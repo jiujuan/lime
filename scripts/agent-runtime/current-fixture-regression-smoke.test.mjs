@@ -62,6 +62,23 @@ describe("agent runtime current fixture regression smoke guard", () => {
     expect(content).toContain("停止后同会话继续输出 Electron fixture");
   });
 
+  it("runs the real Coding Workbench Electron fixture in the current regression set", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain("Coding Workbench Electron fixture");
+    expect(content).toContain(
+      "scripts/electron/code-artifact-workbench-fixture-smoke.mjs",
+    );
+    expect(content).toContain("--scenario");
+    expect(content).toContain("gui-coding-input");
+    expect(content).toContain(
+      "code-artifact-workbench-gui-coding-input-regression",
+    );
+    expect(content).toContain(
+      "真实 GUI coding 输入到 Coding Workbench Electron fixture",
+    );
+  });
+
   it("does not opt into live provider or mock backend evidence", () => {
     const content = readSmokeScript();
 

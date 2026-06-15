@@ -13,6 +13,8 @@ import {
   readReleaseManifest,
   resolveSidecarFromReleaseManifest,
   stdioSidecar,
+  type AppServerRequestOptions,
+  type AppServerRequestResult,
   type ConnectedAppServerSidecar,
   type InitializeResponse,
   type InitializeParams,
@@ -35,6 +37,13 @@ const APP_SERVER_AGENT_APP_UI_RUNTIME_START_TIMEOUT_MS = 60_000;
 const APP_SERVER_PROJECT_SHELL_DRAIN_EVENTS_TIMEOUT_MS = 3_000;
 const APP_SERVER_STREAMING_TURN_ACK_GRACE_MS = 250;
 const APP_SERVER_PROXY_REQUEST_ID_PREFIX = "electron-host";
+const APP_SERVER_DATA_DIR_NAME = "app-server";
+const DEFAULT_APP_SERVER_LEGACY_MESSAGE_CLEANUP: NonNullable<
+  SidecarLaunchConfig["legacyMessageCleanup"]
+> = "drop-empty-tables";
+const DEFAULT_APP_SERVER_PRODUCT_DB_MIGRATION_CLEANUP: NonNullable<
+  SidecarLaunchConfig["productDbMigrationCleanup"]
+> = "drop-tables";
 
 type ElectronAppServerLaunchConfig = {
   config: SidecarLaunchConfig;
@@ -67,9 +76,14 @@ export class ElectronAppServerHost {
   async request<T>(method: string, params: unknown = {}): Promise<T> {
     const connected = await this.#connect();
     const request = connected.client.request(method, params ?? {});
-    const response = await connected.connection.request<T>(request, method, {
-      timeoutMs: resolveAppServerRequestTimeoutMs(method),
-    });
+    const response = await this.#requestAppServer<T>(
+      connected,
+      request,
+      method,
+      {
+        timeoutMs: resolveAppServerRequestTimeoutMs(method),
+      },
+    );
     return response.result;
   }
 
@@ -84,8 +98,13 @@ export class ElectronAppServerHost {
       if (isInitializedNotification(message)) {
         continue;
       }
-      if (isJsonRpcRequestLike(message) && message.method === METHOD_INITIALIZE) {
-        responses.push(initializeResponseMessage(message, connected.initializeResponse));
+      if (
+        isJsonRpcRequestLike(message) &&
+        message.method === METHOD_INITIALIZE
+      ) {
+        responses.push(
+          initializeResponseMessage(message, connected.initializeResponse),
+        );
         continue;
       }
       if (isJsonRpcRequestLike(message)) {
@@ -100,12 +119,14 @@ export class ElectronAppServerHost {
           );
           continue;
         }
-        const result = await connected.connection.request<unknown>(
+        const timeoutMs = resolveAppServerRequestTimeoutMs(
+          proxiedMessage.message.method,
+        );
+        const result = await this.#requestAppServer<unknown>(
+          connected,
           proxiedMessage.message,
           proxiedMessage.message.method,
-          {
-            timeoutMs: resolveAppServerRequestTimeoutMs(proxiedMessage.message.method),
-          },
+          { timeoutMs },
         );
         responses.push(
           ...result.messages.map((response) =>
@@ -114,7 +135,7 @@ export class ElectronAppServerHost {
         );
         continue;
       }
-      connected.connection.transport.send(message);
+      (await this.#connect()).connection.transport.send(message);
     }
 
     return {
@@ -122,7 +143,9 @@ export class ElectronAppServerHost {
     };
   }
 
-  async drainEvents(request: DrainEventsRequest = {}): Promise<{ lines: string[] }> {
+  async drainEvents(
+    request: DrainEventsRequest = {},
+  ): Promise<{ lines: string[] }> {
     const connected = await this.#connect();
     const limit = Math.max(1, Math.min(100, Math.floor(request.limit ?? 20)));
     const drained: JsonRpcMessage[] = [];
@@ -149,7 +172,15 @@ export class ElectronAppServerHost {
 
   async #connect(): Promise<ConnectedAppServerSidecar> {
     if (this.#connected) {
-      return this.#connected;
+      const lifecycleConnected = this.#lifecycle?.connected;
+      if (lifecycleConnected && lifecycleConnected !== this.#connected) {
+        this.#connected = lifecycleConnected;
+        return lifecycleConnected;
+      }
+      if (lifecycleConnected) {
+        return this.#connected;
+      }
+      this.#connected = null;
     }
     if (!this.#connectPromise) {
       this.#connectPromise = this.#start();
@@ -176,22 +207,42 @@ export class ElectronAppServerHost {
       },
     };
 
-    this.#lifecycle = new AppServerSidecarLifecycle(launchConfig.config, initializeParams, {
-      verifySha256: launchConfig.verifySha256,
-      restartPolicy: {
-        maxAttempts: 3,
-        initialDelayMs: 500,
-        maxDelayMs: 5_000,
+    let lifecycle: AppServerSidecarLifecycle;
+    lifecycle = new AppServerSidecarLifecycle(
+      launchConfig.config,
+      initializeParams,
+      {
+        verifySha256: launchConfig.verifySha256,
+        restartPolicy: {
+          maxAttempts: 3,
+          initialDelayMs: 500,
+          maxDelayMs: 5_000,
+        },
+        onExit: (event) => {
+          if (this.#lifecycle === lifecycle) {
+            this.#connected = null;
+            this.#connectPromise = null;
+          }
+          console.warn("[electron-host] app-server exited", event);
+        },
+        onRestarted: (connected) => {
+          if (this.#lifecycle === lifecycle) {
+            this.#connected = connected;
+            this.#connectPromise = null;
+          }
+        },
+        onRestartFailed: (event) => {
+          if (this.#lifecycle === lifecycle) {
+            this.#connected = null;
+            this.#connectPromise = null;
+          }
+          console.warn("[electron-host] app-server restart failed", event);
+        },
       },
-      onExit: (event) => {
-        console.warn("[electron-host] app-server exited", event);
-      },
-      onRestartFailed: (event) => {
-        console.warn("[electron-host] app-server restart failed", event);
-      },
-    });
+    );
 
-    return await this.#lifecycle.start();
+    this.#lifecycle = lifecycle;
+    return await lifecycle.start();
   }
 
   #proxyRequestMessage(message: JsonRpcRequest): {
@@ -215,40 +266,119 @@ export class ElectronAppServerHost {
     originalMessage: JsonRpcRequest,
     message: JsonRpcRequest,
   ): Promise<JsonRpcMessage[]> {
-    const requestPromise = connected.connection
-      .request<AgentSessionTurnStartResponse>(message, message.method, {
-        timeoutMs: resolveAppServerRequestTimeoutMs(message.method),
-      });
-
-    const fastResult = await Promise.race<
-      { kind: "done"; messages: JsonRpcMessage[] } | { kind: "pending" }
-    >([
-      requestPromise.then((result) => ({
-        kind: "done" as const,
-        messages: result.messages.map((response) =>
-          restoreProxyResponseId(response, originalMessage.id),
-        ),
-      })),
-      wait(APP_SERVER_STREAMING_TURN_ACK_GRACE_MS).then(() => ({
-        kind: "pending" as const,
-      })),
-    ]);
-
-    if (fastResult.kind === "done") {
-      return fastResult.messages;
+    try {
+      const result =
+        await this.#requestAppServerUntilFirstNotificationOrResponse<AgentSessionTurnStartResponse>(
+          connected,
+          message,
+          message.method,
+          {
+            timeoutMs: APP_SERVER_STREAMING_TURN_ACK_GRACE_MS,
+          },
+        );
+      const messages = result.messages.map((response) =>
+        restoreProxyResponseId(response, originalMessage.id),
+      );
+      if (result.completed) {
+        return messages;
+      }
+      return [streamingTurnStartAcceptedResponse(originalMessage, message)];
+    } catch (error) {
+      if (!isAppServerRequestTimeoutError(error)) {
+        throw error;
+      }
+      return [streamingTurnStartAcceptedResponse(originalMessage, message)];
     }
-
-    requestPromise.catch((error) => {
-        console.warn("[electron-host] app-server streaming turn failed", error);
-      });
-
-    return [
-      streamingTurnStartAcceptedResponse(
-        originalMessage,
-        message,
-      ),
-    ];
   }
+
+  async #requestAppServer<T>(
+    connected: ConnectedAppServerSidecar,
+    request: JsonRpcRequest,
+    method: string,
+    options: AppServerRequestOptions,
+  ): Promise<AppServerRequestResult<T>> {
+    try {
+      return await connected.connection.request<T>(request, method, options);
+    } catch (error) {
+      if (!isStaleSidecarConnectionError(error)) {
+        throw error;
+      }
+
+      console.warn(
+        "[electron-host] app-server stale connection detected; restarting sidecar",
+        error,
+      );
+      await this.#discardStaleSidecar();
+      const freshConnected = await this.#connect();
+      return await freshConnected.connection.request<T>(
+        request,
+        method,
+        options,
+      );
+    }
+  }
+
+  async #requestAppServerUntilFirstNotificationOrResponse<T>(
+    connected: ConnectedAppServerSidecar,
+    request: JsonRpcRequest,
+    method: string,
+    options: AppServerRequestOptions,
+  ) {
+    try {
+      return await connected.connection.requestUntilFirstNotificationOrResponse<T>(
+        request,
+        method,
+        options,
+      );
+    } catch (error) {
+      if (!isStaleSidecarConnectionError(error)) {
+        throw error;
+      }
+
+      console.warn(
+        "[electron-host] app-server stale connection detected; restarting sidecar",
+        error,
+      );
+      await this.#discardStaleSidecar();
+      const freshConnected = await this.#connect();
+      return await freshConnected.connection.requestUntilFirstNotificationOrResponse<T>(
+        request,
+        method,
+        options,
+      );
+    }
+  }
+
+  async #discardStaleSidecar(): Promise<void> {
+    const lifecycle = this.#lifecycle;
+    this.#lifecycle = null;
+    this.#connected = null;
+    this.#connectPromise = null;
+    try {
+      await lifecycle?.stop();
+    } catch (error) {
+      console.warn(
+        "[electron-host] app-server stale sidecar cleanup failed",
+        error,
+      );
+    }
+  }
+}
+
+function isStaleSidecarConnectionError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.message.includes("app-server sidecar stdin is closed") ||
+      error.message.includes("app-server sidecar is closed") ||
+      error.message.includes("app-server exited before next message"))
+  );
+}
+
+function isAppServerRequestTimeoutError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message.includes("timed out waiting for app-server message after")
+  );
 }
 
 function streamingTurnStartAcceptedResponse(
@@ -258,7 +388,8 @@ function streamingTurnStartAcceptedResponse(
   const params = turnStartParams(proxiedMessage);
   const now = new Date().toISOString();
   const sessionId = nonEmptyString(params?.sessionId) || "";
-  const turnId = nonEmptyString(params?.turnId) || `turn_${String(proxiedMessage.id)}`;
+  const turnId =
+    nonEmptyString(params?.turnId) || `turn_${String(proxiedMessage.id)}`;
   return {
     id: originalMessage.id,
     result: {
@@ -287,12 +418,6 @@ function nonEmptyString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
-function wait(delayMs: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, delayMs);
-  });
-}
-
 function restoreProxyResponseId(
   message: JsonRpcMessage,
   originalId: RequestId,
@@ -307,6 +432,7 @@ function restoreProxyResponseId(
 }
 
 async function resolveLaunchConfig(): Promise<ElectronAppServerLaunchConfig> {
+  const dataDir = resolveAppServerDataDir();
   const envBinary = process.env.APP_SERVER_BIN?.trim();
   if (envBinary) {
     return {
@@ -314,6 +440,7 @@ async function resolveLaunchConfig(): Promise<ElectronAppServerLaunchConfig> {
         envBinary,
         process.env.APP_SERVER_POLICY_PATH,
         "runtime",
+        dataDir,
       ),
     };
   }
@@ -336,6 +463,7 @@ async function resolveLaunchConfig(): Promise<ElectronAppServerLaunchConfig> {
       devBinaryPath,
       process.env.APP_SERVER_POLICY_PATH,
       "runtime",
+      dataDir,
     ),
   };
 }
@@ -343,6 +471,7 @@ async function resolveLaunchConfig(): Promise<ElectronAppServerLaunchConfig> {
 async function resolveResourceLaunchConfig(
   resourcesPath: string,
 ): Promise<ElectronAppServerLaunchConfig | null> {
+  const dataDir = resolveAppServerDataDir();
   const manifestPath = defaultReleaseManifestPath(resourcesPath);
   try {
     const manifest = await readReleaseManifest(manifestPath);
@@ -350,6 +479,9 @@ async function resolveResourceLaunchConfig(
       allowEnvOverride: false,
       resourcesPath,
       appPolicyPath: process.env.APP_SERVER_POLICY_PATH,
+      dataDir,
+      legacyMessageCleanup: resolveLegacyMessageCleanup(),
+      productDbMigrationCleanup: resolveProductDbMigrationCleanup(),
       ...resolveRuntimeBackendLaunchOptions("runtime"),
     });
     if (resolved) {
@@ -376,11 +508,65 @@ function stdioSidecarWithRuntimeBackend(
   binaryPath: string,
   appPolicyPath: string | undefined,
   defaultBackendMode: NonNullable<SidecarLaunchConfig["backendMode"]>,
+  dataDir: string,
 ): SidecarLaunchConfig {
   return {
-    ...stdioSidecar(binaryPath, appPolicyPath),
+    ...stdioSidecar(
+      binaryPath,
+      appPolicyPath,
+      dataDir,
+      resolveLegacyMessageCleanup(),
+      resolveProductDbMigrationCleanup(),
+    ),
     ...resolveRuntimeBackendLaunchOptions(defaultBackendMode),
   };
+}
+
+function resolveAppServerDataDir(): string {
+  return path.join(app.getPath("userData"), APP_SERVER_DATA_DIR_NAME);
+}
+
+function resolveLegacyMessageCleanup(): NonNullable<
+  SidecarLaunchConfig["legacyMessageCleanup"]
+> {
+  const value = process.env.APP_SERVER_LEGACY_MESSAGE_CLEANUP?.trim();
+  if (!value) {
+    return DEFAULT_APP_SERVER_LEGACY_MESSAGE_CLEANUP;
+  }
+
+  if (
+    value === "retain" ||
+    value === "clear-rows" ||
+    value === "drop-empty-tables"
+  ) {
+    return value;
+  }
+
+  throw new Error(
+    "APP_SERVER_LEGACY_MESSAGE_CLEANUP must be one of retain, clear-rows, drop-empty-tables",
+  );
+}
+
+function resolveProductDbMigrationCleanup(): NonNullable<
+  SidecarLaunchConfig["productDbMigrationCleanup"]
+> {
+  const value = process.env.APP_SERVER_PRODUCT_DB_MIGRATION_CLEANUP?.trim();
+  if (!value) {
+    return DEFAULT_APP_SERVER_PRODUCT_DB_MIGRATION_CLEANUP;
+  }
+
+  if (
+    value === "retain" ||
+    value === "clear-rows" ||
+    value === "drop-tables" ||
+    value === "delete-file"
+  ) {
+    return value;
+  }
+
+  throw new Error(
+    "APP_SERVER_PRODUCT_DB_MIGRATION_CLEANUP must be one of retain, clear-rows, drop-tables, delete-file",
+  );
 }
 
 function resolveRuntimeBackendLaunchOptions(
@@ -510,7 +696,9 @@ function isJsonRpcRequestLike(
 }
 
 function isInitializedNotification(message: JsonRpcMessage): boolean {
-  return isJsonRpcNotification(message) && message.method === METHOD_INITIALIZED;
+  return (
+    isJsonRpcNotification(message) && message.method === METHOD_INITIALIZED
+  );
 }
 
 function initializeResponseMessage(

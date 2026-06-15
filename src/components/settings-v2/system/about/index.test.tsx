@@ -6,6 +6,7 @@ import type { UpdateInstallSession } from "@/lib/api/appUpdate";
 
 const {
   mockCheckForUpdates,
+  mockGetRuntimeAppVersion,
   mockGetUpdateInstallSession,
   mockGetSkillPackageFileAssociationStatus,
   mockListenUpdateInstallSession,
@@ -13,6 +14,7 @@ const {
   mockStartUpdateInstallSession,
 } = vi.hoisted(() => ({
   mockCheckForUpdates: vi.fn(),
+  mockGetRuntimeAppVersion: vi.fn(),
   mockGetUpdateInstallSession: vi.fn(),
   mockGetSkillPackageFileAssociationStatus: vi.fn(),
   mockListenUpdateInstallSession: vi.fn(),
@@ -49,6 +51,9 @@ vi.mock("@/lib/api/skills", () => ({
 }));
 vi.mock("@/lib/api/externalUrl", () => ({
   openExternalUrlWithSystemBrowser: mockOpenExternalUrlWithSystemBrowser,
+}));
+vi.mock("@/lib/appVersion", () => ({
+  getRuntimeAppVersion: mockGetRuntimeAppVersion,
 }));
 
 import { AboutSection } from ".";
@@ -138,6 +143,7 @@ beforeEach(async () => {
     value: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
   });
 
+  mockGetRuntimeAppVersion.mockReturnValue("1.10.0");
   mockCheckForUpdates.mockResolvedValue({
     current: "1.10.0",
     latest: "1.10.1",
@@ -416,6 +422,31 @@ describe("AboutSection", () => {
       expect(consoleWarnSpy).not.toHaveBeenCalled();
     } finally {
       consoleWarnSpy.mockRestore();
+    }
+  });
+
+  it("更新通道不可用时应使用构建版本兜底，不显示双重读取中", async () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    try {
+      mockGetRuntimeAppVersion.mockReturnValue("1.60.0");
+      mockCheckForUpdates.mockRejectedValueOnce(
+        new Error("Electron updater unavailable"),
+      );
+
+      const container = renderComponent();
+      await waitForLoad();
+
+      const text = container.textContent ?? "";
+      expect(text).toContain("Version 1.60.0 (1.60.0)");
+      expect(text).toContain(
+        "Unable to check for updates right now. Please try again later.",
+      );
+      expect(text).not.toContain("Version Loading (Loading)");
+      expect(text).not.toContain("Electron updater unavailable");
+    } finally {
+      consoleErrorSpy.mockRestore();
     }
   });
 });

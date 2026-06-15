@@ -2,6 +2,9 @@ use super::super::*;
 
 pub(in crate::runtime::tests) struct TestCurrentTimelineDataSource {
     pub(in crate::runtime::tests) persisted: Option<AgentSessionReadResponse>,
+    pub(in crate::runtime::tests) legacy_transcripts: Mutex<Vec<LegacyAgentSessionTranscript>>,
+    pub(in crate::runtime::tests) cleared_legacy_session_ids: Mutex<Vec<String>>,
+    pub(in crate::runtime::tests) drop_empty_legacy_error: Mutex<Option<String>>,
     pub(in crate::runtime::tests) objective: Mutex<Option<ManagedObjective>>,
     pub(in crate::runtime::tests) audit_updates: Mutex<Vec<ManagedObjectiveAuditUpdate>>,
     pub(in crate::runtime::tests) read_requests: Mutex<Vec<AgentSessionReadParams>>,
@@ -13,6 +16,9 @@ impl TestCurrentTimelineDataSource {
     pub(in crate::runtime::tests) fn new(persisted: AgentSessionReadResponse) -> Self {
         Self {
             persisted: Some(persisted),
+            legacy_transcripts: Mutex::new(Vec::new()),
+            cleared_legacy_session_ids: Mutex::new(Vec::new()),
+            drop_empty_legacy_error: Mutex::new(None),
             objective: Mutex::new(None),
             audit_updates: Mutex::new(Vec::new()),
             read_requests: Mutex::new(Vec::new()),
@@ -26,6 +32,37 @@ impl TestCurrentTimelineDataSource {
             .lock()
             .expect("test objective mutex poisoned") = Some(objective);
         self
+    }
+
+    pub(in crate::runtime::tests) fn without_persisted_session(mut self) -> Self {
+        self.persisted = None;
+        self
+    }
+
+    pub(in crate::runtime::tests) fn with_legacy_transcripts(
+        self,
+        transcripts: Vec<LegacyAgentSessionTranscript>,
+    ) -> Self {
+        *self
+            .legacy_transcripts
+            .lock()
+            .expect("test legacy transcripts mutex poisoned") = transcripts;
+        self
+    }
+
+    pub(in crate::runtime::tests) fn with_drop_empty_legacy_error(self, message: &str) -> Self {
+        *self
+            .drop_empty_legacy_error
+            .lock()
+            .expect("test legacy drop error mutex poisoned") = Some(message.to_string());
+        self
+    }
+
+    pub(in crate::runtime::tests) fn cleared_legacy_session_ids(&self) -> Vec<String> {
+        self.cleared_legacy_session_ids
+            .lock()
+            .expect("test cleared legacy sessions mutex poisoned")
+            .clone()
     }
 
     pub(in crate::runtime::tests) fn read_requests(&self) -> Vec<AgentSessionReadParams> {
@@ -133,6 +170,55 @@ impl SessionAppDataSource for TestCurrentTimelineDataSource {
         NoopAppDataSource
             .update_current_timeline_session(params)
             .await
+    }
+
+    async fn list_legacy_agent_message_transcripts(
+        &self,
+        _params: AgentSessionListParams,
+    ) -> Result<Vec<LegacyAgentSessionTranscript>, RuntimeCoreError> {
+        Ok(self
+            .legacy_transcripts
+            .lock()
+            .expect("test legacy transcripts mutex poisoned")
+            .clone())
+    }
+
+    async fn read_legacy_agent_message_transcript(
+        &self,
+        session_id: String,
+    ) -> Result<Option<LegacyAgentSessionTranscript>, RuntimeCoreError> {
+        Ok(self
+            .legacy_transcripts
+            .lock()
+            .expect("test legacy transcripts mutex poisoned")
+            .iter()
+            .find(|transcript| transcript.session_id == session_id)
+            .cloned())
+    }
+
+    async fn clear_legacy_agent_message_sessions(
+        &self,
+        session_ids: Vec<String>,
+    ) -> Result<usize, RuntimeCoreError> {
+        let mut cleared = self
+            .cleared_legacy_session_ids
+            .lock()
+            .expect("test cleared legacy sessions mutex poisoned");
+        let count = session_ids.len();
+        cleared.extend(session_ids);
+        Ok(count)
+    }
+
+    async fn drop_empty_legacy_agent_message_tables(&self) -> Result<usize, RuntimeCoreError> {
+        if let Some(message) = self
+            .drop_empty_legacy_error
+            .lock()
+            .expect("test legacy drop error mutex poisoned")
+            .clone()
+        {
+            return Err(RuntimeCoreError::Backend(message));
+        }
+        Ok(0)
     }
 
     async fn read_agent_session_objective(

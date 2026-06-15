@@ -117,4 +117,15 @@ describe("RootRouter", () => {
       container.querySelector('[data-testid="update-notification-page"]'),
     ).not.toBeNull();
   });
+
+  it("打包后的文件路径 index.html 入口也应映射到更新提醒页", async () => {
+    const { container } = await renderRootRouter(
+      "/Applications/Lime.app/Contents/Resources/app.asar/dist/index.html?lime_window=update-notification&latest=1.58.0",
+    );
+
+    expect(
+      container.querySelector('[data-testid="update-notification-page"]'),
+    ).not.toBeNull();
+    expect(container.querySelector('[data-testid="main-app"]')).toBeNull();
+  });
 });

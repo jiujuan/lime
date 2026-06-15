@@ -62,11 +62,76 @@ async fn mock_backend_emits_public_runtime_event() {
     let events = core
         .events_for_session(&session.session_id)
         .expect("runtime events");
-    assert_eq!(events.len(), 1);
-    assert_eq!(output.events.len(), 1);
-    assert_eq!(events[0].event_type, "turn.accepted");
-    assert_eq!(events[0].payload["backend"], "mock");
-    assert_eq!(events[0].payload["clientName"], "test-client");
+    assert_eq!(events.len(), 2);
+    assert_eq!(output.events.len(), 2);
+    assert_eq!(events[0].event_type, "message.created");
+    assert_eq!(events[0].payload["role"], "user");
+    assert_eq!(events[0].payload["input"]["text"], "hello");
+    assert_eq!(events[1].event_type, "turn.accepted");
+    assert_eq!(events[1].payload["backend"], "mock");
+    assert_eq!(events[1].payload["clientName"], "test-client");
+}
+
+#[tokio::test]
+async fn runtime_events_are_appended_to_jsonl_event_log() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
+    let event_log_writer = Arc::new(EventLogWriter::new(&roots.event_log_root).expect("writer"));
+    let projection_store =
+        Arc::new(ProjectionStore::initialize(&roots.projection_db_path).expect("projection"));
+    let core = RuntimeCore::default()
+        .with_event_log_writer(event_log_writer.clone())
+        .with_projection_store(projection_store.clone());
+    let session = core
+        .start_session(AgentSessionStartParams {
+            session_id: Some("sess_jsonl".to_string()),
+            thread_id: Some("thread_jsonl".to_string()),
+            app_id: "content-studio".to_string(),
+            workspace_id: Some("default".to_string()),
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("session")
+        .session;
+
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: session.session_id.clone(),
+            turn_id: Some("turn_jsonl".to_string()),
+            input: AgentInput {
+                text: "hello".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: None,
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("turn");
+
+    let records = event_log_writer
+        .read_session_events("sess_jsonl")
+        .expect("jsonl records");
+    assert_eq!(records.len(), 2);
+    assert!(records[0]
+        .path
+        .ends_with("events/sessions/session_sess_jsonl.jsonl"));
+    assert_eq!(records[0].event.session_id, "sess_jsonl");
+    assert_eq!(records[0].event.thread_id.as_deref(), Some("thread_jsonl"));
+    assert_eq!(records[0].event.turn_id.as_deref(), Some("turn_jsonl"));
+    assert_eq!(records[0].event.event_type, "message.created");
+    assert_eq!(records[0].event.payload["input"]["text"], "hello");
+    assert_eq!(records[1].event.event_type, "turn.accepted");
+
+    let projected = projection_store
+        .read_session("sess_jsonl")
+        .expect("read projection")
+        .expect("projected session");
+    assert_eq!(projected.thread_id, "thread_jsonl");
+    assert_eq!(projected.status, "running");
+    assert_eq!(projected.last_event_sequence, 2);
 }
 
 #[tokio::test]
@@ -424,6 +489,7 @@ async fn start_turn_allows_visible_capability_id() {
                     metadata: None,
                     queued_turn_id: None,
                     host_options: None,
+                    ..RuntimeOptions::default()
                 }),
                 queue_if_busy: false,
                 skip_pre_submit_resume: false,
@@ -480,6 +546,7 @@ async fn start_turn_allows_session_scoped_capability_id() {
                     metadata: None,
                     queued_turn_id: None,
                     host_options: None,
+                    ..RuntimeOptions::default()
                 }),
                 queue_if_busy: false,
                 skip_pre_submit_resume: false,
@@ -534,6 +601,7 @@ async fn start_turn_rejects_hidden_capability_id_without_persisting_turn() {
                     metadata: None,
                     queued_turn_id: None,
                     host_options: None,
+                    ..RuntimeOptions::default()
                 }),
                 queue_if_busy: false,
                 skip_pre_submit_resume: false,
@@ -614,6 +682,7 @@ async fn start_turn_rejects_readiness_only_capability_id_without_persisting_turn
                     metadata: None,
                     queued_turn_id: None,
                     host_options: None,
+                    ..RuntimeOptions::default()
                 }),
                 queue_if_busy: false,
                 skip_pre_submit_resume: false,

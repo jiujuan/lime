@@ -501,6 +501,7 @@ interface UseWorkspaceInputbarSceneRuntimeParams {
   navigationActions: Pick<
     NavigationActions,
     | "handleManageProviders"
+    | "handleOpenExecutionPolicySettings"
     | "handleOpenRuntimeMemoryWorkbench"
     | "handleOpenKnowledgeManagement"
     | "handleProjectChange"
@@ -729,8 +730,7 @@ export function useWorkspaceInputbarSceneRuntime({
     (nextToolStates: WorkspaceInputbarToolStates) => {
       const hasPlanChange = typeof nextToolStates.plan === "boolean";
       const hasSubagentChange = typeof nextToolStates.subagent === "boolean";
-      const hasObjectiveChange =
-        typeof nextToolStates.objective === "boolean";
+      const hasObjectiveChange = typeof nextToolStates.objective === "boolean";
       if (!hasPlanChange && !hasSubagentChange && !hasObjectiveChange) {
         return;
       }
@@ -739,9 +739,7 @@ export function useWorkspaceInputbarSceneRuntime({
         setChatToolPreferences((previous) => ({
           ...previous,
           ...(hasPlanChange ? { task: nextToolStates.plan } : {}),
-          ...(hasSubagentChange
-            ? { subagent: nextToolStates.subagent }
-            : {}),
+          ...(hasSubagentChange ? { subagent: nextToolStates.subagent } : {}),
         }));
       }
       if (hasObjectiveChange) {
@@ -874,6 +872,9 @@ export function useWorkspaceInputbarSceneRuntime({
             : undefined,
         onPromoteQueuedTurn: promoteQueuedTurn,
         onObjectiveChanged,
+        onManageProviders: navigationActions.handleManageProviders,
+        onOpenExecutionPolicySettings:
+          navigationActions.handleOpenExecutionPolicySettings,
         onOpenMemoryWorkbench:
           sessionIdForDiagnostics && projectRootPath
             ? () =>

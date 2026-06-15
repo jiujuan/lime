@@ -5,7 +5,7 @@
   "workspaces": [
     "packages/*"
   ],
-  "version": "1.68.0",
+  "version": "1.69.0",
   "description": "AI content workspace for Chinese creators: desktop writing, research, prompt management, knowledge base, and multi-model workflows.",
   "keywords": [
     "ai",
@@ -194,6 +194,7 @@
     "smoke:agent-runtime-tool-surface-page": "node scripts/agent-runtime/tool-surface-page-smoke.mjs",
     "smoke:agent-runtime-current-fixture": "node scripts/agent-runtime/current-fixture-regression-smoke.mjs",
     "smoke:agent-session-history-electron-fixture": "node scripts/electron/session-history-fixture-smoke.mjs",
+    "smoke:settings-provider-migration-electron-fixture": "node scripts/electron/settings-provider-migration-fixture-smoke.mjs",
     "smoke:code-artifact-workbench-electron-fixture": "node scripts/electron/code-artifact-workbench-fixture-smoke.mjs",
     "smoke:claw-chat-current-fixture": "node scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
     "smoke:claw-chat-ready-streaming": "node scripts/claw-chat-ready-streaming-smoke.mjs",

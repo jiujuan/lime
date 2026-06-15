@@ -1,6 +1,16 @@
 // @generated types re-export — 从 Rust JSON Schema 自动生成的类型定义
 // 新代码优先从这里导入类型；手写类型逐步迁移后将删除
 export * from "./generated/protocol-types.js";
+export type {
+  ExecutionProcessDrainOutputParams,
+  ExecutionProcessDrainOutputResponse,
+  ExecutionProcessEmptyResponse,
+  ExecutionProcessIdParams,
+  ExecutionProcessStartParams,
+  ExecutionProcessStartResponse,
+  ExecutionProcessStatusResponse,
+  ExecutionProcessWriteStdinParams,
+} from "./generated/protocol-types.js";
 
 export const JSONRPC_VERSION = "2.0";
 export const PROTOCOL_VERSION = "appserver.v0";
@@ -30,6 +40,14 @@ export const METHOD_PROJECT_SHELL_SESSION_RESIZE =
 export const METHOD_PROJECT_SHELL_SESSION_KILL = "projectShell/session/kill";
 export const METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS =
   "projectShell/session/drainEvents";
+export const METHOD_EXECUTION_PROCESS_START = "executionProcess/start";
+export const METHOD_EXECUTION_PROCESS_WRITE_STDIN =
+  "executionProcess/writeStdin";
+export const METHOD_EXECUTION_PROCESS_INTERRUPT = "executionProcess/interrupt";
+export const METHOD_EXECUTION_PROCESS_TERMINATE = "executionProcess/terminate";
+export const METHOD_EXECUTION_PROCESS_STATUS = "executionProcess/status";
+export const METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT =
+  "executionProcess/drainOutput";
 export const METHOD_EVIDENCE_EXPORT = "evidence/export";
 export const METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT =
   "agentSession/handoffBundle/export";
@@ -356,6 +374,12 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_PROJECT_SHELL_SESSION_RESIZE, kind: "request" },
   { method: METHOD_PROJECT_SHELL_SESSION_KILL, kind: "request" },
   { method: METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS, kind: "request" },
+  { method: METHOD_EXECUTION_PROCESS_START, kind: "request" },
+  { method: METHOD_EXECUTION_PROCESS_WRITE_STDIN, kind: "request" },
+  { method: METHOD_EXECUTION_PROCESS_INTERRUPT, kind: "request" },
+  { method: METHOD_EXECUTION_PROCESS_TERMINATE, kind: "request" },
+  { method: METHOD_EXECUTION_PROCESS_STATUS, kind: "request" },
+  { method: METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT, kind: "request" },
   { method: METHOD_EVIDENCE_EXPORT, kind: "request" },
   { method: METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT, kind: "request" },
   { method: METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT, kind: "request" },
@@ -1146,6 +1170,19 @@ export type RuntimeOptions = {
   metadata?: unknown;
   queuedTurnId?: string;
   hostOptions?: unknown;
+  expectedOutput?: unknown;
+  structuredOutput?: StructuredOutputContract;
+  outputSchema?: unknown;
+};
+
+export type StructuredOutputContract = {
+  type?: string;
+  schemaRef?: string;
+  schema?: unknown;
+  maxValidationRetries?: number;
+  failureSubtype?: string;
+  materializer?: unknown;
+  metadata?: unknown;
 };
 
 export type AgentSessionTurnStartParams = {

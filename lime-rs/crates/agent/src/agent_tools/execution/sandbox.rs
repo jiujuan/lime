@@ -279,12 +279,19 @@ pub fn plan_sandbox_backend(input: SandboxBackendPlanInput<'_>) -> SandboxBacken
             "sandbox_backend_unavailable",
             "Linux bubblewrap backend 不可用",
         ),
+        SandboxBackendPlatform::Windows if windows_restricted_token_available() => (
+            SandboxBackend::RestrictedToken,
+            SandboxBackendStatus::Ready,
+            true,
+            "sandbox_backend_ready",
+            "Windows restricted token backend 可用于当前 shell 工具执行",
+        ),
         SandboxBackendPlatform::Windows => (
             SandboxBackend::RestrictedToken,
-            SandboxBackendStatus::Planned,
+            SandboxBackendStatus::Unavailable,
             false,
-            "sandbox_backend_runner_not_connected",
-            "Windows restricted token backend 已规划但尚未接入真实进程 runner",
+            "sandbox_backend_windows_runner_unavailable_on_host",
+            "当前宿主构建不可执行 Windows restricted token runner",
         ),
         SandboxBackendPlatform::Unsupported => (
             SandboxBackend::None,
@@ -330,6 +337,18 @@ fn linux_bubblewrap_available() -> bool {
     }
 
     #[cfg(not(target_os = "linux"))]
+    {
+        false
+    }
+}
+
+fn windows_restricted_token_available() -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        true
+    }
+
+    #[cfg(not(target_os = "windows"))]
     {
         false
     }

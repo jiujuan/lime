@@ -21,8 +21,11 @@ import {
   type EvidenceExportParams,
   type EvidenceExportResponse,
   type JsonRpcMessage,
+  type StructuredOutputContract,
   agentSessionEventNotification,
 } from "@limecloud/app-server-client";
+
+export type { StructuredOutputContract };
 import {
   AgentRuntimeEventPipeline,
   type AgentRuntimeEventPipelineResult,

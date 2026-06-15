@@ -1,12 +1,16 @@
 use super::support::*;
 use super::*;
 use app_server_protocol::ArtifactContentStatus;
+use lime_infra::telemetry::TelemetryStore;
 use std::fs;
 use std::path::Path;
 
 #[tokio::test]
 async fn export_evidence_reads_session_turn_events_and_artifact_summaries() {
-    let core = RuntimeCore::default();
+    let sidecar_root = tempfile::tempdir().expect("sidecar root");
+    let core = RuntimeCore::default().with_sidecar_store(Arc::new(
+        SidecarStore::new(sidecar_root.path()).expect("sidecar store"),
+    ));
     core.start_session(AgentSessionStartParams {
         session_id: Some("sess_evidence".to_string()),
         thread_id: Some("thread_evidence".to_string()),
@@ -69,11 +73,17 @@ async fn export_evidence_reads_session_turn_events_and_artifact_summaries() {
     assert_eq!(response.session.session_id, "sess_evidence");
     assert_eq!(response.turns.len(), 1);
     assert_eq!(response.turns[0].turn_id, "turn_evidence");
-    assert_eq!(response.events.len(), 3);
-    assert_eq!(response.events[1].event_type, "message.delta");
+    assert_eq!(response.events.len(), 4);
+    assert_eq!(response.events[0].event_type, "message.created");
+    assert_eq!(response.events[0].payload["input"]["text"], "生成 evidence");
+    assert_eq!(response.events[2].event_type, "message.delta");
     assert_eq!(response.artifacts.len(), 1);
     assert_eq!(response.artifacts[0].artifact_ref, "artifact-report");
     assert_eq!(response.artifacts[0].content, None);
+    assert!(response.events[3].payload["content"].as_str().is_none());
+    assert!(response.events[3].payload["sidecarRef"]["sha256"]
+        .as_str()
+        .is_some_and(|value| value.starts_with("sha256:")));
     assert_eq!(
         response.artifacts[0].content_status,
         ArtifactContentStatus::NotRequested
@@ -86,7 +96,7 @@ async fn export_evidence_reads_session_turn_events_and_artifact_summaries() {
         Some("accepted")
     );
     assert_eq!(evidence_pack.turn_count, 1);
-    assert_eq!(evidence_pack.item_count, 3);
+    assert_eq!(evidence_pack.item_count, 4);
     assert_eq!(evidence_pack.recent_artifact_count, 1);
     assert_eq!(
         evidence_pack
@@ -111,6 +121,81 @@ async fn export_evidence_reads_session_turn_events_and_artifact_summaries() {
     assert_eq!(summary_only.artifacts.len(), 0);
     assert_eq!(summary_only.turns.len(), 1);
     assert_eq!(summary_only.evidence_pack, None);
+}
+
+#[tokio::test]
+async fn export_evidence_repairs_and_reads_jsonl_projection_without_legacy_messages() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
+    let event_log_writer = Arc::new(EventLogWriter::new(&roots.event_log_root).expect("writer"));
+    let projection_store =
+        Arc::new(ProjectionStore::initialize(&roots.projection_db_path).expect("projection"));
+    let core = RuntimeCore::with_backend(Arc::new(CompletedBackend))
+        .with_event_log_writer(event_log_writer.clone())
+        .with_projection_store(projection_store.clone());
+    core.start_session(AgentSessionStartParams {
+        session_id: Some("sess_evidence_projection".to_string()),
+        thread_id: Some("thread_evidence_projection".to_string()),
+        app_id: "content-studio".to_string(),
+        workspace_id: Some("workspace-main".to_string()),
+        business_object_ref: None,
+        locale: None,
+    })
+    .expect("session");
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: "sess_evidence_projection".to_string(),
+            turn_id: Some("turn_evidence_projection".to_string()),
+            input: AgentInput {
+                text: "生成 projection evidence".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: None,
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("turn");
+    projection_store
+        .clear_session("sess_evidence_projection")
+        .expect("simulate missing projection");
+
+    let legacy_data_source = Arc::new(TestCurrentTimelineDataSource::new(
+        empty_agent_session_read_response("legacy_unexpected"),
+    ));
+    let restarted_core = RuntimeCore::default()
+        .with_event_log_writer(event_log_writer)
+        .with_projection_store(projection_store)
+        .with_app_data_source(legacy_data_source.clone());
+
+    let response = restarted_core
+        .export_evidence(EvidenceExportParams {
+            session_id: "sess_evidence_projection".to_string(),
+            turn_id: Some("turn_evidence_projection".to_string()),
+            include_events: Some(true),
+            include_artifacts: Some(true),
+            include_evidence_pack: Some(true),
+        })
+        .await
+        .expect("export evidence from projection");
+
+    assert_eq!(response.session.session_id, "sess_evidence_projection");
+    assert_eq!(response.session.thread_id, "thread_evidence_projection");
+    assert_eq!(response.session.status, AgentSessionStatus::Completed);
+    assert_eq!(response.turns.len(), 1);
+    assert_eq!(response.turns[0].turn_id, "turn_evidence_projection");
+    assert_eq!(response.turns[0].status, AgentTurnStatus::Completed);
+    assert_eq!(response.events.len(), 4);
+    assert_eq!(response.events[0].event_type, "message.created");
+    assert_eq!(
+        response.events[0].payload["input"]["text"],
+        "生成 projection evidence"
+    );
+    assert_eq!(response.events[2].event_type, "message.delta");
+    assert!(response.evidence_pack.is_some());
+    assert!(legacy_data_source.read_requests().is_empty());
 }
 
 #[tokio::test]
@@ -159,7 +244,16 @@ async fn export_evidence_pack_includes_coding_snapshot_artifacts() {
                     "outputRef": "output://snapshot-evidence",
                     "outputPreview": "snapshot output",
                     "outputBytes": 42,
-                    "outputSnapshotFile": "runtime-outputs/snapshot-evidence.txt"
+                    "outputSnapshotFile": "runtime-outputs/snapshot-evidence.txt",
+                    "sidecarRef": {
+                        "ref": "sidecar://tool_output/snapshot-evidence",
+                        "kind": "tool_output",
+                        "relativePath": "sessions/sess_coding_snapshot_evidence/runtime-outputs/snapshot-evidence.txt",
+                        "bytes": 42,
+                        "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                        "contentStatus": "available",
+                        "createdAt": "2026-06-14T00:00:00.000Z"
+                    }
                 }),
             ),
             RuntimeEvent::new(
@@ -168,9 +262,115 @@ async fn export_evidence_pack_includes_coding_snapshot_artifacts() {
                     "path": "src/App.tsx",
                     "artifactId": "artifact_snapshot_evidence",
                     "checkpointRef": "checkpoint_snapshot_evidence",
+                    "diffRef": "diff://snapshot-evidence",
                     "checkpointSnapshotFile": "runtime-file-checkpoints/snapshot-evidence.txt",
+                    "sidecarRef": {
+                        "ref": "sidecar://file_checkpoint/snapshot-evidence",
+                        "kind": "file_checkpoint",
+                        "relativePath": "sessions/sess_coding_snapshot_evidence/runtime-file-checkpoints/snapshot-evidence.txt",
+                        "bytes": 24,
+                        "sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                        "contentStatus": "available",
+                        "createdAt": "2026-06-14T00:00:00.000Z"
+                    },
                     "change": {
-                        "previousContentSnapshotFile": "runtime-file-checkpoints/snapshot-evidence.txt"
+                        "previousContentSnapshotFile": "runtime-file-checkpoints/snapshot-evidence.txt",
+                        "artifactRefs": ["artifact://snapshot-evidence/change"],
+                        "sidecarRef": {
+                            "ref": "sidecar://file_checkpoint/snapshot-evidence",
+                            "kind": "file_checkpoint",
+                            "relativePath": "sessions/sess_coding_snapshot_evidence/runtime-file-checkpoints/snapshot-evidence.txt",
+                            "bytes": 24,
+                            "sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                            "contentStatus": "available",
+                            "createdAt": "2026-06-14T00:00:00.000Z"
+                        }
+                    }
+                }),
+            ),
+            RuntimeEvent::new(
+                "patch.started",
+                json!({
+                    "patchId": "patch_snapshot_evidence",
+                    "diffRef": "diff://snapshot-evidence",
+                    "artifactRefs": ["artifact://snapshot-evidence/patch"]
+                }),
+            ),
+            RuntimeEvent::new(
+                "patch.failed",
+                json!({
+                    "patchId": "patch_snapshot_evidence",
+                    "diffRef": "diff://snapshot-evidence",
+                    "failureCategory": "apply_failed"
+                }),
+            ),
+            RuntimeEvent::new(
+                "command.started",
+                json!({
+                    "commandId": "cmd_snapshot_evidence",
+                    "commandSummary": "npm test",
+                    "outputRef": "output://snapshot-evidence"
+                }),
+            ),
+            RuntimeEvent::new(
+                "command.output",
+                json!({
+                    "commandId": "cmd_snapshot_evidence",
+                    "stream": "stderr",
+                    "refIds": ["output://snapshot-evidence"]
+                }),
+            ),
+            RuntimeEvent::new(
+                "test.started",
+                json!({
+                    "testRunId": "test_snapshot_evidence",
+                    "commandId": "cmd_snapshot_evidence",
+                    "suite": "coding evidence"
+                }),
+            ),
+            RuntimeEvent::new(
+                "command.exited",
+                json!({
+                    "commandId": "cmd_snapshot_evidence",
+                    "exitCode": 1,
+                    "outputRef": "output://snapshot-evidence"
+                }),
+            ),
+            RuntimeEvent::new(
+                "test.completed",
+                json!({
+                    "testRunId": "test_snapshot_evidence",
+                    "commandId": "cmd_snapshot_evidence",
+                    "result": "failed",
+                    "failed": 1,
+                    "outputRefs": ["output://snapshot-evidence"]
+                }),
+            ),
+            RuntimeEvent::new(
+                "action.required",
+                json!({
+                    "actionId": "action_snapshot_evidence",
+                    "kind": "tool_confirmation",
+                    "evidenceRefs": ["evidence://snapshot-evidence/action"]
+                }),
+            ),
+            RuntimeEvent::new(
+                "action.resolved",
+                json!({
+                    "actionId": "action_snapshot_evidence",
+                    "decision": "approved"
+                }),
+            ),
+            RuntimeEvent::new(
+                "message.delta",
+                json!({
+                    "text": "继续修复",
+                    "harness": {
+                        "coding_workbench_recovery": {
+                            "source": "coding_workbench",
+                            "outputRefs": ["output://snapshot-evidence"],
+                            "evidenceRefs": ["evidence://snapshot-evidence/recovery"]
+                        }
                     }
                 }),
             ),
@@ -188,6 +388,25 @@ async fn export_evidence_pack_includes_coding_snapshot_artifacts() {
         })
         .await
         .expect("export evidence");
+    let file_changed_event_id = response
+        .events
+        .iter()
+        .find(|event| event.event_type == "file.changed")
+        .map(|event| event.event_id.clone())
+        .expect("file.changed event id");
+    let recovery_event_id = response
+        .events
+        .iter()
+        .find(|event| {
+            event.event_type == "message.delta"
+                && event
+                    .payload
+                    .get("harness")
+                    .and_then(serde_json::Value::as_object)
+                    .is_some()
+        })
+        .map(|event| event.event_id.clone())
+        .expect("recovery event id");
     let evidence_pack = response.evidence_pack.expect("evidence pack");
     assert!(evidence_pack.artifacts.iter().any(|artifact| {
         artifact.kind == "tool_output_snapshot"
@@ -197,6 +416,18 @@ async fn export_evidence_pack_includes_coding_snapshot_artifacts() {
         artifact.kind == "file_checkpoint_snapshot"
             && artifact.relative_path == "runtime-file-checkpoints/snapshot-evidence.txt"
     }));
+    assert!(evidence_pack.artifacts.iter().any(|artifact| {
+        artifact.kind == "tool_output"
+            && artifact.relative_path
+                == "sessions/sess_coding_snapshot_evidence/runtime-outputs/snapshot-evidence.txt"
+            && artifact.bytes == 42
+    }));
+    assert!(evidence_pack.artifacts.iter().any(|artifact| {
+        artifact.kind == "file_checkpoint"
+            && artifact.relative_path
+                == "sessions/sess_coding_snapshot_evidence/runtime-file-checkpoints/snapshot-evidence.txt"
+            && artifact.bytes == 24
+    }));
     assert_eq!(
         evidence_pack
             .observability_summary
@@ -204,6 +435,61 @@ async fn export_evidence_pack_includes_coding_snapshot_artifacts() {
             .and_then(|summary| summary.get("evidence_artifact_count"))
             .and_then(serde_json::Value::as_u64),
         Some(evidence_pack.artifacts.len() as u64)
+    );
+    let coding_summary = evidence_pack
+        .observability_summary
+        .as_ref()
+        .and_then(|summary| summary.get("coding"))
+        .expect("coding evidence summary");
+    assert_eq!(
+        coding_summary["schemaVersion"],
+        "coding-evidence-summary.v1"
+    );
+    assert_eq!(coding_summary["fileChangeCount"], 1);
+    assert_eq!(coding_summary["patchCount"], 1);
+    assert_eq!(coding_summary["failedPatchCount"], 1);
+    assert_eq!(coding_summary["commandCount"], 1);
+    assert_eq!(coding_summary["failedCommandCount"], 1);
+    assert_eq!(coding_summary["testCount"], 1);
+    assert_eq!(coding_summary["failedTestCount"], 1);
+    assert_eq!(coding_summary["actionRequiredCount"], 1);
+    assert_eq!(coding_summary["actionResolvedCount"], 1);
+    assert_eq!(coding_summary["recoveryRequestCount"], 1);
+    assert_json_array_contains(coding_summary, "outputRefs", "output://snapshot-evidence");
+    assert_json_array_contains(coding_summary, "diffRefs", "diff://snapshot-evidence");
+    assert_json_array_contains(
+        coding_summary,
+        "checkpointRefs",
+        "checkpoint_snapshot_evidence",
+    );
+    assert_json_array_contains(coding_summary, "artifactRefs", "artifact_snapshot_evidence");
+    assert_json_array_contains(
+        coding_summary,
+        "artifactRefs",
+        "artifact://snapshot-evidence/change",
+    );
+    assert_json_array_contains(
+        coding_summary,
+        "evidenceRefs",
+        "evidence://snapshot-evidence/action",
+    );
+    assert_json_array_contains(
+        coding_summary,
+        "evidenceRefs",
+        "evidence://snapshot-evidence/recovery",
+    );
+    assert_json_array_contains(coding_summary, "sourceEventIds", &file_changed_event_id);
+    assert_json_array_contains(coding_summary, "sourceEventIds", &recovery_event_id);
+}
+
+fn assert_json_array_contains(value: &serde_json::Value, key: &str, expected: &str) {
+    assert!(
+        value
+            .get(key)
+            .and_then(serde_json::Value::as_array)
+            .is_some_and(|items| items.iter().any(|item| item.as_str() == Some(expected))),
+        "{key} should contain {expected}; actual={:?}",
+        value.get(key)
     );
 }
 
@@ -491,7 +777,7 @@ async fn export_evidence_uses_injected_evidence_pack_provider() {
     assert_eq!(requests.len(), 1);
     assert_eq!(requests[0].session.session_id, "sess_evidence");
     assert_eq!(requests[0].turns[0].turn_id, "turn_evidence");
-    assert_eq!(requests[0].events.len(), 2);
+    assert_eq!(requests[0].events.len(), 3);
     assert_eq!(requests[0].artifacts[0].artifact_ref, "artifact-report");
 
     let evidence_pack = response.evidence_pack.expect("evidence pack");
@@ -509,6 +795,131 @@ async fn export_evidence_uses_injected_evidence_pack_provider() {
             .and_then(|summary| summary.get("decision"))
             .and_then(|decision| decision.as_str()),
         Some("in_progress")
+    );
+}
+
+#[tokio::test]
+async fn export_evidence_reads_request_logs_from_telemetry_store() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
+    let telemetry_store =
+        TelemetryStore::initialize(&roots.telemetry_db_path).expect("telemetry store");
+    let mut request_log = lime_infra::telemetry::RequestLog::new(
+        "request-telemetry-1".to_string(),
+        lime_core::ProviderType::OpenAI,
+        "gpt-4o".to_string(),
+        true,
+    );
+    request_log.session_id = Some("sess_telemetry_export".to_string());
+    request_log.thread_id = Some("thread_telemetry_export".to_string());
+    request_log.turn_id = Some("turn_telemetry_export".to_string());
+    request_log.mark_success(125, 200);
+    telemetry_store
+        .upsert_request_log(&request_log)
+        .expect("upsert telemetry log");
+
+    let core = RuntimeCore::default()
+        .with_telemetry_store(Arc::new(telemetry_store))
+        .with_event_log_writer(Arc::new(
+            EventLogWriter::new(&roots.event_log_root).expect("writer"),
+        ))
+        .with_projection_store(Arc::new(
+            ProjectionStore::initialize(&roots.projection_db_path).expect("projection"),
+        ));
+    core.start_session(AgentSessionStartParams {
+        session_id: Some("sess_telemetry_export".to_string()),
+        thread_id: Some("thread_telemetry_export".to_string()),
+        app_id: "content-studio".to_string(),
+        workspace_id: Some("workspace-main".to_string()),
+        business_object_ref: None,
+        locale: None,
+    })
+    .expect("session");
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: "sess_telemetry_export".to_string(),
+            turn_id: Some("turn_telemetry_export".to_string()),
+            input: AgentInput {
+                text: "生成 telemetry evidence".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: None,
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("turn");
+
+    let response = core
+        .export_evidence(EvidenceExportParams {
+            session_id: "sess_telemetry_export".to_string(),
+            turn_id: Some("turn_telemetry_export".to_string()),
+            include_events: Some(true),
+            include_artifacts: Some(true),
+            include_evidence_pack: Some(true),
+        })
+        .await
+        .expect("export evidence");
+
+    let evidence_pack = response.evidence_pack.expect("evidence pack");
+    let request_telemetry = evidence_pack
+        .observability_summary
+        .as_ref()
+        .and_then(|summary| summary.get("request_telemetry"))
+        .expect("request telemetry summary");
+    assert_eq!(
+        request_telemetry
+            .get("status")
+            .and_then(serde_json::Value::as_str),
+        Some("exported")
+    );
+    assert_eq!(
+        request_telemetry
+            .get("requestCount")
+            .and_then(serde_json::Value::as_u64),
+        Some(1)
+    );
+    assert_eq!(
+        request_telemetry
+            .get("sessionRequestCount")
+            .and_then(serde_json::Value::as_u64),
+        Some(1)
+    );
+    assert_eq!(
+        request_telemetry
+            .get("turnRequestCount")
+            .and_then(serde_json::Value::as_u64),
+        Some(1)
+    );
+    assert_eq!(
+        request_telemetry
+            .get("statusBreakdown")
+            .and_then(|value| value.get("success"))
+            .and_then(serde_json::Value::as_u64),
+        Some(1)
+    );
+    assert_eq!(
+        request_telemetry
+            .get("statusBreakdown")
+            .and_then(|value| value.get("failed"))
+            .and_then(serde_json::Value::as_u64),
+        Some(0)
+    );
+    assert_eq!(
+        request_telemetry
+            .get("statusBreakdown")
+            .and_then(|value| value.get("timeout"))
+            .and_then(serde_json::Value::as_u64),
+        Some(0)
+    );
+    assert_eq!(
+        request_telemetry
+            .get("statusBreakdown")
+            .and_then(|value| value.get("cancelled"))
+            .and_then(serde_json::Value::as_u64),
+        Some(0)
     );
 }
 

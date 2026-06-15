@@ -89,8 +89,12 @@ function buildLogEntries(codingView: CodingWorkbenchView): CodingLogEntry[] {
     ...codingView.commands.map(
       (command): CodingLogEntry => ({
         id: `command:${command.commandId}`,
-        title: command.command || command.title,
-        detail: command.preview || command.cwd,
+        title:
+          command.commandSummary ||
+          command.canonicalCommand ||
+          command.command ||
+          command.title,
+        detail: command.preview || command.command || command.cwd,
         status: command.status,
         tone: toneForStatus(command.status),
         kind: "command",
@@ -99,7 +103,7 @@ function buildLogEntries(codingView: CodingWorkbenchView): CodingLogEntry[] {
     ...codingView.tests.map(
       (test): CodingLogEntry => ({
         id: `test:${test.testRunId}`,
-        title: test.suite || test.title,
+        title: test.commandSummary || test.canonicalCommand || test.suite || test.title,
         detail:
           test.result ||
           [

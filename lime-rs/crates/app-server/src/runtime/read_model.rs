@@ -10,6 +10,7 @@ use super::status::agent_turn_status_label;
 use super::string_array_field;
 use super::string_field;
 use super::timestamp_seconds;
+use super::turn_input_events;
 use super::StoredSession;
 use app_server_protocol::AgentEvent;
 use app_server_protocol::AgentInput;
@@ -57,7 +58,12 @@ pub(super) fn runtime_session_read_detail(stored: &StoredSession) -> serde_json:
 pub(super) fn runtime_session_messages(stored: &StoredSession) -> Vec<serde_json::Value> {
     let mut messages = Vec::new();
     for turn in &stored.turns {
-        if let Some(input) = stored.turn_inputs.get(&turn.turn_id) {
+        let input = stored
+            .turn_inputs
+            .get(&turn.turn_id)
+            .cloned()
+            .or_else(|| turn_input_from_events(&stored.events, &turn.turn_id));
+        if let Some(input) = input.as_ref() {
             if let Some(message) = runtime_user_message_from_turn(turn, input) {
                 messages.push(message);
             }
@@ -67,6 +73,45 @@ pub(super) fn runtime_session_messages(stored: &StoredSession) -> Vec<serde_json
         }
     }
     messages
+}
+
+fn turn_input_from_events(
+    events: &[app_server_protocol::AgentEvent],
+    turn_id: &str,
+) -> Option<app_server_protocol::AgentInput> {
+    events
+        .iter()
+        .find(|event| {
+            event.turn_id.as_deref() == Some(turn_id)
+                && turn_input_events::is_turn_input_event(event)
+        })
+        .and_then(|event| event.payload.get("input"))
+        .and_then(|value| serde_json::from_value(value.clone()).ok())
+        .or_else(|| {
+            events
+                .iter()
+                .find(|event| {
+                    event.turn_id.as_deref() == Some(turn_id)
+                        && turn_input_events::is_turn_input_event(event)
+                })
+                .and_then(|event| {
+                    event
+                        .payload
+                        .get("content")
+                        .and_then(|content| content.get("text").or_else(|| content.get("message")))
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_string)
+                        .filter(|text| !text.trim().is_empty())
+                        .map(|text| app_server_protocol::AgentInput {
+                            text,
+                            attachments: event
+                                .payload
+                                .get("attachments")
+                                .and_then(|value| serde_json::from_value(value.clone()).ok())
+                                .unwrap_or_default(),
+                        })
+                })
+        })
 }
 
 fn runtime_user_message_from_turn(
@@ -214,6 +259,18 @@ fn runtime_thread_read_from_stored_session(stored: &StoredSession) -> serde_json
     let pending_request_count = coding_activity.pending_requests.len();
     let command_count = coding_activity.commands.len();
     let test_count = coding_activity.tests.len();
+    let changed_file_count = coding_activity
+        .change_summary
+        .as_ref()
+        .and_then(|summary| summary.get("changed_file_count"))
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
+    let patch_count = coding_activity
+        .change_summary
+        .as_ref()
+        .and_then(|summary| summary.get("patch_count"))
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
     json!({
         "session_id": stored.session.session_id,
         "thread_id": stored.session.thread_id,
@@ -232,6 +289,7 @@ fn runtime_thread_read_from_stored_session(stored: &StoredSession) -> serde_json
         "tool_calls": tool_calls_from_events(&stored.events),
         "commands": coding_activity.commands,
         "tests": coding_activity.tests,
+        "change_summary": coding_activity.change_summary,
         "model_routing": model_routing.clone(),
         "service_model_slot": service_model_slot.clone(),
         "artifacts": artifact_projection::stored_artifact_summaries_for_turn(stored, None),
@@ -242,6 +300,8 @@ fn runtime_thread_read_from_stored_session(stored: &StoredSession) -> serde_json
             "pending_request_count": pending_request_count,
             "command_count": command_count,
             "test_count": test_count,
+            "changed_file_count": changed_file_count,
+            "patch_count": patch_count,
         },
         "runtime_summary": {
             "latestTurnStatus": latest_turn_status,
@@ -289,6 +349,54 @@ fn model_routing_from_event(event: &AgentEvent) -> serde_json::Value {
         &event.payload,
         "provider_readiness",
         "provider_readiness",
+    );
+    merge_optional_payload_value(
+        &mut routing,
+        &event.payload,
+        "modelRegistry",
+        "modelRegistry",
+    );
+    merge_optional_payload_value(
+        &mut routing,
+        &event.payload,
+        "model_registry",
+        "model_registry",
+    );
+    merge_optional_payload_value(
+        &mut routing,
+        &event.payload,
+        "fallbackApplied",
+        "fallbackApplied",
+    );
+    merge_optional_payload_value(
+        &mut routing,
+        &event.payload,
+        "fallback_applied",
+        "fallback_applied",
+    );
+    merge_optional_payload_value(
+        &mut routing,
+        &event.payload,
+        "routingAttempts",
+        "routingAttempts",
+    );
+    merge_optional_payload_value(
+        &mut routing,
+        &event.payload,
+        "routing_attempts",
+        "routing_attempts",
+    );
+    merge_optional_payload_value(
+        &mut routing,
+        &event.payload,
+        "requestedSelection",
+        "requestedSelection",
+    );
+    merge_optional_payload_value(
+        &mut routing,
+        &event.payload,
+        "requested_selection",
+        "requested_selection",
     );
     routing.insert(
         "sourceEventId".to_string(),

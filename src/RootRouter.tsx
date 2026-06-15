@@ -28,7 +28,10 @@ const BROWSER_CONNECTOR_GUIDE_ROUTE_ID = "browser-connector-guide";
 const BROWSER_CONNECTOR_GUIDE_PATH = "/browser-connector-guide";
 
 function getEffectivePathname(location: Location): string {
-  if (location.pathname !== INDEX_ENTRY_PATH) {
+  if (
+    location.pathname !== INDEX_ENTRY_PATH &&
+    !location.pathname.endsWith(INDEX_ENTRY_PATH)
+  ) {
     return location.pathname;
   }
 

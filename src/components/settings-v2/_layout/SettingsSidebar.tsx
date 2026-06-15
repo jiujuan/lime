@@ -351,6 +351,7 @@ export function SettingsSidebar({
                   key={item.key}
                   $active={activeTab === item.key}
                   data-active={String(activeTab === item.key)}
+                  data-testid={`settings-sidebar-tab-${item.key}`}
                   onMouseEnter={() => onTabPrefetch?.(item.key)}
                   onMouseDown={() => onTabPrefetch?.(item.key)}
                   onFocus={() => onTabPrefetch?.(item.key)}
@@ -405,6 +406,7 @@ export function SettingsSidebar({
                       key={item.key}
                       $active={activeTab === item.key}
                       data-active={String(activeTab === item.key)}
+                      data-testid={`settings-floating-tab-${item.key}`}
                       onMouseEnter={() => onTabPrefetch?.(item.key)}
                       onMouseDown={() => onTabPrefetch?.(item.key)}
                       onFocus={() => onTabPrefetch?.(item.key)}

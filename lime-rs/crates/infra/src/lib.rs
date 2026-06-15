@@ -24,7 +24,7 @@ pub use resilience::{
 pub use telemetry::{
     LogRotationConfig, LoggerError, ModelStats, ModelTokenStats, PeriodTokenStats, ProviderStats,
     ProviderTokenStats, RequestLog, RequestLogger, RequestStatus, StatsAggregator, StatsSummary,
-    TimeRange, TokenSource, TokenStatsSummary, TokenTracker, TokenUsageRecord,
+    TelemetryStore, TimeRange, TokenSource, TokenStatsSummary, TokenTracker, TokenUsageRecord,
 };
 
 pub fn version() -> &'static str {

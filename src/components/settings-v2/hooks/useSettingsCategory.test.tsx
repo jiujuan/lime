@@ -73,7 +73,13 @@ describe("useSettingsCategory", () => {
 
     expect(systemGroup?.title).toBe("System");
     expect(systemKeys).toContain(SettingsTabs.Developer);
+    expect(systemKeys).toContain(SettingsTabs.ExecutionPolicy);
     expect(systemKeys).not.toContain(SettingsTabs.Experimental);
+    expect(
+      systemGroup?.items.find(
+        (item) => item.key === SettingsTabs.ExecutionPolicy,
+      )?.label,
+    ).toBe("Execution Policy");
     expect(developerItem?.label).toBe("Developer & Labs");
     expect(developerItem?.label).not.toBe("开发者与实验功能");
     expect(developerItem?.label).not.toContain("settings.tab.developerLab");

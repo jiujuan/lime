@@ -1384,7 +1384,8 @@ export const AccountMenuPopover = styled.div<{ $collapsed?: boolean }>`
   z-index: 80;
   width: ${({ $collapsed }) => ($collapsed ? "284px" : "304px")};
   max-width: min(304px, calc(100vw - 24px));
-  max-height: min(760px, calc(100vh - 24px));
+  max-height: ${({ $collapsed }) =>
+    $collapsed ? "calc(100vh - 24px)" : "calc(100vh - 116px)"};
   overflow: visible;
   overscroll-behavior: contain;
   border-radius: 18px;
@@ -1398,6 +1399,26 @@ export const AccountMenuPopover = styled.div<{ $collapsed?: boolean }>`
   transform-origin: ${({ $collapsed }) =>
     $collapsed ? "left bottom" : "left bottom"};
   animation: accountMenuPopoverIn 150ms ease-out both;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: var(--lime-divider-strong, rgba(180, 196, 180, 0.7));
+  }
+
+  @media (max-height: 640px) {
+    bottom: calc(100% + 8px);
+    max-height: calc(100vh - 96px);
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
 
   @keyframes accountMenuPopoverIn {
     from {
@@ -1723,7 +1744,7 @@ export const AccountSubmenuPopover = styled.div`
   bottom: 0;
   z-index: 90;
   width: 188px;
-  max-height: min(300px, calc(100vh - 24px));
+  max-height: min(300px, calc(100vh - 48px));
   overflow-y: auto;
   overscroll-behavior: contain;
   border-radius: 16px;
@@ -1751,6 +1772,14 @@ export const AccountSubmenuPopover = styled.div`
     left: 0;
     top: calc(100% + 6px);
     bottom: auto;
+  }
+
+  @media (max-height: 640px) {
+    position: static;
+    width: 100%;
+    max-height: 180px;
+    margin-top: 6px;
+    animation: none;
   }
 `;
 

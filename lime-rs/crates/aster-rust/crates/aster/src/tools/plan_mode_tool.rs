@@ -1140,6 +1140,7 @@ mod tests {
             environment: HashMap::new(),
             cancellation_token: None,
             provider: None,
+            workspace_sandbox: None,
         }
     }
 

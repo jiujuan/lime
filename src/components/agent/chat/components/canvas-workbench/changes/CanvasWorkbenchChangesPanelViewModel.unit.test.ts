@@ -1,17 +1,22 @@
 import { describe, expect, it } from "vitest";
 import {
   buildCanvasWorkbenchChangeFileTree,
+  buildCanvasWorkbenchChangeDiffLines,
   buildCanvasWorkbenchGitApplyPatch,
   countCanvasWorkbenchDiffStats,
+  countCanvasWorkbenchChangeItemsStats,
   inferCanvasWorkbenchChangeKind,
   findChangeItemForSelection,
   isPendingChangeItem,
+  flattenCanvasWorkbenchChangeFileTree,
   parseCanvasWorkbenchGitPatchToChangeItems,
+  resolveCanvasWorkbenchSelectedChangeItem,
   resolveChangeDisplayMeta,
   resolveChangeItemDisplayName,
   resolveChangeStatusClassName,
   resolveChangeStatusCopyKey,
 } from "./CanvasWorkbenchChangesPanelViewModel";
+import { resolveCanvasWorkbenchChangeTreeNodeMeta } from "./CanvasWorkbenchChangeTreeMeta";
 
 describe("CanvasWorkbenchChangesPanelViewModel", () => {
   it("应按 selection path / target path / 标题匹配变更项", () => {
@@ -44,6 +49,43 @@ describe("CanvasWorkbenchChangesPanelViewModel", () => {
       })?.id,
     ).toBe("b");
     expect(findChangeItemForSelection(items, null)).toBeNull();
+  });
+
+  it("应优先选中带证据的 runtime 变更项而不是默认预览项", () => {
+    const items = [
+      {
+        id: "preview",
+        path: "greeting.ts",
+        source: "runtime" as const,
+        preview: "export function greeting() returns Hello Lime Workbench.",
+        status: "completed" as const,
+      },
+      {
+        id: "runtime",
+        path: "src/coding-target.ts",
+        source: "runtime" as const,
+        preview: "export const codingWorkbenchSmoke = true;",
+        status: "completed" as const,
+        changeKind: "modified" as const,
+      },
+    ];
+
+    expect(
+      resolveCanvasWorkbenchSelectedChangeItem({
+        items,
+        selectedChangeId: null,
+        activeSelectionChangeItem: items[0],
+        preferRuntimeEvidenceDefault: true,
+      })?.id,
+    ).toBe("runtime");
+    expect(
+      resolveCanvasWorkbenchSelectedChangeItem({
+        items,
+        selectedChangeId: "preview",
+        activeSelectionChangeItem: items[1],
+        preferRuntimeEvidenceDefault: true,
+      })?.id,
+    ).toBe("preview");
   });
 
   it("应推导变更项展示名、pending 状态和状态样式", () => {
@@ -197,6 +239,74 @@ describe("CanvasWorkbenchChangesPanelViewModel", () => {
     expect(patch).toContain("+++ /dev/null");
   });
 
+  it("应从变更项生成带行号的 diff 并汇总所有文件统计", () => {
+    const items = [
+      {
+        id: "a",
+        path: "src/app.ts",
+        previousContent: "old\nsame\n",
+        currentContent: "new\nsame\n",
+      },
+      {
+        id: "b",
+        path: "docs/new.md",
+        previousContent: null,
+        currentContent: "hello\n",
+      },
+    ];
+
+    const diffLines = buildCanvasWorkbenchChangeDiffLines(items[0]);
+
+    expect(diffLines[0]).toMatchObject({
+      type: "remove",
+      oldLineNumber: 1,
+      newLineNumber: null,
+    });
+    expect(diffLines[1]).toMatchObject({
+      type: "add",
+      oldLineNumber: null,
+      newLineNumber: 1,
+    });
+    expect(
+      countCanvasWorkbenchChangeItemsStats(items),
+    ).toEqual({ additions: 3, removals: 1 });
+    expect(
+      flattenCanvasWorkbenchChangeFileTree(
+        buildCanvasWorkbenchChangeFileTree(items),
+      ),
+    ).toHaveLength(2);
+  });
+
+  it("应为文件树目录聚合子级变更标识", () => {
+    const tree = buildCanvasWorkbenchChangeFileTree([
+      {
+        id: "modified",
+        path: "src/app.ts",
+        changeKind: "modified",
+      },
+      {
+        id: "added",
+        path: "src/components/new.tsx",
+        changeKind: "added",
+      },
+    ]);
+
+    const srcNode = tree.find((node) => node.type === "folder");
+
+    expect(srcNode).toBeTruthy();
+    expect(resolveCanvasWorkbenchChangeTreeNodeMeta(srcNode!)?.kind).toBe(
+      "added",
+    );
+    if (srcNode?.type === "folder") {
+      const fileNode = srcNode.children.find(
+        (node) => node.type === "file" && node.path === "src/app.ts",
+      );
+      expect(resolveCanvasWorkbenchChangeTreeNodeMeta(fileNode!)?.kind).toBe(
+        "modified",
+      );
+    }
+  });
+
   it("应把后端 Git patch 解析为可渲染的文件变更项", () => {
     const items = parseCanvasWorkbenchGitPatchToChangeItems(
       [
@@ -221,16 +331,22 @@ describe("CanvasWorkbenchChangesPanelViewModel", () => {
       displayName: "App.tsx",
       source: "git",
       changeKind: "modified",
+      hunkStartLine: 1,
+      hunkEndLine: 1,
     });
     expect(items[0].diffLines).toEqual([
-      { type: "remove", value: "old" },
-      { type: "add", value: "new" },
+      { type: "remove", value: "old", oldLineNumber: 1, newLineNumber: null },
+      { type: "add", value: "new", oldLineNumber: null, newLineNumber: 1 },
     ]);
     expect(items[1]).toMatchObject({
       path: "docs/new.md",
       displayName: "new.md",
       changeKind: "added",
+      hunkStartLine: 1,
+      hunkEndLine: 1,
     });
-    expect(items[1].diffLines).toEqual([{ type: "add", value: "hello" }]);
+    expect(items[1].diffLines).toEqual([
+      { type: "add", value: "hello", oldLineNumber: null, newLineNumber: 1 },
+    ]);
   });
 });

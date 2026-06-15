@@ -30,6 +30,7 @@ import type { CreationReplaySurfaceModel } from "../utils/creationReplaySurface"
 import { buildStepProgressProps } from "./chatSurfaceProps";
 import { WorkspaceConversationScene } from "./WorkspaceConversationScene";
 import { buildWorkspaceConversationCodingViews } from "./workspaceConversationCodingViews";
+import type { CodingWorkbenchRecoveryContext } from "./codingWorkbenchRecovery";
 import {
   buildQuotedReplyText,
   buildSessionRuntimeProjectionIdentity,
@@ -110,6 +111,7 @@ type NavigationActions = Pick<
   | "handleWorkspaceAlertSelectDirectory"
   | "handleDismissWorkspaceAlert"
   | "handleManageProviders"
+  | "handleOpenExecutionPolicySettings"
   | "handleProjectChange"
   | "handleOpenAppearanceSettings"
   | "handleOpenRuntimeMemoryWorkbench"
@@ -669,7 +671,6 @@ export function useWorkspaceConversationSceneRuntime({
         t,
         locale,
         turns: projectedTurns,
-        threadItems: projectedThreadItems,
         currentTurnId: projectedCurrentTurnId,
         threadRead: projectedThreadRead,
         pendingActions: projectedPendingActions,
@@ -679,8 +680,22 @@ export function useWorkspaceConversationSceneRuntime({
         focusedTimelineItemId,
         onOpenFile: canvasScene.handleOpenCanvasWorkbenchPath,
         onRespondToAction: handlePermissionResponse,
-        onSubmitRecoveryPrompt: (prompt) =>
-          handleSendFromEmptyState({ textOverride: prompt }),
+        onSubmitRecoveryPrompt: (
+          prompt,
+          recoveryContext?: CodingWorkbenchRecoveryContext,
+        ) =>
+          handleSendFromEmptyState({
+            textOverride: prompt,
+            sendOptions: recoveryContext
+              ? {
+                  requestMetadata: {
+                    harness: {
+                      coding_workbench_recovery: recoveryContext,
+                    },
+                  },
+                }
+              : undefined,
+          }),
       }),
     [
       canvasScene.handleOpenCanvasWorkbenchPath,
@@ -693,7 +708,6 @@ export function useWorkspaceConversationSceneRuntime({
       projectedPendingActions,
       projectedQueuedTurns,
       projectedSubmittedActionsInFlight,
-      projectedThreadItems,
       projectedThreadRead,
       projectedTurns,
       t,
@@ -704,7 +718,7 @@ export function useWorkspaceConversationSceneRuntime({
     sessionRuntimeCounters.shouldUseRuntimeWorkbench ||
     navbarContextVariant === "task-center";
   const effectiveCanvasWorkbenchRootPath =
-    canvasWorkbenchRootPath?.trim() || projectRootPath;
+    projectRootPath?.trim() || canvasWorkbenchRootPath?.trim() || null;
   const workspaceView = buildWorkspaceHeaderView({
     projectRootPath: effectiveCanvasWorkbenchRootPath,
     workspacePathMissing: Boolean(workspacePathMissing),
@@ -754,6 +768,8 @@ export function useWorkspaceConversationSceneRuntime({
       accessMode,
       setAccessMode,
       onManageProviders: navigationActions.handleManageProviders,
+      onOpenExecutionPolicySettings:
+        navigationActions.handleOpenExecutionPolicySettings,
       toolPreferences: chatToolPreferences,
       onToolPreferenceChange: (key, enabled) =>
         setChatToolPreferences((previous) => ({

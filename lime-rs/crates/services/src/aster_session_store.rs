@@ -6,7 +6,7 @@
 //! 这是应用层接管框架层存储的关键桥接模块。
 
 use anyhow::{anyhow, Result};
-use aster::conversation::message::{Message, MessageContent, MessageMetadata};
+use aster::conversation::message::Message;
 use aster::conversation::Conversation;
 use aster::model::ModelConfig;
 use aster::recipe::Recipe;
@@ -26,22 +26,15 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex as StdMutex;
 
+mod legacy_conversation;
+mod runtime_conversation;
+
 /// Lime 的 SessionStore 实现
 ///
 /// 将 aster 的会话数据存储到 Lime 的 SQLite 数据库
 pub struct LimeSessionStore {
     db: DbConnection,
     metadata_cache: StdMutex<HashMap<String, Session>>,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct PersistedConversationMessageRecord {
-    content: Vec<MessageContent>,
-    #[serde(default = "persisted_visibility_default_true")]
-    user_visible: bool,
-    #[serde(default = "persisted_visibility_default_true")]
-    agent_visible: bool,
 }
 
 struct SessionListingRow {
@@ -68,34 +61,6 @@ struct SessionListingRow {
     provider_name: Option<String>,
     model_config_json: Option<String>,
     message_count: usize,
-}
-
-fn persisted_visibility_default_true() -> bool {
-    true
-}
-
-fn serialize_persisted_message_content(message: &Message) -> Result<String> {
-    serde_json::to_string(&PersistedConversationMessageRecord {
-        content: message.content.clone(),
-        user_visible: message.metadata.user_visible,
-        agent_visible: message.metadata.agent_visible,
-    })
-    .map_err(|e| anyhow!("序列化消息内容失败: {e}"))
-}
-
-fn deserialize_persisted_message_content(
-    content_json: &str,
-) -> Option<PersistedConversationMessageRecord> {
-    if let Ok(record) = serde_json::from_str::<PersistedConversationMessageRecord>(content_json) {
-        return Some(record);
-    }
-
-    let content: Vec<MessageContent> = serde_json::from_str(content_json).ok()?;
-    Some(PersistedConversationMessageRecord {
-        content,
-        user_visible: true,
-        agent_visible: true,
-    })
 }
 
 impl LimeSessionStore {
@@ -244,18 +209,6 @@ impl LimeSessionStore {
         Self::insert_session_row(conn, session_id, "新对话", &working_dir, SessionType::User)
     }
 
-    /// 将 Message 的 role 转换为字符串
-    /// 通过检查 Message::user() 和 Message::assistant() 的 role 来判断
-    fn message_role_to_string(message: &Message) -> String {
-        // 使用 Debug 格式来获取 role 字符串
-        let role_debug = format!("{:?}", message.role);
-        if role_debug.contains("User") {
-            "user".to_string()
-        } else {
-            "assistant".to_string()
-        }
-    }
-
     /// 解析会话 working_dir（优先默认 workspace，其次应用默认项目目录）
     fn resolve_session_working_dir(conn: &rusqlite::Connection) -> PathBuf {
         if let Some(path) = WorkspaceManager::get_default_root_path_from_conn(conn)
@@ -391,6 +344,26 @@ impl LimeSessionStore {
             .map(|row| Self::build_session_from_listing_row(conn, row))
             .collect())
     }
+
+    async fn apply_runtime_message_counts(&self, sessions: &mut [Session]) {
+        for session in sessions {
+            if let Ok(Some(count)) = runtime_conversation::count_runtime_messages(&session.id).await
+            {
+                session.message_count = count;
+            }
+        }
+    }
+
+    fn load_session_working_dir(conn: &rusqlite::Connection, session_id: &str) -> Result<PathBuf> {
+        let working_dir: Option<String> = conn
+            .query_row(
+                "SELECT working_dir FROM agent_sessions WHERE id = ?",
+                [session_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| anyhow!("读取会话工作目录失败: {e}"))?;
+        Ok(Self::parse_session_working_dir(conn, working_dir))
+    }
 }
 
 #[async_trait]
@@ -454,61 +427,14 @@ impl SessionStore for LimeSessionStore {
             include_messages
         );
 
-        let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
-        Self::ensure_session_row(&conn, id)?;
-        tracing::debug!("[SessionStore] get_session 已确保会话存在: {}", id);
-
-        let mut stmt = conn
-            .prepare(
-                "SELECT id, model, system_prompt, title, created_at, updated_at, working_dir,
-                        session_type, user_set_name, extension_data_json,
-                        total_tokens, input_tokens, output_tokens, cached_input_tokens, cache_creation_input_tokens,
-                        accumulated_total_tokens, accumulated_input_tokens, accumulated_output_tokens,
-                        schedule_id, recipe_json, user_recipe_values_json,
-                        provider_name, model_config_json
-                 FROM agent_sessions WHERE id = ?",
-            )
-            .map_err(|e| anyhow!("准备查询失败: {e}"))?;
-
-        let session_row = stmt
-            .query_row([id], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, Option<String>>(2)?,
-                    row.get::<_, Option<String>>(3)?,
-                    row.get::<_, String>(4)?,
-                    row.get::<_, String>(5)?,
-                    row.get::<_, Option<String>>(6)?,
-                    row.get::<_, Option<String>>(7)?,
-                    row.get::<_, bool>(8)?,
-                    row.get::<_, String>(9)?,
-                    row.get::<_, Option<i32>>(10)?,
-                    row.get::<_, Option<i32>>(11)?,
-                    row.get::<_, Option<i32>>(12)?,
-                    row.get::<_, Option<i32>>(13)?,
-                    row.get::<_, Option<i32>>(14)?,
-                    row.get::<_, Option<i32>>(15)?,
-                    row.get::<_, Option<i32>>(16)?,
-                    row.get::<_, Option<i32>>(17)?,
-                    row.get::<_, Option<String>>(18)?,
-                    row.get::<_, Option<String>>(19)?,
-                    row.get::<_, Option<String>>(20)?,
-                    row.get::<_, Option<String>>(21)?,
-                    row.get::<_, Option<String>>(22)?,
-                ))
-            })
-            .map_err(|e| anyhow!("会话不存在: {e}"))?;
-
         let (
             id,
             model,
-            _system_prompt,
             title,
             created_at,
             updated_at,
-            db_working_dir,
-            session_type_raw,
+            working_dir,
+            session_type,
             user_set_name,
             extension_data_json,
             total_tokens,
@@ -524,21 +450,185 @@ impl SessionStore for LimeSessionStore {
             user_recipe_values_json,
             provider_name,
             model_config_json,
-        ) = session_row;
+        ) = {
+            let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
+            Self::ensure_session_row(&conn, id)?;
+            tracing::debug!("[SessionStore] get_session 已确保会话存在: {}", id);
 
-        let created_at = Self::parse_timestamp_or_now(&created_at);
-        let updated_at = Self::parse_timestamp_or_now(&updated_at);
+            let mut stmt = conn
+                .prepare(
+                    "SELECT id, model, system_prompt, title, created_at, updated_at, working_dir,
+                            session_type, user_set_name, extension_data_json,
+                            total_tokens, input_tokens, output_tokens, cached_input_tokens, cache_creation_input_tokens,
+                            accumulated_total_tokens, accumulated_input_tokens, accumulated_output_tokens,
+                            schedule_id, recipe_json, user_recipe_values_json,
+                            provider_name, model_config_json
+                     FROM agent_sessions WHERE id = ?",
+                )
+                .map_err(|e| anyhow!("准备查询失败: {e}"))?;
 
-        let session_type = Self::resolve_session_type(session_type_raw, &model);
-        let working_dir = Self::parse_session_working_dir(&conn, db_working_dir);
+            let session_row = stmt
+                .query_row([id], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, Option<String>>(2)?,
+                        row.get::<_, Option<String>>(3)?,
+                        row.get::<_, String>(4)?,
+                        row.get::<_, String>(5)?,
+                        row.get::<_, Option<String>>(6)?,
+                        row.get::<_, Option<String>>(7)?,
+                        row.get::<_, bool>(8)?,
+                        row.get::<_, String>(9)?,
+                        row.get::<_, Option<i32>>(10)?,
+                        row.get::<_, Option<i32>>(11)?,
+                        row.get::<_, Option<i32>>(12)?,
+                        row.get::<_, Option<i32>>(13)?,
+                        row.get::<_, Option<i32>>(14)?,
+                        row.get::<_, Option<i32>>(15)?,
+                        row.get::<_, Option<i32>>(16)?,
+                        row.get::<_, Option<i32>>(17)?,
+                        row.get::<_, Option<String>>(18)?,
+                        row.get::<_, Option<String>>(19)?,
+                        row.get::<_, Option<String>>(20)?,
+                        row.get::<_, Option<String>>(21)?,
+                        row.get::<_, Option<String>>(22)?,
+                    ))
+                })
+                .map_err(|e| anyhow!("会话不存在: {e}"))?;
+
+            let (
+                id,
+                model,
+                _system_prompt,
+                title,
+                created_at,
+                updated_at,
+                db_working_dir,
+                session_type_raw,
+                user_set_name,
+                extension_data_json,
+                total_tokens,
+                input_tokens,
+                output_tokens,
+                cached_input_tokens,
+                cache_creation_input_tokens,
+                accumulated_total_tokens,
+                accumulated_input_tokens,
+                accumulated_output_tokens,
+                schedule_id,
+                recipe_json,
+                user_recipe_values_json,
+                provider_name,
+                model_config_json,
+            ) = session_row;
+            let created_at = Self::parse_timestamp_or_now(&created_at);
+            let updated_at = Self::parse_timestamp_or_now(&updated_at);
+            let session_type = Self::resolve_session_type(session_type_raw, &model);
+            let working_dir = Self::parse_session_working_dir(&conn, db_working_dir);
+
+            (
+                id,
+                model,
+                title,
+                created_at,
+                updated_at,
+                working_dir,
+                session_type,
+                user_set_name,
+                extension_data_json,
+                total_tokens,
+                input_tokens,
+                output_tokens,
+                cached_input_tokens,
+                cache_creation_input_tokens,
+                accumulated_total_tokens,
+                accumulated_input_tokens,
+                accumulated_output_tokens,
+                schedule_id,
+                recipe_json,
+                user_recipe_values_json,
+                provider_name,
+                model_config_json,
+            )
+        };
+
+        let mut runtime_message_count = match runtime_conversation::count_runtime_messages(&id)
+            .await
+        {
+            Ok(count) => count,
+            Err(error) => {
+                tracing::warn!(
+                    "[SessionStore] current runtime message count 读取失败，返回 metadata legacy count: session_id={}, error={}",
+                    id,
+                    error
+                );
+                None
+            }
+        };
 
         let conversation = if include_messages {
-            Some(Self::load_conversation_from_conn(&conn, &id)?)
+            let mut runtime_conversation = match runtime_conversation::load_runtime_conversation(
+                &id,
+            )
+            .await
+            {
+                Ok(conversation) => conversation,
+                Err(error) => {
+                    tracing::warn!(
+                        "[SessionStore] current runtime conversation 读取失败，不再回退 agent_messages 产品读路径: session_id={}, error={}",
+                        id,
+                        error
+                    );
+                    None
+                }
+            };
+
+            if runtime_conversation.is_none() {
+                let legacy_conversation = {
+                    let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
+                    legacy_conversation::load_for_migration(&conn, &id)?
+                };
+                if !legacy_conversation.is_empty() {
+                    match runtime_conversation::import_legacy_conversation_if_runtime_empty(
+                        &id,
+                        &working_dir,
+                        &legacy_conversation,
+                    )
+                    .await
+                    {
+                        Ok(Some(count)) => {
+                            runtime_message_count = Some(count);
+                            runtime_conversation =
+                                runtime_conversation::load_runtime_conversation(&id).await?;
+                        }
+                        Ok(None) => {
+                            runtime_conversation =
+                                runtime_conversation::load_runtime_conversation(&id).await?;
+                            runtime_message_count =
+                                runtime_conversation.as_ref().map(Conversation::len);
+                        }
+                        Err(error) => {
+                            tracing::warn!(
+                                "[SessionStore] legacy agent_messages 迁入 current runtime 失败，不作为产品读回 fallback: session_id={}, error={}",
+                                id,
+                                error
+                            );
+                        }
+                    }
+                }
+            }
+
+            runtime_conversation
         } else {
             None
         };
 
-        let message_count = self.count_messages(&conn, &id)?;
+        let message_count = conversation
+            .as_ref()
+            .map(Conversation::len)
+            .or(runtime_message_count)
+            .unwrap_or(0);
 
         let session = Session {
             id: id.to_string(),
@@ -581,47 +671,17 @@ impl SessionStore for LimeSessionStore {
             session_id
         );
 
+        let timestamp = Utc::now().to_rfc3339();
+        let working_dir = {
+            let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
+            Self::ensure_session_row(&conn, session_id)?;
+            Self::load_session_working_dir(&conn, session_id)?
+        };
+        let updated_count =
+            runtime_conversation::append_runtime_message(session_id, &working_dir, message).await?;
+
         let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
         Self::ensure_session_row(&conn, session_id)?;
-
-        let role = Self::message_role_to_string(message);
-        let content_json = serialize_persisted_message_content(message)?;
-        let timestamp = Utc::now().to_rfc3339();
-
-        // 从 content 中提取 tool_calls（ToolRequest 类型）
-        let tool_requests: Vec<_> = message
-            .content
-            .iter()
-            .filter_map(|c| {
-                if let MessageContent::ToolRequest(req) = c {
-                    Some(req.clone())
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        let tool_calls_json: Option<String> = if !tool_requests.is_empty() {
-            Some(serde_json::to_string(&tool_requests)?)
-        } else {
-            None
-        };
-
-        // 从 content 中提取 tool_call_id（ToolResponse 类型）
-        let tool_call_id: Option<String> = message.content.iter().find_map(|c| {
-            if let MessageContent::ToolResponse(resp) = c {
-                Some(resp.id.clone())
-            } else {
-                None
-            }
-        });
-
-        conn.execute(
-            "INSERT INTO agent_messages (session_id, role, content_json, timestamp, tool_calls_json, tool_call_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            rusqlite::params![session_id, role, content_json, timestamp, tool_calls_json, tool_call_id],
-        )
-        .map_err(|e| anyhow!("添加消息失败: {e}"))?;
 
         conn.execute(
             "UPDATE agent_sessions SET updated_at = ? WHERE id = ?",
@@ -632,7 +692,8 @@ impl SessionStore for LimeSessionStore {
         let updated_at = Self::parse_timestamp_or_now(&timestamp);
         self.update_cached_session_metadata(session_id, |session| {
             session.updated_at = updated_at;
-            session.message_count = session.message_count.saturating_add(1);
+            session.working_dir = working_dir;
+            session.message_count = updated_count;
         });
 
         Ok(())
@@ -643,53 +704,20 @@ impl SessionStore for LimeSessionStore {
         session_id: &str,
         conversation: &Conversation,
     ) -> Result<()> {
-        let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
-
-        conn.execute(
-            "DELETE FROM agent_messages WHERE session_id = ?",
-            [session_id],
-        )
-        .map_err(|e| anyhow!("删除旧消息失败: {e}"))?;
-
-        for message in conversation.messages() {
-            let role = Self::message_role_to_string(message);
-            let content_json = serialize_persisted_message_content(message)?;
-            let timestamp = Utc::now().to_rfc3339();
-
-            let tool_requests: Vec<_> = message
-                .content
-                .iter()
-                .filter_map(|c| {
-                    if let MessageContent::ToolRequest(req) = c {
-                        Some(req.clone())
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-
-            let tool_calls_json: Option<String> = if !tool_requests.is_empty() {
-                Some(serde_json::to_string(&tool_requests)?)
-            } else {
-                None
-            };
-
-            let tool_call_id: Option<String> = message.content.iter().find_map(|c| {
-                if let MessageContent::ToolResponse(resp) = c {
-                    Some(resp.id.clone())
-                } else {
-                    None
-                }
-            });
-
-            conn.execute(
-                "INSERT INTO agent_messages (session_id, role, content_json, timestamp, tool_calls_json, tool_call_id)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                rusqlite::params![session_id, role, content_json, timestamp, tool_calls_json, tool_call_id],
-            )?;
-        }
-
         let now = Utc::now().to_rfc3339();
+        let working_dir = {
+            let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
+            Self::ensure_session_row(&conn, session_id)?;
+            Self::load_session_working_dir(&conn, session_id)?
+        };
+        let message_count = runtime_conversation::replace_runtime_conversation(
+            session_id,
+            &working_dir,
+            conversation,
+        )
+        .await?;
+
+        let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
         conn.execute(
             "UPDATE agent_sessions SET updated_at = ? WHERE id = ?",
             rusqlite::params![now, session_id],
@@ -698,27 +726,32 @@ impl SessionStore for LimeSessionStore {
         let updated_at = Self::parse_timestamp_or_now(&now);
         self.update_cached_session_metadata(session_id, |session| {
             session.updated_at = updated_at;
-            session.message_count = conversation.messages().len();
+            session.working_dir = working_dir;
+            session.message_count = message_count;
         });
 
         Ok(())
     }
 
     async fn list_sessions(&self) -> Result<Vec<Session>> {
-        let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
-        self.load_listed_sessions(
-            &conn,
-            "SELECT id, model, title, created_at, updated_at, working_dir,
+        let mut sessions = {
+            let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
+            self.load_listed_sessions(
+                &conn,
+                "SELECT id, model, title, created_at, updated_at, working_dir,
                     session_type, user_set_name, extension_data_json,
                     total_tokens, input_tokens, output_tokens, cached_input_tokens, cache_creation_input_tokens,
                     accumulated_total_tokens, accumulated_input_tokens, accumulated_output_tokens,
                     schedule_id, recipe_json, user_recipe_values_json,
                     provider_name, model_config_json,
-                    (SELECT COUNT(1) FROM agent_messages m WHERE m.session_id = agent_sessions.id) AS message_count
+                    0 AS message_count
              FROM agent_sessions
              ORDER BY updated_at DESC",
-            [],
-        )
+                [],
+            )?
+        };
+        self.apply_runtime_message_counts(&mut sessions).await;
+        Ok(sessions)
     }
 
     async fn list_sessions_by_types(&self, types: &[SessionType]) -> Result<Vec<Session>> {
@@ -726,24 +759,28 @@ impl SessionStore for LimeSessionStore {
             return Ok(Vec::new());
         }
 
-        let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
         let type_names = types.iter().map(ToString::to_string).collect::<Vec<_>>();
         let placeholders = std::iter::repeat_n("?", type_names.len())
             .collect::<Vec<_>>()
             .join(", ");
         let sql = format!(
-            "SELECT id, model, title, created_at, updated_at, working_dir,
+                "SELECT id, model, title, created_at, updated_at, working_dir,
                     session_type, user_set_name, extension_data_json,
                     total_tokens, input_tokens, output_tokens, cached_input_tokens, cache_creation_input_tokens,
                     accumulated_total_tokens, accumulated_input_tokens, accumulated_output_tokens,
                     schedule_id, recipe_json, user_recipe_values_json,
                     provider_name, model_config_json,
-                    (SELECT COUNT(1) FROM agent_messages m WHERE m.session_id = agent_sessions.id) AS message_count
+                    0 AS message_count
              FROM agent_sessions
              WHERE session_type IN ({placeholders})
              ORDER BY updated_at DESC"
         );
-        self.load_listed_sessions(&conn, &sql, rusqlite::params_from_iter(type_names.iter()))
+        let mut sessions = {
+            let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
+            self.load_listed_sessions(&conn, &sql, rusqlite::params_from_iter(type_names.iter()))?
+        };
+        self.apply_runtime_message_counts(&mut sessions).await;
+        Ok(sessions)
     }
 
     async fn delete_session(&self, id: &str) -> Result<()> {
@@ -885,16 +922,21 @@ impl SessionStore for LimeSessionStore {
     }
 
     async fn truncate_conversation(&self, session_id: &str, timestamp: i64) -> Result<()> {
-        let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
-
-        let dt = chrono::DateTime::from_timestamp(timestamp, 0).unwrap_or_else(Utc::now);
-        let timestamp_str = dt.to_rfc3339();
-
-        conn.execute(
-            "DELETE FROM agent_messages WHERE session_id = ? AND timestamp > ?",
-            rusqlite::params![session_id, timestamp_str],
-        )?;
-        self.invalidate_cached_session_metadata(session_id);
+        let working_dir = {
+            let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
+            Self::ensure_session_row(&conn, session_id)?;
+            Self::load_session_working_dir(&conn, session_id)?
+        };
+        let message_count = runtime_conversation::truncate_runtime_conversation(
+            session_id,
+            &working_dir,
+            timestamp,
+        )
+        .await?;
+        self.update_cached_session_metadata(session_id, |session| {
+            session.message_count = message_count;
+            session.working_dir = working_dir;
+        });
 
         Ok(())
     }
@@ -1141,47 +1183,58 @@ impl SessionStore for LimeSessionStore {
         _before_date: Option<chrono::DateTime<chrono::Utc>>,
         _exclude_session_id: Option<String>,
     ) -> Result<Vec<ChatHistoryMatch>> {
-        let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
         let limit = limit.unwrap_or(50);
+        let sessions = {
+            let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
+            self.load_listed_sessions(
+                &conn,
+                "SELECT id, model, title, created_at, updated_at, working_dir,
+                    session_type, user_set_name, extension_data_json,
+                    total_tokens, input_tokens, output_tokens, cached_input_tokens, cache_creation_input_tokens,
+                    accumulated_total_tokens, accumulated_input_tokens, accumulated_output_tokens,
+                    schedule_id, recipe_json, user_recipe_values_json,
+                    provider_name, model_config_json,
+                    0 AS message_count
+             FROM agent_sessions
+             ORDER BY updated_at DESC",
+                [],
+            )?
+        };
 
-        let mut stmt = conn.prepare(
-            "SELECT m.session_id, s.title, m.role, m.content_json, m.timestamp
-             FROM agent_messages m
-             JOIN agent_sessions s ON m.session_id = s.id
-             WHERE m.content_json LIKE ?
-             ORDER BY m.timestamp DESC
-             LIMIT ?",
-        )?;
-
-        let pattern = format!("%{query}%");
-        let matches: Vec<ChatHistoryMatch> = stmt
-            .query_map(rusqlite::params![pattern, limit as i64], |row| {
-                let session_id: String = row.get(0)?;
-                let session_name: Option<String> = row.get(1)?;
-                let role: String = row.get(2)?;
-                let content_json: String = row.get(3)?;
-                let timestamp: String = row.get(4)?;
-
-                Ok((session_id, session_name, role, content_json, timestamp))
-            })?
-            .filter_map(|r| r.ok())
-            .map(
-                |(session_id, session_name, role, content_json, timestamp)| {
-                    let timestamp = chrono::DateTime::parse_from_rfc3339(&timestamp)
-                        .map(|dt| dt.with_timezone(&Utc))
-                        .unwrap_or_else(|_| Utc::now());
-
-                    ChatHistoryMatch {
-                        session_id,
-                        session_name: session_name.unwrap_or_else(|| "未命名".to_string()),
-                        message_role: role,
-                        message_content: content_json,
-                        timestamp,
-                        relevance_score: 1.0,
-                    }
-                },
-            )
-            .collect();
+        let normalized_query = query.trim();
+        if normalized_query.is_empty() {
+            return Ok(Vec::new());
+        }
+        let normalized_query = normalized_query.to_ascii_lowercase();
+        let mut matches = Vec::new();
+        for session in sessions {
+            if matches.len() >= limit {
+                break;
+            }
+            let Some(conversation) =
+                runtime_conversation::load_runtime_conversation(&session.id).await?
+            else {
+                continue;
+            };
+            for message in conversation.messages() {
+                let content = message.as_concat_text();
+                if !content.to_ascii_lowercase().contains(&normalized_query) {
+                    continue;
+                }
+                matches.push(ChatHistoryMatch {
+                    session_id: session.id.clone(),
+                    session_name: session.name.clone(),
+                    message_role: Self::runtime_message_role(message),
+                    message_content: content,
+                    timestamp: chrono::DateTime::from_timestamp(message.created, 0)
+                        .unwrap_or(session.updated_at),
+                    relevance_score: 1.0,
+                });
+                if matches.len() >= limit {
+                    break;
+                }
+            }
+        }
 
         Ok(matches)
     }
@@ -1234,69 +1287,26 @@ impl SessionStore for LimeSessionStore {
 // ============================================================================
 
 impl LimeSessionStore {
-    /// 加载会话的对话历史
-    pub fn load_conversation_from_conn(
-        conn: &rusqlite::Connection,
-        session_id: &str,
-    ) -> Result<Conversation> {
-        let mut stmt = conn.prepare(
-            "SELECT role, content_json, timestamp, tool_calls_json, tool_call_id
-             FROM agent_messages WHERE session_id = ? ORDER BY id ASC",
-        )?;
-
-        let messages: Vec<Message> = stmt
-            .query_map([session_id], |row| {
-                let role: String = row.get(0)?;
-                let content_json: String = row.get(1)?;
-                let _timestamp: String = row.get(2)?;
-                let _tool_calls_json: Option<String> = row.get(3)?;
-                let _tool_call_id: Option<String> = row.get(4)?;
-
-                Ok((role, content_json))
-            })?
-            .filter_map(|r| r.ok())
-            .filter_map(|(role, content_json)| {
-                let persisted = deserialize_persisted_message_content(&content_json)?;
-
-                // 根据角色创建消息
-                let mut message = if role == "assistant" {
-                    Message::assistant()
-                } else {
-                    Message::user()
-                };
-
-                // 添加所有内容
-                for c in persisted.content {
-                    message = message.with_content(c);
-                }
-
-                message = message.with_metadata(MessageMetadata {
-                    user_visible: persisted.user_visible,
-                    agent_visible: persisted.agent_visible,
-                });
-
-                Some(message)
-            })
-            .collect();
-
-        Ok(Conversation::new_unvalidated(messages))
-    }
-
-    /// 统计会话消息数量
-    fn count_messages(&self, conn: &rusqlite::Connection, session_id: &str) -> Result<usize> {
-        let count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM agent_messages WHERE session_id = ?",
-            [session_id],
-            |row| row.get(0),
-        )?;
-        Ok(count as usize)
+    fn runtime_message_role(message: &Message) -> String {
+        let role_debug = format!("{:?}", message.role);
+        if role_debug.contains("User") {
+            "user".to_string()
+        } else {
+            "assistant".to_string()
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use aster::session::{
+        initialize_session_runtime_store, require_shared_session_runtime_store,
+        InMemoryThreadRuntimeStore, ItemRuntime, ItemRuntimePayload, ItemStatus, ThreadRuntime,
+        TurnRuntime,
+    };
     use aster::session::{SessionStore, SessionType};
+    use chrono::Utc;
     use lime_core::database::schema::create_tables;
     use rusqlite::Connection;
     use std::ffi::OsString;
@@ -1336,9 +1346,34 @@ mod tests {
     }
 
     fn setup_test_store() -> LimeSessionStore {
+        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
         let conn = Connection::open_in_memory().expect("创建内存数据库失败");
         create_tables(&conn).expect("初始化表结构失败");
         LimeSessionStore::new(Arc::new(Mutex::new(conn)))
+    }
+
+    fn insert_legacy_agent_message_fixture(
+        conn: &Connection,
+        session_id: &str,
+        role: &str,
+        message: &Message,
+    ) {
+        let legacy_table = "agent_messages";
+        let insert_legacy_message_sql = format!(
+            "INSERT INTO {legacy_table} (session_id, role, content_json, timestamp)
+             VALUES (?1, ?2, ?3, ?4)"
+        );
+        conn.execute(
+            &insert_legacy_message_sql,
+            rusqlite::params![
+                session_id,
+                role,
+                legacy_conversation::serialize_persisted_message_content(message)
+                    .expect("序列化旧消息"),
+                Utc::now().to_rfc3339(),
+            ],
+        )
+        .expect("插入 legacy 消息失败");
     }
 
     #[tokio::test]
@@ -1603,6 +1638,172 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn get_session_should_prefer_current_runtime_conversation_over_agent_messages() {
+        let _guard = env_lock().lock().expect("锁测试环境");
+        let store = setup_test_store();
+        let runtime_store =
+            require_shared_session_runtime_store().expect("读取 runtime store 失败");
+        let session_id = format!("runtime-conversation-{}", uuid::Uuid::new_v4());
+        let session = store
+            .create_session(
+                PathBuf::from("."),
+                "runtime conversation 优先测试".to_string(),
+                SessionType::User,
+            )
+            .await
+            .expect("创建会话失败");
+        {
+            let conn = store.db.lock().expect("锁数据库");
+            conn.execute(
+                "UPDATE agent_sessions SET id = ?1 WHERE id = ?2",
+                rusqlite::params![session_id, session.id],
+            )
+            .expect("更新测试 session id 失败");
+            insert_legacy_agent_message_fixture(
+                &conn,
+                &session_id,
+                "user",
+                &Message::user().with_text("旧表消息"),
+            );
+        }
+
+        let thread = runtime_store
+            .upsert_thread(ThreadRuntime::new(
+                format!("thread-{session_id}"),
+                session_id.clone(),
+                PathBuf::from("."),
+            ))
+            .await
+            .expect("写入 thread runtime 失败");
+        let turn = runtime_store
+            .create_turn(TurnRuntime::new(
+                format!("turn-{session_id}"),
+                session_id.clone(),
+                thread.id.clone(),
+                Some("current 用户消息".to_string()),
+                None,
+            ))
+            .await
+            .expect("写入 turn runtime 失败");
+        let now = Utc::now();
+        runtime_store
+            .create_item(ItemRuntime {
+                id: format!("item-user-{session_id}"),
+                thread_id: thread.id.clone(),
+                turn_id: turn.id.clone(),
+                sequence: 1,
+                status: ItemStatus::Completed,
+                started_at: now,
+                completed_at: Some(now),
+                updated_at: now,
+                payload: ItemRuntimePayload::UserMessage {
+                    content: "current 用户消息".to_string(),
+                },
+            })
+            .await
+            .expect("写入 user item 失败");
+        runtime_store
+            .create_item(ItemRuntime {
+                id: format!("item-agent-{session_id}"),
+                thread_id: thread.id,
+                turn_id: turn.id,
+                sequence: 2,
+                status: ItemStatus::Completed,
+                started_at: now,
+                completed_at: Some(now),
+                updated_at: now,
+                payload: ItemRuntimePayload::AgentMessage {
+                    text: "current 助手回复".to_string(),
+                },
+            })
+            .await
+            .expect("写入 agent item 失败");
+
+        let loaded = store
+            .get_session(&session_id, true)
+            .await
+            .expect("读取会话失败");
+        let conversation = loaded.conversation.expect("应包含 conversation");
+        let texts = conversation
+            .messages()
+            .iter()
+            .map(Message::as_concat_text)
+            .collect::<Vec<_>>();
+
+        assert_eq!(texts, vec!["current 用户消息", "current 助手回复"]);
+        assert_eq!(loaded.message_count, 2);
+    }
+
+    #[tokio::test]
+    async fn get_session_should_import_legacy_agent_messages_into_runtime_store() {
+        let _guard = env_lock().lock().expect("锁测试环境");
+        let store = setup_test_store();
+        let runtime_store =
+            require_shared_session_runtime_store().expect("读取 runtime store 失败");
+        let session_id = format!("legacy-import-{}", uuid::Uuid::new_v4());
+        let session = store
+            .create_session(
+                PathBuf::from("."),
+                "legacy import 测试".to_string(),
+                SessionType::User,
+            )
+            .await
+            .expect("创建会话失败");
+        {
+            let conn = store.db.lock().expect("锁数据库");
+            conn.execute(
+                "UPDATE agent_sessions SET id = ?1 WHERE id = ?2",
+                rusqlite::params![session_id, session.id],
+            )
+            .expect("更新测试 session id 失败");
+            insert_legacy_agent_message_fixture(
+                &conn,
+                &session_id,
+                "user",
+                &Message::user().with_text("旧用户消息"),
+            );
+            insert_legacy_agent_message_fixture(
+                &conn,
+                &session_id,
+                "assistant",
+                &Message::assistant().with_text("旧助手回复"),
+            );
+        }
+
+        let loaded = store
+            .get_session(&session_id, true)
+            .await
+            .expect("读取会话失败");
+        let conversation = loaded.conversation.expect("应包含迁移后 conversation");
+        let texts = conversation
+            .messages()
+            .iter()
+            .map(Message::as_concat_text)
+            .collect::<Vec<_>>();
+
+        assert_eq!(texts, vec!["旧用户消息", "旧助手回复"]);
+        assert_eq!(loaded.message_count, 2);
+
+        let threads = runtime_store
+            .list_threads(&session_id)
+            .await
+            .expect("读取 runtime threads 失败");
+        let mut transcript_items = 0usize;
+        for thread in threads {
+            for item in runtime_store
+                .list_items(&thread.id)
+                .await
+                .expect("读取 runtime items 失败")
+            {
+                if matches!(item.payload, ItemRuntimePayload::TranscriptMessage { .. }) {
+                    transcript_items += 1;
+                }
+            }
+        }
+        assert_eq!(transcript_items, 2);
+    }
+
+    #[tokio::test]
     async fn metadata_cache_should_refresh_after_add_message() {
         let store = setup_test_store();
         let session = store
@@ -1630,6 +1831,23 @@ mod tests {
             .await
             .expect("读取缓存会话失败");
         assert_eq!(refreshed.message_count, 1);
+
+        let loaded = store
+            .get_session(&session.id, true)
+            .await
+            .expect("读取 runtime 对话失败");
+        let conversation = loaded.conversation.expect("应包含对话");
+        assert_eq!(conversation.messages()[0].as_concat_text(), "hello");
+
+        let conn = store.db.lock().expect("锁数据库");
+        let legacy_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM agent_messages WHERE session_id = ?",
+                [session.id.as_str()],
+                |row| row.get(0),
+            )
+            .expect("查询旧消息数失败");
+        assert_eq!(legacy_count, 0);
     }
 
     #[tokio::test]

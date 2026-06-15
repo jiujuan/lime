@@ -1114,15 +1114,18 @@ pub fn convert_agent_event(event: AgentEvent) -> Vec<TauriAgentEvent> {
             }
             events
         }
-        AgentEvent::ItemStarted { item } => vec![TauriAgentEvent::ItemStarted {
-            item: convert_item_runtime(item),
-        }],
-        AgentEvent::ItemUpdated { item } => vec![TauriAgentEvent::ItemUpdated {
-            item: convert_item_runtime(item),
-        }],
-        AgentEvent::ItemCompleted { item } => vec![TauriAgentEvent::ItemCompleted {
-            item: convert_item_runtime(item),
-        }],
+        AgentEvent::ItemStarted { item } => convert_item_runtime(item)
+            .map(|item| TauriAgentEvent::ItemStarted { item })
+            .into_iter()
+            .collect(),
+        AgentEvent::ItemUpdated { item } => convert_item_runtime(item)
+            .map(|item| TauriAgentEvent::ItemUpdated { item })
+            .into_iter()
+            .collect(),
+        AgentEvent::ItemCompleted { item } => convert_item_runtime(item)
+            .map(|item| TauriAgentEvent::ItemCompleted { item })
+            .into_iter()
+            .collect(),
         AgentEvent::Message(message) => convert_message(message),
         AgentEvent::McpNotification((tool_id, notification)) => {
             convert_mcp_notification(tool_id, notification)
@@ -1357,15 +1360,16 @@ fn extract_request_questions_from_schema(
     }
 }
 
-fn convert_item_payload(payload: ItemRuntimePayload) -> AgentThreadItemPayload {
+fn convert_item_payload(payload: ItemRuntimePayload) -> Option<AgentThreadItemPayload> {
     match payload {
+        ItemRuntimePayload::TranscriptMessage { .. } => None,
         ItemRuntimePayload::UserMessage { content } => {
-            AgentThreadItemPayload::UserMessage { content }
+            Some(AgentThreadItemPayload::UserMessage { content })
         }
         ItemRuntimePayload::AgentMessage { text } => {
-            AgentThreadItemPayload::AgentMessage { text, phase: None }
+            Some(AgentThreadItemPayload::AgentMessage { text, phase: None })
         }
-        ItemRuntimePayload::Plan { text } => AgentThreadItemPayload::Plan { text },
+        ItemRuntimePayload::Plan { text } => Some(AgentThreadItemPayload::Plan { text }),
         ItemRuntimePayload::RuntimeStatus {
             phase,
             title,
@@ -1379,27 +1383,27 @@ fn convert_item_payload(payload: ItemRuntimePayload) -> AgentThreadItemPayload {
                     "phase": phase,
                 }),
             );
-            AgentThreadItemPayload::TurnSummary {
+            Some(AgentThreadItemPayload::TurnSummary {
                 text: format_runtime_status_text(&title, &detail, &checkpoints),
                 metadata: Some(
                     serde_json::to_value(metadata)
                         .expect("runtime status diagnostics metadata should serialize"),
                 ),
-            }
+            })
         }
         ItemRuntimePayload::FileArtifact {
             path,
             source,
             content,
             metadata,
-        } => AgentThreadItemPayload::FileArtifact {
+        } => Some(AgentThreadItemPayload::FileArtifact {
             path,
             source,
             content,
             metadata,
-        },
+        }),
         ItemRuntimePayload::Reasoning { text, summary } => {
-            AgentThreadItemPayload::Reasoning { text, summary }
+            Some(AgentThreadItemPayload::Reasoning { text, summary })
         }
         ItemRuntimePayload::ToolCall {
             tool_name,
@@ -1413,14 +1417,14 @@ fn convert_item_payload(payload: ItemRuntimePayload) -> AgentThreadItemPayload {
                 .as_ref()
                 .map(extract_tool_result_text)
                 .filter(|text| !text.is_empty());
-            AgentThreadItemPayload::ToolCall {
+            Some(AgentThreadItemPayload::ToolCall {
                 tool_name,
                 arguments,
                 output: output_text,
                 success,
                 error,
                 metadata,
-            }
+            })
         }
         ItemRuntimePayload::ApprovalRequest {
             request_id,
@@ -1429,32 +1433,33 @@ fn convert_item_payload(payload: ItemRuntimePayload) -> AgentThreadItemPayload {
             tool_name,
             arguments,
             response,
-        } => AgentThreadItemPayload::ApprovalRequest {
+        } => Some(AgentThreadItemPayload::ApprovalRequest {
             request_id,
             action_type,
             prompt,
             tool_name,
             arguments,
             response,
-        },
+        }),
         ItemRuntimePayload::RequestUserInput {
             request_id,
             action_type,
             prompt,
             requested_schema,
             response,
-        } => AgentThreadItemPayload::RequestUserInput {
+        } => Some(AgentThreadItemPayload::RequestUserInput {
             request_id,
             action_type,
             prompt,
             questions: extract_request_questions_from_schema(requested_schema.as_ref()),
             response,
-        },
+        }),
     }
 }
 
-pub fn convert_item_runtime(item: ItemRuntime) -> AgentThreadItem {
-    AgentThreadItem {
+pub fn convert_item_runtime(item: ItemRuntime) -> Option<AgentThreadItem> {
+    let payload = convert_item_payload(item.payload)?;
+    Some(AgentThreadItem {
         id: item.id,
         thread_id: item.thread_id,
         turn_id: item.turn_id,
@@ -1463,8 +1468,8 @@ pub fn convert_item_runtime(item: ItemRuntime) -> AgentThreadItem {
         started_at: item.started_at.to_rfc3339(),
         completed_at: item.completed_at.map(|value| value.to_rfc3339()),
         updated_at: item.updated_at.to_rfc3339(),
-        payload: convert_item_payload(item.payload),
-    }
+        payload,
+    })
 }
 
 /// 将 Aster Message 转换为 TauriAgentEvent 列表
@@ -2337,6 +2342,31 @@ mod tests {
             }
             other => panic!("Expected ItemCompleted event, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn test_transcript_runtime_item_is_internal_only() {
+        let now = chrono::Utc::now();
+        let item = ItemRuntime {
+            id: "transcript:turn-1:1".to_string(),
+            thread_id: "thread-1".to_string(),
+            turn_id: "turn-1".to_string(),
+            sequence: 1,
+            status: ItemStatus::Completed,
+            started_at: now,
+            completed_at: Some(now),
+            updated_at: now,
+            payload: ItemRuntimePayload::TranscriptMessage {
+                role: "user".to_string(),
+                content: vec![MessageContent::text("完整历史")],
+                metadata: Default::default(),
+                created_timestamp: now.timestamp(),
+            },
+        };
+
+        let events = convert_agent_event(AgentEvent::ItemCompleted { item });
+
+        assert!(events.is_empty());
     }
 
     #[test]

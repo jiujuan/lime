@@ -3,7 +3,10 @@ import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ApiKeyProviderSection } from "@/components/api-key-provider";
 import { useOemCloudAccess } from "@/hooks/useOemCloudAccess";
-import type { SettingsProviderView } from "@/types/page";
+import type {
+  ProviderSettingsFocusContext,
+  SettingsProviderView,
+} from "@/types/page";
 import { cn } from "@/lib/utils";
 
 function NoticeBar(props: { tone: "error" | "success"; message: string }) {
@@ -28,9 +31,12 @@ function NoticeBar(props: { tone: "error" | "success"; message: string }) {
 
 export interface CloudProviderSettingsProps {
   initialView?: SettingsProviderView;
+  initialFocus?: ProviderSettingsFocusContext | null;
 }
 
-export function CloudProviderSettings(_props: CloudProviderSettingsProps) {
+export function CloudProviderSettings({
+  initialFocus,
+}: CloudProviderSettingsProps) {
   const { t } = useTranslation("settings");
   const {
     runtime,
@@ -130,6 +136,7 @@ export function CloudProviderSettings(_props: CloudProviderSettingsProps) {
 
       <ApiKeyProviderSection
         className="h-[calc(100vh-280px)] min-h-[520px] max-h-[780px]"
+        initialFocus={initialFocus}
         exposeOemLoginPrompt={isOemRuntime && !session}
         onOemLogin={() => {
           void handleOpenCloudUserCenter("/welcome");

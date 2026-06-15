@@ -40,6 +40,9 @@ pub(in crate::runtime) struct AppendingRuntimeEventSink<'a> {
     state: Arc<Mutex<RuntimeCoreState>>,
     file_checkpoint_snapshot_store: Arc<dyn FileCheckpointSnapshotStore>,
     output_snapshot_store: Arc<dyn output_refs::OutputSnapshotStore>,
+    sidecar_store: Option<Arc<SidecarStore>>,
+    event_log_writer: Option<Arc<EventLogWriter>>,
+    projection_store: Option<Arc<ProjectionStore>>,
     session_id: String,
     thread_id: String,
     turn_id: String,
@@ -52,6 +55,9 @@ impl<'a> AppendingRuntimeEventSink<'a> {
         state: Arc<Mutex<RuntimeCoreState>>,
         file_checkpoint_snapshot_store: Arc<dyn FileCheckpointSnapshotStore>,
         output_snapshot_store: Arc<dyn output_refs::OutputSnapshotStore>,
+        sidecar_store: Option<Arc<SidecarStore>>,
+        event_log_writer: Option<Arc<EventLogWriter>>,
+        projection_store: Option<Arc<ProjectionStore>>,
         session_id: String,
         thread_id: String,
         turn_id: String,
@@ -61,6 +67,9 @@ impl<'a> AppendingRuntimeEventSink<'a> {
             state,
             file_checkpoint_snapshot_store,
             output_snapshot_store,
+            sidecar_store,
+            event_log_writer,
+            projection_store,
             session_id,
             thread_id,
             turn_id,
@@ -75,6 +84,10 @@ impl<'a> AppendingRuntimeEventSink<'a> {
 
     fn into_events(self) -> Vec<AgentEvent> {
         self.events
+    }
+
+    fn extend_events(&mut self, events: Vec<AgentEvent>) {
+        self.events.extend(events);
     }
 
     fn emit_failure(&mut self, error: &RuntimeCoreError) -> Result<(), RuntimeCoreError> {
@@ -93,6 +106,9 @@ impl RuntimeEventSink for AppendingRuntimeEventSink<'_> {
             &self.state,
             self.file_checkpoint_snapshot_store.as_ref(),
             self.output_snapshot_store.as_ref(),
+            self.sidecar_store.as_deref(),
+            self.event_log_writer.as_deref(),
+            self.projection_store.as_deref(),
             &self.session_id,
             &self.thread_id,
             Some(&self.turn_id),
@@ -251,6 +267,7 @@ impl RuntimeCore {
             (stored.session.clone(), previous_session, turn)
         };
 
+        let runtime_options = params.runtime_options.clone();
         let request_host = host.clone();
         let request = ExecutionRequest {
             host,
@@ -261,6 +278,15 @@ impl RuntimeCore {
                 .runtime_options
                 .as_ref()
                 .and_then(|options| options.event_name.clone()),
+            expected_output: runtime_options
+                .as_ref()
+                .and_then(|options| options.expected_output.clone()),
+            structured_output: runtime_options
+                .as_ref()
+                .and_then(|options| options.structured_output.clone()),
+            output_schema: runtime_options
+                .as_ref()
+                .and_then(|options| options.output_schema.clone()),
             provider_preference: params
                 .runtime_options
                 .as_ref()
@@ -283,42 +309,56 @@ impl RuntimeCore {
         };
 
         let events = if let Some(event_callback) = event_callback {
+            let initial_events = self.append_runtime_events(
+                &session.session_id,
+                &session.thread_id,
+                Some(&turn.turn_id),
+                Vec::new(),
+            )?;
+            let initial_events_persisted = !initial_events.is_empty();
+            for event in &initial_events {
+                event_callback(event.clone())?;
+            }
             let mut sink = AppendingRuntimeEventSink::new(
                 self.state.clone(),
                 self.file_checkpoint_snapshot_store.clone(),
                 self.output_snapshot_store.clone(),
+                self.sidecar_store.clone(),
+                self.event_log_writer.clone(),
+                self.projection_store.clone(),
                 session.session_id.clone(),
                 session.thread_id.clone(),
                 turn.turn_id.clone(),
                 event_callback,
             );
+            sink.extend_events(initial_events);
             let backend_result = self.backend.start_turn(request, &mut sink).await;
-            let emitted = sink.emitted_count();
             if let Err(error) = backend_result {
-                if emitted == 0 {
+                if initial_events_persisted || sink.emitted_count() > 0 {
+                    sink.emit_failure(&error)?;
+                } else {
                     self.rollback_started_turn(
                         &session.session_id,
                         &turn.turn_id,
                         previous_session,
                     );
-                } else {
-                    sink.emit_failure(&error)?;
                 }
                 return Err(error);
             }
             let events = sink.into_events();
             events
         } else {
+            let mut events = self.append_runtime_events(
+                &session.session_id,
+                &session.thread_id,
+                Some(&turn.turn_id),
+                Vec::new(),
+            )?;
+            let initial_events_persisted = !events.is_empty();
             let mut sink = CollectingRuntimeEventSink::default();
             let backend_result = self.backend.start_turn(request, &mut sink).await;
             if let Err(error) = backend_result {
-                if sink.emitted_count() == 0 {
-                    self.rollback_started_turn(
-                        &session.session_id,
-                        &turn.turn_id,
-                        previous_session,
-                    );
-                } else {
+                if initial_events_persisted || sink.emitted_count() > 0 {
                     sink.emit_failure(&error)?;
                     if let Err(append_error) = self.append_runtime_events(
                         &session.session_id,
@@ -326,13 +366,21 @@ impl RuntimeCore {
                         Some(&turn.turn_id),
                         sink.into_events(),
                     ) {
-                        self.rollback_started_turn(
-                            &session.session_id,
-                            &turn.turn_id,
-                            previous_session,
-                        );
+                        if !initial_events_persisted {
+                            self.rollback_started_turn(
+                                &session.session_id,
+                                &turn.turn_id,
+                                previous_session,
+                            );
+                        }
                         return Err(append_error);
                     }
+                } else {
+                    self.rollback_started_turn(
+                        &session.session_id,
+                        &turn.turn_id,
+                        previous_session,
+                    );
                 }
                 return Err(error);
             }
@@ -342,15 +390,11 @@ impl RuntimeCore {
                 Some(&turn.turn_id),
                 sink.into_events(),
             ) {
-                Ok(events) => events,
-                Err(error) => {
-                    self.rollback_started_turn(
-                        &session.session_id,
-                        &turn.turn_id,
-                        previous_session,
-                    );
-                    return Err(error);
+                Ok(mut backend_events) => {
+                    events.append(&mut backend_events);
+                    events
                 }
+                Err(error) => return Err(error),
             }
         };
         let response_turn = self
@@ -555,6 +599,9 @@ impl RuntimeCore {
             &self.state,
             self.file_checkpoint_snapshot_store.as_ref(),
             self.output_snapshot_store.as_ref(),
+            self.sidecar_store.as_deref(),
+            self.event_log_writer.as_deref(),
+            self.projection_store.as_deref(),
             session_id,
             thread_id,
             turn_id,

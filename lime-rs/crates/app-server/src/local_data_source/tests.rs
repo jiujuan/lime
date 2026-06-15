@@ -371,6 +371,14 @@ fn insert_legacy_message_only_session(conn: &Connection) {
         params![NOW],
     )
     .expect("insert legacy message");
+    conn.execute(
+        "INSERT INTO agent_messages (
+                session_id, role, content_json, timestamp
+             )
+             VALUES ('legacy-session', 'assistant', '[{\"type\":\"text\",\"text\":\"旧回复\"}]', ?1)",
+        params!["2026-03-13T01:00:02Z"],
+    )
+    .expect("insert legacy assistant message");
 }
 
 fn insert_current_timeline_session(conn: &Connection) {
@@ -427,6 +435,18 @@ fn insert_current_timeline_session(conn: &Connection) {
         },
     )
     .expect("insert agent item");
+}
+
+fn table_exists_for_test(conn: &Connection, table_name: &str) -> bool {
+    conn.query_row(
+        "SELECT EXISTS(
+            SELECT 1 FROM sqlite_master
+            WHERE type = 'table' AND name = ?1
+        )",
+        params![table_name],
+        |row| row.get::<_, bool>(0),
+    )
+    .expect("check table existence")
 }
 
 fn insert_hidden_harness_timeline_session(conn: &Connection) {
@@ -513,6 +533,206 @@ async fn list_current_timeline_sessions_excludes_legacy_message_only_sessions() 
         Some(WORKSPACE_ID)
     );
     assert_eq!(response.sessions[0].messages_count, 2);
+}
+
+#[tokio::test]
+async fn legacy_message_only_transcripts_can_be_read_for_backfill() {
+    let data_source = setup_data_source();
+    {
+        let conn = database::lock_db(&data_source.db).expect("lock db");
+        insert_legacy_message_only_session(&conn);
+        insert_current_timeline_session(&conn);
+    }
+
+    let transcripts = data_source
+        .list_legacy_agent_message_transcripts(AgentSessionListParams {
+            workspace_id: Some(WORKSPACE_ID.to_string()),
+            limit: Some(20),
+            ..AgentSessionListParams::default()
+        })
+        .await
+        .expect("list legacy transcripts");
+
+    assert_eq!(transcripts.len(), 1);
+    assert_eq!(transcripts[0].session_id, "legacy-session");
+    assert_eq!(transcripts[0].messages.len(), 2);
+    assert_eq!(transcripts[0].messages[0].text, "旧消息");
+    assert_eq!(transcripts[0].messages[1].text, "旧回复");
+}
+
+#[tokio::test]
+async fn clear_legacy_agent_message_sessions_removes_migrated_rows() {
+    let data_source = setup_data_source();
+    {
+        let conn = database::lock_db(&data_source.db).expect("lock db");
+        insert_legacy_message_only_session(&conn);
+    }
+
+    let deleted = data_source
+        .clear_legacy_agent_message_sessions(vec!["legacy-session".to_string()])
+        .await
+        .expect("clear legacy rows");
+
+    assert_eq!(deleted, 3);
+    {
+        let conn = database::lock_db(&data_source.db).expect("lock db");
+        let message_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(1) FROM agent_messages WHERE session_id = 'legacy-session'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("message count");
+        let session_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(1) FROM agent_sessions WHERE id = 'legacy-session'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("session count");
+        assert_eq!(message_count, 0);
+        assert_eq!(session_count, 0);
+    }
+}
+
+#[tokio::test]
+async fn clear_legacy_agent_message_sessions_keeps_current_timeline_rows() {
+    let data_source = setup_data_source();
+    {
+        let conn = database::lock_db(&data_source.db).expect("lock db");
+        insert_legacy_message_only_session(&conn);
+        insert_current_timeline_session(&conn);
+        conn.execute(
+            "INSERT INTO agent_messages (
+                 session_id, role, content_json, timestamp, tool_calls_json, tool_call_id
+             )
+             VALUES ('current-session', 'user', '[{\"type\":\"text\",\"text\":\"仍在 current timeline 的旧消息\"}]', ?1, NULL, NULL)",
+            params![NOW],
+        )
+        .expect("insert current timeline legacy message");
+    }
+
+    let deleted = data_source
+        .clear_legacy_agent_message_sessions(vec![
+            "legacy-session".to_string(),
+            "current-session".to_string(),
+        ])
+        .await
+        .expect("clear legacy rows");
+
+    assert_eq!(deleted, 3);
+    {
+        let conn = database::lock_db(&data_source.db).expect("lock db");
+        let legacy_message_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(1) FROM agent_messages WHERE session_id = 'legacy-session'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("legacy message count");
+        let current_message_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(1) FROM agent_messages WHERE session_id = 'current-session'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("current message count");
+        let current_session_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(1) FROM agent_sessions WHERE id = 'current-session'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("current session count");
+        assert_eq!(legacy_message_count, 0);
+        assert_eq!(current_message_count, 1);
+        assert_eq!(current_session_count, 1);
+    }
+}
+
+#[tokio::test]
+async fn drop_empty_legacy_agent_message_tables_drops_only_empty_legacy_tables() {
+    let data_source = setup_data_source();
+    {
+        let conn = database::lock_db(&data_source.db).expect("lock db");
+        insert_legacy_message_only_session(&conn);
+    }
+
+    data_source
+        .clear_legacy_agent_message_sessions(vec!["legacy-session".to_string()])
+        .await
+        .expect("clear legacy rows");
+    let dropped = data_source
+        .drop_empty_legacy_agent_message_tables()
+        .await
+        .expect("drop empty legacy tables");
+
+    assert_eq!(dropped, 2);
+    {
+        let conn = database::lock_db(&data_source.db).expect("lock db");
+        assert!(!table_exists_for_test(&conn, "agent_messages"));
+        assert!(!table_exists_for_test(&conn, "a2ui_forms"));
+        assert!(table_exists_for_test(&conn, "agent_sessions"));
+    }
+}
+
+#[tokio::test]
+async fn legacy_message_backfill_noops_after_legacy_tables_are_dropped() {
+    let data_source = setup_data_source();
+    {
+        let conn = database::lock_db(&data_source.db).expect("lock db");
+        insert_legacy_message_only_session(&conn);
+    }
+
+    data_source
+        .clear_legacy_agent_message_sessions(vec!["legacy-session".to_string()])
+        .await
+        .expect("clear legacy rows");
+    data_source
+        .drop_empty_legacy_agent_message_tables()
+        .await
+        .expect("drop empty legacy tables");
+
+    let transcripts = data_source
+        .list_legacy_agent_message_transcripts(AgentSessionListParams {
+            workspace_id: Some(WORKSPACE_ID.to_string()),
+            ..AgentSessionListParams::default()
+        })
+        .await
+        .expect("list legacy transcripts after drop");
+    let transcript = data_source
+        .read_legacy_agent_message_transcript("legacy-session".to_string())
+        .await
+        .expect("read legacy transcript after drop");
+    let cleared = data_source
+        .clear_legacy_agent_message_sessions(vec!["legacy-session".to_string()])
+        .await
+        .expect("clear legacy rows after drop");
+
+    assert!(transcripts.is_empty());
+    assert!(transcript.is_none());
+    assert_eq!(cleared, 0);
+}
+
+#[tokio::test]
+async fn drop_empty_legacy_agent_message_tables_fails_when_rows_remain() {
+    let data_source = setup_data_source();
+    {
+        let conn = database::lock_db(&data_source.db).expect("lock db");
+        insert_legacy_message_only_session(&conn);
+    }
+
+    let result = data_source.drop_empty_legacy_agent_message_tables().await;
+
+    assert!(
+        matches!(result, Err(crate::RuntimeCoreError::Backend(ref message)) if message.contains("refuse to drop agent_messages")),
+        "{result:?}"
+    );
+    {
+        let conn = database::lock_db(&data_source.db).expect("lock db");
+        assert!(table_exists_for_test(&conn, "agent_messages"));
+        assert!(table_exists_for_test(&conn, "a2ui_forms"));
+    }
 }
 
 #[tokio::test]

@@ -51,6 +51,7 @@ function createBaseParams(overrides: Record<string, unknown> = {}) {
       handleWorkspaceAlertSelectDirectory: noop,
       handleDismissWorkspaceAlert: noop,
       handleManageProviders: noop,
+      handleOpenExecutionPolicySettings: noop,
       handleProjectChange: noop,
       handleOpenAppearanceSettings: noop,
       handleOpenChannels: noop,
@@ -461,8 +462,8 @@ describe("useWorkspaceConversationSceneRuntime", () => {
 
     expect(sessionView?.title).toBe("任务进展");
     expect(sessionView?.tabLabel).toBe("进展");
-    expect(sessionView?.tabBadge).toBe("处理中 1");
-    expect(sessionView?.tabBadgeTone).toBe("sky");
+    expect(sessionView?.tabBadge).toBe("后续 1");
+    expect(sessionView?.tabBadgeTone).toBe("slate");
     expect(sessionView?.subtitle).toBe("正在处理：请抓取文章并整理成 markdown");
     expect(sessionView?.summaryStats).toEqual(
       expect.arrayContaining([
@@ -474,12 +475,12 @@ describe("useWorkspaceConversationSceneRuntime", () => {
         expect.objectContaining({
           key: "session-generated-files",
           label: "生成内容",
-          value: "处理中 1",
+          value: "暂无产出",
         }),
         expect.objectContaining({
           key: "session-follow-up",
-          label: "需要你处理",
-          value: "待补充 1",
+          label: "后续输入",
+          value: "后续 1",
         }),
       ]),
     );
@@ -490,8 +491,8 @@ describe("useWorkspaceConversationSceneRuntime", () => {
           label: "执行中",
         }),
         expect.objectContaining({
-          key: "session-pending-actions",
-          label: "待补充 1",
+          key: "session-queued-turns",
+          label: "后续 1",
         }),
       ]),
     );
@@ -793,7 +794,7 @@ describe("useWorkspaceConversationSceneRuntime", () => {
     );
   });
 
-  it("右侧工作台应优先使用会话 working dir，保留左侧项目根不变", () => {
+  it("右侧工作台应优先打开项目根，避免审查落到会话临时目录", () => {
     const params = createBaseParams({
       projectRootPath: "/tmp/project-record-root",
       canvasWorkbenchRootPath: "/tmp/session-working-dir",
@@ -803,10 +804,10 @@ describe("useWorkspaceConversationSceneRuntime", () => {
 
     expect(sceneProps.projectRootPath).toBe("/tmp/project-record-root");
     expect(sceneProps.canvasWorkbenchLayoutProps.workspaceRoot).toBe(
-      "/tmp/session-working-dir",
+      "/tmp/project-record-root",
     );
     expect(sceneProps.canvasWorkbenchLayoutProps.workspaceView.tabBadge).toBe(
-      "session-working-dir",
+      "project-record-root",
     );
   });
 
@@ -825,6 +826,8 @@ describe("useWorkspaceConversationSceneRuntime", () => {
       threadRead: {
         thread_id: "thread-1",
         active_turn_id: "turn-1",
+        active_command_id: "command-npm-test",
+        active_test_run_id: "test-unit",
         file_checkpoint_summary: {
           count: 2,
           latest_checkpoint: {
@@ -842,6 +845,62 @@ describe("useWorkspaceConversationSceneRuntime", () => {
             validation_issue_count: 0,
           },
         },
+        commands: [
+          {
+            command_id: "command-npm-test",
+            turn_id: "turn-1",
+            status: "failed",
+            command: "npm test",
+            cwd: "demo-project",
+            exit_code: 1,
+            output_preview: "FAIL src/App.test.tsx\nExpected title",
+          },
+        ],
+        tests: [
+          {
+            test_run_id: "test-unit",
+            turn_id: "turn-1",
+            status: "failed",
+            command_id: "command-npm-test",
+            suite: "unit",
+            result: "failed",
+            passed: 8,
+            failed: 1,
+          },
+        ],
+        artifacts: [
+          {
+            artifactRef: "artifact-index",
+            eventId: "evt-file-index",
+            sequence: 3,
+            turnId: "turn-1",
+            path: "index.html",
+            title: "index.html",
+            kind: "code_file",
+            status: "completed",
+            metadata: {
+              previewText: "更新后的页面",
+              checkpointRef: "index.html",
+              artifactVersion: {
+                versionNo: 2,
+                snapshotPath: ".lime/artifacts/thread-1/index.v2.html",
+              },
+            },
+          },
+          {
+            artifactRef: "artifact-app",
+            eventId: "evt-file-app",
+            sequence: 4,
+            turnId: "turn-1",
+            path: "src/App.tsx",
+            title: "App.tsx",
+            kind: "code_file",
+            status: "running",
+            metadata: {
+              previewText: "export function App() {}",
+            },
+          },
+        ],
         pending_requests: [
           {
             id: "approval-command-1",
@@ -861,70 +920,6 @@ describe("useWorkspaceConversationSceneRuntime", () => {
           requestId: "approval-other",
           actionType: "tool_confirmation",
           status: "submitted",
-        },
-      ],
-      effectiveThreadItems: [
-        {
-          id: "item-command",
-          thread_id: "thread-1",
-          turn_id: "turn-1",
-          sequence: 1,
-          status: "failed",
-          started_at: "2026-05-27T10:00:00.000Z",
-          updated_at: "2026-05-27T10:00:01.000Z",
-          type: "command_execution",
-          command: "npm test",
-          cwd: "/tmp/demo-project",
-          aggregated_output: "FAIL src/App.test.tsx\nExpected title",
-          exit_code: 1,
-        },
-        {
-          id: "item-error",
-          thread_id: "thread-1",
-          turn_id: "turn-1",
-          sequence: 2,
-          status: "failed",
-          started_at: "2026-05-27T10:00:02.000Z",
-          updated_at: "2026-05-27T10:00:03.000Z",
-          type: "error",
-          message: "测试失败",
-        },
-        {
-          id: "item-file-index",
-          thread_id: "thread-1",
-          turn_id: "turn-1",
-          sequence: 3,
-          status: "completed",
-          started_at: "2026-05-27T10:00:04.000Z",
-          updated_at: "2026-05-27T10:00:05.000Z",
-          type: "file_artifact",
-          path: "index.html",
-          source: "runtime",
-          content: "<h1>更新后的页面</h1>",
-          metadata: {
-            artifactTitle: "index.html",
-            previewText: "更新后的页面",
-            artifactVersion: {
-              versionNo: 2,
-              snapshotPath: ".lime/artifacts/thread-1/index.v2.html",
-            },
-          },
-        },
-        {
-          id: "item-file-app",
-          thread_id: "thread-1",
-          turn_id: "turn-1",
-          sequence: 4,
-          status: "in_progress",
-          started_at: "2026-05-27T10:00:06.000Z",
-          updated_at: "2026-05-27T10:00:07.000Z",
-          type: "file_artifact",
-          path: "src/App.tsx",
-          source: "runtime",
-          content: "export function App() {}",
-          metadata: {
-            artifactTitle: "App.tsx",
-          },
         },
       ],
     });
@@ -948,6 +943,58 @@ describe("useWorkspaceConversationSceneRuntime", () => {
     expect(handleSendFromEmptyState).toHaveBeenCalledWith({
       textOverride: "请继续修复失败测试",
     });
+    await outputPanel.props.onSubmitRecoveryPrompt("请带上下文继续修复", {
+      schemaVersion: "coding-workbench-recovery/v1",
+      failureKind: "test",
+      sourceIds: {
+        commandId: "command-npm-test",
+        testRunId: "test-unit",
+      },
+      refs: {
+        outputRefs: ["output://command-npm-test"],
+        sourceEventIds: ["event-command-npm-test"],
+      },
+      relatedFiles: ["src/App.tsx"],
+      latestCheckpointPath: "index.html",
+      signals: [
+        {
+          kind: "test",
+          id: "test-unit",
+          title: "unit",
+          sourceIds: {
+            commandId: "command-npm-test",
+            testRunId: "test-unit",
+          },
+          refs: {
+            outputRefs: ["output://command-npm-test"],
+            sourceEventIds: ["event-command-npm-test"],
+          },
+        },
+      ],
+    });
+    expect(handleSendFromEmptyState).toHaveBeenLastCalledWith({
+      textOverride: "请带上下文继续修复",
+      sendOptions: {
+        requestMetadata: {
+          harness: {
+            coding_workbench_recovery: expect.objectContaining({
+              schemaVersion: "coding-workbench-recovery/v1",
+              failureKind: "test",
+              sourceIds: {
+                commandId: "command-npm-test",
+                testRunId: "test-unit",
+              },
+              refs: {
+                outputRefs: ["output://command-npm-test"],
+                sourceEventIds: ["event-command-npm-test"],
+              },
+              relatedFiles: ["src/App.tsx"],
+              latestCheckpointPath: "index.html",
+            }),
+          },
+        },
+      },
+    });
     expect(canvasProps.logView).not.toBe(canvasProps.sessionView);
     expect(canvasProps.logView?.tabLabel).toBe("日志");
     expect(canvasProps.logView?.title).toBe("运行日志");
@@ -959,7 +1006,7 @@ describe("useWorkspaceConversationSceneRuntime", () => {
     expect(canvasProps.changeView?.items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          id: "coding_thread_item_item-file-index",
+          id: "evt-file-index",
           path: "index.html",
           displayName: "index.html",
           status: "completed",
@@ -968,7 +1015,7 @@ describe("useWorkspaceConversationSceneRuntime", () => {
           checkpointLabel: "snapshot",
         }),
         expect.objectContaining({
-          id: "coding_thread_item_item-file-app",
+          id: "evt-file-app",
           path: "src/App.tsx",
           displayName: "App.tsx",
           status: "in_progress",
@@ -979,7 +1026,7 @@ describe("useWorkspaceConversationSceneRuntime", () => {
     canvasProps.changeView?.onOpenFile?.("/tmp/demo/index.html");
     expect(openChangedFile).toHaveBeenCalledWith("/tmp/demo/index.html");
 
-    expect(handleSendFromEmptyState).toHaveBeenCalledTimes(1);
+    expect(handleSendFromEmptyState).toHaveBeenCalledTimes(2);
   });
 
   it("无运行时输出和文件信号时应保持默认画布工作台模式", () => {

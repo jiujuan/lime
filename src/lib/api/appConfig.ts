@@ -26,6 +26,7 @@ export type {
   MultiSearchConfig,
   MultiSearchEngineEntryConfig,
   NavigationConfig,
+  NativeAgentConfig,
   QuotaExceededConfig,
   RemoteManagementConfig,
   ResponseCacheConfig,
@@ -34,8 +35,19 @@ export type {
   ShellImportPreview,
   TlsConfig,
   ToolCallingConfig,
+  ToolExecutionCommandRiskLevelConfig,
+  ToolExecutionCommandRuleConfig,
+  ToolExecutionCommandRuleMatchTypeConfig,
+  ToolExecutionNetworkRuleConfig,
+  ToolExecutionNetworkRuleTargetConfig,
+  ToolExecutionOverrideConfig,
+  ToolExecutionPolicyConfig,
+  ToolExecutionRestrictionProfileConfig,
+  ToolExecutionSandboxProfileConfig,
+  ToolExecutionWarningPolicyConfig,
   UserProfile,
   WorkspacePreferencesConfig,
+  WorkspaceSandboxConfig,
 } from "./appConfigTypes";
 
 interface GetConfigOptions {

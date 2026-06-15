@@ -132,9 +132,31 @@ export interface ExpertAgentLaunchParams {
  */
 export type SettingsProviderView = "settings" | "cloud";
 
+export interface ProviderSettingsFocusContext {
+  providerId?: string;
+  modelId?: string;
+  reasonCode?: string;
+  recoveryAction?: string;
+  requestKey?: number;
+}
+
+export type ExecutionPolicyFocusSection = "workspace" | "shell" | "network";
+export type ExecutionPolicyFocusTarget = "command" | "host" | "url";
+
+export interface ExecutionPolicyFocusContext {
+  section: ExecutionPolicyFocusSection;
+  ruleId?: string;
+  target?: ExecutionPolicyFocusTarget;
+  value?: string;
+  reasonCode?: string;
+  requestKey?: number;
+}
+
 export interface SettingsPageParams {
   tab?: SettingsTabs;
   providerView?: SettingsProviderView;
+  providerFocus?: ProviderSettingsFocusContext;
+  executionPolicyFocus?: ExecutionPolicyFocusContext;
 }
 
 export type MemoryPageSection =

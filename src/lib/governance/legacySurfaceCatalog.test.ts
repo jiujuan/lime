@@ -86,9 +86,10 @@ describe("legacySurfaceCatalog", () => {
     const localProcessMonitor = legacySurfaceCatalogJson.frontendText.find(
       (entry) => entry.id === "agent-ui-local-process-owner-terminology",
     );
-    const hostDrawerFallbackMonitor = legacySurfaceCatalogJson.frontendText.find(
-      (entry) => entry.id === "agent-app-host-drawer-local-process-fallback",
-    );
+    const hostDrawerFallbackMonitor =
+      legacySurfaceCatalogJson.frontendText.find(
+        (entry) => entry.id === "agent-app-host-drawer-local-process-fallback",
+      );
     const providerMonitor = legacySurfaceCatalogJson.frontendText.find(
       (entry) => entry.id === "agent-ui-direct-provider-runtime-surface",
     );
@@ -3094,6 +3095,367 @@ describe("legacySurfaceCatalog", () => {
     ]);
   });
 
+  it("应禁止 Coding Workbench current 运行时直接消费 legacy thread item fact", () => {
+    const monitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) =>
+        entry.id === "agent-chat-coding-workbench-legacy-thread-item-facts",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.patterns).toEqual([
+      "file_artifact",
+      "command_execution",
+      "approval_request",
+      "code_orchestrated",
+    ]);
+    expect(monitor?.includePathPrefixes).toEqual([
+      "src/components/agent/chat/workspace/codingSessionOverviewProjection.ts",
+      "src/components/agent/chat/workspace/workspaceConversationCodingViews.tsx",
+      "src/components/agent/chat/workspace/workspaceConversationSessionViewModel.ts",
+      "src/components/agent/chat/workspace/useWorkspaceConversationSceneRuntime.tsx",
+      "src/components/agent/chat/workspace/CodingWorkbenchOutputPanel.tsx",
+      "src/components/agent/chat/workspace/CodingWorkbenchLogPanel.tsx",
+      "src/components/agent/chat/workspace/CodingWorkbenchActionPanel.tsx",
+      "src/components/agent/chat/workspace/CodingWorkbenchDiagnosticPanel.tsx",
+      "src/components/agent/chat/components/CanvasSessionOverviewPanel.tsx",
+      "src/components/agent/chat/components/CanvasWorkbenchLayout.tsx",
+      "src/components/agent/chat/components/canvas-workbench/",
+    ]);
+  });
+
+  it("应禁止 current scene view model 恢复 legacy thread item adapter", () => {
+    const monitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) =>
+        entry.id === "agent-chat-coding-workbench-legacy-adapter-reexport",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.patterns).toEqual([
+      "workspaceConversationLegacyThreadItemAdapter",
+    ]);
+    expect(monitor?.regexPatterns).toEqual([
+      "\\bexport\\s*\\{\\s*buildCanvasWorkbenchChangeView\\s*,\\s*buildCodingRuntimeEventsFromThreadItems\\s*,\\s*buildCodingWorkbenchProjectionFromThreadItems\\s*,\\s*buildFileArtifactChangeItem\\s*\\}\\s*from\\s*[\"']\\./workspaceConversationLegacyThreadItemAdapter[\"']",
+    ]);
+    expect(monitor?.includePathPrefixes).toEqual([
+      "src/components/agent/chat/workspace/workspaceConversationSceneViewModel.ts",
+      "src/components/agent/chat/workspace/workspaceConversationWorkbenchViewModel.ts",
+    ]);
+  });
+
+  it("应禁止 current 编程入口把 code_orchestrated 当成现役 execution strategy", () => {
+    const monitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) => entry.id === "agent-chat-code-orchestrated-current-entry-ban",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.allowedPaths).toEqual([
+      "src/lib/api/agentProtocol.test.ts",
+      "src/components/agent/chat/skill-selection/runtimeInputCapabilityCatalog.test.tsx",
+      "src/components/agent/chat/hooks/agentSessionRefresh.test.ts",
+      "src/components/agent/chat/hooks/agentChatStorage.test.ts",
+      "src/components/agent/chat/hooks/agentSessionTopicViewModel.unit.test.ts",
+      "src/components/agent/chat/utils/sessionExecutionRuntime.test.ts",
+      "src/components/agent/chat/utils/submitOpRuntimeCompaction.test.ts",
+    ]);
+    expect(monitor?.patterns).toEqual([
+      'execution_strategy: "code_orchestrated"',
+      'executionStrategy: "code_orchestrated"',
+      'effectiveExecutionStrategy: "code_orchestrated"',
+      "code_orchestrated_defaults",
+      "codeOrchestratedDefaults",
+    ]);
+  });
+
+  it("应禁止 execution strategy 历史值归一逻辑散落在多个 current 边界", () => {
+    const monitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) =>
+        entry.id ===
+        "agent-runtime-execution-strategy-compat-helper-single-boundary",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.includePathPrefixes).toEqual([
+      "src/lib/api/agentProtocol.ts",
+      "src/components/agent/chat/skill-selection/runtimeInputCapabilityCatalog.ts",
+      "src/lib/api/agentRuntime/executionStrategyCompat.ts",
+      "lime-rs/crates/agent/src/session_store.rs",
+      "lime-rs/crates/agent/src/execution_strategy_compat.rs",
+    ]);
+    expect(monitor?.allowedPaths).toEqual([
+      "src/lib/api/agentRuntime/executionStrategyCompat.ts",
+      "src/lib/api/agentRuntime/executionStrategyCompat.test.ts",
+      "src/components/agent/chat/skill-selection/runtimeInputCapabilityCatalog.test.tsx",
+      "lime-rs/crates/agent/src/execution_strategy_compat.rs",
+    ]);
+    expect(monitor?.patterns).toEqual(["code_orchestrated"]);
+    expect(monitor?.regexPatterns).toEqual([
+      "\\bnormalizeLegacyExecutionStrategyToCurrentReact\\s*\\(",
+      "\\bnormalizeCatalogExecutionStrategyCompat\\s*\\(",
+      "\\bfn\\s+normalize_execution_strategy\\s*\\(",
+      "\\bnormalizeLegacyExecutionStrategy\\s*\\(",
+      "\\bnormalizeLegacyCatalogExecutionStrategy\\s*\\(",
+    ]);
+  });
+
+  it("应禁止 Agent Runtime current 不可用报错重新指向 legacy command 恢复路径", () => {
+    const monitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) =>
+        entry.id ===
+        "agent-runtime-current-unavailable-legacy-command-recovery-text",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.patterns).toEqual([
+      "current Agent runtime cannot use legacy agent_runtime_* commands",
+      "legacy agent_runtime_* commands",
+    ]);
+    expect(monitor?.includePathPrefixes).toEqual(["src/lib/api/agentRuntime"]);
+  });
+
+  it("应禁止 agent_messages 继续承接生产 transcript 写入", () => {
+    const monitor = legacySurfaceCatalogJson.rustText.find(
+      (entry) => entry.id === "rust-agent-messages-production-write-leak",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("deprecated");
+    expect(monitor?.patterns).toEqual([
+      "INSERT INTO agent_messages",
+      "UPDATE agent_messages",
+      "DELETE FROM agent_messages",
+    ]);
+    expect(monitor?.includePathPrefixes).toEqual(["lime-rs/crates"]);
+    expect(monitor?.allowedPaths).toEqual([
+      "lime-rs/crates/agent/src/session_store_tests.rs",
+      "lime-rs/crates/app-server/src/local_data_source/legacy_message_backfill_source.rs",
+      "lime-rs/crates/app-server/src/local_data_source/tests.rs",
+      "lime-rs/crates/core/src/database/dao/agent.rs",
+      "lime-rs/crates/core/src/database/dao/chat.rs",
+      "lime-rs/crates/core/src/database/migration/general_chat_migration.rs",
+    ]);
+  });
+
+  it("应禁止 agent_messages 成为产品读回长期 fallback", () => {
+    const monitor = legacySurfaceCatalogJson.rustText.find(
+      (entry) => entry.id === "rust-agent-messages-product-read-fallback-leak",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("deprecated");
+    expect(monitor?.patterns).toEqual([
+      "FROM agent_messages",
+      "JOIN agent_messages",
+      "FROM agent_messages m",
+      "JOIN agent_messages m",
+    ]);
+    expect(monitor?.includePathPrefixes).toEqual(["lime-rs/crates"]);
+    expect(monitor?.allowedPaths).toEqual([
+      "lime-rs/crates/agent/src/session_store_history_visibility.rs",
+      "lime-rs/crates/app-server/src/local_data_source/legacy_message_backfill_source.rs",
+      "lime-rs/crates/app-server/src/local_data_source/tests.rs",
+      "lime-rs/crates/core/src/database/dao/agent.rs",
+      "lime-rs/crates/core/src/database/dao/chat.rs",
+      "lime-rs/crates/core/src/database/migration/general_chat_migration.rs",
+      "lime-rs/crates/services/src/aster_session_store/legacy_conversation.rs",
+    ]);
+  });
+
+  it("应禁止产品服务层通过 ChatDao 旧消息 API 回读 agent_messages", () => {
+    const monitor = legacySurfaceCatalogJson.rustText.find(
+      (entry) => entry.id === "rust-chat-dao-agent-messages-product-api-leak",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead-candidate");
+    expect(monitor?.patterns).toEqual([
+      "ChatDao::add_message",
+      "ChatDao::delete_messages",
+      "ChatDao::get_messages",
+      "ChatDao::get_message_count",
+      "ChatDao::get_session_detail",
+      "ChatDao::list_sessions",
+    ]);
+    expect(monitor?.includePathPrefixes).toEqual([
+      "lime-rs/crates/app-server/src",
+      "lime-rs/crates/server/src",
+      "lime-rs/crates/services/src",
+      "lime-rs/crates/websocket/src",
+    ]);
+    expect(monitor?.allowedPaths).toEqual([]);
+  });
+
+  it("应禁止产品层通过 AgentDao 旧消息 API 回读 agent_messages", () => {
+    const monitor = legacySurfaceCatalogJson.rustText.find(
+      (entry) => entry.id === "rust-agent-session-direct-record-access",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead-candidate");
+    expect(monitor?.patterns).toEqual([
+      "AgentDao::get_session_with_messages(",
+      "AgentDao::get_message_count(",
+      "AgentDao::get_messages(",
+      "AgentDao::get_messages_tail(",
+      "AgentDao::get_messages_tail_page(",
+      "AgentDao::get_messages_before(",
+    ]);
+    expect(monitor?.includePathPrefixes).toEqual([
+      "lime-rs/crates/agent/src",
+      "lime-rs/crates/services/src",
+      "lime-rs/crates/app-server/src",
+      "lime-rs/crates/websocket/src",
+    ]);
+    expect(monitor?.allowedPaths).toEqual([]);
+  });
+
+  it("应只在测试编译图保留 agent_messages 可见性读取 helper", () => {
+    const sessionStoreSource = readFileSync(
+      join(REPO_ROOT, "lime-rs/crates/agent/src/session_store.rs"),
+      "utf8",
+    );
+
+    expect(sessionStoreSource).toContain(
+      '#[path = "session_store_history_visibility.rs"]',
+    );
+    expect(sessionStoreSource).toMatch(
+      /#\[cfg\(test\)\]\s*#\[path = "session_store_history_visibility\.rs"\]\s*mod session_store_history_visibility;/,
+    );
+  });
+
+  it("应禁止 agent_thread_items.payload_json 继续作为事实源", () => {
+    const monitor = legacySurfaceCatalogJson.rustText.find(
+      (entry) => entry.id === "rust-agent-thread-items-payload-json-truth-leak",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("deprecated");
+    expect(monitor?.allowedPaths).toEqual([
+      "lime-rs/crates/core/src/database/schema.rs",
+      "lime-rs/crates/core/src/database/dao/agent_timeline.rs",
+    ]);
+    expect(monitor?.regexPatterns).toEqual([
+      "agent_thread_items[\\s\\S]{0,1600}payload_json",
+      "payload_json[\\s\\S]{0,1600}agent_thread_items",
+    ]);
+    expect(monitor?.includePathPrefixes).toEqual(["lime-rs/crates"]);
+  });
+
+  it("应禁止 runtime snapshot 裸字段和 sidecarRef 规则散落到非边界文件", () => {
+    const monitor = legacySurfaceCatalogJson.rustText.find(
+      (entry) => entry.id === "rust-runtime-snapshot-sidecar-ref-boundary-leak",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("deprecated");
+    expect(monitor?.allowedPaths).toEqual([
+      "lime-rs/crates/app-server/src/file_checkpoint.rs",
+      "lime-rs/crates/app-server/src/file_checkpoint_snapshot.rs",
+      "lime-rs/crates/app-server/src/runtime/artifact_reader.rs",
+      "lime-rs/crates/app-server/src/runtime/artifact_sidecar.rs",
+      "lime-rs/crates/app-server/src/runtime/evidence_provider.rs",
+      "lime-rs/crates/app-server/src/runtime/file_checkpoint_projection.rs",
+      "lime-rs/crates/app-server/src/runtime/output_refs.rs",
+      "lime-rs/crates/app-server/src/runtime/session_hydration.rs",
+    ]);
+    expect(monitor?.patterns).toEqual([
+      '"outputSnapshotFile"',
+      '"checkpointSnapshotFile"',
+      '"sidecarRef"',
+      '"contentSha256"',
+    ]);
+    expect(monitor?.includePathPrefixes).toEqual([
+      "lime-rs/crates/app-server/src",
+    ]);
+  });
+
+  it("应禁止 generated artifact 正文继续内联在 runtime event 中", () => {
+    const monitor = legacySurfaceCatalogJson.rustText.find(
+      (entry) =>
+        entry.id === "rust-runtime-artifact-generated-content-inline-leak",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("deprecated");
+    expect(monitor?.patterns).toEqual([
+      "generatedContent",
+      "generated_content",
+    ]);
+    expect(monitor?.includePathPrefixes).toEqual([
+      "lime-rs/crates/app-server/src",
+    ]);
+    expect(monitor?.allowedPaths).toEqual([
+      "lime-rs/crates/app-server/src/runtime/artifact_sidecar.rs",
+      "lime-rs/crates/app-server/src/runtime/artifact_reader.rs",
+      "lime-rs/crates/app-server/src/runtime/event_store.rs",
+      "lime-rs/crates/app-server/src/runtime/tests/artifacts.rs",
+      "lime-rs/crates/app-server/src/runtime/tests/evidence_exports.rs",
+    ]);
+  });
+
+  it("应禁止 file checkpoint 正文继续内联在 runtime event 中", () => {
+    const monitor = legacySurfaceCatalogJson.rustText.find(
+      (entry) =>
+        entry.id === "rust-runtime-file-checkpoint-inline-content-leak",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("deprecated");
+    expect(monitor?.patterns).toEqual([
+      "previousContent",
+      "beforeContent",
+      "oldContent",
+    ]);
+    expect(monitor?.regexPatterns).toEqual([
+      "checkpointSnapshotFile[\\s\\S]{0,1600}(previousContent|beforeContent|oldContent)",
+      "(previousContent|beforeContent|oldContent)[\\s\\S]{0,1600}checkpointSnapshotFile",
+    ]);
+    expect(monitor?.includePathPrefixes).toEqual([
+      "lime-rs/crates/app-server/src",
+    ]);
+    expect(monitor?.allowedPaths).toEqual([
+      "lime-rs/crates/app-server/src/file_checkpoint.rs",
+      "lime-rs/crates/app-server/src/file_checkpoint_snapshot.rs",
+      "lime-rs/crates/app-server/src/runtime/file_checkpoint_projection.rs",
+      "lime-rs/crates/app-server/src/runtime/evidence_provider.rs",
+      "lime-rs/crates/app-server/src/runtime/session_hydration.rs",
+      "lime-rs/crates/app-server/src/runtime/tests/coding_events.rs",
+      "lime-rs/crates/app-server/src/runtime/tests/evidence_exports.rs",
+    ]);
+  });
+
+  it("应禁止 runtime store 自行发现平台路径", () => {
+    const monitor = legacySurfaceCatalogJson.rustText.find(
+      (entry) => entry.id === "rust-runtime-store-hardcoded-platform-path-leak",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead-candidate");
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.patterns).toEqual([
+      "dirs::home_dir(",
+      "dirs::data_dir(",
+      "dirs::data_local_dir(",
+      '"~/.lime"',
+      '"/tmp/lime',
+      '"APPDATA"',
+      '"LOCALAPPDATA"',
+      '"Application Support"',
+    ]);
+    expect(monitor?.includePathPrefixes).toEqual([
+      "lime-rs/crates/app-server/src/runtime",
+      "lime-rs/crates/app-server/src/main.rs",
+      "lime-rs/crates/app-server/src/file_checkpoint_snapshot.rs",
+    ]);
+  });
+
   it("应禁止首页空态恢复 configLoadStrategy 时序开关", () => {
     const monitor = legacySurfaceCatalogJson.frontendText.find(
       (entry) => entry.id === "empty-state-legacy-config-load-strategy-prop",
@@ -3312,6 +3674,111 @@ describe("legacySurfaceCatalog", () => {
         "get_provider_ui_state",
         "set_provider_ui_state",
       ]),
+    );
+  });
+
+  it("应禁止 Coding Workbench current session overview 重新直读旧 thread item facts", () => {
+    const monitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) =>
+        entry.id === "agent-chat-coding-workbench-legacy-thread-item-facts",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.patterns).toEqual(
+      expect.arrayContaining([
+        "file_artifact",
+        "command_execution",
+        "approval_request",
+        "code_orchestrated",
+      ]),
+    );
+    expect(monitor?.includePathPrefixes).toEqual(
+      expect.arrayContaining([
+        "src/components/agent/chat/components/CanvasSessionOverviewPanel.tsx",
+        "src/components/agent/chat/workspace/codingSessionOverviewProjection.ts",
+        "src/components/agent/chat/workspace/workspaceConversationCodingViews.tsx",
+      ]),
+    );
+  });
+
+  it("Coding roadmap 不应再把 code_orchestrated 写成 current 入口", () => {
+    const roadmapFiles = [
+      "internal/roadmap/coding/README.md",
+      "internal/roadmap/coding/architecture.md",
+      "internal/roadmap/coding/implementation-plan.md",
+    ];
+    const forbiddenSnippets = [
+      "compat/current 入口语义",
+      "作为 coding profile 的现有入口语义",
+      "作为 profile selection 输入",
+    ];
+    const offenders = roadmapFiles.flatMap((file) => {
+      const source = readFileSync(join(REPO_ROOT, file), "utf8");
+      return forbiddenSnippets
+        .filter((snippet) => source.includes(snippet))
+        .map((snippet) => `${file}: ${snippet}`);
+    });
+
+    expect(offenders).toEqual([]);
+  });
+
+  it("治理目录册不应把 code_orchestrated runtime 写成 current 编程底座", () => {
+    const source = readFileSync(
+      join(REPO_ROOT, "src/lib/governance/legacySurfaceCatalog.json"),
+      "utf8",
+    );
+
+    expect(source).not.toContain("code_orchestrated runtime");
+    expect(source).toContain(
+      "legacy code_orchestrated 只能在兼容边界归一到 react",
+    );
+  });
+
+  it("Coding roadmap 不应把已完成的 P5/P7/P8 baseline 重新写成主线 blocker", () => {
+    const roadmapFiles = [
+      "internal/roadmap/coding/README.md",
+      "internal/roadmap/coding/implementation-plan.md",
+    ];
+    const forbiddenSnippets = [
+      "P5 多模型 slot、P7 GUI smoke 未完成前",
+      "多模型 slot      | 文档定义完成，工程实现未完成",
+      "继续补 log/action-submit 面板接线和 UI smoke evidence",
+      "日志、审批提交动作继续迁到 projection adapter，并补 GUI smoke",
+      "补 code artifact workbench fixture / GUI smoke",
+      "接 Provider slot diagnostics",
+      "P3/P4 UI evidence、Provider slot diagnostics 仍按后续主线推进",
+      "当前最优先做 P8 收口，而不是继续重复 P2-P7 baseline",
+      "最高价值下一刀转为 P8 legacy residual 收口",
+    ];
+    const offenders = roadmapFiles.flatMap((file) => {
+      const source = readFileSync(join(REPO_ROOT, file), "utf8");
+      return forbiddenSnippets
+        .filter((snippet) => source.includes(snippet))
+        .map((snippet) => `${file}: ${snippet}`);
+    });
+    const readmeSource = readFileSync(
+      join(REPO_ROOT, "internal/roadmap/coding/README.md"),
+      "utf8",
+    );
+    const implementationSource = readFileSync(
+      join(REPO_ROOT, "internal/roadmap/coding/implementation-plan.md"),
+      "utf8",
+    );
+
+    expect(offenders).toEqual([]);
+    expect(readmeSource).toContain(
+      "P1/P2/P3/P4/P5/P7/P8 的骨架闭环已经具备 current facts、projection、GUI smoke、evidence export 与生产 mock / legacy command 防回流守卫",
+    );
+    expect(readmeSource).toContain(
+      "推进 Windows restricted token ACL / token enforcement，补齐 Windows 平台 sandbox 真实 enforce",
+    );
+    expect(implementationSource).toContain(
+      "P8 residual 盘点结论：生产 `src / packages / electron` 主路径未发现 `agent_runtime_*` 直接命令调用",
+    );
+    expect(implementationSource).toContain(
+      "P1/P2/P3/P4/P5/P7/P8 骨架已经进入 App Server / RuntimeCore current crates 与 Workbench current projection",
     );
   });
 });

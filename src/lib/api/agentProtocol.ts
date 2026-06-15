@@ -24,6 +24,7 @@ import type {
   AutoContinueRequestPayload,
   ImageInput,
 } from "./agentRuntime/types";
+import { normalizeExecutionStrategyToReact } from "./agentRuntime/executionStrategyCompat";
 
 export interface AgentContextTraceStep {
   stage: string;
@@ -610,6 +611,29 @@ export interface AgentEventRoutingNotPossible {
   routing_decision: AsterSessionExecutionRuntimeRoutingDecision;
 }
 
+function routingDecisionFromEvent(
+  event: Record<string, unknown>,
+): AsterSessionExecutionRuntimeRoutingDecision {
+  const routingDecision =
+    (event.routing_decision as Record<string, unknown> | undefined) ||
+    (event.routingDecision as Record<string, unknown> | undefined) ||
+    {};
+  const merged: Record<string, unknown> = { ...routingDecision };
+  for (const [sourceKey, targetKey] of [
+    ["fallbackApplied", "fallbackApplied"],
+    ["fallback_applied", "fallbackApplied"],
+    ["requestedSelection", "requestedSelection"],
+    ["requested_selection", "requestedSelection"],
+    ["routingAttempts", "routingAttempts"],
+    ["routing_attempts", "routingAttempts"],
+  ] as const) {
+    if (event[sourceKey] !== undefined && merged[targetKey] === undefined) {
+      merged[targetKey] = event[sourceKey];
+    }
+  }
+  return merged as unknown as AsterSessionExecutionRuntimeRoutingDecision;
+}
+
 export interface AgentEventLimitStateUpdated {
   type: "limit_state_updated";
   limit_state: AsterSessionExecutionRuntimeLimitState;
@@ -939,14 +963,6 @@ function normalizeToolExecutionResult(
   };
 }
 
-function normalizeExecutionStrategy(
-  value: unknown,
-): AsterExecutionStrategy | null {
-  return value === "react" || value === "code_orchestrated" || value === "auto"
-    ? "react"
-    : null;
-}
-
 export function parseAgentEvent(data: unknown): AgentEvent | null {
   if (!data || typeof data !== "object") {
     return null;
@@ -1206,7 +1222,7 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
         session_id: (event.session_id as string) || "",
         thread_id: (event.thread_id as string) || "",
         turn_id: (event.turn_id as string) || "",
-        execution_strategy: normalizeExecutionStrategy(
+        execution_strategy: normalizeExecutionStrategyToReact(
           event.execution_strategy,
         ),
         output_schema_runtime:
@@ -1405,30 +1421,22 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
     case "candidate_set_resolved":
       return {
         type: "candidate_set_resolved",
-        routing_decision:
-          (event.routing_decision as AsterSessionExecutionRuntimeRoutingDecision) ||
-          (event.routingDecision as AsterSessionExecutionRuntimeRoutingDecision),
+        routing_decision: routingDecisionFromEvent(event),
       };
     case "routing_decision_made":
       return {
         type: "routing_decision_made",
-        routing_decision:
-          (event.routing_decision as AsterSessionExecutionRuntimeRoutingDecision) ||
-          (event.routingDecision as AsterSessionExecutionRuntimeRoutingDecision),
+        routing_decision: routingDecisionFromEvent(event),
       };
     case "routing_fallback_applied":
       return {
         type: "routing_fallback_applied",
-        routing_decision:
-          (event.routing_decision as AsterSessionExecutionRuntimeRoutingDecision) ||
-          (event.routingDecision as AsterSessionExecutionRuntimeRoutingDecision),
+        routing_decision: routingDecisionFromEvent(event),
       };
     case "routing_not_possible":
       return {
         type: "routing_not_possible",
-        routing_decision:
-          (event.routing_decision as AsterSessionExecutionRuntimeRoutingDecision) ||
-          (event.routingDecision as AsterSessionExecutionRuntimeRoutingDecision),
+        routing_decision: routingDecisionFromEvent(event),
       };
     case "limit_state_updated":
       return {

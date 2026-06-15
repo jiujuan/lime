@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   clickButton,
+  createMockAgentChatUnifiedState,
   createProject,
   flushEffects,
+  getSendMessageCall,
   getHookCallOrderForWorkspace,
   getIndexTestMocks,
+  installMockAgentChatUnifiedState,
   mountPage,
   observedWorkspaceIds,
   renderPage,
@@ -76,7 +79,12 @@ describe("AgentChatPage 话题切换项目恢复", () => {
   });
 
   it("无可用项目时应自动创建默认项目并继续切换话题", async () => {
-    mockGetProject.mockResolvedValue(null);
+    mockGetProject.mockImplementation(async (projectId: string) => {
+      if (projectId === "default-new") {
+        return createProject("default-new");
+      }
+      return null;
+    });
     mockGetDefaultProject.mockResolvedValue(null);
     mockGetOrCreateDefaultProject.mockResolvedValue(
       createProject("default-new"),
@@ -194,6 +202,55 @@ describe("AgentChatPage 话题切换项目恢复", () => {
     expect(observedWorkspaceIds[observedWorkspaceIds.length - 1]).toBe(
       "project-default-real",
     );
+  });
+
+  it("临时 workspace 路径缺失时应切回默认工作区并自动重发", async () => {
+    localStorage.setItem("agent_last_project_id", JSON.stringify("temp-ws"));
+    mockGetProject.mockImplementation(async (projectId: string) => {
+      if (projectId === "temp-ws") {
+        return {
+          ...createProject("temp-ws"),
+          workspaceType: "temporary",
+          rootPath: "/var/folders/lime-knowledge-product-e2e-stale",
+        };
+      }
+      return createProject(projectId);
+    });
+    mockGetOrCreateDefaultProject.mockResolvedValue(
+      createProject("project-default-real"),
+    );
+    mockEnsureWorkspaceReady.mockResolvedValue({
+      workspaceId: "project-default-real",
+      rootPath: "/tmp/project-default-real",
+      existed: true,
+      created: false,
+      repaired: false,
+      relocated: false,
+      previousRootPath: null,
+      warning: null,
+    });
+    installMockAgentChatUnifiedState(
+      createMockAgentChatUnifiedState({
+        workspacePathMissing: {
+          content: "只回答一个字：好",
+          images: [],
+        },
+        dismissWorkspacePathError: vi.fn(),
+      }),
+    );
+
+    renderPage();
+    await flushEffects(6);
+
+    expect(mockGetOrCreateDefaultProject).toHaveBeenCalledTimes(1);
+    expect(mockEnsureWorkspaceReady).toHaveBeenCalledWith(
+      "project-default-real",
+    );
+    expect(observedWorkspaceIds).toContain("temp-ws");
+    expect(observedWorkspaceIds[observedWorkspaceIds.length - 1]).toBe(
+      "project-default-real",
+    );
+    expect(getSendMessageCall().content).toBe("只回答一个字：好");
   });
 
   it("存在 newChatAt 时手动选项目不应被重置", async () => {

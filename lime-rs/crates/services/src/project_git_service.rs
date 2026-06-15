@@ -297,19 +297,22 @@ fn read_branch_patch(
         return Ok(ProjectGitPatchResult::new(String::new()));
     };
 
-    let patch = git_diff_output(
-        root,
-        &[
-            "diff",
-            "--no-textconv",
-            "--no-ext-diff",
-            "--submodule=short",
-            "--ignore-submodules=dirty",
-            "--no-color",
-            unified_arg,
-            &merge_base,
-        ],
-    )?;
+    let patch = join_patch_sections([
+        git_diff_output(
+            root,
+            &[
+                "diff",
+                "--no-textconv",
+                "--no-ext-diff",
+                "--submodule=short",
+                "--ignore-submodules=dirty",
+                "--no-color",
+                unified_arg,
+                &merge_base,
+            ],
+        )?,
+        read_untracked_patch(root, unified_arg)?,
+    ]);
 
     Ok(ProjectGitPatchResult {
         patch,
@@ -804,6 +807,7 @@ mod tests {
         fs::write(repo.join("README.md"), "hello\nupstream diff\n").expect("write readme");
         run_git(&repo, &["add", "README.md"]);
         run_git(&repo, &["commit", "-m", "local branch change"]);
+        fs::write(repo.join("scratch.txt"), "untracked\n").expect("write untracked");
 
         let diff = read_diff(
             &repo.to_string_lossy(),
@@ -818,6 +822,38 @@ mod tests {
         assert_eq!(diff.comparison_base_ref.as_deref(), Some("origin/main"));
         assert!(diff.patch.contains("diff --git a/README.md b/README.md"));
         assert!(diff.patch.contains("+upstream diff"));
+        assert!(diff
+            .patch
+            .contains("diff --git a/scratch.txt b/scratch.txt"));
+        assert!(diff.patch.contains("+untracked"));
+    }
+
+    #[test]
+    fn branch_diff_includes_untracked_files() {
+        let Some((temp, repo)) = init_repo() else {
+            return;
+        };
+        let remote = temp.path().join("remote.git");
+        run_git(temp.path(), &["init", "--bare", "remote.git"]);
+        run_git(
+            &repo,
+            &["remote", "add", "origin", &remote.to_string_lossy()],
+        );
+        run_git(&repo, &["push", "-u", "origin", "main"]);
+        fs::write(repo.join("scratch.txt"), "untracked\n").expect("write untracked");
+
+        let diff = read_diff(
+            &repo.to_string_lossy(),
+            Some(3),
+            Some(ProjectGitDiffBase::Branch),
+            None,
+        )
+        .expect("diff");
+
+        assert!(diff
+            .patch
+            .contains("diff --git a/scratch.txt b/scratch.txt"));
+        assert!(diff.patch.contains("+untracked"));
     }
 
     #[test]

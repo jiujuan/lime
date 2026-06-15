@@ -340,7 +340,9 @@ export function AppPageContent({
   if (activePage === "agent-app") {
     return (
       <div style={columnPageStyle}>
-        <AgentAppRuntimePage pageParams={activePageParams as AgentAppPageParams} />
+        <AgentAppRuntimePage
+          pageParams={activePageParams as AgentAppPageParams}
+        />
       </div>
     );
   }
@@ -383,6 +385,12 @@ export function AppPageContent({
           initialTab={(activePageParams as SettingsPageParams).tab}
           initialProviderView={
             (activePageParams as SettingsPageParams).providerView
+          }
+          initialProviderFocus={
+            (activePageParams as SettingsPageParams).providerFocus
+          }
+          initialExecutionPolicyFocus={
+            (activePageParams as SettingsPageParams).executionPolicyFocus
           }
         />
       </div>

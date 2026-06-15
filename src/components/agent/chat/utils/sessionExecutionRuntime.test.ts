@@ -40,7 +40,7 @@ describe("sessionExecutionRuntime", () => {
     });
   });
 
-  it("应根据 turn_context 事件同步后端 effective execution strategy", () => {
+  it("应将 turn_context 里的 legacy execution strategy 归一到 current react", () => {
     const runtime = applyTurnContextExecutionRuntime(null, {
       type: "turn_context",
       session_id: "session-code",

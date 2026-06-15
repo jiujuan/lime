@@ -89,7 +89,22 @@ describe("createAgentAppRuntimeCapabilityApiFromClient", () => {
       title: "生成内容批次",
       prompt: "生成 20 条发布内容",
       input: { projectId: "project-1" },
-      expectedOutput: { artifactKind: "content_batch" },
+      expectedOutput: {
+        artifactKind: "content_batch",
+        outputFormat: {
+          type: "json_schema",
+          schema: {
+            type: "object",
+            properties: {
+              items: {
+                type: "array",
+              },
+            },
+            required: ["items"],
+          },
+          maxValidationRetries: 2,
+        },
+      },
       eventName: "agent_app_runtime:content-factory-app:task-1",
       turnId: "turn-1",
       providerPreference: "anthropic",
@@ -121,6 +136,44 @@ describe("createAgentAppRuntimeCapabilityApiFromClient", () => {
         providerPreference: "anthropic",
         modelPreference: "claude-sonnet-4",
         queuedTurnId: "agent-app-queued-task-1",
+        expectedOutput: {
+          artifactKind: "content_batch",
+          outputFormat: {
+            type: "json_schema",
+            schema: {
+              type: "object",
+              properties: {
+                items: {
+                  type: "array",
+                },
+              },
+              required: ["items"],
+            },
+            maxValidationRetries: 2,
+          },
+        },
+        structuredOutput: {
+          type: "json_schema",
+          schema: {
+            type: "object",
+            properties: {
+              items: {
+                type: "array",
+              },
+            },
+            required: ["items"],
+          },
+          maxValidationRetries: 2,
+        },
+        outputSchema: {
+          type: "object",
+          properties: {
+            items: {
+              type: "array",
+            },
+          },
+          required: ["items"],
+        },
         metadata: {
           source: "agent-app-test",
           turn_source: "agent-app",
@@ -137,6 +190,44 @@ describe("createAgentAppRuntimeCapabilityApiFromClient", () => {
               model_name: "claude-sonnet-4",
             },
             queued_turn_id: "agent-app-queued-task-1",
+            expected_output: {
+              artifactKind: "content_batch",
+              outputFormat: {
+                type: "json_schema",
+                schema: {
+                  type: "object",
+                  properties: {
+                    items: {
+                      type: "array",
+                    },
+                  },
+                  required: ["items"],
+                },
+                maxValidationRetries: 2,
+              },
+            },
+            structured_output: {
+              type: "json_schema",
+              schema: {
+                type: "object",
+                properties: {
+                  items: {
+                    type: "array",
+                  },
+                },
+                required: ["items"],
+              },
+              maxValidationRetries: 2,
+            },
+            output_schema: {
+              type: "object",
+              properties: {
+                items: {
+                  type: "array",
+                },
+              },
+              required: ["items"],
+            },
             turn_config: expect.objectContaining({
               provider_config: {
                 provider_name: "anthropic",

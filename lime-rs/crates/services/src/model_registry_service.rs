@@ -25,6 +25,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use url::form_urlencoded;
 
+mod runtime_metadata;
+pub use runtime_metadata::{ProviderModelRegistryMetadata, ProviderModelRegistryMetadataSource};
+
 const LIME_TENANT_HEADER: &str = "X-Lime-Tenant-ID";
 const LIME_TENANT_PARAM: &str = "lime_tenant_id";
 const PROVIDER_MODELS_CACHE_KEY_PREFIX: &str = "provider_models_fetch_cache:";
@@ -3177,6 +3180,14 @@ impl ModelRegistryService {
             now,
         )
         .with_source(ModelSource::Custom)
+    }
+
+    pub fn build_declared_model_metadata(
+        &self,
+        provider_id: &str,
+        model_id: &str,
+    ) -> EnhancedModelMetadata {
+        self.build_provider_declared_model(model_id, provider_id, chrono::Utc::now().timestamp())
     }
 
     fn build_declared_models(

@@ -40,6 +40,11 @@ const PERSISTED_TURN_ID = "agent-session-history-electron-persisted-turn";
 const PERSISTED_USER_ITEM_ID = "agent-session-history-electron-persisted-user";
 const PERSISTED_AGENT_ITEM_ID =
   "agent-session-history-electron-persisted-agent";
+const LEGACY_SESSION_ID = "agent-session-history-electron-legacy";
+const LEGACY_TITLE = "Electron legacy agent_messages fixture";
+const LEGACY_WORKSPACE_ID = "agent-session-history-electron-legacy-workspace";
+const LEGACY_USER_TEXT = "旧 agent_messages 用户消息";
+const LEGACY_ASSISTANT_TEXT = "旧 agent_messages 助手回复";
 const ARCHIVE_FAIL_CLOSED_MESSAGE =
   "agentSession/update archived is only supported for persisted current timeline sessions";
 const REQUIRED_METHODS = [
@@ -59,21 +64,25 @@ const PERSISTED_SESSION_FORBIDDEN_METHODS = [
   "agentSession/start",
   "agentSession/turn/start",
 ];
-const SIDEBAR_GUI_REQUIRED_METHODS = ["agentSession/update"];
+const SIDEBAR_GUI_REQUIRED_METHODS = [
+  "agentSession/list",
+  "agentSession/update",
+];
 const SIDEBAR_GUI_FORBIDDEN_METHODS = [
   "agentSession/start",
   "agentSession/turn/start",
 ];
-const LAST_PROJECT_ID_KEY = "agent_last_project_id";
-const PERSISTED_PROJECT_ID_CHANGED_EVENT = "agent-persisted-project-id-changed";
-const APP_SIDEBAR_COLLAPSED_STORAGE_KEY = "lime.app-sidebar.collapsed";
 const SIDEBAR_RECENT_LIST_SELECTOR =
   '[data-testid="app-sidebar-recent-conversations"]';
-const SIDEBAR_ARCHIVED_LIST_SELECTOR =
-  '[data-testid="app-sidebar-archived-conversations"]';
-const SIDEBAR_SHELF_SELECTOR = '[data-testid="app-sidebar-conversation-shelf"]';
 const SIDEBAR_ARCHIVE_MENU_ITEM_SELECTOR =
   '[data-testid="app-sidebar-conversation-menu-archive"]';
+const SETTINGS_ARCHIVED_CONVERSATIONS_SELECTOR =
+  '[data-testid="settings-archived-conversations"]';
+const SETTINGS_ARCHIVED_RESTORE_SELECTOR =
+  '[data-testid="settings-archived-conversation-restore"]';
+const LAST_PROJECT_ID_KEY = "agent_last_project_id";
+const OPENED_PROJECT_IDS_KEY = "agent_opened_project_ids";
+const APP_SIDEBAR_COLLAPSED_STORAGE_KEY = "lime.app-sidebar.collapsed";
 const SQLITE3_BINARY = process.env.SQLITE3_BIN?.trim() || "sqlite3";
 
 function printHelp() {
@@ -182,6 +191,7 @@ function createTempRuntimeEnv() {
   const roamingAppData = path.join(tempRoot, "roaming-app-data");
   const electronUserDataDir = path.join(tempRoot, "electron-user-data");
   const persistedWorkspaceRoot = path.join(tempRoot, "persisted-workspace");
+  const legacyWorkspaceRoot = path.join(tempRoot, "legacy-workspace");
 
   for (const dir of [
     home,
@@ -190,6 +200,7 @@ function createTempRuntimeEnv() {
     roamingAppData,
     electronUserDataDir,
     persistedWorkspaceRoot,
+    legacyWorkspaceRoot,
   ]) {
     fs.mkdirSync(dir, { recursive: true });
   }
@@ -198,6 +209,7 @@ function createTempRuntimeEnv() {
     tempRoot,
     electronUserDataDir,
     persistedWorkspaceRoot,
+    legacyWorkspaceRoot,
     env: {
       ...process.env,
       HOME: home,
@@ -271,27 +283,8 @@ function writeJsonFile(filePath, value) {
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`);
 }
 
-function resolvePreferredDataParentDir(env) {
-  if (process.platform === "win32") {
-    return env.LOCALAPPDATA || env.APPDATA;
-  }
-  if (process.platform === "darwin") {
-    return env.HOME
-      ? path.join(env.HOME, "Library", "Application Support")
-      : null;
-  }
-  return (
-    env.XDG_DATA_HOME ||
-    (env.HOME ? path.join(env.HOME, ".local", "share") : null)
-  );
-}
-
 function resolveFixtureDatabasePath(runtimeEnv) {
-  const parent = resolvePreferredDataParentDir(runtimeEnv.env);
-  if (!parent) {
-    throw new Error("无法解析 fixture app data 目录");
-  }
-  return path.join(parent, "lime", "lime.db");
+  return path.join(runtimeEnv.electronUserDataDir, "app-server", "lime.db");
 }
 
 function sqlLiteral(value) {
@@ -425,8 +418,221 @@ INSERT INTO agent_thread_items (
     dbPath,
     workspaceRoot,
     sessionId: PERSISTED_SESSION_ID,
-    workspaceId: PERSISTED_WORKSPACE_ID,
+    workspaceId: null,
   };
+}
+
+function seedLegacyAgentMessagesSession(runtimeEnv) {
+  const dbPath = resolveFixtureDatabasePath(runtimeEnv);
+  const now = "2026-06-08T00:00:00.000Z";
+  const userAt = "2026-06-08T00:00:01.000Z";
+  const assistantAt = "2026-06-08T00:00:02.000Z";
+  const workspaceRoot = runtimeEnv.legacyWorkspaceRoot;
+  const userContent = JSON.stringify([
+    { type: "text", text: LEGACY_USER_TEXT },
+  ]);
+  const assistantContent = JSON.stringify([
+    { type: "text", text: LEGACY_ASSISTANT_TEXT },
+  ]);
+
+  const sql = `
+PRAGMA busy_timeout = 5000;
+CREATE TABLE IF NOT EXISTS agent_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT NOT NULL,
+  role TEXT NOT NULL,
+  content_json TEXT NOT NULL,
+  timestamp TEXT NOT NULL,
+  tool_calls_json TEXT,
+  tool_call_id TEXT,
+  reasoning_content TEXT,
+  input_tokens INTEGER,
+  output_tokens INTEGER,
+  cached_input_tokens INTEGER,
+  cache_creation_input_tokens INTEGER,
+  FOREIGN KEY (session_id) REFERENCES agent_sessions(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS a2ui_forms (
+  id TEXT PRIMARY KEY,
+  message_id INTEGER NOT NULL,
+  session_id TEXT NOT NULL,
+  a2ui_response_json TEXT NOT NULL,
+  form_data_json TEXT DEFAULT '{}',
+  submitted INTEGER DEFAULT 0,
+  submitted_at TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  FOREIGN KEY (message_id) REFERENCES agent_messages(id) ON DELETE CASCADE,
+  FOREIGN KEY (session_id) REFERENCES agent_sessions(id) ON DELETE CASCADE
+);
+INSERT OR REPLACE INTO workspaces (
+  id, name, workspace_type, root_path, is_default, settings_json,
+  created_at, updated_at, icon, color, is_favorite, is_archived,
+  tags_json, default_persona_id
+) VALUES (
+  ${sqlLiteral(LEGACY_WORKSPACE_ID)},
+  'Electron legacy agent_messages fixture',
+  'persistent',
+  ${sqlLiteral(workspaceRoot)},
+  0,
+  '{}',
+  1780876800000,
+  1780876800000,
+  NULL,
+  NULL,
+  0,
+  0,
+  '[]',
+  NULL
+);
+DELETE FROM a2ui_forms WHERE session_id = ${sqlLiteral(LEGACY_SESSION_ID)};
+DELETE FROM agent_messages WHERE session_id = ${sqlLiteral(LEGACY_SESSION_ID)};
+DELETE FROM agent_thread_items WHERE session_id = ${sqlLiteral(LEGACY_SESSION_ID)};
+DELETE FROM agent_thread_turns WHERE session_id = ${sqlLiteral(LEGACY_SESSION_ID)};
+DELETE FROM agent_sessions WHERE id = ${sqlLiteral(LEGACY_SESSION_ID)};
+INSERT INTO agent_sessions (
+  id, model, system_prompt, title, created_at, updated_at,
+  working_dir, execution_strategy, session_type, extension_data_json,
+  provider_name, model_config_json, archived_at
+) VALUES (
+  ${sqlLiteral(LEGACY_SESSION_ID)},
+  'fixture-model',
+  NULL,
+  ${sqlLiteral(LEGACY_TITLE)},
+  ${sqlLiteral(now)},
+  ${sqlLiteral(assistantAt)},
+  ${sqlLiteral(workspaceRoot)},
+  'react',
+  'user',
+  '{}',
+  'fixture-provider',
+  '{"model_name":"fixture-model"}',
+  NULL
+);
+INSERT INTO agent_messages (
+  session_id, role, content_json, timestamp
+) VALUES
+  (
+    ${sqlLiteral(LEGACY_SESSION_ID)},
+    'user',
+    ${sqlLiteral(userContent)},
+    ${sqlLiteral(userAt)}
+  ),
+  (
+    ${sqlLiteral(LEGACY_SESSION_ID)},
+    'assistant',
+    ${sqlLiteral(assistantContent)},
+    ${sqlLiteral(assistantAt)}
+  );
+INSERT INTO a2ui_forms (
+  id, message_id, session_id, a2ui_response_json, form_data_json,
+  submitted, submitted_at, created_at, updated_at
+) VALUES (
+  'legacy-a2ui-form',
+  (SELECT id FROM agent_messages WHERE session_id = ${sqlLiteral(LEGACY_SESSION_ID)} ORDER BY id ASC LIMIT 1),
+  ${sqlLiteral(LEGACY_SESSION_ID)},
+  '{}',
+  '{}',
+  0,
+  NULL,
+  1780876800000,
+  1780876800000
+);
+`;
+  runSqlite(dbPath, sql);
+  return {
+    dbPath,
+    workspaceRoot,
+    sessionId: LEGACY_SESSION_ID,
+    workspaceId: LEGACY_WORKSPACE_ID,
+  };
+}
+
+function querySqliteJson(dbPath, sql) {
+  if (!fs.existsSync(dbPath)) {
+    return [];
+  }
+  try {
+    const stdout = execFileSync(
+      SQLITE3_BINARY,
+      ["-json", "-readonly", dbPath],
+      {
+        input: sql,
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "pipe"],
+      },
+    );
+    const trimmed = stdout.trim();
+    return trimmed ? JSON.parse(trimmed) : [];
+  } catch (error) {
+    const stderr = sanitizeText(error?.stderr || "");
+    const stdout = sanitizeText(error?.stdout || "");
+    throw new Error(
+      `${SQLITE3_BINARY} fixture query 失败: ${error?.message || error}; stdout=${stdout}; stderr=${stderr}`,
+    );
+  }
+}
+
+function querySqliteScalar(dbPath, sql) {
+  const rows = querySqliteJson(dbPath, sql);
+  const first = rows[0] ?? {};
+  const value = Object.values(first)[0];
+  return value ?? 0;
+}
+
+function tableExists(dbPath, tableName) {
+  return (
+    Number(
+      querySqliteScalar(
+        dbPath,
+        `SELECT COUNT(1) AS value FROM sqlite_master WHERE type = 'table' AND name = ${sqlLiteral(tableName)};`,
+      ),
+    ) > 0
+  );
+}
+
+function countRowsIfTableExists(dbPath, tableName, whereClause = "") {
+  if (!tableExists(dbPath, tableName)) {
+    return 0;
+  }
+  return Number(
+    querySqliteScalar(
+      dbPath,
+      `SELECT COUNT(1) AS value FROM ${tableName} ${whereClause};`,
+    ),
+  );
+}
+
+function readJsonlEvents(filePath) {
+  if (!fs.existsSync(filePath)) {
+    return [];
+  }
+  return fs
+    .readFileSync(filePath, "utf8")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+}
+
+function legacySessionEventLogPath(runtimeEnv) {
+  return path.join(
+    runtimeEnv.electronUserDataDir,
+    "app-server",
+    "runtime",
+    "events",
+    "sessions",
+    `session_${LEGACY_SESSION_ID}.jsonl`,
+  );
+}
+
+function projectionDbPath(runtimeEnv) {
+  return path.join(
+    runtimeEnv.electronUserDataDir,
+    "app-server",
+    "runtime",
+    "projection_1.sqlite",
+  );
 }
 
 function isTransientPageEvaluationError(error) {
@@ -490,6 +696,321 @@ async function clearInvokeBuffers(page) {
     window.localStorage.removeItem("lime_invoke_error_buffer_v1");
     window.localStorage.removeItem("lime_invoke_trace_buffer_v1");
   });
+}
+
+function parseJsonRpcRequestsFromInvokeTrace(traceRaw) {
+  try {
+    const entries = JSON.parse(traceRaw || "[]");
+    if (!Array.isArray(entries)) {
+      return [];
+    }
+    return entries
+      .filter(
+        (entry) =>
+          entry &&
+          typeof entry === "object" &&
+          entry.status === "success" &&
+          entry.command === APP_SERVER_HANDLE_JSON_LINES_COMMAND,
+      )
+      .flatMap((entry) => {
+        const lines = entry.args_preview?.request?.lines;
+        if (!Array.isArray(lines)) {
+          return [];
+        }
+        return lines
+          .map((line) => parseJsonRpcLine(line))
+          .filter(
+            (request) =>
+              request &&
+              typeof request === "object" &&
+              typeof request.method === "string",
+          )
+          .map((request) => ({
+            id: request.id ?? null,
+            method: request.method,
+            params:
+              request.params && typeof request.params === "object"
+                ? request.params
+                : {},
+            status: entry.status,
+          }));
+      });
+  } catch {
+    return [];
+  }
+}
+
+async function primeSidebarWorkspace(page, workspaceId) {
+  await page.evaluate(
+    ({
+      workspaceId,
+      lastProjectIdKey,
+      openedProjectIdsKey,
+      sidebarCollapsedStorageKey,
+    }) => {
+      window.localStorage.setItem(
+        lastProjectIdKey,
+        JSON.stringify(workspaceId),
+      );
+      window.localStorage.setItem(
+        openedProjectIdsKey,
+        JSON.stringify([workspaceId]),
+      );
+      window.localStorage.setItem(sidebarCollapsedStorageKey, "false");
+      window.dispatchEvent(
+        new CustomEvent("agent-persisted-project-id-changed", {
+          detail: {
+            key: lastProjectIdKey,
+            projectId: workspaceId,
+          },
+        }),
+      );
+      window.dispatchEvent(
+        new CustomEvent("agent-opened-project-ids-changed", {
+          detail: {
+            projectIds: [workspaceId],
+          },
+        }),
+      );
+      window.dispatchEvent(
+        new CustomEvent("lime:app-sidebar-collapse", {
+          detail: { collapsed: false },
+        }),
+      );
+      window.dispatchEvent(new Event("focus"));
+    },
+    {
+      workspaceId,
+      lastProjectIdKey: LAST_PROJECT_ID_KEY,
+      openedProjectIdsKey: OPENED_PROJECT_IDS_KEY,
+      sidebarCollapsedStorageKey: APP_SIDEBAR_COLLAPSED_STORAGE_KEY,
+    },
+  );
+}
+
+async function waitForSidebarSession(page, options, sessionTitle) {
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const snapshot = await evaluatePageSnapshot(
+      page,
+      ({ selector, title }) => {
+        const recentList = document.querySelector(selector);
+        return {
+          hasRecentList: Boolean(recentList),
+          recentText: recentList?.textContent || "",
+          bodyText: document.body?.innerText || "",
+          hasTitle: Boolean(recentList?.textContent?.includes(title)),
+        };
+      },
+      { selector: SIDEBAR_RECENT_LIST_SELECTOR, title: sessionTitle },
+    );
+    if (snapshot?.hasTitle) {
+      return snapshot;
+    }
+    lastSnapshot = snapshot;
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `侧栏最近对话未出现 ${sessionTitle}: ${JSON.stringify(lastSnapshot)}`,
+  );
+}
+
+async function openSidebarConversationMenu(page, options, sessionTitle) {
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const snapshot = await page.evaluate(
+      ({ title, menuSelector }) => {
+        const buttons = Array.from(document.querySelectorAll("button"));
+        const menuButton = buttons.find((button) => {
+          const aria = button.getAttribute("aria-label") || "";
+          const buttonTitle = button.getAttribute("title") || "";
+          return (
+            aria.includes(title) &&
+            (aria.includes("操作菜单") || buttonTitle.includes("更多"))
+          );
+        });
+        if (!menuButton) {
+          return {
+            menuOpened: Boolean(document.querySelector(menuSelector)),
+            foundMenuButton: false,
+            bodyText: document.body?.innerText || "",
+          };
+        }
+        menuButton.click();
+        return {
+          menuOpened: Boolean(document.querySelector(menuSelector)),
+          foundMenuButton: true,
+          bodyText: document.body?.innerText || "",
+        };
+      },
+      {
+        title: sessionTitle,
+        menuSelector: '[data-testid="app-sidebar-conversation-menu"]',
+      },
+    );
+    const menuOpened = await page
+      .locator('[data-testid="app-sidebar-conversation-menu"]')
+      .count();
+    if (menuOpened > 0) {
+      return snapshot;
+    }
+    lastSnapshot = snapshot;
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `未能打开侧栏对话菜单 ${sessionTitle}: ${JSON.stringify(lastSnapshot)}`,
+  );
+}
+
+async function clickSidebarArchiveMenuItem(page) {
+  await page.locator(SIDEBAR_ARCHIVE_MENU_ITEM_SELECTOR).click();
+}
+
+async function waitForSidebarGuiUpdateTrace(page, options, archived) {
+  const startedAt = Date.now();
+  let lastRequests = [];
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const traceRaw = await page.evaluate(() =>
+      window.localStorage.getItem("lime_invoke_trace_buffer_v1"),
+    );
+    const requests = parseJsonRpcRequestsFromInvokeTrace(traceRaw);
+    if (
+      requests.some(
+        (request) =>
+          request.status === "success" &&
+          request.method === "agentSession/update" &&
+          request.params?.sessionId === PERSISTED_SESSION_ID &&
+          request.params?.archived === archived,
+      )
+    ) {
+      return {
+        requests,
+        traceRaw,
+      };
+    }
+    lastRequests = requests;
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    archived
+      ? `侧栏 GUI 点击未发起 agentSession/update archived=true: ${JSON.stringify(lastRequests)}`
+      : `归档设置页 GUI 点击未发起 agentSession/update archived=false: ${JSON.stringify(lastRequests)}`,
+  );
+}
+
+function summarizeGuiUpdateTrace(result, archived) {
+  const requests = result?.requests ?? [];
+  const requestMethods = Array.from(
+    new Set(requests.map((request) => request.method)),
+  );
+  const updateRequest = requests.find(
+    (request) =>
+      request.method === "agentSession/update" &&
+      request.params?.sessionId === PERSISTED_SESSION_ID &&
+      request.params?.archived === archived,
+  );
+  return {
+    requestMethods,
+    missingRequiredMethods: SIDEBAR_GUI_REQUIRED_METHODS.filter(
+      (method) => !requestMethods.includes(method),
+    ),
+    forbiddenMethodsSeen: SIDEBAR_GUI_FORBIDDEN_METHODS.filter((method) =>
+      requestMethods.includes(method),
+    ),
+    updateRequestSeen: Boolean(updateRequest),
+    updateRequest,
+  };
+}
+
+function assertGuiUpdateTrace(result, archived, label) {
+  const summary = summarizeGuiUpdateTrace(result, archived);
+  assert(
+    summary.missingRequiredMethods.length === 0,
+    `${label} 缺少 App Server current method: ${summary.missingRequiredMethods.join(", ")}`,
+  );
+  assert(
+    summary.forbiddenMethodsSeen.length === 0,
+    `${label} 不应触发: ${summary.forbiddenMethodsSeen.join(", ")}`,
+  );
+  assert(
+    summary.updateRequestSeen,
+    archived
+      ? "侧栏 GUI 点击未发起 agentSession/update archived=true"
+      : "归档设置页 GUI 点击未发起 agentSession/update archived=false",
+  );
+  return summary;
+}
+
+async function runSidebarGuiArchivePhase(page, options) {
+  await primeSidebarWorkspace(page, PERSISTED_WORKSPACE_ID);
+  await waitForSidebarSession(page, options, PERSISTED_TITLE);
+  await clearInvokeBuffers(page);
+  await openSidebarConversationMenu(page, options, PERSISTED_TITLE);
+  await clickSidebarArchiveMenuItem(page);
+  const archiveTrace = await waitForSidebarGuiUpdateTrace(page, options, true);
+  await waitForSidebarSessionAbsent(page, options, PERSISTED_TITLE);
+  return {
+    archiveTrace,
+    requests: archiveTrace.requests,
+  };
+}
+
+async function waitForSidebarSessionAbsent(page, options, sessionTitle) {
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const snapshot = await evaluatePageSnapshot(
+      page,
+      ({ selector, title }) => {
+        const recentList = document.querySelector(selector);
+        return {
+          hasRecentList: Boolean(recentList),
+          recentText: recentList?.textContent || "",
+          hasTitle: Boolean(recentList?.textContent?.includes(title)),
+        };
+      },
+      { selector: SIDEBAR_RECENT_LIST_SELECTOR, title: sessionTitle },
+    );
+    if (snapshot && snapshot.hasRecentList && !snapshot.hasTitle) {
+      return snapshot;
+    }
+    lastSnapshot = snapshot;
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `侧栏最近对话仍显示已归档会话 ${sessionTitle}: ${JSON.stringify(lastSnapshot)}`,
+  );
+}
+
+async function runSettingsGuiRestorePhase(page, options) {
+  await clearInvokeBuffers(page);
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event("focus"));
+  });
+  await page.locator('[data-testid="app-sidebar-nav-settings"]').click();
+  await page
+    .locator('[data-testid="settings-sidebar-tab-archived-conversations"]')
+    .click();
+  await page.locator(SETTINGS_ARCHIVED_CONVERSATIONS_SELECTOR).waitFor({
+    state: "visible",
+    timeout: options.timeoutMs,
+  });
+  await page
+    .locator(
+      `${SETTINGS_ARCHIVED_RESTORE_SELECTOR}[data-session-id="${PERSISTED_SESSION_ID}"]`,
+    )
+    .click();
+  const unarchiveTrace = await waitForSidebarGuiUpdateTrace(
+    page,
+    options,
+    false,
+  );
+  return {
+    unarchiveTrace,
+    requests: unarchiveTrace.requests,
+  };
 }
 
 async function launchElectronFixture({
@@ -961,458 +1482,6 @@ async function runPersistedSessionArchivePhase(page, phase) {
   );
 }
 
-function parseInvokeTraceRaw(raw) {
-  if (!raw) {
-    return [];
-  }
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function parseJsonRpcRequestsFromInvokeTrace(raw) {
-  const entries = parseInvokeTraceRaw(raw);
-  const requests = [];
-  for (const entry of entries) {
-    if (entry?.command !== APP_SERVER_HANDLE_JSON_LINES_COMMAND) {
-      continue;
-    }
-    const lines = entry?.args_preview?.request?.lines;
-    if (!Array.isArray(lines)) {
-      continue;
-    }
-    for (const line of lines) {
-      const parsed = parseJsonRpcLine(line);
-      if (parsed?.method) {
-        requests.push({
-          command: entry.command,
-          transport: entry.transport ?? null,
-          status: entry.status ?? null,
-          durationMs: entry.duration_ms ?? null,
-          id: parsed.id ?? null,
-          method: parsed.method,
-          params: parsed.params ?? {},
-        });
-      }
-    }
-  }
-  return requests;
-}
-
-async function waitForPageCondition(
-  page,
-  options,
-  predicate,
-  message,
-  arg = {},
-) {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < Math.min(45_000, options.timeoutMs)) {
-    const result = await evaluatePageSnapshot(page, predicate, arg);
-    if (result) {
-      return result;
-    }
-    await sleep(options.intervalMs);
-  }
-  throw new Error(message);
-}
-
-async function primeSidebarWorkspace(page, options) {
-  await page.evaluate(
-    ({ collapsedKey, persistedProjectEvent, lastProjectKey, workspaceId }) => {
-      window.localStorage.setItem(lastProjectKey, JSON.stringify(workspaceId));
-      window.localStorage.setItem(collapsedKey, "false");
-      window.dispatchEvent(
-        new CustomEvent(persistedProjectEvent, {
-          detail: {
-            key: lastProjectKey,
-            projectId: workspaceId,
-          },
-        }),
-      );
-    },
-    {
-      collapsedKey: APP_SIDEBAR_COLLAPSED_STORAGE_KEY,
-      persistedProjectEvent: PERSISTED_PROJECT_ID_CHANGED_EVENT,
-      lastProjectKey: LAST_PROJECT_ID_KEY,
-      workspaceId: PERSISTED_WORKSPACE_ID,
-    },
-  );
-
-  await waitForPageCondition(
-    page,
-    options,
-    ({ shelfSelector, recentSelector }) =>
-      Boolean(
-        document.querySelector(shelfSelector) &&
-        document.querySelector(recentSelector),
-      ),
-    "侧栏会话 Shelf / 最近对话列表未挂载",
-    {
-      shelfSelector: SIDEBAR_SHELF_SELECTOR,
-      recentSelector: SIDEBAR_RECENT_LIST_SELECTOR,
-    },
-  );
-}
-
-async function waitForSidebarListSettled(page, options, selector, loadingText) {
-  return await waitForPageCondition(
-    page,
-    options,
-    ({ selector: listSelector, loadingText: text }) => {
-      const list = document.querySelector(listSelector);
-      if (!list) {
-        return false;
-      }
-      return !String(list.textContent ?? "").includes(text);
-    },
-    `${selector} 仍处于 loading`,
-    { selector, loadingText },
-  );
-}
-
-async function waitForSidebarSessionVisibility(
-  page,
-  options,
-  { recentTitle, archivedTitle },
-) {
-  return await waitForPageCondition(
-    page,
-    options,
-    ({ recentSelector, archivedSelector, recentTitle, archivedTitle }) => {
-      const recentText =
-        document.querySelector(recentSelector)?.textContent ?? "";
-      const archivedText =
-        document.querySelector(archivedSelector)?.textContent ?? "";
-      const recentMatched = recentTitle
-        ? recentText.includes(recentTitle)
-        : !recentText.includes(archivedTitle);
-      const archivedMatched = archivedTitle
-        ? archivedText.includes(archivedTitle)
-        : !archivedText.includes(recentTitle);
-      return recentMatched && archivedMatched
-        ? {
-            recentText,
-            archivedText,
-          }
-        : false;
-    },
-    `侧栏未达到预期会话可见状态 recent=${recentTitle ?? "absent"} archived=${
-      archivedTitle ?? "absent"
-    }`,
-    {
-      recentSelector: SIDEBAR_RECENT_LIST_SELECTOR,
-      archivedSelector: SIDEBAR_ARCHIVED_LIST_SELECTOR,
-      recentTitle,
-      archivedTitle,
-    },
-  );
-}
-
-async function ensureArchivedSidebarExpanded(page, options) {
-  await page.evaluate(
-    ({ shelfSelector }) => {
-      const shelf = document.querySelector(shelfSelector);
-      const toggle = shelf?.querySelector('button[aria-expanded="false"]');
-      if (toggle instanceof HTMLButtonElement) {
-        toggle.click();
-      }
-    },
-    { shelfSelector: SIDEBAR_SHELF_SELECTOR },
-  );
-
-  await waitForPageCondition(
-    page,
-    options,
-    ({ archivedSelector }) => Boolean(document.querySelector(archivedSelector)),
-    "归档会话列表未挂载",
-    { archivedSelector: SIDEBAR_ARCHIVED_LIST_SELECTOR },
-  );
-  await waitForSidebarListSettled(
-    page,
-    options,
-    SIDEBAR_ARCHIVED_LIST_SELECTOR,
-    "正在加载归档",
-  );
-}
-
-async function openSidebarConversationMenu(page, options, title) {
-  const opened = await page.evaluate(
-    ({ title }) => {
-      const buttons = Array.from(document.querySelectorAll("button"));
-      const target = buttons.find((button) =>
-        String(button.getAttribute("aria-label") ?? "").includes(title),
-      );
-      if (!(target instanceof HTMLButtonElement)) {
-        return false;
-      }
-      target.click();
-      return true;
-    },
-    { title },
-  );
-  assert(opened, `未找到 ${title} 的侧栏操作菜单按钮`);
-  await waitForPageCondition(
-    page,
-    options,
-    () =>
-      Boolean(
-        document.querySelector('[data-testid="app-sidebar-conversation-menu"]'),
-      ),
-    `${title} 操作菜单未打开`,
-  );
-}
-
-async function clickSidebarArchiveMenuItem(page, options) {
-  const clicked = await page.evaluate(
-    ({ selector }) => {
-      const target = document.querySelector(selector);
-      if (!(target instanceof HTMLButtonElement)) {
-        return false;
-      }
-      target.click();
-      return true;
-    },
-    { selector: SIDEBAR_ARCHIVE_MENU_ITEM_SELECTOR },
-  );
-  assert(clicked, "未找到侧栏归档 / 恢复菜单项");
-  await waitForPageCondition(
-    page,
-    options,
-    () =>
-      !document.querySelector('[data-testid="app-sidebar-conversation-menu"]'),
-    "侧栏会话操作菜单未关闭",
-  );
-}
-
-async function waitForSidebarGuiUpdateTrace(page, options, archived) {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < Math.min(45_000, options.timeoutMs)) {
-    const traceRaw = await page.evaluate(() =>
-      window.localStorage.getItem("lime_invoke_trace_buffer_v1"),
-    );
-    const requests = parseJsonRpcRequestsFromInvokeTrace(traceRaw);
-    const matched = requests.find(
-      (request) =>
-        request.method === "agentSession/update" &&
-        request.params?.sessionId === PERSISTED_SESSION_ID &&
-        request.params?.archived === archived &&
-        request.status === "success",
-    );
-    if (matched) {
-      return {
-        matched,
-        requests,
-        traceRaw,
-      };
-    }
-    await sleep(options.intervalMs);
-  }
-  throw new Error(
-    `侧栏 GUI 点击未等到 agentSession/update archived=${String(
-      archived,
-    )} 成功 trace`,
-  );
-}
-
-async function readSidebarSnapshot(page) {
-  return await page.evaluate(
-    ({ recentSelector, archivedSelector, traceKey, errorKey }) => ({
-      recentText:
-        document.querySelector(recentSelector)?.textContent?.trim() ?? "",
-      archivedText:
-        document.querySelector(archivedSelector)?.textContent?.trim() ?? "",
-      traceRaw: window.localStorage.getItem(traceKey),
-      errorRaw: window.localStorage.getItem(errorKey),
-      rememberedProjectRaw: window.localStorage.getItem(
-        "agent_last_project_id",
-      ),
-    }),
-    {
-      recentSelector: SIDEBAR_RECENT_LIST_SELECTOR,
-      archivedSelector: SIDEBAR_ARCHIVED_LIST_SELECTOR,
-      traceKey: "lime_invoke_trace_buffer_v1",
-      errorKey: "lime_invoke_error_buffer_v1",
-    },
-  );
-}
-
-function summarizeSidebarGuiArchive(result) {
-  const requestMethods = Array.from(
-    new Set((result?.guiRequests ?? []).map((request) => request.method)),
-  );
-  const updateRequests = (result?.guiRequests ?? []).filter(
-    (request) => request.method === "agentSession/update",
-  );
-  return {
-    requestMethods,
-    missingRequiredMethods: SIDEBAR_GUI_REQUIRED_METHODS.filter(
-      (method) => !requestMethods.includes(method),
-    ),
-    forbiddenMethodsSeen: SIDEBAR_GUI_FORBIDDEN_METHODS.filter((method) =>
-      requestMethods.includes(method),
-    ),
-    appServerHandleJsonLinesSeen: (result?.guiRequests ?? []).some(
-      (request) => request.command === APP_SERVER_HANDLE_JSON_LINES_COMMAND,
-    ),
-    archiveRequestSeen: updateRequests.some(
-      (request) =>
-        request.params?.sessionId === PERSISTED_SESSION_ID &&
-        request.params?.archived === true,
-    ),
-    unarchiveRequestSeen: updateRequests.some(
-      (request) =>
-        request.params?.sessionId === PERSISTED_SESSION_ID &&
-        request.params?.archived === false,
-    ),
-    beforeRecentText: result?.before?.recentText ?? "",
-    beforeArchivedText: result?.before?.archivedText ?? "",
-    afterArchiveRecentText: result?.afterArchive?.recentText ?? "",
-    afterArchiveArchivedText: result?.afterArchive?.archivedText ?? "",
-    afterUnarchiveRecentText: result?.afterUnarchive?.recentText ?? "",
-    afterUnarchiveArchivedText: result?.afterUnarchive?.archivedText ?? "",
-    archiveReadback: summarizePersistedArchivePhase(
-      result?.archiveReadback ?? {},
-    ),
-    unarchiveReadback: summarizePersistedArchivePhase(
-      result?.unarchiveReadback ?? {},
-    ),
-  };
-}
-
-function assertSidebarGuiArchive(result) {
-  const summary = summarizeSidebarGuiArchive(result);
-  assert(
-    summary.appServerHandleJsonLinesSeen,
-    "侧栏 GUI 点击未观察到 app_server_handle_json_lines",
-  );
-  assert(
-    summary.missingRequiredMethods.length === 0,
-    `侧栏 GUI 点击缺少 App Server current method: ${summary.missingRequiredMethods.join(", ")}`,
-  );
-  assert(
-    summary.forbiddenMethodsSeen.length === 0,
-    `侧栏 GUI 点击不应触发: ${summary.forbiddenMethodsSeen.join(", ")}`,
-  );
-  assert(
-    summary.archiveRequestSeen,
-    "侧栏 GUI 点击未发起 agentSession/update archived=true",
-  );
-  assert(
-    summary.unarchiveRequestSeen,
-    "侧栏 GUI 点击未发起 agentSession/update archived=false",
-  );
-  assert(
-    summary.beforeRecentText.includes(PERSISTED_TITLE),
-    "侧栏 GUI 初始最近列表未显示 persisted session",
-  );
-  assert(
-    !summary.beforeArchivedText.includes(PERSISTED_TITLE),
-    "侧栏 GUI 初始归档列表不应显示 persisted session",
-  );
-  assert(
-    !summary.afterArchiveRecentText.includes(PERSISTED_TITLE),
-    "侧栏 GUI 归档后最近列表仍显示 persisted session",
-  );
-  assert(
-    summary.afterArchiveArchivedText.includes(PERSISTED_TITLE),
-    "侧栏 GUI 归档后归档列表未显示 persisted session",
-  );
-  assert(
-    summary.afterUnarchiveRecentText.includes(PERSISTED_TITLE),
-    "侧栏 GUI 恢复后最近列表未显示 persisted session",
-  );
-  assert(
-    !summary.afterUnarchiveArchivedText.includes(PERSISTED_TITLE),
-    "侧栏 GUI 恢复后归档列表仍显示 persisted session",
-  );
-  assertPersistedPhaseContract(summary.archiveReadback);
-  assertVisiblePersistedSession(
-    summary.archiveReadback.archivedAfterRestartSession,
-    "sidebar GUI archive readback archivedOnly list",
-    true,
-  );
-  assert(
-    !summary.archiveReadback.recentAfterRestartSession,
-    "sidebar GUI archive readback 后 recent list 不应返回 archived session",
-  );
-  assertPersistedPhaseContract(summary.unarchiveReadback);
-  assertVisiblePersistedSession(
-    summary.unarchiveReadback.recentAfterRestartSession,
-    "sidebar GUI unarchive readback recent list",
-    false,
-  );
-  assert(
-    !summary.unarchiveReadback.archivedAfterRestartSession,
-    "sidebar GUI unarchive readback 后 archivedOnly list 不应返回 session",
-  );
-  return summary;
-}
-
-async function runSidebarGuiArchivePhase(page, options) {
-  await primeSidebarWorkspace(page, options);
-  await waitForSidebarListSettled(
-    page,
-    options,
-    SIDEBAR_RECENT_LIST_SELECTOR,
-    "正在加载对话",
-  );
-  await ensureArchivedSidebarExpanded(page, options);
-  await waitForSidebarSessionVisibility(page, options, {
-    recentTitle: PERSISTED_TITLE,
-    archivedTitle: null,
-  });
-
-  const before = await readSidebarSnapshot(page);
-  await clearInvokeBuffers(page);
-
-  await openSidebarConversationMenu(page, options, PERSISTED_TITLE);
-  await clickSidebarArchiveMenuItem(page, options);
-  await waitForSidebarSessionVisibility(page, options, {
-    recentTitle: null,
-    archivedTitle: PERSISTED_TITLE,
-  });
-  const archiveTrace = await waitForSidebarGuiUpdateTrace(page, options, true);
-  const afterArchive = await readSidebarSnapshot(page);
-  const archiveReadback = await runPersistedSessionArchivePhase(
-    page,
-    "archive-readback",
-  );
-
-  await openSidebarConversationMenu(page, options, PERSISTED_TITLE);
-  await clickSidebarArchiveMenuItem(page, options);
-  await waitForSidebarSessionVisibility(page, options, {
-    recentTitle: PERSISTED_TITLE,
-    archivedTitle: null,
-  });
-  const unarchiveTrace = await waitForSidebarGuiUpdateTrace(
-    page,
-    options,
-    false,
-  );
-  const afterUnarchive = await readSidebarSnapshot(page);
-  const unarchiveReadback = await runPersistedSessionArchivePhase(
-    page,
-    "unarchive-readback",
-  );
-
-  const guiRequests = unarchiveTrace.requests;
-
-  return {
-    before,
-    afterArchive,
-    afterUnarchive,
-    guiRequests,
-    archiveTrace,
-    unarchiveTrace,
-    archiveReadback,
-    unarchiveReadback,
-  };
-}
-
 function summarizeFixtureResult(result) {
   const requestMethods = Array.from(
     new Set((result?.requests ?? []).map((request) => request.method)),
@@ -1750,6 +1819,242 @@ function assertFixtureResult(result) {
   return summary;
 }
 
+async function runLegacyAgentMessagesBackfillPhase(page) {
+  return await page.evaluate(
+    async ({ command, sessionId, workspaceId }) => {
+      const invoke = window.electronAPI?.invoke;
+      if (typeof invoke !== "function") {
+        throw new Error("Electron preload invoke bridge is unavailable");
+      }
+
+      const requests = [];
+      const messages = [];
+      let requestId = 1;
+
+      async function call(method, params = {}) {
+        const id = `agent-session-history-electron-legacy-${requestId++}`;
+        requests.push({ id, method, params });
+        const response = await invoke(command, {
+          request: {
+            lines: [
+              JSON.stringify({
+                jsonrpc: "2.0",
+                id,
+                method,
+                params,
+              }),
+            ],
+          },
+        });
+        const decoded = Array.isArray(response?.lines)
+          ? response.lines
+              .map((line) => {
+                try {
+                  return JSON.parse(line);
+                } catch {
+                  return null;
+                }
+              })
+              .filter(Boolean)
+          : [];
+        messages.push(...decoded);
+        const error = decoded.find(
+          (message) => message?.id === id && message.error,
+        );
+        if (error) {
+          throw new Error(`${method} failed: ${JSON.stringify(error.error)}`);
+        }
+        const result = decoded.find(
+          (message) =>
+            message?.id === id &&
+            Object.prototype.hasOwnProperty.call(message, "result"),
+        );
+        if (!result) {
+          throw new Error(`${method} did not return a JSON-RPC result`);
+        }
+        return result.result;
+      }
+
+      const initialize = await call("initialize", {
+        clientInfo: {
+          name: "agent-session-history-electron-fixture:legacy-backfill",
+          version: "1.0.0",
+        },
+        capabilities: { eventMethods: ["agentSession/event"] },
+      });
+      await invoke(command, {
+        request: {
+          lines: [JSON.stringify({ jsonrpc: "2.0", method: "initialized" })],
+        },
+      });
+      const list = await call("agentSession/list", {
+        workspaceId,
+        includeArchived: true,
+        limit: 20,
+      });
+      const read = await call("agentSession/read", {
+        sessionId,
+        historyLimit: 50,
+      });
+
+      return {
+        initialize,
+        list,
+        read,
+        requests,
+        messages,
+        traceRaw: window.localStorage.getItem("lime_invoke_trace_buffer_v1"),
+        errorRaw: window.localStorage.getItem("lime_invoke_error_buffer_v1"),
+      };
+    },
+    {
+      command: APP_SERVER_HANDLE_JSON_LINES_COMMAND,
+      sessionId: LEGACY_SESSION_ID,
+      workspaceId: LEGACY_WORKSPACE_ID,
+    },
+  );
+}
+
+function summarizeLegacyBackfillPhase(result, runtimeEnv) {
+  const requestMethods = uniqueRequestMethods(result);
+  const listedSession = (result?.list?.sessions ?? []).find(
+    (session) => session.sessionId === LEGACY_SESSION_ID,
+  );
+  const detail = result?.read?.detail;
+  const messages = Array.isArray(detail?.messages) ? detail.messages : [];
+  const eventLogPath = legacySessionEventLogPath(runtimeEnv);
+  const jsonlEvents = readJsonlEvents(eventLogPath);
+  const projectionPath = projectionDbPath(runtimeEnv);
+  const dbPath = resolveFixtureDatabasePath(runtimeEnv);
+  const projectionSessionRows = countRowsIfTableExists(
+    projectionPath,
+    "projected_sessions",
+    `WHERE session_id = ${sqlLiteral(LEGACY_SESSION_ID)}`,
+  );
+  const projectionItemRows = countRowsIfTableExists(
+    projectionPath,
+    "projected_items",
+    `WHERE session_id = ${sqlLiteral(LEGACY_SESSION_ID)}`,
+  );
+
+  return {
+    requestMethods,
+    missingRequiredMethods: [
+      "initialize",
+      "agentSession/list",
+      "agentSession/read",
+    ].filter((method) => !requestMethods.includes(method)),
+    forbiddenMethodsSeen: [
+      "agentSession/start",
+      "agentSession/turn/start",
+    ].filter((method) => requestMethods.includes(method)),
+    listedSession,
+    readSession: result?.read?.session ?? null,
+    messagesCount: messages.length,
+    messageTexts: messages.flatMap((message) =>
+      Array.isArray(message?.content)
+        ? message.content
+            .map((part) => part?.text)
+            .filter((text) => typeof text === "string")
+        : [],
+    ),
+    eventLogPath,
+    eventTypes: jsonlEvents.map(
+      (event) => event.type ?? event.eventType ?? event.event_type,
+    ),
+    projectionPath,
+    projectionSessionRows,
+    projectionItemRows,
+    legacyAgentMessagesTableExists: tableExists(dbPath, "agent_messages"),
+    legacyA2uiFormsTableExists: tableExists(dbPath, "a2ui_forms"),
+    legacyAgentMessagesRows: countRowsIfTableExists(
+      dbPath,
+      "agent_messages",
+      `WHERE session_id = ${sqlLiteral(LEGACY_SESSION_ID)}`,
+    ),
+    legacyA2uiFormsRows: countRowsIfTableExists(
+      dbPath,
+      "a2ui_forms",
+      `WHERE session_id = ${sqlLiteral(LEGACY_SESSION_ID)}`,
+    ),
+    legacySessionRows: countRowsIfTableExists(
+      dbPath,
+      "agent_sessions",
+      `WHERE id = ${sqlLiteral(LEGACY_SESSION_ID)}`,
+    ),
+  };
+}
+
+function assertLegacyBackfillPhase(result, runtimeEnv) {
+  const summary = summarizeLegacyBackfillPhase(result, runtimeEnv);
+  assert(
+    summary.missingRequiredMethods.length === 0,
+    `legacy backfill 缺少 App Server current method: ${summary.missingRequiredMethods.join(", ")}`,
+  );
+  assert(
+    summary.forbiddenMethodsSeen.length === 0,
+    `legacy backfill 不应触发: ${summary.forbiddenMethodsSeen.join(", ")}`,
+  );
+  assert(summary.listedSession, "legacy backfill list 未返回旧会话");
+  assert(
+    summary.listedSession?.sessionId === LEGACY_SESSION_ID,
+    "legacy backfill list sessionId 不正确",
+  );
+  assert(
+    summary.listedSession?.title === LEGACY_TITLE,
+    `legacy backfill list 未保留标题: ${summary.listedSession?.title}`,
+  );
+  assert(
+    summary.readSession?.sessionId === LEGACY_SESSION_ID,
+    "legacy backfill read sessionId 不正确",
+  );
+  assert(
+    summary.messagesCount >= 2,
+    `legacy backfill read 未恢复旧消息: ${summary.messagesCount}`,
+  );
+  assert(
+    summary.messageTexts.includes(LEGACY_USER_TEXT),
+    "legacy backfill read 缺少旧用户消息",
+  );
+  assert(
+    summary.messageTexts.includes(LEGACY_ASSISTANT_TEXT),
+    "legacy backfill read 缺少旧助手消息",
+  );
+  assert(
+    summary.eventTypes.includes("message.created"),
+    `legacy backfill 未写 JSONL message.created: ${summary.eventTypes.join(", ")}`,
+  );
+  assert(
+    summary.projectionSessionRows >= 1,
+    "legacy backfill 未写入 Projection DB projected_sessions",
+  );
+  assert(
+    summary.projectionItemRows >= 2,
+    "legacy backfill 未写入 Projection DB projected_items",
+  );
+  assert(
+    summary.legacyAgentMessagesRows === 0,
+    `legacy backfill 后 agent_messages 残留旧行: ${summary.legacyAgentMessagesRows}`,
+  );
+  assert(
+    summary.legacyA2uiFormsRows === 0,
+    `legacy backfill 后 a2ui_forms 残留旧行: ${summary.legacyA2uiFormsRows}`,
+  );
+  assert(
+    summary.legacySessionRows === 0,
+    `legacy backfill 后 message-only agent_sessions 残留旧壳: ${summary.legacySessionRows}`,
+  );
+  assert(
+    !summary.legacyAgentMessagesTableExists,
+    "legacy backfill 默认 drop-empty-tables 后不应保留 agent_messages 表",
+  );
+  assert(
+    !summary.legacyA2uiFormsTableExists,
+    "legacy backfill 默认 drop-empty-tables 后不应保留 a2ui_forms 表",
+  );
+  return summary;
+}
+
 async function run() {
   const options = parseArgs(process.argv.slice(2));
   fs.mkdirSync(options.evidenceDir, { recursive: true });
@@ -1803,17 +2108,21 @@ async function run() {
     persistedWorkspaceId: PERSISTED_WORKSPACE_ID,
     persistedRequiredMethods: PERSISTED_SESSION_REQUIRED_METHODS,
     persistedForbiddenMethods: PERSISTED_SESSION_FORBIDDEN_METHODS,
+    legacySessionId: LEGACY_SESSION_ID,
+    legacyWorkspaceId: LEGACY_WORKSPACE_ID,
     sqliteBinary: SQLITE3_BINARY,
     electronPreloadBridge: false,
     fixtureSummary: null,
+    legacySeed: null,
+    legacyBackfillSummary: null,
     persistedSeed: null,
     persistedArchiveSummary: null,
     persistedArchiveReopenSummary: null,
+    sidebarGuiArchiveSummary: null,
     persistedUnarchiveSummary: null,
     persistedUnarchiveReopenSummary: null,
+    settingsGuiRestoreSummary: null,
     sidecarRestartReadback: false,
-    sidebarGuiArchiveSummary: null,
-    sidebarGuiArchive: false,
     consoleErrors: [],
     screenshot: null,
     rawEvidence: rawEvidencePath,
@@ -1845,6 +2154,34 @@ async function run() {
     const fixtureSummary = assertFixtureResult(fixtureResult);
     summary.fixtureSummary = sanitizeJson(fixtureSummary);
     await page.screenshot({ path: screenshotPath, fullPage: true });
+    await closeElectronFixture(handle);
+    app = null;
+    page = null;
+
+    logStage("seed-legacy-agent-messages-session");
+    const legacySeed = seedLegacyAgentMessagesSession(runtimeEnv);
+    summary.legacySeed = sanitizeJson({
+      ...legacySeed,
+      sqliteBinary: SQLITE3_BINARY,
+    });
+
+    logStage("launch-electron-legacy-agent-messages-backfill");
+    handle = await launchElectronFixture({
+      options,
+      runtimeEnv,
+      appServerEnv,
+      consoleErrors,
+    });
+    app = handle.app;
+    page = handle.page;
+    const legacyBackfillResult =
+      await runLegacyAgentMessagesBackfillPhase(page);
+    rawEvidence.legacyBackfill = sanitizeJson(legacyBackfillResult);
+    const legacyBackfillSummary = assertLegacyBackfillPhase(
+      legacyBackfillResult,
+      runtimeEnv,
+    );
+    summary.legacyBackfillSummary = sanitizeJson(legacyBackfillSummary);
     await closeElectronFixture(handle);
     app = null;
     page = null;
@@ -1902,6 +2239,31 @@ async function run() {
     app = null;
     page = null;
 
+    logStage("launch-electron-sidebar-gui-archive");
+    seedPersistedCurrentTimelineSession(runtimeEnv);
+    handle = await launchElectronFixture({
+      options,
+      runtimeEnv,
+      appServerEnv,
+      consoleErrors,
+    });
+    app = handle.app;
+    page = handle.page;
+    const sidebarGuiArchiveResult = await runSidebarGuiArchivePhase(
+      page,
+      options,
+    );
+    rawEvidence.sidebarGuiArchive = sanitizeJson(sidebarGuiArchiveResult);
+    const sidebarGuiArchiveSummary = assertGuiUpdateTrace(
+      sidebarGuiArchiveResult,
+      true,
+      "sidebarGuiArchive",
+    );
+    summary.sidebarGuiArchiveSummary = sanitizeJson(sidebarGuiArchiveSummary);
+    await closeElectronFixture(handle);
+    app = null;
+    page = null;
+
     logStage("launch-electron-persisted-unarchive");
     handle = await launchElectronFixture({
       options,
@@ -1920,6 +2282,50 @@ async function run() {
       persistedUnarchiveResult,
     );
     summary.persistedUnarchiveSummary = sanitizeJson(persistedUnarchiveSummary);
+    await closeElectronFixture(handle);
+    app = null;
+    page = null;
+
+    logStage("launch-electron-settings-gui-restore");
+    seedPersistedCurrentTimelineSession(runtimeEnv);
+    handle = await launchElectronFixture({
+      options,
+      runtimeEnv,
+      appServerEnv,
+      consoleErrors,
+    });
+    app = handle.app;
+    page = handle.page;
+    const sidebarGuiArchiveForRestoreResult = await runSidebarGuiArchivePhase(
+      page,
+      options,
+    );
+    rawEvidence.settingsGuiRestoreArchive = sanitizeJson(
+      sidebarGuiArchiveForRestoreResult,
+    );
+    await closeElectronFixture(handle);
+    app = null;
+    page = null;
+
+    handle = await launchElectronFixture({
+      options,
+      runtimeEnv,
+      appServerEnv,
+      consoleErrors,
+    });
+    app = handle.app;
+    page = handle.page;
+    const settingsGuiRestoreResult = await runSettingsGuiRestorePhase(
+      page,
+      options,
+    );
+    rawEvidence.settingsGuiRestore = sanitizeJson(settingsGuiRestoreResult);
+    const settingsGuiRestoreSummary = assertGuiUpdateTrace(
+      settingsGuiRestoreResult,
+      false,
+      "settingsGuiRestore",
+    );
+    summary.settingsGuiRestoreSummary = sanitizeJson(settingsGuiRestoreSummary);
     await closeElectronFixture(handle);
     app = null;
     page = null;
@@ -1943,18 +2349,6 @@ async function run() {
     summary.persistedUnarchiveReopenSummary = sanitizeJson(
       persistedUnarchiveReopenSummary,
     );
-
-    logStage("sidebar-gui-persisted-archive-unarchive");
-    const sidebarGuiArchiveResult = await runSidebarGuiArchivePhase(
-      page,
-      options,
-    );
-    rawEvidence.sidebarGuiArchive = sanitizeJson(sidebarGuiArchiveResult);
-    const sidebarGuiArchiveSummary = assertSidebarGuiArchive(
-      sidebarGuiArchiveResult,
-    );
-    summary.sidebarGuiArchiveSummary = sanitizeJson(sidebarGuiArchiveSummary);
-    summary.sidebarGuiArchive = true;
 
     await page.screenshot({ path: screenshotPath, fullPage: true });
     await closeElectronFixture(handle);

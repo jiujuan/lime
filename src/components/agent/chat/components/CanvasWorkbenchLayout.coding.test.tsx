@@ -854,7 +854,11 @@ describe("CanvasWorkbenchLayout coding mode", () => {
     expect(container.textContent).not.toContain("创建拉取请求");
     expect(container.textContent).toContain("index.html");
     expect(container.textContent).toContain("快照 2");
-    expect(container.textContent).toContain("修改");
+    expect(
+      container.querySelector(
+        '[data-testid="canvas-workbench-change-status-mark"][data-change-kind="modified"]',
+      )?.textContent,
+    ).toBe("M");
     expect(container.textContent).toContain("+1");
     expect(container.textContent).toContain("-1");
     expect(container.textContent).toContain("更新后的页面");
@@ -973,6 +977,11 @@ describe("CanvasWorkbenchLayout coding mode", () => {
         '[data-testid="canvas-workbench-changes-branch-compare"]',
       )?.textContent,
     ).toContain("main -> origin/main");
+    expect(
+      container.querySelectorAll(
+        '[data-testid="canvas-workbench-change-diff-file"]',
+      ).length,
+    ).toBeGreaterThanOrEqual(1);
     expect(
       container.querySelectorAll(
         '[data-testid="canvas-workbench-split-diff-before"]',
@@ -1161,10 +1170,47 @@ describe("CanvasWorkbenchLayout coding mode", () => {
     );
     expect(fileList?.textContent).toContain("index.html");
     expect(fileList?.textContent).toContain("App.tsx");
+    expect(fileList?.textContent).toContain("<h1>更新后的页面</h1>");
+    expect(fileList?.textContent).toContain("export function App() {}");
+    expect(
+      fileList?.querySelector(
+        '[data-testid="canvas-workbench-change-status-mark"][data-change-kind="modified"]',
+      )?.textContent,
+    ).toBe("M");
+    expect(
+      fileList?.querySelector(
+        '[data-testid="canvas-workbench-change-status-mark"][data-change-kind="added"]',
+      )?.textContent,
+    ).toBe("A");
     expect(fileList?.textContent).not.toContain("修改");
     expect(fileList?.textContent).not.toContain("新增");
     expect(fileList?.textContent).not.toContain("+3");
     expect(fileList?.textContent).not.toContain("-1");
+    const srcFolder = fileList?.querySelector(
+      '[data-testid="canvas-workbench-change-folder"][data-change-folder-id="folder:src"]',
+    ) as HTMLButtonElement | null;
+    expect(srcFolder?.textContent).toContain("A");
+    act(() => {
+      srcFolder?.click();
+    });
+    await flushEffects();
+    expect(
+      container.querySelector(
+        '[data-testid="canvas-workbench-change-item"][data-change-id="change-app"]',
+      ),
+    ).toBeNull();
+    const collapsedSrcFolder = fileList?.querySelector(
+      '[data-testid="canvas-workbench-change-folder"][data-change-folder-id="folder:src"]',
+    ) as HTMLButtonElement | null;
+    act(() => {
+      collapsedSrcFolder?.click();
+    });
+    await flushEffects();
+    expect(
+      container.querySelector(
+        '[data-testid="canvas-workbench-change-item"][data-change-id="change-app"]',
+      ),
+    ).not.toBeNull();
     clickByAriaLabel(container, "隐藏文件");
     await flushEffects();
     expect(
@@ -1230,5 +1276,179 @@ describe("CanvasWorkbenchLayout coding mode", () => {
     await flushEffects();
     expect(loadFilePreview).toHaveBeenCalledWith("/workspace/src/App.tsx");
     expect(container.textContent).toContain("Ready full file");
+  });
+
+  it("coding 模式应优先展示 runtime 变更证据而不是当前默认预览", async () => {
+    const container = mount({
+      artifacts: [],
+      canvasState: null,
+      taskFiles: [
+        createTaskFile(
+          "task-current",
+          ".lime/qc/code-artifact-workbench-electron-fixture/src/greeting.ts",
+          "export function greeting() returns Hello Lime Workbench.",
+          30,
+        ),
+      ],
+      selectedFileId: "task-current",
+      workspaceRoot: "/workspace",
+      workspaceUnavailable: false,
+      defaultPreview: {
+        selectionKey: "task:task-current",
+        title: "greeting.ts",
+        content: "export function greeting() returns Hello Lime Workbench.",
+        filePath:
+          ".lime/qc/code-artifact-workbench-electron-fixture/src/greeting.ts",
+        absolutePath:
+          "/workspace/.lime/qc/code-artifact-workbench-electron-fixture/src/greeting.ts",
+        previousContent: null,
+      } satisfies CanvasWorkbenchDefaultPreview,
+      loadFilePreview: vi.fn(async (path: string) => ({
+        path,
+        content: "",
+        isBinary: false,
+        size: 0,
+        error: null,
+      })),
+      onOpenPath: vi.fn(async () => undefined),
+      onRevealPath: vi.fn(async () => undefined),
+      workbenchMode: "coding",
+      changeView: {
+        checkpointCount: 1,
+        latestCheckpointPath: "snapshot",
+        items: [
+          {
+            id: "change-greeting",
+            path: ".lime/qc/code-artifact-workbench-electron-fixture/src/greeting.ts",
+            displayName: "greeting.ts",
+            source: "runtime",
+            status: "completed",
+            changeKind: "modified",
+            preview: "export function greeting() returns Hello Lime Workbench.",
+            previousContent: null,
+            currentContent:
+              "export function greeting() returns Hello Lime Workbench.",
+            checkpointPath: "snapshot",
+            checkpointLabel: "snapshot",
+          },
+          {
+            id: "change-coding-target",
+            path: ".lime/qc/code-artifact-workbench-electron-fixture/src/coding-target.ts",
+            displayName: "coding-target.ts",
+            source: "runtime",
+            status: "completed",
+            changeKind: "modified",
+            preview: "export const codingWorkbenchSmoke = true;",
+            previousContent: null,
+            currentContent: "export const codingWorkbenchSmoke = true;",
+            checkpointPath: "snapshot",
+            checkpointLabel: "snapshot",
+          },
+        ],
+      },
+    });
+
+    await flushEffects();
+    clickWorkbenchTab(container, "审查");
+    await flushEffects();
+
+    const changesPanel = container.querySelector(
+      '[data-testid="canvas-workbench-panel-changes"]',
+    );
+    expect(changesPanel?.textContent).toContain("coding-target.ts");
+    expect(changesPanel?.textContent).toContain(
+      "export const codingWorkbenchSmoke = true;",
+    );
+    expect(changesPanel?.textContent).not.toContain(
+      "export function greeting() returns Hello Lime Workbench.",
+    );
+  });
+
+  it("coding 模式应以短标识渲染 Git diff 文件块", async () => {
+    mockReadProjectGitDiff.mockResolvedValueOnce({
+      rootPath: "/workspace",
+      repositoryRoot: "/workspace",
+      hasGitRepository: true,
+      currentRef: "main",
+      comparisonBaseRef: "origin/main",
+      patch: [
+        "diff --git a/src/App.tsx b/src/App.tsx",
+        "--- a/src/App.tsx",
+        "+++ b/src/App.tsx",
+        "@@ -1 +1 @@",
+        "-old",
+        "+new",
+        "diff --git a/docs/new.md b/docs/new.md",
+        "new file mode 100644",
+        "--- /dev/null",
+        "+++ b/docs/new.md",
+        "@@ -0,0 +1 @@",
+        "+hello",
+      ].join("\n"),
+      uncommittedFileCount: 2,
+    });
+
+    const container = mount({
+      artifacts: [],
+      canvasState: null,
+      taskFiles: [
+        createTaskFile("task-current", "scratch.md", "# 当前画布草稿", 30),
+      ],
+      selectedFileId: "task-current",
+      workspaceRoot: "/workspace",
+      workspaceUnavailable: false,
+      defaultPreview: {
+        selectionKey: "task:task-current",
+        title: "当前画布草稿",
+        content: "# 当前画布草稿",
+        filePath: "scratch.md",
+        absolutePath: "/workspace/scratch.md",
+      } satisfies CanvasWorkbenchDefaultPreview,
+      loadFilePreview: vi.fn(async (path: string) => ({
+        path,
+        content: "",
+        isBinary: false,
+        size: 0,
+        error: null,
+      })),
+      onOpenPath: vi.fn(async () => undefined),
+      onRevealPath: vi.fn(async () => undefined),
+      workbenchMode: "coding",
+    });
+
+    await flushEffects();
+    clickByAriaLabel(container, "选择审查基准");
+    await flushEffects();
+    act(() => {
+      (
+        container.querySelector(
+          '[data-testid="canvas-workbench-changes-base-option-unstaged"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+    await flushEffects();
+
+    const diffFiles = container.querySelectorAll(
+      '[data-testid="canvas-workbench-change-diff-file"]',
+    );
+    expect(diffFiles).toHaveLength(2);
+    const appDiffFile = Array.from(diffFiles).find((element) =>
+      element.textContent?.includes("src/App.tsx"),
+    );
+    const docsDiffFile = Array.from(diffFiles).find((element) =>
+      element.textContent?.includes("docs/new.md"),
+    );
+    expect(appDiffFile?.textContent).toContain("M");
+    expect(docsDiffFile?.textContent).toContain("A");
+    expect(
+      container.querySelector(
+        '[data-testid="canvas-workbench-change-status-mark"][data-change-kind="modified"]',
+      )?.textContent,
+    ).toBe("M");
+    expect(
+      container.querySelector(
+        '[data-testid="canvas-workbench-change-status-mark"][data-change-kind="added"]',
+      )?.textContent,
+    ).toBe("A");
   });
 });

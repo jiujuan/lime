@@ -7,6 +7,7 @@ import type {
 import { buildAgentUiProjectionBase } from "./envelope.js";
 import {
   compactProjectionFields,
+  readBooleanField,
   readNumberField,
   readRecord,
   readStringArrayField,
@@ -102,63 +103,93 @@ export function buildRoutingDecisionPayload(
   const routingDecision =
     readRecord(eventRecord?.routing_decision) ??
     readRecord(eventRecord?.routingDecision);
+  const source = routingDecision ?? eventRecord;
 
-  if (!routingDecision) {
+  if (!source) {
     return {};
   }
 
+  const fallbackChain = readStringArrayField(source, [
+    "fallbackChain",
+    "fallback_chain",
+  ]);
+  const preservesEmptyFallbackChain = Boolean(
+    routingDecision ?? readStringField(source, ["routingMode", "routing_mode"]),
+  );
+
   return compactProjectionFields({
-    routingMode: readStringField(routingDecision, [
+    routingMode: readStringField(source, [
       "routingMode",
       "routing_mode",
     ]),
-    decisionSource: readStringField(routingDecision, [
+    decisionSource: readStringField(source, [
       "decisionSource",
       "decision_source",
     ]),
-    decisionReason: readStringField(routingDecision, [
+    decisionReason: readStringField(source, [
       "decisionReason",
       "decision_reason",
     ]),
-    selectedProvider: readStringField(routingDecision, [
+    selectedProvider: readStringField(source, [
       "selectedProvider",
       "selected_provider",
     ]),
-    selectedModel: readStringField(routingDecision, [
+    selectedModel: readStringField(source, [
       "selectedModel",
       "selected_model",
     ]),
-    requestedProvider: readStringField(routingDecision, [
+    requestedProvider: readStringField(source, [
       "requestedProvider",
       "requested_provider",
     ]),
-    requestedModel: readStringField(routingDecision, [
+    requestedModel: readStringField(source, [
       "requestedModel",
       "requested_model",
     ]),
-    candidateCount: readNumberField(routingDecision, [
+    candidateCount: readNumberField(source, [
       "candidateCount",
       "candidate_count",
     ]),
-    estimatedCostClass: readStringField(routingDecision, [
+    estimatedCostClass: readStringField(source, [
       "estimatedCostClass",
       "estimated_cost_class",
     ]),
-    capabilityGap: readStringField(routingDecision, [
+    capabilityGap: readStringField(source, [
       "capabilityGap",
       "capability_gap",
     ]),
-    fallbackChain: readStringArrayField(routingDecision, [
-      "fallbackChain",
-      "fallback_chain",
-    ]),
-    settingsSource: readStringField(routingDecision, [
+    fallbackChain:
+      fallbackChain.length > 0 || preservesEmptyFallbackChain
+        ? fallbackChain
+        : undefined,
+    settingsSource: readStringField(source, [
       "settingsSource",
       "settings_source",
     ]),
-    serviceModelSlot: readStringField(routingDecision, [
+    serviceModelSlot: readStringField(source, [
       "serviceModelSlot",
       "service_model_slot",
     ]),
+    fallbackApplied: readBooleanField(source, [
+      "fallbackApplied",
+      "fallback_applied",
+    ]),
+    requestedSelection:
+      readRecord(source.requestedSelection) ??
+      readRecord(source.requested_selection),
+    routingAttempts: readRoutingAttempts(source),
   });
+}
+
+function readRoutingAttempts(
+  source: Record<string, unknown>,
+): Record<string, unknown>[] | undefined {
+  const attempts = source.routingAttempts ?? source.routing_attempts;
+  if (!Array.isArray(attempts)) {
+    return undefined;
+  }
+  const records = attempts
+    .map(readRecord)
+    .filter((attempt): attempt is Record<string, unknown> => Boolean(attempt));
+  return records.length > 0 ? records : undefined;
 }

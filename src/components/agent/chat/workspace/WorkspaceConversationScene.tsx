@@ -2,6 +2,7 @@ import { useState, type ComponentProps, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, CheckCircle2, Info, Loader2 } from "lucide-react";
 import type { CanvasStateUnion } from "@/components/workspace/canvas/canvasUtils";
+import type { ExecutionPolicyFocusContext } from "@/types/page";
 import { StepProgress } from "@/components/workspace/layout/StepProgress";
 import type {
   A2UIFormData,
@@ -320,6 +321,9 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
   accessMode: ComponentProps<typeof EmptyState>["accessMode"];
   setAccessMode?: ComponentProps<typeof EmptyState>["setAccessMode"];
   onManageProviders?: ComponentProps<typeof EmptyState>["onManageProviders"];
+  onOpenExecutionPolicySettings?: (
+    context?: ExecutionPolicyFocusContext,
+  ) => void;
   toolPreferences: ChatToolPreferences;
   onToolPreferenceChange: (
     key: ChatToolPreferenceKey,

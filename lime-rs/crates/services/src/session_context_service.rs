@@ -3,7 +3,7 @@
 //! 提供会话上下文的持久化、恢复和智能管理功能，解决 AI 对话中的上下文丢失问题
 
 use crate::ai_summary_service::AISummaryService;
-use lime_core::database::dao::chat::{ChatDao, ChatMessage as UnifiedChatMessage, ChatMode};
+use lime_core::database::dao::chat::{ChatDao, ChatMode};
 use lime_core::general_chat::{ChatMessage, MessageRole};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
@@ -196,93 +196,11 @@ impl SessionContextService {
             return Ok(vec![]);
         }
 
-        ChatDao::get_messages(conn, session_id, None)
-            .map_err(|e| format!("获取统一消息失败: {e}"))
-            .map(|messages| {
-                messages
-                    .into_iter()
-                    .map(Self::convert_unified_message)
-                    .collect()
-            })
-    }
-
-    fn convert_unified_message(message: UnifiedChatMessage) -> ChatMessage {
-        ChatMessage {
-            id: message.id.to_string(),
-            session_id: message.session_id,
-            role: Self::convert_unified_role(&message.role),
-            content: Self::extract_unified_text_content(&message.content),
-            blocks: None,
-            status: "complete".to_string(),
-            created_at: Self::parse_unified_timestamp(&message.created_at),
-            metadata: message.metadata,
-        }
-    }
-
-    fn convert_unified_role(role: &str) -> MessageRole {
-        match role {
-            "assistant" => MessageRole::Assistant,
-            "system" => MessageRole::System,
-            _ => MessageRole::User,
-        }
-    }
-
-    fn extract_unified_text_content(content: &serde_json::Value) -> String {
-        match content {
-            serde_json::Value::Null => String::new(),
-            serde_json::Value::String(text) => text.clone(),
-            serde_json::Value::Array(items) => {
-                let parts: Vec<String> = items
-                    .iter()
-                    .filter_map(Self::extract_unified_text_fragment)
-                    .filter(|text| !text.trim().is_empty())
-                    .collect();
-
-                if parts.is_empty() {
-                    content.to_string()
-                } else {
-                    parts.join("\n")
-                }
-            }
-            serde_json::Value::Object(_) => {
-                Self::extract_unified_text_fragment(content).unwrap_or_else(|| content.to_string())
-            }
-            _ => content.to_string(),
-        }
-    }
-
-    fn extract_unified_text_fragment(value: &serde_json::Value) -> Option<String> {
-        match value {
-            serde_json::Value::Null => None,
-            serde_json::Value::String(text) => Some(text.clone()),
-            serde_json::Value::Array(items) => {
-                let parts: Vec<String> = items
-                    .iter()
-                    .filter_map(Self::extract_unified_text_fragment)
-                    .filter(|text| !text.trim().is_empty())
-                    .collect();
-
-                if parts.is_empty() {
-                    None
-                } else {
-                    Some(parts.join("\n"))
-                }
-            }
-            serde_json::Value::Object(map) => map
-                .get("text")
-                .and_then(|value| value.as_str())
-                .or_else(|| map.get("content").and_then(|value| value.as_str()))
-                .or_else(|| map.get("value").and_then(|value| value.as_str()))
-                .map(ToString::to_string),
-            _ => None,
-        }
-    }
-
-    fn parse_unified_timestamp(timestamp: &str) -> i64 {
-        chrono::DateTime::parse_from_rfc3339(timestamp)
-            .map(|value| value.timestamp_millis())
-            .or_else(|_| timestamp.parse::<i64>())
-            .unwrap_or_default()
+        debug!(
+            "会话 {} 已切到 current runtime store，旧 agent_messages 不再作为上下文来源",
+            session_id
+        );
+        Ok(vec![])
     }
 
     /// 选择最近的消息，确保不超过配置限制
@@ -567,9 +485,7 @@ pub struct SessionStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lime_core::database::dao::chat::{
-        ChatDao, ChatMessage as UnifiedChatMessage, ChatMode, ChatSession as UnifiedChatSession,
-    };
+    use lime_core::database::dao::chat::{ChatDao, ChatMode, ChatSession as UnifiedChatSession};
     use rusqlite::Connection;
 
     fn setup_test_db() -> Connection {
@@ -637,27 +553,22 @@ mod tests {
         }
     }
 
-    fn create_unified_messages(session_id: &str, count: usize) -> Vec<UnifiedChatMessage> {
+    fn insert_legacy_agent_messages(conn: &Connection, session_id: &str, count: usize) {
         let base_time = chrono::Utc::now();
 
-        (0..count)
-            .map(|index| {
-                let role = if index % 2 == 0 { "user" } else { "assistant" };
-                let content = format!("这是第 {} 条消息，包含一些测试内容", index + 1);
+        for index in 0..count {
+            let role = if index % 2 == 0 { "user" } else { "assistant" };
+            let content = format!("这是第 {} 条消息，包含一些测试内容", index + 1);
+            let content_json = serde_json::json!([{ "type": "text", "text": content }]).to_string();
+            let timestamp = (base_time + chrono::Duration::milliseconds(index as i64)).to_rfc3339();
 
-                UnifiedChatMessage {
-                    id: 0,
-                    session_id: session_id.to_string(),
-                    role: role.to_string(),
-                    content: serde_json::json!([{ "type": "text", "text": content }]),
-                    tool_calls: None,
-                    tool_call_id: None,
-                    metadata: None,
-                    created_at: (base_time + chrono::Duration::milliseconds(index as i64))
-                        .to_rfc3339(),
-                }
-            })
-            .collect()
+            conn.execute(
+                "INSERT INTO agent_messages (session_id, role, content_json, timestamp)
+                 VALUES (?1, ?2, ?3, ?4)",
+                rusqlite::params![session_id, role, content_json, timestamp],
+            )
+            .expect("insert legacy agent message");
+        }
     }
 
     #[tokio::test]
@@ -670,7 +581,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_effective_context_small_session() {
+    async fn test_get_effective_context_ignores_legacy_messages() {
         let conn = Arc::new(Mutex::new(setup_test_db()));
         let config = ContextWindowConfig {
             max_messages: 50,
@@ -685,19 +596,16 @@ mod tests {
             ChatDao::create_session(&conn_guard, &create_unified_general_session("test-session"))
                 .unwrap();
 
-            let messages = create_unified_messages("test-session", 5);
-            for msg in &messages {
-                ChatDao::add_message(&conn_guard, msg).unwrap();
-            }
+            insert_legacy_agent_messages(&conn_guard, "test-session", 5);
         }
 
-        // 获取有效上下文
+        // 旧 agent_messages 已不再作为上下文来源
         let context = service.get_effective_context("test-session").await.unwrap();
-        assert_eq!(context.len(), 5);
+        assert!(context.is_empty());
     }
 
     #[test]
-    fn test_session_stats() {
+    fn test_session_stats_ignore_legacy_messages() {
         let conn = Arc::new(Mutex::new(setup_test_db()));
         let config = ContextWindowConfig::default();
         let service = SessionContextService::new(conn.clone(), config);
@@ -707,16 +615,13 @@ mod tests {
             ChatDao::create_session(&conn_guard, &create_unified_general_session("test-session"))
                 .unwrap();
 
-            let messages = create_unified_messages("test-session", 10);
-            for msg in &messages {
-                ChatDao::add_message(&conn_guard, msg).unwrap();
-            }
+            insert_legacy_agent_messages(&conn_guard, "test-session", 10);
         }
 
         let stats = service.get_session_stats("test-session").unwrap();
-        assert_eq!(stats.total_messages, 10);
-        assert_eq!(stats.user_messages, 5);
-        assert_eq!(stats.assistant_messages, 5);
+        assert_eq!(stats.total_messages, 0);
+        assert_eq!(stats.user_messages, 0);
+        assert_eq!(stats.assistant_messages, 0);
         assert!(!stats.needs_summary); // 少于阈值
         assert!(!stats.exceeds_context_window);
     }

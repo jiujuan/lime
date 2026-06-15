@@ -1,4 +1,40 @@
 {
+  "$defs": {
+    "StructuredOutputContract": {
+      "properties": {
+        "failureSubtype": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "materializer": true,
+        "maxValidationRetries": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "metadata": true,
+        "schema": true,
+        "schemaRef": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "type": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "type": "object"
+    }
+  },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
     "capabilityId": {
@@ -13,6 +49,7 @@
         "string"
       ]
     },
+    "expectedOutput": true,
     "hostOptions": true,
     "metadata": true,
     "modelPreference": {
@@ -21,6 +58,7 @@
         "string"
       ]
     },
+    "outputSchema": true,
     "providerPreference": {
       "type": [
         "null",
@@ -36,6 +74,16 @@
     "stream": {
       "default": false,
       "type": "boolean"
+    },
+    "structuredOutput": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/StructuredOutputContract"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "title": "RuntimeOptions",

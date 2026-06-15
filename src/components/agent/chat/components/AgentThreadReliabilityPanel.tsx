@@ -59,6 +59,7 @@ import { AgentThreadMemoryPrefetchBaselineCard } from "./AgentThreadMemoryPrefet
 import { AgentThreadMemoryPrefetchPreview } from "./AgentThreadMemoryPrefetchPreview";
 import { AgentThreadOutcomeSummary } from "./AgentThreadOutcomeSummary";
 import { AgentThreadRoutingEvidenceCard } from "./AgentThreadRoutingEvidenceCard";
+import { AgentThreadPolicyEvidenceCard } from "./AgentThreadPolicyEvidenceCard";
 import {
   resolveLatestTurnPrompt,
   resolveRuntimeDecisionReason,
@@ -68,6 +69,10 @@ import {
   resolveToneClassName,
   serializeReliabilityClipboardPayload,
 } from "./AgentThreadReliabilityPanelViewModel";
+import type {
+  ExecutionPolicyFocusContext,
+  ProviderSettingsFocusContext,
+} from "@/types/page";
 
 interface AgentThreadReliabilityPanelProps {
   threadRead?: AgentRuntimeThreadReadModel | null;
@@ -84,6 +89,10 @@ interface AgentThreadReliabilityPanelProps {
   onLocatePendingRequest?: (requestId: string) => void;
   onPromoteQueuedTurn?: (queuedTurnId: string) => boolean | Promise<boolean>;
   onOpenMemoryWorkbench?: () => void;
+  onManageProviders?: (context?: ProviderSettingsFocusContext) => void;
+  onOpenExecutionPolicySettings?: (
+    context?: ExecutionPolicyFocusContext,
+  ) => void;
   className?: string;
   harnessState?: HarnessSessionState | null;
   messages?: Message[];
@@ -113,6 +122,8 @@ export const AgentThreadReliabilityPanel: React.FC<
   onLocatePendingRequest,
   onPromoteQueuedTurn,
   onOpenMemoryWorkbench,
+  onManageProviders,
+  onOpenExecutionPolicySettings,
   className,
   harnessState = null,
   messages = [],
@@ -133,6 +144,9 @@ export const AgentThreadReliabilityPanel: React.FC<
   const locale = i18n.resolvedLanguage || i18n.language;
   const routingEvidenceText = useMemo(
     () => ({
+      appliedFallback: String(
+        agentT("agentChat.threadReliability.routingEvidence.appliedFallback"),
+      ),
       decisionReason: String(
         agentT("agentChat.threadReliability.routingEvidence.decisionReason"),
       ),
@@ -176,8 +190,87 @@ export const AgentThreadReliabilityPanel: React.FC<
       oemQuotaLow: String(
         agentT("agentChat.threadReliability.routingEvidence.oemQuotaLow"),
       ),
+      policy: String(
+        agentT("agentChat.threadReliability.routingEvidence.policy"),
+      ),
+      policyFailure: String(
+        agentT("agentChat.threadReliability.routingEvidence.policyFailure"),
+      ),
+      policyProfile: String(
+        agentT("agentChat.threadReliability.routingEvidence.policyProfile"),
+      ),
+      policySources: String(
+        agentT("agentChat.threadReliability.routingEvidence.policySources"),
+      ),
+      policyOpenSettings: String(
+        agentT(
+          "agentChat.threadReliability.routingEvidence.policyOpenSettings",
+        ),
+      ),
+      policySummary: String(
+        agentT("agentChat.threadReliability.routingEvidence.policySummary"),
+      ),
+      policyTitle: String(
+        agentT("agentChat.threadReliability.routingEvidence.policyTitle"),
+      ),
+      sandbox: String(
+        agentT("agentChat.threadReliability.routingEvidence.sandbox"),
+      ),
+      sandboxBackend: String(
+        agentT("agentChat.threadReliability.routingEvidence.sandboxBackend"),
+      ),
+      network: String(
+        agentT("agentChat.threadReliability.routingEvidence.network"),
+      ),
+      networkDecision: String(
+        agentT("agentChat.threadReliability.routingEvidence.networkDecision"),
+      ),
       selectedModel: String(
         agentT("agentChat.threadReliability.routingEvidence.selectedModel"),
+      ),
+      providerReadiness: String(
+        agentT("agentChat.threadReliability.routingEvidence.providerReadiness"),
+      ),
+      providerReadinessKeys: String(
+        agentT(
+          "agentChat.threadReliability.routingEvidence.providerReadinessKeys",
+        ),
+      ),
+      providerReadinessOpenSettings: String(
+        agentT(
+          "agentChat.threadReliability.routingEvidence.providerReadinessOpenSettings",
+        ),
+      ),
+      providerReadinessProviderType: String(
+        agentT(
+          "agentChat.threadReliability.routingEvidence.providerReadinessProviderType",
+        ),
+      ),
+      providerReadinessRecovery: String(
+        agentT(
+          "agentChat.threadReliability.routingEvidence.providerReadinessRecovery",
+        ),
+      ),
+      routingAttempts: String(
+        agentT("agentChat.threadReliability.routingEvidence.routingAttempts"),
+      ),
+      modelRegistry: String(
+        agentT("agentChat.threadReliability.routingEvidence.modelRegistry"),
+      ),
+      modelRegistryAlias: String(
+        agentT(
+          "agentChat.threadReliability.routingEvidence.modelRegistryAlias",
+        ),
+      ),
+      modelRegistryCapabilities: String(
+        agentT(
+          "agentChat.threadReliability.routingEvidence.modelRegistryCapabilities",
+        ),
+      ),
+      modelRegistryReasoning: String(
+        agentT(
+          "agentChat.threadReliability.routingEvidence.modelRegistryReasoning",
+        ),
       ),
       requestedModel: String(
         agentT("agentChat.threadReliability.routingEvidence.requestedModel"),
@@ -754,6 +847,29 @@ export const AgentThreadReliabilityPanel: React.FC<
         fallbackChain={fallbackChain}
         oemPolicy={oemPolicy}
         labels={routingEvidenceText}
+        onOpenProviderSettings={onManageProviders}
+      />
+
+      <AgentThreadPolicyEvidenceCard
+        threadRead={threadRead}
+        decisionReason={runtimeDecisionReason}
+        fallbackChain={fallbackChain}
+        labels={{
+          title: routingEvidenceText.policyTitle,
+          policy: routingEvidenceText.policy,
+          policyProfile: routingEvidenceText.policyProfile,
+          policySources: routingEvidenceText.policySources,
+          sandbox: routingEvidenceText.sandbox,
+          sandboxBackend: routingEvidenceText.sandboxBackend,
+          network: routingEvidenceText.network,
+          networkDecision: routingEvidenceText.networkDecision,
+          failure: routingEvidenceText.policyFailure,
+          openSettings: routingEvidenceText.policyOpenSettings,
+          summary: routingEvidenceText.policySummary,
+          none: routingEvidenceText.none,
+          unknown: routingEvidenceText.unknown,
+        }}
+        onOpenExecutionPolicySettings={onOpenExecutionPolicySettings}
       />
 
       {(canInterrupt && onInterruptCurrentTurn) ||

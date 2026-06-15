@@ -150,6 +150,58 @@ describe("ProviderSetting", () => {
     expect(byTestId(container, "provider-api-key-save-button")).not.toBeNull();
   });
 
+  it("运行诊断缺少 API Key 时应在服务商页展示恢复提示", async () => {
+    const container = renderSetting(
+      createProvider({ api_key_count: 0, api_keys: [] }),
+      {
+        focus: {
+          providerId: "deepseek",
+          modelId: "deepseek-chat",
+          reasonCode: "missing_enabled_api_key",
+          recoveryAction: "add_enabled_api_key",
+        },
+      },
+    );
+    await flushEffects();
+
+    const banner = byTestId<HTMLElement>(container, "provider-focus-banner");
+    expect(banner).not.toBeNull();
+    expect(banner?.textContent ?? "").toContain("补齐 API 密钥后可继续运行");
+    expect(banner?.textContent ?? "").toContain("missing_enabled_api_key");
+    expect(byTestId(container, "provider-api-key-input")).not.toBeNull();
+  });
+
+  it("运行诊断缺少模型时应允许一键加入模型优先级", async () => {
+    const onUpdate = vi.fn().mockResolvedValue(undefined);
+    const container = renderSetting(createProvider(), {
+      focus: {
+        providerId: "deepseek",
+        modelId: "deepseek-coder-large",
+        reasonCode: "model_not_enabled",
+      },
+      onUpdate,
+    });
+    await flushEffects();
+
+    const button = byTestId<HTMLButtonElement>(
+      container,
+      "provider-focus-add-model-button",
+    );
+    expect(button).not.toBeNull();
+    expect(container.textContent ?? "").toContain("补齐模型后可继续运行");
+    expect(container.textContent ?? "").toContain("deepseek-coder-large");
+
+    await act(async () => {
+      button?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(onUpdate).toHaveBeenCalledWith("deepseek", {
+      custom_models: ["deepseek-chat", "deepseek-coder-large"],
+    });
+  });
+
   it("获取 API Key 链接应走 Desktop Host 外链网关", async () => {
     const container = renderSetting(createProvider());
     await flushEffects();

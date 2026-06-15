@@ -19,7 +19,7 @@ pub fn project_turn_runtime(turn: TurnRuntime) -> AgentThreadTurn {
     crate::event_converter::convert_turn_runtime(turn)
 }
 
-pub fn project_item_runtime(item: ItemRuntime) -> AgentThreadItem {
+pub fn project_item_runtime(item: ItemRuntime) -> Option<AgentThreadItem> {
     crate::event_converter::convert_item_runtime(item)
 }
 

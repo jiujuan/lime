@@ -3,7 +3,6 @@
 //! 处理 Gateway RPC 请求；旧 agent/cron 执行入口只保留 fail-closed 守卫
 
 use super::super::{protocol::*, WsError};
-use lime_core::database::dao::chat::{ChatDao, ChatMode};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -11,6 +10,8 @@ const CRON_DEPRECATED_MESSAGE: &str =
     "cron.* 已下线旧 scheduled_tasks 查询/执行入口；请使用 App Server automationJob/*";
 const AGENT_RUN_DEPRECATED_MESSAGE: &str =
     "agent.run 已下线旧 WebSocket scheduler 执行入口；请使用 App Server agentSession/turn/start 或 automationJob/runNow";
+const SESSIONS_DEPRECATED_MESSAGE: &str =
+    "sessions.* 已下线旧 WebSocket agent_messages 查询入口；请使用 App Server agentSession/list 或 agentSession/read";
 
 /// RPC 处理器状态
 #[derive(Clone)]
@@ -138,32 +139,9 @@ impl RpcHandler {
 
     /// 处理 sessions.list
     async fn handle_sessions_list(&self) -> Result<serde_json::Value, RpcError> {
-        let db = self
-            .require_db()
-            .await
-            .map_err(|e| RpcError::internal_error(e.message))?;
-        let conn = lime_core::database::lock_db(&db)
-            .map_err(|e| RpcError::internal_error(format!("DB lock failed: {e}")))?;
-        let raw_sessions = ChatDao::list_sessions(&conn, Some(ChatMode::Agent))
-            .map_err(|e| RpcError::internal_error(format!("load sessions failed: {e}")))?;
-
-        let sessions: Vec<SessionInfo> = raw_sessions
-            .into_iter()
-            .map(|item| {
-                let message_count = ChatDao::get_message_count(&conn, &item.id).unwrap_or(0);
-                SessionInfo {
-                    session_id: item.id,
-                    model: item.model.unwrap_or_else(|| "default".to_string()),
-                    message_count,
-                    created_at: item.created_at,
-                    updated_at: item.updated_at,
-                }
-            })
-            .collect();
-
-        let result = SessionsListResult { sessions };
-
-        Ok(serde_json::to_value(result).map_err(|e| RpcError::internal_error(e.to_string()))?)
+        Err(RpcError::invalid_params(format!(
+            "{SESSIONS_DEPRECATED_MESSAGE}，sessions.list 未执行"
+        )))
     }
 
     /// 处理 sessions.get
@@ -176,31 +154,10 @@ impl RpcHandler {
             .ok_or_else(|| {
                 RpcError::invalid_params("Missing or invalid parameters for sessions.get")
             })?;
-        let db = self
-            .require_db()
-            .await
-            .map_err(|e| RpcError::internal_error(e.message))?;
-        let conn = lime_core::database::lock_db(&db)
-            .map_err(|e| RpcError::internal_error(format!("DB lock failed: {e}")))?;
-        let detail = ChatDao::get_session_detail(&conn, &params.session_id, None)
-            .map_err(|e| RpcError::internal_error(format!("load session detail failed: {e}")))?;
-        let detail = detail.ok_or_else(|| {
-            RpcError::invalid_params(format!("session not found: {}", params.session_id))
-        })?;
-
-        let result = SessionGetResult {
-            session_id: detail.session.id,
-            model: detail
-                .session
-                .model
-                .unwrap_or_else(|| "default".to_string()),
-            system_prompt: detail.session.system_prompt,
-            message_count: detail.message_count,
-            created_at: detail.session.created_at,
-            updated_at: detail.session.updated_at,
-        };
-
-        Ok(serde_json::to_value(result).map_err(|e| RpcError::internal_error(e.to_string()))?)
+        Err(RpcError::invalid_params(format!(
+            "{SESSIONS_DEPRECATED_MESSAGE}，sessions.get 未读取会话 {}",
+            params.session_id
+        )))
     }
 
     /// 处理 cron.list
@@ -240,15 +197,6 @@ impl RpcHandler {
             "{CRON_DEPRECATED_MESSAGE}，cron.health 未执行"
         )))
     }
-
-    async fn require_db(&self) -> Result<lime_core::database::DbConnection, RpcError> {
-        self.state
-            .db
-            .read()
-            .await
-            .clone()
-            .ok_or_else(|| RpcError::internal_error("database not initialized"))
-    }
 }
 
 /// 从 WsMessage 解析 RPC 请求
@@ -265,11 +213,8 @@ pub fn serialize_rpc_response(resp: &GatewayRpcResponse) -> Result<String, WsErr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lime_core::database::dao::chat::ChatSession;
-    use lime_core::database::{self, schema};
-    use rusqlite::Connection;
     use serde_json::json;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
 
     #[test]
     fn test_parse_rpc_request() {
@@ -303,36 +248,13 @@ mod tests {
     }
 
     fn create_test_handler() -> RpcHandler {
-        let conn = Connection::open_in_memory().expect("创建内存数据库失败");
-        schema::create_tables(&conn).expect("创建核心表失败");
-        let db: database::DbConnection = Arc::new(Mutex::new(conn));
-        let state =
-            RpcHandlerState::new(Some(db), Arc::new(RwLock::new(lime_core::LogStore::new())));
+        let state = RpcHandlerState::new(None, Arc::new(RwLock::new(lime_core::LogStore::new())));
         RpcHandler::new(state)
     }
 
     #[tokio::test]
-    async fn test_sessions_list_should_return_created_session() {
+    async fn test_session_methods_should_fail_closed() {
         let handler = create_test_handler();
-        let db = handler.state.db.read().await.clone().expect("db 未初始化");
-        let conn = database::lock_db(&db).expect("DB lock 失败");
-        ChatDao::create_session(
-            &conn,
-            &ChatSession {
-                id: "session-current".to_string(),
-                mode: ChatMode::Agent,
-                title: Some("当前会话".to_string()),
-                system_prompt: None,
-                model: Some("model-current".to_string()),
-                provider_type: None,
-                credential_uuid: None,
-                metadata: None,
-                created_at: "2026-06-13T00:00:00Z".to_string(),
-                updated_at: "2026-06-13T00:00:00Z".to_string(),
-            },
-        )
-        .expect("创建会话失败");
-        drop(conn);
 
         let list_request = GatewayRpcRequest {
             jsonrpc: "2.0".to_string(),
@@ -341,15 +263,26 @@ mod tests {
             params: None,
         };
         let list_response = handler.handle_request(list_request).await;
-        assert!(list_response.error.is_none());
-        let result: SessionsListResult =
-            serde_json::from_value(list_response.result.expect("缺少 sessions.list result"))
-                .expect("解析 sessions.list 返回失败");
-        assert!(!result.sessions.is_empty());
-        assert!(result
-            .sessions
-            .iter()
-            .any(|session| session.session_id == "session-current"));
+        let list_err = list_response.error.expect("sessions.list 应返回错误");
+        assert!(list_err
+            .message
+            .contains("sessions.* 已下线旧 WebSocket agent_messages 查询入口"));
+        assert!(list_err.message.contains("agentSession/list"));
+
+        let get_request = GatewayRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: "get-1".to_string(),
+            method: RpcMethod::SessionsGet,
+            params: Some(json!({
+                "session_id": "legacy-session"
+            })),
+        };
+        let get_response = handler.handle_request(get_request).await;
+        let get_err = get_response.error.expect("sessions.get 应返回错误");
+        assert!(get_err
+            .message
+            .contains("sessions.get 未读取会话 legacy-session"));
+        assert!(get_err.message.contains("agentSession/read"));
     }
 
     #[tokio::test]

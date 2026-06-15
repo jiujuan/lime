@@ -3,6 +3,7 @@ pub mod agent;
 pub mod agent_run;
 pub mod agent_thread_incident;
 pub mod agent_timeline;
+mod agent_timeline_payload;
 pub mod agent_turn_outcome;
 pub mod api_key_provider;
 pub mod automation_job;

@@ -280,6 +280,36 @@ pub struct RuntimeOptions {
     pub queued_turn_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host_options: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_output: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub structured_output: Option<StructuredOutputContract>,
+    #[serde(
+        default,
+        rename = "outputSchema",
+        alias = "output_schema",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub output_schema: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct StructuredOutputContract {
+    #[serde(default, rename = "type", skip_serializing_if = "Option::is_none")]
+    pub contract_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub schema_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub schema: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_validation_retries: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure_subtype: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub materializer: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]

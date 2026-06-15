@@ -56,28 +56,35 @@ describe("agent session history Electron fixture smoke guard", () => {
     expect(content).toContain("persistedUnarchiveReopenSummary");
     expect(content).toContain("archived: false");
     expect(content).toContain("PERSISTED_SESSION_FORBIDDEN_METHODS");
+    expect(content).toContain("sidecarRestartReadback");
+    expect(content).toContain("seedLegacyAgentMessagesSession");
+    expect(content).toContain("runLegacyAgentMessagesBackfillPhase");
+    expect(content).toContain("assertLegacyBackfillPhase");
+    expect(content).toContain("LEGACY_SESSION_ID");
+    expect(content).toContain("LEGACY_USER_TEXT");
+    expect(content).toContain("LEGACY_ASSISTANT_TEXT");
+    expect(content).toContain("agent_messages");
+    expect(content).toContain("a2ui_forms");
+    expect(content).toContain("projection_1.sqlite");
+    expect(content).toContain("message.created");
+    expect(content).toContain("legacyBackfillSummary");
+    expect(content).toContain(
+      '"launch-electron-legacy-agent-messages-backfill"',
+    );
+    expect(content).toContain("legacy backfill 默认 drop-empty-tables");
+    expect(content).toContain('"launch-electron-persisted-archive-readback"');
+    expect(content).toContain('"launch-electron-persisted-unarchive-readback"');
     expect(content).toContain("SIDEBAR_GUI_REQUIRED_METHODS");
-    expect(content).toContain("LAST_PROJECT_ID_KEY");
-    expect(content).toContain("APP_SIDEBAR_COLLAPSED_STORAGE_KEY");
+    expect(content).toContain("SIDEBAR_GUI_FORBIDDEN_METHODS");
     expect(content).toContain("runSidebarGuiArchivePhase");
-    expect(content).toContain("primeSidebarWorkspace");
-    expect(content).toContain("openSidebarConversationMenu");
-    expect(content).toContain("clickSidebarArchiveMenuItem");
-    expect(content).toContain("waitForSidebarGuiUpdateTrace");
-    expect(content).toContain("parseJsonRpcRequestsFromInvokeTrace");
-    expect(content).toContain("SIDEBAR_ARCHIVE_MENU_ITEM_SELECTOR");
-    expect(content).toContain("app-sidebar-conversation-menu-archive");
+    expect(content).toContain("runSettingsGuiRestorePhase");
     expect(content).toContain("sidebarGuiArchiveSummary");
-    expect(content).toContain("sidebarGuiArchive");
-    expect(content).toContain("archiveTrace");
-    expect(content).toContain("unarchiveTrace");
-    expect(content).toContain('request.status === "success"');
-    expect(content).toContain(
-      "侧栏 GUI 点击未发起 agentSession/update archived=true",
-    );
-    expect(content).toContain(
-      "侧栏 GUI 点击未发起 agentSession/update archived=false",
-    );
+    expect(content).toContain("settingsGuiRestoreSummary");
+    expect(content).toContain("parseJsonRpcRequestsFromInvokeTrace");
+    expect(content).toContain("OPENED_PROJECT_IDS_KEY");
+    expect(content).toContain("agent-opened-project-ids-changed");
+    expect(content).toContain("app-sidebar-conversation-menu-archive");
+    expect(content).toContain("settings-archived-conversation-restore");
     expect(content).not.toContain('APP_SERVER_BACKEND_MODE: "external"');
     expect(content).not.toContain("APP_SERVER_BACKEND_COMMAND");
     expect(content).not.toContain("--allow-live-provider");

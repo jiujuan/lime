@@ -19,9 +19,11 @@ use async_trait::async_trait;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::process::Command;
 use tracing::{debug, warn};
 
+use crate::sandbox::output_buffer::{BoundedOutputBuffer, CapturedOutput};
 use crate::sandbox::{execute_in_sandbox_with_options, ExecutorOptions, ExecutorResult};
 use crate::subprocess::{decode_process_output, summarize_decoded_with};
 
@@ -112,6 +114,12 @@ pub struct SandboxConfig {
     pub allowed_directories: Vec<String>,
     /// Environment variables to set
     pub environment: std::collections::HashMap<String, String>,
+}
+
+struct CapturedProcessOutput {
+    exit_code: i32,
+    stdout: CapturedOutput,
+    stderr: CapturedOutput,
 }
 
 /// Bash Tool for executing shell commands
@@ -1079,33 +1087,34 @@ impl BashTool {
             );
         }
 
-        let mut cmd = self.build_platform_command(command, context);
-        let result = tokio::time::timeout(effective_timeout, async {
-            cmd.stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .stdin(Stdio::null())
-                .kill_on_drop(true)
-                .output()
-                .await
-        })
-        .await;
+        let result = self
+            .execute_embedded_command(command, effective_timeout, context)
+            .await;
 
         match result {
-            Ok(Ok(output)) => {
-                let stdout_output = decode_process_output(&output.stdout);
-                let stderr_output = decode_process_output(&output.stderr);
+            Ok(output) => {
+                let stdout_output = decode_process_output(&output.stdout.retained);
+                let stderr_output = decode_process_output(&output.stderr.retained);
                 let stdout_encoding = stdout_output.encoding;
                 let stderr_encoding = stderr_output.encoding;
                 let decoded_with = summarize_decoded_with(&[&stdout_output, &stderr_output]);
                 let stdout = stdout_output.text;
                 let stderr = stderr_output.text;
-                let exit_code = output.status.code().unwrap_or(-1);
+                let stdout_bytes = output.stdout.bytes;
+                let stderr_bytes = output.stderr.bytes;
+                let stdout_omitted_bytes = output.stdout.omitted_bytes;
+                let stderr_omitted_bytes = output.stderr.omitted_bytes;
+                let stdout_truncated = output.stdout.truncated;
+                let stderr_truncated = output.stderr.truncated;
+                let output_bytes = stdout_bytes.saturating_add(stderr_bytes);
+                let output_omitted_bytes =
+                    stdout_omitted_bytes.saturating_add(stderr_omitted_bytes);
+                let output_truncated = stdout_truncated || stderr_truncated;
+                let exit_code = output.exit_code;
 
                 debug!(
                     "Command completed with exit code {}, stdout: {} bytes, stderr: {} bytes",
-                    exit_code,
-                    stdout.len(),
-                    stderr.len()
+                    exit_code, stdout_bytes, stderr_bytes
                 );
 
                 let interpretation =
@@ -1125,8 +1134,24 @@ impl BashTool {
                         .with_metadata("exit_code", serde_json::json!(exit_code))
                         .with_metadata("stdout_length", serde_json::json!(stdout.len()))
                         .with_metadata("stderr_length", serde_json::json!(stderr.len()))
-                        .with_metadata("stdout_bytes", serde_json::json!(output.stdout.len()))
-                        .with_metadata("stderr_bytes", serde_json::json!(output.stderr.len()))
+                        .with_metadata("stdout_bytes", serde_json::json!(stdout_bytes))
+                        .with_metadata("stderr_bytes", serde_json::json!(stderr_bytes))
+                        .with_metadata(
+                            "stdout_omitted_bytes",
+                            serde_json::json!(stdout_omitted_bytes),
+                        )
+                        .with_metadata(
+                            "stderr_omitted_bytes",
+                            serde_json::json!(stderr_omitted_bytes),
+                        )
+                        .with_metadata("stdout_truncated", serde_json::json!(stdout_truncated))
+                        .with_metadata("stderr_truncated", serde_json::json!(stderr_truncated))
+                        .with_metadata("outputBytes", serde_json::json!(output_bytes))
+                        .with_metadata(
+                            "outputOmittedBytes",
+                            serde_json::json!(output_omitted_bytes),
+                        )
+                        .with_metadata("outputTruncated", serde_json::json!(output_truncated))
                         .with_metadata("stdout", serde_json::json!(self.truncate_output(&stdout)))
                         .with_metadata("stderr", serde_json::json!(self.truncate_output(&stderr)))
                         .with_metadata("shell", serde_json::json!(resolved_shell_name()))
@@ -1144,8 +1169,24 @@ impl BashTool {
                         .with_metadata("exit_code", serde_json::json!(exit_code))
                         .with_metadata("stdout_length", serde_json::json!(stdout.len()))
                         .with_metadata("stderr_length", serde_json::json!(stderr.len()))
-                        .with_metadata("stdout_bytes", serde_json::json!(output.stdout.len()))
-                        .with_metadata("stderr_bytes", serde_json::json!(output.stderr.len()))
+                        .with_metadata("stdout_bytes", serde_json::json!(stdout_bytes))
+                        .with_metadata("stderr_bytes", serde_json::json!(stderr_bytes))
+                        .with_metadata(
+                            "stdout_omitted_bytes",
+                            serde_json::json!(stdout_omitted_bytes),
+                        )
+                        .with_metadata(
+                            "stderr_omitted_bytes",
+                            serde_json::json!(stderr_omitted_bytes),
+                        )
+                        .with_metadata("stdout_truncated", serde_json::json!(stdout_truncated))
+                        .with_metadata("stderr_truncated", serde_json::json!(stderr_truncated))
+                        .with_metadata("outputBytes", serde_json::json!(output_bytes))
+                        .with_metadata(
+                            "outputOmittedBytes",
+                            serde_json::json!(output_omitted_bytes),
+                        )
+                        .with_metadata("outputTruncated", serde_json::json!(output_truncated))
                         .with_metadata("stdout", serde_json::json!(self.truncate_output(&stdout)))
                         .with_metadata("stderr", serde_json::json!(self.truncate_output(&stderr)))
                         .with_metadata("shell", serde_json::json!(resolved_shell_name()))
@@ -1164,18 +1205,59 @@ impl BashTool {
                     Ok(result)
                 }
             }
-            Ok(Err(e)) => {
-                warn!("Command execution failed: {}", e);
-                Err(ToolError::execution_failed(format!(
-                    "Failed to execute command: {}",
-                    e
-                )))
-            }
-            Err(_) => {
+            Err(ToolError::Timeout(_)) => {
                 warn!("Command timed out after {:?}", effective_timeout);
                 Err(ToolError::timeout(effective_timeout))
             }
+            Err(e) => {
+                warn!("Command execution failed: {}", e);
+                Err(e)
+            }
         }
+    }
+
+    async fn execute_embedded_command(
+        &self,
+        command: &str,
+        timeout: Duration,
+        context: &ToolContext,
+    ) -> Result<CapturedProcessOutput, ToolError> {
+        let mut cmd = self.build_platform_command(command, context);
+        cmd.stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .stdin(Stdio::null())
+            .kill_on_drop(true);
+        let mut child = cmd.spawn().map_err(|error| {
+            ToolError::execution_failed(format!("Failed to execute command: {error}"))
+        })?;
+        let stdout_reader = child
+            .stdout
+            .take()
+            .map(|stdout| tokio::spawn(read_bounded_output_stream(stdout)));
+        let stderr_reader = child
+            .stderr
+            .take()
+            .map(|stderr| tokio::spawn(read_bounded_output_stream(stderr)));
+
+        let status = match tokio::time::timeout(timeout, child.wait()).await {
+            Ok(Ok(status)) => status,
+            Ok(Err(error)) => {
+                return Err(ToolError::execution_failed(format!(
+                    "Failed to execute command: {error}"
+                )));
+            }
+            Err(_) => {
+                let _ = child.kill().await;
+                let _ = child.wait().await;
+                return Err(ToolError::timeout(timeout));
+            }
+        };
+
+        Ok(CapturedProcessOutput {
+            exit_code: status.code().unwrap_or(-1),
+            stdout: join_bounded_output_reader(stdout_reader, "stdout").await?,
+            stderr: join_bounded_output_reader(stderr_reader, "stderr").await?,
+        })
     }
 
     fn tool_result_from_executor_result(
@@ -1187,6 +1269,15 @@ impl BashTool {
     ) -> Result<ToolResult, ToolError> {
         let stdout = executor_result.stdout;
         let stderr = executor_result.stderr;
+        let stdout_bytes = executor_result.stdout_bytes;
+        let stderr_bytes = executor_result.stderr_bytes;
+        let stdout_omitted_bytes = executor_result.stdout_omitted_bytes;
+        let stderr_omitted_bytes = executor_result.stderr_omitted_bytes;
+        let stdout_truncated = executor_result.stdout_truncated;
+        let stderr_truncated = executor_result.stderr_truncated;
+        let output_bytes = stdout_bytes.saturating_add(stderr_bytes);
+        let output_omitted_bytes = stdout_omitted_bytes.saturating_add(stderr_omitted_bytes);
+        let output_truncated = stdout_truncated || stderr_truncated;
         let exit_code = executor_result.exit_code;
         let interpretation = interpret_bash_command_result(command, exit_code, &stdout, &stderr);
         let combined_output = self.format_output_with_message(
@@ -1204,8 +1295,24 @@ impl BashTool {
         .with_metadata("exit_code", serde_json::json!(exit_code))
         .with_metadata("stdout_length", serde_json::json!(stdout.len()))
         .with_metadata("stderr_length", serde_json::json!(stderr.len()))
-        .with_metadata("stdout_bytes", serde_json::json!(stdout.len()))
-        .with_metadata("stderr_bytes", serde_json::json!(stderr.len()))
+        .with_metadata("stdout_bytes", serde_json::json!(stdout_bytes))
+        .with_metadata("stderr_bytes", serde_json::json!(stderr_bytes))
+        .with_metadata(
+            "stdout_omitted_bytes",
+            serde_json::json!(stdout_omitted_bytes),
+        )
+        .with_metadata(
+            "stderr_omitted_bytes",
+            serde_json::json!(stderr_omitted_bytes),
+        )
+        .with_metadata("stdout_truncated", serde_json::json!(stdout_truncated))
+        .with_metadata("stderr_truncated", serde_json::json!(stderr_truncated))
+        .with_metadata("outputBytes", serde_json::json!(output_bytes))
+        .with_metadata(
+            "outputOmittedBytes",
+            serde_json::json!(output_omitted_bytes),
+        )
+        .with_metadata("outputTruncated", serde_json::json!(output_truncated))
         .with_metadata("stdout", serde_json::json!(self.truncate_output(&stdout)))
         .with_metadata("stderr", serde_json::json!(self.truncate_output(&stderr)))
         .with_metadata("shell", serde_json::json!(resolved_shell_name()))
@@ -1323,6 +1430,39 @@ fn resolved_shell_args(command: &str) -> Vec<String> {
     #[cfg(not(target_os = "windows"))]
     {
         vec!["-c".to_string(), command.to_string()]
+    }
+}
+
+async fn read_bounded_output_stream<R>(mut stream: R) -> anyhow::Result<CapturedOutput>
+where
+    R: AsyncRead + Unpin,
+{
+    let mut output = BoundedOutputBuffer::default();
+    let mut buffer = [0u8; 8192];
+    loop {
+        let read_bytes = stream.read(&mut buffer).await?;
+        if read_bytes == 0 {
+            break;
+        }
+        output.push_chunk(&buffer[..read_bytes]);
+    }
+    Ok(output.into_captured_output())
+}
+
+async fn join_bounded_output_reader(
+    reader: Option<tokio::task::JoinHandle<anyhow::Result<CapturedOutput>>>,
+    stream_name: &str,
+) -> Result<CapturedOutput, ToolError> {
+    match reader {
+        Some(reader) => reader
+            .await
+            .map_err(|error| {
+                ToolError::execution_failed(format!("{stream_name} reader task failed: {error}"))
+            })?
+            .map_err(|error| {
+                ToolError::execution_failed(format!("Failed to read {stream_name} output: {error}"))
+            }),
+        None => Ok(CapturedOutput::from_bytes(&[])),
     }
 }
 
@@ -1915,6 +2055,35 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(not(target_os = "windows"))]
+    async fn test_execute_large_output_reports_bounded_capture_metadata() {
+        let tool = BashTool::new();
+        let context = create_test_context();
+        let result = tool
+            .execute(
+                serde_json::json!({
+                    "command": "i=0; while [ $i -lt 40000 ]; do printf 'line\\n'; i=$((i+1)); done; printf tail-marker",
+                    "timeout": 5
+                }),
+                &context,
+            )
+            .await
+            .expect("large output command should run");
+
+        assert!(result.is_success());
+        assert_eq!(
+            result.metadata.get("outputTruncated"),
+            Some(&serde_json::json!(true))
+        );
+        assert!(result
+            .metadata
+            .get("outputOmittedBytes")
+            .and_then(serde_json::Value::as_u64)
+            .is_some_and(|value| value > 0));
+        assert!(result.content().contains("tail-marker"));
+    }
+
+    #[tokio::test]
     async fn test_execute_background() {
         use tempfile::TempDir;
 
@@ -2001,6 +2170,62 @@ mod tests {
         assert_eq!(
             result.metadata.get("preflight_check"),
             Some(&serde_json::json!("windows_wsl_drive_mount"))
+        );
+    }
+
+    #[test]
+    fn test_executor_result_metadata_preserves_output_truncation_stats() {
+        let tool = BashTool::new();
+        let result = tool
+            .tool_result_from_executor_result(
+                "printf lots",
+                Path::new("/tmp"),
+                ExecutorResult {
+                    exit_code: 0,
+                    stdout: "headtail".to_string(),
+                    stderr: "err".to_string(),
+                    stdout_bytes: 1_000,
+                    stderr_bytes: 3,
+                    stdout_omitted_bytes: 992,
+                    stderr_omitted_bytes: 0,
+                    stdout_truncated: true,
+                    stderr_truncated: false,
+                    sandboxed: true,
+                    sandbox_type: crate::sandbox::SandboxType::RestrictedToken,
+                    duration: Some(42),
+                },
+                Some("workspace"),
+            )
+            .expect("executor result should convert");
+
+        assert!(result.is_success());
+        assert_eq!(
+            result.metadata.get("stdout_bytes"),
+            Some(&serde_json::json!(1_000))
+        );
+        assert_eq!(
+            result.metadata.get("stderr_bytes"),
+            Some(&serde_json::json!(3))
+        );
+        assert_eq!(
+            result.metadata.get("stdout_omitted_bytes"),
+            Some(&serde_json::json!(992))
+        );
+        assert_eq!(
+            result.metadata.get("outputBytes"),
+            Some(&serde_json::json!(1_003))
+        );
+        assert_eq!(
+            result.metadata.get("outputOmittedBytes"),
+            Some(&serde_json::json!(992))
+        );
+        assert_eq!(
+            result.metadata.get("outputTruncated"),
+            Some(&serde_json::json!(true))
+        );
+        assert_eq!(
+            result.metadata.get("sandbox_scope"),
+            Some(&serde_json::json!("workspace"))
         );
     }
 

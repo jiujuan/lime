@@ -27,6 +27,7 @@ mod diagnostics;
 mod gallery_materials;
 mod impls;
 mod knowledge;
+mod legacy_message_backfill_source;
 mod mcp;
 mod media_tasks;
 mod model_providers;

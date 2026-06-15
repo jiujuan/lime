@@ -83,6 +83,18 @@ pub(super) fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<ProjectShellSessionDrainEventsResponse>(
             "ProjectShellSessionDrainEventsResponse",
         ),
+        typed_schema::<ExecutionProcessStatus>("ExecutionProcessStatus"),
+        typed_schema::<ExecutionProcessOutputKind>("ExecutionProcessOutputKind"),
+        typed_schema::<ExecutionProcessSnapshot>("ExecutionProcessSnapshot"),
+        typed_schema::<ExecutionProcessOutputDelta>("ExecutionProcessOutputDelta"),
+        typed_schema::<ExecutionProcessStartParams>("ExecutionProcessStartParams"),
+        typed_schema::<ExecutionProcessStartResponse>("ExecutionProcessStartResponse"),
+        typed_schema::<ExecutionProcessWriteStdinParams>("ExecutionProcessWriteStdinParams"),
+        typed_schema::<ExecutionProcessEmptyResponse>("ExecutionProcessEmptyResponse"),
+        typed_schema::<ExecutionProcessIdParams>("ExecutionProcessIdParams"),
+        typed_schema::<ExecutionProcessStatusResponse>("ExecutionProcessStatusResponse"),
+        typed_schema::<ExecutionProcessDrainOutputParams>("ExecutionProcessDrainOutputParams"),
+        typed_schema::<ExecutionProcessDrainOutputResponse>("ExecutionProcessDrainOutputResponse"),
         typed_schema::<EvidenceExportParams>("EvidenceExportParams"),
         typed_schema::<EvidenceExportResponse>("EvidenceExportResponse"),
         typed_schema::<EvidencePackSummary>("EvidencePackSummary"),
@@ -570,6 +582,7 @@ pub(super) fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<AgentInput>("AgentInput"),
         typed_schema::<AgentAttachment>("AgentAttachment"),
         typed_schema::<RuntimeOptions>("RuntimeOptions"),
+        typed_schema::<StructuredOutputContract>("StructuredOutputContract"),
         typed_schema::<AgentEvent>("AgentEvent"),
     ]
 }

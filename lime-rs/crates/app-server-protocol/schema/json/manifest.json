@@ -276,6 +276,30 @@
     },
     {
       "kind": "request",
+      "method": "executionProcess/drainOutput"
+    },
+    {
+      "kind": "request",
+      "method": "executionProcess/interrupt"
+    },
+    {
+      "kind": "request",
+      "method": "executionProcess/start"
+    },
+    {
+      "kind": "request",
+      "method": "executionProcess/status"
+    },
+    {
+      "kind": "request",
+      "method": "executionProcess/terminate"
+    },
+    {
+      "kind": "request",
+      "method": "executionProcess/writeStdin"
+    },
+    {
+      "kind": "request",
       "method": "feishuChannel/probe"
     },
     {
@@ -1175,6 +1199,18 @@
       "EvidenceExportResponse",
       "EvidencePackArtifact",
       "EvidencePackSummary",
+      "ExecutionProcessDrainOutputParams",
+      "ExecutionProcessDrainOutputResponse",
+      "ExecutionProcessEmptyResponse",
+      "ExecutionProcessIdParams",
+      "ExecutionProcessOutputDelta",
+      "ExecutionProcessOutputKind",
+      "ExecutionProcessSnapshot",
+      "ExecutionProcessStartParams",
+      "ExecutionProcessStartResponse",
+      "ExecutionProcessStatus",
+      "ExecutionProcessStatusResponse",
+      "ExecutionProcessWriteStdinParams",
       "FileSystemCreateDirectoryParams",
       "FileSystemCreateFileParams",
       "FileSystemDeleteFileParams",
@@ -1410,6 +1446,7 @@
       "SkillRepositorySaveParams",
       "SkillScaffoldCreateParams",
       "SkillScaffoldCreateResponse",
+      "StructuredOutputContract",
       "SupportBundleExportResponse",
       "UnifiedMemory",
       "UnifiedMemoryAnalysisResponse",

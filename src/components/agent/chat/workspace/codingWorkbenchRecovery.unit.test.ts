@@ -131,6 +131,38 @@ describe("codingWorkbenchRecovery", () => {
     expect(recoveryView?.prompt).toContain("App.test.tsx failed");
     expect(recoveryView?.prompt).toContain("相关文件: src/App.tsx");
     expect(recoveryView?.prompt).toContain("最近文件快照: src/App.tsx");
+    expect(recoveryView?.context).toMatchObject({
+      schemaVersion: "coding-workbench-recovery/v1",
+      failureKind: "patch",
+      sourceIds: {
+        commandId: "command-1",
+        testRunId: "test-1",
+        patchId: "patch-1",
+        toolCallId: "tool-patch-1",
+      },
+      refs: {
+        outputRefs: ["output://command-1"],
+        diffRef: "diff://patch-1",
+        sourceEventIds: [
+          "event-command-1",
+          "event-test-1",
+          "event-patch-1",
+        ],
+      },
+      relatedFiles: ["src/App.tsx"],
+      latestCheckpointPath: "src/App.tsx",
+    });
+    expect(recoveryView?.context.signals[0]).toMatchObject({
+      kind: "command",
+      id: "command-1",
+      sourceIds: {
+        commandId: "command-1",
+      },
+      refs: {
+        outputRefs: ["output://command-1"],
+        sourceEventIds: ["event-command-1"],
+      },
+    });
   });
 
   it("没有失败事实时返回 null", () => {

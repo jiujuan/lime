@@ -1,4 +1,5 @@
 mod coding_events;
+mod model_registry_metadata;
 mod model_routing;
 mod tool_events;
 mod tool_inventory;
@@ -63,19 +64,30 @@ impl RuntimeBackend {
         let session_scope = session_scope_from_request(&request)?;
         let host_request = aster_chat_request_from_request(&request);
         let db = initialize_runtime_database(self.db.as_ref())?;
-        let selection = resolve_runtime_model_selection(&request)?;
-        let model_routing = model_routing::resolve_model_routing(&request, &selection);
+        let requested_selection = resolve_runtime_model_selection(&request)?;
         let direct_provider_config = direct_provider_config_from_request(
             host_request.as_ref(),
-            &selection,
-            selection.reasoning_effort.clone(),
+            &requested_selection,
+            requested_selection.reasoning_effort.clone(),
         );
-        let provider_readiness = model_routing::resolve_provider_readiness(
+        let routing_resolution = model_routing::resolve_ready_routing(
+            &db,
+            &self.api_key_provider_service,
+            &request,
+            &requested_selection,
+            direct_provider_config.as_ref(),
+        )
+        .map_err(backend_error)?;
+        let selection = routing_resolution.selection;
+        let model_routing = routing_resolution.routing;
+        let provider_readiness = routing_resolution.readiness;
+        let model_registry = model_registry_metadata::resolve_runtime_model_registry_metadata(
             &db,
             &self.api_key_provider_service,
             &selection,
             direct_provider_config.as_ref(),
         )
+        .await
         .map_err(backend_error)?;
 
         sink.emit(RuntimeEvent::new(
@@ -84,15 +96,31 @@ impl RuntimeBackend {
                 &selection,
                 &model_routing,
                 &provider_readiness,
+                &model_registry,
             ),
         ))?;
-        if !provider_readiness.ready {
+        if requested_selection != selection {
             sink.emit(RuntimeEvent::new(
-                "routing.not_possible",
-                model_routing::routing_not_possible_payload(
+                "routing.fallback.applied",
+                model_routing::routing_fallback_applied_payload(
+                    &requested_selection,
                     &selection,
                     &model_routing,
                     &provider_readiness,
+                    &model_registry,
+                    &routing_resolution.attempted,
+                ),
+            ))?;
+        }
+        if !provider_readiness.ready {
+            sink.emit(RuntimeEvent::new(
+                "routing.not_possible",
+                model_routing::routing_not_possible_payload_with_attempts(
+                    &selection,
+                    &model_routing,
+                    &provider_readiness,
+                    &model_registry,
+                    &routing_resolution.attempted,
                 ),
             ))?;
             return Err(RuntimeCoreError::Backend(format!(

@@ -32,6 +32,10 @@ import {
   resolveRuntimeRoutingEvidence,
   type RuntimeRoutingEvidenceLineText,
 } from "./runtimeRoutingEvidence";
+import {
+  buildRuntimePolicyEvidenceLines,
+  resolveRuntimePolicyEvidence,
+} from "./runtimePolicyEvidence";
 
 export interface AgentThreadReliabilityDiagnosticContext {
   sessionId?: string | null;
@@ -607,6 +611,11 @@ export function buildReliabilityDiagnosticText(params: {
   const threadItemSignals = summarizeThreadItemSignals(threadItems);
   const recentMessages = summarizeRecentMessages(messages);
   const runtimeRoutingEvidence = resolveRuntimeRoutingEvidence(threadRead);
+  const runtimePolicyEvidence = resolveRuntimePolicyEvidence({
+    threadRead,
+    decisionReason: runtimeRoutingEvidence.decisionReason,
+    fallbackChain: runtimeRoutingEvidence.fallbackChain,
+  });
   const unknownLabel = tr(t, "value.unknown");
   const unsetLabel = tr(t, "value.unset");
   const noneLabel = tr(t, "value.nonePlain");
@@ -693,6 +702,10 @@ export function buildReliabilityDiagnosticText(params: {
     tr(t, "sections.routing"),
     ...buildRuntimeRoutingEvidenceLines(
       runtimeRoutingEvidence,
+      routingEvidenceLineText,
+    ),
+    ...buildRuntimePolicyEvidenceLines(
+      runtimePolicyEvidence,
       routingEvidenceLineText,
     ),
     "",
@@ -1307,6 +1320,9 @@ export function buildReliabilityRawPayload(params: {
     runtime_context: params.diagnosticRuntimeContext || null,
     backend_diagnostics: params.threadRead?.diagnostics || null,
     runtime_routing_evidence: resolveRuntimeRoutingEvidence(params.threadRead),
+    runtime_policy_evidence: resolveRuntimePolicyEvidence({
+      threadRead: params.threadRead,
+    }),
     latest_compaction_boundary:
       params.threadRead?.latest_compaction_boundary || null,
     memory_prefetch_preview: params.memoryPrefetchState?.result || null,

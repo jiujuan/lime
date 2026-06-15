@@ -5,53 +5,6 @@
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
-const HISTORY_FILE_ARTIFACT_INLINE_CONTENT_BYTES_LIMIT: usize = 16 * 1024;
-const HISTORY_ITEM_INLINE_OUTPUT_BYTES_LIMIT: usize = 16 * 1024;
-
-fn history_item_payload_json_projection_sql() -> String {
-    format!(
-        "CASE
-             WHEN NOT json_valid(payload_json) THEN payload_json
-             WHEN item_type = 'file_artifact'
-                  AND length(payload_json) > {file_limit}
-             THEN json_remove(payload_json, '$.content')
-             WHEN item_type = 'tool_call'
-                  AND json_type(payload_json, '$.output') = 'text'
-                  AND length(json_extract(payload_json, '$.output')) > {output_limit}
-             THEN json_set(
-                 payload_json,
-                 '$.output',
-                 substr(json_extract(payload_json, '$.output'), 1, {output_limit})
-                     || char(10) || char(10)
-                     || '[历史输出已截断，完整输出未随首屏加载。]'
-             )
-             WHEN item_type = 'command_execution'
-                  AND json_type(payload_json, '$.aggregated_output') = 'text'
-                  AND length(json_extract(payload_json, '$.aggregated_output')) > {output_limit}
-             THEN json_set(
-                 payload_json,
-                 '$.aggregated_output',
-                 substr(json_extract(payload_json, '$.aggregated_output'), 1, {output_limit})
-                     || char(10) || char(10)
-                     || '[历史输出已截断，完整输出未随首屏加载。]'
-             )
-             WHEN item_type = 'web_search'
-                  AND json_type(payload_json, '$.output') = 'text'
-                  AND length(json_extract(payload_json, '$.output')) > {output_limit}
-             THEN json_set(
-                 payload_json,
-                 '$.output',
-                 substr(json_extract(payload_json, '$.output'), 1, {output_limit})
-                     || char(10) || char(10)
-                     || '[历史输出已截断，完整输出未随首屏加载。]'
-             )
-             ELSE payload_json
-         END",
-        file_limit = HISTORY_FILE_ARTIFACT_INLINE_CONTENT_BYTES_LIMIT,
-        output_limit = HISTORY_ITEM_INLINE_OUTPUT_BYTES_LIMIT,
-    )
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentThreadTurnStatus {
@@ -516,7 +469,9 @@ impl AgentTimelineDao {
     }
 
     pub fn upsert_item(conn: &Connection, item: &AgentThreadItem) -> Result<(), rusqlite::Error> {
-        let payload_json = serde_json::to_string(&item.payload)
+        let payload_projection =
+            super::agent_timeline_payload::bounded_payload_for_storage(&item.payload);
+        let payload_json = serde_json::to_string(&payload_projection)
             .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
 
         conn.execute(
@@ -607,7 +562,8 @@ impl AgentTimelineDao {
             return Ok(Vec::new());
         }
 
-        let payload_json_projection = history_item_payload_json_projection_sql();
+        let payload_json_projection =
+            super::agent_timeline_payload::history_item_payload_json_projection_sql();
         let sql = format!(
             "SELECT id, session_id, turn_id, sequence, status, started_at, completed_at,
                     updated_at, payload_json, sort_started_at
@@ -649,7 +605,8 @@ impl AgentTimelineDao {
             return Ok(Vec::new());
         }
 
-        let payload_json_projection = history_item_payload_json_projection_sql();
+        let payload_json_projection =
+            super::agent_timeline_payload::history_item_payload_json_projection_sql();
         let sql = format!(
             "SELECT id, session_id, turn_id, sequence, status, started_at, completed_at,
                     updated_at, payload_json, sort_started_at
@@ -852,7 +809,7 @@ mod tests {
     }
 
     #[test]
-    fn item_tail_query_should_omit_large_file_artifact_content() {
+    fn item_storage_should_omit_large_file_artifact_content() {
         let conn = setup_conn();
         let turn = AgentThreadTurn {
             id: "turn-artifact".to_string(),
@@ -891,13 +848,25 @@ mod tests {
         )
         .unwrap();
 
+        let stored_payload_json: String = conn
+            .query_row(
+                "SELECT payload_json FROM agent_thread_items WHERE id = ?1",
+                params!["item-large-artifact"],
+                |row| row.get(0),
+            )
+            .unwrap();
         let full_items = AgentTimelineDao::list_items_by_thread(&conn, "thread-1").unwrap();
         let tail_items = AgentTimelineDao::list_items_by_thread_tail(&conn, "thread-1", 1).unwrap();
 
+        assert!(!stored_payload_json.contains("正文正文"));
         assert!(matches!(
             &full_items[0].payload,
-            AgentThreadItemPayload::FileArtifact { content: Some(content), .. }
-                if content.contains("正文")
+            AgentThreadItemPayload::FileArtifact { content: None, metadata, .. }
+                if metadata
+                    .as_ref()
+                    .and_then(|value| value.get("artifactTitle"))
+                    .and_then(serde_json::Value::as_str)
+                    == Some("日报")
         ));
         assert!(matches!(
             &tail_items[0].payload,
@@ -911,7 +880,7 @@ mod tests {
     }
 
     #[test]
-    fn item_tail_query_should_truncate_large_tool_output() {
+    fn item_storage_should_truncate_large_tool_output() {
         let conn = setup_conn();
         let turn = AgentThreadTurn {
             id: "turn-tool-output".to_string(),
@@ -950,13 +919,23 @@ mod tests {
         )
         .unwrap();
 
+        let stored_payload_json: String = conn
+            .query_row(
+                "SELECT payload_json FROM agent_thread_items WHERE id = ?1",
+                params!["item-large-tool-output"],
+                |row| row.get(0),
+            )
+            .unwrap();
         let full_items = AgentTimelineDao::list_items_by_thread(&conn, "thread-1").unwrap();
         let tail_items = AgentTimelineDao::list_items_by_thread_tail(&conn, "thread-1", 1).unwrap();
 
+        assert!(!stored_payload_json.contains(&large_output));
         assert!(matches!(
             &full_items[0].payload,
             AgentThreadItemPayload::ToolCall { output: Some(output), .. }
-                if output == &large_output
+                if output.starts_with("封面工具输出开始")
+                    && output.contains("历史输出已截断")
+                    && output.len() < large_output.len()
         ));
         assert!(matches!(
             &tail_items[0].payload,

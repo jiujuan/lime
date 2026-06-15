@@ -13,6 +13,7 @@ use utoipa::ToSchema;
 
 use super::runtime_queue::initialize_session_runtime_queue_service;
 use crate::config::paths::Paths;
+use crate::conversation::message::{MessageContent, MessageMetadata};
 use crate::session::session_manager::SESSIONS_FOLDER;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteRow};
 use sqlx::{Pool, Row, Sqlite};
@@ -107,6 +108,12 @@ pub struct TurnOutputSchemaRuntime {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ItemRuntimePayload {
+    TranscriptMessage {
+        role: String,
+        content: Vec<MessageContent>,
+        metadata: MessageMetadata,
+        created_timestamp: i64,
+    },
     UserMessage {
         content: String,
     },
@@ -432,6 +439,7 @@ pub trait ThreadRuntimeStore: Send + Sync {
     async fn create_item(&self, item: ItemRuntime) -> Result<ItemRuntime>;
     async fn update_item(&self, item: ItemRuntime) -> Result<ItemRuntime>;
     async fn get_item(&self, item_id: &str) -> Result<Option<ItemRuntime>>;
+    async fn delete_item(&self, item_id: &str) -> Result<Option<ItemRuntime>>;
     async fn list_items(&self, thread_id: &str) -> Result<Vec<ItemRuntime>>;
     async fn enqueue_turn(&self, queued_turn: QueuedTurnRuntime) -> Result<QueuedTurnRuntime>;
     async fn list_queued_turns(&self, session_id: &str) -> Result<Vec<QueuedTurnRuntime>>;
@@ -1047,6 +1055,35 @@ impl ThreadRuntimeStore for SqliteThreadRuntimeStore {
         row.map(Self::decode_item_row).transpose()
     }
 
+    async fn delete_item(&self, item_id: &str) -> Result<Option<ItemRuntime>> {
+        let pool = self.pool().await?;
+        let mut tx = pool.begin().await?;
+        let row = sqlx::query(
+            r#"
+            SELECT
+                id, thread_id, turn_id, sequence, status, started_at,
+                completed_at, updated_at, payload_json
+            FROM item_runtimes
+            WHERE id = ?
+        "#,
+        )
+        .bind(item_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        let Some(row) = row else {
+            tx.commit().await?;
+            return Ok(None);
+        };
+        sqlx::query("DELETE FROM item_runtimes WHERE id = ?")
+            .bind(item_id)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+
+        Ok(Some(Self::decode_item_row(row)?))
+    }
+
     async fn list_items(&self, thread_id: &str) -> Result<Vec<ItemRuntime>> {
         let pool = self.pool().await?;
         let rows = sqlx::query(
@@ -1253,6 +1290,10 @@ impl ThreadRuntimeStore for NoopThreadRuntimeStore {
         Ok(None)
     }
 
+    async fn delete_item(&self, _item_id: &str) -> Result<Option<ItemRuntime>> {
+        Ok(None)
+    }
+
     async fn list_items(&self, _thread_id: &str) -> Result<Vec<ItemRuntime>> {
         Ok(Vec::new())
     }
@@ -1403,6 +1444,10 @@ impl ThreadRuntimeStore for InMemoryThreadRuntimeStore {
 
     async fn get_item(&self, item_id: &str) -> Result<Option<ItemRuntime>> {
         Ok(self.items.read().await.get(item_id).cloned())
+    }
+
+    async fn delete_item(&self, item_id: &str) -> Result<Option<ItemRuntime>> {
+        Ok(self.items.write().await.remove(item_id))
     }
 
     async fn list_items(&self, thread_id: &str) -> Result<Vec<ItemRuntime>> {

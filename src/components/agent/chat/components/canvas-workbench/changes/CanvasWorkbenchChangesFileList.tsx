@@ -1,9 +1,12 @@
-import { type ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import {
   ChevronDown,
+  ChevronRight,
   FileCode,
   FileJson,
   FileText,
+  Folder,
+  FolderOpen,
   Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -11,6 +14,8 @@ import type {
   CanvasWorkbenchChangeItem,
   CanvasWorkbenchChangeTreeNode,
 } from "./CanvasWorkbenchChangesPanelViewModel";
+import { CanvasWorkbenchChangeStatusMark } from "./CanvasWorkbenchChangeStatusMark";
+import { resolveCanvasWorkbenchChangeTreeNodeMeta } from "./CanvasWorkbenchChangeTreeMeta";
 
 type CanvasWorkbenchTranslation = (
   key: string,
@@ -20,7 +25,10 @@ type CanvasWorkbenchTranslation = (
 interface RenderChangeTreeNodeOptions {
   nodes: CanvasWorkbenchChangeTreeNode[];
   selectedChangeItem: CanvasWorkbenchChangeItem | undefined;
+  collapsedFolderIds: Set<string>;
   onSelectChangeItem?: (item: CanvasWorkbenchChangeItem) => void;
+  onToggleFolder: (nodeId: string) => void;
+  translateWorkbench: CanvasWorkbenchTranslation;
 }
 
 function resolveFileIcon(path: string) {
@@ -41,29 +49,78 @@ function resolveFileIcon(path: string) {
   return FileText;
 }
 
+function resolveFileBadge(path: string): string | null {
+  const extension = path.split(".").pop()?.trim().toLowerCase();
+  if (!extension) {
+    return null;
+  }
+  if (extension === "tsx" || extension === "ts") {
+    return "TS";
+  }
+  if (extension === "jsx" || extension === "js" || extension === "mjs") {
+    return "JS";
+  }
+  if (extension === "md" || extension === "mdx") {
+    return "MD";
+  }
+  if (extension === "rs") {
+    return "RS";
+  }
+  if (extension === "json") {
+    return "{}";
+  }
+  return extension.length <= 3 ? extension.toUpperCase() : null;
+}
+
 function renderChangeTreeNodes({
   nodes,
   selectedChangeItem,
+  collapsedFolderIds,
   onSelectChangeItem,
+  onToggleFolder,
+  translateWorkbench,
 }: RenderChangeTreeNodeOptions): ReactNode {
   return nodes.map((node) => {
     const paddingLeft = 8 + node.depth * 14;
+    const meta = resolveCanvasWorkbenchChangeTreeNodeMeta(node);
 
     if (node.type === "folder") {
+      const collapsed = collapsedFolderIds.has(node.id);
+      const FolderIcon = collapsed ? Folder : FolderOpen;
       return (
         <div key={node.id}>
-          <div
-            className="flex h-7 items-center gap-1 rounded-[6px] pr-2 text-[13px] font-medium text-slate-500"
+          <button
+            type="button"
+            className="flex h-7 w-full items-center gap-1 rounded-[6px] pr-2 text-left text-[13px] font-medium text-slate-600 transition-colors hover:bg-white hover:text-slate-950"
             style={{ paddingLeft }}
+            onClick={() => onToggleFolder(node.id)}
+            data-testid="canvas-workbench-change-folder"
+            data-change-folder-id={node.id}
+            title={node.path}
           >
-            <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-            <span className="truncate">{node.name}</span>
-          </div>
-          {renderChangeTreeNodes({
-            nodes: node.children,
-            selectedChangeItem,
-            onSelectChangeItem,
-          })}
+            {collapsed ? (
+              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+            ) : (
+              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+            )}
+            <FolderIcon className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+            <span className="min-w-0 flex-1 truncate">{node.name}</span>
+            <CanvasWorkbenchChangeStatusMark
+              meta={meta}
+              translateWorkbench={translateWorkbench}
+              className="ml-1"
+            />
+          </button>
+          {collapsed
+            ? null
+            : renderChangeTreeNodes({
+                nodes: node.children,
+                selectedChangeItem,
+                collapsedFolderIds,
+                onSelectChangeItem,
+                onToggleFolder,
+                translateWorkbench,
+              })}
         </div>
       );
     }
@@ -71,15 +128,16 @@ function renderChangeTreeNodes({
     const item = node.item;
     const active = item.id === selectedChangeItem?.id;
     const FileIcon = resolveFileIcon(item.path);
+    const fileBadge = resolveFileBadge(item.path);
 
     return (
       <button
         key={node.id}
         type="button"
         className={cn(
-          "flex h-8 w-full items-center gap-1.5 rounded-[6px] pr-2 text-left text-[13px] transition-colors",
+          "group flex min-h-8 w-full items-start gap-1.5 rounded-[6px] py-1 pr-2 text-left text-[13px] transition-colors",
           active
-            ? "bg-slate-100 text-slate-950"
+            ? "bg-emerald-50 text-slate-950 shadow-[inset_2px_0_0_#22c55e]"
             : "text-slate-600 hover:bg-slate-50 hover:text-slate-950",
         )}
         style={{ paddingLeft }}
@@ -89,13 +147,41 @@ function renderChangeTreeNodes({
         data-change-id={item.id}
         title={item.path}
       >
-        <FileIcon
-          className={cn(
-            "h-3.5 w-3.5 shrink-0",
-            active ? "text-slate-700" : "text-slate-400",
-          )}
+        {fileBadge ? (
+          <span
+            className={cn(
+              "mt-0.5 inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-[4px] bg-sky-50 px-0.5 font-mono text-[9px] font-bold leading-none text-sky-700",
+              active && "bg-white text-sky-700",
+            )}
+          >
+            {fileBadge}
+          </span>
+        ) : (
+          <FileIcon
+            className={cn(
+              "mt-0.5 h-3.5 w-3.5 shrink-0",
+              active ? "text-slate-700" : "text-slate-400",
+            )}
+          />
+        )}
+        <span className="min-w-0 flex-1">
+          <span className="block truncate">{node.name}</span>
+          {item.preview ? (
+            <span
+              className={cn(
+                "mt-0.5 block truncate font-mono text-[11px]",
+                active ? "text-emerald-700" : "text-slate-500",
+              )}
+            >
+              {item.preview}
+            </span>
+          ) : null}
+        </span>
+        <CanvasWorkbenchChangeStatusMark
+          meta={meta}
+          translateWorkbench={translateWorkbench}
+          className="ml-1 mt-0.5"
         />
-        <span className="min-w-0 flex-1 truncate">{node.name}</span>
       </button>
     );
   });
@@ -119,6 +205,20 @@ export function CanvasWorkbenchChangesFileList({
   onSelectChangeItem?: (item: CanvasWorkbenchChangeItem) => void;
 }) {
   const filterDisabled = Boolean(disabled || !onFileFilterChange);
+  const [collapsedFolderIds, setCollapsedFolderIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const handleToggleFolder = (nodeId: string) => {
+    setCollapsedFolderIds((current) => {
+      const next = new Set(current);
+      if (next.has(nodeId)) {
+        next.delete(nodeId);
+      } else {
+        next.add(nodeId);
+      }
+      return next;
+    });
+  };
 
   return (
     <aside
@@ -146,7 +246,10 @@ export function CanvasWorkbenchChangesFileList({
             {renderChangeTreeNodes({
               nodes: fileTree,
               selectedChangeItem,
+              collapsedFolderIds,
               onSelectChangeItem,
+              onToggleFolder: handleToggleFolder,
+              translateWorkbench,
             })}
           </div>
         ) : (

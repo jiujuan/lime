@@ -1046,7 +1046,7 @@
     {
       "id": "agent-chat-code-workbench-command-parser-entry",
       "classification": "dead",
-      "description": "已删除的旧工作台专用 parser 与测试入口；编程底座当前收敛到 command catalog agent_turn route 与 code_orchestrated runtime，不得恢复这些文件",
+      "description": "已删除的旧工作台专用 parser 与测试入口；编程底座当前收敛到 command catalog agent_turn route 与 react Agent runtime 主链，legacy code_orchestrated 只能在兼容边界归一到 react，不得恢复这些文件",
       "targets": [
         "src/components/agent/chat/utils/codeWorkbenchCommand.ts",
         "src/components/agent/chat/utils/codeWorkbenchCommand.test.ts"
@@ -2684,7 +2684,9 @@
         "shouldRenderLocalProcessFallback",
         "shouldRenderProjection ? ("
       ],
-      "includePathPrefixes": ["src/features/agent-app/ui/AgentRunHostDrawer.tsx"],
+      "includePathPrefixes": [
+        "src/features/agent-app/ui/AgentRunHostDrawer.tsx"
+      ],
       "allowedPaths": []
     },
     {
@@ -3841,7 +3843,7 @@
     {
       "id": "agent-chat-code-workbench-workspace-send-hardcode",
       "classification": "dead",
-      "description": "Workspace 发送主链不得重新为 @代码 / code_runtime 增加专用 parser、专用命令键判断、正文关键词路由或独立 code_command metadata；编程底座必须由 code_orchestrated 主链承载，@代码 只允许作为 command catalog 的 agent_turn 快捷入口",
+      "description": "Workspace 发送主链不得重新为 @代码 / code_runtime 增加专用 parser、专用命令键判断、正文关键词路由或独立 code_command metadata；编程底座必须由 react Agent runtime 主链承载，@代码 只允许作为 command catalog 的 agent_turn 快捷入口，legacy code_orchestrated 只能在兼容边界归一到 react",
       "patterns": [
         "parseCodeWorkbenchCommand",
         "commandKey: \"code_runtime\"",
@@ -3863,6 +3865,111 @@
       "includePathPrefixes": [
         "src/components/agent/chat/workspace/useWorkspaceSendActions.ts"
       ],
+      "allowedPaths": []
+    },
+    {
+      "id": "agent-chat-coding-workbench-legacy-thread-item-facts",
+      "classification": "dead",
+      "description": "Coding Workbench current presentation/runtime 不得直接消费 legacy thread item fact 类型；旧 file_artifact / command_execution / approval_request 只能留在历史测试/fixture 中，不得恢复为生产适配器",
+      "patterns": [
+        "file_artifact",
+        "command_execution",
+        "approval_request",
+        "code_orchestrated"
+      ],
+      "includePathPrefixes": [
+        "src/components/agent/chat/workspace/codingSessionOverviewProjection.ts",
+        "src/components/agent/chat/workspace/workspaceConversationCodingViews.tsx",
+        "src/components/agent/chat/workspace/workspaceConversationSessionViewModel.ts",
+        "src/components/agent/chat/workspace/useWorkspaceConversationSceneRuntime.tsx",
+        "src/components/agent/chat/workspace/CodingWorkbenchOutputPanel.tsx",
+        "src/components/agent/chat/workspace/CodingWorkbenchLogPanel.tsx",
+        "src/components/agent/chat/workspace/CodingWorkbenchActionPanel.tsx",
+        "src/components/agent/chat/workspace/CodingWorkbenchDiagnosticPanel.tsx",
+        "src/components/agent/chat/components/CanvasSessionOverviewPanel.tsx",
+        "src/components/agent/chat/components/CanvasWorkbenchLayout.tsx",
+        "src/components/agent/chat/components/canvas-workbench/"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "agent-chat-coding-workbench-legacy-adapter-reexport",
+      "classification": "dead",
+      "description": "已删除的 legacy thread item adapter 不得重新被 current workspaceConversationSceneViewModel / Workbench facade re-export；任何恢复都视为旧路回流",
+      "patterns": ["workspaceConversationLegacyThreadItemAdapter"],
+      "regexPatterns": [
+        "\\bexport\\s*\\{\\s*buildCanvasWorkbenchChangeView\\s*,\\s*buildCodingRuntimeEventsFromThreadItems\\s*,\\s*buildCodingWorkbenchProjectionFromThreadItems\\s*,\\s*buildFileArtifactChangeItem\\s*\\}\\s*from\\s*[\"']\\./workspaceConversationLegacyThreadItemAdapter[\"']"
+      ],
+      "includePathPrefixes": [
+        "src/components/agent/chat/workspace/workspaceConversationSceneViewModel.ts",
+        "src/components/agent/chat/workspace/workspaceConversationWorkbenchViewModel.ts"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "agent-chat-code-orchestrated-current-entry-ban",
+      "classification": "dead",
+      "description": "current 发送/协议/运行时入口不得把 code_orchestrated 当成现役 execution strategy；它只允许在 session store、协议兼容归一或测试夹具里出现，current 主链必须统一回 react",
+      "patterns": [
+        "execution_strategy: \"code_orchestrated\"",
+        "executionStrategy: \"code_orchestrated\"",
+        "effectiveExecutionStrategy: \"code_orchestrated\"",
+        "code_orchestrated_defaults",
+        "codeOrchestratedDefaults"
+      ],
+      "includePathPrefixes": [
+        "src/lib/api/agentProtocol.ts",
+        "src/components/agent/chat/skill-selection/runtimeInputCapabilityCatalog.ts",
+        "src/components/agent/chat/hooks/",
+        "src/components/agent/chat/utils/",
+        "src/components/agent/chat/workspace/",
+        "lime-rs/crates/agent/src/session_store.rs"
+      ],
+      "allowedPaths": [
+        "src/lib/api/agentProtocol.test.ts",
+        "src/components/agent/chat/skill-selection/runtimeInputCapabilityCatalog.test.tsx",
+        "src/components/agent/chat/hooks/agentSessionRefresh.test.ts",
+        "src/components/agent/chat/hooks/agentChatStorage.test.ts",
+        "src/components/agent/chat/hooks/agentSessionTopicViewModel.unit.test.ts",
+        "src/components/agent/chat/utils/sessionExecutionRuntime.test.ts",
+        "src/components/agent/chat/utils/submitOpRuntimeCompaction.test.ts"
+      ]
+    },
+    {
+      "id": "agent-runtime-execution-strategy-compat-helper-single-boundary",
+      "classification": "dead",
+      "description": "execution strategy 历史值归一只能走单一 compat helper；agentProtocol、runtimeInputCapabilityCatalog 和 Rust session_store 不得各自维护独立的 code_orchestrated/auto 归一逻辑，也不得继续暴露旧 wrapper 名",
+      "patterns": ["code_orchestrated"],
+      "regexPatterns": [
+        "\\bnormalizeLegacyExecutionStrategyToCurrentReact\\s*\\(",
+        "\\bnormalizeCatalogExecutionStrategyCompat\\s*\\(",
+        "\\bfn\\s+normalize_execution_strategy\\s*\\(",
+        "\\bnormalizeLegacyExecutionStrategy\\s*\\(",
+        "\\bnormalizeLegacyCatalogExecutionStrategy\\s*\\("
+      ],
+      "includePathPrefixes": [
+        "src/lib/api/agentProtocol.ts",
+        "src/components/agent/chat/skill-selection/runtimeInputCapabilityCatalog.ts",
+        "src/lib/api/agentRuntime/executionStrategyCompat.ts",
+        "lime-rs/crates/agent/src/session_store.rs",
+        "lime-rs/crates/agent/src/execution_strategy_compat.rs"
+      ],
+      "allowedPaths": [
+        "src/lib/api/agentRuntime/executionStrategyCompat.ts",
+        "src/lib/api/agentRuntime/executionStrategyCompat.test.ts",
+        "src/components/agent/chat/skill-selection/runtimeInputCapabilityCatalog.test.tsx",
+        "lime-rs/crates/agent/src/execution_strategy_compat.rs"
+      ]
+    },
+    {
+      "id": "agent-runtime-current-unavailable-legacy-command-recovery-text",
+      "classification": "dead",
+      "description": "Agent Runtime current 生产报错不得把 legacy agent_runtime_* command 写成恢复路径；App Server lifecycle 不可用时必须 fail closed 并指向 current lifecycle channel",
+      "patterns": [
+        "current Agent runtime cannot use legacy agent_runtime_* commands",
+        "legacy agent_runtime_* commands"
+      ],
+      "includePathPrefixes": ["src/lib/api/agentRuntime"],
       "allowedPaths": []
     },
     {
@@ -4862,6 +4969,158 @@
       "allowedPaths": []
     },
     {
+      "id": "rust-agent-messages-production-write-leak",
+      "classification": "deprecated",
+      "description": "agent_messages 只允许 migration/backfill/export 输入；生产新写入必须进入 JSONL Event Log 和 Projection DB",
+      "patterns": [
+        "INSERT INTO agent_messages",
+        "UPDATE agent_messages",
+        "DELETE FROM agent_messages"
+      ],
+      "includePathPrefixes": ["lime-rs/crates"],
+      "allowedPaths": [
+        "lime-rs/crates/agent/src/session_store_tests.rs",
+        "lime-rs/crates/app-server/src/local_data_source/legacy_message_backfill_source.rs",
+        "lime-rs/crates/app-server/src/local_data_source/tests.rs",
+        "lime-rs/crates/core/src/database/dao/agent.rs",
+        "lime-rs/crates/core/src/database/dao/chat.rs",
+        "lime-rs/crates/core/src/database/migration/general_chat_migration.rs"
+      ]
+    },
+    {
+      "id": "rust-agent-messages-product-read-fallback-leak",
+      "classification": "deprecated",
+      "description": "agent_messages 不保留长期产品读取 fallback；agentSession/read、evidence/export、usage 统计和 GUI read 必须走 JSONL Event Log + Projection DB / Telemetry DB，旧表只允许 migration/backfill/export 输入",
+      "patterns": [
+        "FROM agent_messages",
+        "JOIN agent_messages",
+        "FROM agent_messages m",
+        "JOIN agent_messages m"
+      ],
+      "includePathPrefixes": ["lime-rs/crates"],
+      "allowedPaths": [
+        "lime-rs/crates/agent/src/session_store_history_visibility.rs",
+        "lime-rs/crates/app-server/src/local_data_source/legacy_message_backfill_source.rs",
+        "lime-rs/crates/app-server/src/local_data_source/tests.rs",
+        "lime-rs/crates/core/src/database/dao/agent.rs",
+        "lime-rs/crates/core/src/database/dao/chat.rs",
+        "lime-rs/crates/core/src/database/migration/general_chat_migration.rs",
+        "lime-rs/crates/services/src/aster_session_store/legacy_conversation.rs"
+      ]
+    },
+    {
+      "id": "rust-chat-dao-agent-messages-product-api-leak",
+      "classification": "dead-candidate",
+      "description": "产品服务层不得通过 ChatDao 旧消息 API 间接把 agent_messages 当读取或写入 fallback；旧 DAO 只保留 migration/backfill/export/test fixture 输入身份",
+      "patterns": [
+        "ChatDao::add_message",
+        "ChatDao::delete_messages",
+        "ChatDao::get_messages",
+        "ChatDao::get_message_count",
+        "ChatDao::get_session_detail",
+        "ChatDao::list_sessions"
+      ],
+      "includePathPrefixes": [
+        "lime-rs/crates/app-server/src",
+        "lime-rs/crates/server/src",
+        "lime-rs/crates/services/src",
+        "lime-rs/crates/websocket/src"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "rust-agent-thread-items-payload-json-truth-leak",
+      "classification": "deprecated",
+      "description": "agent_thread_items.payload_json 只能作为迁移期 GUI projection 兼容字段；新 runtime event truth 和大正文必须进入 JSONL Event Log + Sidecar，不得继续把 payload_json 当事实源",
+      "patterns": [],
+      "regexPatterns": [
+        "agent_thread_items[\\s\\S]{0,1600}payload_json",
+        "payload_json[\\s\\S]{0,1600}agent_thread_items"
+      ],
+      "includePathPrefixes": ["lime-rs/crates"],
+      "allowedPaths": [
+        "lime-rs/crates/core/src/database/schema.rs",
+        "lime-rs/crates/core/src/database/dao/agent_timeline.rs"
+      ]
+    },
+    {
+      "id": "rust-runtime-snapshot-sidecar-ref-boundary-leak",
+      "classification": "deprecated",
+      "description": "runtime snapshot / sidecar 引用字段只能在集中 writer、resolver、projection 和 evidence 边界出现；新事件必须携带 sidecarRef.sha256，不得散落裸 outputSnapshotFile / checkpointSnapshotFile truth",
+      "patterns": [
+        "\"outputSnapshotFile\"",
+        "\"checkpointSnapshotFile\"",
+        "\"sidecarRef\"",
+        "\"contentSha256\""
+      ],
+      "includePathPrefixes": ["lime-rs/crates/app-server/src"],
+      "allowedPaths": [
+        "lime-rs/crates/app-server/src/file_checkpoint.rs",
+        "lime-rs/crates/app-server/src/file_checkpoint_snapshot.rs",
+        "lime-rs/crates/app-server/src/runtime/artifact_reader.rs",
+        "lime-rs/crates/app-server/src/runtime/artifact_sidecar.rs",
+        "lime-rs/crates/app-server/src/runtime/evidence_provider.rs",
+        "lime-rs/crates/app-server/src/runtime/file_checkpoint_projection.rs",
+        "lime-rs/crates/app-server/src/runtime/output_refs.rs",
+        "lime-rs/crates/app-server/src/runtime/session_hydration.rs"
+      ]
+    },
+    {
+      "id": "rust-runtime-artifact-generated-content-inline-leak",
+      "classification": "deprecated",
+      "description": "artifact.snapshot 里的 generatedContent / generated_content 只能在 artifact sidecar writer、reader、evidence 和测试夹具中出现；生成正文必须先落 sidecar，再写 sidecarRef.sha256，不能继续把 inline content 当事实源",
+      "patterns": ["generatedContent", "generated_content"],
+      "includePathPrefixes": ["lime-rs/crates/app-server/src"],
+      "allowedPaths": [
+        "lime-rs/crates/app-server/src/runtime/artifact_sidecar.rs",
+        "lime-rs/crates/app-server/src/runtime/artifact_reader.rs",
+        "lime-rs/crates/app-server/src/runtime/event_store.rs",
+        "lime-rs/crates/app-server/src/runtime/tests/artifacts.rs",
+        "lime-rs/crates/app-server/src/runtime/tests/evidence_exports.rs"
+      ]
+    },
+    {
+      "id": "rust-runtime-file-checkpoint-inline-content-leak",
+      "classification": "deprecated",
+      "description": "file.changed 里的 previousContent / beforeContent / oldContent 只能在 file checkpoint sidecar writer、projection、evidence、读取/恢复兼容 resolver 和测试夹具中出现；当前 checkpoint 文本必须先写 sidecar，再写 checkpointSnapshotFile",
+      "patterns": ["previousContent", "beforeContent", "oldContent"],
+      "regexPatterns": [
+        "checkpointSnapshotFile[\\s\\S]{0,1600}(previousContent|beforeContent|oldContent)",
+        "(previousContent|beforeContent|oldContent)[\\s\\S]{0,1600}checkpointSnapshotFile"
+      ],
+      "includePathPrefixes": ["lime-rs/crates/app-server/src"],
+      "allowedPaths": [
+        "lime-rs/crates/app-server/src/file_checkpoint.rs",
+        "lime-rs/crates/app-server/src/file_checkpoint_snapshot.rs",
+        "lime-rs/crates/app-server/src/runtime/file_checkpoint_projection.rs",
+        "lime-rs/crates/app-server/src/runtime/evidence_provider.rs",
+        "lime-rs/crates/app-server/src/runtime/session_hydration.rs",
+        "lime-rs/crates/app-server/src/runtime/tests/coding_events.rs",
+        "lime-rs/crates/app-server/src/runtime/tests/evidence_exports.rs"
+      ]
+    },
+    {
+      "id": "rust-runtime-store-hardcoded-platform-path-leak",
+      "classification": "dead-candidate",
+      "description": "App Server runtime durable store 只能消费 StorageRoots / 显式 data root；不得在 runtime store、sidecar 或 checkpoint writer 内自行发现 home、APPDATA、Application Support、/tmp/lime 或 ~/.lime",
+      "patterns": [
+        "dirs::home_dir(",
+        "dirs::data_dir(",
+        "dirs::data_local_dir(",
+        "\"~/.lime\"",
+        "\"/tmp/lime",
+        "\"APPDATA\"",
+        "\"LOCALAPPDATA\"",
+        "\"Application Support\""
+      ],
+      "includePathPrefixes": [
+        "lime-rs/crates/app-server/src/runtime",
+        "lime-rs/crates/app-server/src/main.rs",
+        "lime-rs/crates/app-server/src/file_checkpoint_snapshot.rs"
+      ],
+      "allowedPaths": []
+    },
+    {
       "id": "rust-service-model-usage-table-query-leak",
       "classification": "dead-candidate",
       "description": "已零引用的 旧桌面宿主 service 层 direct model_usage_stats 查询回流",
@@ -4920,26 +5179,23 @@
     },
     {
       "id": "rust-agent-session-direct-record-access",
-      "classification": "deprecated",
-      "description": "Rust 上层模块 direct Agent session 记录与消息读写回流",
+      "classification": "dead-candidate",
+      "description": "已零引用的 Rust 上层模块 direct Agent session 记录与旧消息读写回流；产品读取必须走 JSONL Event Log + Projection DB / 统一 session query 边界",
       "patterns": [
-        "AgentDao::get_session(",
         "AgentDao::get_session_with_messages(",
-        "AgentDao::list_sessions(",
-        "AgentDao::list_session_overviews(",
         "AgentDao::get_message_count(",
         "AgentDao::get_messages(",
-        "AgentDao::get_session_overview(",
-        "AgentDao::session_exists(",
-        "AgentDao::update_title(",
-        "AgentDao::update_session_time(",
-        "AgentDao::rename_session(",
-        "AgentDao::update_working_dir(",
-        "AgentDao::update_execution_strategy("
+        "AgentDao::get_messages_tail(",
+        "AgentDao::get_messages_tail_page(",
+        "AgentDao::get_messages_before("
       ],
-      "allowedPaths": [
-        "lime-rs/crates/core/src/database/agent_session_repository.rs"
-      ]
+      "includePathPrefixes": [
+        "lime-rs/crates/agent/src",
+        "lime-rs/crates/services/src",
+        "lime-rs/crates/app-server/src",
+        "lime-rs/crates/websocket/src"
+      ],
+      "allowedPaths": []
     },
     {
       "id": "rust-agent-session-direct-delete",

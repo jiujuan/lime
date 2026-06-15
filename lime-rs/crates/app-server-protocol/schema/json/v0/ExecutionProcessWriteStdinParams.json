@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "data": {
+      "type": "string"
+    },
+    "processId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "data",
+    "processId"
+  ],
+  "title": "ExecutionProcessWriteStdinParams",
+  "type": "object"
+}

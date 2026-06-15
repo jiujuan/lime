@@ -13,6 +13,10 @@ export interface CanvasWorkbenchToolTabProjectionInput {
   changeItemCount: number;
   documentDiffLineCount: number;
   failedChangeItemCount: number;
+  utilityTabs?: {
+    outputs?: boolean;
+    logs?: boolean;
+  };
   openedToolTabs: CanvasWorkbenchOpenedToolTab[];
   translateWorkbench: CanvasWorkbenchTranslation;
 }
@@ -26,6 +30,7 @@ export function buildCanvasWorkbenchToolTabProjection({
   changeItemCount,
   documentDiffLineCount,
   failedChangeItemCount,
+  utilityTabs,
   openedToolTabs,
   translateWorkbench,
 }: CanvasWorkbenchToolTabProjectionInput): CanvasWorkbenchToolTabProjection {
@@ -52,6 +57,7 @@ export function buildCanvasWorkbenchToolTabProjection({
               ? "sky"
               : "slate",
       },
+      ...buildCodingUtilityTabs(utilityTabs, translateWorkbench),
       ...openedToolTabs.map((tab) =>
         buildCanvasWorkbenchToolTab(tab, translateWorkbench),
       ),
@@ -82,6 +88,32 @@ export function buildCanvasWorkbenchToolTabProjection({
       },
     ],
   };
+}
+
+function buildCodingUtilityTabs(
+  utilityTabs: CanvasWorkbenchToolTabProjectionInput["utilityTabs"],
+  translateWorkbench: CanvasWorkbenchTranslation,
+): CanvasWorkbenchTopTab[] {
+  const tabs: CanvasWorkbenchTopTab[] = [];
+  if (utilityTabs?.outputs) {
+    tabs.push({
+      key: "outputs",
+      label: translateCanvasWorkbenchText(
+        translateWorkbench,
+        "agentChat.canvasWorkbench.coding.tabs.outputs",
+      ),
+    });
+  }
+  if (utilityTabs?.logs) {
+    tabs.push({
+      key: "logs",
+      label: translateCanvasWorkbenchText(
+        translateWorkbench,
+        "agentChat.canvasWorkbench.coding.tabs.logs",
+      ),
+    });
+  }
+  return tabs;
 }
 
 function buildCanvasWorkbenchToolTab(

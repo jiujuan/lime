@@ -32,6 +32,7 @@ app-server-protocol.workspace = true
 app-server-transport.workspace = true
 lime-core.workspace = true
 lime-gateway.workspace = true
+lime-infra.workspace = true
 lime-agent.workspace = true
 lime-knowledge.workspace = true
 lime-media-runtime.workspace = true

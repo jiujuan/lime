@@ -81,6 +81,16 @@ function main() {
     "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs",
   ]);
 
+  runNodeSmoke("Coding Workbench Electron fixture", [
+    "scripts/electron/code-artifact-workbench-fixture-smoke.mjs",
+    "--scenario",
+    "gui-coding-input",
+    "--prefix",
+    "code-artifact-workbench-gui-coding-input-regression",
+    "--timeout-ms",
+    "180000",
+  ]);
+
   runNodeSmoke("Claw 停止后同会话继续输出 Electron fixture", [
     "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
     "--scenario",
@@ -92,7 +102,7 @@ function main() {
   ]);
 
   console.log(
-    `[${LOG_PREFIX}] summary: current Agent Runtime fixture regression 已覆盖 history/cache hydration、final_done 工具收尾、failed read model、Claw 终态 UI、Electron fixture guard、Claw GUI current fixture guard、停止后同会话继续输出 Electron fixture；liveProviderUsed=false`,
+    `[${LOG_PREFIX}] summary: current Agent Runtime fixture regression 已覆盖 history/cache hydration、final_done 工具收尾、failed read model、Claw 终态 UI、Electron fixture guard、真实 GUI coding 输入到 Coding Workbench Electron fixture、Claw GUI current fixture guard、停止后同会话继续输出 Electron fixture；liveProviderUsed=false`,
   );
   console.log(`\n[${LOG_PREFIX}] 通过`);
 }

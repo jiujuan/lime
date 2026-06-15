@@ -1,6 +1,6 @@
 use crate::ExecutionRequest;
 use crate::RuntimeCoreError;
-use aster::session::TurnContextOverride;
+use aster::session::{TurnContextOverride, TurnOutputSchemaSource};
 use lime_agent::{
     merge_system_prompt_with_request_tool_policy,
     merge_system_prompt_with_runtime_agents_for_project, resolve_request_tool_policy_with_mode,
@@ -539,16 +539,111 @@ pub(super) fn turn_context_from_request(
     if let Some(config_metadata) = config_metadata {
         metadata.insert("config".to_string(), config_metadata);
     }
+    if let Some(output_schema) = output_schema_from_request(request, host_request) {
+        context.output_schema = Some(output_schema);
+        context.output_schema_source = Some(TurnOutputSchemaSource::Turn);
+    }
     context.metadata = metadata;
     if context.approval_policy.is_none()
         && context.sandbox_policy.is_none()
         && context.user_visible_input_text.is_none()
+        && context.output_schema.is_none()
         && context.metadata.is_empty()
     {
         None
     } else {
         Some(context)
     }
+}
+
+fn output_schema_from_request(
+    request: &ExecutionRequest,
+    host_request: Option<&AsterChatRequestSnapshot>,
+) -> Option<Value> {
+    request
+        .output_schema
+        .clone()
+        .or_else(|| {
+            request
+                .structured_output
+                .as_ref()
+                .and_then(|value| value.schema.clone())
+        })
+        .or_else(|| output_schema_from_expected_output(request.expected_output.as_ref()))
+        .or_else(|| {
+            request
+                .runtime_options
+                .as_ref()
+                .and_then(|options| options.output_schema.clone())
+        })
+        .or_else(|| {
+            request
+                .runtime_options
+                .as_ref()
+                .and_then(|options| options.structured_output.as_ref())
+                .and_then(|value| value.schema.clone())
+        })
+        .or_else(|| {
+            request.runtime_options.as_ref().and_then(|options| {
+                output_schema_from_expected_output(options.expected_output.as_ref())
+            })
+        })
+        .or_else(|| host_request.and_then(host_output_schema).cloned())
+}
+
+fn host_output_schema(host: &AsterChatRequestSnapshot) -> Option<&Value> {
+    host_turn_config(host)
+        .and_then(|turn_config| turn_config.output_schema.as_ref())
+        .or_else(|| {
+            host_turn_config(host)
+                .and_then(|turn_config| turn_config.structured_output.as_ref())
+                .and_then(output_schema_from_structured_output_value)
+        })
+        .or_else(|| {
+            host_turn_config(host)
+                .and_then(|turn_config| turn_config.expected_output.as_ref())
+                .and_then(output_schema_from_expected_output_value)
+        })
+        .or(host.output_schema.as_ref())
+        .or_else(|| {
+            host.structured_output
+                .as_ref()
+                .and_then(output_schema_from_structured_output_value)
+        })
+        .or_else(|| {
+            host.expected_output
+                .as_ref()
+                .and_then(output_schema_from_expected_output_value)
+        })
+}
+
+fn output_schema_from_structured_output_value(value: &Value) -> Option<&Value> {
+    value
+        .get("schema")
+        .or_else(|| value.get("outputSchema"))
+        .or_else(|| value.get("output_schema"))
+}
+
+fn output_schema_from_expected_output(value: Option<&Value>) -> Option<Value> {
+    output_schema_from_expected_output_value(value?).cloned()
+}
+
+fn output_schema_from_expected_output_value(value: &Value) -> Option<&Value> {
+    if let Some(schema) = value
+        .get("outputFormat")
+        .or_else(|| value.get("output_format"))
+        .and_then(output_schema_from_output_format)
+    {
+        return Some(schema);
+    }
+    output_schema_from_output_format(value)
+}
+
+fn output_schema_from_output_format(value: &Value) -> Option<&Value> {
+    value
+        .get("schema")
+        .or_else(|| value.get("outputSchema"))
+        .or_else(|| value.get("output_schema"))
 }
 
 fn host_metadata_value(host: &AsterChatRequestSnapshot) -> Option<Value> {
@@ -605,6 +700,12 @@ pub(super) struct AsterChatRequestSnapshot {
     search_mode: Option<RequestToolPolicyMode>,
     #[serde(default, alias = "systemPrompt")]
     system_prompt: Option<String>,
+    #[serde(default, alias = "expectedOutput")]
+    expected_output: Option<Value>,
+    #[serde(default, alias = "structuredOutput")]
+    structured_output: Option<Value>,
+    #[serde(default, alias = "outputSchema")]
+    output_schema: Option<Value>,
     #[serde(default, alias = "turnId")]
     turn_id: Option<String>,
     #[serde(default)]
@@ -639,6 +740,12 @@ struct AgentTurnConfigSnapshot {
     workspace_root: Option<String>,
     #[serde(default, alias = "projectRoot")]
     project_root: Option<String>,
+    #[serde(default, alias = "expectedOutput")]
+    expected_output: Option<Value>,
+    #[serde(default, alias = "structuredOutput")]
+    structured_output: Option<Value>,
+    #[serde(default, alias = "outputSchema")]
+    output_schema: Option<Value>,
     #[serde(default)]
     metadata: Option<Value>,
 }

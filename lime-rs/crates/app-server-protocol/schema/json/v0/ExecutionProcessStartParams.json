@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "approvalPolicy": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "command": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "cwd": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "env": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "processId": {
+      "type": "string"
+    },
+    "runtimeMetadata": true,
+    "sandboxPolicy": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "toolId": {
+      "type": "string"
+    },
+    "toolName": {
+      "type": "string"
+    },
+    "workingDirectory": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "command",
+    "processId",
+    "toolId",
+    "toolName",
+    "workingDirectory"
+  ],
+  "title": "ExecutionProcessStartParams",
+  "type": "object"
+}

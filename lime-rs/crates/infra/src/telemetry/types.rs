@@ -37,7 +37,7 @@ impl std::fmt::Display for RequestStatus {
 /// 请求日志条目
 ///
 /// 记录每个 API 请求的详细信息，包括时间戳、Provider、模型、持续时间和状态
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RequestLog {
     /// 唯一请求 ID
     pub id: String,

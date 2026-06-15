@@ -21,6 +21,10 @@ import type { TeamMemorySnapshot } from "@/lib/teamMemorySync";
 import type { HarnessSessionState } from "../utils/harnessState";
 import { conversationProjectionStore } from "../projection/conversationProjectionStore";
 import { changeLimeLocale } from "@/i18n/createI18n";
+import type {
+  ExecutionPolicyFocusContext,
+  ProviderSettingsFocusContext,
+} from "@/types/page";
 
 const hoistedMocks = vi.hoisted(() => ({
   diffAgentRuntimeFileCheckpointMock: vi.fn(),
@@ -340,6 +344,10 @@ export function renderPanel(props?: {
   onLocatePendingRequest?: (requestId: string) => void;
   onPromoteQueuedTurn?: (queuedTurnId: string) => boolean | Promise<boolean>;
   onOpenMemoryWorkbench?: () => void;
+  onManageProviders?: (context?: ProviderSettingsFocusContext) => void;
+  onOpenExecutionPolicySettings?: (
+    context?: ExecutionPolicyFocusContext,
+  ) => void;
   harnessState?: HarnessSessionState | null;
   messages?: Message[];
   teamMemorySnapshot?: TeamMemorySnapshot | null;
@@ -374,6 +382,8 @@ export function renderPanel(props?: {
         onLocatePendingRequest={props?.onLocatePendingRequest}
         onPromoteQueuedTurn={props?.onPromoteQueuedTurn}
         onOpenMemoryWorkbench={props?.onOpenMemoryWorkbench}
+        onManageProviders={props?.onManageProviders}
+        onOpenExecutionPolicySettings={props?.onOpenExecutionPolicySettings}
         harnessState={props?.harnessState}
         messages={props?.messages}
         teamMemorySnapshot={props?.teamMemorySnapshot}

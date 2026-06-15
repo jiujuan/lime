@@ -76,6 +76,12 @@ import {
   METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE,
   METHOD_CONNECT_RELAY_API_KEY_SAVE,
   METHOD_EVIDENCE_EXPORT,
+  METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT,
+  METHOD_EXECUTION_PROCESS_INTERRUPT,
+  METHOD_EXECUTION_PROCESS_START,
+  METHOD_EXECUTION_PROCESS_STATUS,
+  METHOD_EXECUTION_PROCESS_TERMINATE,
+  METHOD_EXECUTION_PROCESS_WRITE_STDIN,
   METHOD_FILE_SYSTEM_CREATE_DIRECTORY,
   METHOD_FILE_SYSTEM_CREATE_FILE,
   METHOD_FILE_SYSTEM_DELETE_FILE,
@@ -387,6 +393,14 @@ import {
   type ConnectOpenDeepLinkResolveResponse,
   type ConnectRelayApiKeySaveParams,
   type ConnectRelayApiKeySaveResponse,
+  type ExecutionProcessDrainOutputParams,
+  type ExecutionProcessDrainOutputResponse,
+  type ExecutionProcessEmptyResponse,
+  type ExecutionProcessIdParams,
+  type ExecutionProcessStartParams,
+  type ExecutionProcessStartResponse,
+  type ExecutionProcessStatusResponse,
+  type ExecutionProcessWriteStdinParams,
   type EvidenceExportParams,
   type EvidenceExportResponse,
   type FileSystemCreateDirectoryParams,
@@ -662,6 +676,13 @@ export const DEFAULT_PROTOCOL_SCHEMA_MANIFEST_NAME = "manifest.json";
 export type SidecarLaunchConfig = {
   binaryPath: string;
   listenUrl: string;
+  dataDir?: string;
+  legacyMessageCleanup?: "retain" | "clear-rows" | "drop-empty-tables";
+  productDbMigrationCleanup?:
+    | "retain"
+    | "clear-rows"
+    | "drop-tables"
+    | "delete-file";
   backendMode?: "external" | "runtime" | "mock" | "unavailable";
   backendCommand?: string;
   backendArgs?: string[];
@@ -697,6 +718,9 @@ export type ResolveSidecarFromManifestOptions =
     backendArgs?: string[];
     backendTimeoutMs?: number;
     appPolicyPath?: string;
+    dataDir?: string;
+    legacyMessageCleanup?: SidecarLaunchConfig["legacyMessageCleanup"];
+    productDbMigrationCleanup?: SidecarLaunchConfig["productDbMigrationCleanup"];
     expectedProtocolVersion?: string;
   };
 
@@ -832,6 +856,8 @@ export type AppServerRequestOptions = {
   timeoutMs?: number;
 };
 
+const APP_SERVER_TRANSPORT_READ_SLICE_MS = 250;
+
 export type AppServerRequestResult<T> = {
   id: RequestId;
   result: T;
@@ -839,6 +865,15 @@ export type AppServerRequestResult<T> = {
   notifications: JsonRpcNotification[];
   messages: JsonRpcMessage[];
 };
+
+export type AppServerRequestFirstMessageResult<T> =
+  | (AppServerRequestResult<T> & { completed: true })
+  | {
+      id: RequestId;
+      completed: false;
+      notifications: JsonRpcNotification[];
+      messages: JsonRpcMessage[];
+    };
 
 export class AppServerRequestError extends Error {
   readonly id: RequestId;
@@ -1854,6 +1889,34 @@ export class AppServerClient {
     return this.request(METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS, params);
   }
 
+  startExecutionProcess(params: ExecutionProcessStartParams): JsonRpcRequest {
+    return this.request(METHOD_EXECUTION_PROCESS_START, params);
+  }
+
+  writeExecutionProcessStdin(
+    params: ExecutionProcessWriteStdinParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_EXECUTION_PROCESS_WRITE_STDIN, params);
+  }
+
+  interruptExecutionProcess(params: ExecutionProcessIdParams): JsonRpcRequest {
+    return this.request(METHOD_EXECUTION_PROCESS_INTERRUPT, params);
+  }
+
+  terminateExecutionProcess(params: ExecutionProcessIdParams): JsonRpcRequest {
+    return this.request(METHOD_EXECUTION_PROCESS_TERMINATE, params);
+  }
+
+  readExecutionProcessStatus(params: ExecutionProcessIdParams): JsonRpcRequest {
+    return this.request(METHOD_EXECUTION_PROCESS_STATUS, params);
+  }
+
+  drainExecutionProcessOutput(
+    params: ExecutionProcessDrainOutputParams = {},
+  ): JsonRpcRequest {
+    return this.request(METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT, params);
+  }
+
   exportEvidence(params: EvidenceExportParams): JsonRpcRequest {
     return this.request(METHOD_EVIDENCE_EXPORT, params);
   }
@@ -2066,12 +2129,29 @@ export class AppServerClient {
   }
 }
 
+function remainingRequestTimeoutMs(
+  timeoutMs: number | undefined,
+  startedAt: number,
+): number | undefined {
+  if (timeoutMs === undefined) {
+    return undefined;
+  }
+  const elapsedMs = Date.now() - startedAt;
+  if (elapsedMs >= timeoutMs) {
+    throw new Error(
+      `timed out waiting for app-server message after ${timeoutMs}ms`,
+    );
+  }
+  return Math.max(1, timeoutMs - elapsedMs);
+}
+
 export class AppServerConnection {
   readonly client: AppServerClient;
   readonly transport: AppServerMessageTransport;
 
   #bufferedMessages: JsonRpcMessage[] = [];
   #mirroredNotifications: JsonRpcNotification[] = [];
+  #detachedRequestIds = new Set<RequestId>();
   #transportReadLock: Promise<void> = Promise.resolve();
 
   constructor(
@@ -4328,6 +4408,72 @@ export class AppServerConnection {
     );
   }
 
+  async startExecutionProcess(
+    params: ExecutionProcessStartParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ExecutionProcessStartResponse>> {
+    return await this.request<ExecutionProcessStartResponse>(
+      this.client.startExecutionProcess(params),
+      METHOD_EXECUTION_PROCESS_START,
+      options,
+    );
+  }
+
+  async writeExecutionProcessStdin(
+    params: ExecutionProcessWriteStdinParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ExecutionProcessEmptyResponse>> {
+    return await this.request<ExecutionProcessEmptyResponse>(
+      this.client.writeExecutionProcessStdin(params),
+      METHOD_EXECUTION_PROCESS_WRITE_STDIN,
+      options,
+    );
+  }
+
+  async interruptExecutionProcess(
+    params: ExecutionProcessIdParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ExecutionProcessStatusResponse>> {
+    return await this.request<ExecutionProcessStatusResponse>(
+      this.client.interruptExecutionProcess(params),
+      METHOD_EXECUTION_PROCESS_INTERRUPT,
+      options,
+    );
+  }
+
+  async terminateExecutionProcess(
+    params: ExecutionProcessIdParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ExecutionProcessStatusResponse>> {
+    return await this.request<ExecutionProcessStatusResponse>(
+      this.client.terminateExecutionProcess(params),
+      METHOD_EXECUTION_PROCESS_TERMINATE,
+      options,
+    );
+  }
+
+  async readExecutionProcessStatus(
+    params: ExecutionProcessIdParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ExecutionProcessStatusResponse>> {
+    return await this.request<ExecutionProcessStatusResponse>(
+      this.client.readExecutionProcessStatus(params),
+      METHOD_EXECUTION_PROCESS_STATUS,
+      options,
+    );
+  }
+
+  async drainExecutionProcessOutput(
+    params: ExecutionProcessDrainOutputParams = {},
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ExecutionProcessDrainOutputResponse>> {
+    return await this.request<ExecutionProcessDrainOutputResponse>(
+      this.client.drainExecutionProcessOutput(params),
+      METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT,
+      options,
+    );
+  }
+
   async exportEvidence(
     params: EvidenceExportParams,
     options: AppServerRequestOptions = {},
@@ -4591,6 +4737,69 @@ export class AppServerConnection {
     return await this.waitForResponse<T>(requestMessage.id, method, options);
   }
 
+  async requestUntilFirstNotificationOrResponse<T>(
+    requestMessage: JsonRpcRequest,
+    method = requestMessage.method,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestFirstMessageResult<T>> {
+    this.transport.send(requestMessage);
+    const messages: JsonRpcMessage[] = [];
+    const notifications: JsonRpcNotification[] = [];
+
+    try {
+      const message = await this.#nextMessageForRequest(
+        requestMessage.id,
+        options.timeoutMs,
+      );
+      messages.push(message);
+
+      if (isJsonRpcNotification(message)) {
+        notifications.push(message);
+        this.#mirroredNotifications.push(message);
+        this.#detachedRequestIds.add(requestMessage.id);
+        return {
+          id: requestMessage.id,
+          completed: false,
+          notifications,
+          messages,
+        };
+      }
+
+      if (isJsonRpcErrorResponse(message) && message.id === requestMessage.id) {
+        throw new AppServerRequestError(
+          method,
+          message,
+          [...notifications],
+          [...messages],
+        );
+      }
+
+      if (isJsonRpcResponse(message) && message.id === requestMessage.id) {
+        return {
+          id: requestMessage.id,
+          result: message.result as T,
+          response: message,
+          notifications,
+          messages,
+          completed: true,
+        };
+      }
+
+      this.#detachedRequestIds.add(requestMessage.id);
+      return {
+        id: requestMessage.id,
+        completed: false,
+        notifications,
+        messages,
+      };
+    } catch (error) {
+      if (isAppServerTransportReadTimeoutError(error)) {
+        this.#detachedRequestIds.add(requestMessage.id);
+      }
+      throw error;
+    }
+  }
+
   async waitForResponse<T>(
     id: RequestId,
     method: string,
@@ -4598,12 +4807,17 @@ export class AppServerConnection {
   ): Promise<AppServerRequestResult<T>> {
     const messages: JsonRpcMessage[] = [];
     const notifications: JsonRpcNotification[] = [];
+    const startedAt = Date.now();
 
     try {
       for (;;) {
+        const remainingTimeoutMs = remainingRequestTimeoutMs(
+          options.timeoutMs,
+          startedAt,
+        );
         const message = await this.#nextMessageForRequest(
           id,
-          options.timeoutMs,
+          remainingTimeoutMs,
         );
         messages.push(message);
 
@@ -4648,6 +4862,9 @@ export class AppServerConnection {
         timeoutMs,
         () => this.#shiftBufferedNotification(),
         (message) => {
+          if (this.#consumeDetachedRequestMessage(message)) {
+            return undefined;
+          }
           if (isJsonRpcNotification(message)) {
             return message;
           }
@@ -4662,15 +4879,21 @@ export class AppServerConnection {
   }
 
   async nextMessage(timeoutMs?: number): Promise<JsonRpcMessage> {
-    const buffered = this.#bufferedMessages.shift();
-    if (buffered) {
-      return buffered;
+    for (;;) {
+      const buffered = this.#shiftBufferedMessage();
+      if (buffered) {
+        return buffered;
+      }
+      const message = await this.#withTransportRead<JsonRpcMessage | undefined>(
+        timeoutMs,
+        () => this.#shiftBufferedMessage(),
+        (incoming) =>
+          this.#consumeDetachedRequestMessage(incoming) ? undefined : incoming,
+      );
+      if (message) {
+        return message;
+      }
     }
-    return await this.#withTransportRead(
-      timeoutMs,
-      () => this.#bufferedMessages.shift(),
-      (message) => message,
-    );
   }
 
   async #nextMessageForRequest(
@@ -4689,21 +4912,44 @@ export class AppServerConnection {
         timeoutMs === undefined
           ? undefined
           : Math.max(1, timeoutMs - (Date.now() - startedAt));
-      const message = await this.#withTransportRead<JsonRpcMessage | undefined>(
-        remainingTimeoutMs,
-        () => this.#shiftBufferedRequestMessage(id),
-        (incoming) => {
-          if (
-            isJsonRpcNotification(incoming) ||
-            (isJsonRpcResponse(incoming) && incoming.id === id) ||
-            (isJsonRpcErrorResponse(incoming) && incoming.id === id)
-          ) {
-            return incoming;
-          }
-          this.#prependBufferedMessages([incoming]);
-          return undefined;
-        },
-      );
+      const readTimeoutMs =
+        remainingTimeoutMs === undefined
+          ? APP_SERVER_TRANSPORT_READ_SLICE_MS
+          : Math.min(remainingTimeoutMs, APP_SERVER_TRANSPORT_READ_SLICE_MS);
+      let message: JsonRpcMessage | undefined;
+      try {
+        message = await this.#withTransportRead<JsonRpcMessage | undefined>(
+          readTimeoutMs,
+          () => this.#shiftBufferedRequestMessage(id),
+          (incoming) => {
+            if (this.#consumeDetachedRequestMessage(incoming)) {
+              return undefined;
+            }
+            if (isJsonRpcNotification(incoming)) {
+              return incoming;
+            }
+            if (isJsonRpcResponse(incoming) && incoming.id === id) {
+              return incoming;
+            }
+            if (isJsonRpcErrorResponse(incoming) && incoming.id === id) {
+              return incoming;
+            }
+            this.#prependBufferedMessages([incoming]);
+            return undefined;
+          },
+        );
+      } catch (error) {
+        if (!isAppServerTransportReadTimeoutError(error)) {
+          throw error;
+        }
+        if (timeoutMs !== undefined && Date.now() - startedAt >= timeoutMs) {
+          throw new Error(
+            `timed out waiting for app-server message after ${timeoutMs}ms`,
+          );
+        }
+        await this.#yieldReadTurn();
+        continue;
+      }
 
       if (message) {
         return message;
@@ -4717,10 +4963,28 @@ export class AppServerConnection {
     if (messages.length === 0) {
       return;
     }
-    this.#bufferedMessages = [...messages, ...this.#bufferedMessages];
+    const retained = messages.filter(
+      (message) => !this.#consumeDetachedRequestMessage(message),
+    );
+    if (retained.length === 0) {
+      return;
+    }
+    this.#bufferedMessages = [...retained, ...this.#bufferedMessages];
+  }
+
+  #shiftBufferedMessage(): JsonRpcMessage | undefined {
+    while (this.#bufferedMessages.length > 0) {
+      const message = this.#bufferedMessages.shift();
+      if (message && !this.#consumeDetachedRequestMessage(message)) {
+        return message;
+      }
+    }
+    return undefined;
   }
 
   #shiftBufferedRequestMessage(id: RequestId): JsonRpcMessage | undefined {
+    this.#dropDetachedBufferedRequestMessages();
+
     const notificationIndex = this.#bufferedMessages.findIndex(
       isJsonRpcNotification,
     );
@@ -4747,12 +5011,30 @@ export class AppServerConnection {
     if (mirrored) {
       return mirrored;
     }
+    this.#dropDetachedBufferedRequestMessages();
     const index = this.#bufferedMessages.findIndex(isJsonRpcNotification);
     if (index < 0) {
       return undefined;
     }
     const [message] = this.#bufferedMessages.splice(index, 1);
     return message as JsonRpcNotification;
+  }
+
+  #dropDetachedBufferedRequestMessages(): void {
+    this.#bufferedMessages = this.#bufferedMessages.filter(
+      (message) => !this.#consumeDetachedRequestMessage(message),
+    );
+  }
+
+  #consumeDetachedRequestMessage(message: JsonRpcMessage): boolean {
+    if (
+      (isJsonRpcResponse(message) || isJsonRpcErrorResponse(message)) &&
+      this.#detachedRequestIds.has(message.id)
+    ) {
+      this.#detachedRequestIds.delete(message.id);
+      return true;
+    }
+    return false;
   }
 
   async #withTransportRead<T>(
@@ -4783,6 +5065,13 @@ export class AppServerConnection {
       setTimeout(resolve, 0);
     });
   }
+}
+
+function isAppServerTransportReadTimeoutError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message.includes("timed out waiting for app-server message after")
+  );
 }
 
 export class AppServerAgentEventRouter {
@@ -4982,12 +5271,18 @@ export function resolveSidecarBinaryPath(
 export function stdioSidecar(
   binaryPath: string,
   appPolicyPath?: string,
+  dataDir?: string,
+  legacyMessageCleanup?: SidecarLaunchConfig["legacyMessageCleanup"],
+  productDbMigrationCleanup?: SidecarLaunchConfig["productDbMigrationCleanup"],
 ): SidecarLaunchConfig {
   return {
     binaryPath,
     listenUrl: DEFAULT_LISTEN_URL,
     backendMode: DEFAULT_STANDALONE_BACKEND_MODE,
     ...(appPolicyPath ? { appPolicyPath } : {}),
+    ...(dataDir ? { dataDir } : {}),
+    ...(legacyMessageCleanup ? { legacyMessageCleanup } : {}),
+    ...(productDbMigrationCleanup ? { productDbMigrationCleanup } : {}),
   };
 }
 
@@ -4997,12 +5292,18 @@ export function sidecarFromReleaseArtifact(
   listenUrl = DEFAULT_LISTEN_URL,
   backendMode: SidecarLaunchConfig["backendMode"] = DEFAULT_STANDALONE_BACKEND_MODE,
   appPolicyPath?: string,
+  dataDir?: string,
+  legacyMessageCleanup?: SidecarLaunchConfig["legacyMessageCleanup"],
+  productDbMigrationCleanup?: SidecarLaunchConfig["productDbMigrationCleanup"],
 ): SidecarLaunchConfig {
   return {
     binaryPath,
     listenUrl,
     backendMode,
     ...(appPolicyPath ? { appPolicyPath } : {}),
+    ...(dataDir ? { dataDir } : {}),
+    ...(legacyMessageCleanup ? { legacyMessageCleanup } : {}),
+    ...(productDbMigrationCleanup ? { productDbMigrationCleanup } : {}),
     expectedSha256: artifact.sha256,
     artifact,
   };
@@ -5030,6 +5331,18 @@ export function sidecarArgs(config: SidecarLaunchConfig): string[] {
   }
   if (config.appPolicyPath) {
     args.push("--app-policy", config.appPolicyPath);
+  }
+  if (config.dataDir) {
+    args.push("--data-dir", config.dataDir);
+  }
+  if (config.legacyMessageCleanup) {
+    args.push("--legacy-message-cleanup", config.legacyMessageCleanup);
+  }
+  if (config.productDbMigrationCleanup) {
+    args.push(
+      "--product-db-migration-cleanup",
+      config.productDbMigrationCleanup,
+    );
   }
   return args;
 }
@@ -5095,6 +5408,13 @@ export function resolveSidecarFromReleaseManifest(
         : {}),
       ...(options.appPolicyPath
         ? { appPolicyPath: options.appPolicyPath }
+        : {}),
+      ...(options.dataDir ? { dataDir: options.dataDir } : {}),
+      ...(options.legacyMessageCleanup
+        ? { legacyMessageCleanup: options.legacyMessageCleanup }
+        : {}),
+      ...(options.productDbMigrationCleanup
+        ? { productDbMigrationCleanup: options.productDbMigrationCleanup }
         : {}),
       expectedSha256:
         binaryPath.source === "resources" ? artifact.sha256 : undefined,
@@ -5486,6 +5806,7 @@ export class AppServerSidecar {
     timer: NodeJS.Timeout;
   }> = [];
   #closed = false;
+  #closedError: Error | null = null;
 
   constructor(child: ChildProcessWithoutNullStreams) {
     this.child = child;
@@ -5494,17 +5815,19 @@ export class AppServerSidecar {
 
     this.#stdout.on("line", (line) => this.#receiveLine(line));
     this.#stderr.on("line", (line) => this.stderrLines.push(line));
-    child.once("error", (error) => this.#rejectWaiters(error));
-    child.once("exit", (code, signal) => {
-      this.#closed = true;
-      if (this.#waiters.length > 0) {
-        this.#rejectWaiters(
-          new Error(
-            `app-server exited before next message: code=${code}, signal=${signal}`,
-          ),
-        );
-      }
-    });
+    child.stdin.on("error", (error) =>
+      this.#markClosedWithError(
+        normalizeSidecarStdinError(error, "app-server sidecar stdin error"),
+      ),
+    );
+    child.once("error", (error) => this.#markClosedWithError(error));
+    child.once("exit", (code, signal) =>
+      this.#markClosedWithError(
+        new Error(
+          `app-server exited before next message: code=${code}, signal=${signal}`,
+        ),
+      ),
+    );
   }
 
   send(message: JsonRpcMessage): void {
@@ -5515,7 +5838,23 @@ export class AppServerSidecar {
     if (this.#closed || this.child.stdin.destroyed) {
       throw new Error("app-server sidecar stdin is closed");
     }
-    this.child.stdin.write(line);
+    try {
+      this.child.stdin.write(line, (error) => {
+        if (error) {
+          this.#markClosedWithError(
+            normalizeSidecarStdinError(
+              error,
+              "app-server sidecar stdin write failed",
+            ),
+          );
+        }
+      });
+    } catch (error) {
+      throw normalizeSidecarStdinError(
+        error,
+        "app-server sidecar stdin write failed",
+      );
+    }
   }
 
   nextMessage(timeoutMs = 30_000): Promise<JsonRpcMessage> {
@@ -5524,7 +5863,9 @@ export class AppServerSidecar {
       return Promise.resolve(message);
     }
     if (this.#closed) {
-      return Promise.reject(new Error("app-server sidecar is closed"));
+      return Promise.reject(
+        this.#closedError ?? new Error("app-server sidecar is closed"),
+      );
     }
 
     return new Promise((resolve, reject) => {
@@ -5598,6 +5939,24 @@ export class AppServerSidecar {
       waiter.reject(error);
     }
   }
+
+  #markClosedWithError(error: Error): void {
+    this.#closed = true;
+    this.#closedError = error;
+    this.#rejectWaiters(error);
+  }
+}
+
+function normalizeSidecarStdinError(error: unknown, fallback: string): Error {
+  const message = error instanceof Error ? error.message : String(error || "");
+  if (
+    message.includes("EPIPE") ||
+    message.includes("ERR_STREAM_DESTROYED") ||
+    message.includes("write after end")
+  ) {
+    return new Error("app-server sidecar stdin is closed");
+  }
+  return error instanceof Error ? error : new Error(fallback);
 }
 
 function normalizeSha256(value: string): string {

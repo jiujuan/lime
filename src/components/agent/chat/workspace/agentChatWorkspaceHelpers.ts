@@ -11,6 +11,7 @@ import { isHiddenInternalArtifactPath } from "../utils/internalArtifactVisibilit
 import { asRecord } from "./browserAssistArtifact";
 import { shouldAutoSelectGeneralArtifact } from "./generalArtifactAutoSelection";
 import { doesWorkspaceFileCandidateMatch } from "./workspaceFilePathMatch";
+import { normalizeProjectId } from "../utils/topicProjectResolution";
 
 export const GENERAL_BROWSER_ASSIST_PROFILE_KEY = "general_browser_assist";
 export const BLANK_HOME_DEFERRED_LOAD_MS = 18_000;
@@ -80,6 +81,12 @@ export interface PendingSessionRecentMetadataSync {
   rejecters: Array<(error: unknown) => void>;
 }
 
+export function resolveRuntimeWorkspaceId(
+  projectId: string | null | undefined,
+): string {
+  return normalizeProjectId(projectId) ?? "";
+}
+
 export function areStringArraysEqual(
   left: string[] | null,
   right: string[],
@@ -133,6 +140,26 @@ export function isTransientWorkspaceBridgeError(message: string): boolean {
     normalized.includes("bridge health check failed") ||
     normalized.includes("bridge cooldown active")
   );
+}
+
+export function shouldAutoRecoverWorkspacePathMissing(
+  project:
+    | {
+        workspaceType?: string | null;
+      }
+    | null
+    | undefined,
+  workspacePathMissing: unknown,
+): boolean {
+  if (
+    !workspacePathMissing ||
+    typeof workspacePathMissing !== "object" ||
+    Array.isArray(workspacePathMissing)
+  ) {
+    return false;
+  }
+
+  return project?.workspaceType === "temporary";
 }
 
 export function loadFileManagerSidebarOpen(): boolean {
@@ -204,9 +231,9 @@ export function resolveTaskCenterHomeSurfaceState({
   );
   const shouldRenderEmbeddedHome = Boolean(
     agentEntry === "claw" &&
-      !sessionSwitchPending &&
-      !hasConversationActivity &&
-      (draftSurfaceActive || hasEmbeddedHomeSession),
+    !sessionSwitchPending &&
+    !hasConversationActivity &&
+    (draftSurfaceActive || hasEmbeddedHomeSession),
   );
   const shouldHideCurrentSessionContent =
     sessionSwitchPending || shouldSuppressDraftContent;
@@ -217,7 +244,9 @@ export function resolveTaskCenterHomeSurfaceState({
     isRestoringSession:
       !shouldSuppressDraftContent &&
       (isAutoRestoringSession || isSessionHydrating || sessionSwitchPending),
-    sceneSessionId: shouldHideCurrentSessionContent ? null : (sessionId ?? null),
+    sceneSessionId: shouldHideCurrentSessionContent
+      ? null
+      : (sessionId ?? null),
   };
 }
 

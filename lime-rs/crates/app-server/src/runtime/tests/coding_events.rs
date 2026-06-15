@@ -141,8 +141,8 @@ async fn append_external_runtime_events_accepts_coding_lifecycle() {
     assert_eq!(appended.len(), 8);
     assert_eq!(appended[0].event_type, "file.changed");
     assert_eq!(appended[7].event_type, "test.completed");
-    assert_eq!(appended[0].sequence, 2);
-    assert_eq!(appended[7].sequence, 9);
+    assert_eq!(appended[0].sequence, 3);
+    assert_eq!(appended[7].sequence, 10);
 }
 
 #[tokio::test]
@@ -159,10 +159,28 @@ async fn read_model_projects_active_coding_activity_and_pending_action() {
         Some(&turn_id),
         vec![
             RuntimeEvent::new(
+                "patch.started",
+                json!({
+                    "patchId": "patch_active",
+                    "paths": ["src/App.tsx"]
+                }),
+            ),
+            RuntimeEvent::new(
+                "file.changed",
+                json!({
+                    "path": "src/App.tsx",
+                    "artifactId": "artifact_app_tsx"
+                }),
+            ),
+            RuntimeEvent::new(
                 "command.started",
                 json!({
                     "commandId": "cmd_active",
                     "command": "npm test",
+                    "canonicalCommand": "npm test",
+                    "commandSummary": "npm test",
+                    "commandArgv": ["npm", "test"],
+                    "commandArgvSource": "argv",
                     "cwd": "."
                 }),
             ),
@@ -178,6 +196,9 @@ async fn read_model_projects_active_coding_activity_and_pending_action() {
                 json!({
                     "testRunId": "test_active",
                     "commandId": "cmd_active",
+                    "command": "npm test",
+                    "canonicalCommand": "npm test",
+                    "commandSummary": "npm test",
                     "suite": "unit"
                 }),
             ),
@@ -210,11 +231,22 @@ async fn read_model_projects_active_coding_activity_and_pending_action() {
     assert_eq!(thread_read["active_test_run_id"], "test_active");
     assert_eq!(thread_read["active_action_id"], "action_active");
     assert_eq!(thread_read["diagnostics"]["pending_request_count"], 1);
+    assert_eq!(thread_read["diagnostics"]["changed_file_count"], 1);
+    assert_eq!(thread_read["diagnostics"]["patch_count"], 1);
+    assert_eq!(thread_read["change_summary"]["changed_file_count"], 1);
+    assert_eq!(
+        thread_read["change_summary"]["changed_files"][0],
+        "src/App.tsx"
+    );
+    assert_eq!(thread_read["change_summary"]["running_patch_count"], 1);
 
     let commands = thread_read["commands"].as_array().expect("commands");
     assert_eq!(commands.len(), 1);
     assert_eq!(commands[0]["command_id"], "cmd_active");
     assert_eq!(commands[0]["status"], "running");
+    assert_eq!(commands[0]["canonical_command"], "npm test");
+    assert_eq!(commands[0]["command_summary"], "npm test");
+    assert_eq!(commands[0]["command_argv"][0], "npm");
     assert_eq!(commands[0]["output_refs"][0], "output://cmd_active");
 
     let tests = thread_read["tests"].as_array().expect("tests");
@@ -222,6 +254,8 @@ async fn read_model_projects_active_coding_activity_and_pending_action() {
     assert_eq!(tests[0]["test_run_id"], "test_active");
     assert_eq!(tests[0]["status"], "running");
     assert_eq!(tests[0]["command_id"], "cmd_active");
+    assert_eq!(tests[0]["canonical_command"], "npm test");
+    assert_eq!(tests[0]["command_summary"], "npm test");
 
     let pending_requests = thread_read["pending_requests"]
         .as_array()
@@ -355,6 +389,7 @@ async fn coding_file_changed_artifact_refs_join_read_model_and_evidence() {
                 "path": "src/App.tsx",
                 "artifactId": "artifact_src_app_after",
                 "artifactRefs": ["artifact_src_app_after", "artifact_src_app_before"],
+                "changeKind": "modified",
                 "checkpointRef": "checkpoint_src_app_after",
                 "contentRef": "content://src-app-after",
                 "diffRef": "diff://src-app",
@@ -375,6 +410,30 @@ async fn coding_file_changed_artifact_refs_join_read_model_and_evidence() {
         artifact["artifactRef"].as_str() == Some("artifact_src_app_before")
             && artifact["path"].as_str() == Some("src/App.tsx")
     }));
+    let app_artifact = artifacts
+        .iter()
+        .find(|artifact| artifact["artifactRef"].as_str() == Some("artifact_src_app_after"))
+        .expect("app artifact");
+    assert_eq!(
+        app_artifact["metadata"]["previewText"].as_str(),
+        Some("changed App component")
+    );
+    assert_eq!(
+        app_artifact["metadata"]["changeKind"].as_str(),
+        Some("modified")
+    );
+    assert_eq!(
+        app_artifact["metadata"]["checkpointRef"].as_str(),
+        Some("checkpoint_src_app_after")
+    );
+    assert_eq!(
+        app_artifact["metadata"]["contentRef"].as_str(),
+        Some("content://src-app-after")
+    );
+    assert_eq!(
+        app_artifact["metadata"]["diffRef"].as_str(),
+        Some("diff://src-app")
+    );
 
     let artifact_read = core
         .read_artifacts(ArtifactReadParams {
@@ -394,6 +453,22 @@ async fn coding_file_changed_artifact_refs_join_read_model_and_evidence() {
     assert_eq!(
         artifact_read.artifacts[0].path.as_deref(),
         Some("src/App.tsx")
+    );
+    assert_eq!(
+        artifact_read.artifacts[0]
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get("previewText"))
+            .and_then(serde_json::Value::as_str),
+        Some("changed App component")
+    );
+    assert_eq!(
+        artifact_read.artifacts[0]
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get("diffRef"))
+            .and_then(serde_json::Value::as_str),
+        Some("diff://src-app")
     );
 
     let evidence = core
@@ -617,6 +692,25 @@ async fn tool_terminal_large_output_persists_to_filesystem_snapshot_owner() {
         .as_str()
         .expect("output ref")
         .to_string();
+    let event_sidecar_ref = appended[1].payload["sidecarRef"]
+        .as_object()
+        .expect("output sidecar ref")
+        .clone();
+    assert_eq!(
+        event_sidecar_ref
+            .get("kind")
+            .and_then(serde_json::Value::as_str),
+        Some("tool_output")
+    );
+    assert!(event_sidecar_ref
+        .get("relativePath")
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|value| value
+            .starts_with("sessions/sess_coding_output_snapshot_owner/runtime-outputs/")));
+    assert!(event_sidecar_ref
+        .get("sha256")
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|value| value.starts_with("sha256:")));
 
     let snapshot_file = {
         let state = core
@@ -637,11 +731,23 @@ async fn tool_terminal_large_output_persists_to_filesystem_snapshot_owner() {
             .clone()
             .expect("stored output snapshot file");
         assert!(snapshot_file.starts_with("runtime-outputs/"));
+        let sidecar_ref = output
+            .sidecar_ref
+            .as_ref()
+            .expect("stored output sidecar ref");
+        assert_eq!(sidecar_ref.kind, "tool_output");
+        assert_eq!(
+            sidecar_ref.relative_path,
+            event_sidecar_ref
+                .get("relativePath")
+                .and_then(serde_json::Value::as_str)
+                .expect("event sidecar relative path")
+        );
         snapshot_file
     };
     let snapshot_path = snapshot_root
+        .join("sessions")
         .join(session_id.as_str())
-        .join("files")
         .join(snapshot_file.as_str());
     assert_eq!(
         std::fs::read_to_string(snapshot_path).expect("stored output snapshot"),
@@ -654,6 +760,9 @@ async fn tool_terminal_large_output_persists_to_filesystem_snapshot_owner() {
     assert!(outputs.iter().any(|output| {
         output["outputRef"].as_str() == Some(output_ref.as_str())
             && output["outputSnapshotFile"].as_str() == Some(snapshot_file.as_str())
+            && output["sidecarRef"]["sha256"]
+                .as_str()
+                .is_some_and(|value| value.starts_with("sha256:"))
     }));
 
     let artifact_read = core
@@ -691,30 +800,30 @@ async fn start_turn_hydrates_persisted_coding_snapshot_refs_into_runtime_state()
     let workspace_root = unique_temp_dir("lime-runtime-hydrated-workspace");
     std::fs::create_dir_all(
         snapshot_root
+            .join("sessions")
             .join(session_id)
-            .join("files")
             .join("runtime-outputs"),
     )
     .expect("output snapshot dir");
     std::fs::create_dir_all(
         snapshot_root
+            .join("sessions")
             .join(session_id)
-            .join("files")
             .join("runtime-file-checkpoints"),
     )
     .expect("checkpoint snapshot dir");
     std::fs::write(
         snapshot_root
+            .join("sessions")
             .join(session_id)
-            .join("files")
             .join(output_snapshot_file),
         output_content.as_str(),
     )
     .expect("output snapshot");
     std::fs::write(
         snapshot_root
+            .join("sessions")
             .join(session_id)
-            .join("files")
             .join(checkpoint_snapshot_file),
         previous_content,
     )
@@ -978,6 +1087,17 @@ async fn file_changed_projects_to_file_checkpoint_api() {
         .expect("checkpoint snapshot file")
         .to_string();
     assert!(checkpoint_snapshot_file.starts_with("runtime-file-checkpoints/"));
+    assert!(file_changed_event.payload["sidecarRef"]["relativePath"]
+        .as_str()
+        .is_some_and(|value| value
+            .starts_with("sessions/sess_coding_file_checkpoint/runtime-file-checkpoints/")));
+    assert_eq!(
+        file_changed_event.payload["sidecarRef"]["kind"].as_str(),
+        Some("file_checkpoint")
+    );
+    assert!(file_changed_event.payload["sidecarRef"]["sha256"]
+        .as_str()
+        .is_some_and(|value| value.starts_with("sha256:")));
     assert!(
         file_changed_event.payload["change"]["previousContent"]
             .as_str()
@@ -991,8 +1111,8 @@ async fn file_changed_projects_to_file_checkpoint_api() {
     assert_eq!(
         std::fs::read_to_string(
             checkpoint_snapshot_root
+                .join("sessions")
                 .join("sess_coding_file_checkpoint")
-                .join("files")
                 .join(checkpoint_snapshot_file.as_str())
         )
         .expect("stored checkpoint snapshot"),
@@ -1243,6 +1363,7 @@ async fn start_turn_accepts_backend_emitted_coding_lifecycle() {
     assert_eq!(
         event_types,
         vec![
+            "message.created",
             "file.changed",
             "patch.started",
             "patch.applied",

@@ -173,7 +173,7 @@ pub struct AgentSession {
     pub title: Option<String>,
     /// 会话工作目录（对应 Workspace.root_path）
     pub working_dir: Option<String>,
-    /// 会话执行策略（react / code_orchestrated / auto）
+    /// 会话执行策略。current 主链只继续演进 react；code_orchestrated / auto 仅作为历史输入归一为 react。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub execution_strategy: Option<String>,
     /// 创建时间

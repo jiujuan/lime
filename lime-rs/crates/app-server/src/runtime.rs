@@ -3,12 +3,14 @@ mod app_data;
 mod artifact_content;
 mod artifact_projection;
 mod artifact_reader;
+mod artifact_sidecar;
 mod automation;
 mod backend;
 mod capabilities;
 mod coding_activity_projection;
 mod connect;
 mod diagnostics;
+mod event_log;
 mod event_store;
 mod evidence_provider;
 mod exports;
@@ -17,6 +19,8 @@ mod file_system;
 mod gateway;
 mod gateway_runner;
 mod knowledge;
+mod legacy_message_backfill;
+mod load_context;
 mod mcp;
 mod media_tasks;
 mod memory;
@@ -24,16 +28,21 @@ mod model_providers;
 mod objectives;
 mod output_refs;
 mod project_git;
+mod projection_repair;
+mod projection_store;
 mod read_model;
 mod service_projection;
 mod session_control;
 mod session_files;
 mod session_hydration;
 mod session_lifecycle;
+pub(crate) mod sidecar_store;
 mod skills;
 mod status;
+mod storage_roots;
 mod tool_lifecycle;
 mod turn_execution;
+mod turn_input_events;
 mod usage_stats;
 mod voice;
 mod workspaces;
@@ -67,14 +76,24 @@ pub use artifact_content::FilesystemArtifactContentProvider;
 pub use artifact_content::InlineArtifactContentProvider;
 pub use backend::MockBackend;
 pub use backend::UnavailableBackend;
+pub use event_log::EventLogRecord;
+pub use event_log::EventLogWriter;
 pub use evidence_provider::BasicEvidenceExportProvider;
 pub use evidence_provider::NoopEvidenceExportProvider;
+pub use legacy_message_backfill::LegacyAgentMessage;
+pub use legacy_message_backfill::LegacyAgentSessionTranscript;
 pub use output_refs::FilesystemOutputSnapshotStore;
 pub use output_refs::NoopOutputSnapshotStore;
 pub use output_refs::OutputSnapshotReadRequest;
 pub use output_refs::OutputSnapshotRecord;
 pub use output_refs::OutputSnapshotSaveRequest;
 pub use output_refs::OutputSnapshotStore;
+pub use projection_repair::ProjectionRepair;
+pub use projection_store::ProjectionStore;
+pub use sidecar_store::SidecarRef;
+pub use sidecar_store::SidecarStore;
+pub use sidecar_store::SidecarWriteRequest;
+pub use storage_roots::StorageRoots;
 
 use crate::CapabilityInventorySource;
 use crate::CapabilitySource;
@@ -95,6 +114,8 @@ use app_server_protocol::ManagedObjectiveStatus;
 use async_trait::async_trait;
 use chrono::SecondsFormat;
 use chrono::Utc;
+use lime_infra::telemetry::RequestLog;
+use lime_infra::telemetry::TelemetryStore;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -200,6 +221,7 @@ pub struct EvidencePackRequest {
     pub turns: Vec<AgentTurn>,
     pub events: Vec<AgentEvent>,
     pub artifacts: Vec<ArtifactSummary>,
+    pub request_logs: Vec<RequestLog>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -232,6 +254,9 @@ pub struct ExecutionRequest {
     pub turn: AgentTurn,
     pub input: app_server_protocol::AgentInput,
     pub runtime_options: Option<app_server_protocol::RuntimeOptions>,
+    pub expected_output: Option<serde_json::Value>,
+    pub structured_output: Option<app_server_protocol::StructuredOutputContract>,
+    pub output_schema: Option<serde_json::Value>,
     pub event_name: Option<String>,
     pub provider_preference: Option<String>,
     pub model_preference: Option<String>,
@@ -309,9 +334,14 @@ pub struct RuntimeCore {
     pub(in crate::runtime) artifact_content_provider: Arc<dyn ArtifactContentProvider>,
     pub(in crate::runtime) file_checkpoint_snapshot_store: Arc<dyn FileCheckpointSnapshotStore>,
     pub(in crate::runtime) output_snapshot_store: Arc<dyn OutputSnapshotStore>,
+    pub(in crate::runtime) sidecar_store: Option<Arc<SidecarStore>>,
+    pub(in crate::runtime) event_log_writer: Option<Arc<EventLogWriter>>,
+    pub(in crate::runtime) projection_store: Option<Arc<ProjectionStore>>,
+    pub(in crate::runtime) telemetry_store: Option<Arc<TelemetryStore>>,
     evidence_export_provider: Arc<dyn EvidenceExportProvider>,
     knowledge_builder_runtime_executor: Arc<dyn KnowledgeBuilderRuntimeExecutor>,
     app_data_source: Arc<dyn AppDataSource>,
+    pub(in crate::runtime) legacy_message_cleanup_policy: LegacyMessageCleanupPolicy,
 }
 
 #[derive(Clone)]
@@ -319,12 +349,50 @@ pub struct RuntimeCoreEventAppender {
     state: Arc<Mutex<RuntimeCoreState>>,
     file_checkpoint_snapshot_store: Arc<dyn FileCheckpointSnapshotStore>,
     output_snapshot_store: Arc<dyn OutputSnapshotStore>,
+    sidecar_store: Option<Arc<SidecarStore>>,
+    event_log_writer: Option<Arc<EventLogWriter>>,
+    projection_store: Option<Arc<ProjectionStore>>,
 }
 
 #[derive(Debug, Default)]
 pub(in crate::runtime) struct RuntimeCoreState {
     pub(in crate::runtime) sessions: HashMap<String, StoredSession>,
     agent_app_ui_runtimes: HashMap<String, agent_apps::AgentAppUiRuntimeProcess>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LegacyMessageCleanupPolicy {
+    Retain,
+    ClearRows,
+    DropEmptyTables,
+}
+
+impl Default for LegacyMessageCleanupPolicy {
+    fn default() -> Self {
+        Self::DropEmptyTables
+    }
+}
+
+impl LegacyMessageCleanupPolicy {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Retain => "retain",
+            Self::ClearRows => "clear-rows",
+            Self::DropEmptyTables => "drop-empty-tables",
+        }
+    }
+
+    pub fn parse(value: &str) -> Result<Self, String> {
+        let normalized = value.trim().to_ascii_lowercase();
+        match normalized.as_str() {
+            "retain" => Ok(Self::Retain),
+            "clear-rows" => Ok(Self::ClearRows),
+            "drop-empty-tables" => Ok(Self::DropEmptyTables),
+            _ => Err(format!(
+                "unsupported legacy message cleanup policy: {value}"
+            )),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -389,11 +457,16 @@ impl RuntimeCore {
             artifact_content_provider,
             file_checkpoint_snapshot_store: Arc::new(NoopFileCheckpointSnapshotStore),
             output_snapshot_store: Arc::new(NoopOutputSnapshotStore),
+            sidecar_store: None,
+            event_log_writer: None,
+            projection_store: None,
+            telemetry_store: None,
             evidence_export_provider,
             knowledge_builder_runtime_executor: Arc::new(
                 NativeKnowledgeBuilderRuntimeExecutor::new(),
             ),
             app_data_source: Arc::new(NoopAppDataSource),
+            legacy_message_cleanup_policy: LegacyMessageCleanupPolicy::default(),
         }
     }
 
@@ -418,6 +491,34 @@ impl RuntimeCore {
         self
     }
 
+    pub fn with_sidecar_store(mut self, sidecar_store: Arc<SidecarStore>) -> Self {
+        self.sidecar_store = Some(sidecar_store);
+        self
+    }
+
+    pub fn with_event_log_writer(mut self, event_log_writer: Arc<EventLogWriter>) -> Self {
+        self.event_log_writer = Some(event_log_writer);
+        self
+    }
+
+    pub fn with_projection_store(mut self, projection_store: Arc<ProjectionStore>) -> Self {
+        self.projection_store = Some(projection_store);
+        self
+    }
+
+    pub fn with_telemetry_store(mut self, telemetry_store: Arc<TelemetryStore>) -> Self {
+        self.telemetry_store = Some(telemetry_store);
+        self
+    }
+
+    pub fn with_legacy_message_cleanup_policy(
+        mut self,
+        policy: LegacyMessageCleanupPolicy,
+    ) -> Self {
+        self.legacy_message_cleanup_policy = policy;
+        self
+    }
+
     pub fn with_knowledge_builder_runtime_executor(
         mut self,
         executor: Arc<dyn KnowledgeBuilderRuntimeExecutor>,
@@ -431,6 +532,9 @@ impl RuntimeCore {
             state: self.state.clone(),
             file_checkpoint_snapshot_store: self.file_checkpoint_snapshot_store.clone(),
             output_snapshot_store: self.output_snapshot_store.clone(),
+            sidecar_store: self.sidecar_store.clone(),
+            event_log_writer: self.event_log_writer.clone(),
+            projection_store: self.projection_store.clone(),
         }
     }
 }

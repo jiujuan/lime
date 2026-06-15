@@ -236,19 +236,31 @@ impl RuntimeCore {
         &self,
         params: AgentSessionListParams,
     ) -> Result<AgentSessionListResponse, RuntimeCoreError> {
+        self.backfill_legacy_agent_messages_for_list(&params)
+            .await?;
         let mut sessions = self
             .app_data_source
             .list_current_timeline_sessions(params.clone())
             .await?
             .sessions;
-        let persisted_session_ids: HashSet<String> = sessions
+        let mut persisted_session_ids: HashSet<String> = sessions
             .iter()
             .map(|session| session.session_id.clone())
             .collect();
+        if let Some(projection_store) = self.projection_store.as_ref() {
+            let projected = projection_store
+                .list_session_overviews(&params)
+                .map_err(RuntimeCoreError::Backend)?;
+            for session in projected {
+                if persisted_session_ids.insert(session.session_id.clone()) {
+                    sessions.push(session);
+                }
+            }
+        }
         sessions.extend(
             self.list_runtime_core_session_overviews(&params)
                 .into_iter()
-                .filter(|session| !persisted_session_ids.contains(&session.session_id)),
+                .filter(|session| persisted_session_ids.insert(session.session_id.clone())),
         );
         sessions.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
         if let Some(limit) = params.limit.map(|value| value as usize) {
@@ -322,15 +334,9 @@ impl RuntimeCore {
         &self,
         params: AgentSessionReadParams,
     ) -> Result<AgentSessionReadResponse, RuntimeCoreError> {
-        match self.read_session(params.clone()) {
-            Ok(response) => Ok(response),
-            Err(RuntimeCoreError::SessionNotFound(_)) => self
-                .app_data_source
-                .read_current_timeline_session(params.clone())
-                .await?
-                .ok_or_else(|| RuntimeCoreError::SessionNotFound(params.session_id)),
-            Err(error) => Err(error),
-        }
+        self.load_session_current(params)
+            .await
+            .map(|context| context.response)
     }
 
     pub async fn update_session_current(
@@ -448,17 +454,15 @@ impl RuntimeCore {
             return Ok(());
         }
 
-        let response = self
-            .app_data_source
-            .read_current_timeline_session(AgentSessionReadParams {
+        let context = self
+            .load_session_current(AgentSessionReadParams {
                 session_id: session_id.to_string(),
                 history_limit: None,
                 history_offset: None,
                 history_before_message_id: None,
             })
-            .await?
-            .ok_or_else(|| RuntimeCoreError::SessionNotFound(session_id.to_string()))?;
-        self.insert_hydrated_session(response);
+            .await?;
+        self.insert_hydrated_session(context.response);
         Ok(())
     }
 

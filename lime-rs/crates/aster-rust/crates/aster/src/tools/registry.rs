@@ -581,6 +581,78 @@ impl ToolRegistry {
 // =============================================================================
 
 impl ToolRegistry {
+    /// Check tool permissions and return the params that should be used for execution.
+    ///
+    /// This is used by external process owners that need to keep the registry
+    /// permission model but own the process lifecycle themselves.
+    pub async fn check_tool_permissions(
+        &self,
+        name: &str,
+        params: serde_json::Value,
+        context: &ToolContext,
+        on_permission_request: Option<PermissionRequestCallback>,
+    ) -> Result<serde_json::Value, ToolError> {
+        let start_time = Instant::now();
+        let tool = self.get(name).ok_or_else(|| ToolError::not_found(name))?;
+        let permission_result = tool.check_permissions(&params, context).await;
+
+        match permission_result.behavior {
+            PermissionBehavior::Deny => {
+                let reason = permission_result
+                    .message
+                    .unwrap_or_else(|| format!("Permission denied for tool '{}'", name));
+                self.log_permission_denied(name, &params, context, &reason, start_time.elapsed());
+                return Err(ToolError::permission_denied(reason));
+            }
+            PermissionBehavior::Ask => {
+                if let Some(callback) = on_permission_request {
+                    let message = permission_result.message.unwrap_or_else(|| {
+                        format!("Tool '{}' requires permission to execute", name)
+                    });
+                    let approved = callback(name.to_string(), message.clone()).await;
+                    if !approved {
+                        self.log_permission_denied(
+                            name,
+                            &params,
+                            context,
+                            "User denied permission",
+                            start_time.elapsed(),
+                        );
+                        return Err(ToolError::permission_denied("User denied permission"));
+                    }
+                } else {
+                    let reason =
+                        "Permission request requires user confirmation but no callback provided";
+                    self.log_permission_denied(
+                        name,
+                        &params,
+                        context,
+                        reason,
+                        start_time.elapsed(),
+                    );
+                    return Err(ToolError::permission_denied(reason));
+                }
+            }
+            PermissionBehavior::Allow => {}
+        }
+
+        if let Some(ref permission_manager) = self.permission_manager {
+            let perm_context = self.create_permission_context(context);
+            let params_map = self.params_to_hashmap(&params);
+            let perm_result = permission_manager.is_allowed(name, &params_map, &perm_context);
+
+            if !perm_result.allowed {
+                let reason = perm_result
+                    .reason
+                    .unwrap_or_else(|| format!("Permission denied for tool '{}'", name));
+                self.log_permission_denied(name, &params, context, &reason, start_time.elapsed());
+                return Err(ToolError::permission_denied(reason));
+            }
+        }
+
+        Ok(permission_result.updated_params.unwrap_or(params))
+    }
+
     /// Execute a tool by name with permission checking and audit logging
     ///
     /// This method:
@@ -609,85 +681,12 @@ impl ToolRegistry {
         on_permission_request: Option<PermissionRequestCallback>,
     ) -> Result<ToolResult, ToolError> {
         let start_time = Instant::now();
-
-        // Step 1: Look up the tool
+        let params_to_use = self
+            .check_tool_permissions(name, params.clone(), context, on_permission_request)
+            .await?;
         let tool = self.get(name).ok_or_else(|| ToolError::not_found(name))?;
-
-        // Step 2: Check tool-level permissions
-        let permission_result = tool.check_permissions(&params, context).await;
-
-        // Handle tool-level permission check result
-        match permission_result.behavior {
-            PermissionBehavior::Deny => {
-                let reason = permission_result
-                    .message
-                    .unwrap_or_else(|| format!("Permission denied for tool '{}'", name));
-
-                // Log permission denial
-                self.log_permission_denied(name, &params, context, &reason, start_time.elapsed());
-
-                return Err(ToolError::permission_denied(reason));
-            }
-            PermissionBehavior::Ask => {
-                // Handle user confirmation request
-                if let Some(callback) = on_permission_request {
-                    let message = permission_result.message.unwrap_or_else(|| {
-                        format!("Tool '{}' requires permission to execute", name)
-                    });
-
-                    let approved = callback(name.to_string(), message.clone()).await;
-
-                    if !approved {
-                        self.log_permission_denied(
-                            name,
-                            &params,
-                            context,
-                            "User denied permission",
-                            start_time.elapsed(),
-                        );
-                        return Err(ToolError::permission_denied("User denied permission"));
-                    }
-                } else {
-                    // No callback provided, deny by default
-                    let reason =
-                        "Permission request requires user confirmation but no callback provided";
-                    self.log_permission_denied(
-                        name,
-                        &params,
-                        context,
-                        reason,
-                        start_time.elapsed(),
-                    );
-                    return Err(ToolError::permission_denied(reason));
-                }
-            }
-            PermissionBehavior::Allow => {
-                // Permission granted, continue
-            }
-        }
-
-        // Step 3: Check system-level permissions (if permission manager is configured)
-        if let Some(ref permission_manager) = self.permission_manager {
-            let perm_context = self.create_permission_context(context);
-            let params_map = self.params_to_hashmap(&params);
-            let perm_result = permission_manager.is_allowed(name, &params_map, &perm_context);
-
-            if !perm_result.allowed {
-                let reason = perm_result
-                    .reason
-                    .unwrap_or_else(|| format!("Permission denied for tool '{}'", name));
-
-                self.log_permission_denied(name, &params, context, &reason, start_time.elapsed());
-
-                return Err(ToolError::permission_denied(reason));
-            }
-        }
-
-        // Step 4: Execute the tool
-        let params_to_use = permission_result.updated_params.unwrap_or(params.clone());
         let result = tool.execute(params_to_use, context).await;
 
-        // Step 5: Log the execution
         let duration = start_time.elapsed();
         match &result {
             Ok(tool_result) => {

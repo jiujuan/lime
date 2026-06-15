@@ -1043,6 +1043,76 @@ export interface EvidencePackSummary {
   turnCount: number;
 }
 
+export interface ExecutionProcessDrainOutputParams {
+  limit?: number | null;
+  processId?: null | string;
+}
+
+export interface ExecutionProcessDrainOutputResponse {
+  deltas?: (ExecutionProcessOutputDelta)[];
+}
+
+export type ExecutionProcessEmptyResponse = Record<string, unknown>;
+
+export interface ExecutionProcessIdParams {
+  processId: string;
+}
+
+export interface ExecutionProcessOutputDelta {
+  bytes: number;
+  delta: string;
+  kind: ExecutionProcessOutputKind;
+  omittedBytes: number;
+  processId: string;
+  sequence: number;
+  toolId: string;
+  truncated: boolean;
+}
+
+export type ExecutionProcessOutputKind = "combined" | "stderr" | "stdout";
+
+export interface ExecutionProcessSnapshot {
+  elapsedMs: number;
+  exitCode?: number | null;
+  failure?: null | string;
+  outputBytes: number;
+  outputOmittedBytes: number;
+  outputTruncated: boolean;
+  processId: string;
+  retainedOutput: string;
+  status: ExecutionProcessStatus;
+  toolId: string;
+  toolName: string;
+}
+
+export interface ExecutionProcessStartParams {
+  approvalPolicy?: null | string;
+  command: (string)[];
+  cwd?: null | string;
+  env?: Record<string, unknown>;
+  processId: string;
+  runtimeMetadata?: unknown;
+  sandboxPolicy?: null | string;
+  toolId: string;
+  toolName: string;
+  workingDirectory: string;
+}
+
+export interface ExecutionProcessStartResponse {
+  snapshot: ExecutionProcessSnapshot;
+}
+
+export type ExecutionProcessStatus = "exited" | "failed" | "interrupted" | "running" | "starting" | "terminated";
+
+export interface ExecutionProcessStatusResponse {
+  snapshot: ExecutionProcessSnapshot;
+}
+
+export interface ExecutionProcessWriteStdinParams {
+  data: string;
+  processId: string;
+}
+
 export interface FileSystemCreateDirectoryParams {
   path: string;
 }
@@ -2230,12 +2300,15 @@ export interface RuntimeCapabilityManifest {
 export interface RuntimeOptions {
   capabilityId?: null | string;
   eventName?: null | string;
+  expectedOutput?: unknown;
   hostOptions?: unknown;
   metadata?: unknown;
   modelPreference?: null | string;
+  outputSchema?: unknown;
   providerPreference?: null | string;
   queuedTurnId?: null | string;
   stream?: boolean;
+  structuredOutput?: StructuredOutputContract | null;
 }
 
 export interface RuntimeResumeActionDecision {
@@ -2541,6 +2614,16 @@ export interface SkillScaffoldCreateParams {
 
 export interface SkillScaffoldCreateResponse {
   inspection: unknown;
+}
+
+export interface StructuredOutputContract {
+  failureSubtype?: null | string;
+  materializer?: unknown;
+  maxValidationRetries?: number | null;
+  metadata?: unknown;
+  schema?: unknown;
+  schemaRef?: null | string;
+  type?: null | string;
 }
 
 export interface SupportBundleExportResponse {

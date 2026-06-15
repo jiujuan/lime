@@ -3,6 +3,7 @@ mod agent_session;
 mod automation;
 mod connect;
 mod diagnostics;
+mod execution_process;
 mod file;
 mod gallery;
 mod gateway;
@@ -20,6 +21,7 @@ mod voice;
 mod wechat;
 mod workspace;
 
+use crate::execution_process::ExecutionProcessServer;
 use crate::project_shell::ProjectShellManager;
 use crate::AppServerError;
 use crate::RuntimeCore;
@@ -119,6 +121,12 @@ use app_server_protocol::METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT;
 use app_server_protocol::METHOD_DIAGNOSTICS_WINDOWS_STARTUP_READ;
 use app_server_protocol::METHOD_DISCORD_CHANNEL_PROBE;
 use app_server_protocol::METHOD_EVIDENCE_EXPORT;
+use app_server_protocol::METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT;
+use app_server_protocol::METHOD_EXECUTION_PROCESS_INTERRUPT;
+use app_server_protocol::METHOD_EXECUTION_PROCESS_START;
+use app_server_protocol::METHOD_EXECUTION_PROCESS_STATUS;
+use app_server_protocol::METHOD_EXECUTION_PROCESS_TERMINATE;
+use app_server_protocol::METHOD_EXECUTION_PROCESS_WRITE_STDIN;
 use app_server_protocol::METHOD_FEISHU_CHANNEL_PROBE;
 use app_server_protocol::METHOD_FILE_SYSTEM_CREATE_DIRECTORY;
 use app_server_protocol::METHOD_FILE_SYSTEM_CREATE_FILE;
@@ -316,6 +324,7 @@ pub struct RequestProcessor {
     state: Arc<Mutex<ProcessorState>>,
     runtime: Arc<RuntimeCore>,
     project_shell: ProjectShellManager,
+    execution_process: ExecutionProcessServer,
 }
 
 #[derive(Debug, Default)]
@@ -331,6 +340,7 @@ impl RequestProcessor {
             state: Arc::new(Mutex::new(ProcessorState::default())),
             runtime: Arc::new(runtime),
             project_shell: ProjectShellManager::default(),
+            execution_process: ExecutionProcessServer::default(),
         }
     }
 
@@ -414,6 +424,25 @@ impl RequestProcessor {
             }
             METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS => {
                 self.handle_project_shell_session_drain_events_impl(params)
+                    .await
+            }
+            METHOD_EXECUTION_PROCESS_START => {
+                self.handle_execution_process_start_impl(params).await
+            }
+            METHOD_EXECUTION_PROCESS_WRITE_STDIN => {
+                self.handle_execution_process_write_stdin_impl(params).await
+            }
+            METHOD_EXECUTION_PROCESS_INTERRUPT => {
+                self.handle_execution_process_interrupt_impl(params).await
+            }
+            METHOD_EXECUTION_PROCESS_TERMINATE => {
+                self.handle_execution_process_terminate_impl(params).await
+            }
+            METHOD_EXECUTION_PROCESS_STATUS => {
+                self.handle_execution_process_status_impl(params).await
+            }
+            METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT => {
+                self.handle_execution_process_drain_output_impl(params)
                     .await
             }
             METHOD_EVIDENCE_EXPORT => self.handle_evidence_export(params).await,
@@ -1391,6 +1420,7 @@ pub(super) fn to_jsonrpc_error(error: RuntimeCoreError) -> JsonRpcError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::SidecarStore;
     use app_server_protocol::AgentSessionStartParams;
     use app_server_protocol::CapabilityDescriptor;
     use app_server_protocol::ClientCapabilities;
@@ -1398,6 +1428,7 @@ mod tests {
     use app_server_protocol::RequestId;
     use serde_json::json;
     use std::sync::Arc;
+    use tokio::time::Duration;
 
     struct ScopedCapabilitySource;
 
@@ -1413,6 +1444,31 @@ mod tests {
                 methods: vec![METHOD_AGENT_SESSION_START.to_string()],
             }]
         }
+    }
+
+    async fn initialize_processor(processor: &RequestProcessor) {
+        processor
+            .handle_request(JsonRpcRequest::new(
+                RequestId::Integer(1),
+                METHOD_INITIALIZE,
+                Some(
+                    serde_json::to_value(InitializeParams {
+                        client_info: ClientInfo {
+                            name: "test-client".to_string(),
+                            title: None,
+                            version: None,
+                        },
+                        capabilities: ClientCapabilities::default(),
+                    })
+                    .expect("initialize params"),
+                ),
+            ))
+            .await
+            .expect("initialize");
+        processor.handle_notification(JsonRpcNotification::new(
+            METHOD_INITIALIZED,
+            Some(json!({})),
+        ));
     }
 
     #[tokio::test]
@@ -1491,8 +1547,120 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn execution_process_methods_start_drain_and_report_status() {
+        let processor = RequestProcessor::new(RuntimeCore::default());
+        initialize_processor(&processor).await;
+
+        let started = processor
+            .handle_request(JsonRpcRequest::new(
+                RequestId::Integer(10),
+                METHOD_EXECUTION_PROCESS_START,
+                Some(json!({
+                    "processId": "jsonrpc-process-test",
+                    "toolId": "tool-jsonrpc",
+                    "toolName": "Bash",
+                    "command": ["sh", "-c", "printf jsonrpc-process"],
+                    "workingDirectory": std::env::current_dir()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string(),
+                    "approvalPolicy": "never",
+                    "sandboxPolicy": "danger-full-access",
+                })),
+            ))
+            .await
+            .expect("execution process start response");
+        match &started[0] {
+            JsonRpcMessage::Response(response) => {
+                assert_eq!(
+                    response.result["snapshot"]["processId"],
+                    "jsonrpc-process-test"
+                );
+                assert_eq!(response.result["snapshot"]["status"], "running");
+            }
+            other => panic!("expected response, got {other:?}"),
+        }
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let drained = processor
+            .handle_request(JsonRpcRequest::new(
+                RequestId::Integer(11),
+                METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT,
+                Some(json!({
+                    "processId": "jsonrpc-process-test",
+                })),
+            ))
+            .await
+            .expect("execution process output response");
+        match &drained[0] {
+            JsonRpcMessage::Response(response) => {
+                let deltas = response.result["deltas"]
+                    .as_array()
+                    .expect("deltas should be an array");
+                assert!(deltas
+                    .iter()
+                    .any(|delta| delta["delta"].as_str() == Some("jsonrpc-process")));
+            }
+            other => panic!("expected response, got {other:?}"),
+        }
+
+        let status = processor
+            .handle_request(JsonRpcRequest::new(
+                RequestId::Integer(12),
+                METHOD_EXECUTION_PROCESS_STATUS,
+                Some(json!({
+                    "processId": "jsonrpc-process-test",
+                })),
+            ))
+            .await
+            .expect("execution process status response");
+        match &status[0] {
+            JsonRpcMessage::Response(response) => {
+                assert_eq!(response.result["snapshot"]["status"], "exited");
+            }
+            other => panic!("expected response, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn execution_process_start_rejects_workspace_sandbox_without_process_owner() {
+        let processor = RequestProcessor::new(RuntimeCore::default());
+        initialize_processor(&processor).await;
+
+        let response = processor
+            .handle_request(JsonRpcRequest::new(
+                RequestId::Integer(13),
+                METHOD_EXECUTION_PROCESS_START,
+                Some(json!({
+                    "processId": "jsonrpc-process-sandbox",
+                    "toolId": "tool-jsonrpc-sandbox",
+                    "toolName": "Bash",
+                    "command": ["sh", "-c", "printf blocked"],
+                    "workingDirectory": std::env::current_dir()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string(),
+                    "approvalPolicy": "never",
+                    "sandboxPolicy": "workspace-write",
+                })),
+            ))
+            .await
+            .expect("execution process sandbox rejection response");
+
+        match &response[0] {
+            JsonRpcMessage::Error(response) => {
+                assert!(response.error.message.contains("requires sandbox backend"));
+            }
+            other => panic!("expected response, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
     async fn artifact_read_requires_initialized_and_returns_artifact_summaries() {
-        let runtime = RuntimeCore::default();
+        let sidecar_root = tempfile::tempdir().expect("sidecar root");
+        let runtime = RuntimeCore::default().with_sidecar_store(Arc::new(
+            SidecarStore::new(sidecar_root.path()).expect("sidecar store"),
+        ));
         runtime
             .start_session(AgentSessionStartParams {
                 session_id: Some("sess_artifact".to_string()),
@@ -2129,7 +2297,10 @@ mod tests {
 
     #[tokio::test]
     async fn evidence_export_requires_initialized_and_returns_read_model_snapshot() {
-        let runtime = RuntimeCore::default();
+        let sidecar_root = tempfile::tempdir().expect("sidecar root");
+        let runtime = RuntimeCore::default().with_sidecar_store(Arc::new(
+            SidecarStore::new(sidecar_root.path()).expect("sidecar store"),
+        ));
         runtime
             .start_session(AgentSessionStartParams {
                 session_id: Some("sess_evidence".to_string()),
@@ -2241,7 +2412,7 @@ mod tests {
         match &messages[0] {
             JsonRpcMessage::Response(response) => {
                 assert_eq!(response.result["session"]["sessionId"], "sess_evidence");
-                assert_eq!(response.result["events"].as_array().unwrap().len(), 3);
+                assert_eq!(response.result["events"].as_array().unwrap().len(), 4);
                 assert_eq!(
                     response.result["artifacts"][0]["artifactRef"],
                     "artifact-report"

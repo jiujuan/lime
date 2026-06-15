@@ -5,6 +5,7 @@ mod aster_backend;
 mod automation_execution;
 mod backend_event;
 mod capability;
+mod execution_process;
 mod external_backend;
 mod file_checkpoint;
 mod file_checkpoint_snapshot;
@@ -131,6 +132,8 @@ pub use runtime::BasicEvidenceExportProvider;
 pub use runtime::CancelExecutionRequest;
 pub use runtime::ConnectAppDataSource;
 pub use runtime::DiagnosticsAppDataSource;
+pub use runtime::EventLogRecord;
+pub use runtime::EventLogWriter;
 pub use runtime::EvidenceExportProvider;
 pub use runtime::EvidencePackRequest;
 pub use runtime::ExecutionBackend;
@@ -145,6 +148,9 @@ pub use runtime::FilesystemOutputSnapshotStore;
 pub use runtime::GatewayAppDataSource;
 pub use runtime::InlineArtifactContentProvider;
 pub use runtime::KnowledgeAppDataSource;
+pub use runtime::LegacyAgentMessage;
+pub use runtime::LegacyAgentSessionTranscript;
+pub use runtime::LegacyMessageCleanupPolicy;
 pub use runtime::ManagedObjectiveAuditUpdate;
 pub use runtime::McpAppDataSource;
 pub use runtime::MediaAppDataSource;
@@ -159,6 +165,8 @@ pub use runtime::OutputSnapshotReadRequest;
 pub use runtime::OutputSnapshotRecord;
 pub use runtime::OutputSnapshotSaveRequest;
 pub use runtime::OutputSnapshotStore;
+pub use runtime::ProjectionRepair;
+pub use runtime::ProjectionStore;
 pub use runtime::RuntimeCore;
 pub use runtime::RuntimeCoreError;
 pub use runtime::RuntimeCoreEventAppender;
@@ -167,7 +175,11 @@ pub use runtime::RuntimeEvent;
 pub use runtime::RuntimeEventSink;
 pub use runtime::RuntimeHostContext;
 pub use runtime::SessionAppDataSource;
+pub use runtime::SidecarRef;
+pub use runtime::SidecarStore;
+pub use runtime::SidecarWriteRequest;
 pub use runtime::SkillAppDataSource;
+pub use runtime::StorageRoots;
 pub use runtime::ToolInventoryReadRequest;
 pub use runtime::UnavailableBackend;
 pub use runtime::UsageStatsAppDataSource;
@@ -498,6 +510,7 @@ mod tests {
     use app_server_protocol::ClientInfo;
     use app_server_protocol::InitializeParams;
     use app_server_protocol::RequestId;
+    use app_server_protocol::METHOD_AGENT_SESSION_LIST;
     #[cfg(feature = "aster-backend")]
     use async_trait::async_trait;
     use serde_json::json;
@@ -791,7 +804,7 @@ mod tests {
             .runtime()
             .events_for_session(&session_id)
             .expect("stored events");
-        assert_eq!(events.len(), 1);
+        assert_eq!(events.len(), 2);
     }
 
     #[tokio::test]
@@ -1127,13 +1140,18 @@ mod tests {
             .await
             .expect("handle");
 
-        assert_eq!(messages.len(), 2);
+        assert_eq!(messages.len(), 3);
         match &messages[1] {
             JsonRpcMessage::Notification(notification) => {
                 assert_eq!(notification.method, METHOD_AGENT_SESSION_EVENT);
                 assert_eq!(
                     notification.params.as_ref().expect("params")["event"]["type"],
-                    "turn.accepted"
+                    "message.created"
+                );
+                assert_eq!(
+                    notification.params.as_ref().expect("params")["event"]["payload"]["input"]
+                        ["text"],
+                    "生成草稿"
                 );
             }
             other => panic!("expected notification, got {other:?}"),
@@ -1312,19 +1330,27 @@ mod tests {
                 "evidenceRefs": ["evidence://sess_flow/runtime"]
             }),
         );
-        assert_agent_event_notification(
-            &turn_messages[2],
-            "artifact.snapshot",
-            "turn_flow",
-            json!({
-                "artifactId": "artifact-report",
-                "path": ".app-server/artifacts/report.md",
-                "title": "Report",
-                "kind": "markdown_report",
-                "status": "ready",
-                "content": "# Report"
-            }),
-        );
+        match &turn_messages[2] {
+            JsonRpcMessage::Notification(notification) => {
+                assert_eq!(notification.method, METHOD_AGENT_SESSION_EVENT);
+                let event = &notification.params.as_ref().expect("params")["event"];
+                assert_eq!(event["sessionId"], "sess_flow");
+                assert_eq!(event["threadId"], "thread_flow");
+                assert_eq!(event["turnId"], "turn_flow");
+                assert_eq!(event["type"], "artifact.snapshot");
+                assert_eq!(event["payload"]["artifactId"], "artifact-report");
+                assert_eq!(event["payload"]["path"], ".app-server/artifacts/report.md");
+                assert_eq!(event["payload"]["title"], "Report");
+                assert_eq!(event["payload"]["kind"], "markdown_report");
+                assert_eq!(event["payload"]["status"], "ready");
+                assert!(event["payload"]["content"].is_null());
+                assert_eq!(event["payload"]["sidecarRef"]["kind"], "artifact_snapshot");
+                assert!(event["payload"]["sidecarRef"]["sha256"]
+                    .as_str()
+                    .is_some_and(|value| value.starts_with("sha256:")));
+            }
+            other => panic!("expected artifact notification, got {other:?}"),
+        }
         assert_agent_event_notification(
             &turn_messages[3],
             "action.required",
@@ -1517,7 +1543,7 @@ mod tests {
             JsonRpcMessage::Notification(notification) => {
                 assert_eq!(notification.method, METHOD_AGENT_SESSION_EVENT);
                 let event = &notification.params.as_ref().expect("params")["event"];
-                assert_eq!(event["sequence"], 2);
+                assert_eq!(event["sequence"], 3);
                 assert_eq!(event["sessionId"], "sess_external");
                 assert_eq!(event["threadId"], "thread_external");
                 assert_eq!(event["turnId"], turn_id);
@@ -1668,11 +1694,21 @@ mod tests {
             JsonRpcMessage::Notification(notification) => {
                 assert_eq!(notification.method, METHOD_AGENT_SESSION_EVENT);
                 let event = &notification.params.as_ref().expect("params")["event"];
-                assert_eq!(event["type"], "turn.accepted");
+                assert_eq!(event["type"], "message.created");
+                assert_eq!(event["payload"]["input"]["text"], "draft");
                 event["turnId"].as_str().expect("event turn id").to_string()
             }
             other => panic!("expected sync turn notification, got {other:?}"),
         };
+        match next_json_message(&mut output_lines).await {
+            JsonRpcMessage::Notification(notification) => {
+                assert_eq!(notification.method, METHOD_AGENT_SESSION_EVENT);
+                let event = &notification.params.as_ref().expect("params")["event"];
+                assert_eq!(event["type"], "turn.accepted");
+                assert_eq!(event["turnId"], event_turn_id);
+            }
+            other => panic!("expected turn.accepted notification, got {other:?}"),
+        }
         let turn_id = match next_json_message(&mut output_lines).await {
             JsonRpcMessage::Response(response) => response.result["turn"]["turnId"]
                 .as_str()
@@ -1815,6 +1851,26 @@ mod tests {
             &next_json_message(&mut output_lines).await,
             "sess_external_stream_stdio",
             "thread_external_stream_stdio",
+            "message.created",
+            "turn_external_stream_stdio",
+            json!({
+                "attachments": [],
+                "content": {
+                    "kind": "inline_text",
+                    "text": "draft",
+                },
+                "input": {
+                    "attachments": [],
+                    "text": "draft",
+                },
+                "role": "user",
+                "visibility": "user_visible",
+            }),
+        );
+        assert_scoped_agent_event_notification(
+            &next_json_message(&mut output_lines).await,
+            "sess_external_stream_stdio",
+            "thread_external_stream_stdio",
             "message.delta",
             "turn_external_stream_stdio",
             json!({ "chunk": 1, "text": "hello" }),
@@ -1840,6 +1896,163 @@ mod tests {
 
         drop(input_client);
         runner.await.expect("runner join").expect("runner result");
+    }
+
+    #[tokio::test]
+    async fn json_lines_loop_lists_sessions_while_external_turn_is_waiting_for_first_output() {
+        let Some(node) = node_binary() else {
+            return;
+        };
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let script_path = temp_dir
+            .path()
+            .join("external-backend-waits-before-output.mjs");
+        std::fs::write(
+            &script_path,
+            r#"
+              import { setTimeout as delay } from 'node:timers/promises';
+              await delay(1000);
+              console.log(JSON.stringify({
+                type: 'message.delta',
+                payload: { text: 'late first output' }
+              }));
+            "#,
+        )
+        .expect("write backend script");
+
+        let server = AppServerRuntimeFactory::external_app_server(
+            ExternalBackendConfig::new(node)
+                .with_args([script_path.to_string_lossy().to_string()])
+                .with_timeout_ms(2_000),
+        );
+        let (mut input_client, input_server) = tokio::io::duplex(4096);
+        let (output_server, output_client) = tokio::io::duplex(4096);
+        let runner =
+            tokio::spawn(async move { run_json_lines(server, input_server, output_server).await });
+        let mut output_lines = BufReader::new(output_client).lines();
+
+        write_json_message(
+            &mut input_client,
+            JsonRpcMessage::Request(JsonRpcRequest::new(
+                RequestId::Integer(1),
+                METHOD_INITIALIZE,
+                Some(
+                    serde_json::to_value(InitializeParams {
+                        client_info: ClientInfo {
+                            name: "content-studio".to_string(),
+                            title: None,
+                            version: Some("0.1.0".to_string()),
+                        },
+                        capabilities: ClientCapabilities::default(),
+                    })
+                    .expect("initialize params"),
+                ),
+            )),
+        )
+        .await;
+        assert_response_id(
+            next_json_message(&mut output_lines).await,
+            RequestId::Integer(1),
+        );
+
+        write_json_message(
+            &mut input_client,
+            JsonRpcMessage::Notification(JsonRpcNotification::new(
+                METHOD_INITIALIZED,
+                Some(json!({})),
+            )),
+        )
+        .await;
+        write_json_message(
+            &mut input_client,
+            JsonRpcMessage::Request(JsonRpcRequest::new(
+                RequestId::Integer(2),
+                METHOD_AGENT_SESSION_START,
+                Some(json!({
+                    "sessionId": "sess_external_wait_stdio",
+                    "threadId": "thread_external_wait_stdio",
+                    "appId": "content-studio",
+                    "workspaceId": "default"
+                })),
+            )),
+        )
+        .await;
+        assert_response_id(
+            next_json_message(&mut output_lines).await,
+            RequestId::Integer(2),
+        );
+
+        write_json_message(
+            &mut input_client,
+            JsonRpcMessage::Request(JsonRpcRequest::new(
+                RequestId::Integer(3),
+                METHOD_AGENT_SESSION_TURN_START,
+                Some(json!({
+                    "sessionId": "sess_external_wait_stdio",
+                    "turnId": "turn_external_wait_stdio",
+                    "input": {
+                        "text": "draft"
+                    }
+                })),
+            )),
+        )
+        .await;
+        assert_scoped_agent_event_notification(
+            &next_json_message(&mut output_lines).await,
+            "sess_external_wait_stdio",
+            "thread_external_wait_stdio",
+            "message.created",
+            "turn_external_wait_stdio",
+            json!({
+                "attachments": [],
+                "content": {
+                    "kind": "inline_text",
+                    "text": "draft",
+                },
+                "input": {
+                    "attachments": [],
+                    "text": "draft",
+                },
+                "role": "user",
+                "visibility": "user_visible",
+            }),
+        );
+
+        write_json_message(
+            &mut input_client,
+            JsonRpcMessage::Request(JsonRpcRequest::new(
+                RequestId::Integer(4),
+                METHOD_AGENT_SESSION_LIST,
+                Some(json!({ "limit": 10 })),
+            )),
+        )
+        .await;
+        let list_message = tokio::time::timeout(
+            std::time::Duration::from_millis(500),
+            output_lines.next_line(),
+        )
+        .await
+        .expect("agentSession/list should respond while turn waits")
+        .expect("stdio output should stay open")
+        .expect("agentSession/list response line should exist");
+        match decode_message(&list_message).expect("decode list response") {
+            JsonRpcMessage::Response(response) => {
+                assert_eq!(response.id, RequestId::Integer(4));
+                let sessions = response.result["sessions"]
+                    .as_array()
+                    .expect("sessions array");
+                assert!(
+                    sessions
+                        .iter()
+                        .any(|session| session["sessionId"] == "sess_external_wait_stdio"),
+                    "running session should be listed while backend waits"
+                );
+            }
+            other => panic!("expected list response while turn waits, got {other:?}"),
+        }
+
+        drop(input_client);
+        runner.abort();
     }
 
     #[tokio::test]
@@ -1944,6 +2157,26 @@ mod tests {
             &next_json_message(&mut output_lines).await,
             "sess_external_stream_fail_stdio",
             "thread_external_stream_fail_stdio",
+            "message.created",
+            "turn_external_stream_fail_stdio",
+            json!({
+                "attachments": [],
+                "content": {
+                    "kind": "inline_text",
+                    "text": "draft",
+                },
+                "input": {
+                    "attachments": [],
+                    "text": "draft",
+                },
+                "role": "user",
+                "visibility": "user_visible",
+            }),
+        );
+        assert_scoped_agent_event_notification(
+            &next_json_message(&mut output_lines).await,
+            "sess_external_stream_fail_stdio",
+            "thread_external_stream_fail_stdio",
             "message.delta",
             "turn_external_stream_fail_stdio",
             json!({ "chunk": 1, "text": "partial" }),
@@ -2001,9 +2234,10 @@ mod tests {
                     "turn_external_stream_fail_stdio"
                 );
                 let events = response.result["events"].as_array().expect("events");
-                assert_eq!(events[0]["type"], "message.delta");
-                assert_eq!(events[1]["type"], "turn.failed");
-                assert!(events[1]["payload"]["message"]
+                assert_eq!(events[0]["type"], "message.created");
+                assert_eq!(events[1]["type"], "message.delta");
+                assert_eq!(events[2]["type"], "turn.failed");
+                assert!(events[2]["payload"]["message"]
                     .as_str()
                     .expect("evidence failure message")
                     .contains("external backend crashed after partial output"));

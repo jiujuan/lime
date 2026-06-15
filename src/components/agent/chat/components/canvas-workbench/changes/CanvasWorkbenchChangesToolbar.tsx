@@ -4,6 +4,7 @@ import {
   ChevronRight,
   FileDiff,
   FolderOpen,
+  GitCompareArrows,
   ListChecks,
   MoreHorizontal,
   GitBranch,
@@ -116,6 +117,10 @@ export function CanvasWorkbenchChangesToolbar({
   const isReviewMenuDisabled = reviewMenuDisabled ?? actionsDisabled;
   const isDiffViewToggleDisabled =
     diffViewToggleDisabled ?? (actionsDisabled || !onToggleDiffVariant);
+  const toolbarButtonClassName =
+    "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] border border-transparent bg-white text-slate-500 transition-colors hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:text-slate-300";
+  const activeToolbarButtonClassName =
+    "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] border border-slate-200 bg-slate-50 text-slate-700 transition-colors hover:border-slate-300 hover:bg-white hover:text-slate-900 disabled:cursor-not-allowed disabled:text-slate-300";
 
   return (
     <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_auto] gap-x-2 gap-y-1 border-b border-slate-200 bg-white px-3 py-2">
@@ -252,7 +257,7 @@ export function CanvasWorkbenchChangesToolbar({
         ) : null}
       </div>
 
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="flex shrink-0 items-center gap-1.5">
         <div className="relative">
           <button
             type="button"
@@ -264,7 +269,7 @@ export function CanvasWorkbenchChangesToolbar({
             )}
             disabled={isReviewMenuDisabled}
             onClick={onToggleReviewMenu}
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] border border-transparent bg-white text-slate-500 transition-colors hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:text-slate-300"
+            className={toolbarButtonClassName}
           >
             <MoreHorizontal className="h-4 w-4" />
           </button>
@@ -301,9 +306,17 @@ export function CanvasWorkbenchChangesToolbar({
           title={diffViewToggleLabel}
           disabled={isDiffViewToggleDisabled}
           onClick={onToggleDiffVariant}
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] border border-transparent bg-white text-slate-500 transition-colors hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:text-slate-300"
+          className={
+            diffVariant === "split"
+              ? activeToolbarButtonClassName
+              : toolbarButtonClassName
+          }
         >
-          <FileDiff className="h-4 w-4" />
+          {diffVariant === "split" ? (
+            <GitCompareArrows className="h-4 w-4" />
+          ) : (
+            <FileDiff className="h-4 w-4" />
+          )}
         </button>
         {showFilesToggle ? (
           <button
@@ -312,11 +325,34 @@ export function CanvasWorkbenchChangesToolbar({
             title={filesPanelToggleLabel}
             disabled={!onToggleFilesPanel}
             onClick={onToggleFilesPanel}
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] border border-slate-200 bg-slate-50 text-slate-600 transition-colors hover:border-slate-300 hover:bg-white hover:text-slate-900 disabled:cursor-not-allowed disabled:text-slate-300"
+            className={
+              filesPanelOpen
+                ? activeToolbarButtonClassName
+                : toolbarButtonClassName
+            }
           >
             <FolderOpen className="h-4 w-4" />
           </button>
         ) : null}
+        <button
+          type="button"
+          aria-label={translateWorkbench(
+            "agentChat.canvasWorkbench.coding.changes.submit",
+          )}
+          title={translateWorkbench(
+            "agentChat.canvasWorkbench.coding.changes.submit",
+          )}
+          disabled={copyGitApplyDisabled || reviewActionBusy || !onCopyGitApply}
+          onClick={onCopyGitApply}
+          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[7px] border border-slate-200 bg-white px-2.5 text-[12px] font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 disabled:cursor-not-allowed disabled:text-slate-300"
+        >
+          <GitCompareArrows className="h-3.5 w-3.5" />
+          <span className="hidden lg:inline">
+            {translateWorkbench(
+              "agentChat.canvasWorkbench.coding.changes.submit",
+            )}
+          </span>
+        </button>
       </div>
       {selectedBase === "branch" && branchCompareLabel ? (
         <div

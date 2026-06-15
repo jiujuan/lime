@@ -10,7 +10,6 @@ import {
 } from "@/lib/api/skillCatalog";
 import {
   buildRuntimeInputCapabilityCatalog,
-  parseCatalogExecutionStrategy,
   useRuntimeInputCapabilityCatalog,
   type RuntimeInputCapabilityCatalog,
 } from "./runtimeInputCapabilityCatalog";
@@ -102,13 +101,6 @@ afterEach(() => {
 });
 
 describe("runtimeInputCapabilityCatalog", () => {
-  it("legacy execution strategy 只作为 compat 输入归一为 react", () => {
-    expect(parseCatalogExecutionStrategy("code_orchestrated")).toBe("react");
-    expect(parseCatalogExecutionStrategy("auto")).toBe("react");
-    expect(parseCatalogExecutionStrategy("react")).toBe("react");
-    expect(parseCatalogExecutionStrategy("unknown")).toBeUndefined();
-  });
-
   it("应从统一 skill catalog 生成 builtin、scene 与 mention 路由映射", () => {
     const catalog = buildRuntimeCatalogFixture();
 

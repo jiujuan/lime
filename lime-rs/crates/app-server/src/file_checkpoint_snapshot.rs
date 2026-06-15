@@ -1,7 +1,8 @@
+use crate::runtime::sidecar_store::{
+    session_scoped_relative_path, SidecarRef, SidecarStore, SidecarWriteRequest,
+};
 use app_server_protocol::AgentEvent;
-use lime_core::session_files::SessionFileStorage;
 use serde_json::{json, Map, Value};
-use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FileCheckpointSnapshotSaveRequest {
@@ -21,6 +22,7 @@ pub struct FileCheckpointSnapshotReadRequest {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileCheckpointSnapshotRecord {
     pub file_name: String,
+    pub sidecar_ref: SidecarRef,
 }
 
 pub trait FileCheckpointSnapshotStore: Send + Sync {
@@ -56,25 +58,30 @@ impl FileCheckpointSnapshotStore for NoopFileCheckpointSnapshotStore {
 
 #[derive(Debug, Clone, Default)]
 pub struct FilesystemFileCheckpointSnapshotStore {
-    base_dir: Option<PathBuf>,
+    sidecar_store: Option<SidecarStore>,
 }
 
 impl FilesystemFileCheckpointSnapshotStore {
     pub fn new() -> Self {
-        Self { base_dir: None }
-    }
-
-    pub fn with_base_dir(base_dir: impl Into<PathBuf>) -> Self {
         Self {
-            base_dir: Some(base_dir.into()),
+            sidecar_store: None,
         }
     }
 
-    fn storage(&self) -> Result<SessionFileStorage, String> {
-        match self.base_dir.as_ref() {
-            Some(base_dir) => SessionFileStorage::with_base_dir(base_dir.clone()),
-            None => SessionFileStorage::new(),
-        }
+    pub fn with_base_dir(base_dir: impl AsRef<std::path::Path>) -> Self {
+        Self::with_sidecar_root(base_dir)
+    }
+
+    pub fn with_sidecar_root(root: impl AsRef<std::path::Path>) -> Self {
+        let sidecar_store = SidecarStore::new(root).ok();
+        Self { sidecar_store }
+    }
+
+    fn sidecar_store(&self) -> Result<&SidecarStore, String> {
+        self.sidecar_store.as_ref().ok_or_else(|| {
+            "file checkpoint snapshot store 缺少显式 sidecar root，不能写入默认 sessions 目录"
+                .to_string()
+        })
     }
 }
 
@@ -87,25 +94,33 @@ impl FileCheckpointSnapshotStore for FilesystemFileCheckpointSnapshotStore {
             request.checkpoint_id.as_str(),
             request.path.as_str(),
         );
-        self.storage()?
-            .save_file_with_metadata(
-                request.session_id.as_str(),
-                file_name.as_str(),
-                request.content.as_str(),
-                Some(request.metadata.clone()),
-            )
+        let sidecar_ref = self
+            .sidecar_store()?
+            .write_text(&SidecarWriteRequest {
+                session_id: request.session_id.clone(),
+                kind: "file_checkpoint".to_string(),
+                logical_id: request.checkpoint_id.clone(),
+                relative_path: session_scoped_relative_path(
+                    request.session_id.as_str(),
+                    &file_name,
+                ),
+                content: request.content.clone(),
+            })
             .map_err(|error| format!("保存文件快照内容失败: {error}"))?;
-        Ok(Some(FileCheckpointSnapshotRecord { file_name }))
+        Ok(Some(FileCheckpointSnapshotRecord {
+            file_name,
+            sidecar_ref,
+        }))
     }
 
     fn read_file_checkpoint_snapshot(
         &self,
         request: &FileCheckpointSnapshotReadRequest,
     ) -> Option<String> {
-        self.storage()
-            .ok()?
-            .read_file(request.session_id.as_str(), request.file_name.as_str())
-            .ok()
+        self.sidecar_store.as_ref()?.read_text(
+            session_scoped_relative_path(request.session_id.as_str(), request.file_name.as_str())
+                .as_str(),
+        )
     }
 }
 
@@ -159,6 +174,7 @@ pub fn persist_runtime_file_checkpoint_snapshot(
         return Ok(());
     };
     attach_checkpoint_snapshot_ref(&mut event.payload, snapshot.file_name.as_str());
+    attach_sidecar_ref(&mut event.payload, &snapshot.sidecar_ref);
     Ok(())
 }
 
@@ -178,6 +194,23 @@ fn attach_checkpoint_snapshot_ref(payload: &mut Value, file_name: &str) {
         change_object.insert(
             "previousContentSnapshotFile".to_string(),
             Value::String(file_name.to_string()),
+        );
+    }
+}
+
+fn attach_sidecar_ref(payload: &mut Value, sidecar_ref: &SidecarRef) {
+    let Value::Object(object) = payload else {
+        return;
+    };
+    object.insert(
+        "sidecarRef".to_string(),
+        serde_json::to_value(sidecar_ref).unwrap_or_else(|_| json!({})),
+    );
+    let change = object.entry("change").or_insert_with(|| json!({}));
+    if let Value::Object(change_object) = change {
+        change_object.insert(
+            "sidecarRef".to_string(),
+            serde_json::to_value(sidecar_ref).unwrap_or_else(|_| json!({})),
         );
     }
 }

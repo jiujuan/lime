@@ -12,7 +12,7 @@ describe("buildUpdateNotificationWindowUrl", () => {
         downloadUrl: "https://example.com/release",
       }),
     ).toBe(
-      "http://127.0.0.1:1420/update-notification?current=1.57.0&latest=1.58.0&download_url=https%3A%2F%2Fexample.com%2Frelease",
+      "http://127.0.0.1:1420/update-notification?lime_window=update-notification&current=1.57.0&latest=1.58.0&download_url=https%3A%2F%2Fexample.com%2Frelease",
     );
   });
 

@@ -4,6 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CodingWorkbenchView } from "@limecloud/agent-runtime-projection";
 import type { ConfirmResponse } from "../types";
 import { CodingWorkbenchOutputPanel } from "./CodingWorkbenchOutputPanel";
+import type {
+  CodingWorkbenchRecoveryContext,
+  CodingWorkbenchRecoverySignal,
+} from "./codingWorkbenchRecovery";
 
 vi.mock("react-i18next", async () => {
   const agentZhCN = (await import("@/i18n/resources/zh-CN/agent.json"))
@@ -48,7 +52,11 @@ function createCodingView(
         commandId: "command-1",
         status: "running",
         title: "npm test",
-        command: "npm test",
+        command: "bash -lc 'npm test'",
+        canonicalCommand: "npm test",
+        commandSummary: "npm test",
+        commandArgv: ["npm", "test"],
+        commandArgvSource: "argv",
         cwd: "app",
         outputRefs: ["output://command-1"],
         preview: "running tests",
@@ -198,6 +206,10 @@ describe("CodingWorkbenchOutputPanel", () => {
       container.querySelector('[data-testid="coding-workbench-command"]')
         ?.textContent,
     ).toContain("npm test");
+    expect(
+      container.querySelector('[data-testid="coding-workbench-command"]')
+        ?.textContent,
+    ).toContain("bash -lc 'npm test'");
     expect(container.textContent).toContain("running tests");
     expect(
       container.querySelector('[data-testid="coding-workbench-test"]')
@@ -402,14 +414,42 @@ describe("CodingWorkbenchOutputPanel", () => {
 
     expect(onSubmitRecoveryPrompt).toHaveBeenCalledWith(
       expect.stringContaining("请继续修复本轮编程任务中的失败输出。"),
+      expect.objectContaining({
+        schemaVersion: "coding-workbench-recovery/v1",
+        failureKind: "patch",
+        sourceIds: {
+          commandId: "command-1",
+          testRunId: "test-1",
+          patchId: "patch-1",
+          toolCallId: "tool-patch-1",
+        },
+        refs: expect.objectContaining({
+          outputRefs: ["output://command-1"],
+          diffRef: "diff://patch-1",
+        }),
+        relatedFiles: ["src/App.tsx"],
+        latestCheckpointPath: "src/App.tsx",
+      }),
     );
     const prompt = onSubmitRecoveryPrompt.mock.calls[0]?.[0] as string;
+    const context =
+      onSubmitRecoveryPrompt.mock.calls[0]?.[1] as
+        | CodingWorkbenchRecoveryContext
+        | undefined;
     expect(prompt).toContain("npm test");
     expect(prompt).toContain("unit");
     expect(prompt).toContain("命令失败");
     expect(prompt).toContain("App.test.tsx failed");
     expect(prompt).toContain("相关文件: src/App.tsx");
     expect(prompt).toContain("最近文件快照: src/App.tsx");
+    expect(
+      context?.signals.map((signal: CodingWorkbenchRecoverySignal) => signal.kind),
+    ).toEqual([
+      "command",
+      "test",
+      "patch",
+      "diagnostic",
+    ]);
   });
 
   it("没有失败事实时不应显示继续修复入口", () => {

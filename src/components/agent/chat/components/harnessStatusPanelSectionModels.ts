@@ -52,6 +52,8 @@ interface BuildHarnessStatusPanelSectionModelsInput {
   messages: NonNullable<HarnessStatusPanelProps["messages"]>;
   onInterruptCurrentTurn: HarnessStatusPanelProps["onInterruptCurrentTurn"];
   onObjectiveChanged: HarnessStatusPanelProps["onObjectiveChanged"];
+  onManageProviders: HarnessStatusPanelProps["onManageProviders"];
+  onOpenExecutionPolicySettings: HarnessStatusPanelProps["onOpenExecutionPolicySettings"];
   onOpenFileCheckpoints: HarnessStatusPanelProps["onOpenFileCheckpoints"];
   onOpenMemoryWorkbench: HarnessStatusPanelProps["onOpenMemoryWorkbench"];
   onOpenSubagentSession: HarnessStatusPanelProps["onOpenSubagentSession"];
@@ -108,6 +110,8 @@ export function buildHarnessStatusPanelSectionModels({
   messages,
   onInterruptCurrentTurn,
   onObjectiveChanged,
+  onManageProviders,
+  onOpenExecutionPolicySettings,
   onOpenFileCheckpoints,
   onOpenMemoryWorkbench,
   onOpenSubagentSession,
@@ -190,11 +194,8 @@ export function buildHarnessStatusPanelSectionModels({
     evidencePack,
     handleExportEvidencePack,
   } = handoffExports;
-  const {
-    handleOpenPathValue,
-    openBrowserReplayPreview,
-    openPreview,
-  } = previewModel;
+  const { handleOpenPathValue, openBrowserReplayPreview, openPreview } =
+    previewModel;
 
   return {
     registerSectionRef,
@@ -264,6 +265,8 @@ export function buildHarnessStatusPanelSectionModels({
         onReplayPendingRequest,
         onPromoteQueuedTurn,
         onOpenMemoryWorkbench,
+        onManageProviders,
+        onOpenExecutionPolicySettings,
         harnessState,
         messages,
         teamMemorySnapshot,

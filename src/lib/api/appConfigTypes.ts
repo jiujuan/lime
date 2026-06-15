@@ -118,6 +118,81 @@ export interface DeveloperConfig {
   workspace_harness_enabled?: boolean;
 }
 
+export type ToolExecutionWarningPolicyConfig =
+  | "none"
+  | "shell_command_risk";
+
+export type ToolExecutionRestrictionProfileConfig =
+  | "none"
+  | "workspace_path_required"
+  | "workspace_path_optional"
+  | "workspace_absolute_path_required"
+  | "workspace_shell_command"
+  | "analyze_image_input"
+  | "safe_https_url_required";
+
+export type ToolExecutionSandboxProfileConfig = "none" | "workspace_command";
+
+export type ToolExecutionCommandRiskLevelConfig =
+  | "low"
+  | "medium"
+  | "high";
+
+export type ToolExecutionCommandRuleMatchTypeConfig =
+  | "regex"
+  | "prefix"
+  | "exact";
+
+export type ToolExecutionNetworkRuleTargetConfig = "url" | "host";
+
+export interface ToolExecutionOverrideConfig {
+  warning_policy?: ToolExecutionWarningPolicyConfig;
+  restriction_profile?: ToolExecutionRestrictionProfileConfig;
+  sandbox_profile?: ToolExecutionSandboxProfileConfig;
+}
+
+export interface ToolExecutionCommandRuleConfig {
+  rule_id: string;
+  match_type?: ToolExecutionCommandRuleMatchTypeConfig;
+  pattern: string;
+  risk_level?: ToolExecutionCommandRiskLevelConfig;
+  reason_code?: string;
+  reason?: string;
+}
+
+export interface ToolExecutionNetworkRuleConfig {
+  rule_id: string;
+  match_type?: ToolExecutionCommandRuleMatchTypeConfig;
+  target?: ToolExecutionNetworkRuleTargetConfig;
+  pattern: string;
+  risk_level?: ToolExecutionCommandRiskLevelConfig;
+  reason_code?: string;
+  reason?: string;
+}
+
+export interface ToolExecutionPolicyConfig {
+  tool_overrides?: Record<string, ToolExecutionOverrideConfig>;
+  shell_command_rules?: ToolExecutionCommandRuleConfig[];
+  network_rules?: ToolExecutionNetworkRuleConfig[];
+}
+
+export interface WorkspaceSandboxConfig {
+  enabled: boolean;
+  strict: boolean;
+  notify_on_fallback: boolean;
+}
+
+export interface NativeAgentConfig {
+  use_default_system_prompt?: boolean;
+  custom_system_prompt?: string | null;
+  system_prompt_file?: string | null;
+  default_model?: string;
+  temperature?: number;
+  max_tokens?: number;
+  workspace_sandbox?: WorkspaceSandboxConfig;
+  tool_execution?: ToolExecutionPolicyConfig;
+}
+
 export interface ImageGenConfig {
   default_service?: "dall_e" | "midjourney" | "stable_diffusion" | "flux";
   default_count?: number;
@@ -240,6 +315,7 @@ export interface Config {
   image_gen?: ImageGenConfig;
   user_profile?: UserProfile;
   developer?: DeveloperConfig;
+  agent?: NativeAgentConfig;
   gateway?: GatewayConfig;
   channels?: ChannelsConfig;
   crash_reporting?: CrashReportingConfig;

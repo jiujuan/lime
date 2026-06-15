@@ -4,11 +4,13 @@
 
 mod logger;
 mod stats;
+mod store;
 mod tokens;
 mod types;
 
 pub use logger::{LogRotationConfig, LoggerError, RequestLogger};
 pub use stats::StatsAggregator;
+pub use store::TelemetryStore;
 pub use tokens::{
     ModelTokenStats, PeriodTokenStats, ProviderTokenStats, TokenSource, TokenStatsSummary,
     TokenTracker, TokenUsageRecord,

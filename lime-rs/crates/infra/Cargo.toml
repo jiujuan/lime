@@ -13,6 +13,9 @@ lime-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 
+# 数据库
+rusqlite.workspace = true
+
 # 异步运行时
 tokio.workspace = true
 
@@ -37,3 +40,4 @@ tiktoken-rs.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
+tempfile.workspace = true

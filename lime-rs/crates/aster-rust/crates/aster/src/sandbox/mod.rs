@@ -5,7 +5,9 @@
 mod config;
 mod executor;
 mod filesystem;
+pub(crate) mod output_buffer;
 mod resource_limits;
+mod restricted_token;
 
 pub use config::{
     ResourceLimits, SandboxConfig, SandboxConfigManager, SandboxPreset, SandboxType,

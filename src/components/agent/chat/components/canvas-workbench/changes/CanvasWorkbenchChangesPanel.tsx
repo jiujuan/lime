@@ -1,22 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  buildCanvasWorkbenchDiff,
-  collapseCanvasWorkbenchDiffContext,
-} from "../../../utils/canvasWorkbenchDiff";
+import { collapseCanvasWorkbenchDiffContext } from "../../../utils/canvasWorkbenchDiff";
 import type { HarnessFilePreviewResult } from "../../HarnessStatusPanel";
 import type { CanvasWorkbenchDiffLine } from "../../../utils/canvasWorkbenchDiff";
 import type { CanvasWorkbenchResolvedSelection } from "../../CanvasWorkbenchLayoutViewModel";
 import {
   buildCanvasWorkbenchChangeFileTree,
-  countCanvasWorkbenchChangeItemStats,
+  buildCanvasWorkbenchChangeDiffLines,
+  countCanvasWorkbenchChangeItemsStats,
   countCanvasWorkbenchDiffStats,
   findChangeItemForSelection,
+  flattenCanvasWorkbenchChangeFileTree,
+  resolveCanvasWorkbenchSelectedChangeItem,
 } from "./CanvasWorkbenchChangesPanelViewModel";
 import type {
   CanvasWorkbenchChangeItem,
   CanvasWorkbenchChangeView,
 } from "./CanvasWorkbenchChangesPanelViewModel";
 import { CanvasWorkbenchChangeDetailPanel } from "./CanvasWorkbenchChangeDetailPanel";
+import { CanvasWorkbenchChangeDiffList } from "./CanvasWorkbenchChangeDiffList";
 import type { CanvasWorkbenchChangesToolbarProps } from "./CanvasWorkbenchChangesToolbar";
 import { CanvasWorkbenchEmptyDiffPanel } from "./CanvasWorkbenchEmptyDiffPanel";
 import { CanvasWorkbenchReviewSurface } from "./CanvasWorkbenchReviewSurface";
@@ -35,29 +36,6 @@ interface CanvasWorkbenchChangesPanelProps {
   loadFilePreview?: (path: string) => Promise<HarnessFilePreviewResult>;
   filesPanelOpen?: boolean;
   onToggleFilesPanel?: () => void;
-}
-
-function buildSelectedChangeDiffLines(
-  item: CanvasWorkbenchChangeItem | undefined,
-  loadedContent?: string,
-): CanvasWorkbenchDiffLine[] {
-  if (!item) {
-    return [];
-  }
-  if (item.diffLines?.length) {
-    return item.diffLines;
-  }
-  const currentContent = loadedContent ?? item.currentContent;
-  if (item.previousContent != null && currentContent != null) {
-    return buildCanvasWorkbenchDiff(item.previousContent, currentContent);
-  }
-  if (item.previousContent === null && currentContent != null) {
-    return buildCanvasWorkbenchDiff("", currentContent);
-  }
-  if (item.previousContent != null && currentContent === null) {
-    return buildCanvasWorkbenchDiff(item.previousContent, "");
-  }
-  return [];
 }
 
 export function CanvasWorkbenchChangesPanel({
@@ -121,10 +99,16 @@ export function CanvasWorkbenchChangesPanel({
     () => findChangeItemForSelection(changeItems, documentContext),
     [changeItems, documentContext],
   );
-  const selectedChangeItem =
-    changeItems.find((item) => item.id === selectedChangeId) ||
-    activeSelectionChangeItem ||
-    changeItems[0];
+  const selectedChangeItem = useMemo(
+    () =>
+      resolveCanvasWorkbenchSelectedChangeItem({
+        items: changeItems,
+        selectedChangeId,
+        activeSelectionChangeItem,
+        preferRuntimeEvidenceDefault: true,
+      }),
+    [activeSelectionChangeItem, changeItems, selectedChangeId],
+  );
   const selectedChangeItemRef = useRef<CanvasWorkbenchChangeItem | undefined>(
     selectedChangeItem,
   );
@@ -249,14 +233,10 @@ export function CanvasWorkbenchChangesPanel({
   ) : null;
 
   if (changeItemCount > 0) {
-    const selectedDiffLines = buildSelectedChangeDiffLines(
+    const selectedDiffLines = buildCanvasWorkbenchChangeDiffLines(
       selectedChangeItem,
       selectedLoadedContent,
     );
-    const diffStats = countCanvasWorkbenchDiffStats(selectedDiffLines);
-    const selectedItemStats = selectedChangeItem
-      ? countCanvasWorkbenchChangeItemStats(selectedChangeItem)
-      : { additions: 0, removals: 0 };
     const visibleDiffLines = collapseDiffContext
       ? collapseCanvasWorkbenchDiffContext(selectedDiffLines)
       : textDiffEnabled
@@ -266,6 +246,14 @@ export function CanvasWorkbenchChangesPanel({
       changeItems,
       fileFilter,
     );
+    const filteredChangeItems =
+      flattenCanvasWorkbenchChangeFileTree(filteredFileTree);
+    const selectedItemStats = selectedChangeItem
+      ? countCanvasWorkbenchChangeItemsStats([selectedChangeItem])
+      : { additions: 0, removals: 0 };
+    const diffStats = selectedBaseUsesGit
+      ? countCanvasWorkbenchChangeItemsStats(filteredChangeItems)
+      : selectedItemStats;
     const latestCheckpointPath =
       changeView?.latestCheckpointPath ||
       selectedChangeItem?.checkpointPath ||
@@ -300,19 +288,36 @@ export function CanvasWorkbenchChangesPanel({
         onFileFilterChange={setFileFilter}
         onSelectChangeItem={handleSelectChangeItem}
         detail={
-          <CanvasWorkbenchChangeDetailPanel
-            selectedChangeItem={selectedChangeItem}
-            selectedItemStats={selectedItemStats}
-            latestCheckpointPath={latestCheckpointPath}
-            visibleDiffLines={visibleDiffLines}
-            selectedDiffLines={selectedDiffLines}
-            panelClassName={panelClassName}
-            mutedPanelClassName={mutedPanelClassName}
-            diffVariant={diffVariant}
-            showWhitespace={showWhitespace}
-            wordWrapEnabled={wordWrapEnabled}
-            translateWorkbench={translateWorkbench}
-          />
+          selectedBaseUsesGit ? (
+            <CanvasWorkbenchChangeDiffList
+              items={filteredChangeItems}
+              selectedChangeItem={selectedChangeItem}
+              fullFileContentById={fullFileContentById}
+              loadFullFile={loadFullFile}
+              collapseDiffContext={collapseDiffContext}
+              textDiffEnabled={textDiffEnabled}
+              panelClassName={panelClassName}
+              diffVariant={diffVariant}
+              showWhitespace={showWhitespace}
+              wordWrapEnabled={wordWrapEnabled}
+              translateWorkbench={translateWorkbench}
+              onSelectChangeItem={handleSelectChangeItem}
+            />
+          ) : (
+            <CanvasWorkbenchChangeDetailPanel
+              selectedChangeItem={selectedChangeItem}
+              selectedItemStats={selectedItemStats}
+              latestCheckpointPath={latestCheckpointPath}
+              visibleDiffLines={visibleDiffLines}
+              selectedDiffLines={selectedDiffLines}
+              panelClassName={panelClassName}
+              mutedPanelClassName={mutedPanelClassName}
+              diffVariant={diffVariant}
+              showWhitespace={showWhitespace}
+              wordWrapEnabled={wordWrapEnabled}
+              translateWorkbench={translateWorkbench}
+            />
+          )
         }
       />
     );

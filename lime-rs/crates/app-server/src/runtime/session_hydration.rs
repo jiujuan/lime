@@ -1,4 +1,5 @@
 use super::output_refs;
+use super::turn_input_events;
 use super::StoredSession;
 use app_server_protocol::AgentEvent;
 use app_server_protocol::AgentSessionReadResponse;
@@ -10,10 +11,11 @@ pub(in crate::runtime) fn hydrated_stored_session_from_response(
 ) -> StoredSession {
     let events = hydrated_events_from_detail(response.detail.as_ref());
     let output_blobs = hydrated_output_blobs_from_detail(response.detail.as_ref(), &events);
+    let turn_inputs = turn_input_events::turn_inputs_from_events(&events);
     StoredSession {
         session: response.session,
         turns: response.turns,
-        turn_inputs: Default::default(),
+        turn_inputs,
         turn_runtime_options: Default::default(),
         events,
         output_blobs,

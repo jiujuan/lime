@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
 import { SettingsTabs } from "@/types/settings";
+import type { ProviderSettingsFocusContext } from "@/types/page";
 
 const {
   mockSettingsSidebar,
@@ -11,6 +12,7 @@ const {
   mockSettingsHomePage,
   mockDeveloperLabSettings,
   mockArchivedConversationsSettings,
+  mockExecutionPolicySettings,
 } = vi.hoisted(() => ({
   mockSettingsSidebar: vi.fn(),
   mockPreloadDeveloperDefaultSections: vi.fn(),
@@ -18,6 +20,7 @@ const {
   mockSettingsHomePage: vi.fn(),
   mockDeveloperLabSettings: vi.fn(),
   mockArchivedConversationsSettings: vi.fn(),
+  mockExecutionPolicySettings: vi.fn(),
 }));
 
 const { mockResolveOemCloudRuntimeContext } = vi.hoisted(() => ({
@@ -92,6 +95,12 @@ vi.mock("@/components/mcp", () => ({
 vi.mock("../system/environment", () => ({
   EnvironmentSettings: () => <div>environment</div>,
 }));
+vi.mock("../system/execution-policy", () => ({
+  ExecutionPolicySettings: () => {
+    mockExecutionPolicySettings();
+    return <div>execution-policy</div>;
+  },
+}));
 vi.mock("../system/web-search", () => ({
   WebSearchSettings: () => <div>web-search</div>,
 }));
@@ -120,6 +129,7 @@ function renderComponent(
   initialTab: SettingsTabs,
   onNavigate?: (page: string) => void,
   initialProviderView?: "settings" | "cloud",
+  initialProviderFocus?: ProviderSettingsFocusContext | null,
 ) {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -130,6 +140,7 @@ function renderComponent(
       <SettingsLayoutV2
         initialTab={initialTab}
         initialProviderView={initialProviderView}
+        initialProviderFocus={initialProviderFocus}
         onNavigate={onNavigate as any}
       />,
     );
@@ -169,6 +180,7 @@ afterEach(async () => {
   mockSettingsHomePage.mockReset();
   mockDeveloperLabSettings.mockReset();
   mockArchivedConversationsSettings.mockReset();
+  mockExecutionPolicySettings.mockReset();
 
   while (mounted.length > 0) {
     const current = mounted.pop();
@@ -346,6 +358,38 @@ describe("SettingsLayoutV2 Developer Tab", () => {
     expect(mockCloudProviderSettings).toHaveBeenCalled();
     expect(mockCloudProviderSettings.mock.calls.at(-1)?.[0]).toMatchObject({
       initialView: "settings",
+    });
+  });
+
+  it("直达执行策略页时应渲染真实策略设置入口", async () => {
+    const container = renderComponent(SettingsTabs.ExecutionPolicy);
+    await flushEffects();
+
+    expect(container.textContent ?? "").toContain("execution-policy");
+    expect(mockExecutionPolicySettings).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("SettingsLayoutV2 Provider Focus", () => {
+  it("服务商设置页应透传 provider focus 给 Provider 设置组件", async () => {
+    const providerFocus: ProviderSettingsFocusContext = {
+      providerId: "custom-coder",
+      modelId: "coder-large",
+      reasonCode: "missing_enabled_api_key",
+      recoveryAction: "add_enabled_api_key",
+    };
+
+    renderComponent(
+      SettingsTabs.Providers,
+      undefined,
+      "settings",
+      providerFocus,
+    );
+    await flushEffects();
+
+    expect(mockCloudProviderSettings.mock.calls.at(-1)?.[0]).toMatchObject({
+      initialView: "settings",
+      initialFocus: providerFocus,
     });
   });
 });

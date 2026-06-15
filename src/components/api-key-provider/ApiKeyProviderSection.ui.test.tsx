@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProviderWithKeysDisplay } from "@/lib/api/apiKeyProvider";
+import type { ProviderSettingsFocusContext } from "@/types/page";
 
 const {
   mockUseApiKeyProvider,
@@ -83,6 +84,7 @@ vi.mock("react-i18next", () => ({
 vi.mock("./ProviderSetting", () => ({
   ProviderSetting: (props: {
     provider: ProviderWithKeysDisplay | null;
+    focus?: ProviderSettingsFocusContext | null;
     authStatus?: "ready" | "login_required";
     onLogin?: () => void | Promise<void>;
     onTestConnection?: (
@@ -114,7 +116,12 @@ vi.mock("./ProviderSetting", () => ({
     }
 
     return (
-      <div data-testid="provider-setting-stub">
+      <div
+        data-testid="provider-setting-stub"
+        data-focus-provider-id={props.focus?.providerId ?? ""}
+        data-focus-model-id={props.focus?.modelId ?? ""}
+        data-focus-reason-code={props.focus?.reasonCode ?? ""}
+      >
         {props.provider?.name ?? "未选择模型"}
         {props.provider ? (
           <button
@@ -174,13 +181,15 @@ function createHookState(overrides: Record<string, unknown> = {}) {
   return createApiKeyProviderHookState(mockUseApiKeyProvider, vi.fn, overrides);
 }
 
-function renderSection() {
+function renderSection(
+  props: Partial<React.ComponentProps<typeof ApiKeyProviderSection>> = {},
+) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
 
   act(() => {
-    root.render(<ApiKeyProviderSection />);
+    root.render(<ApiKeyProviderSection {...props} />);
   });
 
   mountedRoots.push({ container, root });
@@ -326,6 +335,66 @@ describe("ApiKeyProviderSection 模型管理布局", () => {
     expect(container.textContent ?? "").toContain("导入 / 导出配置");
     expect(container.textContent ?? "").toContain("DeepSeek");
     expect(container.textContent ?? "").not.toContain("OpenAI");
+  });
+
+  it("initialFocus 命中 providerId 时应切换到目标服务商并透传焦点", async () => {
+    const customCoder = createProvider({
+      id: "custom-coder",
+      name: "Custom Coder",
+      sort_order: 3,
+      custom_models: ["coder-small"],
+      api_keys: [],
+      api_key_count: 0,
+    });
+    const hookState = createHookState({
+      providers: [createProvider(), customCoder],
+      selectedProviderId: "deepseek",
+      selectedProvider: customCoder,
+      filteredProviders: [createProvider(), customCoder],
+    });
+
+    const container = renderSection({
+      initialFocus: {
+        providerId: "custom-coder",
+        modelId: "coder-large",
+        reasonCode: "missing_enabled_api_key",
+        recoveryAction: "add_enabled_api_key",
+      },
+    });
+    await flushEffects();
+
+    expect(hookState.selectProvider).toHaveBeenCalledWith("custom-coder");
+    const stub = maybeByTestId(container, "provider-setting-stub");
+    expect(stub?.getAttribute("data-focus-provider-id")).toBe("custom-coder");
+    expect(stub?.getAttribute("data-focus-model-id")).toBe("coder-large");
+    expect(stub?.getAttribute("data-focus-reason-code")).toBe(
+      "missing_enabled_api_key",
+    );
+  });
+
+  it("initialFocus 只有 modelId 时应按已启用模型反查服务商", async () => {
+    const codingProvider = createProvider({
+      id: "coding-provider",
+      name: "Coding Provider",
+      sort_order: 3,
+      custom_models: ["coder-large"],
+    });
+    const hookState = createHookState({
+      providers: [createProvider(), codingProvider],
+      selectedProviderId: "deepseek",
+      selectedProvider: codingProvider,
+      filteredProviders: [createProvider(), codingProvider],
+    });
+
+    renderSection({
+      initialFocus: {
+        modelId: "coder-large",
+        reasonCode: "model_not_enabled",
+      },
+    });
+    await flushEffects();
+
+    expect(hookState.selectProvider).toHaveBeenCalledWith("coding-provider");
   });
 
   it("未登录时可在 AI 服务商列表中展示 Lime Hub 登录提示", async () => {

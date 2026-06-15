@@ -626,10 +626,9 @@ describe("useAsterAgentChat slash skill 执行链路", () => {
       await flushEffects();
 
       await act(async () => {
-        const failedSessionId = await harness
-          .getValue()
-          .createFreshSession("新对话");
-        expect(failedSessionId).toBeNull();
+        await expect(
+          harness.getValue().createFreshSession("新对话"),
+        ).rejects.toThrow("bridge health check failed");
       });
 
       await act(async () => {

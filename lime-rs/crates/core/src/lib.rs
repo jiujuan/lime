@@ -50,6 +50,7 @@ pub mod router;
 
 // 请求处理器核心类型（context, error）
 pub mod processor;
+pub mod product_db_migration_cleanup;
 pub mod provider_prompt_cache_support;
 
 // WebSocket 核心类型

@@ -24,6 +24,7 @@ import {
   interceptHttpExternalLinkClick,
   resolveHttpExternalHref,
 } from "@/lib/markdown/externalLinks";
+import { getRuntimeAppVersion } from "@/lib/appVersion";
 import { cn } from "@/lib/utils";
 
 const FALLBACK_RELEASES_URL = "https://github.com/limecloud/lime/releases";
@@ -32,10 +33,22 @@ const PRIMARY_ACTION_BUTTON_CLASS =
 const SECONDARY_ACTION_BUTTON_CLASS =
   "inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50";
 
+function normalizeAboutVersion(value?: string | null): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed || trimmed.toLowerCase() === "unknown") {
+    return null;
+  }
+  return trimmed;
+}
+
 export function AboutSection() {
   const { t } = useTranslation("settings");
+  const runtimeAppVersion = useMemo(
+    () => normalizeAboutVersion(getRuntimeAppVersion()),
+    [],
+  );
   const [versionInfo, setVersionInfo] = useState<VersionInfo>({
-    current: "",
+    current: runtimeAppVersion ?? "",
     latest: undefined,
     hasUpdate: false,
     downloadUrl: undefined,
@@ -125,19 +138,24 @@ export function AboutSection() {
         const result = await checkForUpdates();
         setVersionInfo({
           ...result,
+          current:
+            normalizeAboutVersion(result.current) ?? runtimeAppVersion ?? "",
           downloadUrl: result.downloadUrl || FALLBACK_RELEASES_URL,
         });
       } catch (error) {
         console.error("Failed to load version:", error);
         setVersionInfo((prev) => ({
           ...prev,
+          current:
+            normalizeAboutVersion(prev.current) ?? runtimeAppVersion ?? "",
+          error: t("settings.about.update.errorCheck"),
           downloadUrl: prev.downloadUrl || FALLBACK_RELEASES_URL,
         }));
       }
     };
 
     void loadCurrentVersion();
-  }, []);
+  }, [runtimeAppVersion, t]);
 
   useEffect(() => {
     let disposed = false;
@@ -194,12 +212,16 @@ export function AboutSection() {
       const result = await checkForUpdates();
       setVersionInfo({
         ...result,
+        current:
+          normalizeAboutVersion(result.current) ?? runtimeAppVersion ?? "",
         downloadUrl: result.downloadUrl || FALLBACK_RELEASES_URL,
       });
     } catch (error) {
       console.error("Failed to check for updates:", error);
       setVersionInfo((prev) => ({
         ...prev,
+        current:
+          normalizeAboutVersion(prev.current) ?? runtimeAppVersion ?? "",
         error: t("settings.about.update.errorCheck"),
         downloadUrl: prev.downloadUrl || FALLBACK_RELEASES_URL,
       }));
@@ -246,10 +268,19 @@ export function AboutSection() {
     }
   };
 
-  const versionLabel = t("settings.about.version.label", {
-    version: versionInfo.current || t("settings.about.version.loading"),
-    build: versionInfo.current || t("settings.about.version.loading"),
-  });
+  const currentVersion =
+    normalizeAboutVersion(versionInfo.current) ??
+    normalizeAboutVersion(installSession?.currentVersion) ??
+    runtimeAppVersion;
+  const versionLabel = currentVersion
+    ? t("settings.about.version.label", {
+        version: currentVersion,
+        build: currentVersion,
+      })
+    : t("settings.about.version.loadingLabel", {
+        loading: t("settings.about.version.loading"),
+        defaultValue: "Version {{loading}}",
+      });
 
   const updateStatus = useMemo(() => {
     if (installingUpdate) {

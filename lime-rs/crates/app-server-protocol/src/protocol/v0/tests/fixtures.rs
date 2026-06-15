@@ -468,6 +468,7 @@ fn agent_session_turn_start_request_matches_protocol_fixture_shape() {
                     metadata: Some(json!({ "taskId": "task-1" })),
                     queued_turn_id: Some("queued-turn-1".to_string()),
                     host_options: Some(json!({ "adapter": "desktop" })),
+                    ..RuntimeOptions::default()
                 }),
                 queue_if_busy: true,
                 skip_pre_submit_resume: true,

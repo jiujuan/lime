@@ -726,7 +726,7 @@ impl AgentDao {
         let sql = format!(
             "SELECT s.id, s.model, s.system_prompt, s.title, s.created_at, s.updated_at,
                     s.working_dir, s.execution_strategy,
-                    (SELECT COUNT(1) FROM agent_messages m WHERE m.session_id = s.id) AS messages_count,
+                    0 AS messages_count,
                     s.archived_at, w.id AS workspace_id
              FROM agent_sessions s
              LEFT JOIN workspaces w ON w.root_path = s.working_dir
@@ -754,7 +754,7 @@ impl AgentDao {
         let mut stmt = conn.prepare(
             "SELECT s.id, s.model, s.system_prompt, s.title, s.created_at, s.updated_at,
                     s.working_dir, s.execution_strategy,
-                    (SELECT COUNT(1) FROM agent_messages m WHERE m.session_id = s.id) AS messages_count,
+                    0 AS messages_count,
                     s.archived_at, w.id AS workspace_id
              FROM agent_sessions s
              LEFT JOIN workspaces w ON w.root_path = s.working_dir

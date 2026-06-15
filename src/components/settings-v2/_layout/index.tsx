@@ -19,7 +19,13 @@ import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import { SettingsSidebar } from "./SettingsSidebar";
 import { SettingsTabs } from "@/types/settings";
-import { Page, PageParams, type SettingsProviderView } from "@/types/page";
+import {
+  Page,
+  PageParams,
+  type ExecutionPolicyFocusContext,
+  type ProviderSettingsFocusContext,
+  type SettingsProviderView,
+} from "@/types/page";
 import { buildHomeAgentParams } from "@/lib/workspace/navigation";
 import { shouldReserveMacWindowControls } from "@/lib/windowControls";
 import { SettingsHomePage } from "../home";
@@ -96,6 +102,11 @@ const McpPanel = lazy(() =>
 const EnvironmentSettings = lazy(() =>
   import("../system/environment").then((module) => ({
     default: module.EnvironmentSettings,
+  })),
+);
+const ExecutionPolicySettings = lazy(() =>
+  import("../system/execution-policy").then((module) => ({
+    default: module.ExecutionPolicySettings,
   })),
 );
 const WebSearchSettings = lazy(() =>
@@ -325,6 +336,7 @@ const ACTIVE_SETTINGS_TABS = new Set<SettingsTabs>([
   SettingsTabs.McpServer,
   SettingsTabs.WebSearch,
   SettingsTabs.Environment,
+  SettingsTabs.ExecutionPolicy,
   SettingsTabs.ChromeRelay,
   SettingsTabs.Automation,
   SettingsTabs.Developer,
@@ -370,6 +382,8 @@ function preloadSettingsTab(tab: SettingsTabs): Promise<unknown> | null {
       return import("../system/web-search");
     case SettingsTabs.Environment:
       return import("../system/environment");
+    case SettingsTabs.ExecutionPolicy:
+      return import("../system/execution-policy");
     case SettingsTabs.ChromeRelay:
       return import("../system/chrome-relay");
     case SettingsTabs.Automation:
@@ -399,6 +413,8 @@ function renderSettingsContent(
   onTabPrefetch?: (tab: SettingsTabs) => void,
   onNavigate?: (page: Page, params?: PageParams) => void,
   initialProviderView?: SettingsProviderView,
+  initialProviderFocus?: ProviderSettingsFocusContext | null,
+  initialExecutionPolicyFocus?: ExecutionPolicyFocusContext | null,
   activeDeveloperLabTab: "developer" | "experimental" = "developer",
 ): ReactNode {
   const hasManagedAccountProfile = Boolean(resolveOemCloudRuntimeContext());
@@ -457,7 +473,10 @@ function renderSettingsContent(
     // 智能体组
     case SettingsTabs.Providers:
       return withSettingsContentFallback(
-        <CloudProviderSettings initialView={initialProviderView} />,
+        <CloudProviderSettings
+          initialView={initialProviderView}
+          initialFocus={initialProviderFocus}
+        />,
         t("settings.layout.loading.providers"),
       );
 
@@ -484,6 +503,12 @@ function renderSettingsContent(
       return withSettingsContentFallback(
         <EnvironmentSettings />,
         t("settings.layout.loading.environment"),
+      );
+
+    case SettingsTabs.ExecutionPolicy:
+      return withSettingsContentFallback(
+        <ExecutionPolicySettings focus={initialExecutionPolicyFocus ?? null} />,
+        t("settings.layout.loading.executionPolicy"),
       );
 
     case SettingsTabs.ChromeRelay:
@@ -529,6 +554,8 @@ interface SettingsLayoutV2Props {
   onNavigate?: (page: Page, params?: PageParams) => void;
   initialTab?: SettingsTabs;
   initialProviderView?: SettingsProviderView;
+  initialProviderFocus?: ProviderSettingsFocusContext | null;
+  initialExecutionPolicyFocus?: ExecutionPolicyFocusContext | null;
 }
 
 const WIDE_CONTENT_TABS = ACTIVE_SETTINGS_TABS;
@@ -544,6 +571,8 @@ export function SettingsLayoutV2({
   onNavigate,
   initialTab,
   initialProviderView,
+  initialProviderFocus,
+  initialExecutionPolicyFocus,
 }: SettingsLayoutV2Props) {
   const { t } = useTranslation("settings");
   const [activeTab, setActiveTab] = useState<SettingsTabs>(
@@ -595,17 +624,19 @@ export function SettingsLayoutV2({
   }, [initialTab]);
 
   useEffect(() => {
-    if (!initialTab && !initialProviderView) {
+    if (!initialTab && !initialProviderView && !initialProviderFocus) {
       return;
     }
 
     if ((initialTab ?? SettingsTabs.Providers) === SettingsTabs.Providers) {
-      setActiveProviderView(initialProviderView);
+      setActiveProviderView(
+        initialProviderView ?? (initialProviderFocus ? "settings" : undefined),
+      );
       return;
     }
 
     setActiveProviderView(undefined);
-  }, [initialProviderView, initialTab]);
+  }, [initialProviderFocus, initialProviderView, initialTab]);
 
   useEffect(() => {
     contentContainerRef.current?.scrollTo?.({ top: 0, behavior: "auto" });
@@ -646,6 +677,8 @@ export function SettingsLayoutV2({
               handleTabPrefetch,
               onNavigate,
               activeProviderView,
+              initialProviderFocus,
+              initialExecutionPolicyFocus,
               activeDeveloperLabTab,
             )}
           </ContentWrapper>

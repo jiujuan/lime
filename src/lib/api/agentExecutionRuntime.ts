@@ -86,6 +86,9 @@ export interface AsterSessionExecutionRuntimeRoutingDecision {
   fallbackChain?: string[];
   settingsSource?: string | null;
   serviceModelSlot?: string | null;
+  fallbackApplied?: boolean | null;
+  requestedSelection?: Record<string, unknown> | null;
+  routingAttempts?: Record<string, unknown>[];
 }
 
 export interface AsterSessionExecutionRuntimeLimitState {

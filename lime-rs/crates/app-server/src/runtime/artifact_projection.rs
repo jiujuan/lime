@@ -5,6 +5,7 @@ use super::StoredSession;
 use app_server_protocol::AgentEvent;
 use app_server_protocol::ArtifactContentStatus;
 use app_server_protocol::ArtifactSummary;
+use serde_json::{json, Map, Value};
 use std::collections::HashSet;
 
 pub(super) fn paginate_artifact_summaries(
@@ -165,7 +166,7 @@ fn artifact_ref_summaries_from_event(event: &AgentEvent) -> Vec<ArtifactSummary>
         return Vec::new();
     }
     let path = string_field(payload, &["filePath", "file_path", "path", "artifactPath"]);
-    let metadata = payload.get("metadata").cloned();
+    let metadata = artifact_ref_metadata_from_payload(payload);
     artifact_refs
         .into_iter()
         .map(|artifact_ref| ArtifactSummary {
@@ -183,6 +184,132 @@ fn artifact_ref_summaries_from_event(event: &AgentEvent) -> Vec<ArtifactSummary>
             metadata: metadata.clone(),
         })
         .collect()
+}
+
+fn artifact_ref_metadata_from_payload(payload: &Value) -> Option<Value> {
+    let original_metadata = payload.get("metadata").cloned();
+    let mut metadata = original_metadata
+        .as_ref()
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let mut normalized = false;
+
+    insert_string_metadata_if_missing(
+        &mut metadata,
+        "previewText",
+        &["previewText", "preview_text", "preview", "summary"],
+        payload,
+        &mut normalized,
+    );
+    insert_string_metadata_if_missing(
+        &mut metadata,
+        "changeKind",
+        &["changeKind", "change_kind", "operation"],
+        payload,
+        &mut normalized,
+    );
+    insert_string_metadata_if_missing(
+        &mut metadata,
+        "checkpointRef",
+        &[
+            "checkpointRef",
+            "checkpoint_ref",
+            "checkpointId",
+            "checkpoint_id",
+        ],
+        payload,
+        &mut normalized,
+    );
+    insert_string_metadata_if_missing(
+        &mut metadata,
+        "contentRef",
+        &["contentRef", "content_ref"],
+        payload,
+        &mut normalized,
+    );
+    insert_string_metadata_if_missing(
+        &mut metadata,
+        "diffRef",
+        &["diffRef", "diff_ref"],
+        payload,
+        &mut normalized,
+    );
+
+    if !metadata_has_any(&metadata, &["file_change", "fileChange"]) {
+        if let Some(change) = payload
+            .get("file_change")
+            .or_else(|| payload.get("fileChange"))
+            .or_else(|| payload.get("change"))
+            .cloned()
+        {
+            metadata.insert("file_change".to_string(), change);
+            normalized = true;
+        }
+    }
+    if !metadata_has_any(&metadata, &["artifactVersionDiff", "artifact_version_diff"]) {
+        if let Some(diff) = payload
+            .get("artifactVersionDiff")
+            .or_else(|| payload.get("artifact_version_diff"))
+            .or_else(|| payload.get("diff"))
+            .cloned()
+        {
+            metadata.insert("artifactVersionDiff".to_string(), diff);
+            normalized = true;
+        } else if let Some(diff_ref) = string_field(payload, &["diffRef", "diff_ref"]) {
+            metadata.insert(
+                "artifactVersionDiff".to_string(),
+                json!({ "diffRef": diff_ref }),
+            );
+            normalized = true;
+        }
+    }
+
+    if metadata.is_empty() {
+        original_metadata
+    } else if normalized
+        || original_metadata
+            .as_ref()
+            .and_then(Value::as_object)
+            .is_some()
+    {
+        Some(Value::Object(metadata))
+    } else {
+        original_metadata
+    }
+}
+
+fn insert_string_metadata_if_missing(
+    metadata: &mut Map<String, Value>,
+    target_key: &str,
+    source_keys: &[&str],
+    payload: &Value,
+    normalized: &mut bool,
+) {
+    if metadata.contains_key(target_key) {
+        return;
+    }
+    if let Some(value) =
+        string_from_metadata(metadata, source_keys).or_else(|| string_field(payload, source_keys))
+    {
+        metadata.insert(target_key.to_string(), json!(value));
+        *normalized = true;
+    }
+}
+
+fn metadata_has_any(metadata: &Map<String, Value>, keys: &[&str]) -> bool {
+    keys.iter().any(|key| metadata.contains_key(*key))
+}
+
+fn string_from_metadata(metadata: &Map<String, Value>, keys: &[&str]) -> Option<String> {
+    keys.iter().find_map(|key| {
+        metadata
+            .get(*key)
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+    })
 }
 
 fn dedupe_artifact_summaries(summaries: Vec<ArtifactSummary>) -> Vec<ArtifactSummary> {

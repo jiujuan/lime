@@ -6,6 +6,7 @@ use app_server_protocol::AgentEvent;
 use serde_json::json;
 use serde_json::Map;
 use serde_json::Value;
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 
 #[derive(Debug, Default)]
@@ -13,6 +14,7 @@ pub(super) struct CodingActivityProjection {
     pub(super) commands: Vec<Value>,
     pub(super) tests: Vec<Value>,
     pub(super) pending_requests: Vec<Value>,
+    pub(super) change_summary: Option<Value>,
     pub(super) active_command_id: Option<String>,
     pub(super) active_test_run_id: Option<String>,
     pub(super) active_action_id: Option<String>,
@@ -24,6 +26,10 @@ struct CommandState {
     turn_id: Option<String>,
     status: String,
     command: Option<String>,
+    canonical_command: Option<String>,
+    command_summary: Option<String>,
+    command_argv: Vec<String>,
+    command_argv_source: Option<String>,
     cwd: Option<String>,
     exit_code: Option<i64>,
     output_refs: Vec<String>,
@@ -42,6 +48,8 @@ struct TestState {
     status: String,
     command_id: Option<String>,
     suite: Option<String>,
+    canonical_command: Option<String>,
+    command_summary: Option<String>,
     result: Option<String>,
     passed: Option<i64>,
     failed: Option<i64>,
@@ -69,13 +77,26 @@ struct PendingActionState {
     sequence: u64,
 }
 
+#[derive(Debug, Default)]
+struct ChangeSummaryState {
+    changed_files: Vec<String>,
+    patch_status_by_id: BTreeMap<String, String>,
+    source_event_ids: Vec<String>,
+    latest_sequence: u64,
+}
+
 pub(super) fn coding_activity_from_events(stored: &StoredSession) -> CodingActivityProjection {
     let mut commands: HashMap<String, CommandState> = HashMap::new();
     let mut tests: HashMap<String, TestState> = HashMap::new();
     let mut pending_actions: HashMap<String, PendingActionState> = HashMap::new();
+    let mut change_summary = ChangeSummaryState::default();
 
     for event in &stored.events {
         match event.event_type.as_str() {
+            "file.changed" => update_change_summary_file(&mut change_summary, event),
+            "patch.started" | "patch.applied" | "patch.failed" => {
+                update_change_summary_patch(&mut change_summary, event)
+            }
             "command.started" => upsert_command_started(&mut commands, event),
             "command.output" => upsert_command_output(&mut commands, event),
             "command.exited" => upsert_command_exited(&mut commands, event),
@@ -139,10 +160,38 @@ pub(super) fn coding_activity_from_events(stored: &StoredSession) -> CodingActiv
             .into_iter()
             .map(pending_action_value)
             .collect(),
+        change_summary: change_summary_value(change_summary),
         active_command_id,
         active_test_run_id,
         active_action_id,
     }
+}
+
+fn update_change_summary_file(summary: &mut ChangeSummaryState, event: &AgentEvent) {
+    if let Some(path) = string_field(&event.payload, &["path", "relativePath", "relative_path"]) {
+        merge_refs(&mut summary.changed_files, vec![path]);
+    }
+    push_source_event(summary.source_event_ids.as_mut(), event);
+    summary.latest_sequence = event.sequence;
+}
+
+fn update_change_summary_patch(summary: &mut ChangeSummaryState, event: &AgentEvent) {
+    if let Some(patch_id) = string_field(&event.payload, &["patchId", "patch_id", "id"]) {
+        let status = match event.event_type.as_str() {
+            "patch.started" => "running",
+            "patch.applied" => "applied",
+            "patch.failed" => "failed",
+            _ => "unknown",
+        };
+        summary
+            .patch_status_by_id
+            .insert(patch_id, status.to_string());
+    }
+    for path in string_array_field(&event.payload, &["paths", "changedFiles", "changed_files"]) {
+        merge_refs(&mut summary.changed_files, vec![path]);
+    }
+    push_source_event(summary.source_event_ids.as_mut(), event);
+    summary.latest_sequence = event.sequence;
 }
 
 fn upsert_command_started(commands: &mut HashMap<String, CommandState>, event: &AgentEvent) {
@@ -156,6 +205,20 @@ fn upsert_command_started(commands: &mut HashMap<String, CommandState>, event: &
     command.turn_id = event.turn_id.clone().or_else(|| command.turn_id.clone());
     command.command =
         string_field(&event.payload, &["command"]).or_else(|| command.command.clone());
+    command.canonical_command =
+        string_field(&event.payload, &["canonicalCommand", "canonical_command"])
+            .or_else(|| command.canonical_command.clone());
+    command.command_summary = string_field(&event.payload, &["commandSummary", "command_summary"])
+        .or_else(|| command.command_summary.clone());
+    merge_refs(
+        &mut command.command_argv,
+        string_array_field(&event.payload, &["commandArgv", "command_argv"]),
+    );
+    command.command_argv_source = string_field(
+        &event.payload,
+        &["commandArgvSource", "command_argv_source"],
+    )
+    .or_else(|| command.command_argv_source.clone());
     command.cwd = string_field(&event.payload, &["cwd", "workingDirectory", "working_dir"])
         .or_else(|| command.cwd.clone());
     command.started_at = Some(event.timestamp.clone());
@@ -197,6 +260,22 @@ fn upsert_command_exited(commands: &mut HashMap<String, CommandState>, event: &A
         .or_insert_with(|| command_state(&command_id, event));
     command.exit_code =
         payload_i64(&event.payload, &["exitCode", "exit_code"]).or(command.exit_code);
+    command.command =
+        string_field(&event.payload, &["command"]).or_else(|| command.command.clone());
+    command.canonical_command =
+        string_field(&event.payload, &["canonicalCommand", "canonical_command"])
+            .or_else(|| command.canonical_command.clone());
+    command.command_summary = string_field(&event.payload, &["commandSummary", "command_summary"])
+        .or_else(|| command.command_summary.clone());
+    merge_refs(
+        &mut command.command_argv,
+        string_array_field(&event.payload, &["commandArgv", "command_argv"]),
+    );
+    command.command_argv_source = string_field(
+        &event.payload,
+        &["commandArgvSource", "command_argv_source"],
+    )
+    .or_else(|| command.command_argv_source.clone());
     command.status = command_exit_status(&event.payload, command.exit_code);
     command.completed_at = Some(event.timestamp.clone());
     command.updated_at = Some(event.timestamp.clone());
@@ -216,6 +295,11 @@ fn upsert_test_started(tests: &mut HashMap<String, TestState>, event: &AgentEven
     test.command_id = string_field(&event.payload, &["commandId", "command_id"])
         .or_else(|| test.command_id.clone());
     test.suite = string_field(&event.payload, &["suite"]).or_else(|| test.suite.clone());
+    test.canonical_command =
+        string_field(&event.payload, &["canonicalCommand", "canonical_command"])
+            .or_else(|| test.canonical_command.clone());
+    test.command_summary = string_field(&event.payload, &["commandSummary", "command_summary"])
+        .or_else(|| test.command_summary.clone());
     test.started_at = Some(event.timestamp.clone());
     test.updated_at = Some(event.timestamp.clone());
     test.sequence = event.sequence;
@@ -231,6 +315,11 @@ fn upsert_test_completed(tests: &mut HashMap<String, TestState>, event: &AgentEv
         .or_insert_with(|| test_state(&test_run_id, event));
     test.command_id = string_field(&event.payload, &["commandId", "command_id"])
         .or_else(|| test.command_id.clone());
+    test.canonical_command =
+        string_field(&event.payload, &["canonicalCommand", "canonical_command"])
+            .or_else(|| test.canonical_command.clone());
+    test.command_summary = string_field(&event.payload, &["commandSummary", "command_summary"])
+        .or_else(|| test.command_summary.clone());
     test.result =
         string_field(&event.payload, &["result", "status"]).or_else(|| test.result.clone());
     test.status = test_result_status(test.result.as_deref());
@@ -289,6 +378,10 @@ fn command_state(command_id: &str, event: &AgentEvent) -> CommandState {
         turn_id: event.turn_id.clone(),
         status: "running".to_string(),
         command: None,
+        canonical_command: None,
+        command_summary: None,
+        command_argv: Vec::new(),
+        command_argv_source: None,
         cwd: None,
         exit_code: None,
         output_refs: Vec::new(),
@@ -308,6 +401,8 @@ fn test_state(test_run_id: &str, event: &AgentEvent) -> TestState {
         status: "running".to_string(),
         command_id: None,
         suite: None,
+        canonical_command: None,
+        command_summary: None,
         result: None,
         passed: None,
         failed: None,
@@ -327,6 +422,10 @@ fn command_state_value(command: CommandState) -> Value {
         "turn_id": command.turn_id,
         "status": command.status,
         "command": command.command,
+        "canonical_command": command.canonical_command,
+        "command_summary": command.command_summary,
+        "command_argv": command.command_argv,
+        "command_argv_source": command.command_argv_source,
         "cwd": command.cwd,
         "exit_code": command.exit_code,
         "output_refs": command.output_refs,
@@ -345,6 +444,8 @@ fn test_state_value(test: TestState) -> Value {
         "status": test.status,
         "command_id": test.command_id,
         "suite": test.suite,
+        "canonical_command": test.canonical_command,
+        "command_summary": test.command_summary,
         "result": test.result,
         "passed": test.passed,
         "failed": test.failed,
@@ -370,6 +471,38 @@ fn pending_action_value(action: PendingActionState) -> Value {
         "created_at": action.created_at,
         "source_event_id": action.source_event_id,
     }))
+}
+
+fn change_summary_value(summary: ChangeSummaryState) -> Option<Value> {
+    if summary.changed_files.is_empty() && summary.patch_status_by_id.is_empty() {
+        return None;
+    }
+    let patch_count = summary.patch_status_by_id.len();
+    let failed_patch_count = summary
+        .patch_status_by_id
+        .values()
+        .filter(|status| status.as_str() == "failed")
+        .count();
+    let running_patch_count = summary
+        .patch_status_by_id
+        .values()
+        .filter(|status| status.as_str() == "running")
+        .count();
+    let applied_patch_count = summary
+        .patch_status_by_id
+        .values()
+        .filter(|status| status.as_str() == "applied")
+        .count();
+    Some(compact_object(json!({
+        "changed_file_count": summary.changed_files.len(),
+        "changed_files": summary.changed_files,
+        "patch_count": patch_count,
+        "applied_patch_count": applied_patch_count,
+        "failed_patch_count": failed_patch_count,
+        "running_patch_count": running_patch_count,
+        "source_event_ids": summary.source_event_ids,
+        "latest_sequence": summary.latest_sequence,
+    })))
 }
 
 fn stored_turn_is_active(stored: &StoredSession, turn_id: Option<&str>) -> bool {

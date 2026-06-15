@@ -1,7 +1,7 @@
 //! 运行态会话详情装配。
 
-use lime_core::database::agent_session_repository;
 use lime_core::database::DbConnection;
+use lime_core::database::agent_session_repository;
 use std::time::Instant;
 
 use super::session_store_runtime_projection::{
@@ -15,10 +15,43 @@ use super::session_store_subagent_context::{
 use super::session_store_types::SessionDetail;
 use super::{get_session_sync_with_history_page, resolve_session_provider_selector};
 use crate::aster_runtime_support::load_aster_runtime_snapshot;
+use crate::event_converter::convert_to_tauri_message;
 use crate::session_execution_runtime::{
     build_session_execution_runtime, reconcile_session_execution_runtime_permission_fallback,
 };
 use crate::session_query::read_session;
+
+pub(super) fn apply_current_runtime_conversation(
+    detail: &mut SessionDetail,
+    session: &aster::session::Session,
+    history_limit: Option<usize>,
+    history_offset: usize,
+    before_message_id: Option<i64>,
+) {
+    if before_message_id.is_some() {
+        return;
+    }
+
+    let Some(conversation) = session.conversation.as_ref() else {
+        return;
+    };
+
+    let mut messages = conversation
+        .messages()
+        .iter()
+        .filter(|message| message.is_user_visible())
+        .map(convert_to_tauri_message)
+        .collect::<Vec<_>>();
+
+    if let Some(limit) = history_limit {
+        let len = messages.len();
+        let end = len.saturating_sub(history_offset.min(len));
+        let start = end.saturating_sub(limit);
+        messages = messages[start..end].to_vec();
+    }
+
+    detail.messages = messages;
+}
 
 fn is_session_archived_sync(db: &DbConnection, session_id: &str) -> Result<bool, String> {
     let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
@@ -114,8 +147,9 @@ pub async fn get_runtime_session_detail_with_history_page(
 
     let overlay_started_at = Instant::now();
     let (session, runtime_snapshot) = if load_runtime_overlay {
+        let include_messages = before_message_id.is_none();
         let (session_result, snapshot_result) = tokio::join!(
-            read_session(session_id, false, "读取运行态 session 失败"),
+            read_session(session_id, include_messages, "读取运行态 session 失败"),
             load_aster_runtime_snapshot(session_id),
         );
         let session = match session_result {
@@ -145,6 +179,16 @@ pub async fn get_runtime_session_detail_with_history_page(
         (None, None)
     };
     let overlay_ms = overlay_started_at.elapsed().as_millis();
+
+    if let Some(session) = session.as_ref() {
+        apply_current_runtime_conversation(
+            &mut detail,
+            session,
+            history_limit,
+            history_offset,
+            before_message_id,
+        );
+    }
 
     let usage_fallback_started_at = Instant::now();
     if let Some(session) = session.as_ref() {

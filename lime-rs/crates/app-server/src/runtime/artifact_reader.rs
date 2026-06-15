@@ -1,5 +1,6 @@
 use super::artifact_projection;
 use super::output_refs;
+use super::sidecar_store::SidecarStore;
 use super::ArtifactContentRequest;
 use super::RuntimeCore;
 use super::RuntimeCoreError;
@@ -79,6 +80,13 @@ impl RuntimeCore {
                     session.session_id.as_str(),
                     artifact.artifact_ref.as_str(),
                 )
+                .or_else(|| {
+                    artifact_sidecar_content(
+                        self.sidecar_store.as_deref(),
+                        session.session_id.as_str(),
+                        artifact,
+                    )
+                })
                 .or_else(|| self.artifact_content_provider.read_content(&request));
                 artifact.content_status = if artifact.content.is_some() {
                     ArtifactContentStatus::Available
@@ -97,4 +105,30 @@ impl RuntimeCore {
             next_cursor,
         })
     }
+}
+
+fn artifact_sidecar_content(
+    sidecar_store: Option<&SidecarStore>,
+    session_id: &str,
+    artifact: &app_server_protocol::ArtifactSummary,
+) -> Option<String> {
+    let sidecar_store = sidecar_store?;
+    let sidecar_ref = artifact.metadata.as_ref().and_then(|metadata| {
+        metadata.get("sidecarRef").or_else(|| {
+            metadata
+                .get("artifact")
+                .and_then(|artifact| artifact.get("sidecarRef"))
+        })
+    })?;
+    let relative_path = sidecar_ref
+        .get("relativePath")
+        .and_then(serde_json::Value::as_str)?;
+    sidecar_store.read_text(relative_path).or_else(|| {
+        let prefixed = format!(
+            "sessions/{}/{}",
+            session_id,
+            relative_path.trim_start_matches("sessions/")
+        );
+        sidecar_store.read_text(prefixed.as_str())
+    })
 }

@@ -383,7 +383,7 @@ function assertAppServerTurnLifecycleAvailable(
 ): void {
   if (!isAvailable()) {
     throw new Error(
-      "App Server turn lifecycle is unavailable; current Agent runtime cannot use legacy agent_runtime_* commands.",
+      "App Server turn lifecycle is unavailable; Agent Runtime requires the App Server current lifecycle channel.",
     );
   }
 }
@@ -1263,6 +1263,36 @@ export function projectAppServerAgentEventPayload(
   };
 
   switch (event.type) {
+    case "thread.started":
+      return {
+        ...basePayload,
+        type: "thread_started",
+        thread_id: event.threadId ?? event.sessionId,
+      };
+    case "turn.started":
+      return {
+        ...basePayload,
+        type: "turn_started",
+        turn: readAgentThreadTurnFromPayload(payload, event, "running"),
+      };
+    case "item.started":
+      return {
+        ...basePayload,
+        type: "item_started",
+        item: readAgentThreadItemFromPayload(payload, event, "in_progress"),
+      };
+    case "item.updated":
+      return {
+        ...basePayload,
+        type: "item_updated",
+        item: readAgentThreadItemFromPayload(payload, event, "in_progress"),
+      };
+    case "message.created":
+      return {
+        ...basePayload,
+        type: "item_started",
+        item: readUserMessageItemFromPayload(payload, event),
+      };
     case "message.delta":
       if (readString(payload, "type") === "text_delta_batch") {
         return projectTextDeltaBatchPayload(basePayload, payload);
@@ -1283,7 +1313,7 @@ export function projectAppServerAgentEventPayload(
         message: readAgentMessageFromPayload(payload, event.timestamp),
       };
     case "item.completed": {
-      const item = readAgentThreadItemFromPayload(payload);
+      const item = readAgentThreadItemFromPayload(payload, event, "completed");
       if (item?.type === "agent_message") {
         return {
           ...basePayload,
@@ -1601,25 +1631,99 @@ function readAgentMessageFromPayload(
   };
 }
 
+function readAgentThreadTurnFromPayload(
+  payload: Record<string, unknown>,
+  event: AppServerAgentEvent,
+  fallbackStatus: string,
+): Record<string, unknown> {
+  const turn = normalizeRecord(payload.turn) ?? payload;
+  const timestamp = event.timestamp;
+  return {
+    id: readString(turn, "id", "turnId", "turn_id") ?? event.turnId ?? "",
+    thread_id:
+      readString(turn, "thread_id", "threadId") ??
+      event.threadId ??
+      event.sessionId,
+    prompt_text: readString(turn, "prompt_text", "promptText", "prompt") ?? "",
+    status: readString(turn, "status") ?? fallbackStatus,
+    started_at: readString(turn, "started_at", "startedAt") ?? timestamp,
+    completed_at: readString(turn, "completed_at", "completedAt"),
+    error_message: readString(turn, "error_message", "errorMessage", "error"),
+    created_at: readString(turn, "created_at", "createdAt") ?? timestamp,
+    updated_at: readString(turn, "updated_at", "updatedAt") ?? timestamp,
+  };
+}
+
 function readAgentThreadItemFromPayload(
   payload: Record<string, unknown>,
-): Record<string, unknown> | undefined {
+  event: AppServerAgentEvent,
+  fallbackStatus: "in_progress" | "completed" | "failed",
+): Record<string, unknown> {
   const item = normalizeRecord(payload.item) ?? payload;
-  const itemType = readString(item, "type");
-  if (!itemType) {
-    return undefined;
-  }
+  const itemType = readString(item, "type") ?? "agent_message";
+  const baseItem = readAgentThreadItemBase(item, event, fallbackStatus);
 
   if (itemType === "agent_message") {
     return {
       ...item,
+      ...baseItem,
       type: "agent_message",
       text: readString(item, "text", "content", "message") ?? "",
       phase: readString(item, "phase"),
     };
   }
 
-  return item;
+  return {
+    ...item,
+    ...baseItem,
+    type: itemType,
+  };
+}
+
+function readUserMessageItemFromPayload(
+  payload: Record<string, unknown>,
+  event: AppServerAgentEvent,
+): Record<string, unknown> {
+  const input = normalizeRecord(payload.input);
+  const contentRecord = normalizeRecord(payload.content);
+  const content =
+    readString(payload, "text", "message", "content") ??
+    readString(input ?? {}, "text", "message", "content") ??
+    readString(contentRecord ?? {}, "text", "message", "content") ??
+    "";
+  return {
+    ...readAgentThreadItemBase(payload, event, "completed"),
+    type: "user_message",
+    content,
+  };
+}
+
+function readAgentThreadItemBase(
+  item: Record<string, unknown>,
+  event: AppServerAgentEvent,
+  fallbackStatus: "in_progress" | "completed" | "failed",
+): Record<string, unknown> {
+  return {
+    id:
+      readString(item, "id", "itemId", "item_id", "messageId", "message_id") ??
+      event.eventId,
+    thread_id:
+      readString(item, "thread_id", "threadId") ??
+      event.threadId ??
+      event.sessionId,
+    turn_id:
+      readString(item, "turn_id", "turnId") ?? event.turnId ?? event.sessionId,
+    sequence:
+      typeof item.sequence === "number" ? item.sequence : event.sequence,
+    status:
+      readString(item, "status") ??
+      (readString(item, "completed_at", "completedAt")
+        ? "completed"
+        : fallbackStatus),
+    started_at: readString(item, "started_at", "startedAt") ?? event.timestamp,
+    completed_at: readString(item, "completed_at", "completedAt"),
+    updated_at: readString(item, "updated_at", "updatedAt") ?? event.timestamp,
+  };
 }
 
 function readAgentMessageFromThreadItem(
@@ -1658,6 +1762,8 @@ function readTimestampMs(value: unknown, fallback: string): number {
 export function appServerTurnStartParamsFromRequest(
   request: AgentRuntimeSubmitTurnRequest,
 ): AppServerAgentSessionTurnStartParams {
+  const structuredOutput = structuredOutputFromRequest(request);
+  const outputSchema = outputSchemaFromRequest(request, structuredOutput);
   return omitUndefined({
     sessionId: request.session_id,
     turnId: request.turn_id,
@@ -1672,8 +1778,15 @@ export function appServerTurnStartParamsFromRequest(
       modelPreference: request.turn_config?.model_preference,
       metadata: request.turn_config?.metadata,
       queuedTurnId: request.queued_turn_id,
+      expectedOutput: request.expected_output,
+      structuredOutput,
+      outputSchema,
       hostOptions: {
-        asterChatRequest: appServerAsterChatRequestFromRequest(request),
+        asterChatRequest: appServerAsterChatRequestFromRequest(
+          request,
+          structuredOutput,
+          outputSchema,
+        ),
       },
     }),
     queueIfBusy: request.queue_if_busy,
@@ -1747,6 +1860,8 @@ function agentRuntimeReplayedActionFromAppServer(
 
 function appServerAsterChatRequestFromRequest(
   request: AgentRuntimeSubmitTurnRequest,
+  structuredOutput?: Record<string, unknown>,
+  outputSchema?: unknown,
 ): Record<string, unknown> {
   return omitUndefined({
     message: request.message,
@@ -1766,11 +1881,87 @@ function appServerAsterChatRequestFromRequest(
     execution_strategy: request.turn_config?.execution_strategy,
     auto_continue: request.turn_config?.auto_continue,
     system_prompt: request.turn_config?.system_prompt,
+    expected_output: request.expected_output,
+    structured_output:
+      structuredOutput ??
+      request.structured_output ??
+      request.turn_config?.structured_output,
+    output_schema:
+      outputSchema ??
+      request.output_schema ??
+      request.turn_config?.output_schema,
     metadata: request.turn_config?.metadata,
     turn_id: request.turn_id,
     queue_if_busy: request.queue_if_busy,
     queued_turn_id: request.queued_turn_id,
   });
+}
+
+function structuredOutputFromRequest(
+  request: AgentRuntimeSubmitTurnRequest,
+): Record<string, unknown> | undefined {
+  if (isRecord(request.turn_config?.structured_output)) {
+    return request.turn_config.structured_output;
+  }
+  if (isRecord(request.structured_output)) {
+    return request.structured_output;
+  }
+  const fromExpectedOutput = expectedOutputStructuredOutput(
+    request.expected_output,
+  );
+  return fromExpectedOutput ?? undefined;
+}
+
+function outputSchemaFromRequest(
+  request: AgentRuntimeSubmitTurnRequest,
+  structuredOutput?: Record<string, unknown>,
+): unknown {
+  if (request.output_schema !== undefined) {
+    return request.output_schema;
+  }
+  if (request.turn_config?.output_schema !== undefined) {
+    return request.turn_config.output_schema;
+  }
+  if (structuredOutput?.schema !== undefined) {
+    return structuredOutput.schema;
+  }
+  return expectedOutputOutputSchema(request.expected_output);
+}
+
+function expectedOutputStructuredOutput(
+  expectedOutput: unknown,
+): Record<string, unknown> | undefined {
+  if (!isRecord(expectedOutput)) {
+    return undefined;
+  }
+  const outputFormat = isRecord(expectedOutput.outputFormat)
+    ? expectedOutput.outputFormat
+    : isRecord(expectedOutput.output_format)
+      ? expectedOutput.output_format
+      : undefined;
+  if (outputFormat) {
+    return outputFormat;
+  }
+  if (
+    expectedOutput.schema !== undefined ||
+    expectedOutput.outputSchema !== undefined ||
+    expectedOutput.output_schema !== undefined
+  ) {
+    return expectedOutput;
+  }
+  return undefined;
+}
+
+function expectedOutputOutputSchema(expectedOutput: unknown): unknown {
+  const structuredOutput = expectedOutputStructuredOutput(expectedOutput);
+  if (!structuredOutput) {
+    return undefined;
+  }
+  return (
+    structuredOutput.schema ??
+    structuredOutput.outputSchema ??
+    structuredOutput.output_schema
+  );
 }
 
 function appServerAttachmentsFromImages(

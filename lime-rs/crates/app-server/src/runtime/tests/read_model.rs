@@ -46,6 +46,28 @@ impl ExecutionBackend for RoutingDecisionReadModelBackend {
                     "status": "ready",
                     "source": "provider_store",
                     "enabledKeyCount": 1
+                },
+                "modelRegistry": {
+                    "source": "provider_declared_model",
+                    "status": "matched",
+                    "reasonCode": "matched_provider_custom_models",
+                    "modelCapabilities": {
+                        "capabilities": {
+                            "tools": true,
+                            "streaming": true,
+                            "reasoning": true
+                        },
+                        "taskFamilies": ["chat", "reasoning"],
+                        "runtimeFeatures": ["streaming", "tool_calling", "reasoning"]
+                    },
+                    "modelAlias": {
+                        "canonicalModelId": "coder-large",
+                        "providerModelId": "coder-large",
+                        "aliasSource": "local"
+                    },
+                    "reasoning": {
+                        "supported": true
+                    }
                 }
             }),
         ))?;
@@ -277,6 +299,18 @@ async fn read_session_projects_model_routing_into_thread_read() {
         Some("ready")
     );
     assert_eq!(
+        routing["modelRegistry"]["reasonCode"].as_str(),
+        Some("matched_provider_custom_models")
+    );
+    assert_eq!(
+        routing["modelRegistry"]["modelCapabilities"]["capabilities"]["reasoning"].as_bool(),
+        Some(true)
+    );
+    assert_eq!(
+        routing["modelRegistry"]["modelAlias"]["providerModelId"].as_str(),
+        Some("coder-large")
+    );
+    assert_eq!(
         routing["modelSlot"]["slots"][1]["slot"].as_str(),
         Some("review")
     );
@@ -357,6 +391,7 @@ async fn start_turn_hydrates_current_timeline_session_before_backend_submit() {
                     metadata: None,
                     queued_turn_id: None,
                     host_options: None,
+                    ..RuntimeOptions::default()
                 }),
                 queue_if_busy: false,
                 skip_pre_submit_resume: false,
@@ -699,13 +734,10 @@ async fn read_session_projects_runtime_events_into_thread_read_artifacts() {
 
 #[tokio::test]
 async fn start_turn_missing_current_timeline_session_still_fails_closed() {
-    let app_data_source = Arc::new(TestCurrentTimelineDataSource {
-        persisted: None,
-        objective: Mutex::new(None),
-        audit_updates: Mutex::new(Vec::new()),
-        read_requests: Mutex::new(Vec::new()),
-        knowledge_compile_requests: Mutex::new(Vec::new()),
-    });
+    let app_data_source = Arc::new(
+        TestCurrentTimelineDataSource::new(empty_agent_session_read_response("unused"))
+            .without_persisted_session(),
+    );
     let backend = Arc::new(RecordingBackend::default());
     let core =
         RuntimeCore::with_backend(backend.clone()).with_app_data_source(app_data_source.clone());

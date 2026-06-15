@@ -1615,6 +1615,64 @@ describe("agentUiEventProjection", () => {
     expect(
       buildAgentUiProjectionEvents(
         {
+          type: "routing_fallback_applied",
+          routing_decision: {
+            routingMode: "profile_slot",
+            decisionSource: "profile_model_slot",
+            selectedProvider: "openai",
+            selectedModel: "gpt-4.1-mini",
+            fallbackApplied: true,
+            requestedSelection: {
+              provider: "custom-coding",
+              model: "coder-large",
+            },
+            routingAttempts: [
+              {
+                slot: "coding",
+                provider: "custom-coding",
+                model: "coder-large",
+                providerReadiness: {
+                  status: "needs_setup",
+                  reasonCode: "missing_enabled_api_key",
+                },
+              },
+            ],
+          },
+        } as unknown as AgentEvent,
+        baseContext,
+      )[0],
+    ).toMatchObject({
+      type: "run.status",
+      sourceType: "routing_fallback_applied",
+      phase: "routing",
+      payload: {
+        runtimeEvent: "routing_fallback_applied",
+        routingMode: "profile_slot",
+        decisionSource: "profile_model_slot",
+        selectedProvider: "openai",
+        selectedModel: "gpt-4.1-mini",
+        fallbackApplied: true,
+        requestedSelection: {
+          provider: "custom-coding",
+          model: "coder-large",
+        },
+        routingAttempts: [
+          {
+            slot: "coding",
+            provider: "custom-coding",
+            model: "coder-large",
+            providerReadiness: {
+              status: "needs_setup",
+              reasonCode: "missing_enabled_api_key",
+            },
+          },
+        ],
+      },
+    });
+
+    expect(
+      buildAgentUiProjectionEvents(
+        {
           type: "routing_decision_made",
           routing_decision: {
             routing_mode: "single_candidate",

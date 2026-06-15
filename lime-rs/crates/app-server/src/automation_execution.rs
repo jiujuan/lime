@@ -548,6 +548,7 @@ fn build_runtime_options(
         metadata: Some(json_strip_nulls(runtime_metadata)),
         queued_turn_id: None,
         host_options: Some(host_options),
+        ..RuntimeOptions::default()
     })
 }
 

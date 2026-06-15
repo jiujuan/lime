@@ -75,6 +75,36 @@ fn test_sandbox_backend_plan_maps_supported_platforms() {
 }
 
 #[test]
+fn test_windows_restricted_token_backend_is_ready_on_windows() {
+    let metadata = json!({ "workspaceSandbox": { "enabled": true } });
+    let plan = plan_sandbox_backend(SandboxBackendPlanInput {
+        sandbox_profile: ToolExecutionSandboxProfile::WorkspaceCommand,
+        requested_policy: Some("workspace-write"),
+        request_metadata: Some(&metadata),
+        bypass_restrictions: false,
+        platform: SandboxBackendPlatform::Windows,
+    });
+
+    assert_eq!(plan.backend, SandboxBackend::RestrictedToken);
+    if cfg!(target_os = "windows") {
+        assert_eq!(plan.status, SandboxBackendStatus::Ready);
+        assert!(plan.enforced);
+        assert_eq!(plan.reason_code, "sandbox_backend_ready");
+    } else {
+        assert_eq!(plan.status, SandboxBackendStatus::Unavailable);
+        assert!(!plan.enforced);
+        assert_eq!(
+            plan.reason_code,
+            "sandbox_backend_windows_runner_unavailable_on_host"
+        );
+        assert_eq!(
+            plan.reason,
+            "当前宿主构建不可执行 Windows restricted token runner"
+        );
+    }
+}
+
+#[test]
 fn test_sandbox_backend_plan_blocks_strict_fallback_when_backend_is_not_enforced() {
     let metadata = json!({
         "workspaceSandbox": {

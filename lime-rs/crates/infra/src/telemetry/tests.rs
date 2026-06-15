@@ -3,7 +3,8 @@
 //! 使用 proptest 进行属性测试
 
 use super::{
-    LogRotationConfig, RequestLog, RequestLogger, RequestStatus, StatsAggregator, TimeRange,
+    LogRotationConfig, RequestLog, RequestLogger, RequestStatus, StatsAggregator, TelemetryStore,
+    TimeRange,
 };
 use chrono::{Duration, Utc};
 use lime_core::ProviderType;
@@ -112,6 +113,11 @@ fn create_test_logger() -> RequestLogger {
         enable_file_logging: false, // 测试时禁用文件日志
     };
     RequestLogger::new(config).expect("Failed to create test logger")
+}
+
+fn create_test_telemetry_store(temp_dir: &std::path::Path) -> TelemetryStore {
+    TelemetryStore::initialize(temp_dir.join("runtime/telemetry_1.sqlite"))
+        .expect("Failed to create telemetry store")
 }
 
 proptest! {
@@ -444,6 +450,41 @@ fn test_logger_clear() {
 }
 
 #[test]
+fn test_logger_dual_writes_telemetry_store() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let telemetry_store = create_test_telemetry_store(temp.path());
+    let config = LogRotationConfig {
+        max_memory_logs: 1000,
+        retention_days: 7,
+        max_file_size: 10 * 1024 * 1024,
+        enable_file_logging: false,
+    };
+    let logger = RequestLogger::new_with_telemetry_store(config, Some(telemetry_store.clone()))
+        .expect("logger");
+    let mut log = RequestLog::new(
+        "telemetry-dual-write".to_string(),
+        ProviderType::OpenAI,
+        "gpt-5".to_string(),
+        true,
+    );
+    log.session_id = Some("sess-telemetry".to_string());
+    log.thread_id = Some("thread-telemetry".to_string());
+    log.turn_id = Some("turn-telemetry".to_string());
+    log.mark_success(222, 200);
+
+    logger.record(log.clone()).expect("record");
+
+    let stored = telemetry_store
+        .read_request_log("telemetry-dual-write")
+        .expect("read request log")
+        .expect("stored request log");
+    assert_eq!(stored.id, log.id);
+    assert_eq!(stored.session_id, log.session_id);
+    assert_eq!(stored.turn_id, log.turn_id);
+    assert_eq!(stored.status, log.status);
+}
+
+#[test]
 fn test_stats_by_provider() {
     let logger = create_test_logger();
 
@@ -489,6 +530,46 @@ fn test_stats_by_model() {
     assert!(stats.contains_key("model-b"));
     assert_eq!(stats["model-a"].summary.total_requests, 2);
     assert_eq!(stats["model-b"].summary.total_requests, 1);
+}
+
+#[test]
+fn test_telemetry_store_session_queries() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let store = create_test_telemetry_store(temp.path());
+
+    let mut first = RequestLog::new(
+        "req-1".to_string(),
+        ProviderType::OpenAI,
+        "gpt-5".to_string(),
+        false,
+    );
+    first.session_id = Some("sess-1".to_string());
+    first.turn_id = Some("turn-1".to_string());
+    first.mark_success(111, 200);
+    store.upsert_request_log(&first).expect("first");
+
+    let mut second = RequestLog::new(
+        "req-2".to_string(),
+        ProviderType::OpenAI,
+        "gpt-5".to_string(),
+        false,
+    );
+    second.session_id = Some("sess-1".to_string());
+    second.turn_id = Some("turn-2".to_string());
+    second.mark_failed(222, Some(500), "boom".to_string());
+    store.upsert_request_log(&second).expect("second");
+
+    let session_logs = store
+        .read_request_logs_for_session("sess-1")
+        .expect("session logs");
+    assert_eq!(session_logs.len(), 2);
+
+    let turn_logs = store
+        .read_request_logs_for_session_turn("sess-1", Some("turn-2"))
+        .expect("turn logs");
+    assert_eq!(turn_logs.len(), 1);
+    assert_eq!(turn_logs[0].id, "req-2");
+    assert_eq!(turn_logs[0].status, RequestStatus::Failed);
 }
 
 // ========== StatsAggregator 属性测试 ==========

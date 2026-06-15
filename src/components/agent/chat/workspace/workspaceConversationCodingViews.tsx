@@ -5,6 +5,7 @@ import type {
   AgentRuntimeThreadReadModel,
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
+import { projectCodingWorkbenchViewFromEvents } from "@limecloud/agent-runtime-projection";
 import { CanvasSessionOverviewPanel } from "../components/CanvasSessionOverviewPanel";
 import type {
   CanvasWorkbenchSessionView,
@@ -13,15 +14,15 @@ import type {
 import type { CanvasWorkbenchChangeView } from "../components/canvas-workbench";
 import type {
   ActionRequired,
-  AgentThreadItem,
   AgentThreadTurn,
   ConfirmResponse,
 } from "../types";
 import { CodingWorkbenchLogPanel } from "./CodingWorkbenchLogPanel";
 import { CodingWorkbenchOutputPanel } from "./CodingWorkbenchOutputPanel";
+import type { CodingWorkbenchRecoveryContext } from "./codingWorkbenchRecovery";
+import { buildCodingSessionOverviewActivities } from "./codingSessionOverviewProjection";
 import {
   buildCanvasWorkbenchChangeViewFromCodingProjection,
-  buildCodingWorkbenchProjectionFromThreadItems,
   buildOutputHeaderViewModel,
   buildSessionHeaderViewModel,
   buildSessionRuntimeCountersFromCodingProjection,
@@ -35,7 +36,6 @@ interface WorkspaceConversationCodingViewsParams {
   t: AgentTranslate;
   locale: string;
   turns: readonly AgentThreadTurn[];
-  threadItems: readonly AgentThreadItem[];
   currentTurnId?: string | null;
   threadRead?: AgentRuntimeThreadReadModel | null;
   pendingActions: readonly ActionRequired[];
@@ -47,6 +47,7 @@ interface WorkspaceConversationCodingViewsParams {
   onRespondToAction?: (response: ConfirmResponse) => void | Promise<void>;
   onSubmitRecoveryPrompt?: (
     prompt: string,
+    context?: CodingWorkbenchRecoveryContext,
   ) => void | Promise<boolean> | boolean;
 }
 
@@ -64,7 +65,6 @@ export function buildWorkspaceConversationCodingViews({
   t,
   locale,
   turns,
-  threadItems,
   currentTurnId,
   threadRead,
   pendingActions,
@@ -83,11 +83,42 @@ export function buildWorkspaceConversationCodingViews({
     t,
   );
   const fileCheckpointSummary = threadRead?.file_checkpoint_summary || null;
-  const codingView = buildCodingWorkbenchProjectionFromThreadItems({
-    threadItems,
-    fileCheckpointSummary,
-    threadRead,
+  const codingView = projectCodingWorkbenchViewFromEvents({
+    executionEvents: [],
+    codingReadModel: threadRead,
   });
+  const formatCount = (count: number) =>
+    formatNumber(count, {
+      locale,
+    });
+  const sessionOverviewActivities = buildCodingSessionOverviewActivities(
+    codingView,
+    {
+      failedCount: (count) =>
+        t("agentChat.canvasWorkbench.coding.sessionOverview.failedCount", {
+          count,
+          countLabel: formatCount(count),
+        }),
+      filesChanged: (count) =>
+        t("agentChat.canvasWorkbench.coding.sessionOverview.filesChanged", {
+          count,
+          countLabel: formatCount(count),
+        }),
+      passedCount: (count) =>
+        t("agentChat.canvasWorkbench.coding.sessionOverview.passedCount", {
+          count,
+          countLabel: formatCount(count),
+        }),
+      patchCount: (count) =>
+        t("agentChat.canvasWorkbench.coding.sessionOverview.patchCount", {
+          count,
+          countLabel: formatCount(count),
+        }),
+      preparingResult: t(
+        "agentChat.canvasWorkbench.coding.sessionOverview.preparingResult",
+      ),
+    },
+  );
   const counters = buildSessionRuntimeCountersFromCodingProjection({
     codingView,
     fileCheckpointSummary,
@@ -120,7 +151,7 @@ export function buildWorkspaceConversationCodingViews({
         renderPanel: () => (
           <CanvasSessionOverviewPanel
             turns={turns}
-            threadItems={threadItems}
+            activityItems={sessionOverviewActivities}
             currentTurnId={currentTurnId}
             pendingActions={pendingActions}
             queuedTurns={queuedTurns}

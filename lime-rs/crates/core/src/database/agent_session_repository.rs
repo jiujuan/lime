@@ -132,17 +132,7 @@ pub fn get_session_with_messages(
     conn: &Connection,
     session_id: &str,
 ) -> Result<Option<SessionRecordDetail>, String> {
-    AgentDao::get_session_with_messages(conn, session_id)
-        .map(|session| {
-            session.map(|session| SessionRecordDetail {
-                workspace_id: resolve_workspace_id_by_working_dir(
-                    conn,
-                    session.working_dir.as_deref(),
-                ),
-                session,
-            })
-        })
-        .map_err(|error| format!("获取会话详情失败: {error}"))
+    get_session_without_messages(conn, session_id)
 }
 
 pub fn get_session_without_messages(
@@ -176,17 +166,8 @@ pub fn get_session_with_messages_tail_page(
     limit: usize,
     offset: usize,
 ) -> Result<Option<SessionRecordDetail>, String> {
-    AgentDao::get_session_with_messages_tail_page(conn, session_id, limit, offset)
-        .map(|session| {
-            session.map(|session| SessionRecordDetail {
-                workspace_id: resolve_workspace_id_by_working_dir(
-                    conn,
-                    session.working_dir.as_deref(),
-                ),
-                session,
-            })
-        })
-        .map_err(|error| format!("获取会话详情失败: {error}"))
+    let _ = (limit, offset);
+    get_session_without_messages(conn, session_id)
 }
 
 pub fn get_session_with_messages_before(
@@ -195,17 +176,8 @@ pub fn get_session_with_messages_before(
     limit: usize,
     before_message_id: i64,
 ) -> Result<Option<SessionRecordDetail>, String> {
-    AgentDao::get_session_with_messages_before(conn, session_id, limit, before_message_id)
-        .map(|session| {
-            session.map(|session| SessionRecordDetail {
-                workspace_id: resolve_workspace_id_by_working_dir(
-                    conn,
-                    session.working_dir.as_deref(),
-                ),
-                session,
-            })
-        })
-        .map_err(|error| format!("获取会话详情失败: {error}"))
+    let _ = (limit, before_message_id);
+    get_session_without_messages(conn, session_id)
 }
 
 pub fn get_persisted_session_metadata(
@@ -222,8 +194,8 @@ pub fn get_persisted_session_metadata(
 }
 
 pub fn count_session_messages(conn: &Connection, session_id: &str) -> Result<usize, String> {
-    AgentDao::get_message_count(conn, session_id)
-        .map_err(|error| format!("获取会话消息数量失败: {error}"))
+    let _ = (conn, session_id);
+    Ok(0)
 }
 
 pub fn list_title_preview_messages(
@@ -231,23 +203,8 @@ pub fn list_title_preview_messages(
     session_id: &str,
     limit: usize,
 ) -> Result<Vec<SessionRecordPreviewMessage>, String> {
-    if limit == 0 {
-        return Ok(Vec::new());
-    }
-
-    AgentDao::get_messages(conn, session_id)
-        .map(|messages| {
-            messages
-                .into_iter()
-                .filter(|msg| msg.role == "user" || msg.role == "assistant")
-                .take(limit)
-                .map(|msg| SessionRecordPreviewMessage {
-                    role: msg.role,
-                    content: msg.content.as_text(),
-                })
-                .collect()
-        })
-        .map_err(|error| format!("获取标题预览消息失败: {error}"))
+    let _ = (conn, session_id, limit);
+    Ok(Vec::new())
 }
 
 pub fn rename_session(

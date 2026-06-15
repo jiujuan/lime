@@ -11,6 +11,7 @@ import type {
   CanvasWorkbenchChangeItem,
 } from "./CanvasWorkbenchChangesPanelViewModel";
 import { resolveChangeDisplayMeta } from "./CanvasWorkbenchChangesPanelViewModel";
+import { CanvasWorkbenchChangeStatusMark } from "./CanvasWorkbenchChangeStatusMark";
 
 type CanvasWorkbenchTranslation = (
   key: string,
@@ -47,6 +48,12 @@ export function CanvasWorkbenchChangeDetailPanel({
   const selectedItemMeta = selectedChangeItem
     ? resolveChangeDisplayMeta(selectedChangeItem)
     : null;
+  const selectedRangeLabel = selectedChangeItem?.hunkStartLine
+    ? selectedChangeItem.hunkEndLine &&
+      selectedChangeItem.hunkEndLine !== selectedChangeItem.hunkStartLine
+      ? `${selectedChangeItem.hunkStartLine}-${selectedChangeItem.hunkEndLine}`
+      : `${selectedChangeItem.hunkStartLine}`
+    : null;
 
   return (
     <div className="group relative flex min-h-0 flex-col overflow-hidden">
@@ -62,13 +69,14 @@ export function CanvasWorkbenchChangeDetailPanel({
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {selectedItemMeta ? (
-            <span
-              className={cn(
-                "inline-flex h-5 items-center rounded-[6px] border px-1.5 text-[10px] font-semibold",
-                selectedItemMeta.className,
-              )}
-            >
-              {translateWorkbench(selectedItemMeta.labelKey)}
+            <CanvasWorkbenchChangeStatusMark
+              meta={selectedItemMeta}
+              translateWorkbench={translateWorkbench}
+            />
+          ) : null}
+          {selectedRangeLabel ? (
+            <span className="inline-flex h-5 items-center rounded-[6px] border border-slate-200 bg-slate-50 px-1.5 text-[10px] font-semibold text-slate-500">
+              {selectedRangeLabel}
             </span>
           ) : null}
           <span className="font-mono text-[12px] font-semibold">
@@ -97,6 +105,7 @@ export function CanvasWorkbenchChangeDetailPanel({
             diffLines={visibleDiffLines}
             panelClassName={panelClassName}
             variant={diffVariant}
+            filePath={selectedChangeItem?.path}
             showWhitespace={showWhitespace}
             wordWrapEnabled={wordWrapEnabled}
             omittedLabel={(count) =>

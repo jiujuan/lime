@@ -196,7 +196,7 @@ describe("safeInvoke", () => {
   it("Electron invoke 长时间不返回时按命令超时 fail-closed", async () => {
     vi.useFakeTimers();
     try {
-      mocks.resolveBridgeRequestTimeoutMs.mockReturnValueOnce(8000);
+      mocks.resolveBridgeRequestTimeoutMs.mockReturnValueOnce(30000);
       const invoke = vi.fn(() => new Promise<never>(() => {}));
       (window as any).electronAPI = {
         supportsCommand: () => true,
@@ -217,10 +217,10 @@ describe("safeInvoke", () => {
         },
       });
       const timeoutExpectation = expect(invokePromise).rejects.toThrow(
-        'Desktop Host IPC 命令 "app_server_handle_json_lines" 在 8000ms 内未返回',
+        'Desktop Host IPC 命令 "app_server_handle_json_lines" 在 30000ms 内未返回',
       );
 
-      await vi.advanceTimersByTimeAsync(8000);
+      await vi.advanceTimersByTimeAsync(30000);
       await timeoutExpectation;
 
       expect(invoke).toHaveBeenCalledWith("app_server_handle_json_lines", {
@@ -238,7 +238,7 @@ describe("safeInvoke", () => {
         expect.objectContaining({
           command: "app_server_handle_json_lines",
           transport: "electron-ipc",
-          error: expect.stringContaining("8000ms"),
+          error: expect.stringContaining("30000ms"),
         }),
       ]);
       expect(getInvokeTraceBuffer()).toEqual([
@@ -246,7 +246,7 @@ describe("safeInvoke", () => {
           command: "app_server_handle_json_lines",
           transport: "electron-ipc",
           status: "error",
-          error: expect.stringContaining("8000ms"),
+          error: expect.stringContaining("30000ms"),
         }),
       ]);
     } finally {

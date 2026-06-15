@@ -34,6 +34,9 @@ pub enum SandboxType {
     Docker,
     /// Firejail (Linux)
     Firejail,
+    /// Windows restricted token
+    #[serde(rename = "restricted_token")]
+    RestrictedToken,
     /// Seatbelt (macOS)
     Seatbelt,
     /// 无沙箱
@@ -344,6 +347,11 @@ impl SandboxConfigManager {
         if config.enabled && config.sandbox_type == SandboxType::Seatbelt {
             #[cfg(not(target_os = "macos"))]
             warnings.push("Seatbelt 仅在 macOS 上可用，沙箱将被禁用".to_string());
+        }
+
+        if config.enabled && config.sandbox_type == SandboxType::RestrictedToken {
+            #[cfg(not(target_os = "windows"))]
+            warnings.push("RestrictedToken 仅在 Windows 上可用，沙箱将被拒绝执行".to_string());
         }
 
         // 检查路径冲突

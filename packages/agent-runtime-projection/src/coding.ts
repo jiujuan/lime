@@ -15,6 +15,14 @@ export interface CodingReadModelCommandFact {
   commandId?: string;
   status?: string;
   command?: string;
+  canonical_command?: string;
+  canonicalCommand?: string;
+  command_summary?: string;
+  commandSummary?: string;
+  command_argv?: string[];
+  commandArgv?: string[];
+  command_argv_source?: string;
+  commandArgvSource?: string;
   cwd?: string;
   exit_code?: number;
   exitCode?: number;
@@ -33,6 +41,10 @@ export interface CodingReadModelTestRunFact {
   command_id?: string;
   commandId?: string;
   suite?: string;
+  canonical_command?: string;
+  canonicalCommand?: string;
+  command_summary?: string;
+  commandSummary?: string;
   result?: string;
   passed?: number;
   failed?: number;
@@ -55,6 +67,43 @@ export interface CodingReadModelPendingRequestFact {
   payload?: unknown;
 }
 
+export interface CodingReadModelArtifactFact {
+  artifact_ref?: string;
+  artifactRef?: string;
+  event_id?: string;
+  eventId?: string;
+  sequence?: number;
+  turn_id?: string;
+  turnId?: string;
+  artifact_id?: string;
+  artifactId?: string;
+  path?: string;
+  title?: string;
+  kind?: string;
+  status?: string;
+  content?: string;
+  metadata?: unknown;
+}
+
+export interface CodingReadModelChangeSummaryFact {
+  changed_file_count?: number;
+  changedFileCount?: number;
+  changed_files?: string[];
+  changedFiles?: string[];
+  patch_count?: number;
+  patchCount?: number;
+  applied_patch_count?: number;
+  appliedPatchCount?: number;
+  failed_patch_count?: number;
+  failedPatchCount?: number;
+  running_patch_count?: number;
+  runningPatchCount?: number;
+  source_event_ids?: string[];
+  sourceEventIds?: string[];
+  latest_sequence?: number;
+  latestSequence?: number;
+}
+
 export interface CodingReadModelFacts {
   thread_id?: string;
   threadId?: string;
@@ -70,6 +119,9 @@ export interface CodingReadModelFacts {
   activeTestRunId?: string | null;
   active_action_id?: string | null;
   activeActionId?: string | null;
+  change_summary?: CodingReadModelChangeSummaryFact | null;
+  changeSummary?: CodingReadModelChangeSummaryFact | null;
+  artifacts?: unknown[];
 }
 
 export interface CodingWorkbenchProjectionInput<
@@ -137,6 +189,10 @@ export interface CommandOutputView {
   status: string;
   title: string;
   command?: string;
+  canonicalCommand?: string;
+  commandSummary?: string;
+  commandArgv?: string[];
+  commandArgvSource?: string;
   cwd?: string;
   exitCode?: number;
   outputRefs: string[];
@@ -149,12 +205,25 @@ export interface TestRunView {
   status: string;
   title: string;
   commandId?: string;
+  command?: string;
+  canonicalCommand?: string;
+  commandSummary?: string;
   suite?: string;
   result?: string;
   passed?: number;
   failed?: number;
   outputRefs: string[];
   failureCategory?: string;
+  sourceEventIds: string[];
+}
+
+export interface ChangeSummaryView {
+  changedFileCount: number;
+  changedFiles: string[];
+  patchCount: number;
+  appliedPatchCount: number;
+  failedPatchCount: number;
+  runningPatchCount: number;
   sourceEventIds: string[];
 }
 
@@ -171,6 +240,7 @@ export interface CodingWorkbenchView<
   files: CodingFileView[];
   changes: FileChangeView[];
   patches: PatchView[];
+  changeSummary?: ChangeSummaryView;
   commands: CommandOutputView[];
   tests: TestRunView[];
   actions: AgentRuntimeEventProjection<TEvent>[];
@@ -190,6 +260,11 @@ interface CommandAccumulator extends CommandOutputView {
 
 interface TestAccumulator extends TestRunView {
   sequence: number;
+}
+
+interface ArtifactChangeAccumulator extends FileChangeView {
+  sequence: number;
+  fileId: string;
 }
 
 function isRecord(input: unknown): input is Record<string, unknown> {
@@ -259,6 +334,13 @@ function valueStringArray(...values: unknown[]): string[] {
   return [];
 }
 
+function valueRecord(...values: unknown[]): Record<string, unknown> | undefined {
+  for (const value of values) {
+    if (isRecord(value)) return value;
+  }
+  return undefined;
+}
+
 function eventSequence(event: AgentRuntimeExecutionEvent): number {
   return typeof event.sequence === "number" ? event.sequence : 0;
 }
@@ -283,6 +365,10 @@ function safeCommand(value: string | undefined): string | undefined {
     return undefined;
   }
   return safePreview(value);
+}
+
+function safeArtifactKind(value: string | undefined): string | undefined {
+  return value?.trim().toLowerCase();
 }
 
 function refIds(event: AgentRuntimeExecutionEvent): string[] {
@@ -460,6 +546,275 @@ function collectChanges(
   });
 }
 
+function artifactCheckpointRef(
+  artifact: CodingReadModelArtifactFact,
+  metadata?: Record<string, unknown>,
+): string | undefined {
+  const artifactVersion = valueRecord(
+    metadata?.artifactVersion,
+    metadata?.artifact_version,
+  );
+  return valueString(
+    metadata?.checkpointRef,
+    metadata?.checkpoint_ref,
+    metadata?.checkpointId,
+    metadata?.checkpoint_id,
+    metadata?.artifactVersionId,
+    metadata?.artifact_version_id,
+    artifactVersion?.id,
+    artifactVersion?.checkpointRef,
+    artifactVersion?.checkpoint_ref,
+    artifact.artifact_ref,
+    artifact.artifactRef,
+  );
+}
+
+function artifactDiffRef(
+  metadata?: Record<string, unknown>,
+): string | undefined {
+  const artifactVersion = valueRecord(
+    metadata?.artifactVersion,
+    metadata?.artifact_version,
+  );
+  const diff = valueRecord(
+    metadata?.artifactVersionDiff,
+    metadata?.artifact_version_diff,
+  );
+  return valueString(
+    metadata?.diffRef,
+    metadata?.diff_ref,
+    artifactVersion?.diffRef,
+    artifactVersion?.diff_ref,
+    diff?.diffRef,
+    diff?.diff_ref,
+  );
+}
+
+function artifactPreview(
+  artifact: CodingReadModelArtifactFact,
+  metadata?: Record<string, unknown>,
+): string | undefined {
+  const artifactVersion = valueRecord(
+    metadata?.artifactVersion,
+    metadata?.artifact_version,
+  );
+  return safePreview(
+    valueString(
+      metadata?.previewText,
+      metadata?.preview_text,
+      metadata?.artifactSummary,
+      metadata?.artifact_summary,
+      metadata?.summary,
+      artifactVersion?.title,
+      artifact.title,
+      artifact.path,
+    ),
+  );
+}
+
+function artifactChangeKind(
+  metadata?: Record<string, unknown>,
+): string | undefined {
+  const change = valueRecord(metadata?.file_change, metadata?.fileChange);
+  return valueString(
+    metadata?.changeKind,
+    metadata?.change_kind,
+    metadata?.operation,
+    change?.changeKind,
+    change?.change_kind,
+    change?.operation,
+  );
+}
+
+function isCodingArtifact(artifact: CodingReadModelArtifactFact): boolean {
+  const metadata = valueRecord(artifact.metadata);
+  const kind = safeArtifactKind(
+    valueString(
+      artifact.kind,
+      metadata?.artifactKind,
+      metadata?.artifact_kind,
+      metadata?.kind,
+    ),
+  );
+  const path = safeRelativePath(valueString(artifact.path));
+  if (!path) return false;
+  if (!kind) return true;
+  return (
+    kind.includes("file") ||
+    kind.includes("code") ||
+    kind.includes("patch") ||
+    kind.includes("diff")
+  );
+}
+
+function readModelArtifact(
+  value: unknown,
+): CodingReadModelArtifactFact | null {
+  return isRecord(value) ? (value as CodingReadModelArtifactFact) : null;
+}
+
+function changeFromReadModelArtifact(
+  artifact: CodingReadModelArtifactFact,
+): ArtifactChangeAccumulator | null {
+  if (!isCodingArtifact(artifact)) return null;
+  const path = safeRelativePath(valueString(artifact.path));
+  if (!path) return null;
+  const metadata = valueRecord(artifact.metadata);
+  const artifactRef = valueString(artifact.artifact_ref, artifact.artifactRef);
+  const sourceEventId =
+    valueString(artifact.event_id, artifact.eventId) ??
+    (artifactRef ? `read-model:artifact:${artifactRef}` : `read-model:path:${path}`);
+  const checkpointRef = artifactCheckpointRef(artifact, metadata);
+  return compact({
+    id: sourceEventId,
+    path,
+    status: valueString(artifact.status) ?? "completed",
+    changeKind: artifactChangeKind(metadata) ?? "modified",
+    artifactRefs: artifactRef ? [artifactRef] : [],
+    checkpointRef,
+    diffRef: artifactDiffRef(metadata),
+    preview: artifactPreview(artifact, metadata),
+    sourceEventId,
+    sequence: valueNumber(artifact.sequence) ?? 0,
+    fileId: path.toLowerCase(),
+  });
+}
+
+function mergeChanges(
+  eventChanges: FileChangeView[],
+  readModel?: CodingReadModelFacts | null,
+): FileChangeView[] {
+  const byFile = new Map<string, ArtifactChangeAccumulator>();
+  eventChanges.forEach((change, index) => {
+    byFile.set(change.path.toLowerCase(), {
+      ...change,
+      sequence: index + 1,
+      fileId: change.path.toLowerCase(),
+    });
+  });
+  readModel?.artifacts
+    ?.map(readModelArtifact)
+    .filter((artifact): artifact is CodingReadModelArtifactFact =>
+      Boolean(artifact),
+    )
+    .map(changeFromReadModelArtifact)
+    .filter((change): change is ArtifactChangeAccumulator => Boolean(change))
+    .forEach((change) => {
+      const existing = byFile.get(change.fileId);
+      byFile.set(
+        change.fileId,
+        existing
+          ? {
+              ...change,
+              ...existing,
+              artifactRefs: [
+                ...new Set([...change.artifactRefs, ...existing.artifactRefs]),
+              ],
+            }
+          : change,
+      );
+    });
+  return Array.from(byFile.values())
+    .sort((left, right) => left.sequence - right.sequence)
+    .map(({ sequence: _sequence, fileId: _fileId, ...change }) => change);
+}
+
+function filesFromChanges(changes: readonly FileChangeView[]): CodingFileView[] {
+  const files = new Map<string, CodingFileView>();
+  changes.forEach((change) => {
+    files.set(change.path, {
+      id: change.path,
+      path: change.path,
+      status: change.status,
+      title: change.path,
+      artifactRefs: change.artifactRefs,
+      checkpointRef: change.checkpointRef,
+      contentRef: undefined,
+      latestEventId: change.sourceEventId,
+    });
+  });
+  return Array.from(files.values());
+}
+
+function fileFromReadModelArtifact(
+  artifact: CodingReadModelArtifactFact,
+): CodingFileView | null {
+  if (!isCodingArtifact(artifact)) return null;
+  const path = safeRelativePath(valueString(artifact.path));
+  if (!path) return null;
+  const metadata = valueRecord(artifact.metadata);
+  const artifactRef = valueString(artifact.artifact_ref, artifact.artifactRef);
+  const sourceEventId =
+    valueString(artifact.event_id, artifact.eventId) ??
+    (artifactRef ? `read-model:artifact:${artifactRef}` : `read-model:path:${path}`);
+  return compact({
+    id: artifactRef ?? path,
+    path,
+    status: valueString(artifact.status) ?? "completed",
+    title: safeCommand(valueString(artifact.title)) ?? artifact.title ?? path,
+    artifactRefs: artifactRef ? [artifactRef] : [],
+    checkpointRef: artifactCheckpointRef(artifact, metadata),
+    contentRef: valueString(
+      metadata?.contentRef,
+      metadata?.content_ref,
+      metadata?.snapshotFile,
+      metadata?.snapshot_file,
+    ),
+    latestEventId: sourceEventId,
+  });
+}
+
+function mergeFiles(
+  eventFiles: CodingFileView[],
+  changes: readonly FileChangeView[],
+  readModel?: CodingReadModelFacts | null,
+): CodingFileView[] {
+  const byPath = new Map<string, CodingFileView>();
+  eventFiles.forEach((file) => {
+    byPath.set(file.path.toLowerCase(), file);
+  });
+  filesFromChanges(changes).forEach((file) => {
+    const key = file.path.toLowerCase();
+    const existing = byPath.get(key);
+    byPath.set(
+      key,
+      existing
+        ? {
+            ...existing,
+            ...file,
+            artifactRefs: [
+              ...new Set([...existing.artifactRefs, ...file.artifactRefs]),
+            ],
+          }
+        : file,
+    );
+  });
+  readModel?.artifacts
+    ?.map(readModelArtifact)
+    .filter((artifact): artifact is CodingReadModelArtifactFact =>
+      Boolean(artifact),
+    )
+    .map(fileFromReadModelArtifact)
+    .filter((file): file is CodingFileView => Boolean(file))
+    .forEach((file) => {
+      const key = file.path.toLowerCase();
+      const existing = byPath.get(key);
+      byPath.set(
+        key,
+        existing
+          ? {
+              ...existing,
+              ...file,
+              artifactRefs: [
+                ...new Set([...existing.artifactRefs, ...file.artifactRefs]),
+              ],
+            }
+          : file,
+      );
+    });
+  return Array.from(byPath.values());
+}
+
 function collectPatches(
   events: readonly AgentRuntimeExecutionEvent[],
 ): PatchView[] {
@@ -505,6 +860,24 @@ function collectCommands(
       status: event.status,
       title: event.title,
       command: safeCommand(payloadString(event, "command")) ?? previous?.command,
+      canonicalCommand:
+        safeCommand(payloadString(event, "canonicalCommand", "canonical_command")) ??
+        previous?.canonicalCommand,
+      commandSummary:
+        safeCommand(payloadString(event, "commandSummary", "command_summary")) ??
+        previous?.commandSummary,
+      commandArgv: [
+        ...new Set([
+          ...(previous?.commandArgv ?? []),
+          ...valueStringArray(
+            payload(event).commandArgv,
+            payload(event).command_argv,
+          ),
+        ]),
+      ],
+      commandArgvSource:
+        payloadString(event, "commandArgvSource", "command_argv_source") ??
+        previous?.commandArgvSource,
       cwd:
         safeRelativePath(payloadString(event, "cwd", "workingDirectory")) ??
         previous?.cwd,
@@ -536,6 +909,13 @@ function collectTests(
       status: event.status,
       title: event.title,
       commandId: payloadString(event, "commandId") ?? previous?.commandId,
+      command: safeCommand(payloadString(event, "command")) ?? previous?.command,
+      canonicalCommand:
+        safeCommand(payloadString(event, "canonicalCommand", "canonical_command")) ??
+        previous?.canonicalCommand,
+      commandSummary:
+        safeCommand(payloadString(event, "commandSummary", "command_summary")) ??
+        previous?.commandSummary,
       suite: payloadString(event, "suite") ?? previous?.suite,
       result: payloadString(event, "result", "status") ?? previous?.result,
       passed: payloadNumber(event, "passed") ?? previous?.passed,
@@ -564,8 +944,22 @@ function commandFromReadModel(
   return compact({
     commandId,
     status: valueString(command.status) ?? "running",
-    title: safeCommand(valueString(command.command)) ?? commandId,
+    title:
+      safeCommand(valueString(command.command_summary, command.commandSummary)) ??
+      safeCommand(valueString(command.command)) ??
+      commandId,
     command: safeCommand(valueString(command.command)),
+    canonicalCommand: safeCommand(
+      valueString(command.canonical_command, command.canonicalCommand),
+    ),
+    commandSummary: safeCommand(
+      valueString(command.command_summary, command.commandSummary),
+    ),
+    commandArgv: valueStringArray(command.command_argv, command.commandArgv),
+    commandArgvSource: valueString(
+      command.command_argv_source,
+      command.commandArgvSource,
+    ),
     cwd: safeRelativePath(valueString(command.cwd)),
     exitCode: valueNumber(command.exit_code, command.exitCode),
     outputRefs: valueStringArray(command.output_refs, command.outputRefs),
@@ -590,8 +984,17 @@ function testFromReadModel(
   return compact({
     testRunId,
     status: valueString(test.status) ?? "running",
-    title: valueString(test.suite, test.command_id, test.commandId) ?? testRunId,
+    title:
+      safeCommand(valueString(test.command_summary, test.commandSummary)) ??
+      valueString(test.suite, test.command_id, test.commandId) ??
+      testRunId,
     commandId: valueString(test.command_id, test.commandId),
+    canonicalCommand: safeCommand(
+      valueString(test.canonical_command, test.canonicalCommand),
+    ),
+    commandSummary: safeCommand(
+      valueString(test.command_summary, test.commandSummary),
+    ),
     suite: valueString(test.suite),
     result: valueString(test.result),
     passed: valueNumber(test.passed),
@@ -605,6 +1008,39 @@ function testFromReadModel(
       ? sourceEventIds
       : [`read-model:test:${testRunId}`],
   });
+}
+
+function changeSummaryFromReadModel(
+  readModel?: CodingReadModelFacts | null,
+): ChangeSummaryView | undefined {
+  const summary = readModel?.change_summary ?? readModel?.changeSummary;
+  if (!summary) return undefined;
+  const changedFiles = valueStringArray(
+    summary.changed_files,
+    summary.changedFiles,
+  )
+    .map((path) => safeRelativePath(path))
+    .filter((path): path is string => Boolean(path));
+  const patchCount = valueNumber(summary.patch_count, summary.patchCount) ?? 0;
+  const changedFileCount =
+    valueNumber(summary.changed_file_count, summary.changedFileCount) ??
+    changedFiles.length;
+  if (changedFileCount === 0 && patchCount === 0) return undefined;
+  return {
+    changedFileCount,
+    changedFiles,
+    patchCount,
+    appliedPatchCount:
+      valueNumber(summary.applied_patch_count, summary.appliedPatchCount) ?? 0,
+    failedPatchCount:
+      valueNumber(summary.failed_patch_count, summary.failedPatchCount) ?? 0,
+    runningPatchCount:
+      valueNumber(summary.running_patch_count, summary.runningPatchCount) ?? 0,
+    sourceEventIds: valueStringArray(
+      summary.source_event_ids,
+      summary.sourceEventIds,
+    ),
+  };
 }
 
 function actionEventFromReadModel(
@@ -732,9 +1168,10 @@ export function projectCodingWorkbenchView<
 ): CodingWorkbenchView<TEvent> {
   const events = state.readModel.events.map((projection) => projection.source);
   const codingEvents = collectCodingEvents(events);
-  const files = collectFiles(codingEvents);
-  const changes = collectChanges(codingEvents);
+  const changes = mergeChanges(collectChanges(codingEvents), readModel);
+  const files = mergeFiles(collectFiles(codingEvents), changes, readModel);
   const patches = collectPatches(codingEvents);
+  const changeSummary = changeSummaryFromReadModel(readModel);
   const commands = mergeCommands(collectCommands(codingEvents), readModel);
   const tests = mergeTests(collectTests(codingEvents), readModel);
   const actions = mergeActions(state.actions, readModel);
@@ -755,6 +1192,7 @@ export function projectCodingWorkbenchView<
     files,
     changes,
     patches,
+    changeSummary,
     commands,
     tests,
     actions,

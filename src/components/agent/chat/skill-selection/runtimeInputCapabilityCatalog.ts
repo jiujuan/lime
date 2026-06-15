@@ -7,6 +7,7 @@ import {
   type SkillCatalogCommandEntry,
 } from "@/lib/api/skillCatalog";
 import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
+import { normalizeExecutionStrategyToReact } from "@/lib/api/agentRuntime/executionStrategyCompat";
 import {
   INPUTBAR_BUILTIN_COMMANDS,
   listBuiltinCommandsFromSkillCatalog,
@@ -79,15 +80,6 @@ function buildMentionCommandPrefixKeyMap(
   );
 }
 
-export function parseCatalogExecutionStrategy(
-  value?: string,
-): "react" | undefined {
-  if (value === "react" || value === "code_orchestrated" || value === "auto") {
-    return "react";
-  }
-  return undefined;
-}
-
 function buildAgentTurnRoute(
   entry: SkillCatalogCommandEntry,
 ): RuntimeMentionAgentTurnRoute | null {
@@ -97,9 +89,9 @@ function buildAgentTurnRoute(
   }
 
   const requestDefaults = entry.binding.requestDefaults ?? {};
-  const executionStrategy = parseCatalogExecutionStrategy(
+  const executionStrategy = normalizeExecutionStrategyToReact(
     requestDefaults.executionStrategy ?? requestDefaults.execution_strategy,
-  );
+  ) ?? undefined;
 
   if (!executionStrategy) {
     return null;

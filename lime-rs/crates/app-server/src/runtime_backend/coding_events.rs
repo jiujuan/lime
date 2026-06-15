@@ -3,8 +3,10 @@ use lime_agent::{AgentEvent as RuntimeAgentEvent, AgentToolResult};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
+mod command;
 mod patch;
 
+use command::{command_facts_from_arguments, command_facts_from_text, CommandFacts};
 use patch::{patch_id_for_tool_start, patch_paths_from_arguments, patch_terminal_events};
 
 const COMMAND_OUTPUT_PREVIEW_CHARS: usize = 1_200;
@@ -13,6 +15,7 @@ const COMMAND_OUTPUT_PREVIEW_CHARS: usize = 1_200;
 struct TrackedTool {
     name: String,
     arguments: Option<Value>,
+    command_facts: Option<CommandFacts>,
     test_run_id: Option<String>,
     patch_id: Option<String>,
     emitted_output: bool,
@@ -67,6 +70,7 @@ impl CodingEventMirror {
     ) -> Vec<RuntimeEvent> {
         let normalized_name = normalize_tool_name(tool_name);
         let arguments_value = arguments.and_then(parse_json_str);
+        let command_facts = command_facts_from_arguments(arguments_value.as_ref());
         let mut events = Vec::new();
         let patch_id = patch_id_for_tool_start(normalized_name, tool_id, arguments_value.as_ref());
         if let Some(patch_id) = &patch_id {
@@ -82,7 +86,10 @@ impl CodingEventMirror {
             ));
         }
         let test_run_id = if is_shell_tool(normalized_name) {
-            let command = command_from_arguments(arguments_value.as_ref()).unwrap_or_default();
+            let command = command_facts
+                .as_ref()
+                .map(|facts| facts.command.clone())
+                .unwrap_or_default();
             events.push(RuntimeEvent::new(
                 "command.started",
                 compact_object(json!({
@@ -90,6 +97,10 @@ impl CodingEventMirror {
                     "toolCallId": tool_id,
                     "toolName": normalized_name,
                     "command": command,
+                    "canonicalCommand": command_facts.as_ref().map(|facts| facts.canonical_command.clone()),
+                    "commandSummary": command_facts.as_ref().map(|facts| facts.summary.clone()),
+                    "commandArgv": command_facts.as_ref().map(|facts| facts.argv.clone()),
+                    "commandArgvSource": command_facts.as_ref().map(|facts| facts.source),
                     "cwd": cwd_from_value(arguments_value.as_ref()),
                     "source": "runtime_tool",
                 })),
@@ -103,6 +114,8 @@ impl CodingEventMirror {
                         "testRunId": test_run_id,
                         "commandId": tool_id,
                         "command": command,
+                        "canonicalCommand": command_facts.as_ref().map(|facts| facts.canonical_command.clone()),
+                        "commandSummary": command_facts.as_ref().map(|facts| facts.summary.clone()),
                         "source": "runtime_tool",
                     })),
                 ));
@@ -119,6 +132,7 @@ impl CodingEventMirror {
             TrackedTool {
                 name: normalized_name.to_string(),
                 arguments: arguments_value,
+                command_facts,
                 test_run_id,
                 patch_id,
                 emitted_output: false,
@@ -184,9 +198,15 @@ impl CodingEventMirror {
         result: &AgentToolResult,
     ) -> Vec<RuntimeEvent> {
         let metadata = result.metadata.as_ref();
-        let command = metadata
+        let command_text = metadata
             .and_then(|metadata| metadata_string(metadata, &["command"]))
             .or_else(|| command_from_arguments(tool.arguments.as_ref()));
+        let command_facts = command_text
+            .as_deref()
+            .and_then(command_facts_from_text)
+            .or_else(|| tool.command_facts.clone());
+        let command =
+            command_text.or_else(|| command_facts.as_ref().map(|facts| facts.command.clone()));
         let exit_code = metadata.and_then(|metadata| metadata_i64(metadata, &["exit_code"]));
         let status = command_status(exit_code, result.success);
         let mut events = Vec::new();
@@ -214,6 +234,10 @@ impl CodingEventMirror {
                 "commandId": tool_id,
                 "toolCallId": tool_id,
                 "command": command,
+                "canonicalCommand": command_facts.as_ref().map(|facts| facts.canonical_command.clone()),
+                "commandSummary": command_facts.as_ref().map(|facts| facts.summary.clone()),
+                "commandArgv": command_facts.as_ref().map(|facts| facts.argv.clone()),
+                "commandArgvSource": command_facts.as_ref().map(|facts| facts.source),
                 "exitCode": exit_code,
                 "status": status,
                 "success": result.success,
@@ -231,6 +255,8 @@ impl CodingEventMirror {
                     "testRunId": test_run_id,
                     "commandId": tool_id,
                     "command": command,
+                    "canonicalCommand": command_facts.as_ref().map(|facts| facts.canonical_command.clone()),
+                    "commandSummary": command_facts.as_ref().map(|facts| facts.summary.clone()),
                     "result": if status == "passed" { "passed" } else { "failed" },
                     "status": status,
                     "exitCode": exit_code,
@@ -516,6 +542,10 @@ fn policy_diagnostics(tool: &TrackedTool, result: &AgentToolResult) -> Value {
         "toolSurface": metadata.and_then(|metadata| metadata_string(metadata, &["toolSurface", "tool_surface"])).unwrap_or_else(|| "runtime_tool".to_string()),
         "toolName": tool.name,
         "command": command_from_arguments(tool.arguments.as_ref()).or_else(|| metadata.and_then(|metadata| metadata_string(metadata, &["command", "cmd", "script"]))),
+        "canonicalCommand": tool.command_facts.as_ref().map(|facts| facts.canonical_command.clone()),
+        "commandSummary": tool.command_facts.as_ref().map(|facts| facts.summary.clone()),
+        "commandArgv": tool.command_facts.as_ref().map(|facts| facts.argv.clone()),
+        "commandArgvSource": tool.command_facts.as_ref().map(|facts| facts.source),
         "cwd": cwd_from_value(tool.arguments.as_ref()).or_else(|| metadata.and_then(|metadata| metadata_string(metadata, &["cwd", "workingDir", "working_dir"]))),
     }))
 }
@@ -553,7 +583,9 @@ fn is_shell_tool(tool_name: &str) -> bool {
 }
 
 fn command_from_arguments(arguments: Option<&Value>) -> Option<String> {
-    value_string_from_object(arguments?, &["command", "cmd", "script"])
+    command_facts_from_arguments(arguments)
+        .map(|facts| facts.command)
+        .or_else(|| value_string_from_object(arguments?, &["command", "cmd", "script"]))
 }
 
 fn cwd_from_value(value: Option<&Value>) -> Option<String> {

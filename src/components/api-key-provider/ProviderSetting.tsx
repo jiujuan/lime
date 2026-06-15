@@ -64,6 +64,7 @@ import {
   isProviderApiKeyRequired,
   type ProviderModelFetchStatusCopy,
 } from "./providerModelFetchHelpers";
+import type { ProviderSettingsFocusContext } from "@/types/page";
 
 // ============================================================================
 // 类型定义
@@ -72,6 +73,8 @@ import {
 export interface ProviderSettingProps {
   /** Provider 数据（包含 API Keys） */
   provider: ProviderWithKeysDisplay | null;
+  /** 从运行诊断进入设置页时的焦点 */
+  focus?: ProviderSettingsFocusContext | null;
   /** 当前授权状态 */
   authStatus?: "ready" | "login_required";
   /** 触发登录或授权 */
@@ -268,6 +271,15 @@ function formatProviderRuntimeError(
   return resolveAgentRuntimeErrorPresentation(rawMessage).displayMessage;
 }
 
+function isMissingApiKeyFocus(
+  focus: ProviderSettingsFocusContext | null | undefined,
+): boolean {
+  return (
+    focus?.recoveryAction === "add_enabled_api_key" ||
+    focus?.reasonCode === "missing_enabled_api_key"
+  );
+}
+
 // ============================================================================
 // 组件实现
 // ============================================================================
@@ -379,6 +391,7 @@ export const ProviderSetting: React.FC<ProviderSettingProps> = (props) => {
 
 const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
   provider,
+  focus,
   onUpdate,
   onAddApiKey,
   onTestConnection,
@@ -504,6 +517,17 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
         : availableApiModels,
     [availableApiModels, normalizedApiModelQuery],
   );
+  const focusedModelId = focus?.modelId?.trim() || "";
+  const focusModelMissing = Boolean(
+    focusedModelId && !normalizedModelSet.has(focusedModelId.toLowerCase()),
+  );
+  const showProviderFocusBanner = Boolean(
+    focus?.providerId ||
+    focus?.modelId ||
+    focus?.reasonCode ||
+    focus?.recoveryAction,
+  );
+  const needsApiKeyFromFocus = isMissingApiKeyFocus(focus);
   const imageModelCommandByModel = useMemo(() => {
     void skillCatalogRevision;
     const catalog = getCurrentSkillCatalogSnapshot();
@@ -1191,6 +1215,84 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
           </header>
 
           <div className="mt-6 space-y-6">
+            {showProviderFocusBanner ? (
+              <div
+                className={cn(
+                  "rounded-[18px] border px-4 py-3 text-sm",
+                  needsApiKeyFromFocus || focusModelMissing
+                    ? "border-amber-200 bg-amber-50 text-amber-900"
+                    : "border-sky-200 bg-sky-50 text-sky-900",
+                )}
+                data-testid="provider-focus-banner"
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="font-semibold">
+                      {needsApiKeyFromFocus
+                        ? t(
+                            "settings.providers.setting.focus.needApiKey.title",
+                            "补齐 API 密钥后可继续运行",
+                          )
+                        : focusModelMissing
+                          ? t(
+                              "settings.providers.setting.focus.needModel.title",
+                              "补齐模型后可继续运行",
+                            )
+                          : t(
+                              "settings.providers.setting.focus.title",
+                              "运行诊断定位到这里",
+                            )}
+                    </div>
+                    <p className="mt-1 leading-5">
+                      {needsApiKeyFromFocus
+                        ? t(
+                            "settings.providers.setting.focus.needApiKey.description",
+                            "请在下方填写并保存可用的 API 密钥，然后试跑当前模型。",
+                          )
+                        : focusModelMissing
+                          ? t(
+                              "settings.providers.setting.focus.needModel.description",
+                              {
+                                model: focusedModelId,
+                              },
+                            )
+                          : t(
+                              "settings.providers.setting.focus.description",
+                              "请检查该服务商的密钥、模型优先级和连接状态。",
+                            )}
+                    </p>
+                    {focus?.reasonCode ? (
+                      <p className="mt-1 break-all text-xs opacity-70">
+                        {t("settings.providers.setting.focus.reason", {
+                          reason: focus.reasonCode,
+                          defaultValue: "诊断原因：{{reason}}",
+                        })}
+                      </p>
+                    ) : null}
+                  </div>
+                  {focusModelMissing ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-9 shrink-0 rounded-full border-amber-300 bg-white px-3 text-amber-900 hover:bg-amber-100"
+                      onClick={() => {
+                        void addModels([focusedModelId]);
+                      }}
+                      disabled={loading || !focusedModelId}
+                      data-testid="provider-focus-add-model-button"
+                    >
+                      <Plus className="mr-1 h-3.5 w-3.5" />
+                      {t(
+                        "settings.providers.setting.focus.action.addModel",
+                        "加入模型优先级",
+                      )}
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
             {providerActionStatus ? (
               <div
                 className={cn(

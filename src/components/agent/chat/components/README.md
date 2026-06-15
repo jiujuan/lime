@@ -4,18 +4,18 @@ Agent 聊天界面的 UI 组件集合。
 
 ## 文件索引
 
-| 文件                             | 说明                                                                                   |
-| -------------------------------- | -------------------------------------------------------------------------------------- |
-| `ChatNavbar.tsx`                 | 聊天顶部导航栏                                                                         |
-| `ChatSidebar.tsx`                | 旧会话侧栏组件，已退出 WorkspaceShell 主路径，仅保留为 legacy/test-only                 |
-| `CanvasWorkbenchLayout.tsx`      | 画布顶部标签壳，统一承载结果、文件、Subagents 进展与动态文件标签 |
-| `CanvasSessionOverviewPanel.tsx` | 解耦后的会话过程面板，用于从运行时注入 turn、tool、A2UI、queue 等过程视图              |
-| `EmptyState.tsx`                 | 空状态占位组件                                                                         |
-| `MarkdownRenderer.tsx`           | Markdown 渲染组件                                                                      |
-| `MessageList.tsx`                | 消息列表组件                                                                           |
-| `StreamingRenderer.tsx`          | 流式消息渲染（支持思考内容、工具调用）                                                 |
-| `TokenUsageDisplay.tsx`          | Token 使用量显示                                                                       |
-| `ToolCallDisplay.tsx`            | 工具调用显示（状态、参数、日志、结果）                                                 |
+| 文件                             | 说明                                                                          |
+| -------------------------------- | ----------------------------------------------------------------------------- |
+| `ChatNavbar.tsx`                 | 聊天顶部导航栏                                                                |
+| `ChatSidebar.tsx`                | 旧会话侧栏组件，已退出 WorkspaceShell 主路径，仅保留为 legacy/test-only       |
+| `CanvasWorkbenchLayout.tsx`      | 画布顶部标签壳，统一承载结果、文件、Subagents 进展与动态文件标签              |
+| `CanvasSessionOverviewPanel.tsx` | 解耦后的会话过程面板，用于从运行时注入 turn、activity、A2UI、queue 等过程视图 |
+| `EmptyState.tsx`                 | 空状态占位组件                                                                |
+| `MarkdownRenderer.tsx`           | Markdown 渲染组件                                                             |
+| `MessageList.tsx`                | 消息列表组件                                                                  |
+| `StreamingRenderer.tsx`          | 流式消息渲染（支持思考内容、工具调用）                                        |
+| `TokenUsageDisplay.tsx`          | Token 使用量显示                                                              |
+| `ToolCallDisplay.tsx`            | 工具调用显示（状态、参数、日志、结果）                                        |
 
 ## 核心组件
 
@@ -29,10 +29,12 @@ Agent 聊天界面的 UI 组件集合。
 - `panelCopy` 允许运行时覆盖 workspace / Subagents 面板里的引导文案、空态文案与目录区标题，避免布局壳继续承载场景描述
 - Subagents 进展由运行时显式注入插槽定义，布局只消费定义，不在本地重建协作语义
 - 通过 `sessionView` 等插槽注入不同运行时面板，保持未来场景扩展时的边界稳定
+- `CanvasSessionOverviewPanel` 只接受运行时注入的中性 `activityItems`，coding 场景必须从 `CodingWorkbenchView` 派生 session overview，不允许回到旧 `threadItems` 事实源
 
 ### CanvasSessionOverviewPanel
 
 - 只在需要时展示当前任务状态、最近关键进展与需要用户处理的事项
+- 最近进展只消费 `activityItems`，不在组件内解析旧 thread item 类型
 - 辅助说明收进 help 图标，避免默认占据主画布
 - 技术运行细节默认收进诊断面板，不在普通工作台铺开
 

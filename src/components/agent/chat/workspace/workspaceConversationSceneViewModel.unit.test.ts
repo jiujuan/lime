@@ -1,21 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AgentRuntimeFileCheckpointThreadSummary } from "@/lib/api/agentRuntime";
-import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
+import type { AgentThreadTurn } from "@/lib/api/agentProtocol";
+import { projectCodingWorkbenchViewFromEvents } from "@limecloud/agent-runtime-projection";
 import {
-  buildCanvasWorkbenchChangeView,
   buildCanvasWorkbenchChangeViewFromCodingProjection,
-  buildCodingRuntimeEventsFromThreadItems,
-  buildCodingWorkbenchProjectionFromThreadItems,
-  buildFileArtifactChangeItem,
   buildOutputHeaderViewModel,
   buildQuotedReplyText,
   buildSessionHeaderViewModel,
-  buildSessionRuntimeCounters,
   buildSessionRuntimeCountersFromCodingProjection,
   buildSessionRuntimeProjectionIdentity,
   buildSessionRuntimeProjectionState,
   buildWorkspaceHeaderView,
-  isCodeOutputThreadItem,
   resolveNextSessionRuntimeProjectionState,
   resolvePathLeaf,
   resolveSessionRuntimeProjectionStatus,
@@ -23,41 +18,6 @@ import {
   shouldConsiderSessionRuntimeProjectionDeferral,
   shortenSessionText,
 } from "./workspaceConversationSceneViewModel";
-
-function createFileArtifactItem(
-  overrides: Partial<Extract<AgentThreadItem, { type: "file_artifact" }>> = {},
-): Extract<AgentThreadItem, { type: "file_artifact" }> {
-  return {
-    id: "file-1",
-    type: "file_artifact",
-    path: "src/App.tsx",
-    source: "agent",
-    status: "completed",
-    content: "export default function App() {}",
-    metadata: {},
-    ...overrides,
-  } as Extract<AgentThreadItem, { type: "file_artifact" }>;
-}
-
-function createCommandExecutionItem(
-  overrides: Partial<
-    Extract<AgentThreadItem, { type: "command_execution" }>
-  > = {},
-): Extract<AgentThreadItem, { type: "command_execution" }> {
-  return {
-    id: "command-1",
-    type: "command_execution",
-    thread_id: "thread-1",
-    turn_id: "turn-1",
-    sequence: 1,
-    status: "completed",
-    started_at: "2026-01-01T00:00:00Z",
-    updated_at: "2026-01-01T00:00:00Z",
-    command: "npm test",
-    cwd: "/workspace",
-    ...overrides,
-  } as Extract<AgentThreadItem, { type: "command_execution" }>;
-}
 
 function createThreadTurn(
   overrides: Partial<AgentThreadTurn> = {},
@@ -151,40 +111,58 @@ describe("workspaceConversationSceneViewModel", () => {
     ).toBeNull();
   });
 
-  it("应统计 runtime 输出、文件变更和待处理进度", () => {
-    const commandItem = createCommandExecutionItem({ status: "failed" });
-    const fileItem = createFileArtifactItem({ status: "in_progress" });
-
-    const counters = buildSessionRuntimeCounters({
-      threadItems: [commandItem, fileItem],
-      fileCheckpointSummary: null,
-      pendingActions: [{}],
-      queuedTurns: [],
-    });
-
-    expect(isCodeOutputThreadItem(commandItem)).toBe(true);
-    expect(isCodeOutputThreadItem(fileItem)).toBe(false);
-    expect(counters).toEqual({
-      outputItemCount: 1,
-      failedOutputItemCount: 1,
-      inProgressItemCount: 1,
-      generatedFileCount: 1,
-      hasRuntimeFileChanges: true,
-      hasRuntimeOutputs: true,
-      shouldUseRuntimeWorkbench: true,
-      shouldExposeSessionProgress: true,
-    });
-  });
-
   it("应构造 session header 与 output header 的纯 view model", () => {
     const t = createTranslate();
-    const counters = buildSessionRuntimeCounters({
-      threadItems: [
-        createCommandExecutionItem({ status: "failed" }),
-        createFileArtifactItem({ status: "in_progress" }),
-      ],
+    const codingView = projectCodingWorkbenchViewFromEvents({
+      executionEvents: [],
+      codingReadModel: {
+        thread_id: "thread-1",
+        active_turn_id: "turn-1",
+        active_command_id: "command-active",
+        commands: [
+          {
+            command_id: "command-active",
+            status: "running",
+            command: "npm test",
+            output_preview: "running tests",
+          },
+        ],
+        tests: [
+          {
+            test_run_id: "test-current",
+            status: "failed",
+            command_id: "command-active",
+            suite: "unit",
+            passed: 3,
+            failed: 1,
+          },
+        ],
+        pending_requests: [
+          {
+            id: "action-approve-command",
+            turn_id: "turn-1",
+            request_type: "approval",
+            status: "pending",
+            title: "确认执行命令",
+          },
+        ],
+        artifacts: [
+          {
+            artifactRef: "artifact-src-app",
+            eventId: "evt-file-app",
+            sequence: 1,
+            turnId: "turn-1",
+            path: "src/App.tsx",
+            title: "App.tsx",
+            kind: "code_file",
+            status: "completed",
+          },
+        ],
+      },
+    });
+    const counters = buildSessionRuntimeCountersFromCodingProjection({
+      codingView,
       fileCheckpointSummary: createCheckpointSummary({ count: 1 }),
-      pendingActions: [{}],
       queuedTurns: [],
     });
     const labels = {
@@ -258,169 +236,31 @@ describe("workspaceConversationSceneViewModel", () => {
     });
   });
 
-  it("应从 file artifact metadata 构造 canvas change item", () => {
-    const item = createFileArtifactItem({
-      metadata: {
-        artifact_title: "应用入口",
-        preview_text: "更新 App 入口",
-        artifact_version_no: "4",
-      },
-    });
-
-    expect(
-      buildFileArtifactChangeItem(item, createCheckpointSummary()),
-    ).toEqual(
-      expect.objectContaining({
-        id: "file-1",
-        path: "src/App.tsx",
-        displayName: "应用入口",
-        preview: "更新 App 入口",
-        checkpointPath: "src/App.tsx",
-        checkpointLabel: "v4",
-      }),
-    );
-  });
-
-  it("应合并同一路径的 file artifact change view", () => {
-    const onOpenFile = vi.fn();
-    const view = buildCanvasWorkbenchChangeView({
-      threadItems: [
-        createFileArtifactItem({
-          id: "file-first",
-          path: "src/App.tsx",
-          status: "completed",
-          content: "first",
-        }),
-        createFileArtifactItem({
-          id: "file-second",
-          path: "SRC\\app.tsx",
-          status: "in_progress",
-          content: "second",
-          metadata: {
-            title: "App 入口",
-          },
-        }),
-      ] as AgentThreadItem[],
-      fileCheckpointSummary: createCheckpointSummary({
-        count: 2,
-        latest_checkpoint: {
-          checkpoint_id: "checkpoint-app-v5",
-          turn_id: "turn-1",
-          path: "src/App.tsx",
-          source: "artifact_snapshot",
-          snapshot_path: ".lime/checkpoints/app-v5.tsx",
-          updated_at: "2026-06-02T10:00:00.000Z",
-          version_no: 5,
-          validation_issue_count: 0,
-        },
-      }),
-      onOpenFile,
-    });
-
-    expect(view).toMatchObject({
-      checkpointCount: 2,
-      latestCheckpointPath: ".lime/checkpoints/app-v5.tsx",
-      items: [
-        {
-          id: "file-first",
-          path: "SRC\\app.tsx",
-          displayName: "App 入口",
-          status: "in_progress",
-          currentContent: "second",
-          checkpointLabel: "v5",
-        },
-      ],
-    });
-    expect(view?.onOpenFile).toBe(onOpenFile);
-  });
-
-  it("应把迁移期 thread item 归一为标准 coding runtime events", () => {
-    const events = buildCodingRuntimeEventsFromThreadItems({
-      threadItems: [
-        createFileArtifactItem({
-          id: "file-item",
-          sequence: 1,
-          path: "src/App.tsx",
-          metadata: {
-            diffRef: "artifact://diff/app",
-          },
-        }),
-        createCommandExecutionItem({
-          id: "command-item",
-          sequence: 2,
-          command: "npm test",
-          cwd: ".",
-          exit_code: 0,
-          aggregated_output: "pass",
-        }),
-        {
-          id: "patch-item",
-          type: "tool_call",
-          thread_id: "thread-1",
-          turn_id: "turn-1",
-          sequence: 3,
-          status: "failed",
-          started_at: "2026-01-01T00:00:00Z",
-          updated_at: "2026-01-01T00:00:01Z",
-          tool_name: "apply_patch",
-          output: "conflict",
-          metadata: {
-            patchId: "patch-app",
-            path: "src/App.tsx",
-            failureCategory: "conflict",
-          },
-        },
-        {
-          id: "test-summary",
-          type: "turn_summary",
-          thread_id: "thread-1",
-          turn_id: "turn-1",
-          sequence: 4,
-          status: "failed",
-          started_at: "2026-01-01T00:00:00Z",
-          updated_at: "2026-01-01T00:00:01Z",
-          text: "unit tests failed",
-          metadata: {
-            kind: "test_run",
-            testRunId: "test-unit",
-            commandId: "command-item",
-            passed: 8,
-            failed: 1,
-          },
-        },
-      ] as AgentThreadItem[],
-      fileCheckpointSummary: createCheckpointSummary(),
-    });
-
-    expect(events.map((event) => event.eventClass)).toEqual([
-      "file.changed",
-      "command.started",
-      "command.exited",
-      "patch.started",
-      "patch.failed",
-      "test.started",
-      "test.completed",
-    ]);
-    expect(events.every((event, index) => event.sequence === index + 1)).toBe(
-      true,
-    );
-  });
-
   it("应通过标准 coding projection 派生工作台 change view", () => {
     const onOpenFile = vi.fn();
-    const codingView = buildCodingWorkbenchProjectionFromThreadItems({
-      threadItems: [
-        createFileArtifactItem({
-          id: "file-item",
-          path: "src/App.tsx",
-          content: "export function App() {}",
-          metadata: {
-            previewText: "更新 App",
-            diffRef: "artifact://diff/app",
+    const codingView = projectCodingWorkbenchViewFromEvents({
+      executionEvents: [],
+      codingReadModel: {
+        thread_id: "thread-1",
+        active_turn_id: "turn-1",
+        artifacts: [
+          {
+            artifactRef: "artifact-src-app",
+            eventId: "evt-file-app",
+            sequence: 1,
+            turnId: "turn-1",
+            path: "src/App.tsx",
+            title: "App.tsx",
+            kind: "code_file",
+            status: "completed",
+            metadata: {
+              previewText: "更新 App",
+              checkpointRef: "checkpoint-app",
+              diffRef: "artifact://diff/app",
+            },
           },
-        }),
-      ] as AgentThreadItem[],
-      fileCheckpointSummary: createCheckpointSummary(),
+        ],
+      },
     });
     const changeView = buildCanvasWorkbenchChangeViewFromCodingProjection({
       codingView,
@@ -433,12 +273,13 @@ describe("workspaceConversationSceneViewModel", () => {
       checkpointCount: 1,
       items: [
         {
-          id: "coding_thread_item_file-item",
+          id: "evt-file-app",
           path: "src/App.tsx",
           displayName: "App.tsx",
           source: "runtime",
           status: "completed",
           preview: "更新 App",
+          checkpointPath: "checkpoint-app",
         },
       ],
     });
@@ -446,9 +287,9 @@ describe("workspaceConversationSceneViewModel", () => {
   });
 
   it("应从 current thread read model 合并 coding command/test/action 状态", () => {
-    const codingView = buildCodingWorkbenchProjectionFromThreadItems({
-      threadItems: [],
-      threadRead: {
+    const codingView = projectCodingWorkbenchViewFromEvents({
+      executionEvents: [],
+      codingReadModel: {
         thread_id: "thread-1",
         active_turn_id: "turn-1",
         active_command_id: "command-active",
@@ -476,7 +317,6 @@ describe("workspaceConversationSceneViewModel", () => {
         pending_requests: [
           {
             id: "action-approve-command",
-            thread_id: "thread-1",
             turn_id: "turn-1",
             request_type: "approval",
             status: "pending",
@@ -512,9 +352,9 @@ describe("workspaceConversationSceneViewModel", () => {
   });
 
   it("应从 current coding projection 计算 workbench 输出和进度计数", () => {
-    const codingView = buildCodingWorkbenchProjectionFromThreadItems({
-      threadItems: [],
-      threadRead: {
+    const codingView = projectCodingWorkbenchViewFromEvents({
+      executionEvents: [],
+      codingReadModel: {
         thread_id: "thread-1",
         active_turn_id: "turn-1",
         active_command_id: "command-active",
@@ -541,7 +381,6 @@ describe("workspaceConversationSceneViewModel", () => {
         pending_requests: [
           {
             id: "action-approve-command",
-            thread_id: "thread-1",
             turn_id: "turn-1",
             request_type: "approval",
             status: "pending",

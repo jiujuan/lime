@@ -62,6 +62,44 @@ fn shell_tool_events_emit_command_and_test_lifecycle() {
 }
 
 #[test]
+fn shell_tool_output_delta_preserves_process_lifecycle_metadata() {
+    let mut mirror = CodingEventMirror::default();
+
+    let _ = mirror.process_event(&RuntimeAgentEvent::ToolStart {
+        tool_name: "Bash".to_string(),
+        tool_id: "tool-process".to_string(),
+        arguments: Some(json!({ "command": "npm test" }).to_string()),
+    });
+    let output = mirror.process_event(&RuntimeAgentEvent::ToolOutputDelta {
+        tool_id: "tool-process".to_string(),
+        delta: "running".to_string(),
+        output_kind: Some("stdout".to_string()),
+        metadata: Some(HashMap::from([
+            ("processId".to_string(), json!("process-tool-process")),
+            ("executionProcessStatus".to_string(), json!("running")),
+            ("outputBytes".to_string(), json!(7)),
+            ("outputOmittedBytes".to_string(), json!(0)),
+            ("outputTruncated".to_string(), json!(false)),
+        ])),
+    });
+
+    assert_eq!(output.after_raw.len(), 1);
+    assert_eq!(output.after_raw[0].event_type, "command.output");
+    assert_eq!(
+        output.after_raw[0].payload["metadata"]["processId"].as_str(),
+        Some("process-tool-process")
+    );
+    assert_eq!(
+        output.after_raw[0].payload["metadata"]["executionProcessStatus"].as_str(),
+        Some("running")
+    );
+    assert_eq!(
+        output.after_raw[0].payload["metadata"]["outputBytes"].as_u64(),
+        Some(7)
+    );
+}
+
+#[test]
 fn shell_tool_result_emits_output_when_stream_delta_was_absent() {
     let mut mirror = CodingEventMirror::default();
     let _ = mirror.process_event(&RuntimeAgentEvent::ToolStart {

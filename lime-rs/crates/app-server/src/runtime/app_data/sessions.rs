@@ -1,6 +1,7 @@
 use super::unavailable;
 use super::NoopAppDataSource;
 use super::RuntimeCoreError;
+use crate::runtime::LegacyAgentSessionTranscript;
 use crate::runtime::ManagedObjectiveAuditUpdate;
 use app_server_protocol::*;
 use async_trait::async_trait;
@@ -44,6 +45,31 @@ pub trait SessionAppDataSource: Send + Sync {
             sessions.push(response.session);
         }
         Ok(AgentSessionArchiveManyResponse { sessions })
+    }
+
+    async fn list_legacy_agent_message_transcripts(
+        &self,
+        _params: AgentSessionListParams,
+    ) -> Result<Vec<LegacyAgentSessionTranscript>, RuntimeCoreError> {
+        Ok(Vec::new())
+    }
+
+    async fn read_legacy_agent_message_transcript(
+        &self,
+        _session_id: String,
+    ) -> Result<Option<LegacyAgentSessionTranscript>, RuntimeCoreError> {
+        Ok(None)
+    }
+
+    async fn clear_legacy_agent_message_sessions(
+        &self,
+        _session_ids: Vec<String>,
+    ) -> Result<usize, RuntimeCoreError> {
+        Ok(0)
+    }
+
+    async fn drop_empty_legacy_agent_message_tables(&self) -> Result<usize, RuntimeCoreError> {
+        Ok(0)
     }
 
     async fn read_agent_session_objective(

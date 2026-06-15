@@ -382,6 +382,7 @@ impl RuntimeCore {
                             metadata: Some(metadata),
                             queued_turn_id: Some(queued_turn_id.clone()),
                             host_options: Some(host_options),
+                            ..app_server_protocol::RuntimeOptions::default()
                         }),
                         queue_if_busy: false,
                         skip_pre_submit_resume: true,
@@ -666,6 +667,7 @@ impl RuntimeCore {
                         metadata: Some(metadata),
                         queued_turn_id: Some(queued_turn_id.clone()),
                         host_options: Some(host_options),
+                        ..app_server_protocol::RuntimeOptions::default()
                     }),
                     queue_if_busy: false,
                     skip_pre_submit_resume: false,

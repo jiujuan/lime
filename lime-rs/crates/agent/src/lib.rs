@@ -19,6 +19,7 @@ pub mod aster_state_support;
 pub mod credential_bridge;
 pub mod durable_memory_fs;
 pub mod event_converter;
+mod execution_strategy_compat;
 pub mod filesystem_event_protocol;
 pub mod hooks;
 pub mod lsp_bridge;

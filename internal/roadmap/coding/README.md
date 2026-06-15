@@ -24,14 +24,14 @@ User coding intent
 
 ## 标准事实源
 
-| 层 | current 事实源 | 禁止方向 |
-| --- | --- | --- |
-| 标准 | `/Users/coso/Documents/dev/ai/limecloud/lime-agent-workbench` | 把外部 SDK 或 CLI 协议当 Lime 标准。 |
-| Runtime API | App Server JSON-RPC + RuntimeCore | 恢复 legacy desktop facade 或产品页本地 runtime。 |
-| 执行 | ExecutionBackend + Tool inventory + Policy service | 让模型自由拼 shell 作为长期主路径。 |
-| Provider | API Key Provider / Provider Store / Model Registry | 单 Provider 假设或产品应用直连模型 API。 |
-| UI | AgentUI projection + shared Coding Workbench surfaces | 从 assistant prose 推断工具、文件、审批、测试状态。 |
-| 证据 | Evidence pack / replay / review refs | UI 或日志后处理重新构造运行事实。 |
+| 层          | current 事实源                                                | 禁止方向                                            |
+| ----------- | ------------------------------------------------------------- | --------------------------------------------------- |
+| 标准        | `/Users/coso/Documents/dev/ai/limecloud/lime-agent-workbench` | 把外部 SDK 或 CLI 协议当 Lime 标准。                |
+| Runtime API | App Server JSON-RPC + RuntimeCore                             | 恢复 legacy desktop facade 或产品页本地 runtime。   |
+| 执行        | ExecutionBackend + Tool inventory + Policy service            | 让模型自由拼 shell 作为长期主路径。                 |
+| Provider    | API Key Provider / Provider Store / Model Registry            | 单 Provider 假设或产品应用直连模型 API。            |
+| UI          | AgentUI projection + shared Coding Workbench surfaces         | 从 assistant prose 推断工具、文件、审批、测试状态。 |
+| 证据        | Evidence pack / replay / review refs                          | UI 或日志后处理重新构造运行事实。                   |
 
 ## 用户闭环
 
@@ -62,7 +62,7 @@ User coding intent
 
 ### compat
 
-- 旧 `code_orchestrated` scene runtime 可作为 coding profile 的现有入口语义，但后续必须映射到标准 RuntimeEvent / ReadModel。
+- 旧 `code_orchestrated` 只作为历史 session、偏好或旧命令包的 compat 输入；进入 current 前必须在单一 compat helper 归一为 `react`，并由 RuntimeEvent / ReadModel 承接，不得再作为 coding profile current 入口。
 - 外部 CLI agent 会话可作为 `external_harness` adapter，但只能输出 RuntimeEvent，不能拥有主事实。
 - 现有 Workspace / Harness 局部状态可短期作为迁移缓存；接入标准 projection 后必须退出。
 
@@ -85,13 +85,14 @@ User coding intent
 
 ## 文档索引
 
-| 文档 | 作用 |
-| --- | --- |
-| [architecture.md](./architecture.md) | Coding profile 的运行时、工具、Provider、UI 和证据架构。 |
-| [ui-projection.md](./ui-projection.md) | 前端 Coding Workbench 如何消费 AgentUI projection。 |
-| [runtime-capability-map.md](./runtime-capability-map.md) | 外部参考能力到 Lime current 落点的迁移分类。 |
-| [implementation-plan.md](./implementation-plan.md) | 分阶段落地计划、验收和测试入口。 |
-| [reference-boundary.md](./reference-boundary.md) | 参考外部实现时的命名、许可、复制和禁止边界。 |
+| 文档                                                     | 作用                                                     |
+| -------------------------------------------------------- | -------------------------------------------------------- |
+| [architecture.md](./architecture.md)                     | Coding profile 的运行时、工具、Provider、UI 和证据架构。 |
+| [ui-projection.md](./ui-projection.md)                   | 前端 Coding Workbench 如何消费 AgentUI projection。      |
+| [runtime-capability-map.md](./runtime-capability-map.md) | 外部参考能力到 Lime current 落点的迁移分类。             |
+| [upstream-gap-review.md](./upstream-gap-review.md)       | 对照上游 coding 执行 / 沙箱 / 审批能力后的高价值遗漏。   |
+| [implementation-plan.md](./implementation-plan.md)       | 分阶段落地计划、验收和测试入口。                         |
+| [reference-boundary.md](./reference-boundary.md)         | 参考外部实现时的命名、许可、复制和禁止边界。             |
 
 ## 全量完成口径
 
@@ -100,7 +101,7 @@ User coding intent
 1. **Runtime 完整**：coding turn 的 profile、model slot、tool inventory、policy、sandbox、approval、file/patch/command/test facts 都由 App Server / RuntimeCore current 主链产生。
 2. **执行完整**：文件读取/写入、补丁应用、命令执行、测试执行、搜索上下文、MCP / browser 工具都通过 ExecutionBackend owner 执行，失败结构化。
 3. **投影完整**：`@limecloud/agent-ui-contracts` 和 `@limecloud/agent-runtime-projection` 能从 RuntimeEvent / ReadModel 派生 `CodingWorkbenchView`，不从 assistant 正文推断状态。
-4. **UI 完整**：Coding Workbench 的预览、文件、变更、输出、日志、审批、诊断都消费标准 projection；旧 thread item / checkpoint 只能作为迁移期输入 adapter。
+4. **UI 完整**：Coding Workbench 的预览、文件、变更、输出、日志、审批、诊断都消费标准 projection；旧 thread item 只能停留在历史消息展示、历史 fixture 或负向守卫中，checkpoint 只能作为 current read model / artifact owner 的历史数据来源。
 5. **多模型完整**：coding/review/fast/local 等模型槽位走 Provider Store / Model Registry，不绑定单供应商或单协议。
 6. **证据完整**：conformance fixture、GUI smoke、Evidence Pack、hydration repair、失败恢复和 replay 都可机械验证。
 7. **治理完整**：旧 `code_orchestrated`、Workspace / Harness 局部状态、正文推断和生产 mock fallback 都有 current / compat / deprecated / dead 分类与退出条件。
@@ -132,45 +133,44 @@ User coding intent
 ## 当前落地状态
 
 | 区域 | 当前状态 | 下一步 |
-| --- | --- | --- |
+| ---- | -------- | ------ |
 | Runtime 模块化 | `lime-rs/crates/app-server/src/runtime.rs` 已从巨型中心文件拆成 facade + `runtime/**` 领域模块，当前约 527 行；`RuntimeCore` 根文件只保留核心类型、构造、共享状态和模块出口。`runtime/app_data.rs` 已 facade 化为组合 trait，`LocalAppDataSource` 根文件约 420 行，领域 impl 下沉到 `local_data_source/impls/**`。Gateway channel 已接入 `RuntimeGatewayAgentRunner`，Telegram / Feishu / Discord / WeChat 入站消息走 App Server current `RuntimeCore::start_turn`；旧 `aster_agent_state` 字段已从 `LocalAppDataSource` 移除。 | 继续把新增后端能力落到对应 `runtime/<domain>.rs`、`runtime/app_data/<domain>.rs` 或 `local_data_source/impls/<domain>.rs`，不得回填 `runtime.rs`；后续清理 gateway crate 的历史 warning 与 AppServer 未用 `runtime_arc` helper。 |
-| 合约 fixture | `coding-file-change`、`coding-command-approval`、`coding-sandbox-blocked`、`coding-patch-failure`、`coding-test-failure-fix`、`coding-hydration-repair` 已进入 conformance 计划；App Server Rust 侧已补 `outputRef/refIds/artifactRefs/checkpointRef/contentRef/diffRef` 透传、read/evidence 聚合测试和 tool terminal 大输出 payload 规整测试；`tool.result/tool.failed` 大输出已可经 `FilesystemOutputSnapshotStore` 落到会话文件系统 snapshot，RuntimeCore 只保留 preview/ref，`artifact/read(include_content=true)` 可从 snapshot 回读完整内容；`file.changed.change.previousContent` 已可经 `FilesystemFileCheckpointSnapshotStore` 落到会话文件系统 snapshot，RuntimeCore 事件只保留 `checkpointSnapshotFile / previousContentSnapshotFile` refs；历史 current timeline hydrate 已能从 persisted `detail.events / detail.outputs / detail.items` 恢复 output snapshot refs 与 file checkpoint snapshot refs 到 RuntimeCore read model；`thread_read.commands/tests/pending_requests` 已可 hydrate 回标准 `command.* / test.* / action.required` 事件，`read_session` 可输出 `active_command_id / active_test_run_id / active_action_id`；Basic Evidence Pack 已输出 `tool_output_snapshot` 与 `file_checkpoint_snapshot` 文件化 evidence artifacts；`permission.denied / sandbox.blocked` 已透传 `policyName/profile/decisionId/sandboxPolicy/platform/command/cwd/diagnostics` 基础诊断 facts | 继续补完整 Policy service / sandbox manager、P4 UI evidence 和 GUI smoke。 |
-| sequence gate | 已扩展到 patch / command / test / action lifecycle，并能把 `action.resolved` 从历史 `action.required` 回填到对应 tool | 继续用 GUI fixture 验证 active command/test/action 刷新后可见。 |
-| projection | `CodingWorkbenchView` selector 已能合并 RuntimeEvent 与 `thread_read.commands/tests/pending_requests`，并输出 active command/test ids、actions 与 diagnostics | 继续补 log/action-submit 面板接线和 UI smoke evidence。 |
-| Workspace UI | 现有 coding mode 保留为 compat/current surface；change view 已通过标准 projection adapter 派生，`threadRead` 已传入 selector；输出 tab 已直接渲染 `CodingWorkbenchView.commands/tests/actions/diagnostics`，不再由 React 组件过滤 thread item 自建输出状态 | 日志、审批提交动作继续迁到 projection adapter，并补 GUI smoke。 |
-| ExecutionBackend | P2 已接入 RuntimeBackend tool event mirror：Aster `Read/Write/Edit/Bash/PowerShell/apply_patch` tool stream 会在保留 `tool.*` 原始事件的同时派生 `file.read`、`file.changed`、`patch.*`、`command.*`、`test.*` coding facts；`patch-apply` crate 已提供真实 workdir apply service，agent `apply_patch` current tool 已委托该 service 执行，支持 add/update/delete/move、缺父目录创建、Unicode 标点模糊匹配和 path escape 拒绝，并把多文件 patch metadata 投影为多条 `file.changed`；tool policy/sandbox 类失败会在 `tool.failed` 前派生 `permission.denied` / `sandbox.blocked`，并携带基础 policy/sandbox/platform diagnostics；RuntimeBackend action response 已回写 Aster tool confirmation / elicitation owner并发出标准 `action.resolved`；agent execution 已拆出 policy/decision 子模块，`tool_orchestrator` 会在真实工具执行前计算 `ToolExecutionDecision`，shell 风险在 `on_request / unless_trusted / granular` 下先产出 `action.required`，`read-only` sandbox 下非只读 shell 命令会在真实执行前产出 `sandbox.blocked`，`never` 不做前置人工确认；`WorkspaceToolPolicyInspector` 已把同一 decision 接入 Aster 主工具 inspection 链，避免主工具链绕过 approval / sandbox preflight；App Server turn start 会把非默认 `NativeAgentConfig.agent.tool_execution` 注入 turn metadata，execution / orchestrator / inspector / inventory 使用同一 effective policy，且 runtime `harness.executionPolicy` 仍高于持久化配置；backend metadata 中已有的 `outputRef/refIds/artifactRefs/checkpointRef/contentRef/diffRef` 会进入 coding facts，`file.changed.artifactRefs` 已能被 RuntimeCore artifact read 和 evidence export 聚合；`tool.result/tool.failed` 大输出会入库前规整为 `outputPreview + outputRef/refIds`，并可由文件系统 output snapshot owner 持久化完整内容；`file.changed` 旧内容会入库前落到文件系统 checkpoint snapshot owner，事件和 read model 只保留 snapshot refs，restore 可创建恢复前备份；历史 hydrate / evidence export 已能带上 output/checkpoint snapshot refs；active command/test/action 已进入 App Server read model 与 current timeline hydrate | 继续补完整 Policy service / sandbox manager、approval resume/resolve 生产续跑、P3/P4 projection/UI evidence。 |
-| 多模型 slot | 文档定义完成，工程实现未完成 | 接 Provider Store / Model Registry profile facts。 |
+| 合约 fixture | `coding-file-change`、`coding-command-approval`、`coding-sandbox-blocked`、`coding-patch-failure`、`coding-test-failure-fix`、`coding-hydration-repair` 已进入 conformance；`expected.coding`、sequence gate、output / checkpoint snapshot refs、active command/test/action hydrate、Basic Evidence Pack 与 `observability_summary.coding` 已形成 P7 baseline。 | 新增 coding fact、provider routing 或 policy/sandbox 语义时继续扩 fixture；不再把 baseline GUI smoke 当未完成 blocker。 |
+| sequence gate | 已扩展到 patch / command / test / action lifecycle，并能把 `action.resolved` 从历史 `action.required` 回填到对应 tool；终态 turn 后继续追加 execution stream 会 fail closed。 | 后续只随新增 lifecycle fact 扩展，不再为旧 thread item 兼容新增旁路。 |
+| projection | `CodingWorkbenchView` selector 已合并 RuntimeEvent 与 `thread_read.commands/tests/pending_requests/changeSummary/model_routing`，输出 active command/test/action、变更摘要、diagnostics 与 routing facts；session overview、output、log、action submit 和 diagnostics 均从同一 projection 派生。 | 继续守住旧 thread item 不回流；新增 UI fact 先进入 RuntimeEvent / read model / projection，再进入组件。 |
+| Workspace UI | Coding mode 继续作为 current Workbench surface；变更、输出、日志、审批、诊断、失败继续、provider 设置深链、执行策略恢复和 session overview 均已消费 `CodingWorkbenchView` 或 current reliability/routing evidence；`smoke:code-artifact-workbench-electron-fixture -- --scenario gui-coding-input` 已证明 GUI 输入到 changes / outputs / logs / recovery metadata 的 current 闭环。 | 新增可见状态继续保持 projection-only；新增 coding fact 必须先进入 RuntimeEvent / read model / projection。 |
+| ExecutionBackend | P2 已接入 RuntimeBackend tool event mirror、真实 `patch-apply` workdir apply service、command/test/action facts、output refs、checkpoint refs、artifact/evidence refs、policy/sandbox/action metadata、tool confirmation resume、默认 policy rule catalog、组织 / 用户 / runtime / request policy layer、network rules、macOS/Linux sandbox runner 与 Windows restricted token runner；Windows runner 已落地 CreateRestrictedToken、workspace ACL 授权、denied path write deny、CreateProcessAsUserW、Job Object timeout/process-tree termination、ACL rollback 和 stdout/stderr 并发 pipe reader。P2-B first-core-slice 已新增 `agent_tools::execution::process` owner，具备 process snapshot、stdout/stderr delta、有界 retained output、stdin write、interrupt、terminate、status 与本地 process runner；App Server current 已新增 `executionProcess/start`、`executionProcess/writeStdin`、`executionProcess/interrupt`、`executionProcess/terminate`、`executionProcess/status`、`executionProcess/drainOutput` JSON-RPC 控制面，client / schema / processor 契约已接通。P2-B second slice 已让 no-sandbox shell path 使用 live process 输出 `tool.output.delta`，并在启动前复用 Lime `ToolExecutionDecision` 与 Aster `ToolRegistry::check_tool_permissions`；需要 workspace sandbox backend 的命令仍留在 Aster sandbox executor，不走裸进程。 | 下一步把 command/test 默认执行切到 sandbox-aware process control owner；UI 停止、stdin、状态刷新复用 `executionProcess/*`，且不得绕过 policy / sandbox。Windows-only smoke 门禁已入库，随后在 Windows 机器运行并保存证据。 |
+| 多模型 slot | P5 已进入 App Server current routing facts：`base/coding/review/fast/local` slot 解析、Provider Store readiness、Model Registry metadata、`thread_read.model_routing`、Reliability routing card 与五语言诊断文案已接通；未配置 provider 会结构化 `needs_setup / blocked`，不降级 mock。 | 具体 provider/key 编辑深链和独立 `model_slot.resolved` 事件仅在 evidence join 需要时继续补强。 |
+| P8 守卫 | 骨架阶段已完成防回流收口：旧 thread item adapter 已从 Workbench current surface 删除；`code_orchestrated / auto -> react` 归一收进 TS / Rust 单一 compat helper；legacy `agent_runtime_*` 只允许 retired guard / contract negative test / test-only fixture / 明确 compat 文档；`mockPriorityCommands` 为空，生产 `safeInvoke` 不回退 mock。 | 后续只随新增 coding fact / command / GUI 主路径补守卫，不再把 guard/test-only 字符串当主线 blocker。 |
 
 ## 完成百分比口径
 
 后续汇报必须区分：
 
-| 口径 | 含义 |
-| --- | --- |
-| 本轮完成度 | 本轮选定阶段的完成比例，例如 P1 contract/projection 或 P2 Rust event emission。 |
-| 整体目标完成度 | P0-P8 全量 coding profile 的完成比例，不因文档完成而大幅提高。 |
-| 可交付状态 | 是否达到 Lime GUI 产品可用闭环：真实 current 主链 + GUI smoke + evidence。 |
+| 口径           | 含义                                                                            |
+| -------------- | ------------------------------------------------------------------------------- |
+| 本轮完成度     | 本轮选定阶段的完成比例，例如 P1 contract/projection 或 P2 Rust event emission。 |
+| 整体目标完成度 | P0-P8 全量 coding profile 的完成比例，不因文档完成而大幅提高。                  |
+| 可交付状态     | 是否达到 Lime GUI 产品可用闭环：真实 current 主链 + GUI smoke + evidence。      |
 
-当前整体目标完成度只能按工程闭环估算；P2 已进入 execution decision owner 第一刀，但在完整 sandbox manager、P4 UI evidence、P5 多模型 slot、P7 GUI smoke 未完成前，仍不能按产品可交付闭环判满。
+当前整体目标完成度按工程闭环估算约 `97%`。P1/P2/P3/P4/P5/P7/P8 的骨架闭环已经具备 current facts、projection、GUI smoke、evidence export 与生产 mock / legacy command 防回流守卫；Windows restricted token runner 已从 fail-closed stub 推进到真实 enforce 边界，并补齐 Job Object timeout/process-tree termination、ACL rollback 与 stdout/stderr 并发 pipe reader，Windows-only smoke 也已进入 Aster executor 测试门禁。P2-A 已把 Aster sandbox executor、Windows restricted token pipe reader 和 embedded Bash 前台执行的 stdout/stderr 捕获前移到有界 head/tail buffer；P2-B 已新增 execution process owner、本地 process runner、App Server current control API 和 no-sandbox shell live process bridge。不能宣称全量完成的主因仍是两条：command/test 默认执行尚未切到 sandbox-aware execution process control owner，Windows restricted token 仍缺持久 capability SID、TokenDefaultDacl、扩展启动 handle allowlist / desktop、read deny 和网络强制。
 
 ## 下一刀
 
-下一刀继续沿主链推进，而不是继续写标准站：
+下一刀继续沿主链补强可执行能力，而不是重复 P1-P7 baseline：
 
 ```text
-App Server / RuntimeCore coding event emission
-  -> ExecutionBackend file/patch/command/test tools
-  -> AgentUI coding projection hydration
-  -> Coding Workbench full UI adapter
-  -> GUI smoke + evidence export
+P2-B live process lifecycle second slice
+  -> switch command/test execution from batch outcome bridge to sandbox-aware process runner/control owner
+  -> reuse executionProcess current API for command/test default execution and UI controls
+  -> then P2-C Windows sandbox completeness
 ```
 
-当前最优先补 P2 policy/sandbox 与 P3/P4 UI evidence：真实 turn 已能从 Aster tool stream 派生 `file.read`、`file.changed`、`patch.*`、`command.*`、`test.*`、`permission.denied`、`sandbox.blocked` 和 `action.*` 基础 facts，`patch-apply` 已具备真实 workdir apply service，并已通过 agent `apply_patch` current tool 入口执行；agent tool orchestrator 已接入执行前置 `ToolExecutionDecision`，shell approval policy 会先产出 `action.required`，`read-only` sandbox 下非只读 shell 命令会先产出 `sandbox.blocked`，且 Aster 主工具 inspector 已复用同一 decision；backend 已透传真实 output/artifact/checkpoint/diff/content refs，并让 `file.changed.artifactRefs` 进入 RuntimeCore artifact/evidence 聚合；tool terminal 大输出、file checkpoint previous content、历史 hydrate、active command/test/action read model、evidence pack snapshot artifacts、policy/sandbox 基础 diagnostics、P3 read model projection adapter 和 P4 输出/actions/diagnostics projection 渲染都已进入 current facts。下一刀补完整 Policy service / sandbox manager、approval resume/resolve 生产续跑，再让 Coding Workbench 日志和审批提交动作继续直接消费 `CodingWorkbenchView`，补 GUI smoke。
+P8 骨架阶段已经收口，不再重复做旧字符串 inventory：真实 turn 已能从 Aster tool stream 派生 `file.read`、`file.changed`、`patch.*`、`command.*`、`test.*`、`permission.denied`、`sandbox.blocked` 和 `action.*` 基础 facts，并通过 `CodingWorkbenchView`、GUI coding input smoke、Evidence Pack、`legacySurfaceCatalog`、`test:contracts` 与 `governance:legacy-report` 证明 current 主链和防回流守卫成立。
 
-执行顺序：
+后续高价值顺序：
 
-1. 继续在 `lime-rs/crates/**` current owner 内补完整 Policy service / sandbox manager，不恢复 legacy wrapper。
-2. 为 `apply_patch` 成功/失败补 diff/checkpoint owner，让 patch report 可进入 artifact/evidence refs。
-3. 回到 Workspace UI，把 log/action-submit 从 `CodingWorkbenchView` 派生，当前 `threadRead`、output/actions/diagnostics tab 内容已进入 selector / UI。
-4. 补 code artifact workbench fixture / GUI smoke，证明刷新后 active command/test/action 可见。
-5. 接 Provider slot diagnostics。
+1. 继续 P2-B：把 command/test 默认执行切到 sandbox-aware `agent_tools::execution::process` owner，并复用 `executionProcess/*` current API 接 UI 控制和 RuntimeCore lifecycle；no-sandbox shell live process 已落地，不再重复做裸进程接管。
+2. 再补 P2-D：为 shell command 建 session-scope approval key，减少重复审批，但只通过 settings 草案进入持久规则。
+3. Windows 机器上继续推进 Windows restricted token ACL / token enforcement，补齐 Windows 平台 sandbox 真实 enforce：运行 `cargo test --manifest-path "lime-rs/crates/aster-rust/crates/aster/Cargo.toml" --target-dir "lime-rs/target" --lib restricted_token -- --nocapture`，保存 workspace write、外部路径拒绝、denied path write deny、timeout 杀进程树、ACL 恢复和大输出不死锁证据；通过后再做 P2-C TokenDefaultDacl / STARTUPINFOEXW / 持久 SID / read deny / network deny。
+4. 若需要外部 CLI / harness 接入，按 P6 只输出 RuntimeEvent / ReadModel adapter，不允许成为生产必需主链。

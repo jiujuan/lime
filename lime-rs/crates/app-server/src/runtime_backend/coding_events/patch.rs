@@ -217,6 +217,7 @@ mod tests {
             arguments: Some(json!({
                 "patch": "*** Begin Patch\n*** Update File: broken.rs\n*** End Patch",
             })),
+            command_facts: None,
             test_run_id: None,
             patch_id: Some("patch:1".to_string()),
             emitted_output: false,

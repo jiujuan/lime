@@ -6,6 +6,7 @@ import type {
   AgentRuntimeWebSearchMode,
   AutoContinueRequestPayload,
 } from "@/lib/api/agentRuntime";
+import { normalizeExecutionStrategyToReact } from "@/lib/api/agentRuntime/executionStrategyCompat";
 import type { ServiceModelsConfig } from "@/lib/api/appConfigTypes";
 import { logAgentDebug } from "@/lib/agentDebug";
 import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
@@ -18,9 +19,7 @@ import { parseAnalysisWorkbenchCommand } from "../utils/analysisWorkbenchCommand
 import { parseBrowserWorkbenchCommand } from "../utils/browserWorkbenchCommand";
 import { parseBroadcastWorkbenchCommand } from "../utils/broadcastWorkbenchCommand";
 import { parseChannelPreviewWorkbenchCommand } from "../utils/channelPreviewWorkbenchCommand";
-import {
-  parseComplianceWorkbenchCommand,
-} from "../utils/complianceWorkbenchCommand";
+import { parseComplianceWorkbenchCommand } from "../utils/complianceWorkbenchCommand";
 import { parseCompetitorWorkbenchCommand } from "../utils/competitorWorkbenchCommand";
 import { parseCoverWorkbenchCommand } from "../utils/coverWorkbenchCommand";
 import { parseDeepSearchWorkbenchCommand } from "../utils/deepSearchWorkbenchCommand";
@@ -39,9 +38,7 @@ import { parseSearchWorkbenchCommand } from "../utils/searchWorkbenchCommand";
 import { parseSiteSearchWorkbenchCommand } from "../utils/siteSearchWorkbenchCommand";
 import { parseSummaryWorkbenchCommand } from "../utils/summaryWorkbenchCommand";
 import { parseTranslationWorkbenchCommand } from "../utils/translationWorkbenchCommand";
-import {
-  resolveMentionCommandMergedPrefillReplayText,
-} from "../utils/mentionCommandReplayText";
+import { resolveMentionCommandMergedPrefillReplayText } from "../utils/mentionCommandReplayText";
 import {
   parseMentionCommand,
   resolveMentionCommandPrefixMatch,
@@ -78,10 +75,7 @@ import { extractAgentUiPerformanceTraceMetadata } from "../hooks/agentStreamPerf
 import type { UseRuntimeTeamFormationResult } from "../hooks/useRuntimeTeamFormation";
 import type { SendMessageFn } from "../hooks/agentChatShared";
 import { normalizeExecutionStrategy } from "../hooks/agentChatCoreUtils";
-import type {
-  Message,
-  MessageImage,
-} from "../types";
+import type { Message, MessageImage } from "../types";
 import type { TeamDefinition } from "../utils/teamDefinitions";
 import type { AgentAccessMode } from "../hooks/agentChatStorage";
 import {
@@ -147,16 +141,11 @@ import {
   getMentionEntryUsageRecordKey,
   recordMentionEntryUsage,
 } from "../skill-selection/mentionEntryUsage";
-import {
-  parseCatalogExecutionStrategy,
-  useRuntimeMentionCommandCatalog,
-} from "../skill-selection/runtimeInputCapabilityCatalog";
+import { useRuntimeMentionCommandCatalog } from "../skill-selection/runtimeInputCapabilityCatalog";
 import { recordServiceSkillUsage } from "../service-skills/storage";
 import { recordSlashEntryUsage } from "../skill-selection/slashEntryUsage";
 import { CONTENT_POST_SKILL_KEY } from "../utils/contentPostSkill";
-import {
-  parseSkillInstallPromptInstruction,
-} from "@/lib/skills/skillInstallPrompt";
+import { parseSkillInstallPromptInstruction } from "@/lib/skills/skillInstallPrompt";
 import {
   mergeSummaryCommandRecentDefaults,
   mergeTranslationCommandRecentDefaults,
@@ -176,14 +165,36 @@ import {
 } from "./commands/dispatchBodyBuilders";
 import { asRecord } from "./commands/skillSlotUtils";
 import { waitForNextPaint } from "./commands/sendHelpers";
-import { readFastResponseMode, withFastResponseMetadata } from "./commands/fastResponseHelpers";
-import { isImageGenerationPlainInputIntent, isPlainInputIntentAffirmativeReply } from "./commands/intentHelpers";
+import {
+  readFastResponseMode,
+  withFastResponseMetadata,
+} from "./commands/fastResponseHelpers";
+import {
+  isImageGenerationPlainInputIntent,
+  isPlainInputIntentAffirmativeReply,
+} from "./commands/intentHelpers";
 import { resolveServiceModelSendOverrides } from "./commands/serviceModelHelpers";
-import { shouldSkipBrowserAssistPrimeForPlainFirstTurn, buildFastResponseAssistantDraft } from "./commands/browserAssistHelpers";
+import {
+  shouldSkipBrowserAssistPrimeForPlainFirstTurn,
+  buildFastResponseAssistantDraft,
+} from "./commands/browserAssistHelpers";
 import { buildImageWorkbenchAssistantDraft } from "./commands/imageWorkbenchHelpers";
 import { resolveSkillInstallPromptConfirmation } from "./commands/skillInstallHelpers";
-import { buildFileReadSkillLaunchRequestContext, buildVideoSkillLaunchRequestContext, buildCoverSkillLaunchRequestContext, buildResearchSkillLaunchRequestContext, buildDeepSearchSkillLaunchRequestContext, buildReportSkillLaunchRequestContext, buildCompetitorSkillLaunchRequestContext, buildSiteSearchSkillLaunchRequestContext, buildPdfReadSkillLaunchRequestContext } from "./commands/skillLaunchContextBuilders";
-import { resolveGrowthSkillLaunchRequestContext, resolveVoiceSkillLaunchRequestContext } from "./commands/skillLaunchResolvers";
+import {
+  buildFileReadSkillLaunchRequestContext,
+  buildVideoSkillLaunchRequestContext,
+  buildCoverSkillLaunchRequestContext,
+  buildResearchSkillLaunchRequestContext,
+  buildDeepSearchSkillLaunchRequestContext,
+  buildReportSkillLaunchRequestContext,
+  buildCompetitorSkillLaunchRequestContext,
+  buildSiteSearchSkillLaunchRequestContext,
+  buildPdfReadSkillLaunchRequestContext,
+} from "./commands/skillLaunchContextBuilders";
+import {
+  resolveGrowthSkillLaunchRequestContext,
+  resolveVoiceSkillLaunchRequestContext,
+} from "./commands/skillLaunchResolvers";
 import {
   resolveMentionCommandUsageSlotValues,
   resolveImageMentionCommandKey,
@@ -224,7 +235,7 @@ type CompletedMentionCommandUsage = {
 // MENTION_USAGE_REQUEST_FIELDS + resolve*Mention* 函数组已提取到 ./commands/mentionCommandUtils.ts
 
 interface UseWorkspaceSendActionsParams {
-// 命令 recent defaults 合并函数已提取到 ./commands/commandRecentDefaults.ts
+  // 命令 recent defaults 合并函数已提取到 ./commands/commandRecentDefaults.ts
   input: string;
   setInput: SetStringState;
   mentionedCharacters: Character[];
@@ -2563,13 +2574,14 @@ export function useWorkspaceSendActions({
         if (sceneLaunchRequest) {
           const sceneRequestDefaults =
             sceneLaunchRequest.sceneEntry.requestDefaults ?? {};
-          const sceneExecutionStrategy = parseCatalogExecutionStrategy(
+          const sceneExecutionStrategy = normalizeExecutionStrategyToReact(
             sceneRequestDefaults.executionStrategy ??
               sceneRequestDefaults.execution_strategy,
           );
           if (sceneExecutionStrategy) {
-            effectiveSendExecutionStrategy =
-              normalizeExecutionStrategy(sceneExecutionStrategy);
+            effectiveSendExecutionStrategy = normalizeExecutionStrategy(
+              sceneExecutionStrategy,
+            );
           }
           if (sceneLaunchRequest.dispatchText) {
             dispatchText = sceneLaunchRequest.dispatchText;
@@ -3103,11 +3115,7 @@ export function useWorkspaceSendActions({
         setIsPreparingSend(false);
       }
     },
-    [
-      executeLocalConfirmationPlan,
-      executeSendPlan,
-      resolveSendExecutionPlan,
-    ],
+    [executeLocalConfirmationPlan, executeSendPlan, resolveSendExecutionPlan],
   );
 
   const handleRecommendationClick = useCallback(

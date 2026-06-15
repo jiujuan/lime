@@ -321,6 +321,7 @@ mod tests {
                         })),
                         queued_turn_id: Some("agent-app-queued-task-1".to_string()),
                         host_options: None,
+                        ..RuntimeOptions::default()
                     }),
                     queue_if_busy: true,
                     skip_pre_submit_resume: true,
@@ -375,6 +376,7 @@ mod tests {
                         })),
                         queued_turn_id: Some("agent-app-queued-task-1".to_string()),
                         host_options: None,
+                        ..RuntimeOptions::default()
                     }),
                     queue_if_busy: true,
                     skip_pre_submit_resume: true,

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import type {
+  CodingWorkbenchRecoveryContext,
   CodingWorkbenchRecoverySignalKind,
   CodingWorkbenchRecoveryView,
 } from "./codingWorkbenchRecovery";
@@ -24,6 +25,7 @@ interface CodingWorkbenchRecoveryPanelProps {
   recoveryView: CodingWorkbenchRecoveryView;
   onSubmitRecoveryPrompt?: (
     prompt: string,
+    context?: CodingWorkbenchRecoveryContext,
   ) => void | Promise<boolean> | boolean;
 }
 
@@ -38,7 +40,7 @@ export function CodingWorkbenchRecoveryPanel({
     if (!onSubmitRecoveryPrompt || submitting) return;
     setSubmitting(true);
     try {
-      await onSubmitRecoveryPrompt(recoveryView.prompt);
+      await onSubmitRecoveryPrompt(recoveryView.prompt, recoveryView.context);
     } catch {
       return;
     } finally {
@@ -65,6 +67,7 @@ export function CodingWorkbenchRecoveryPanel({
           <Button
             type="button"
             size="sm"
+            data-testid="coding-workbench-recovery-submit"
             disabled={submitting}
             className="border-slate-900 bg-slate-900 text-white shadow-sm shadow-slate-950/10 hover:bg-slate-800 hover:opacity-100"
             onClick={() => void handleSubmit()}

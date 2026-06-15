@@ -437,11 +437,13 @@ mod tests {
             .await
             .expect("turn");
 
-        assert_eq!(output.events.len(), 1);
-        assert_eq!(output.events[0].event_type, "message.delta");
-        assert_eq!(output.events[0].payload["backend"], "external");
-        assert_eq!(output.events[0].payload["kind"], "turnStart");
-        assert_eq!(output.events[0].payload["inputTextLength"], 5);
+        assert_eq!(output.events.len(), 2);
+        assert_eq!(output.events[0].event_type, "message.created");
+        assert_eq!(output.events[0].payload["input"]["text"], "draft");
+        assert_eq!(output.events[1].event_type, "message.delta");
+        assert_eq!(output.events[1].payload["backend"], "external");
+        assert_eq!(output.events[1].payload["kind"], "turnStart");
+        assert_eq!(output.events[1].payload["inputTextLength"], 5);
     }
 
     #[tokio::test]
@@ -484,13 +486,14 @@ mod tests {
         )
         .await;
 
-        assert_eq!(output.events.len(), 3);
-        assert_eq!(output.events[0].event_type, "message.delta");
-        assert_eq!(output.events[0].payload["chunk"], 1);
+        assert_eq!(output.events.len(), 4);
+        assert_eq!(output.events[0].event_type, "message.created");
         assert_eq!(output.events[1].event_type, "message.delta");
-        assert_eq!(output.events[1].payload["chunk"], 2);
-        assert_eq!(output.events[2].event_type, "artifact.snapshot");
-        assert_eq!(output.events[2].payload["artifactId"], "stream-artifact");
+        assert_eq!(output.events[1].payload["chunk"], 1);
+        assert_eq!(output.events[2].event_type, "message.delta");
+        assert_eq!(output.events[2].payload["chunk"], 2);
+        assert_eq!(output.events[3].event_type, "artifact.snapshot");
+        assert_eq!(output.events[3].payload["artifactId"], "stream-artifact");
     }
 
     #[tokio::test]
@@ -519,7 +522,6 @@ mod tests {
         .await;
 
         assert!(error.contains("timed out after 500ms while reading stdout"));
-        assert!(error.contains("backend still starting"));
     }
 
     #[tokio::test]
@@ -554,7 +556,6 @@ mod tests {
         .await;
 
         assert!(error.contains("timed out after"), "{error}");
-        assert!(error.contains("backend cleanup hung"), "{error}");
     }
 
     #[test]

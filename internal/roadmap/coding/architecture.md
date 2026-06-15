@@ -29,30 +29,30 @@ Product intent
 
 ## 分层职责
 
-| 层 | 职责 | 不负责 |
-| --- | --- | --- |
-| Product App | 提供用户意图、项目上下文、业务 refs。 | 写 runtime facts、拼 Provider 请求。 |
-| AgentRuntimeClient | 统一传输、订阅事件、读取 read model、响应 action。 | UI 投影和 Provider 调用。 |
-| App Server | JSON-RPC current API、Provider store、RuntimeCore owner。 | Electron 壳能力和产品页本地状态。 |
-| RuntimeCore | session/thread/turn/task/action/event truth。 | 具体 shell/文件副作用执行。 |
-| ExecutionBackend | 文件、补丁、命令、测试、MCP、浏览器等工具执行。 | 保存 UI 状态或解释产品文案。 |
-| Policy service | sandbox、permission、approval、network、filesystem 决策。 | 让工具绕过 action.required。 |
-| AgentUI projection | 把 facts 转为 messages/timeline/graph/tools/actions/artifacts。 | 从正文猜测执行结果。 |
-| Coding Workbench UI | 渲染预览、文件、变更、输出、日志、审批、证据。 | 写事实、调 Provider、执行 shell。 |
+| 层                  | 职责                                                            | 不负责                               |
+| ------------------- | --------------------------------------------------------------- | ------------------------------------ |
+| Product App         | 提供用户意图、项目上下文、业务 refs。                           | 写 runtime facts、拼 Provider 请求。 |
+| AgentRuntimeClient  | 统一传输、订阅事件、读取 read model、响应 action。              | UI 投影和 Provider 调用。            |
+| App Server          | JSON-RPC current API、Provider store、RuntimeCore owner。       | Electron 壳能力和产品页本地状态。    |
+| RuntimeCore         | session/thread/turn/task/action/event truth。                   | 具体 shell/文件副作用执行。          |
+| ExecutionBackend    | 文件、补丁、命令、测试、MCP、浏览器等工具执行。                 | 保存 UI 状态或解释产品文案。         |
+| Policy service      | sandbox、permission、approval、network、filesystem 决策。       | 让工具绕过 action.required。         |
+| AgentUI projection  | 把 facts 转为 messages/timeline/graph/tools/actions/artifacts。 | 从正文猜测执行结果。                 |
+| Coding Workbench UI | 渲染预览、文件、变更、输出、日志、审批、证据。                  | 写事实、调 Provider、执行 shell。    |
 
 ## Current crate / package 落点
 
 新增实现默认落在 current owner，不能恢复旧目录或把 compat facade 当新业务入口。
 
-| 能力 | 首选落点 | 说明 |
-| --- | --- | --- |
-| JSON-RPC 方法、session 读写、fixture backend | `lime-rs/crates/app-server` | App Server 是 coding turn 的 current API owner。 |
-| 协议结构、schema、生成客户端输入 | `lime-rs/crates/app-server-protocol` + `packages/app-server-client` | 协议改动必须同步 Rust schema、generated TS type 和 client contract。 |
-| prompt / context / model turn envelope | `lime-rs/crates/agent` | 只放 coding profile 所需 envelope，不把所有逻辑塞进中心 runtime 文件。 |
-| 文件 / patch / command / test 工具执行 | App Server runtime backend 子模块或独立 execution domain crate | 文件接近 800 行先拆模块；中心文件只 dispatch。 |
-| policy / sandbox / approval | policy domain module + RuntimeCore action owner | 需要用户决策时先写 `action.required`。 |
-| projection / conformance | `packages/agent-ui-contracts`、`packages/agent-runtime-projection` | 前端只能消费 derived state。 |
-| shared React surface | `packages/agent-runtime-ui` 或现有 Workspace surface adapter | 先复用成熟工作台壳，再逐步抽 shared surface。 |
+| 能力                                         | 首选落点                                                            | 说明                                                                   |
+| -------------------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| JSON-RPC 方法、session 读写、fixture backend | `lime-rs/crates/app-server`                                         | App Server 是 coding turn 的 current API owner。                       |
+| 协议结构、schema、生成客户端输入             | `lime-rs/crates/app-server-protocol` + `packages/app-server-client` | 协议改动必须同步 Rust schema、generated TS type 和 client contract。   |
+| prompt / context / model turn envelope       | `lime-rs/crates/agent`                                              | 只放 coding profile 所需 envelope，不把所有逻辑塞进中心 runtime 文件。 |
+| 文件 / patch / command / test 工具执行       | App Server runtime backend 子模块或独立 execution domain crate      | 文件接近 800 行先拆模块；中心文件只 dispatch。                         |
+| policy / sandbox / approval                  | policy domain module + RuntimeCore action owner                     | 需要用户决策时先写 `action.required`。                                 |
+| projection / conformance                     | `packages/agent-ui-contracts`、`packages/agent-runtime-projection`  | 前端只能消费 derived state。                                           |
+| shared React surface                         | `packages/agent-runtime-ui` 或现有 Workspace surface adapter        | 先复用成熟工作台壳，再逐步抽 shared surface。                          |
 
 禁止落点：
 
@@ -124,52 +124,52 @@ turn.submitted
 
 Coding 能力必须继续走 Lime 多模型主链。
 
-| 能力 | 规则 |
-| --- | --- |
-| 模型选择 | 通过 Provider Store / Model Registry / profile slot 解析。 |
-| 自定义端点 | 作为 Provider Store 的 provider/model entry，不写进产品页本地 key。 |
-| coding 模型 | 是一个模型槽位，不等于固定供应商或固定协议。 |
-| review 模型 | 可独立槽位，用于代码审阅、测试失败解释、补丁风险总结。 |
-| fast 模型 | 可用于标题、摘要、轻量分类，不接管执行主 turn。 |
-| fallback | 必须产生 routing / provider diagnostics，不能静默改走 mock。 |
+| 能力        | 规则                                                                |
+| ----------- | ------------------------------------------------------------------- |
+| 模型选择    | 通过 Provider Store / Model Registry / profile slot 解析。          |
+| 自定义端点  | 作为 Provider Store 的 provider/model entry，不写进产品页本地 key。 |
+| coding 模型 | 是一个模型槽位，不等于固定供应商或固定协议。                        |
+| review 模型 | 可独立槽位，用于代码审阅、测试失败解释、补丁风险总结。              |
+| fast 模型   | 可用于标题、摘要、轻量分类，不接管执行主 turn。                     |
+| fallback    | 必须产生 routing / provider diagnostics，不能静默改走 mock。        |
 
 Provider readiness 至少要表达：
 
-| 状态 | Runtime 行为 | UI 行为 |
-| --- | --- | --- |
-| `ready` | 正常发起 coding turn。 | 只显示轻量状态。 |
-| `needs_setup` | 不发起模型请求，返回可恢复 diagnostics 或 action。 | 提供配置入口，不伪装成模型失败。 |
-| `capability_mismatch` | 可按 policy fallback，或 blocked。 | 显示槽位能力不足和 fallback 原因。 |
-| `rate_limited` | 结构化失败或等待重试 action。 | 显示可恢复动作和 evidence ref。 |
-| `blocked` | turn blocked / failed，不能 mock。 | 主状态显示 blocked。 |
+| 状态                  | Runtime 行为                                       | UI 行为                            |
+| --------------------- | -------------------------------------------------- | ---------------------------------- |
+| `ready`               | 正常发起 coding turn。                             | 只显示轻量状态。                   |
+| `needs_setup`         | 不发起模型请求，返回可恢复 diagnostics 或 action。 | 提供配置入口，不伪装成模型失败。   |
+| `capability_mismatch` | 可按 policy fallback，或 blocked。                 | 显示槽位能力不足和 fallback 原因。 |
+| `rate_limited`        | 结构化失败或等待重试 action。                      | 显示可恢复动作和 evidence ref。    |
+| `blocked`             | turn blocked / failed，不能 mock。                 | 主状态显示 blocked。               |
 
 ## 工具与执行
 
 Coding profile 的最小工具面：
 
-| 工具 | Runtime facts | UI 投影 |
-| --- | --- | --- |
-| 读取文件 | `tool.started/result` + file ref | 文件查看、上下文引用。 |
+| 工具     | Runtime facts                            | UI 投影                    |
+| -------- | ---------------------------------------- | -------------------------- |
+| 读取文件 | `tool.started/result` + file ref         | 文件查看、上下文引用。     |
 | 写入文件 | `file.changed` + artifact/checkpoint ref | 变更列表、diff、恢复入口。 |
-| 应用补丁 | `patch.started/applied/failed` | patch viewer、失败原因。 |
-| 命令执行 | `command.started/output/exited` | 输出 / 日志 tab。 |
-| 测试执行 | `test.started/completed` | 测试结果、继续修复入口。 |
-| 搜索 | `tool.result` + context refs | 上下文来源和引用。 |
-| 审批 | `action.required/resolved` | 审批卡，不进入正文。 |
-| 沙箱阻断 | `sandbox.blocked` | 阻断状态和可恢复动作。 |
+| 应用补丁 | `patch.started/applied/failed`           | patch viewer、失败原因。   |
+| 命令执行 | `command.started/output/exited`          | 输出 / 日志 tab。          |
+| 测试执行 | `test.started/completed`                 | 测试结果、继续修复入口。   |
+| 搜索     | `tool.result` + context refs             | 上下文来源和引用。         |
+| 审批     | `action.required/resolved`               | 审批卡，不进入正文。       |
+| 沙箱阻断 | `sandbox.blocked`                        | 阻断状态和可恢复动作。     |
 
 所有副作用都必须有 stable id：`toolCallId`、`actionId`、`artifactId`、`checkpointId` 或等价 owner id。
 
 ### ExecutionBackend 子域
 
-| 子域 | 输入 | 输出 | 失败分类 |
-| --- | --- | --- | --- |
-| `file` | workspace root、path、mode、content/ref | `file.read`、`file.changed`、artifact/checkpoint refs | `not_found`、`outside_workspace`、`permission_denied`、`encoding_error`。 |
-| `patch` | patch text/ref、base checkpoint、policy | `patch.started/applied/failed`、diff refs | `parse_error`、`context_mismatch`、`conflict`、`permission_denied`。 |
-| `command` | argv、cwd、env policy、timeout | `command.started/output/exited`、output refs | `approval_denied`、`sandbox_blocked`、`spawn_failed`、`timed_out`、`non_zero_exit`。 |
-| `test` | command ref、framework hint、timeout | `test.started/completed`、summary/output refs | `failed`、`canceled`、`timed_out`、`unparseable`。 |
-| `search` | query、roots、limits | `tool.result`、source refs | `outside_workspace`、`too_many_results`、`index_unavailable`。 |
-| `preview` | artifact/app server ref、port policy | artifact/diagnostics refs | `port_blocked`、`build_failed`、`preview_unavailable`。 |
+| 子域      | 输入                                    | 输出                                                  | 失败分类                                                                             |
+| --------- | --------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `file`    | workspace root、path、mode、content/ref | `file.read`、`file.changed`、artifact/checkpoint refs | `not_found`、`outside_workspace`、`permission_denied`、`encoding_error`。            |
+| `patch`   | patch text/ref、base checkpoint、policy | `patch.started/applied/failed`、diff refs             | `parse_error`、`context_mismatch`、`conflict`、`permission_denied`。                 |
+| `command` | argv、cwd、env policy、timeout          | `command.started/output/exited`、output refs          | `approval_denied`、`sandbox_blocked`、`spawn_failed`、`timed_out`、`non_zero_exit`。 |
+| `test`    | command ref、framework hint、timeout    | `test.started/completed`、summary/output refs         | `failed`、`canceled`、`timed_out`、`unparseable`。                                   |
+| `search`  | query、roots、limits                    | `tool.result`、source refs                            | `outside_workspace`、`too_many_results`、`index_unavailable`。                       |
+| `preview` | artifact/app server ref、port policy    | artifact/diagnostics refs                             | `port_blocked`、`build_failed`、`preview_unavailable`。                              |
 
 每个子域必须先把大输出写成 ref，再把 ref 放入事件；不得把长日志、完整文件 bytes 或 secret-bearing payload 塞进 RuntimeEvent / projection。
 
@@ -177,19 +177,19 @@ Coding profile 的最小工具面：
 
 Coding facts 必须在进入 ReadModel / UI 前通过 schema gate 和 sequence gate。
 
-| Event family | 必需 scope | 必需 payload / refs | 配对 |
-| --- | --- | --- | --- |
-| `file.read` | `payload.path` | `contentRef` 或 file ref | 可独立出现。 |
-| `file.changed` | `artifactId` 或 `artifactRefs` + `payload.path` | `checkpointRef` / `diffRef` / preview ref | 可独立出现，但写入必须有 artifact owner。 |
-| `patch.started` | `payload.patchId` 或 `toolCallId` | `path` 可选 | 必须由 `patch.applied` 或 `patch.failed` 收口。 |
-| `patch.failed` | patch scope | `failureCategory`，可选 `recoveryHintRef` | 关闭 active patch。 |
-| `command.started` | `payload.commandId` 或 `toolCallId` | `command`、`cwd` | 必须由 `command.exited` 收口。 |
-| `command.output` | command scope | `outputRef` 或 `refIds` | 只能在 active command 内出现。 |
-| `command.exited` | command scope | `exitCode` 或 status | 关闭 active command。 |
-| `test.started` | `payload.testRunId` 或 `toolCallId` | `commandId` 可选 | 必须由 `test.completed` 收口。 |
-| `test.completed` | test scope | `result` / `status` + output refs | 关闭 active test。 |
-| `sandbox.blocked` | runtime / command scope | `reasonCode` + recovery hint | 触发 blocked UI。 |
-| `action.required/resolved` | `actionId` | controls / decision | 审批状态只从 action facts 派生。 |
+| Event family               | 必需 scope                                      | 必需 payload / refs                       | 配对                                            |
+| -------------------------- | ----------------------------------------------- | ----------------------------------------- | ----------------------------------------------- |
+| `file.read`                | `payload.path`                                  | `contentRef` 或 file ref                  | 可独立出现。                                    |
+| `file.changed`             | `artifactId` 或 `artifactRefs` + `payload.path` | `checkpointRef` / `diffRef` / preview ref | 可独立出现，但写入必须有 artifact owner。       |
+| `patch.started`            | `payload.patchId` 或 `toolCallId`               | `path` 可选                               | 必须由 `patch.applied` 或 `patch.failed` 收口。 |
+| `patch.failed`             | patch scope                                     | `failureCategory`，可选 `recoveryHintRef` | 关闭 active patch。                             |
+| `command.started`          | `payload.commandId` 或 `toolCallId`             | `command`、`cwd`                          | 必须由 `command.exited` 收口。                  |
+| `command.output`           | command scope                                   | `outputRef` 或 `refIds`                   | 只能在 active command 内出现。                  |
+| `command.exited`           | command scope                                   | `exitCode` 或 status                      | 关闭 active command。                           |
+| `test.started`             | `payload.testRunId` 或 `toolCallId`             | `commandId` 可选                          | 必须由 `test.completed` 收口。                  |
+| `test.completed`           | test scope                                      | `result` / `status` + output refs         | 关闭 active test。                              |
+| `sandbox.blocked`          | runtime / command scope                         | `reasonCode` + recovery hint              | 触发 blocked UI。                               |
+| `action.required/resolved` | `actionId`                                      | controls / decision                       | 审批状态只从 action facts 派生。                |
 
 终态 `turn.completed / turn.failed / turn.canceled` 出现后，不允许再出现同 turn 的 file/patch/command/test/tool/action/model 执行流事件。
 
@@ -230,14 +230,14 @@ Evidence join 规则：
 
 本地参考仓库中以下模块可作为实现素材，迁入时必须改为 Lime owner 和 Lime 命名：
 
-| 参考素材 | Lime 落点 | 迁移方式 |
-| --- | --- | --- |
-| patch parser / streaming parser | ExecutionBackend patch service | 可复制算法结构，输出 `patch.*` + `file.changed`。 |
-| exec policy prefix / network rule | Policy service | 可复制规则模型，接 Lime approval / sandbox profile。 |
-| command JSONL event processor | RuntimeEvent adapter | 可复制事件分发思想，不复制协议名。 |
-| file search session | search / context tool | 可复制异步增量搜索结构，输出 source refs。 |
-| sandbox policy transforms | sandbox manager | 按 macOS / Linux / Windows 分平台重写 owner。 |
-| code-mode protocol session framing | external harness adapter | 只用于 compat adapter，不能替代 App Server JSON-RPC。 |
+| 参考素材                           | Lime 落点                      | 迁移方式                                              |
+| ---------------------------------- | ------------------------------ | ----------------------------------------------------- |
+| patch parser / streaming parser    | ExecutionBackend patch service | 可复制算法结构，输出 `patch.*` + `file.changed`。     |
+| exec policy prefix / network rule  | Policy service                 | 可复制规则模型，接 Lime approval / sandbox profile。  |
+| command JSONL event processor      | RuntimeEvent adapter           | 可复制事件分发思想，不复制协议名。                    |
+| file search session                | search / context tool          | 可复制异步增量搜索结构，输出 source refs。            |
+| sandbox policy transforms          | sandbox manager                | 按 macOS / Linux / Windows 分平台重写 owner。         |
+| code-mode protocol session framing | external harness adapter       | 只用于 compat adapter，不能替代 App Server JSON-RPC。 |
 
 迁入前必须确认许可证、依赖、平台行为和 secret redaction；迁入后必须有 Lime 侧单测。
 
@@ -268,23 +268,23 @@ Evidence join 规则：
 
 ## 与既有 Lime 能力关系
 
-| Lime 现有能力 | 分类 | Coding 目标 |
-| --- | --- | --- |
-| `code_orchestrated` | compat/current 入口语义 | 映射为标准 coding profile，不再依赖 command 文本。 |
-| Project Shell | current execution surface | 接入 RuntimeEvent / policy / projection。 |
-| file checkpoint | current artifact support | 作为 patch/file change 的 checkpoint owner。 |
-| AgentUI sequence gate | current guard | 扩展覆盖 coding command/patch/test/action 配对。 |
-| Workspace Harness 局部面板 | compat UI | 迁到 Coding Workbench shared surfaces。 |
-| Agent App runtime projection | current consumer | 可复用 coding task/read model，不复制执行事实。 |
-| `CanvasWorkbenchLayout` coding mode | compat/current UI surface | 可以保留壳和视觉，但事实解释必须来自 `CodingWorkbenchView`。 |
-| thread item / checkpoint change view | compat migration input | 只能先 adapter 成 RuntimeEvent，不能直接驱动最终 UI。 |
+| Lime 现有能力                        | 分类                      | Coding 目标                                                                                 |
+| ------------------------------------ | ------------------------- | ------------------------------------------------------------------------------------------- |
+| `code_orchestrated`                  | compat legacy input       | 只在单一 compat helper 中归一为 `react`；不得作为 coding profile current 入口或独立状态机。 |
+| Project Shell                        | current execution surface | 接入 RuntimeEvent / policy / projection。                                                   |
+| file checkpoint                      | current artifact support  | 作为 patch/file change 的 checkpoint owner。                                                |
+| AgentUI sequence gate                | current guard             | 扩展覆盖 coding command/patch/test/action 配对。                                            |
+| Workspace Harness 局部面板           | compat UI                 | 迁到 Coding Workbench shared surfaces。                                                     |
+| Agent App runtime projection         | current consumer          | 可复用 coding task/read model，不复制执行事实。                                             |
+| `CanvasWorkbenchLayout` coding mode  | compat/current UI surface | 可以保留壳和视觉，但事实解释必须来自 `CodingWorkbenchView`。                                |
+| thread item / checkpoint change view | compat migration input    | 只能先 adapter 成 RuntimeEvent，不能直接驱动最终 UI。                                       |
 
 ## 旧实现清理边界
 
 允许短期保留：
 
 - 历史 thread item 到 RuntimeEvent 的 migration adapter。
-- 旧 `code_orchestrated` 值作为 profile selection 输入。
+- 旧 `code_orchestrated` 值作为历史 session / 偏好 / 旧命令包的 compat 输入，且只能归一到 `react`。
 - 旧 checkpoint summary 作为 artifact/checkpoint owner 的历史数据来源。
 - `CanvasWorkbenchLayout` 的视觉壳，只要事实解释来自 `CodingWorkbenchView`。
 

@@ -114,12 +114,7 @@ pub fn get_model_usage_ranking_from_db(
     conn: &Connection,
 ) -> Result<Vec<ModelUsage>, String> {
     let range_start = resolve_range_start(time_range)?;
-
-    let mut usages = query_model_usage_from_stats_table(conn, range_start)?;
-    if usages.is_empty() {
-        usages = query_model_usage_from_agent_messages(conn, range_start)?;
-    }
-
+    let usages = query_model_usage_from_stats_table(conn, range_start)?;
     Ok(build_model_usage_response(usages))
 }
 
@@ -239,7 +234,7 @@ fn summarize_unified_window(
     let from_text = from_timestamp_ms.map(format_sqlite_datetime);
     let to_text = to_timestamp_ms.map(format_sqlite_datetime);
 
-    AgentDao::summarize_by_model_pattern(
+    let session_count = AgentDao::count_sessions_by_model_pattern(
         conn,
         GENERAL_MODE_PATTERN,
         match_mode,
@@ -247,8 +242,14 @@ fn summarize_unified_window(
         to_text.as_deref(),
     )
     .map_err(|e| match match_mode {
-        AgentModelPatternMatch::Like => format!("查询 unified general 摘要失败: {e}"),
-        AgentModelPatternMatch::NotLike => format!("查询非通用 unified 摘要失败: {e}"),
+        AgentModelPatternMatch::Like => format!("查询 unified general 会话摘要失败: {e}"),
+        AgentModelPatternMatch::NotLike => format!("查询非通用 unified 会话摘要失败: {e}"),
+    })?;
+
+    Ok(ConversationWindowSummary {
+        session_count,
+        message_count: 0,
+        content_chars: 0,
     })
 }
 
@@ -384,30 +385,6 @@ fn query_model_usage_from_stats_table(
         .collect())
 }
 
-fn query_model_usage_from_agent_messages(
-    conn: &Connection,
-    range_start: Option<DateTime<Local>>,
-) -> Result<Vec<RawModelUsage>, String> {
-    let start_str = range_start.map(|start| start.format("%Y-%m-%d %H:%M:%S").to_string());
-    let rows = AgentDao::list_model_usage_by_model_pattern(
-        conn,
-        GENERAL_MODE_PATTERN,
-        AgentModelPatternMatch::NotLike,
-        start_str.as_deref(),
-        20,
-    )
-    .map_err(|e| format!("查询 Agent 模型排行失败: {e}"))?;
-
-    Ok(rows
-        .into_iter()
-        .map(|row| RawModelUsage {
-            model: row.model,
-            conversations: row.conversations,
-            tokens: chars_to_estimated_tokens(row.content_chars as i64),
-        })
-        .collect())
-}
-
 fn build_model_usage_response(usages: Vec<RawModelUsage>) -> Vec<ModelUsage> {
     if usages.is_empty() {
         return Vec::new();
@@ -437,4 +414,95 @@ fn build_model_usage_response(usages: Vec<RawModelUsage>) -> Vec<ModelUsage> {
             }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use lime_core::database::schema::create_tables;
+    use rusqlite::params;
+
+    fn setup_usage_db() -> Connection {
+        let conn = Connection::open_in_memory().expect("open db");
+        create_tables(&conn).expect("create schema");
+        conn
+    }
+
+    fn insert_agent_session(conn: &Connection, id: &str, model: &str, created_at: &str) {
+        conn.execute(
+            "INSERT INTO agent_sessions (
+                id, model, system_prompt, title, created_at, updated_at, working_dir,
+                execution_strategy
+             ) VALUES (?1, ?2, NULL, ?3, ?4, ?4, NULL, 'react')",
+            params![id, model, id, created_at],
+        )
+        .expect("insert session");
+    }
+
+    fn insert_agent_message(conn: &Connection, session_id: &str, content: &str, timestamp: &str) {
+        conn.execute(
+            "INSERT INTO agent_messages (session_id, role, content_json, timestamp)
+             VALUES (?1, 'assistant', ?2, ?3)",
+            params![session_id, content, timestamp],
+        )
+        .expect("insert legacy message");
+    }
+
+    #[test]
+    fn model_usage_ranking_does_not_fallback_to_agent_messages() {
+        let conn = setup_usage_db();
+        insert_agent_session(&conn, "legacy-agent", "gpt-4.1", "2026-03-14T09:00:00Z");
+        insert_agent_message(
+            &conn,
+            "legacy-agent",
+            r#"[{"type":"text","text":"旧消息不再作为模型统计来源"}]"#,
+            "2026-03-14T09:01:00Z",
+        );
+
+        let ranking = get_model_usage_ranking_from_db("all", &conn).expect("ranking");
+
+        assert!(ranking.is_empty());
+    }
+
+    #[test]
+    fn model_usage_ranking_uses_model_usage_stats() {
+        let conn = setup_usage_db();
+        OrchestratorDao::record_model_usage(&conn, "gpt-5", "cred-1", true, 120, 30)
+            .expect("record gpt-5");
+        OrchestratorDao::record_model_usage(&conn, "gpt-4.1", "cred-2", true, 30, 10)
+            .expect("record gpt-4.1");
+
+        let ranking = get_model_usage_ranking_from_db("all", &conn).expect("ranking");
+
+        assert_eq!(ranking.len(), 2);
+        assert_eq!(ranking[0].model, "gpt-5");
+        assert_eq!(ranking[0].tokens, 120);
+        assert_eq!(ranking[1].model, "gpt-4.1");
+        assert_eq!(ranking[1].tokens, 30);
+    }
+
+    #[test]
+    fn usage_stats_keep_session_counts_but_do_not_estimate_tokens_from_legacy_messages() {
+        let conn = setup_usage_db();
+        insert_agent_session(&conn, "general", "general:gpt-4.1", "2026-03-14T09:00:00Z");
+        insert_agent_session(&conn, "agent", "gpt-4.1", "2026-03-14T10:00:00Z");
+        insert_agent_message(
+            &conn,
+            "general",
+            r#"[{"type":"text","text":"general legacy content"}]"#,
+            "2026-03-14T09:01:00Z",
+        );
+        insert_agent_message(
+            &conn,
+            "agent",
+            r#"[{"type":"text","text":"agent legacy content"}]"#,
+            "2026-03-14T10:01:00Z",
+        );
+
+        let stats = get_usage_stats_from_db("all", &conn).expect("usage stats");
+
+        assert_eq!(stats.total_conversations, 2);
+        assert_eq!(stats.total_messages, 0);
+        assert_eq!(stats.total_tokens, 0);
+    }
 }

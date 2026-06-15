@@ -406,6 +406,10 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
         changeItemCount,
         documentDiffLineCount: documentDiffLines.length,
         failedChangeItemCount,
+        utilityTabs: {
+          outputs: Boolean(outputView?.renderPanel),
+          logs: Boolean(logView?.renderPanel),
+        },
         openedToolTabs,
         translateWorkbench: canvasT,
       }),
@@ -413,7 +417,9 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
       changeItemCount,
       documentDiffLines.length,
       failedChangeItemCount,
+      logView?.renderPanel,
       openedToolTabs,
+      outputView?.renderPanel,
       canvasT,
     ],
   );

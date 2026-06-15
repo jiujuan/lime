@@ -3,6 +3,7 @@ import type {
   AgentSessionActionRespondParams,
   AgentSessionReadResponse,
   AgentSessionTurnStartParams,
+  StructuredOutputContract,
 } from "@limecloud/agent-runtime-client";
 
 import type {
@@ -62,6 +63,15 @@ export function createAgentAppRuntimeCapabilityApiFromClient(
         ...(request.metadata ?? {}),
         ...(isRecord(turnConfig.metadata) ? turnConfig.metadata : {}),
       };
+      const structuredOutput = structuredOutputContractFromRequest(
+        request.expectedOutput,
+        turnConfig,
+      );
+      const outputSchema = outputSchemaFromStructuredOutput(
+        structuredOutput,
+        request.expectedOutput,
+        turnConfig,
+      );
       const startParams: AgentSessionTurnStartParams = omitUndefined({
         sessionId,
         turnId: normalizeString(request.turnId),
@@ -76,6 +86,9 @@ export function createAgentAppRuntimeCapabilityApiFromClient(
           modelPreference,
           metadata,
           queuedTurnId,
+          expectedOutput: request.expectedOutput,
+          structuredOutput,
+          outputSchema,
           hostOptions: {
             asterChatRequest: buildAgentAppAsterChatRequest({
               request,
@@ -88,6 +101,9 @@ export function createAgentAppRuntimeCapabilityApiFromClient(
               providerPreference,
               modelPreference,
               metadata,
+              expectedOutput: request.expectedOutput,
+              structuredOutput,
+              outputSchema,
               queueIfBusy,
               queuedTurnId,
             }),
@@ -179,6 +195,9 @@ function buildAgentAppAsterChatRequest(params: {
   providerPreference?: string;
   modelPreference?: string;
   metadata: Record<string, unknown>;
+  expectedOutput?: unknown;
+  structuredOutput?: StructuredOutputContract;
+  outputSchema?: unknown;
   queueIfBusy: boolean;
   queuedTurnId: string;
 }): Record<string, unknown> {
@@ -210,6 +229,9 @@ function buildAgentAppAsterChatRequest(params: {
       turnConfig.autoContinue ?? turnConfig.auto_continue ?? null,
     system_prompt: turnConfig.systemPrompt ?? turnConfig.system_prompt ?? null,
     metadata: params.metadata,
+    expected_output: params.expectedOutput,
+    structured_output: params.structuredOutput,
+    output_schema: params.outputSchema,
     turn_id: params.turnId,
     queue_if_busy: params.queueIfBusy,
     queued_turn_id: params.queuedTurnId,
@@ -357,6 +379,122 @@ function readString(
 ): string | undefined {
   const item = value[key];
   return typeof item === "string" && item.trim() ? item.trim() : undefined;
+}
+
+function structuredOutputContractFromRequest(
+  expectedOutput: unknown,
+  turnConfig: Record<string, unknown>,
+): StructuredOutputContract | undefined {
+  const explicit = recordValue(turnConfig, "structuredOutput") ??
+    recordValue(turnConfig, "structured_output");
+  if (explicit) {
+    return omitUndefined({
+      type: readString(explicit, "type"),
+      schemaRef:
+        readString(explicit, "schemaRef") ?? readString(explicit, "schema_ref"),
+      schema:
+        explicit.schema ??
+        explicit.outputSchema ??
+        explicit.output_schema,
+      maxValidationRetries: readNumber(
+        explicit,
+        "maxValidationRetries",
+        "max_validation_retries",
+      ),
+      failureSubtype:
+        readString(explicit, "failureSubtype") ??
+        readString(explicit, "failure_subtype"),
+      materializer: explicit.materializer,
+      metadata: explicit.metadata,
+    });
+  }
+
+  const outputFormat = expectedOutputOutputFormat(expectedOutput);
+  if (!outputFormat) {
+    return undefined;
+  }
+  return omitUndefined({
+    type:
+      readString(outputFormat, "type") ??
+      readString(outputFormat, "format") ??
+      "json_schema",
+    schemaRef:
+      readString(outputFormat, "schemaRef") ??
+      readString(outputFormat, "schema_ref"),
+    schema:
+      outputFormat.schema ??
+      outputFormat.outputSchema ??
+      outputFormat.output_schema,
+    maxValidationRetries: readNumber(
+      outputFormat,
+      "maxValidationRetries",
+      "max_validation_retries",
+    ),
+    failureSubtype:
+      readString(outputFormat, "failureSubtype") ??
+      readString(outputFormat, "failure_subtype"),
+    materializer: outputFormat.materializer,
+    metadata: outputFormat.metadata,
+  });
+}
+
+function outputSchemaFromStructuredOutput(
+  structuredOutput: StructuredOutputContract | undefined,
+  expectedOutput: unknown,
+  turnConfig: Record<string, unknown>,
+): unknown {
+  const direct = turnConfig.outputSchema ?? turnConfig.output_schema;
+  if (direct !== undefined) {
+    return direct;
+  }
+  if (structuredOutput?.schema !== undefined) {
+    return structuredOutput.schema;
+  }
+  const outputFormat = expectedOutputOutputFormat(expectedOutput);
+  return outputFormat?.schema ?? outputFormat?.outputSchema ?? outputFormat?.output_schema;
+}
+
+function expectedOutputOutputFormat(
+  expectedOutput: unknown,
+): Record<string, unknown> | undefined {
+  if (!isRecord(expectedOutput)) {
+    return undefined;
+  }
+  const outputFormat =
+    recordValue(expectedOutput, "outputFormat") ??
+    recordValue(expectedOutput, "output_format");
+  if (outputFormat) {
+    return outputFormat;
+  }
+  if (
+    expectedOutput.schema !== undefined ||
+    expectedOutput.outputSchema !== undefined ||
+    expectedOutput.output_schema !== undefined
+  ) {
+    return expectedOutput;
+  }
+  return undefined;
+}
+
+function recordValue(
+  value: Record<string, unknown>,
+  key: string,
+): Record<string, unknown> | undefined {
+  const item = value[key];
+  return isRecord(item) ? item : undefined;
+}
+
+function readNumber(
+  value: Record<string, unknown>,
+  ...keys: string[]
+): number | undefined {
+  for (const key of keys) {
+    const item = value[key];
+    if (typeof item === "number" && Number.isFinite(item)) {
+      return item;
+    }
+  }
+  return undefined;
 }
 
 function stringifyJson(value: unknown): string {

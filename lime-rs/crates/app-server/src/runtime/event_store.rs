@@ -1,4 +1,5 @@
 use super::status::{agent_turn_is_terminal, session_status_from_turn_status};
+use super::turn_input_events;
 use super::*;
 use crate::agent_ui_event_schema;
 use crate::agent_ui_sequence_verifier;
@@ -31,6 +32,9 @@ impl RuntimeCoreEventAppender {
             stored,
             self.file_checkpoint_snapshot_store.as_ref(),
             self.output_snapshot_store.as_ref(),
+            self.sidecar_store.as_deref(),
+            self.event_log_writer.as_deref(),
+            self.projection_store.as_deref(),
             session_id,
             &thread_id,
             turn_id,
@@ -43,6 +47,9 @@ pub(in crate::runtime) fn append_runtime_events_to_state(
     state: &Arc<Mutex<RuntimeCoreState>>,
     file_checkpoint_snapshot_store: &dyn crate::file_checkpoint_snapshot::FileCheckpointSnapshotStore,
     output_snapshot_store: &dyn output_refs::OutputSnapshotStore,
+    sidecar_store: Option<&SidecarStore>,
+    event_log_writer: Option<&EventLogWriter>,
+    projection_store: Option<&ProjectionStore>,
     session_id: &str,
     thread_id: &str,
     turn_id: Option<&str>,
@@ -57,6 +64,9 @@ pub(in crate::runtime) fn append_runtime_events_to_state(
         stored,
         file_checkpoint_snapshot_store,
         output_snapshot_store,
+        sidecar_store,
+        event_log_writer,
+        projection_store,
         session_id,
         thread_id,
         turn_id,
@@ -68,12 +78,19 @@ fn append_runtime_events_to_stored_session(
     stored: &mut StoredSession,
     file_checkpoint_snapshot_store: &dyn crate::file_checkpoint_snapshot::FileCheckpointSnapshotStore,
     output_snapshot_store: &dyn output_refs::OutputSnapshotStore,
+    sidecar_store: Option<&SidecarStore>,
+    event_log_writer: Option<&EventLogWriter>,
+    projection_store: Option<&ProjectionStore>,
     session_id: &str,
     thread_id: &str,
     turn_id: Option<&str>,
     runtime_events: Vec<RuntimeEvent>,
 ) -> Result<Vec<AgentEvent>, RuntimeCoreError> {
-    if runtime_events.is_empty() || is_terminal_turn(stored, turn_id) {
+    if is_terminal_turn(stored, turn_id) {
+        return Ok(Vec::new());
+    }
+    let runtime_events = runtime_events_with_turn_input(stored, turn_id, runtime_events);
+    if runtime_events.is_empty() {
         return Ok(Vec::new());
     }
     let mut events = Vec::with_capacity(runtime_events.len());
@@ -131,6 +148,13 @@ fn append_runtime_events_to_stored_session(
                 file_checkpoint_snapshot_store,
             )
             .map_err(RuntimeCoreError::Backend)?;
+            artifact_sidecar::persist_artifact_snapshot_payload(
+                event.event_type.as_str(),
+                &mut event.payload,
+                session_id,
+                event.event_id.as_str(),
+                sidecar_store,
+            )?;
         }
         agent_ui_event_schema::validate_agent_event(&event).map_err(RuntimeCoreError::Backend)?;
         if needs_sequence_context {
@@ -148,7 +172,11 @@ fn append_runtime_events_to_stored_session(
                 .map_err(RuntimeCoreError::Backend)?;
         }
         if let Some(output_blob) = normalized.output_blob {
-            output_records.push(output_refs::record_output_blob(&event, output_blob));
+            let output = output_refs::record_output_blob(&event, output_blob);
+            let output =
+                output_refs::persist_output_record(output, session_id, output_snapshot_store)?;
+            output_refs::attach_output_snapshot_ref(&mut event.payload, &output);
+            output_records.push(output);
         }
         if event.turn_id.as_deref() == turn_id && turn_terminal_event {
             pending_terminal_for_turn = true;
@@ -156,17 +184,64 @@ fn append_runtime_events_to_stored_session(
         events.push(event);
     }
     let appended_events = events.clone();
+    if let Some(event_log_writer) = event_log_writer {
+        for event in &appended_events {
+            event_log_writer
+                .append(event)
+                .map_err(RuntimeCoreError::Backend)?;
+        }
+    }
+    if let Some(projection_store) = projection_store {
+        for event in &appended_events {
+            if let Err(error) = projection_store.apply_event(event) {
+                tracing::warn!(
+                    "[projection-store] failed to apply event {} for session {}: {}",
+                    event.event_id,
+                    event.session_id,
+                    error
+                );
+            }
+        }
+    }
     for event in events {
         apply_runtime_event_state_transition(stored, turn_id, event.event_type.as_str());
         stored.events.push(event);
     }
     for output in output_records {
-        let output = output_refs::persist_output_record(output, session_id, output_snapshot_store)?;
         stored
             .output_blobs
             .insert(output.output_ref.clone(), output);
     }
     Ok(appended_events)
+}
+
+fn runtime_events_with_turn_input(
+    stored: &StoredSession,
+    turn_id: Option<&str>,
+    runtime_events: Vec<RuntimeEvent>,
+) -> Vec<RuntimeEvent> {
+    let Some(turn_id) = turn_id else {
+        return runtime_events;
+    };
+    if stored.events.iter().any(|event| {
+        event.turn_id.as_deref() == Some(turn_id) && turn_input_events::is_turn_input_event(event)
+    }) || runtime_events
+        .iter()
+        .any(|event| turn_input_events::is_turn_input_event_type(&event.event_type))
+    {
+        return runtime_events;
+    }
+    let Some(input) = stored.turn_inputs.get(turn_id) else {
+        return runtime_events;
+    };
+    let Some(input_event) = turn_input_events::runtime_event_for_turn_input(input) else {
+        return runtime_events;
+    };
+
+    let mut events = Vec::with_capacity(runtime_events.len() + 1);
+    events.push(input_event);
+    events.extend(runtime_events);
+    events
 }
 
 fn validation_context_for_event(
@@ -245,6 +320,7 @@ fn should_validate_tool_lifecycle_event_class(event_class: &str) -> bool {
 
 fn normalized_runtime_event_class(event_type: &str) -> &str {
     match event_type {
+        "message.created" => "message.created",
         "tool_args" => "tool.args",
         "tool_args_delta" => "tool.args.delta",
         "tool_output_delta" => "tool.output.delta",
@@ -256,7 +332,7 @@ fn normalized_runtime_event_class(event_type: &str) -> &str {
 fn is_text_delta_event_class(event_class: &str) -> bool {
     matches!(
         event_class,
-        "message.delta" | "message.delta_batch" | "message.batch"
+        "message.delta" | "message.delta_batch" | "message.batch" | "message.created"
     )
 }
 

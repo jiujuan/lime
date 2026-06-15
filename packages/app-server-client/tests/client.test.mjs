@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { EventEmitter } from "node:events";
 import {
   chmod,
   copyFile,
@@ -12,6 +13,7 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { PassThrough, Writable } from "node:stream";
 import { test } from "vitest";
 const require = createRequire(import.meta.url);
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -31,6 +33,7 @@ const {
   AppServerAgentEventRouter,
   AppServerAgentRuntimeClient,
   AppServerSidecarLifecycle,
+  AppServerSidecar,
   DEFAULT_LISTEN_URL,
   DEFAULT_PROTOCOL_SCHEMA_MANIFEST_NAME,
   DEFAULT_RELEASE_MANIFEST_NAME,
@@ -101,6 +104,12 @@ const {
   METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE,
   METHOD_CONNECT_RELAY_API_KEY_SAVE,
   METHOD_EVIDENCE_EXPORT,
+  METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT,
+  METHOD_EXECUTION_PROCESS_INTERRUPT,
+  METHOD_EXECUTION_PROCESS_START,
+  METHOD_EXECUTION_PROCESS_STATUS,
+  METHOD_EXECUTION_PROCESS_TERMINATE,
+  METHOD_EXECUTION_PROCESS_WRITE_STDIN,
   METHOD_FILE_SYSTEM_CREATE_DIRECTORY,
   METHOD_FILE_SYSTEM_CREATE_FILE,
   METHOD_FILE_SYSTEM_DELETE_FILE,
@@ -1644,6 +1653,32 @@ test("builds file system requests with current methods", () => {
     sessionId: "project-shell-1",
     limit: 20,
   });
+  const executionStart = client.startExecutionProcess({
+    processId: "execution-process-1",
+    toolId: "tool-1",
+    toolName: "shell",
+    command: ["sh", "-c", "printf ok"],
+    workingDirectory: "/workspace",
+    approvalPolicy: "never",
+    sandboxPolicy: "danger-full-access",
+  });
+  const executionWrite = client.writeExecutionProcessStdin({
+    processId: "execution-process-1",
+    data: "input\n",
+  });
+  const executionInterrupt = client.interruptExecutionProcess({
+    processId: "execution-process-1",
+  });
+  const executionTerminate = client.terminateExecutionProcess({
+    processId: "execution-process-1",
+  });
+  const executionStatus = client.readExecutionProcessStatus({
+    processId: "execution-process-1",
+  });
+  const executionDrain = client.drainExecutionProcessOutput({
+    processId: "execution-process-1",
+    limit: 20,
+  });
 
   assert.equal(listing.id, 1);
   assert.equal(listing.method, METHOD_FILE_SYSTEM_LIST_DIRECTORY);
@@ -1745,6 +1780,44 @@ test("builds file system requests with current methods", () => {
   assert.equal(shellDrain.method, METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS);
   assert.deepEqual(shellDrain.params, {
     sessionId: "project-shell-1",
+    limit: 20,
+  });
+  assert.equal(executionStart.id, 18);
+  assert.equal(executionStart.method, METHOD_EXECUTION_PROCESS_START);
+  assert.deepEqual(executionStart.params, {
+    processId: "execution-process-1",
+    toolId: "tool-1",
+    toolName: "shell",
+    command: ["sh", "-c", "printf ok"],
+    workingDirectory: "/workspace",
+    approvalPolicy: "never",
+    sandboxPolicy: "danger-full-access",
+  });
+  assert.equal(executionWrite.id, 19);
+  assert.equal(executionWrite.method, METHOD_EXECUTION_PROCESS_WRITE_STDIN);
+  assert.deepEqual(executionWrite.params, {
+    processId: "execution-process-1",
+    data: "input\n",
+  });
+  assert.equal(executionInterrupt.id, 20);
+  assert.equal(executionInterrupt.method, METHOD_EXECUTION_PROCESS_INTERRUPT);
+  assert.deepEqual(executionInterrupt.params, {
+    processId: "execution-process-1",
+  });
+  assert.equal(executionTerminate.id, 21);
+  assert.equal(executionTerminate.method, METHOD_EXECUTION_PROCESS_TERMINATE);
+  assert.deepEqual(executionTerminate.params, {
+    processId: "execution-process-1",
+  });
+  assert.equal(executionStatus.id, 22);
+  assert.equal(executionStatus.method, METHOD_EXECUTION_PROCESS_STATUS);
+  assert.deepEqual(executionStatus.params, {
+    processId: "execution-process-1",
+  });
+  assert.equal(executionDrain.id, 23);
+  assert.equal(executionDrain.method, METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT);
+  assert.deepEqual(executionDrain.params, {
+    processId: "execution-process-1",
     limit: 20,
   });
 });
@@ -1917,6 +1990,12 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_PROJECT_SHELL_SESSION_RESIZE, kind: "request" },
     { method: METHOD_PROJECT_SHELL_SESSION_KILL, kind: "request" },
     { method: METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS, kind: "request" },
+    { method: METHOD_EXECUTION_PROCESS_START, kind: "request" },
+    { method: METHOD_EXECUTION_PROCESS_WRITE_STDIN, kind: "request" },
+    { method: METHOD_EXECUTION_PROCESS_INTERRUPT, kind: "request" },
+    { method: METHOD_EXECUTION_PROCESS_TERMINATE, kind: "request" },
+    { method: METHOD_EXECUTION_PROCESS_STATUS, kind: "request" },
+    { method: METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT, kind: "request" },
     { method: METHOD_EVIDENCE_EXPORT, kind: "request" },
     { method: METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT, kind: "request" },
     { method: METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT, kind: "request" },
@@ -2210,6 +2289,24 @@ test("exports app-server method catalog with request and notification kinds", ()
   );
   assert.equal(
     isAppServerRequestMethod(METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS),
+    true,
+  );
+  assert.equal(isAppServerRequestMethod(METHOD_EXECUTION_PROCESS_START), true);
+  assert.equal(
+    isAppServerRequestMethod(METHOD_EXECUTION_PROCESS_WRITE_STDIN),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_EXECUTION_PROCESS_INTERRUPT),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_EXECUTION_PROCESS_TERMINATE),
+    true,
+  );
+  assert.equal(isAppServerRequestMethod(METHOD_EXECUTION_PROCESS_STATUS), true);
+  assert.equal(
+    isAppServerRequestMethod(METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT),
     true,
   );
   assert.equal(isAppServerRequestMethod(METHOD_EVIDENCE_EXPORT), true);
@@ -2551,6 +2648,210 @@ test("connection wraps request response flow and keeps async notifications", asy
   assert.equal(result.notifications.length, 1);
   assert.equal(result.notifications[0].method, METHOD_AGENT_SESSION_EVENT);
   assert.equal(result.notifications[0].params.event.payload.text, "delta");
+});
+
+test("connection yields transport reads while one request is still pending", async () => {
+  const sent = [];
+  const inbound = [
+    {
+      id: 2,
+      result: {
+        sessions: [
+          {
+            sessionId: "sess_external",
+            threadId: "thread_external",
+            appId: "content-studio",
+            status: "running",
+            createdAt: "2026-06-04T00:00:00Z",
+            updatedAt: "2026-06-04T00:00:01Z",
+          },
+        ],
+      },
+    },
+  ];
+  const connection = new AppServerConnection({
+    send(message) {
+      sent.push(message);
+    },
+    nextMessage(timeoutMs = 30_000) {
+      return new Promise((resolve, reject) => {
+        setTimeout(() => {
+          const message = inbound.shift();
+          if (message) {
+            resolve(message);
+            return;
+          }
+          reject(
+            new Error(
+              `timed out waiting for app-server message after ${timeoutMs}ms`,
+            ),
+          );
+        }, 1);
+      });
+    },
+  });
+
+  void connection
+    .startTurn(
+      {
+        sessionId: "sess_external",
+        input: {
+          text: "draft",
+        },
+        queueIfBusy: true,
+      },
+      { timeoutMs: 1_000 },
+    )
+    .catch(() => undefined);
+  await new Promise((resolve) => setTimeout(resolve, 5));
+
+  const result = await connection.listSessions({}, { timeoutMs: 100 });
+
+  assert.equal(sent[0].method, METHOD_AGENT_SESSION_TURN_START);
+  assert.equal(sent[1].method, METHOD_AGENT_SESSION_LIST);
+  assert.equal(result.id, 2);
+  assert.equal(result.result.sessions[0].sessionId, "sess_external");
+});
+
+test("connection detaches streaming request after first notification and drops its late final response", async () => {
+  const sent = [];
+  const inbound = [
+    {
+      method: METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "evt-turn-started",
+          sequence: 1,
+          sessionId: "sess_external",
+          turnId: "turn_external",
+          type: "turn.started",
+          timestamp: "2026-06-04T00:00:00Z",
+          payload: {},
+        },
+      },
+    },
+    {
+      id: 1,
+      result: {
+        turn: {
+          turnId: "turn_external",
+          sessionId: "sess_external",
+          threadId: "thread_external",
+          status: "accepted",
+        },
+      },
+    },
+    {
+      id: 2,
+      result: {
+        sessions: [
+          {
+            sessionId: "sess_external",
+            threadId: "thread_external",
+            appId: "content-studio",
+            status: "running",
+            createdAt: "2026-06-04T00:00:00Z",
+            updatedAt: "2026-06-04T00:00:01Z",
+          },
+        ],
+      },
+    },
+  ];
+  const connection = new AppServerConnection({
+    send(message) {
+      sent.push(message);
+    },
+    async nextMessage() {
+      const message = inbound.shift();
+      if (!message) {
+        throw new Error("empty transport");
+      }
+      return message;
+    },
+  });
+
+  const turnRequest = connection.client.startTurn({
+    sessionId: "sess_external",
+    turnId: "turn_external",
+    input: {
+      text: "draft",
+    },
+    queueIfBusy: true,
+  });
+  const start = await connection.requestUntilFirstNotificationOrResponse(
+    turnRequest,
+    METHOD_AGENT_SESSION_TURN_START,
+    { timeoutMs: 100 },
+  );
+  const list = await connection.listSessions({}, { timeoutMs: 100 });
+
+  assert.equal(start.completed, false);
+  assert.equal(start.notifications.length, 1);
+  assert.equal(sent[0].method, METHOD_AGENT_SESSION_TURN_START);
+  assert.equal(sent[1].method, METHOD_AGENT_SESSION_LIST);
+  assert.equal(list.id, 2);
+  assert.equal(list.result.sessions[0].sessionId, "sess_external");
+});
+
+test("ordinary request timeout is not extended forever by streaming notifications", async () => {
+  const sent = [];
+  let sequence = 0;
+  const connection = new AppServerConnection({
+    send(message) {
+      sent.push(message);
+    },
+    async nextMessage() {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      sequence += 1;
+      return {
+        method: METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: `evt-${sequence}`,
+            sequence,
+            sessionId: "sess_external",
+            turnId: "turn_external",
+            type: "message.delta",
+            timestamp: "2026-06-04T00:00:01Z",
+            payload: { text: "still streaming" },
+          },
+        },
+      };
+    },
+  });
+
+  await assert.rejects(
+    () => connection.listSessions({}, { timeoutMs: 100 }),
+    /timed out waiting for app-server message after 100ms/,
+  );
+
+  assert.equal(sent[0].method, METHOD_AGENT_SESSION_LIST);
+  assert.ok(sequence > 0);
+});
+
+test("stdio sidecar stdin EPIPE rejects pending request instead of escaping as uncaught exception", async () => {
+  const stdin = new Writable({
+    write(_chunk, _encoding, callback) {
+      callback(Object.assign(new Error("write EPIPE"), { code: "EPIPE" }));
+    },
+  });
+  const child = Object.assign(new EventEmitter(), {
+    stdin,
+    stdout: new PassThrough(),
+    stderr: new PassThrough(),
+    exitCode: null,
+    signalCode: null,
+    kill() {
+      return true;
+    },
+  });
+  const sidecar = new AppServerSidecar(child);
+  const connection = new AppServerConnection(sidecar);
+
+  await assert.rejects(
+    () => connection.listSessions({ limit: 1 }, { timeoutMs: 1_000 }),
+    /app-server sidecar stdin is closed/,
+  );
 });
 
 test("agent runtime client facade delegates to current App Server session methods", async () => {
@@ -4066,6 +4367,41 @@ test("uses agent-style stdio sidecar launch args", () => {
     "--app-policy",
     "/tmp/content-studio.policy.json",
   ]);
+  const dataDirConfig = stdioSidecar(
+    "/tmp/app-server",
+    "/tmp/content-studio.policy.json",
+    "/tmp/content-studio-app-server-data",
+  );
+  assert.equal(dataDirConfig.dataDir, "/tmp/content-studio-app-server-data");
+  assert.deepEqual(sidecarArgs(dataDirConfig), [
+    "--stdio",
+    "--backend",
+    "unavailable",
+    "--app-policy",
+    "/tmp/content-studio.policy.json",
+    "--data-dir",
+    "/tmp/content-studio-app-server-data",
+  ]);
+  const cleanupConfig = stdioSidecar(
+    "/tmp/app-server",
+    undefined,
+    "/tmp/content-studio-app-server-data",
+    "drop-empty-tables",
+    "delete-file",
+  );
+  assert.equal(cleanupConfig.legacyMessageCleanup, "drop-empty-tables");
+  assert.equal(cleanupConfig.productDbMigrationCleanup, "delete-file");
+  assert.deepEqual(sidecarArgs(cleanupConfig), [
+    "--stdio",
+    "--backend",
+    "unavailable",
+    "--data-dir",
+    "/tmp/content-studio-app-server-data",
+    "--legacy-message-cleanup",
+    "drop-empty-tables",
+    "--product-db-migration-cleanup",
+    "delete-file",
+  ]);
   assert.deepEqual(
     sidecarArgs({ binaryPath: "app-server", listenUrl: "stdio://" }),
     ["--stdio", "--backend", "unavailable"],
@@ -4079,8 +4415,15 @@ test("uses agent-style stdio sidecar launch args", () => {
       binaryPath: "app-server",
       listenUrl: "stdio://",
       backendMode: "unavailable",
+      productDbMigrationCleanup: "drop-tables",
     }),
-    ["--stdio", "--backend", "unavailable"],
+    [
+      "--stdio",
+      "--backend",
+      "unavailable",
+      "--product-db-migration-cleanup",
+      "drop-tables",
+    ],
   );
   assert.deepEqual(
     sidecarArgs({
@@ -4350,6 +4693,7 @@ test("resolves sidecar config from manifest and packaged resources", () => {
       backendArgs: ["--workspace", "/app/workspace"],
       backendTimeoutMs: 45_000,
       appPolicyPath: "/app/content-studio.policy.json",
+      dataDir: "/app/user-data/app-server",
       platform: "darwin",
       arch: "arm64",
     }),
@@ -4369,6 +4713,7 @@ test("resolves sidecar config from manifest and packaged resources", () => {
         backendArgs: ["--workspace", "/app/workspace"],
         backendTimeoutMs: 45_000,
         appPolicyPath: "/app/content-studio.policy.json",
+        dataDir: "/app/user-data/app-server",
         expectedSha256: "abc",
         artifact: manifest.artifacts[0],
       },
@@ -4565,11 +4910,20 @@ test("verifies release artifact sha256 before sidecar launch", async () => {
   try {
     await writeFile(binaryPath, "sidecar-binary");
     const sha256 = sha256Hex("sidecar-binary");
-    const config = sidecarFromReleaseArtifact(binaryPath, {
-      platform: "darwin-arm64",
-      url: "https://example/app-server-darwin-arm64.tar.gz",
-      sha256,
-    });
+    const config = sidecarFromReleaseArtifact(
+      binaryPath,
+      {
+        platform: "darwin-arm64",
+        url: "https://example/app-server-darwin-arm64.tar.gz",
+        sha256,
+      },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "drop-empty-tables",
+      "drop-tables",
+    );
 
     assert.equal(config.expectedSha256, sha256);
     assert.equal(config.backendMode, DEFAULT_STANDALONE_BACKEND_MODE);
@@ -4577,6 +4931,10 @@ test("verifies release artifact sha256 before sidecar launch", async () => {
       "--stdio",
       "--backend",
       "unavailable",
+      "--legacy-message-cleanup",
+      "drop-empty-tables",
+      "--product-db-migration-cleanup",
+      "drop-tables",
     ]);
     assert.doesNotThrow(() => assertSha256(sha256.toUpperCase(), sha256));
     await assert.doesNotReject(() => assertSidecarFileSha256(config));

@@ -239,6 +239,7 @@ fn validate_with_schema(label: &str, value: &Value, validator: &Validator) -> Re
 
 fn normalize_event_class(event_type: &str) -> &str {
     match event_type {
+        "message.created" => "message.created",
         "message.delta" | "message.delta_batch" | "message.batch" => "model.delta",
         "message" | "message.completed" | "item.completed" => "model.completed",
         "thinking.delta" => "reasoning.delta",
@@ -252,7 +253,7 @@ fn normalize_event_class(event_type: &str) -> &str {
 fn is_text_delta_fast_path_event(event_type: &str) -> bool {
     matches!(
         event_type,
-        "message.delta" | "message.delta_batch" | "message.batch"
+        "message.created" | "message.delta" | "message.delta_batch" | "message.batch"
     )
 }
 

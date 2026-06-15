@@ -1144,8 +1144,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
             },
             { level: "error" },
           );
-          toast.error(`创建新任务失败: ${error}`);
-          return null;
+          throw error;
         }
       })();
 

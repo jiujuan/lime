@@ -12,7 +12,7 @@
 
 `agentSession/turn/start ArtifactSnapshot -> AgentTimeline FileArtifact -> artifact_document_service sidecar versions -> SessionDetail / AgentRuntimeThreadReadModel / App Server file checkpoint methods -> evidence / replay`
 
-路径边界：旧 `agent_runtime_*file_checkpoint*` 文件快照命令名只允许作为迁移期读取 surface、retired guard 或历史 evidence；`lime-rs/src/commands/**` 已删除，不是新增持久化实现目录。本文提到的 `aster_agent_cmd/dto.rs` 只作为历史读模型锚点；新增 file checkpoint、artifact sidecar、export / replay 持久化逻辑应进入 services、App Server / RuntimeCore 或 `lime-rs/crates/agent`，不得恢复旧 command wrapper。
+路径边界：旧 `agent_runtime_*file_checkpoint*` 文件快照命令名只允许作为迁移期读取 surface、retired guard 或历史 evidence；`lime-rs/src/**` 与 `lime-rs/src/commands/**` 已删除，不是新增持久化实现目录。新增 file checkpoint、artifact sidecar、export / replay 持久化逻辑应进入 `lime-rs/crates/**` 下的 App Server / RuntimeCore / services / core / agent 或协议 client，不得恢复旧 command wrapper。DB 瘦身与平台落盘主线见 `internal/roadmap/db/README.md` 与 `internal/exec-plans/db-slimming-codex-alignment-plan.md`。
 
 含义如下：
 
@@ -32,8 +32,8 @@
 
 文件：
 
-- `lime-rs/src/services/agent_timeline_service.rs`
 - `lime-rs/crates/core/src/database/dao/agent_timeline.rs`
+- 迁移目标：`lime-rs/crates/app-server/src/runtime/projection_store.rs` / `projection_repair.rs` 或后续独立 projection store crate
 
 职责：
 
@@ -45,12 +45,15 @@
 
 - 不再为“文件持久化”新增第二套并列事件模型
 - 不从 UI 状态反写 timeline 真相
+- `agent_thread_turns / agent_thread_items` 当前只作为 `compat / projection`；长期目标是 Projection DB，而不是继续向 `lime.db` 扩写 runtime transcript
 
 ### 2. Sidecar snapshot store
 
 文件：
 
-- `lime-rs/src/services/artifact_document_service.rs`
+- `lime-rs/crates/app-server/src/file_checkpoint.rs`
+- `lime-rs/crates/app-server/src/file_checkpoint_snapshot.rs`
+- 迁移目标：workspace sidecar store，通过 event ref / checksum 被 App Server read/export 解析
 
 职责：
 
@@ -62,13 +65,14 @@
 
 - sidecar 负责详情补充，不单独定义 thread 真相
 - 当前 / 历史版本路径都必须继续走工作区相对路径
+- 跨 workspace 的产品主库、全局 telemetry、全局 runtime index 不写入 workspace `.lime/`
 
 ### 3. Runtime read models
 
 文件：
 
-- `lime-rs/src/services/runtime_file_checkpoint_service.rs`
-- `lime-rs/src/commands/aster_agent_cmd/dto.rs`
+- `lime-rs/crates/app-server/src/runtime/exports/**`
+- `lime-rs/crates/app-server/src/runtime/**`
 - `src/lib/api/agentRuntime/threadClient.ts`
 
 职责：
@@ -86,8 +90,9 @@
 
 文件：
 
-- `lime-rs/src/services/runtime_evidence_pack_service.rs`
-- `lime-rs/src/services/runtime_replay_case_service.rs`
+- `lime-rs/crates/app-server/src/runtime/exports/**`
+- `lime-rs/crates/app-server/src/runtime/**`
+- `lime-rs/crates/app-server/src/local_data_source/current_timeline.rs`（compat，迁移到 projection reader 前）
 
 当前约束：
 
@@ -105,8 +110,24 @@
 
 如果需要补持久化能力，优先继续扩展：
 
-- `runtime_file_checkpoint_service`
+- App Server `agentSession/fileCheckpoint/*` current 命令边界
+- App Server shared load context / export context
 - `AgentRuntimeThreadReadModel.file_checkpoint_summary`
-- App Server `agentSession/fileCheckpoint/*` 命令边界；旧 `agent_runtime_*file_checkpoint*` 只作 retired guard
+- Event Log / Projection DB / Sidecar ref；旧 `agent_runtime_*file_checkpoint*` 只作 retired guard
 
 而不是再开平级旁路。
+
+## DB 瘦身补充口径
+
+`lime.db` 不再被定义为 runtime transcript DB。当前分类：
+
+- `current`：Product DB，保留 provider、API key、model registry、workspace、settings、user assets、插件与低频产品对象。
+- `compat / projection`：`agent_sessions`、`agent_thread_turns`、`agent_thread_items`、`agent_turn_outcomes`、`agent_thread_incidents`。
+- `deprecated / migration-source`：`agent_messages`，只允许 migration/backfill/export 输入，不承接新 Agent runtime transcript truth，也不保留长期产品 fallback。
+- `move`：request telemetry、runtime trace、大输出、file checkpoint content，分别进入 Telemetry DB、Event Log、Sidecar 或 Projection DB。
+
+平台路径要求：
+
+- Desktop 托管时由 Electron `userData` 派生 App Server `--data-dir`。
+- CLI / 测试通过 `--data-dir` 或 `APP_SERVER_DATA_DIR` 注入。
+- Rust store 只接受显式 `data_root` / `workspace_root`，业务层不硬编码 macOS / Windows 目录、`~/.lime`、repo 根或 temp。

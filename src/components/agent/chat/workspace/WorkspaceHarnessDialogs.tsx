@@ -38,6 +38,8 @@ type HarnessPanelBaseProps = Pick<
   | "onPromoteQueuedTurn"
   | "onObjectiveChanged"
   | "onOpenMemoryWorkbench"
+  | "onManageProviders"
+  | "onOpenExecutionPolicySettings"
   | "messages"
   | "teamMemorySnapshot"
   | "diagnosticRuntimeContext"
@@ -90,9 +92,7 @@ function openHarnessSection(target: CodeWorkbenchGuideTarget): void {
     return;
   }
 
-  const section = document.querySelector(
-    `[data-harness-section="${target}"]`,
-  );
+  const section = document.querySelector(`[data-harness-section="${target}"]`);
   section?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -109,13 +109,13 @@ function renderCodeWorkbenchGuide({
     return null;
   }
 
-  const metrics = resolveCodeWorkbenchGuideMetrics(
-    panelBaseProps.harnessState,
-  );
+  const metrics = resolveCodeWorkbenchGuideMetrics(panelBaseProps.harnessState);
 
   return (
     <CodeWorkbenchGuide
-      pendingApprovalsCount={panelBaseProps.harnessState.pendingApprovals.length}
+      pendingApprovalsCount={
+        panelBaseProps.harnessState.pendingApprovals.length
+      }
       activeWriteCount={panelBaseProps.harnessState.activeFileWrites.length}
       outputSignalCount={panelBaseProps.harnessState.outputSignals.length}
       failedOutputSignalCount={countFailedHarnessOutputSignals(
@@ -137,7 +137,9 @@ function hasRuntimeWorkbenchSignals({
 }: {
   harnessState: HarnessPanelBaseProps["harnessState"];
   fileCheckpointSummary:
-    | NonNullable<HarnessPanelBaseProps["threadRead"]>["file_checkpoint_summary"]
+    | NonNullable<
+        HarnessPanelBaseProps["threadRead"]
+      >["file_checkpoint_summary"]
     | null
     | undefined;
 }): boolean {
@@ -159,9 +161,11 @@ function renderCodeReviewSummaryPanel({
 }: {
   panelBaseProps: HarnessPanelBaseProps;
   hasRuntimeWorkbenchSignals: boolean;
-  fileCheckpointSummary: NonNullable<
-    HarnessPanelBaseProps["threadRead"]
-  >["file_checkpoint_summary"] | null;
+  fileCheckpointSummary:
+    | NonNullable<
+        HarnessPanelBaseProps["threadRead"]
+      >["file_checkpoint_summary"]
+    | null;
   fileChangeReviewSummary?: HarnessFileChangeReviewSummary | null;
   onOpenFileCheckpoints?: () => void;
   onSubmitCodeFixPrompt?: (prompt: string) => void | Promise<void>;
@@ -206,8 +210,7 @@ export function GeneralWorkbenchHarnessDialogSection({
     panelBaseProps.diagnosticRuntimeContext?.workingDir?.trim() || "";
   const fileCheckpointSummary =
     panelBaseProps.threadRead?.file_checkpoint_summary || null;
-  const latestFileCheckpoint =
-    fileCheckpointSummary?.latest_checkpoint || null;
+  const latestFileCheckpoint = fileCheckpointSummary?.latest_checkpoint || null;
   const shouldShowRuntimeWorkbench = hasRuntimeWorkbenchSignals({
     harnessState: panelBaseProps.harnessState,
     fileCheckpointSummary,
@@ -222,7 +225,9 @@ export function GeneralWorkbenchHarnessDialogSection({
     : undefined;
   const leadContent =
     codeWorkbenchGuide || shouldShowRuntimeWorkbench
-      ? ({ fileChangeReviewSummary }: {
+      ? ({
+          fileChangeReviewSummary,
+        }: {
           fileChangeReviewSummary: HarnessFileChangeReviewSummary;
         }) => (
           <div className="space-y-3">
@@ -326,8 +331,7 @@ export function GeneralWorkbenchDialogSection({
     panelBaseProps.diagnosticRuntimeContext?.workingDir?.trim() || "";
   const fileCheckpointSummary =
     panelBaseProps.threadRead?.file_checkpoint_summary || null;
-  const latestFileCheckpoint =
-    fileCheckpointSummary?.latest_checkpoint || null;
+  const latestFileCheckpoint = fileCheckpointSummary?.latest_checkpoint || null;
   const shouldShowRuntimeWorkbench = hasRuntimeWorkbenchSignals({
     harnessState: panelBaseProps.harnessState,
     fileCheckpointSummary,

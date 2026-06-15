@@ -816,7 +816,8 @@ export function AppSidebar({
     }
 
     if (item.id === "workbench") {
-      const targetSessionId = currentSessionId ?? fallbackSessionId ?? undefined;
+      const targetSessionId =
+        currentSessionId ?? fallbackSessionId ?? undefined;
       const targetParams = buildClawAgentParams({
         projectId: currentProjectId ?? undefined,
         initialSessionId: targetSessionId,
@@ -911,6 +912,7 @@ export function AppSidebar({
         title={item.label}
         aria-label={item.label}
         aria-current={active ? "page" : undefined}
+        data-testid={`app-sidebar-nav-${item.id}`}
       >
         <item.icon />
         <NavLabel $collapsed={collapsed}>{item.label}</NavLabel>
@@ -956,7 +958,12 @@ export function AppSidebar({
       requestedNavigationTargetRef.current = target;
       onNavigate(target.page, target.rawParams);
     },
-    [currentProjectId, deferConversationNavigation, isClawTaskCenter, onNavigate],
+    [
+      currentProjectId,
+      deferConversationNavigation,
+      isClawTaskCenter,
+      onNavigate,
+    ],
   );
 
   const handleNavigateToNewTask = useCallback(() => {

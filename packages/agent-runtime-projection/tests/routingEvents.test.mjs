@@ -76,6 +76,79 @@ test("routing status helper marks impossible routing as failed", () => {
   });
 });
 
+test("routing status helper preserves fallback attempts diagnostics", () => {
+  const event = buildAgentUiRoutingStatusEvent({
+    runtimeEvent: "routing_fallback_applied",
+    routingDecision: {
+      routing_mode: "profile_slot",
+      decision_source: "profile_model_slot",
+      selected_provider: "openai",
+      selected_model: "gpt-4.1-mini",
+      fallback_applied: true,
+      requested_selection: {
+        provider: "custom-coding",
+        model: "coder-large",
+        source: "profile_model_slot",
+      },
+      routing_attempts: [
+        {
+          slot: "coding",
+          provider: "custom-coding",
+          model: "coder-large",
+          providerReadiness: {
+            status: "needs_setup",
+            reasonCode: "missing_enabled_api_key",
+          },
+        },
+        {
+          slot: "base",
+          provider: "openai",
+          model: "gpt-4.1-mini",
+          providerReadiness: {
+            status: "ready",
+          },
+        },
+      ],
+    },
+  });
+
+  assert.equal(event.sourceType, "routing_fallback_applied");
+  assert.equal(event.phase, "routing");
+  assert.deepEqual(event.payload, {
+    runtimeEvent: "routing_fallback_applied",
+    routingMode: "profile_slot",
+    decisionSource: "profile_model_slot",
+    selectedProvider: "openai",
+    selectedModel: "gpt-4.1-mini",
+    fallbackChain: [],
+    fallbackApplied: true,
+    requestedSelection: {
+      provider: "custom-coding",
+      model: "coder-large",
+      source: "profile_model_slot",
+    },
+    routingAttempts: [
+      {
+        slot: "coding",
+        provider: "custom-coding",
+        model: "coder-large",
+        providerReadiness: {
+          status: "needs_setup",
+          reasonCode: "missing_enabled_api_key",
+        },
+      },
+      {
+        slot: "base",
+        provider: "openai",
+        model: "gpt-4.1-mini",
+        providerReadiness: {
+          status: "ready",
+        },
+      },
+    ],
+  });
+});
+
 test("routing status helper projects limit state events", () => {
   const event = buildAgentUiRoutingStatusEvent({
     runtimeEvent: "single_candidate_only",

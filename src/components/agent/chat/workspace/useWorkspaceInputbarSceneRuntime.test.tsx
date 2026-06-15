@@ -38,9 +38,7 @@ type HookProps = Parameters<typeof useWorkspaceInputbarSceneRuntime>[0];
 
 const mountedRoots: Array<{ container: HTMLDivElement; root: Root }> = [];
 
-function createDefaultProps(
-  overrides: Partial<HookProps> = {},
-): HookProps {
+function createDefaultProps(overrides: Partial<HookProps> = {}): HookProps {
   const noop = vi.fn();
 
   return {
@@ -83,6 +81,7 @@ function createDefaultProps(
     activeTheme: "general",
     navigationActions: {
       handleManageProviders: noop,
+      handleOpenExecutionPolicySettings: noop,
       handleOpenRuntimeMemoryWorkbench: noop,
       handleOpenKnowledgeManagement: noop,
       handleProjectChange: noop,
@@ -270,7 +269,9 @@ describe("useWorkspaceInputbarSceneRuntime", () => {
     const container = renderHookNode(createDefaultProps());
 
     expect(
-      container.querySelector('[data-testid="soul-artifact-voice-turn-toggle"]'),
+      container.querySelector(
+        '[data-testid="soul-artifact-voice-turn-toggle"]',
+      ),
     ).toBeNull();
   });
 
@@ -299,9 +300,10 @@ describe("useWorkspaceInputbarSceneRuntime", () => {
       });
     });
 
-    const updater = setChatToolPreferences.mock.calls[0]?.[0] as (
-      previous: { task: boolean; subagent: boolean },
-    ) => { task: boolean; subagent: boolean };
+    const updater = setChatToolPreferences.mock.calls[0]?.[0] as (previous: {
+      task: boolean;
+      subagent: boolean;
+    }) => { task: boolean; subagent: boolean };
     expect(updater({ task: true, subagent: true })).toEqual({
       task: false,
       subagent: true,

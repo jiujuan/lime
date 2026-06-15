@@ -1,8 +1,9 @@
+use super::sidecar_store::{
+    session_scoped_relative_path, SidecarRef, SidecarStore, SidecarWriteRequest,
+};
 use app_server_protocol::{AgentEvent, ArtifactContentStatus, ArtifactSummary};
-use lime_core::session_files::SessionFileStorage;
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 use super::RuntimeCoreError;
 
@@ -39,6 +40,7 @@ pub(super) struct OutputBlobRecord {
     pub(super) tool_call_id: Option<String>,
     pub(super) command_id: Option<String>,
     pub(super) snapshot_file: Option<String>,
+    pub(super) sidecar_ref: Option<SidecarRef>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -58,6 +60,7 @@ pub struct OutputSnapshotReadRequest {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OutputSnapshotRecord {
     pub file_name: String,
+    pub sidecar_ref: SidecarRef,
 }
 
 pub trait OutputSnapshotStore: Send + Sync {
@@ -87,26 +90,31 @@ impl OutputSnapshotStore for NoopOutputSnapshotStore {
 
 #[derive(Debug, Clone, Default)]
 pub struct FilesystemOutputSnapshotStore {
-    base_dir: Option<PathBuf>,
+    sidecar_store: Option<SidecarStore>,
 }
 
 impl FilesystemOutputSnapshotStore {
     pub fn new() -> Self {
-        Self { base_dir: None }
-    }
-
-    pub fn with_base_dir(base_dir: impl Into<PathBuf>) -> Self {
         Self {
-            base_dir: Some(base_dir.into()),
+            sidecar_store: None,
         }
     }
 
-    fn storage(&self) -> Result<SessionFileStorage, RuntimeCoreError> {
-        match self.base_dir.as_ref() {
-            Some(base_dir) => SessionFileStorage::with_base_dir(base_dir.clone()),
-            None => SessionFileStorage::new(),
-        }
-        .map_err(|error| RuntimeCoreError::Backend(format!("初始化输出快照存储失败: {error}")))
+    pub fn with_base_dir(base_dir: impl AsRef<std::path::Path>) -> Self {
+        Self::with_sidecar_root(base_dir)
+    }
+
+    pub fn with_sidecar_root(root: impl AsRef<std::path::Path>) -> Self {
+        let sidecar_store = SidecarStore::new(root).ok();
+        Self { sidecar_store }
+    }
+
+    fn sidecar_store(&self) -> Result<&SidecarStore, RuntimeCoreError> {
+        self.sidecar_store.as_ref().ok_or_else(|| {
+            RuntimeCoreError::Backend(
+                "输出快照存储缺少显式 sidecar root，不能写入默认 sessions 目录".to_string(),
+            )
+        })
     }
 }
 
@@ -116,22 +124,28 @@ impl OutputSnapshotStore for FilesystemOutputSnapshotStore {
         request: &OutputSnapshotSaveRequest,
     ) -> Result<Option<OutputSnapshotRecord>, RuntimeCoreError> {
         let file_name = output_snapshot_file_name(request.output_ref.as_str());
-        self.storage()?
-            .save_file_with_metadata(
-                request.session_id.as_str(),
-                file_name.as_str(),
-                request.content.as_str(),
-                Some(request.metadata.clone()),
-            )
+        let relative_path = session_scoped_relative_path(request.session_id.as_str(), &file_name);
+        let sidecar_ref = self
+            .sidecar_store()?
+            .write_text(&SidecarWriteRequest {
+                session_id: request.session_id.clone(),
+                kind: "tool_output".to_string(),
+                logical_id: request.output_ref.clone(),
+                relative_path,
+                content: request.content.clone(),
+            })
             .map_err(|error| RuntimeCoreError::Backend(format!("保存输出快照失败: {error}")))?;
-        Ok(Some(OutputSnapshotRecord { file_name }))
+        Ok(Some(OutputSnapshotRecord {
+            file_name,
+            sidecar_ref,
+        }))
     }
 
     fn read_output_snapshot(&self, request: &OutputSnapshotReadRequest) -> Option<String> {
-        self.storage()
-            .ok()?
-            .read_file(request.session_id.as_str(), request.file_name.as_str())
-            .ok()
+        self.sidecar_store.as_ref()?.read_text(
+            session_scoped_relative_path(request.session_id.as_str(), request.file_name.as_str())
+                .as_str(),
+        )
     }
 }
 
@@ -225,6 +239,7 @@ pub(super) fn record_output_blob(event: &AgentEvent, output: OutputBlob) -> Outp
         ),
         command_id: payload_string(&event.payload, &["commandId", "command_id"]),
         snapshot_file: None,
+        sidecar_ref: None,
     }
 }
 
@@ -244,9 +259,28 @@ pub(super) fn persist_output_record(
         metadata,
     })? {
         record.snapshot_file = Some(snapshot.file_name);
+        record.sidecar_ref = Some(snapshot.sidecar_ref);
         record.content = None;
     }
     Ok(record)
+}
+
+pub(super) fn attach_output_snapshot_ref(payload: &mut Value, output: &OutputBlobRecord) {
+    let Value::Object(object) = payload else {
+        return;
+    };
+    if let Some(snapshot_file) = output.snapshot_file.as_ref() {
+        object.insert(
+            "outputSnapshotFile".to_string(),
+            Value::String(snapshot_file.clone()),
+        );
+    }
+    if let Some(sidecar_ref) = output.sidecar_ref.as_ref() {
+        object.insert(
+            "sidecarRef".to_string(),
+            serde_json::to_value(sidecar_ref).unwrap_or_else(|_| json!({})),
+        );
+    }
 }
 
 pub(super) fn output_summaries_for_turn<'a>(
@@ -317,6 +351,7 @@ pub(super) fn output_record_from_read_model(value: &Value) -> Option<OutputBlobR
         tool_call_id: payload_string(value, &["toolCallId", "tool_call_id"]),
         command_id: payload_string(value, &["commandId", "command_id"]),
         snapshot_file: payload_string(value, &["outputSnapshotFile", "output_snapshot_file"]),
+        sidecar_ref: output_sidecar_ref_from_value(value),
     })
 }
 
@@ -395,10 +430,17 @@ fn output_read_model_value(output: &OutputBlobRecord) -> Value {
         "toolCallId": output.tool_call_id,
         "commandId": output.command_id,
         "outputSnapshotFile": output.snapshot_file,
+        "sidecarRef": output.sidecar_ref.as_ref().map(|sidecar_ref| {
+            serde_json::to_value(sidecar_ref).unwrap_or_else(|_| json!({}))
+        }),
     })
 }
 
 fn output_metadata(output: &OutputBlobRecord) -> Value {
+    let sidecar_ref = output
+        .sidecar_ref
+        .as_ref()
+        .map(|sidecar_ref| serde_json::to_value(sidecar_ref).unwrap_or_else(|_| json!({})));
     json!({
         "outputRef": output.output_ref,
         "refIds": output.ref_ids,
@@ -410,11 +452,20 @@ fn output_metadata(output: &OutputBlobRecord) -> Value {
         "toolCallId": output.tool_call_id,
         "commandId": output.command_id,
         "outputSnapshotFile": output.snapshot_file,
+        "sidecarRef": sidecar_ref,
     })
 }
 
 fn output_snapshot_file_name(output_ref: &str) -> String {
     format!("runtime-outputs/{:016x}.txt", stable_hash(output_ref))
+}
+
+fn output_sidecar_ref_from_value(value: &Value) -> Option<SidecarRef> {
+    value
+        .get("sidecarRef")
+        .or_else(|| value.get("sidecar_ref"))
+        .cloned()
+        .and_then(|value| serde_json::from_value(value).ok())
 }
 
 fn is_tool_terminal_event(event_type: &str) -> bool {

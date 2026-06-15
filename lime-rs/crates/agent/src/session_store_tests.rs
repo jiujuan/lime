@@ -1,3 +1,7 @@
+use super::session_store_history_visibility::load_user_visible_message_flags_from_conn;
+use super::session_store_message_projection::{
+    convert_agent_messages_with_history_eviction, convert_user_visible_agent_messages_with_flags,
+};
 use super::session_store_runtime_projection::{
     apply_aster_runtime_snapshot, apply_runtime_usage_fallback_to_latest_assistant_message,
 };
@@ -13,7 +17,8 @@ use aster::session::{
 };
 use chrono::{Duration, Utc};
 use lime_core::agent::types::{FunctionCall, ImageUrl, ToolCall};
-use lime_core::database::{schema, DbConnection};
+use lime_core::database::dao::agent::AgentDao;
+use lime_core::database::{DbConnection, schema};
 use std::ffi::OsString;
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -727,10 +732,12 @@ fn convert_agent_message_should_preserve_tool_request_and_response() {
         &tool,
         &crate::tool_io_offload::HistoryToolIoEvictionPlan::default(),
     );
-    assert!(!tool_converted
-        .content
-        .iter()
-        .any(|part| matches!(part, RuntimeAgentMessageContent::Text { .. })));
+    assert!(
+        !tool_converted
+            .content
+            .iter()
+            .any(|part| matches!(part, RuntimeAgentMessageContent::Text { .. }))
+    );
     assert!(tool_converted.content.iter().any(|part| {
         matches!(
             part,
@@ -1071,10 +1078,11 @@ fn convert_agent_message_should_keep_image_parts_for_history() {
                 if mime_type == "image/png" && data == "aGVsbG8="
         )
     }));
-    assert!(converted
-        .content
-        .iter()
-        .any(|part| matches!(part, RuntimeAgentMessageContent::Text { text } if text == "参考图")));
+    assert!(
+        converted.content.iter().any(
+            |part| matches!(part, RuntimeAgentMessageContent::Text { text } if text == "参考图")
+        )
+    );
 }
 
 #[test]
@@ -1093,10 +1101,12 @@ fn convert_agent_message_should_not_render_user_tool_response_as_plain_text() {
         &user_tool_response,
         &crate::tool_io_offload::HistoryToolIoEvictionPlan::default(),
     );
-    assert!(!converted
-        .content
-        .iter()
-        .any(|part| matches!(part, RuntimeAgentMessageContent::Text { .. })));
+    assert!(
+        !converted
+            .content
+            .iter()
+            .any(|part| matches!(part, RuntimeAgentMessageContent::Text { .. }))
+    );
     assert!(converted.content.iter().any(|part| {
         matches!(
             part,
@@ -1285,7 +1295,7 @@ fn list_sessions_sync_should_resolve_workspace_id_from_working_dir() {
         session.working_dir.as_deref(),
         Some("/tmp/lime-workspace-1")
     );
-    assert_eq!(session.messages_count, 1);
+    assert_eq!(session.messages_count, 0);
 }
 
 #[test]
@@ -1341,7 +1351,7 @@ fn get_session_sync_should_resolve_workspace_id_from_working_dir() {
 
     assert_eq!(detail.workspace_id.as_deref(), Some("workspace-2"));
     assert_eq!(detail.working_dir.as_deref(), Some("/tmp/lime-workspace-2"));
-    assert_eq!(detail.messages.len(), 1);
+    assert!(detail.messages.is_empty());
 }
 
 #[test]
@@ -1409,7 +1419,7 @@ fn get_session_sync_with_full_timeline_without_messages_should_skip_messages() {
 }
 
 #[test]
-fn get_session_sync_with_history_limit_should_tail_persisted_history() {
+fn get_session_sync_with_history_limit_should_not_return_legacy_messages() {
     let db = create_test_db();
     insert_test_session_with_message(&db, "session-tail", "/tmp/lime-workspace-tail", "消息 1");
 
@@ -1440,60 +1450,18 @@ fn get_session_sync_with_history_limit_should_tail_persisted_history() {
     let detail = get_session_sync_with_history_limit(&db, "session-tail", Some(2))
         .expect("get tail session");
 
-    assert_eq!(detail.messages.len(), 2);
-    assert!(detail
-        .messages
-        .first()
-        .expect("first message")
-        .content
-        .iter()
-        .any(|part| matches!(part, RuntimeAgentMessageContent::Text { text } if text == "消息 3")));
-    assert!(detail
-        .messages
-        .last()
-        .expect("last message")
-        .content
-        .iter()
-        .any(|part| matches!(part, RuntimeAgentMessageContent::Text { text } if text == "消息 4")));
+    assert!(detail.messages.is_empty());
 
     let older_detail = get_session_sync_with_history_window(&db, "session-tail", Some(2), 2)
         .expect("get older session page");
 
-    assert_eq!(older_detail.messages.len(), 2);
-    assert!(older_detail
-        .messages
-        .first()
-        .expect("first older message")
-        .content
-        .iter()
-        .any(|part| matches!(part, RuntimeAgentMessageContent::Text { text } if text == "消息 1")));
-    assert!(older_detail
-        .messages
-        .last()
-        .expect("last older message")
-        .content
-        .iter()
-        .any(|part| matches!(part, RuntimeAgentMessageContent::Text { text } if text == "消息 2")));
+    assert!(older_detail.messages.is_empty());
 
     let cursor_detail =
         get_session_sync_with_history_page(&db, "session-tail", Some(2), 0, Some(3))
             .expect("get cursor session page");
 
-    assert_eq!(cursor_detail.messages.len(), 2);
-    assert!(cursor_detail
-        .messages
-        .first()
-        .expect("first cursor message")
-        .content
-        .iter()
-        .any(|part| matches!(part, RuntimeAgentMessageContent::Text { text } if text == "消息 1")));
-    assert!(cursor_detail
-        .messages
-        .last()
-        .expect("last cursor message")
-        .content
-        .iter()
-        .any(|part| matches!(part, RuntimeAgentMessageContent::Text { text } if text == "消息 2")));
+    assert!(cursor_detail.messages.is_empty());
 }
 
 #[tokio::test]
@@ -1512,7 +1480,7 @@ async fn get_runtime_session_detail_should_use_archived_fast_path() {
         .await
         .expect("get archived session detail");
 
-    assert_eq!(detail.messages.len(), 1);
+    assert!(detail.messages.is_empty());
     assert!(detail.execution_runtime.is_none());
     assert!(detail.child_subagent_sessions.is_empty());
     assert!(detail.subagent_parent_context.is_none());
@@ -1542,6 +1510,63 @@ async fn get_runtime_session_detail_should_use_empty_persisted_fast_path() {
     assert!(detail.execution_runtime.is_none());
     assert!(detail.child_subagent_sessions.is_empty());
     assert!(detail.subagent_parent_context.is_none());
+}
+
+#[test]
+fn apply_current_runtime_conversation_should_read_current_store_messages() {
+    let mut detail = build_empty_runtime_detail();
+    let mut session = aster::session::Session {
+        id: "session-current-runtime-history".to_string(),
+        conversation: Some(aster::conversation::Conversation::new_unvalidated([
+            aster::conversation::message::Message::user().with_text("第一条用户消息"),
+            aster::conversation::message::Message::assistant().with_text("第一条助手消息"),
+            aster::conversation::message::Message::assistant()
+                .with_text("内部续跑消息")
+                .agent_only(),
+            aster::conversation::message::Message::user().with_text("第二条用户消息"),
+        ])),
+        ..aster::session::Session::default()
+    };
+
+    super::session_store_runtime_detail::apply_current_runtime_conversation(
+        &mut detail,
+        &session,
+        Some(2),
+        0,
+        None,
+    );
+
+    assert_eq!(detail.messages.len(), 2);
+    assert_eq!(detail.messages[0].role, "assistant");
+    assert!(detail.messages[0].content.iter().any(|part| {
+        matches!(part, RuntimeAgentMessageContent::Text { text } if text == "第一条助手消息")
+    }));
+    assert_eq!(detail.messages[1].role, "user");
+    assert!(detail.messages[1].content.iter().any(|part| {
+        matches!(part, RuntimeAgentMessageContent::Text { text } if text == "第二条用户消息")
+    }));
+
+    super::session_store_runtime_detail::apply_current_runtime_conversation(
+        &mut detail,
+        &session,
+        Some(1),
+        1,
+        None,
+    );
+    assert_eq!(detail.messages.len(), 1);
+    assert!(detail.messages[0].content.iter().any(|part| {
+        matches!(part, RuntimeAgentMessageContent::Text { text } if text == "第一条助手消息")
+    }));
+
+    session.conversation = None;
+    super::session_store_runtime_detail::apply_current_runtime_conversation(
+        &mut detail,
+        &session,
+        None,
+        0,
+        None,
+    );
+    assert_eq!(detail.messages.len(), 1);
 }
 
 #[test]
@@ -1588,9 +1613,11 @@ fn update_session_provider_config_sync_should_persist_provider_and_model_config(
 
     assert_eq!(provider_name.as_deref(), Some("openai"));
     assert_eq!(model_name, "gpt-5.4-mini");
-    assert!(model_config_json
-        .as_deref()
-        .is_some_and(|value| value.contains("\"model_name\":\"gpt-5.4-mini\"")));
+    assert!(
+        model_config_json
+            .as_deref()
+            .is_some_and(|value| value.contains("\"model_name\":\"gpt-5.4-mini\""))
+    );
 }
 
 #[test]
@@ -1605,7 +1632,7 @@ fn rename_session_sync_should_update_session_title() {
 }
 
 #[test]
-fn list_title_preview_messages_sync_should_only_keep_chat_roles() {
+fn list_title_preview_messages_sync_should_not_read_legacy_agent_messages() {
     let db = create_test_db();
     create_session_record_sync(
         &db,
@@ -1679,17 +1706,5 @@ fn list_title_preview_messages_sync_should_only_keep_chat_roles() {
     drop(conn);
 
     let preview = list_title_preview_messages_sync(&db, "session-title", 4).expect("load preview");
-    assert_eq!(
-        preview,
-        vec![
-            SessionTitlePreviewMessage {
-                role: "user".to_string(),
-                content: "第一条用户消息".to_string(),
-            },
-            SessionTitlePreviewMessage {
-                role: "assistant".to_string(),
-                content: "第一条助手消息".to_string(),
-            },
-        ]
-    );
+    assert!(preview.is_empty());
 }

@@ -67,8 +67,12 @@ pub(super) fn request_for_test(
             metadata,
             queued_turn_id: None,
             host_options,
+            ..RuntimeOptions::default()
         }),
         event_name: None,
+        expected_output: None,
+        structured_output: None,
+        output_schema: None,
         provider_preference: None,
         model_preference: None,
         metadata: None,
@@ -281,6 +285,42 @@ fn runtime_options_metadata_reasoning_flows_to_selection_and_turn_context() {
         turn_context_from_request(&request, None, &scope, &selection, None).expect("turn context");
 
     assert_eq!(turn_context.effort.as_deref(), Some("medium"));
+}
+
+#[test]
+fn runtime_options_expected_output_schema_flows_to_turn_context() {
+    let output_schema = json!({
+        "type": "object",
+        "properties": {
+            "items": {
+                "type": "array"
+            }
+        },
+        "required": ["items"]
+    });
+    let mut request = request_for_test("hello", None, None);
+    let options = request.runtime_options.as_mut().expect("runtime options");
+    options.provider_preference = Some("openai".to_string());
+    options.model_preference = Some("gpt-4.1".to_string());
+    options.expected_output = Some(json!({
+        "artifactKind": "content_batch",
+        "outputFormat": {
+            "type": "json_schema",
+            "schema": output_schema.clone()
+        }
+    }));
+    request.expected_output = options.expected_output.clone();
+
+    let selection = selection_from_explicit_preferences(&request).expect("selection");
+    let scope = session_scope_from_request(&request).expect("scope");
+    let turn_context =
+        turn_context_from_request(&request, None, &scope, &selection, None).expect("turn context");
+
+    assert_eq!(turn_context.output_schema, Some(output_schema));
+    assert_eq!(
+        turn_context.output_schema_source,
+        Some(aster::session::TurnOutputSchemaSource::Turn)
+    );
 }
 
 #[test]
@@ -605,6 +645,40 @@ fn runtime_agent_tool_events_are_mirrored_to_coding_facts() {
     assert_eq!(
         args_event.payload["source"].as_str(),
         Some("runtime_tool_start")
+    );
+    let command_started = sink
+        .events
+        .iter()
+        .find(|event| event.event_type == "command.started")
+        .expect("command started event");
+    assert_eq!(
+        command_started.payload["canonicalCommand"].as_str(),
+        Some("cargo test -p app-server coding_events")
+    );
+    assert_eq!(
+        command_started.payload["commandSummary"].as_str(),
+        Some("cargo test -p app-server")
+    );
+    assert_eq!(
+        command_started.payload["commandArgv"]
+            .as_array()
+            .expect("argv"),
+        &vec![
+            json!("cargo"),
+            json!("test"),
+            json!("-p"),
+            json!("app-server"),
+            json!("coding_events")
+        ]
+    );
+    let command_exited = sink
+        .events
+        .iter()
+        .find(|event| event.event_type == "command.exited")
+        .expect("command exited event");
+    assert_eq!(
+        command_exited.payload["canonicalCommand"].as_str(),
+        Some("cargo test -p app-server coding_events")
     );
 }
 

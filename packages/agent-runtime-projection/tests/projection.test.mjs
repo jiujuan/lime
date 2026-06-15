@@ -174,11 +174,22 @@ test("projectCodingWorkbenchViewFromEvents consumes current thread read model co
       active_turn_id: "turn-1",
       active_command_id: "command-install",
       active_test_run_id: "test-unit",
+      change_summary: {
+        changed_file_count: 1,
+        changed_files: ["src/App.tsx"],
+        patch_count: 1,
+        running_patch_count: 1,
+        source_event_ids: ["evt-file-app", "evt-patch-app"],
+      },
       commands: [
         {
           command_id: "command-install",
           status: "running",
-          command: "npm test",
+          command: "bash -lc 'npm test'",
+          canonical_command: "npm test",
+          command_summary: "npm test",
+          command_argv: ["npm", "test"],
+          command_argv_source: "argv",
           cwd: "app",
           output_refs: ["output://command-install"],
           output_preview: "running tests",
@@ -189,6 +200,8 @@ test("projectCodingWorkbenchViewFromEvents consumes current thread read model co
           test_run_id: "test-unit",
           status: "running",
           command_id: "command-install",
+          canonical_command: "npm test",
+          command_summary: "npm test",
           suite: "unit",
           passed: 8,
           failed: 0,
@@ -209,12 +222,68 @@ test("projectCodingWorkbenchViewFromEvents consumes current thread read model co
   assert.equal(view.mainObject.id, "turn-1");
   assert.equal(view.mainObject.activeCommandId, "command-install");
   assert.equal(view.mainObject.activeTestRunId, "test-unit");
-  assert.equal(view.commands[0].command, "npm test");
+  assert.equal(view.commands[0].title, "npm test");
+  assert.equal(view.commands[0].command, "bash -lc 'npm test'");
+  assert.equal(view.commands[0].canonicalCommand, "npm test");
+  assert.deepEqual(view.commands[0].commandArgv, ["npm", "test"]);
   assert.equal(view.commands[0].preview, "running tests");
+  assert.equal(view.changeSummary?.changedFileCount, 1);
+  assert.deepEqual(view.changeSummary?.changedFiles, ["src/App.tsx"]);
+  assert.equal(view.changeSummary?.runningPatchCount, 1);
+  assert.equal(view.tests[0].commandSummary, "npm test");
   assert.equal(view.tests[0].suite, "unit");
   assert.equal(view.actions.length, 1);
   assert.equal(view.actions[0].actionId, "action-approve-command");
   assert.equal(view.ui.preferredTab, "outputs");
+});
+
+test("projectCodingWorkbenchViewFromEvents consumes current read model artifacts as file changes", () => {
+  const view = projectCodingWorkbenchViewFromEvents({
+    executionEvents: [],
+    codingReadModel: {
+      thread_id: "thread-1",
+      active_turn_id: "turn-1",
+      artifacts: [
+        {
+          artifactRef: "artifact-src-app",
+          eventId: "evt-file-app",
+          sequence: 2,
+          turnId: "turn-1",
+          path: "src/App.tsx",
+          title: "App.tsx",
+          kind: "code_file",
+          status: "completed",
+          metadata: {
+            previewText: "updated app component",
+            checkpointRef: "checkpoint-src-app",
+            diffRef: "diff-src-app",
+          },
+        },
+        {
+          artifactRef: "output-command",
+          eventId: "evt-output",
+          kind: "tool_output",
+          status: "completed",
+        },
+      ],
+    },
+  });
+
+  assert.equal(view.files.length, 1);
+  assert.equal(view.files[0].path, "src/App.tsx");
+  assert.equal(view.changes.length, 1);
+  assert.deepEqual(view.changes[0], {
+    id: "evt-file-app",
+    path: "src/App.tsx",
+    status: "completed",
+    changeKind: "modified",
+    artifactRefs: ["artifact-src-app"],
+    checkpointRef: "checkpoint-src-app",
+    diffRef: "diff-src-app",
+    preview: "updated app component",
+    sourceEventId: "evt-file-app",
+  });
+  assert.equal(view.ui.preferredTab, "changes");
 });
 
 test("projectAgentRuntimeReadModel marks action terminal events as resolved", () => {

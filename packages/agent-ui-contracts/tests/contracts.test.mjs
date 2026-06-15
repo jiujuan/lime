@@ -518,6 +518,138 @@ test("agent ui conformance fixtures cover the standard runtime slices", () => {
   );
 });
 
+test("coding conformance fixtures pin the required workbench fact families", () => {
+  const codingFixtures = agentUiConformanceFixtures.filter((fixture) =>
+    fixture.id.startsWith("coding-"),
+  );
+
+  assert.deepEqual(
+    codingFixtures.map((fixture) => fixture.id),
+    [
+      "coding-file-change",
+      "coding-command-approval",
+      "coding-sandbox-blocked",
+      "coding-patch-failure",
+      "coding-test-failure-fix",
+      "coding-hydration-repair",
+    ],
+  );
+
+  assert.deepEqual(getAgentUiFixture("coding-file-change").expected.coding, {
+    fileCount: 1,
+    changeCount: 1,
+    patchCount: 1,
+    commandCount: 1,
+    testCount: 1,
+    blockedCount: 0,
+    failedPatchCount: 0,
+    failedTestCount: 0,
+  });
+  assert.deepEqual(getAgentUiFixture("coding-command-approval").expected.coding, {
+    commandCount: 1,
+  });
+  assert.deepEqual(getAgentUiFixture("coding-sandbox-blocked").expected.coding, {
+    blockedCount: 1,
+  });
+  assert.deepEqual(getAgentUiFixture("coding-patch-failure").expected.coding, {
+    patchCount: 1,
+    testCount: 1,
+    blockedCount: 1,
+    failedPatchCount: 1,
+    failedTestCount: 1,
+  });
+  assert.deepEqual(getAgentUiFixture("coding-test-failure-fix").expected.coding, {
+    changeCount: 1,
+    patchCount: 1,
+    commandCount: 2,
+    testCount: 1,
+    failedTestCount: 0,
+  });
+  assert.deepEqual(getAgentUiFixture("coding-hydration-repair").expected.coding, {
+    changeCount: 1,
+  });
+
+  for (const fixture of codingFixtures) {
+    assert.equal(
+      collectAgentUiFixtureValidationIssues(fixture).length,
+      0,
+      fixture.id,
+    );
+    assert.ok(fixture.expected.coding, fixture.id);
+  }
+});
+
+test("coding conformance fixtures fail closed on malformed lifecycle streams", () => {
+  const patchFailure = getAgentUiFixture("coding-patch-failure");
+  const orphanPatchTerminal = {
+    ...patchFailure,
+    events: patchFailure.events.filter(
+      (event) => event.eventClass !== "patch.started",
+    ),
+    expected: {
+      ...patchFailure.expected,
+      diagnostics: [],
+    },
+  };
+  assert.deepEqual(
+    collectAgentUiFixtureValidationIssues(orphanPatchTerminal).map((issue) => [
+      issue.code,
+      issue.path,
+    ]),
+    [["sequence_violation", "$.events[0]"]],
+  );
+  assert.deepEqual(
+    verifyRuntimeEventSequence(orphanPatchTerminal.events).map(
+      (violation) => violation.code,
+    ),
+    ["patch_terminal_without_start"],
+  );
+
+  const commandApproval = getAgentUiFixture("coding-command-approval");
+  const unresolvedActionAtTurnEnd = {
+    ...commandApproval,
+    events: commandApproval.events.filter(
+      (event) => event.eventClass !== "action.resolved",
+    ),
+    expected: {
+      ...commandApproval.expected,
+      diagnostics: [],
+    },
+  };
+  assert.deepEqual(
+    verifyRuntimeEventSequence(unresolvedActionAtTurnEnd.events).map(
+      (violation) => violation.code,
+    ),
+    ["action_unresolved_at_turn_end"],
+  );
+
+  const testFix = getAgentUiFixture("coding-test-failure-fix");
+  const duplicateActiveTest = {
+    ...testFix,
+    events: testFix.events.map((event) =>
+      event.id === "evt_test_fix_completed_failed"
+        ? {
+            ...event,
+            id: "evt_test_fix_started_duplicate",
+            eventClass: "test.started",
+            status: "running",
+            title: "Duplicate active test start",
+          }
+        : event,
+    ),
+    expected: {
+      ...testFix.expected,
+      diagnostics: [],
+    },
+  };
+  assert.deepEqual(
+    verifyRuntimeEventSequence(duplicateActiveTest.events).map(
+      (violation) => violation.code,
+    ),
+    ["test_started_already_active", "test_started_already_active"],
+  );
+});
+
 test("fixture validation checks Subagents expectation shape", () => {
   const fixture = {
     ...getAgentUiFixture("subagent-handoff"),
@@ -533,6 +665,29 @@ test("fixture validation checks Subagents expectation shape", () => {
   assert.deepEqual(
     collectAgentUiFixtureValidationIssues(fixture).map((issue) => issue.path),
     ["$.expected.subagents.hasSubagents", "$.expected.subagents.threadCount"],
+  );
+});
+
+test("fixture validation checks coding expectation shape", () => {
+  const fixture = {
+    ...getAgentUiFixture("coding-file-change"),
+    expected: {
+      status: "completed",
+      coding: {
+        fileCount: "1",
+        changeCount: "1",
+        patchCount: "1",
+      },
+    },
+  };
+
+  assert.deepEqual(
+    collectAgentUiFixtureValidationIssues(fixture).map((issue) => issue.path),
+    [
+      "$.expected.coding.fileCount",
+      "$.expected.coding.changeCount",
+      "$.expected.coding.patchCount",
+    ],
   );
 });
 

@@ -1,7 +1,8 @@
 use crate::agent_tools::execution::{
     decide_tool_execution, persisted_tool_execution_policy_from_metadata,
-    tool_execution_policy_metadata, ToolExecutionDecision, ToolExecutionDecisionInput,
-    ToolExecutionDecisionKind, ToolExecutionResolverInput,
+    start_local_execution_process, tool_execution_policy_metadata, LocalExecutionRequest,
+    ToolExecutionDecision, ToolExecutionDecisionInput, ToolExecutionDecisionKind,
+    ToolExecutionResolverInput,
 };
 use crate::protocol::{AgentEvent as RuntimeAgentEvent, AgentToolResult};
 use aster::sandbox::{SandboxConfig, SandboxType};
@@ -32,6 +33,7 @@ pub struct ToolExecutionOutcome {
     pub output: String,
     pub error: Option<String>,
     pub metadata: Option<HashMap<String, Value>>,
+    pub stream_events: Vec<RuntimeAgentEvent>,
 }
 
 #[derive(Debug, Clone)]
@@ -109,6 +111,7 @@ pub async fn execute_planned_tool_batch(
         if let Some(action_required) = action_required_event_from_outcome(outcome) {
             events.push(action_required);
         }
+        events.extend(outcome.stream_events.clone());
         events.push(RuntimeAgentEvent::ToolEnd {
             tool_id: outcome.tool_id.clone(),
             result: AgentToolResult {
@@ -169,6 +172,25 @@ pub fn rewrite_tool_terminal_event(
     false
 }
 
+fn process_id_for_tool(tool_id: &str) -> String {
+    format!("process-{tool_id}")
+}
+
+fn is_shell_tool_name(tool_name: &str) -> bool {
+    matches!(
+        normalized_tool_name(tool_name).as_str(),
+        "bash" | "powershell" | "bashtool" | "powershelltool" | "shellcommand" | "execcommand"
+    )
+}
+
+fn normalized_tool_name(tool_name: &str) -> String {
+    tool_name
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .map(|character| character.to_ascii_lowercase())
+        .collect()
+}
+
 async fn execute_planned_tool(
     input: ToolExecutionBatchInput,
     planned: PlannedToolExecution,
@@ -189,7 +211,7 @@ async fn execute_planned_tool(
 
     let mut context =
         ToolContext::new(input.working_directory.clone()).with_session_id(input.session_id.clone());
-    if let Some(token) = input.cancel_token {
+    if let Some(token) = input.cancel_token.clone() {
         context = context.with_cancellation_token(token);
     }
     if should_attach_workspace_sandbox(&policy_decision) {
@@ -197,6 +219,11 @@ async fn execute_planned_tool(
             &policy_decision,
             &input.working_directory,
         ));
+    }
+
+    if can_start_live_shell_process(&planned, &policy_decision, &context) {
+        let mut metadata = policy_decision.metadata;
+        return execute_live_shell_process(input, planned, context, &mut metadata).await;
     }
 
     let result = aster::session_context::with_turn_context(input.turn_context.clone(), async {
@@ -211,17 +238,19 @@ async fn execute_planned_tool(
         Ok(tool_result) => {
             let mut metadata = policy_decision.metadata;
             metadata.extend(tool_result.metadata);
+            let output = tool_result.output.unwrap_or_default();
             ToolExecutionOutcome {
                 tool_name: planned.tool_name,
                 tool_id: planned.tool_id,
                 success: tool_result.success,
-                output: tool_result.output.unwrap_or_default(),
+                output,
                 error: tool_result.error,
                 metadata: if metadata.is_empty() {
                     None
                 } else {
                     Some(metadata)
                 },
+                stream_events: Vec::new(),
             }
         }
         Err(error) => {
@@ -239,8 +268,245 @@ async fn execute_planned_tool(
                 output: String::new(),
                 error: Some(format!("执行工具失败: {error}")),
                 metadata,
+                stream_events: Vec::new(),
             }
         }
+    }
+}
+
+async fn execute_live_shell_process(
+    input: ToolExecutionBatchInput,
+    planned: PlannedToolExecution,
+    context: ToolContext,
+    metadata: &mut HashMap<String, Value>,
+) -> ToolExecutionOutcome {
+    let permission_result = {
+        let registry = input.registry.read().await;
+        registry
+            .check_tool_permissions(&planned.tool_name, planned.params.clone(), &context, None)
+            .await
+    };
+    let params = match permission_result {
+        Ok(params) => params,
+        Err(error) => {
+            let error_metadata = policy_error_metadata(
+                &planned,
+                &input.working_directory,
+                input.turn_context.as_ref(),
+                input.persisted_execution_policy.as_ref(),
+                &error,
+            )
+            .unwrap_or_default();
+            metadata.extend(error_metadata);
+            return ToolExecutionOutcome {
+                tool_name: planned.tool_name,
+                tool_id: planned.tool_id,
+                success: false,
+                output: String::new(),
+                error: Some(format!("执行工具失败: {error}")),
+                metadata: Some(metadata.clone()),
+                stream_events: Vec::new(),
+            };
+        }
+    };
+    let Some(command) = param_string(&params, &["command", "cmd", "script"]) else {
+        metadata.insert(
+            "executionSurface".to_string(),
+            json!("registry_fallback_missing_command"),
+        );
+        return execute_registry_tool_after_live_process_skip(input, planned, context, metadata)
+            .await;
+    };
+
+    let cwd = context.working_directory.clone();
+    let mut env = context.environment.clone();
+    env.insert("ASTER_TERMINAL".to_string(), "1".to_string());
+    let request = LocalExecutionRequest {
+        process_id: process_id_for_tool(&planned.tool_id),
+        tool_id: planned.tool_id.clone(),
+        tool_name: planned.tool_name.clone(),
+        command: shell_command_for_tool(&planned.tool_name, &command),
+        cwd: Some(cwd.clone()),
+        env,
+    };
+    metadata.insert("executionSurface".to_string(), json!("live_process"));
+
+    let mut handle = match start_local_execution_process(request) {
+        Ok(handle) => handle,
+        Err(error) => {
+            metadata.insert(
+                "executionSurface".to_string(),
+                json!("registry_fallback_live_process_start_failed"),
+            );
+            metadata.insert(
+                "liveProcessStartError".to_string(),
+                json!(error.to_string()),
+            );
+            return execute_registry_tool_after_live_process_skip(
+                input, planned, context, metadata,
+            )
+            .await;
+        }
+    };
+
+    let mut stream_events = Vec::new();
+    while let Some(delta) = handle.recv_output().await {
+        let metadata = delta.metadata();
+        stream_events.push(RuntimeAgentEvent::ToolOutputDelta {
+            tool_id: planned.tool_id.clone(),
+            delta: delta.delta,
+            output_kind: Some(delta.kind.label().to_string()),
+            metadata: Some(metadata),
+        });
+    }
+
+    let final_snapshot = match handle.wait().await {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            metadata.insert("executionProcessStatus".to_string(), json!("failed"));
+            metadata.insert(
+                "failureCategory".to_string(),
+                json!("process_supervisor_failed"),
+            );
+            return ToolExecutionOutcome {
+                tool_name: planned.tool_name,
+                tool_id: planned.tool_id,
+                success: false,
+                output: String::new(),
+                error: Some(format!("执行进程失败: {error:?}")),
+                metadata: Some(metadata.clone()),
+                stream_events,
+            };
+        }
+    };
+    metadata.extend(final_snapshot.metadata());
+    metadata.insert("command".to_string(), json!(command));
+    metadata.insert("cwd".to_string(), json!(cwd.to_string_lossy().to_string()));
+    let output = final_snapshot.retained_output;
+    let exit_code = final_snapshot.exit_code.unwrap_or(-1);
+    let success = exit_code == 0
+        && matches!(
+            final_snapshot.status,
+            crate::agent_tools::execution::ExecutionProcessStatus::Exited
+        );
+
+    ToolExecutionOutcome {
+        tool_name: planned.tool_name,
+        tool_id: planned.tool_id,
+        success,
+        output: output.clone(),
+        error: if success {
+            None
+        } else {
+            Some(format!("process exited with code {exit_code}"))
+        },
+        metadata: Some(metadata.clone()),
+        stream_events,
+    }
+}
+
+fn can_start_live_shell_process(
+    planned: &PlannedToolExecution,
+    decision: &ToolExecutionDecision,
+    context: &ToolContext,
+) -> bool {
+    if !is_shell_tool_name(&planned.tool_name) {
+        return false;
+    }
+    if context.workspace_sandbox.is_some() {
+        return false;
+    }
+    if metadata_bool(&decision.metadata, "sandboxBackendRequired")
+        || metadata_bool(&decision.metadata, "sandboxBackendEnforced")
+    {
+        return false;
+    }
+    if planned
+        .params
+        .get("background")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        return false;
+    }
+    param_string(&planned.params, &["command", "cmd", "script"]).is_some()
+}
+
+fn metadata_bool(metadata: &HashMap<String, Value>, key: &str) -> bool {
+    metadata.get(key).and_then(Value::as_bool) == Some(true)
+}
+
+fn shell_command_for_tool(tool_name: &str, command: &str) -> Vec<String> {
+    if normalized_tool_name(tool_name).contains("powershell") {
+        return powershell_command(command);
+    }
+    default_shell_command(command)
+}
+
+fn default_shell_command(command: &str) -> Vec<String> {
+    if cfg!(windows) {
+        vec![
+            "cmd".to_string(),
+            "/D".to_string(),
+            "/S".to_string(),
+            "/C".to_string(),
+            command.to_string(),
+        ]
+    } else {
+        vec!["sh".to_string(), "-c".to_string(), command.to_string()]
+    }
+}
+
+fn powershell_command(command: &str) -> Vec<String> {
+    if cfg!(windows) {
+        vec![
+            "powershell.exe".to_string(),
+            "-NoProfile".to_string(),
+            "-NonInteractive".to_string(),
+            "-Command".to_string(),
+            command.to_string(),
+        ]
+    } else {
+        default_shell_command(command)
+    }
+}
+
+async fn execute_registry_tool_after_live_process_skip(
+    input: ToolExecutionBatchInput,
+    planned: PlannedToolExecution,
+    context: ToolContext,
+    metadata: &mut HashMap<String, Value>,
+) -> ToolExecutionOutcome {
+    let result = aster::session_context::with_turn_context(input.turn_context.clone(), async {
+        let registry = input.registry.read().await;
+        registry
+            .execute(&planned.tool_name, planned.params.clone(), &context, None)
+            .await
+    })
+    .await;
+
+    match result {
+        Ok(tool_result) => {
+            metadata.extend(tool_result.metadata);
+            ToolExecutionOutcome {
+                tool_name: planned.tool_name,
+                tool_id: planned.tool_id,
+                success: tool_result.success,
+                output: tool_result.output.unwrap_or_default(),
+                error: tool_result.error,
+                metadata: Some(metadata.clone()),
+                stream_events: Vec::new(),
+            }
+        }
+        Err(error) => ToolExecutionOutcome {
+            tool_name: planned.tool_name,
+            tool_id: planned.tool_id,
+            success: false,
+            output: String::new(),
+            error: Some(format!("执行工具失败: {error}")),
+            metadata: Some(metadata.clone()),
+            stream_events: Vec::new(),
+        },
     }
 }
 
@@ -263,6 +529,7 @@ fn workspace_sandbox_config(
     {
         Some("seatbelt") => SandboxType::Seatbelt,
         Some("linux_sandbox") => SandboxType::Bubblewrap,
+        Some("restricted_token") => SandboxType::RestrictedToken,
         _ => SandboxType::None,
     };
     let requested_policy = decision
@@ -333,6 +600,7 @@ fn action_required_outcome(
         output: String::new(),
         error: Some(decision.reason),
         metadata: Some(metadata),
+        stream_events: Vec::new(),
     }
 }
 
@@ -351,6 +619,7 @@ fn policy_denied_outcome(
         output: String::new(),
         error: Some(decision.reason),
         metadata: Some(metadata),
+        stream_events: Vec::new(),
     }
 }
 
@@ -369,6 +638,7 @@ fn sandbox_blocked_outcome(
         output: String::new(),
         error: Some(decision.reason),
         metadata: Some(metadata),
+        stream_events: Vec::new(),
     }
 }
 

@@ -12,7 +12,7 @@ use lime_core::agent::types::AgentSession;
 #[cfg(test)]
 use lime_core::agent::types::{AgentMessage, ContentPart, MessageContent};
 use lime_core::database::agent_session_repository::{
-    self, SessionRecordDetail, SessionRecordMetadata, SessionRecordPreviewMessage,
+    self, SessionRecordDetail, SessionRecordMetadata,
 };
 use lime_core::database::dao::agent::SessionArchiveFilter;
 use lime_core::database::dao::agent_timeline::AgentTimelineDao;
@@ -24,12 +24,14 @@ use lime_services::aster_session_store::LimeSessionStore;
 use std::time::Instant;
 use uuid::Uuid;
 
+use crate::execution_strategy_compat::normalize_execution_strategy_to_react;
 #[cfg(test)]
 use crate::protocol::AgentMessageContent as RuntimeAgentMessageContent;
-use lime_core::database::dao::agent::AgentDao;
 
+#[cfg(test)]
 #[path = "session_store_history_visibility.rs"]
 mod session_store_history_visibility;
+#[cfg(test)]
 #[path = "session_store_message_projection.rs"]
 mod session_store_message_projection;
 #[path = "session_store_runtime_detail.rs"]
@@ -48,18 +50,12 @@ use self::session_store_message_projection::{
     convert_agent_message, convert_agent_messages, convert_user_visible_agent_messages,
     parse_tool_call_arguments,
 };
-use self::session_store_message_projection::{
-    convert_agent_messages_with_history_eviction, convert_user_visible_agent_messages_with_flags,
-};
 pub use self::session_store_runtime_detail::{
     get_runtime_session_detail, get_runtime_session_detail_with_history_limit,
     get_runtime_session_detail_with_history_page, get_runtime_session_detail_with_history_window,
 };
 use self::session_store_runtime_projection::build_runtime_session_info;
 
-use self::session_store_history_visibility::{
-    load_chat_user_visible_message_flags_from_conn, load_user_visible_message_flags_from_conn,
-};
 #[cfg(test)]
 use self::session_store_subagent_context::{
     apply_runtime_status_to_child_subagent_session, build_child_subagent_session_summaries,
@@ -125,13 +121,6 @@ fn resolve_session_working_dir(
     Err(format!("Workspace 不存在: {}", workspace_id))
 }
 
-fn normalize_execution_strategy(execution_strategy: Option<String>) -> String {
-    match execution_strategy.as_deref() {
-        Some("react") => "react".to_string(),
-        Some("code_orchestrated") | Some("auto") | _ => "react".to_string(),
-    }
-}
-
 fn resolve_optional_session_working_dir(
     db: &DbConnection,
     working_dir: Option<String>,
@@ -165,7 +154,9 @@ pub(crate) fn create_session_record_sync(
             input.working_dir,
             input.workspace_id,
         )?,
-        execution_strategy: Some(normalize_execution_strategy(input.execution_strategy)),
+        execution_strategy: Some(normalize_execution_strategy_to_react(
+            input.execution_strategy.as_deref(),
+        )),
         created_at: now.clone(),
         updated_at: now,
     };
@@ -270,41 +261,9 @@ pub fn list_title_preview_messages_sync(
     limit: usize,
 ) -> Result<Vec<SessionTitlePreviewMessage>, String> {
     let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
-    if limit == 0 {
-        return Ok(Vec::new());
-    }
-
-    let messages =
-        agent_session_repository::list_title_preview_messages(&conn, session_id, usize::MAX)?;
-    let user_visible_flags = load_chat_user_visible_message_flags_from_conn(&conn, session_id)?;
-    if messages.len() != user_visible_flags.len() {
-        tracing::warn!(
-            "[SessionStore] 标题预览 user_visible 过滤失败，消息条数不一致: session_id={}, messages={}, flags={}",
-            session_id,
-            messages.len(),
-            user_visible_flags.len(),
-        );
-    }
-
-    Ok(messages
-        .into_iter()
-        .zip(
-            user_visible_flags
-                .into_iter()
-                .chain(std::iter::repeat(true)),
-        )
-        .filter_map(|(msg, user_visible): (SessionRecordPreviewMessage, bool)| {
-            if !user_visible {
-                return None;
-            }
-
-            Some(SessionTitlePreviewMessage {
-                role: msg.role,
-                content: msg.content,
-            })
-        })
-        .take(limit)
-        .collect())
+    let _ = (session_id, limit);
+    drop(conn);
+    Ok(Vec::new())
 }
 
 /// 获取会话详情
@@ -435,26 +394,8 @@ pub fn get_session_sync_with_history_page(
     let started_at = Instant::now();
 
     let session_started_at = Instant::now();
-    let (
-        session_detail,
-        turns,
-        items,
-        todo_items,
-        user_visible_flags_result,
-        session_ms,
-        turns_ms,
-        items_ms,
-        todo_ms,
-    ) = {
+    let (session_detail, turns, items, todo_items, session_ms, turns_ms, items_ms, todo_ms) = {
         let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
-        let before_message_timestamp = match (history_limit, before_message_id) {
-            (Some(_), Some(message_id)) => {
-                AgentDao::get_message_timestamp_by_id(&conn, session_id, message_id)
-                    .map_err(|e| format!("读取历史游标消息时间失败: {e}"))?
-            }
-            _ => None,
-        };
-
         let session_detail = match (history_limit, before_message_id) {
             (Some(limit), Some(message_id)) => {
                 agent_session_repository::get_session_with_messages_before(
@@ -474,16 +415,8 @@ pub fn get_session_sync_with_history_page(
         let session_ms = session_started_at.elapsed().as_millis();
 
         let turns_started_at = Instant::now();
-        let turns = match (history_limit, before_message_timestamp.as_deref()) {
-            (Some(limit), Some(before_started_at)) => {
-                AgentTimelineDao::list_turns_by_thread_before(
-                    &conn,
-                    session_id,
-                    limit,
-                    before_started_at,
-                )
-            }
-            (Some(_), None) if before_message_id.is_some() => Ok(Vec::new()),
+        let turns = match (history_limit, before_message_id) {
+            (Some(_), Some(_)) => Ok(Vec::new()),
             (Some(limit), None) => AgentTimelineDao::list_turns_by_thread_tail_page(
                 &conn,
                 session_id,
@@ -496,16 +429,8 @@ pub fn get_session_sync_with_history_page(
         let turns_ms = turns_started_at.elapsed().as_millis();
 
         let items_started_at = Instant::now();
-        let items = match (history_limit, before_message_timestamp.as_deref()) {
-            (Some(limit), Some(before_started_at)) => {
-                AgentTimelineDao::list_items_by_thread_before(
-                    &conn,
-                    session_id,
-                    limit,
-                    before_started_at,
-                )
-            }
-            (Some(_), None) if before_message_id.is_some() => Ok(Vec::new()),
+        let items = match (history_limit, before_message_id) {
+            (Some(_), Some(_)) => Ok(Vec::new()),
             (Some(limit), None) => AgentTimelineDao::list_items_by_thread_tail_page(
                 &conn,
                 session_id,
@@ -521,20 +446,11 @@ pub fn get_session_sync_with_history_page(
         let todo_items = load_session_todo_items_from_conn(&conn, session_id);
         let todo_ms = todo_started_at.elapsed().as_millis();
 
-        let user_visible_flags_result = load_user_visible_message_flags_from_conn(
-            &conn,
-            session_id,
-            history_limit,
-            history_offset,
-            before_message_id,
-        );
-
         (
             session_detail,
             turns,
             items,
             todo_items,
-            user_visible_flags_result,
             session_ms,
             turns_ms,
             items_ms,
@@ -548,27 +464,7 @@ pub fn get_session_sync_with_history_page(
     } = session_detail;
     let working_dir = session.working_dir.clone();
     let messages_started_at = Instant::now();
-    let use_history_eviction_plan = history_limit.is_none();
-    let tauri_messages = match user_visible_flags_result {
-        Ok(user_visible_flags) => convert_user_visible_agent_messages_with_flags(
-            &session.messages,
-            &user_visible_flags,
-            Some(session.model.as_str()),
-            use_history_eviction_plan,
-        ),
-        Err(error) => {
-            tracing::warn!(
-                "[SessionStore] 读取消息可见性失败，已回退旧消息转换: session_id={}, error={}",
-                session_id,
-                error
-            );
-            convert_agent_messages_with_history_eviction(
-                &session.messages,
-                Some(session.model.as_str()),
-                use_history_eviction_plan,
-            )
-        }
-    };
+    let tauri_messages = Vec::new();
     let messages_ms = messages_started_at.elapsed().as_millis();
     let total_ms = started_at.elapsed().as_millis();
 
@@ -650,7 +546,7 @@ pub fn update_session_execution_strategy_sync(
     execution_strategy: &str,
 ) -> Result<(), String> {
     let normalized_execution_strategy =
-        normalize_execution_strategy(Some(execution_strategy.to_string()));
+        normalize_execution_strategy_to_react(Some(execution_strategy));
     let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
     agent_session_repository::update_session_execution_strategy(
         &conn,

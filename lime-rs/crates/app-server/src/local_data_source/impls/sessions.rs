@@ -1,4 +1,5 @@
 use super::super::*;
+use crate::LegacyAgentSessionTranscript;
 use async_trait::async_trait;
 
 #[async_trait]
@@ -29,6 +30,31 @@ impl SessionAppDataSource for LocalAppDataSource {
         params: AgentSessionArchiveManyParams,
     ) -> Result<AgentSessionArchiveManyResponse, RuntimeCoreError> {
         current_timeline::archive_many_current_timeline_sessions(&self.db, params)
+    }
+
+    async fn list_legacy_agent_message_transcripts(
+        &self,
+        params: AgentSessionListParams,
+    ) -> Result<Vec<LegacyAgentSessionTranscript>, RuntimeCoreError> {
+        legacy_message_backfill_source::list_legacy_agent_message_transcripts(&self.db, params)
+    }
+
+    async fn read_legacy_agent_message_transcript(
+        &self,
+        session_id: String,
+    ) -> Result<Option<LegacyAgentSessionTranscript>, RuntimeCoreError> {
+        legacy_message_backfill_source::read_legacy_agent_message_transcript(&self.db, &session_id)
+    }
+
+    async fn clear_legacy_agent_message_sessions(
+        &self,
+        session_ids: Vec<String>,
+    ) -> Result<usize, RuntimeCoreError> {
+        legacy_message_backfill_source::clear_legacy_agent_message_sessions(&self.db, &session_ids)
+    }
+
+    async fn drop_empty_legacy_agent_message_tables(&self) -> Result<usize, RuntimeCoreError> {
+        legacy_message_backfill_source::drop_empty_legacy_agent_message_tables(&self.db)
     }
 
     async fn read_agent_session_objective(

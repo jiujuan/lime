@@ -29,6 +29,7 @@ use app_server_protocol::ArtifactSummary;
 use app_server_protocol::EvidenceExportParams;
 use app_server_protocol::EvidenceExportResponse;
 use app_server_protocol::EvidencePackSummary;
+use lime_infra::telemetry::RequestLog;
 use std::fs;
 
 const HANDOFF_BUNDLE_RELATIVE_ROOT: &str = ".lime/harness/sessions";
@@ -51,39 +52,37 @@ impl RuntimeCore {
         &self,
         params: EvidenceExportParams,
     ) -> Result<EvidenceExportResponse, RuntimeCoreError> {
-        let (session, turns, events, artifacts) = {
-            let state = self
-                .state
-                .lock()
-                .expect("runtime core state mutex poisoned");
-            let stored = state
-                .sessions
-                .get(&params.session_id)
-                .ok_or_else(|| RuntimeCoreError::SessionNotFound(params.session_id.clone()))?;
-
-            let turns = match params.turn_id.as_deref() {
-                Some(turn_id) => stored
-                    .turns
-                    .iter()
-                    .filter(|turn| turn.turn_id == turn_id)
-                    .cloned()
-                    .collect(),
-                None => stored.turns.clone(),
-            };
-            let events = if params.include_events.unwrap_or(true) {
-                artifact_projection::events_for_turn(&stored.events, params.turn_id.as_deref())
-            } else {
-                Vec::new()
-            };
-            let artifacts = if params.include_artifacts.unwrap_or(true) {
-                artifact_projection::stored_artifact_summaries_for_turn(
-                    stored,
-                    params.turn_id.as_deref(),
-                )
-            } else {
-                Vec::new()
-            };
-            (stored.session.clone(), turns, events, artifacts)
+        let context = self
+            .load_session_current(AgentSessionReadParams {
+                session_id: params.session_id.clone(),
+                history_limit: None,
+                history_offset: None,
+                history_before_message_id: None,
+            })
+            .await?;
+        let stored = context.stored;
+        let session = stored.session.clone();
+        let turns = match params.turn_id.as_deref() {
+            Some(turn_id) => stored
+                .turns
+                .iter()
+                .filter(|turn| turn.turn_id == turn_id)
+                .cloned()
+                .collect(),
+            None => stored.turns.clone(),
+        };
+        let events = if params.include_events.unwrap_or(true) {
+            artifact_projection::events_for_turn(&stored.events, params.turn_id.as_deref())
+        } else {
+            Vec::new()
+        };
+        let artifacts = if params.include_artifacts.unwrap_or(true) {
+            artifact_projection::stored_artifact_summaries_for_turn(
+                &stored,
+                params.turn_id.as_deref(),
+            )
+        } else {
+            Vec::new()
         };
 
         if let Some(turn_id) = params.turn_id.as_deref() {
@@ -91,6 +90,8 @@ impl RuntimeCore {
                 return Err(RuntimeCoreError::TurnNotActive(turn_id.to_string()));
             }
         }
+        let request_logs =
+            self.request_logs_for_evidence(&session.session_id, params.turn_id.as_deref());
         let evidence_pack = if params.include_evidence_pack.unwrap_or(true) {
             let evidence_pack = self
                 .evidence_export_provider
@@ -99,6 +100,7 @@ impl RuntimeCore {
                     turns: turns.clone(),
                     events: events.clone(),
                     artifacts: artifacts.clone(),
+                    request_logs: request_logs.clone(),
                 })
                 .await?;
             self.with_current_objective_completion_audit_summary(
@@ -121,6 +123,36 @@ impl RuntimeCore {
             exported_at: timestamp(),
             evidence_pack,
         })
+    }
+
+    fn request_logs_for_evidence(
+        &self,
+        session_id: &str,
+        turn_id: Option<&str>,
+    ) -> Vec<RequestLog> {
+        let Some(telemetry_store) = &self.telemetry_store else {
+            return Vec::new();
+        };
+
+        let result = match turn_id {
+            Some(turn_id) => {
+                telemetry_store.read_request_logs_for_session_turn(session_id, Some(turn_id))
+            }
+            None => telemetry_store.read_request_logs_for_session(session_id),
+        };
+
+        match result {
+            Ok(logs) => logs,
+            Err(error) => {
+                tracing::warn!(
+                    "failed to read request telemetry for evidence export session={} turn={:?}: {}",
+                    session_id,
+                    turn_id,
+                    error
+                );
+                Vec::new()
+            }
+        }
     }
 
     async fn with_current_objective_completion_audit_summary(

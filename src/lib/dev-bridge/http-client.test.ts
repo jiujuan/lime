@@ -426,7 +426,7 @@ describe("http-client", () => {
     });
   });
 
-  it("App Server 会话列表读取应使用较短超时，避免恢复链路卡住 60 秒", async () => {
+  it("App Server 会话列表读取应使用 current read 超时，避免冷启动和迁移期误判失败", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(electronHostHealthResponse())
@@ -447,12 +447,12 @@ describe("http-client", () => {
       () => ({ ok: true as const }),
       (error) => ({ ok: false as const, error }),
     );
-    await vi.advanceTimersByTimeAsync(8000);
+    await vi.advanceTimersByTimeAsync(30000);
 
     await expect(listSessionsPromise).resolves.toMatchObject({
       ok: false,
       error: expect.objectContaining({
-        message: expect.stringContaining("timeout after 8000ms"),
+        message: expect.stringContaining("timeout after 30000ms"),
       }),
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -651,7 +651,7 @@ describe("http-client", () => {
           ],
         },
       }),
-    ).toBe(8000);
+    ).toBe(30000);
     expect(resolveBridgeRequestTimeoutMs("agent_app_start_ui_runtime")).toBe(
       150000,
     );
@@ -732,6 +732,19 @@ describe("http-client", () => {
               id: 4,
               method: "agentSession/read",
               params: {},
+            }),
+          ],
+        },
+      }),
+    ).toBe(30000);
+    expect(
+      resolveBridgeRequestTimeoutMs("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
+              id: "session-files",
+              method: "sessionFile/list",
+              params: { sessionId: "session-1" },
             }),
           ],
         },

@@ -631,19 +631,21 @@ describe("agentRuntime threadClient", () => {
       }),
     ).resolves.toEqual(checkpointRestore);
 
-    expect(appServerClient.listAgentSessionFileCheckpoints).toHaveBeenCalledWith(
-      {
-        sessionId: "session-1",
-      },
-    );
+    expect(
+      appServerClient.listAgentSessionFileCheckpoints,
+    ).toHaveBeenCalledWith({
+      sessionId: "session-1",
+    });
     expect(appServerClient.getAgentSessionFileCheckpoint).toHaveBeenCalledWith({
       sessionId: "session-1",
       checkpointId: "checkpoint-1",
     });
-    expect(appServerClient.diffAgentSessionFileCheckpoint).toHaveBeenCalledWith({
-      sessionId: "session-1",
-      checkpointId: "checkpoint-1",
-    });
+    expect(appServerClient.diffAgentSessionFileCheckpoint).toHaveBeenCalledWith(
+      {
+        sessionId: "session-1",
+        checkpointId: "checkpoint-1",
+      },
+    );
     expect(
       appServerClient.restoreAgentSessionFileCheckpoint,
     ).toHaveBeenCalledWith({
@@ -840,7 +842,9 @@ describe("agentRuntime threadClient", () => {
         confirmed: true,
       }),
     ).resolves.toBeUndefined();
-    await expect(client.getAgentRuntimeThreadRead(" session-1 ")).resolves.toEqual(
+    await expect(
+      client.getAgentRuntimeThreadRead(" session-1 "),
+    ).resolves.toEqual(
       expect.objectContaining({
         thread_id: "thread-1",
         status: "idle",
@@ -967,6 +971,22 @@ describe("agentRuntime threadClient", () => {
           },
         },
       },
+      expected_output: {
+        artifactKind: "content_batch",
+        output_format: {
+          type: "json_schema",
+          schema: {
+            type: "object",
+            properties: {
+              items: {
+                type: "array",
+              },
+            },
+            required: ["items"],
+          },
+          max_validation_retries: 2,
+        },
+      },
       queue_if_busy: true,
       queued_turn_id: "queued-claw",
       skip_pre_submit_resume: true,
@@ -999,6 +1019,29 @@ describe("agentRuntime threadClient", () => {
         modelPreference: "deepseek-v4-pro",
         metadata: turnConfig.metadata,
         queuedTurnId: "queued-claw",
+        expectedOutput: request.expected_output,
+        structuredOutput: {
+          type: "json_schema",
+          schema: {
+            type: "object",
+            properties: {
+              items: {
+                type: "array",
+              },
+            },
+            required: ["items"],
+          },
+          max_validation_retries: 2,
+        },
+        outputSchema: {
+          type: "object",
+          properties: {
+            items: {
+              type: "array",
+            },
+          },
+          required: ["items"],
+        },
         hostOptions: {
           asterChatRequest: {
             message: "继续执行完整 Claw 链路",
@@ -1032,6 +1075,29 @@ describe("agentRuntime threadClient", () => {
               sensitivity: 0.5,
             },
             system_prompt: "保留 Claw 原始系统提示",
+            expected_output: request.expected_output,
+            structured_output: {
+              type: "json_schema",
+              schema: {
+                type: "object",
+                properties: {
+                  items: {
+                    type: "array",
+                  },
+                },
+                required: ["items"],
+              },
+              max_validation_retries: 2,
+            },
+            output_schema: {
+              type: "object",
+              properties: {
+                items: {
+                  type: "array",
+                },
+              },
+              required: ["items"],
+            },
             metadata: {
               harness: {
                 source: "claw",
@@ -1263,10 +1329,9 @@ describe("agentRuntime threadClient", () => {
       "tool_start",
       "tool_end",
     ]);
-    expect(listener.mock.calls.map(([event]) => event.payload.tool_id)).toEqual([
-      "tool-fanout",
-      "tool-fanout",
-    ]);
+    expect(listener.mock.calls.map(([event]) => event.payload.tool_id)).toEqual(
+      ["tool-fanout", "tool-fanout"],
+    );
     unlisten();
   });
 
@@ -1382,7 +1447,7 @@ describe("agentRuntime threadClient", () => {
             sessionId: "session-1",
             threadId: "thread-1",
             turnId: "turn-1",
-              type: "turn.completed",
+            type: "turn.completed",
             timestamp: "2026-06-06T00:00:02.000Z",
             payload: {},
           },
@@ -1891,7 +1956,7 @@ describe("agentRuntime threadClient", () => {
     };
 
     await expect(client.submitAgentRuntimeTurn(request)).rejects.toThrow(
-      "App Server turn lifecycle is unavailable",
+      "App Server turn lifecycle is unavailable; Agent Runtime requires the App Server current lifecycle channel.",
     );
 
     expect(invokeCommand).not.toHaveBeenCalled();
@@ -1997,7 +2062,7 @@ describe("agentRuntime threadClient", () => {
     const request = { session_id: "session-1", turn_id: "turn-1" };
 
     await expect(client.interruptAgentRuntimeTurn(request)).rejects.toThrow(
-      "App Server turn lifecycle is unavailable",
+      "App Server turn lifecycle is unavailable; Agent Runtime requires the App Server current lifecycle channel.",
     );
 
     expect(invokeCommand).not.toHaveBeenCalled();
@@ -2184,7 +2249,7 @@ describe("agentRuntime threadClient", () => {
     });
 
     await expect(client.getAgentRuntimeThreadRead("session-1")).rejects.toThrow(
-      "App Server turn lifecycle is unavailable",
+      "App Server turn lifecycle is unavailable; Agent Runtime requires the App Server current lifecycle channel.",
     );
 
     expect(appServerClient.readSession).not.toHaveBeenCalled();
@@ -2207,7 +2272,9 @@ describe("agentRuntime threadClient", () => {
         action_type: "ask_user",
         confirmed: true,
       }),
-    ).rejects.toThrow("App Server turn lifecycle is unavailable");
+    ).rejects.toThrow(
+      "App Server turn lifecycle is unavailable; Agent Runtime requires the App Server current lifecycle channel.",
+    );
 
     expect(invokeCommand).not.toHaveBeenCalled();
     expect(appServerClient.respondAction).not.toHaveBeenCalled();
@@ -2324,6 +2391,133 @@ describe("agentRuntime threadClient", () => {
   });
 
   it("App Server event payload projection 应覆盖 current event type", () => {
+    expect(
+      projectAppServerAgentEventPayload({
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: "evt-thread",
+            sequence: 1,
+            sessionId: "session-1",
+            threadId: "thread-1",
+            type: "thread.started",
+            timestamp: "2026-06-06T00:00:00.000Z",
+            payload: {},
+          },
+        },
+      }),
+    ).toMatchObject({
+      type: "thread_started",
+      thread_id: "thread-1",
+      event_id: "evt-thread",
+      session_id: "session-1",
+    });
+
+    expect(
+      projectAppServerAgentEventPayload({
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: "evt-turn-started",
+            sequence: 2,
+            sessionId: "session-1",
+            threadId: "thread-1",
+            turnId: "turn-1",
+            type: "turn.started",
+            timestamp: "2026-06-06T00:00:01.000Z",
+            payload: {
+              turn: {
+                id: "turn-1",
+                prompt_text: "整理今天的国际新闻",
+              },
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      type: "turn_started",
+      turn: {
+        id: "turn-1",
+        thread_id: "thread-1",
+        prompt_text: "整理今天的国际新闻",
+        status: "running",
+      },
+      event_id: "evt-turn-started",
+      session_id: "session-1",
+      turn_id: "turn-1",
+    });
+
+    expect(
+      projectAppServerAgentEventPayload({
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: "evt-message-created",
+            sequence: 3,
+            sessionId: "session-1",
+            threadId: "thread-1",
+            turnId: "turn-1",
+            type: "message.created",
+            timestamp: "2026-06-06T00:00:01.500Z",
+            payload: {
+              role: "user",
+              input: {
+                text: "整理今天的国际新闻",
+              },
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      type: "item_started",
+      item: {
+        id: "evt-message-created",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        sequence: 3,
+        status: "completed",
+        type: "user_message",
+        content: "整理今天的国际新闻",
+      },
+    });
+
+    expect(
+      projectAppServerAgentEventPayload({
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: "evt-item-started",
+            sequence: 4,
+            sessionId: "session-1",
+            threadId: "thread-1",
+            turnId: "turn-1",
+            type: "item.started",
+            timestamp: "2026-06-06T00:00:01.750Z",
+            payload: {
+              item: {
+                id: "item-1",
+                type: "agent_message",
+                text: "",
+                phase: "final_answer",
+              },
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      type: "item_started",
+      item: {
+        id: "item-1",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        sequence: 4,
+        status: "in_progress",
+        type: "agent_message",
+        text: "",
+        phase: "final_answer",
+      },
+    });
+
     expect(
       projectAppServerAgentEventPayload({
         method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,

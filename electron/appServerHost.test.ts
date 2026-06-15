@@ -8,16 +8,89 @@ import {
 
 const {
   fakeConnection,
+  lifecycleConfigs,
   recordedRequests,
   resetFakeConnection,
   setTurnStartRequestMode,
   FakeAppServerSidecarLifecycle,
 } = vi.hoisted(() => {
   const recordedRequests: JsonRpcRequest[] = [];
+  const lifecycleConfigs: Array<{
+    binaryPath: string;
+    dataDir?: string;
+    legacyMessageCleanup?: string;
+    productDbMigrationCleanup?: string;
+  }> = [];
   const mirroredNotifications: JsonRpcMessage[] = [];
-  let turnStartRequestMode: "resolve" | "hang" = "resolve";
+  let turnStartRequestMode: "resolve" | "hang" | "throw-stale-once" = "resolve";
   const fakeConnection = {
+    requestUntilFirstNotificationOrResponse: vi.fn(
+      async (request: JsonRpcRequest) => {
+        if (turnStartRequestMode === "throw-stale-once") {
+          turnStartRequestMode = "resolve";
+          throw new Error("app-server sidecar stdin is closed");
+        }
+        recordedRequests.push(request);
+        const notification = {
+          method: "agentSession/event",
+          params: {
+            event: {
+              eventId: `evt-${request.id}`,
+              sequence: 1,
+              sessionId: "session-b",
+              turnId: "turn-b",
+              type: "message.delta",
+              timestamp: "2026-06-06T00:00:00.000Z",
+              payload: { text: "第一段" },
+            },
+          },
+        };
+        if (request.method === "agentSession/turn/start") {
+          mirroredNotifications.push(notification);
+          if (turnStartRequestMode === "hang") {
+            return {
+              id: request.id,
+              completed: false,
+              notifications: [notification],
+              messages: [notification],
+            };
+          }
+        }
+        return {
+          id: request.id,
+          completed: true,
+          result: {
+            ok: true,
+          },
+          response: {
+            id: request.id,
+            result: {
+              internalId: request.id,
+              method: request.method,
+            },
+          },
+          notifications:
+            request.method === "agentSession/turn/start" ? [notification] : [],
+          messages: [
+            ...(request.method === "agentSession/turn/start"
+              ? [notification]
+              : []),
+            {
+              id: request.id,
+              result: {
+                internalId: request.id,
+                method: request.method,
+              },
+            },
+          ],
+        };
+      },
+    ),
     request: vi.fn(async (request: JsonRpcRequest) => {
+      if (turnStartRequestMode === "throw-stale-once") {
+        turnStartRequestMode = "resolve";
+        throw new Error("app-server sidecar stdin is closed");
+      }
       recordedRequests.push(request);
       const notification = {
         method: "agentSession/event",
@@ -44,7 +117,9 @@ const {
           ok: true,
         },
         messages: [
-          ...(request.method === "agentSession/turn/start" ? [notification] : []),
+          ...(request.method === "agentSession/turn/start"
+            ? [notification]
+            : []),
           {
             id: request.id,
             result: {
@@ -65,6 +140,15 @@ const {
   };
 
   class FakeAppServerSidecarLifecycle {
+    constructor(config: {
+      binaryPath: string;
+      dataDir?: string;
+      legacyMessageCleanup?: string;
+      productDbMigrationCleanup?: string;
+    }) {
+      lifecycleConfigs.push(config);
+    }
+
     async start() {
       return {
         initializeResponse: {
@@ -90,15 +174,20 @@ const {
 
   return {
     fakeConnection,
+    lifecycleConfigs,
     recordedRequests,
     resetFakeConnection: () => {
       recordedRequests.length = 0;
+      lifecycleConfigs.length = 0;
       mirroredNotifications.length = 0;
       turnStartRequestMode = "resolve";
       fakeConnection.request.mockClear();
+      fakeConnection.requestUntilFirstNotificationOrResponse.mockClear();
       fakeConnection.nextNotification.mockClear();
     },
-    setTurnStartRequestMode: (mode: "resolve" | "hang") => {
+    setTurnStartRequestMode: (
+      mode: "resolve" | "hang" | "throw-stale-once",
+    ) => {
       turnStartRequestMode = mode;
     },
     FakeAppServerSidecarLifecycle,
@@ -108,6 +197,8 @@ const {
 vi.mock("./electronRuntime", () => ({
   app: {
     getAppPath: () => process.cwd(),
+    getPath: (name: string) =>
+      name === "userData" ? "/tmp/lime-electron-user-data" : "/tmp/lime",
     getVersion: () => "0.0.0-test",
     isPackaged: false,
   },
@@ -119,7 +210,8 @@ Object.defineProperty(process, "resourcesPath", {
 });
 
 vi.mock("@limecloud/app-server-client", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@limecloud/app-server-client")>();
+  const actual =
+    await importOriginal<typeof import("@limecloud/app-server-client")>();
   return {
     ...actual,
     AppServerSidecarLifecycle: FakeAppServerSidecarLifecycle,
@@ -132,6 +224,82 @@ vi.mock("@limecloud/app-server-client", async (importOriginal) => {
 describe("ElectronAppServerHost", () => {
   beforeEach(() => {
     resetFakeConnection();
+    delete process.env.APP_SERVER_LEGACY_MESSAGE_CLEANUP;
+    delete process.env.APP_SERVER_PRODUCT_DB_MIGRATION_CLEANUP;
+  });
+
+  it("启动 App Server 时应显式传入 Electron userData 下的 dataDir", async () => {
+    const { ElectronAppServerHost } = await import("./appServerHost");
+    const host = new ElectronAppServerHost();
+
+    await host.warmup();
+
+    expect(lifecycleConfigs).toHaveLength(1);
+    expect(lifecycleConfigs[0]).toMatchObject({
+      dataDir: "/tmp/lime-electron-user-data/app-server",
+      legacyMessageCleanup: "drop-empty-tables",
+      productDbMigrationCleanup: "drop-tables",
+    });
+  });
+
+  it("支持通过环境变量配置迁移后旧 Product DB 清理策略", async () => {
+    process.env.APP_SERVER_PRODUCT_DB_MIGRATION_CLEANUP = "delete-file";
+    const { ElectronAppServerHost } = await import("./appServerHost");
+    const host = new ElectronAppServerHost();
+
+    await host.warmup();
+
+    expect(lifecycleConfigs).toHaveLength(1);
+    expect(lifecycleConfigs[0]).toMatchObject({
+      productDbMigrationCleanup: "delete-file",
+    });
+  });
+
+  it("旧 Product DB 清理策略配置非法时应 fail fast", async () => {
+    process.env.APP_SERVER_PRODUCT_DB_MIGRATION_CLEANUP = "truncate-all";
+    const { ElectronAppServerHost } = await import("./appServerHost");
+    const host = new ElectronAppServerHost();
+
+    await expect(host.warmup()).rejects.toThrow(
+      "APP_SERVER_PRODUCT_DB_MIGRATION_CLEANUP must be one of retain, clear-rows, drop-tables, delete-file",
+    );
+    expect(lifecycleConfigs).toHaveLength(0);
+  });
+
+  it("支持通过环境变量配置 legacy message 迁移后的删除策略", async () => {
+    process.env.APP_SERVER_LEGACY_MESSAGE_CLEANUP = "drop-empty-tables";
+    const { ElectronAppServerHost } = await import("./appServerHost");
+    const host = new ElectronAppServerHost();
+
+    await host.warmup();
+
+    expect(lifecycleConfigs).toHaveLength(1);
+    expect(lifecycleConfigs[0]).toMatchObject({
+      legacyMessageCleanup: "drop-empty-tables",
+    });
+  });
+
+  it("legacy message 删除策略默认应为 drop-empty-tables", async () => {
+    const { ElectronAppServerHost } = await import("./appServerHost");
+    const host = new ElectronAppServerHost();
+
+    await host.warmup();
+
+    expect(lifecycleConfigs).toHaveLength(1);
+    expect(lifecycleConfigs[0]).toMatchObject({
+      legacyMessageCleanup: "drop-empty-tables",
+    });
+  });
+
+  it("legacy message 删除策略配置非法时应 fail fast", async () => {
+    process.env.APP_SERVER_LEGACY_MESSAGE_CLEANUP = "delete-everything";
+    const { ElectronAppServerHost } = await import("./appServerHost");
+    const host = new ElectronAppServerHost();
+
+    await expect(host.warmup()).rejects.toThrow(
+      "APP_SERVER_LEGACY_MESSAGE_CLEANUP must be one of retain, clear-rows, drop-empty-tables",
+    );
+    expect(lifecycleConfigs).toHaveLength(0);
   });
 
   it("转发 JSON-RPC 时隔离并发前端 request id，并在返回前还原原 id", async () => {
@@ -183,6 +351,40 @@ describe("ElectronAppServerHost", () => {
         method: "agentSession/turn/start",
       },
     });
+  });
+
+  it("发现 stale sidecar stdin 已关闭时应丢弃旧连接并重启后重试当前请求", async () => {
+    const { ElectronAppServerHost } = await import("./appServerHost");
+    const host = new ElectronAppServerHost();
+    setTurnStartRequestMode("throw-stale-once");
+
+    const result = await host.handleJsonLines({
+      lines: [
+        encodeMessage({
+          id: 1,
+          method: "agentSession/read",
+          params: { sessionId: "session-stale" },
+        }),
+      ],
+    });
+    const messages = result.lines.map(decodeMessage);
+
+    expect(lifecycleConfigs).toHaveLength(2);
+    expect(fakeConnection.request).toHaveBeenCalledTimes(2);
+    expect(recordedRequests).toHaveLength(1);
+    expect(recordedRequests[0]).toMatchObject({
+      id: "electron-host:1",
+      method: "agentSession/read",
+    });
+    expect(messages).toEqual([
+      {
+        id: 1,
+        result: {
+          internalId: "electron-host:1",
+          method: "agentSession/read",
+        },
+      },
+    ]);
   });
 
   it("drainEvents 应能读取被长 turn/start 请求镜像的流式 notification", async () => {
@@ -271,6 +473,65 @@ describe("ElectronAppServerHost", () => {
         },
       },
     });
+  });
+
+  it("长 turn/start 返回 accepted 后不应阻塞后续读模型请求", async () => {
+    const { ElectronAppServerHost } = await import("./appServerHost");
+    setTurnStartRequestMode("hang");
+    const host = new ElectronAppServerHost();
+
+    const turnResult = await host.handleJsonLines({
+      lines: [
+        encodeMessage({
+          id: 1,
+          method: "agentSession/turn/start",
+          params: {
+            sessionId: "session-b",
+            turnId: "turn-b",
+            input: { text: "生成长内容" },
+          },
+        }),
+      ],
+    });
+    const turnMessages = turnResult.lines.map(decodeMessage);
+    expect(turnMessages).toEqual([
+      {
+        id: 1,
+        result: {
+          turn: expect.objectContaining({
+            turnId: "turn-b",
+            sessionId: "session-b",
+            status: "accepted",
+          }),
+        },
+      },
+    ]);
+
+    setTurnStartRequestMode("resolve");
+    const listResult = await host.handleJsonLines({
+      lines: [
+        encodeMessage({
+          id: 2,
+          method: "agentSession/list",
+          params: { limit: 20 },
+        }),
+      ],
+    });
+    const listMessages = listResult.lines.map(decodeMessage);
+
+    expect(recordedRequests.map((request) => request.method)).toEqual([
+      "agentSession/turn/start",
+      "agentSession/list",
+    ]);
+    expect(listMessages).toEqual([
+      {
+        id: 2,
+        result: {
+          internalId: "electron-host:2",
+          method: "agentSession/list",
+        },
+      },
+    ]);
   });
 
   it("current Agent App UI runtime start 应覆盖 App Server readiness 等待窗口", async () => {

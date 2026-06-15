@@ -31,6 +31,9 @@ export interface CanvasWorkbenchChangeItem {
   previousContent?: string | null;
   checkpointPath?: string | null;
   checkpointLabel?: string | null;
+  hunkStartLine?: number;
+  hunkEndLine?: number;
+  hunkHeader?: string;
 }
 
 export interface CanvasWorkbenchChangeView {
@@ -122,6 +125,70 @@ export function findChangeItemForSelection(
       );
     }) || null
   );
+}
+
+function hasChangeItemReviewEvidence(item: CanvasWorkbenchChangeItem): boolean {
+  return Boolean(
+    item.preview?.trim() ||
+      item.diffLines?.length ||
+      item.currentContent != null ||
+      item.previousContent != null ||
+      item.checkpointPath?.trim(),
+  );
+}
+
+function findRuntimeChangeItemWithEvidence(
+  items: readonly CanvasWorkbenchChangeItem[],
+  excludedItemId?: string,
+): CanvasWorkbenchChangeItem | undefined {
+  return (
+    items.find(
+      (item) =>
+        item.id !== excludedItemId &&
+        item.source === "runtime" &&
+        hasChangeItemReviewEvidence(item),
+    ) ||
+    items.find(
+      (item) => item.id !== excludedItemId && item.source === "runtime",
+    )
+  );
+}
+
+export function resolveCanvasWorkbenchSelectedChangeItem({
+  items,
+  selectedChangeId,
+  activeSelectionChangeItem,
+  preferRuntimeEvidenceDefault = false,
+}: {
+  items: readonly CanvasWorkbenchChangeItem[];
+  selectedChangeId: string | null;
+  activeSelectionChangeItem: CanvasWorkbenchChangeItem | null;
+  preferRuntimeEvidenceDefault?: boolean;
+}): CanvasWorkbenchChangeItem | undefined {
+  const explicitSelection = selectedChangeId
+    ? items.find((item) => item.id === selectedChangeId)
+    : undefined;
+  if (explicitSelection) {
+    return explicitSelection;
+  }
+
+  const runtimeEvidenceItem = findRuntimeChangeItemWithEvidence(items);
+  const runtimeEvidenceAfterActiveSelection = findRuntimeChangeItemWithEvidence(
+    items,
+    activeSelectionChangeItem?.id,
+  );
+  if (preferRuntimeEvidenceDefault && runtimeEvidenceItem) {
+    if (
+      activeSelectionChangeItem &&
+      hasChangeItemReviewEvidence(activeSelectionChangeItem) &&
+      activeSelectionChangeItem.previousContent != null
+    ) {
+      return activeSelectionChangeItem;
+    }
+    return runtimeEvidenceAfterActiveSelection || runtimeEvidenceItem;
+  }
+
+  return activeSelectionChangeItem || runtimeEvidenceItem || items[0];
 }
 
 export function resolveChangeStatusCopyKey(
@@ -318,6 +385,43 @@ export function countCanvasWorkbenchChangeItemStats(
   return { additions: 0, removals: 0 };
 }
 
+export function countCanvasWorkbenchChangeItemsStats(
+  items: readonly CanvasWorkbenchChangeItem[],
+): CanvasWorkbenchChangeDiffStats {
+  return items.reduce<CanvasWorkbenchChangeDiffStats>(
+    (stats, item) => {
+      const itemStats = countCanvasWorkbenchChangeItemStats(item);
+      stats.additions += itemStats.additions;
+      stats.removals += itemStats.removals;
+      return stats;
+    },
+    { additions: 0, removals: 0 },
+  );
+}
+
+export function buildCanvasWorkbenchChangeDiffLines(
+  item: CanvasWorkbenchChangeItem | undefined,
+  loadedContent?: string,
+): CanvasWorkbenchDiffLine[] {
+  if (!item) {
+    return [];
+  }
+  if (item.diffLines?.length) {
+    return item.diffLines;
+  }
+  const currentContent = loadedContent ?? item.currentContent;
+  if (item.previousContent != null && currentContent != null) {
+    return buildCanvasWorkbenchDiff(item.previousContent, currentContent);
+  }
+  if (item.previousContent === null && currentContent != null) {
+    return buildCanvasWorkbenchDiff("", currentContent);
+  }
+  if (item.previousContent != null && currentContent === null) {
+    return buildCanvasWorkbenchDiff(item.previousContent, "");
+  }
+  return [];
+}
+
 export function parseCanvasWorkbenchGitPatchToChangeItems(
   patch: string,
 ): CanvasWorkbenchChangeItem[] {
@@ -385,6 +489,7 @@ function parseGitPatchSection(
   const diffLines = parseGitPatchDiffLines(lines);
   const preview = diffLines.find((line) => line.type !== "context")?.value;
   const changeKind = inferGitPatchChangeKind(lines);
+  const hunk = parseGitPatchHunk(lines);
 
   return {
     id: `git:${index}:${path}`,
@@ -395,6 +500,47 @@ function parseGitPatchSection(
     changeKind,
     preview,
     diffLines,
+    hunkStartLine: hunk?.newStart ?? undefined,
+    hunkEndLine:
+      hunk && hunk.newLength > 0
+        ? hunk.newStart + hunk.newLength - 1
+        : (hunk?.newStart ?? undefined),
+    hunkHeader: hunk?.header,
+  };
+}
+
+interface ParsedGitPatchHunk {
+  header: string;
+  oldStart: number;
+  oldLength: number;
+  newStart: number;
+  newLength: number;
+}
+
+function parseGitPatchHunk(lines: string[]): ParsedGitPatchHunk | null {
+  const hunkLine = lines.find((line) => line.startsWith("@@"));
+  if (!hunkLine) {
+    return null;
+  }
+
+  const match = hunkLine.match(
+    /^@@ -(?<oldStart>\d+)(?:,(?<oldLength>\d+))? \+(?<newStart>\d+)(?:,(?<newLength>\d+))? @@/,
+  );
+  if (!match?.groups) {
+    return null;
+  }
+
+  const oldStart = Number.parseInt(match.groups.oldStart || "0", 10);
+  const oldLength = Number.parseInt(match.groups.oldLength || "1", 10);
+  const newStart = Number.parseInt(match.groups.newStart || "0", 10);
+  const newLength = Number.parseInt(match.groups.newLength || "1", 10);
+
+  return {
+    header: hunkLine,
+    oldStart: Number.isFinite(oldStart) ? oldStart : 0,
+    oldLength: Number.isFinite(oldLength) ? oldLength : 0,
+    newStart: Number.isFinite(newStart) ? newStart : 0,
+    newLength: Number.isFinite(newLength) ? newLength : 0,
   };
 }
 
@@ -420,25 +566,49 @@ function normalizeGitPatchPath(value: string | null | undefined): string {
 function parseGitPatchDiffLines(lines: string[]): CanvasWorkbenchDiffLine[] {
   const diffLines: CanvasWorkbenchDiffLine[] = [];
   let inHunk = false;
+  let oldLineNumber = 0;
+  let newLineNumber = 0;
 
   lines.forEach((line) => {
     if (line.startsWith("@@")) {
       inHunk = true;
+      const hunk = parseGitPatchHunk([line]);
+      oldLineNumber = hunk?.oldStart ?? 0;
+      newLineNumber = hunk?.newStart ?? 0;
       return;
     }
     if (!inHunk || line.startsWith("\\ No newline")) {
       return;
     }
     if (line.startsWith("+") && !line.startsWith("+++ ")) {
-      diffLines.push({ type: "add", value: line.slice(1) });
+      diffLines.push({
+        type: "add",
+        value: line.slice(1),
+        oldLineNumber: null,
+        newLineNumber,
+      });
+      newLineNumber += 1;
       return;
     }
     if (line.startsWith("-") && !line.startsWith("--- ")) {
-      diffLines.push({ type: "remove", value: line.slice(1) });
+      diffLines.push({
+        type: "remove",
+        value: line.slice(1),
+        oldLineNumber,
+        newLineNumber: null,
+      });
+      oldLineNumber += 1;
       return;
     }
     if (line.startsWith(" ")) {
-      diffLines.push({ type: "context", value: line.slice(1) });
+      diffLines.push({
+        type: "context",
+        value: line.slice(1),
+        oldLineNumber,
+        newLineNumber,
+      });
+      oldLineNumber += 1;
+      newLineNumber += 1;
     }
   });
 
@@ -639,4 +809,14 @@ export function buildCanvasWorkbenchChangeFileTree(
     });
 
   return sortNested(roots);
+}
+
+export function flattenCanvasWorkbenchChangeFileTree(
+  nodes: CanvasWorkbenchChangeTreeNode[],
+): CanvasWorkbenchChangeItem[] {
+  return nodes.flatMap((node) =>
+    node.type === "file"
+      ? [node.item]
+      : flattenCanvasWorkbenchChangeFileTree(node.children),
+  );
 }

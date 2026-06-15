@@ -98,7 +98,9 @@ pub(super) fn apply_aster_runtime_snapshot(
         .collect::<HashMap<_, _>>();
     for thread in &snapshot.threads {
         for item in &thread.items {
-            items_by_id.insert(item.id.clone(), project_item_runtime(item.clone()));
+            if let Some(projected) = project_item_runtime(item.clone()) {
+                items_by_id.insert(projected.id.clone(), projected);
+            }
         }
     }
     detail.items = items_by_id.into_values().collect();

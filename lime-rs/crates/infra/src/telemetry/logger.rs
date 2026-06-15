@@ -2,6 +2,7 @@
 //!
 //! 提供请求日志记录、查询和轮转功能
 
+use super::store::TelemetryStore;
 use super::types::{ModelStats, ProviderStats, RequestLog, RequestStatus, StatsSummary, TimeRange};
 use chrono::{DateTime, Duration, Utc};
 use lime_core::ProviderType;
@@ -24,6 +25,8 @@ pub enum LoggerError {
     NotFound(String),
     /// 日志目录创建失败
     DirectoryCreation(String),
+    /// Telemetry DB 写入失败
+    TelemetryStore(String),
 }
 
 impl std::fmt::Display for LoggerError {
@@ -33,6 +36,7 @@ impl std::fmt::Display for LoggerError {
             LoggerError::Serialization(e) => write!(f, "序列化错误: {e}"),
             LoggerError::NotFound(id) => write!(f, "日志未找到: {id}"),
             LoggerError::DirectoryCreation(msg) => write!(f, "日志目录创建失败: {msg}"),
+            LoggerError::TelemetryStore(msg) => write!(f, "Telemetry DB 错误: {msg}"),
         }
     }
 }
@@ -95,11 +99,21 @@ pub struct RequestLogger {
     log_dir: PathBuf,
     /// 当前日志文件路径
     current_log_file: RwLock<Option<PathBuf>>,
+    /// 独立 Telemetry DB（可选，保留文件日志作为迁移源）
+    telemetry_store: Option<TelemetryStore>,
 }
 
 impl RequestLogger {
     /// 创建新的日志记录器
     pub fn new(config: LogRotationConfig) -> Result<Self, LoggerError> {
+        Self::new_with_telemetry_store(config, None)
+    }
+
+    /// 创建新的日志记录器，并可选写入 Telemetry DB
+    pub fn new_with_telemetry_store(
+        config: LogRotationConfig,
+        telemetry_store: Option<TelemetryStore>,
+    ) -> Result<Self, LoggerError> {
         let log_dir = lime_core::app_paths::resolve_request_logs_dir()
             .map_err(LoggerError::DirectoryCreation)?;
 
@@ -108,6 +122,7 @@ impl RequestLogger {
             config,
             log_dir,
             current_log_file: RwLock::new(None),
+            telemetry_store,
         };
 
         // 初始化日志文件
@@ -139,6 +154,12 @@ impl RequestLogger {
         // 写入文件
         if self.config.enable_file_logging {
             self.write_to_file(&log)?;
+        }
+
+        if let Some(store) = &self.telemetry_store {
+            store
+                .upsert_request_log(&log)
+                .map_err(LoggerError::TelemetryStore)?;
         }
 
         Ok(())

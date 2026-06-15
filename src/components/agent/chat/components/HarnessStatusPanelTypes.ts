@@ -20,6 +20,10 @@ import type { HarnessEnvironmentSummary } from "./HarnessActivityTypes";
 import type { HarnessFilePreviewResult } from "./useHarnessPreviewDialog";
 import type { HarnessFileChangeReviewSummary } from "./useHarnessFileReviewState";
 import type { HarnessSectionKey } from "./HarnessStatusSectionFrame";
+import type {
+  ExecutionPolicyFocusContext,
+  ProviderSettingsFocusContext,
+} from "@/types/page";
 
 export type HarnessStatusPanelLayout = "default" | "sidebar" | "dialog";
 
@@ -76,6 +80,10 @@ export interface HarnessStatusPanelProps {
   onPromoteQueuedTurn?: (queuedTurnId: string) => boolean | Promise<boolean>;
   onObjectiveChanged?: () => void | Promise<void>;
   onOpenMemoryWorkbench?: () => void;
+  onManageProviders?: (context?: ProviderSettingsFocusContext) => void;
+  onOpenExecutionPolicySettings?: (
+    context?: ExecutionPolicyFocusContext,
+  ) => void;
   messages?: Message[];
   teamMemorySnapshot?: TeamMemorySnapshot | null;
   diagnosticRuntimeContext?: {

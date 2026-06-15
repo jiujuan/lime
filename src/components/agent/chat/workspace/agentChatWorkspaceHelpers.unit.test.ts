@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { Artifact } from "@/lib/artifact/types";
 import {
   resolveDefaultSelectedArtifact,
+  resolveRuntimeWorkspaceId,
   resolveTaskCenterHomeSurfaceState,
+  shouldAutoRecoverWorkspacePathMissing,
 } from "./agentChatWorkspaceHelpers";
 
 const DOCUMENT_ARTIFACT_TYPE = ("doc" + "ument") as Artifact["type"];
@@ -60,6 +62,55 @@ describe("resolveTaskCenterHomeSurfaceState", () => {
     expect(state.shouldRenderEmbeddedHome).toBe(false);
     expect(state.shouldHideCurrentSessionContent).toBe(false);
     expect(state.sceneSessionId).toBe("new-session");
+  });
+});
+
+describe("resolveRuntimeWorkspaceId", () => {
+  it("应只依赖当前 projectId，不因项目详情或目录健康状态缺失而清空", () => {
+    expect(resolveRuntimeWorkspaceId(" remembered-project ")).toBe(
+      "remembered-project",
+    );
+  });
+
+  it("应拒绝 default/legacy alias，避免把占位项目写入 session", () => {
+    expect(resolveRuntimeWorkspaceId("default")).toBe("");
+    expect(resolveRuntimeWorkspaceId("workspace-default")).toBe("");
+    expect(resolveRuntimeWorkspaceId("")).toBe("");
+  });
+});
+
+describe("shouldAutoRecoverWorkspacePathMissing", () => {
+  it("临时 workspace 发送失败后应允许自动回收默认 workspace", () => {
+    expect(
+      shouldAutoRecoverWorkspacePathMissing(
+        { workspaceType: "temporary" },
+        { content: "继续", images: [] },
+      ),
+    ).toBe(true);
+  });
+
+  it("持久 workspace 路径失败仍应保留手动重新选择目录", () => {
+    expect(
+      shouldAutoRecoverWorkspacePathMissing(
+        { workspaceType: "general" },
+        { content: "继续", images: [] },
+      ),
+    ).toBe(false);
+    expect(
+      shouldAutoRecoverWorkspacePathMissing(
+        { workspaceType: "persistent" },
+        { content: "继续", images: [] },
+      ),
+    ).toBe(false);
+  });
+
+  it("没有发送失败 payload 时不应自动切换 workspace", () => {
+    expect(
+      shouldAutoRecoverWorkspacePathMissing(
+        { workspaceType: "temporary" },
+        false,
+      ),
+    ).toBe(false);
   });
 });
 
@@ -124,10 +175,8 @@ describe("resolveDefaultSelectedArtifact", () => {
     });
 
     expect(
-      resolveDefaultSelectedArtifact("article", [
-        firstArtifact,
-        lastArtifact,
-      ])?.id,
+      resolveDefaultSelectedArtifact("article", [firstArtifact, lastArtifact])
+        ?.id,
     ).toBe("artifact-doc-2");
   });
 });

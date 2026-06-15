@@ -2,35 +2,40 @@ import { Suspense, useEffect } from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentPageParams, Page, PageParams } from "@/types/page";
+import type {
+  AgentPageParams,
+  Page,
+  PageParams,
+  SettingsPageParams,
+} from "@/types/page";
+import { SettingsTabs } from "@/types/settings";
 import { AppPageContent } from "./AppPageContent";
 
-const latestAgentChatProps = vi.hoisted(
-  () => ({ value: null as Record<string, unknown> | null }),
-);
-const agentChatLifecycle = vi.hoisted(
-  () => ({ mounts: 0, unmounts: 0 }),
-);
-const latestSkillsWorkspaceProps = vi.hoisted(
-  () => ({ value: null as Record<string, unknown> | null }),
-);
-const latestMemoryPageProps = vi.hoisted(
-  () => ({ value: null as Record<string, unknown> | null }),
-);
-const latestKnowledgePageProps = vi.hoisted(
-  () => ({ value: null as Record<string, unknown> | null }),
-);
-const latestAgentAppsProps = vi.hoisted(
-  () => ({ value: null as Record<string, unknown> | null }),
-);
-const latestExpertPlazaProps = vi.hoisted(
-  () => ({ value: null as Record<string, unknown> | null }),
-);
+const latestAgentChatProps = vi.hoisted(() => ({
+  value: null as Record<string, unknown> | null,
+}));
+const agentChatLifecycle = vi.hoisted(() => ({ mounts: 0, unmounts: 0 }));
+const latestSkillsWorkspaceProps = vi.hoisted(() => ({
+  value: null as Record<string, unknown> | null,
+}));
+const latestMemoryPageProps = vi.hoisted(() => ({
+  value: null as Record<string, unknown> | null,
+}));
+const latestKnowledgePageProps = vi.hoisted(() => ({
+  value: null as Record<string, unknown> | null,
+}));
+const latestAgentAppsProps = vi.hoisted(() => ({
+  value: null as Record<string, unknown> | null,
+}));
+const latestExpertPlazaProps = vi.hoisted(() => ({
+  value: null as Record<string, unknown> | null,
+}));
+const latestSettingsPageProps = vi.hoisted(() => ({
+  value: null as Record<string, unknown> | null,
+}));
 const agentAppLabLifecycle = vi.hoisted(() => ({ mounts: 0 }));
 const agentAppsLifecycle = vi.hoisted(() => ({ mounts: 0 }));
-const agentAppRuntimeLifecycle = vi.hoisted(
-  () => ({ mounts: 0 }),
-);
+const agentAppRuntimeLifecycle = vi.hoisted(() => ({ mounts: 0 }));
 vi.mock("./agent/chat", () => ({
   AgentChatPage: (props: Record<string, unknown>) => {
     latestAgentChatProps.value = props;
@@ -52,7 +57,10 @@ vi.mock("./channels/ImConfigPage", () => ({
 }));
 
 vi.mock("./settings-v2", () => ({
-  SettingsPageV2: () => <div data-testid="settings-page" />,
+  SettingsPageV2: (props: Record<string, unknown>) => {
+    latestSettingsPageProps.value = props;
+    return <div data-testid="settings-page" />;
+  },
 }));
 
 vi.mock("./automation", () => ({
@@ -200,6 +208,7 @@ describe("AppPageContent", () => {
     latestMemoryPageProps.value = null;
     latestKnowledgePageProps.value = null;
     latestExpertPlazaProps.value = null;
+    latestSettingsPageProps.value = null;
     agentAppLabLifecycle.mounts = 0;
     agentAppsLifecycle.mounts = 0;
   });
@@ -703,6 +712,60 @@ describe("AppPageContent", () => {
     expectTestId(container, "settings-page");
   });
 
+  it("settings 页面应透传 executionPolicyFocus 给设置页", async () => {
+    const pageParams: SettingsPageParams = {
+      tab: SettingsTabs.ExecutionPolicy,
+      executionPolicyFocus: {
+        section: "network",
+        ruleId: "download-block",
+        target: "url",
+        value: "https://example.com/install.sh",
+        reasonCode: "request_download_url",
+      },
+    };
+
+    renderContent("settings", pageParams);
+    await flushEffects();
+
+    expect(latestSettingsPageProps.value).toMatchObject({
+      initialTab: "execution-policy",
+      initialExecutionPolicyFocus: {
+        section: "network",
+        ruleId: "download-block",
+        target: "url",
+        value: "https://example.com/install.sh",
+        reasonCode: "request_download_url",
+      },
+    });
+  });
+
+  it("settings 页面应透传 providerFocus 给设置页", async () => {
+    const pageParams: SettingsPageParams = {
+      tab: SettingsTabs.Providers,
+      providerView: "settings",
+      providerFocus: {
+        providerId: "custom-coder",
+        modelId: "coder-large",
+        reasonCode: "missing_enabled_api_key",
+        recoveryAction: "add_enabled_api_key",
+      },
+    };
+
+    renderContent("settings", pageParams);
+    await flushEffects();
+
+    expect(latestSettingsPageProps.value).toMatchObject({
+      initialTab: "providers",
+      initialProviderView: "settings",
+      initialProviderFocus: {
+        providerId: "custom-coder",
+        modelId: "coder-large",
+        reasonCode: "missing_enabled_api_key",
+        recoveryAction: "add_enabled_api_key",
+      },
+    });
+  });
+
   it("skills 页面应把技能草稿参数透传给 SkillsWorkspacePage", async () => {
     renderContent("skills", {
       initialScaffoldDraft: {
@@ -794,7 +857,9 @@ describe("AppPageContent", () => {
         selectedAgentAppId: "content-factory-app",
       },
     });
-    expect(latestAgentAppsProps.value?.onNavigate).toEqual(expect.any(Function));
+    expect(latestAgentAppsProps.value?.onNavigate).toEqual(
+      expect.any(Function),
+    );
   });
 
   it("agent-app 页面应渲染已安装 App 的独立使用入口", async () => {

@@ -1207,6 +1207,9 @@ export interface AgentTurnConfigSnapshot {
   search_mode?: AgentRuntimeWebSearchMode;
   auto_continue?: AutoContinueRequestPayload;
   system_prompt?: string;
+  expected_output?: unknown;
+  structured_output?: Record<string, unknown>;
+  output_schema?: unknown;
   metadata?: Record<string, unknown>;
 }
 
@@ -1218,6 +1221,9 @@ export interface AgentRuntimeSubmitTurnRequest {
   turn_id?: string;
   images?: ImageInput[];
   turn_config?: AgentTurnConfigSnapshot;
+  expected_output?: unknown;
+  structured_output?: Record<string, unknown>;
+  output_schema?: unknown;
   queue_if_busy?: boolean;
   queued_turn_id?: string;
   skip_pre_submit_resume?: boolean;

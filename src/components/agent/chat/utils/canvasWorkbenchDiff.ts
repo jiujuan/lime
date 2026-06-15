@@ -3,11 +3,15 @@ export type CanvasWorkbenchDiffLineType = "context" | "add" | "remove";
 export interface CanvasWorkbenchDiffLine {
   type: CanvasWorkbenchDiffLineType;
   value: string;
+  oldLineNumber?: number | null;
+  newLineNumber?: number | null;
 }
 
 export interface CanvasWorkbenchOmittedDiffLine {
   type: "omitted";
   count: number;
+  oldLineNumber?: number | null;
+  newLineNumber?: number | null;
 }
 
 export type CanvasWorkbenchDisplayedDiffLine =
@@ -52,6 +56,8 @@ export function buildCanvasWorkbenchDiff(
       diffLines.push({
         type: "context",
         value: previousLines[row],
+        oldLineNumber: row + 1,
+        newLineNumber: col + 1,
       });
       row += 1;
       col += 1;
@@ -62,6 +68,8 @@ export function buildCanvasWorkbenchDiff(
       diffLines.push({
         type: "remove",
         value: previousLines[row],
+        oldLineNumber: row + 1,
+        newLineNumber: null,
       });
       row += 1;
       continue;
@@ -70,6 +78,8 @@ export function buildCanvasWorkbenchDiff(
     diffLines.push({
       type: "add",
       value: currentLines[col],
+      oldLineNumber: null,
+      newLineNumber: col + 1,
     });
     col += 1;
   }
@@ -78,6 +88,8 @@ export function buildCanvasWorkbenchDiff(
     diffLines.push({
       type: "remove",
       value: previousLines[row],
+      oldLineNumber: row + 1,
+      newLineNumber: null,
     });
     row += 1;
   }
@@ -86,6 +98,8 @@ export function buildCanvasWorkbenchDiff(
     diffLines.push({
       type: "add",
       value: currentLines[col],
+      oldLineNumber: null,
+      newLineNumber: col + 1,
     });
     col += 1;
   }
@@ -120,16 +134,27 @@ export function collapseCanvasWorkbenchDiffContext(
 
   const collapsedLines: CanvasWorkbenchDisplayedDiffLine[] = [];
   let omittedCount = 0;
+  let omittedOldLineNumber: number | null | undefined = null;
+  let omittedNewLineNumber: number | null | undefined = null;
   const flushOmitted = () => {
     if (omittedCount > 0) {
-      collapsedLines.push({ type: "omitted", count: omittedCount });
+      collapsedLines.push({
+        type: "omitted",
+        count: omittedCount,
+        oldLineNumber: omittedOldLineNumber,
+        newLineNumber: omittedNewLineNumber,
+      });
       omittedCount = 0;
+      omittedOldLineNumber = null;
+      omittedNewLineNumber = null;
     }
   };
 
   diffLines.forEach((line, index) => {
     if (line.type === "context" && !visibleIndexes.has(index)) {
       omittedCount += 1;
+      omittedOldLineNumber = line.oldLineNumber;
+      omittedNewLineNumber = line.newLineNumber;
       return;
     }
 

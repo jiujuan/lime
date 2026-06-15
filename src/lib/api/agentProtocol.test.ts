@@ -847,6 +847,24 @@ describe("agentProtocol", () => {
     expect(
       parseAgentEvent({
         type: "routing_fallback_applied",
+        fallbackApplied: true,
+        requestedSelection: {
+          provider: "custom-coding",
+          model: "coder-large",
+          source: "profile_model_slot",
+        },
+        routingAttempts: [
+          {
+            slot: "coding",
+            provider: "custom-coding",
+            model: "coder-large",
+            source: "profile_model_slot",
+            providerReadiness: {
+              status: "needs_setup",
+              reasonCode: "missing_enabled_api_key",
+            },
+          },
+        ],
         routing_decision: {
           routingMode: "single_candidate",
           decisionSource: "runtime_fallback",
@@ -867,6 +885,24 @@ describe("agentProtocol", () => {
         selectedModel: "claude-3-5-haiku",
         candidateCount: 1,
         fallbackChain: ["service_models.translation -> session_default"],
+        fallbackApplied: true,
+        requestedSelection: {
+          provider: "custom-coding",
+          model: "coder-large",
+          source: "profile_model_slot",
+        },
+        routingAttempts: [
+          {
+            slot: "coding",
+            provider: "custom-coding",
+            model: "coder-large",
+            source: "profile_model_slot",
+            providerReadiness: {
+              status: "needs_setup",
+              reasonCode: "missing_enabled_api_key",
+            },
+          },
+        ],
       },
     });
 

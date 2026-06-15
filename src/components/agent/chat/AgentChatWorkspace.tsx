@@ -34,6 +34,7 @@ import { useGlobalMediaGenerationDefaults } from "@/hooks/useGlobalMediaGenerati
 import { useServiceModelsConfig } from "@/hooks/useServiceModelsConfig";
 import { useSoulArtifactVoiceGenerationBrief } from "@/hooks/useSoulArtifactVoiceGenerationBrief";
 import { useTrayModelShortcuts } from "./hooks/useTrayModelShortcuts";
+import { SettingsTabs } from "@/types/settings";
 import {
   type CanvasWorkbenchBrowserOpenRequest,
   type CanvasWorkbenchLayoutMode,
@@ -101,6 +102,7 @@ import type { TaskCenterDraftSendRequest } from "./homePendingPreview";
 
 import type {
   Message,
+  MessageImage,
   MessagePathReference,
   MessagePreviewTarget,
   SiteSavedContentTarget,
@@ -313,7 +315,11 @@ import {
   projectTypeToTheme,
 } from "./agentChatWorkspaceShared";
 import type { AgentChatWorkspaceProps } from "./agentChatWorkspaceContract";
-import type { AgentInitialInputCapabilityParams } from "@/types/page";
+import type {
+  AgentInitialInputCapabilityParams,
+  ExecutionPolicyFocusContext,
+  ProviderSettingsFocusContext,
+} from "@/types/page";
 import { extractCreationReplayMetadata } from "./utils/creationReplayMetadata";
 import { buildCreationReplaySurfaceModel } from "./utils/creationReplaySurface";
 import {
@@ -370,11 +376,13 @@ import {
   normalizeVideoAspectRatio,
   normalizeVideoResolution,
   resolveDefaultSelectedArtifact,
+  resolveRuntimeWorkspaceId,
   resolveTaskCenterDraftSendTitle,
   resolveTaskCenterHomeSurfaceState,
   resolveTaskPreviewArtifact,
   resolveVideoCanvasStatusFromPreview,
   saveFileManagerSidebarOpen,
+  shouldAutoRecoverWorkspacePathMissing,
   type TaskCenterDraftTab,
 } from "./workspace/agentChatWorkspaceHelpers";
 import {
@@ -387,6 +395,13 @@ export type {
   AgentChatWorkspaceProps,
   WorkflowProgressSnapshot,
 } from "./agentChatWorkspaceContract";
+
+interface PendingWorkspacePathRetry {
+  targetWorkspaceId: string;
+  content: string;
+  images: MessageImage[];
+  recoveryKey: string;
+}
 
 export function AgentChatWorkspace({
   onNavigate: _onNavigate,
@@ -536,7 +551,6 @@ export function AgentChatWorkspace({
     useState(false);
   const {
     projectId,
-    projectSelectionSource,
     shouldDisableSessionRestore,
     hasHandledNewChatRequest,
     markNewChatRequestHandled,
@@ -1000,6 +1014,10 @@ export function AgentChatWorkspace({
   const [projectMemory, setProjectMemory] = useState<ProjectMemory | null>(
     null,
   );
+  const pendingWorkspacePathRetryRef = useRef<PendingWorkspacePathRetry | null>(
+    null,
+  );
+  const workspacePathAutoRecoveryKeyRef = useRef<string | null>(null);
   const currentOpenedProjectSummary =
     normalizeProjectId(project?.id) === normalizeProjectId(projectId)
       ? project
@@ -1050,12 +1068,13 @@ export function AgentChatWorkspace({
     },
     [applyProjectSelection, openedProjects, projectId],
   );
-  const runtimeWorkspaceId =
-    projectSelectionSource === "remembered" &&
-    taskCenterWorkspaceId &&
-    normalizeProjectId(project?.id) !== taskCenterWorkspaceId
-      ? ""
-      : (taskCenterWorkspaceId ?? "");
+  const validatedRuntimeProjectId =
+    normalizeProjectId(project?.id) === normalizeProjectId(projectId)
+      ? projectId
+      : undefined;
+  const runtimeWorkspaceId = resolveRuntimeWorkspaceId(
+    validatedRuntimeProjectId,
+  );
   const { workspaceHarnessEnabled } = useDeveloperFeatureFlags();
   const { mediaDefaults, loading: mediaDefaultsLoading } =
     useGlobalMediaGenerationDefaults();
@@ -3562,7 +3581,7 @@ export function AgentChatWorkspace({
   });
 
   const { switchTopic } = useWorkspaceTopicSwitch({
-    projectId,
+    projectId: validatedRuntimeProjectId,
     externalProjectId,
     originalSwitchTopic,
     onBeforeTopicSwitch: deferSessionRecentMetadataSyncForNavigation,
@@ -3943,6 +3962,132 @@ export function AgentChatWorkspace({
     ensureSessionForCommandMetadata: ensureSession,
     resolveImageWorkbenchSkillRequest,
   });
+  useEffect(() => {
+    if (!workspacePathMissing || typeof workspacePathMissing === "boolean") {
+      return;
+    }
+    if (
+      !shouldAutoRecoverWorkspacePathMissing(project, workspacePathMissing) ||
+      pendingWorkspacePathRetryRef.current
+    ) {
+      return;
+    }
+
+    const sourceWorkspaceId = normalizeProjectId(project?.id);
+    if (!sourceWorkspaceId) {
+      return;
+    }
+
+    const recoveryKey = [
+      sourceWorkspaceId,
+      workspacePathMissing.content,
+      workspacePathMissing.images.length,
+    ].join(":");
+    if (workspacePathAutoRecoveryKeyRef.current === recoveryKey) {
+      return;
+    }
+    workspacePathAutoRecoveryKeyRef.current = recoveryKey;
+
+    let cancelled = false;
+
+    void (async () => {
+      const defaultProject = await getOrCreateDefaultProject();
+      const targetWorkspaceId = normalizeProjectId(defaultProject?.id);
+      if (!targetWorkspaceId || targetWorkspaceId === sourceWorkspaceId) {
+        throw new Error("no alternate default workspace available");
+      }
+
+      let resolvedRootPath = defaultProject.rootPath;
+      try {
+        const ensuredWorkspace = await ensureWorkspaceReady(targetWorkspaceId);
+        resolvedRootPath = ensuredWorkspace.rootPath || resolvedRootPath;
+      } catch (error) {
+        logAgentDebug(
+          "AgentChatPage",
+          "workspacePathAutoRecovery.ensureDefaultWorkspaceReadyError",
+          {
+            error,
+            projectId: targetWorkspaceId,
+          },
+          { level: "warn" },
+        );
+      }
+
+      if (cancelled) {
+        return;
+      }
+
+      pendingWorkspacePathRetryRef.current = {
+        targetWorkspaceId,
+        content: workspacePathMissing.content,
+        images: workspacePathMissing.images,
+        recoveryKey,
+      };
+      dismissWorkspacePathError();
+      applyProjectSelection(targetWorkspaceId);
+      setProject((current) =>
+        current?.id === targetWorkspaceId &&
+        current.rootPath === resolvedRootPath
+          ? current
+          : {
+              ...defaultProject,
+              rootPath: resolvedRootPath,
+            },
+      );
+      setWorkspaceHealthError(false);
+      logAgentDebug("AgentChatPage", "workspacePathAutoRecovery.switched", {
+        sourceWorkspaceId,
+        targetWorkspaceId,
+        rootPath: resolvedRootPath,
+      });
+    })().catch((error) => {
+      if (cancelled) {
+        return;
+      }
+      workspacePathAutoRecoveryKeyRef.current = null;
+      logAgentDebug(
+        "AgentChatPage",
+        "workspacePathAutoRecovery.error",
+        {
+          error,
+          projectId: sourceWorkspaceId,
+        },
+        { level: "warn" },
+      );
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    applyProjectSelection,
+    dismissWorkspacePathError,
+    project,
+    workspacePathMissing,
+  ]);
+  useEffect(() => {
+    const pendingRetry = pendingWorkspacePathRetryRef.current;
+    if (!pendingRetry) {
+      return;
+    }
+
+    const normalizedProjectId = normalizeProjectId(projectId);
+    if (normalizedProjectId !== pendingRetry.targetWorkspaceId) {
+      return;
+    }
+
+    pendingWorkspacePathRetryRef.current = null;
+    logAgentDebug("AgentChatPage", "workspacePathAutoRecovery.retrySend", {
+      projectId: normalizedProjectId,
+      recoveryKey: pendingRetry.recoveryKey,
+    });
+    void handleSendRef.current(
+      pendingRetry.images,
+      undefined,
+      undefined,
+      pendingRetry.content,
+    );
+  }, [handleSendRef, projectId]);
   useEffect(() => {
     sceneGateResumeHandlerRef.current = async ({ rawText, requestMetadata }) =>
       await handleSendRef.current(
@@ -6082,6 +6227,25 @@ export function AgentChatWorkspace({
     },
     [handleSendRef],
   );
+  const handleManageProvidersFromHarness = useCallback(
+    (focus?: ProviderSettingsFocusContext) => {
+      _onNavigate?.("settings", {
+        tab: SettingsTabs.Providers,
+        providerView: "settings",
+        ...(focus ? { providerFocus: focus } : {}),
+      });
+    },
+    [_onNavigate],
+  );
+  const handleOpenExecutionPolicySettingsFromHarness = useCallback(
+    (focus?: ExecutionPolicyFocusContext) => {
+      _onNavigate?.("settings", {
+        tab: SettingsTabs.ExecutionPolicy,
+        ...(focus ? { executionPolicyFocus: focus } : {}),
+      });
+    },
+    [_onNavigate],
+  );
   const effectiveInitialInputCapability = useMemo(
     () =>
       resolveEffectiveInitialInputCapability({
@@ -6130,6 +6294,10 @@ export function AgentChatWorkspace({
       onObjectiveChanged={async () => {
         await refreshSessionReadModel(sessionId || undefined);
       }}
+      onManageProviders={handleManageProvidersFromHarness}
+      onOpenExecutionPolicySettings={
+        handleOpenExecutionPolicySettingsFromHarness
+      }
       messages={displayMessages}
       diagnosticRuntimeContext={{
         sessionId: sessionId || null,

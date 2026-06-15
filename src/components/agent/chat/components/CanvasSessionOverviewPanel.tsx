@@ -17,18 +17,11 @@ import { Badge } from "@/components/ui/badge";
 import { formatDate, formatNumber } from "@/i18n/format";
 import { cn } from "@/lib/utils";
 import type { QueuedTurnSnapshot } from "@/lib/api/agentRuntime";
-import type {
-  ActionRequired,
-  AgentThreadItem,
-  AgentThreadTurn,
-} from "../types";
-import { sortThreadItems } from "../utils/threadTimelineView";
-import { extractFileNameFromPath } from "../workspace/workspacePath";
-import { resolveAgentRuntimeErrorPresentation } from "../utils/agentRuntimeErrorPresentation";
+import type { ActionRequired, AgentThreadTurn } from "../types";
 
 interface CanvasSessionOverviewPanelProps {
   turns: readonly AgentThreadTurn[];
-  threadItems: readonly AgentThreadItem[];
+  activityItems?: readonly CanvasSessionOverviewActivity[];
   currentTurnId?: string | null;
   pendingActions?: readonly ActionRequired[];
   queuedTurns?: readonly QueuedTurnSnapshot[];
@@ -38,11 +31,34 @@ interface CanvasSessionOverviewPanelProps {
 
 type SessionStatusTone = "default" | "accent" | "success";
 type AgentTranslate = TFunction<"agent", undefined>;
+type CanvasSessionOverviewActivityStatus =
+  | "completed"
+  | "failed"
+  | "in_progress";
+export type CanvasSessionOverviewActivityIcon =
+  | "sparkles"
+  | "listChecks"
+  | "fileText"
+  | "shieldAlert"
+  | "alertTriangle"
+  | "bot"
+  | "search"
+  | "clock";
+
+export interface CanvasSessionOverviewActivity {
+  id: string;
+  title: string;
+  summary: string;
+  status: CanvasSessionOverviewActivityStatus;
+  updatedAt?: string | null;
+  icon?: CanvasSessionOverviewActivityIcon;
+}
 
 interface SessionActivityView {
   id: string;
   title: string;
   summary: string;
+  status: CanvasSessionOverviewActivityStatus;
   timeLabel: string | null;
   statusLabel: string;
   tone: SessionStatusTone;
@@ -71,14 +87,6 @@ function shortenText(value?: string | null, maxLength = 120): string {
     return normalized;
   }
   return `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
-}
-
-function resolveUserFacingErrorSummary(value?: string | null): string {
-  const normalized = (value || "").trim();
-  if (!normalized) {
-    return "";
-  }
-  return resolveAgentRuntimeErrorPresentation(normalized).displayMessage;
 }
 
 function formatTimeLabel(
@@ -134,20 +142,20 @@ function resolveTurnStatusLabel(
   };
 }
 
-function resolveItemStatusLabel(
-  item: AgentThreadItem,
+function resolveActivityStatusLabel(
+  status: CanvasSessionOverviewActivityStatus,
   t: AgentTranslate,
 ): {
   label: string;
   tone: SessionStatusTone;
 } {
-  if (item.status === "in_progress") {
+  if (status === "in_progress") {
     return {
       label: t("agentChat.sessionOverview.status.item.inProgress"),
       tone: "accent",
     };
   }
-  if (item.status === "failed") {
+  if (status === "failed") {
     return {
       label: t("agentChat.sessionOverview.status.item.failed"),
       tone: "default",
@@ -156,6 +164,56 @@ function resolveItemStatusLabel(
   return {
     label: t("agentChat.sessionOverview.status.item.completed"),
     tone: "success",
+  };
+}
+
+function resolveActivityIcon(
+  icon: CanvasSessionOverviewActivityIcon | undefined,
+): {
+  icon: typeof Sparkles;
+  iconClassName: string;
+} {
+  switch (icon) {
+    case "listChecks":
+      return { icon: ListChecks, iconClassName: "text-slate-600" };
+    case "fileText":
+      return { icon: FileText, iconClassName: "text-emerald-600" };
+    case "shieldAlert":
+      return { icon: ShieldAlert, iconClassName: "text-amber-600" };
+    case "alertTriangle":
+      return { icon: AlertTriangle, iconClassName: "text-amber-600" };
+    case "bot":
+      return { icon: Bot, iconClassName: "text-sky-700" };
+    case "search":
+      return { icon: Search, iconClassName: "text-sky-600" };
+    case "clock":
+      return { icon: Clock3, iconClassName: "text-slate-500" };
+    case "sparkles":
+    default:
+      return { icon: Sparkles, iconClassName: "text-sky-600" };
+  }
+}
+
+function buildProjectedActivityView(
+  item: CanvasSessionOverviewActivity,
+  t: AgentTranslate,
+  locale: string,
+): SessionActivityView {
+  const { label: statusLabel, tone } = resolveActivityStatusLabel(
+    item.status,
+    t,
+  );
+  const icon = resolveActivityIcon(item.icon);
+  return {
+    id: item.id,
+    title: item.title,
+    summary: shortenText(item.summary, 100) || item.title,
+    status: item.status,
+    timeLabel: formatTimeLabel(item.updatedAt, locale),
+    statusLabel,
+    tone,
+    icon: icon.icon,
+    iconClassName: icon.iconClassName,
   };
 }
 
@@ -178,209 +236,9 @@ function resolvePendingActionPreview(action: ActionRequired): string {
   return action.requestId;
 }
 
-function buildActivityView(
-  item: AgentThreadItem,
-  t: AgentTranslate,
-  locale: string,
-): SessionActivityView | null {
-  const { label: statusLabel, tone } = resolveItemStatusLabel(item, t);
-  const timeLabel = formatTimeLabel(
-    item.updated_at || item.completed_at || item.started_at,
-    locale,
-  );
-
-  switch (item.type) {
-    case "tool_call":
-      return {
-        id: item.id,
-        title: t("agentChat.sessionOverview.activity.toolCall.title"),
-        summary:
-          shortenText(resolveUserFacingErrorSummary(item.error), 100) ||
-          shortenText(item.output, 100) ||
-          t("agentChat.sessionOverview.activity.toolCall.summaryFallback"),
-        timeLabel,
-        statusLabel,
-        tone,
-        icon: Sparkles,
-        iconClassName: "text-sky-600",
-      };
-    case "command_execution":
-      return {
-        id: item.id,
-        title: t("agentChat.sessionOverview.activity.command.title"),
-        summary:
-          shortenText(resolveUserFacingErrorSummary(item.error), 100) ||
-          shortenText(item.aggregated_output, 100) ||
-          t("agentChat.sessionOverview.activity.command.summaryFallback"),
-        timeLabel,
-        statusLabel,
-        tone,
-        icon: ListChecks,
-        iconClassName: "text-slate-600",
-      };
-    case "web_search":
-      return {
-        id: item.id,
-        title: t("agentChat.sessionOverview.activity.webSearch.title"),
-        summary:
-          shortenText(item.query, 100) ||
-          shortenText(item.output, 100) ||
-          t("agentChat.sessionOverview.activity.webSearch.summaryFallback"),
-        timeLabel,
-        statusLabel,
-        tone,
-        icon: Search,
-        iconClassName: "text-sky-600",
-      };
-    case "request_user_input":
-      return {
-        id: item.id,
-        title: t("agentChat.sessionOverview.activity.requestInput.title"),
-        summary:
-          shortenText(item.prompt, 100) ||
-          shortenText(item.questions?.[0]?.question, 100) ||
-          t("agentChat.sessionOverview.activity.requestInput.summaryFallback"),
-        timeLabel,
-        statusLabel,
-        tone,
-        icon: ShieldAlert,
-        iconClassName: "text-amber-600",
-      };
-    case "approval_request":
-      return {
-        id: item.id,
-        title: t("agentChat.sessionOverview.activity.approval.title"),
-        summary:
-          shortenText(item.prompt, 100) ||
-          shortenText(item.tool_name, 100) ||
-          t("agentChat.sessionOverview.activity.approval.summaryFallback"),
-        timeLabel,
-        statusLabel,
-        tone,
-        icon: ShieldAlert,
-        iconClassName: "text-amber-600",
-      };
-    case "file_artifact":
-      return {
-        id: item.id,
-        title: t("agentChat.sessionOverview.activity.fileArtifact.title"),
-        summary:
-          shortenText(extractFileNameFromPath(item.path) || item.path, 100) ||
-          t("agentChat.sessionOverview.activity.fileArtifact.summaryFallback"),
-        timeLabel,
-        statusLabel,
-        tone,
-        icon: FileText,
-        iconClassName: "text-emerald-600",
-      };
-    case "subagent_activity":
-      return {
-        id: item.id,
-        title:
-          item.title?.trim() ||
-          t("agentChat.sessionOverview.activity.subagent.title"),
-        summary:
-          shortenText(item.summary, 100) ||
-          shortenText(item.role, 100) ||
-          shortenText(item.model, 100) ||
-          t("agentChat.sessionOverview.activity.subagent.summaryFallback"),
-        timeLabel,
-        statusLabel,
-        tone,
-        icon: Bot,
-        iconClassName: "text-sky-700",
-      };
-    case "warning":
-      return {
-        id: item.id,
-        title: t("agentChat.sessionOverview.activity.warning.title"),
-        summary:
-          shortenText(item.message, 100) ||
-          t("agentChat.sessionOverview.activity.warning.summaryFallback"),
-        timeLabel,
-        statusLabel,
-        tone: "default",
-        icon: AlertTriangle,
-        iconClassName: "text-amber-600",
-      };
-    case "error":
-      return {
-        id: item.id,
-        title: t("agentChat.sessionOverview.activity.error.title"),
-        summary:
-          shortenText(resolveUserFacingErrorSummary(item.message), 100) ||
-          t("agentChat.sessionOverview.activity.error.summaryFallback"),
-        timeLabel,
-        statusLabel,
-        tone: "default",
-        icon: AlertTriangle,
-        iconClassName: "text-rose-600",
-      };
-    case "context_compaction":
-      return {
-        id: item.id,
-        title:
-          item.stage === "started"
-            ? t("agentChat.sessionOverview.activity.compaction.started")
-            : t("agentChat.sessionOverview.activity.compaction.completed"),
-        summary:
-          shortenText(item.detail, 100) ||
-          shortenText(item.trigger, 100) ||
-          t("agentChat.sessionOverview.activity.compaction.summaryFallback"),
-        timeLabel,
-        statusLabel,
-        tone,
-        icon: Clock3,
-        iconClassName: "text-slate-500",
-      };
-    case "reasoning":
-      return {
-        id: item.id,
-        title: t("agentChat.sessionOverview.activity.reasoning.title"),
-        summary:
-          shortenText(item.summary?.join(" "), 100) ||
-          shortenText(item.text, 100) ||
-          t("agentChat.sessionOverview.activity.reasoning.summaryFallback"),
-        timeLabel,
-        statusLabel,
-        tone,
-        icon: Sparkles,
-        iconClassName: "text-violet-600",
-      };
-    case "plan":
-      return {
-        id: item.id,
-        title: t("agentChat.sessionOverview.activity.plan.title"),
-        summary:
-          shortenText(item.text, 100) ||
-          t("agentChat.sessionOverview.activity.plan.summaryFallback"),
-        timeLabel,
-        statusLabel,
-        tone,
-        icon: ListChecks,
-        iconClassName: "text-slate-600",
-      };
-    case "turn_summary":
-      return {
-        id: item.id,
-        title: t("agentChat.sessionOverview.activity.turnSummary.title"),
-        summary:
-          shortenText(item.text, 100) ||
-          t("agentChat.sessionOverview.activity.turnSummary.summaryFallback"),
-        timeLabel,
-        statusLabel,
-        tone,
-        icon: ListChecks,
-        iconClassName: "text-slate-600",
-      };
-    default:
-      return null;
-  }
-}
-
 export function CanvasSessionOverviewPanel({
   turns,
-  threadItems,
+  activityItems = [],
   currentTurnId = null,
   pendingActions = [],
   queuedTurns = [],
@@ -389,9 +247,9 @@ export function CanvasSessionOverviewPanel({
 }: CanvasSessionOverviewPanelProps) {
   const { i18n, t } = useTranslation("agent");
   const locale = i18n.language;
-  const sortedItems = sortThreadItems(threadItems).filter(
-    (item) => item.type !== "user_message" && item.type !== "agent_message",
-  );
+  const projectedActivityInProgressCount = activityItems.filter(
+    (item) => item.status === "in_progress",
+  ).length;
 
   const currentTurn =
     turns.find((turn) => turn.id === currentTurnId) || turns.at(-1) || null;
@@ -399,12 +257,8 @@ export function CanvasSessionOverviewPanel({
     isSending ? "running" : currentTurn?.status,
     t,
   );
-  const inProgressCount = sortedItems.filter(
-    (item) => item.status === "in_progress",
-  ).length;
-  const recentActivity = sortedItems
-    .map((item) => buildActivityView(item, t, locale))
-    .filter((item): item is SessionActivityView => Boolean(item))
+  const recentActivity = activityItems
+    .map((item) => buildProjectedActivityView(item, t, locale))
     .slice(-8)
     .reverse();
   const latestTurnPrompt =
@@ -421,7 +275,10 @@ export function CanvasSessionOverviewPanel({
     recentActivity[0] ||
     null;
   const summaryMetrics = useMemo(() => {
-    const formattedInProgressCount = formatNumber(inProgressCount, { locale });
+    const formattedInProgressCount = formatNumber(
+      projectedActivityInProgressCount,
+      { locale },
+    );
     const formattedProgressCount = formatNumber(recentActivity.length, {
       locale,
     });
@@ -442,7 +299,7 @@ export function CanvasSessionOverviewPanel({
               })
             : t("agentChat.sessionOverview.metrics.noFollowUp"),
       progress:
-        inProgressCount > 0
+        projectedActivityInProgressCount > 0
           ? t("agentChat.sessionOverview.metrics.inProgress", {
               countLabel: formattedInProgressCount,
             })
@@ -451,11 +308,11 @@ export function CanvasSessionOverviewPanel({
             }),
     };
   }, [
-    inProgressCount,
     locale,
     pendingActions.length,
     queuedTurns.length,
     recentActivity.length,
+    projectedActivityInProgressCount,
     t,
   ]);
 

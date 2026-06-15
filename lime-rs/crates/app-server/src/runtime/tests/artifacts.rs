@@ -5,7 +5,10 @@ use std::fs;
 
 #[tokio::test]
 async fn read_artifacts_indexes_latest_artifact_events_for_session() {
-    let core = RuntimeCore::default();
+    let sidecar_root = tempfile::tempdir().expect("sidecar root");
+    let core = RuntimeCore::default().with_sidecar_store(Arc::new(
+        SidecarStore::new(sidecar_root.path()).expect("sidecar store"),
+    ));
     core.start_session(AgentSessionStartParams {
         session_id: Some("sess_artifacts".to_string()),
         thread_id: Some("thread_artifacts".to_string()),
@@ -101,6 +104,18 @@ async fn read_artifacts_indexes_latest_artifact_events_for_session() {
         response.artifacts[0].content_status,
         ArtifactContentStatus::NotRequested
     );
+    assert!(response.artifacts[0]
+        .metadata
+        .as_ref()
+        .and_then(|metadata| metadata.get("content"))
+        .is_none());
+    assert!(response.artifacts[0]
+        .metadata
+        .as_ref()
+        .and_then(|metadata| metadata.get("sidecarRef"))
+        .and_then(|sidecar_ref| sidecar_ref.get("sha256"))
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|value| value.starts_with("sha256:")));
 
     let filtered = core
         .read_artifacts(ArtifactReadParams {
@@ -128,6 +143,23 @@ async fn read_artifacts_indexes_latest_artifact_events_for_session() {
         filtered.artifacts[0].content_status,
         ArtifactContentStatus::Unavailable
     );
+
+    let outline = core
+        .read_artifacts(ArtifactReadParams {
+            session_id: "sess_artifacts".to_string(),
+            turn_id: None,
+            artifact_ref: Some("artifact-outline".to_string()),
+            include_content: Some(true),
+            cursor: None,
+            limit: None,
+        })
+        .expect("outline artifact");
+    assert_eq!(outline.artifacts.len(), 1);
+    assert_eq!(outline.artifacts[0].content.as_deref(), Some("# Outline"));
+    assert_eq!(
+        outline.artifacts[0].content_status,
+        ArtifactContentStatus::Available
+    );
 }
 
 #[test]
@@ -144,11 +176,15 @@ fn read_artifacts_uses_injected_content_provider_for_current_page() {
         }
     }
 
+    let sidecar_root = tempfile::tempdir().expect("sidecar root");
     let core = RuntimeCore::with_backend_capability_source_and_artifact_content_provider(
         Arc::new(MockBackend),
         Arc::new(CapabilityInventorySource::default()),
         Arc::new(TestArtifactContentProvider),
-    );
+    )
+    .with_sidecar_store(Arc::new(
+        SidecarStore::new(sidecar_root.path()).expect("sidecar store"),
+    ));
     core.start_session(AgentSessionStartParams {
         session_id: Some("sess_content".to_string()),
         thread_id: None,
@@ -200,12 +236,24 @@ fn read_artifacts_uses_injected_content_provider_for_current_page() {
         .expect("read content");
     assert_eq!(
         with_content.artifacts[0].content.as_deref(),
-        Some("content-studio:artifact-provider")
+        Some("inline content")
     );
     assert_eq!(
         with_content.artifacts[0].content_status,
         ArtifactContentStatus::Available
     );
+    assert!(with_content.artifacts[0]
+        .metadata
+        .as_ref()
+        .and_then(|metadata| metadata.get("content"))
+        .is_none());
+    assert!(with_content.artifacts[0]
+        .metadata
+        .as_ref()
+        .and_then(|metadata| metadata.get("sidecarRef"))
+        .and_then(|sidecar_ref| sidecar_ref.get("sha256"))
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|value| value.starts_with("sha256:")));
 }
 
 #[test]

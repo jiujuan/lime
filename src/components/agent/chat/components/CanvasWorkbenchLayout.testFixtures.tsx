@@ -351,6 +351,7 @@ vi.mock("react-i18next", () => ({
           "已刷新变更",
         "agentChat.canvasWorkbench.coding.changes.toast.refreshFailed":
           "刷新变更失败",
+        "agentChat.canvasWorkbench.coding.changes.submit": "提交",
         "agentChat.canvasWorkbench.coding.outputs.empty":
           "本轮还没有可展示的输出。",
         "agentChat.canvasWorkbench.coding.logs.empty":

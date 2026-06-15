@@ -107,7 +107,7 @@ async fn append_external_runtime_events_keeps_sequence_and_turn_scope() {
         .expect("append");
 
     assert_eq!(appended.len(), 1);
-    assert_eq!(appended[0].sequence, 2);
+    assert_eq!(appended[0].sequence, 3);
     assert_eq!(appended[0].session_id, "sess_external");
     assert_eq!(appended[0].thread_id.as_deref(), Some("thread_external"));
     assert_eq!(appended[0].turn_id.as_deref(), Some(turn_id.as_str()));
@@ -160,8 +160,8 @@ async fn append_external_runtime_events_keeps_text_delta_fast_path_and_terminal_
         .append_external_runtime_events(&session.session_id, Some(&turn_id), text_events)
         .expect("append text deltas");
     assert_eq!(appended.len(), 128);
-    assert_eq!(appended[0].sequence, 2);
-    assert_eq!(appended[127].sequence, 129);
+    assert_eq!(appended[0].sequence, 3);
+    assert_eq!(appended[127].sequence, 130);
 
     core.append_external_runtime_events(
         &session.session_id,

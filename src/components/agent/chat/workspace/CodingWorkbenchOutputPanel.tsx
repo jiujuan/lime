@@ -5,7 +5,10 @@ import type { ActionRequired, ConfirmResponse } from "../types";
 import { CodingWorkbenchActionPanel } from "./CodingWorkbenchActionPanel";
 import { CodingWorkbenchDiagnosticPanel } from "./CodingWorkbenchDiagnosticPanel";
 import { CodingWorkbenchRecoveryPanel } from "./CodingWorkbenchRecoveryPanel";
-import { buildCodingWorkbenchRecoveryView } from "./codingWorkbenchRecovery";
+import {
+  buildCodingWorkbenchRecoveryView,
+  type CodingWorkbenchRecoveryContext,
+} from "./codingWorkbenchRecovery";
 import { CodingStatusBadge } from "./codingWorkbenchStatus";
 import { statusLabelKey } from "./codingWorkbenchStatusModel";
 
@@ -16,6 +19,7 @@ interface CodingWorkbenchOutputPanelProps {
   onRespondToAction?: (response: ConfirmResponse) => void | Promise<void>;
   onSubmitRecoveryPrompt?: (
     prompt: string,
+    context?: CodingWorkbenchRecoveryContext,
   ) => void | Promise<boolean> | boolean;
 }
 
@@ -107,8 +111,18 @@ export function CodingWorkbenchOutputPanel({
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="truncate font-mono text-sm text-slate-900">
-                        {command.command || command.title}
+                        {command.commandSummary ||
+                          command.canonicalCommand ||
+                          command.command ||
+                          command.title}
                       </div>
+                      {command.command &&
+                      command.command !== command.commandSummary &&
+                      command.command !== command.canonicalCommand ? (
+                        <div className="mt-1 truncate text-xs text-slate-500">
+                          {command.command}
+                        </div>
+                      ) : null}
                       {command.cwd ? (
                         <div className="mt-1 truncate text-xs text-slate-500">
                           {command.cwd}
@@ -149,7 +163,7 @@ export function CodingWorkbenchOutputPanel({
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="truncate text-sm font-medium text-slate-900">
-                        {test.suite || test.title}
+                        {test.commandSummary || test.canonicalCommand || test.suite || test.title}
                       </div>
                       <div className="mt-1 text-xs text-slate-500">
                         {t(

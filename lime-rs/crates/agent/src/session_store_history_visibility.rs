@@ -102,26 +102,3 @@ pub(super) fn load_user_visible_message_flags_from_conn(
         }
     }
 }
-
-pub(super) fn load_chat_user_visible_message_flags_from_conn(
-    conn: &rusqlite::Connection,
-    session_id: &str,
-) -> Result<Vec<bool>, String> {
-    let visibility_projection = user_visible_projection_sql();
-    let sql = format!(
-        "SELECT {visibility_projection} AS user_visible
-         FROM agent_messages
-         WHERE session_id = ?1 AND role IN ('user', 'assistant')
-         ORDER BY id ASC"
-    );
-    let mut stmt = conn
-        .prepare(&sql)
-        .map_err(|e| format!("准备聊天消息可见性查询失败: {e}"))?;
-
-    let rows = stmt
-        .query_map(rusqlite::params![session_id], map_user_visible_flag_row)
-        .map_err(|e| format!("查询聊天消息可见性失败: {e}"))?;
-
-    rows.collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("读取聊天消息可见性失败: {e}"))
-}
