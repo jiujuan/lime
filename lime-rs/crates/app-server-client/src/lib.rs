@@ -2291,6 +2291,7 @@ mod tests {
                 include_archived: Some(true),
                 archived_only: Some(false),
                 workspace_id: Some("workspace-main".to_string()),
+                cwd: None,
                 limit: Some(50),
             })
             .expect("request");

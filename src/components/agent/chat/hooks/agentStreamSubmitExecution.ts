@@ -200,11 +200,16 @@ export async function executeAgentStreamSubmit(
     performanceTrace,
     activateStream: callbacks.activateStream,
   });
+  const resolvedActiveSessionId = activeSessionId?.trim();
+  if (!resolvedActiveSessionId) {
+    throw new Error("缺少会话 ID，无法启动流式任务");
+  }
   const preserveAssistantContent =
     assistantDraft?.preserveContent === true
       ? assistantDraft.content?.trim() || null
       : null;
   const assistantFallbackContent = assistantDraft?.fallbackContent?.trim() || null;
+  const eventBindingWorkspaceId = resolvedWorkspaceId ?? "";
 
   const unlisten = await registerAgentStreamTurnEventBinding({
     runtime,
@@ -221,8 +226,8 @@ export async function executeAgentStreamSubmit(
     webSearch,
     autoContinue,
     expectingQueue,
-    activeSessionId,
-    resolvedWorkspaceId,
+    activeSessionId: resolvedActiveSessionId,
+    resolvedWorkspaceId: eventBindingWorkspaceId,
     assistantMsgId,
     pendingTurnKey,
     pendingItemKey,
@@ -261,7 +266,7 @@ export async function executeAgentStreamSubmit(
   callbacks.registerListener(unlisten);
 
   await runAgentStreamSubmitLifecycle({
-    activeSessionId,
+    activeSessionId: resolvedActiveSessionId,
     effectiveModel,
     effectiveProviderType,
     eventName,
@@ -272,7 +277,7 @@ export async function executeAgentStreamSubmit(
         buildAgentStreamSubmitOp({
           content,
           images,
-          activeSessionId,
+          activeSessionId: resolvedActiveSessionId,
           eventName,
           submitWorkspaceId,
           requestTurnId,
