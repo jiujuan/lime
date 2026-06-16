@@ -246,7 +246,6 @@ export function useTaskCenterTopicNavigationRuntime({
       taskCenterDetachedTopicId,
       taskCenterDraftSurfaceActiveRef,
       taskCenterOpenTabIdsRef,
-      taskCenterWorkspaceId,
       topicById,
       upsertTaskCenterOpenTab,
     ],

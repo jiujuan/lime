@@ -112,6 +112,7 @@ export function useWorkspaceProjectSelection(
   }, [
     loadInitialSessionProjectId,
     loadRememberedProjectId,
+    normalizedInitialSessionId,
     shouldStartDetachedNewChat,
   ]);
   const [internalProjectId, setInternalProjectId] = useState<string | null>(
