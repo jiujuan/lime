@@ -1,0 +1,64 @@
+{
+  "$defs": {
+    "ConversationImportSourceClient": {
+      "enum": [
+        "claude_code",
+        "codex"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "cursor": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "includeArchived": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "limit": {
+      "format": "uint",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "projectPath": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "query": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "sourceClient": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ConversationImportSourceClient"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "sourceRoot": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "title": "ConversationImportSourceScanParams",
+  "type": "object"
+}

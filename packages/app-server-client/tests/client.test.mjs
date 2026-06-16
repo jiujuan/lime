@@ -103,6 +103,7 @@ const {
   METHOD_CONNECT_DEEP_LINK_RESOLVE,
   METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE,
   METHOD_CONNECT_RELAY_API_KEY_SAVE,
+  METHOD_CONVERSATION_IMPORT_SOURCE_SCAN,
   METHOD_EVIDENCE_EXPORT,
   METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT,
   METHOD_EXECUTION_PROCESS_INTERRUPT,
@@ -1846,6 +1847,14 @@ test("builds connect deep link requests with current methods", () => {
     status: "success",
     refCode: "ref-001",
   });
+  const importScan = client.scanConversationImportSource({
+    sourceClient: "codex",
+    sourceRoot: "/Users/example/.codex",
+    projectPath: "/workspace/lime",
+    query: "runtime",
+    includeArchived: true,
+    limit: 20,
+  });
 
   assert.equal(connect.id, 1);
   assert.equal(connect.method, METHOD_CONNECT_DEEP_LINK_RESOLVE);
@@ -1877,6 +1886,16 @@ test("builds connect deep link requests with current methods", () => {
     apiKey: "sk-relay-key",
     status: "success",
     refCode: "ref-001",
+  });
+  assert.equal(importScan.id, 6);
+  assert.equal(importScan.method, METHOD_CONVERSATION_IMPORT_SOURCE_SCAN);
+  assert.deepEqual(importScan.params, {
+    sourceClient: "codex",
+    sourceRoot: "/Users/example/.codex",
+    projectPath: "/workspace/lime",
+    query: "runtime",
+    includeArchived: true,
+    limit: 20,
   });
 });
 
@@ -2230,6 +2249,7 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE, kind: "request" },
     { method: METHOD_CONNECT_RELAY_API_KEY_SAVE, kind: "request" },
     { method: METHOD_CONNECT_CALLBACK_SEND, kind: "request" },
+    { method: METHOD_CONVERSATION_IMPORT_SOURCE_SCAN, kind: "request" },
     { method: METHOD_AGENT_SESSION_START, kind: "request" },
     { method: METHOD_AGENT_SESSION_READ, kind: "request" },
     { method: METHOD_AGENT_SESSION_TURN_START, kind: "request" },
@@ -2494,6 +2514,10 @@ test("exports app-server method catalog with request and notification kinds", ()
     true,
   );
   assert.equal(isAppServerRequestMethod(METHOD_CONNECT_CALLBACK_SEND), true);
+  assert.equal(
+    isAppServerRequestMethod(METHOD_CONVERSATION_IMPORT_SOURCE_SCAN),
+    true,
+  );
   assert.equal(isAppServerRequestMethod(METHOD_VOICE_INSTRUCTION_LIST), true);
   assert.equal(isAppServerRequestMethod(METHOD_VOICE_INSTRUCTION_SAVE), true);
   assert.equal(isAppServerRequestMethod(METHOD_VOICE_INSTRUCTION_DELETE), true);

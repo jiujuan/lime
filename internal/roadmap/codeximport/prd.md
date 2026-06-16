@@ -258,6 +258,7 @@ Lime SessionDetail 是唯一内部事实源
 | --- | --- |
 | 安全 | 只读外部目录；敏感文件 denylist；不上传原始 transcript；不写回 source。 |
 | 隐私 | 导入预览只在本地处理；用户确认前不进入 Lime session store。 |
+| 用户确认 | P1 只读扫描不弹确认；任何会写入 Lime session store 的导入 commit 必须先展示确认弹窗，列出 source client、会话数量、目标 workspace、是否可继续对话和已知 unsupported 项。 |
 | 可恢复 | 解析失败要局部降级，不能让整个 source 扫描失败。 |
 | 可测试 | Codex fixture、SQLite schema fixture、rollout JSONL fixture、unsupported event fixture。 |
 | 跨平台 | CODEX_HOME / Claude home 解析必须走统一路径封装。 |

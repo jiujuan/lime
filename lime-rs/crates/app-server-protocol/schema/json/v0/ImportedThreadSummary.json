@@ -1,0 +1,84 @@
+{
+  "$defs": {
+    "ConversationImportSourceClient": {
+      "enum": [
+        "claude_code",
+        "codex"
+      ],
+      "type": "string"
+    },
+    "ConversationImportThreadStatus": {
+      "enum": [
+        "conflict",
+        "imported",
+        "not_imported"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "archived": {
+      "default": false,
+      "type": "boolean"
+    },
+    "createdAt": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "cwd": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "importStatus": {
+      "$ref": "#/$defs/ConversationImportThreadStatus"
+    },
+    "modelProvider": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "source": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "sourceClient": {
+      "$ref": "#/$defs/ConversationImportSourceClient"
+    },
+    "sourcePath": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "sourceThreadId": {
+      "type": "string"
+    },
+    "title": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "updatedAt": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "importStatus",
+    "sourceClient",
+    "sourceThreadId"
+  ],
+  "title": "ImportedThreadSummary",
+  "type": "object"
+}

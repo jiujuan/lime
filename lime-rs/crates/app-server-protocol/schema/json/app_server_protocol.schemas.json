@@ -7312,6 +7312,335 @@
       "title": "ConnectRelayApiKeySaveResponse",
       "type": "object"
     },
+    "ConversationImportSourceClient": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "enum": [
+        "claude_code",
+        "codex"
+      ],
+      "title": "ConversationImportSourceClient",
+      "type": "string"
+    },
+    "ConversationImportSourceScanParams": {
+      "$defs": {
+        "ConversationImportSourceClient": {
+          "enum": [
+            "claude_code",
+            "codex"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "cursor": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "includeArchived": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "limit": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "projectPath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "query": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sourceClient": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConversationImportSourceClient"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sourceRoot": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "title": "ConversationImportSourceScanParams",
+      "type": "object"
+    },
+    "ConversationImportSourceScanResponse": {
+      "$defs": {
+        "ConversationImportSourceClient": {
+          "enum": [
+            "claude_code",
+            "codex"
+          ],
+          "type": "string"
+        },
+        "ConversationImportSourceStatus": {
+          "enum": [
+            "error",
+            "missing",
+            "ready",
+            "unsupported"
+          ],
+          "type": "string"
+        },
+        "ConversationImportSourceSummary": {
+          "properties": {
+            "indexedAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "message": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "readable": {
+              "type": "boolean"
+            },
+            "sourceClient": {
+              "$ref": "#/$defs/ConversationImportSourceClient"
+            },
+            "sourceRoot": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "statePath": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "status": {
+              "$ref": "#/$defs/ConversationImportSourceStatus"
+            },
+            "threadCount": {
+              "default": 0,
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "readable",
+            "sourceClient",
+            "status"
+          ],
+          "type": "object"
+        },
+        "ConversationImportThreadStatus": {
+          "enum": [
+            "conflict",
+            "imported",
+            "not_imported"
+          ],
+          "type": "string"
+        },
+        "ImportedThreadSummary": {
+          "properties": {
+            "archived": {
+              "default": false,
+              "type": "boolean"
+            },
+            "createdAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "cwd": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "importStatus": {
+              "$ref": "#/$defs/ConversationImportThreadStatus"
+            },
+            "modelProvider": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "source": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "sourceClient": {
+              "$ref": "#/$defs/ConversationImportSourceClient"
+            },
+            "sourcePath": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "sourceThreadId": {
+              "type": "string"
+            },
+            "title": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "updatedAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "importStatus",
+            "sourceClient",
+            "sourceThreadId"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "nextCursor": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "source": {
+          "$ref": "#/$defs/ConversationImportSourceSummary"
+        },
+        "threads": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ImportedThreadSummary"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "ConversationImportSourceScanResponse",
+      "type": "object"
+    },
+    "ConversationImportSourceStatus": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "enum": [
+        "error",
+        "missing",
+        "ready",
+        "unsupported"
+      ],
+      "title": "ConversationImportSourceStatus",
+      "type": "string"
+    },
+    "ConversationImportSourceSummary": {
+      "$defs": {
+        "ConversationImportSourceClient": {
+          "enum": [
+            "claude_code",
+            "codex"
+          ],
+          "type": "string"
+        },
+        "ConversationImportSourceStatus": {
+          "enum": [
+            "error",
+            "missing",
+            "ready",
+            "unsupported"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "indexedAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "message": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "readable": {
+          "type": "boolean"
+        },
+        "sourceClient": {
+          "$ref": "#/$defs/ConversationImportSourceClient"
+        },
+        "sourceRoot": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "statePath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/ConversationImportSourceStatus"
+        },
+        "threadCount": {
+          "default": 0,
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "readable",
+        "sourceClient",
+        "status"
+      ],
+      "title": "ConversationImportSourceSummary",
+      "type": "object"
+    },
+    "ConversationImportThreadStatus": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "enum": [
+        "conflict",
+        "imported",
+        "not_imported"
+      ],
+      "title": "ConversationImportThreadStatus",
+      "type": "string"
+    },
     "DiagnosticsCapabilityRoutingMetricsSnapshot": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -10841,6 +11170,90 @@
         "prompt"
       ],
       "title": "ImageStoryboardSlotInput",
+      "type": "object"
+    },
+    "ImportedThreadSummary": {
+      "$defs": {
+        "ConversationImportSourceClient": {
+          "enum": [
+            "claude_code",
+            "codex"
+          ],
+          "type": "string"
+        },
+        "ConversationImportThreadStatus": {
+          "enum": [
+            "conflict",
+            "imported",
+            "not_imported"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "archived": {
+          "default": false,
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "cwd": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "importStatus": {
+          "$ref": "#/$defs/ConversationImportThreadStatus"
+        },
+        "modelProvider": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "source": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sourceClient": {
+          "$ref": "#/$defs/ConversationImportSourceClient"
+        },
+        "sourcePath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sourceThreadId": {
+          "type": "string"
+        },
+        "title": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "updatedAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "importStatus",
+        "sourceClient",
+        "sourceThreadId"
+      ],
+      "title": "ImportedThreadSummary",
       "type": "object"
     },
     "InitializeParams": {
@@ -22141,6 +22554,7 @@
               "connectDeepLink/resolve",
               "connectOpenDeepLink/resolve",
               "connectRelayApiKey/save",
+              "conversationImport/source/scan",
               "diagnostics/logStorage/read",
               "diagnostics/server/read",
               "diagnostics/supportBundle/export",

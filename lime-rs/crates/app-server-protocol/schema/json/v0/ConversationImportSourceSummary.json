@@ -1,0 +1,69 @@
+{
+  "$defs": {
+    "ConversationImportSourceClient": {
+      "enum": [
+        "claude_code",
+        "codex"
+      ],
+      "type": "string"
+    },
+    "ConversationImportSourceStatus": {
+      "enum": [
+        "error",
+        "missing",
+        "ready",
+        "unsupported"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "indexedAt": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "message": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "readable": {
+      "type": "boolean"
+    },
+    "sourceClient": {
+      "$ref": "#/$defs/ConversationImportSourceClient"
+    },
+    "sourceRoot": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "statePath": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "status": {
+      "$ref": "#/$defs/ConversationImportSourceStatus"
+    },
+    "threadCount": {
+      "default": 0,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "readable",
+    "sourceClient",
+    "status"
+  ],
+  "title": "ConversationImportSourceSummary",
+  "type": "object"
+}

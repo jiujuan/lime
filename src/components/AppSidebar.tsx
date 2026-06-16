@@ -28,7 +28,10 @@ import {
   buildClawAgentParams,
   buildHomeAgentParams,
 } from "@/lib/workspace/navigation";
-import { requestTaskCenterDraftTask } from "@/components/agent/chat/taskCenterDraftTaskEvents";
+import {
+  notifyTaskCenterTaskOpen,
+  requestTaskCenterDraftTask,
+} from "@/components/agent/chat/taskCenterDraftTaskEvents";
 import {
   deleteAgentRuntimeSession,
   updateAgentRuntimeSession,
@@ -948,6 +951,17 @@ export function AppSidebar({
         session,
         conversationProjects,
       );
+      if (
+        isAgentWorkspace &&
+        notifyTaskCenterTaskOpen({
+          sessionId: session.id,
+          workspaceId: sessionProjectId ?? null,
+          source: "sidebar",
+        })
+      ) {
+        return;
+      }
+
       const targetParams = buildClawAgentParams({
         ...(sessionProjectId ? { projectId: sessionProjectId } : {}),
         initialSessionId: session.id,
@@ -971,7 +985,7 @@ export function AppSidebar({
       requestedNavigationTargetRef.current = target;
       onNavigate(target.page, target.rawParams);
     },
-    [conversationProjects, deferConversationNavigation, onNavigate],
+    [conversationProjects, deferConversationNavigation, isAgentWorkspace, onNavigate],
   );
 
   const handleNavigateToNewTask = useCallback(

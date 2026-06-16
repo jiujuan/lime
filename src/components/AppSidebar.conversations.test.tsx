@@ -5,6 +5,7 @@ import type { SidebarOpenedProjectSummary } from "@/components/app-sidebar/sideb
 import {
   AppSidebar,
   TASK_CENTER_CREATE_DRAFT_TASK_EVENT,
+  TASK_CENTER_OPEN_TASK_EVENT,
   act,
   cleanupAppSidebarTest,
   clickConversationMenuItem,
@@ -146,6 +147,24 @@ describe("AppSidebar conversations", () => {
     };
   }
 
+  function captureTaskCenterOpenTaskRequests() {
+    const receivedDetails: unknown[] = [];
+    const listener = (event: Event) => {
+      receivedDetails.push(
+        event instanceof CustomEvent ? event.detail : undefined,
+      );
+      event.preventDefault();
+    };
+    window.addEventListener(TASK_CENTER_OPEN_TASK_EVENT, listener);
+
+    return {
+      receivedDetails,
+      dispose: () => {
+        window.removeEventListener(TASK_CENTER_OPEN_TASK_EVENT, listener);
+      },
+    };
+  }
+
   it("任务中心内悬停已有会话不应再触发旧会话预取", async () => {
     vi.useFakeTimers();
     mockListAgentRuntimeSessions.mockResolvedValue([
@@ -248,6 +267,54 @@ describe("AppSidebar conversations", () => {
       );
     } finally {
       vi.useRealTimers();
+    }
+  });
+
+  it("任务中心内点击项目会话应交给本地打开事件，不跳到最近对话壳", async () => {
+    const taskCenterRequests = captureTaskCenterOpenTaskRequests();
+    mockListAgentRuntimeSessions.mockResolvedValue([
+      {
+        id: "session-click",
+        name: "立即打开历史会话",
+        created_at: 1713000000,
+        updated_at: 1713000600,
+        archived_at: null,
+        workspace_id: "project-1",
+        working_dir: "/repo/project-1",
+        messages_count: 3,
+      },
+    ]);
+
+    try {
+      const onNavigate = vi.fn();
+      const container = mountSidebarContainer({
+        currentPage: "agent",
+        currentPageParams: {
+          agentEntry: "claw",
+          projectId: "project-1",
+          initialSessionId: "session-current",
+        } as AgentPageParams,
+        onNavigate,
+      });
+      await flushEffects(2);
+
+      await act(async () => {
+        container
+          .querySelector<HTMLButtonElement>('button[title="立即打开历史会话"]')
+          ?.click();
+        await Promise.resolve();
+      });
+
+      expect(taskCenterRequests.receivedDetails).toEqual([
+        {
+          sessionId: "session-click",
+          workspaceId: "project-1",
+          source: "sidebar",
+        },
+      ]);
+      expect(onNavigate).not.toHaveBeenCalled();
+    } finally {
+      taskCenterRequests.dispose();
     }
   });
 

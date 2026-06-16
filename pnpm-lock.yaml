@@ -369,6 +369,8 @@ importers:
 
   packages/agent-app-runtime: {}
 
+  packages/agent-capability-catalog: {}
+
   packages/agent-runtime-client:
     dependencies:
       '@limecloud/agent-ui-contracts':
@@ -401,6 +403,12 @@ importers:
         version: link:../agent-runtime-projection
 
   packages/agent-ui-contracts: {}
+
+  packages/agent-workbench-adapter:
+    dependencies:
+      '@limecloud/agent-capability-catalog':
+        specifier: 0.1.0
+        version: link:../agent-capability-catalog
 
   packages/app-server-client: {}
 

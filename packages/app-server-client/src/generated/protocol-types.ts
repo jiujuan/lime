@@ -949,6 +949,39 @@ export interface ConnectRelayApiKeySaveResponse {
   providerName: string;
 }
 
+export type ConversationImportSourceClient = "claude_code" | "codex";
+
+export interface ConversationImportSourceScanParams {
+  cursor?: null | string;
+  includeArchived?: boolean | null;
+  limit?: number | null;
+  projectPath?: null | string;
+  query?: null | string;
+  sourceClient?: ConversationImportSourceClient | null;
+  sourceRoot?: null | string;
+}
+
+export interface ConversationImportSourceScanResponse {
+  nextCursor?: null | string;
+  source: ConversationImportSourceSummary;
+  threads?: (ImportedThreadSummary)[];
+}
+
+export type ConversationImportSourceStatus = "error" | "missing" | "ready" | "unsupported";
+
+export interface ConversationImportSourceSummary {
+  indexedAt?: null | string;
+  message?: null | string;
+  readable: boolean;
+  sourceClient: ConversationImportSourceClient;
+  sourceRoot?: null | string;
+  statePath?: null | string;
+  status: ConversationImportSourceStatus;
+  threadCount?: number;
+}
+
+export type ConversationImportThreadStatus = "conflict" | "imported" | "not_imported";
+
 export interface DiagnosticsCapabilityRoutingMetricsSnapshot {
   allCandidatesExcludedTotal: number;
   filterEvalTotal: number;
@@ -1371,6 +1404,20 @@ export interface ImageStoryboardSlotInput {
   prompt: string;
   shotType?: null | string;
   slotId?: null | string;
+}
+
+export interface ImportedThreadSummary {
+  archived?: boolean;
+  createdAt?: null | string;
+  cwd?: null | string;
+  importStatus: ConversationImportThreadStatus;
+  modelProvider?: null | string;
+  source?: null | string;
+  sourceClient: ConversationImportSourceClient;
+  sourcePath?: null | string;
+  sourceThreadId: string;
+  title?: null | string;
+  updatedAt?: null | string;
 }
 
 export interface InitializeParams {

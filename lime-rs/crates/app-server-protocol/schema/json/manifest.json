@@ -252,6 +252,10 @@
     },
     {
       "kind": "request",
+      "method": "conversationImport/source/scan"
+    },
+    {
+      "kind": "request",
       "method": "diagnostics/logStorage/read"
     },
     {
@@ -1189,6 +1193,12 @@
       "ConnectPayload",
       "ConnectRelayApiKeySaveParams",
       "ConnectRelayApiKeySaveResponse",
+      "ConversationImportSourceClient",
+      "ConversationImportSourceScanParams",
+      "ConversationImportSourceScanResponse",
+      "ConversationImportSourceStatus",
+      "ConversationImportSourceSummary",
+      "ConversationImportThreadStatus",
       "DiagnosticsCapabilityRoutingMetricsSnapshot",
       "DiagnosticsIdempotencyDiagnostics",
       "DiagnosticsMetricConfig",
@@ -1246,6 +1256,7 @@
       "GatewayTunnelSyncWebhookUrlParams",
       "GatewayTunnelSyncWebhookUrlResponse",
       "ImageStoryboardSlotInput",
+      "ImportedThreadSummary",
       "InitializeParams",
       "InitializeResponse",
       "KnowledgeCompilePackParams",

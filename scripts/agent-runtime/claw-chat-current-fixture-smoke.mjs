@@ -1104,67 +1104,101 @@ async function waitForGuiSessionVisible(page, options) {
 async function openFixtureSessionFromSidebar(page, options) {
   const startedAt = Date.now();
   let lastSnapshot = null;
+  let lastClick = null;
   while (Date.now() - startedAt < options.timeoutMs) {
-    const clicked = await evaluatePageSnapshot(
-      page,
-      ({ title }) => {
-        const candidates = Array.from(document.querySelectorAll("button"));
-        const button = candidates.find((candidate) => {
-          const label = [
-            candidate.getAttribute("title") || "",
-            candidate.getAttribute("aria-label") || "",
-            candidate.textContent || "",
-          ].join("\n");
-          if (!label.includes(title)) {
+    if (!lastClick?.clicked) {
+      lastClick = await evaluatePageSnapshot(
+        page,
+        ({ title }) => {
+          const candidates = Array.from(
+            document.querySelectorAll(
+              '[data-testid="app-sidebar-conversation-open"], button',
+            ),
+          );
+          const button = candidates.find((candidate) => {
+            const label = [
+              candidate.getAttribute("title") || "",
+              candidate.getAttribute("aria-label") || "",
+              candidate.textContent || "",
+            ].join("\n");
+            if (!label.includes(title)) {
+              return false;
+            }
+            const actionLabel = [
+              candidate.getAttribute("data-testid") || "",
+              candidate.getAttribute("aria-label") || "",
+              candidate.textContent || "",
+            ].join("\n");
+            return !/menu|more|action|archive|delete|favorite|rename|菜单|更多|操作|归档|删除|收藏|重命名/i.test(
+              actionLabel,
+            );
+          });
+          if (!button) {
+            const moreButton = Array.from(
+              document.querySelectorAll("button"),
+            ).find((candidate) =>
+              (candidate.textContent || "").includes("查看更多对话"),
+            );
+            moreButton?.click();
             return false;
           }
-          const actionLabel = [
-            candidate.getAttribute("data-testid") || "",
-            candidate.getAttribute("aria-label") || "",
-            candidate.textContent || "",
-          ].join("\n");
-          return !/menu|more|action|archive|delete|favorite|rename|菜单|更多|操作|归档|删除|收藏|重命名/i.test(
-            actionLabel,
+          button.click();
+          return {
+            clicked: true,
+            title: button.getAttribute("title") || "",
+            aria: button.getAttribute("aria-label") || "",
+            text: button.textContent || "",
+            testId: button.getAttribute("data-testid") || "",
+          };
+        },
+        { title: SESSION_TITLE },
+      );
+    }
+
+    if (lastClick?.clicked) {
+      const inputReady = await evaluatePageSnapshot(
+        page,
+        ({ title }) => {
+          const textarea = document.querySelector(
+            'textarea[name="agent-chat-message"]',
           );
-        });
-        if (!button) {
-          const moreButton = candidates.find((candidate) =>
-            (candidate.textContent || "").includes("查看更多对话"),
+          const menu = document.querySelector(
+            '[data-testid="app-sidebar-conversation-menu"]',
           );
-          moreButton?.click();
-          return false;
-        }
-        button.click();
-        return {
-          clicked: true,
-          title: button.getAttribute("title") || "",
-          aria: button.getAttribute("aria-label") || "",
-          text: button.textContent || "",
-        };
-      },
-      { title: SESSION_TITLE },
-    );
-    if (clicked?.clicked) {
-      const inputReady = await evaluatePageSnapshot(page, () => {
-        const textarea = document.querySelector(
-          'textarea[name="agent-chat-message"]',
-        );
-        const bodyText = document.body?.innerText || "";
-        return {
-          hasTextarea: Boolean(textarea),
-          hasRecentConversationsShell: bodyText.includes("最近对话"),
-          textareaDisabled:
-            textarea instanceof HTMLTextAreaElement ? textarea.disabled : null,
-          bodyText,
-        };
-      });
+          const bodyText = document.body?.innerText || "";
+          const mainText = document.querySelector("main")?.textContent || "";
+          return {
+            url: window.location.href,
+            hasTextarea: Boolean(textarea),
+            hasConversationMenu: Boolean(menu),
+            hasSessionTitleInMain: mainText.includes(title),
+            hasRecentConversationsShell: mainText.includes("最近对话"),
+            hasWorkspaceShell: Boolean(
+              document.querySelector('[data-testid="agent-chat-workspace"]') ||
+                document.querySelector('[data-testid="chat-workspace"]') ||
+                document.querySelector(
+                  '[data-testid="theme-workbench-harness-toggle"]',
+                ) ||
+                document.querySelector('[data-testid="toggle-harness"]'),
+            ),
+            textareaDisabled:
+              textarea instanceof HTMLTextAreaElement ? textarea.disabled : null,
+            bodyText,
+            mainText,
+          };
+        },
+        { title: SESSION_TITLE },
+      );
       lastSnapshot = {
-        clicked,
+        clicked: lastClick,
         inputReady: sanitizeJson(inputReady),
       };
       if (
         inputReady?.hasTextarea &&
-        inputReady?.textareaDisabled === false
+        inputReady?.textareaDisabled === false &&
+        inputReady?.hasWorkspaceShell &&
+        !inputReady?.hasConversationMenu &&
+        !inputReady?.hasRecentConversationsShell
       ) {
         return lastSnapshot;
       }
@@ -2142,6 +2176,7 @@ async function run() {
     sessionCreation: null,
     guiWorkspaceNavigation: null,
     guiSessionVisible: null,
+    guiSessionOpened: null,
     inputSend: null,
     guiCompleted: null,
     stopClick: null,
@@ -2292,7 +2327,9 @@ async function run() {
     summary.guiSessionVisible = sanitizeJson(
       await waitForGuiSessionVisible(page, options),
     );
-    await openFixtureSessionFromSidebar(page, options);
+    summary.guiSessionOpened = sanitizeJson(
+      await openFixtureSessionFromSidebar(page, options),
+    );
 
     if (options.scenario === "plan") {
       logStage("enable-plan-mode-from-gui");
