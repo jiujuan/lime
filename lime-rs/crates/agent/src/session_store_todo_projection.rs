@@ -1,10 +1,10 @@
 //! Aster task board 到 Session todo 展示结构的投影。
 
-use aster::session::{TaskBoardItem, TaskBoardItemStatus, resolve_task_board_state};
+use aster::session::{resolve_task_board_state, TaskBoardItem, TaskBoardItemStatus};
 use lime_services::aster_session_store::LimeSessionStore;
 
 use super::session_store_types::{
-    SessionTodoItem, SessionTodoStatus, normalize_optional_nonempty_body,
+    normalize_optional_nonempty_body, SessionTodoItem, SessionTodoStatus,
 };
 
 fn map_session_todo_status(status: TaskBoardItemStatus) -> SessionTodoStatus {

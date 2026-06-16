@@ -100,6 +100,51 @@ fn shell_tool_output_delta_preserves_process_lifecycle_metadata() {
 }
 
 #[test]
+fn shell_tool_metadata_only_delta_updates_process_lifecycle_without_consuming_output() {
+    let mut mirror = CodingEventMirror::default();
+
+    let _ = mirror.process_event(&RuntimeAgentEvent::ToolStart {
+        tool_name: "Bash".to_string(),
+        tool_id: "tool-process-start".to_string(),
+        arguments: Some(json!({ "command": "sleep 1 && echo done" }).to_string()),
+    });
+    let process_update = mirror.process_event(&RuntimeAgentEvent::ToolOutputDelta {
+        tool_id: "tool-process-start".to_string(),
+        delta: String::new(),
+        output_kind: Some("process".to_string()),
+        metadata: Some(HashMap::from([
+            ("processId".to_string(), json!("process-tool-process-start")),
+            ("executionProcessStatus".to_string(), json!("running")),
+            ("executionSurface".to_string(), json!("live_process")),
+        ])),
+    });
+    let ended = mirror.process_event(&RuntimeAgentEvent::ToolEnd {
+        tool_id: "tool-process-start".to_string(),
+        result: success_result(
+            "done",
+            HashMap::from([
+                ("exit_code".to_string(), json!(0)),
+                ("command".to_string(), json!("sleep 1 && echo done")),
+            ]),
+        ),
+    });
+
+    assert_eq!(process_update.after_raw.len(), 1);
+    assert_eq!(process_update.after_raw[0].event_type, "command.output");
+    assert_eq!(
+        process_update.after_raw[0].payload["metadata"]["processId"].as_str(),
+        Some("process-tool-process-start")
+    );
+    assert_eq!(
+        process_update.after_raw[0].payload["metadata"]["executionProcessStatus"].as_str(),
+        Some("running")
+    );
+    assert!(process_update.after_raw[0].payload.get("preview").is_none());
+    assert_eq!(ended.after_raw[0].event_type, "command.output");
+    assert_eq!(ended.after_raw[0].payload["preview"].as_str(), Some("done"));
+}
+
+#[test]
 fn shell_tool_result_emits_output_when_stream_delta_was_absent() {
     let mut mirror = CodingEventMirror::default();
     let _ = mirror.process_event(&RuntimeAgentEvent::ToolStart {
@@ -115,6 +160,12 @@ fn shell_tool_result_emits_output_when_stream_delta_was_absent() {
             HashMap::from([
                 ("exit_code".to_string(), json!(0)),
                 ("command".to_string(), json!("Write-Output ok")),
+                ("execution_surface".to_string(), json!("embedded")),
+                ("outputBytes".to_string(), json!(2)),
+                ("outputOmittedBytes".to_string(), json!(0)),
+                ("outputTruncated".to_string(), json!(false)),
+                ("stdout_bytes".to_string(), json!(2)),
+                ("stderr_bytes".to_string(), json!(0)),
             ]),
         ),
     });
@@ -124,6 +175,35 @@ fn shell_tool_result_emits_output_when_stream_delta_was_absent() {
     assert!(ended.after_raw[0].payload["outputRef"]
         .as_str()
         .is_some_and(|value| value.starts_with("output:command:")));
+    assert_eq!(
+        ended.after_raw[0].payload["processId"].as_str(),
+        Some("process-tool-2")
+    );
+    assert_eq!(
+        ended.after_raw[0].payload["executionProcessStatus"].as_str(),
+        Some("exited")
+    );
+    assert_eq!(
+        ended.after_raw[0].payload["executionSurface"].as_str(),
+        Some("embedded")
+    );
+    assert_eq!(ended.after_raw[0].payload["outputBytes"].as_u64(), Some(2));
+    assert_eq!(
+        ended.after_raw[0].payload["metadata"]["stdoutBytes"].as_u64(),
+        Some(2)
+    );
+    assert_eq!(
+        ended.after_raw[1].payload["processId"].as_str(),
+        Some("process-tool-2")
+    );
+    assert_eq!(
+        ended.after_raw[1].payload["executionProcessStatus"].as_str(),
+        Some("exited")
+    );
+    assert_eq!(
+        ended.after_raw[1].payload["outputTruncated"].as_bool(),
+        Some(false)
+    );
 }
 
 #[test]

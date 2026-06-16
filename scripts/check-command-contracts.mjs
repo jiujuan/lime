@@ -752,6 +752,7 @@ const currentElectronHostRequiredCommands = new Set([
   "agent_app_runtime_get_task",
   "agent_app_runtime_submit_host_response",
   "get_default_provider",
+  "get_environment_preview",
   "get_experimental_config",
   "open_external_url",
   "open_system_settings_url",
@@ -783,7 +784,6 @@ const electronDiagnosticFacadeCommands = new Set([
   "get_chrome_bridge_endpoint_info",
   "get_chrome_bridge_status",
   "get_chrome_profile_sessions",
-  "get_environment_preview",
 ]);
 
 function normalizePath(filePath) {

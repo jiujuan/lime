@@ -1,5 +1,5 @@
 //! Chrome MCP 工具定义
-//! 与官方 Claude Code 保持一致的 17 个工具
+//! 与官方 Claude Code 保持一致的浏览器自动化工具
 
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -28,7 +28,6 @@ pub fn get_chrome_mcp_tools() -> Vec<McpTool> {
         get_page_text(),
         tabs_context_mcp(),
         tabs_create_mcp(),
-        update_plan(),
         read_console_messages(),
         read_network_requests(),
         shortcuts_list(),
@@ -228,20 +227,6 @@ fn tabs_create_mcp() -> McpTool {
     }
 }
 
-fn update_plan() -> McpTool {
-    McpTool {
-        name: "update_plan".to_string(),
-        description: "Update the current automation plan displayed to the user.".to_string(),
-        input_schema: json!({
-            "type": "object",
-            "properties": {
-                "plan": { "type": "string", "description": "The updated plan text" }
-            },
-            "required": ["plan"]
-        }),
-    }
-}
-
 fn read_console_messages() -> McpTool {
     McpTool {
         name: "read_console_messages".to_string(),
@@ -325,9 +310,24 @@ pub const CHROME_MCP_TOOLS: &[&str] = &[
     "get_page_text",
     "tabs_context_mcp",
     "tabs_create_mcp",
-    "update_plan",
     "read_console_messages",
     "read_network_requests",
     "shortcuts_list",
     "shortcuts_execute",
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn chrome_mcp_tools_do_not_shadow_native_update_plan() {
+        assert!(!CHROME_MCP_TOOLS.contains(&"update_plan"));
+        assert!(!get_tool_names_with_prefix()
+            .iter()
+            .any(|name| name == "mcp__claude-in-chrome__update_plan"));
+        assert!(!get_chrome_mcp_tools()
+            .iter()
+            .any(|tool| tool.name == "update_plan"));
+    }
+}

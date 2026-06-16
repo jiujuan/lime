@@ -317,6 +317,7 @@ mod tests {
     fn build_requested_schema_embeds_questions_extension() {
         let request = AskRequest {
             questions: vec![AskQuestion {
+                id: Some("primary_color".to_string()),
                 question: "你希望主色调是什么？".to_string(),
                 header: Some("主色调".to_string()),
                 options: vec![
@@ -357,6 +358,7 @@ mod tests {
             questions: vec![
                 AskQuestion::new("第一问"),
                 AskQuestion {
+                    id: Some("mode".to_string()),
                     question: "第二问".to_string(),
                     header: Some("mode".to_string()),
                     options: vec![
@@ -392,6 +394,7 @@ mod tests {
     fn extract_response_normalizes_multi_select_answers() {
         let request = AskRequest {
             questions: vec![AskQuestion {
+                id: Some("skills".to_string()),
                 question: "请选择能力".to_string(),
                 header: Some("skills".to_string()),
                 options: vec![

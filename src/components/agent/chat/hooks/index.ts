@@ -18,6 +18,7 @@ interface UseAgentChatUnifiedOptions {
     context?: import("../types").WriteArtifactContext,
   ) => void;
   workspaceId: string;
+  workingDir?: string | null;
   disableSessionRestore?: boolean;
   initialTopicsLoadMode?: "immediate" | "deferred";
   initialTopicsDeferredDelayMs?: number;

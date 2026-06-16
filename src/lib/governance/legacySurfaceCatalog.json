@@ -5183,6 +5183,11 @@
       "classification": "dead-candidate",
       "description": "已零引用的 Rust 上层模块 direct Agent session 记录与旧消息读写回流；产品读取必须走 JSONL Event Log + Projection DB / 统一 session query 边界",
       "patterns": [
+        "AgentDao::add_message(",
+        "AgentDao::delete_messages(",
+        "AgentDao::update_latest_assistant_message_usage(",
+        "AgentDao::get_message_window_info(",
+        "AgentDao::get_message_timestamp_by_id(",
         "AgentDao::get_session_with_messages(",
         "AgentDao::get_message_count(",
         "AgentDao::get_messages(",

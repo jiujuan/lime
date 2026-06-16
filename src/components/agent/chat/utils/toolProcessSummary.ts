@@ -803,6 +803,9 @@ function buildGenericPostSummary(params: {
   if (normalizedName === "taskupdate") {
     return normalizedSubject ? `已更新任务 ${normalizedSubject}` : "已更新任务";
   }
+  if (normalizedName === "updateplan") {
+    return normalizedSubject ? `已更新计划 ${normalizedSubject}` : "已更新计划";
+  }
   if (normalizedName === "taskoutput") {
     return normalizedSubject
       ? `已查看 ${normalizedSubject} 的任务结果`
@@ -974,7 +977,7 @@ function buildGenericPreSummary(params: {
       : "先暂停不再需要的子任务";
   }
 
-  if (normalizedName === "askuserquestion") {
+  if (normalizedName === "requestuserinput") {
     return subject
       ? `先确认 ${shorten(subject, 40)}`
       : "先确认继续执行所需信息";
@@ -1068,6 +1071,9 @@ function buildGenericPreSummary(params: {
     return normalizedSubject
       ? `先更新任务 ${normalizedSubject}`
       : "先更新任务状态";
+  }
+  if (normalizedName === "updateplan") {
+    return normalizedSubject ? `先更新计划 ${normalizedSubject}` : "先更新计划";
   }
 
   if (normalizedName === "taskoutput") {
@@ -1326,13 +1332,19 @@ function buildNarrative(input: ToolProcessInput): ToolProcessNarrative {
     postSource = postSummary ? "generic" : "none";
   }
 
+  const resolvedPreSummary =
+    input.status !== "running" &&
+    input.status !== "in_progress" &&
+    normalizedName === "updateplan"
+      ? postSummary || preSummary
+      : preSummary;
   const summary =
     input.status === "running" || input.status === "in_progress"
-      ? preSummary
-      : postSummary || preSummary;
+      ? resolvedPreSummary
+      : postSummary || resolvedPreSummary;
 
   return {
-    preSummary,
+    preSummary: resolvedPreSummary,
     postSummary,
     summary,
     postSource,

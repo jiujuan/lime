@@ -20,7 +20,7 @@ export declare function createSessionClient({
   appServerSessionClient,
 }?: AgentRuntimeSessionClientDeps): {
   createAgentRuntimeSession: (
-    workspaceId: string,
+    workspaceId?: string,
     name?: string,
     executionStrategy?: AsterExecutionStrategy,
     options?: AgentRuntimeCreateSessionOptions,
@@ -44,7 +44,7 @@ export declare const archiveManyAgentRuntimeSessions: (
     sessionIds: string[],
   ) => Promise<AsterSessionInfo[]>,
   createAgentRuntimeSession: (
-    workspaceId: string,
+    workspaceId?: string,
     name?: string,
     executionStrategy?: AsterExecutionStrategy,
     options?: AgentRuntimeCreateSessionOptions,

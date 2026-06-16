@@ -74,12 +74,11 @@ export const parseJsonObject = (
 export const isAskToolName = (toolName: string): boolean => {
   const normalized = toolName.toLowerCase().trim();
   return (
+    normalized === "ask" ||
     normalized === "askuserquestion" ||
     normalized === "request_user_input" ||
     normalized === "requestuserinput" ||
-    normalized === "ask" ||
-    normalized === "ask_user" ||
-    /(^|[_-])ask($|[_-])/.test(normalized)
+    normalized === "requestuserinputtool"
   );
 };
 

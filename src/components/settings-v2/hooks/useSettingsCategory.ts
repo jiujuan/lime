@@ -13,7 +13,6 @@ import {
   User,
   BarChart3,
   Palette,
-  Keyboard,
   Brain,
   Bot,
   Image,
@@ -97,11 +96,6 @@ export function useSettingsCategory(): CategoryGroup[] {
           key: SettingsTabs.Appearance,
           label: t("settings.tab.appearance"),
           icon: Palette,
-        },
-        {
-          key: SettingsTabs.Hotkeys,
-          label: t("settings.tab.hotkeys"),
-          icon: Keyboard,
         },
         {
           key: SettingsTabs.Memory,

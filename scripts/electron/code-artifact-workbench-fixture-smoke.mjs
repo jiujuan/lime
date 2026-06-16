@@ -26,6 +26,8 @@ const DEFAULTS = {
 };
 
 const LOG_PREFIX = "[smoke:code-artifact-workbench-electron-fixture]";
+const TEMP_CLEANUP_RETRY_COUNT = 8;
+const TEMP_CLEANUP_RETRY_DELAY_MS = 250;
 const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
 const APP_SERVER_METHOD_SESSION_START = "agentSession/start";
 const APP_SERVER_METHOD_SESSION_UPDATE = "agentSession/update";
@@ -254,6 +256,21 @@ function sanitizeJson(value, depth = 0) {
 function writeJsonFile(filePath, value) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+function cleanupTempRoot(tempRoot) {
+  try {
+    fs.rmSync(tempRoot, {
+      recursive: true,
+      force: true,
+      maxRetries: TEMP_CLEANUP_RETRY_COUNT,
+      retryDelay: TEMP_CLEANUP_RETRY_DELAY_MS,
+    });
+  } catch (error) {
+    console.warn(
+      `${LOG_PREFIX} temp cleanup skipped path=${tempRoot} error=${sanitizeText(error)}`,
+    );
+  }
 }
 
 function createTempRuntimeEnv() {
@@ -2472,7 +2489,7 @@ async function run() {
       await app.close().catch(() => undefined);
     }
     if (!options.keepTemp) {
-      fs.rmSync(runtimeEnv.tempRoot, { recursive: true, force: true });
+      cleanupTempRoot(runtimeEnv.tempRoot);
     }
   }
 }

@@ -43,7 +43,7 @@
   },
   "dependencies": {
     "@limecloud/agent-ui-contracts": "0.1.0",
-    "@limecloud/app-server-client": "1.69.0"
+    "@limecloud/app-server-client": "1.70.0"
   },
   "sideEffects": false
 }

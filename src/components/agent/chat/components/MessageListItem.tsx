@@ -308,6 +308,11 @@ export function MessageListItem({
   const firstTokenRuntimeStatusNode = shouldRenderFirstTokenRuntimeStatus ? (
     <AssistantFirstTokenRuntimeStatus status={msg.runtimeStatus} />
   ) : null;
+  const shouldPinTrailingTimelineBeforeBubble =
+    msg.role === "assistant" &&
+    Boolean(trailingTimeline) &&
+    hasAssistantBodyContent &&
+    trailingTimeline!.items.some((item) => item.type === "file_artifact");
 
   if (
     msg.role === "assistant" &&
@@ -349,6 +354,29 @@ export function MessageListItem({
       threadRead={threadRead}
     />
   ) : null;
+  const trailingTimelineNode =
+    msg.role === "assistant" && trailingTimeline ? (
+      <MessageTimelineSection
+        timeline={trailingTimeline}
+        actionRequests={trailingActionRequests}
+        activeCurrentTurnId={activeCurrentTurnId}
+        focusedTimelineItemId={focusedTimelineItemId}
+        focusRequestKey={timelineFocusRequestKey}
+        isCurrentTurnSending={isSending}
+        messageId={msg.id}
+        onFileClick={onFileClick}
+        onOpenArtifactFromTimeline={onOpenArtifactFromTimeline}
+        onOpenSavedSiteContent={onOpenSavedSiteContent}
+        onOpenSubagentSession={onOpenSubagentSession}
+        onPermissionResponse={onPermissionResponse}
+        onSaveMessageAsKnowledge={onSaveMessageAsKnowledge}
+        placement="trailing"
+        shouldDeferHistoricalTimelineDetails={
+          shouldDeferHistoricalTimelineDetails
+        }
+        threadRead={threadRead}
+      />
+    ) : null;
 
   return (
     <MessageWrapper
@@ -368,6 +396,14 @@ export function MessageListItem({
             data-testid="assistant-runtime-status-shell"
           >
             {firstTokenRuntimeStatusNode}
+          </div>
+        ) : null}
+        {shouldPinTrailingTimelineBeforeBubble && trailingTimelineNode ? (
+          <div
+            className="mb-2"
+            data-testid="assistant-pinned-file-timeline-shell"
+          >
+            {trailingTimelineNode}
           </div>
         ) : null}
         {hasAssistantBodyContent ? (
@@ -478,27 +514,9 @@ export function MessageListItem({
 
             {msg.role === "assistant" &&
             trailingTimeline &&
-            !shouldRenderFirstTokenRuntimeStatus ? (
-              <MessageTimelineSection
-                timeline={trailingTimeline}
-                actionRequests={trailingActionRequests}
-                activeCurrentTurnId={activeCurrentTurnId}
-                focusedTimelineItemId={focusedTimelineItemId}
-                focusRequestKey={timelineFocusRequestKey}
-                isCurrentTurnSending={isSending}
-                messageId={msg.id}
-                onFileClick={onFileClick}
-                onOpenArtifactFromTimeline={onOpenArtifactFromTimeline}
-                onOpenSavedSiteContent={onOpenSavedSiteContent}
-                onOpenSubagentSession={onOpenSubagentSession}
-                onPermissionResponse={onPermissionResponse}
-                onSaveMessageAsKnowledge={onSaveMessageAsKnowledge}
-                placement="trailing"
-                shouldDeferHistoricalTimelineDetails={
-                  shouldDeferHistoricalTimelineDetails
-                }
-                threadRead={threadRead}
-              />
+            !shouldRenderFirstTokenRuntimeStatus &&
+            !shouldPinTrailingTimelineBeforeBubble ? (
+              trailingTimelineNode
             ) : null}
 
             {assistantMetaFooter}

@@ -156,6 +156,7 @@ fn append_runtime_events_to_stored_session(
                 sidecar_store,
             )?;
         }
+        attach_session_projection_metadata(&mut event, stored);
         agent_ui_event_schema::validate_agent_event(&event).map_err(RuntimeCoreError::Backend)?;
         if needs_sequence_context {
             let validation_events = validation_events
@@ -242,6 +243,119 @@ fn runtime_events_with_turn_input(
     events.push(input_event);
     events.extend(runtime_events);
     events
+}
+
+fn attach_session_projection_metadata(event: &mut AgentEvent, stored: &StoredSession) {
+    let Some(payload) = event.payload.as_object_mut() else {
+        return;
+    };
+    let session_payload = payload
+        .entry("session")
+        .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+    if !session_payload.is_object() {
+        *session_payload = serde_json::Value::Object(serde_json::Map::new());
+    }
+    let Some(session_payload) = session_payload.as_object_mut() else {
+        return;
+    };
+
+    insert_session_projection_string(
+        session_payload,
+        "createdAt",
+        Some(stored.session.created_at.as_str()),
+    );
+    insert_session_projection_string(
+        session_payload,
+        "updatedAt",
+        Some(stored.session.updated_at.as_str()),
+    );
+    insert_session_projection_string(
+        session_payload,
+        "appId",
+        Some(stored.session.app_id.as_str()),
+    );
+    insert_session_projection_string(
+        session_payload,
+        "workspaceId",
+        stored.session.workspace_id.as_deref(),
+    );
+    insert_session_projection_string(
+        session_payload,
+        "title",
+        session_business_object_title(stored).as_deref(),
+    );
+    insert_session_projection_string(
+        session_payload,
+        "model",
+        session_business_object_metadata(stored, &["model", "modelName"]).as_deref(),
+    );
+    insert_session_projection_string(
+        session_payload,
+        "workingDir",
+        session_business_object_metadata(stored, &["workingDir", "working_dir"]).as_deref(),
+    );
+    insert_session_projection_string(
+        session_payload,
+        "executionStrategy",
+        session_business_object_metadata(stored, &["executionStrategy", "execution_strategy"])
+            .as_deref(),
+    );
+    insert_session_projection_metadata(session_payload, stored);
+}
+
+fn insert_session_projection_string(
+    payload: &mut serde_json::Map<String, serde_json::Value>,
+    key: &str,
+    value: Option<&str>,
+) {
+    let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return;
+    };
+    payload.insert(
+        key.to_string(),
+        serde_json::Value::String(value.to_string()),
+    );
+}
+
+fn insert_session_projection_metadata(
+    payload: &mut serde_json::Map<String, serde_json::Value>,
+    stored: &StoredSession,
+) {
+    let Some(metadata) = stored
+        .session
+        .business_object_ref
+        .as_ref()
+        .and_then(|reference| reference.metadata.as_ref())
+    else {
+        return;
+    };
+    payload.insert("metadata".to_string(), metadata.clone());
+}
+
+fn session_business_object_title(stored: &StoredSession) -> Option<String> {
+    stored
+        .session
+        .business_object_ref
+        .as_ref()
+        .and_then(|reference| reference.title.as_deref())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .or_else(|| session_business_object_metadata(stored, &["title"]))
+}
+
+fn session_business_object_metadata(stored: &StoredSession, keys: &[&str]) -> Option<String> {
+    let metadata = stored
+        .session
+        .business_object_ref
+        .as_ref()
+        .and_then(|reference| reference.metadata.as_ref())?;
+    keys.iter()
+        .filter_map(|key| metadata.get(*key))
+        .find_map(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
 }
 
 fn validation_context_for_event(

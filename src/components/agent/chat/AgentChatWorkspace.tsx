@@ -38,6 +38,7 @@ import { SettingsTabs } from "@/types/settings";
 import {
   type CanvasWorkbenchBrowserOpenRequest,
   type CanvasWorkbenchLayoutMode,
+  type CanvasWorkbenchPreviewOpenRequest,
 } from "./components/CanvasWorkbenchLayout";
 import type { CreationMode } from "./components/types";
 import { type TaskFile } from "./components/TaskFiles";
@@ -66,7 +67,6 @@ import {
   getContent,
   getGeneralWorkbenchDocumentState,
   ensureWorkspaceReady,
-  getOrCreateDefaultProject,
   type Project,
 } from "@/lib/api/project";
 import { executionRunGetGeneralWorkbenchState } from "@/lib/api/executionRun";
@@ -90,7 +90,6 @@ import { logAgentDebug } from "@/lib/agentDebug";
 import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
 import { setActiveContentTarget } from "@/lib/activeContentTarget";
 import { recordWorkspaceRepair } from "@/lib/workspaceHealthTelemetry";
-import { startupTracker } from "@/lib/diagnostics/startupPerformance";
 import { useImageGen } from "@/components/image-gen/useImageGen";
 import { resolveMediaGenerationPreference } from "@/lib/mediaGeneration";
 import { scheduleMinimumDelayIdleTask } from "@/lib/utils/scheduleMinimumDelayIdleTask";
@@ -226,6 +225,7 @@ import { useWorkspaceGeneralWorkbenchDocumentPersistenceRuntime } from "./worksp
 import { useWorkspaceServiceSkillEntryActions } from "./workspace/useWorkspaceServiceSkillEntryActions";
 import { useWorkspaceArtifactViewModeControl } from "./workspace/useWorkspaceArtifactViewModeControl";
 import { useWorkspaceInitialSessionNavigation } from "./workspace/useWorkspaceInitialSessionNavigation";
+import { buildHomeAgentParams } from "@/lib/workspace/navigation";
 import { WorkspaceGeneralWorkbenchSidebar } from "./workspace/WorkspaceGeneralWorkbenchSidebar";
 import { GeneralWorkbenchHarnessDialogSection } from "./workspace/WorkspaceHarnessDialogs";
 import { WorkspaceShellScene } from "./workspace/WorkspaceShellScene";
@@ -790,44 +790,14 @@ export function AgentChatWorkspace({
           }
         }
 
-        const defaultProject = await getOrCreateDefaultProject();
-        let resolvedRootPath = defaultProject.rootPath;
-
-        try {
-          const ensuredWorkspace = await ensureWorkspaceReady(
-            defaultProject.id,
-          );
-          resolvedRootPath = ensuredWorkspace.rootPath || resolvedRootPath;
-        } catch (error) {
-          logAgentDebug(
-            "AgentChatPage",
-            "resolveDefaultProjectAlias.ensureWorkspaceReadyError",
-            {
-              error,
-              projectId: defaultProject.id,
-            },
-            { level: "warn" },
-          );
-        }
-
         if (cancelled) {
           return;
         }
 
-        applyProjectSelection(defaultProject.id);
-        setProject((current) =>
-          current?.id === defaultProject.id &&
-          current.rootPath === resolvedRootPath
-            ? current
-            : {
-                ...defaultProject,
-                rootPath: resolvedRootPath,
-              },
-        );
-        logAgentDebug("AgentChatPage", "resolveDefaultProjectAlias.success", {
+        resetProjectSelection();
+        setProject(null);
+        logAgentDebug("AgentChatPage", "resolveDefaultProjectAlias.detached", {
           durationMs: Date.now() - startedAt,
-          projectId: defaultProject.id,
-          rootPath: resolvedRootPath,
         });
         console.info(
           `[PERF] resolveDefaultProjectAlias: ${(performance.now() - perfT0).toFixed(0)}ms`,
@@ -859,93 +829,7 @@ export function AgentChatWorkspace({
     externalProjectId,
     getRememberedProjectId,
     projectId,
-  ]);
-
-  useEffect(() => {
-    if (
-      !shouldUseBrowserWorkspaceHomeChrome ||
-      projectId ||
-      externalProjectId
-    ) {
-      return;
-    }
-
-    let cancelled = false;
-    const startedAt = Date.now();
-
-    startupTracker.mark(
-      "AgentChatWorkspace: homeDefaultWorkspace resolve start",
-    );
-    logAgentDebug("AgentChatPage", "homeDefaultWorkspace.resolve.start", {
-      agentEntry,
-    });
-
-    void (async () => {
-      try {
-        startupTracker.mark(
-          "AgentChatWorkspace: calling getOrCreateDefaultProject",
-        );
-        const defaultProject = await getOrCreateDefaultProject();
-        startupTracker.mark(
-          "AgentChatWorkspace: getOrCreateDefaultProject returned",
-        );
-
-        if (cancelled) {
-          return;
-        }
-
-        if (!defaultProject?.id) {
-          startupTracker.mark("AgentChatWorkspace: no default project");
-          logAgentDebug(
-            "AgentChatPage",
-            "homeDefaultWorkspace.resolve.empty",
-            {
-              durationMs: Date.now() - startedAt,
-            },
-            { level: "warn" },
-          );
-          return;
-        }
-
-        applyProjectSelection(defaultProject.id);
-        setProject(defaultProject);
-        startupTracker.mark(
-          `AgentChatWorkspace: homeDefaultWorkspace resolved (${Date.now() - startedAt}ms)`,
-        );
-        logAgentDebug("AgentChatPage", "homeDefaultWorkspace.resolve.success", {
-          durationMs: Date.now() - startedAt,
-          projectId: defaultProject.id,
-        });
-      } catch (error) {
-        if (cancelled) {
-          return;
-        }
-
-        startupTracker.mark(
-          `AgentChatWorkspace: homeDefaultWorkspace error (${Date.now() - startedAt}ms)`,
-        );
-        console.warn("[AgentChatPage] 准备默认工作区失败:", error);
-        logAgentDebug(
-          "AgentChatPage",
-          "homeDefaultWorkspace.resolve.error",
-          {
-            durationMs: Date.now() - startedAt,
-            error,
-          },
-          { level: "warn" },
-        );
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    agentEntry,
-    applyProjectSelection,
-    externalProjectId,
-    projectId,
-    shouldUseBrowserWorkspaceHomeChrome,
+    resetProjectSelection,
   ]);
 
   // 画布状态（支持多种画布类型）
@@ -1021,12 +905,7 @@ export function AgentChatWorkspace({
   const currentOpenedProjectSummary =
     normalizeProjectId(project?.id) === normalizeProjectId(projectId)
       ? project
-      : projectId
-        ? {
-            id: projectId,
-            name: projectId,
-          }
-        : null;
+      : null;
   const openedProjects = useOpenedProjectSummaries(currentOpenedProjectSummary);
   const handleCloseOpenedProject = useCallback(
     (closingProjectId: string) => {
@@ -1414,6 +1293,10 @@ export function AgentChatWorkspace({
     useState<CanvasWorkbenchLayoutMode>("split");
   const [browserWorkbenchOpenRequest, setBrowserWorkbenchOpenRequest] =
     useState<CanvasWorkbenchBrowserOpenRequest | null>(null);
+  const [
+    canvasWorkbenchPreviewOpenRequest,
+    setCanvasWorkbenchPreviewOpenRequest,
+  ] = useState<CanvasWorkbenchPreviewOpenRequest | null>(null);
   const [focusedArtifactBlockId, setFocusedArtifactBlockId] = useState<
     string | null
   >(null);
@@ -1424,6 +1307,7 @@ export function AgentChatWorkspace({
   >(null);
   const [timelineFocusRequestKey, setTimelineFocusRequestKey] = useState(0);
   const browserWorkbenchRequestKeyRef = useRef(0);
+  const canvasWorkbenchPreviewRequestKeyRef = useRef(0);
   const autoCollapsedTopicSidebarRef = useRef(false);
 
   const requestBrowserWorkbenchOpen = useCallback((url: string | null) => {
@@ -1433,10 +1317,28 @@ export function AgentChatWorkspace({
       url,
     });
   }, []);
+  const requestCanvasWorkbenchPreviewOpen = useCallback(
+    (filePath: string | null) => {
+      canvasWorkbenchPreviewRequestKeyRef.current += 1;
+      setCanvasWorkbenchPreviewOpenRequest({
+        requestKey: canvasWorkbenchPreviewRequestKeyRef.current,
+        filePath,
+      });
+    },
+    [],
+  );
 
   const handleBrowserWorkbenchOpenRequestHandled = useCallback(
     (requestKey: string | number) => {
       setBrowserWorkbenchOpenRequest((current) =>
+        current?.requestKey === requestKey ? null : current,
+      );
+    },
+    [],
+  );
+  const handleCanvasWorkbenchPreviewOpenRequestHandled = useCallback(
+    (requestKey: string | number) => {
+      setCanvasWorkbenchPreviewOpenRequest((current) =>
         current?.requestKey === requestKey ? null : current,
       );
     },
@@ -2011,6 +1913,7 @@ export function AgentChatWorkspace({
       handleWriteFileRef.current?.(content, fileName, context);
     },
     workspaceId: runtimeWorkspaceId,
+    workingDir: project?.rootPath || null,
     disableSessionRestore: shouldDisableSessionRestore,
     initialTopicsLoadMode: shouldDeferInitialTopicsLoad
       ? "deferred"
@@ -3555,6 +3458,7 @@ export function AgentChatWorkspace({
     clearRuntimeTeamState,
     clearPendingEntryA2UI: clearEntryPendingA2UI,
     clearProjectSelectionRuntime,
+    resetProjectSelection,
     resetRestoredSessionState,
     resetGuideState,
     hasHandledNewChatRequest,
@@ -3988,80 +3892,17 @@ export function AgentChatWorkspace({
     }
     workspacePathAutoRecoveryKeyRef.current = recoveryKey;
 
-    let cancelled = false;
-
-    void (async () => {
-      const defaultProject = await getOrCreateDefaultProject();
-      const targetWorkspaceId = normalizeProjectId(defaultProject?.id);
-      if (!targetWorkspaceId || targetWorkspaceId === sourceWorkspaceId) {
-        throw new Error("no alternate default workspace available");
-      }
-
-      let resolvedRootPath = defaultProject.rootPath;
-      try {
-        const ensuredWorkspace = await ensureWorkspaceReady(targetWorkspaceId);
-        resolvedRootPath = ensuredWorkspace.rootPath || resolvedRootPath;
-      } catch (error) {
-        logAgentDebug(
-          "AgentChatPage",
-          "workspacePathAutoRecovery.ensureDefaultWorkspaceReadyError",
-          {
-            error,
-            projectId: targetWorkspaceId,
-          },
-          { level: "warn" },
-        );
-      }
-
-      if (cancelled) {
-        return;
-      }
-
-      pendingWorkspacePathRetryRef.current = {
-        targetWorkspaceId,
-        content: workspacePathMissing.content,
-        images: workspacePathMissing.images,
+    workspacePathAutoRecoveryKeyRef.current = null;
+    logAgentDebug(
+      "AgentChatPage",
+      "workspacePathAutoRecovery.skippedNoDefaultProjectFallback",
+      {
+        projectId: sourceWorkspaceId,
         recoveryKey,
-      };
-      dismissWorkspacePathError();
-      applyProjectSelection(targetWorkspaceId);
-      setProject((current) =>
-        current?.id === targetWorkspaceId &&
-        current.rootPath === resolvedRootPath
-          ? current
-          : {
-              ...defaultProject,
-              rootPath: resolvedRootPath,
-            },
-      );
-      setWorkspaceHealthError(false);
-      logAgentDebug("AgentChatPage", "workspacePathAutoRecovery.switched", {
-        sourceWorkspaceId,
-        targetWorkspaceId,
-        rootPath: resolvedRootPath,
-      });
-    })().catch((error) => {
-      if (cancelled) {
-        return;
-      }
-      workspacePathAutoRecoveryKeyRef.current = null;
-      logAgentDebug(
-        "AgentChatPage",
-        "workspacePathAutoRecovery.error",
-        {
-          error,
-          projectId: sourceWorkspaceId,
-        },
-        { level: "warn" },
-      );
-    });
-
-    return () => {
-      cancelled = true;
-    };
+      },
+      { level: "warn" },
+    );
   }, [
-    applyProjectSelection,
-    dismissWorkspacePathError,
     project,
     workspacePathMissing,
   ]);
@@ -4605,20 +4446,51 @@ export function AgentChatWorkspace({
     },
     [handleOpenTaskTopic],
   );
-  const handleOpenTaskCenterNewTaskPage = useCallback(() => {
-    if (agentEntry !== "claw" && agentEntry !== "new-task") {
-      return;
-    }
+  const handleOpenTaskCenterNewTaskPage = useCallback(
+    (requestedProjectId?: string | null) => {
+      if (agentEntry !== "claw" && agentEntry !== "new-task") {
+        return;
+      }
 
-    openTaskCenterDraftTab();
-  }, [agentEntry, openTaskCenterDraftTab]);
+      const normalizedRequestedProjectId =
+        requestedProjectId === undefined
+          ? normalizeProjectId(externalProjectId)
+          : normalizeProjectId(requestedProjectId);
+      const normalizedExternalProjectId = normalizeProjectId(externalProjectId);
+      if (normalizedRequestedProjectId !== normalizedExternalProjectId) {
+        _onNavigate?.(
+          "agent",
+          buildHomeAgentParams({
+            projectId: normalizedRequestedProjectId ?? undefined,
+          }),
+        );
+        return;
+      }
+
+      if (normalizedRequestedProjectId) {
+        applyProjectSelection(normalizedRequestedProjectId);
+      } else {
+        resetProjectSelection();
+      }
+
+      openTaskCenterDraftTab();
+    },
+    [
+      _onNavigate,
+      agentEntry,
+      applyProjectSelection,
+      externalProjectId,
+      openTaskCenterDraftTab,
+      resetProjectSelection,
+    ],
+  );
   useEffect(() => {
     if (agentEntry !== "claw" && agentEntry !== "new-task") {
       return;
     }
 
-    return subscribeTaskCenterDraftTaskRequests(() => {
-      handleOpenTaskCenterNewTaskPage();
+    return subscribeTaskCenterDraftTaskRequests((detail) => {
+      handleOpenTaskCenterNewTaskPage(detail.projectId);
     });
   }, [agentEntry, handleOpenTaskCenterNewTaskPage]);
   useEffect(() => {
@@ -5191,6 +5063,10 @@ export function AgentChatWorkspace({
 
         handleWorkspaceFileClick(target.filePath, content);
 
+        if (target.openMode === "file_preview") {
+          requestCanvasWorkbenchPreviewOpen(target.filePath);
+        }
+
         const normalizedBlockId = target.blockId?.trim();
         if (!normalizedBlockId) {
           return;
@@ -5200,7 +5076,12 @@ export function AgentChatWorkspace({
         setArtifactBlockFocusRequestKey((current) => current + 1);
       })();
     },
-    [handleHarnessLoadFilePreview, handleWorkspaceFileClick, project?.rootPath],
+    [
+      handleHarnessLoadFilePreview,
+      handleWorkspaceFileClick,
+      project?.rootPath,
+      requestCanvasWorkbenchPreviewOpen,
+    ],
   );
   const siteSkillSavedContentTarget = useMemo(
     () =>
@@ -6977,6 +6858,9 @@ export function AgentChatWorkspace({
     browserWorkbenchOpenRequest,
     onBrowserWorkbenchOpenRequestHandled:
       handleBrowserWorkbenchOpenRequestHandled,
+    canvasWorkbenchPreviewOpenRequest,
+    onCanvasWorkbenchPreviewOpenRequestHandled:
+      handleCanvasWorkbenchPreviewOpenRequestHandled,
     projectId: projectId ?? null,
     openedProjects,
     onCloseProject: handleCloseOpenedProject,
@@ -7086,11 +6970,15 @@ export function AgentChatWorkspace({
     isSpecializedThemeMode,
     hasMessages,
     steps,
+    activityLogs: generalWorkbenchSidebarRuntime.generalWorkbenchActivityLogs,
+    creationTaskEvents:
+      generalWorkbenchScaffoldRuntime.generalWorkbenchCreationTaskEvents,
     currentStepIndex,
     goToStep,
     displayMessages: sceneDisplayMessages,
     turns: sceneTurns,
     effectiveThreadItems: sceneThreadItems,
+    todoItems,
     currentTurnId: sceneCurrentTurnId,
     threadRead: sceneThreadRead,
     pendingActions: scenePendingActions,

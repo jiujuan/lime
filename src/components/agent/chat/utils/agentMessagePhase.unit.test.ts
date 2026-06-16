@@ -54,6 +54,35 @@ describe("agentMessagePhase", () => {
     expect([...selected]).toEqual(["assistant-final"]);
   });
 
+  it("应把 content/message 字段也纳入最终正文候选", () => {
+    const selected = resolveFinalAgentMessageItemIds([
+      {
+        id: "assistant-process",
+        type: "agent_message",
+        turn_id: "turn-content-alias",
+        sequence: 2,
+        content: "我先读取文件。",
+      },
+      {
+        id: "assistant-final",
+        type: "agent_message",
+        turn_id: "turn-content-alias",
+        sequence: 4,
+        phase: "final_answer",
+        content: "文件总结正文。",
+      },
+      {
+        id: "assistant-empty",
+        type: "agent_message",
+        turn_id: "turn-empty-message",
+        sequence: 1,
+        message: "   ",
+      },
+    ]);
+
+    expect([...selected]).toEqual(["assistant-final"]);
+  });
+
   it("旧数据缺少 phase 时每个 turn 只选最后一条 agent_message", () => {
     const selected = resolveFinalAgentMessageItemIds([
       {

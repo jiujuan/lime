@@ -344,6 +344,186 @@ describe("useWorkspaceConversationSceneRuntime", () => {
     expect(sceneProps.navbarContextVariant).toBe("task-center");
   });
 
+  it("应把运行摘要事实透传给 Task Center 任务轨道", () => {
+    const params = createBaseParams({
+      providerType: "cloud",
+      model: "reasoner-pro",
+      accessMode: "current",
+      reasoningEffort: "medium",
+      projectRootPath: "/tmp/project-1",
+      canvasWorkbenchRootPath: "/tmp/canvas-root",
+    });
+
+    const sceneProps = getRenderedSceneProps(params);
+    expect(sceneProps.taskRail?.context).toEqual({
+      providerType: "cloud",
+      model: "reasoner-pro",
+      accessMode: "current",
+      reasoningEffort: "medium",
+      workspacePath: "/tmp/project-1",
+    });
+  });
+
+  it("应把待确认状态与响应入口透传给 Task Center 任务轨道", () => {
+    const handlePermissionResponse = vi.fn();
+    const pendingActions = [
+      {
+        requestId: "approval-write",
+        actionType: "tool_confirmation",
+        toolName: "write_file",
+        prompt: "允许保存 result.md？",
+      },
+    ];
+    const submittedActionsInFlight = [
+      {
+        requestId: "approval-shell",
+        actionType: "tool_confirmation",
+        toolName: "shell",
+        status: "submitted",
+      },
+    ];
+    const params = createBaseParams({
+      pendingActions,
+      submittedActionsInFlight,
+      handlePermissionResponse,
+    });
+
+    const sceneProps = getRenderedSceneProps(params);
+    expect(sceneProps.taskRail?.pendingActions).toBe(pendingActions);
+    expect(sceneProps.taskRail?.submittedActionsInFlight).toBe(
+      submittedActionsInFlight,
+    );
+    expect(sceneProps.taskRail?.onRespondToAction).toBe(
+      handlePermissionResponse,
+    );
+  });
+
+  it("应把已投影 timeline 透传给 Task Center 任务轨道用于已处理确认回显", () => {
+    const threadItems = [
+      {
+        id: "approval-write-item",
+        type: "approval_request",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        sequence: 1,
+        status: "completed",
+        request_id: "approval-write",
+        action_type: "tool_confirmation",
+        prompt: "允许保存 result.md？",
+        response: "approved",
+        started_at: "2026-06-16T10:00:00.000Z",
+        completed_at: "2026-06-16T10:00:03.000Z",
+        updated_at: "2026-06-16T10:00:03.000Z",
+      },
+    ];
+    const params = createBaseParams({
+      effectiveThreadItems: threadItems,
+    });
+
+    const sceneProps = getRenderedSceneProps(params);
+    expect(sceneProps.taskRail?.threadItems).toBe(threadItems);
+  });
+
+  it("应把 todo items 透传给 Task Center 任务轨道用于恢复历史计划", () => {
+    const todoItems = [
+      {
+        content: "恢复历史计划",
+        status: "in_progress",
+      },
+    ];
+    const params = createBaseParams({
+      todoItems,
+    });
+
+    const sceneProps = getRenderedSceneProps(params);
+    expect(sceneProps.taskRail?.todoItems).toBe(todoItems);
+  });
+
+  it("应把 read model 目标、变更和子任务事实透传给 Task Center 任务轨道", () => {
+    const threadRead = {
+      thread_id: "thread-1",
+      managed_objective: {
+        objective_id: "objective-1",
+        owner_kind: "agent_session",
+        owner_id: "session-1",
+        objective_text: "完成任务区域摘要",
+        success_criteria: [],
+        status: "active",
+        last_artifact_refs: [],
+        created_at: "2026-06-16T10:00:00.000Z",
+        updated_at: "2026-06-16T10:00:00.000Z",
+      },
+      change_summary: {
+        changed_file_count: 2,
+        changed_files: ["src/App.tsx", "src/index.ts"],
+        patch_count: 2,
+        applied_patch_count: 1,
+      },
+      context_summary: {
+        sources: ["https://docs.example.com/task-rail"],
+        retrieval_refs: [
+          {
+            source_id: "retrieval-1",
+            kind: "file",
+            title: "run-observability.md",
+          },
+        ],
+      },
+      evidence_summary: {
+        evidence_refs: ["evidence/run-control.json"],
+      },
+    };
+    const childSubagentSessions = [
+      {
+        id: "child-running",
+        name: "实现",
+        created_at: 1,
+        updated_at: 2,
+        session_type: "subagent",
+        runtime_status: "running",
+      },
+      {
+        id: "child-done",
+        name: "验证",
+        created_at: 1,
+        updated_at: 2,
+        session_type: "subagent",
+        runtime_status: "completed",
+      },
+    ];
+    const params = createBaseParams({
+      threadRead,
+      childSubagentSessions,
+    });
+
+    const sceneProps = getRenderedSceneProps(params);
+
+    expect(sceneProps.taskRail?.threadRead).toBe(threadRead);
+    expect(sceneProps.taskRail?.childSubagentSessions).toBe(
+      childSubagentSessions,
+    );
+    expect(sceneProps.taskRail?.context).toEqual(
+      expect.objectContaining({
+        objectiveText: "完成任务区域摘要",
+        changedFileCount: 2,
+        changedFiles: ["src/App.tsx", "src/index.ts"],
+        patchCount: 2,
+        appliedPatchCount: 1,
+        sourceCount: 3,
+        sourceLabels: [
+          "docs.example.com",
+          "run-observability.md",
+          "run-control.json",
+        ],
+        sourceEvidenceCount: 1,
+        sourceConsistencyStatus: "linked",
+        subtaskTotalCount: 2,
+        subtaskActiveCount: 1,
+        subtaskCompletedCount: 1,
+      }),
+    );
+  });
+
   it("存在 Harness 入口时应透传顶栏按钮文案", () => {
     const params = createBaseParams({
       showHarnessToggle: true,
@@ -1057,6 +1237,31 @@ describe("useWorkspaceConversationSceneRuntime", () => {
     expect(canvasProps.outputView).toBeNull();
     expect(canvasProps.logView).toBeNull();
     expect(canvasProps.changeView).toBeNull();
+  });
+
+  it("任务中心输出文件应按工作区根目录解析后再打开", () => {
+    const handleOpenCanvasWorkbenchPath = vi.fn();
+    const sceneProps = getRenderedSceneProps(
+      createBaseParams({
+        canvasScene: {
+          ...createBaseParams().canvasScene,
+          handleOpenCanvasWorkbenchPath,
+        },
+        projectRootPath: "/tmp/project-1",
+        canvasWorkbenchRootPath: "/tmp/session-root",
+        steps: [{ id: "write", title: "整理输出文件", status: "active" }],
+      }),
+    );
+
+    sceneProps.taskRail?.onOpenOutput?.("docs/result.md");
+    expect(handleOpenCanvasWorkbenchPath).toHaveBeenCalledWith(
+      "/tmp/project-1/docs/result.md",
+    );
+
+    sceneProps.taskRail?.onOpenOutput?.("/tmp/absolute.md");
+    expect(handleOpenCanvasWorkbenchPath).toHaveBeenLastCalledWith(
+      "/tmp/absolute.md",
+    );
   });
 
   it("应把做法执行摘要卡透传给 WorkspaceConversationScene", () => {

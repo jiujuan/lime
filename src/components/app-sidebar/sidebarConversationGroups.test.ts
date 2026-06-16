@@ -38,9 +38,9 @@ describe("sidebarConversationGroups", () => {
     const groups = buildSidebarConversationGroups({
       openedProjects,
       sessions: [
-        session("a-1", { workspace_id: "project-a" }),
-        session("b-1", { workspace_id: "project-b" }),
-        session("hidden-1", { workspace_id: "project-hidden" }),
+        session("a-1", { working_dir: "/repo/content-factory-app/" }),
+        session("b-1", { working_dir: "/repo/lime" }),
+        session("hidden-1", { working_dir: "/repo/hidden" }),
         session("standalone-1"),
       ],
     });
@@ -62,11 +62,15 @@ describe("sidebarConversationGroups", () => {
     );
   });
 
-  it("用 working_dir 兜底归属 Codex 风格的项目历史", () => {
+  it("只用 working_dir 匹配项目 rootPath，不再用 workspace_id 推断归属", () => {
     const groups = buildSidebarConversationGroups({
       openedProjects,
       sessions: [
-        session("cwd-project", { working_dir: "/repo/lime/" }),
+        session("workspace-project", { workspace_id: "project-b" }),
+        session("cwd-project", {
+          workspace_id: "project-hidden",
+          working_dir: "/repo/lime/",
+        }),
         session("cwd-standalone", { working_dir: "/repo/other" }),
       ],
     });
@@ -74,18 +78,16 @@ describe("sidebarConversationGroups", () => {
     expect(groups.projectSections[1].sessions.map((item) => item.id)).toEqual([
       "cwd-project",
     ]);
-    expect(groups.standaloneSessions.map((item) => item.id)).toEqual([
-      "cwd-standalone",
-    ]);
+    expect(groups.standaloneSessions.map((item) => item.id)).toEqual([]);
   });
 
   it("左侧导航只构建未归档会话分组", () => {
     const groups = buildSidebarConversationGroups({
       openedProjects,
       sessions: [
-        session("active", { workspace_id: "project-a" }),
+        session("active", { working_dir: "/repo/content-factory-app" }),
         session("archived", {
-          workspace_id: "project-a",
+          working_dir: "/repo/content-factory-app",
           archived_at: 1,
         }),
       ],

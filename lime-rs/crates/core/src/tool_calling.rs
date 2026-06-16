@@ -352,8 +352,8 @@ static TOOL_DISCOVERY_PROFILES: &[ToolDiscoveryProfile] = &[
         intent_terms: &["send message", "team message", "发消息", "团队消息"],
     },
     ToolDiscoveryProfile {
-        canonical_name: "AskUserQuestion",
-        aliases: &["AskUserQuestionTool", "request_user_input"],
+        canonical_name: "request_user_input",
+        aliases: &["RequestUserInputTool"],
         intent_terms: &["ask user", "user input", "clarify", "询问用户", "补充信息"],
     },
     ToolDiscoveryProfile {
@@ -1291,7 +1291,7 @@ mod tests {
                 "Return the final JSON answer",
                 "structured final output",
             ),
-            ("AskUserQuestion", "Ask the user for input", "ask user"),
+            ("request_user_input", "Ask the user for input", "ask user"),
         ];
 
         for (name, description, query) in cases {

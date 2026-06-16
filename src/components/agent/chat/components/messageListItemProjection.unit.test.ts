@@ -17,8 +17,10 @@ function buildProjection(
   options: {
     activePendingA2UISource?: PendingA2UISource | null;
     hasActiveInteractiveRuntime?: boolean;
+    isRestoredHistoryWindow?: boolean;
     isSending?: boolean;
     lastAssistantMessageId?: string | null;
+    shouldDeferMessageDetails?: boolean;
     streamingTextOverlay?: AgentStreamTextOverlaySnapshot | null;
   } = {},
 ) {
@@ -42,11 +44,12 @@ function buildProjection(
         : null,
     } as never,
     hasActiveInteractiveRuntime: options.hasActiveInteractiveRuntime ?? true,
-    isRestoredHistoryWindow: false,
+    isRestoredHistoryWindow: options.isRestoredHistoryWindow ?? false,
     isSending: options.isSending ?? true,
     lastAssistantMessageId: options.lastAssistantMessageId ?? message.id,
     message,
-    shouldDeferHistoricalAssistantMessageDetails: () => false,
+    shouldDeferHistoricalAssistantMessageDetails: () =>
+      options.shouldDeferMessageDetails ?? false,
     shouldDeferThreadItemsScan: false,
     streamingTextOverlay: options.streamingTextOverlay ?? null,
   });
@@ -291,6 +294,57 @@ describe("messageListItemProjection", () => {
       "text",
     ]);
     expect(projection.rendererRawContent).not.toContain("外部信息工具");
+  });
+
+  it("历史细节延迟时 content 为空也应从 contentParts 保留最终正文首帧", () => {
+    const message: Message = {
+      id: "assistant-history-deferred-text-parts",
+      role: "assistant",
+      content: "",
+      timestamp: new Date("2026-06-02T10:00:00.000Z"),
+      contentParts: [
+        {
+          type: "text",
+          text: "我先查看关键文件，再整理评分卡。",
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-read-scorecard",
+            name: "Read",
+            arguments: '{"file_path":"/repo/scorecard.md"}',
+            status: "completed",
+            result: {
+              success: true,
+              output: "file contents",
+            },
+          } as never,
+        },
+        {
+          type: "text",
+          text: "## 文件总结\n\n这是一份 Agent Workspace 工具 UI 评分卡。",
+        },
+      ],
+    };
+
+    const projection = buildProjection(message, null, {
+      hasActiveInteractiveRuntime: false,
+      isRestoredHistoryWindow: true,
+      isSending: false,
+      shouldDeferMessageDetails: true,
+    });
+
+    expect(projection.hasAssistantBodyContent).toBe(true);
+    expect(projection.actionContent).toBe(
+      "## 文件总结\n\n这是一份 Agent Workspace 工具 UI 评分卡。",
+    );
+    expect(projection.shouldDeferHistoricalMarkdownRender).toBe(true);
+    expect(projection.rendererContent).toBe(
+      "## 文件总结\n\n这是一份 Agent Workspace 工具 UI 评分卡。",
+    );
+    expect(projection.rendererContentParts).toBeUndefined();
+    expect(projection.rendererRawContent).not.toContain("我先查看关键文件");
+    expect(projection.rendererRawContent).not.toContain("file contents");
   });
 
   it("旧 timeline 缺少 phase 时应只把最后一条 agent_message 当作最终正文", () => {

@@ -241,6 +241,57 @@ describe("agentTaskRuntime", () => {
     expect(inputbarModel?.completedAt).toBeNull();
   });
 
+  it("可恢复模型通道错误重试时应在输入栏保留运行状态详情", () => {
+    const messages: Message[] = [
+      {
+        id: "msg-user-retry",
+        role: "user",
+        content: "整理今天的国际新闻",
+        timestamp: new Date("2026-06-07T10:00:00.000Z"),
+      },
+      {
+        id: "msg-assistant-retry",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-06-07T10:00:01.000Z"),
+        isThinking: true,
+        runtimeStatus: {
+          phase: "retrying",
+          title: "正在恢复模型输出",
+          detail: "模型通道在尾段暂时中断，正在补齐最终答复。",
+          checkpoints: ["已保留本轮已有工具结果和部分输出"],
+        },
+      },
+    ];
+
+    const inputbarModel = buildInputbarRuntimeStatusLineModel({
+      messages,
+      turns: [
+        {
+          id: "turn-retry",
+          thread_id: "thread-retry",
+          prompt_text: "整理今天的国际新闻",
+          status: "running",
+          started_at: "2026-06-07T10:00:00Z",
+          created_at: "2026-06-07T10:00:00Z",
+          updated_at: "2026-06-07T10:00:04Z",
+        },
+      ],
+      currentTurnId: "turn-retry",
+      threadRead: {
+        thread_id: "thread-retry",
+        status: "running",
+      },
+    });
+
+    expect(inputbarModel).toMatchObject({
+      status: "running",
+      latestRuntimePhase: "retrying",
+      detail: "模型通道在尾段暂时中断，正在补齐最终答复。",
+      completedAt: null,
+    });
+  });
+
   it("复杂任务完成后应自动折叠，回到消息级 usage 与结算展示", () => {
     const model = buildAgentTaskRuntimeCardModel({
       messages: [

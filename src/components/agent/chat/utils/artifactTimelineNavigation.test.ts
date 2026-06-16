@@ -93,12 +93,31 @@ describe("artifactTimelineNavigation", () => {
     expect(navigation?.rootTarget.filePath).toBe(
       ".lime/artifacts/thread-1/demo.artifact.json",
     );
+    expect(navigation?.rootTarget.openMode).toBe("artifact_review");
     expect(navigation?.blockTargets).toEqual([
       expect.objectContaining({
         timelineItemId: "item-1",
         blockId: "body-1",
+        openMode: "artifact_review",
       }),
     ]);
+  });
+
+  it("普通文件目标应声明为文件预览而不是审查", () => {
+    const navigation = resolveTimelineArtifactNavigation(
+      createFileArtifactItem({
+        path: "outputs/international-news-analysis-2026-06-16.md",
+        content: "# 今日国际新闻分析\n\n正文内容",
+        metadata: {},
+      }),
+    );
+
+    expect(navigation?.rootTarget).toEqual(
+      expect.objectContaining({
+        filePath: "outputs/international-news-analysis-2026-06-16.md",
+        openMode: "file_preview",
+      }),
+    );
   });
 
   it("构建 workbench 侧索引时应按 blockId 回灌 timeline 关联", () => {

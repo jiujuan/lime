@@ -44,7 +44,8 @@ describe("agent session history Electron fixture smoke guard", () => {
     expect(content).toContain("callExpectError");
     expect(content).toContain("archiveFailClosed");
     expect(content).toContain("listedSessionArchivedAt == null");
-    expect(content).toContain("seedPersistedCurrentTimelineSession");
+    expect(content).toContain("seedPersistedProjectionSession");
+    expect(content).not.toContain("seedPersistedCurrentTimelineSession");
     expect(content).toContain("SQLITE3_BINARY");
     expect(content).toContain("PERSISTED_SESSION_ID");
     expect(content).toContain("launchElectronFixture");
@@ -57,21 +58,11 @@ describe("agent session history Electron fixture smoke guard", () => {
     expect(content).toContain("archived: false");
     expect(content).toContain("PERSISTED_SESSION_FORBIDDEN_METHODS");
     expect(content).toContain("sidecarRestartReadback");
-    expect(content).toContain("seedLegacyAgentMessagesSession");
-    expect(content).toContain("runLegacyAgentMessagesBackfillPhase");
-    expect(content).toContain("assertLegacyBackfillPhase");
-    expect(content).toContain("LEGACY_SESSION_ID");
-    expect(content).toContain("LEGACY_USER_TEXT");
-    expect(content).toContain("LEGACY_ASSISTANT_TEXT");
-    expect(content).toContain("agent_messages");
-    expect(content).toContain("a2ui_forms");
     expect(content).toContain("projection_1.sqlite");
+    expect(content).toContain("projected_sessions");
+    expect(content).toContain("projected_items");
+    expect(content).toContain("projection_watermarks");
     expect(content).toContain("message.created");
-    expect(content).toContain("legacyBackfillSummary");
-    expect(content).toContain(
-      '"launch-electron-legacy-agent-messages-backfill"',
-    );
-    expect(content).toContain("legacy backfill 默认 drop-empty-tables");
     expect(content).toContain('"launch-electron-persisted-archive-readback"');
     expect(content).toContain('"launch-electron-persisted-unarchive-readback"');
     expect(content).toContain("SIDEBAR_GUI_REQUIRED_METHODS");
@@ -88,17 +79,22 @@ describe("agent session history Electron fixture smoke guard", () => {
     expect(content).not.toContain('APP_SERVER_BACKEND_MODE: "external"');
     expect(content).not.toContain("APP_SERVER_BACKEND_COMMAND");
     expect(content).not.toContain("--allow-live-provider");
+    expect(content).not.toContain("seedLegacyAgentMessagesSession");
+    expect(content).not.toContain("runLegacyAgentMessagesBackfillPhase");
+    expect(content).not.toContain("assertLegacyBackfillPhase");
+    expect(content).not.toContain("LEGACY_SESSION_ID");
+    expect(content).not.toContain("agent_messages");
+    expect(content).not.toContain("a2ui_forms");
   });
 
-  it("guards hydrate detail arrays that previously crashed history restore", () => {
+  it("guards current detail arrays that previously crashed history restore", () => {
     const content = readSmokeScript();
 
     expect(content).toContain("detail.turns");
     expect(content).toContain("detail.items");
     expect(content).toContain("detail.queued_turns");
-    expect(content).toContain("detail.child_subagent_sessions");
     expect(content).toContain("detail.thread_read");
-    expect(content).toContain("不能破坏 hydrate");
+    expect(content).toContain("不是数组");
   });
 
   it("does not use legacy commands or mock fallback as success evidence", () => {

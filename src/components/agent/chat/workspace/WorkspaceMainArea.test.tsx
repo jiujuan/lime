@@ -165,9 +165,9 @@ describe("WorkspaceMainArea", () => {
 
     expect(orderedPanels).toContain("layout-chat-panel");
     expect(orderedPanels).toContain("layout-canvas-panel");
-    expect(
-      orderedPanels.indexOf("layout-chat-panel"),
-    ).toBeLessThan(orderedPanels.indexOf("layout-canvas-panel"));
+    expect(orderedPanels.indexOf("layout-chat-panel")).toBeLessThan(
+      orderedPanels.indexOf("layout-canvas-panel"),
+    );
     expect(orderedPanels).toContain("layout-chat-canvas-resize-handle");
     expect(
       container.querySelector('[data-testid="workspace-chat-content"]'),
@@ -194,7 +194,7 @@ describe("WorkspaceMainArea", () => {
     ).toBe("chat");
   });
 
-  it("任务中心顶栏和会话标签应合并到统一 Chrome 背景中", () => {
+  it("没有独立工具栏时任务中心顶栏和会话标签仍可作为兼容 Chrome 渲染", () => {
     const { container } = mountHarness(
       WorkspaceMainAreaHarness,
       {
@@ -218,7 +218,68 @@ describe("WorkspaceMainArea", () => {
     ).not.toBeNull();
   });
 
-  it("任务中心工具栏应占据独立右侧区域，避免覆盖工作台和会话标签", () => {
+  it("任务中心有独立工具栏时应隐藏项目栏和会话标签，只保留右上工具区", () => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      writable: true,
+      value: 1440,
+    });
+    Object.defineProperty(window, "innerHeight", {
+      configurable: true,
+      writable: true,
+      value: 900,
+    });
+
+    const { container } = mountHarness(
+      WorkspaceMainAreaHarness,
+      {
+        navbarNode: <div data-testid="workspace-navbar">navbar</div>,
+        taskCenterTabsNode: <div data-testid="task-center-tabs">tabs</div>,
+        taskCenterUtilityToolbarNode: (
+          <div data-testid="task-center-toolbar">toolbar</div>
+        ),
+      },
+      mountedRoots,
+    );
+
+    const chromeShell = container.querySelector<HTMLElement>(
+      '[data-testid="task-center-chrome-shell"]',
+    );
+    const navbar = container.querySelector<HTMLElement>(
+      '[data-testid="workspace-navbar"]',
+    );
+    const tabs = container.querySelector<HTMLElement>(
+      '[data-testid="task-center-tabs"]',
+    );
+    const inlineHost = container.querySelector<HTMLElement>(
+      '[data-testid="task-center-utility-toolbar-host"]',
+    );
+    const homeTopHost = container.querySelector<HTMLElement>(
+      '[data-testid="task-center-home-top-toolbar-host"]',
+    );
+    const workbenchTopHost = container.querySelector<HTMLElement>(
+      '[data-testid="task-center-workbench-top-toolbar-host"]',
+    );
+
+    expect(chromeShell).toBeNull();
+    expect(navbar).toBeNull();
+    expect(tabs).toBeNull();
+    expect(inlineHost).toBeNull();
+    expect(homeTopHost).not.toBeNull();
+    expect(homeTopHost?.className).toContain("right-0");
+    expect(homeTopHost?.className).toContain("top-0");
+    expect(homeTopHost?.className).not.toContain(
+      "bg-[color:var(--lime-chrome-rail)]",
+    );
+    expect(homeTopHost?.className).not.toContain("border-b");
+    expect(homeTopHost?.style.width).toBe("236px");
+    expect(
+      homeTopHost?.querySelector('[data-testid="task-center-toolbar"]'),
+    ).not.toBeNull();
+    expect(workbenchTopHost).toBeNull();
+  });
+
+  it("窄宽度任务中心也不应恢复内联会话标签条", () => {
     Object.defineProperty(window, "innerWidth", {
       configurable: true,
       writable: true,
@@ -233,6 +294,7 @@ describe("WorkspaceMainArea", () => {
     const { container } = mountHarness(
       WorkspaceMainAreaHarness,
       {
+        layoutMode: "chat",
         navbarNode: <div data-testid="workspace-navbar">navbar</div>,
         taskCenterTabsNode: <div data-testid="task-center-tabs">tabs</div>,
         taskCenterUtilityToolbarNode: (
@@ -242,118 +304,22 @@ describe("WorkspaceMainArea", () => {
       mountedRoots,
     );
 
-    const host = container.querySelector<HTMLElement>(
+    const inlineHost = container.querySelector<HTMLElement>(
       '[data-testid="task-center-utility-toolbar-host"]',
+    );
+    const homeTopHost = container.querySelector<HTMLElement>(
+      '[data-testid="task-center-home-top-toolbar-host"]',
     );
     const tabs = container.querySelector<HTMLElement>(
       '[data-testid="task-center-tabs"]',
     );
 
-    expect(host).not.toBeNull();
-    expect(host?.className).toContain("shrink-0");
-    expect(host?.className).toContain("max-w-[42%]");
-    expect(host?.className).toContain("overflow-hidden");
-    expect(host?.className).toContain("border-l");
-    expect(tabs?.parentElement?.className).toContain("flex-1");
-    expect(host?.contains(tabs)).toBe(false);
-  });
-
-  it("首页任务中心工具栏在桌面宽度应固定到右上角，而不是挤在标签行中间", () => {
-    Object.defineProperty(window, "innerWidth", {
-      configurable: true,
-      writable: true,
-      value: 1440,
-    });
-    Object.defineProperty(window, "innerHeight", {
-      configurable: true,
-      writable: true,
-      value: 900,
-    });
-
-    const { container } = mountHarness(
-      WorkspaceMainAreaHarness,
-      {
-        layoutMode: "chat",
-        navbarNode: <div data-testid="workspace-navbar">navbar</div>,
-        taskCenterTabsNode: <div data-testid="task-center-tabs">tabs</div>,
-        taskCenterUtilityToolbarNode: (
-          <div data-testid="task-center-toolbar">toolbar</div>
-        ),
-      },
-      mountedRoots,
-    );
-
-    const inlineHost = container.querySelector<HTMLElement>(
-      '[data-testid="task-center-utility-toolbar-host"]',
-    );
-    const homeTopHost = container.querySelector<HTMLElement>(
-      '[data-testid="task-center-home-top-toolbar-host"]',
-    );
-    const workbenchTopHost = container.querySelector<HTMLElement>(
-      '[data-testid="task-center-workbench-top-toolbar-host"]',
-    );
-
     expect(inlineHost).toBeNull();
     expect(homeTopHost).not.toBeNull();
-    expect(homeTopHost?.className).toContain("right-0");
-    expect(homeTopHost?.className).toContain("top-0");
-    expect(homeTopHost?.className).toContain("flex");
-    expect(homeTopHost?.style.width).toBe("236px");
-    expect(
-      homeTopHost?.querySelector('[data-testid="task-center-toolbar"]'),
-    ).not.toBeNull();
-    expect(workbenchTopHost).toBeNull();
+    expect(tabs).toBeNull();
   });
 
-  it("关闭工作台时一级任务导航应向左收缩，给右上工具按钮留出独立区域", () => {
-    Object.defineProperty(window, "innerWidth", {
-      configurable: true,
-      writable: true,
-      value: 1440,
-    });
-    Object.defineProperty(window, "innerHeight", {
-      configurable: true,
-      writable: true,
-      value: 900,
-    });
-
-    const { container } = mountHarness(
-      WorkspaceMainAreaHarness,
-      {
-        layoutMode: "chat",
-        navbarNode: <div data-testid="workspace-navbar">navbar</div>,
-        taskCenterTabsNode: <div data-testid="task-center-tabs">tabs</div>,
-        taskCenterUtilityToolbarNode: (
-          <div data-testid="task-center-toolbar">toolbar</div>
-        ),
-      },
-      mountedRoots,
-    );
-
-    const chromeShell = container.querySelector<HTMLElement>(
-      '[data-testid="task-center-chrome-shell"]',
-    );
-    const homeTopHost = container.querySelector<HTMLElement>(
-      '[data-testid="task-center-home-top-toolbar-host"]',
-    );
-    const inlineHost = container.querySelector<HTMLElement>(
-      '[data-testid="task-center-utility-toolbar-host"]',
-    );
-
-    expect(chromeShell?.dataset.layout).toBe("detached");
-    expect(chromeShell?.dataset.detachedRightReserve).toBe("236px");
-    expect(chromeShell?.dataset.detachedLeftWidth).toBe(
-      "calc(100% - 236px)",
-    );
-    expect(homeTopHost?.style.width).toBe("236px");
-    expect(inlineHost).toBeNull();
-    expect(homeTopHost).not.toBeNull();
-    expect(
-      homeTopHost?.querySelector('[data-testid="task-center-toolbar"]'),
-    ).not.toBeNull();
-  });
-
-  it("展开工作台时任务中心顶栏应只占左侧聊天列，工具栏提升到右侧顶层", () => {
+  it("展开工作台时仍只保留右上工具区，不恢复左侧任务导航", () => {
     Object.defineProperty(window, "innerWidth", {
       configurable: true,
       writable: true,
@@ -383,11 +349,20 @@ describe("WorkspaceMainArea", () => {
     const chromeShell = container.querySelector<HTMLElement>(
       '[data-testid="task-center-chrome-shell"]',
     );
-    const toolbarHost = container.querySelector<HTMLElement>(
+    const homeTopHost = container.querySelector<HTMLElement>(
+      '[data-testid="task-center-home-top-toolbar-host"]',
+    );
+    const inlineHost = container.querySelector<HTMLElement>(
       '[data-testid="task-center-utility-toolbar-host"]',
     );
     const workbenchToolbarHost = container.querySelector<HTMLElement>(
       '[data-testid="task-center-workbench-top-toolbar-host"]',
+    );
+    const navbar = container.querySelector<HTMLElement>(
+      '[data-testid="workspace-navbar"]',
+    );
+    const tabs = container.querySelector<HTMLElement>(
+      '[data-testid="task-center-tabs"]',
     );
     const chatPanelPlain = container.querySelector<HTMLElement>(
       '[data-testid="layout-chat-panel-plain"]',
@@ -396,84 +371,17 @@ describe("WorkspaceMainArea", () => {
       '[data-testid="layout-canvas-panel"]',
     );
 
-    expect(chromeShell?.dataset.layout).toBe("split");
-    expect(chromeShell?.className).toContain("absolute");
-    expect(toolbarHost).toBeNull();
+    expect(chromeShell).toBeNull();
+    expect(navbar).toBeNull();
+    expect(tabs).toBeNull();
+    expect(inlineHost).toBeNull();
+    expect(workbenchToolbarHost).toBeNull();
+    expect(homeTopHost).not.toBeNull();
     expect(
-      chromeShell?.querySelector('[data-testid="task-center-toolbar"]'),
-    ).toBeNull();
-    expect(workbenchToolbarHost).not.toBeNull();
-    expect(
-      workbenchToolbarHost?.querySelector(
-        '[data-testid="task-center-toolbar"]',
-      ),
+      homeTopHost?.querySelector('[data-testid="task-center-toolbar"]'),
     ).not.toBeNull();
-    expect(workbenchToolbarHost?.className).toContain("top-0");
-    expect(workbenchToolbarHost?.className).toContain("h-[42px]");
-    expect(workbenchToolbarHost?.className).toContain(
-      "[left:var(--task-center-split-left)]",
-    );
-    expect(workbenchToolbarHost?.style.getPropertyValue(
-      "--task-center-split-left",
-    )).toBe("min(100%, clamp(640px, 54%, 1180px))");
-    expect(workbenchToolbarHost?.style.getPropertyValue(
-      "--task-center-split-min-left",
-    )).toBe("");
-    expect(workbenchToolbarHost?.className).toContain("right-0");
-    expect(workbenchToolbarHost?.className).toContain("min-w-0");
-    expect(workbenchToolbarHost?.className).toContain("overflow-visible");
-    expect(workbenchToolbarHost?.className).not.toContain("[min-width:calc");
-    expect(chatPanelPlain?.dataset.topInset).toBe("84px");
-    expect(canvasPanel?.dataset.topInset).toBe("42px");
-  });
-
-  it("展开工作台默认只应调整中右两列比例，不改变左侧导航", () => {
-    Object.defineProperty(window, "innerWidth", {
-      configurable: true,
-      writable: true,
-      value: 1440,
-    });
-    Object.defineProperty(window, "innerHeight", {
-      configurable: true,
-      writable: true,
-      value: 900,
-    });
-
-    const { container } = mountHarness(
-      WorkspaceMainAreaHarness,
-      {
-        layoutMode: "chat-canvas",
-        navbarNode: <div data-testid="workspace-navbar">navbar</div>,
-        taskCenterTabsNode: <div data-testid="task-center-tabs">tabs</div>,
-        taskCenterUtilityToolbarNode: (
-          <div data-testid="task-center-toolbar">toolbar</div>
-        ),
-      },
-      mountedRoots,
-    );
-
-    const chromeShell = container.querySelector<HTMLElement>(
-      '[data-testid="task-center-chrome-shell"]',
-    );
-    const workbenchToolbarHost = container.querySelector<HTMLElement>(
-      '[data-testid="task-center-workbench-top-toolbar-host"]',
-    );
-
-    expect(chromeShell?.dataset.layout).toBe("split");
-    expect(chromeShell?.dataset.splitLeftWidth).toBe(
-      "min(100%, clamp(640px, 54%, 1180px))",
-    );
-    expect(chromeShell?.dataset.splitLeftMinWidth).toBe("560px");
-    expect(
-      workbenchToolbarHost?.style.getPropertyValue(
-        "--task-center-split-left",
-      ),
-    ).toBe("min(100%, clamp(640px, 54%, 1180px))");
-    expect(
-      workbenchToolbarHost?.style.getPropertyValue(
-        "--task-center-split-min-left",
-      ),
-    ).toBe("");
+    expect(chatPanelPlain?.dataset.topInset).toBe("0px");
+    expect(canvasPanel?.dataset.topInset).toBe("0px");
   });
 
   it("任务中心自动隐藏顶栏时应通过小图标展开完整顶部工具", () => {

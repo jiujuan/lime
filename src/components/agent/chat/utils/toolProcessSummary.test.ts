@@ -114,6 +114,12 @@ describe("toolProcessSummary", () => {
   });
 
   it("应为计划模式与最终答复提供专用文案", () => {
+    const updatePlanNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "update_plan",
+        status: "completed",
+      }),
+    );
     const enterPlanNarrative = resolveToolProcessNarrative(
       createToolCall({
         name: "EnterPlanModeTool",
@@ -133,6 +139,9 @@ describe("toolProcessSummary", () => {
       }),
     );
 
+    expect(updatePlanNarrative.preSummary).toBe("已更新计划");
+    expect(updatePlanNarrative.postSummary).toBe("已更新计划");
+    expect(updatePlanNarrative.summary).toBe("已更新计划");
     expect(enterPlanNarrative.preSummary).toBe("先进入计划模式拆解方案");
     expect(exitPlanNarrative.postSummary).toBe("已退出计划模式");
     expect(finalNarrative.preSummary).toBe("先整理最终答复");

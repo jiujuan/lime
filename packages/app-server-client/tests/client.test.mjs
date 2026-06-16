@@ -3090,7 +3090,7 @@ test("connection request errors preserve streamed notifications and response con
 test("connection keeps session archive failures fail-closed", async () => {
   const sent = [];
   const archiveFailure =
-    "agentSession/update archived is only supported for persisted current timeline sessions";
+    "agentSession/update archived is only supported for persisted sessions";
   const inbound = [
     {
       id: 1,
@@ -4386,10 +4386,8 @@ test("uses agent-style stdio sidecar launch args", () => {
     "/tmp/app-server",
     undefined,
     "/tmp/content-studio-app-server-data",
-    "drop-empty-tables",
     "delete-file",
   );
-  assert.equal(cleanupConfig.legacyMessageCleanup, "drop-empty-tables");
   assert.equal(cleanupConfig.productDbMigrationCleanup, "delete-file");
   assert.deepEqual(sidecarArgs(cleanupConfig), [
     "--stdio",
@@ -4397,8 +4395,6 @@ test("uses agent-style stdio sidecar launch args", () => {
     "unavailable",
     "--data-dir",
     "/tmp/content-studio-app-server-data",
-    "--legacy-message-cleanup",
-    "drop-empty-tables",
     "--product-db-migration-cleanup",
     "delete-file",
   ]);
@@ -4921,7 +4917,6 @@ test("verifies release artifact sha256 before sidecar launch", async () => {
       undefined,
       undefined,
       undefined,
-      "drop-empty-tables",
       "drop-tables",
     );
 
@@ -4931,8 +4926,6 @@ test("verifies release artifact sha256 before sidecar launch", async () => {
       "--stdio",
       "--backend",
       "unavailable",
-      "--legacy-message-cleanup",
-      "drop-empty-tables",
       "--product-db-migration-cleanup",
       "drop-tables",
     ]);
@@ -5222,6 +5215,54 @@ test("connects sidecar with initialize and initialized handshake", async () => {
     } finally {
       await connected.sidecar.close();
     }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("includes sidecar stderr when initialize exits before response", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "app-server-client-connect-fail-"));
+  const fakeSidecar = join(dir, "fake-connect-fail-sidecar.mjs");
+
+  try {
+    await writeFile(
+      fakeSidecar,
+      `
+        console.error('fixture initialize failed: schema mismatch');
+        process.exit(1);
+      `,
+    );
+
+    await assert.rejects(
+      () =>
+        connectAppServerSidecar(
+          stdioSidecar(process.execPath),
+          {
+            clientInfo: {
+              name: "content_studio",
+              version: "0.1.0",
+            },
+          },
+          {
+            args: [fakeSidecar],
+            initializeTimeoutMs: SIDECAR_TEST_TIMEOUT_MS,
+          },
+        ),
+      (error) => {
+        assert.match(
+          error.message,
+          /app-server exited before next message: code=1/,
+        );
+        assert.match(
+          error.message,
+          /fixture initialize failed: schema mismatch/,
+        );
+        assert.deepEqual(error.stderrLines, [
+          "fixture initialize failed: schema mismatch",
+        ]);
+        return true;
+      },
+    );
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

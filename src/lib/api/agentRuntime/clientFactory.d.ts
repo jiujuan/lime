@@ -64,7 +64,7 @@ export declare function createAgentRuntimeClient({
     request: import("./types").AgentRuntimeSubmitTurnRequest,
   ) => Promise<void>;
   createAgentRuntimeSession: (
-    workspaceId: string,
+    workspaceId?: string,
     name?: string,
     executionStrategy?: import("./types").AsterExecutionStrategy,
     options?: import("./types").AgentRuntimeCreateSessionOptions,

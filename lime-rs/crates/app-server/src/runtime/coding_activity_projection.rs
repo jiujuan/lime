@@ -32,6 +32,14 @@ struct CommandState {
     command_argv_source: Option<String>,
     cwd: Option<String>,
     exit_code: Option<i64>,
+    process_id: Option<String>,
+    execution_process_status: Option<String>,
+    execution_surface: Option<String>,
+    output_bytes: Option<u64>,
+    output_omitted_bytes: Option<u64>,
+    output_truncated: Option<bool>,
+    stdout_bytes: Option<u64>,
+    stderr_bytes: Option<u64>,
     output_refs: Vec<String>,
     output_preview: Option<String>,
     started_at: Option<String>,
@@ -221,6 +229,7 @@ fn upsert_command_started(commands: &mut HashMap<String, CommandState>, event: &
     .or_else(|| command.command_argv_source.clone());
     command.cwd = string_field(&event.payload, &["cwd", "workingDirectory", "working_dir"])
         .or_else(|| command.cwd.clone());
+    merge_command_process_facts(command, &event.payload);
     command.started_at = Some(event.timestamp.clone());
     command.updated_at = Some(event.timestamp.clone());
     command.sequence = event.sequence;
@@ -246,6 +255,7 @@ fn upsert_command_output(commands: &mut HashMap<String, CommandState>, event: &A
         &["outputPreview", "output_preview", "preview", "summary"],
     )
     .or_else(|| command.output_preview.clone());
+    merge_command_process_facts(command, &event.payload);
     command.updated_at = Some(event.timestamp.clone());
     command.sequence = event.sequence;
     push_source_event(command.source_event_ids.as_mut(), event);
@@ -276,6 +286,7 @@ fn upsert_command_exited(commands: &mut HashMap<String, CommandState>, event: &A
         &["commandArgvSource", "command_argv_source"],
     )
     .or_else(|| command.command_argv_source.clone());
+    merge_command_process_facts(command, &event.payload);
     command.status = command_exit_status(&event.payload, command.exit_code);
     command.completed_at = Some(event.timestamp.clone());
     command.updated_at = Some(event.timestamp.clone());
@@ -384,6 +395,14 @@ fn command_state(command_id: &str, event: &AgentEvent) -> CommandState {
         command_argv_source: None,
         cwd: None,
         exit_code: None,
+        process_id: None,
+        execution_process_status: None,
+        execution_surface: None,
+        output_bytes: None,
+        output_omitted_bytes: None,
+        output_truncated: None,
+        stdout_bytes: None,
+        stderr_bytes: None,
         output_refs: Vec::new(),
         output_preview: None,
         started_at: None,
@@ -428,6 +447,14 @@ fn command_state_value(command: CommandState) -> Value {
         "command_argv_source": command.command_argv_source,
         "cwd": command.cwd,
         "exit_code": command.exit_code,
+        "process_id": command.process_id,
+        "execution_process_status": command.execution_process_status,
+        "execution_surface": command.execution_surface,
+        "output_bytes": command.output_bytes,
+        "output_omitted_bytes": command.output_omitted_bytes,
+        "output_truncated": command.output_truncated,
+        "stdout_bytes": command.stdout_bytes,
+        "stderr_bytes": command.stderr_bytes,
         "output_refs": command.output_refs,
         "output_preview": command.output_preview,
         "started_at": command.started_at,
@@ -581,10 +608,78 @@ fn push_source_event(target: &mut Vec<String>, event: &AgentEvent) {
     }
 }
 
+fn merge_command_process_facts(command: &mut CommandState, payload: &Value) {
+    command.process_id = payload_or_metadata_string(payload, &["processId", "process_id"])
+        .or_else(|| command.process_id.clone());
+    command.execution_process_status = payload_or_metadata_string(
+        payload,
+        &["executionProcessStatus", "execution_process_status"],
+    )
+    .or_else(|| command.execution_process_status.clone());
+    command.execution_surface =
+        payload_or_metadata_string(payload, &["executionSurface", "execution_surface"])
+            .or_else(|| command.execution_surface.clone());
+    command.output_bytes =
+        payload_or_metadata_u64(payload, &["outputBytes", "output_bytes"]).or(command.output_bytes);
+    command.output_omitted_bytes =
+        payload_or_metadata_u64(payload, &["outputOmittedBytes", "output_omitted_bytes"])
+            .or(command.output_omitted_bytes);
+    command.output_truncated =
+        payload_or_metadata_bool(payload, &["outputTruncated", "output_truncated"])
+            .or(command.output_truncated);
+    command.stdout_bytes =
+        payload_or_metadata_u64(payload, &["stdoutBytes", "stdout_bytes"]).or(command.stdout_bytes);
+    command.stderr_bytes =
+        payload_or_metadata_u64(payload, &["stderrBytes", "stderr_bytes"]).or(command.stderr_bytes);
+}
+
 fn payload_i64(payload: &Value, keys: &[&str]) -> Option<i64> {
     keys.iter()
         .filter_map(|key| payload.get(*key))
         .find_map(Value::as_i64)
+}
+
+fn payload_or_metadata_string(payload: &Value, keys: &[&str]) -> Option<String> {
+    payload_or_metadata_value(payload, keys).and_then(|value| {
+        value
+            .as_str()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToString::to_string)
+    })
+}
+
+fn payload_or_metadata_u64(payload: &Value, keys: &[&str]) -> Option<u64> {
+    payload_or_metadata_value(payload, keys).and_then(value_u64)
+}
+
+fn payload_or_metadata_bool(payload: &Value, keys: &[&str]) -> Option<bool> {
+    payload_or_metadata_value(payload, keys).and_then(value_bool)
+}
+
+fn payload_or_metadata_value<'a>(payload: &'a Value, keys: &[&str]) -> Option<&'a Value> {
+    for key in keys {
+        if let Some(value) = payload.get(*key) {
+            return Some(value);
+        }
+    }
+    let metadata = payload.get("metadata").and_then(Value::as_object)?;
+    keys.iter().find_map(|key| metadata.get(*key))
+}
+
+fn value_u64(value: &Value) -> Option<u64> {
+    value
+        .as_u64()
+        .or_else(|| value.as_i64().and_then(|value| u64::try_from(value).ok()))
+        .or_else(|| value.as_str()?.trim().parse::<u64>().ok())
+}
+
+fn value_bool(value: &Value) -> Option<bool> {
+    value.as_bool().or_else(|| match value.as_str()?.trim() {
+        "true" | "TRUE" | "True" | "1" => Some(true),
+        "false" | "FALSE" | "False" | "0" => Some(false),
+        _ => None,
+    })
 }
 
 fn command_exit_status(payload: &Value, exit_code: Option<i64>) -> String {

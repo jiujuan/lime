@@ -70,7 +70,7 @@ describe("agentStreamUserInputSubmission", () => {
       isThreadBusy: () => false,
       hasPendingPreparedSubmit: () => false,
       runPreparedSubmit: async (task) => task(),
-      getRequiredWorkspaceId: () => "workspace-1",
+      getWorkspaceIdForSubmit: () => "workspace-1",
       getSyncedSessionModelPreference: () => null,
       getSyncedSessionExecutionStrategy: () => "react",
       warnedKeysRef: { current: new Set<string>() },

@@ -1,21 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  SettingsTabs,
   act,
   changeLimeLocale,
   cleanupAppSidebarTest,
-  clickAccountMenuItem,
   clickConversationMenuItem,
   flushEffects,
   getStoredOemCloudSessionState,
   mockBuildOemCloudUserCenterUrl,
   mockGetClientReferralDashboard,
-  mockGetConfig,
   mockListAgentRuntimeSessions,
   mockLogoutClient,
   mockOpenExternalUrl,
-  mockSaveConfig,
-  mockSetI18nLanguage,
   mockStartOemCloudLogin,
   mockToastSuccess,
   mountSidebarContainer,
@@ -31,7 +26,7 @@ describe("AppSidebar account menu", () => {
   beforeEach(resetAppSidebarTest);
   afterEach(cleanupAppSidebarTest);
 
-  it("首页侧边栏底部应展示紧凑用户弹框与 Lime 云端入口", async () => {
+  it("底部设置入口应打开紧凑账号与积分弹窗", async () => {
     const onNavigate = vi.fn();
     setStoredOemCloudSessionState({
       token: "session-token",
@@ -57,8 +52,9 @@ describe("AppSidebar account menu", () => {
       '[data-testid="app-sidebar-account-button"]',
     );
     expect(accountButton).not.toBeNull();
-    expect(container.textContent).toContain("zhong feng shan");
-    expect(container.textContent).toContain("云端");
+    expect(accountButton?.textContent).toContain("设置");
+    expect(container.textContent).not.toContain("zhong feng shan");
+    expect(container.textContent).not.toContain("云端");
 
     await act(async () => {
       accountButton?.click();
@@ -76,30 +72,16 @@ describe("AppSidebar account menu", () => {
     expect(accountMenu?.textContent).not.toContain("套餐、积分和模型目录");
     expect(accountMenu?.textContent).not.toContain("登录方式：");
     expect(accountMenu?.textContent).not.toContain("默认服务：");
-    expect(accountMenu?.textContent).toContain("语言");
-    expect(accountMenu?.textContent).toContain("持续流程");
-    expect(accountMenu?.textContent).toContain("消息渠道");
-    expect(accountMenu?.textContent).toContain("设置");
     expect(accountMenu?.textContent).toContain("用户中心");
+    expect(accountMenu?.textContent).toContain("退出登录");
+    expect(accountMenu?.textContent).toContain("界面语言");
+    expect(accountMenu?.textContent).toContain("项目资料");
     expect(accountMenu?.textContent).toContain("模型设置");
     expect(accountMenu?.textContent).toContain("关于");
-    expect(accountMenu?.textContent).toContain("退出登录");
-    expect(accountMenu?.textContent).not.toContain("连接 Lime 云端");
+    expect(accountMenu?.textContent).not.toContain("登录 Lime 云端");
+    expect(accountMenu?.textContent).not.toContain("开源");
     expect(accountMenu?.textContent).not.toContain("主题");
     expect(accountMenu?.textContent).not.toContain("帮助中心");
-
-    const settingsButton = Array.from(
-      accountMenu?.querySelectorAll("button") ?? [],
-    ).find((button) => button.textContent?.includes("设置"));
-
-    await act(async () => {
-      settingsButton?.click();
-      await Promise.resolve();
-    });
-
-    expect(onNavigate).toHaveBeenCalledWith("settings", {
-      tab: SettingsTabs.Home,
-    });
   });
 
   it("已登录账号弹框应展示真实套餐摘要并跳出到用户中心详情", async () => {
@@ -298,7 +280,7 @@ describe("AppSidebar account menu", () => {
     expect(mockGetClientReferralDashboard).not.toHaveBeenCalled();
   });
 
-  it("未连接 Lime 云端时应保持开源使用口径", async () => {
+  it("未连接 Lime 云端时应只提示登录并保留登录入口", async () => {
     const container = mountSidebarContainer({
       currentPage: "agent",
       currentPageParams: {
@@ -307,8 +289,10 @@ describe("AppSidebar account menu", () => {
     });
     await flushEffects(2);
 
-    expect(container.textContent).toContain("开源使用");
-    expect(container.textContent).toContain("开源");
+    expect(container.textContent).toContain("设置");
+    expect(container.textContent).not.toContain("登录 Lime 云端");
+    expect(container.textContent).not.toContain("未登录");
+    expect(container.textContent).not.toContain("开源");
     expect(container.textContent).not.toContain("升级");
 
     await act(async () => {
@@ -323,11 +307,15 @@ describe("AppSidebar account menu", () => {
     const accountMenu = container.querySelector(
       '[data-testid="app-sidebar-account-menu"]',
     );
-    expect(accountMenu?.textContent).toContain("开源使用");
-    expect(accountMenu?.textContent).toContain("免费版");
-    expect(accountMenu?.textContent).toContain("本地模型可配置");
+    expect(accountMenu?.textContent).toContain("登录 Lime 云端");
+    expect(accountMenu?.textContent).toContain(
+      "登录 Lime 云端 后同步账号、积分和套餐信息。",
+    );
+    expect(accountMenu?.textContent).toContain("项目资料");
+    expect(accountMenu?.textContent).toContain("界面语言");
     expect(accountMenu?.textContent).toContain("模型设置");
-    expect(accountMenu?.textContent).toContain("连接 Lime 云端");
+    expect(accountMenu?.textContent).toContain("关于");
+    expect(accountMenu?.textContent).not.toContain("开源");
     expect(accountMenu?.textContent).not.toContain("退出登录");
     expect(
       accountMenu?.querySelector('button[aria-label="Lime 云端"]'),
@@ -336,7 +324,7 @@ describe("AppSidebar account menu", () => {
     await act(async () => {
       accountMenu
         ?.querySelector<HTMLButtonElement>(
-          'button[aria-label="连接 Lime 云端"]',
+          'button[aria-label="登录 Lime 云端"]',
         )
         ?.click();
       await Promise.resolve();
@@ -352,7 +340,7 @@ describe("AppSidebar account menu", () => {
     );
   });
 
-  it("开源入口启动桌面 OAuth 后只等待登录页打开，不应显示已同步", async () => {
+  it("登录入口启动桌面 OAuth 后只等待登录页打开，不应显示已同步", async () => {
     mockStartOemCloudLogin.mockResolvedValueOnce({
       mode: "desktop_auth",
       openedUrl: "https://user.limeai.run/oauth/desktop/device-001/signin",
@@ -368,7 +356,7 @@ describe("AppSidebar account menu", () => {
 
     await act(async () => {
       container
-        .querySelector<HTMLButtonElement>('button[aria-label="连接 Lime 云端"]')
+        .querySelector<HTMLButtonElement>('button[aria-label="登录 Lime 云端"]')
         ?.click();
       await Promise.resolve();
     });
@@ -395,25 +383,30 @@ describe("AppSidebar account menu", () => {
     });
     await flushEffects(2);
 
-    expect(container.textContent).toContain("Local ready");
-    expect(container.textContent).toContain("Open Source Use");
-    expect(container.textContent).not.toContain("开源使用");
+    expect(container.textContent).toContain("Settings");
+    expect(container.textContent).not.toContain("Log in to Lime Cloud");
+    expect(container.textContent).not.toContain("Signed out");
+    expect(container.textContent).not.toContain("Open Source");
+    expect(container.textContent).not.toContain("开源");
 
     await openAccountMenu(container);
 
     const accountMenu = container.querySelector(
       '[data-testid="app-sidebar-account-menu"]',
     );
-    expect(accountMenu?.textContent).toContain("Open Source Use");
-    expect(accountMenu?.textContent).toContain("Free plan");
+    expect(accountMenu?.textContent).toContain("Log in to Lime Cloud");
+    expect(accountMenu?.textContent).toContain(
+      "Log in to Lime Cloud to sync your account, credits, and plan.",
+    );
+    expect(accountMenu?.textContent).toContain("Interface Language");
     expect(accountMenu?.textContent).toContain("Model Settings");
     expect(accountMenu?.textContent).toContain("About");
-    expect(accountMenu?.textContent).toContain("Connect Lime Cloud");
+    expect(accountMenu?.textContent).not.toContain("Open Source");
 
     await act(async () => {
       accountMenu
         ?.querySelector<HTMLButtonElement>(
-          'button[aria-label="Connect Lime Cloud"]',
+          'button[aria-label="Log in to Lime Cloud"]',
         )
         ?.click();
       await Promise.resolve();
@@ -424,26 +417,7 @@ describe("AppSidebar account menu", () => {
     );
   });
 
-  it("开源使用说明应折叠到信息图标中", async () => {
-    const container = mountSidebarContainer({
-      currentPage: "agent",
-      currentPageParams: {
-        agentEntry: "new-task",
-      } as AgentPageParams,
-    });
-    await flushEffects(2);
-    await openAccountMenu(container);
-
-    const accountMenu = container.querySelector(
-      '[data-testid="app-sidebar-account-menu"]',
-    );
-    expect(accountMenu?.textContent).not.toContain("本地开源功能可直接使用");
-    expect(
-      accountMenu?.querySelector('button[aria-label="开源使用说明"]'),
-    ).not.toBeNull();
-  });
-
-  it("Lime 云端登录完成后侧边栏应从开源态刷新为账号信息", async () => {
+  it("Lime 云端登录完成后侧边栏应从未登录态刷新为账号信息", async () => {
     const container = mountSidebarContainer({
       currentPage: "agent",
       currentPageParams: {
@@ -452,7 +426,9 @@ describe("AppSidebar account menu", () => {
     });
     await flushEffects(2);
 
-    expect(container.textContent).toContain("开源使用");
+    expect(container.textContent).toContain("设置");
+    expect(container.textContent).not.toContain("登录 Lime 云端");
+    expect(container.textContent).not.toContain("开源");
 
     await act(async () => {
       setStoredOemCloudSessionState({
@@ -476,8 +452,8 @@ describe("AppSidebar account menu", () => {
     });
     await flushEffects(2);
 
-    expect(container.textContent).toContain("晚风");
-    expect(container.textContent).toContain("云端");
+    expect(container.textContent).not.toContain("晚风");
+    expect(container.textContent).not.toContain("云端");
 
     await openAccountMenu(container);
     const accountMenu = container.querySelector(
@@ -487,99 +463,6 @@ describe("AppSidebar account menu", () => {
     expect(accountMenu?.textContent).toContain("Lime Cloud");
     expect(accountMenu?.textContent).toContain("免费版");
     expect(accountMenu?.textContent).not.toContain("登录方式：Google");
-  });
-
-  it("用户弹框的语言入口应使用二级弹框并保存真实语言设置", async () => {
-    mockGetConfig.mockResolvedValue({ language: "zh" });
-
-    const container = mountSidebarContainer({
-      currentPage: "agent",
-      currentPageParams: {
-        agentEntry: "new-task",
-      } as AgentPageParams,
-    });
-    await flushEffects(2);
-
-    await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>(
-          '[data-testid="app-sidebar-account-button"]',
-        )
-        ?.click();
-      await Promise.resolve();
-    });
-
-    expect(
-      container.querySelector('[data-testid="app-sidebar-language-menu"]'),
-    ).toBeNull();
-
-    await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>('button[aria-label="界面语言"]')
-        ?.click();
-      await Promise.resolve();
-    });
-
-    const languageMenu = container.querySelector(
-      '[data-testid="app-sidebar-language-menu"]',
-    );
-    expect(languageMenu).not.toBeNull();
-    const accountMenu = container.querySelector(
-      '[data-testid="app-sidebar-account-menu"]',
-    );
-    expect(accountMenu).not.toBeNull();
-    expect(getComputedStyle(accountMenu as Element).overflow).toBe("visible");
-    expect(getComputedStyle(languageMenu as Element).position).toBe("absolute");
-    expect(getComputedStyle(languageMenu as Element).left).toBe(
-      "calc(100% + 8px)",
-    );
-    expect(getComputedStyle(languageMenu as Element).bottom).toBe("0px");
-    expect(getComputedStyle(languageMenu as Element).overflowY).toBe("auto");
-    expect(languageMenu?.textContent).toContain("中文");
-    expect(languageMenu?.textContent).toContain("English");
-
-    await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>(
-          'button[aria-label="切换界面语言为English"]',
-        )
-        ?.click();
-      await Promise.resolve();
-    });
-    await flushEffects(2);
-
-    expect(mockSetI18nLanguage).toHaveBeenCalledWith("en");
-    expect(mockSaveConfig).toHaveBeenCalledWith(
-      expect.objectContaining({ language: "en-US" }),
-    );
-    expect(document.documentElement.lang).toBe("en-US");
-    expect(
-      container.querySelector('button[aria-label="New Task"]'),
-    ).not.toBeNull();
-    expect(container.textContent).toContain("Project Knowledge");
-    expect(container.textContent).toContain("Conversations");
-
-    await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>('button[aria-label="Search Tasks"]')
-        ?.click();
-      await Promise.resolve();
-    });
-
-    const searchDialog = document.body.querySelector(
-      '[data-testid="app-sidebar-search-dialog"]',
-    );
-    const searchInput = document.body.querySelector<HTMLInputElement>(
-      '[data-testid="app-sidebar-search-input"]',
-    );
-    expect(searchDialog?.textContent).toContain("New Conversation");
-    expect(searchDialog?.textContent).toContain(
-      "Select a project workspace first",
-    );
-    expect(searchInput?.placeholder).toBe("Search conversation titles");
-    expect(
-      container.querySelector('[data-testid="app-sidebar-language-menu"]'),
-    ).toBeNull();
   });
 
   it("英文界面下会话兜底标题与时间 meta 应跟随当前 locale", async () => {
@@ -638,7 +521,7 @@ describe("AppSidebar account menu", () => {
     }
   });
 
-  it("用户弹框中的收缩入口应导航到真实页面", async () => {
+  it("底部设置入口应打开账号弹窗，用户中心仍跳到真实页面", async () => {
     const onNavigate = vi.fn();
     setStoredOemCloudSessionState({
       token: "session-token",
@@ -658,34 +541,30 @@ describe("AppSidebar account menu", () => {
     });
     await flushEffects(2);
 
-    await clickAccountMenuItem(container, "设置");
-    expect(onNavigate).toHaveBeenLastCalledWith("settings", {
-      tab: SettingsTabs.Home,
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="app-sidebar-account-button"]',
+        )
+        ?.click();
+      await Promise.resolve();
     });
-
-    await openAccountMenu(container);
+    expect(onNavigate).not.toHaveBeenCalled();
     expect(
       container.querySelector('[data-testid="app-sidebar-account-menu"]')
         ?.textContent,
     ).not.toContain("Agent Apps");
-    await openAccountMenu(container);
+    expect(
+      container.querySelector('[data-testid="app-sidebar-account-menu"]')
+        ?.textContent,
+    ).toContain("模型设置");
 
-    await clickAccountMenuItem(container, "灵感");
-    expect(onNavigate).toHaveBeenLastCalledWith("memory", undefined);
-
-    await clickAccountMenuItem(container, "持续流程");
-    expect(onNavigate).toHaveBeenLastCalledWith("automation", undefined);
-
-    await clickAccountMenuItem(container, "消息渠道");
-    expect(onNavigate).toHaveBeenLastCalledWith("channels", undefined);
-
-    await clickAccountMenuItem(container, "模型设置");
-    expect(onNavigate).toHaveBeenLastCalledWith("settings", {
-      tab: SettingsTabs.Providers,
-      providerView: "settings",
+    await act(async () => {
+      Array.from(container.querySelectorAll("button"))
+        .find((button) => button.textContent?.includes("用户中心"))
+        ?.click();
+      await Promise.resolve();
     });
-
-    await clickAccountMenuItem(container, "用户中心");
     expect(mockBuildOemCloudUserCenterUrl).toHaveBeenLastCalledWith(
       "https://user.limeai.run",
       "/welcome",
@@ -694,29 +573,6 @@ describe("AppSidebar account menu", () => {
       "https://user.limeai.run/welcome",
       { browserTarget: null },
     );
-    expect(onNavigate).toHaveBeenLastCalledWith("settings", {
-      tab: SettingsTabs.Providers,
-      providerView: "settings",
-    });
-
-    await clickAccountMenuItem(container, "Lime 云端");
-    expect(mockBuildOemCloudUserCenterUrl).toHaveBeenLastCalledWith(
-      "https://user.limeai.run",
-      "/welcome",
-    );
-    expect(mockOpenExternalUrl).toHaveBeenLastCalledWith(
-      "https://user.limeai.run/welcome",
-      { browserTarget: null },
-    );
-    expect(onNavigate).toHaveBeenLastCalledWith("settings", {
-      tab: SettingsTabs.Providers,
-      providerView: "settings",
-    });
-
-    await clickAccountMenuItem(container, "关于");
-    expect(onNavigate).toHaveBeenLastCalledWith("settings", {
-      tab: SettingsTabs.About,
-    });
   });
 
   it("用户弹框退出登录应清理个人中心会话", async () => {

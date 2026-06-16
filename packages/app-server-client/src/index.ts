@@ -75,6 +75,7 @@ import {
   METHOD_CONNECT_DEEP_LINK_RESOLVE,
   METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE,
   METHOD_CONNECT_RELAY_API_KEY_SAVE,
+  METHOD_CONVERSATION_IMPORT_SOURCE_SCAN,
   METHOD_EVIDENCE_EXPORT,
   METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT,
   METHOD_EXECUTION_PROCESS_INTERRUPT,
@@ -393,6 +394,8 @@ import {
   type ConnectOpenDeepLinkResolveResponse,
   type ConnectRelayApiKeySaveParams,
   type ConnectRelayApiKeySaveResponse,
+  type ConversationImportSourceScanParams,
+  type ConversationImportSourceScanResponse,
   type ExecutionProcessDrainOutputParams,
   type ExecutionProcessDrainOutputResponse,
   type ExecutionProcessEmptyResponse,
@@ -677,7 +680,6 @@ export type SidecarLaunchConfig = {
   binaryPath: string;
   listenUrl: string;
   dataDir?: string;
-  legacyMessageCleanup?: "retain" | "clear-rows" | "drop-empty-tables";
   productDbMigrationCleanup?:
     | "retain"
     | "clear-rows"
@@ -719,7 +721,6 @@ export type ResolveSidecarFromManifestOptions =
     backendTimeoutMs?: number;
     appPolicyPath?: string;
     dataDir?: string;
-    legacyMessageCleanup?: SidecarLaunchConfig["legacyMessageCleanup"];
     productDbMigrationCleanup?: SidecarLaunchConfig["productDbMigrationCleanup"];
     expectedProtocolVersion?: string;
   };
@@ -769,6 +770,7 @@ export type SidecarRestartScheduledEvent = SidecarExitEvent & {
 export type SidecarRestartFailedEvent = {
   attempt: number;
   error: unknown;
+  stderrLines?: string[];
 };
 
 export type SidecarLifecycleOptions = ConnectSidecarOptions & {
@@ -2100,6 +2102,12 @@ export class AppServerClient {
 
   sendConnectCallback(params: ConnectCallbackSendParams): JsonRpcRequest {
     return this.request(METHOD_CONNECT_CALLBACK_SEND, params);
+  }
+
+  scanConversationImportSource(
+    params: ConversationImportSourceScanParams = {},
+  ): JsonRpcRequest {
+    return this.request(METHOD_CONVERSATION_IMPORT_SOURCE_SCAN, params);
   }
 
   startTurn(params: AgentSessionTurnStartParams): JsonRpcRequest {
@@ -4684,6 +4692,17 @@ export class AppServerConnection {
     );
   }
 
+  async scanConversationImportSource(
+    params: ConversationImportSourceScanParams = {},
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ConversationImportSourceScanResponse>> {
+    return await this.request<ConversationImportSourceScanResponse>(
+      this.client.scanConversationImportSource(params),
+      METHOD_CONVERSATION_IMPORT_SOURCE_SCAN,
+      options,
+    );
+  }
+
   async startTurn(
     params: AgentSessionTurnStartParams,
     options: AppServerRequestOptions = {},
@@ -5272,7 +5291,6 @@ export function stdioSidecar(
   binaryPath: string,
   appPolicyPath?: string,
   dataDir?: string,
-  legacyMessageCleanup?: SidecarLaunchConfig["legacyMessageCleanup"],
   productDbMigrationCleanup?: SidecarLaunchConfig["productDbMigrationCleanup"],
 ): SidecarLaunchConfig {
   return {
@@ -5281,7 +5299,6 @@ export function stdioSidecar(
     backendMode: DEFAULT_STANDALONE_BACKEND_MODE,
     ...(appPolicyPath ? { appPolicyPath } : {}),
     ...(dataDir ? { dataDir } : {}),
-    ...(legacyMessageCleanup ? { legacyMessageCleanup } : {}),
     ...(productDbMigrationCleanup ? { productDbMigrationCleanup } : {}),
   };
 }
@@ -5293,7 +5310,6 @@ export function sidecarFromReleaseArtifact(
   backendMode: SidecarLaunchConfig["backendMode"] = DEFAULT_STANDALONE_BACKEND_MODE,
   appPolicyPath?: string,
   dataDir?: string,
-  legacyMessageCleanup?: SidecarLaunchConfig["legacyMessageCleanup"],
   productDbMigrationCleanup?: SidecarLaunchConfig["productDbMigrationCleanup"],
 ): SidecarLaunchConfig {
   return {
@@ -5302,7 +5318,6 @@ export function sidecarFromReleaseArtifact(
     backendMode,
     ...(appPolicyPath ? { appPolicyPath } : {}),
     ...(dataDir ? { dataDir } : {}),
-    ...(legacyMessageCleanup ? { legacyMessageCleanup } : {}),
     ...(productDbMigrationCleanup ? { productDbMigrationCleanup } : {}),
     expectedSha256: artifact.sha256,
     artifact,
@@ -5334,9 +5349,6 @@ export function sidecarArgs(config: SidecarLaunchConfig): string[] {
   }
   if (config.dataDir) {
     args.push("--data-dir", config.dataDir);
-  }
-  if (config.legacyMessageCleanup) {
-    args.push("--legacy-message-cleanup", config.legacyMessageCleanup);
   }
   if (config.productDbMigrationCleanup) {
     args.push(
@@ -5410,9 +5422,6 @@ export function resolveSidecarFromReleaseManifest(
         ? { appPolicyPath: options.appPolicyPath }
         : {}),
       ...(options.dataDir ? { dataDir: options.dataDir } : {}),
-      ...(options.legacyMessageCleanup
-        ? { legacyMessageCleanup: options.legacyMessageCleanup }
-        : {}),
       ...(options.productDbMigrationCleanup
         ? { productDbMigrationCleanup: options.productDbMigrationCleanup }
         : {}),
@@ -5593,9 +5602,19 @@ export async function connectAppServerSidecar(
       initializeResponse,
     };
   } catch (error) {
+    appendSidecarStderr(error, sidecar.stderrLines);
     await sidecar.close().catch(() => undefined);
     throw error;
   }
+}
+
+function appendSidecarStderr(error: unknown, stderrLines: readonly string[]): void {
+  if (!(error instanceof Error) || stderrLines.length === 0) {
+    return;
+  }
+  const tail = stderrLines.slice(-20);
+  error.message = `${error.message}; stderr=${tail.join("\n")}`;
+  Object.assign(error, { stderrLines: tail });
 }
 
 export async function startPackagedAppServerSidecar(
@@ -5707,10 +5726,16 @@ export class AppServerSidecarLifecycle {
     try {
       return await this.#connect(attempt);
     } catch (error) {
+      const stderrLines =
+        error instanceof Error &&
+        Array.isArray((error as Error & { stderrLines?: unknown }).stderrLines)
+          ? ((error as Error & { stderrLines: string[] }).stderrLines ?? [])
+          : [];
       const retryAttempt = attempt + 1;
       this.#options.onRestartFailed?.({
         attempt: retryAttempt,
         error,
+        stderrLines,
       });
       if (
         this.#stopped ||
@@ -5767,6 +5792,7 @@ export class AppServerSidecarLifecycle {
       this.#options.onRestartFailed?.({
         attempt: event.attempt,
         error,
+        stderrLines: event.stderrLines,
       });
       await this.#restartAfterDelay({
         ...event,

@@ -151,6 +151,7 @@ export function TaskCenterTabStrip({
         !embedded && "border-b border-[color:var(--lime-chrome-divider)]",
       )}
       data-testid="task-center-tab-strip"
+      role="tablist"
       style={embedded ? undefined : taskCenterTabStripStyle}
     >
       <div className="flex items-center gap-1">
@@ -180,7 +181,8 @@ export function TaskCenterTabStrip({
                   <button
                     type="button"
                     className={conversationTabButtonClassName}
-                    aria-current={item.isActive ? "page" : undefined}
+                    role="tab"
+                    aria-selected={item.isActive ? "true" : "false"}
                     title={tabTitle}
                     onClick={() => {
                       void onSelectTask(item.id);

@@ -18,7 +18,6 @@ const {
   const lifecycleConfigs: Array<{
     binaryPath: string;
     dataDir?: string;
-    legacyMessageCleanup?: string;
     productDbMigrationCleanup?: string;
   }> = [];
   const mirroredNotifications: JsonRpcMessage[] = [];
@@ -143,7 +142,6 @@ const {
     constructor(config: {
       binaryPath: string;
       dataDir?: string;
-      legacyMessageCleanup?: string;
       productDbMigrationCleanup?: string;
     }) {
       lifecycleConfigs.push(config);
@@ -224,7 +222,6 @@ vi.mock("@limecloud/app-server-client", async (importOriginal) => {
 describe("ElectronAppServerHost", () => {
   beforeEach(() => {
     resetFakeConnection();
-    delete process.env.APP_SERVER_LEGACY_MESSAGE_CLEANUP;
     delete process.env.APP_SERVER_PRODUCT_DB_MIGRATION_CLEANUP;
   });
 
@@ -237,7 +234,6 @@ describe("ElectronAppServerHost", () => {
     expect(lifecycleConfigs).toHaveLength(1);
     expect(lifecycleConfigs[0]).toMatchObject({
       dataDir: "/tmp/lime-electron-user-data/app-server",
-      legacyMessageCleanup: "drop-empty-tables",
       productDbMigrationCleanup: "drop-tables",
     });
   });
@@ -262,42 +258,6 @@ describe("ElectronAppServerHost", () => {
 
     await expect(host.warmup()).rejects.toThrow(
       "APP_SERVER_PRODUCT_DB_MIGRATION_CLEANUP must be one of retain, clear-rows, drop-tables, delete-file",
-    );
-    expect(lifecycleConfigs).toHaveLength(0);
-  });
-
-  it("支持通过环境变量配置 legacy message 迁移后的删除策略", async () => {
-    process.env.APP_SERVER_LEGACY_MESSAGE_CLEANUP = "drop-empty-tables";
-    const { ElectronAppServerHost } = await import("./appServerHost");
-    const host = new ElectronAppServerHost();
-
-    await host.warmup();
-
-    expect(lifecycleConfigs).toHaveLength(1);
-    expect(lifecycleConfigs[0]).toMatchObject({
-      legacyMessageCleanup: "drop-empty-tables",
-    });
-  });
-
-  it("legacy message 删除策略默认应为 drop-empty-tables", async () => {
-    const { ElectronAppServerHost } = await import("./appServerHost");
-    const host = new ElectronAppServerHost();
-
-    await host.warmup();
-
-    expect(lifecycleConfigs).toHaveLength(1);
-    expect(lifecycleConfigs[0]).toMatchObject({
-      legacyMessageCleanup: "drop-empty-tables",
-    });
-  });
-
-  it("legacy message 删除策略配置非法时应 fail fast", async () => {
-    process.env.APP_SERVER_LEGACY_MESSAGE_CLEANUP = "delete-everything";
-    const { ElectronAppServerHost } = await import("./appServerHost");
-    const host = new ElectronAppServerHost();
-
-    await expect(host.warmup()).rejects.toThrow(
-      "APP_SERVER_LEGACY_MESSAGE_CLEANUP must be one of retain, clear-rows, drop-empty-tables",
     );
     expect(lifecycleConfigs).toHaveLength(0);
   });

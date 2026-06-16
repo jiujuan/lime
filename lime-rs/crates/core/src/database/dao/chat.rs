@@ -1,14 +1,14 @@
-//! 统一对话数据访问层
+//! 统一对话元数据访问层
 //!
-//! 提供统一的会话和消息存储功能，支持多种对话模式：
+//! 提供旧 Product DB 会话元数据读取能力，支持多种对话模式：
 //! - Agent: AI Agent 模式，支持工具调用
 //! - General: 通用对话模式，纯文本
 //! - Workbench: 工作台模式，支持画布输出
 //!
 //! ## 设计原则
-//! - 单一数据源：所有对话数据统一存储
+//! - 单一数据源：生产 transcript truth 收敛到 JSONL Event Log + Projection DB
 //! - 模式化设计：通过 ChatMode 区分不同场景
-//! - 向后兼容：复用现有的 agent_sessions/agent_messages 表
+//! - 旧消息 API：仅在测试编译图保留，服务迁移和 fixture 回归
 
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
@@ -79,7 +79,8 @@ pub struct ChatSession {
     pub updated_at: String,
 }
 
-/// 统一消息结构
+/// 旧 Product DB 消息结构，仅用于测试/迁移 fixture。
+#[cfg(test)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
     /// 消息 ID
@@ -100,7 +101,8 @@ pub struct ChatMessage {
     pub created_at: String,
 }
 
-/// 会话详情（包含消息）
+/// 旧 Product DB 会话详情，仅用于测试/迁移 fixture。
+#[cfg(test)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatSessionDetail {
     /// 会话信息
@@ -191,7 +193,8 @@ impl ChatDao {
         }
     }
 
-    /// 获取会话列表
+    /// 获取会话列表，仅保留给测试/迁移 fixture。
+    #[cfg(test)]
     pub fn list_sessions(
         conn: &Connection,
         mode: Option<ChatMode>,
@@ -267,7 +270,8 @@ impl ChatDao {
     // 消息管理
     // ------------------------------------------------------------------------
 
-    /// 添加消息
+    /// 添加旧 Product DB 消息，仅保留给测试/迁移 fixture。
+    #[cfg(test)]
     pub fn add_message(conn: &Connection, message: &ChatMessage) -> Result<i64, rusqlite::Error> {
         let content_json = serde_json::to_string(&message.content)
             .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
@@ -303,7 +307,8 @@ impl ChatDao {
         Ok(id)
     }
 
-    /// 获取会话消息
+    /// 获取旧 Product DB 会话消息，仅保留给测试/迁移 fixture。
+    #[cfg(test)]
     pub fn get_messages(
         conn: &Connection,
         session_id: &str,
@@ -330,7 +335,8 @@ impl ChatDao {
         Ok(messages)
     }
 
-    /// 获取消息数量
+    /// 获取旧 Product DB 消息数量，仅保留给测试/迁移 fixture。
+    #[cfg(test)]
     pub fn get_message_count(
         conn: &Connection,
         session_id: &str,
@@ -343,7 +349,8 @@ impl ChatDao {
         Ok(count as usize)
     }
 
-    /// 删除会话消息
+    /// 删除旧 Product DB 会话消息，仅保留给测试/迁移 fixture。
+    #[cfg(test)]
     pub fn delete_messages(conn: &Connection, session_id: &str) -> Result<(), rusqlite::Error> {
         conn.execute(
             "DELETE FROM agent_messages WHERE session_id = ?",
@@ -372,7 +379,8 @@ impl ChatDao {
         }
     }
 
-    /// 映射消息行
+    /// 映射旧 Product DB 消息行，仅保留给测试/迁移 fixture。
+    #[cfg(test)]
     fn map_message_row(row: &rusqlite::Row) -> Result<ChatMessage, rusqlite::Error> {
         let content_json: String = row.get(3)?;
         let tool_calls_json: Option<String> = row.get(5)?;
@@ -398,7 +406,8 @@ impl ChatDao {
         })
     }
 
-    /// 获取会话详情（包含消息）
+    /// 获取旧 Product DB 会话详情，仅保留给测试/迁移 fixture。
+    #[cfg(test)]
     pub fn get_session_detail(
         conn: &Connection,
         session_id: &str,

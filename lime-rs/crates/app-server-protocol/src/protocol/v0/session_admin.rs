@@ -5,6 +5,13 @@ use super::*;
 
 pub const RUNTIME_RESUME_CONTRACT_SCHEMA_VERSION: &str = "lime-runtime-resume-contract/v0.1";
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum AgentSessionCwdFilter {
+    One(String),
+    Many(Vec<String>),
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentSessionListParams {
@@ -12,6 +19,8 @@ pub struct AgentSessionListParams {
     pub include_archived: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub archived_only: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<AgentSessionCwdFilter>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

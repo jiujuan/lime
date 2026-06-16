@@ -40,13 +40,8 @@ const PERSISTED_TURN_ID = "agent-session-history-electron-persisted-turn";
 const PERSISTED_USER_ITEM_ID = "agent-session-history-electron-persisted-user";
 const PERSISTED_AGENT_ITEM_ID =
   "agent-session-history-electron-persisted-agent";
-const LEGACY_SESSION_ID = "agent-session-history-electron-legacy";
-const LEGACY_TITLE = "Electron legacy agent_messages fixture";
-const LEGACY_WORKSPACE_ID = "agent-session-history-electron-legacy-workspace";
-const LEGACY_USER_TEXT = "旧 agent_messages 用户消息";
-const LEGACY_ASSISTANT_TEXT = "旧 agent_messages 助手回复";
 const ARCHIVE_FAIL_CLOSED_MESSAGE =
-  "agentSession/update archived is only supported for persisted current timeline sessions";
+  "agentSession/update archived is only supported for persisted sessions";
 const REQUIRED_METHODS = [
   "initialize",
   "agentSession/start",
@@ -74,8 +69,18 @@ const SIDEBAR_GUI_FORBIDDEN_METHODS = [
 ];
 const SIDEBAR_RECENT_LIST_SELECTOR =
   '[data-testid="app-sidebar-recent-conversations"]';
+const SIDEBAR_PROJECT_LIST_SELECTOR =
+  '[data-testid="app-sidebar-project-conversations"]';
+const SIDEBAR_SESSION_LIST_SELECTORS = [
+  SIDEBAR_RECENT_LIST_SELECTOR,
+  SIDEBAR_PROJECT_LIST_SELECTOR,
+];
 const SIDEBAR_ARCHIVE_MENU_ITEM_SELECTOR =
   '[data-testid="app-sidebar-conversation-menu-archive"]';
+const SIDEBAR_ACCOUNT_BUTTON_SELECTOR =
+  '[data-testid="app-sidebar-account-button"]';
+const SIDEBAR_ACCOUNT_MENU_SELECTOR =
+  '[data-testid="app-sidebar-account-menu"]';
 const SETTINGS_ARCHIVED_CONVERSATIONS_SELECTOR =
   '[data-testid="settings-archived-conversations"]';
 const SETTINGS_ARCHIVED_RESTORE_SELECTOR =
@@ -191,7 +196,6 @@ function createTempRuntimeEnv() {
   const roamingAppData = path.join(tempRoot, "roaming-app-data");
   const electronUserDataDir = path.join(tempRoot, "electron-user-data");
   const persistedWorkspaceRoot = path.join(tempRoot, "persisted-workspace");
-  const legacyWorkspaceRoot = path.join(tempRoot, "legacy-workspace");
 
   for (const dir of [
     home,
@@ -200,7 +204,6 @@ function createTempRuntimeEnv() {
     roamingAppData,
     electronUserDataDir,
     persistedWorkspaceRoot,
-    legacyWorkspaceRoot,
   ]) {
     fs.mkdirSync(dir, { recursive: true });
   }
@@ -209,7 +212,6 @@ function createTempRuntimeEnv() {
     tempRoot,
     electronUserDataDir,
     persistedWorkspaceRoot,
-    legacyWorkspaceRoot,
     env: {
       ...process.env,
       HOME: home,
@@ -310,26 +312,39 @@ function runSqlite(dbPath, sql) {
   }
 }
 
-function seedPersistedCurrentTimelineSession(runtimeEnv) {
+function seedPersistedProjectionSession(runtimeEnv) {
   const dbPath = resolveFixtureDatabasePath(runtimeEnv);
+  const projectionPath = projectionDbPath(runtimeEnv);
   const now = "2026-06-07T00:00:00.000Z";
   const turnStartedAt = "2026-06-07T00:00:01.000Z";
   const turnCompletedAt = "2026-06-07T00:00:02.000Z";
   const workspaceRoot = runtimeEnv.persistedWorkspaceRoot;
+  const sessionMetadata = JSON.stringify({
+    title: PERSISTED_TITLE,
+    model: "fixture-model",
+    modelName: "fixture-model",
+    providerName: "fixture-provider",
+    workingDir: workspaceRoot,
+    executionStrategy: "react",
+  });
   const userPayload = JSON.stringify({
-    type: "user_message",
-    content: "请验证 persisted session archive restart readback。",
+    input: {
+      text: "请验证 persisted session archive restart readback。",
+      attachments: [],
+    },
+    content: {
+      text: "请验证 persisted session archive restart readback。",
+    },
   });
   const assistantPayload = JSON.stringify({
-    type: "agent_message",
     text: "已准备 persisted session archive restart readback fixture。",
-    phase: "final",
+    content: {
+      text: "已准备 persisted session archive restart readback fixture。",
+    },
   });
 
   const sql = `
 PRAGMA busy_timeout = 5000;
-DELETE FROM agent_thread_items WHERE session_id = ${sqlLiteral(PERSISTED_SESSION_ID)};
-DELETE FROM agent_thread_turns WHERE session_id = ${sqlLiteral(PERSISTED_SESSION_ID)};
 DELETE FROM agent_sessions WHERE id = ${sqlLiteral(PERSISTED_SESSION_ID)};
 INSERT OR REPLACE INTO workspaces (
   id, name, workspace_type, root_path, is_default, settings_json,
@@ -370,181 +385,201 @@ INSERT INTO agent_sessions (
   '{"model_name":"fixture-model"}',
   NULL
 );
-INSERT INTO agent_thread_turns (
-  id, session_id, prompt_text, status, started_at, completed_at,
-  error_message, created_at, updated_at
+`;
+  runSqlite(dbPath, sql);
+
+  const projectionSql = `
+PRAGMA busy_timeout = 5000;
+CREATE TABLE IF NOT EXISTS projected_sessions (
+  session_id TEXT PRIMARY KEY,
+  thread_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  created_at TEXT,
+  updated_at TEXT NOT NULL,
+  archived_at TEXT,
+  title TEXT,
+  model TEXT,
+  workspace_id TEXT,
+  working_dir TEXT,
+  execution_strategy TEXT,
+  metadata_json TEXT,
+  last_event_sequence INTEGER NOT NULL DEFAULT 0,
+  last_event_id TEXT
+);
+CREATE TABLE IF NOT EXISTS projected_turns (
+  turn_id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  started_at TEXT,
+  completed_at TEXT,
+  last_event_sequence INTEGER NOT NULL,
+  FOREIGN KEY(session_id) REFERENCES projected_sessions(session_id)
+);
+CREATE TABLE IF NOT EXISTS projected_items (
+  event_id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  turn_id TEXT,
+  sequence INTEGER NOT NULL,
+  item_type TEXT NOT NULL,
+  payload_summary_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(session_id) REFERENCES projected_sessions(session_id)
+);
+CREATE TABLE IF NOT EXISTS projection_watermarks (
+  session_id TEXT PRIMARY KEY,
+  last_sequence INTEGER NOT NULL,
+  last_event_id TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_projected_sessions_updated
+  ON projected_sessions(updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_projected_turns_session_sequence
+  ON projected_turns(session_id, last_event_sequence);
+CREATE INDEX IF NOT EXISTS idx_projected_items_session_sequence
+  ON projected_items(session_id, sequence);
+DELETE FROM projected_items WHERE session_id = ${sqlLiteral(PERSISTED_SESSION_ID)};
+DELETE FROM projected_turns WHERE session_id = ${sqlLiteral(PERSISTED_SESSION_ID)};
+DELETE FROM projection_watermarks WHERE session_id = ${sqlLiteral(PERSISTED_SESSION_ID)};
+DELETE FROM projected_sessions WHERE session_id = ${sqlLiteral(PERSISTED_SESSION_ID)};
+INSERT INTO projected_sessions (
+  session_id, thread_id, status, created_at, updated_at, archived_at,
+  title, model, workspace_id, working_dir, execution_strategy,
+  metadata_json, last_event_sequence, last_event_id
+) VALUES (
+  ${sqlLiteral(PERSISTED_SESSION_ID)},
+  ${sqlLiteral(PERSISTED_SESSION_ID)},
+  'idle',
+  ${sqlLiteral(now)},
+  ${sqlLiteral(turnCompletedAt)},
+  NULL,
+  ${sqlLiteral(PERSISTED_TITLE)},
+  'fixture-model',
+  ${sqlLiteral(PERSISTED_WORKSPACE_ID)},
+  ${sqlLiteral(workspaceRoot)},
+  'react',
+  ${sqlLiteral(sessionMetadata)},
+  3,
+  ${sqlLiteral(PERSISTED_AGENT_ITEM_ID)}
+);
+INSERT INTO projected_turns (
+  turn_id, session_id, thread_id, status, started_at, completed_at,
+  last_event_sequence
 ) VALUES (
   ${sqlLiteral(PERSISTED_TURN_ID)},
   ${sqlLiteral(PERSISTED_SESSION_ID)},
-  '请验证 persisted session archive restart readback。',
+  ${sqlLiteral(PERSISTED_SESSION_ID)},
   'completed',
   ${sqlLiteral(turnStartedAt)},
   ${sqlLiteral(turnCompletedAt)},
-  NULL,
-  ${sqlLiteral(turnStartedAt)},
-  ${sqlLiteral(turnCompletedAt)}
+  3
 );
-INSERT INTO agent_thread_items (
-  id, session_id, turn_id, sequence, item_type, status, started_at,
-  completed_at, updated_at, payload_json
+INSERT INTO projected_items (
+  event_id, session_id, thread_id, turn_id, sequence, item_type,
+  payload_summary_json, created_at
 ) VALUES
   (
     ${sqlLiteral(PERSISTED_USER_ITEM_ID)},
     ${sqlLiteral(PERSISTED_SESSION_ID)},
+    ${sqlLiteral(PERSISTED_SESSION_ID)},
     ${sqlLiteral(PERSISTED_TURN_ID)},
     1,
-    'user_message',
-    'completed',
-    ${sqlLiteral(turnStartedAt)},
-    ${sqlLiteral(turnStartedAt)},
-    ${sqlLiteral(turnStartedAt)},
-    ${sqlLiteral(userPayload)}
+    'message.created',
+    ${sqlLiteral(userPayload)},
+    ${sqlLiteral(turnStartedAt)}
   ),
   (
     ${sqlLiteral(PERSISTED_AGENT_ITEM_ID)},
     ${sqlLiteral(PERSISTED_SESSION_ID)},
+    ${sqlLiteral(PERSISTED_SESSION_ID)},
     ${sqlLiteral(PERSISTED_TURN_ID)},
     2,
-    'agent_message',
-    'completed',
-    ${sqlLiteral(turnCompletedAt)},
-    ${sqlLiteral(turnCompletedAt)},
-    ${sqlLiteral(turnCompletedAt)},
-    ${sqlLiteral(assistantPayload)}
+    'message.delta',
+    ${sqlLiteral(assistantPayload)},
+    ${sqlLiteral(turnCompletedAt)}
   );
+INSERT INTO projection_watermarks (
+  session_id, last_sequence, last_event_id, updated_at
+) VALUES (
+  ${sqlLiteral(PERSISTED_SESSION_ID)},
+  3,
+  ${sqlLiteral(PERSISTED_AGENT_ITEM_ID)},
+  ${sqlLiteral(turnCompletedAt)}
+);
 `;
-  runSqlite(dbPath, sql);
+  runSqlite(projectionPath, projectionSql);
+
+  const eventLogPath = path.join(
+    runtimeEnv.electronUserDataDir,
+    "app-server",
+    "runtime",
+    "events",
+    "sessions",
+    `session_${PERSISTED_SESSION_ID}.jsonl`,
+  );
+  fs.mkdirSync(path.dirname(eventLogPath), { recursive: true });
+  fs.writeFileSync(
+    eventLogPath,
+    [
+      {
+        eventId: "persisted-session-accepted",
+        sequence: 1,
+        sessionId: PERSISTED_SESSION_ID,
+        threadId: PERSISTED_SESSION_ID,
+        turnId: PERSISTED_TURN_ID,
+        type: "turn.accepted",
+        timestamp: turnStartedAt,
+        payload: {
+          session: {
+            title: PERSISTED_TITLE,
+            model: "fixture-model",
+            workspaceId: PERSISTED_WORKSPACE_ID,
+            workingDir: workspaceRoot,
+            executionStrategy: "react",
+            metadata: JSON.parse(sessionMetadata),
+          },
+        },
+      },
+      {
+        eventId: PERSISTED_USER_ITEM_ID,
+        sequence: 2,
+        sessionId: PERSISTED_SESSION_ID,
+        threadId: PERSISTED_SESSION_ID,
+        turnId: PERSISTED_TURN_ID,
+        type: "message.created",
+        timestamp: turnStartedAt,
+        payload: JSON.parse(userPayload),
+      },
+      {
+        eventId: PERSISTED_AGENT_ITEM_ID,
+        sequence: 3,
+        sessionId: PERSISTED_SESSION_ID,
+        threadId: PERSISTED_SESSION_ID,
+        turnId: PERSISTED_TURN_ID,
+        type: "message.delta",
+        timestamp: turnCompletedAt,
+        payload: JSON.parse(assistantPayload),
+      },
+      {
+        eventId: "persisted-turn-completed",
+        sequence: 4,
+        sessionId: PERSISTED_SESSION_ID,
+        threadId: PERSISTED_SESSION_ID,
+        turnId: PERSISTED_TURN_ID,
+        type: "turn.completed",
+        timestamp: turnCompletedAt,
+        payload: {},
+      },
+    ]
+      .map((event) => JSON.stringify(event))
+      .join("\n") + "\n",
+  );
   return {
     dbPath,
     workspaceRoot,
     sessionId: PERSISTED_SESSION_ID,
     workspaceId: null,
-  };
-}
-
-function seedLegacyAgentMessagesSession(runtimeEnv) {
-  const dbPath = resolveFixtureDatabasePath(runtimeEnv);
-  const now = "2026-06-08T00:00:00.000Z";
-  const userAt = "2026-06-08T00:00:01.000Z";
-  const assistantAt = "2026-06-08T00:00:02.000Z";
-  const workspaceRoot = runtimeEnv.legacyWorkspaceRoot;
-  const userContent = JSON.stringify([
-    { type: "text", text: LEGACY_USER_TEXT },
-  ]);
-  const assistantContent = JSON.stringify([
-    { type: "text", text: LEGACY_ASSISTANT_TEXT },
-  ]);
-
-  const sql = `
-PRAGMA busy_timeout = 5000;
-CREATE TABLE IF NOT EXISTS agent_messages (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  session_id TEXT NOT NULL,
-  role TEXT NOT NULL,
-  content_json TEXT NOT NULL,
-  timestamp TEXT NOT NULL,
-  tool_calls_json TEXT,
-  tool_call_id TEXT,
-  reasoning_content TEXT,
-  input_tokens INTEGER,
-  output_tokens INTEGER,
-  cached_input_tokens INTEGER,
-  cache_creation_input_tokens INTEGER,
-  FOREIGN KEY (session_id) REFERENCES agent_sessions(id) ON DELETE CASCADE
-);
-CREATE TABLE IF NOT EXISTS a2ui_forms (
-  id TEXT PRIMARY KEY,
-  message_id INTEGER NOT NULL,
-  session_id TEXT NOT NULL,
-  a2ui_response_json TEXT NOT NULL,
-  form_data_json TEXT DEFAULT '{}',
-  submitted INTEGER DEFAULT 0,
-  submitted_at TEXT,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
-  FOREIGN KEY (message_id) REFERENCES agent_messages(id) ON DELETE CASCADE,
-  FOREIGN KEY (session_id) REFERENCES agent_sessions(id) ON DELETE CASCADE
-);
-INSERT OR REPLACE INTO workspaces (
-  id, name, workspace_type, root_path, is_default, settings_json,
-  created_at, updated_at, icon, color, is_favorite, is_archived,
-  tags_json, default_persona_id
-) VALUES (
-  ${sqlLiteral(LEGACY_WORKSPACE_ID)},
-  'Electron legacy agent_messages fixture',
-  'persistent',
-  ${sqlLiteral(workspaceRoot)},
-  0,
-  '{}',
-  1780876800000,
-  1780876800000,
-  NULL,
-  NULL,
-  0,
-  0,
-  '[]',
-  NULL
-);
-DELETE FROM a2ui_forms WHERE session_id = ${sqlLiteral(LEGACY_SESSION_ID)};
-DELETE FROM agent_messages WHERE session_id = ${sqlLiteral(LEGACY_SESSION_ID)};
-DELETE FROM agent_thread_items WHERE session_id = ${sqlLiteral(LEGACY_SESSION_ID)};
-DELETE FROM agent_thread_turns WHERE session_id = ${sqlLiteral(LEGACY_SESSION_ID)};
-DELETE FROM agent_sessions WHERE id = ${sqlLiteral(LEGACY_SESSION_ID)};
-INSERT INTO agent_sessions (
-  id, model, system_prompt, title, created_at, updated_at,
-  working_dir, execution_strategy, session_type, extension_data_json,
-  provider_name, model_config_json, archived_at
-) VALUES (
-  ${sqlLiteral(LEGACY_SESSION_ID)},
-  'fixture-model',
-  NULL,
-  ${sqlLiteral(LEGACY_TITLE)},
-  ${sqlLiteral(now)},
-  ${sqlLiteral(assistantAt)},
-  ${sqlLiteral(workspaceRoot)},
-  'react',
-  'user',
-  '{}',
-  'fixture-provider',
-  '{"model_name":"fixture-model"}',
-  NULL
-);
-INSERT INTO agent_messages (
-  session_id, role, content_json, timestamp
-) VALUES
-  (
-    ${sqlLiteral(LEGACY_SESSION_ID)},
-    'user',
-    ${sqlLiteral(userContent)},
-    ${sqlLiteral(userAt)}
-  ),
-  (
-    ${sqlLiteral(LEGACY_SESSION_ID)},
-    'assistant',
-    ${sqlLiteral(assistantContent)},
-    ${sqlLiteral(assistantAt)}
-  );
-INSERT INTO a2ui_forms (
-  id, message_id, session_id, a2ui_response_json, form_data_json,
-  submitted, submitted_at, created_at, updated_at
-) VALUES (
-  'legacy-a2ui-form',
-  (SELECT id FROM agent_messages WHERE session_id = ${sqlLiteral(LEGACY_SESSION_ID)} ORDER BY id ASC LIMIT 1),
-  ${sqlLiteral(LEGACY_SESSION_ID)},
-  '{}',
-  '{}',
-  0,
-  NULL,
-  1780876800000,
-  1780876800000
-);
-`;
-  runSqlite(dbPath, sql);
-  return {
-    dbPath,
-    workspaceRoot,
-    sessionId: LEGACY_SESSION_ID,
-    workspaceId: LEGACY_WORKSPACE_ID,
   };
 }
 
@@ -613,17 +648,6 @@ function readJsonlEvents(filePath) {
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => JSON.parse(line));
-}
-
-function legacySessionEventLogPath(runtimeEnv) {
-  return path.join(
-    runtimeEnv.electronUserDataDir,
-    "app-server",
-    "runtime",
-    "events",
-    "sessions",
-    `session_${LEGACY_SESSION_ID}.jsonl`,
-  );
 }
 
 function projectionDbPath(runtimeEnv) {
@@ -794,16 +818,35 @@ async function waitForSidebarSession(page, options, sessionTitle) {
   while (Date.now() - startedAt < options.timeoutMs) {
     const snapshot = await evaluatePageSnapshot(
       page,
-      ({ selector, title }) => {
-        const recentList = document.querySelector(selector);
+      ({ selectors, title }) => {
+        const lists = selectors.map((selector) => {
+          const element = document.querySelector(selector);
+          return {
+            selector,
+            exists: Boolean(element),
+            text: element?.textContent || "",
+          };
+        });
+        const visibleMenuButtons = Array.from(
+          document.querySelectorAll("button"),
+        ).filter((button) => {
+          const aria = button.getAttribute("aria-label") || "";
+          const titleText = button.getAttribute("title") || "";
+          return (
+            aria.includes(title) &&
+            (aria.includes("操作菜单") || titleText.includes("更多"))
+          );
+        });
         return {
-          hasRecentList: Boolean(recentList),
-          recentText: recentList?.textContent || "",
+          hasSessionList: lists.some((list) => list.exists),
+          listText: lists.map((list) => list.text).join("\n"),
+          lists,
           bodyText: document.body?.innerText || "",
-          hasTitle: Boolean(recentList?.textContent?.includes(title)),
+          hasSessionMenuButton: visibleMenuButtons.length > 0,
+          hasTitle: visibleMenuButtons.length > 0,
         };
       },
-      { selector: SIDEBAR_RECENT_LIST_SELECTOR, title: sessionTitle },
+      { selectors: SIDEBAR_SESSION_LIST_SELECTORS, title: sessionTitle },
     );
     if (snapshot?.hasTitle) {
       return snapshot;
@@ -865,7 +908,17 @@ async function openSidebarConversationMenu(page, options, sessionTitle) {
 }
 
 async function clickSidebarArchiveMenuItem(page) {
-  await page.locator(SIDEBAR_ARCHIVE_MENU_ITEM_SELECTOR).click();
+  const clicked = await page.evaluate((selector) => {
+    const item = document.querySelector(selector);
+    if (!(item instanceof HTMLButtonElement) || item.disabled) {
+      return false;
+    }
+    item.click();
+    return true;
+  }, SIDEBAR_ARCHIVE_MENU_ITEM_SELECTOR);
+  if (!clicked) {
+    throw new Error("未找到可点击的侧栏归档菜单项");
+  }
 }
 
 async function waitForSidebarGuiUpdateTrace(page, options, archived) {
@@ -944,9 +997,9 @@ function assertGuiUpdateTrace(result, archived, label) {
 }
 
 async function runSidebarGuiArchivePhase(page, options) {
+  await clearInvokeBuffers(page);
   await primeSidebarWorkspace(page, PERSISTED_WORKSPACE_ID);
   await waitForSidebarSession(page, options, PERSISTED_TITLE);
-  await clearInvokeBuffers(page);
   await openSidebarConversationMenu(page, options, PERSISTED_TITLE);
   await clickSidebarArchiveMenuItem(page);
   const archiveTrace = await waitForSidebarGuiUpdateTrace(page, options, true);
@@ -963,17 +1016,36 @@ async function waitForSidebarSessionAbsent(page, options, sessionTitle) {
   while (Date.now() - startedAt < options.timeoutMs) {
     const snapshot = await evaluatePageSnapshot(
       page,
-      ({ selector, title }) => {
-        const recentList = document.querySelector(selector);
+      ({ selectors, title }) => {
+        const lists = selectors.map((selector) => {
+          const element = document.querySelector(selector);
+          return {
+            selector,
+            exists: Boolean(element),
+            text: element?.textContent || "",
+          };
+        });
+        const visibleMenuButtons = Array.from(
+          document.querySelectorAll("button"),
+        ).filter((button) => {
+          const aria = button.getAttribute("aria-label") || "";
+          const titleText = button.getAttribute("title") || "";
+          return (
+            aria.includes(title) &&
+            (aria.includes("操作菜单") || titleText.includes("更多"))
+          );
+        });
         return {
-          hasRecentList: Boolean(recentList),
-          recentText: recentList?.textContent || "",
-          hasTitle: Boolean(recentList?.textContent?.includes(title)),
+          hasSessionList: lists.some((list) => list.exists),
+          listText: lists.map((list) => list.text).join("\n"),
+          lists,
+          hasSessionMenuButton: visibleMenuButtons.length > 0,
+          hasTitle: visibleMenuButtons.length > 0,
         };
       },
-      { selector: SIDEBAR_RECENT_LIST_SELECTOR, title: sessionTitle },
+      { selectors: SIDEBAR_SESSION_LIST_SELECTORS, title: sessionTitle },
     );
-    if (snapshot && snapshot.hasRecentList && !snapshot.hasTitle) {
+    if (snapshot && snapshot.hasSessionList && !snapshot.hasTitle) {
       return snapshot;
     }
     lastSnapshot = snapshot;
@@ -989,7 +1061,14 @@ async function runSettingsGuiRestorePhase(page, options) {
   await page.evaluate(() => {
     window.dispatchEvent(new Event("focus"));
   });
-  await page.locator('[data-testid="app-sidebar-nav-settings"]').click();
+  await page.locator(SIDEBAR_ACCOUNT_BUTTON_SELECTOR).click();
+  await page.locator(SIDEBAR_ACCOUNT_MENU_SELECTOR).waitFor({
+    state: "visible",
+    timeout: options.timeoutMs,
+  });
+  await page
+    .locator(`${SIDEBAR_ACCOUNT_MENU_SELECTOR} button[aria-label="设置"]`)
+    .click();
   await page
     .locator('[data-testid="settings-sidebar-tab-archived-conversations"]')
     .click();
@@ -1539,9 +1618,6 @@ function persistedReadDetailShape(readResponse) {
     turnsIsArray: Array.isArray(detail?.turns),
     itemsIsArray: Array.isArray(detail?.items),
     queuedTurnsIsArray: Array.isArray(detail?.queued_turns),
-    childSubagentSessionsIsArray: Array.isArray(
-      detail?.child_subagent_sessions,
-    ),
     threadReadPresent:
       detail && Object.prototype.hasOwnProperty.call(detail, "thread_read"),
     messagesCount: detail?.messages_count ?? null,
@@ -1596,10 +1672,6 @@ function assertPersistedReadDetail(detail, label) {
   assert(detail.turnsIsArray, `${label}.detail.turns 不是数组`);
   assert(detail.itemsIsArray, `${label}.detail.items 不是数组`);
   assert(detail.queuedTurnsIsArray, `${label}.detail.queued_turns 不是数组`);
-  assert(
-    detail.childSubagentSessionsIsArray,
-    `${label}.detail.child_subagent_sessions 不能破坏 hydrate`,
-  );
   assert(detail.threadReadPresent, `${label}.detail.thread_read 字段缺失`);
   assert(
     Number(detail.messagesCount) >= 2,
@@ -1807,251 +1879,11 @@ function assertFixtureResult(result) {
       `${label}.detail.queued_turns 不是数组`,
     );
     assert(
-      Array.isArray(detail.child_subagent_sessions ?? []),
-      `${label}.detail.child_subagent_sessions 不能破坏 hydrate`,
-    );
-    assert(
       detail.thread_read && typeof detail.thread_read === "object",
       `${label}.detail.thread_read 缺失`,
     );
   }
 
-  return summary;
-}
-
-async function runLegacyAgentMessagesBackfillPhase(page) {
-  return await page.evaluate(
-    async ({ command, sessionId, workspaceId }) => {
-      const invoke = window.electronAPI?.invoke;
-      if (typeof invoke !== "function") {
-        throw new Error("Electron preload invoke bridge is unavailable");
-      }
-
-      const requests = [];
-      const messages = [];
-      let requestId = 1;
-
-      async function call(method, params = {}) {
-        const id = `agent-session-history-electron-legacy-${requestId++}`;
-        requests.push({ id, method, params });
-        const response = await invoke(command, {
-          request: {
-            lines: [
-              JSON.stringify({
-                jsonrpc: "2.0",
-                id,
-                method,
-                params,
-              }),
-            ],
-          },
-        });
-        const decoded = Array.isArray(response?.lines)
-          ? response.lines
-              .map((line) => {
-                try {
-                  return JSON.parse(line);
-                } catch {
-                  return null;
-                }
-              })
-              .filter(Boolean)
-          : [];
-        messages.push(...decoded);
-        const error = decoded.find(
-          (message) => message?.id === id && message.error,
-        );
-        if (error) {
-          throw new Error(`${method} failed: ${JSON.stringify(error.error)}`);
-        }
-        const result = decoded.find(
-          (message) =>
-            message?.id === id &&
-            Object.prototype.hasOwnProperty.call(message, "result"),
-        );
-        if (!result) {
-          throw new Error(`${method} did not return a JSON-RPC result`);
-        }
-        return result.result;
-      }
-
-      const initialize = await call("initialize", {
-        clientInfo: {
-          name: "agent-session-history-electron-fixture:legacy-backfill",
-          version: "1.0.0",
-        },
-        capabilities: { eventMethods: ["agentSession/event"] },
-      });
-      await invoke(command, {
-        request: {
-          lines: [JSON.stringify({ jsonrpc: "2.0", method: "initialized" })],
-        },
-      });
-      const list = await call("agentSession/list", {
-        workspaceId,
-        includeArchived: true,
-        limit: 20,
-      });
-      const read = await call("agentSession/read", {
-        sessionId,
-        historyLimit: 50,
-      });
-
-      return {
-        initialize,
-        list,
-        read,
-        requests,
-        messages,
-        traceRaw: window.localStorage.getItem("lime_invoke_trace_buffer_v1"),
-        errorRaw: window.localStorage.getItem("lime_invoke_error_buffer_v1"),
-      };
-    },
-    {
-      command: APP_SERVER_HANDLE_JSON_LINES_COMMAND,
-      sessionId: LEGACY_SESSION_ID,
-      workspaceId: LEGACY_WORKSPACE_ID,
-    },
-  );
-}
-
-function summarizeLegacyBackfillPhase(result, runtimeEnv) {
-  const requestMethods = uniqueRequestMethods(result);
-  const listedSession = (result?.list?.sessions ?? []).find(
-    (session) => session.sessionId === LEGACY_SESSION_ID,
-  );
-  const detail = result?.read?.detail;
-  const messages = Array.isArray(detail?.messages) ? detail.messages : [];
-  const eventLogPath = legacySessionEventLogPath(runtimeEnv);
-  const jsonlEvents = readJsonlEvents(eventLogPath);
-  const projectionPath = projectionDbPath(runtimeEnv);
-  const dbPath = resolveFixtureDatabasePath(runtimeEnv);
-  const projectionSessionRows = countRowsIfTableExists(
-    projectionPath,
-    "projected_sessions",
-    `WHERE session_id = ${sqlLiteral(LEGACY_SESSION_ID)}`,
-  );
-  const projectionItemRows = countRowsIfTableExists(
-    projectionPath,
-    "projected_items",
-    `WHERE session_id = ${sqlLiteral(LEGACY_SESSION_ID)}`,
-  );
-
-  return {
-    requestMethods,
-    missingRequiredMethods: [
-      "initialize",
-      "agentSession/list",
-      "agentSession/read",
-    ].filter((method) => !requestMethods.includes(method)),
-    forbiddenMethodsSeen: [
-      "agentSession/start",
-      "agentSession/turn/start",
-    ].filter((method) => requestMethods.includes(method)),
-    listedSession,
-    readSession: result?.read?.session ?? null,
-    messagesCount: messages.length,
-    messageTexts: messages.flatMap((message) =>
-      Array.isArray(message?.content)
-        ? message.content
-            .map((part) => part?.text)
-            .filter((text) => typeof text === "string")
-        : [],
-    ),
-    eventLogPath,
-    eventTypes: jsonlEvents.map(
-      (event) => event.type ?? event.eventType ?? event.event_type,
-    ),
-    projectionPath,
-    projectionSessionRows,
-    projectionItemRows,
-    legacyAgentMessagesTableExists: tableExists(dbPath, "agent_messages"),
-    legacyA2uiFormsTableExists: tableExists(dbPath, "a2ui_forms"),
-    legacyAgentMessagesRows: countRowsIfTableExists(
-      dbPath,
-      "agent_messages",
-      `WHERE session_id = ${sqlLiteral(LEGACY_SESSION_ID)}`,
-    ),
-    legacyA2uiFormsRows: countRowsIfTableExists(
-      dbPath,
-      "a2ui_forms",
-      `WHERE session_id = ${sqlLiteral(LEGACY_SESSION_ID)}`,
-    ),
-    legacySessionRows: countRowsIfTableExists(
-      dbPath,
-      "agent_sessions",
-      `WHERE id = ${sqlLiteral(LEGACY_SESSION_ID)}`,
-    ),
-  };
-}
-
-function assertLegacyBackfillPhase(result, runtimeEnv) {
-  const summary = summarizeLegacyBackfillPhase(result, runtimeEnv);
-  assert(
-    summary.missingRequiredMethods.length === 0,
-    `legacy backfill 缺少 App Server current method: ${summary.missingRequiredMethods.join(", ")}`,
-  );
-  assert(
-    summary.forbiddenMethodsSeen.length === 0,
-    `legacy backfill 不应触发: ${summary.forbiddenMethodsSeen.join(", ")}`,
-  );
-  assert(summary.listedSession, "legacy backfill list 未返回旧会话");
-  assert(
-    summary.listedSession?.sessionId === LEGACY_SESSION_ID,
-    "legacy backfill list sessionId 不正确",
-  );
-  assert(
-    summary.listedSession?.title === LEGACY_TITLE,
-    `legacy backfill list 未保留标题: ${summary.listedSession?.title}`,
-  );
-  assert(
-    summary.readSession?.sessionId === LEGACY_SESSION_ID,
-    "legacy backfill read sessionId 不正确",
-  );
-  assert(
-    summary.messagesCount >= 2,
-    `legacy backfill read 未恢复旧消息: ${summary.messagesCount}`,
-  );
-  assert(
-    summary.messageTexts.includes(LEGACY_USER_TEXT),
-    "legacy backfill read 缺少旧用户消息",
-  );
-  assert(
-    summary.messageTexts.includes(LEGACY_ASSISTANT_TEXT),
-    "legacy backfill read 缺少旧助手消息",
-  );
-  assert(
-    summary.eventTypes.includes("message.created"),
-    `legacy backfill 未写 JSONL message.created: ${summary.eventTypes.join(", ")}`,
-  );
-  assert(
-    summary.projectionSessionRows >= 1,
-    "legacy backfill 未写入 Projection DB projected_sessions",
-  );
-  assert(
-    summary.projectionItemRows >= 2,
-    "legacy backfill 未写入 Projection DB projected_items",
-  );
-  assert(
-    summary.legacyAgentMessagesRows === 0,
-    `legacy backfill 后 agent_messages 残留旧行: ${summary.legacyAgentMessagesRows}`,
-  );
-  assert(
-    summary.legacyA2uiFormsRows === 0,
-    `legacy backfill 后 a2ui_forms 残留旧行: ${summary.legacyA2uiFormsRows}`,
-  );
-  assert(
-    summary.legacySessionRows === 0,
-    `legacy backfill 后 message-only agent_sessions 残留旧壳: ${summary.legacySessionRows}`,
-  );
-  assert(
-    !summary.legacyAgentMessagesTableExists,
-    "legacy backfill 默认 drop-empty-tables 后不应保留 agent_messages 表",
-  );
-  assert(
-    !summary.legacyA2uiFormsTableExists,
-    "legacy backfill 默认 drop-empty-tables 后不应保留 a2ui_forms 表",
-  );
   return summary;
 }
 
@@ -2108,13 +1940,9 @@ async function run() {
     persistedWorkspaceId: PERSISTED_WORKSPACE_ID,
     persistedRequiredMethods: PERSISTED_SESSION_REQUIRED_METHODS,
     persistedForbiddenMethods: PERSISTED_SESSION_FORBIDDEN_METHODS,
-    legacySessionId: LEGACY_SESSION_ID,
-    legacyWorkspaceId: LEGACY_WORKSPACE_ID,
     sqliteBinary: SQLITE3_BINARY,
     electronPreloadBridge: false,
     fixtureSummary: null,
-    legacySeed: null,
-    legacyBackfillSummary: null,
     persistedSeed: null,
     persistedArchiveSummary: null,
     persistedArchiveReopenSummary: null,
@@ -2158,36 +1986,8 @@ async function run() {
     app = null;
     page = null;
 
-    logStage("seed-legacy-agent-messages-session");
-    const legacySeed = seedLegacyAgentMessagesSession(runtimeEnv);
-    summary.legacySeed = sanitizeJson({
-      ...legacySeed,
-      sqliteBinary: SQLITE3_BINARY,
-    });
-
-    logStage("launch-electron-legacy-agent-messages-backfill");
-    handle = await launchElectronFixture({
-      options,
-      runtimeEnv,
-      appServerEnv,
-      consoleErrors,
-    });
-    app = handle.app;
-    page = handle.page;
-    const legacyBackfillResult =
-      await runLegacyAgentMessagesBackfillPhase(page);
-    rawEvidence.legacyBackfill = sanitizeJson(legacyBackfillResult);
-    const legacyBackfillSummary = assertLegacyBackfillPhase(
-      legacyBackfillResult,
-      runtimeEnv,
-    );
-    summary.legacyBackfillSummary = sanitizeJson(legacyBackfillSummary);
-    await closeElectronFixture(handle);
-    app = null;
-    page = null;
-
-    logStage("seed-persisted-current-timeline-session");
-    const persistedSeed = seedPersistedCurrentTimelineSession(runtimeEnv);
+    logStage("seed-persisted-projection-session");
+    const persistedSeed = seedPersistedProjectionSession(runtimeEnv);
     summary.persistedSeed = sanitizeJson({
       ...persistedSeed,
       sqliteBinary: SQLITE3_BINARY,
@@ -2240,7 +2040,7 @@ async function run() {
     page = null;
 
     logStage("launch-electron-sidebar-gui-archive");
-    seedPersistedCurrentTimelineSession(runtimeEnv);
+    seedPersistedProjectionSession(runtimeEnv);
     handle = await launchElectronFixture({
       options,
       runtimeEnv,
@@ -2287,7 +2087,7 @@ async function run() {
     page = null;
 
     logStage("launch-electron-settings-gui-restore");
-    seedPersistedCurrentTimelineSession(runtimeEnv);
+    seedPersistedProjectionSession(runtimeEnv);
     handle = await launchElectronFixture({
       options,
       runtimeEnv,

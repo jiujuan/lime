@@ -340,7 +340,7 @@ describe("agentThreadGrouping", () => {
       {
         ...createBaseItem("question-1", 1),
         type: "tool_call",
-        tool_name: "AskUserQuestion",
+        tool_name: "request_user_input",
         arguments: { question: "需要继续吗？" },
       },
       {

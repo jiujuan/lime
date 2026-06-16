@@ -3,6 +3,7 @@ import {
   act,
   cleanupAppSidebarTest,
   flushEffects,
+  mockGetProject,
   mockListAgentRuntimeSessions,
   mockRecordAgentUiPerformanceMetric,
   mountSidebarContainer,
@@ -12,7 +13,15 @@ import {
 import type { AgentPageParams } from "./AppSidebar.testFixtures";
 
 describe("AppSidebar search", () => {
-  beforeEach(resetAppSidebarTest);
+  beforeEach(async () => {
+    await resetAppSidebarTest();
+    mockGetProject.mockImplementation(async (projectId: string) => ({
+      id: projectId,
+      name: projectId,
+      rootPath: `/repo/${projectId}`,
+      isFavorite: false,
+    }));
+  });
   afterEach(cleanupAppSidebarTest);
 
   it("搜索按钮应打开标题搜索弹窗，并按会话标题过滤结果", async () => {
@@ -24,6 +33,7 @@ describe("AppSidebar search", () => {
         updated_at: 1713000600,
         archived_at: null,
         workspace_id: "project-1",
+        working_dir: "/repo/project-1",
         messages_count: 3,
       },
       {
@@ -46,14 +56,14 @@ describe("AppSidebar search", () => {
     });
     await flushEffects(2);
 
-    await act(async () => {
+    act(() => {
       container
         .querySelector<HTMLButtonElement>(
           '[data-testid="app-sidebar-search-button"]',
         )
         ?.click();
-      await Promise.resolve();
     });
+    await flushEffects(1);
 
     const dialog = document.body.querySelector<HTMLElement>(
       '[data-testid="app-sidebar-search-dialog"]',
@@ -156,6 +166,7 @@ describe("AppSidebar search", () => {
         updated_at: 1713000600,
         archived_at: null,
         workspace_id: "project-1",
+        working_dir: "/repo/project-1",
         messages_count: 3,
       },
     ]);
@@ -182,12 +193,12 @@ describe("AppSidebar search", () => {
       '[data-testid="app-sidebar-search-dialog"]',
     );
 
-    await act(async () => {
+    act(() => {
       dialog
         ?.querySelector<HTMLButtonElement>('button[title="目标历史会话"]')
         ?.click();
-      await Promise.resolve();
     });
+    await flushEffects(1);
 
     expect(onNavigate).toHaveBeenCalledWith(
       "agent",
@@ -200,14 +211,72 @@ describe("AppSidebar search", () => {
     expect(mockRecordAgentUiPerformanceMetric).toHaveBeenCalledWith(
       "sidebar.conversation.click",
       expect.objectContaining({
+        cwd: "/repo/project-1",
+        projectId: "project-1",
         sessionId: "session-target",
         source: "sidebar_search",
-        workspaceId: "project-1",
       }),
     );
     expect(
       document.body.querySelector('[data-testid="app-sidebar-search-dialog"]'),
     ).toBeNull();
+  });
+
+  it("搜索结果从项目上下文打开无项目对话时不应继承项目 ID", async () => {
+    const onNavigate = vi.fn();
+    mockListAgentRuntimeSessions.mockResolvedValue([
+      {
+        id: "session-standalone-search",
+        name: "搜索无项目会话",
+        created_at: 1713000000,
+        updated_at: 1713000600,
+        archived_at: null,
+        workspace_id: null,
+        messages_count: 2,
+      },
+    ]);
+
+    const container = mountSidebarContainer({
+      currentPage: "agent",
+      currentPageParams: {
+        agentEntry: "claw",
+        projectId: "project-1",
+        initialSessionId: "session-project-current",
+      } as AgentPageParams,
+      onNavigate,
+    });
+    await flushEffects(2);
+
+    act(() => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="app-sidebar-search-button"]',
+        )
+        ?.click();
+    });
+    await flushEffects(1);
+
+    const dialog = document.body.querySelector<HTMLElement>(
+      '[data-testid="app-sidebar-search-dialog"]',
+    );
+
+    act(() => {
+      dialog
+        ?.querySelector<HTMLButtonElement>('button[title="搜索无项目会话"]')
+        ?.click();
+    });
+    await flushEffects(1);
+
+    expect(onNavigate).toHaveBeenCalledWith(
+      "agent",
+      expect.objectContaining({
+        agentEntry: "claw",
+        initialSessionId: "session-standalone-search",
+      }),
+    );
+    expect((onNavigate.mock.calls[0]?.[1] as AgentPageParams).projectId).toBe(
+      undefined,
+    );
   });
 
   it("搜索结果悬停不应再触发旧会话预取，避免抢占点击切换", async () => {
@@ -358,30 +427,34 @@ describe("AppSidebar search", () => {
     });
     await flushEffects(2);
 
-    await act(async () => {
+    act(() => {
       container
         .querySelector<HTMLButtonElement>(
           '[data-testid="app-sidebar-search-button"]',
         )
         ?.click();
-      await Promise.resolve();
     });
+    await flushEffects(1);
 
-    await act(async () => {
-      document.body
-        .querySelector<HTMLButtonElement>(
-          '[data-testid="app-sidebar-search-new-conversation"]',
-        )
-        ?.click();
-      await Promise.resolve();
+    const newConversationButton =
+      document.body.querySelector<HTMLButtonElement>(
+        '[data-testid="app-sidebar-search-new-conversation"]',
+      );
+    expect(newConversationButton).not.toBeNull();
+
+    act(() => {
+      newConversationButton?.click();
     });
+    await flushEffects(1);
 
     expect(onNavigate).toHaveBeenCalledWith(
       "agent",
       expect.objectContaining({
         agentEntry: "new-task",
-        projectId: "project-1",
       }),
+    );
+    expect((onNavigate.mock.calls[0]?.[1] as AgentPageParams).projectId).toBe(
+      undefined,
     );
     expect(
       document.body.querySelector('[data-testid="app-sidebar-search-dialog"]'),

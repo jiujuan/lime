@@ -38,9 +38,6 @@ const APP_SERVER_PROJECT_SHELL_DRAIN_EVENTS_TIMEOUT_MS = 3_000;
 const APP_SERVER_STREAMING_TURN_ACK_GRACE_MS = 250;
 const APP_SERVER_PROXY_REQUEST_ID_PREFIX = "electron-host";
 const APP_SERVER_DATA_DIR_NAME = "app-server";
-const DEFAULT_APP_SERVER_LEGACY_MESSAGE_CLEANUP: NonNullable<
-  SidecarLaunchConfig["legacyMessageCleanup"]
-> = "drop-empty-tables";
 const DEFAULT_APP_SERVER_PRODUCT_DB_MIGRATION_CLEANUP: NonNullable<
   SidecarLaunchConfig["productDbMigrationCleanup"]
 > = "drop-tables";
@@ -480,7 +477,6 @@ async function resolveResourceLaunchConfig(
       resourcesPath,
       appPolicyPath: process.env.APP_SERVER_POLICY_PATH,
       dataDir,
-      legacyMessageCleanup: resolveLegacyMessageCleanup(),
       productDbMigrationCleanup: resolveProductDbMigrationCleanup(),
       ...resolveRuntimeBackendLaunchOptions("runtime"),
     });
@@ -515,7 +511,6 @@ function stdioSidecarWithRuntimeBackend(
       binaryPath,
       appPolicyPath,
       dataDir,
-      resolveLegacyMessageCleanup(),
       resolveProductDbMigrationCleanup(),
     ),
     ...resolveRuntimeBackendLaunchOptions(defaultBackendMode),
@@ -524,27 +519,6 @@ function stdioSidecarWithRuntimeBackend(
 
 function resolveAppServerDataDir(): string {
   return path.join(app.getPath("userData"), APP_SERVER_DATA_DIR_NAME);
-}
-
-function resolveLegacyMessageCleanup(): NonNullable<
-  SidecarLaunchConfig["legacyMessageCleanup"]
-> {
-  const value = process.env.APP_SERVER_LEGACY_MESSAGE_CLEANUP?.trim();
-  if (!value) {
-    return DEFAULT_APP_SERVER_LEGACY_MESSAGE_CLEANUP;
-  }
-
-  if (
-    value === "retain" ||
-    value === "clear-rows" ||
-    value === "drop-empty-tables"
-  ) {
-    return value;
-  }
-
-  throw new Error(
-    "APP_SERVER_LEGACY_MESSAGE_CLEANUP must be one of retain, clear-rows, drop-empty-tables",
-  );
 }
 
 function resolveProductDbMigrationCleanup(): NonNullable<

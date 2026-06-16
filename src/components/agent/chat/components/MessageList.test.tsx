@@ -1269,6 +1269,102 @@ describe("MessageList", () => {
     );
   });
 
+  it("旧会话助手 content 为空但 contentParts 有最终正文时首帧不应空白", () => {
+    vi.useFakeTimers();
+    const turn: AgentThreadTurn = {
+      id: "turn-history-parts-only-body",
+      thread_id: "thread-history-parts-only-body",
+      prompt_text: "总结关键文件",
+      status: "completed",
+      started_at: "2026-04-25T10:00:00.000Z",
+      completed_at: "2026-04-25T10:01:00.000Z",
+      created_at: "2026-04-25T10:00:00.000Z",
+      updated_at: "2026-04-25T10:01:00.000Z",
+    };
+    const threadItems: AgentThreadItem[] = Array.from(
+      { length: 30 },
+      (_, index): AgentThreadItem => ({
+        id: `history-parts-only-tool-${index + 1}`,
+        thread_id: turn.thread_id,
+        turn_id: turn.id,
+        sequence: index + 1,
+        status: "completed",
+        started_at: turn.started_at,
+        completed_at: turn.completed_at,
+        updated_at: turn.updated_at,
+        type: "tool_call",
+        tool_name: "Read",
+        arguments: { file_path: `/repo/key-file-${index + 1}.md` },
+      }),
+    );
+    const container = render(
+      [
+        {
+          id: "msg-user-history-parts-only-body",
+          role: "user",
+          content: "总结关键文件",
+          timestamp: new Date("2026-04-25T10:00:00.000Z"),
+        } as Message,
+        {
+          id: "msg-assistant-history-parts-only-body",
+          role: "assistant",
+          content: "",
+          contentParts: [
+            {
+              type: "text",
+              text: "我先查看关键文件，再整理评分卡。",
+            },
+            {
+              type: "tool_use",
+              toolCall: {
+                id: "tool-history-parts-only-read",
+                name: "Read",
+                arguments: JSON.stringify({
+                  file_path: "/repo/scorecard.md",
+                }),
+                status: "completed",
+                result: { success: true, output: "file contents" },
+                startTime: new Date("2026-04-25T10:00:10.000Z"),
+                endTime: new Date("2026-04-25T10:00:11.000Z"),
+              },
+            },
+            {
+              type: "text",
+              text: "## 文件总结\n\n这是一份 Agent Workspace 工具 UI 评分卡。",
+            },
+          ],
+          timestamp: new Date("2026-04-25T10:01:00.000Z"),
+        } as Message,
+      ],
+      {
+        sessionId: "session-history-parts-only-body",
+        currentTurnId: turn.id,
+        turns: [turn],
+        threadItems,
+        sessionHistoryWindow: {
+          loadedMessages: 2,
+          totalMessages: 180,
+          isLoadingFull: false,
+          error: null,
+        },
+      },
+    );
+
+    const markdownPreview = container.querySelector(
+      '[data-testid="message-list-historical-markdown-preview"]',
+    );
+
+    expect(markdownPreview).not.toBeNull();
+    expect(markdownPreview?.textContent).toContain("文件总结");
+    expect(markdownPreview?.textContent).toContain(
+      "这是一份 Agent Workspace 工具 UI 评分卡。",
+    );
+    expect(markdownPreview?.textContent).not.toContain("file contents");
+    expect(
+      container.querySelector('[data-testid="streaming-renderer"]'),
+    ).toBeNull();
+  });
+
   it("旧会话 idle 后应分批恢复历史 Markdown hydrate，避免一次性挂载", async () => {
     vi.useFakeTimers();
     const turn: AgentThreadTurn = {
@@ -6450,6 +6546,21 @@ describe("MessageList", () => {
     expect(
       container.querySelector('[data-testid="agent-thread-timeline:trailing"]'),
     ).not.toBeNull();
+    const pinnedFileTimeline = container.querySelector(
+      '[data-testid="assistant-pinned-file-timeline-shell"]',
+    );
+    const assistantBubble = container.querySelector(
+      '[data-message-role="assistant"]',
+    );
+
+    expect(pinnedFileTimeline).not.toBeNull();
+    expect(assistantBubble).not.toBeNull();
+    expect(
+      Boolean(
+        pinnedFileTimeline!.compareDocumentPosition(assistantBubble!) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
   });
 
   it("不应把 .lime/artifacts 下的内部 artifact 文稿 JSON 渲染成尾部时间线", () => {

@@ -444,7 +444,7 @@ export interface AgentRuntimeStatusMetadata {
     keepalive_elapsed_ms?: number;
 }
 export interface AgentRuntimeStatusPayload {
-    phase: "preparing" | "routing" | "context" | "permission_review" | "failed";
+    phase: "preparing" | "routing" | "context" | "permission_review" | "retrying" | "continuing" | "synthesizing" | "failed";
     title: string;
     detail: string;
     checkpoints?: string[];

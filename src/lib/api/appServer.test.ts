@@ -19,6 +19,9 @@ import {
   APP_SERVER_METHOD_ARTIFACT_READ,
   APP_SERVER_METHOD_CAPABILITY_LIST,
   APP_SERVER_METHOD_EVIDENCE_EXPORT,
+  APP_SERVER_METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT,
+  APP_SERVER_METHOD_EXECUTION_PROCESS_INTERRUPT,
+  APP_SERVER_METHOD_EXECUTION_PROCESS_START,
   APP_SERVER_METHOD_FILE_SYSTEM_LIST_DIRECTORY,
   APP_SERVER_METHOD_FILE_SYSTEM_READ_FILE_PREVIEW,
   APP_SERVER_METHOD_PROJECT_GIT_DIFF,
@@ -680,6 +683,167 @@ describe("App Server API", () => {
         ],
       },
     });
+  });
+
+  it("execution process 控制面应通过 App Server JSON-RPC current methods", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({
+        lines: [
+          line({
+            id: 10,
+            result: {
+              snapshot: {
+                processId: "process-1",
+                toolId: "tool-1",
+                toolName: "Bash",
+                status: "running",
+                exitCode: null,
+                elapsedMs: 0,
+                outputBytes: 0,
+                outputOmittedBytes: 0,
+                outputTruncated: false,
+                retainedOutput: "",
+                failure: null,
+              },
+            },
+          }),
+        ],
+      })
+      .mockResolvedValueOnce({
+        lines: [
+          line({
+            id: 11,
+            result: {
+              snapshot: {
+                processId: "process-1",
+                toolId: "tool-1",
+                toolName: "Bash",
+                status: "interrupted",
+                exitCode: null,
+                elapsedMs: 12,
+                outputBytes: 0,
+                outputOmittedBytes: 0,
+                outputTruncated: false,
+                retainedOutput: "",
+                failure: null,
+              },
+            },
+          }),
+        ],
+      })
+      .mockResolvedValueOnce({
+        lines: [
+          line({
+            id: 12,
+            result: {
+              deltas: [
+                {
+                  processId: "process-1",
+                  toolId: "tool-1",
+                  sequence: 1,
+                  kind: "stdout",
+                  delta: "ok",
+                  bytes: 2,
+                  omittedBytes: 0,
+                  truncated: false,
+                },
+              ],
+            },
+          }),
+        ],
+      });
+
+    const client = new AppServerClient({ initialRequestId: 10 });
+
+    await expect(
+      client.startExecutionProcess({
+        processId: "process-1",
+        toolId: "tool-1",
+        toolName: "Bash",
+        command: ["sh", "-c", "npm test"],
+        workingDirectory: "/workspace",
+        approvalPolicy: "never",
+        sandboxPolicy: "danger-full-access",
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        result: expect.objectContaining({
+          snapshot: expect.objectContaining({ processId: "process-1" }),
+        }),
+      }),
+    );
+    await expect(
+      client.interruptExecutionProcess({ processId: "process-1" }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        result: expect.objectContaining({
+          snapshot: expect.objectContaining({ status: "interrupted" }),
+        }),
+      }),
+    );
+    await expect(
+      client.drainExecutionProcessOutput({ processId: "process-1", limit: 16 }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        result: expect.objectContaining({
+          deltas: [expect.objectContaining({ delta: "ok" })],
+        }),
+      }),
+    );
+
+    expect(safeInvoke).toHaveBeenNthCalledWith(
+      1,
+      "app_server_handle_json_lines",
+      {
+        request: {
+          lines: [
+            line({
+              id: 10,
+              method: APP_SERVER_METHOD_EXECUTION_PROCESS_START,
+              params: {
+                processId: "process-1",
+                toolId: "tool-1",
+                toolName: "Bash",
+                command: ["sh", "-c", "npm test"],
+                workingDirectory: "/workspace",
+                approvalPolicy: "never",
+                sandboxPolicy: "danger-full-access",
+              },
+            }),
+          ],
+        },
+      },
+    );
+    expect(safeInvoke).toHaveBeenNthCalledWith(
+      2,
+      "app_server_handle_json_lines",
+      {
+        request: {
+          lines: [
+            line({
+              id: 11,
+              method: APP_SERVER_METHOD_EXECUTION_PROCESS_INTERRUPT,
+              params: { processId: "process-1" },
+            }),
+          ],
+        },
+      },
+    );
+    expect(safeInvoke).toHaveBeenNthCalledWith(
+      3,
+      "app_server_handle_json_lines",
+      {
+        request: {
+          lines: [
+            line({
+              id: 12,
+              method: APP_SERVER_METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT,
+              params: { processId: "process-1", limit: 16 },
+            }),
+          ],
+        },
+      },
+    );
   });
 
   it("exportEvidence 应通过 App Server JSON-RPC 导出 current evidence snapshot", async () => {

@@ -294,6 +294,1003 @@ describe("TaskCenterUtilityToolbar", () => {
     expect(popover?.textContent).toContain("提交或推送");
   });
 
+  it("环境信息区域应轻量展示当前任务进度，并允许打开输出文件", async () => {
+    const onOpenOutput = vi.fn();
+    const container = renderToolbar({
+      taskRail: {
+        workflowSteps: [
+          { id: "read", title: "读取任务区结构", status: "completed" },
+          { id: "build", title: "接入顶部任务轨道", status: "active" },
+          { id: "verify", title: "验证顶部浮层", status: "pending" },
+          { id: "ship", title: "整理交付结果", status: "pending" },
+        ],
+        messages: [
+          {
+            id: "assistant-task",
+            role: "assistant",
+            content: "",
+            timestamp: new Date("2026-06-16T10:00:00.000Z"),
+            toolCalls: [
+              {
+                id: "tool-rg",
+                name: "rg",
+                arguments: JSON.stringify({ query: "TaskCenterUtilityToolbar" }),
+                status: "completed",
+                result: {
+                  success: true,
+                  output: "找到顶部工具栏",
+                },
+                startTime: new Date("2026-06-16T10:00:01.000Z"),
+              },
+            ],
+            artifacts: [
+              {
+                id: "artifact-plan",
+                type: "document",
+                title: "agent-workspace-task-rail.md",
+                content: "task rail",
+                status: "complete",
+                createdAt: new Date("2026-06-16T10:00:02.000Z").getTime(),
+                updatedAt: new Date("2026-06-16T10:00:02.000Z").getTime(),
+                position: { start: 0, end: 9 },
+                meta: {
+                  filePath: "internal/roadmap/agent-workspace/task-rail.md",
+                },
+              },
+            ],
+          },
+        ],
+        context: {
+          providerType: "cloud",
+          model: "reasoner-pro",
+          accessMode: "current",
+          reasoningEffort: "medium",
+          workspacePath: "/tmp/project",
+          objectiveText: "完成任务轨道",
+          changedFileCount: 2,
+          changedFiles: ["src/App.tsx", "src/index.ts"],
+          patchCount: 2,
+          runningPatchCount: 1,
+          sourceCount: 4,
+          sourceEvidenceCount: 1,
+          sourceLabels: [
+            "AG-UI spec",
+            "https://example.com/report",
+            "docs/context.md",
+          ],
+          subtaskTotalCount: 3,
+          subtaskActiveCount: 1,
+          subtaskCompletedCount: 2,
+        },
+        threadRead: {
+          thread_id: "thread-1",
+          active_turn_id: "turn-1",
+          profile_status: "running",
+          managed_objective: {
+            objective_id: "objective-1",
+            owner_kind: "agent_session",
+            owner_id: "session-1",
+            objective_text: "完成任务轨道",
+            success_criteria: [],
+            status: "active",
+            last_artifact_refs: [],
+            created_at: "2026-06-16T10:00:00.000Z",
+            updated_at: "2026-06-16T10:00:00.000Z",
+          },
+          context_summary: {
+            sources: ["https://docs.example.com/task-rail"],
+          },
+          evidence_summary: {
+            evidence_refs: ["evidence/task-rail.json"],
+          },
+        } as any,
+        childSubagentSessions: [
+          {
+            id: "subagent-1",
+            name: "实现",
+            created_at: 1,
+            updated_at: 2,
+            session_type: "subagent",
+            runtime_status: "running",
+          },
+        ],
+        onOpenOutput,
+      },
+    });
+    const trigger = container.querySelector(
+      '[data-testid="task-center-environment-trigger"]',
+    ) as HTMLButtonElement | null;
+
+    await act(async () => {
+      trigger?.click();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    const popover = document.body.querySelector(
+      '[data-testid="task-center-environment-popover"]',
+    );
+    const taskRail = document.body.querySelector(
+      '[data-testid="task-center-task-rail"]',
+    );
+    const items = Array.from(
+      document.body.querySelectorAll('[data-testid="task-center-task-rail-item"]'),
+    );
+
+    expect(popover?.textContent).toContain("环境信息");
+    expect(taskRail?.textContent).toContain("当前任务");
+    expect(taskRail?.textContent).toContain("环境");
+    expect(taskRail?.textContent).toContain("运行");
+    expect(taskRail?.textContent).toContain("计划");
+    expect(taskRail?.textContent).toContain("目标");
+    expect(taskRail?.textContent).toContain("来源");
+    expect(taskRail?.textContent).toContain("参与");
+    expect(taskRail?.textContent).toContain("结果");
+    expect(taskRail?.textContent).toContain("接入顶部任务轨道");
+    expect(taskRail?.textContent).toContain("步骤 1读取任务区结构已完成");
+    expect(taskRail?.textContent).toContain("步骤 2接入顶部任务轨道进行中");
+    expect(taskRail?.textContent).toContain("步骤 3验证顶部浮层待处理");
+    expect(taskRail?.textContent).toContain("另有 1 步");
+    expect(taskRail?.textContent).not.toContain("整理交付结果");
+    expect(taskRail?.textContent).toContain("模型cloud / reasoner-pro");
+    expect(taskRail?.textContent).toContain("权限按需确认");
+    expect(taskRail?.textContent).toContain("思考中");
+    expect(taskRail?.textContent).toContain("工作区project");
+    expect(taskRail?.textContent).toContain("本地");
+    expect(taskRail?.textContent).toContain("feature");
+    expect(taskRail?.textContent).toContain("3 个文件");
+    expect(taskRail?.textContent).toContain("状态running");
+    expect(taskRail?.textContent).toContain("线程thread-1");
+    expect(taskRail?.textContent).toContain("轮次turn-1");
+    expect(taskRail?.textContent).toContain("目标完成任务轨道");
+    expect(taskRail?.textContent).toContain("变更2 文件");
+    expect(taskRail?.textContent).toContain("来源4 项");
+    expect(taskRail?.textContent).toContain("AG-UI spec");
+    expect(taskRail?.textContent).toContain("example.com");
+    expect(taskRail?.textContent).toContain("context.md");
+    expect(taskRail?.textContent).toContain("另有 1 项");
+    expect(taskRail?.textContent).toContain("已关联");
+    expect(taskRail?.textContent).toContain("子任务2/3");
+    expect(taskRail?.textContent).toContain("参与");
+    expect(taskRail?.textContent).toContain("执行");
+    expect(taskRail?.textContent).toContain("rg");
+    expect(taskRail?.textContent).toContain("已完成");
+    expect(taskRail?.textContent).toContain("输出");
+    expect(taskRail?.textContent).toContain("task-rail.md");
+    expect(taskRail?.textContent).toContain("分屏");
+    expect(taskRail?.textContent).toContain("可打开");
+    expect(taskRail?.textContent).not.toContain("找到顶部工具栏");
+    expect(taskRail?.textContent).not.toContain(
+      "internal/roadmap/agent-workspace/task-rail.md",
+    );
+    expect(taskRail?.textContent).not.toContain("/tmp/project");
+    expect(popover?.textContent?.replace(taskRail?.textContent ?? "", "")).not.toContain(
+      "来源",
+    );
+    expect(
+      document.body.querySelector('[data-testid="task-center-task-rail-context"]'),
+    ).toBeNull();
+    expect(
+      Array.from(
+        document.body.querySelectorAll(
+          '[data-testid="task-center-run-control-surface"]',
+        ),
+      ),
+    ).toHaveLength(1);
+    expect(
+      document.body.querySelector(
+        '[data-testid="task-center-run-control-environment"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      document.body.querySelector(
+        '[data-testid="task-center-run-control-controls"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      document.body.querySelector('[data-testid="task-center-run-control-plan"]'),
+    ).not.toBeNull();
+    expect(
+      document.body.querySelector('[data-testid="task-center-task-rail-plan"]'),
+    ).toBeNull();
+    expect(
+      document.body.querySelector('[data-testid="task-center-run-control-goal"]'),
+    ).not.toBeNull();
+    expect(
+      document.body.querySelector(
+        '[data-testid="task-center-run-control-sources"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      document.body.querySelector(
+        '[data-testid="task-center-run-control-subagents"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      document.body.querySelector(
+        '[data-testid="task-center-run-control-outputs"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      document.body.querySelector(
+        '[data-testid="task-center-task-rail-activity"]',
+      ),
+    ).toBeNull();
+    expect(
+      document.body.querySelector('[data-testid="task-center-task-rail-outputs"]'),
+    ).toBeNull();
+    expect(
+      Array.from(
+        document.body.querySelectorAll(
+          '[data-testid="task-center-run-control-sources"] [data-testid="task-center-run-control-source-row"]',
+        ),
+      )
+        .map((item) => item.textContent)
+        .join(" "),
+    ).toContain("AG-UI specexample.comcontext.md另有 1 项已关联");
+    expect(items.map((item) => item.getAttribute("data-kind"))).not.toContain(
+      "tool",
+    );
+    expect(items.map((item) => item.getAttribute("data-kind"))).toContain(
+      "artifact",
+    );
+
+    const outputButton = document.body.querySelector<HTMLButtonElement>(
+      'button[data-testid="task-center-task-rail-item"][data-kind="artifact"]',
+    );
+    expect(outputButton?.getAttribute("aria-label")).toBe(
+      "打开输出文件：task-rail.md",
+    );
+
+    await act(async () => {
+      outputButton?.click();
+      await Promise.resolve();
+    });
+
+    expect(onOpenOutput).toHaveBeenCalledWith(
+      "internal/roadmap/agent-workspace/task-rail.md",
+    );
+  });
+
+  it("环境信息区域应消费运行日志与任务文件输出，并隐藏超出项", async () => {
+    const onOpenOutput = vi.fn();
+    const container = renderToolbar({
+      taskRail: {
+        workflowSteps: [],
+        messages: [
+          {
+            id: "assistant-output",
+            role: "assistant",
+            content: "",
+            timestamp: new Date("2026-06-16T10:00:00.000Z"),
+            artifacts: [
+              {
+                id: "artifact-one",
+                type: "document",
+                title: "one.md",
+                content: "one",
+                status: "complete",
+                createdAt: Date.parse("2026-06-16T10:00:01.000Z"),
+                updatedAt: Date.parse("2026-06-16T10:00:01.000Z"),
+                position: { start: 0, end: 3 },
+                meta: { filePath: "docs/one.md" },
+              },
+              {
+                id: "artifact-two",
+                type: "document",
+                title: "two.md",
+                content: "two",
+                status: "complete",
+                createdAt: Date.parse("2026-06-16T10:00:02.000Z"),
+                updatedAt: Date.parse("2026-06-16T10:00:02.000Z"),
+                position: { start: 0, end: 3 },
+                meta: { filePath: "docs/two.md" },
+              },
+              {
+                id: "artifact-three",
+                type: "document",
+                title: "three.md",
+                content: "three",
+                status: "complete",
+                createdAt: Date.parse("2026-06-16T10:00:03.000Z"),
+                updatedAt: Date.parse("2026-06-16T10:00:03.000Z"),
+                position: { start: 0, end: 5 },
+                meta: { filePath: "docs/three.md" },
+              },
+            ],
+          },
+        ],
+        activityLogs: [
+          {
+            id: "log-write",
+            name: "write_file",
+            status: "running",
+            timeLabel: "10:05",
+            artifactPaths: ["drafts/result.md"],
+            runId: "run-1",
+            source: "write_file",
+          },
+        ],
+        creationTaskEvents: [
+          {
+            taskId: "image-task-1",
+            taskType: "image_generate",
+            path: "images/result.png",
+            createdAt: Date.parse("2026-06-16T10:06:00.000Z"),
+            timeLabel: "10:06",
+          },
+        ],
+        onOpenOutput,
+      },
+    });
+    const trigger = container.querySelector(
+      '[data-testid="task-center-environment-trigger"]',
+    ) as HTMLButtonElement | null;
+
+    await act(async () => {
+      trigger?.click();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    const taskRail = document.body.querySelector(
+      '[data-testid="task-center-task-rail"]',
+    );
+    const outputItems = Array.from(
+      document.body.querySelectorAll(
+        '[data-testid="task-center-task-rail-item"]',
+      ),
+    );
+
+    expect(taskRail?.textContent).toContain("输出");
+    expect(taskRail?.textContent).toContain("执行 write_file");
+    expect(taskRail?.textContent).toContain("result.png");
+    expect(taskRail?.textContent).toContain("另有 1 个输出");
+    expect(taskRail?.textContent).not.toContain("docs/one.md");
+    expect(outputItems).toHaveLength(4);
+
+    const runningOutput = document.body.querySelector<HTMLButtonElement>(
+      'button[data-testid="task-center-task-rail-item"][data-status="running"]',
+    );
+    await act(async () => {
+      runningOutput?.click();
+      await Promise.resolve();
+    });
+
+    expect(onOpenOutput).toHaveBeenCalledWith("drafts/result.md");
+  });
+
+  it("环境信息区域应展示待确认摘要，并通过既有响应入口处理工具确认", async () => {
+    const onRespondToAction = vi.fn();
+    const container = renderToolbar({
+      taskRail: {
+        workflowSteps: [],
+        messages: [],
+        pendingActions: [
+          {
+            requestId: "approval-write",
+            actionType: "tool_confirmation",
+            toolName: "write_file",
+            prompt: "允许保存 result.md？",
+          },
+          {
+            requestId: "question-topic",
+            actionType: "ask_user",
+            questions: [{ question: "继续写哪一节？" }],
+          },
+          {
+            requestId: "approval-shell",
+            actionType: "tool_confirmation",
+            toolName: "shell",
+            prompt: "允许运行 npm test？",
+            status: "queued",
+          },
+        ],
+        submittedActionsInFlight: [
+          {
+            requestId: "approval-other",
+            actionType: "tool_confirmation",
+            toolName: "shell",
+            status: "submitted",
+            prompt: "允许运行 npm run build？",
+          },
+        ],
+        onRespondToAction,
+      },
+    });
+    const trigger = container.querySelector(
+      '[data-testid="task-center-environment-trigger"]',
+    ) as HTMLButtonElement | null;
+
+    await act(async () => {
+      trigger?.click();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    const approvals = Array.from(
+      document.body.querySelectorAll(
+        '[data-testid="task-center-task-rail-approval-item"]',
+      ),
+    );
+    const taskRail = document.body.querySelector(
+      '[data-testid="task-center-task-rail"]',
+    );
+
+    expect(taskRail?.textContent).toContain("确认");
+    expect(taskRail?.textContent).toContain("允许保存 result.md？");
+    expect(taskRail?.textContent).toContain("等待回答");
+    expect(taskRail?.textContent).toContain("另有 2 条确认");
+    expect(taskRail?.textContent).not.toContain("允许运行 npm test？");
+    expect(taskRail?.textContent).not.toContain("npm run build");
+    expect(approvals).toHaveLength(2);
+    expect(approvals[0]?.getAttribute("data-status")).toBe("pending");
+    expect(approvals[1]?.getAttribute("data-status")).toBe("pending");
+
+    const approveButton = Array.from(
+      approvals[0]?.querySelectorAll("button") ?? [],
+    ).find((button) => button.textContent?.includes("允许"));
+    const rejectButton = Array.from(
+      approvals[0]?.querySelectorAll("button") ?? [],
+    ).find((button) => button.textContent?.includes("拒绝"));
+    expect(approvals[1]?.querySelector("button")).toBeNull();
+
+    await act(async () => {
+      approveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(onRespondToAction).toHaveBeenCalledWith({
+      requestId: "approval-write",
+      actionType: "tool_confirmation",
+      confirmed: true,
+      response: "approved",
+    });
+
+    await act(async () => {
+      rejectButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(onRespondToAction).toHaveBeenLastCalledWith({
+      requestId: "approval-write",
+      actionType: "tool_confirmation",
+      confirmed: false,
+      response: "rejected",
+    });
+  });
+
+  it("环境信息区域应展示已处理确认结果且不再提供响应按钮", async () => {
+    const onRespondToAction = vi.fn();
+    const container = renderToolbar({
+      taskRail: {
+        workflowSteps: [],
+        messages: [],
+        threadItems: [
+          {
+            id: "approval-write-item",
+            type: "approval_request",
+            thread_id: "thread-1",
+            turn_id: "turn-1",
+            sequence: 1,
+            status: "completed",
+            request_id: "approval-write",
+            action_type: "tool_confirmation",
+            prompt: "允许保存 result.md？",
+            tool_name: "write_file",
+            response: "approved",
+            started_at: "2026-06-16T10:00:00.000Z",
+            completed_at: "2026-06-16T10:00:03.000Z",
+            updated_at: "2026-06-16T10:00:03.000Z",
+          },
+          {
+            id: "question-topic-item",
+            type: "request_user_input",
+            thread_id: "thread-1",
+            turn_id: "turn-1",
+            sequence: 2,
+            status: "completed",
+            request_id: "question-topic",
+            action_type: "ask_user",
+            questions: [{ question: "继续写哪一节？" }],
+            response: { answer: "先写评测标准" },
+            started_at: "2026-06-16T10:00:01.000Z",
+            completed_at: "2026-06-16T10:00:04.000Z",
+            updated_at: "2026-06-16T10:00:04.000Z",
+          },
+        ],
+        onRespondToAction,
+      },
+    });
+    const trigger = container.querySelector(
+      '[data-testid="task-center-environment-trigger"]',
+    ) as HTMLButtonElement | null;
+
+    await act(async () => {
+      trigger?.click();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    const approvals = Array.from(
+      document.body.querySelectorAll(
+        '[data-testid="task-center-task-rail-approval-item"]',
+      ),
+    );
+    const taskRail = document.body.querySelector(
+      '[data-testid="task-center-task-rail"]',
+    );
+
+    expect(taskRail?.textContent).toContain("确认");
+    expect(taskRail?.textContent).toContain("已回答");
+    expect(taskRail?.textContent).toContain("继续写哪一节？");
+    expect(taskRail?.textContent).toContain("已允许");
+    expect(taskRail?.textContent).toContain("允许保存 result.md？");
+    expect(approvals.map((item) => item.getAttribute("data-status"))).toEqual([
+      "answered",
+      "approved",
+    ]);
+    expect(approvals[0]?.querySelector("button")).toBeNull();
+    expect(approvals[1]?.querySelector("button")).toBeNull();
+    expect(onRespondToAction).not.toHaveBeenCalled();
+  });
+
+  it("环境信息区域应展示恢复后的执行轨迹和文件产物", async () => {
+    const onOpenOutput = vi.fn();
+    const container = renderToolbar({
+      taskRail: {
+        workflowSteps: [],
+        messages: [],
+        threadItems: [
+          {
+            id: "command-test",
+            type: "command_execution",
+            thread_id: "thread-1",
+            turn_id: "turn-1",
+            sequence: 1,
+            status: "completed",
+            command: "npm test",
+            cwd: "/tmp/project",
+            aggregated_output: "1 failed",
+            exit_code: 1,
+            started_at: "2026-06-16T10:00:00.000Z",
+            completed_at: "2026-06-16T10:00:02.000Z",
+            updated_at: "2026-06-16T10:00:02.000Z",
+          },
+          {
+            id: "web-search",
+            type: "web_search",
+            thread_id: "thread-1",
+            turn_id: "turn-1",
+            sequence: 2,
+            status: "completed",
+            query: "agent workspace evaluation",
+            output: "找到 3 个来源",
+            started_at: "2026-06-16T10:00:03.000Z",
+            completed_at: "2026-06-16T10:00:04.000Z",
+            updated_at: "2026-06-16T10:00:04.000Z",
+          },
+          {
+            id: "file-result",
+            type: "file_artifact",
+            thread_id: "thread-1",
+            turn_id: "turn-1",
+            sequence: 3,
+            status: "completed",
+            path: "docs/result.md",
+            source: "write_file",
+            started_at: "2026-06-16T10:00:05.000Z",
+            completed_at: "2026-06-16T10:00:06.000Z",
+            updated_at: "2026-06-16T10:00:06.000Z",
+          },
+        ],
+        onOpenOutput,
+      },
+    });
+    const trigger = container.querySelector(
+      '[data-testid="task-center-environment-trigger"]',
+    ) as HTMLButtonElement | null;
+
+    await act(async () => {
+      trigger?.click();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    const taskRail = document.body.querySelector(
+      '[data-testid="task-center-task-rail"]',
+    );
+    const activityItems = Array.from(
+      document.body.querySelectorAll(
+        '[data-testid="task-center-task-rail-activity-item"]',
+      ),
+    );
+
+    expect(taskRail?.textContent).toContain("执行");
+    expect(taskRail?.textContent).toContain("执行 npm test");
+    expect(taskRail?.textContent).toContain("需处理");
+    expect(taskRail?.textContent).toContain("执行 agent workspace evaluation");
+    expect(taskRail?.textContent).toContain("已完成");
+    expect(taskRail?.textContent).toContain("输出");
+    expect(taskRail?.textContent).toContain("result.md");
+    expect(activityItems.map((item) => item.getAttribute("data-status"))).toEqual(
+      ["failed", "completed"],
+    );
+
+    const outputButton = document.body.querySelector<HTMLButtonElement>(
+      'button[data-testid="task-center-task-rail-item"][data-kind="artifact"]',
+    );
+
+    await act(async () => {
+      outputButton?.click();
+      await Promise.resolve();
+    });
+
+    expect(onOpenOutput).toHaveBeenCalledWith("docs/result.md");
+  });
+
+  it("环境信息区域应从历史计划事实恢复计划清单", async () => {
+    const container = renderToolbar({
+      taskRail: {
+        workflowSteps: [],
+        messages: [],
+        threadItems: [
+          {
+            id: "plan-read",
+            type: "plan",
+            thread_id: "thread-1",
+            turn_id: "turn-1",
+            sequence: 1,
+            status: "completed",
+            text: "读取任务区域",
+            started_at: "2026-06-16T10:00:00.000Z",
+            completed_at: "2026-06-16T10:00:01.000Z",
+            updated_at: "2026-06-16T10:00:01.000Z",
+          },
+          {
+            id: "plan-restore",
+            type: "plan",
+            thread_id: "thread-1",
+            turn_id: "turn-1",
+            sequence: 2,
+            status: "in_progress",
+            text: "恢复运行计划",
+            started_at: "2026-06-16T10:00:02.000Z",
+            updated_at: "2026-06-16T10:00:03.000Z",
+          },
+        ],
+      },
+    });
+    const trigger = container.querySelector(
+      '[data-testid="task-center-environment-trigger"]',
+    ) as HTMLButtonElement | null;
+
+    await act(async () => {
+      trigger?.click();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    const planSection = document.body.querySelector(
+      '[data-testid="task-center-run-control-plan"]',
+    );
+    const planItems = Array.from(
+      document.body.querySelectorAll(
+        '[data-testid="task-center-run-control-plan-item"]',
+      ),
+    );
+
+    expect(planSection?.textContent).toContain("计划");
+    expect(planSection?.textContent).toContain("读取任务区域");
+    expect(planSection?.textContent).toContain("恢复运行计划");
+    expect(planItems.map((item) => item.getAttribute("data-status"))).toEqual([
+      "completed",
+      "running",
+    ]);
+  });
+
+  it("环境信息区域应从 todo items 恢复计划清单", async () => {
+    const container = renderToolbar({
+      taskRail: {
+        workflowSteps: [],
+        messages: [],
+        todoItems: [
+          {
+            content: "补齐恢复逻辑",
+            status: "completed",
+          },
+          {
+            content: "验证同一区域展示",
+            status: "in_progress",
+          },
+          {
+            content: "整理 evidence",
+            status: "pending",
+          },
+        ],
+      },
+    });
+    const trigger = container.querySelector(
+      '[data-testid="task-center-environment-trigger"]',
+    ) as HTMLButtonElement | null;
+
+    await act(async () => {
+      trigger?.click();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    const planSection = document.body.querySelector(
+      '[data-testid="task-center-run-control-plan"]',
+    );
+    const planItems = Array.from(
+      document.body.querySelectorAll(
+        '[data-testid="task-center-run-control-plan-item"]',
+      ),
+    );
+
+    expect(planSection?.textContent).toContain("补齐恢复逻辑");
+    expect(planSection?.textContent).toContain("验证同一区域展示");
+    expect(planSection?.textContent).toContain("整理 evidence");
+    expect(planItems.map((item) => item.getAttribute("data-status"))).toEqual([
+      "completed",
+      "running",
+      "pending",
+    ]);
+  });
+
+  it("历史恢复态应在同一运行控制区域恢复环境、计划、来源、审批、子任务和产物", async () => {
+    const onOpenOutput = vi.fn();
+    const container = renderToolbar({
+      taskRail: {
+        workflowSteps: [],
+        messages: [],
+        todoItems: [
+          {
+            content: "恢复运行环境",
+            status: "completed",
+          },
+          {
+            content: "恢复计划与来源",
+            status: "in_progress",
+          },
+          {
+            content: "恢复产物入口",
+            status: "pending",
+          },
+          {
+            content: "写入正式 evidence",
+            status: "pending",
+          },
+        ],
+        threadItems: [
+          {
+            id: "restore-command",
+            type: "command_execution",
+            thread_id: "restore-thread",
+            turn_id: "restore-turn",
+            sequence: 1,
+            status: "completed",
+            command: "npm run restore:check",
+            cwd: "/tmp/project",
+            aggregated_output: "restore smoke passed",
+            exit_code: 0,
+            started_at: "2026-06-16T10:00:00.000Z",
+            completed_at: "2026-06-16T10:00:01.000Z",
+            updated_at: "2026-06-16T10:00:01.000Z",
+          },
+          {
+            id: "restore-search",
+            type: "web_search",
+            thread_id: "restore-thread",
+            turn_id: "restore-turn",
+            sequence: 2,
+            status: "completed",
+            query: "run control restore sources",
+            output: "source linked",
+            started_at: "2026-06-16T10:00:02.000Z",
+            completed_at: "2026-06-16T10:00:03.000Z",
+            updated_at: "2026-06-16T10:00:03.000Z",
+          },
+          {
+            id: "restore-file",
+            type: "file_artifact",
+            thread_id: "restore-thread",
+            turn_id: "restore-turn",
+            sequence: 3,
+            status: "completed",
+            path: "internal/roadmap/agent-workspace/run-control-restore.md",
+            source: "write_file",
+            started_at: "2026-06-16T10:00:04.000Z",
+            completed_at: "2026-06-16T10:00:05.000Z",
+            updated_at: "2026-06-16T10:00:05.000Z",
+          },
+          {
+            id: "restore-approval-resolved",
+            type: "approval_request",
+            thread_id: "restore-thread",
+            turn_id: "restore-turn",
+            sequence: 4,
+            status: "completed",
+            request_id: "approval-restore-write",
+            action_type: "tool_confirmation",
+            prompt: "允许写入 restore.md？",
+            tool_name: "write_file",
+            response: "approved",
+            started_at: "2026-06-16T10:00:06.000Z",
+            completed_at: "2026-06-16T10:00:07.000Z",
+            updated_at: "2026-06-16T10:00:07.000Z",
+          },
+        ],
+        pendingActions: [
+          {
+            requestId: "approval-restore-evidence",
+            actionType: "tool_confirmation",
+            toolName: "write_file",
+            prompt: "允许保存 evidence？",
+          },
+        ],
+        threadRead: {
+          thread_id: "restore-thread",
+          active_turn_id: "restore-turn",
+          profile_status: "completed",
+          managed_objective: {
+            objective_id: "restore-objective",
+            owner_kind: "agent_session",
+            owner_id: "restore-session",
+            objective_text: "恢复运行控制区",
+            success_criteria: [],
+            status: "active",
+            last_artifact_refs: [],
+            created_at: "2026-06-16T10:00:00.000Z",
+            updated_at: "2026-06-16T10:00:08.000Z",
+          },
+          context_summary: {
+            sources: ["https://docs.example.com/run-control"],
+            retrieval_refs: [
+              {
+                title: "Restore spec",
+                path: "docs/restore.md",
+              },
+            ],
+            team_memory_refs: [
+              {
+                key: "workspace-restore",
+              },
+            ],
+          },
+          evidence_summary: {
+            evidence_refs: ["evidence/restore-evidence.json"],
+          },
+          artifacts: [
+            {
+              title: "restore.md",
+              path: "internal/roadmap/agent-workspace/run-control-restore.md",
+            },
+          ],
+          change_summary: {
+            changed_file_count: 2,
+            changed_files: [
+              "src/components/agent/chat/components/TaskCenterUtilityToolbar.integration.test.tsx",
+              "internal/roadmap/agent-workspace/evidence/agent-workspace-run-control-restore.20260616-0000.json",
+            ],
+            patch_count: 1,
+          },
+        } as any,
+        childSubagentSessions: [
+          {
+            id: "subagent-running",
+            name: "恢复检查",
+            created_at: 1,
+            updated_at: 2,
+            session_type: "subagent",
+            runtime_status: "running",
+          },
+          {
+            id: "subagent-done",
+            name: "证据整理",
+            created_at: 1,
+            updated_at: 3,
+            session_type: "subagent",
+            runtime_status: "completed",
+          },
+        ],
+        context: {
+          providerType: "cloud",
+          model: "gpt-5-pro",
+          accessMode: "current",
+          reasoningEffort: "high",
+          workspacePath: "/tmp/project",
+        },
+        onOpenOutput,
+      },
+    });
+    const trigger = container.querySelector(
+      '[data-testid="task-center-environment-trigger"]',
+    ) as HTMLButtonElement | null;
+
+    await act(async () => {
+      trigger?.click();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    const taskRail = document.body.querySelector(
+      '[data-testid="task-center-task-rail"]',
+    );
+    const runControl = document.body.querySelector(
+      '[data-testid="task-center-run-control-surface"]',
+    );
+    const planItems = Array.from(
+      document.body.querySelectorAll(
+        '[data-testid="task-center-run-control-plan-item"]',
+      ),
+    );
+    const approvalItems = Array.from(
+      document.body.querySelectorAll(
+        '[data-testid="task-center-task-rail-approval-item"]',
+      ),
+    );
+
+    expect(taskRail?.contains(runControl)).toBe(true);
+    expect(taskRail?.textContent).toContain("环境");
+    expect(taskRail?.textContent).toContain("本地");
+    expect(taskRail?.textContent).toContain("工作区project");
+    expect(taskRail?.textContent).toContain("分支feature/task-center");
+    expect(taskRail?.textContent).toContain("Git3 个文件");
+    expect(taskRail?.textContent).toContain("变更2 文件");
+    expect(taskRail?.textContent).toContain("运行");
+    expect(taskRail?.textContent).toContain("状态completed");
+    expect(taskRail?.textContent).toContain("线程restore-thread");
+    expect(taskRail?.textContent).toContain("轮次restore-turn");
+    expect(taskRail?.textContent).toContain("模型cloud / gpt-5-pro");
+    expect(taskRail?.textContent).toContain("权限按需确认");
+    expect(taskRail?.textContent).toContain("思考高");
+    expect(taskRail?.textContent).toContain("计划");
+    expect(taskRail?.textContent).toContain("恢复运行环境");
+    expect(taskRail?.textContent).toContain("恢复计划与来源");
+    expect(taskRail?.textContent).toContain("恢复产物入口");
+    expect(taskRail?.textContent).toContain("另有 1 步");
+    expect(planItems.map((item) => item.getAttribute("data-status"))).toEqual([
+      "completed",
+      "running",
+      "pending",
+    ]);
+    expect(taskRail?.textContent).toContain("目标恢复运行控制区");
+    expect(taskRail?.textContent).toContain("来源");
+    expect(taskRail?.textContent).toContain("docs.example.com");
+    expect(taskRail?.textContent).toContain("Restore spec");
+    expect(taskRail?.textContent).toContain("workspace-restore");
+    expect(taskRail?.textContent).toContain("已关联");
+    expect(taskRail?.textContent).toContain("子任务1/2");
+    expect(taskRail?.textContent).toContain("执行");
+    expect(taskRail?.textContent).toContain("执行 npm run restore:check");
+    expect(taskRail?.textContent).toContain(
+      "执行 run control restore sources",
+    );
+    expect(taskRail?.textContent).toContain("确认1 条待确认");
+    expect(taskRail?.textContent).toContain("允许保存 evidence？");
+    expect(taskRail?.textContent).toContain("已允许");
+    expect(taskRail?.textContent).toContain("允许写入 restore.md？");
+    expect(taskRail?.textContent).toContain("输出1 项");
+    expect(taskRail?.textContent).toContain("restore.md");
+    expect(approvalItems.map((item) => item.getAttribute("data-status"))).toEqual(
+      ["pending", "approved"],
+    );
+    expect(
+      document.body.querySelector('[data-testid="task-center-task-rail-plan"]'),
+    ).toBeNull();
+    expect(
+      document.body.querySelector('[data-testid="task-center-task-rail-context"]'),
+    ).toBeNull();
+    expect(
+      document.body.querySelector('[data-testid="task-center-task-rail-outputs"]'),
+    ).toBeNull();
+
+    const outputButton = document.body.querySelector<HTMLButtonElement>(
+      'button[data-testid="task-center-task-rail-item"][data-kind="artifact"]',
+    );
+
+    await act(async () => {
+      outputButton?.click();
+      await Promise.resolve();
+    });
+
+    expect(onOpenOutput).toHaveBeenCalledWith(
+      "internal/roadmap/agent-workspace/run-control-restore.md",
+    );
+  });
+
   it("Shell、工作台与聊天按钮应分别接入真实能力并保持当前态", async () => {
     const onToggleCanvas = vi.fn();
     const onToggleShellPanel = vi.fn();

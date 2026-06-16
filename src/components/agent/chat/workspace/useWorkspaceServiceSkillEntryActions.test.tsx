@@ -616,7 +616,7 @@ describe("useWorkspaceServiceSkillEntryActions", () => {
     );
   });
 
-  it("站点型技能缺少当前项目时应回退默认项目后再进入工作区", async () => {
+  it("站点型技能缺少当前项目时应提示进入项目，不再回退默认项目", async () => {
     const onNavigate = vi.fn();
     const { render, getValue } = renderHook({
       onNavigate,
@@ -632,26 +632,11 @@ describe("useWorkspaceServiceSkillEntryActions", () => {
       });
     });
 
-    expect(mockGetOrCreateDefaultProject).toHaveBeenCalledTimes(1);
-    expect(mockCreateContent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        project_id: "project-default",
-      }),
-    );
-    expect(onNavigate).toHaveBeenCalledWith(
-      "agent",
-      expect.objectContaining({
-        projectId: "project-default",
-        contentId: "content-created-by-service-skill",
-        initialAutoSendRequestMetadata: {
-          harness: expect.objectContaining({
-            service_skill_launch: expect.objectContaining({
-              project_id: "project-default",
-              content_id: "content-created-by-service-skill",
-            }),
-          }),
-        },
-      }),
+    expect(mockGetOrCreateDefaultProject).not.toHaveBeenCalled();
+    expect(mockCreateContent).not.toHaveBeenCalled();
+    expect(onNavigate).not.toHaveBeenCalled();
+    expect(mockToastError).toHaveBeenCalledWith(
+      expect.stringContaining("当前技能需要项目工作区，请先进入项目工作。"),
     );
   });
 

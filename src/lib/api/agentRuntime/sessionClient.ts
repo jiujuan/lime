@@ -70,13 +70,14 @@ export function createSessionClient({
   appServerSessionClient = createAppServerSessionClient({ appServerClient }),
 }: AgentRuntimeSessionClientDeps = {}) {
   async function createAgentRuntimeSession(
-    workspaceId: string,
+    workspaceId?: string,
     name?: string,
     executionStrategy?: AsterExecutionStrategy,
     options?: AgentRuntimeCreateSessionOptions,
   ): Promise<string> {
+    const normalizedWorkspaceId = workspaceId?.trim() || undefined;
     const sessionId = await appServerSessionClient.createAgentRuntimeSession(
-      workspaceId,
+      normalizedWorkspaceId,
       name,
       executionStrategy,
       options,
@@ -84,7 +85,7 @@ export function createSessionClient({
     notifyAgentRuntimeSessionsChanged({
       reason: "created",
       sessionId,
-      workspaceId,
+      workspaceId: normalizedWorkspaceId,
     });
     return sessionId;
   }
@@ -96,6 +97,7 @@ export function createSessionClient({
     let settled = false;
     const includeArchived = options?.includeArchived === true;
     const archivedOnly = options?.archivedOnly === true;
+    const cwd = options?.cwd;
     const workspaceId = options?.workspaceId?.trim();
     const limit =
       typeof options?.limit === "number" &&
@@ -127,6 +129,7 @@ export function createSessionClient({
 
     const listMetricContext = {
       archivedOnly,
+      cwd: cwd ?? null,
       includeArchived,
       limit: limit ?? null,
       workspaceId: workspaceId ?? null,
@@ -141,6 +144,7 @@ export function createSessionClient({
       const sessions = await appServerSessionClient.listAgentRuntimeSessions({
         includeArchived,
         archivedOnly,
+        cwd,
         workspaceId,
         limit,
       });
@@ -156,6 +160,7 @@ export function createSessionClient({
         limit,
         sessionsCount: sessions.length,
         includeArchived,
+        cwd: cwd ?? null,
         workspaceId: workspaceId ?? null,
       });
       return sessions;
@@ -173,6 +178,7 @@ export function createSessionClient({
           durationMs: Date.now() - startedAt,
           error,
           limit,
+          cwd: cwd ?? null,
           workspaceId: workspaceId ?? null,
         },
         { level: "warn" },

@@ -6,9 +6,6 @@ import {
   FolderOpen,
   GitBranch,
   GitCommitHorizontal,
-  GitPullRequest,
-  HardDrive,
-  Laptop,
   Monitor,
   PanelRightClose,
   PanelRightOpen,
@@ -33,9 +30,56 @@ import {
 } from "@/lib/api/projectGit";
 import { cn } from "@/lib/utils";
 import { agentText } from "./harnessPanelText";
+import type {
+  AgentRuntimeThreadReadModel,
+  AsterTodoItem,
+  AsterSubagentSessionInfo,
+} from "@/lib/api/agentRuntime";
+import type {
+  ActionRequired,
+  AgentThreadItem,
+  ConfirmResponse,
+  Message,
+} from "../types";
+import {
+  buildGeneralWorkbenchTaskRailProjection,
+  type GeneralWorkbenchTaskRailContextInput,
+} from "./generalWorkbenchTaskRailViewModel";
+import {
+  buildGeneralWorkbenchRunControlSurfaceProjection,
+  type GeneralWorkbenchRunControlEnvironmentInput,
+  type GeneralWorkbenchRunControlSplitLaneInput,
+} from "./generalWorkbenchRunControlSurfaceViewModel";
+import type { SidebarActivityLog } from "../hooks/useThemeContextWorkspace";
+import {
+  calculateWorkflowProgressPercent,
+  countCompletedWorkflowSteps,
+  type GeneralWorkbenchWorkflowStepInput,
+} from "./generalWorkbenchWorkflowPanelViewModel";
+import {
+  buildGeneralWorkbenchActivityLogGroups,
+  buildGeneralWorkbenchCreationTaskGroups,
+  type GeneralWorkbenchCreationTaskEvent,
+} from "./generalWorkbenchWorkflowData";
+import { TaskCenterTaskRail } from "./TaskCenterTaskRail";
 
 interface TaskCenterUtilityToolbarProps {
   projectRootPath?: string | null;
+  taskRail?: {
+    workflowSteps: GeneralWorkbenchWorkflowStepInput[];
+    messages: Message[];
+    activityLogs?: SidebarActivityLog[];
+    creationTaskEvents?: GeneralWorkbenchCreationTaskEvent[];
+    pendingActions?: readonly ActionRequired[];
+    submittedActionsInFlight?: readonly ActionRequired[];
+    threadItems?: readonly AgentThreadItem[];
+    todoItems?: readonly AsterTodoItem[];
+    threadRead?: AgentRuntimeThreadReadModel | null;
+    childSubagentSessions?: readonly AsterSubagentSessionInfo[];
+    context?: GeneralWorkbenchTaskRailContextInput;
+    onOpenOutput?: (path: string) => void | Promise<void>;
+    onRespondToAction?: (response: ConfirmResponse) => void | Promise<void>;
+  };
   placement?: "task-strip" | "workbench-header";
   showCanvasToggle: boolean;
   isCanvasOpen: boolean;
@@ -120,6 +164,7 @@ function useProjectGitStatus(rootPath?: string | null) {
 
 export function TaskCenterUtilityToolbar({
   projectRootPath,
+  taskRail,
   placement = "task-strip",
   showCanvasToggle,
   isCanvasOpen,
@@ -133,7 +178,7 @@ export function TaskCenterUtilityToolbar({
   shellPanelOpen,
   onToggleShellPanel,
 }: TaskCenterUtilityToolbarProps) {
-  useTranslation("agent");
+  const { t } = useTranslation("agent");
   const normalizedProjectRootPath = projectRootPath?.trim() || null;
   const [environmentVisited, setEnvironmentVisited] = React.useState(false);
   const { status, loading, error } = useProjectGitStatus(
@@ -193,6 +238,96 @@ export function TaskCenterUtilityToolbar({
               { count: changeCount },
             )
           : agentText("agentChat.navbar.environment.noGit", "非 Git 项目");
+  const taskRailTranslate = React.useCallback(
+    (key: string, options?: Record<string, unknown>) =>
+      (t as (nextKey: string, nextOptions?: Record<string, unknown>) => unknown)(
+        key,
+        options,
+      ),
+    [t],
+  );
+  const taskRailProjection = React.useMemo(() => {
+    if (!taskRail) {
+      return null;
+    }
+    const completedSteps = countCompletedWorkflowSteps(
+      taskRail.workflowSteps,
+    );
+    return buildGeneralWorkbenchTaskRailProjection({
+      workflowSteps: taskRail.workflowSteps,
+      completedSteps,
+      progressPercent: calculateWorkflowProgressPercent({
+        completedSteps,
+        totalSteps: taskRail.workflowSteps.length,
+      }),
+      messages: taskRail.messages,
+      groupedActivityLogs: buildGeneralWorkbenchActivityLogGroups(
+        taskRail.activityLogs ?? [],
+      ),
+      groupedCreationTaskEvents: buildGeneralWorkbenchCreationTaskGroups(
+        taskRail.creationTaskEvents ?? [],
+      ),
+      pendingActions: taskRail.pendingActions,
+      submittedActionsInFlight: taskRail.submittedActionsInFlight,
+      threadItems: taskRail.threadItems,
+      todoItems: taskRail.todoItems,
+      threadRead: taskRail.threadRead,
+      childSubagentSessions: taskRail.childSubagentSessions,
+      context: taskRail.context,
+      t: taskRailTranslate,
+    });
+  }, [taskRail, taskRailTranslate]);
+  const runControlSurfaceProjection = React.useMemo(() => {
+    if (!taskRailProjection) {
+      return null;
+    }
+
+    const environment: GeneralWorkbenchRunControlEnvironmentInput = {
+      modeLabel: normalizedProjectRootPath
+        ? agentText(
+            "agentChat.navbar.environment.local",
+            "本地",
+          )
+        : null,
+      branchLabel: status?.currentBranch?.trim() || null,
+      gitStatusLabel: status
+        ? agentText(
+            "agentChat.navbar.environment.uncommittedFiles",
+            "{{count}} 个文件",
+            {
+              count: status.hasGitRepository ? status.uncommittedFileCount : 0,
+            },
+          )
+        : null,
+    };
+    const splitLane: GeneralWorkbenchRunControlSplitLaneInput = {
+      state: shellPanelOpen ? "open" : showCanvasToggle ? "available" : "unavailable",
+    };
+
+    return buildGeneralWorkbenchRunControlSurfaceProjection({
+      contextItems: taskRailProjection.contextItems,
+      planItems: taskRailProjection.planItems,
+      planOverflowCount: taskRailProjection.planOverflowCount,
+      activityItems: taskRailProjection.activityItems,
+      activityOverflowCount: taskRailProjection.activityOverflowCount,
+      approvalItems: taskRailProjection.approvalItems,
+      approvalOverflowCount: taskRailProjection.approvalOverflowCount,
+      outputItems: taskRailProjection.outputItems.slice(0, 4),
+      outputOverflowCount: taskRailProjection.outputOverflowCount,
+      threadRead: taskRail?.threadRead,
+      environment,
+      splitLane,
+      t: taskRailTranslate,
+    });
+  }, [
+    normalizedProjectRootPath,
+    shellPanelOpen,
+    showCanvasToggle,
+    status,
+    taskRail,
+    taskRailProjection,
+    taskRailTranslate,
+  ]);
 
   return (
     <div
@@ -350,16 +485,15 @@ export function TaskCenterUtilityToolbar({
                 </span>
               </button>
             </div>
-            <div className="mt-4 border-t border-[color:var(--lime-surface-border)] pt-3">
-              <div className="text-xs font-medium text-[color:var(--lime-text-muted)]">
-                {agentText("agentChat.navbar.environment.source", "来源")}
-              </div>
-              <div className="mt-2 flex items-center gap-2 text-[color:var(--lime-text-muted)]">
-                <GitPullRequest className="h-4 w-4" />
-                <HardDrive className="h-4 w-4" />
-                <Laptop className="h-4 w-4" />
-              </div>
-            </div>
+            {taskRailProjection ? (
+              <TaskCenterTaskRail
+                projection={taskRailProjection}
+                runControlSurfaceProjection={runControlSurfaceProjection}
+                onOpenOutput={taskRail?.onOpenOutput}
+                onRespondToAction={taskRail?.onRespondToAction}
+                t={taskRailTranslate}
+              />
+            ) : null}
           </PopoverContent>
         </Popover>
       </div>

@@ -165,7 +165,7 @@ function generateTypes() {
   console.log("📖 读取 JSON Schema bundle...");
   const bundleRaw = fs.readFileSync(SCHEMA_BUNDLE_PATH, "utf8");
   const bundle = JSON.parse(bundleRaw);
-  globalDefs = bundle["$defs"] || {};
+  globalDefs = collectSchemaDefinitions(bundle);
 
   const defNames = Object.keys(globalDefs);
   console.log(`   找到 ${defNames.length} 个类型定义`);
@@ -215,6 +215,32 @@ function generateTypes() {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   fs.writeFileSync(OUTPUT_PATH, output, "utf8");
   console.log(`✅ 已写入 ${OUTPUT_PATH} (${output.length} bytes)`);
+}
+
+function collectSchemaDefinitions(bundle) {
+  const collected = { ...(bundle["$defs"] || {}) };
+  let nestedAdded = 0;
+
+  for (const schema of Object.values(collected)) {
+    const nestedDefs = schema?.["$defs"];
+    if (!nestedDefs || typeof nestedDefs !== "object") {
+      continue;
+    }
+
+    for (const [name, nestedSchema] of Object.entries(nestedDefs)) {
+      if (Object.hasOwn(collected, name)) {
+        continue;
+      }
+      collected[name] = nestedSchema;
+      nestedAdded++;
+    }
+  }
+
+  if (nestedAdded > 0) {
+    console.log(`   合并 ${nestedAdded} 个内联 $defs 类型定义`);
+  }
+
+  return collected;
 }
 
 function checkDrift() {

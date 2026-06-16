@@ -94,6 +94,7 @@ import { scheduleSessionMetadataSync } from "./sessionMetadataSyncScheduler";
 import {
   buildSessionFinalizeSuccessStatePlan,
   buildSessionWorkspaceRestorePlan,
+  normalizeSessionScopeWorkingDir,
   resolveSessionExecutionStrategyOverride,
   resolveShadowSessionExecutionStrategyFallback,
 } from "./sessionFinalizeController";
@@ -238,6 +239,7 @@ function isSessionWorkspaceMismatchError(error: unknown): boolean {
 interface UseAgentSessionOptions {
   runtime: AgentRuntimeAdapter;
   workspaceId: string;
+  workingDir?: string | null;
   disableSessionRestore: boolean;
   initialTopicsLoadMode: "immediate" | "deferred";
   initialTopicsDeferredDelayMs?: number;
@@ -290,6 +292,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   const {
     runtime,
     workspaceId,
+    workingDir,
     disableSessionRestore,
     initialTopicsLoadMode,
     initialTopicsDeferredDelayMs,
@@ -320,6 +323,10 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     () => getAgentSessionScopedKeys(workspaceId),
     [workspaceId],
   );
+  const normalizedWorkingDir = useMemo(() => {
+    const value = workingDir?.trim().replace(/[\\/]+$/u, "");
+    return value || null;
+  }, [workingDir]);
   const sanitizeRestoreCandidateSessionId = useCallback(
     (candidateSessionId: string | null | undefined): string | null => {
       const plan = resolveRestoreCandidateSanitizationPlan({
@@ -530,12 +537,14 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   const listWorkspaceTopics = useCallback(async () => {
     const startedAt = Date.now();
     const sessions = await runtime.listSessions({
-      workspaceId,
+      ...(normalizedWorkingDir ? { cwd: normalizedWorkingDir } : { workspaceId }),
       limit: INITIAL_TOPICS_SESSION_REQUEST_LIMIT,
     });
     const listDurationMs = Date.now() - startedAt;
     const workspaceFilterStartedAt = Date.now();
-    const workspaceSessions = filterSessionsByWorkspace(sessions);
+    const workspaceSessions = normalizedWorkingDir
+      ? sessions
+      : filterSessionsByWorkspace(sessions);
     const workspaceFilterDurationMs = Date.now() - workspaceFilterStartedAt;
     const auxiliaryFilterStartedAt = Date.now();
     const visibleSessions = workspaceSessions.filter(
@@ -582,7 +591,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       visibleSessions,
       topicList,
     };
-  }, [filterSessionsByWorkspace, runtime, workspaceId]);
+  }, [filterSessionsByWorkspace, normalizedWorkingDir, runtime, workspaceId]);
 
   const applySessionSnapshot = useCallback(
     (snapshot: AgentSessionSnapshot) => {
@@ -1036,11 +1045,9 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         return createFreshSessionPromiseRef.current;
       }
 
-      const resolvedWorkspaceId = workspaceId?.trim();
-      if (!resolvedWorkspaceId) {
-        toast.error("缺少项目工作区，请先选择项目");
-        return null;
-      }
+      const resolvedWorkspaceId = workspaceId?.trim() || "";
+      const sessionScopeId =
+        normalizedWorkingDir ?? (resolvedWorkspaceId || "detached");
 
       const creationPromise = (async () => {
         const startedAt = Date.now();
@@ -1052,16 +1059,19 @@ export function useAgentSession(options: UseAgentSessionOptions) {
           logAgentDebug("useAgentSession", "createFreshSession.start", {
             executionStrategy: creationExecutionStrategy,
             sessionName: sessionName?.trim() || null,
-            workspaceId: resolvedWorkspaceId,
+            sessionScopeId,
+            workspaceId: resolvedWorkspaceId || null,
+            workingDir: normalizedWorkingDir,
           });
           const nextProviderType = providerTypeRef.current;
           const nextModel = modelRef.current;
           const newSessionId = await runtime.createSession(
-            resolvedWorkspaceId,
+            resolvedWorkspaceId || undefined,
             sessionName,
             creationExecutionStrategy,
             {
               runStartHooks: createOptions?.skipSessionStartHooks !== true,
+              workingDir: normalizedWorkingDir,
               metadata: buildFreshSessionProviderModelMetadata(
                 nextProviderType,
                 nextModel,
@@ -1072,7 +1082,9 @@ export function useAgentSession(options: UseAgentSessionOptions) {
 
           const now = new Date();
           applySessionSnapshot({
-            ...createEmptyAgentSessionSnapshot(),
+            ...createEmptyAgentSessionSnapshot({
+              workingDir: normalizedWorkingDir,
+            }),
             sessionId: newSessionId,
             messages:
               createOptions?.preserveCurrentSnapshot === true
@@ -1096,13 +1108,14 @@ export function useAgentSession(options: UseAgentSessionOptions) {
               executionStrategy: creationExecutionStrategy,
               sessionId: newSessionId,
               sessionName,
-              workspaceId: resolvedWorkspaceId,
+              workspaceId: resolvedWorkspaceId || null,
+              workingDir: normalizedWorkingDir,
             }),
           );
           resetPendingActions();
           resetStreamingRefs();
           hydratedSessionRef.current = newSessionId;
-          restoredWorkspaceRef.current = resolvedWorkspaceId;
+          restoredWorkspaceRef.current = resolvedWorkspaceId || null;
 
           markSessionExecutionStrategySynced(
             newSessionId,
@@ -1127,7 +1140,9 @@ export function useAgentSession(options: UseAgentSessionOptions) {
             durationMs: Date.now() - startedAt,
             newSessionId,
             sessionName: sessionName?.trim() || null,
-            workspaceId: resolvedWorkspaceId,
+            sessionScopeId,
+            workspaceId: resolvedWorkspaceId || null,
+            workingDir: normalizedWorkingDir,
           });
           return newSessionId;
         } catch (error) {
@@ -1140,7 +1155,9 @@ export function useAgentSession(options: UseAgentSessionOptions) {
               durationMs: Date.now() - startedAt,
               error,
               sessionName: sessionName?.trim() || null,
-              workspaceId: resolvedWorkspaceId,
+              sessionScopeId,
+              workspaceId: resolvedWorkspaceId || null,
+              workingDir: normalizedWorkingDir,
             },
             { level: "error" },
           );
@@ -1168,6 +1185,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       persistSessionAccessMode,
       persistSessionRestoreCandidate,
       providerTypeRef,
+      normalizedWorkingDir,
       resetPendingActions,
       resetStreamingRefs,
       runtime,
@@ -1464,10 +1482,13 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       );
       const resolvedWorkspaceId = normalizeProjectId(workspaceId);
       const workspaceRestorePlan = buildSessionWorkspaceRestorePlan({
+        resolvedWorkingDir: normalizedWorkingDir,
         resolvedWorkspaceId,
+        runtimeWorkingDir: detail.working_dir,
         runtimeWorkspaceId,
         shadowWorkspaceId,
         topicId,
+        topicWorkingDir: selectedTopic?.workingDir,
         topicWorkspaceId,
       });
 
@@ -1713,6 +1734,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       loadSessionModelPreference,
       markSessionExecutionStrategySynced,
       markSessionModelPreferenceSynced,
+      normalizedWorkingDir,
       persistSessionAccessMode,
       persistSessionRestoreCandidate,
       resolveSessionHistoryWindow,
@@ -2294,7 +2316,22 @@ export function useAgentSession(options: UseAgentSessionOptions) {
           );
           const runtimeWorkspaceId = normalizeProjectId(detail.workspace_id);
           const currentWorkspaceId = normalizeProjectId(workspaceId);
+          const runtimeWorkingDir = normalizeSessionScopeWorkingDir(
+            detail.working_dir,
+          );
+          const currentWorkingDir =
+            normalizeSessionScopeWorkingDir(normalizedWorkingDir);
           if (
+            runtimeWorkingDir &&
+            currentWorkingDir &&
+            runtimeWorkingDir !== currentWorkingDir
+          ) {
+            throw new Error(
+              `session workspace mismatch: expected cwd ${currentWorkingDir}, got ${runtimeWorkingDir}`,
+            );
+          }
+          if (
+            !runtimeWorkingDir &&
             runtimeWorkspaceId &&
             currentWorkspaceId &&
             runtimeWorkspaceId !== currentWorkspaceId
@@ -2383,6 +2420,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       createFreshSession,
       disableSessionRestore,
       applySessionSnapshot,
+      normalizedWorkingDir,
       persistSessionRestoreCandidate,
       runtime,
       sessionIdRef,

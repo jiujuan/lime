@@ -34,7 +34,7 @@ describe("appConfig API", () => {
     await expect(getDefaultProvider()).resolves.toBe("claude");
   });
 
-  it("环境预览遇到 Electron degraded diagnostic facade 时应 fail closed", async () => {
+  it("环境预览应接收 Electron Host current 返回的局部 Shell 导入状态", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       shellImport: {
         enabled: false,
@@ -42,11 +42,30 @@ describe("appConfig API", () => {
         message: "Electron current 暂未接入 shell 环境导入预览。",
         importedCount: 0,
         durationMs: null,
-        diagnostic: {
-          source: "electron-host-diagnostic",
-          command: "get_environment_preview",
-          status: "degraded",
-        },
+      },
+      entries: [],
+    });
+
+    await expect(getEnvironmentPreview()).resolves.toEqual({
+      shellImport: {
+        enabled: false,
+        status: "disabled",
+        message: "Electron current 暂未接入 shell 环境导入预览。",
+        importedCount: 0,
+        durationMs: null,
+      },
+      entries: [],
+    });
+  });
+
+  it("环境预览遇到顶层 Electron degraded diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      shellImport: {
+        enabled: false,
+        status: "disabled",
+        message: "Electron current 暂未接入 shell 环境导入预览。",
+        importedCount: 0,
+        durationMs: null,
       },
       entries: [],
       diagnostic: {

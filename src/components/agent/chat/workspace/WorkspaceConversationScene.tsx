@@ -16,6 +16,11 @@ import {
   TASK_CENTER_SHELL_PANEL_MAX_HEIGHT_RATIO,
 } from "../components/TaskCenterShellPanel";
 import { TaskCenterUtilityToolbar } from "../components/TaskCenterUtilityToolbar";
+import type { GeneralWorkbenchWorkflowStepInput } from "../components/generalWorkbenchWorkflowPanelViewModel";
+import type { SidebarActivityLog } from "../hooks/useThemeContextWorkspace";
+import type { GeneralWorkbenchCreationTaskEvent } from "../components/generalWorkbenchWorkflowData";
+import type { GeneralWorkbenchTaskRailContextInput } from "../components/generalWorkbenchTaskRailViewModel";
+import type { ConfirmResponse } from "../types";
 import { CreationReplaySurfaceBanner } from "../components/CreationReplaySurfaceBanner";
 import { EmptyState } from "../components/EmptyState";
 import type { InputbarSendHandler } from "../components/Inputbar/inputbarSendPayload";
@@ -300,6 +305,20 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
   contextWorkspaceEnabled: boolean;
   generalWorkbenchMessageViewportBottomPadding?: string;
   messageListProps: WorkspaceChatContentParams["messageListProps"];
+  taskRail?: {
+    workflowSteps: GeneralWorkbenchWorkflowStepInput[];
+    messages: MessageListProps["messages"];
+    activityLogs?: SidebarActivityLog[];
+    creationTaskEvents?: GeneralWorkbenchCreationTaskEvent[];
+    pendingActions?: MessageListProps["pendingActions"];
+    submittedActionsInFlight?: MessageListProps["submittedActionsInFlight"];
+    threadItems?: MessageListProps["threadItems"];
+    threadRead?: MessageListProps["threadRead"];
+    childSubagentSessions?: MessageListProps["childSubagentSessions"];
+    context?: GeneralWorkbenchTaskRailContextInput;
+    onOpenOutput?: (path: string) => void | Promise<void>;
+    onRespondToAction?: (response: ConfirmResponse) => void | Promise<void>;
+  };
   workspaceAlertVisible: boolean;
   onSelectWorkspaceDirectory: () => void;
   onDismissWorkspaceAlert: () => void;
@@ -497,6 +516,7 @@ export function WorkspaceConversationScene({
   contextWorkspaceEnabled,
   generalWorkbenchMessageViewportBottomPadding,
   messageListProps,
+  taskRail,
   workspaceAlertVisible,
   onSelectWorkspaceDirectory,
   onDismissWorkspaceAlert,
@@ -747,6 +767,7 @@ export function WorkspaceConversationScene({
   const taskCenterUtilityToolbarNode = shouldUseTaskCenterUtilityToolbar ? (
     <TaskCenterUtilityToolbar
       projectRootPath={projectRootPath}
+      taskRail={taskRail}
       placement={layoutMode !== "chat" ? "workbench-header" : "task-strip"}
       showCanvasToggle={!isThemeWorkbench}
       isCanvasOpen={layoutMode !== "chat"}

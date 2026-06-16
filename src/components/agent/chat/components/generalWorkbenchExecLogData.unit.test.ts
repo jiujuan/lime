@@ -161,7 +161,7 @@ describe("generalWorkbenchExecLogData", () => {
             }),
             toolCall({
               id: "tool-input-1",
-              name: "AskUserQuestion",
+              name: "request_user_input",
               arguments: JSON.stringify({ question: "需要继续吗？" }),
               status: "running",
             }),

@@ -111,10 +111,10 @@ pub fn create_session(conn: &Connection, session: &AgentSession) -> Result<(), S
 pub fn list_session_overviews(
     conn: &Connection,
     archive_filter: SessionArchiveFilter,
-    workspace_id: Option<&str>,
+    cwd_filters: &[String],
     limit: Option<usize>,
 ) -> Result<Vec<SessionRecordOverview>, String> {
-    AgentDao::list_session_overviews(conn, archive_filter, workspace_id, limit)
+    AgentDao::list_session_overviews(conn, archive_filter, cwd_filters, limit)
         .map(|rows| rows.into_iter().map(map_session_overview).collect())
         .map_err(|error| format!("获取会话列表失败: {error}"))
 }
@@ -126,13 +126,6 @@ pub fn get_session_overview(
     AgentDao::get_session_overview(conn, session_id)
         .map(|row| row.map(map_session_overview))
         .map_err(|error| format!("获取会话失败: {error}"))
-}
-
-pub fn get_session_with_messages(
-    conn: &Connection,
-    session_id: &str,
-) -> Result<Option<SessionRecordDetail>, String> {
-    get_session_without_messages(conn, session_id)
 }
 
 pub fn get_session_without_messages(
@@ -150,34 +143,6 @@ pub fn get_session_without_messages(
             })
         })
         .map_err(|error| format!("获取会话详情失败: {error}"))
-}
-
-pub fn get_session_with_messages_tail(
-    conn: &Connection,
-    session_id: &str,
-    limit: usize,
-) -> Result<Option<SessionRecordDetail>, String> {
-    get_session_with_messages_tail_page(conn, session_id, limit, 0)
-}
-
-pub fn get_session_with_messages_tail_page(
-    conn: &Connection,
-    session_id: &str,
-    limit: usize,
-    offset: usize,
-) -> Result<Option<SessionRecordDetail>, String> {
-    let _ = (limit, offset);
-    get_session_without_messages(conn, session_id)
-}
-
-pub fn get_session_with_messages_before(
-    conn: &Connection,
-    session_id: &str,
-    limit: usize,
-    before_message_id: i64,
-) -> Result<Option<SessionRecordDetail>, String> {
-    let _ = (limit, before_message_id);
-    get_session_without_messages(conn, session_id)
 }
 
 pub fn get_persisted_session_metadata(
@@ -262,23 +227,4 @@ pub fn update_session_archived_at(
 ) -> Result<(), String> {
     AgentDao::update_archived_at(conn, session_id, archived_at, updated_at)
         .map_err(|error| format!("更新会话归档状态失败: {error}"))
-}
-
-pub fn update_latest_assistant_message_usage(
-    conn: &Connection,
-    session_id: &str,
-    input_tokens: u32,
-    output_tokens: u32,
-    cached_input_tokens: Option<u32>,
-    cache_creation_input_tokens: Option<u32>,
-) -> Result<bool, String> {
-    AgentDao::update_latest_assistant_message_usage(
-        conn,
-        session_id,
-        input_tokens,
-        output_tokens,
-        cached_input_tokens,
-        cache_creation_input_tokens,
-    )
-    .map_err(|error| format!("更新最新 assistant 消息 usage 失败: {error}"))
 }

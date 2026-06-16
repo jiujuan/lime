@@ -124,7 +124,7 @@ async fn export_evidence_reads_session_turn_events_and_artifact_summaries() {
 }
 
 #[tokio::test]
-async fn export_evidence_repairs_and_reads_jsonl_projection_without_legacy_messages() {
+async fn export_evidence_repairs_and_reads_jsonl_projection() {
     let temp = tempfile::tempdir().expect("tempdir");
     let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
     let event_log_writer = Arc::new(EventLogWriter::new(&roots.event_log_root).expect("writer"));
@@ -162,13 +162,13 @@ async fn export_evidence_repairs_and_reads_jsonl_projection_without_legacy_messa
         .clear_session("sess_evidence_projection")
         .expect("simulate missing projection");
 
-    let legacy_data_source = Arc::new(TestCurrentTimelineDataSource::new(
+    let app_data_source = Arc::new(TestSessionDataSource::new(
         empty_agent_session_read_response("legacy_unexpected"),
     ));
     let restarted_core = RuntimeCore::default()
         .with_event_log_writer(event_log_writer)
         .with_projection_store(projection_store)
-        .with_app_data_source(legacy_data_source.clone());
+        .with_app_data_source(app_data_source);
 
     let response = restarted_core
         .export_evidence(EvidenceExportParams {
@@ -195,7 +195,6 @@ async fn export_evidence_repairs_and_reads_jsonl_projection_without_legacy_messa
     );
     assert_eq!(response.events[2].event_type, "message.delta");
     assert!(response.evidence_pack.is_some());
-    assert!(legacy_data_source.read_requests().is_empty());
 }
 
 #[tokio::test]

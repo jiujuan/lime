@@ -90,6 +90,11 @@ export interface CanvasWorkbenchHeaderView {
 
 export type { CanvasWorkbenchPreviewTarget };
 
+export interface CanvasWorkbenchPreviewOpenRequest {
+  requestKey: string | number;
+  filePath?: string | null;
+}
+
 export interface CanvasWorkbenchSessionView extends CanvasWorkbenchHeaderView {
   renderPanel: () => ReactNode;
 }
@@ -98,6 +103,16 @@ export interface CanvasWorkbenchUtilityView extends CanvasWorkbenchHeaderView {
   enabled?: boolean;
   leadContent?: ReactNode;
   renderPanel: () => ReactNode;
+}
+
+function getPreviewTargetPath(
+  target: CanvasWorkbenchPreviewTarget | null | undefined,
+  key: "filePath" | "absolutePath",
+): string | undefined {
+  if (!target || target.kind === "empty") {
+    return undefined;
+  }
+  return key === "filePath" ? target.filePath : target.absolutePath;
 }
 
 export interface CanvasWorkbenchLayoutProps {
@@ -122,9 +137,31 @@ export interface CanvasWorkbenchLayoutProps {
   topRightTools?: ReactNode;
   browserOpenRequest?: CanvasWorkbenchBrowserOpenRequest | null;
   onBrowserOpenRequestHandled?: (requestKey: string | number) => void;
+  previewOpenRequest?: CanvasWorkbenchPreviewOpenRequest | null;
+  onPreviewOpenRequestHandled?: (requestKey: string | number) => void;
 }
 
 const STACKED_LAYOUT_BREAKPOINT = 1040;
+
+function normalizePreviewOnlyPath(path: string | null | undefined): string {
+  return path?.replace(/\\/g, "/").trim() || "";
+}
+
+function doesPreviewOnlyPathMatch(
+  requestedPath: string | null | undefined,
+  candidatePath: string | null | undefined,
+): boolean {
+  const requested = normalizePreviewOnlyPath(requestedPath);
+  const candidate = normalizePreviewOnlyPath(candidatePath);
+  if (!requested || !candidate) {
+    return false;
+  }
+  return (
+    requested === candidate ||
+    requested.endsWith(`/${candidate}`) ||
+    candidate.endsWith(`/${requested}`)
+  );
+}
 
 export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
   artifacts,
@@ -148,6 +185,8 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
   topRightTools = null,
   browserOpenRequest = null,
   onBrowserOpenRequestHandled,
+  previewOpenRequest = null,
+  onPreviewOpenRequestHandled,
 }: CanvasWorkbenchLayoutProps) {
   const { i18n, t } = useTranslation("agent");
   const locale = i18n.language || "zh-CN";
@@ -265,6 +304,9 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     onBrowserOpenRequestHandled,
   });
   const [changesFilesPanelOpen, setChangesFilesPanelOpen] = useState(false);
+  const [previewOnlyFilePath, setPreviewOnlyFilePath] = useState<string | null>(
+    null,
+  );
   const hasAutoFocusedInitialDocumentTabRef = useRef(
     Boolean(documentSelectionKey),
   );
@@ -351,6 +393,27 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
         : [],
     [documentContext],
   );
+  const activeDocumentPaths = useMemo(
+    () => [
+      documentContext?.selectionPath,
+      documentContext?.subtitle,
+      getPreviewTargetPath(documentContext?.target, "filePath"),
+      getPreviewTargetPath(documentContext?.target, "absolutePath"),
+      documentContext?.title,
+    ],
+    [
+      documentContext?.selectionPath,
+      documentContext?.subtitle,
+      documentContext?.target,
+      documentContext?.title,
+    ],
+  );
+  const isPreviewOnlyFileOpen = Boolean(
+    previewOnlyFilePath &&
+      activeDocumentPaths.some((candidatePath) =>
+        doesPreviewOnlyPathMatch(previewOnlyFilePath, candidatePath),
+      ),
+  );
   const hasReviewSurface =
     isCodingWorkbench || Boolean(changeView) || documentDiffLines.length > 0;
   const resolvedChangeView = useMemo<CanvasWorkbenchChangeView | null>(() => {
@@ -385,6 +448,9 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     if (!hasReviewSurface) {
       return;
     }
+    if (isPreviewOnlyFileOpen) {
+      return;
+    }
     if (hasAutoFocusedCodingReviewRef.current) {
       return;
     }
@@ -397,10 +463,25 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     changeItemCount,
     documentDiffLines.length,
     hasReviewSurface,
+    isPreviewOnlyFileOpen,
     setActiveTab,
   ]);
 
-  const { primaryTabs, newTabActions } = useMemo(
+  useEffect(() => {
+    if (!previewOpenRequest) {
+      return;
+    }
+    setPreviewOnlyFilePath(previewOpenRequest.filePath?.trim() || null);
+    setActiveTab(previewModeState.defaultMode);
+    onPreviewOpenRequestHandled?.(previewOpenRequest.requestKey);
+  }, [
+    onPreviewOpenRequestHandled,
+    previewModeState.defaultMode,
+    previewOpenRequest,
+    setActiveTab,
+  ]);
+
+  const { primaryTabs: basePrimaryTabs, newTabActions } = useMemo(
     () =>
       buildCanvasWorkbenchToolTabProjection({
         changeItemCount,
@@ -423,6 +504,23 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
       canvasT,
     ],
   );
+  const primaryTabs = useMemo(() => {
+    if (!documentContext) {
+      return basePrimaryTabs;
+    }
+
+    return [
+      {
+        key: previewModeState.defaultMode,
+        label: documentContext.tabLabel || documentContext.title,
+      },
+      ...basePrimaryTabs,
+    ];
+  }, [
+    basePrimaryTabs,
+    documentContext,
+    previewModeState.defaultMode,
+  ]);
 
   const handleCopyPath = useCallback(async () => {
     if (!activeSelectionPath) {
@@ -461,11 +559,14 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
 
   const activeToolTabKind = resolveToolTabKind(activeTab);
   const topActiveTab: CanvasWorkbenchTab =
-    primaryTabs.some((tab) => tab.key === activeTab) || activeTab === "changes"
-      ? activeTab
-      : hasReviewSurface
-        ? "changes"
-        : primaryTabs[0]?.key || activeTab;
+    documentContext && activeTab === "code"
+      ? previewModeState.defaultMode
+      : primaryTabs.some((tab) => tab.key === activeTab) ||
+          (activeTab === "changes" && hasReviewSurface)
+        ? activeTab
+        : hasReviewSurface
+          ? "changes"
+          : primaryTabs[0]?.key || activeTab;
 
   return (
     <CanvasWorkbenchShell

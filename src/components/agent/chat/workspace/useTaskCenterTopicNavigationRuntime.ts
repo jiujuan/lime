@@ -134,15 +134,15 @@ export function useTaskCenterTopicNavigationRuntime({
     ) => {
       const topic = topicById.get(topicId);
       const topicWorkspaceId = normalizeProjectId(
-        topic?.workspaceId ??
-          loadPersistedSessionWorkspaceId(topicId) ??
-          taskCenterWorkspaceId,
+        topic?.workspaceId ?? loadPersistedSessionWorkspaceId(topicId),
       );
+      const isDetachedTopic = !topicWorkspaceId;
       const shouldResume =
         options?.preferResume === true || shouldResumeTaskSession(topic);
       const switchOptions = resolveTaskCenterTopicSwitchOptions({
         shouldResume,
         forceRefresh: options?.forceRefresh,
+        allowDetachedSession: isDetachedTopic,
       });
       const wasOpenInTaskCenter =
         taskCenterOpenTabIdsRef.current.includes(topicId);
@@ -187,7 +187,7 @@ export function useTaskCenterTopicNavigationRuntime({
       taskCenterDraftSurfaceActiveRef.current = false;
       resetLocalImageWorkbenchSessionScope();
       setTaskCenterTransitionTopicId(topicId);
-      setTaskCenterDetachedTopicId(null);
+      setTaskCenterDetachedTopicId(isDetachedTopic ? topicId : null);
       setActiveTaskCenterDraftTabId(null);
       clearEntryPendingA2UI();
       if (options?.replaceOpenTabs === true) {

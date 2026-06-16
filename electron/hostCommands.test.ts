@@ -1990,6 +1990,52 @@ describe("ElectronHostCommands system utilities", () => {
     ).rejects.toThrow("输入法切换");
   });
 
+  it("get_environment_preview 返回 current 环境预览且不暴露 diagnostic facade", async () => {
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir);
+    await host.invoke("save_config", {
+      config: {
+        server: {
+          host: "127.0.0.1",
+          port: 8910,
+          api_key: "secret-key",
+        },
+      },
+    });
+
+    const result = (await host.invoke(
+      "get_environment_preview",
+    )) as Record<string, unknown>;
+    const shellImport = result.shellImport as Record<string, unknown>;
+
+    expect(result).not.toHaveProperty("diagnostic");
+    expect(shellImport).not.toHaveProperty("diagnostic");
+    expect(shellImport).toEqual(
+      expect.objectContaining({
+        enabled: false,
+        status: "disabled",
+        importedCount: 0,
+        durationMs: null,
+      }),
+    );
+    expect(result.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: "LIME_API_BASE",
+          value: "http://127.0.0.1:8910",
+          maskedValue: "http://127.0.0.1:8910",
+          sensitive: false,
+        }),
+        expect.objectContaining({
+          key: "LIME_API_KEY",
+          value: "secret-key",
+          maskedValue: "********",
+          sensitive: true,
+        }),
+      ]),
+    );
+  });
+
   it("voice_models_list_catalog 返回 Electron Host current 目录形态", async () => {
     const userDataDir = await createTempUserDataDir();
     const host = createHost(userDataDir);

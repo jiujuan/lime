@@ -69,8 +69,7 @@ impl RuntimeCore {
             &params.session_id,
             "sessionId is required for agentSession/compact",
         )?;
-        self.ensure_current_timeline_session_hydrated(&session_id)
-            .await?;
+        self.ensure_current_session_hydrated(&session_id).await?;
         let (session, turns) = self.session_snapshot(&session_id)?;
         let event_name = params
             .event_name
@@ -126,8 +125,7 @@ impl RuntimeCore {
             "sessionId is required for agentSession/thread/resume",
         )?;
         validate_runtime_resume_contract(params.resume_contract.as_ref(), &session_id)?;
-        self.ensure_current_timeline_session_hydrated(&session_id)
-            .await?;
+        self.ensure_current_session_hydrated(&session_id).await?;
         let queued = {
             let mut state = self
                 .state
@@ -226,8 +224,7 @@ impl RuntimeCore {
             &params.queued_turn_id,
             "queuedTurnId is required for agentSession/queuedTurn/remove",
         )?;
-        self.ensure_current_timeline_session_hydrated(&session_id)
-            .await?;
+        self.ensure_current_session_hydrated(&session_id).await?;
         let (session, removed) = {
             let mut state = self
                 .state
@@ -297,8 +294,7 @@ impl RuntimeCore {
             &params.queued_turn_id,
             "queuedTurnId is required for agentSession/queuedTurn/promote",
         )?;
-        self.ensure_current_timeline_session_hydrated(&session_id)
-            .await?;
+        self.ensure_current_session_hydrated(&session_id).await?;
         let (session, promoted) = {
             let mut state = self
                 .state

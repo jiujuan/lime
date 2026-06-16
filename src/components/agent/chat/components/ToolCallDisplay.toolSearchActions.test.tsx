@@ -182,7 +182,7 @@ describe("ToolCallDisplay tool search and actions", () => {
         },
         {
           id: "tool-input-1",
-          name: "AskUserQuestion",
+          name: "request_user_input",
           arguments: JSON.stringify({ question: "需要继续吗？" }),
           status: "running",
           startTime: new Date("2026-03-20T12:20:09.000Z"),

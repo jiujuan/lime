@@ -4,6 +4,19 @@ import { getLimeI18n } from "@/i18n/createI18n";
 
 const DEFAULT_SKILL_MARKETPLACE_API_BASE_URL =
   "https://lime-api.limeai.run/api";
+const DEFAULT_SKILL_MARKETPLACE_WEBSITE_BASE_URL = "https://limeai.run";
+const STATIC_SKILL_MARKETPLACE_PATH = "/skills/";
+const STATIC_SKILL_PACKAGE_BASE_PATH = "/skill-packages";
+
+type SkillMarketplaceSource =
+  | {
+      kind: "api";
+      baseUrl: string;
+    }
+  | {
+      kind: "static";
+      websiteBaseUrl: string;
+    };
 
 export interface SkillMarketplaceVisualAsset {
   kind?: string;
@@ -99,6 +112,13 @@ function normalizeOptionalText(value: unknown): string | undefined {
 function normalizeBaseUrl(value: unknown): string | null {
   const normalized = normalizeText(value);
   return normalized ? normalized.replace(/\/+$/, "") : null;
+}
+
+function normalizeSkillPackageSlug(value: unknown): string | null {
+  const normalized = normalizeText(value).toLowerCase();
+  return /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(normalized)
+    ? normalized
+    : null;
 }
 
 function tMarketplaceError(
@@ -378,6 +398,202 @@ function normalizeMarketplaceItems(value: unknown): SkillMarketplaceItem[] {
     .filter((item): item is SkillMarketplaceItem => Boolean(item));
 }
 
+function readStaticMarketplaceVersion(value: unknown): string {
+  const explicitVersion = normalizeOptionalText(
+    isRecord(value) ? value.version : undefined,
+  );
+  if (explicitVersion) {
+    return explicitVersion;
+  }
+
+  const meta = normalizeText(isRecord(value) ? value.meta : undefined);
+  const parts = meta
+    .split(/[·|]/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return parts.at(-1) ?? "";
+}
+
+function normalizeStaticMarketplaceItem(
+  value: unknown,
+  index: number,
+): SkillMarketplaceItem | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const launch = isRecord(value.launch) ? value.launch : null;
+  if (normalizeText(launch?.type) !== "service_skill") {
+    return null;
+  }
+
+  const slug = normalizeSkillPackageSlug(value.slug);
+  const skillName = normalizeSkillPackageSlug(launch?.skillId) ?? slug;
+  if (!slug || !skillName) {
+    return null;
+  }
+
+  const title = normalizeText(value.title) || skillName;
+  const description = normalizeText(value.description);
+  const summary = normalizeText(value.summary) || description;
+
+  return {
+    id: `official:${skillName}`,
+    name: skillName,
+    aliases: [],
+    title,
+    summary,
+    category: normalizeText(value.category),
+    outputHint: description || summary,
+    version: readStaticMarketplaceVersion(value),
+    sort: index,
+  };
+}
+
+function decodeNextFlightEscapedText(value: string): string {
+  return value
+    .replace(/\\u([0-9a-fA-F]{4})/g, (_match, hex: string) =>
+      String.fromCharCode(Number.parseInt(hex, 16)),
+    )
+    .replace(/\\(["\\/bfnrt])/g, (_match, token: string) => {
+      switch (token) {
+        case '"':
+          return '"';
+        case "\\":
+          return "\\";
+        case "/":
+          return "/";
+        case "b":
+          return "\b";
+        case "f":
+          return "\f";
+        case "n":
+          return "\n";
+        case "r":
+          return "\r";
+        case "t":
+          return "\t";
+        default:
+          return token;
+      }
+    });
+}
+
+function extractJsonValue(source: string, startIndex: number): string | null {
+  const opening = source[startIndex];
+  const closing = opening === "[" ? "]" : opening === "{" ? "}" : null;
+  if (!closing) {
+    return null;
+  }
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = startIndex; index < source.length; index += 1) {
+    const char = source[index];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+    if (char === opening) {
+      depth += 1;
+      continue;
+    }
+    if (char === closing) {
+      depth -= 1;
+      if (depth === 0) {
+        return source.slice(startIndex, index + 1);
+      }
+    }
+  }
+
+  return null;
+}
+
+function parseStaticMarketplaceItems(html: string): SkillMarketplaceItem[] {
+  const decoded = decodeNextFlightEscapedText(html);
+  const marker = '"skills":[';
+  const itemsByName = new Map<string, SkillMarketplaceItem>();
+  let searchStart = 0;
+  let globalIndex = 0;
+
+  while (searchStart < decoded.length) {
+    const markerIndex = decoded.indexOf(marker, searchStart);
+    if (markerIndex < 0) {
+      break;
+    }
+
+    const arrayStart = markerIndex + marker.length - 1;
+    const json = extractJsonValue(decoded, arrayStart);
+    if (json) {
+      try {
+        const payload = JSON.parse(json) as unknown;
+        if (Array.isArray(payload)) {
+          for (const value of payload) {
+            const item = normalizeStaticMarketplaceItem(value, globalIndex);
+            globalIndex += 1;
+            if (item && !itemsByName.has(item.name)) {
+              itemsByName.set(item.name, item);
+            }
+          }
+        }
+      } catch {
+        // Continue scanning; malformed chunks are ignored and fail closed below.
+      }
+    }
+
+    searchStart = arrayStart + Math.max(json?.length ?? 1, 1);
+  }
+
+  const items = Array.from(itemsByName.values());
+  if (items.length === 0) {
+    throw new Error(tMarketplaceError("invalidResponse"));
+  }
+  return items;
+}
+
+function filterStaticMarketplaceItems(
+  items: SkillMarketplaceItem[],
+  params: ListSkillMarketplaceParams,
+): SkillMarketplaceItem[] {
+  const query = normalizeText(params.query).toLowerCase();
+  const category = normalizeText(params.category).toLowerCase();
+
+  return items.filter((item) => {
+    if (category && item.category.toLowerCase() !== category) {
+      return false;
+    }
+    if (!query) {
+      return true;
+    }
+    const searchable = [
+      item.name,
+      item.title,
+      item.summary,
+      item.category,
+      item.outputHint,
+    ]
+      .join("\n")
+      .toLowerCase();
+    return searchable.includes(query);
+  });
+}
+
 function assertMarketplaceFile(value: unknown): void {
   if (
     !isRecord(value) ||
@@ -521,6 +737,83 @@ async function requestMarketplaceJson<T>(url: string): Promise<T> {
   return payload.data as T;
 }
 
+async function requestStaticMarketplaceHtml(url: string): Promise<string> {
+  const response = await fetch(url, {
+    method: "GET",
+    headers: { Accept: "text/html" },
+  });
+
+  const html = await response.text();
+  if (!response.ok) {
+    throw new Error(
+      tMarketplaceError("requestFailed", { status: response.status }),
+    );
+  }
+
+  return html;
+}
+
+async function requestStaticMarketplaceJson<T>(url: string): Promise<T> {
+  const response = await fetch(url, {
+    method: "GET",
+    headers: { Accept: "application/json" },
+  });
+
+  let payload: unknown = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      tMarketplaceError("requestFailed", { status: response.status }),
+    );
+  }
+
+  return payload as T;
+}
+
+function resolveSkillMarketplaceSource(): SkillMarketplaceSource {
+  const explicitBaseUrl = normalizeBaseUrl(
+    readEnvValue("VITE_LIME_SKILL_MARKETPLACE_API_BASE_URL") ??
+      readEnvValue("VITE_LIME_CONTROL_PLANE_API_BASE_URL"),
+  );
+  if (explicitBaseUrl) {
+    return { kind: "api", baseUrl: explicitBaseUrl };
+  }
+
+  return {
+    kind: "static",
+    websiteBaseUrl:
+      normalizeBaseUrl(
+        readEnvValue("VITE_LIME_SKILL_MARKETPLACE_WEBSITE_URL"),
+      ) ??
+      DEFAULT_SKILL_MARKETPLACE_WEBSITE_BASE_URL,
+  };
+}
+
+function buildStaticMarketplaceUrl(
+  source: Extract<SkillMarketplaceSource, { kind: "static" }>,
+): string {
+  return `${source.websiteBaseUrl}${STATIC_SKILL_MARKETPLACE_PATH}`;
+}
+
+function buildStaticSkillPackageUrl(
+  source: Extract<SkillMarketplaceSource, { kind: "static" }>,
+  skillName: string,
+  fileName: string,
+): string {
+  const slug = normalizeSkillPackageSlug(skillName);
+  if (!slug) {
+    throw new Error(tMarketplaceError("invalidBundle"));
+  }
+  return `${source.websiteBaseUrl}${STATIC_SKILL_PACKAGE_BASE_PATH}/${encodeURIComponent(
+    slug,
+  )}/latest/${encodeURIComponent(fileName)}`;
+}
+
 export function resolveSkillMarketplaceApiBaseUrl(): string {
   const explicitBaseUrl = normalizeBaseUrl(
     readEnvValue("VITE_LIME_SKILL_MARKETPLACE_API_BASE_URL") ??
@@ -541,6 +834,17 @@ export function resolveSkillMarketplaceApiBaseUrl(): string {
 export async function listOfficialSkillMarketplace(
   params: ListSkillMarketplaceParams = {},
 ): Promise<SkillMarketplaceItem[]> {
+  const source = resolveSkillMarketplaceSource();
+  if (source.kind === "static") {
+    const html = await requestStaticMarketplaceHtml(
+      buildStaticMarketplaceUrl(source),
+    );
+    return filterStaticMarketplaceItems(
+      parseStaticMarketplaceItems(html),
+      params,
+    );
+  }
+
   const search = new URLSearchParams();
   if (params.query?.trim()) {
     search.set("query", params.query.trim());
@@ -554,7 +858,7 @@ export async function listOfficialSkillMarketplace(
 
   const query = search.toString();
   const data = await requestMarketplaceJson<unknown>(
-    `${resolveSkillMarketplaceApiBaseUrl()}/v1/public/service-skills/marketplace${
+    `${source.baseUrl}/v1/public/service-skills/marketplace${
       query ? `?${query}` : ""
     }`,
   );
@@ -569,8 +873,20 @@ export async function getOfficialSkillMarketplaceBundle(
     throw new Error(tMarketplaceError("skillNameRequired"));
   }
 
+  const source = resolveSkillMarketplaceSource();
+  if (source.kind === "static") {
+    const data = await requestStaticMarketplaceJson<unknown>(
+      buildStaticSkillPackageUrl(source, normalizedSkillName, "bundle.json"),
+    );
+    const bundle = normalizeMarketplaceBundle(data);
+    if (!bundle) {
+      throw new Error(tMarketplaceError("invalidBundle"));
+    }
+    return bundle;
+  }
+
   const data = await requestMarketplaceJson<unknown>(
-    `${resolveSkillMarketplaceApiBaseUrl()}/v1/public/service-skills/marketplace/${encodeURIComponent(
+    `${source.baseUrl}/v1/public/service-skills/marketplace/${encodeURIComponent(
       normalizedSkillName,
     )}/bundle`,
   );
@@ -585,6 +901,25 @@ export async function installOfficialMarketplaceSkill(
   skillName: string,
   app: AppType = "lime",
 ): Promise<SkillMarketplaceInstallResult> {
+  const source = resolveSkillMarketplaceSource();
+  if (source.kind === "static") {
+    const normalizedSkillName = skillName.trim();
+    if (!normalizedSkillName) {
+      throw new Error(tMarketplaceError("skillNameRequired"));
+    }
+    const slug = normalizeSkillPackageSlug(normalizedSkillName);
+    if (!slug) {
+      throw new Error(tMarketplaceError("invalidBundle"));
+    }
+    return skillsApi.installFromDownloadUrl(
+      {
+        skillName: slug,
+        downloadUrl: buildStaticSkillPackageUrl(source, slug, `${slug}.zip`),
+      },
+      app,
+    );
+  }
+
   const bundle = await getOfficialSkillMarketplaceBundle(skillName);
   return skillsApi.installMarketplaceBundle(bundle, app);
 }

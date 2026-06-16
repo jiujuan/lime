@@ -1,4 +1,3 @@
-import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 import {
   clickButton,
@@ -12,7 +11,6 @@ import {
   mountPage,
   renderPage,
   sharedSendMessageMock,
-  waitForElement,
 } from "./index.testFixtures";
 import { buildHomeAgentParams } from "@/lib/workspace/navigation";
 import { requestTaskCenterDraftTask } from "./taskCenterDraftTaskEvents";
@@ -25,48 +23,47 @@ const {
   mockUseAgentChatUnified,
 } = getIndexTestMocks();
 
-describe("AgentChatPage 任务中心初始会话标签", () => {
-  it("顶部会话标签应支持重命名当前任务", async () => {
-    const renameTopic = vi.fn(async () => undefined);
-    const state: Record<string, unknown> = createMockAgentChatUnifiedState({
-      sessionId: "topic-current",
-      topics: [
-        {
-          id: "topic-current",
-          title: "当前会话",
-          updatedAt: new Date(FIXED_TOPIC_UPDATED_AT),
-          workspaceId: "workspace-test",
-        },
-      ],
-      renameTopic,
-    });
-    installMockAgentChatUnifiedState(state);
-    const promptSpy = vi
-      .spyOn(window, "prompt")
-      .mockReturnValue("重命名后的会话");
+describe("AgentChatPage 任务中心顶部工具区", () => {
+  it("任务中心不应再渲染顶部项目栏和会话标签", async () => {
+    installMockAgentChatUnifiedState(
+      createMockAgentChatUnifiedState({
+        sessionId: "topic-current",
+        topics: [
+          {
+            id: "topic-current",
+            title: "当前会话",
+            updatedAt: new Date(FIXED_TOPIC_UPDATED_AT),
+            workspaceId: "workspace-test",
+          },
+        ],
+      }),
+    );
 
-    const mounted = mountPage({
+    const container = renderPage({
       agentEntry: "claw",
       initialSessionId: "topic-current",
       projectId: "workspace-test",
     });
     await flushEffects();
 
-    const renameButton = mounted.container.querySelector(
-      '[data-testid="task-center-tab-rename-topic-current"]',
-    ) as HTMLButtonElement | null;
-    expect(renameButton).not.toBeNull();
-
-    act(() => {
-      renameButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    await flushEffects();
-
-    expect(promptSpy).toHaveBeenCalledWith(expect.any(String), "当前会话");
-    expect(renameTopic).toHaveBeenCalledWith("topic-current", "重命名后的会话");
+    expect(container.querySelector('[data-testid="chat-navbar"]')).toBeNull();
+    expect(
+      container.querySelector('[data-testid="task-center-chrome-shell"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="task-center-tab-strip"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid="task-center-home-top-toolbar-host"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="task-center-utility-toolbar"]'),
+    ).not.toBeNull();
   });
 
-  it("点击顶部加号应在任务中心新标签内嵌首页起手页", async () => {
+  it("侧边栏新建任务事件应在任务中心内嵌首页起手页，不恢复顶部标签", async () => {
     const onNavigate = vi.fn();
     vi.mocked(buildHomeAgentParams).mockClear();
     const state: Record<string, unknown> = createMockAgentChatUnifiedState({
@@ -96,13 +93,7 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     const { container } = mounted;
     await flushEffects();
 
-    expect(
-      await waitForElement(
-        container,
-        '[data-testid="task-center-tab-create-button"]',
-      ),
-    ).not.toBeNull();
-    clickButton(container, "task-center-tab-create-button");
+    expect(requestTaskCenterDraftTask({ source: "sidebar" })).toBe(true);
     await flushEffects();
     mounted.rerender();
     await flushEffects();
@@ -113,24 +104,21 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     expect(onNavigate).not.toHaveBeenCalled();
     expect(
       container.querySelector('[data-testid="task-center-chrome-shell"]'),
-    ).not.toBeNull();
+    ).toBeNull();
     expect(
       container.querySelector('[data-testid="task-center-tab-strip"]'),
-    ).not.toBeNull();
+    ).toBeNull();
     expect(
       container.querySelector(
         '[data-testid^="task-center-tab-task-draft-"][data-active="true"]',
       ),
-    ).not.toBeNull();
+    ).toBeNull();
+    expect(container.querySelector('[data-testid="chat-navbar"]')).toBeNull();
     expect(
-      container.querySelector('[data-testid="chat-navbar"]'),
+      container.querySelector(
+        '[data-testid="task-center-home-top-toolbar-host"]',
+      ),
     ).not.toBeNull();
-    const navbar = container.querySelector(
-      '[data-testid="chat-navbar"]',
-    ) as HTMLDivElement | null;
-    expect(navbar?.dataset.showHarnessToggle).toBe("false");
-    expect(navbar?.dataset.showSettingsButton).toBe("false");
-    expect(navbar?.dataset.showContextCompactionAction).toBe("false");
     expect(
       container.querySelector('[data-testid="toggle-harness"]'),
     ).toBeNull();
@@ -143,7 +131,7 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     expect(container.querySelector('[data-testid="message-list"]')).toBeNull();
   });
 
-  it("侧边栏新建任务事件应在任务中心内新增草稿标签，不跳出当前页面", async () => {
+  it("侧边栏新建任务事件应保留在当前页面且不恢复顶部草稿标签", async () => {
     const onNavigate = vi.fn();
     vi.mocked(buildHomeAgentParams).mockClear();
     const state: Record<string, unknown> = createMockAgentChatUnifiedState({
@@ -181,14 +169,99 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     expect(buildHomeAgentParams).not.toHaveBeenCalled();
     expect(onNavigate).not.toHaveBeenCalled();
     expect(
-      container
-        .querySelector('[data-testid^="task-center-tab-task-draft-"]')
-        ?.getAttribute("data-active"),
-    ).toBe("true");
+      container.querySelector('[data-testid="task-center-tab-strip"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid^="task-center-tab-task-draft-"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid="task-center-home-top-toolbar-host"]',
+      ),
+    ).not.toBeNull();
     expect(
       container.querySelector('[data-testid="empty-state"]'),
     ).not.toBeNull();
     expect(container.querySelector('[data-testid="message-list"]')).toBeNull();
+  });
+
+  it("项目会话收到无项目对话事件时应跳到无项目新建页", async () => {
+    const onNavigate = vi.fn();
+    vi.mocked(buildHomeAgentParams).mockClear();
+    installMockAgentChatUnifiedState(
+      createMockAgentChatUnifiedState({
+        sessionId: "topic-project",
+        topics: [
+          {
+            id: "topic-project",
+            title: "项目会话",
+            updatedAt: new Date(FIXED_TOPIC_UPDATED_AT),
+            workspaceId: "workspace-test",
+          },
+        ],
+      }),
+    );
+
+    mountPage({
+      agentEntry: "claw",
+      initialSessionId: "topic-project",
+      projectId: "workspace-test",
+      onNavigate,
+    });
+    await flushEffects();
+
+    expect(
+      requestTaskCenterDraftTask({ source: "sidebar", projectId: null }),
+    ).toBe(true);
+    await flushEffects();
+
+    expect(buildHomeAgentParams).toHaveBeenCalledWith({
+      projectId: undefined,
+    });
+    expect(onNavigate).toHaveBeenCalledWith(
+      "agent",
+      expect.not.objectContaining({
+        projectId: expect.any(String),
+      }),
+    );
+  });
+
+  it("项目会话收到顶部新建任务事件时应保留当前项目上下文", async () => {
+    const onNavigate = vi.fn();
+    vi.mocked(buildHomeAgentParams).mockClear();
+    const state: Record<string, unknown> = createMockAgentChatUnifiedState({
+      sessionId: "topic-project",
+      topics: [
+        {
+          id: "topic-project",
+          title: "项目会话",
+          updatedAt: new Date(FIXED_TOPIC_UPDATED_AT),
+          workspaceId: "workspace-test",
+        },
+      ],
+    });
+    state.clearMessages = vi.fn();
+    installMockAgentChatUnifiedState(state);
+
+    mountPage({
+      agentEntry: "claw",
+      initialSessionId: "topic-project",
+      projectId: "workspace-test",
+      onNavigate,
+    });
+    await flushEffects();
+
+    expect(
+      requestTaskCenterDraftTask({
+        source: "sidebar",
+        projectId: "workspace-test",
+      }),
+    ).toBe(true);
+    await flushEffects();
+
+    expect(buildHomeAgentParams).not.toHaveBeenCalled();
+    expect(onNavigate).not.toHaveBeenCalled();
+    expect(state.clearMessages).toHaveBeenCalledWith({ showToast: false });
   });
 
   it("打开旧会话后草稿预热创建新对话时不应继承旧消息快照", async () => {
@@ -250,14 +323,8 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     });
     await flushEffects();
 
-    expect(
-      await waitForElement(
-        mounted.container,
-        '[data-testid="task-center-tab-create-button"]',
-      ),
-    ).not.toBeNull();
     mockMessageList.mockClear();
-    clickButton(mounted.container, "task-center-tab-create-button");
+    expect(requestTaskCenterDraftTask({ source: "sidebar" })).toBe(true);
     await flushEffects();
     mounted.rerender();
     await flushEffects();
@@ -288,7 +355,7 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     );
   });
 
-  it("草稿标签输入后应预热创建会话，发送时复用同一次创建", async () => {
+  it("隐藏草稿首页输入后应预热创建会话，发送时复用同一次创建", async () => {
     const onNavigate = vi.fn();
     vi.mocked(buildHomeAgentParams).mockClear();
     mockEmptyState.mockImplementation((props?: MockEmptyStateProps) => (
@@ -360,14 +427,8 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     });
     await flushEffects();
 
-    expect(
-      await waitForElement(
-        mounted.container,
-        '[data-testid="task-center-tab-create-button"]',
-      ),
-    ).not.toBeNull();
     mockMessageList.mockClear();
-    clickButton(mounted.container, "task-center-tab-create-button");
+    expect(requestTaskCenterDraftTask({ source: "sidebar" })).toBe(true);
     await flushEffects();
     mounted.rerender();
     await flushEffects();
@@ -409,13 +470,9 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     await flushEffects(2);
     expect(createFreshSession).toHaveBeenCalledTimes(1);
     expect(sharedSendMessageMock).not.toHaveBeenCalled();
-    expect(mounted.container.textContent).toContain("你好");
     expect(
       mounted.container.querySelector('[data-testid="empty-state"]'),
     ).toBeNull();
-    expect(
-      mounted.container.querySelector('[data-testid="message-list"]'),
-    ).not.toBeNull();
 
     expect(creationController.resolve).toBeTruthy();
     creationController.resolve?.();
@@ -478,5 +535,4 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     expect(mockSkillsGetLocal).not.toHaveBeenCalled();
     expect(mockGetProjectMemory).not.toHaveBeenCalled();
   });
-
 });

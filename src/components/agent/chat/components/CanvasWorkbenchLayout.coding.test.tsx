@@ -23,6 +23,7 @@ import {
   mockSetEmbeddedBrowserViewBounds,
   mockStartProjectShellSession,
   mockToast,
+  mountHarness,
 } from "./CanvasWorkbenchLayout.testFixtures";
 
 function updateInputValue(element: HTMLInputElement, value: string) {
@@ -50,6 +51,101 @@ function createPointerLikeEvent(
 }
 
 describe("CanvasWorkbenchLayout coding mode", () => {
+  it("普通文件预览请求应切到文件内容 tab 而不是停在审查", async () => {
+    const onPreviewOpenRequestHandled = vi.fn();
+    const defaultPreview = {
+      selectionKey: "default-preview:outputs/international-news-analysis-2026-06-16.md",
+      title: "international-news-analysis-2026-06-16.md",
+      content: "# 今日国际新闻分析\n\n正文内容",
+      filePath: "outputs/international-news-analysis-2026-06-16.md",
+      absolutePath:
+        "/workspace/outputs/international-news-analysis-2026-06-16.md",
+    } satisfies CanvasWorkbenchDefaultPreview;
+    const baseProps = {
+      artifacts: [],
+      canvasState: null,
+      taskFiles: [],
+      workspaceRoot: "/workspace",
+      workspaceUnavailable: false,
+      defaultPreview,
+      loadFilePreview: vi.fn(async (path: string) => ({
+        path,
+        content: "",
+        isBinary: false,
+        size: 0,
+        error: null,
+      })),
+      onOpenPath: vi.fn(async () => undefined),
+      onRevealPath: vi.fn(async () => undefined),
+      workbenchMode: "coding" as const,
+      changeView: {
+        checkpointCount: 1,
+        latestCheckpointPath: ".lime/artifacts/thread-1/index.v2.md",
+        items: [],
+      },
+    };
+    const harness = mountHarness(baseProps);
+
+    await flushEffects();
+
+    expect(
+      harness.container.querySelector(
+        '[data-testid="canvas-workbench-panel-changes"]',
+      ),
+    ).not.toBeNull();
+
+    harness.rerender({
+      ...baseProps,
+      previewOpenRequest: {
+        requestKey: 1,
+        filePath: "outputs/international-news-analysis-2026-06-16.md",
+      },
+      onPreviewOpenRequestHandled,
+    });
+    await flushEffects();
+
+    expect(onPreviewOpenRequestHandled).toHaveBeenCalledWith(1);
+    expect(
+      harness.container.querySelector(
+        '[data-testid="canvas-workbench-preview-mode-panel"][data-preview-mode="markdown"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      harness.container.querySelector(
+        '[data-testid="canvas-workbench-markdown-preview"]',
+      )?.textContent,
+    ).toContain("今日国际新闻分析");
+    expect(
+      harness.container.querySelector(
+        '[data-testid="canvas-workbench-panel-changes"]',
+      ),
+    ).toBeNull();
+    const fileTab = harness.container.querySelector<HTMLButtonElement>(
+      '[aria-label="切换画布标签-international-news-analysis-2026-06-16.md"]',
+    );
+    const reviewTab = harness.container.querySelector<HTMLButtonElement>(
+      '[aria-label="切换画布标签-审查"]',
+    );
+    expect(fileTab?.getAttribute("aria-selected")).toBe("true");
+    expect(reviewTab).not.toBeNull();
+    expect(reviewTab?.getAttribute("aria-selected")).toBe("false");
+    clickPreviewMode(harness.container, "Code");
+    await flushEffects();
+    expect(
+      harness.container.querySelector(
+        '[data-testid="canvas-workbench-code-preview"]',
+      ),
+    ).not.toBeNull();
+    expect(fileTab?.getAttribute("aria-selected")).toBe("true");
+    clickWorkbenchTab(harness.container, "审查");
+    await flushEffects();
+    expect(
+      harness.container.querySelector(
+        '[data-testid="canvas-workbench-panel-changes"]',
+      ),
+    ).not.toBeNull();
+  });
+
   it("coding 模式无运行时变更时也应默认暴露审查入口和预览模式切换", async () => {
     const container = mount({
       artifacts: [],
@@ -120,9 +216,9 @@ describe("CanvasWorkbenchLayout coding mode", () => {
     ).not.toBeNull();
     expect(
       container.querySelector(
-        '[data-testid="canvas-workbench-direct-tabs"] [aria-label="切换画布标签-文件"]',
+        '[data-testid="canvas-workbench-direct-tabs"] [aria-label="切换画布标签-scratch.md"]',
       ),
-    ).toBeNull();
+    ).not.toBeNull();
     expectNewWorkbenchToolInMenu(container, "终端");
     expectNewWorkbenchToolInMenu(container, "浏览器");
     expectNewWorkbenchToolInMenu(container, "文件");
@@ -345,7 +441,7 @@ describe("CanvasWorkbenchLayout coding mode", () => {
     expectWorkbenchTabNotInNewMenu(container, "日志");
     expect(
       container.querySelector('button[aria-label="切换画布标签-index.html"]'),
-    ).toBeNull();
+    ).not.toBeNull();
     expect(
       container.querySelector('button[aria-label="切换画布标签-结果"]'),
     ).toBeNull();
@@ -438,7 +534,7 @@ describe("CanvasWorkbenchLayout coding mode", () => {
     ).not.toBeNull();
     expect(
       container.querySelector('button[aria-label="切换画布标签-README.md"]'),
-    ).toBeNull();
+    ).not.toBeNull();
 
     clickNewWorkbenchTool(container, "终端");
     await flushEffects();

@@ -102,8 +102,13 @@ describe("useSettingsCategory", () => {
 
     expect(generalGroup?.title).toBe("General");
     expect(archivedItem?.label).toBe("Archived Conversations");
-    expect(generalGroup?.items.map((item) => item.key)).toContain(
+    const generalKeys = generalGroup?.items.map((item) => item.key) ?? [];
+
+    expect(generalKeys).toContain(SettingsTabs.Appearance);
+    expect(generalKeys).toContain(SettingsTabs.Memory);
+    expect(generalKeys).toContain(
       SettingsTabs.ArchivedConversations,
     );
+    expect(generalKeys).not.toContain(SettingsTabs.Hotkeys);
   });
 });

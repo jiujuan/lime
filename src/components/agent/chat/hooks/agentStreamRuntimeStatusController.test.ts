@@ -50,6 +50,25 @@ describe("agentStreamRuntimeStatusController", () => {
     ).toMatchObject({ title: "读取上下文" });
   });
 
+  it("应保留 App Server current retrying phase，避免降级成普通 routing", () => {
+    const plan = buildAgentStreamRuntimeStatusApplyPlan({
+      status: {
+        phase: "retrying",
+        title: "正在恢复模型输出",
+        detail: "模型通道在尾段暂时中断，正在补齐最终答复。",
+        metadata: {
+          agentui: {
+            eventClass: "run.status",
+          },
+        },
+      },
+      updatedAt: "2026-05-05T10:00:00.000Z",
+    });
+
+    expect(plan.normalizedStatus.phase).toBe("retrying");
+    expect(plan.summaryText).toContain("正在恢复模型输出");
+  });
+
   it("应优先选择 pending turn summary item", () => {
     const pendingSummary = summaryItem("pending-summary");
     const fallbackSummary = summaryItem("fallback-summary");

@@ -65,6 +65,24 @@ describe("sessionFinalizeController", () => {
         knownWorkspaceId: "workspace-a",
       }),
     ).toBe(false);
+
+    expect(
+      isCrossWorkspaceSessionDetail({
+        resolvedWorkingDir: "/repo/a",
+        knownWorkingDir: "/repo/b",
+        resolvedWorkspaceId: "workspace-a",
+        knownWorkspaceId: "workspace-a",
+      }),
+    ).toBe(true);
+
+    expect(
+      isCrossWorkspaceSessionDetail({
+        resolvedWorkingDir: "/repo/a",
+        knownWorkingDir: "/repo/a",
+        resolvedWorkspaceId: "workspace-a",
+        knownWorkspaceId: "workspace-b",
+      }),
+    ).toBe(false);
   });
 
   it("应构造跨 workspace 恢复拒绝上下文", () => {
@@ -75,7 +93,9 @@ describe("sessionFinalizeController", () => {
         knownWorkspaceId: "workspace-b",
       }),
     ).toEqual({
+      currentWorkingDir: null,
       currentWorkspaceId: "workspace-a",
+      knownWorkingDir: null,
       knownWorkspaceId: "workspace-b",
       topicId: "topic-a",
     });
@@ -90,13 +110,43 @@ describe("sessionFinalizeController", () => {
       }),
     ).toEqual({
       crossWorkspaceContext: {
+        currentWorkingDir: null,
         currentWorkspaceId: "workspace-a",
+        knownWorkingDir: null,
         knownWorkspaceId: "workspace-b",
         topicId: "topic-a",
       },
       knownWorkspaceId: "workspace-b",
       shouldReject: true,
     });
+  });
+
+  it("cwd 命中时应忽略旧 workspace shadow 的不一致", () => {
+    expect(
+      buildSessionWorkspaceRestorePlan({
+        topicId: "topic-cwd",
+        resolvedWorkingDir: "/repo/project/",
+        resolvedWorkspaceId: "workspace-current",
+        runtimeWorkingDir: "/repo/project",
+        runtimeWorkspaceId: null,
+        topicWorkspaceId: "workspace-old-topic",
+        shadowWorkspaceId: "workspace-old-shadow",
+      }),
+    ).toEqual({
+      crossWorkspaceContext: null,
+      knownWorkspaceId: "workspace-current",
+      shouldReject: false,
+    });
+
+    expect(
+      buildSessionWorkspaceRestorePlan({
+        topicId: "topic-cwd",
+        resolvedWorkingDir: "/repo/current",
+        resolvedWorkspaceId: "workspace-current",
+        runtimeWorkingDir: "/repo/other",
+        runtimeWorkspaceId: "workspace-current",
+      }).shouldReject,
+    ).toBe(true);
   });
 
   it("runtime 或 topic 已有执行策略时不使用 shadow fallback", () => {

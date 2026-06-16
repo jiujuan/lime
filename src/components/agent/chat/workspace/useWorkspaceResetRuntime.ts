@@ -28,6 +28,7 @@ interface UseWorkspaceResetRuntimeParams {
   clearRuntimeTeamState: () => void;
   clearPendingEntryA2UI?: () => void;
   clearProjectSelectionRuntime: () => void;
+  resetProjectSelection: () => void;
   resetRestoredSessionState: () => void;
   resetGuideState: () => void;
   hasHandledNewChatRequest: (requestKey: string) => boolean;
@@ -58,6 +59,7 @@ export function useWorkspaceResetRuntime({
   clearRuntimeTeamState,
   clearPendingEntryA2UI,
   clearProjectSelectionRuntime,
+  resetProjectSelection,
   resetRestoredSessionState,
   resetGuideState,
   hasHandledNewChatRequest,
@@ -158,6 +160,9 @@ export function useWorkspaceResetRuntime({
     clearPendingEntryA2UI?.();
     setMentionedCharacters([]);
     clearProjectSelectionRuntime();
+    if (!externalProjectId) {
+      resetProjectSelection();
+    }
     resetRestoredSessionState();
     resetGuideState();
 
@@ -178,6 +183,7 @@ export function useWorkspaceResetRuntime({
     newChatAt,
     normalizedInitialTheme,
     resetGuideState,
+    resetProjectSelection,
     resetRestoredSessionState,
     resetWorkbenchSurface,
     setActiveTheme,

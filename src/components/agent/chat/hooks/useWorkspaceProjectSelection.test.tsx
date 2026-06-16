@@ -86,15 +86,15 @@ describe("useWorkspaceProjectSelection", () => {
     localStorage.clear();
   });
 
-  it("新会话请求应保留最近工作区上下文", () => {
+  it("新会话请求默认不应选择最近工作区", () => {
     localStorage.setItem(LAST_PROJECT_ID_KEY, JSON.stringify("project-local"));
     const harness = mountHook({
       newChatAt: 123,
     });
 
     try {
-      expect(harness.getValue().projectId).toBe("project-local");
-      expect(harness.getValue().projectSelectionSource).toBe("remembered");
+      expect(harness.getValue().projectId).toBeUndefined();
+      expect(harness.getValue().projectSelectionSource).toBe("none");
       expect(harness.getValue().shouldDisableSessionRestore).toBe(true);
 
       act(() => {
@@ -103,14 +103,17 @@ describe("useWorkspaceProjectSelection", () => {
 
       expect(harness.getValue().hasHandledNewChatRequest("123")).toBe(true);
       expect(harness.getValue().shouldDisableSessionRestore).toBe(false);
-      expect(harness.getValue().projectId).toBe("project-local");
-      expect(harness.getValue().projectSelectionSource).toBe("remembered");
+      expect(harness.getValue().projectId).toBeUndefined();
+      expect(harness.getValue().projectSelectionSource).toBe("none");
+      expect(harness.getValue().getRememberedProjectId()).toBe(
+        "project-local",
+      );
     } finally {
       harness.unmount();
     }
   });
 
-  it("首页新会话请求可持续禁用自动恢复旧会话", () => {
+  it("首页新会话请求保持空项目并持续禁用自动恢复旧会话", () => {
     localStorage.setItem(LAST_PROJECT_ID_KEY, JSON.stringify("project-local"));
     const harness = mountHook({
       keepNewChatSessionRestoreDisabled: true,
@@ -118,7 +121,8 @@ describe("useWorkspaceProjectSelection", () => {
     });
 
     try {
-      expect(harness.getValue().projectId).toBe("project-local");
+      expect(harness.getValue().projectId).toBeUndefined();
+      expect(harness.getValue().projectSelectionSource).toBe("none");
       expect(harness.getValue().shouldDisableSessionRestore).toBe(true);
 
       act(() => {
@@ -127,6 +131,30 @@ describe("useWorkspaceProjectSelection", () => {
 
       expect(harness.getValue().hasHandledNewChatRequest("123")).toBe(true);
       expect(harness.getValue().shouldDisableSessionRestore).toBe(true);
+      expect(harness.getValue().projectId).toBeUndefined();
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("切换到新的新会话请求时应清空已有项目选择", () => {
+    const harness = mountHook();
+
+    try {
+      act(() => {
+        harness.getValue().applyProjectSelection("project-local");
+      });
+      expect(harness.getValue().projectId).toBe("project-local");
+
+      harness.rerender({
+        newChatAt: 456,
+      });
+
+      expect(harness.getValue().projectId).toBeUndefined();
+      expect(harness.getValue().projectSelectionSource).toBe("none");
+      expect(harness.getValue().getRememberedProjectId()).toBe(
+        "project-local",
+      );
     } finally {
       harness.unmount();
     }
@@ -158,16 +186,21 @@ describe("useWorkspaceProjectSelection", () => {
     }
   });
 
-  it("显式指定初始会话时应禁用自动恢复旧会话", () => {
+  it("显式指定无项目初始会话时应禁用自动恢复旧会话且不回退最近项目", () => {
     localStorage.setItem(LAST_PROJECT_ID_KEY, JSON.stringify("project-local"));
     const harness = mountHook({
       initialSessionId: "session-42",
     });
 
     try {
-      expect(harness.getValue().projectId).toBe("project-local");
-      expect(harness.getValue().projectSelectionSource).toBe("remembered");
+      expect(harness.getValue().projectId).toBeUndefined();
+      expect(harness.getValue().projectSelectionSource).toBe(
+        "initial-session",
+      );
       expect(harness.getValue().shouldDisableSessionRestore).toBe(true);
+      expect(harness.getValue().getRememberedProjectId()).toBe(
+        "project-local",
+      );
     } finally {
       harness.unmount();
     }
@@ -208,6 +241,35 @@ describe("useWorkspaceProjectSelection", () => {
 
       expect(harness.getValue().projectId).toBe("project-session");
       expect(harness.getValue().projectSelectionSource).toBe("initial-session");
+      expect(harness.getValue().getRememberedProjectId()).toBe(
+        "project-session",
+      );
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("从有项目会话切到无项目会话时应清空当前项目选择", () => {
+    localStorage.setItem(LAST_PROJECT_ID_KEY, JSON.stringify("project-local"));
+    savePersistedSessionWorkspaceId("session-project", "project-session");
+    const harness = mountHook({
+      initialSessionId: "session-project",
+    });
+
+    try {
+      expect(harness.getValue().projectId).toBe("project-session");
+      expect(harness.getValue().projectSelectionSource).toBe(
+        "initial-session",
+      );
+
+      harness.rerender({
+        initialSessionId: "session-detached",
+      });
+
+      expect(harness.getValue().projectId).toBeUndefined();
+      expect(harness.getValue().projectSelectionSource).toBe(
+        "initial-session",
+      );
       expect(harness.getValue().getRememberedProjectId()).toBe(
         "project-session",
       );

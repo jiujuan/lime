@@ -35,7 +35,7 @@ const {
 } = getIndexTestMocks();
 
 describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
-  it("空白新建任务首页应保留浏览器式工作区顶栏与新对话标签", async () => {
+  it("空白新建任务首页应去掉项目栏和会话标签，只保留右上工具区", async () => {
     const container = renderPage({
       agentEntry: "new-task",
       showChatPanel: false,
@@ -44,26 +44,30 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     });
     await flushEffects(10);
 
-    const navbar = container.querySelector(
-      '[data-testid="chat-navbar"]',
-    ) as HTMLDivElement | null;
-
-    expect(navbar?.dataset.contextVariant).toBe("task-center");
-    expect(navbar?.dataset.showHarnessToggle).toBe("false");
-    expect(navbar?.dataset.showSettingsButton).toBe("false");
-    expect(navbar?.dataset.showContextCompactionAction).toBe("false");
+    expect(container.querySelector('[data-testid="chat-navbar"]')).toBeNull();
+    expect(
+      container.querySelector('[data-testid="task-center-chrome-shell"]'),
+    ).toBeNull();
     expect(
       container.querySelector('[data-testid="task-center-tab-strip"]'),
-    ).not.toBeNull();
+    ).toBeNull();
     expect(
       container.querySelector('[data-testid="task-center-tab-new-task-home"]'),
-    ).not.toBeNull();
+    ).toBeNull();
     expect(
       container.querySelector(
         '[data-testid="task-center-tab-close-new-task-home"]',
       ),
     ).toBeNull();
-    expect(container.textContent).toContain("新对话");
+    expect(container.textContent).not.toContain("新对话");
+    expect(
+      container.querySelector(
+        '[data-testid="task-center-home-top-toolbar-host"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="task-center-utility-toolbar"]'),
+    ).not.toBeNull();
     expect(
       container.querySelector('[data-testid="toggle-harness"]'),
     ).toBeNull();
@@ -75,7 +79,7 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     ).not.toBeNull();
   });
 
-  it("空白新建任务首页点击加号应连续创建草稿标签", async () => {
+  it("空白新建任务首页不应再展示顶部加号和草稿标签", async () => {
     const mounted = mountPage({
       agentEntry: "new-task",
       showChatPanel: false,
@@ -88,31 +92,21 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
       mounted.container.querySelector(
         '[data-testid="task-center-tab-new-task-home"]',
       ),
-    ).not.toBeNull();
-
-    clickButton(mounted.container, "task-center-tab-create-button");
-    await flushEffects(4);
-
-    const firstDraftTabs = mounted.container.querySelectorAll(
-      '[data-testid^="task-center-tab-task-draft-"]',
-    );
-    expect(firstDraftTabs).toHaveLength(1);
-    expect(firstDraftTabs[0]?.getAttribute("data-active")).toBe("true");
+    ).toBeNull();
     expect(
       mounted.container.querySelector(
-        '[data-testid="task-center-tab-new-task-home"]',
+        '[data-testid="task-center-tab-create-button"]',
       ),
     ).toBeNull();
-
-    clickButton(mounted.container, "task-center-tab-create-button");
-    await flushEffects(4);
-
     const draftTabs = mounted.container.querySelectorAll(
       '[data-testid^="task-center-tab-task-draft-"]',
     );
-    expect(draftTabs).toHaveLength(2);
-    expect(draftTabs[0]?.getAttribute("data-active")).toBe("false");
-    expect(draftTabs[1]?.getAttribute("data-active")).toBe("true");
+    expect(draftTabs).toHaveLength(0);
+    expect(
+      mounted.container.querySelector(
+        '[data-testid="task-center-home-top-toolbar-host"]',
+      ),
+    ).not.toBeNull();
   });
 
   it("空白新建任务首页刷新后不应自动恢复最近会话", async () => {
@@ -314,15 +308,15 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     });
     await flushEffects();
 
-    const navbar = container.querySelector(
-      '[data-testid="chat-navbar"]',
+    const toolbar = container.querySelector(
+      '[data-testid="task-center-utility-toolbar"]',
     ) as HTMLDivElement | null;
     const toggleCanvasButton = container.querySelector(
       '[data-testid="toggle-canvas"]',
     ) as HTMLButtonElement | null;
 
-    expect(navbar?.dataset.showCanvasToggle).toBe("true");
-    expect(navbar?.dataset.canvasOpen).toBe("false");
+    expect(toolbar?.dataset.showCanvasToggle).toBe("true");
+    expect(toolbar?.dataset.canvasOpen).toBe("false");
     expect(toggleCanvasButton?.textContent).toContain("展开画布");
     expect(
       container
@@ -338,7 +332,7 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     expect(
       (
         container.querySelector(
-          '[data-testid="chat-navbar"]',
+          '[data-testid="task-center-utility-toolbar"]',
         ) as HTMLDivElement | null
       )?.dataset.canvasOpen,
     ).toBe("true");
@@ -360,7 +354,7 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     expect(
       (
         container.querySelector(
-          '[data-testid="chat-navbar"]',
+          '[data-testid="task-center-utility-toolbar"]',
         ) as HTMLDivElement | null
       )?.dataset.canvasOpen,
     ).toBe("false");
@@ -402,11 +396,11 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     });
     await flushEffects();
 
-    const navbar = container.querySelector(
-      '[data-testid="chat-navbar"]',
+    const toolbar = container.querySelector(
+      '[data-testid="task-center-utility-toolbar"]',
     ) as HTMLDivElement | null;
-    expect(navbar?.dataset.showHarnessToggle).toBe("true");
-    expect(navbar?.dataset.harnessToggleLabel).toBe("Harness");
+    expect(toolbar?.dataset.showHarnessToggle).toBe("true");
+    expect(toolbar?.dataset.harnessToggleLabel).toBe("Harness");
     expect(document.body.textContent).not.toContain(WORKSPACE_HARNESS_TITLE);
     expect(document.body.textContent).not.toContain(GENERAL_ASSISTANT_TITLE);
 
@@ -430,11 +424,11 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     });
     await flushEffects();
 
-    const navbar = container.querySelector(
-      '[data-testid="chat-navbar"]',
+    const toolbar = container.querySelector(
+      '[data-testid="task-center-utility-toolbar"]',
     ) as HTMLDivElement | null;
-    expect(navbar?.dataset.showHarnessToggle).toBe("true");
-    expect(navbar?.dataset.harnessToggleLabel).toBe("Harness");
+    expect(toolbar?.dataset.showHarnessToggle).toBe("true");
+    expect(toolbar?.dataset.harnessToggleLabel).toBe("Harness");
     expect(document.body.textContent).not.toContain(WORKSPACE_HARNESS_TITLE);
     expect(document.body.textContent).not.toContain(GENERAL_ASSISTANT_TITLE);
 
@@ -457,11 +451,11 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     });
     await flushEffects();
 
-    const navbar = container.querySelector(
-      '[data-testid="chat-navbar"]',
+    const toolbar = container.querySelector(
+      '[data-testid="task-center-utility-toolbar"]',
     ) as HTMLDivElement | null;
-    expect(navbar?.dataset.showHarnessToggle).toBe("true");
-    expect(navbar?.dataset.harnessToggleLabel).toBe("Harness");
+    expect(toolbar?.dataset.showHarnessToggle).toBe("true");
+    expect(toolbar?.dataset.harnessToggleLabel).toBe("Harness");
     expect(document.body.textContent).not.toContain(WORKSPACE_HARNESS_TITLE);
     expect(mockGetAgentRuntimeToolInventory).not.toHaveBeenCalled();
 
@@ -482,7 +476,9 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     await flushEffects();
 
     expect(container.querySelector('[data-testid="chat-sidebar"]')).toBeNull();
-    expect(container.querySelector('[data-testid="toggle-history"]')).toBeNull();
+    expect(
+      container.querySelector('[data-testid="toggle-history"]'),
+    ).toBeNull();
 
     clickButton(container, "toggle-canvas");
     await flushEffects(4);
@@ -502,7 +498,9 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     await flushEffects(4);
 
     expect(container.querySelector('[data-testid="chat-sidebar"]')).toBeNull();
-    expect(container.querySelector('[data-testid="toggle-history"]')).toBeNull();
+    expect(
+      container.querySelector('[data-testid="toggle-history"]'),
+    ).toBeNull();
 
     act(() => {
       getWorkbenchProps()?.onLayoutModeChange?.("split");
@@ -607,5 +605,4 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
       );
     }
   });
-
 });

@@ -20,13 +20,16 @@ use crate::tools::error::ToolError;
 
 /// Default timeout for user response (5 minutes)
 pub const DEFAULT_ASK_TIMEOUT_SECS: u64 = 300;
-pub const ASK_USER_QUESTION_TOOL_NAME: &str = "AskUserQuestion";
-pub const ASK_USER_QUESTION_TOOL_CHIP_WIDTH: usize = 12;
+pub const REQUEST_USER_INPUT_TOOL_NAME: &str = "request_user_input";
+pub const REQUEST_USER_INPUT_HEADER_WIDTH: usize = 12;
 
 /// A structured question payload aligned with modern ask_user style prompts.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct AskQuestion {
+    /// Stable identifier for mapping answers
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
     /// The complete question text shown to the user
     pub question: String,
     /// Optional short chip/header label
@@ -44,6 +47,7 @@ impl AskQuestion {
     /// Create a new free-form question
     pub fn new(question: impl Into<String>) -> Self {
         Self {
+            id: None,
             question: question.into(),
             header: None,
             options: Vec::new(),
@@ -54,6 +58,7 @@ impl AskQuestion {
     /// Create a question with predefined choices
     pub fn with_options(question: impl Into<String>, options: Vec<AskOption>) -> Self {
         Self {
+            id: None,
             question: question.into(),
             header: None,
             options,
@@ -82,6 +87,25 @@ impl AskQuestion {
     }
 
     fn validate_current_surface(&self) -> Result<(), ToolError> {
+        let id = self
+            .id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                ToolError::invalid_params(
+                    "request_user_input.questions[].id is required".to_string(),
+                )
+            })?;
+
+        if !id.chars().all(|character| {
+            character.is_ascii_lowercase() || character == '_' || character.is_ascii_digit()
+        }) {
+            return Err(ToolError::invalid_params(
+                "request_user_input.questions[].id must be snake_case".to_string(),
+            ));
+        }
+
         let header = self
             .header
             .as_deref()
@@ -89,20 +113,20 @@ impl AskQuestion {
             .filter(|value| !value.is_empty())
             .ok_or_else(|| {
                 ToolError::invalid_params(
-                    "Question header is required for AskUserQuestion".to_string(),
+                    "Question header is required for request_user_input".to_string(),
                 )
             })?;
 
-        if header.chars().count() > ASK_USER_QUESTION_TOOL_CHIP_WIDTH {
+        if header.chars().count() > REQUEST_USER_INPUT_HEADER_WIDTH {
             return Err(ToolError::invalid_params(format!(
                 "Question header cannot exceed {} characters",
-                ASK_USER_QUESTION_TOOL_CHIP_WIDTH
+                REQUEST_USER_INPUT_HEADER_WIDTH
             )));
         }
 
-        if self.options.len() < 2 || self.options.len() > 4 {
+        if self.options.len() < 2 || self.options.len() > 3 {
             return Err(ToolError::invalid_params(
-                "Each question must provide 2-4 options".to_string(),
+                "Each request_user_input question must provide 2-3 options".to_string(),
             ));
         }
 
@@ -142,9 +166,9 @@ impl AskRequest {
             ));
         }
 
-        if self.questions.len() > 4 {
+        if self.questions.len() > 3 {
             return Err(ToolError::invalid_params(
-                "Questions cannot exceed 4 entries".to_string(),
+                "request_user_input questions cannot exceed 3 entries".to_string(),
             ));
         }
 
@@ -374,6 +398,7 @@ impl TryFrom<AskOptionInput> for AskOption {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 struct AskQuestionInput {
+    id: Option<String>,
     question: String,
     header: Option<String>,
     options: Option<Vec<AskOptionInput>>,
@@ -393,6 +418,7 @@ impl TryFrom<AskQuestionInput> for AskQuestion {
             .collect::<Result<Vec<_>, _>>()?;
 
         let question = AskQuestion {
+            id: value.id,
             question: value.question,
             header: value.header,
             options,
@@ -407,6 +433,8 @@ impl TryFrom<AskQuestionInput> for AskQuestion {
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 struct AskToolInput {
     questions: Option<Vec<AskQuestionInput>>,
+    #[serde(default, alias = "auto_resolution_ms")]
+    auto_resolution_ms: Option<u64>,
 }
 
 impl AskTool {
@@ -445,9 +473,10 @@ impl AskTool {
 
     fn parse_request(&self, params: Value) -> Result<AskRequest, ToolError> {
         let input: AskToolInput = serde_json::from_value(params).map_err(|e| {
-            ToolError::invalid_params(format!("Failed to parse AskUserQuestion input: {e}"))
+            ToolError::invalid_params(format!("Failed to parse request_user_input input: {e}"))
         })?;
 
+        let _auto_resolution_ms = input.auto_resolution_ms;
         let questions = input.questions.ok_or_else(|| {
             ToolError::invalid_params("Missing required parameter: questions".to_string())
         })?;
@@ -785,14 +814,14 @@ impl AskTool {
 #[async_trait]
 impl Tool for AskTool {
     fn name(&self) -> &str {
-        ASK_USER_QUESTION_TOOL_NAME
+        REQUEST_USER_INPUT_TOOL_NAME
     }
 
     fn description(&self) -> &str {
-        "Ask the user multiple-choice questions to gather information, clarify ambiguity, \
-         understand preferences, and make decisions before continuing execution. \
-         Use the modern `questions` array with short headers, 2-4 options, and optional \
-         multi-select choices."
+        "Request user input for one to three short questions and wait for the response. \
+Set autoResolutionMs, from 60000 to 240000 milliseconds, only when the question is useful \
+but non-blocking and continuing with best judgment is acceptable if the user does not answer; \
+omit it when explicit user input is required."
     }
 
     fn input_schema(&self) -> serde_json::Value {
@@ -802,53 +831,53 @@ impl Tool for AskTool {
             "properties": {
                 "questions": {
                     "type": "array",
-                    "description": "Questions to ask the user (1-4 questions).",
+                    "description": "Questions to show the user. Prefer 1 and do not exceed 3",
                     "minItems": 1,
-                    "maxItems": 4,
+                    "maxItems": 3,
                     "items": {
                         "type": "object",
                         "additionalProperties": false,
                         "properties": {
-                            "question": {
+                            "id": {
                                 "type": "string",
-                                "description": "The complete question to ask the user."
+                                "description": "Stable identifier for mapping answers (snake_case)."
                             },
                             "header": {
                                 "type": "string",
-                                "description": "Very short label displayed as a chip/tag (max 12 chars)."
+                                "description": "Short header label shown in the UI (12 or fewer chars)."
+                            },
+                            "question": {
+                                "type": "string",
+                                "description": "Single-sentence prompt shown to the user."
                             },
                             "options": {
                                 "type": "array",
-                                "description": "The available choices for this question. Provide 2-4 options.",
+                                "description": "Provide 2-3 mutually exclusive choices. Put the recommended option first and suffix its label with \"(Recommended)\". Do not include an \"Other\" option in this list; the client will add a free-form \"Other\" option automatically.",
                                 "minItems": 2,
-                                "maxItems": 4,
+                                "maxItems": 3,
                                 "items": {
                                     "type": "object",
                                     "additionalProperties": false,
                                     "properties": {
                                         "label": {
                                             "type": "string",
-                                            "description": "The display text for this option that the user will see and select."
+                                            "description": "User-facing label (1-5 words)."
                                         },
                                         "description": {
                                             "type": "string",
-                                            "description": "Explanation of what this option means or what will happen if chosen."
-                                        },
-                                        "preview": {
-                                            "type": "string",
-                                            "description": "Optional preview content for richer UIs."
+                                            "description": "One short sentence explaining impact/tradeoff if selected."
                                         }
                                     },
                                     "required": ["label", "description"]
                                 }
-                            },
-                            "multiSelect": {
-                                "type": "boolean",
-                                "description": "Set to true to allow the user to select multiple options."
                             }
                         },
-                        "required": ["question", "header", "options"]
+                        "required": ["id", "header", "question", "options"]
                     }
+                },
+                "autoResolutionMs": {
+                    "type": "number",
+                    "description": "Optional auto-resolution window in milliseconds, from 60000 to 240000. Include this only when the question is useful but non-blocking and continuing with best judgment is acceptable if the user does not answer; omit it when explicit user input is required before continuing."
                 }
             },
             "required": ["questions"]
@@ -1109,6 +1138,7 @@ mod tests {
 
         let request = AskRequest {
             questions: vec![AskQuestion {
+                id: Some("theme".to_string()),
                 question: "Choose a theme".to_string(),
                 header: Some("Theme".to_string()),
                 options: vec![
@@ -1150,6 +1180,7 @@ mod tests {
         let request = AskRequest {
             questions: vec![
                 AskQuestion {
+                    id: Some("primary_goal".to_string()),
                     question: "Primary goal?".to_string(),
                     header: Some("Goal".to_string()),
                     options: vec![
@@ -1159,6 +1190,7 @@ mod tests {
                     multi_select: false,
                 },
                 AskQuestion {
+                    id: Some("need_tests".to_string()),
                     question: "Need tests?".to_string(),
                     header: Some("Tests".to_string()),
                     options: vec![
@@ -1211,13 +1243,14 @@ mod tests {
     #[tokio::test]
     async fn test_ask_tool_trait_name() {
         let tool = AskTool::new();
-        assert_eq!(tool.name(), ASK_USER_QUESTION_TOOL_NAME);
+        assert_eq!(tool.name(), REQUEST_USER_INPUT_TOOL_NAME);
     }
 
     #[tokio::test]
     async fn test_ask_tool_trait_description() {
         let tool = AskTool::new();
-        assert!(tool.description().contains("multiple-choice questions"));
+        assert!(tool.description().contains("one to three short questions"));
+        assert!(tool.description().contains("autoResolutionMs"));
     }
 
     #[tokio::test]
@@ -1234,10 +1267,23 @@ mod tests {
             serde_json::json!(false)
         );
         assert_eq!(
+            schema["properties"]["questions"]["items"]["required"],
+            serde_json::json!(["id", "header", "question", "options"])
+        );
+        assert_eq!(
             schema["properties"]["questions"]["items"]["properties"]["options"]["items"]
                 ["additionalProperties"],
             serde_json::json!(false)
         );
+        assert_eq!(
+            schema["properties"]["questions"]["items"]["properties"]["options"]["items"]
+                ["required"],
+            serde_json::json!(["label", "description"])
+        );
+        assert!(schema["properties"]
+            .as_object()
+            .unwrap()
+            .contains_key("autoResolutionMs"));
         assert!(!schema["properties"]
             .as_object()
             .unwrap()
@@ -1255,6 +1301,7 @@ mod tests {
         let params = serde_json::json!({
             "questions": [
                 {
+                    "id": "profile",
                     "question": "What is your name?",
                     "header": "Profile",
                     "options": [
@@ -1290,6 +1337,7 @@ mod tests {
         let params = serde_json::json!({
             "questions": [
                 {
+                    "id": "approval",
                     "question": "Continue?",
                     "header": "Approval",
                     "options": [
@@ -1307,6 +1355,7 @@ mod tests {
             result.metadata.get("questions"),
             Some(&serde_json::json!([
                 {
+                    "id": "approval",
                     "question": "Continue?",
                     "header": "Approval",
                     "options": [
@@ -1340,6 +1389,7 @@ mod tests {
         let params = serde_json::json!({
             "questions": [
                 {
+                    "id": "mode",
                     "question": "Which mode?",
                     "header": "Mode",
                     "options": [
@@ -1382,6 +1432,7 @@ mod tests {
         let params = serde_json::json!({
             "questions": [
                 {
+                    "id": "approval",
                     "question": "Continue?",
                     "header": "Approval",
                     "options": [
@@ -1410,6 +1461,7 @@ mod tests {
         let params = serde_json::json!({
             "questions": [
                 {
+                    "id": "approval",
                     "question": "Continue?",
                     "header": "Approval",
                     "options": [
@@ -1438,6 +1490,7 @@ mod tests {
         let params = serde_json::json!({
             "questions": [
                 {
+                    "id": "approval",
                     "question": "Continue?",
                     "header": "Approval",
                     "options": [

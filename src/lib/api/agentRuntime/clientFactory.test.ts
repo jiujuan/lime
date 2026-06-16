@@ -900,7 +900,13 @@ describe("agentRuntime clientFactory", () => {
     ).resolves.toMatchObject({
       id: "session-failed",
       messages: [],
-      turns: [],
+      turns: [
+        {
+          id: "turn-failed",
+          thread_id: "thread-failed",
+          status: "failed",
+        },
+      ],
       items: [],
       queued_turns: [],
       todo_items: [],

@@ -39,6 +39,7 @@ pub mod notebook_edit_tool;
 pub mod path_guard;
 mod peer_address_surface;
 pub mod plan_mode_tool;
+pub mod plan_tool;
 pub mod powershell_tool;
 pub mod remote_trigger_tool;
 pub mod search;
@@ -131,6 +132,7 @@ pub use crate::skills::SkillTool;
 // Task tools
 pub use notebook_edit_tool::{NotebookCell, NotebookContent, NotebookEditInput, NotebookEditTool};
 pub use plan_mode_tool::{EnterPlanModeTool, ExitPlanModeTool, PlanModeState, SavedPlan};
+pub use plan_tool::{UpdatePlanTool, UPDATE_PLAN_TOOL_NAME};
 pub use powershell_tool::{
     is_powershell_command_concurrency_safe, preflight_powershell_read_targets, PowerShellTool,
 };
@@ -226,7 +228,7 @@ pub(crate) fn should_register_current_surface_tool(
 /// Configuration for tool registration
 #[derive(Default)]
 pub struct ToolRegistrationConfig {
-    /// Callback for AskUserQuestion user interaction
+    /// Callback for request_user_input user interaction
     pub ask_callback: Option<AskCallback>,
     /// Callback for LSPTool operations
     pub lsp_callback: Option<LspCallback>,
@@ -288,7 +290,7 @@ impl ToolRegistrationConfig {
         Self::default()
     }
 
-    /// Set the AskUserQuestion callback
+    /// Set the request_user_input callback
     pub fn with_ask_callback(mut self, callback: AskCallback) -> Self {
         self.ask_callback = Some(callback);
         self
@@ -343,7 +345,7 @@ impl ToolRegistrationConfig {
 /// - EditTool: Smart file editing
 /// - GlobTool: File search with glob patterns
 /// - GrepTool: Content search with regex
-/// - AskUserQuestion: User interaction (if callback provided)
+/// - request_user_input: User interaction (if callback provided)
 /// - LSPTool: Code intelligence (if callback provided)
 /// - SkillTool: Skill execution and management
 ///
@@ -414,7 +416,7 @@ pub fn register_all_tools(
         registry.register(Box::new(powershell_tool));
     }
 
-    // Register AskUserQuestion if callback is provided
+    // Register request_user_input if callback is provided
     if let Some(callback) = config.ask_callback {
         let ask_tool = AskTool::new().with_callback(callback);
         registry.register(Box::new(ask_tool));
@@ -452,6 +454,7 @@ pub fn register_all_tools(
         shared_task_manager,
     )));
     registry.register(Box::new(NotebookEditTool::new()));
+    registry.register(Box::new(UpdatePlanTool::new()));
     if should_register_current_surface_tool("Cron", tool_gates) {
         if let Some(scheduler) = config.scheduler.as_ref() {
             registry.register(Box::new(CronCreateTool::new(scheduler.clone())));
@@ -501,7 +504,7 @@ pub fn register_all_tools(
 /// Register all native tools with default configuration
 ///
 /// This is a convenience function that registers all tools with default settings.
-/// AskUserQuestion and LSPTool are not registered since they require callbacks.
+/// request_user_input and LSPTool are not registered since they require callbacks.
 ///
 /// # Arguments
 /// * `registry` - The ToolRegistry to register tools with
@@ -673,6 +676,9 @@ mod tests {
             assert!(registry.contains("KillShell"));
             assert!(registry.contains("NotebookEdit"));
             assert!(registry.contains("NotebookEditTool"));
+            assert!(registry.contains("update_plan"));
+            assert!(registry.contains("UpdatePlan"));
+            assert!(registry.contains("UpdatePlanTool"));
             assert!(!registry.contains("CronCreate"));
             assert!(!registry.contains("CronList"));
             assert!(!registry.contains("CronDelete"));
@@ -699,8 +705,8 @@ mod tests {
             assert!(!registry.contains("TeamCreate"));
             assert!(!registry.contains("TeamDelete"));
             assert!(!registry.contains("ListPeers"));
-            // AskUserQuestion and LSPTool should not be registered without callbacks
-            assert!(!registry.contains("AskUserQuestion"));
+            // request_user_input and LSPTool should not be registered without callbacks
+            assert!(!registry.contains("request_user_input"));
             assert!(!registry.contains("LSP"));
         });
     }
@@ -789,8 +795,9 @@ mod tests {
                 should_register_current_surface_tool("PowerShell", tool_gates)
                     && PowerShellTool::is_runtime_available()
             );
-            assert!(registry.contains("AskUserQuestion"));
-            assert!(registry.contains("AskUserQuestionTool"));
+            assert!(registry.contains("request_user_input"));
+            assert!(!registry.contains("AskUserQuestion"));
+            assert!(!registry.contains("AskUserQuestionTool"));
             assert!(registry.contains("LSP"));
             assert!(registry.contains("LSPTool"));
             assert!(registry.contains("Skill"));
@@ -807,6 +814,9 @@ mod tests {
             assert!(registry.contains("TaskStop"));
             assert!(registry.contains("NotebookEdit"));
             assert!(registry.contains("NotebookEditTool"));
+            assert!(registry.contains("update_plan"));
+            assert!(registry.contains("UpdatePlan"));
+            assert!(registry.contains("UpdatePlanTool"));
             assert!(!registry.contains("CronCreate"));
             assert!(!registry.contains("CronList"));
             assert!(!registry.contains("CronDelete"));

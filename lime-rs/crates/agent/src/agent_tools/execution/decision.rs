@@ -52,6 +52,15 @@ impl ToolExecutionDecision {
     pub fn requires_approval(&self) -> bool {
         self.kind == ToolExecutionDecisionKind::RequiresApproval
     }
+
+    pub fn workspace_sandbox_backend_enforced(&self) -> bool {
+        metadata_bool(&self.metadata, "sandboxBackendEnforced")
+    }
+
+    pub fn requires_sandboxed_execution(&self) -> bool {
+        metadata_bool(&self.metadata, "sandboxBackendRequired")
+            || self.workspace_sandbox_backend_enforced()
+    }
 }
 
 pub fn decide_tool_execution(input: ToolExecutionDecisionInput<'_>) -> ToolExecutionDecision {
@@ -265,6 +274,10 @@ fn build_decision(
         policy_resolution,
         metadata,
     }
+}
+
+fn metadata_bool(metadata: &HashMap<String, JsonValue>, key: &str) -> bool {
+    metadata.get(key).and_then(JsonValue::as_bool) == Some(true)
 }
 
 fn should_require_approval(

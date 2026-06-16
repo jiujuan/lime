@@ -37,7 +37,7 @@ interface ExecuteAgentStreamSubmitOptions {
     promptText: string,
   ) => Promise<boolean>;
   sessionIdRef: MutableRefObject<string | null>;
-  getRequiredWorkspaceId: () => string;
+  getWorkspaceIdForSubmit: () => string | undefined;
   getSyncedSessionExecutionStrategy: (
     sessionId: string,
   ) => AsterExecutionStrategy | null;
@@ -125,7 +125,7 @@ export async function executeAgentStreamSubmit(
     ensureSession,
     attemptSilentTurnRecovery,
     sessionIdRef,
-    getRequiredWorkspaceId,
+    getWorkspaceIdForSubmit,
     getSyncedSessionExecutionStrategy,
     getSyncedSessionRecentPreferences,
     effectiveAccessMode,
@@ -189,7 +189,7 @@ export async function executeAgentStreamSubmit(
   } = await resolveAgentStreamSubmitContext({
     ensureSession,
     sessionIdRef,
-    getRequiredWorkspaceId,
+    getWorkspaceIdForSubmit,
     getSyncedSessionRecentPreferences,
     getSyncedSessionExecutionStrategy,
     effectiveExecutionStrategy,

@@ -1,4 +1,5 @@
 import { act } from "react";
+import type { ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -48,6 +49,9 @@ function createAggregate(): FileChangesAggregate {
 function renderCard(props?: {
   aggregate?: FileChangesAggregate;
   onFileClick?: (path: string, content: string) => void;
+  onOpenFile?: NonNullable<
+    ComponentProps<typeof FileChangesSummaryCard>["onOpenFile"]
+  >;
   onUndo?: () => Promise<{ restoredCount?: number } | void> | void;
 }) {
   const container = document.createElement("div");
@@ -59,6 +63,7 @@ function renderCard(props?: {
       <FileChangesSummaryCard
         aggregate={props?.aggregate ?? createAggregate()}
         onFileClick={props?.onFileClick}
+        onOpenFile={props?.onOpenFile}
         onUndo={props?.onUndo}
       />,
     );
@@ -125,6 +130,29 @@ describe("FileChangesSummaryCard", () => {
     expect(calls[0]?.[1]).toContain("-1 行");
     expect(calls[0]?.[1]).toContain("+  return 'Hello Lime Runtime';");
     expect(calls[0]?.[1]).not.toContain("agentChat.toolCall.diffReview");
+  });
+
+  it("传入 onOpenFile 时应显示打开文件入口且不生成 diff 审阅内容", () => {
+    const onOpenFile = vi.fn();
+    const onFileClick = vi.fn();
+    const { container } = renderCard({ onFileClick, onOpenFile });
+
+    expect(container.textContent).toContain("打开文件");
+    expect(container.textContent).not.toContain("审核");
+
+    const openButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("打开文件"),
+    );
+    act(() => {
+      openButton?.click();
+    });
+
+    expect(onOpenFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: expect.stringContaining("greeting.ts"),
+      }),
+    );
+    expect(onFileClick).not.toHaveBeenCalled();
   });
 
   it("撤销应先确认，再调用真实恢复回调并展示成功状态", async () => {

@@ -5,7 +5,6 @@ import { createAutomationJob } from "@/lib/api/automation";
 import { recordAutomationJobAgentUiProjection } from "../projection/automationJobAgentUiProjection";
 import {
   createContent,
-  getOrCreateDefaultProject,
   listProjects,
   type Project,
 } from "@/lib/api/project";
@@ -232,13 +231,7 @@ export function useWorkspaceServiceSkillEntryActions({
         return currentProjectId;
       }
 
-      const defaultProject = await getOrCreateDefaultProject();
-      const defaultProjectId = normalizeProjectId(defaultProject?.id);
-      if (!defaultProjectId) {
-        throw new Error("当前技能需要项目工作区，但默认项目准备失败。");
-      }
-
-      return defaultProjectId;
+      throw new Error("当前技能需要项目工作区，请先进入项目工作。");
     },
     [currentProjectId],
   );

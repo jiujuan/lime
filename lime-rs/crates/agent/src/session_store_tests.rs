@@ -17,8 +17,7 @@ use aster::session::{
 };
 use chrono::{Duration, Utc};
 use lime_core::agent::types::{FunctionCall, ImageUrl, ToolCall};
-use lime_core::database::dao::agent::AgentDao;
-use lime_core::database::{DbConnection, schema};
+use lime_core::database::{schema, DbConnection};
 use std::ffi::OsString;
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -168,7 +167,7 @@ fn insert_test_session_with_message(
     .expect("create session");
 
     let conn = db.lock().expect("lock db");
-    AgentDao::add_message(
+    insert_legacy_agent_message(
         &conn,
         session_id,
         &AgentMessage {
@@ -182,6 +181,44 @@ fn insert_test_session_with_message(
         },
     )
     .expect("add message");
+}
+
+fn insert_legacy_agent_message(
+    conn: &rusqlite::Connection,
+    session_id: &str,
+    message: &AgentMessage,
+) -> Result<(), rusqlite::Error> {
+    let content_json = serde_json::to_string(&message.content)
+        .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+    let tool_calls_json = message
+        .tool_calls
+        .as_ref()
+        .map(serde_json::to_string)
+        .transpose()
+        .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+
+    conn.execute(
+        "INSERT INTO agent_messages (
+            session_id,
+            role,
+            content_json,
+            timestamp,
+            tool_calls_json,
+            tool_call_id,
+            reasoning_content
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        rusqlite::params![
+            session_id,
+            message.role,
+            content_json,
+            message.timestamp,
+            tool_calls_json,
+            message.tool_call_id,
+            message.reasoning_content.as_deref(),
+        ],
+    )?;
+
+    Ok(())
 }
 
 #[test]
@@ -732,12 +769,10 @@ fn convert_agent_message_should_preserve_tool_request_and_response() {
         &tool,
         &crate::tool_io_offload::HistoryToolIoEvictionPlan::default(),
     );
-    assert!(
-        !tool_converted
-            .content
-            .iter()
-            .any(|part| matches!(part, RuntimeAgentMessageContent::Text { .. }))
-    );
+    assert!(!tool_converted
+        .content
+        .iter()
+        .any(|part| matches!(part, RuntimeAgentMessageContent::Text { .. })));
     assert!(tool_converted.content.iter().any(|part| {
         matches!(
             part,
@@ -1078,11 +1113,10 @@ fn convert_agent_message_should_keep_image_parts_for_history() {
                 if mime_type == "image/png" && data == "aGVsbG8="
         )
     }));
-    assert!(
-        converted.content.iter().any(
-            |part| matches!(part, RuntimeAgentMessageContent::Text { text } if text == "参考图")
-        )
-    );
+    assert!(converted
+        .content
+        .iter()
+        .any(|part| matches!(part, RuntimeAgentMessageContent::Text { text } if text == "参考图")));
 }
 
 #[test]
@@ -1101,12 +1135,10 @@ fn convert_agent_message_should_not_render_user_tool_response_as_plain_text() {
         &user_tool_response,
         &crate::tool_io_offload::HistoryToolIoEvictionPlan::default(),
     );
-    assert!(
-        !converted
-            .content
-            .iter()
-            .any(|part| matches!(part, RuntimeAgentMessageContent::Text { .. }))
-    );
+    assert!(!converted
+        .content
+        .iter()
+        .any(|part| matches!(part, RuntimeAgentMessageContent::Text { .. })));
     assert!(converted.content.iter().any(|part| {
         matches!(
             part,
@@ -1283,7 +1315,7 @@ fn list_sessions_sync_should_resolve_workspace_id_from_working_dir() {
     insert_test_workspace(&db, "workspace-1", "/tmp/lime-workspace-1");
     insert_test_session_with_message(&db, "session-1", "/tmp/lime-workspace-1", "你好，世界");
 
-    let sessions = list_sessions_sync(&db, SessionArchiveFilter::ActiveOnly, None, None)
+    let sessions = list_sessions_sync(&db, SessionArchiveFilter::ActiveOnly, &[], None)
         .expect("list sessions");
     let session = sessions
         .iter()
@@ -1306,13 +1338,13 @@ fn list_sessions_sync_should_include_archived_sessions_when_requested() {
 
     update_session_archived_state_sync(&db, "session-archived", true).expect("archive session");
 
-    let active_only = list_sessions_sync(&db, SessionArchiveFilter::ActiveOnly, None, None)
+    let active_only = list_sessions_sync(&db, SessionArchiveFilter::ActiveOnly, &[], None)
         .expect("list active sessions");
     assert_eq!(active_only.len(), 1);
     assert_eq!(active_only[0].id, "session-active");
 
     let with_archived =
-        list_sessions_sync(&db, SessionArchiveFilter::All, None, None).expect("list all sessions");
+        list_sessions_sync(&db, SessionArchiveFilter::All, &[], None).expect("list all sessions");
     let archived_session = with_archived
         .iter()
         .find(|item| item.id == "session-archived")
@@ -1321,7 +1353,7 @@ fn list_sessions_sync_should_include_archived_sessions_when_requested() {
 }
 
 #[test]
-fn list_sessions_sync_should_support_workspace_filter_and_limit() {
+fn list_sessions_sync_should_support_cwd_filter_and_limit() {
     let db = create_test_db();
     insert_test_workspace(&db, "workspace-8", "/tmp/lime-workspace-8");
     insert_test_workspace(&db, "workspace-9", "/tmp/lime-workspace-9");
@@ -1332,7 +1364,7 @@ fn list_sessions_sync_should_support_workspace_filter_and_limit() {
     let filtered = list_sessions_sync(
         &db,
         SessionArchiveFilter::ActiveOnly,
-        Some("workspace-8"),
+        &["/tmp/lime-workspace-8".to_string()],
         Some(1),
     )
     .expect("list filtered sessions");
@@ -1426,7 +1458,7 @@ fn get_session_sync_with_history_limit_should_not_return_legacy_messages() {
     {
         let conn = db.lock().expect("lock db");
         for index in 2..=4 {
-            AgentDao::add_message(
+            insert_legacy_agent_message(
                 &conn,
                 "session-tail",
                 &AgentMessage {
@@ -1613,11 +1645,9 @@ fn update_session_provider_config_sync_should_persist_provider_and_model_config(
 
     assert_eq!(provider_name.as_deref(), Some("openai"));
     assert_eq!(model_name, "gpt-5.4-mini");
-    assert!(
-        model_config_json
-            .as_deref()
-            .is_some_and(|value| value.contains("\"model_name\":\"gpt-5.4-mini\""))
-    );
+    assert!(model_config_json
+        .as_deref()
+        .is_some_and(|value| value.contains("\"model_name\":\"gpt-5.4-mini\"")));
 }
 
 #[test]
@@ -1647,7 +1677,7 @@ fn list_title_preview_messages_sync_should_not_read_legacy_agent_messages() {
     .expect("create session");
 
     let conn = db.lock().expect("lock db");
-    AgentDao::add_message(
+    insert_legacy_agent_message(
         &conn,
         "session-title",
         &AgentMessage {
@@ -1661,7 +1691,7 @@ fn list_title_preview_messages_sync_should_not_read_legacy_agent_messages() {
         },
     )
     .expect("add system message");
-    AgentDao::add_message(
+    insert_legacy_agent_message(
         &conn,
         "session-title",
         &AgentMessage {
@@ -1675,7 +1705,7 @@ fn list_title_preview_messages_sync_should_not_read_legacy_agent_messages() {
         },
     )
     .expect("add user message");
-    AgentDao::add_message(
+    insert_legacy_agent_message(
         &conn,
         "session-title",
         &AgentMessage {
@@ -1689,7 +1719,7 @@ fn list_title_preview_messages_sync_should_not_read_legacy_agent_messages() {
         },
     )
     .expect("add assistant message");
-    AgentDao::add_message(
+    insert_legacy_agent_message(
         &conn,
         "session-title",
         &AgentMessage {

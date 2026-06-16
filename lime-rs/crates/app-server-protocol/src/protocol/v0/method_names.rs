@@ -256,6 +256,7 @@ pub const METHOD_CONNECT_DEEP_LINK_RESOLVE: &str = "connectDeepLink/resolve";
 pub const METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE: &str = "connectOpenDeepLink/resolve";
 pub const METHOD_CONNECT_RELAY_API_KEY_SAVE: &str = "connectRelayApiKey/save";
 pub const METHOD_CONNECT_CALLBACK_SEND: &str = "connectCallback/send";
+pub const METHOD_CONVERSATION_IMPORT_SOURCE_SCAN: &str = "conversationImport/source/scan";
 pub const METHOD_AGENT_SESSION_START: &str = "agentSession/start";
 pub const METHOD_AGENT_SESSION_READ: &str = "agentSession/read";
 pub const METHOD_AGENT_SESSION_TURN_START: &str = "agentSession/turn/start";

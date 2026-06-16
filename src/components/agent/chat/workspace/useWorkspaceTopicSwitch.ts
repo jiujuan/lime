@@ -1,11 +1,7 @@
 import { useCallback, useEffect } from "react";
 import { toast } from "sonner";
 import { logAgentDebug } from "@/lib/agentDebug";
-import {
-  getProject,
-  getDefaultProject,
-  getOrCreateDefaultProject,
-} from "@/lib/api/project";
+import { getProject } from "@/lib/api/project";
 import { normalizeProjectId } from "../utils/topicProjectResolution";
 import { resolveTopicSwitchProject } from "../utils/topicProjectSwitch";
 
@@ -198,22 +194,8 @@ export function useWorkspaceTopicSwitch({
               ? { id: project.id, isArchived: project.isArchived }
               : null;
           },
-          loadDefaultProject: async () => {
-            const project = await getDefaultProject();
-            return project
-              ? { id: project.id, isArchived: project.isArchived }
-              : null;
-          },
-          createDefaultProject: async () => {
-            const project = await getOrCreateDefaultProject();
-            return project
-              ? { id: project.id, isArchived: project.isArchived }
-              : null;
-          },
         });
         logAgentDebug("AgentChatPage", "switchTopic.decision", {
-          createdDefault:
-            decision.status === "ok" ? decision.createdDefault : false,
           decisionStatus: decision.status,
           projectId: decision.status === "ok" ? decision.projectId : null,
           topicId,
@@ -230,10 +212,6 @@ export function useWorkspaceTopicSwitch({
         }
 
         const targetProjectId = decision.projectId;
-        if (decision.createdDefault) {
-          toast.info("未找到可用项目，已自动创建默认项目");
-        }
-
         if (currentProjectId !== targetProjectId) {
           deferTopicSwitch(topicId, targetProjectId, options);
           logAgentDebug("AgentChatPage", "switchTopic.deferUntilProjectReady", {

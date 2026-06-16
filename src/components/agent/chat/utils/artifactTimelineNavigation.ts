@@ -16,6 +16,7 @@ export interface ArtifactTimelineOpenTarget {
   content: string;
   timelineItemId: string;
   blockId?: string;
+  openMode?: "file_preview" | "artifact_review";
 }
 
 export interface ArtifactTimelineLink {
@@ -129,6 +130,31 @@ function resolveDocumentBlockIds(
   );
 }
 
+function resolveTimelineOpenMode(params: {
+  artifactId?: string;
+  document: ArtifactDocumentV1 | null;
+  metadata: Record<string, unknown> | null;
+}): ArtifactTimelineOpenTarget["openMode"] {
+  if (params.document || params.artifactId) {
+    return "artifact_review";
+  }
+
+  const artifactFact = readString(params.metadata, [
+    "artifactKind",
+    "artifact_kind",
+    "artifactStatus",
+    "artifact_status",
+    "artifactVersionId",
+    "artifact_version_id",
+    "artifactVersionNo",
+    "artifact_version_no",
+    "snapshotPath",
+    "snapshot_path",
+  ]);
+
+  return artifactFact ? "artifact_review" : "file_preview";
+}
+
 export function resolveTimelineArtifactNavigation(
   item: AgentThreadItem,
   options?: {
@@ -166,6 +192,7 @@ export function resolveTimelineArtifactNavigation(
     filePath,
     content,
     timelineItemId: item.id,
+    openMode: resolveTimelineOpenMode({ artifactId, document, metadata }),
   };
 
   return {

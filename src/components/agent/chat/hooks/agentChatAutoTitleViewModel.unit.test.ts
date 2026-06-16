@@ -15,6 +15,8 @@ describe("agentChatAutoTitleViewModel", () => {
     expect(isAutoTitlePlaceholder(null)).toBe(true);
     expect(isAutoTitlePlaceholder(undefined)).toBe(true);
     expect(isAutoTitlePlaceholder("")).toBe(true);
+    expect(isAutoTitlePlaceholder("未命名")).toBe(true);
+    expect(isAutoTitlePlaceholder("未命名对话")).toBe(true);
     expect(isAutoTitlePlaceholder(" 新任务 ")).toBe(true);
     expect(isAutoTitlePlaceholder("新话题")).toBe(true);
     expect(isAutoTitlePlaceholder("新对话")).toBe(true);

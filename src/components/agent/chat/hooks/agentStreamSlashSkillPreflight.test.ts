@@ -50,7 +50,7 @@ function createEnv(): SlashSkillPreflightTestEnv {
     playTypewriterSound: vi.fn(),
     playToolcallSound: vi.fn(),
     onWriteFile: vi.fn(),
-    getRequiredWorkspaceId: vi.fn(() => "workspace-1"),
+    getWorkspaceIdForSubmit: vi.fn(() => "workspace-1"),
   };
 }
 

@@ -41,7 +41,7 @@ export interface AgentStreamPreparedSendEnv {
   isThreadBusy: () => boolean;
   hasPendingPreparedSubmit: () => boolean;
   runPreparedSubmit: <T>(task: () => Promise<T>) => Promise<T>;
-  getRequiredWorkspaceId: () => string;
+  getWorkspaceIdForSubmit: () => string | undefined;
   getSyncedSessionModelPreference: (
     sessionId: string,
   ) => SessionModelPreference | null;

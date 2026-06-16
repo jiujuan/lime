@@ -32,6 +32,12 @@ const RUNTIME_STATUS_LABEL_KEYS = {
   string
 >;
 
+const ACTIVE_RUNTIME_PHASE_LABEL_KEYS = {
+  retrying: "agentChat.inputbar.runtimeStatus.phase.retrying",
+  continuing: "agentChat.inputbar.runtimeStatus.phase.continuing",
+  synthesizing: "agentChat.inputbar.runtimeStatus.phase.synthesizing",
+} as const satisfies Record<string, string>;
+
 function resolveTimestamp(value?: string | number | null): number | null {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
@@ -171,10 +177,22 @@ export const InputbarRuntimeStatusLine: React.FC<
   }
 
   const statusMeta = resolveStatusMeta(runtime.status);
-  const statusLabel = t(
-    RUNTIME_STATUS_LABEL_KEYS[runtime.status] as AgentI18nKey,
-    {},
-  );
+  const activePhase =
+    runtime.latestRuntimePhase &&
+    runtime.latestRuntimePhase in ACTIVE_RUNTIME_PHASE_LABEL_KEYS
+      ? runtime.latestRuntimePhase
+      : null;
+  const statusLabel = activePhase
+    ? t(
+        ACTIVE_RUNTIME_PHASE_LABEL_KEYS[
+          activePhase as keyof typeof ACTIVE_RUNTIME_PHASE_LABEL_KEYS
+        ] as AgentI18nKey,
+        {},
+      )
+    : t(
+        RUNTIME_STATUS_LABEL_KEYS[runtime.status] as AgentI18nKey,
+        {},
+      );
   const elapsedText =
     startedAtMs && (completedAtMs || now) >= startedAtMs
       ? formatElapsed((completedAtMs || now) - startedAtMs)
@@ -192,6 +210,7 @@ export const InputbarRuntimeStatusLine: React.FC<
       ? promptCacheNotice?.label?.trim() || null
       : null;
   const detailText =
+    (runtime.status === "running" && activePhase) ||
     runtime.status === "waiting_input" ||
     runtime.status === "aborted"
       ? runtime.detail?.trim() ||

@@ -18,12 +18,16 @@ use crate::hints::load_hints::{load_hint_files, AGENTS_MD_FILENAME, ASTER_HINTS_
 use crate::{
     config::{AsterMode, Config},
     prompt_template,
+    session_context::current_turn_context,
     utils::sanitize_unicode_tags,
 };
 use std::path::Path;
 
 const MAX_EXTENSIONS: usize = 5;
 const MAX_TOOLS: usize = 50;
+const PLAN_COLLABORATION_INSTRUCTION: &str = r#"You are running in plan mode for this turn. Do not implement code changes or perform mutating actions. Explore only as needed to produce a decision-complete plan.
+
+When the plan is ready, output it inside exactly one <proposed_plan>...</proposed_plan> block so the client can render it as a plan item. Do not use update_plan in plan mode; update_plan is only a checklist/progress tool for non-plan collaboration modes. If you need a decision from the user while planning, use request_user_input."#;
 
 pub struct PromptManager {
     /// 完全覆盖系统提示词（向后兼容）
@@ -247,6 +251,14 @@ impl<'a> SystemPromptBuilder<'a, PromptManager> {
                 "Right now you are in the chat only mode, no access to any tool use and system."
                     .to_string(),
             );
+        }
+
+        if current_turn_context()
+            .as_ref()
+            .and_then(|context| context.collaboration_mode.as_deref())
+            .is_some_and(|mode| matches!(mode.trim(), "plan" | "planning"))
+        {
+            system_prompt_extras.push(PLAN_COLLABORATION_INSTRUCTION.to_string());
         }
 
         let sanitized_system_prompt_extras: Vec<String> = system_prompt_extras

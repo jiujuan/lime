@@ -5,6 +5,12 @@ import type {
   AgentRuntimeThreadReadModel,
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
+import {
+  drainExecutionProcessOutput,
+  interruptExecutionProcess,
+  readExecutionProcessStatus,
+  terminateExecutionProcess,
+} from "@/lib/api/executionProcess";
 import { projectCodingWorkbenchViewFromEvents } from "@limecloud/agent-runtime-projection";
 import { CanvasSessionOverviewPanel } from "../components/CanvasSessionOverviewPanel";
 import type {
@@ -174,6 +180,13 @@ export function buildWorkspaceConversationCodingViews({
               codingView={codingView}
               fileCheckpointSummary={fileCheckpointSummary}
               submittedActionsInFlight={submittedActionsInFlight}
+              processControls={{
+                onInterruptProcess: interruptExecutionProcess,
+                onTerminateProcess: terminateExecutionProcess,
+                onRefreshProcessStatus: readExecutionProcessStatus,
+                onDrainProcessOutput: (processId) =>
+                  drainExecutionProcessOutput({ processId }),
+              }}
               onRespondToAction={onRespondToAction}
               onSubmitRecoveryPrompt={onSubmitRecoveryPrompt}
             />

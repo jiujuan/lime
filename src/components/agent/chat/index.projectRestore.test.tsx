@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  clickButton,
   createMockAgentChatUnifiedState,
   createProject,
   flushEffects,
@@ -78,7 +77,7 @@ describe("AgentChatPage 话题切换项目恢复", () => {
     expect(mockGetOrCreateDefaultProject).not.toHaveBeenCalled();
   });
 
-  it("无可用项目时应自动创建默认项目并继续切换话题", async () => {
+  it("无可用项目时不应自动创建默认项目或切换话题", async () => {
     mockGetProject.mockImplementation(async (projectId: string) => {
       if (projectId === "default-new") {
         return createProject("default-new");
@@ -103,18 +102,17 @@ describe("AgentChatPage 话题切换项目恢复", () => {
 
     const switchTopicMock = mockUseAgentChatUnified.mock.results[0]?.value
       ?.switchTopic as ReturnType<typeof vi.fn>;
-    expect(mockGetOrCreateDefaultProject).toHaveBeenCalledTimes(1);
-    expect(mockToast.info).toHaveBeenCalledWith(
+    expect(mockGetOrCreateDefaultProject).not.toHaveBeenCalled();
+    expect(mockToast.info).not.toHaveBeenCalledWith(
       "未找到可用项目，已自动创建默认项目",
     );
-    expect(switchTopicMock).toHaveBeenCalledWith("topic-a");
-
-    const workspaceHookOrder = getHookCallOrderForWorkspace("default-new");
-    const switchTopicOrder = switchTopicMock.mock.invocationCallOrder[0];
-    expect(workspaceHookOrder).toBeLessThan(switchTopicOrder);
+    expect(switchTopicMock).not.toHaveBeenCalledWith("topic-a");
+    expect(observedWorkspaceIds[observedWorkspaceIds.length - 1]).toBe(
+      "",
+    );
   });
 
-  it("默认工作区别名应在进入页面时归一为真实项目 ID", async () => {
+  it("默认工作区别名没有最近项目时应保持未选择项目", async () => {
     mockGetOrCreateDefaultProject.mockResolvedValue(
       createProject("project-default-real"),
     );
@@ -132,13 +130,13 @@ describe("AgentChatPage 话题切换项目恢复", () => {
     renderPage({ projectId: "default" });
     await flushEffects();
 
-    expect(mockGetOrCreateDefaultProject).toHaveBeenCalledTimes(1);
-    expect(mockEnsureWorkspaceReady).toHaveBeenCalledWith(
+    expect(mockGetOrCreateDefaultProject).not.toHaveBeenCalled();
+    expect(mockEnsureWorkspaceReady).not.toHaveBeenCalledWith(
       "project-default-real",
     );
     expect(observedWorkspaceIds).not.toContain("default");
     expect(observedWorkspaceIds[observedWorkspaceIds.length - 1]).toBe(
-      "project-default-real",
+      "",
     );
   });
 
@@ -168,7 +166,7 @@ describe("AgentChatPage 话题切换项目恢复", () => {
     );
   });
 
-  it("本地记忆项目不存在时不应把 stale 项目 ID 传给 Agent runtime", async () => {
+  it("新建对话时不应读取 stale 最近项目或创建默认项目", async () => {
     localStorage.setItem(
       "agent_last_project_id",
       JSON.stringify("workspace-1"),
@@ -193,14 +191,18 @@ describe("AgentChatPage 话题切换项目恢复", () => {
       warning: null,
     });
 
-    renderPage({ agentEntry: "new-task", showChatPanel: false });
+    renderPage({
+      agentEntry: "new-task",
+      showChatPanel: false,
+      newChatAt: 1234567890,
+    });
     await flushEffects();
 
-    expect(mockGetProject).toHaveBeenCalledWith("workspace-1");
-    expect(mockGetOrCreateDefaultProject).toHaveBeenCalledTimes(1);
+    expect(mockGetProject).not.toHaveBeenCalledWith("workspace-1");
+    expect(mockGetOrCreateDefaultProject).not.toHaveBeenCalled();
     expect(observedWorkspaceIds).not.toContain("workspace-1");
     expect(observedWorkspaceIds[observedWorkspaceIds.length - 1]).toBe(
-      "project-default-real",
+      "",
     );
   });
 
@@ -253,38 +255,25 @@ describe("AgentChatPage 话题切换项目恢复", () => {
     expect(getSendMessageCall().content).toBe("只回答一个字：好");
   });
 
-  it("存在 newChatAt 时手动选项目不应被重置", async () => {
-    const container = renderPage({ newChatAt: 1234567890 });
-    await flushEffects();
-
-    clickButton(container, "set-project");
-    await flushEffects();
-
-    expect(observedWorkspaceIds).toContain("project-manual");
-    expect(observedWorkspaceIds[observedWorkspaceIds.length - 1]).toBe(
-      "project-manual",
+  it("收到首页新会话请求时应清空当前工作区上下文", async () => {
+    localStorage.setItem(
+      "agent_last_project_id",
+      JSON.stringify("project-manual"),
     );
-  });
 
-  it("收到首页新会话请求时应保留当前工作区上下文", async () => {
     const mounted = mountPage();
     await flushEffects();
 
-    clickButton(mounted.container, "set-project");
-    await flushEffects();
     expect(observedWorkspaceIds[observedWorkspaceIds.length - 1]).toBe(
       "project-manual",
     );
 
     mounted.rerender({ newChatAt: 2233445566 });
 
-    expect(observedWorkspaceIds[observedWorkspaceIds.length - 1]).toBe(
-      "project-manual",
-    );
-
     await flushEffects();
+    expect(observedWorkspaceIds).toContain("");
     expect(observedWorkspaceIds[observedWorkspaceIds.length - 1]).toBe(
-      "project-manual",
+      "",
     );
   });
 });

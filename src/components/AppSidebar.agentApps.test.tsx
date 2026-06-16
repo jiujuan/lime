@@ -24,7 +24,7 @@ describe("AppSidebar Agent Apps", () => {
           '[data-testid="app-sidebar-main-nav"] button',
         ),
       ).map((button) => button.getAttribute("aria-label")),
-    ).toEqual(["新建任务", "专家", "Skills", "Agent Apps", "项目资料"]);
+    ).toEqual(["新建任务", "专家", "Skills", "Agent Apps"]);
 
     act(() => {
       container
@@ -103,7 +103,7 @@ describe("AppSidebar Agent Apps", () => {
           '[data-testid="app-sidebar-main-nav"] button',
         ),
       ).map((button) => button.getAttribute("aria-label")),
-    ).toEqual(["新建任务", "专家", "Skills", "Agent Apps", "项目资料"]);
+    ).toEqual(["新建任务", "专家", "Skills", "Agent Apps"]);
     expect(mockListInstalledAgentApps).not.toHaveBeenCalled();
   });
 
@@ -124,7 +124,7 @@ describe("AppSidebar Agent Apps", () => {
           '[data-testid="app-sidebar-main-nav"] button',
         ),
       ).map((button) => button.getAttribute("aria-label")),
-    ).toEqual(["新建任务", "专家", "Skills", "Agent Apps", "项目资料"]);
+    ).toEqual(["新建任务", "专家", "Skills", "Agent Apps"]);
   });
 
   it("安装态读取失败不应影响静态 Agent Apps 聚合入口", async () => {

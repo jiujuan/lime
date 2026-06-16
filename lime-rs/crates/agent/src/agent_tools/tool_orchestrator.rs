@@ -350,6 +350,13 @@ async fn execute_live_shell_process(
     };
 
     let mut stream_events = Vec::new();
+    let start_snapshot = handle.status();
+    stream_events.push(RuntimeAgentEvent::ToolOutputDelta {
+        tool_id: planned.tool_id.clone(),
+        delta: String::new(),
+        output_kind: Some("process".to_string()),
+        metadata: Some(start_snapshot.metadata()),
+    });
     while let Some(delta) = handle.recv_output().await {
         let metadata = delta.metadata();
         stream_events.push(RuntimeAgentEvent::ToolOutputDelta {
@@ -416,9 +423,7 @@ fn can_start_live_shell_process(
     if context.workspace_sandbox.is_some() {
         return false;
     }
-    if metadata_bool(&decision.metadata, "sandboxBackendRequired")
-        || metadata_bool(&decision.metadata, "sandboxBackendEnforced")
-    {
+    if decision.requires_sandboxed_execution() {
         return false;
     }
     if planned
@@ -430,10 +435,6 @@ fn can_start_live_shell_process(
         return false;
     }
     param_string(&planned.params, &["command", "cmd", "script"]).is_some()
-}
-
-fn metadata_bool(metadata: &HashMap<String, Value>, key: &str) -> bool {
-    metadata.get(key).and_then(Value::as_bool) == Some(true)
 }
 
 fn shell_command_for_tool(tool_name: &str, command: &str) -> Vec<String> {
@@ -511,11 +512,7 @@ async fn execute_registry_tool_after_live_process_skip(
 }
 
 fn should_attach_workspace_sandbox(decision: &ToolExecutionDecision) -> bool {
-    decision
-        .metadata
-        .get("sandboxBackendEnforced")
-        .and_then(Value::as_bool)
-        == Some(true)
+    decision.workspace_sandbox_backend_enforced()
 }
 
 fn workspace_sandbox_config(

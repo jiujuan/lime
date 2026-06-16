@@ -17,7 +17,7 @@ async fn objective_continue_fails_closed_when_pending_requests_exist() {
         }
     }));
     let app_data_source = Arc::new(
-        TestCurrentTimelineDataSource::new(persisted)
+        TestSessionDataSource::new(persisted)
             .with_objective(managed_objective("sess_objective_continue")),
     );
     let backend = Arc::new(RecordingBackend::default());
@@ -52,7 +52,7 @@ async fn objective_continue_uses_host_provider_config_without_runtime_explicit_p
     let mut persisted = empty_agent_session_read_response(session_id);
     persisted.session.workspace_id = Some("workspace-main".to_string());
     let app_data_source = Arc::new(
-        TestCurrentTimelineDataSource::new(persisted).with_objective(managed_objective(session_id)),
+        TestSessionDataSource::new(persisted).with_objective(managed_objective(session_id)),
     );
     let backend = Arc::new(FinalDoneRecordingBackend {
         requests: Mutex::new(Vec::new()),
@@ -177,8 +177,7 @@ async fn managed_objective_auto_continuation_submits_current_turn_after_terminal
         "maxElapsedMs": 180000
     }));
     objective.budget_policy = Some(json!({ "maxTurns": 1 }));
-    let app_data_source =
-        Arc::new(TestCurrentTimelineDataSource::new(persisted).with_objective(objective));
+    let app_data_source = Arc::new(TestSessionDataSource::new(persisted).with_objective(objective));
     let backend = Arc::new(RecordingBackend::default());
     let core =
         RuntimeCore::with_backend(backend.clone()).with_app_data_source(app_data_source.clone());
@@ -317,8 +316,7 @@ async fn managed_objective_auto_continuation_stops_at_budget_after_auto_turn() {
         "maxElapsedMs": 180000
     }));
     objective.budget_policy = Some(json!({ "maxTurns": 1 }));
-    let app_data_source =
-        Arc::new(TestCurrentTimelineDataSource::new(persisted).with_objective(objective));
+    let app_data_source = Arc::new(TestSessionDataSource::new(persisted).with_objective(objective));
     let backend = Arc::new(FinalDoneRecordingBackend {
         requests: Mutex::new(Vec::new()),
     });
@@ -473,8 +471,7 @@ async fn managed_objective_auto_continuation_submits_and_budget_limits_on_curren
     }));
     let mut persisted = empty_agent_session_read_response(session_id);
     persisted.session.workspace_id = Some("workspace-main".to_string());
-    let app_data_source =
-        Arc::new(TestCurrentTimelineDataSource::new(persisted).with_objective(objective));
+    let app_data_source = Arc::new(TestSessionDataSource::new(persisted).with_objective(objective));
     let backend = Arc::new(CompletedBackend);
     let core = RuntimeCore::with_backend(backend).with_app_data_source(app_data_source.clone());
     core.start_session(AgentSessionStartParams {
@@ -610,7 +607,7 @@ async fn objective_audit_writes_current_evidence_pack_decision() {
     let mut persisted = empty_agent_session_read_response("sess_objective_audit");
     persisted.session.workspace_id = Some("workspace-main".to_string());
     let app_data_source = Arc::new(
-        TestCurrentTimelineDataSource::new(persisted)
+        TestSessionDataSource::new(persisted)
             .with_objective(managed_objective("sess_objective_audit")),
     );
     let core = RuntimeCore::with_backend_capability_source_artifact_content_provider_and_evidence_export_provider(

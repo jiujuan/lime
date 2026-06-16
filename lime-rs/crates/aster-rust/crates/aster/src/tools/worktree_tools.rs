@@ -1,6 +1,6 @@
-use crate::session::{apply_session_update, query_session, ExtensionState, WorktreeSessionState};
 #[cfg(test)]
-use crate::session::{create_managed_session, SessionManager};
+use crate::session::create_managed_session;
+use crate::session::{apply_session_update, query_session, ExtensionState, WorktreeSessionState};
 use crate::tools::{
     base::{PermissionCheckResult, Tool},
     context::{ToolContext, ToolResult},
@@ -748,7 +748,7 @@ fn command_failure_text(output: &Output) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::session::{SessionManager, SessionType};
+    use crate::session::SessionType;
     use serde_json::json;
     use tempfile::TempDir;
     use uuid::Uuid;

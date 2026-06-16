@@ -10,6 +10,7 @@ export type TaskCenterTaskEventSource =
 
 export interface TaskCenterCreateDraftTaskDetail {
   source?: TaskCenterTaskEventSource;
+  projectId?: string | null;
 }
 
 export interface TaskCenterOpenTaskDetail {

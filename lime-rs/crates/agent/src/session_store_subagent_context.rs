@@ -1,18 +1,18 @@
-use aster::session::{Session as AsterSession, resolve_subagent_session_metadata};
+use aster::session::{resolve_subagent_session_metadata, Session as AsterSession};
 #[cfg(test)]
 use aster::session::{SessionRuntimeSnapshot, TurnStatus};
 use chrono::{DateTime, Utc};
-use lime_core::database::DbConnection;
 use lime_core::database::dao::agent_timeline::{AgentThreadItemStatus, AgentThreadTurnStatus};
+use lime_core::database::DbConnection;
 use lime_core::workspace::WorkspaceManager;
 use std::path::Path;
 
 use super::session_store_types::{
-    SessionDetail, normalize_optional_nonempty_body, normalize_optional_text,
+    normalize_optional_nonempty_body, normalize_optional_text, SessionDetail,
 };
 use crate::session_query::{list_child_subagent_sessions, read_session};
 use crate::subagent_control::SubagentRuntimeStatusKind;
-use crate::subagent_control::{SubagentRuntimeStatus, load_subagent_runtime_status};
+use crate::subagent_control::{load_subagent_runtime_status, SubagentRuntimeStatus};
 use crate::subagent_profiles::{SubagentCustomizationState, SubagentSkillSummary};
 
 const RUNTIME_OVERLAY_ACTIVE_WINDOW_SECS: i64 = 30 * 60;

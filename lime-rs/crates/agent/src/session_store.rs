@@ -222,14 +222,14 @@ pub fn create_session_with_id_sync(
 pub fn list_sessions_sync(
     db: &DbConnection,
     archive_filter: SessionArchiveFilter,
-    workspace_id: Option<&str>,
+    cwd_filters: &[String],
     limit: Option<usize>,
 ) -> Result<Vec<SessionInfo>, String> {
     let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
     let sessions = agent_session_repository::list_session_overviews(
         &conn,
         archive_filter,
-        workspace_id,
+        cwd_filters,
         limit,
     )?;
 
@@ -364,7 +364,7 @@ pub fn get_session_sync_with_full_timeline_without_messages(
     })
 }
 
-/// 获取会话详情；传入 history_limit 时只读取末尾历史，用于旧会话首屏恢复。
+/// 获取会话详情；传入 history_limit 时只读取 timeline 末尾历史，用于首屏恢复。
 pub fn get_session_sync_with_history_limit(
     db: &DbConnection,
     session_id: &str,
@@ -373,7 +373,7 @@ pub fn get_session_sync_with_history_limit(
     get_session_sync_with_history_window(db, session_id, history_limit, 0)
 }
 
-/// 获取会话详情；传入 history_limit/history_offset 时从最新消息向前分页读取历史。
+/// 获取会话详情；传入 history_limit/history_offset 时从最新 timeline 向前分页读取历史。
 pub fn get_session_sync_with_history_window(
     db: &DbConnection,
     session_id: &str,
@@ -383,7 +383,7 @@ pub fn get_session_sync_with_history_window(
     get_session_sync_with_history_page(db, session_id, history_limit, history_offset, None)
 }
 
-/// 获取会话详情；传入 before_message_id 时以稳定消息游标读取更早历史。
+/// 获取会话详情；传入 before_message_id 时走 timeline 游标读取更早历史。
 pub fn get_session_sync_with_history_page(
     db: &DbConnection,
     session_id: &str,
@@ -396,22 +396,10 @@ pub fn get_session_sync_with_history_page(
     let session_started_at = Instant::now();
     let (session_detail, turns, items, todo_items, session_ms, turns_ms, items_ms, todo_ms) = {
         let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
-        let session_detail = match (history_limit, before_message_id) {
-            (Some(limit), Some(message_id)) => {
-                agent_session_repository::get_session_with_messages_before(
-                    &conn, session_id, limit, message_id,
-                )
-            }
-            (Some(limit), None) => agent_session_repository::get_session_with_messages_tail_page(
-                &conn,
-                session_id,
-                limit,
-                history_offset,
-            ),
-            (None, _) => agent_session_repository::get_session_with_messages(&conn, session_id),
-        }
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| format!("会话不存在: {session_id}"))?;
+        let session_detail =
+            agent_session_repository::get_session_without_messages(&conn, session_id)
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| format!("会话不存在: {session_id}"))?;
         let session_ms = session_started_at.elapsed().as_millis();
 
         let turns_started_at = Instant::now();

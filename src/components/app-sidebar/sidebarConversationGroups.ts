@@ -27,8 +27,8 @@ function normalizeId(value?: string | null): string | null {
   return normalized ? normalized : null;
 }
 
-function normalizePathKey(value?: string | null): string | null {
-  const normalized = value?.trim().replace(/\\/g, "/").replace(/\/+$/g, "");
+function normalizePath(value?: string | null): string | null {
+  const normalized = value?.trim().replace(/[\\/]+$/u, "");
   return normalized ? normalized : null;
 }
 
@@ -36,17 +36,9 @@ function sessionBelongsToProject(
   session: AsterSessionInfo,
   project: SidebarOpenedProjectSummary,
 ): boolean {
-  const projectId = normalizeId(project.id);
-  if (projectId && normalizeId(session.workspace_id) === projectId) {
-    return true;
-  }
-
-  const projectRootPath = normalizePathKey(project.rootPath);
-  if (!projectRootPath || normalizeId(session.workspace_id)) {
-    return false;
-  }
-
-  return normalizePathKey(session.working_dir) === projectRootPath;
+  const projectRoot = normalizePath(project.rootPath);
+  const sessionCwd = normalizePath(session.working_dir);
+  return Boolean(projectRoot && sessionCwd && projectRoot === sessionCwd);
 }
 
 function dedupeOpenedProjects(
@@ -54,11 +46,11 @@ function dedupeOpenedProjects(
 ): SidebarOpenedProjectSummary[] {
   const seen = new Set<string>();
   return openedProjects.filter((project) => {
-    const projectId = normalizeId(project.id);
-    if (!projectId || seen.has(projectId)) {
+    const projectKey = normalizePath(project.rootPath) ?? normalizeId(project.id);
+    if (!projectKey || seen.has(projectKey)) {
       return false;
     }
-    seen.add(projectId);
+    seen.add(projectKey);
     return true;
   });
 }
@@ -68,11 +60,6 @@ export function buildSidebarConversationGroups({
   openedProjects,
 }: BuildSidebarConversationGroupsParams): SidebarConversationGroups {
   const normalizedOpenedProjects = dedupeOpenedProjects(openedProjects);
-  const openedProjectRootPaths = new Set(
-    normalizedOpenedProjects
-      .map((project) => normalizePathKey(project.rootPath))
-      .filter((rootPath): rootPath is string => Boolean(rootPath)),
-  );
   const scopedSessions = sessions.filter((session) => !session.archived_at);
 
   const projectSections = normalizedOpenedProjects.map((project) => {
@@ -84,15 +71,17 @@ export function buildSidebarConversationGroups({
     };
   });
 
-  const standaloneSessions = scopedSessions.filter((session) => {
-    const workspaceId = normalizeId(session.workspace_id);
-    if (workspaceId) {
-      return false;
-    }
-
-    const workingDir = normalizePathKey(session.working_dir);
-    return !workingDir || !openedProjectRootPaths.has(workingDir);
-  });
+  const projectSessionIds = new Set(
+    projectSections.flatMap((section) =>
+      section.sessions.map((session) => session.id),
+    ),
+  );
+  const standaloneSessions = scopedSessions.filter(
+    (session) =>
+      !normalizePath(session.working_dir) &&
+      !normalizeId(session.workspace_id) &&
+      !projectSessionIds.has(session.id),
+  );
 
   return {
     projectSections,

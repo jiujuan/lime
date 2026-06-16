@@ -7,7 +7,7 @@
 - 什么情况下应该进入 Playwright MCP，而不是只跑本地测试
 - 如何复用现有浏览器标签页和页面状态
 - GUI 续测前最少要做哪些准备
-- 出现 bridge 缺口、mock fallback、控制台报错时该怎么判断
+- 出现 Electron Desktop Host / App Server JSON-RPC2 bridge 缺口、测试夹具误用、控制台报错时该怎么判断
 
 它是 **GUI 续测手册**，不是新的本地 Playwright 测试文件模板。
 
@@ -17,18 +17,26 @@
 
 - 用户说“继续测试”“继续复现”“继续用 Playwright MCP 验证”
 - 需要复用当前浏览器标签页和已有页面状态
-- 需要排查浏览器模式下的 DevBridge、mock fallback、控制台报错
+- 需要排查 Electron Desktop Host、App Server JSON-RPC2、测试夹具误用或控制台报错
 - 已经跑过最小 GUI smoke，接下来要做真实页面交互验证
 
 ## 使用边界
 
 - 优先使用 **Playwright MCP** 做交互验证，不优先编写新的本地 Playwright 测试文件
-- 浏览器模式默认首页从 `http://127.0.0.1:1420/` 进入
+- 真实交付验证默认走 Electron Desktop Host；只有做 renderer 镜像、调试或 Playwright MCP 复用浏览器态时，才从 `http://127.0.0.1:1420/` 进入浏览器模式
 - 需要稳定的桌面 Chrome 观感时，优先复用已有 Lime 页签；必须新启 headed 浏览器时，使用固定 profile 的 Chrome 持久化上下文，例如 `channel: 'chrome'` + `launchPersistentContext(userDataDir, { headless: false, viewport: null })`
 - 本地桌面续测不要传 `--no-sandbox` / `--disable-setuid-sandbox`；如需去掉 Chrome 顶部“自动测试软件控制”提示，只能在受控 launcher 中忽略 `--enable-automation`。CI、容器或 Linux sandbox 受限环境例外，但要在结论中说明原因
 - 如果 Playwright 工具当前还在 deferred surface，优先用 `ToolSearch` 的精确选择名，例如 `select:mcp__playwright__browser_click`；不要把 `playwright_browser_click`、`browser click` 之类同义词反复丢给 `ToolSearch`
-- 能走真实后端就走真实后端；浏览器模式暂不支持或尚未桥接的能力，允许走 mock
+- 当前 GUI 主路径事实源是 `renderer -> preload/contextBridge -> Electron IPC -> app_server_handle_json_lines -> App Server JSON-RPC2 -> RuntimeCore/backend -> 前端投影`。E2E 证据应能对应到 Electron IPC channel、App Server method、JSON-RPC `id/result/error` 或 GUI 可见状态；不要再把 Tauri command、旧 Rust command facade 或裸 `invoke` 当 current 事实源
+- Electron preload 只暴露 allowlist API。按 Electron 官方 IPC 口径，renderer 侧应通过 contextBridge 暴露的函数进入 `ipcRenderer.invoke`，main 侧通过 `ipcMain.handle` 承接；不要在 renderer 直接暴露或调用原始 `ipcRenderer`
+- App Server 调用遵循 JSON-RPC 2.0：请求带 `jsonrpc: "2.0"`、`method`、可选 `params` 与 `id`；响应用同一个 `id` 返回 `result` 或 `error`。排查时优先记录 method、id、result/error，而不是旧命令名
+- Agent 工作区导航成功标准是 current GUI 状态与 App Server read model 对齐，例如输入框可用、会话标题 / turn 内容可见、`agentSession/*` JSON-RPC method 被记录；旧的 renderer 自定义事件或 legacy task-center 事件只能作为 test-only 唤醒辅助，不能当作已进入 current 会话的成功证据
+- 能走真实 Electron Desktop Host 和 App Server 就必须走真实链路；浏览器镜像入口暂不支持的原生壳能力只能使用显式测试夹具，并在结论里标为 `test-only / fixture`，不能作为 GUI 主路径交付证据
 - `verify:gui-smoke` 内部的 browser runtime 校验默认走无界面浏览器会话；它只证明主链可启动，不替代后续真实页面交互验证
+- 本节基于 Playwright 官方 best practices、Electron 官方 IPC / context isolation 文档和 JSON-RPC 2.0 规范收敛：
+  - Playwright：使用 locator 和 web-first assertion，依赖 auto-wait / retry，不用固定 sleep 证明状态达成（官方文档：https://playwright.dev/docs/best-practices）
+  - Electron：renderer 经 preload `contextBridge` 暴露的受控函数进入 `ipcRenderer.invoke`，main process 用 `ipcMain.handle` 承接；不要直接把原始 `ipcRenderer` 暴露给 renderer（官方文档：https://www.electronjs.org/docs/latest/tutorial/ipc）
+  - JSON-RPC2：App Server 请求必须以 `jsonrpc: "2.0"`、`method`、可选 `params` 和 `id` 表达；响应以同一个 `id` 返回 `result` 或 `error`，排障时记录 method / id / result / error（官方规范：https://www.jsonrpc.org/specification）
 - Companion 桌宠链路已在 Lime 主仓下线并归类为 `dead`；Playwright 续测不再验证 `companion_*` API、`companion-pet-status` 状态事件、桌宠设置回跳或主窗口唤起链路
 - 如未来重新设计独立桌面伴随能力，必须先定义新的 current 协议与 GUI 入口，再补对应 Playwright 覆盖；不得复用旧 `companion_*` 命令或本地 `companion/pet` 协议作为续测依据
 - 共享网关控制页已下线，托盘也不再展示网关状态或地址；共享网关 `/v1/routes` 与 selector HTTP 路由也已下线，不再对“启动/停止网关、复制网关地址、路由/curl 示例、selector 路由、托盘运行态文案”做 GUI 续测；server 验证只关注标准 `/v1/messages` 与 `/v1/chat/completions` 主链，如需看运行时状态，走开发者页或实验页的诊断面板
@@ -49,8 +57,8 @@ npm run electron:dev
 用途：
 
 - 启动前端 dev server
-- 启动 Electron Desktop host 调试环境
-- 启动浏览器模式所需的 DevBridge / Electron Host bridge
+- 启动 Electron Desktop Host 调试环境、preload IPC 与 App Server sidecar
+- 启动 renderer 到 Electron Desktop Host / App Server JSON-RPC2 的桥接链路
 
 ### 桥接健康检查
 
@@ -61,7 +69,7 @@ npm run bridge:health -- --timeout-ms 120000
 用途：
 
 - 等待 `http://127.0.0.1:3030/health` 就绪
-- 避免 Playwright 进入页面时，前端早于 DevBridge 启动而产生 `Failed to fetch` 噪音
+- 避免 Playwright 进入页面时，前端早于 Electron Desktop Host / App Server bridge 启动而产生 `Failed to fetch` 噪音
 
 ### 命令 / bridge 相关定向测试
 
@@ -74,8 +82,8 @@ npm run test:contracts
 
 - 修改了 `safeInvoke`
 - 修改了 `src/lib/desktop-host/` 或 legacy mock path
-- 修改了浏览器模式 bridge/mock 优先级
-- 修改了 Electron IPC、App Server 或 legacy desktop facade 边界
+- 修改了 Electron Desktop Host bridge、preload allowlist、App Server JSON-RPC2 协议或测试夹具边界
+- 发现旧 Tauri / Rust facade 命令名重新出现在 production truth、mock priority 或 GUI 可见路径
 
 ### 项目资料产品 E2E
 
@@ -118,11 +126,11 @@ npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 
 - 首页成功加载
 - 默认首页可交互
-- 初始控制台 error 为 0；如果不是 0，先定位是否为 bridge 缺口
+- 初始控制台 error 为 0；如果不是 0，先定位是否为 Electron Desktop Host / App Server JSON-RPC2 bridge 缺口
 
 ### 3. 交互时优先使用稳定定位
 
-遵循 Playwright 官方最佳实践：
+遵循 Playwright 官方最佳实践。Playwright locator 自带 auto-wait 和 retry，web-first assertion 会等待期望状态达成，因此 E2E 不应靠固定 sleep 证明页面可用：
 
 - 优先用角色、名称、可见文本定位
 - 优先使用 Playwright 自带等待与 web-first 断言
@@ -187,7 +195,7 @@ npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 5. 触发一次执行失败场景时，确认结果区展示业务级错误码与 `report_hint`
 6. 如当前页面带有 `contentId` 上下文，再确认执行成功后默认是“写回当前主稿”，而不是新建资源文档
 7. 如工作台模式开启自动保存，再确认执行成功后保存态文案与打开入口正常
-8. 打开控制台并确认浏览器资料 / 环境预设读取没有落回 web mock，尤其不应出现 `[Mock] invoke: list_browser_profiles_cmd` 或 `[Mock] invoke: list_browser_environment_presets_cmd`
+8. 打开控制台并确认浏览器资料 / 环境预设读取没有落回 renderer mock fallback，尤其不应出现 `[Mock] invoke: list_browser_profiles_cmd` 或 `[Mock] invoke: list_browser_environment_presets_cmd`
 
 ### Team runtime 工具面验证
 
@@ -195,9 +203,21 @@ npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 2. 打开工具库存 / runtime inventory 面板
 3. 确认 current 协作工具面至少包含 `Agent`、`TeamCreate`、`TeamDelete`、`SendMessage`、`ListPeers`
 4. 同时确认主线程 current 工具面包含 `SendUserMessage`，且 tool display 不会退回通用图标或泛化文案
-5. 如果页面当前走的是浏览器 fallback mock，也要确认 fallback inventory 与 tool display 仍显示同一组工具，而不是只出现一部分协作工具或退回通用图标
+5. 如果页面当前走的是显式测试夹具，也要确认 fixture inventory 与 tool display 仍显示同一组工具，而不是只出现一部分协作工具或退回通用图标；生产 GUI 路径不能靠 fixture 通过
 6. 如果页面同时展示 MCP bridge 工具，确认 current 命名为 `mcp__<server>__<tool>`，对应 extension surface key 为 `mcp__<server>`；若仍出现裸 `server__tool`、混合前缀或 extension/tool 各自一套命名，判定为协议漂移
-7. 如出现缺失、重复图标或文案回退，优先检查 Rust catalog、runtime 注册、`src/lib/desktop-host/` / legacy mock path 与 `toolDisplayInfo.ts` 是否同步
+7. 如出现缺失、重复图标或文案回退，优先检查 App Server tool catalog / RuntimeCore 注册、Aster backend tool registry、`src/lib/desktop-host/` 测试夹具与 `toolDisplayInfo.ts` 是否同步；不要把旧 Tauri / Rust facade registry 当 current owner
+
+### Claw 计划模式与计划轨验证
+
+1. 进入 `Claw` 或通用工作区对话入口，确认输入区可见并已连接当前 workspace
+2. 点击输入区或工具栏中的计划模式开关，确认 UI 状态切到 `plan`，且运行时请求 metadata / turn config 也带上 plan mode 语义；不要只看按钮高亮
+3. 发送一个明确需要规划的请求，例如 `先给我一个修复计划，不要直接改代码`
+4. 确认本轮经 `Frontend -> Electron preload bridge -> app_server_handle_json_lines -> App Server JSON-RPC2 -> RuntimeCore/backend` 发起 `agentSession/turn/start`，而不是旧 Tauri command、renderer mock fallback 或 legacy `agent_runtime_*`
+5. 确认模型可见工具面包含 Codex 风格 `request_user_input`，且计划模式系统指令要求最终计划输出为 `<proposed_plan>...</proposed_plan>`；`AskUserQuestion` 不应出现在 current tool surface、工具库存或普通工具展示里
+6. 等待本轮输出后，确认线程事件或 read model 中出现 `plan` item / proposed plan 内容；不要把普通 checklist 工具 `update_plan` 当作进入或退出 Plan mode 的机制
+7. 确认右侧任务 / 环境信息区域显示计划过程，计划项不会重复出现在普通工具活动列表；普通非 Plan mode 回合若使用 `update_plan`，其 metadata 至少包含 `plan` 数组，且每项有 `step` 与 `status=pending|in_progress|completed`
+8. 继续切回普通执行模式再发送一条消息，确认 plan mode 不会黏连到后续普通回合；如仍携带 plan metadata，判定为运行时状态恢复缺口
+9. 复测时记录 App Server JSON-RPC method、turn id、是否出现 proposed plan / plan item、右侧计划项可见文本和控制台 error 数量
 
 ### Claw 站点技能直跑门禁验证
 
@@ -381,7 +401,7 @@ npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 1. 进入 `Claw` 或任一支持 slash skill 的聊天入口
 2. 输入一个已安装技能，例如 `/image_generate 画一张春日海报`
 3. 确认前端不会回退普通 `chat_stream`，而是进入 skill 执行态
-4. 打开控制台，确认浏览器模式接通 DevBridge 时不再出现 `execute_skill`、`list_executable_skills` 或 `get_skill_detail` 的 unknown command 报错
+4. 打开控制台，确认当前 Electron Desktop Host / App Server JSON-RPC2 链路不再出现 `execute_skill`、`list_executable_skills` 或 `get_skill_detail` 的 unknown method / unknown command 报错
 5. 如当前 skill 的 executor kind 是 `typed local_cli`，继续确认最终反馈的是 runtime 组装后的任务提交摘要或任务状态，而不是前端本地伪造成功态；不要把“模型先写 Bash”当成通过条件
 
 ### 聊天结果保存为技能验证
@@ -436,7 +456,7 @@ npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 1. 进入 `设置 -> 系统 -> 自动化`
 2. 确认调度状态、任务列表、健康面板能正常加载
 3. 打开控制台 / 网络证据，确认自动化读取经 `app_server_handle_json_lines` 观察到 `automationJob/list`、`automationJob/health` 或 `automationJob/runHistory` 等 App Server method，且没有旧 automation 命令族调用
-4. 如当前环境允许创建或编辑任务，再确认提交后列表能刷新，而不是只靠 web mock 静态回显
+4. 如当前环境允许创建或编辑任务，再确认提交后列表能刷新，而不是只靠测试夹具静态回显
 
 ### 话题模型恢复验证
 
@@ -570,7 +590,7 @@ npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 1. 从社媒内容项目进入 `素材`
 2. 验证素材列表可加载
 3. 验证素材计数、列表项或空状态正常显示
-4. 如当前环境能查看调试面板或 DevBridge 日志，优先确认素材页读取的是 `gallery_material_*` 命令，而不是旧 `poster_material_*` 命名
+4. 如当前环境能查看调试面板、Electron IPC 或 App Server JSON-RPC 记录，优先确认素材页读取的是 `gallery_material_*` 命令，而不是旧 `poster_material_*` 命名
 5. 检查控制台无新增 error
 
 ## 每一步至少记录什么
@@ -579,8 +599,8 @@ npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 
 - 当前页面 URL
 - 当前关键可见文本
-- 是否走到了真实 bridge
-- 是否触发了 mock fallback
+- 是否走到了真实 Electron Desktop Host / App Server JSON-RPC2 bridge
+- 是否触发了测试夹具、renderer mock fallback 或旧命令 fallback
 - 控制台 error 数量
 - 如失败，明确失败命令名或失败交互点
 
@@ -590,7 +610,7 @@ npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 - 业务流是否走通
 - 控制台是否归零
 - 新暴露的命令缺口是什么
-- 该缺口更适合补真实 bridge 还是补 mock
+- 该缺口更适合补真实 Electron Desktop Host / App Server JSON-RPC2 bridge，还是只允许落到 test-only fixture
 
 ## 常见故障与处理
 
@@ -598,39 +618,40 @@ npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 
 通常表示：
 
-- 浏览器里加载了真实 Electron preload / Desktop host API 包
-- 没有走 web mock / HTTP bridge 链路
+- 页面没有拿到预期的 Electron preload / Desktop Host API，或把旧裸 `invoke` 当成 current 入口
+- renderer 没有通过 `src/lib/api/* -> safeInvoke/AppServerClient -> app_server_handle_json_lines` 进入 current bridge
 
 优先排查：
 
-- 是否使用了浏览器模式专用启动方式
-- Vite 是否正确走了 web alias
+- 是否通过 `npm run electron:dev` 启动了 Electron Desktop Host 与 App Server sidecar
+- preload allowlist 是否暴露了对应 API，前端是否仍在直接访问旧 `window.__TAURI__` / 裸 `invoke`
 - 当前页面是否需要强制刷新以拿到最新前端代码
 
-### 2. `[DevBridge] 未知命令`
+### 2. Bridge `unknown command` / App Server `method not found`
 
 说明：
 
-- 前端已调用某命令
-- 浏览器 bridge 分发器没有实现
+- 前端已调用某个命令或 App Server method
+- Electron preload / main allowlist、`app_server_handle_json_lines`、App Server protocol 或 RuntimeCore handler 其中一侧没有同步
+- 如果命令名来自旧 Tauri / Rust facade，优先按旧路回流处理
 
 处理顺序：
 
-1. 先判断该命令是否应走真实后端
-2. 如果该能力在浏览器模式下不是关键阻塞项，可加入 mock 优先集合
-3. 如果该命令属于核心业务路径，优先补 bridge 分发
+1. 先判断该能力的 current owner 是 Electron Desktop Host 壳能力，还是 App Server JSON-RPC2 backend 能力
+2. 核心业务路径必须补真实 preload / IPC / JSON-RPC / handler / client 链路
+3. 非主路径、浏览器镜像不可支持的壳能力才允许进入显式 test-only fixture；不得加入生产 mock fallback
 
 ### 3. `Failed to fetch`
 
 常见原因：
 
-- DevBridge 没启动
+- Electron Desktop Host / App Server bridge 没启动
 - `3030` 端口不可用
-- 前端先于 bridge 就绪开始调用
+- 前端先于 bridge 就绪开始调用 App Server JSON-RPC
 
 处理建议：
 
-- 确认 `electron:dev` 或 `verify:gui-smoke` 已启动 Electron host
+- 确认 `electron:dev` 或 `verify:gui-smoke` 已启动 Electron Desktop Host 与 App Server sidecar
 - 检查 bridge 健康接口
 - 刷新页面后复测，排除启动时序问题
 
@@ -638,16 +659,16 @@ npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 
 说明：
 
-- 页面可能依赖 fallback mock 继续运行
-- 但仍有命令先打到了 bridge 并报 unknown command
+- 页面可能依赖测试夹具或兼容 fallback 继续运行
+- 但仍有命令先打到了 Electron Desktop Host / App Server bridge 并报 unknown command / method
 
 处理建议：
 
-- 如果该命令属于浏览器模式可接受的降级能力，加入 mock 优先列表
-- 如果该命令属于当前主路径必须能力，补真实 bridge
-- 对浏览器资料 / 环境预设这类已桥接命令，优先排查真实 DevBridge 或默认种子，不要再把它们加回 mock 优先集合
+- 如果该命令属于当前主路径必须能力，补真实 Electron Desktop Host / App Server JSON-RPC2 bridge
+- 如果只是测试夹具能力，明确标记为 `test-only`，不要接回 production truth
+- 对浏览器资料 / 环境预设这类已桥接命令，优先排查真实 bridge 或默认种子，不要再把它们加回 mock 优先集合
 
-## 何时补 mock，何时补真实 bridge
+## 何时补测试夹具，何时补真实 bridge
 
 ### 优先补真实 bridge
 
@@ -658,7 +679,7 @@ npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 - 返回结构简单稳定
 - 不涉及复杂流式事件或强原生依赖
 
-### 优先补 mock
+### 只允许补 test-only fixture
 
 适用于：
 
@@ -667,13 +688,15 @@ npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 - 高频噪音命令，但不影响主流程完成
 - 流式 / 系统级能力，短期内 bridge 成本高于收益
 
+这些 fixture 只能位于测试、smoke 或显式 fixture backend 中，不能进入 `safeInvoke` 生产 fallback、mock priority 或 GUI 交付证据。
+
 ## 结果判定标准
 
 一次“继续测试”完成后，至少满足以下之一：
 
 1. 主路径走通且控制台 error 归零
 2. 主路径走通，且剩余错误已被明确归类为非阻塞项
-3. 已定位新的 bridge 缺口，并给出下一步最小修复点
+3. 已定位新的 Electron Desktop Host / App Server JSON-RPC2 bridge 缺口，并给出下一步最小修复点
 
 ## 交接要求
 
@@ -681,8 +704,8 @@ npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 
 - 当前停留页面
 - 已完成的业务步骤
-- 最新暴露的命令缺口
-- 推荐下一步先补 mock 还是先补 bridge
+- 最新暴露的 Electron IPC / App Server JSON-RPC method 缺口
+- 推荐下一步先补真实 bridge 还是只补 test-only fixture
 - 下一轮建议的 Playwright 复测路径
 
 ## 相关文档

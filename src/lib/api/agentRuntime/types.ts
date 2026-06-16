@@ -121,6 +121,7 @@ export interface AsterSessionInfo {
 export interface AgentRuntimeListSessionsOptions {
   includeArchived?: boolean;
   archivedOnly?: boolean;
+  cwd?: string | string[];
   workspaceId?: string;
   limit?: number;
 }
@@ -1231,6 +1232,7 @@ export interface AgentRuntimeSubmitTurnRequest {
 
 export interface AgentRuntimeCreateSessionOptions {
   runStartHooks?: boolean;
+  workingDir?: string | null;
   metadata?: Record<string, unknown>;
 }
 

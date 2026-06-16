@@ -390,6 +390,9 @@ export interface AgentRuntimeStatus {
     | "routing"
     | "context"
     | "permission_review"
+    | "retrying"
+    | "continuing"
+    | "synthesizing"
     | "failed"
     | "cancelled";
   title: string;

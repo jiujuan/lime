@@ -231,6 +231,7 @@ export function upsertTopicFromSessionDetail(
           ? existingTopic.title
           : detailTopic.title,
         workspaceId: detailTopic.workspaceId ?? existingTopic.workspaceId,
+        workingDir: detailTopic.workingDir ?? existingTopic.workingDir,
         isPinned: existingTopic.isPinned,
         hasUnread: existingTopic.hasUnread,
         tag: existingTopic.tag,
@@ -269,6 +270,7 @@ export function upsertFreshSessionDraftTopic(
     sessionId: string;
     sessionName?: string | null;
     workspaceId: string | null | undefined;
+    workingDir?: string | null;
   },
 ): Topic[] {
   const title = params.sessionName?.trim() || "新任务";
@@ -278,6 +280,7 @@ export function upsertFreshSessionDraftTopic(
     createdAt: params.createdAt,
     updatedAt: params.createdAt,
     workspaceId: params.workspaceId,
+    workingDir: params.workingDir ?? null,
     messagesCount: 0,
     executionStrategy: params.executionStrategy,
     status: "draft",

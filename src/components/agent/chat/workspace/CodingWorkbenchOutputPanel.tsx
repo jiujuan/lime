@@ -1,4 +1,6 @@
+import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { Pause, RefreshCw, Square, Terminal } from "lucide-react";
 import type { CodingWorkbenchView } from "@limecloud/agent-runtime-projection";
 import type { AgentRuntimeFileCheckpointThreadSummary } from "@/lib/api/agentRuntime";
 import type { ActionRequired, ConfirmResponse } from "../types";
@@ -16,6 +18,7 @@ interface CodingWorkbenchOutputPanelProps {
   codingView: CodingWorkbenchView;
   fileCheckpointSummary?: AgentRuntimeFileCheckpointThreadSummary | null;
   submittedActionsInFlight?: readonly ActionRequired[];
+  processControls?: CodingWorkbenchCommandProcessControls;
   onRespondToAction?: (response: ConfirmResponse) => void | Promise<void>;
   onSubmitRecoveryPrompt?: (
     prompt: string,
@@ -23,10 +26,18 @@ interface CodingWorkbenchOutputPanelProps {
   ) => void | Promise<boolean> | boolean;
 }
 
+export interface CodingWorkbenchCommandProcessControls {
+  onInterruptProcess?: (processId: string) => void | Promise<unknown>;
+  onTerminateProcess?: (processId: string) => void | Promise<unknown>;
+  onRefreshProcessStatus?: (processId: string) => void | Promise<unknown>;
+  onDrainProcessOutput?: (processId: string) => void | Promise<unknown>;
+}
+
 export function CodingWorkbenchOutputPanel({
   codingView,
   fileCheckpointSummary,
   submittedActionsInFlight,
+  processControls,
   onRespondToAction,
   onSubmitRecoveryPrompt,
 }: CodingWorkbenchOutputPanelProps) {
@@ -139,6 +150,14 @@ export function CodingWorkbenchOutputPanel({
                       {command.preview}
                     </pre>
                   ) : null}
+                  {command.processId ? (
+                    <CodingWorkbenchCommandProcessRow
+                      processId={command.processId}
+                      executionProcessStatus={command.executionProcessStatus}
+                      executionSurface={command.executionSurface}
+                      processControls={processControls}
+                    />
+                  ) : null}
                 </article>
               );
             })}
@@ -163,7 +182,10 @@ export function CodingWorkbenchOutputPanel({
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="truncate text-sm font-medium text-slate-900">
-                        {test.commandSummary || test.canonicalCommand || test.suite || test.title}
+                        {test.commandSummary ||
+                          test.canonicalCommand ||
+                          test.suite ||
+                          test.title}
                       </div>
                       <div className="mt-1 text-xs text-slate-500">
                         {t(
@@ -200,4 +222,178 @@ export function CodingWorkbenchOutputPanel({
       ) : null}
     </div>
   );
+}
+
+function CodingWorkbenchCommandProcessRow({
+  processId,
+  executionProcessStatus,
+  executionSurface,
+  processControls,
+}: {
+  processId: string;
+  executionProcessStatus?: string;
+  executionSurface?: string;
+  processControls?: CodingWorkbenchCommandProcessControls;
+}) {
+  const { t } = useTranslation("agent");
+  const live = isLiveExecutionProcessStatus(executionProcessStatus);
+  const hasControls =
+    live &&
+    Boolean(
+      processControls?.onInterruptProcess ||
+      processControls?.onTerminateProcess ||
+      processControls?.onRefreshProcessStatus ||
+      processControls?.onDrainProcessOutput,
+    );
+
+  return (
+    <div className="mt-3 flex min-h-8 items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-600">
+      <div className="flex min-w-0 items-center gap-2">
+        <Terminal className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+        <span className="truncate">
+          {t("agentChat.canvasWorkbench.coding.outputs.processId", {
+            id: processId,
+          })}
+        </span>
+        {executionProcessStatus ? (
+          <span className="shrink-0 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] text-slate-500">
+            {t("agentChat.canvasWorkbench.coding.outputs.processStatus", {
+              status: executionProcessStatus,
+            })}
+          </span>
+        ) : null}
+        {executionSurface ? (
+          <span className="hidden shrink-0 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] text-slate-500 sm:inline-flex">
+            {t("agentChat.canvasWorkbench.coding.outputs.processSurface", {
+              surface: executionSurface,
+            })}
+          </span>
+        ) : null}
+      </div>
+      {hasControls ? (
+        <CodingWorkbenchCommandProcessButtons
+          processId={processId}
+          processControls={processControls}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function CodingWorkbenchCommandProcessButtons({
+  processId,
+  processControls,
+}: {
+  processId: string;
+  processControls?: CodingWorkbenchCommandProcessControls;
+}) {
+  const { t } = useTranslation("agent");
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
+
+  const run = async (
+    action: string,
+    handler: ((processId: string) => void | Promise<unknown>) | undefined,
+  ) => {
+    if (!handler || pendingAction) return;
+    setPendingAction(action);
+    try {
+      await handler(processId);
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  return (
+    <div
+      className="flex shrink-0 items-center gap-1"
+      data-testid="coding-workbench-command-process-controls"
+    >
+      {processControls?.onRefreshProcessStatus ? (
+        <ProcessControlButton
+          label={t(
+            "agentChat.canvasWorkbench.coding.outputs.processRefreshAria",
+            { id: processId },
+          )}
+          pending={pendingAction === "refresh"}
+          disabled={Boolean(pendingAction)}
+          onClick={() => run("refresh", processControls.onRefreshProcessStatus)}
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+        </ProcessControlButton>
+      ) : null}
+      {processControls?.onDrainProcessOutput ? (
+        <ProcessControlButton
+          label={t(
+            "agentChat.canvasWorkbench.coding.outputs.processDrainAria",
+            {
+              id: processId,
+            },
+          )}
+          pending={pendingAction === "drain"}
+          disabled={Boolean(pendingAction)}
+          onClick={() => run("drain", processControls.onDrainProcessOutput)}
+        >
+          <Terminal className="h-3.5 w-3.5" />
+        </ProcessControlButton>
+      ) : null}
+      {processControls?.onInterruptProcess ? (
+        <ProcessControlButton
+          label={t(
+            "agentChat.canvasWorkbench.coding.outputs.processInterruptAria",
+            { id: processId },
+          )}
+          pending={pendingAction === "interrupt"}
+          disabled={Boolean(pendingAction)}
+          onClick={() => run("interrupt", processControls.onInterruptProcess)}
+        >
+          <Pause className="h-3.5 w-3.5" />
+        </ProcessControlButton>
+      ) : null}
+      {processControls?.onTerminateProcess ? (
+        <ProcessControlButton
+          label={t(
+            "agentChat.canvasWorkbench.coding.outputs.processTerminateAria",
+            { id: processId },
+          )}
+          pending={pendingAction === "terminate"}
+          disabled={Boolean(pendingAction)}
+          onClick={() => run("terminate", processControls.onTerminateProcess)}
+        >
+          <Square className="h-3.5 w-3.5" />
+        </ProcessControlButton>
+      ) : null}
+    </div>
+  );
+}
+
+function ProcessControlButton({
+  label,
+  pending,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string;
+  pending: boolean;
+  disabled: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={onClick}
+      className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      <span className={pending ? "animate-spin" : ""}>{children}</span>
+    </button>
+  );
+}
+
+function isLiveExecutionProcessStatus(status?: string): boolean {
+  const normalized = status?.trim().toLowerCase();
+  return normalized === "running" || normalized === "starting";
 }

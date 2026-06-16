@@ -8,9 +8,14 @@ import type {
   AgentUiProjectionState,
   AgentUiRuntimeStatusView,
 } from "@limecloud/agent-ui-contracts";
+import {
+  codingProcessFactsFromInput,
+  mergeCodingProcessFacts,
+  type CodingProcessFactInput,
+} from "./codingProcessFacts.js";
 import { projectAgentUiState } from "./uiState.js";
 
-export interface CodingReadModelCommandFact {
+export interface CodingReadModelCommandFact extends CodingProcessFactInput {
   command_id?: string;
   commandId?: string;
   status?: string;
@@ -184,7 +189,7 @@ export interface PatchView {
   sourceEventIds: string[];
 }
 
-export interface CommandOutputView {
+export interface CommandOutputView extends CodingProcessFactInput {
   commandId: string;
   status: string;
   title: string;
@@ -882,6 +887,10 @@ function collectCommands(
         safeRelativePath(payloadString(event, "cwd", "workingDirectory")) ??
         previous?.cwd,
       exitCode: payloadNumber(event, "exitCode") ?? previous?.exitCode,
+      ...mergeCodingProcessFacts(
+        previous ?? {},
+        codingProcessFactsFromInput(payload(event)),
+      ),
       outputRefs: [...new Set([...(previous?.outputRefs ?? []), ...outputRefs(event)])],
       preview:
         safePreview(payloadString(event, "preview", "summary")) ??
@@ -962,6 +971,7 @@ function commandFromReadModel(
     ),
     cwd: safeRelativePath(valueString(command.cwd)),
     exitCode: valueNumber(command.exit_code, command.exitCode),
+    ...codingProcessFactsFromInput(command),
     outputRefs: valueStringArray(command.output_refs, command.outputRefs),
     preview: safePreview(
       valueString(command.output_preview, command.outputPreview),

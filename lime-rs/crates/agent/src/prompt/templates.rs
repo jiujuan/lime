@@ -46,7 +46,7 @@ pub const TOOL_GUIDELINES: &str = r#"# 工具使用策略
 - **Agent / TeamCreate / TeamDelete / SendMessage / ListPeers**: 当前 team runtime 主路径
 
 ### 人在环工具
-- **AskUserQuestion**: 向用户请求确认或补充信息
+- **request_user_input**: 向用户请求确认或补充信息
 
 ## 使用原则
 

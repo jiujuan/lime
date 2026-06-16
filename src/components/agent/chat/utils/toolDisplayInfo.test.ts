@@ -13,7 +13,6 @@ import {
 
 const REFERENCE_JS_TOOL_NAME_MAPPINGS = [
   ["AgentTool", "agent"],
-  ["AskUserQuestionTool", "askuserquestion"],
   ["BashTool", "bash"],
   ["developer__shell", "bash"],
   ["mcp__system__shell", "bash"],
@@ -22,6 +21,10 @@ const REFERENCE_JS_TOOL_NAME_MAPPINGS = [
   ["local_shell_call", "bash"],
   ["BriefTool", "sendusermessage"],
   ["ConfigTool", "config"],
+  ["request_user_input", "requestuserinput"],
+  ["RequestUserInputTool", "requestuserinput"],
+  ["update_plan", "updateplan"],
+  ["UpdatePlanTool", "updateplan"],
   ["EnterPlanModeTool", "enterplanmode"],
   ["EnterWorktreeTool", "enterworktree"],
   ["ExitPlanModeTool", "exitplanmode"],
@@ -89,21 +92,22 @@ describe("toolDisplayInfo", () => {
       expect(normalizeToolNameKey(toolName)).toBe(expected);
     }
 
-    expect(normalizeToolNameKey("RequestUserInputTool")).toBe(
-      "askuserquestion",
+    expect(normalizeToolNameKey("AskUserQuestionTool")).toBe(
+      "askuserquestiontool",
     );
     expect(normalizeToolNameKey("AgentOutputTool")).toBe("taskoutput");
     expect(normalizeToolNameKey("BashOutputTool")).toBe("taskoutput");
   });
 
   it("应为参考 JS 工具目录名解析出当前展示文案", () => {
-    expect(resolveToolDisplayLabel("AskUserQuestionTool")).toBe("用户确认");
+    expect(resolveToolDisplayLabel("request_user_input")).toBe("用户输入");
     expect(resolveToolDisplayLabel("BriefTool")).toBe("用户消息");
     expect(resolveToolDisplayLabel("developer__shell")).toBe("命令执行");
     expect(resolveToolDisplayLabel("exec_command")).toBe("命令执行");
     expect(resolveToolDisplayLabel("FileReadTool")).toBe("文件读取");
     expect(resolveToolDisplayLabel("mcp__system__read_file")).toBe("文件读取");
     expect(resolveToolDisplayLabel("ConfigTool")).toBe("运行配置");
+    expect(resolveToolDisplayLabel("update_plan")).toBe("计划更新");
     expect(resolveToolDisplayLabel("PowerShellTool")).toBe("PowerShell");
     expect(resolveToolDisplayLabel("WorkflowTool")).toBe("工作流执行");
     expect(resolveToolDisplayLabel("MCPTool")).toBe("MCP 工具");

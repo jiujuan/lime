@@ -163,7 +163,8 @@ describe("AgentThreadTimelineArtifactCard", () => {
     expect(container.textContent).not.toContain('"artifactId"');
   });
 
-  it("普通 JSON 文件也不应把原始结构直接摊在聊天区", () => {
+  it("普通 JSON 文件应渲染为文件附件卡且不摊开原始结构", async () => {
+    const onOpenArtifactFromTimeline = vi.fn();
     const container = renderCard(
       createFileArtifactItem({
         path: ".lime/artifacts/thread-1/runtime-state.json",
@@ -174,14 +175,34 @@ describe("AgentThreadTimelineArtifactCard", () => {
         }),
         metadata: {},
       }),
+      { onOpenArtifactFromTimeline },
     );
 
-    expect(container.textContent).toContain("已同步");
-    expect(container.textContent).toContain(
-      "包含结构化结果，点击在画布中查看完整内容。",
-    );
+    expect(
+      container.querySelector('[data-testid="timeline-file-attachment-card"]'),
+    ).not.toBeNull();
+    expect(container.textContent).toContain("runtime-state.json");
+    expect(container.textContent).toContain("代码 · JSON");
+    expect(container.textContent).toContain("打开文件");
+    expect(container.textContent).not.toContain("打开方式");
     expect(container.textContent).not.toContain('"queue"');
     expect(container.textContent).not.toContain('"retryable"');
+
+    const openButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>("button"),
+    ).find((button) => button.textContent?.includes("打开文件"));
+
+    await act(async () => {
+      openButton?.click();
+      await Promise.resolve();
+    });
+
+    expect(onOpenArtifactFromTimeline).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filePath: ".lime/artifacts/thread-1/runtime-state.json",
+        openMode: "file_preview",
+      }),
+    );
   });
 
   it("首屏省略 artifact 正文时应使用 metadata 渲染卡片摘要", () => {
@@ -264,6 +285,7 @@ describe("AgentThreadTimelineArtifactCard", () => {
         timelineItemId: "artifact-1",
         filePath: ".app-server/artifacts/quarterly-review.md",
         content: "# 季度复盘\n\n这里是 App Server 返回的完整正文。",
+        openMode: "artifact_review",
       }),
     );
   });
@@ -367,7 +389,7 @@ describe("AgentThreadTimelineArtifactCard", () => {
     expect(badge?.getAttribute("title")).not.toContain("产物快照");
   });
 
-  it("Markdown 文件产物应明确标识为可沉淀的 Document 产物", () => {
+  it("Markdown 文件产物应展示为文件附件并保留保存到项目资料动作", () => {
     const onSaveFileArtifactAsKnowledge = vi.fn();
     const content =
       "# 谢晶营销文案包 v1.0\n\n## 视频号口播\n这是一份可以进入项目资料的营销文案产物，包含口播、朋友圈和私信话术。";
@@ -386,8 +408,15 @@ describe("AgentThreadTimelineArtifactCard", () => {
       },
     );
 
-    expect(container.textContent).toContain("Document 产物");
-    expect(container.textContent).toContain("可保存到项目资料");
+    expect(
+      container.querySelector('[data-testid="timeline-file-attachment-card"]'),
+    ).not.toBeNull();
+    expect(container.textContent).toContain(
+      "谢晶_营销文案包_KnowledgeV2_E2E.md",
+    );
+    expect(container.textContent).toContain("文档 · MD");
+    expect(container.textContent).toContain("打开文件");
+    expect(container.textContent).not.toContain("打开方式");
     expect(container.textContent).toContain("保存这份文档");
 
     const saveButton = Array.from(

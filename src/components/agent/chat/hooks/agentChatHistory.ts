@@ -664,8 +664,8 @@ function buildMessageFromThreadItem(
 
   const content =
     item.type === "user_message"
-      ? normalizeHistoryString(item.content).trim()
-      : normalizeHistoryString(item.text).trim();
+      ? readThreadItemText(item, ["content", "text", "message"])
+      : readThreadItemText(item, ["text", "content", "message"]);
   const role = item.type === "user_message" ? "user" : "assistant";
   const sanitizedContent = sanitizeMessageTextForDisplay(content, {
     role,
@@ -964,6 +964,20 @@ const AUXILIARY_HISTORY_TURN_ID_PREFIX = "auxiliary-runtime-projection-";
 
 function normalizeHistoryString(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+function readThreadItemText(
+  item: AgentThreadItem,
+  keys: readonly string[],
+): string {
+  const record = item as unknown as Record<string, unknown>;
+  for (const key of keys) {
+    const value = normalizeHistoryString(record[key]).trim();
+    if (value) {
+      return value;
+    }
+  }
+  return "";
 }
 
 function isAuxiliaryHistoryTurn(turn: AgentThreadTurn) {

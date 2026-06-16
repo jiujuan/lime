@@ -684,7 +684,7 @@ function summarizeOtherItem(item: AgentThreadItem): string | null {
     const normalized = normalizeToolName(item.tool_name);
     const args = asRecord(item.arguments);
 
-    if (normalized === "askuserquestion") {
+    if (normalized === "requestuserinput") {
       return prefixAction(
         readString(args, ["question", "prompt", "header"]) || "等你确认这一步",
         "等你确认：",

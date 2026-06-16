@@ -36,6 +36,7 @@ pub(super) fn runtime_session_read_detail(stored: &StoredSession) -> serde_json:
         "status": agent_session_status_label(stored.session.status),
         "working_dir": session_working_dir(&stored.session),
         "execution_strategy": session_execution_strategy(&stored.session),
+        "execution_runtime": session_execution_runtime(&stored.session),
         "messages_count": messages_count,
         "history_limit": messages_count,
         "history_offset": 0,
@@ -667,4 +668,51 @@ fn session_working_dir(session: &AgentSession) -> Option<String> {
         super::metadata_string(reference.metadata.as_ref(), "workingDir")
             .or_else(|| super::metadata_string(reference.metadata.as_ref(), "working_dir"))
     })
+}
+
+fn session_execution_runtime(session: &AgentSession) -> serde_json::Value {
+    let metadata = session
+        .business_object_ref
+        .as_ref()
+        .and_then(|reference| reference.metadata.as_ref());
+    let runtime = json!({
+        "session_id": session.session_id,
+        "provider_selector": metadata_string_alias(metadata, &["providerSelector", "provider_selector"]),
+        "provider_name": metadata_string_alias(metadata, &["providerName", "provider_name"]),
+        "model_name": metadata_string_alias(metadata, &["modelName", "model_name", "model"]),
+        "execution_strategy": session_execution_strategy(session),
+        "recent_access_mode": metadata_string_alias(metadata, &["recentAccessMode", "recent_access_mode"]),
+        "recent_preferences": metadata_value_alias(metadata, &["recentPreferences", "recent_preferences"]),
+        "recent_team_selection": metadata_value_alias(metadata, &["recentTeamSelection", "recent_team_selection"]),
+        "source": "session_metadata",
+        "mode": "current",
+    });
+    compact_json_nulls(runtime)
+}
+
+fn metadata_string_alias(metadata: Option<&serde_json::Value>, keys: &[&str]) -> Option<String> {
+    keys.iter()
+        .find_map(|key| super::metadata_string(metadata, key))
+}
+
+fn metadata_value_alias(
+    metadata: Option<&serde_json::Value>,
+    keys: &[&str],
+) -> Option<serde_json::Value> {
+    let metadata = metadata?;
+    keys.iter()
+        .find_map(|key| metadata.get(*key))
+        .filter(|value| !value.is_null())
+        .cloned()
+}
+
+fn compact_json_nulls(value: serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::Object(map) => serde_json::Value::Object(
+            map.into_iter()
+                .filter_map(|(key, value)| (!value.is_null()).then_some((key, value)))
+                .collect(),
+        ),
+        value => value,
+    }
 }

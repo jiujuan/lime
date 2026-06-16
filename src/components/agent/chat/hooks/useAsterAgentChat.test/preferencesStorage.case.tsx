@@ -309,7 +309,11 @@ describe("useAsterAgentChat 偏好持久化 - storage cleanup", () => {
         workspaceId,
         undefined,
         "react",
-        { runStartHooks: true },
+        {
+          runStartHooks: true,
+          workingDir: null,
+          metadata: undefined,
+        },
       );
     } finally {
       harness.unmount();
@@ -368,7 +372,11 @@ describe("useAsterAgentChat 偏好持久化 - storage cleanup", () => {
         workspaceId,
         undefined,
         "react",
-        { runStartHooks: true },
+        {
+          runStartHooks: true,
+          workingDir: null,
+          metadata: undefined,
+        },
       );
       expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledWith(
         expect.objectContaining({

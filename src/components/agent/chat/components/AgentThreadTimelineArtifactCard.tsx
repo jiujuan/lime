@@ -142,6 +142,48 @@ function resolveFileName(path: string): string {
   return parts[parts.length - 1] || normalized;
 }
 
+function resolveFileExtension(path: string): string | null {
+  const fileName = resolveFileName(path).split(/[?#]/)[0] || "";
+  const match = /\.([a-z0-9]+)$/i.exec(fileName);
+  return match?.[1]?.toUpperCase() || null;
+}
+
+function resolveFileKindKey(path: string): string {
+  const extension = resolveFileExtension(path)?.toLowerCase();
+  if (
+    extension &&
+    ["md", "markdown", "txt", "doc", "docx", "pdf"].includes(extension)
+  ) {
+    return "agentChat.messageList.fileArtifact.kind.document";
+  }
+  if (
+    extension &&
+    [
+      "js",
+      "jsx",
+      "ts",
+      "tsx",
+      "json",
+      "css",
+      "html",
+      "py",
+      "rs",
+      "go",
+      "java",
+      "c",
+      "cpp",
+      "h",
+      "hpp",
+      "toml",
+      "yaml",
+      "yml",
+    ].includes(extension)
+  ) {
+    return "agentChat.messageList.fileArtifact.kind.code";
+  }
+  return "agentChat.messageList.fileArtifact.kind.file";
+}
+
 function truncateMiddle(value: string, maxLength = 72): string {
   const normalized = value.trim();
   if (normalized.length <= maxLength) {
@@ -481,6 +523,16 @@ export function AgentThreadTimelineArtifactCard({
   const canSaveAsKnowledge = Boolean(
     onSaveFileArtifactAsKnowledge && sourceMessageId && knowledgeDocumentSource,
   );
+  const hasArtifactDocumentFacts = Boolean(
+    artifactProjectionId ||
+      metadataKind ||
+      metadataStatus ||
+      metadataVersionNo ||
+      metadataVersionId ||
+      snapshotPath ||
+      metadataVersionDiff ||
+      validationIssueCount > 0,
+  );
   const resolveOpenTarget = async (
     target: ArtifactTimelineOpenTarget,
   ): Promise<ArtifactTimelineOpenTarget> => {
@@ -505,6 +557,98 @@ export function AgentThreadTimelineArtifactCard({
     const resolvedTarget = await resolveOpenTarget(target).catch(() => target);
     onOpenArtifactFromTimeline?.(resolvedTarget);
   };
+  const openFileAttachment = () => {
+    if (onOpenArtifactFromTimeline && navigation) {
+      void openTimelineTarget(navigation.rootTarget);
+      return;
+    }
+
+    if (item.content?.trim()) {
+      onFileClick?.(item.path, item.content);
+      return;
+    }
+
+    void readTimelineArtifactContent(item)
+      .then((artifactContent) => {
+        onFileClick?.(
+          artifactContent?.filePath || item.path,
+          artifactContent?.content || "",
+        );
+      })
+      .catch(() => {
+        onFileClick?.(item.path, "");
+      });
+  };
+
+  if (!document && !hasArtifactDocumentFacts) {
+    const fileName = resolveFileName(item.path);
+    const extension = resolveFileExtension(item.path);
+    const fileKind = String(t(resolveFileKindKey(item.path) as never));
+    const openAriaLabel = String(
+      t(
+        "agentChat.messageList.fileArtifact.openAria" as never,
+        { name: fileName } as never,
+      ),
+    );
+
+    return (
+      <div className="py-1.5">
+        <div
+          data-testid="timeline-file-attachment-card"
+          className="overflow-hidden rounded-xl border border-slate-200 bg-white text-left shadow-sm shadow-slate-950/5"
+        >
+          <div className="flex items-center gap-3 px-3 py-2.5">
+            <button
+              type="button"
+              className="group flex min-w-0 flex-1 items-center gap-3 text-left"
+              onClick={openFileAttachment}
+              aria-label={openAriaLabel}
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-500">
+                <FileText className="h-[18px] w-[18px]" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold leading-5 text-slate-900">
+                  {fileName}
+                </span>
+                <span className="mt-0.5 block text-xs leading-5 text-slate-500">
+                  {fileKind}
+                  {extension ? ` · ${extension}` : ""}
+                </span>
+              </span>
+            </button>
+
+            {canSaveAsKnowledge && knowledgeDocumentSource ? (
+              <button
+                type="button"
+                className="hidden shrink-0 rounded-lg border border-sky-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-sky-700 transition hover:border-sky-300 hover:bg-sky-50 sm:inline-flex"
+                onClick={() =>
+                  onSaveFileArtifactAsKnowledge?.({
+                    messageId: sourceMessageId!,
+                    content: knowledgeDocumentSource.content,
+                    sourceName: knowledgeDocumentSource.sourceName,
+                    description: knowledgeDocumentSource.description,
+                  })
+                }
+              >
+                {t("agentChat.messageList.artifact.saveDocument")}
+              </button>
+            ) : null}
+
+            <button
+              type="button"
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+              onClick={openFileAttachment}
+              aria-label={openAriaLabel}
+            >
+              <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+              {t("agentChat.messageList.fileArtifact.openFile")}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="py-1.5">

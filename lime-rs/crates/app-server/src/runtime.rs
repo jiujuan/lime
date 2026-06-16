@@ -9,6 +9,7 @@ mod backend;
 mod capabilities;
 mod coding_activity_projection;
 mod connect;
+mod conversation_import;
 mod diagnostics;
 mod event_log;
 mod event_store;
@@ -19,7 +20,6 @@ mod file_system;
 mod gateway;
 mod gateway_runner;
 mod knowledge;
-mod legacy_message_backfill;
 mod load_context;
 mod mcp;
 mod media_tasks;
@@ -36,6 +36,8 @@ mod session_control;
 mod session_files;
 mod session_hydration;
 mod session_lifecycle;
+pub(crate) mod session_list_scope;
+pub(crate) mod session_title;
 pub(crate) mod sidecar_store;
 mod skills;
 mod status;
@@ -80,8 +82,6 @@ pub use event_log::EventLogRecord;
 pub use event_log::EventLogWriter;
 pub use evidence_provider::BasicEvidenceExportProvider;
 pub use evidence_provider::NoopEvidenceExportProvider;
-pub use legacy_message_backfill::LegacyAgentMessage;
-pub use legacy_message_backfill::LegacyAgentSessionTranscript;
 pub use output_refs::FilesystemOutputSnapshotStore;
 pub use output_refs::NoopOutputSnapshotStore;
 pub use output_refs::OutputSnapshotReadRequest;
@@ -341,7 +341,6 @@ pub struct RuntimeCore {
     evidence_export_provider: Arc<dyn EvidenceExportProvider>,
     knowledge_builder_runtime_executor: Arc<dyn KnowledgeBuilderRuntimeExecutor>,
     app_data_source: Arc<dyn AppDataSource>,
-    pub(in crate::runtime) legacy_message_cleanup_policy: LegacyMessageCleanupPolicy,
 }
 
 #[derive(Clone)]
@@ -358,41 +357,6 @@ pub struct RuntimeCoreEventAppender {
 pub(in crate::runtime) struct RuntimeCoreState {
     pub(in crate::runtime) sessions: HashMap<String, StoredSession>,
     agent_app_ui_runtimes: HashMap<String, agent_apps::AgentAppUiRuntimeProcess>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LegacyMessageCleanupPolicy {
-    Retain,
-    ClearRows,
-    DropEmptyTables,
-}
-
-impl Default for LegacyMessageCleanupPolicy {
-    fn default() -> Self {
-        Self::DropEmptyTables
-    }
-}
-
-impl LegacyMessageCleanupPolicy {
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Retain => "retain",
-            Self::ClearRows => "clear-rows",
-            Self::DropEmptyTables => "drop-empty-tables",
-        }
-    }
-
-    pub fn parse(value: &str) -> Result<Self, String> {
-        let normalized = value.trim().to_ascii_lowercase();
-        match normalized.as_str() {
-            "retain" => Ok(Self::Retain),
-            "clear-rows" => Ok(Self::ClearRows),
-            "drop-empty-tables" => Ok(Self::DropEmptyTables),
-            _ => Err(format!(
-                "unsupported legacy message cleanup policy: {value}"
-            )),
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -466,7 +430,6 @@ impl RuntimeCore {
                 NativeKnowledgeBuilderRuntimeExecutor::new(),
             ),
             app_data_source: Arc::new(NoopAppDataSource),
-            legacy_message_cleanup_policy: LegacyMessageCleanupPolicy::default(),
         }
     }
 
@@ -508,14 +471,6 @@ impl RuntimeCore {
 
     pub fn with_telemetry_store(mut self, telemetry_store: Arc<TelemetryStore>) -> Self {
         self.telemetry_store = Some(telemetry_store);
-        self
-    }
-
-    pub fn with_legacy_message_cleanup_policy(
-        mut self,
-        policy: LegacyMessageCleanupPolicy,
-    ) -> Self {
-        self.legacy_message_cleanup_policy = policy;
         self
     }
 

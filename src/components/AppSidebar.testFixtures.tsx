@@ -46,7 +46,6 @@ const {
   mockCreateProjectGitWorktree,
   mockRevealPathInFinder,
   mockUpdateAgentRuntimeSession,
-  mockArchiveManyAgentRuntimeSessions,
   mockDeleteAgentRuntimeSession,
   mockSetI18nLanguage,
   mockScheduleMinimumDelayIdleTask,
@@ -82,7 +81,6 @@ const {
   mockCreateProjectGitWorktree: vi.fn(),
   mockRevealPathInFinder: vi.fn(),
   mockUpdateAgentRuntimeSession: vi.fn(),
-  mockArchiveManyAgentRuntimeSessions: vi.fn(),
   mockDeleteAgentRuntimeSession: vi.fn(),
   mockSetI18nLanguage: vi.fn(),
   mockScheduleMinimumDelayIdleTask: vi.fn((task: () => void) => {
@@ -117,7 +115,6 @@ export {
   mockClearSiteAdapterCatalogCache,
   mockCheckForUpdates,
   mockCreateExternalBrowserOpenTarget,
-  mockArchiveManyAgentRuntimeSessions,
   mockDeleteAgentRuntimeSession,
   mockGetUpdateInstallSession,
   mockGetClientReferralDashboard,
@@ -165,7 +162,6 @@ vi.mock("@/i18n/legacy-patch/I18nPatchProvider", () => ({
 
 vi.mock("@/lib/api/agentRuntime", () => ({
   AGENT_RUNTIME_SESSIONS_CHANGED_EVENT: "lime:agent-runtime-sessions-changed",
-  archiveManyAgentRuntimeSessions: mockArchiveManyAgentRuntimeSessions,
   deleteAgentRuntimeSession: mockDeleteAgentRuntimeSession,
   listAgentRuntimeSessions: mockListAgentRuntimeSessions,
   updateAgentRuntimeSession: mockUpdateAgentRuntimeSession,
@@ -468,7 +464,6 @@ export async function resetAppSidebarTest() {
   mockGetProject.mockResolvedValue(null);
   mockUpdateProject.mockResolvedValue({});
   mockDeleteProject.mockResolvedValue(true);
-  mockArchiveManyAgentRuntimeSessions.mockResolvedValue([]);
   mockEnsureProjectWorkspace.mockResolvedValue({
     id: "project-worktree",
     name: "project-worktree",

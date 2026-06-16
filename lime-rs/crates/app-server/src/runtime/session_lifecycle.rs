@@ -1,4 +1,7 @@
 use super::read_model;
+use super::session_list_scope::normalize_cwd_values;
+use super::session_list_scope::SessionListScope;
+use super::session_title;
 use super::*;
 use app_server_protocol::*;
 use serde_json::json;
@@ -6,19 +9,21 @@ use std::collections::{HashMap, HashSet};
 
 fn stored_session_to_overview(stored: &StoredSession) -> AgentSessionOverview {
     let session = &stored.session;
+    let explicit_title = session
+        .business_object_ref
+        .as_ref()
+        .and_then(|reference| reference.title.clone())
+        .or_else(|| {
+            session
+                .business_object_ref
+                .as_ref()
+                .and_then(|reference| metadata_string(reference.metadata.as_ref(), "title"))
+        });
+    let first_user_message = first_user_message_from_stored_session(stored);
     AgentSessionOverview {
         session_id: session.session_id.clone(),
         thread_id: Some(session.thread_id.clone()),
-        title: session
-            .business_object_ref
-            .as_ref()
-            .and_then(|reference| reference.title.clone())
-            .or_else(|| {
-                session
-                    .business_object_ref
-                    .as_ref()
-                    .and_then(|reference| metadata_string(reference.metadata.as_ref(), "title"))
-            }),
+        title: session_title::resolve_session_title(explicit_title, first_user_message),
         model: session
             .business_object_ref
             .as_ref()
@@ -54,6 +59,27 @@ fn stored_session_to_overview(stored: &StoredSession) -> AgentSessionOverview {
             }),
         messages_count: read_model::runtime_session_messages(stored).len(),
     }
+}
+
+fn first_user_message_from_stored_session(stored: &StoredSession) -> Option<String> {
+    stored
+        .turns
+        .iter()
+        .find_map(|turn| {
+            stored
+                .turn_inputs
+                .get(&turn.turn_id)
+                .and_then(session_title::first_user_message_from_agent_input)
+        })
+        .or_else(|| {
+            stored
+                .events
+                .iter()
+                .filter(|event| event.event_type == turn_input_events::TURN_INPUT_EVENT_TYPE)
+                .find_map(|event| {
+                    session_title::first_user_message_from_runtime_payload(&event.payload)
+                })
+        })
 }
 
 fn stored_session_hidden_from_user_recents(stored: &StoredSession) -> bool {
@@ -208,11 +234,7 @@ impl RuntimeCore {
             return Vec::new();
         }
 
-        let workspace_id = params
-            .workspace_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty());
+        let scope = SessionListScope::from_params(params);
         let state = self
             .state
             .lock()
@@ -221,14 +243,13 @@ impl RuntimeCore {
             .sessions
             .values()
             .filter(|stored| !stored_session_hidden_from_user_recents(stored))
-            .filter(|stored| {
-                workspace_id
-                    .map(|workspace_id| {
-                        stored.session.workspace_id.as_deref() == Some(workspace_id)
-                    })
-                    .unwrap_or(true)
-            })
             .map(stored_session_to_overview)
+            .filter(|overview| {
+                scope.matches_session(
+                    overview.workspace_id.as_deref(),
+                    overview.working_dir.as_deref(),
+                )
+            })
             .collect()
     }
 
@@ -236,17 +257,9 @@ impl RuntimeCore {
         &self,
         params: AgentSessionListParams,
     ) -> Result<AgentSessionListResponse, RuntimeCoreError> {
-        self.backfill_legacy_agent_messages_for_list(&params)
-            .await?;
-        let mut sessions = self
-            .app_data_source
-            .list_current_timeline_sessions(params.clone())
-            .await?
-            .sessions;
-        let mut persisted_session_ids: HashSet<String> = sessions
-            .iter()
-            .map(|session| session.session_id.clone())
-            .collect();
+        let params = self.normalize_agent_session_list_params(params).await?;
+        let mut sessions = Vec::new();
+        let mut persisted_session_ids = HashSet::new();
         if let Some(projection_store) = self.projection_store.as_ref() {
             let projected = projection_store
                 .list_session_overviews(&params)
@@ -267,6 +280,39 @@ impl RuntimeCore {
             sessions.truncate(limit);
         }
         Ok(AgentSessionListResponse { sessions })
+    }
+
+    async fn normalize_agent_session_list_params(
+        &self,
+        mut params: AgentSessionListParams,
+    ) -> Result<AgentSessionListParams, RuntimeCoreError> {
+        if params.cwd.is_some() {
+            params.workspace_id = None;
+            return Ok(params);
+        }
+
+        let Some(workspace_id) = params
+            .workspace_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        else {
+            return Ok(params);
+        };
+
+        let response = self
+            .app_data_source
+            .read_workspace(WorkspaceReadParams {
+                id: workspace_id.to_string(),
+            })
+            .await?;
+        let root_path = response.workspace.as_ref().and_then(workspace_root_path);
+        let cwd_filters = normalize_cwd_values(root_path);
+        if !cwd_filters.is_empty() {
+            params.cwd = Some(AgentSessionCwdFilter::Many(cwd_filters));
+            params.workspace_id = None;
+        }
+        Ok(params)
     }
 
     pub fn start_session(
@@ -354,20 +400,29 @@ impl RuntimeCore {
         {
             return Ok(AgentSessionUpdateResponse { session });
         }
-        self.app_data_source
-            .update_current_timeline_session(AgentSessionUpdateParams {
-                session_id: normalized_session_id,
-                title: params.title,
-                archived: params.archived,
-                provider_selector: params.provider_selector,
-                provider_name: params.provider_name,
-                model_name: params.model_name,
-                execution_strategy: params.execution_strategy,
-                recent_access_mode: params.recent_access_mode,
-                recent_preferences: params.recent_preferences,
-                recent_team_selection: params.recent_team_selection,
-            })
-            .await
+        if let Some(projection_store) = self.projection_store.as_ref() {
+            if let Some(response) = projection_store
+                .update_session_overview(
+                    AgentSessionUpdateParams {
+                        session_id: normalized_session_id.clone(),
+                        title: params.title.clone(),
+                        archived: params.archived,
+                        provider_selector: params.provider_selector.clone(),
+                        provider_name: params.provider_name.clone(),
+                        model_name: params.model_name.clone(),
+                        execution_strategy: params.execution_strategy.clone(),
+                        recent_access_mode: params.recent_access_mode.clone(),
+                        recent_preferences: params.recent_preferences.clone(),
+                        recent_team_selection: params.recent_team_selection.clone(),
+                    },
+                    timestamp().as_str(),
+                )
+                .map_err(RuntimeCoreError::Backend)?
+            {
+                return Ok(response);
+            }
+        }
+        Err(RuntimeCoreError::SessionNotFound(normalized_session_id))
     }
 
     pub async fn archive_many_agent_sessions(
@@ -405,13 +460,17 @@ impl RuntimeCore {
         }
 
         if !remaining_persisted_session_ids.is_empty() {
-            let response = self
-                .app_data_source
-                .archive_many_current_timeline_sessions(AgentSessionArchiveManyParams {
-                    session_ids: remaining_persisted_session_ids,
-                })
-                .await?;
-            sessions.extend(response.sessions);
+            if let Some(projection_store) = self.projection_store.as_ref() {
+                let (response, _missing_session_ids) = projection_store
+                    .archive_many_sessions(
+                        AgentSessionArchiveManyParams {
+                            session_ids: remaining_persisted_session_ids,
+                        },
+                        timestamp().as_str(),
+                    )
+                    .map_err(RuntimeCoreError::Backend)?;
+                sessions.extend(response.sessions);
+            }
         }
 
         sessions.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
@@ -439,14 +498,13 @@ impl RuntimeCore {
         stored.session.updated_at = timestamp();
         if params.archived.unwrap_or(false) {
             return Err(RuntimeCoreError::Backend(
-                "agentSession/update archived is only supported for persisted current timeline sessions"
-                    .to_string(),
+                "agentSession/update archived is only supported for persisted sessions".to_string(),
             ));
         }
         Ok(Some(stored_session_to_overview(stored)))
     }
 
-    pub(in crate::runtime) async fn ensure_current_timeline_session_hydrated(
+    pub(in crate::runtime) async fn ensure_current_session_hydrated(
         &self,
         session_id: &str,
     ) -> Result<(), RuntimeCoreError> {
@@ -567,4 +625,13 @@ impl RuntimeCore {
             stored.turn_inputs.insert(turn.turn_id, input);
         }
     }
+}
+
+fn workspace_root_path(workspace: &serde_json::Value) -> Option<&str> {
+    workspace
+        .get("rootPath")
+        .or_else(|| workspace.get("root_path"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
 }

@@ -624,18 +624,35 @@ export const FooterArea = styled.div<{ $collapsed?: boolean }>`
   gap: 6px;
 `;
 
+export const FooterPrimaryActionRow = styled.div<{ $collapsed?: boolean }>`
+  display: grid;
+  grid-template-columns: ${({ $collapsed }) =>
+    $collapsed ? "40px" : "minmax(0, 1fr) auto"};
+  align-items: center;
+  justify-content: ${({ $collapsed }) => ($collapsed ? "center" : "stretch")};
+  gap: ${({ $collapsed }) => ($collapsed ? "0" : "8px")};
+`;
+
+export const FooterSettingsAction = styled.div<{ $collapsed?: boolean }>`
+  min-width: 0;
+
+  > * {
+    width: 100%;
+  }
+`;
+
+export const FooterUpdateActionSlot = styled.div<{ $collapsed?: boolean }>`
+  display: ${({ $collapsed }) => ($collapsed ? "none" : "flex")};
+  align-items: center;
+  justify-content: center;
+`;
+
 export const ActionRow = styled.div<{ $collapsed?: boolean }>`
   display: flex;
   align-items: center;
   justify-content: ${({ $collapsed }) =>
     $collapsed ? "center" : "space-between"};
   padding: 0 2px;
-`;
-
-export const AppearanceActionSlot = styled.div<{ $collapsed?: boolean }>`
-  position: relative;
-  display: inline-flex;
-  justify-content: ${({ $collapsed }) => ($collapsed ? "center" : "flex-end")};
 `;
 
 export const IconActionButton = styled.button<{ $active?: boolean }>`
@@ -1274,6 +1291,12 @@ export const AccountActionSlot = styled.div<{ $collapsed?: boolean }>`
   gap: 6px;
   align-items: ${({ $collapsed }) => ($collapsed ? "center" : "stretch")};
   justify-content: ${({ $collapsed }) => ($collapsed ? "center" : "stretch")};
+`;
+
+export const AccountMenuAnchor = styled.div<{ $collapsed?: boolean }>`
+  position: relative;
+  min-width: 0;
+  width: 100%;
 `;
 
 export const AccountButton = styled.button<{

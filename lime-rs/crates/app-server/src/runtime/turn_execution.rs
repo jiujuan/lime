@@ -148,7 +148,7 @@ impl RuntimeCore {
         event_callback: Option<&mut RuntimeEventCallback<'_>>,
         enable_auto_continuation: bool,
     ) -> Result<RuntimeCoreOutput<AgentSessionTurnStartResponse>, RuntimeCoreError> {
-        self.ensure_current_timeline_session_hydrated(&params.session_id)
+        self.ensure_current_session_hydrated(&params.session_id)
             .await?;
 
         if let Some(capability_id) = params
@@ -479,7 +479,7 @@ impl RuntimeCore {
         &self,
         params: AgentSessionActionReplayParams,
     ) -> Result<RuntimeCoreOutput<AgentSessionActionReplayResponse>, RuntimeCoreError> {
-        self.ensure_current_timeline_session_hydrated(&params.session_id)
+        self.ensure_current_session_hydrated(&params.session_id)
             .await?;
         let action = {
             let state = self

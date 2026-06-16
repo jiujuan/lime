@@ -503,6 +503,7 @@ pub(super) fn turn_context_from_request(
         effort: selection.reasoning_effort.clone(),
         approval_policy: host_request.and_then(host_approval_policy),
         sandbox_policy: host_request.and_then(host_sandbox_policy),
+        collaboration_mode: collaboration_mode_from_request(request, host_request),
         user_visible_input_text: non_empty(Some(&request.input.text)),
         ..TurnContextOverride::default()
     };
@@ -528,6 +529,10 @@ pub(super) fn turn_context_from_request(
     if let Some(host_metadata) = host_request.and_then(host_metadata_value) {
         metadata.insert("aster_chat_request".to_string(), host_metadata);
     }
+    if request_tool_policy_from_request(host_request).allows_web_search() {
+        metadata.insert("web_search_enabled".to_string(), json!(true));
+        metadata.insert("webSearchEnabled".to_string(), json!(true));
+    }
     if let Some(runtime_metadata) = request
         .runtime_options
         .as_ref()
@@ -548,6 +553,7 @@ pub(super) fn turn_context_from_request(
         && context.sandbox_policy.is_none()
         && context.user_visible_input_text.is_none()
         && context.output_schema.is_none()
+        && context.collaboration_mode.is_none()
         && context.metadata.is_empty()
     {
         None
@@ -589,6 +595,46 @@ fn output_schema_from_request(
             })
         })
         .or_else(|| host_request.and_then(host_output_schema).cloned())
+}
+
+fn collaboration_mode_from_request(
+    request: &ExecutionRequest,
+    host_request: Option<&AsterChatRequestSnapshot>,
+) -> Option<String> {
+    host_request
+        .and_then(host_turn_config)
+        .and_then(|turn_config| collaboration_mode_from_metadata(turn_config.metadata.as_ref()))
+        .or_else(|| {
+            host_request.and_then(|host| collaboration_mode_from_metadata(host.metadata.as_ref()))
+        })
+        .or_else(|| {
+            request
+                .runtime_options
+                .as_ref()
+                .and_then(|options| collaboration_mode_from_metadata(options.metadata.as_ref()))
+        })
+        .or_else(|| collaboration_mode_from_metadata(request.metadata.as_ref()))
+}
+
+fn collaboration_mode_from_metadata(metadata: Option<&Value>) -> Option<String> {
+    let metadata = metadata?;
+    json_pointer_string(
+        metadata,
+        &[
+            "/collaboration_mode",
+            "/collaborationMode",
+            "/harness/collaboration_mode/mode",
+            "/harness/collaborationMode/mode",
+            "/harness/collaboration_mode",
+            "/harness/collaborationMode",
+            "/turn_config/collaboration_mode",
+            "/turnConfig/collaborationMode",
+        ],
+    )
+    .map(|value| match value.as_str() {
+        "planning" => "plan".to_string(),
+        _ => value,
+    })
 }
 
 fn host_output_schema(host: &AsterChatRequestSnapshot) -> Option<&Value> {

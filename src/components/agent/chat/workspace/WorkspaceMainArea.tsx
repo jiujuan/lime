@@ -100,19 +100,21 @@ export function WorkspaceMainArea({
   const shouldRenderRevealHandle =
     shouldAutoHideNavbar && !isAutoHideNavbarVisible;
   const hasCanvasContent = Children.count(canvasContent) > 0;
-  const shouldSplitTaskCenterChrome =
+  const shouldRenderTaskCenterChrome =
+    !taskCenterUtilityToolbarNode &&
     !shouldAutoHideNavbar &&
-    Boolean(taskCenterTabsNode) &&
+    Boolean(taskCenterTabsNode);
+  const shouldSplitTaskCenterChrome =
+    shouldRenderTaskCenterChrome &&
     hasCanvasContent &&
     shouldUseTaskCenterSplitChrome(effectiveLayoutMode);
   const shouldDetachTaskCenterToolbar =
     !shouldSplitTaskCenterChrome &&
     Boolean(taskCenterUtilityToolbarNode) &&
-    shouldDetachTaskCenterHomeToolbar();
+    (!shouldRenderTaskCenterChrome || shouldDetachTaskCenterHomeToolbar());
   const splitTaskCenterChromeWidth =
     chatPanelWidth || DEFAULT_CHAT_CANVAS_PANEL_WIDTH;
-  const splitTaskCenterChromeMinWidth =
-    chatPanelMinWidth || "560px";
+  const splitTaskCenterChromeMinWidth = chatPanelMinWidth || "560px";
   const taskCenterChromeStyle = shouldSplitTaskCenterChrome
     ? ({
         background: TASK_CENTER_CHROME_RAIL_SURFACE,
@@ -130,52 +132,49 @@ export function WorkspaceMainArea({
     : shouldDetachTaskCenterToolbar
       ? "detached"
       : "stacked";
-  const taskCenterChromeNode =
-    !shouldAutoHideNavbar && taskCenterTabsNode ? (
-      <div
-        className={
-          shouldSplitTaskCenterChrome
-            ? "absolute left-0 top-0 z-20 shrink-0 overflow-visible bg-[color:var(--lime-chrome-rail)] dark:bg-slate-900"
-            : "relative z-20 shrink-0 overflow-visible bg-[color:var(--lime-chrome-rail)] dark:bg-slate-900"
-        }
-        data-testid="task-center-chrome-shell"
-        data-layout={taskCenterChromeLayout}
-        data-split-left-width={
-          shouldSplitTaskCenterChrome ? splitTaskCenterChromeWidth : undefined
-        }
-        data-split-left-min-width={
-          shouldSplitTaskCenterChrome
-            ? splitTaskCenterChromeMinWidth
-            : undefined
-        }
-        data-detached-right-reserve={
-          shouldDetachTaskCenterToolbar
-            ? TASK_CENTER_TOP_TOOLBAR_RESERVE_WIDTH
-            : undefined
-        }
-        data-detached-left-width={
-          shouldDetachTaskCenterToolbar
-            ? DEFAULT_TASK_CENTER_HOME_CHROME_WIDTH
-            : undefined
-        }
-        style={taskCenterChromeStyle}
-      >
-        {navbarNode}
-        <div className="relative z-10 flex min-h-[42px] shrink-0 items-stretch overflow-hidden border-b border-[color:var(--lime-chrome-divider)] bg-[color:var(--lime-chrome-tab-active-surface)]">
-          <div className="min-w-0 flex-1">{taskCenterTabsNode}</div>
-          {taskCenterUtilityToolbarNode &&
-          !shouldSplitTaskCenterChrome &&
-          !shouldDetachTaskCenterToolbar ? (
-            <div
-              className="flex min-w-0 max-w-[42%] shrink-0 items-center justify-end overflow-hidden border-l border-[color:var(--lime-chrome-divider)] bg-[color:var(--lime-chrome-tab-active-surface)] px-2 lg:hidden"
-              data-testid="task-center-utility-toolbar-host"
-            >
-              {taskCenterUtilityToolbarNode}
-            </div>
-          ) : null}
-        </div>
+  const taskCenterChromeNode = shouldRenderTaskCenterChrome ? (
+    <div
+      className={
+        shouldSplitTaskCenterChrome
+          ? "absolute left-0 top-0 z-20 shrink-0 overflow-visible bg-[color:var(--lime-chrome-rail)] dark:bg-slate-900"
+          : "relative z-20 shrink-0 overflow-visible bg-[color:var(--lime-chrome-rail)] dark:bg-slate-900"
+      }
+      data-testid="task-center-chrome-shell"
+      data-layout={taskCenterChromeLayout}
+      data-split-left-width={
+        shouldSplitTaskCenterChrome ? splitTaskCenterChromeWidth : undefined
+      }
+      data-split-left-min-width={
+        shouldSplitTaskCenterChrome ? splitTaskCenterChromeMinWidth : undefined
+      }
+      data-detached-right-reserve={
+        shouldDetachTaskCenterToolbar
+          ? TASK_CENTER_TOP_TOOLBAR_RESERVE_WIDTH
+          : undefined
+      }
+      data-detached-left-width={
+        shouldDetachTaskCenterToolbar
+          ? DEFAULT_TASK_CENTER_HOME_CHROME_WIDTH
+          : undefined
+      }
+      style={taskCenterChromeStyle}
+    >
+      {navbarNode}
+      <div className="relative z-10 flex min-h-[42px] shrink-0 items-stretch overflow-hidden border-b border-[color:var(--lime-chrome-divider)] bg-[color:var(--lime-chrome-tab-active-surface)]">
+        <div className="min-w-0 flex-1">{taskCenterTabsNode}</div>
+        {taskCenterUtilityToolbarNode &&
+        !shouldSplitTaskCenterChrome &&
+        !shouldDetachTaskCenterToolbar ? (
+          <div
+            className="flex min-w-0 max-w-[42%] shrink-0 items-center justify-end overflow-hidden border-l border-[color:var(--lime-chrome-divider)] bg-[color:var(--lime-chrome-tab-active-surface)] px-2 lg:hidden"
+            data-testid="task-center-utility-toolbar-host"
+          >
+            {taskCenterUtilityToolbarNode}
+          </div>
+        ) : null}
       </div>
-    ) : null;
+    </div>
+  ) : null;
 
   return (
     <MainArea
@@ -223,7 +222,7 @@ export function WorkspaceMainArea({
         </AutoHideNavbarHost>
       ) : taskCenterChromeNode ? (
         taskCenterChromeNode
-      ) : (
+      ) : taskCenterUtilityToolbarNode ? null : (
         navbarNode
       )}
       {shouldAutoHideNavbar ? taskCenterTabsNode : null}
@@ -232,7 +231,7 @@ export function WorkspaceMainArea({
       taskCenterUtilityToolbarNode &&
       shouldDetachTaskCenterToolbar ? (
         <div
-          className="absolute right-0 top-0 z-20 flex h-[42px] min-w-0 items-end justify-end overflow-visible border-b border-[color:var(--lime-chrome-divider)] bg-[color:var(--lime-chrome-rail)] px-4 pb-1"
+          className="absolute right-0 top-0 z-20 flex h-[42px] min-w-0 items-end justify-end overflow-visible px-4 pb-1"
           data-testid="task-center-home-top-toolbar-host"
           style={{ width: TASK_CENTER_TOP_TOOLBAR_RESERVE_WIDTH }}
         >
@@ -241,11 +240,13 @@ export function WorkspaceMainArea({
       ) : null}
       {shouldSplitTaskCenterChrome && taskCenterUtilityToolbarNode ? (
         <div
-          className="absolute right-0 top-0 z-20 flex h-[42px] min-w-0 items-end justify-end overflow-visible border-b border-[color:var(--lime-chrome-divider)] bg-[color:var(--lime-chrome-rail)] px-4 pb-1 [left:var(--task-center-split-left)]"
+          className="absolute right-0 top-0 z-20 flex h-[42px] min-w-0 items-end justify-end overflow-visible px-4 pb-1 [left:var(--task-center-split-left)]"
           data-testid="task-center-workbench-top-toolbar-host"
-          style={{
-            "--task-center-split-left": splitTaskCenterChromeWidth,
-          } as CSSProperties}
+          style={
+            {
+              "--task-center-split-left": splitTaskCenterChromeWidth,
+            } as CSSProperties
+          }
         >
           {taskCenterUtilityToolbarNode}
         </div>

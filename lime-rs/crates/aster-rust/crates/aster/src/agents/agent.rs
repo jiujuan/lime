@@ -234,7 +234,7 @@ fn default_ask_callback() -> crate::tools::AskCallback {
             {
                 Ok(user_data) => Some(user_data),
                 Err(error) => {
-                    warn!(?error, "AskUserQuestion elicitation failed");
+                    warn!(?error, "request_user_input elicitation failed");
                     None
                 }
             }
@@ -454,6 +454,13 @@ fn session_allows_subagent_teammate_tools(session: &Session) -> bool {
 
 fn session_plan_mode_active(session: &Session) -> bool {
     SessionPlanModeState::from_session(session).is_some_and(|state| state.active)
+}
+
+fn turn_context_plan_mode_active() -> bool {
+    crate::session_context::current_turn_context()
+        .as_ref()
+        .and_then(|context| context.collaboration_mode.as_deref())
+        .is_some_and(|mode| matches!(mode.trim(), "plan" | "planning"))
 }
 
 fn collect_string_values(value: &Value) -> Vec<String> {
@@ -3546,7 +3553,10 @@ impl Agent {
                 current_session
                     .as_ref()
                     .map(session_plan_mode_active)
-                    .unwrap_or_else(crate::tools::plan_mode_tool::current_plan_mode_active),
+                    .unwrap_or_else(|| {
+                        turn_context_plan_mode_active()
+                            || crate::tools::plan_mode_tool::current_plan_mode_active()
+                    }),
             )
         });
 
@@ -6422,8 +6432,12 @@ mod tests {
             "ToolSearch should be registered"
         );
         assert!(
-            registry_guard.contains("AskUserQuestion"),
-            "AskUserQuestion should be registered"
+            registry_guard.contains("request_user_input"),
+            "request_user_input should be registered"
+        );
+        assert!(
+            !registry_guard.contains("AskUserQuestion"),
+            "AskUserQuestion should not remain in the current native surface"
         );
         let tool_gates = current_surface_tool_gates();
         assert_eq!(
@@ -6548,8 +6562,12 @@ mod tests {
             "ToolSearch should be registered"
         );
         assert!(
-            registry_guard.contains("AskUserQuestion"),
-            "AskUserQuestion should be registered"
+            registry_guard.contains("request_user_input"),
+            "request_user_input should be registered"
+        );
+        assert!(
+            !registry_guard.contains("AskUserQuestion"),
+            "AskUserQuestion should not remain in the current native surface"
         );
         let tool_gates = current_surface_tool_gates();
         assert_eq!(
@@ -7125,7 +7143,7 @@ mod tests {
             "Config",
             "Sleep",
             "Workflow",
-            "AskUserQuestion",
+            "request_user_input",
             "EnterPlanMode",
             "ExitPlanMode",
         ] {

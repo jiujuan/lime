@@ -1,8 +1,6 @@
 import {
   Check,
-  ChevronDown,
   ChevronRight,
-  Cloud,
   ExternalLink,
   Info,
   KeyRound,
@@ -10,19 +8,12 @@ import {
   LogIn,
   LogOut,
 } from "lucide-react";
+import type { ReactElement } from "react";
 import type { SidebarNavItemDefinition } from "@/lib/navigation/sidebarNav";
 import type { LocalePreference } from "@/i18n/locales";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { APP_SIDEBAR_LANGUAGE_OPTIONS } from "./AppSidebar.constants";
 import {
-  AccountAvatar,
-  AccountButton,
-  AccountIdentity,
-  AccountInfoIconButton,
+  AccountMenuAnchor,
   AccountMenuDivider,
   AccountMenuItem,
   AccountMenuItemGroup,
@@ -31,7 +22,6 @@ import {
   AccountMenuList,
   AccountMenuNotice,
   AccountMenuPopover,
-  AccountName,
   AccountPlanActionButton,
   AccountPlanActions,
   AccountPlanBadge,
@@ -45,14 +35,12 @@ import {
   AccountPlanProgressTrack,
   AccountPlanTitle,
   AccountPlanUsage,
-  AccountStateBadge,
   AccountSubmenuItem,
   AccountSubmenuItemHint,
   AccountSubmenuItemLabel,
   AccountSubmenuItemText,
   AccountSubmenuPopover,
   AccountSubmenuTitle,
-  AccountTrailing,
 } from "./AppSidebar.styles";
 
 export interface AppSidebarAccountPlanSummary {
@@ -62,19 +50,12 @@ export interface AppSidebarAccountPlanSummary {
 }
 
 export interface AppSidebarAccountMenuCopy {
-  openUserMenuLabel: string;
-  buttonTooltip: string;
   menuLabel: string;
-  cloudStateLabel: string;
-  localStateLabel: string;
   viewPlanDetailsLabel: string;
   viewDetailsLabel: string;
-  openSourceTitleLabel: string;
-  openSourceInfoLabel: string;
-  openSourceDescriptionLabel: string;
-  freePlanLabel: string;
-  noLoginAvailableLabel: string;
-  localModelConfigurableLabel: string;
+  loginPromptTitleLabel: string;
+  loginPromptDescriptionLabel: string;
+  loginPromptBadgeLabel: string;
   connectCloudLabel: string;
   loginPendingLabel: string;
   modelSettingsLabel: string;
@@ -83,7 +64,6 @@ export interface AppSidebarAccountMenuCopy {
   languageMenuLabel: string;
   currentLanguageLabel: string;
   userCenterLabel: string;
-  cloudBrandLabel: string;
   aboutLabel: string;
   logoutLabel: string;
   logoutPendingLabel: string;
@@ -92,11 +72,9 @@ export interface AppSidebarAccountMenuCopy {
 
 interface AppSidebarAccountMenuProps {
   collapsed: boolean;
+  trigger: ReactElement;
   accountMenuOpen: boolean;
   languageMenuOpen: boolean;
-  accountDisplayName: string;
-  accountAvatarUrl?: string;
-  accountInitial: string;
   accountMetaLine: string;
   hasCloudAccount: boolean;
   accountPlanSummary: AppSidebarAccountPlanSummary;
@@ -107,7 +85,6 @@ interface AppSidebarAccountMenuProps {
   navItems: SidebarNavItemDefinition[];
   copy: AppSidebarAccountMenuCopy;
   isNavItemActive: (item: SidebarNavItemDefinition) => boolean;
-  onToggleAccountMenu: () => void;
   onNavigateItem: (item: SidebarNavItemDefinition) => void;
   onToggleLanguageMenu: () => void;
   onLanguageChange: (language: LocalePreference) => void;
@@ -121,11 +98,9 @@ interface AppSidebarAccountMenuProps {
 
 export function AppSidebarAccountMenu({
   collapsed,
+  trigger,
   accountMenuOpen,
   languageMenuOpen,
-  accountDisplayName,
-  accountAvatarUrl,
-  accountInitial,
   accountMetaLine,
   hasCloudAccount,
   accountPlanSummary,
@@ -136,7 +111,6 @@ export function AppSidebarAccountMenu({
   navItems,
   copy,
   isNavItemActive,
-  onToggleAccountMenu,
   onNavigateItem,
   onToggleLanguageMenu,
   onLanguageChange,
@@ -147,56 +121,9 @@ export function AppSidebarAccountMenu({
   onOpenAbout,
   onLogout,
 }: AppSidebarAccountMenuProps) {
-  const accountButton = (
-    <AccountButton
-      type="button"
-      $collapsed={collapsed}
-      $active={accountMenuOpen}
-      onClick={onToggleAccountMenu}
-      aria-label={copy.openUserMenuLabel}
-      aria-expanded={accountMenuOpen}
-      aria-haspopup="dialog"
-      data-testid="app-sidebar-account-button"
-    >
-      <AccountIdentity $collapsed={collapsed}>
-        <AccountAvatar>
-          {accountAvatarUrl ? (
-            <img src={accountAvatarUrl} alt={accountDisplayName} />
-          ) : (
-            accountInitial
-          )}
-        </AccountAvatar>
-        <AccountName>{accountDisplayName}</AccountName>
-      </AccountIdentity>
-      {collapsed ? (
-        <AccountAvatar>
-          {accountAvatarUrl ? (
-            <img src={accountAvatarUrl} alt={accountDisplayName} />
-          ) : (
-            accountInitial
-          )}
-        </AccountAvatar>
-      ) : null}
-      <AccountTrailing $collapsed={collapsed}>
-        <AccountStateBadge $connected={hasCloudAccount}>
-          {hasCloudAccount ? copy.cloudStateLabel : copy.localStateLabel}
-        </AccountStateBadge>
-        <ChevronDown />
-      </AccountTrailing>
-    </AccountButton>
-  );
-
   return (
-    <>
-      {collapsed ? (
-        <Tooltip>
-          <TooltipTrigger asChild>{accountButton}</TooltipTrigger>
-          <TooltipContent side="right">{copy.buttonTooltip}</TooltipContent>
-        </Tooltip>
-      ) : (
-        accountButton
-      )}
-
+    <AccountMenuAnchor $collapsed={collapsed}>
+      {trigger}
       {accountMenuOpen ? (
         <AccountMenuPopover
           $collapsed={collapsed}
@@ -235,30 +162,17 @@ export function AppSidebarAccountMenu({
               <AccountPlanMeta>{accountMetaLine}</AccountPlanMeta>
             </AccountPlanButton>
           ) : (
-            <AccountPlanCard data-testid="app-sidebar-open-source-card">
+            <AccountPlanCard data-testid="app-sidebar-login-card">
               <AccountPlanHeader>
                 <AccountPlanTitle>
-                  <span>{copy.openSourceTitleLabel}</span>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <AccountInfoIconButton
-                        type="button"
-                        aria-label={copy.openSourceInfoLabel}
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        <Info />
-                      </AccountInfoIconButton>
-                    </TooltipTrigger>
-                    <TooltipContent side="right">
-                      {copy.openSourceDescriptionLabel}
-                    </TooltipContent>
-                  </Tooltip>
+                  <span>{copy.loginPromptTitleLabel}</span>
                 </AccountPlanTitle>
-                <AccountPlanBadge>{copy.freePlanLabel}</AccountPlanBadge>
+                <AccountPlanBadge>
+                  {copy.loginPromptBadgeLabel}
+                </AccountPlanBadge>
               </AccountPlanHeader>
               <AccountPlanDetail>
-                <span>{copy.noLoginAvailableLabel}</span>
-                <span>{copy.localModelConfigurableLabel}</span>
+                <span>{copy.loginPromptDescriptionLabel}</span>
               </AccountPlanDetail>
               <AccountPlanActions>
                 <AccountPlanActionButton
@@ -272,14 +186,6 @@ export function AppSidebarAccountMenu({
                   {accountLoginPending
                     ? copy.loginPendingLabel
                     : copy.connectCloudLabel}
-                </AccountPlanActionButton>
-                <AccountPlanActionButton
-                  type="button"
-                  aria-label={copy.modelSettingsLabel}
-                  onClick={onOpenModelSettings}
-                >
-                  <KeyRound />
-                  {copy.modelSettingsLabel}
                 </AccountPlanActionButton>
               </AccountPlanActions>
               {accountLoginError ? (
@@ -349,9 +255,7 @@ export function AppSidebarAccountMenu({
                         $active={active}
                         role="menuitemradio"
                         aria-checked={active}
-                        aria-label={copy.formatSwitchLanguageAria(
-                          option.label,
-                        )}
+                        aria-label={copy.formatSwitchLanguageAria(option.label)}
                         onClick={() => onLanguageChange(option.id)}
                       >
                         <AccountSubmenuItemText>
@@ -369,19 +273,6 @@ export function AppSidebarAccountMenu({
                 </AccountSubmenuPopover>
               ) : null}
             </AccountMenuItemGroup>
-            {hasCloudAccount ? (
-              <AccountMenuItem
-                type="button"
-                aria-label={copy.userCenterLabel}
-                onClick={onOpenUserCenter}
-              >
-                <AccountMenuItemLeading>
-                  <ExternalLink />
-                  {copy.userCenterLabel}
-                </AccountMenuItemLeading>
-                <ChevronRight />
-              </AccountMenuItem>
-            ) : null}
             <AccountMenuItem
               type="button"
               aria-label={copy.modelSettingsLabel}
@@ -396,12 +287,12 @@ export function AppSidebarAccountMenu({
             {hasCloudAccount ? (
               <AccountMenuItem
                 type="button"
-                aria-label={copy.cloudBrandLabel}
+                aria-label={copy.userCenterLabel}
                 onClick={onOpenUserCenter}
               >
                 <AccountMenuItemLeading>
-                  <Cloud />
-                  {copy.cloudBrandLabel}
+                  <ExternalLink />
+                  {copy.userCenterLabel}
                 </AccountMenuItemLeading>
                 <ChevronRight />
               </AccountMenuItem>
@@ -439,6 +330,6 @@ export function AppSidebarAccountMenu({
           </AccountMenuList>
         </AccountMenuPopover>
       ) : null}
-    </>
+    </AccountMenuAnchor>
   );
 }

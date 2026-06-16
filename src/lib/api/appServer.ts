@@ -40,6 +40,12 @@ import {
   METHOD_FILE_SYSTEM_LIST_DIRECTORY,
   METHOD_FILE_SYSTEM_READ_FILE_PREVIEW,
   METHOD_FILE_SYSTEM_RENAME_FILE,
+  METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT,
+  METHOD_EXECUTION_PROCESS_INTERRUPT,
+  METHOD_EXECUTION_PROCESS_START,
+  METHOD_EXECUTION_PROCESS_STATUS,
+  METHOD_EXECUTION_PROCESS_TERMINATE,
+  METHOD_EXECUTION_PROCESS_WRITE_STDIN,
   METHOD_PROJECT_GIT_BRANCH_CHECKOUT,
   METHOD_PROJECT_GIT_BRANCH_CREATE,
   METHOD_PROJECT_GIT_COMMITS_LIST,
@@ -217,6 +223,14 @@ import {
   type EvidenceExportResponse,
   type EvidencePackArtifact,
   type EvidencePackSummary,
+  type ExecutionProcessDrainOutputParams,
+  type ExecutionProcessDrainOutputResponse,
+  type ExecutionProcessEmptyResponse,
+  type ExecutionProcessIdParams,
+  type ExecutionProcessStartParams,
+  type ExecutionProcessStartResponse,
+  type ExecutionProcessStatusResponse,
+  type ExecutionProcessWriteStdinParams,
   type FileSystemCreateDirectoryParams,
   type FileSystemCreateFileParams,
   type FileSystemDeleteFileParams,
@@ -371,6 +385,18 @@ export const APP_SERVER_METHOD_FILE_SYSTEM_RENAME_FILE =
   METHOD_FILE_SYSTEM_RENAME_FILE;
 export const APP_SERVER_METHOD_FILE_SYSTEM_DELETE_FILE =
   METHOD_FILE_SYSTEM_DELETE_FILE;
+export const APP_SERVER_METHOD_EXECUTION_PROCESS_START =
+  METHOD_EXECUTION_PROCESS_START;
+export const APP_SERVER_METHOD_EXECUTION_PROCESS_WRITE_STDIN =
+  METHOD_EXECUTION_PROCESS_WRITE_STDIN;
+export const APP_SERVER_METHOD_EXECUTION_PROCESS_INTERRUPT =
+  METHOD_EXECUTION_PROCESS_INTERRUPT;
+export const APP_SERVER_METHOD_EXECUTION_PROCESS_TERMINATE =
+  METHOD_EXECUTION_PROCESS_TERMINATE;
+export const APP_SERVER_METHOD_EXECUTION_PROCESS_STATUS =
+  METHOD_EXECUTION_PROCESS_STATUS;
+export const APP_SERVER_METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT =
+  METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT;
 export const APP_SERVER_METHOD_PROJECT_GIT_STATUS = METHOD_PROJECT_GIT_STATUS;
 export const APP_SERVER_METHOD_PROJECT_GIT_DIFF = METHOD_PROJECT_GIT_DIFF;
 export const APP_SERVER_METHOD_PROJECT_GIT_COMMITS_LIST =
@@ -778,6 +804,20 @@ export type AppServerSessionFileResolvePathResponse =
   SessionFileResolvePathResponse;
 export type AppServerSessionFileListResponse = SessionFileListResponse;
 export type AppServerSessionFileMutationResponse = SessionFileMutationResponse;
+export type AppServerExecutionProcessDrainOutputParams =
+  ExecutionProcessDrainOutputParams;
+export type AppServerExecutionProcessDrainOutputResponse =
+  ExecutionProcessDrainOutputResponse;
+export type AppServerExecutionProcessEmptyResponse =
+  ExecutionProcessEmptyResponse;
+export type AppServerExecutionProcessIdParams = ExecutionProcessIdParams;
+export type AppServerExecutionProcessStartParams = ExecutionProcessStartParams;
+export type AppServerExecutionProcessStartResponse =
+  ExecutionProcessStartResponse;
+export type AppServerExecutionProcessStatusResponse =
+  ExecutionProcessStatusResponse;
+export type AppServerExecutionProcessWriteStdinParams =
+  ExecutionProcessWriteStdinParams;
 export type AppServerAgentSessionTurnStartResponse =
   AgentSessionTurnStartResponse;
 export type AppServerAgentSessionTurnCancelResponse =
@@ -1124,6 +1164,62 @@ export class AppServerClient {
   ): Promise<AppServerRequestResult<AppServerFileSystemMutationResponse>> {
     return await this.request<AppServerFileSystemMutationResponse>(
       APP_SERVER_METHOD_FILE_SYSTEM_DELETE_FILE,
+      params,
+    );
+  }
+
+  async startExecutionProcess(
+    params: AppServerExecutionProcessStartParams,
+  ): Promise<AppServerRequestResult<AppServerExecutionProcessStartResponse>> {
+    return await this.request<AppServerExecutionProcessStartResponse>(
+      APP_SERVER_METHOD_EXECUTION_PROCESS_START,
+      params,
+    );
+  }
+
+  async writeExecutionProcessStdin(
+    params: AppServerExecutionProcessWriteStdinParams,
+  ): Promise<AppServerRequestResult<AppServerExecutionProcessEmptyResponse>> {
+    return await this.request<AppServerExecutionProcessEmptyResponse>(
+      APP_SERVER_METHOD_EXECUTION_PROCESS_WRITE_STDIN,
+      params,
+    );
+  }
+
+  async interruptExecutionProcess(
+    params: AppServerExecutionProcessIdParams,
+  ): Promise<AppServerRequestResult<AppServerExecutionProcessStatusResponse>> {
+    return await this.request<AppServerExecutionProcessStatusResponse>(
+      APP_SERVER_METHOD_EXECUTION_PROCESS_INTERRUPT,
+      params,
+    );
+  }
+
+  async terminateExecutionProcess(
+    params: AppServerExecutionProcessIdParams,
+  ): Promise<AppServerRequestResult<AppServerExecutionProcessStatusResponse>> {
+    return await this.request<AppServerExecutionProcessStatusResponse>(
+      APP_SERVER_METHOD_EXECUTION_PROCESS_TERMINATE,
+      params,
+    );
+  }
+
+  async readExecutionProcessStatus(
+    params: AppServerExecutionProcessIdParams,
+  ): Promise<AppServerRequestResult<AppServerExecutionProcessStatusResponse>> {
+    return await this.request<AppServerExecutionProcessStatusResponse>(
+      APP_SERVER_METHOD_EXECUTION_PROCESS_STATUS,
+      params,
+    );
+  }
+
+  async drainExecutionProcessOutput(
+    params: AppServerExecutionProcessDrainOutputParams = {},
+  ): Promise<
+    AppServerRequestResult<AppServerExecutionProcessDrainOutputResponse>
+  > {
+    return await this.request<AppServerExecutionProcessDrainOutputResponse>(
+      APP_SERVER_METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT,
       params,
     );
   }

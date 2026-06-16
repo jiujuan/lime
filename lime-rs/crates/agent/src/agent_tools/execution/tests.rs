@@ -155,6 +155,8 @@ fn test_decide_tool_execution_requires_approval_for_shell_on_request_policy() {
         Some(&json!("on_request"))
     );
     assert_eq!(decision.metadata.get("command"), Some(&json!("cargo test")));
+    assert!(decision.requires_sandboxed_execution());
+    assert!(!decision.workspace_sandbox_backend_enforced());
 }
 
 #[test]

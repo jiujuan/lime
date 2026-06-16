@@ -16,7 +16,7 @@ interface ResolveAgentStreamSubmitContextOptions {
     skipSessionStartHooks?: boolean;
   }) => Promise<string | null>;
   sessionIdRef: MutableRefObject<string | null>;
-  getRequiredWorkspaceId: () => string;
+  getWorkspaceIdForSubmit: () => string | undefined;
   getSyncedSessionRecentPreferences?: (
     sessionId: string,
   ) => ChatToolPreferences | null;
@@ -41,7 +41,7 @@ export async function resolveAgentStreamSubmitContext(
   const {
     ensureSession,
     sessionIdRef,
-    getRequiredWorkspaceId,
+    getWorkspaceIdForSubmit,
     getSyncedSessionRecentPreferences,
     getSyncedSessionExecutionStrategy,
     effectiveExecutionStrategy,
@@ -95,10 +95,11 @@ export async function resolveAgentStreamSubmitContext(
     hadActiveSessionBeforeEnsure,
   });
 
-  const resolvedWorkspaceId = getRequiredWorkspaceId();
-  const submitWorkspaceId = hadActiveSessionBeforeEnsure
-    ? undefined
-    : resolvedWorkspaceId;
+  const resolvedWorkspaceId = getWorkspaceIdForSubmit();
+  const submitWorkspaceId =
+    hadActiveSessionBeforeEnsure || !resolvedWorkspaceId
+      ? undefined
+      : resolvedWorkspaceId;
   const syncedRecentPreferences =
     getSyncedSessionRecentPreferences?.(activeSessionId) || null;
   const syncedExecutionStrategy =

@@ -45,7 +45,7 @@ export interface AgentSessionMetadataPatch {
 export interface AgentRuntimeAdapter {
   init(): Promise<AsterAgentStatus>;
   createSession(
-    workspaceId: string,
+    workspaceId?: string,
     name?: string,
     executionStrategy?: AsterExecutionStrategy,
     options?: AgentRuntimeCreateSessionOptions,

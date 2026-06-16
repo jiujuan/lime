@@ -5,6 +5,7 @@ import {
   type AppServerRequestResult,
 } from "@/lib/api/appServer";
 import { isAppServerBridgeAvailable } from "@/lib/api/appServerBridgeAvailability";
+import { parseAgentEvent } from "@/lib/api/agentProtocol";
 import { safeListen } from "@/lib/dev-bridge";
 import { listenAgentRuntimeEvent } from "../agentRuntimeEvents";
 import { resetAgentRuntimeEventSequenceGatesForTests } from "./eventSequenceGate";
@@ -1394,6 +1395,44 @@ describe("agentRuntime threadClient", () => {
     unlisten();
   });
 
+  it("App Server runtime.status 应保留 retrying phase 供 GUI 展示恢复状态", () => {
+    const payload = projectAppServerAgentEventPayload({
+      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "evt-retrying",
+          sequence: 1,
+          sessionId: "session-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          type: "runtime.status",
+          timestamp: "2026-06-06T00:00:00.000Z",
+          payload: {
+            status: {
+              phase: "retrying",
+              title: "正在恢复模型输出",
+              detail: "模型通道在尾段暂时中断，正在补齐最终答复。",
+              metadata: {
+                agentui: {
+                  eventClass: "run.status",
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    expect(payload).toMatchObject({
+      type: "runtime_status",
+      status: {
+        phase: "retrying",
+        title: "正在恢复模型输出",
+        detail: "模型通道在尾段暂时中断，正在补齐最终答复。",
+      },
+    });
+  });
+
   it("App Server 异步 agentSession/event drain 应投递到当前前端 stream event", async () => {
     const appServerClient = appServerClientMock();
     vi.mocked(appServerClient.startTurn).mockResolvedValueOnce({
@@ -2772,6 +2811,302 @@ describe("agentRuntime threadClient", () => {
       event_id: "evt-item-message",
       session_id: "session-1",
       turn_id: "turn-1",
+    });
+  });
+
+  it("App Server current tool/file/command events 应投影为 GUI 可解析过程事件", () => {
+    const toolArgsPayload = projectAppServerAgentEventPayload({
+      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "evt-tool-args",
+          sequence: 10,
+          sessionId: "session-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          type: "tool.args",
+          timestamp: "2026-06-06T00:00:08.000Z",
+          payload: {
+            toolCallId: "tool-read",
+            toolName: "Read",
+            args: {
+              path: "src/App.tsx",
+              start_line: 2,
+              end_line: 8,
+            },
+            rawArgs:
+              '{"path":"src/App.tsx","start_line":2,"end_line":8}',
+            source: "runtime_tool_start",
+          },
+        },
+      },
+    });
+
+    expect(toolArgsPayload).toMatchObject({
+      type: "tool_input_delta",
+      tool_id: "tool-read",
+      tool_name: "Read",
+      delta: '{"path":"src/App.tsx","start_line":2,"end_line":8}',
+      accumulated_arguments:
+        '{"path":"src/App.tsx","start_line":2,"end_line":8}',
+      provider: "runtime_tool_start",
+    });
+    expect(parseAgentEvent(toolArgsPayload)).toMatchObject({
+      type: "tool_input_delta",
+      tool_id: "tool-read",
+      tool_name: "Read",
+      accumulated_arguments:
+        '{"path":"src/App.tsx","start_line":2,"end_line":8}',
+    });
+
+    const progressPayload = projectAppServerAgentEventPayload({
+      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "evt-tool-progress",
+          sequence: 11,
+          sessionId: "session-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          type: "tool.progress",
+          timestamp: "2026-06-06T00:00:09.000Z",
+          payload: {
+            toolCallId: "tool-read",
+            message: "正在读取文件",
+            progress: 1,
+            total: 2,
+            metadata: {
+              notification_kind: "mcp_progress",
+            },
+          },
+        },
+      },
+    });
+
+    expect(progressPayload).toMatchObject({
+      type: "tool_progress",
+      tool_id: "tool-read",
+      progress: {
+        message: "正在读取文件",
+        progress: 1,
+        total: 2,
+        metadata: {
+          notification_kind: "mcp_progress",
+        },
+      },
+    });
+    expect(parseAgentEvent(progressPayload)).toMatchObject({
+      type: "tool_progress",
+      tool_id: "tool-read",
+    });
+
+    const outputDeltaPayload = projectAppServerAgentEventPayload({
+      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "evt-tool-output",
+          sequence: 12,
+          sessionId: "session-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          type: "tool.output.delta",
+          timestamp: "2026-06-06T00:00:10.000Z",
+          payload: {
+            toolCallId: "tool-read",
+            delta: "1 | export {}",
+            stream: "stdout",
+            metadata: {
+              outputRef: "output://tool-read",
+            },
+          },
+        },
+      },
+    });
+
+    expect(outputDeltaPayload).toMatchObject({
+      type: "tool_output_delta",
+      tool_id: "tool-read",
+      delta: "1 | export {}",
+      output_kind: "stdout",
+      metadata: {
+        outputRef: "output://tool-read",
+      },
+    });
+    expect(parseAgentEvent(outputDeltaPayload)).toMatchObject({
+      type: "tool_output_delta",
+      tool_id: "tool-read",
+      delta: "1 | export {}",
+    });
+
+    const fileReadPayload = projectAppServerAgentEventPayload({
+      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "evt-file-read",
+          sequence: 13,
+          sessionId: "session-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          type: "file.read",
+          timestamp: "2026-06-06T00:00:11.000Z",
+          payload: {
+            path: "src/App.tsx",
+            toolCallId: "tool-read",
+            toolName: "Read",
+            outputRef: "output://file-read",
+            contentRef: "content://file-read",
+            refIds: ["output://file-read", "content://file-read"],
+            startLine: 2,
+            endLine: 8,
+            fileType: "text",
+          },
+        },
+      },
+    });
+
+    expect(fileReadPayload).toMatchObject({
+      type: "item_completed",
+      item: {
+        id: "tool-read",
+        type: "file_artifact",
+        path: "src/App.tsx",
+        source: "file_read",
+        status: "completed",
+        metadata: {
+          eventClass: "file.read",
+          outputRef: "output://file-read",
+          contentRef: "content://file-read",
+          startLine: 2,
+          endLine: 8,
+          fileType: "text",
+        },
+      },
+    });
+    expect(parseAgentEvent(fileReadPayload)).toMatchObject({
+      type: "item_completed",
+      item: {
+        type: "file_artifact",
+        path: "src/App.tsx",
+      },
+    });
+
+    const commandStartedPayload = projectAppServerAgentEventPayload({
+      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "evt-command-started",
+          sequence: 14,
+          sessionId: "session-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          type: "command.started",
+          timestamp: "2026-06-06T00:00:12.000Z",
+          payload: {
+            commandId: "command-1",
+            canonicalCommand: "npm test -- src/lib/api/agentRuntime/threadClient.test.ts",
+            commandSummary: "npm test",
+            cwd: "/repo",
+          },
+        },
+      },
+    });
+
+    expect(commandStartedPayload).toMatchObject({
+      type: "item_started",
+      item: {
+        id: "command-1",
+        type: "command_execution",
+        command: "npm test -- src/lib/api/agentRuntime/threadClient.test.ts",
+        cwd: "/repo",
+        status: "in_progress",
+      },
+    });
+    expect(parseAgentEvent(commandStartedPayload)).toMatchObject({
+      type: "item_started",
+      item: {
+        type: "command_execution",
+        command: "npm test -- src/lib/api/agentRuntime/threadClient.test.ts",
+      },
+    });
+
+    const commandOutputPayload = projectAppServerAgentEventPayload({
+      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "evt-command-output",
+          sequence: 15,
+          sessionId: "session-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          type: "command.output",
+          timestamp: "2026-06-06T00:00:12.500Z",
+          payload: {
+            commandId: "command-1",
+            toolCallId: "command-1",
+            outputRef: "output://npm-test",
+            refIds: ["output://npm-test", "log://npm-test"],
+            kind: "stdout",
+            preview: "1 test passed",
+          },
+        },
+      },
+    });
+
+    expect(commandOutputPayload).toMatchObject({
+      type: "tool_output_delta",
+      tool_id: "command-1",
+      delta: "1 test passed",
+      output_kind: "stdout",
+      metadata: {
+        eventClass: "command.output",
+        outputRef: "output://npm-test",
+        refIds: ["output://npm-test", "log://npm-test"],
+      },
+    });
+    expect(parseAgentEvent(commandOutputPayload)).toMatchObject({
+      type: "tool_output_delta",
+      tool_id: "command-1",
+      delta: "1 test passed",
+    });
+
+    const commandExitedPayload = projectAppServerAgentEventPayload({
+      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "evt-command-exited",
+          sequence: 16,
+          sessionId: "session-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          type: "command.exited",
+          timestamp: "2026-06-06T00:00:13.000Z",
+          payload: {
+            commandId: "command-1",
+            canonicalCommand: "npm test -- src/lib/api/agentRuntime/threadClient.test.ts",
+            cwd: "/repo",
+            output: "PASS threadClient.test.ts",
+            exitCode: 0,
+          },
+        },
+      },
+    });
+
+    expect(commandExitedPayload).toMatchObject({
+      type: "item_completed",
+      item: {
+        id: "command-1",
+        type: "command_execution",
+        aggregated_output: "PASS threadClient.test.ts",
+        exit_code: 0,
+        status: "completed",
+      },
+    });
+    expect(parseAgentEvent(commandExitedPayload)).toMatchObject({
+      type: "item_completed",
+      item: {
+        type: "command_execution",
+        status: "completed",
+      },
     });
   });
 });

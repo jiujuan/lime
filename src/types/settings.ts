@@ -75,7 +75,6 @@ export const SETTINGS_GROUPS: Record<SettingsGroupKey, SettingsTabs[]> = {
   [SettingsGroupKey.Account]: [SettingsTabs.Profile, SettingsTabs.Stats],
   [SettingsGroupKey.General]: [
     SettingsTabs.Appearance,
-    SettingsTabs.Hotkeys,
     SettingsTabs.Memory,
     SettingsTabs.ArchivedConversations,
   ],

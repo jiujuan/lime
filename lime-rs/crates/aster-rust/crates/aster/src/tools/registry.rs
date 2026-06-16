@@ -34,7 +34,6 @@ pub type PermissionRequestCallback =
 
 pub(crate) const DEFAULT_NATIVE_ALIAS_PAIRS: &[(&str, &[&str])] = &[
     ("Agent", &["AgentTool"]),
-    ("AskUserQuestion", &["AskUserQuestionTool"]),
     (
         "Bash",
         &[
@@ -91,6 +90,10 @@ pub(crate) const DEFAULT_NATIVE_ALIAS_PAIRS: &[(&str, &[&str])] = &[
     (
         "ToolSearch",
         &["ToolSearchTool", "tool_search", "mcp__system__tool_search"],
+    ),
+    (
+        "update_plan",
+        &["UpdatePlan", "UpdatePlanTool", "update_plan_tool"],
     ),
     (
         "WebFetch",

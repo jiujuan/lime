@@ -14,6 +14,7 @@ import {
   mockGenerateAgentRuntimeSessionTitle,
   mockGetAgentRuntimeSession,
   mockListAgentRuntimeSessions,
+  mockScheduleMinimumDelayIdleTask,
   mockSubmitAgentRuntimeTurn,
   mockUpdateAgentRuntimeSession,
   mountHook,
@@ -390,6 +391,13 @@ describe("useAsterAgentChat 兼容接口 - topics", () => {
       expect(mockGenerateAgentRuntimeSessionTitle).toHaveBeenCalledWith(
         sessionId,
         expect.stringContaining("今天国际新闻"),
+      );
+      expect(mockScheduleMinimumDelayIdleTask).toHaveBeenCalledWith(
+        expect.any(Function),
+        expect.objectContaining({
+          idleTimeoutMs: 2000,
+          minimumDelayMs: 400,
+        }),
       );
       expect(mockUpdateAgentRuntimeSession).toHaveBeenCalledWith({
         session_id: sessionId,

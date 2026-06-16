@@ -43,7 +43,7 @@ describe("agentStreamSubmitExecution", () => {
       ensureSession,
       attemptSilentTurnRecovery: async () => false,
       sessionIdRef: { current: null } as MutableRefObject<string | null>,
-      getRequiredWorkspaceId: () => "workspace-1",
+      getWorkspaceIdForSubmit: () => "workspace-1",
       getSyncedSessionExecutionStrategy: () => "react",
       getSyncedSessionRecentPreferences: () => ({
         webSearch: true,

@@ -1338,15 +1338,7 @@ export function projectAppServerAgentEventPayload(
         ...basePayload,
         type: "tool_start",
         tool_name: readString(payload, "tool_name", "toolName", "name") ?? "",
-        tool_id:
-          readString(
-            payload,
-            "toolCallId",
-            "tool_call_id",
-            "toolId",
-            "tool_id",
-            "id",
-          ) ?? "",
+        tool_id: readToolCallId(payload) ?? "",
         arguments: normalizeToolArguments(
           payload.arguments ??
             payload.args ??
@@ -1354,21 +1346,120 @@ export function projectAppServerAgentEventPayload(
             payload.parameters,
         ),
       };
+    case "tool.args":
+      return {
+        ...basePayload,
+        type: "tool_input_delta",
+        tool_id: readToolCallId(payload) ?? "",
+        tool_name: readToolName(payload),
+        delta: normalizeToolArguments(
+          payload.rawArgs ??
+            payload.raw_args ??
+            payload.args ??
+            payload.arguments ??
+            payload.input,
+        ),
+        accumulated_arguments: normalizeToolArguments(
+          payload.rawArgs ??
+            payload.raw_args ??
+            payload.args ??
+            payload.arguments ??
+            payload.input,
+        ),
+        provider: readString(payload, "provider", "source"),
+      };
+    case "tool.args.delta":
+    case "tool.input.delta":
+      return {
+        ...basePayload,
+        type: "tool_input_delta",
+        tool_id: readToolCallId(payload) ?? "",
+        tool_name: readToolName(payload),
+        delta: readString(payload, "delta", "text", "chunk") ?? "",
+        accumulated_arguments: readString(
+          payload,
+          "accumulated_arguments",
+          "accumulatedArguments",
+          "rawArgs",
+          "raw_args",
+        ),
+        provider: readString(payload, "provider", "source"),
+      };
+    case "tool.progress":
+      return {
+        ...basePayload,
+        type: "tool_progress",
+        tool_id: readToolCallId(payload) ?? "",
+        progress: {
+          message: readString(payload, "message", "detail", "title"),
+          progress: readFiniteNumber(payload, "progress", "completed"),
+          total: readFiniteNumber(payload, "total"),
+          metadata: normalizeRecord(payload.metadata),
+        },
+      };
+    case "tool.output.delta":
+      return {
+        ...basePayload,
+        type: "tool_output_delta",
+        tool_id: readToolCallId(payload) ?? "",
+        delta: readString(payload, "delta", "text", "output", "preview") ?? "",
+        output_kind:
+          readString(payload, "output_kind", "outputKind", "stream") ??
+          undefined,
+        metadata: normalizeRecord(payload.metadata),
+      };
     case "tool.result":
       return {
         ...basePayload,
         type: "tool_end",
-        tool_id:
-          readString(
-            payload,
-            "toolCallId",
-            "tool_call_id",
-            "toolId",
-            "tool_id",
-            "id",
-          ) ?? "",
+        tool_id: readToolCallId(payload) ?? "",
         result: normalizeToolExecutionResult(payload),
       };
+    case "file.read":
+      return {
+        ...basePayload,
+        type: "item_completed",
+        item: readFileReadItemFromPayload(payload, event),
+      };
+    case "command.started":
+      return {
+        ...basePayload,
+        type: "item_started",
+        item: readCommandExecutionItemFromPayload(
+          payload,
+          event,
+          "in_progress",
+        ),
+      };
+    case "command.output":
+      return {
+        ...basePayload,
+        type: "tool_output_delta",
+        tool_id: readToolCallId(payload) ?? "",
+        delta: readCommandOutput(payload),
+        output_kind: readString(payload, "kind", "stream"),
+        metadata: {
+          ...(normalizeRecord(payload.metadata) ?? {}),
+          eventClass: event.type,
+          outputRef: readString(payload, "outputRef", "output_ref"),
+          contentRef: readString(payload, "contentRef", "content_ref"),
+          refIds: readStringArray(payload, "refIds", "ref_ids"),
+        },
+      };
+    case "command.exited": {
+      const exitCode = readFiniteNumber(payload, "exitCode", "exit_code");
+      return {
+        ...basePayload,
+        type: "item_completed",
+        item: readCommandExecutionItemFromPayload(
+          payload,
+          event,
+          typeof exitCode === "number" && exitCode !== 0
+            ? "failed"
+            : "completed",
+        ),
+      };
+    }
     case "artifact.snapshot":
       return {
         ...basePayload,
@@ -1540,6 +1631,42 @@ function readStringArray(
   return undefined;
 }
 
+function readFiniteNumber(
+  record: Record<string, unknown>,
+  ...keys: string[]
+): number | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number(value.trim());
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+  return undefined;
+}
+
+function readToolCallId(record: Record<string, unknown>): string | undefined {
+  return readString(
+    record,
+    "toolCallId",
+    "tool_call_id",
+    "toolId",
+    "tool_id",
+    "commandId",
+    "command_id",
+    "id",
+  );
+}
+
+function readToolName(record: Record<string, unknown>): string | undefined {
+  return readString(record, "toolName", "tool_name", "name");
+}
+
 function normalizeToolArguments(value: unknown): string | undefined {
   if (value === undefined || value === null) {
     return undefined;
@@ -1586,6 +1713,111 @@ function normalizeToolExecutionResult(
     ...(error ? { error } : {}),
     ...(Array.isArray(source.images) ? { images: source.images } : {}),
     ...(metadata ? { metadata } : {}),
+  };
+}
+
+function readCommandString(payload: Record<string, unknown>): string {
+  const argv = Array.isArray(payload.commandArgv)
+    ? payload.commandArgv.filter(
+        (part): part is string => typeof part === "string",
+      )
+    : [];
+  return (
+    readString(
+      payload,
+      "canonicalCommand",
+      "canonical_command",
+      "command",
+      "commandSummary",
+      "command_summary",
+    ) ??
+    argv.join(" ") ??
+    ""
+  );
+}
+
+function readCommandOutput(payload: Record<string, unknown>): string {
+  return (
+    readString(
+      payload,
+      "aggregated_output",
+      "aggregatedOutput",
+      "output",
+      "preview",
+      "delta",
+      "text",
+    ) ?? ""
+  );
+}
+
+function readCommandExecutionItemFromPayload(
+  payload: Record<string, unknown>,
+  event: AppServerAgentEvent,
+  status: "in_progress" | "completed" | "failed",
+): Record<string, unknown> {
+  const commandId = readToolCallId(payload) ?? event.eventId;
+  const startedAt =
+    readString(payload, "startedAt", "started_at", "timestamp") ??
+    event.timestamp;
+  const exitCode = readFiniteNumber(payload, "exitCode", "exit_code");
+  const metadata = normalizeRecord(payload.metadata);
+  return {
+    id: commandId,
+    thread_id: event.threadId ?? event.sessionId,
+    turn_id: event.turnId ?? "",
+    sequence: event.sequence,
+    status,
+    started_at: startedAt,
+    completed_at: status === "in_progress" ? undefined : event.timestamp,
+    updated_at: event.timestamp,
+    type: "command_execution",
+    command: readCommandString(payload),
+    cwd: readString(payload, "cwd", "workingDirectory", "working_dir") ?? "",
+    aggregated_output: readCommandOutput(payload),
+    exit_code: exitCode,
+    error: readString(payload, "error", "message"),
+    metadata: {
+      ...(metadata ?? {}),
+      eventClass: event.type,
+      outputRef: readString(payload, "outputRef", "output_ref"),
+      contentRef: readString(payload, "contentRef", "content_ref"),
+      refIds: readStringArray(payload, "refIds", "ref_ids"),
+    },
+  };
+}
+
+function readFileReadItemFromPayload(
+  payload: Record<string, unknown>,
+  event: AppServerAgentEvent,
+): Record<string, unknown> {
+  const path = readString(payload, "path", "filePath", "file_path") ?? "";
+  const contentRef = readString(payload, "contentRef", "content_ref");
+  const outputRef = readString(payload, "outputRef", "output_ref");
+  const metadata = normalizeRecord(payload.metadata);
+  return {
+    id: readToolCallId(payload) ?? event.eventId,
+    thread_id: event.threadId ?? event.sessionId,
+    turn_id: event.turnId ?? "",
+    sequence: event.sequence,
+    status: "completed",
+    started_at: event.timestamp,
+    completed_at: event.timestamp,
+    updated_at: event.timestamp,
+    type: "file_artifact",
+    path,
+    source: "file_read",
+    metadata: {
+      ...(metadata ?? {}),
+      eventClass: event.type,
+      toolCallId: readToolCallId(payload),
+      toolName: readToolName(payload),
+      outputRef,
+      contentRef,
+      refIds: readStringArray(payload, "refIds", "ref_ids"),
+      startLine: readFiniteNumber(payload, "startLine", "start_line"),
+      endLine: readFiniteNumber(payload, "endLine", "end_line"),
+      fileType: readString(payload, "fileType", "file_type"),
+    },
   };
 }
 

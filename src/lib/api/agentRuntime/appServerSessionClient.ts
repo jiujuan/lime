@@ -4,7 +4,6 @@ import {
   type AppServerAgentTurn,
   type AppServerAgentSessionReadParams,
   type AppServerAgentSessionReadResponse,
-  type AppServerAgentSessionArchiveManyResponse,
   type AppServerAgentSessionUpdateParams,
   type AppServerBusinessObjectRef,
 } from "@/lib/api/appServer";
@@ -35,6 +34,7 @@ export type AppServerSessionRpcClient = Pick<
 export type AppServerAgentSessionListParams = {
   includeArchived?: boolean;
   archivedOnly?: boolean;
+  cwd?: string | string[];
   workspaceId?: string;
   limit?: number;
 };
@@ -57,6 +57,11 @@ export type AppServerAgentSessionListResponse = {
   sessions: AppServerAgentSessionOverview[];
 };
 
+type NormalizedAppServerAgentSessionReadResponse =
+  AppServerAgentSessionReadResponse & {
+    detail?: unknown;
+  };
+
 export interface AppServerSessionClientDeps {
   appServerClient?: AppServerSessionRpcClient;
 }
@@ -65,21 +70,22 @@ export function createAppServerSessionClient({
   appServerClient = new AppServerClient(),
 }: AppServerSessionClientDeps = {}) {
   async function createAgentRuntimeSession(
-    workspaceId: string,
+    workspaceId?: string,
     name?: string,
     executionStrategy?: AsterExecutionStrategy,
     options?: AgentRuntimeCreateSessionOptions,
   ): Promise<string> {
-    const normalizedWorkspaceId = requireWorkspaceId(workspaceId);
+    const sessionScope = normalizeCreateSessionScope(workspaceId, options);
     const normalizedName = name?.trim() || "新对话";
     const response = await appServerClient.startSession({
       appId: DEFAULT_APP_ID,
-      workspaceId: normalizedWorkspaceId,
+      workspaceId: sessionScope.workspaceId,
       businessObjectRef: sessionBusinessObjectRef({
-        workspaceId: normalizedWorkspaceId,
+        scopeId: sessionScope.scopeId,
         name: normalizedName,
         executionStrategy,
         runStartHooks: options?.runStartHooks,
+        workingDir: sessionScope.workingDir,
         metadata: options?.metadata,
       }),
     });
@@ -95,8 +101,11 @@ export function createAppServerSessionClient({
         METHOD_AGENT_SESSION_LIST,
         appServerSessionListParamsFromOptions(options),
       );
-    assertAppServerAgentSessionListResponse(response.result);
-    return response.result.sessions.map(appServerSessionOverviewToRuntimeInfo);
+    const sessions = readAppServerAgentSessionListResponse(response.result);
+    if (!sessions) {
+      throw new Error("agentSession/list did not return session list");
+    }
+    return sessions.map(appServerSessionOverviewToRuntimeInfo);
   }
 
   async function getAgentRuntimeSession(
@@ -106,10 +115,13 @@ export function createAppServerSessionClient({
     const response = await appServerClient.readSession(
       appServerSessionReadParamsFromOptions(sessionId, options),
     );
-    assertAppServerAgentSessionReadResponse(response.result);
+    const readResponse = readAppServerAgentSessionReadResponse(response.result);
+    if (!readResponse) {
+      throw new Error("agentSession/read did not return session detail");
+    }
     return (
-      readSessionDetail(response.result) ??
-      appServerSessionReadToRuntimeDetail(response.result)
+      readSessionDetail(readResponse) ??
+      appServerSessionReadToRuntimeDetail(readResponse)
     );
   }
 
@@ -127,8 +139,13 @@ export function createAppServerSessionClient({
     const response = await appServerClient.archiveManySessions({
       sessionIds: normalizeSessionIds(sessionIds),
     });
-    assertAppServerAgentSessionArchiveManyResponse(response.result);
-    return response.result.sessions.map(appServerSessionOverviewToRuntimeInfo);
+    const sessions = readAppServerAgentSessionListResponse(response.result);
+    if (!sessions) {
+      throw new Error(
+        "agentSession/archiveMany did not return archived sessions",
+      );
+    }
+    return sessions.map(appServerSessionOverviewToRuntimeInfo);
   }
 
   return {
@@ -148,101 +165,227 @@ function assertAppServerAgentSession(
   }
 }
 
-function assertAppServerAgentSessionListResponse(
-  value: unknown,
-): asserts value is AppServerAgentSessionListResponse {
-  if (!isAppServerAgentSessionListResponse(value)) {
-    throw new Error("agentSession/list did not return session list");
-  }
-}
-
-function assertAppServerAgentSessionArchiveManyResponse(
-  value: unknown,
-): asserts value is AppServerAgentSessionArchiveManyResponse {
-  if (!isAppServerAgentSessionListResponse(value)) {
-    throw new Error(
-      "agentSession/archiveMany did not return archived sessions",
-    );
-  }
-}
-
-function assertAppServerAgentSessionReadResponse(
-  value: unknown,
-): asserts value is AppServerAgentSessionReadResponse {
-  if (!isAppServerAgentSessionReadResponse(value)) {
-    throw new Error("agentSession/read did not return session detail");
-  }
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function readField(
+  record: Record<string, unknown>,
+  camelKey: string,
+  snakeKey?: string,
+): unknown {
+  if (Object.prototype.hasOwnProperty.call(record, camelKey)) {
+    return record[camelKey];
+  }
+  return snakeKey ? record[snakeKey] : undefined;
+}
+
+function readStringField(
+  record: Record<string, unknown>,
+  camelKey: string,
+  snakeKey?: string,
+): string {
+  const value = readField(record, camelKey, snakeKey);
+  return typeof value === "string" ? value : "";
+}
+
+function readOptionalStringField(
+  record: Record<string, unknown>,
+  camelKey: string,
+  snakeKey?: string,
+): string | undefined {
+  const value = readField(record, camelKey, snakeKey);
+  return typeof value === "string" ? value : undefined;
+}
+
+function readNumberField(
+  record: Record<string, unknown>,
+  camelKey: string,
+  snakeKey?: string,
+): number | undefined {
+  const value = readField(record, camelKey, snakeKey);
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
+}
+
+function readNullableStringField(
+  record: Record<string, unknown>,
+  camelKey: string,
+  snakeKey?: string,
+): string | null | undefined {
+  const value = readField(record, camelKey, snakeKey);
+  return value === null || typeof value === "string" ? value : undefined;
+}
+
+function readAppServerAgentSession(
+  value: unknown,
+): AppServerAgentSession | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const sessionId = readStringField(value, "sessionId", "session_id");
+  const threadId = readStringField(value, "threadId", "thread_id");
+  const appId = readStringField(value, "appId", "app_id");
+  const status = readStringField(value, "status");
+  const createdAt = readStringField(value, "createdAt", "created_at");
+  const updatedAt = readStringField(value, "updatedAt", "updated_at");
+  const workspaceId = readOptionalStringField(
+    value,
+    "workspaceId",
+    "workspace_id",
+  );
+  if (
+    !sessionId ||
+    !threadId ||
+    !appId ||
+    !isAppServerAgentSessionStatus(status) ||
+    !createdAt ||
+    !updatedAt
+  ) {
+    return null;
+  }
+
+  return omitUndefined({
+    ...(value as Partial<AppServerAgentSession>),
+    sessionId,
+    threadId,
+    appId,
+    workspaceId,
+    status,
+    createdAt,
+    updatedAt,
+  }) as AppServerAgentSession;
 }
 
 function isAppServerAgentSession(
   value: unknown,
 ): value is AppServerAgentSession {
-  return (
-    isRecord(value) &&
-    isNonEmptyString(value.sessionId) &&
-    isNonEmptyString(value.threadId) &&
-    isNonEmptyString(value.appId) &&
-    optionalString(value.workspaceId) &&
-    isAppServerAgentSessionStatus(value.status) &&
-    isNonEmptyString(value.createdAt) &&
-    isNonEmptyString(value.updatedAt)
-  );
+  return readAppServerAgentSession(value) !== null;
 }
 
-function isAppServerAgentSessionOverview(
+function readAppServerAgentSessionOverview(
   value: unknown,
-): value is AppServerAgentSessionOverview {
-  return (
-    isRecord(value) &&
-    isNonEmptyString(value.sessionId) &&
-    optionalString(value.threadId) &&
-    optionalString(value.title) &&
-    isString(value.model) &&
-    isNonEmptyString(value.createdAt) &&
-    isNonEmptyString(value.updatedAt) &&
-    (value.archivedAt === null || optionalString(value.archivedAt)) &&
-    optionalString(value.workspaceId) &&
-    optionalString(value.workingDir) &&
-    optionalString(value.executionStrategy) &&
-    isFiniteNumber(value.messagesCount)
+): AppServerAgentSessionOverview | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const sessionId = readStringField(value, "sessionId", "session_id");
+  const model = readField(value, "model");
+  const messagesCount = readNumberField(
+    value,
+    "messagesCount",
+    "messages_count",
   );
+  const createdAt = readStringField(value, "createdAt", "created_at");
+  const updatedAt = readStringField(value, "updatedAt", "updated_at");
+  if (
+    !sessionId ||
+    typeof model !== "string" ||
+    typeof messagesCount !== "number" ||
+    !createdAt ||
+    !updatedAt
+  ) {
+    return null;
+  }
+
+  return omitUndefined({
+    ...(value as Partial<AppServerAgentSessionOverview>),
+    sessionId,
+    threadId:
+      readOptionalStringField(value, "threadId", "thread_id") ?? undefined,
+    title: readOptionalStringField(value, "title"),
+    model,
+    createdAt,
+    updatedAt,
+    archivedAt: readNullableStringField(value, "archivedAt", "archived_at"),
+    workspaceId: readOptionalStringField(value, "workspaceId", "workspace_id"),
+    workingDir: readOptionalStringField(value, "workingDir", "working_dir"),
+    executionStrategy: readOptionalStringField(
+      value,
+      "executionStrategy",
+      "execution_strategy",
+    ),
+    messagesCount,
+  }) as AppServerAgentSessionOverview;
 }
 
-function isAppServerAgentSessionListResponse(
+function readAppServerAgentSessionListResponse(
   value: unknown,
-): value is AppServerAgentSessionListResponse {
-  return (
-    isRecord(value) &&
-    Array.isArray(value.sessions) &&
-    value.sessions.every(isAppServerAgentSessionOverview)
-  );
+): AppServerAgentSessionOverview[] | null {
+  if (!isRecord(value) || !Array.isArray(value.sessions)) {
+    return null;
+  }
+
+  const sessions: AppServerAgentSessionOverview[] = [];
+  for (const session of value.sessions) {
+    const normalized = readAppServerAgentSessionOverview(session);
+    if (!normalized) {
+      return null;
+    }
+    sessions.push(normalized);
+  }
+  return sessions;
 }
 
-function isAppServerAgentSessionReadResponse(
+function readAppServerAgentSessionReadResponse(
   value: unknown,
-): value is AppServerAgentSessionReadResponse {
-  return (
-    isRecord(value) &&
-    isAppServerAgentSession(value.session) &&
-    Array.isArray(value.turns) &&
-    value.turns.every(isAppServerAgentTurn)
-  );
+): NormalizedAppServerAgentSessionReadResponse | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const session = readAppServerAgentSession(value.session);
+  if (!session || !Array.isArray(value.turns)) {
+    return null;
+  }
+
+  const turns: AppServerAgentTurn[] = [];
+  for (const turn of value.turns) {
+    const normalized = readAppServerAgentTurn(turn);
+    if (!normalized) {
+      return null;
+    }
+    turns.push(normalized);
+  }
+
+  return {
+    ...(value as Partial<NormalizedAppServerAgentSessionReadResponse>),
+    session,
+    turns,
+    detail: value.detail,
+  } as NormalizedAppServerAgentSessionReadResponse;
 }
 
-function isAppServerAgentTurn(value: unknown): value is AppServerAgentTurn {
-  return (
-    isRecord(value) &&
-    isNonEmptyString(value.turnId) &&
-    isNonEmptyString(value.sessionId) &&
-    isNonEmptyString(value.threadId) &&
-    isAppServerAgentTurnStatus(value.status) &&
-    optionalString(value.startedAt) &&
-    optionalString(value.completedAt)
-  );
+function readAppServerAgentTurn(value: unknown): AppServerAgentTurn | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const turnId = readStringField(value, "turnId", "turn_id");
+  const sessionId = readStringField(value, "sessionId", "session_id");
+  const threadId = readStringField(value, "threadId", "thread_id");
+  const status = readStringField(value, "status");
+  if (
+    !turnId ||
+    !sessionId ||
+    !threadId ||
+    !isAppServerAgentTurnStatus(status)
+  ) {
+    return null;
+  }
+
+  return omitUndefined({
+    ...(value as Partial<AppServerAgentTurn>),
+    turnId,
+    sessionId,
+    threadId,
+    status,
+    startedAt: readOptionalStringField(value, "startedAt", "started_at"),
+    completedAt: readOptionalStringField(value, "completedAt", "completed_at"),
+  }) as AppServerAgentTurn;
 }
 
 function isAppServerAgentSessionStatus(value: unknown): boolean {
@@ -268,51 +411,69 @@ function isAppServerAgentTurnStatus(value: unknown): boolean {
   );
 }
 
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0;
-}
-
-function optionalString(value: unknown): boolean {
-  return typeof value === "undefined" || typeof value === "string";
-}
-
-function isString(value: unknown): value is string {
-  return typeof value === "string";
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
 function sessionBusinessObjectRef({
-  workspaceId,
+  scopeId,
   name,
   executionStrategy,
   runStartHooks,
+  workingDir,
   metadata,
 }: {
-  workspaceId: string;
+  scopeId: string;
   name: string;
   executionStrategy?: AsterExecutionStrategy;
   runStartHooks?: boolean;
+  workingDir?: string | null;
   metadata?: Record<string, unknown>;
 }): AppServerBusinessObjectRef {
+  const normalizedWorkingDir = normalizeCwd(workingDir ?? undefined);
   return {
     kind: "agent.session",
-    id: `agent-session:${workspaceId}:${Date.now()}`,
+    id: `agent-session:${scopeId}:${Date.now()}`,
     title: name,
     metadata: {
       ...metadata,
       title: name,
+      ...(normalizedWorkingDir
+        ? {
+            workingDir: normalizedWorkingDir,
+            working_dir: normalizedWorkingDir,
+          }
+        : {}),
       executionStrategy,
       ...(runStartHooks === false ? { runStartHooks: false } : {}),
     },
   };
 }
 
+function normalizeCreateSessionScope(
+  workspaceId: string | undefined,
+  options?: AgentRuntimeCreateSessionOptions,
+): { workspaceId?: string; workingDir?: string; scopeId: string } {
+  const normalizedWorkingDir = normalizeCwd(options?.workingDir ?? undefined);
+  const normalizedWorkspaceId = workspaceId?.trim() || undefined;
+  if (normalizedWorkingDir) {
+    return {
+      workspaceId: normalizedWorkspaceId,
+      workingDir: normalizedWorkingDir,
+      scopeId: normalizedWorkingDir,
+    };
+  }
+  if (normalizedWorkspaceId) {
+    return {
+      workspaceId: normalizedWorkspaceId,
+      scopeId: normalizedWorkspaceId,
+    };
+  }
+  return {
+    scopeId: "detached",
+  };
+}
+
 function appServerSessionListParamsFromOptions(
   options?: AgentRuntimeListSessionsOptions,
 ): AppServerAgentSessionListParams {
+  const cwd = normalizeCwdFilter(options?.cwd);
   const workspaceId = options?.workspaceId?.trim();
   const limit =
     typeof options?.limit === "number" &&
@@ -323,9 +484,29 @@ function appServerSessionListParamsFromOptions(
   return omitUndefined({
     includeArchived: options?.includeArchived === true ? true : undefined,
     archivedOnly: options?.archivedOnly === true ? true : undefined,
-    workspaceId: workspaceId || undefined,
+    cwd,
+    workspaceId: cwd ? undefined : workspaceId || undefined,
     limit,
   });
+}
+
+function normalizeCwdFilter(cwd: string | string[] | undefined) {
+  if (Array.isArray(cwd)) {
+    const normalized = cwd
+      .map((value) => normalizeCwd(value))
+      .filter((value): value is string => Boolean(value));
+    return normalized.length > 0 ? normalized : undefined;
+  }
+  return normalizeCwd(cwd);
+}
+
+function normalizeCwd(cwd: string | undefined) {
+  const value = cwd?.trim();
+  if (!value) {
+    return undefined;
+  }
+  const trimmed = value.replace(/[\\/]+$/u, "");
+  return trimmed || value;
 }
 
 function appServerSessionReadParamsFromOptions(
@@ -491,21 +672,52 @@ function agentThreadTurnStatusFromAppServer(
 }
 
 function readSessionDetail(
-  response: AppServerAgentSessionReadResponse & { detail?: unknown },
+  response: NormalizedAppServerAgentSessionReadResponse,
 ): AsterSessionDetail | null {
-  const detail = response.detail;
-  if (!detail || typeof detail !== "object" || Array.isArray(detail)) {
+  if (!isRecord(response.detail)) {
     return null;
   }
-  return detail as AsterSessionDetail;
-}
-
-function requireWorkspaceId(workspaceId?: string): string {
-  const normalizedWorkspaceId = workspaceId?.trim();
-  if (!normalizedWorkspaceId) {
-    throw new Error("workspaceId 不能为空，请先选择项目工作区");
-  }
-  return normalizedWorkspaceId;
+  const detail = response.detail as Partial<AsterSessionDetail>;
+  const fallback = appServerSessionReadToRuntimeDetail(response);
+  const detailThreadRead = isRecord(detail.thread_read)
+    ? detail.thread_read
+    : isRecord((detail as Record<string, unknown>).threadRead)
+      ? ((detail as Record<string, unknown>)
+          .threadRead as AsterSessionDetail["thread_read"])
+      : undefined;
+  return {
+    ...fallback,
+    ...detail,
+    id: typeof detail.id === "string" ? detail.id : fallback.id,
+    thread_id:
+      typeof detail.thread_id === "string" ? detail.thread_id : fallback.thread_id,
+    name: typeof detail.name === "string" ? detail.name : fallback.name,
+    created_at:
+      typeof detail.created_at === "number" && Number.isFinite(detail.created_at)
+        ? detail.created_at
+        : fallback.created_at,
+    updated_at:
+      typeof detail.updated_at === "number" && Number.isFinite(detail.updated_at)
+        ? detail.updated_at
+        : fallback.updated_at,
+    workspace_id:
+      typeof detail.workspace_id === "string"
+        ? detail.workspace_id
+        : fallback.workspace_id,
+    messages: Array.isArray(detail.messages) ? detail.messages : fallback.messages,
+    turns: Array.isArray(detail.turns) ? detail.turns : fallback.turns,
+    items: Array.isArray(detail.items) ? detail.items : fallback.items,
+    queued_turns: Array.isArray(detail.queued_turns)
+      ? detail.queued_turns
+      : fallback.queued_turns,
+    thread_read: detailThreadRead ?? projectAppServerSessionReadToThreadReadModel(response),
+    todo_items: Array.isArray(detail.todo_items)
+      ? detail.todo_items
+      : fallback.todo_items,
+    child_subagent_sessions: Array.isArray(detail.child_subagent_sessions)
+      ? detail.child_subagent_sessions
+      : fallback.child_subagent_sessions,
+  };
 }
 
 function timestampMillis(value: string | undefined): number {

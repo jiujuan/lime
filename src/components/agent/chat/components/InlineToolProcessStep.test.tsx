@@ -652,7 +652,7 @@ describe("InlineToolProcessStep", () => {
   it("完成态过程卡不应重复展示执行完成与原始工具名", () => {
     const { container } = renderTool({
       id: "tool-inline-ask-user-1",
-      name: "AskUserQuestion",
+      name: "request_user_input",
       arguments: JSON.stringify({ question: "需要继续吗？" }),
       status: "completed",
       result: {

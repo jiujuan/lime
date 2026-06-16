@@ -111,21 +111,81 @@ describe("AgentThreadTimeline", () => {
         timelineItemId: "artifact-1",
         filePath: "exports/x-article-export/google/index.md",
         blockId: "hero-1",
+        openMode: "artifact_review",
       }),
     );
   });
-  it("多个 file_artifact 应直接渲染卡片，不再重复显示产出摘要头", () => {
+  it("单个普通 file_artifact 应渲染为文件附件卡并打开真实内容", async () => {
+    const onOpenArtifactFromTimeline = vi.fn();
+    const container = renderTimeline(
+      [
+        createFileArtifactItem({
+          path: "internal/roadmap/db/README.md",
+          content: "# Lime DB\n\nAgent durable log owns runtime transcript",
+          metadata: {},
+        }),
+      ],
+      { onOpenArtifactFromTimeline },
+    );
+
+    expect(
+      container.querySelector('[data-testid="timeline-file-attachment-card"]'),
+    ).not.toBeNull();
+    expect(container.textContent).toContain("README.md");
+    expect(container.textContent).toContain("文档 · MD");
+    expect(container.textContent).toContain("打开文件");
+    expect(container.textContent).not.toContain("打开方式");
+    expect(
+      container.querySelector('[data-testid="timeline-file-artifact-card"]'),
+    ).toBeNull();
+
+    const openButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>("button"),
+    ).find((button) => button.textContent?.includes("打开文件"));
+
+    await act(async () => {
+      openButton?.click();
+      await Promise.resolve();
+    });
+
+    expect(onOpenArtifactFromTimeline).toHaveBeenCalledWith(
+      expect.objectContaining({
+        timelineItemId: "artifact-1",
+        filePath: "internal/roadmap/db/README.md",
+        content: "# Lime DB\n\nAgent durable log owns runtime transcript",
+        openMode: "file_preview",
+      }),
+    );
+  });
+  it("多个 file_artifact 应聚合成一个文件变更框", async () => {
+    const onOpenArtifactFromTimeline = vi.fn();
     const container = renderTimeline([
       createFileArtifactItem({
         path: "workspace/index.md",
         content: "# Index\n\n主文档内容",
+        metadata: {
+          file_change: {
+            path: "workspace/index.md",
+            kind: "update",
+            lines_added: 4,
+            lines_removed: 2,
+          },
+        },
       }),
       createFileArtifactItem({
         ...createBaseItem("artifact-2", 2),
         path: "workspace/Agents.md",
         content: "# Agents\n\n协作说明",
+        metadata: {
+          file_change: {
+            path: "workspace/Agents.md",
+            kind: "add",
+            lines_added: 3,
+            lines_removed: 0,
+          },
+        },
       }),
-    ]);
+    ], { onOpenArtifactFromTimeline });
 
     expect(
       container.querySelector('[data-testid="agent-thread-block:1:artifact"]'),
@@ -136,10 +196,38 @@ describe("AgentThreadTimeline", () => {
       ),
     ).toBeNull();
     expect(
+      container.querySelector('[data-testid="timeline-file-artifact-group"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="file-changes-summary-card"]'),
+    ).not.toBeNull();
+    expect(container.textContent).toContain("已编辑 2 个文件");
+    expect(container.textContent).toContain("+7");
+    expect(container.textContent).toContain("-2");
+    expect(
       container.querySelectorAll('[data-testid="timeline-file-artifact-card"]'),
-    ).toHaveLength(2);
+    ).toHaveLength(0);
     expect(container.textContent).not.toContain("产出了 index.md");
     expect(container.textContent).not.toContain("产出了 Agents.md");
+
+    const rows = container.querySelectorAll<HTMLButtonElement>(
+      '[data-testid="file-changes-summary-file-row"]',
+    );
+    expect(rows).toHaveLength(2);
+
+    await act(async () => {
+      rows[0]?.click();
+      await Promise.resolve();
+    });
+
+    expect(onOpenArtifactFromTimeline).toHaveBeenCalledWith(
+      expect.objectContaining({
+        timelineItemId: "artifact-1",
+        filePath: "workspace/index.md",
+        content: "# Index\n\n主文档内容",
+        openMode: "file_preview",
+      }),
+    );
   });
   it("时间线 Markdown 产物应透传保存到项目资料回调", () => {
     const onSaveFileArtifactAsKnowledge = vi.fn();
@@ -162,8 +250,15 @@ describe("AgentThreadTimeline", () => {
       },
     );
 
-    expect(container.textContent).toContain("Document 产物");
-    expect(container.textContent).toContain("可保存到项目资料");
+    expect(
+      container.querySelector('[data-testid="timeline-file-attachment-card"]'),
+    ).not.toBeNull();
+    expect(container.textContent).toContain(
+      "谢晶_营销文案包_KnowledgeV2_E2E.md",
+    );
+    expect(container.textContent).toContain("文档 · MD");
+    expect(container.textContent).toContain("打开文件");
+    expect(container.textContent).not.toContain("打开方式");
 
     const saveButton = Array.from(
       container.querySelectorAll<HTMLButtonElement>("button"),

@@ -104,12 +104,30 @@ function normalizeProjectId(projectId?: string | null): string {
   return projectId?.trim() ?? "";
 }
 
-function resolveProjectNameFromId(projectId: string): string {
-  if (!projectId) {
-    return "";
+function isUuidLike(value?: string | null): boolean {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return false;
   }
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    normalized,
+  );
+}
 
-  return projectId.split(/[\\/]/).filter(Boolean).pop()?.trim() || projectId;
+function isDisplayableProject(project?: InputbarOpenedProject | null) {
+  if (!project) {
+    return false;
+  }
+  const projectId = normalizeProjectId(project.id);
+  const projectName = project.name.trim();
+  const projectRootPath = project.rootPath?.trim();
+  if (!projectId || !projectName) {
+    return false;
+  }
+  if (projectRootPath) {
+    return true;
+  }
+  return !(isUuidLike(projectId) && projectName === projectId);
 }
 
 function resolveDirectoryName(path: string): string {
@@ -191,27 +209,22 @@ export function InputbarProjectContextBar({
         if (cancelled) {
           return;
         }
+        const projectSummary = project
+          ? {
+              id: project.id,
+              name: project.name,
+              rootPath: project.rootPath,
+            }
+          : null;
         setResolvedProject(
-          project
-            ? {
-                id: project.id,
-                name: project.name,
-                rootPath: project.rootPath,
-              }
-            : {
-                id: normalizedProjectId,
-                name: resolveProjectNameFromId(normalizedProjectId),
-              },
+          isDisplayableProject(projectSummary) ? projectSummary : null,
         );
       })
       .catch(() => {
         if (cancelled) {
           return;
         }
-        setResolvedProject({
-          id: normalizedProjectId,
-          name: resolveProjectNameFromId(normalizedProjectId),
-        });
+        setResolvedProject(null);
       });
 
     return () => {
@@ -219,36 +232,21 @@ export function InputbarProjectContextBar({
     };
   }, [normalizedProjectId, openedProjectsContainCurrent]);
 
-  const currentProjectFallback = useMemo(
-    () =>
-      normalizedProjectId
-        ? {
-            id: normalizedProjectId,
-            name: resolveProjectNameFromId(normalizedProjectId),
-            rootPath: null,
-          }
-        : null,
-    [normalizedProjectId],
-  );
   const visibleOpenedProjects = useMemo(() => {
     const source: InputbarOpenedProject[] = [
       ...(openedProjects ?? []),
-      ...(resolvedProject
-        ? [resolvedProject]
-        : currentProjectFallback
-          ? [currentProjectFallback]
-          : []),
+      ...(resolvedProject ? [resolvedProject] : []),
     ];
     const seen = new Set<string>();
     return source.filter((project) => {
       const id = normalizeProjectId(project.id);
-      if (!id || seen.has(id)) {
+      if (!id || seen.has(id) || !isDisplayableProject(project)) {
         return false;
       }
       seen.add(id);
       return true;
     });
-  }, [currentProjectFallback, openedProjects, resolvedProject]);
+  }, [openedProjects, resolvedProject]);
   const activeProject =
     visibleOpenedProjects.find(
       (project) => normalizeProjectId(project.id) === normalizedProjectId,

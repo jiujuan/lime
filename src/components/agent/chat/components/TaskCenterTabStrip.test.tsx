@@ -84,6 +84,7 @@ describe("TaskCenterTabStrip", () => {
       '[data-testid="task-center-tab-strip"]',
     ) as HTMLElement | null;
     expect(strip).toBeTruthy();
+    expect(strip?.getAttribute("role")).toBe("tablist");
     expect(strip?.className).toContain("z-10");
     expect(strip?.className).toContain("min-h-[42px]");
     expect(strip?.className).toContain(
@@ -106,7 +107,14 @@ describe("TaskCenterTabStrip", () => {
     const activeTab = container.querySelector(
       '[data-testid="task-center-tab-topic-a"]',
     ) as HTMLElement | null;
+    const activeTabButton = activeTab?.querySelector("button[role='tab']");
+    const inactiveTabButton = container.querySelector(
+      '[data-testid="task-center-tab-topic-b"] button[role="tab"]',
+    );
     expect(activeTab?.getAttribute("data-active")).toBe("true");
+    expect(activeTabButton?.getAttribute("aria-selected")).toBe("true");
+    expect(activeTabButton?.getAttribute("aria-current")).toBeNull();
+    expect(inactiveTabButton?.getAttribute("aria-selected")).toBe("false");
     expect(activeTab?.className).toContain(
       "bg-[color:var(--lime-chrome-tab-hover)]",
     );

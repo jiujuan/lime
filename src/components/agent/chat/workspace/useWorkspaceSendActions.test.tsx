@@ -611,6 +611,28 @@ describe("useWorkspaceSendActions", () => {
     }
   });
 
+  it("没有项目时普通对话仍应允许发送", async () => {
+    const harness = mountHook({
+      input: "你好",
+      projectId: null,
+      projectRootPath: null,
+      workspaceRequestMetadataBase: undefined,
+    });
+
+    try {
+      await act(async () => {
+        const started = await harness
+          .getValue()
+          .handleSend([], false, false, "你好", "react");
+        expect(started).toBe(true);
+      });
+
+      expect(mockSendMessage).toHaveBeenCalledTimes(1);
+    } finally {
+      harness.unmount();
+    }
+  });
+
   it("首轮初始预览绘制不应阻塞消息提交", async () => {
     const originalRequestAnimationFrameDescriptor =
       Object.getOwnPropertyDescriptor(window, "requestAnimationFrame");

@@ -431,6 +431,7 @@ export interface AgentSessionHandoffBundleExportResponse {
 
 export interface AgentSessionListParams {
   archivedOnly?: boolean | null;
+  cwd?: AgentSessionCwdFilter | null;
   includeArchived?: boolean | null;
   limit?: number | null;
   workspaceId?: null | string;
@@ -3164,3 +3165,5 @@ export interface jsonRpcResponse {
 }
 
 export type requestId = number | string;
+
+export type AgentSessionCwdFilter = string | (string)[];

@@ -3,7 +3,10 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CodingWorkbenchView } from "@limecloud/agent-runtime-projection";
 import type { ConfirmResponse } from "../types";
-import { CodingWorkbenchOutputPanel } from "./CodingWorkbenchOutputPanel";
+import {
+  CodingWorkbenchOutputPanel,
+  type CodingWorkbenchCommandProcessControls,
+} from "./CodingWorkbenchOutputPanel";
 import type {
   CodingWorkbenchRecoveryContext,
   CodingWorkbenchRecoverySignal,
@@ -60,6 +63,9 @@ function createCodingView(
         cwd: "app",
         outputRefs: ["output://command-1"],
         preview: "running tests",
+        processId: "process-1",
+        executionProcessStatus: "running",
+        executionSurface: "execution_process",
         sourceEventIds: ["event-command-1"],
       },
     ],
@@ -143,6 +149,7 @@ function renderPanelWithProps({
   codingView = createCodingView(),
   fileCheckpointSummary,
   submittedActionsInFlight = [],
+  processControls,
   onRespondToAction,
   onSubmitRecoveryPrompt,
 }: {
@@ -153,6 +160,7 @@ function renderPanelWithProps({
   submittedActionsInFlight?: Parameters<
     typeof CodingWorkbenchOutputPanel
   >[0]["submittedActionsInFlight"];
+  processControls?: CodingWorkbenchCommandProcessControls;
   onRespondToAction?: (response: ConfirmResponse) => void | Promise<void>;
   onSubmitRecoveryPrompt?: Parameters<
     typeof CodingWorkbenchOutputPanel
@@ -168,6 +176,7 @@ function renderPanelWithProps({
         codingView={codingView}
         fileCheckpointSummary={fileCheckpointSummary}
         submittedActionsInFlight={submittedActionsInFlight}
+        processControls={processControls}
         onRespondToAction={onRespondToAction}
         onSubmitRecoveryPrompt={onSubmitRecoveryPrompt}
       />,
@@ -220,12 +229,99 @@ describe("CodingWorkbenchOutputPanel", () => {
         ?.textContent,
     ).toContain("确认执行命令");
     expect(container.textContent).toContain("npm test");
+    expect(container.textContent).toContain("进程 process-1");
+    expect(container.textContent).toContain("状态：running");
     expect(
       container.querySelector('[data-testid="coding-workbench-diagnostic"]')
         ?.textContent,
     ).toContain("命令失败");
     expect(container.textContent).toContain("失败即停止");
     expect(container.textContent).toContain("event-command-1");
+  });
+
+  it("应为 live execution process 渲染进程控制按钮并传递 processId", async () => {
+    const processControls: Required<CodingWorkbenchCommandProcessControls> = {
+      onInterruptProcess: vi.fn(),
+      onTerminateProcess: vi.fn(),
+      onRefreshProcessStatus: vi.fn(),
+      onDrainProcessOutput: vi.fn(),
+    };
+    const container = renderPanelWithProps({ processControls });
+
+    expect(
+      container.querySelector(
+        '[data-testid="coding-workbench-command-process-controls"]',
+      ),
+    ).not.toBeNull();
+
+    const refresh = container.querySelector(
+      'button[aria-label="刷新进程 process-1 状态"]',
+    ) as HTMLButtonElement | null;
+    const drain = container.querySelector(
+      'button[aria-label="读取进程 process-1 的新增输出"]',
+    ) as HTMLButtonElement | null;
+    const interrupt = container.querySelector(
+      'button[aria-label="中断进程 process-1"]',
+    ) as HTMLButtonElement | null;
+    const terminate = container.querySelector(
+      'button[aria-label="终止进程 process-1"]',
+    ) as HTMLButtonElement | null;
+
+    await act(async () => {
+      refresh?.click();
+      drain?.click();
+      interrupt?.click();
+      terminate?.click();
+    });
+
+    expect(processControls.onRefreshProcessStatus).toHaveBeenCalledWith(
+      "process-1",
+    );
+    expect(processControls.onDrainProcessOutput).toHaveBeenCalledWith(
+      "process-1",
+    );
+    expect(processControls.onInterruptProcess).toHaveBeenCalledWith(
+      "process-1",
+    );
+    expect(processControls.onTerminateProcess).toHaveBeenCalledWith(
+      "process-1",
+    );
+  });
+
+  it("已结束或缺少 processId 的命令不应显示进程控制按钮", () => {
+    const processControls: Required<CodingWorkbenchCommandProcessControls> = {
+      onInterruptProcess: vi.fn(),
+      onTerminateProcess: vi.fn(),
+      onRefreshProcessStatus: vi.fn(),
+      onDrainProcessOutput: vi.fn(),
+    };
+    const terminalCommand = {
+      ...createCodingView().commands[0],
+      commandId: "command-terminal",
+      processId: "process-terminal",
+      executionProcessStatus: "exited",
+    };
+    const nonProcessCommand = {
+      ...createCodingView().commands[0],
+      commandId: "command-no-process",
+      processId: undefined,
+      executionProcessStatus: "running",
+    };
+    const container = renderPanelWithProps({
+      processControls,
+      codingView: createCodingView({
+        commands: [terminalCommand, nonProcessCommand],
+        tests: [],
+        actions: [],
+        diagnostics: [],
+      }),
+    });
+
+    expect(
+      container.querySelector(
+        '[data-testid="coding-workbench-command-process-controls"]',
+      ),
+    ).toBeNull();
   });
 
   it("应允许从 coding action projection 直接提交命令确认", () => {
@@ -432,10 +528,9 @@ describe("CodingWorkbenchOutputPanel", () => {
       }),
     );
     const prompt = onSubmitRecoveryPrompt.mock.calls[0]?.[0] as string;
-    const context =
-      onSubmitRecoveryPrompt.mock.calls[0]?.[1] as
-        | CodingWorkbenchRecoveryContext
-        | undefined;
+    const context = onSubmitRecoveryPrompt.mock.calls[0]?.[1] as
+      | CodingWorkbenchRecoveryContext
+      | undefined;
     expect(prompt).toContain("npm test");
     expect(prompt).toContain("unit");
     expect(prompt).toContain("命令失败");
@@ -443,13 +538,10 @@ describe("CodingWorkbenchOutputPanel", () => {
     expect(prompt).toContain("相关文件: src/App.tsx");
     expect(prompt).toContain("最近文件快照: src/App.tsx");
     expect(
-      context?.signals.map((signal: CodingWorkbenchRecoverySignal) => signal.kind),
-    ).toEqual([
-      "command",
-      "test",
-      "patch",
-      "diagnostic",
-    ]);
+      context?.signals.map(
+        (signal: CodingWorkbenchRecoverySignal) => signal.kind,
+      ),
+    ).toEqual(["command", "test", "patch", "diagnostic"]);
   });
 
   it("没有失败事实时不应显示继续修复入口", () => {

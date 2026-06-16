@@ -13,14 +13,12 @@ export interface ResolveTopicSwitchProjectOptions {
   topicBoundProjectId?: string | null;
   lastProjectId?: string | null;
   loadProjectById: (projectId: string) => Promise<TopicProjectSnapshot | null>;
-  loadDefaultProject: () => Promise<TopicProjectSnapshot | null>;
-  createDefaultProject: () => Promise<TopicProjectSnapshot | null>;
 }
 
 export type ResolveTopicSwitchProjectResult =
   | { status: "blocked"; reason: "locked_project_conflict" }
   | { status: "missing"; reason: "no_available_project" }
-  | { status: "ok"; projectId: string; createdDefault: boolean };
+  | { status: "ok"; projectId: string };
 
 function normalizeActiveProjectId(
   project: TopicProjectSnapshot | null | undefined,
@@ -36,8 +34,6 @@ export async function resolveTopicSwitchProject({
   topicBoundProjectId,
   lastProjectId,
   loadProjectById,
-  loadDefaultProject,
-  createDefaultProject,
 }: ResolveTopicSwitchProjectOptions): Promise<ResolveTopicSwitchProjectResult> {
   const locked = normalizeProjectId(lockedProjectId);
   const topicBound = normalizeProjectId(topicBoundProjectId);
@@ -46,7 +42,7 @@ export async function resolveTopicSwitchProject({
     if (isLockedProjectConflict(locked, topicBound)) {
       return { status: "blocked", reason: "locked_project_conflict" };
     }
-    return { status: "ok", projectId: locked, createdDefault: false };
+    return { status: "ok", projectId: locked };
   }
 
   const candidateProjectIds = [
@@ -66,25 +62,8 @@ export async function resolveTopicSwitchProject({
       return {
         status: "ok",
         projectId: normalizedCandidateId,
-        createdDefault: false,
       };
     }
-  }
-
-  const defaultProjectId = normalizeActiveProjectId(await loadDefaultProject());
-  if (defaultProjectId) {
-    return { status: "ok", projectId: defaultProjectId, createdDefault: false };
-  }
-
-  const createdDefaultProjectId = normalizeActiveProjectId(
-    await createDefaultProject(),
-  );
-  if (createdDefaultProjectId) {
-    return {
-      status: "ok",
-      projectId: createdDefaultProjectId,
-      createdDefault: true,
-    };
   }
 
   return { status: "missing", reason: "no_available_project" };

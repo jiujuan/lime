@@ -30,9 +30,11 @@ import {
 } from "./toolBatchGrouping";
 
 type DateLike = string | number | null;
+type LatestRuntimePhase = NonNullable<Message["runtimeStatus"]>["phase"];
 
 export interface InputbarRuntimeStatusLineModel {
   status: AgentTaskRuntimeStatus;
+  latestRuntimePhase?: LatestRuntimePhase | null;
   detail: string | null;
   batchDescriptor: ToolBatchSummaryDescriptor | null;
   queuedTurnCount: number;
@@ -287,6 +289,16 @@ function resolveVisibleUsage(
   return latestAssistant?.usage;
 }
 
+function shouldShowActiveRuntimeStatusDetail(
+  phase?: LatestRuntimePhase | null,
+): boolean {
+  return (
+    phase === "retrying" ||
+    phase === "continuing" ||
+    phase === "synthesizing"
+  );
+}
+
 function resolveFallbackDetail(params: {
   status: AgentTaskRuntimeStatus;
   latestTurn: AgentThreadTurn | null;
@@ -390,7 +402,12 @@ export function buildInputbarRuntimeStatusLineModel({
   if (builtTask) {
     return {
       status: builtTask.status,
+      latestRuntimePhase: latestAssistant?.runtimeStatus?.phase ?? null,
       detail:
+        (builtTask.status === "running" &&
+          shouldShowActiveRuntimeStatusDetail(
+            latestAssistant?.runtimeStatus?.phase,
+          )) ||
         builtTask.status === "waiting_input" ||
         builtTask.status === "failed" ||
         builtTask.status === "aborted"
@@ -432,6 +449,7 @@ export function buildInputbarRuntimeStatusLineModel({
 
   return {
     status,
+    latestRuntimePhase: latestAssistant?.runtimeStatus?.phase ?? null,
     detail: resolveFallbackDetail({
       status,
       latestTurn,

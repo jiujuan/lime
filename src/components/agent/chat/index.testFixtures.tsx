@@ -286,8 +286,7 @@ vi.mock("sonner", () => ({
 }));
 
 vi.mock("@/lib/dev-bridge", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("@/lib/dev-bridge")>();
+  const actual = await importOriginal<typeof import("@/lib/dev-bridge")>();
   return {
     ...actual,
     safeListen: mockSafeListen,
@@ -606,6 +605,58 @@ vi.mock("./components/MarkdownRenderer", () => ({
 
 vi.mock("./components/Inputbar", () => ({
   Inputbar: (props: Record<string, unknown>) => mockInputbar(props),
+}));
+
+vi.mock("./components/TaskCenterUtilityToolbar", () => ({
+  TaskCenterUtilityToolbar: ({
+    showCanvasToggle,
+    isCanvasOpen,
+    onToggleCanvas,
+    showHarnessToggle,
+    harnessPanelVisible,
+    onToggleHarnessPanel,
+    harnessToggleLabel,
+  }: {
+    showCanvasToggle?: boolean;
+    isCanvasOpen?: boolean;
+    onToggleCanvas?: () => void;
+    showHarnessToggle?: boolean;
+    harnessPanelVisible?: boolean;
+    onToggleHarnessPanel?: () => void;
+    harnessToggleLabel?: string;
+  }) => (
+    <div
+      data-testid="task-center-utility-toolbar"
+      data-show-canvas-toggle={showCanvasToggle ? "true" : "false"}
+      data-canvas-open={isCanvasOpen ? "true" : "false"}
+      data-show-harness-toggle={showHarnessToggle ? "true" : "false"}
+      data-harness-panel-visible={harnessPanelVisible ? "true" : "false"}
+      data-harness-toggle-label={harnessToggleLabel || "Harness"}
+    >
+      {showCanvasToggle ? (
+        <button
+          type="button"
+          data-testid="toggle-canvas"
+          onClick={() => {
+            onToggleCanvas?.();
+          }}
+        >
+          {isCanvasOpen ? "折叠画布" : "展开画布"}
+        </button>
+      ) : null}
+      {showHarnessToggle ? (
+        <button
+          type="button"
+          data-testid="toggle-harness"
+          onClick={() => {
+            onToggleHarnessPanel?.();
+          }}
+        >
+          切换 {harnessToggleLabel || "Harness"}
+        </button>
+      ) : null}
+    </div>
+  ),
 }));
 
 vi.mock("./components/EmptyState", () => ({
@@ -1130,10 +1181,12 @@ export function createMockAgentChatUnifiedState(
   };
 }
 
-export function installMockAgentChatUnifiedState(state: Record<string, unknown>) {
+export function installMockAgentChatUnifiedState(
+  state: Record<string, unknown>,
+) {
   mockUseAgentChatUnified.mockImplementation(
-    ({ workspaceId }: { workspaceId: string }) => {
-      observedWorkspaceIds.push(workspaceId);
+    ({ workspaceId }: { workspaceId?: string }) => {
+      observedWorkspaceIds.push(workspaceId ?? "");
       return state;
     },
   );

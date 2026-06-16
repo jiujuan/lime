@@ -148,7 +148,6 @@ pub fn get_mcp_tool_names() -> Vec<String> {
         "mcp__claude-in-chrome__get_page_text".to_string(),
         "mcp__claude-in-chrome__tabs_context_mcp".to_string(),
         "mcp__claude-in-chrome__tabs_create_mcp".to_string(),
-        "mcp__claude-in-chrome__update_plan".to_string(),
         "mcp__claude-in-chrome__read_console_messages".to_string(),
         "mcp__claude-in-chrome__read_network_requests".to_string(),
         "mcp__claude-in-chrome__shortcuts_list".to_string(),

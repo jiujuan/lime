@@ -32,7 +32,7 @@ const BUILTIN_VISIBLE_NATIVE_TOOLS: &[(&str, &str)] = &[
         "Return the final JSON answer for the current turn without re-searching tools.",
     ),
     (
-        "AskUserQuestion",
+        "request_user_input",
         "Ask the user for clarification or missing information.",
     ),
 ];
@@ -304,9 +304,7 @@ fn native_tool_search_aliases(name: &str) -> &'static [&'static str] {
             "final output tool",
             "final response",
         ],
-        "askuserquestion" | "askuserquestiontool" => {
-            &["request_user_input", "ask user", "user input"]
-        }
+        "requestuserinput" | "requestuserinputtool" => &["ask user", "user input"],
         "toolsearch" | "toolsearchtool" => &["tool lookup", "search tools", "find tool"],
         _ => &[],
     }

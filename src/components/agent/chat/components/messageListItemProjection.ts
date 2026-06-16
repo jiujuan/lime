@@ -232,6 +232,17 @@ function resolveFinalTextFromContentParts(
   return textParts[textParts.length - 1]?.text.trim() || "";
 }
 
+function resolveDeferredTextContentParts(
+  parts?: Message["contentParts"],
+  options?: Parameters<typeof sanitizeMessageTextForDisplay>[1],
+): Message["contentParts"] | undefined {
+  const finalText = resolveFinalTextFromContentParts(parts);
+  const sanitizedText = options
+    ? sanitizeMessageTextForDisplay(finalText, options)
+    : finalText;
+  return sanitizedText ? [{ type: "text", text: sanitizedText }] : undefined;
+}
+
 function resolveAssistantActionContent(params: {
   displayContent: string;
   conversationContentParts?: Message["contentParts"];
@@ -241,7 +252,10 @@ function resolveAssistantActionContent(params: {
     return resolveFinalTextFromContentParts(params.conversationContentParts);
   }
 
-  return params.displayContent.trim();
+  return (
+    params.displayContent.trim() ||
+    resolveFinalTextFromContentParts(params.conversationContentParts)
+  );
 }
 
 function hasFinalTextAfterProcessBoundary(
@@ -578,7 +592,10 @@ export function resolveMessageListItemProjection({
     rawRuntimePeerContent.length > 0 &&
     isPureRuntimePeerMessageText(rawRuntimePeerContent);
   const sanitizedDisplayContentParts = shouldDeferMessageDetails
-    ? undefined
+    ? resolveDeferredTextContentParts(message.contentParts, {
+        role: message.role,
+        hasImages,
+      })
     : sanitizeContentPartsForDisplay(message.contentParts, {
         role: message.role,
         hasImages,

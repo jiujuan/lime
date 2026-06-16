@@ -85,7 +85,7 @@ pub(super) fn request_for_test(
 fn request_with_session_metadata(metadata: Value) -> ExecutionRequest {
     let mut request = request_for_test("hello", None, None);
     request.session.business_object_ref = Some(BusinessObjectRef {
-        kind: "current_timeline".to_string(),
+        kind: "agent_session".to_string(),
         id: "session-1".to_string(),
         title: None,
         uri: None,
@@ -348,6 +348,68 @@ fn metadata_reasoning_aliases_flow_to_selection_and_turn_context() {
 }
 
 #[test]
+fn inputbar_plan_mode_metadata_flows_to_turn_context_collaboration_mode() {
+    let mut request = request_for_test(
+        "先给我一个修复计划，不要直接改代码",
+        None,
+        Some(json!({
+            "harness": {
+                "task_mode_enabled": true,
+                "collaboration_mode": {
+                    "mode": "plan",
+                    "source": "inputbar"
+                }
+            }
+        })),
+    );
+    let options = request.runtime_options.as_mut().expect("runtime options");
+    options.provider_preference = Some("openai".to_string());
+    options.model_preference = Some("gpt-4.1".to_string());
+
+    let selection = selection_from_explicit_preferences(&request).expect("selection");
+    let scope = session_scope_from_request(&request).expect("scope");
+    let turn_context =
+        turn_context_from_request(&request, None, &scope, &selection, None).expect("turn context");
+
+    assert_eq!(turn_context.collaboration_mode.as_deref(), Some("plan"));
+}
+
+#[test]
+fn planning_collaboration_mode_alias_is_normalized_to_plan() {
+    let mut request = request_for_test(
+        "先规划",
+        Some(json!({
+            "asterChatRequest": {
+                "provider_preference": "openai",
+                "model_preference": "gpt-4.1",
+                "turn_config": {
+                    "metadata": {
+                        "harness": {
+                            "collaborationMode": {
+                                "mode": "planning"
+                            }
+                        }
+                    }
+                }
+            }
+        })),
+        None,
+    );
+    let options = request.runtime_options.as_mut().expect("runtime options");
+    options.provider_preference = Some("openai".to_string());
+    options.model_preference = Some("gpt-4.1".to_string());
+
+    let host_request = aster_chat_request_from_request(&request);
+    let selection = selection_from_explicit_preferences(&request).expect("selection");
+    let scope = session_scope_from_request(&request).expect("scope");
+    let turn_context =
+        turn_context_from_request(&request, host_request.as_ref(), &scope, &selection, None)
+            .expect("turn context");
+
+    assert_eq!(turn_context.collaboration_mode.as_deref(), Some("plan"));
+}
+
+#[test]
 fn injected_tool_execution_config_flows_to_turn_context_metadata() {
     let mut request = request_for_test("hello", None, None);
     let options = request.runtime_options.as_mut().expect("runtime options");
@@ -534,7 +596,7 @@ fn incomplete_session_default_is_not_a_runtime_selection() {
 }
 
 #[test]
-fn current_timeline_extension_data_provider_routing_is_used_as_session_default() {
+fn session_extension_data_provider_routing_is_used_as_session_default() {
     let request = request_with_session_metadata(json!({
         "model": "claude-sonnet-4",
         "extensionData": {
@@ -943,6 +1005,51 @@ fn explicit_web_search_false_keeps_search_disabled() {
 
     assert!(!policy.effective_web_search);
     assert_eq!(policy.search_mode, RequestToolPolicyMode::Disabled);
+}
+
+#[test]
+fn required_web_search_marks_turn_context_for_tool_permission() {
+    let request = request_for_test(
+        "整理今天的国际新闻",
+        Some(json!({
+            "asterChatRequest": {
+                "web_search": true,
+                "search_mode": "required",
+                "turn_config": {
+                    "web_search": true,
+                    "search_mode": "required"
+                }
+            }
+        })),
+        None,
+    );
+    let host_request = aster_chat_request_from_request(&request);
+    let scope = session_scope_from_request(&request).expect("scope");
+    let selection = RuntimeModelSelection {
+        provider: "openai".to_string(),
+        model: "gpt-4.1-mini".to_string(),
+        source: "test",
+        reasoning_effort: None,
+    };
+
+    let turn_context =
+        turn_context_from_request(&request, host_request.as_ref(), &scope, &selection, None)
+            .expect("turn context");
+
+    assert_eq!(
+        turn_context
+            .metadata
+            .get("web_search_enabled")
+            .and_then(Value::as_bool),
+        Some(true)
+    );
+    assert_eq!(
+        turn_context
+            .metadata
+            .get("webSearchEnabled")
+            .and_then(Value::as_bool),
+        Some(true)
+    );
 }
 
 #[test]

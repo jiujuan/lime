@@ -17,7 +17,7 @@ async fn knowledge_compile_pack_runs_builder_runtime_executor_on_current_path() 
     })
     .expect("import source");
 
-    let app_data_source = Arc::new(TestCurrentTimelineDataSource::new(
+    let app_data_source = Arc::new(TestSessionDataSource::new(
         empty_agent_session_read_response("knowledge-builder-session"),
     ));
     let executor = Arc::new(TestKnowledgeBuilderRuntimeExecutor::new());

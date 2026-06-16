@@ -1,9 +1,7 @@
 const LEGACY_DECISION_PREFIX_RE = /^已决定[:：]\s*/;
 const LEGACY_TOOL_SURFACE_ALIASES: Record<string, string> = {
-  ask: "AskUserQuestion",
-  requestuserinput: "AskUserQuestion",
-  requestuserinputtool: "AskUserQuestion",
-  askuserquestiontool: "AskUserQuestion",
+  requestuserinput: "request_user_input",
+  requestuserinputtool: "request_user_input",
   brief: "SendUserMessage",
   brieftool: "SendUserMessage",
   sendusermessage: "SendUserMessage",
@@ -21,6 +19,8 @@ const LEGACY_TOOL_SURFACE_ALIASES: Record<string, string> = {
   execcommand: "Bash",
   localshellcall: "Bash",
   configtool: "Config",
+  updateplan: "update_plan",
+  updateplantool: "update_plan",
   enterplanmodetool: "EnterPlanMode",
   exitplanmodetool: "ExitPlanMode",
   enterworktreetool: "EnterWorktree",

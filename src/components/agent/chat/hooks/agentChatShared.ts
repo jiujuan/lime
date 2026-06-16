@@ -36,6 +36,7 @@ export interface Topic {
   createdAt: Date;
   updatedAt: Date;
   workspaceId?: string | null;
+  workingDir?: string | null;
   messagesCount: number;
   executionStrategy: AsterExecutionStrategy;
   status: TaskStatus;
@@ -55,6 +56,7 @@ export interface UseAsterAgentChatOptions {
     context?: WriteArtifactContext,
   ) => void;
   workspaceId: string;
+  workingDir?: string | null;
   disableSessionRestore?: boolean;
   initialTopicsLoadMode?: "immediate" | "deferred";
   initialTopicsDeferredDelayMs?: number;
@@ -587,6 +589,7 @@ export const mapSessionToTopic = (session: AsterSessionInfo): Topic => {
     createdAt,
     updatedAt,
     workspaceId: normalizeProjectId(session.workspace_id),
+    workingDir: session.working_dir ?? null,
     messagesCount,
     executionStrategy: normalizeExecutionStrategy(session.execution_strategy),
     status: messagesCount > 0 ? "done" : "draft",

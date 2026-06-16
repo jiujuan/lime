@@ -16,7 +16,7 @@ use lime_agent::agent_tools::execution::{
     LocalExecutionRequest, ToolExecutionDecisionInput, ToolExecutionDecisionKind,
     ToolExecutionResolverInput,
 };
-use serde_json::{json, Value};
+use serde_json::json;
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -100,9 +100,7 @@ impl ExecutionProcessServer {
                 )));
             }
         }
-        if metadata_bool(&decision.metadata, "sandboxBackendRequired")
-            || metadata_bool(&decision.metadata, "sandboxBackendEnforced")
-        {
+        if decision.requires_sandboxed_execution() {
             return Err(ExecutionProcessError::SandboxRequired);
         }
         let mut registry = ToolRegistry::new();
@@ -325,10 +323,6 @@ fn shell_wrapper_part(part: &str) -> bool {
             | "-NonInteractive"
             | "-Command"
     )
-}
-
-fn metadata_bool(metadata: &HashMap<String, Value>, key: &str) -> bool {
-    metadata.get(key).and_then(Value::as_bool) == Some(true)
 }
 
 fn push_output(state: &mut ExecutionProcessState, delta: ExecutionProcessOutputDelta) {

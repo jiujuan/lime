@@ -52,14 +52,14 @@ describe("resolveTopicProjectId", () => {
     ).toBe("last-project");
   });
 
-  it("应在前两者缺失时回退默认项目", () => {
+  it("前两者缺失时不应回退默认项目", () => {
     expect(
       resolveTopicProjectId({
         topicBoundProjectId: null,
         lastProjectId: null,
         defaultProjectId: "default-project",
       }),
-    ).toBe("default-project");
+    ).toBeNull();
   });
 });
 

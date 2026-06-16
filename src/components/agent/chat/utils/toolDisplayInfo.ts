@@ -790,6 +790,22 @@ const EXACT_TOOL_CONFIGS = new Map<string, ToolDisplayConfig>([
     },
   ],
   [
+    "updateplan",
+    {
+      family: "plan",
+      label: "计划更新",
+      verb: "更新",
+      icon: Edit3,
+      groupTitle: "计划",
+      actionKey: "plan",
+      actions: {
+        failed: "更新失败",
+        completed: "已更新计划",
+        running: "更新中",
+      },
+    },
+  ],
+  [
     "taskoutput",
     {
       family: "task",
@@ -922,10 +938,10 @@ const EXACT_TOOL_CONFIGS = new Map<string, ToolDisplayConfig>([
     },
   ],
   [
-    "askuserquestion",
+    "requestuserinput",
     {
       family: "generic",
-      label: "用户确认",
+      label: "用户输入",
       verb: "收集",
       icon: Wrench,
       groupTitle: "交互",
@@ -1931,10 +1947,8 @@ const resolveVisionImageSubject = (
 };
 
 const TOOL_NAME_KEY_ALIASES: Record<string, string> = {
-  ask: "askuserquestion",
-  requestuserinput: "askuserquestion",
-  requestuserinputtool: "askuserquestion",
-  askuserquestiontool: "askuserquestion",
+  requestuserinput: "requestuserinput",
+  requestuserinputtool: "requestuserinput",
   brief: "sendusermessage",
   brieftool: "sendusermessage",
   mcptool: "mcp",
@@ -1949,6 +1963,10 @@ const TOOL_NAME_KEY_ALIASES: Record<string, string> = {
   sendmessagetool: "sendmessage",
   bashtool: "bash",
   configtool: "config",
+  updateplan: "updateplan",
+  updateplantool: "updateplan",
+  update_plan: "updateplan",
+  update_plan_tool: "updateplan",
   enterplanmodetool: "enterplanmode",
   exitplanmodetool: "exitplanmode",
   enterworktreetool: "enterworktree",
@@ -2298,6 +2316,7 @@ export const resolveToolPrimarySubject = (
     normalizedName === "tasklist" ||
     normalizedName === "taskget" ||
     normalizedName === "taskupdate" ||
+    normalizedName === "updateplan" ||
     normalizedName === "taskoutput" ||
     normalizedName === "taskstop" ||
     normalizedName.startsWith("limecreate") ||
@@ -2390,7 +2409,7 @@ export const resolveToolPrimarySubject = (
     return "工具入口";
   }
 
-  if (normalizedName === "askuserquestion") {
+  if (normalizedName === "requestuserinput") {
     return resolveToolArgumentPreview(args, [
       "question",
       "header",

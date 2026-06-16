@@ -38,6 +38,7 @@ import { A2UITaskCard, A2UITaskLoadingCard } from "./A2UITaskCard";
 import { ToolCallItem } from "./ToolCallDisplay";
 import { DecisionPanel } from "./DecisionPanel";
 import { AgentThreadTimelineArtifactCard } from "./AgentThreadTimelineArtifactCard";
+import { AgentThreadTimelineFileChangesCard } from "./AgentThreadTimelineFileChangesCard";
 import type { ArtifactTimelineOpenTarget } from "../utils/artifactTimelineNavigation";
 import {
   shouldHideTurnSummaryFromConversation,
@@ -819,23 +820,38 @@ function TimelineBlockCard({
   if (renderPlan.shouldRenderArtifactCardsInline) {
     return (
       <div
-        className="space-y-2 py-0.5"
+        className={cn("py-0.5", block.items.length === 1 && "space-y-2")}
         data-testid={dataTestId}
         data-emphasis={emphasis}
       >
-        {detailEntries.map((entry) => (
-          <div
-            key={entry.id}
-            data-thread-item-id={entry.id}
-            ref={entry.id === focusedItemId ? focusedEntryRef : null}
-            className={cn(
-              entry.id === focusedItemId &&
-                "rounded-2xl ring-2 ring-sky-200 ring-offset-2 ring-offset-white",
-            )}
-          >
-            {entry.content}
-          </div>
-        ))}
+        {block.items.length > 1 ? (
+          <AgentThreadTimelineFileChangesCard
+            items={
+              block.items.filter(
+                (item): item is Extract<
+                  AgentThreadItem,
+                  { type: "file_artifact" }
+                > => item.type === "file_artifact",
+              )
+            }
+            onFileClick={onFileClick}
+            onOpenArtifactFromTimeline={onOpenArtifactFromTimeline}
+          />
+        ) : (
+          detailEntries.map((entry) => (
+            <div
+              key={entry.id}
+              data-thread-item-id={entry.id}
+              ref={entry.id === focusedItemId ? focusedEntryRef : null}
+              className={cn(
+                entry.id === focusedItemId &&
+                  "rounded-2xl ring-2 ring-sky-200 ring-offset-2 ring-offset-white",
+              )}
+            >
+              {entry.content}
+            </div>
+          ))
+        )}
       </div>
     );
   }

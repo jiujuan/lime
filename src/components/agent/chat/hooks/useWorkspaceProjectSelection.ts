@@ -67,14 +67,32 @@ export function useWorkspaceProjectSelection(
       ? null
       : rememberedProjectId;
   }, [storageKey]);
+  const incomingNewChatRequestKey =
+    typeof newChatAt === "number" ? String(newChatAt) : null;
+  const shouldStartDetachedNewChat =
+    incomingNewChatRequestKey !== null && !normalizedInitialSessionId;
   const resolveInitialSelection = useCallback((): {
     projectId: string | null;
     source: Exclude<WorkspaceProjectSelectionSource, "external">;
   } => {
+    if (shouldStartDetachedNewChat) {
+      return {
+        projectId: null,
+        source: "none",
+      };
+    }
+
     const initialSessionProjectId = loadInitialSessionProjectId();
     if (initialSessionProjectId) {
       return {
         projectId: initialSessionProjectId,
+        source: "initial-session",
+      };
+    }
+
+    if (normalizedInitialSessionId) {
+      return {
+        projectId: null,
         source: "initial-session",
       };
     }
@@ -91,7 +109,11 @@ export function useWorkspaceProjectSelection(
       projectId: null,
       source: "none",
     };
-  }, [loadInitialSessionProjectId, loadRememberedProjectId]);
+  }, [
+    loadInitialSessionProjectId,
+    loadRememberedProjectId,
+    shouldStartDetachedNewChat,
+  ]);
   const [internalProjectId, setInternalProjectId] = useState<string | null>(
     () => normalizedExternalProjectId ?? resolveInitialSelection().projectId,
   );
@@ -106,8 +128,6 @@ export function useWorkspaceProjectSelection(
   const pendingTopicSwitchRef = useRef<PendingTopicSwitchState | null>(null);
   const isResolvingTopicProjectRef = useRef(false);
 
-  const incomingNewChatRequestKey =
-    typeof newChatAt === "number" ? String(newChatAt) : null;
   const hasExplicitInitialSession =
     typeof initialSessionId === "string" && initialSessionId.trim().length > 0;
   const hasHandledIncomingNewChatRequest =
@@ -157,28 +177,52 @@ export function useWorkspaceProjectSelection(
   );
 
   useEffect(() => {
-    if (normalizedExternalProjectId) {
+    if (normalizedExternalProjectId || shouldStartDetachedNewChat) {
       return;
     }
 
-    const initialSessionProjectId = loadInitialSessionProjectId();
-    if (!initialSessionProjectId) {
+    if (normalizedInitialSessionId) {
+      const initialSessionProjectId = loadInitialSessionProjectId();
+      clearProjectSelectionRuntime();
+      if (!initialSessionProjectId) {
+        setInternalProjectId(null);
+        setInternalProjectSelectionSource("initial-session");
+        return;
+      }
+
+      rememberProjectId(initialSessionProjectId);
+      setInternalProjectId((currentProjectId) =>
+        currentProjectId === initialSessionProjectId
+          ? currentProjectId
+          : initialSessionProjectId,
+      );
+      setInternalProjectSelectionSource("initial-session");
+      return;
+    }
+
+    return;
+  }, [
+    clearProjectSelectionRuntime,
+    loadInitialSessionProjectId,
+    normalizedInitialSessionId,
+    normalizedExternalProjectId,
+    rememberProjectId,
+    shouldStartDetachedNewChat,
+  ]);
+
+  useEffect(() => {
+    if (normalizedExternalProjectId || !shouldStartDetachedNewChat) {
       return;
     }
 
     clearProjectSelectionRuntime();
-    rememberProjectId(initialSessionProjectId);
-    setInternalProjectId((currentProjectId) =>
-      currentProjectId === initialSessionProjectId
-        ? currentProjectId
-        : initialSessionProjectId,
-    );
-    setInternalProjectSelectionSource("initial-session");
+    setInternalProjectId(null);
+    setInternalProjectSelectionSource("none");
   }, [
     clearProjectSelectionRuntime,
-    loadInitialSessionProjectId,
+    incomingNewChatRequestKey,
     normalizedExternalProjectId,
-    rememberProjectId,
+    shouldStartDetachedNewChat,
   ]);
 
   const resetProjectSelection = useCallback(() => {

@@ -574,7 +574,15 @@ export interface AgentRuntimeStatusMetadata {
 }
 
 export interface AgentRuntimeStatusPayload {
-  phase: "preparing" | "routing" | "context" | "permission_review" | "failed";
+  phase:
+    | "preparing"
+    | "routing"
+    | "context"
+    | "permission_review"
+    | "retrying"
+    | "continuing"
+    | "synthesizing"
+    | "failed";
   title: string;
   detail: string;
   checkpoints?: string[];
@@ -1275,6 +1283,9 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
             phase === "routing" ||
             phase === "context" ||
             phase === "permission_review" ||
+            phase === "retrying" ||
+            phase === "continuing" ||
+            phase === "synthesizing" ||
             phase === "failed"
               ? phase
               : "routing",

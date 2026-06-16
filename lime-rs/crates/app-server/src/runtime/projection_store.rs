@@ -1,8 +1,12 @@
 use app_server_protocol::AgentEvent;
 use app_server_protocol::AgentSession;
+use app_server_protocol::AgentSessionArchiveManyParams;
+use app_server_protocol::AgentSessionArchiveManyResponse;
 use app_server_protocol::AgentSessionListParams;
 use app_server_protocol::AgentSessionOverview;
 use app_server_protocol::AgentSessionStatus;
+use app_server_protocol::AgentSessionUpdateParams;
+use app_server_protocol::AgentSessionUpdateResponse;
 use app_server_protocol::AgentTurn;
 use app_server_protocol::AgentTurnStatus;
 use app_server_protocol::BusinessObjectRef;
@@ -12,6 +16,9 @@ use rusqlite::OptionalExtension;
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
+
+use super::session_list_scope::SessionListScope;
+use super::session_title;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectionStore {
@@ -118,8 +125,9 @@ impl ProjectionStore {
         };
         let turns = query_projected_turns(&conn, session_id)?;
         let item_count = query_projected_item_count(&conn, session_id)?;
+        let first_user_message = query_projected_first_user_message(&conn, session_id)?;
         Ok(Some(ProjectionReadSession {
-            session: projected_session_to_protocol(&session_row),
+            session: projected_session_to_protocol(&session_row, first_user_message),
             turns: turns.into_iter().map(projected_turn_to_protocol).collect(),
             item_count,
             last_event_sequence: session_row.last_event_sequence,
@@ -201,6 +209,7 @@ struct ProjectedSessionRow {
     workspace_id: Option<String>,
     working_dir: Option<String>,
     execution_strategy: Option<String>,
+    metadata_json: Option<String>,
     last_event_sequence: u64,
 }
 
@@ -231,6 +240,7 @@ fn create_schema(conn: &Connection) -> Result<(), String> {
             workspace_id TEXT,
             working_dir TEXT,
             execution_strategy TEXT,
+            metadata_json TEXT,
             last_event_sequence INTEGER NOT NULL DEFAULT 0,
             last_event_id TEXT
         );
@@ -282,6 +292,7 @@ fn create_schema(conn: &Connection) -> Result<(), String> {
     add_projected_session_column_if_missing(conn, "workspace_id", "TEXT")?;
     add_projected_session_column_if_missing(conn, "working_dir", "TEXT")?;
     add_projected_session_column_if_missing(conn, "execution_strategy", "TEXT")?;
+    add_projected_session_column_if_missing(conn, "metadata_json", "TEXT")?;
     Ok(())
 }
 
@@ -316,7 +327,7 @@ fn query_projected_session(
     conn.query_row(
         "SELECT session_id, thread_id, status, created_at, updated_at,
                 archived_at, title, model, workspace_id, working_dir,
-                execution_strategy, last_event_sequence
+                execution_strategy, metadata_json, last_event_sequence
          FROM projected_sessions
          WHERE session_id = ?1",
         params![session_id],
@@ -339,7 +350,8 @@ fn projected_session_row(row: &rusqlite::Row<'_>) -> Result<ProjectedSessionRow,
         workspace_id: row.get(8)?,
         working_dir: row.get(9)?,
         execution_strategy: row.get(10)?,
-        last_event_sequence: row.get::<_, i64>(11)?.max(0) as u64,
+        metadata_json: row.get(11)?,
+        last_event_sequence: row.get::<_, i64>(12)?.max(0) as u64,
     })
 }
 
@@ -347,28 +359,60 @@ fn query_projected_session_overviews(
     conn: &Connection,
     include_archived: bool,
     archived_only: bool,
-    workspace_id: Option<&str>,
+    scope: &SessionListScope,
     limit: Option<usize>,
 ) -> Result<Vec<AgentSessionOverview>, String> {
     let limit = limit.unwrap_or(1_000);
-    let mut stmt = conn
-        .prepare(
-            "SELECT session_id, thread_id, status, created_at, updated_at,
-                    archived_at, title, model, workspace_id, working_dir,
-                    execution_strategy, last_event_sequence
+    let cwd_filters = scope.cwd_filters();
+    let workspace_id_filters = scope.workspace_id_filters();
+    let cwd_filter_sql = if cwd_filters.is_empty() {
+        String::new()
+    } else {
+        let placeholders = (0..cwd_filters.len())
+            .map(|index| format!("?{}", index + 4))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!(" AND working_dir IN ({placeholders})")
+    };
+    let workspace_id_filter_sql = if workspace_id_filters.is_empty() {
+        String::new()
+    } else {
+        let offset = 4 + cwd_filters.len();
+        let placeholders = (0..workspace_id_filters.len())
+            .map(|index| format!("?{}", offset + index))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!(" AND workspace_id IN ({placeholders})")
+    };
+    let sql = format!(
+        "SELECT session_id, thread_id, status, created_at, updated_at,
+                archived_at, title, model, workspace_id, working_dir,
+                execution_strategy, metadata_json, last_event_sequence
          FROM projected_sessions
          WHERE (
                 (?1 = 1 AND archived_at IS NOT NULL)
                 OR (?1 = 0 AND (?2 = 1 OR archived_at IS NULL))
             )
-           AND (?3 IS NULL OR workspace_id = ?3)
+           {cwd_filter_sql}
+           {workspace_id_filter_sql}
          ORDER BY updated_at DESC, session_id DESC
-         LIMIT ?4",
-        )
+         LIMIT ?3"
+    );
+    let mut stmt = conn
+        .prepare(&sql)
         .map_err(|error| format!("无法准备 projected_sessions list 查询: {error}"))?;
+    let limit_i64 = limit as i64;
+    let mut query_params: Vec<&dyn rusqlite::ToSql> =
+        vec![&archived_only, &include_archived, &limit_i64];
+    for cwd in cwd_filters {
+        query_params.push(cwd);
+    }
+    for workspace_id in workspace_id_filters {
+        query_params.push(workspace_id);
+    }
     let rows = stmt
         .query_map(
-            params![archived_only, include_archived, workspace_id, limit as i64],
+            rusqlite::params_from_iter(query_params),
             projected_session_row,
         )
         .map_err(|error| format!("无法查询 projected_sessions list: {error}"))?;
@@ -378,13 +422,15 @@ fn query_projected_session_overviews(
 }
 
 fn projected_session_overview(conn: &Connection, row: ProjectedSessionRow) -> AgentSessionOverview {
+    let first_user_message =
+        query_projected_first_user_message(conn, row.session_id.as_str()).unwrap_or_default();
     let messages_count = conn
         .query_row(
             "SELECT COUNT(1)
              FROM projected_items
              WHERE session_id = ?1
                AND item_type IN ('message.created', 'message.delta')",
-            params![row.session_id],
+            params![row.session_id.as_str()],
             |row| row.get::<_, i64>(0),
         )
         .map(|value| value.max(0) as usize)
@@ -392,7 +438,7 @@ fn projected_session_overview(conn: &Connection, row: ProjectedSessionRow) -> Ag
     AgentSessionOverview {
         session_id: row.session_id.clone(),
         thread_id: Some(row.thread_id),
-        title: row.title,
+        title: session_title::resolve_session_title(row.title, first_user_message),
         model: row.model.unwrap_or_default(),
         created_at: row.created_at.unwrap_or_else(|| row.updated_at.clone()),
         updated_at: row.updated_at,
@@ -411,17 +457,105 @@ impl ProjectionStore {
     ) -> Result<Vec<AgentSessionOverview>, String> {
         let conn = Connection::open(&self.path)
             .map_err(|error| format!("无法打开 Projection DB {}: {error}", self.path.display()))?;
+        let scope = SessionListScope::from_params(params);
         query_projected_session_overviews(
             &conn,
             params.include_archived.unwrap_or(false),
             params.archived_only.unwrap_or(false),
-            params
-                .workspace_id
-                .as_deref()
-                .map(str::trim)
-                .filter(|v| !v.is_empty()),
+            &scope,
             params.limit.map(|value| value as usize),
         )
+    }
+
+    pub fn update_session_overview(
+        &self,
+        params: AgentSessionUpdateParams,
+        updated_at: &str,
+    ) -> Result<Option<AgentSessionUpdateResponse>, String> {
+        let session_id = params.session_id.trim();
+        if session_id.is_empty() {
+            return Err("sessionId is required for agentSession/update".to_string());
+        }
+        let mut conn = Connection::open(&self.path)
+            .map_err(|error| format!("无法打开 Projection DB {}: {error}", self.path.display()))?;
+        let tx = conn
+            .transaction()
+            .map_err(|error| format!("无法开始 Projection DB 事务: {error}"))?;
+        let Some(existing) = query_projected_session(&tx, session_id)? else {
+            return Ok(None);
+        };
+        let title = normalized_text(params.title.as_deref());
+        let model = normalized_text(params.model_name.as_deref());
+        let execution_strategy = normalized_text(params.execution_strategy.as_deref());
+        let archived_at = params
+            .archived
+            .map(|archived| archived.then_some(updated_at.to_string()));
+        let metadata_json = merge_projected_session_metadata_json(
+            existing.metadata_json.as_deref(),
+            &params,
+            title.as_deref(),
+            model.as_deref(),
+            execution_strategy.as_deref(),
+        )?;
+        tx.execute(
+            r#"
+            UPDATE projected_sessions
+            SET
+                title = COALESCE(?1, title),
+                model = COALESCE(?2, model),
+                execution_strategy = COALESCE(?3, execution_strategy),
+                archived_at = CASE WHEN ?4 IS NULL THEN archived_at ELSE ?5 END,
+                metadata_json = COALESCE(?6, metadata_json),
+                updated_at = ?7
+            WHERE session_id = ?8
+            "#,
+            params![
+                title,
+                model,
+                execution_strategy,
+                params.archived,
+                archived_at.flatten(),
+                metadata_json,
+                updated_at,
+                session_id,
+            ],
+        )
+        .map_err(|error| format!("无法更新 projected_sessions: {error}"))?;
+        let session = query_projected_session(&tx, session_id)?
+            .map(|row| projected_session_overview(&tx, row));
+        tx.commit()
+            .map_err(|error| format!("无法提交 Projection DB 事务: {error}"))?;
+        Ok(session.map(|session| AgentSessionUpdateResponse { session }))
+    }
+
+    pub fn archive_many_sessions(
+        &self,
+        params: AgentSessionArchiveManyParams,
+        archived_at: &str,
+    ) -> Result<(AgentSessionArchiveManyResponse, Vec<String>), String> {
+        let mut sessions = Vec::new();
+        let mut missing_session_ids = Vec::new();
+        for session_id in params.session_ids {
+            let normalized = session_id.trim();
+            if normalized.is_empty() {
+                continue;
+            }
+            match self.update_session_overview(
+                AgentSessionUpdateParams {
+                    session_id: normalized.to_string(),
+                    archived: Some(true),
+                    ..AgentSessionUpdateParams::default()
+                },
+                archived_at,
+            )? {
+                Some(response) => sessions.push(response.session),
+                None => missing_session_ids.push(normalized.to_string()),
+            }
+        }
+        Ok((
+            AgentSessionArchiveManyResponse { sessions },
+            missing_session_ids,
+        ))
     }
 }
 
@@ -463,15 +597,54 @@ fn query_projected_item_count(conn: &Connection, session_id: &str) -> Result<usi
     .map_err(|error| format!("无法统计 projected_items: {error}"))
 }
 
-fn projected_session_to_protocol(row: &ProjectedSessionRow) -> AgentSession {
-    let metadata = serde_json::json!({
-        "projectionSource": "runtime.projection_1",
-        "lastEventSequence": row.last_event_sequence,
-        "title": row.title,
-        "model": row.model,
-        "workingDir": row.working_dir,
-        "executionStrategy": row.execution_strategy,
-    });
+fn query_projected_first_user_message(
+    conn: &Connection,
+    session_id: &str,
+) -> Result<Option<String>, String> {
+    let payload_summary = conn
+        .query_row(
+            "SELECT payload_summary_json
+             FROM projected_items
+             WHERE session_id = ?1 AND item_type = 'message.created'
+             ORDER BY sequence ASC, event_id ASC
+             LIMIT 1",
+            params![session_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|error| format!("无法读取 projected_items 首条用户消息: {error}"))?;
+
+    Ok(payload_summary
+        .and_then(|summary| serde_json::from_str::<Value>(&summary).ok())
+        .and_then(|payload| session_title::first_user_message_from_runtime_payload(&payload)))
+}
+
+fn projected_session_to_protocol(
+    row: &ProjectedSessionRow,
+    first_user_message: Option<String>,
+) -> AgentSession {
+    let title = session_title::resolve_session_title(row.title.clone(), first_user_message);
+    let mut metadata = row
+        .metadata_json
+        .as_deref()
+        .and_then(|value| serde_json::from_str::<serde_json::Map<String, Value>>(value).ok())
+        .unwrap_or_default();
+    metadata.insert(
+        "projectionSource".to_string(),
+        Value::String("runtime.projection_1".to_string()),
+    );
+    metadata.insert(
+        "lastEventSequence".to_string(),
+        Value::Number(serde_json::Number::from(row.last_event_sequence)),
+    );
+    metadata.insert("title".to_string(), title.clone().into());
+    metadata.insert("model".to_string(), row.model.clone().into());
+    metadata.insert("workingDir".to_string(), row.working_dir.clone().into());
+    metadata.insert(
+        "executionStrategy".to_string(),
+        row.execution_strategy.clone().into(),
+    );
+    let metadata = Value::Object(metadata);
     AgentSession {
         session_id: row.session_id.clone(),
         thread_id: row.thread_id.clone(),
@@ -480,7 +653,7 @@ fn projected_session_to_protocol(row: &ProjectedSessionRow) -> AgentSession {
         business_object_ref: Some(BusinessObjectRef {
             kind: "agent_session_projection".to_string(),
             id: row.session_id.clone(),
-            title: row.title.clone(),
+            title,
             uri: None,
             metadata: Some(metadata),
         }),
@@ -548,9 +721,9 @@ fn upsert_projected_session(conn: &Connection, event: &AgentEvent) -> Result<(),
         INSERT INTO projected_sessions (
             session_id, thread_id, status, created_at, updated_at,
             archived_at, title, model, workspace_id, working_dir,
-            execution_strategy, last_event_sequence, last_event_id
+            execution_strategy, metadata_json, last_event_sequence, last_event_id
         )
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
         ON CONFLICT(session_id) DO UPDATE SET
             thread_id = excluded.thread_id,
             status = excluded.status,
@@ -565,6 +738,7 @@ fn upsert_projected_session(conn: &Connection, event: &AgentEvent) -> Result<(),
                 excluded.execution_strategy,
                 projected_sessions.execution_strategy
             ),
+            metadata_json = COALESCE(excluded.metadata_json, projected_sessions.metadata_json),
             last_event_sequence = excluded.last_event_sequence,
             last_event_id = excluded.last_event_id
         "#,
@@ -583,6 +757,7 @@ fn upsert_projected_session(conn: &Connection, event: &AgentEvent) -> Result<(),
             fields.workspace_id,
             fields.working_dir,
             fields.execution_strategy,
+            fields.metadata_json,
             event.sequence as i64,
             event.event_id,
         ],
@@ -600,6 +775,7 @@ struct ProjectedSessionFields {
     workspace_id: Option<String>,
     working_dir: Option<String>,
     execution_strategy: Option<String>,
+    metadata_json: Option<String>,
 }
 
 fn projected_session_fields_from_event(event: &AgentEvent) -> ProjectedSessionFields {
@@ -612,7 +788,93 @@ fn projected_session_fields_from_event(event: &AgentEvent) -> ProjectedSessionFi
         workspace_id: value_string(session, &["workspaceId", "workspace_id"]),
         working_dir: value_string(session, &["workingDir", "working_dir"]),
         execution_strategy: value_string(session, &["executionStrategy", "execution_strategy"]),
+        metadata_json: session
+            .and_then(|session| {
+                session
+                    .get("metadata")
+                    .or_else(|| session.get("metadataJson"))
+            })
+            .map(normalize_metadata_value)
+            .transpose()
+            .unwrap_or_default(),
     }
+}
+
+fn merge_projected_session_metadata_json(
+    existing: Option<&str>,
+    params: &AgentSessionUpdateParams,
+    title: Option<&str>,
+    model: Option<&str>,
+    execution_strategy: Option<&str>,
+) -> Result<Option<String>, String> {
+    let mut metadata = match existing {
+        Some(existing) => serde_json::from_str::<Value>(existing)
+            .ok()
+            .and_then(|value| value.as_object().cloned())
+            .unwrap_or_default(),
+        None => serde_json::Map::new(),
+    };
+    let before = metadata.clone();
+    insert_metadata_string(&mut metadata, "title", title);
+    insert_metadata_string(&mut metadata, "model", model);
+    insert_metadata_string(&mut metadata, "modelName", model);
+    insert_metadata_string(&mut metadata, "executionStrategy", execution_strategy);
+    insert_metadata_string(
+        &mut metadata,
+        "providerSelector",
+        params.provider_selector.as_deref(),
+    );
+    insert_metadata_string(
+        &mut metadata,
+        "providerName",
+        params.provider_name.as_deref(),
+    );
+    insert_metadata_string(
+        &mut metadata,
+        "recentAccessMode",
+        params.recent_access_mode.as_deref(),
+    );
+    if let Some(value) = params.recent_preferences.as_ref() {
+        metadata.insert("recentPreferences".to_string(), value.clone());
+    }
+    if let Some(value) = params.recent_team_selection.as_ref() {
+        metadata.insert("recentTeamSelection".to_string(), value.clone());
+    }
+    if metadata == before {
+        return Ok(None);
+    }
+    serde_json::to_string(&Value::Object(metadata))
+        .map(Some)
+        .map_err(|error| format!("无法序列化 projected session metadata: {error}"))
+}
+
+fn normalize_metadata_value(value: &Value) -> Result<String, String> {
+    let metadata = match value {
+        Value::String(raw) => {
+            serde_json::from_str::<Value>(raw).unwrap_or_else(|_| Value::String(raw.clone()))
+        }
+        value => value.clone(),
+    };
+    serde_json::to_string(&metadata)
+        .map_err(|error| format!("无法序列化 projected session metadata: {error}"))
+}
+
+fn insert_metadata_string(
+    metadata: &mut serde_json::Map<String, Value>,
+    key: &str,
+    value: Option<&str>,
+) {
+    let Some(value) = normalized_text(value) else {
+        return;
+    };
+    metadata.insert(key.to_string(), Value::String(value));
+}
+
+fn normalized_text(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
 }
 
 fn value_string(value: Option<&Value>, keys: &[&str]) -> Option<String> {

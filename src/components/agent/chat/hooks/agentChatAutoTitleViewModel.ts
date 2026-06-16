@@ -5,6 +5,8 @@ type AutoTitleMessage = Pick<Message, "role" | "content">;
 
 const AUTO_TITLE_PLACEHOLDER_TITLES = new Set([
   "",
+  "未命名",
+  "未命名对话",
   "新任务",
   "新话题",
   "新对话",

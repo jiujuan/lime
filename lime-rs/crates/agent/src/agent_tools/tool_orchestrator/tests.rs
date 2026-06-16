@@ -570,16 +570,46 @@ async fn execute_planned_shell_tool_emits_process_output_delta_before_terminal_e
     )
     .await;
 
+    let process_delta_index = batch
+        .events
+        .iter()
+        .position(|event| {
+            matches!(
+                event,
+                RuntimeAgentEvent::ToolOutputDelta {
+                    tool_id,
+                    delta,
+                    output_kind,
+                    metadata,
+                } if tool_id == "tool-process"
+                    && delta.is_empty()
+                    && output_kind.as_deref() == Some("process")
+                    && metadata.as_ref().and_then(|metadata| metadata.get("processId"))
+                        == Some(&json!("process-tool-process"))
+                    && metadata
+                        .as_ref()
+                        .and_then(|metadata| metadata.get("executionProcessStatus"))
+                        == Some(&json!("running"))
+            )
+        })
+        .expect("process lifecycle delta should be emitted");
     let delta_index = batch
         .events
         .iter()
-        .position(|event| matches!(event, RuntimeAgentEvent::ToolOutputDelta { .. }))
+        .position(|event| {
+            matches!(
+                event,
+                RuntimeAgentEvent::ToolOutputDelta { delta, .. }
+                    if delta.contains("live-shell-output")
+            )
+        })
         .expect("shell output delta should be emitted");
     let terminal_index = batch
         .events
         .iter()
         .position(|event| matches!(event, RuntimeAgentEvent::ToolEnd { .. }))
         .expect("terminal event should be emitted");
+    assert!(process_delta_index < delta_index);
     assert!(delta_index < terminal_index);
 
     assert!(matches!(

@@ -3300,6 +3300,11 @@ describe("legacySurfaceCatalog", () => {
     expect(monitor).toBeTruthy();
     expect(monitor?.classification).toBe("dead-candidate");
     expect(monitor?.patterns).toEqual([
+      "AgentDao::add_message(",
+      "AgentDao::delete_messages(",
+      "AgentDao::update_latest_assistant_message_usage(",
+      "AgentDao::get_message_window_info(",
+      "AgentDao::get_message_timestamp_by_id(",
       "AgentDao::get_session_with_messages(",
       "AgentDao::get_message_count(",
       "AgentDao::get_messages(",
@@ -3314,6 +3319,34 @@ describe("legacySurfaceCatalog", () => {
       "lime-rs/crates/websocket/src",
     ]);
     expect(monitor?.allowedPaths).toEqual([]);
+  });
+
+  it("应只在测试编译图保留 AgentDao 旧消息 API", () => {
+    const agentDaoSource = readFileSync(
+      join(REPO_ROOT, "lime-rs/crates/core/src/database/dao/agent.rs"),
+      "utf8",
+    );
+    const legacyMethods = [
+      "add_message",
+      "delete_messages",
+      "update_latest_assistant_message_usage",
+      "get_message_window_info",
+      "get_message_timestamp_by_id",
+      "get_session_with_messages",
+      "get_message_count",
+      "get_messages",
+      "get_messages_tail",
+      "get_messages_tail_page",
+      "get_messages_before",
+    ];
+
+    for (const method of legacyMethods) {
+      expect(agentDaoSource).toMatch(
+        new RegExp(
+          `#\\[cfg\\(test\\)\\][\\s\\S]{0,160}pub fn ${method}\\s*\\(`,
+        ),
+      );
+    }
   });
 
   it("应只在测试编译图保留 agent_messages 可见性读取 helper", () => {

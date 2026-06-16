@@ -74,12 +74,9 @@ export function useAgentContext(options: UseAgentContextOptions) {
     runtime,
   } = options;
 
-  const getRequiredWorkspaceId = useCallback((): string => {
+  const getWorkspaceIdForSubmit = useCallback((): string | undefined => {
     const resolvedWorkspaceId = workspaceId?.trim();
-    if (!resolvedWorkspaceId) {
-      throw new Error("缺少项目工作区，请先选择项目后再使用 Agent");
-    }
-    return resolvedWorkspaceId;
+    return resolvedWorkspaceId || undefined;
   }, [workspaceId]);
 
   const initialPreferencesRef = useRef(
@@ -686,7 +683,7 @@ export function useAgentContext(options: UseAgentContextOptions) {
     setAccessModeState,
     workspacePathMissing,
     setWorkspacePathMissing,
-    getRequiredWorkspaceId,
+    getWorkspaceIdForSubmit,
     persistSessionAccessMode,
     loadSessionAccessMode,
     persistSessionModelPreference,

@@ -79,14 +79,6 @@ const BASE_MAIN_SIDEBAR_NAV_ITEMS: SidebarNavItemDefinition[] = [
     isActive: (currentPage) => currentPage === "agent-apps",
     configurable: false,
   },
-  {
-    id: "knowledge",
-    label: "项目资料",
-    icon: BookOpen,
-    page: "knowledge",
-    isActive: (currentPage) => currentPage === "knowledge",
-    configurable: false,
-  },
 ];
 
 const AGENT_APP_LAB_NAV_ITEM: SidebarNavItemDefinition = {
@@ -121,6 +113,14 @@ export const FOOTER_SIDEBAR_NAV_ITEMS: SidebarNavItemDefinition[] = [
       tab: SettingsTabs.Home,
     },
     isActive: (currentPage) => currentPage === "settings",
+    configurable: false,
+  },
+  {
+    id: "knowledge",
+    label: "项目资料",
+    icon: BookOpen,
+    page: "knowledge",
+    isActive: (currentPage) => currentPage === "knowledge",
     configurable: false,
   },
   {

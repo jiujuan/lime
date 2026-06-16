@@ -1,6 +1,6 @@
 import type { MouseEvent } from "react";
 import styled from "styled-components";
-import { Check, MoreHorizontal, Pin } from "lucide-react";
+import { MoreHorizontal, Pin } from "lucide-react";
 import type { AsterSessionInfo } from "@/lib/api/agentRuntime";
 import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
 
@@ -10,14 +10,11 @@ interface AppSidebarConversationRowProps {
   meta: string;
   active: boolean;
   favorite: boolean;
-  selected: boolean;
-  multiSelectMode: boolean;
   actionDisabled: boolean;
   favoriteBadgeLabel: string;
   moreActionsLabel: string;
   openActionMenuLabel: string;
   onNavigate: (session: AsterSessionInfo) => void;
-  onToggleSelected: (session: AsterSessionInfo) => void;
   onOpenMenu: (
     event: MouseEvent<HTMLButtonElement>,
     session: AsterSessionInfo,
@@ -70,27 +67,6 @@ const ConversationItemDot = styled.span<{ $active?: boolean }>`
   border-radius: 999px;
   background: ${({ $active }) =>
     $active ? "var(--sidebar-active-foreground)" : "rgba(148, 163, 184, 0.72)"};
-`;
-
-const ConversationSelectionMark = styled.span<{ $selected?: boolean }>`
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  border-radius: 6px;
-  border: 1px solid
-    ${({ $selected }) =>
-      $selected ? "var(--sidebar-active-foreground)" : "var(--sidebar-border)"};
-  background: ${({ $selected }) =>
-    $selected ? "var(--sidebar-active-foreground)" : "transparent"};
-  color: var(--sidebar-active);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-
-  svg {
-    width: 11px;
-    height: 11px;
-  }
 `;
 
 const ConversationItemLabel = styled.span`
@@ -172,14 +148,11 @@ export function AppSidebarConversationRow({
   meta,
   active,
   favorite,
-  selected,
-  multiSelectMode,
   actionDisabled,
   favoriteBadgeLabel,
   moreActionsLabel,
   openActionMenuLabel,
   onNavigate,
-  onToggleSelected,
   onOpenMenu,
 }: AppSidebarConversationRowProps) {
   return (
@@ -190,28 +163,19 @@ export function AppSidebarConversationRow({
       <ConversationItemButton
         type="button"
         $active={active}
+        data-testid="app-sidebar-conversation-open"
         aria-current={active ? "page" : undefined}
         onClick={() => {
           recordAgentUiPerformanceMetric("sidebar.conversation.click", {
             sessionId: session.id,
             source: "conversation_shelf",
-            workspaceId: session.workspace_id ?? null,
+            cwd: session.working_dir ?? null,
           });
-          if (multiSelectMode) {
-            onToggleSelected(session);
-            return;
-          }
           onNavigate(session);
         }}
         title={title}
       >
-        {multiSelectMode ? (
-          <ConversationSelectionMark $selected={selected}>
-            {selected ? <Check /> : null}
-          </ConversationSelectionMark>
-        ) : (
-          <ConversationItemDot $active={active} />
-        )}
+        <ConversationItemDot $active={active} />
         <ConversationItemLabel>{title}</ConversationItemLabel>
         {favorite ? (
           <ConversationFavoriteBadge

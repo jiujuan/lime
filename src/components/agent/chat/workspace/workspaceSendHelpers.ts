@@ -782,6 +782,47 @@ export function hasServiceSkillLaunchRequestMetadata(
   return typeof skillId === "string" && skillId.trim().length > 0;
 }
 
+export function serviceSkillLaunchRequiresProject(
+  requestMetadata?: Record<string, unknown>,
+): boolean {
+  const harness = extractExistingHarnessMetadata(requestMetadata);
+  if (!harness) {
+    return false;
+  }
+
+  const siteLaunch =
+    asRecord(harness.service_skill_launch) ??
+    asRecord(harness.serviceSkillLaunch);
+  if (siteLaunch) {
+    const projectId = siteLaunch.project_id ?? siteLaunch.projectId;
+    return typeof projectId !== "string" || projectId.trim().length === 0;
+  }
+
+  const sceneLaunch =
+    asRecord(harness.service_scene_launch) ??
+    asRecord(harness.serviceSceneLaunch);
+  const serviceSceneRun =
+    asRecord(sceneLaunch?.service_scene_run) ??
+    asRecord(sceneLaunch?.serviceSceneRun) ??
+    asRecord(sceneLaunch?.request_context) ??
+    asRecord(sceneLaunch?.requestContext);
+  if (!serviceSceneRun) {
+    return false;
+  }
+
+  const hasSkill =
+    typeof serviceSceneRun.skill_id === "string" ||
+    typeof serviceSceneRun.skillId === "string" ||
+    typeof serviceSceneRun.linked_skill_id === "string" ||
+    typeof serviceSceneRun.linkedSkillId === "string";
+  if (!hasSkill) {
+    return false;
+  }
+
+  const projectId = serviceSceneRun.project_id ?? serviceSceneRun.projectId;
+  return typeof projectId !== "string" || projectId.trim().length === 0;
+}
+
 export function hasModelSkillLaunchRequestMetadata(
   requestMetadata?: Record<string, unknown>,
 ): boolean {

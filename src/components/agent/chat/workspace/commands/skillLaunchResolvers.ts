@@ -5,7 +5,6 @@
 //! @module skillLaunchResolvers
 
 import { toast } from "sonner";
-import { getOrCreateDefaultProject } from "@/lib/api/project";
 import { normalizeMediaGenerationPreference } from "@/lib/mediaGeneration";
 import {
   VOICE_GENERATION_DEFAULT_ENTRY_SOURCE,
@@ -74,15 +73,7 @@ export async function resolveGrowthSkillLaunchRequestContext(params: {
     return null;
   }
 
-  let resolvedProjectId = normalizeOptionalText(params.projectId);
-  if (!resolvedProjectId && skill.readinessRequirements?.requiresProject) {
-    try {
-      const defaultProject = await getOrCreateDefaultProject();
-      resolvedProjectId = normalizeOptionalText(defaultProject?.id);
-    } catch {
-      resolvedProjectId = undefined;
-    }
-  }
+  const resolvedProjectId = normalizeOptionalText(params.projectId);
 
   if (!resolvedProjectId && skill.readinessRequirements?.requiresProject) {
     toast.error("请先选择项目后再开始增长跟踪");
@@ -153,15 +144,7 @@ export async function resolveVoiceSkillLaunchRequestContext(params: {
     return null;
   }
 
-  let resolvedProjectId = normalizeOptionalText(params.projectId);
-  if (!resolvedProjectId && skill.readinessRequirements?.requiresProject) {
-    try {
-      const defaultProject = await getOrCreateDefaultProject();
-      resolvedProjectId = normalizeOptionalText(defaultProject?.id);
-    } catch {
-      resolvedProjectId = undefined;
-    }
-  }
+  const resolvedProjectId = normalizeOptionalText(params.projectId);
 
   if (!resolvedProjectId && skill.readinessRequirements?.requiresProject) {
     toast.error("请先选择项目后再开始配音");
@@ -231,4 +214,3 @@ export async function resolveVoiceSkillLaunchRequestContext(params: {
     },
   };
 }
-

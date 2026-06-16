@@ -77,7 +77,7 @@ const PLAN_WORKTREE_TOOLS = [
   "EnterWorktree",
   "ExitWorktree",
 ];
-const ASK_LSP_TOOLS = ["AskUserQuestion", "LSP"];
+const ASK_LSP_TOOLS = ["request_user_input", "LSP"];
 const CREATION_TASK_TOOLS = [
   "lime_create_audio_generation_task",
   "lime_create_broadcast_generation_task",
@@ -598,9 +598,10 @@ function buildPlanWorktreeFixtureResponses() {
 
 function buildAskLspFixtureResponses() {
   return [
-    toolCall("AskUserQuestion", "call-tool-exec-ask-user-question", {
+    toolCall("request_user_input", "call-tool-exec-request-user-input", {
       questions: [
         {
+          id: "continue_lsp_validation",
           question: "Continue Lime runtime tool smoke?",
           header: "Runtime",
           options: [
@@ -945,8 +946,8 @@ function buildBatchScenario(batchId, fixtureFiles) {
     return {
       id: "ask-lsp-tools",
       prompt:
-        "请从普通输入框自然语言触发问答和 LSP 工具验收：先向用户询问是否继续，然后读取 fixture TypeScript 文件的 document_symbol。不要使用命令入口。",
-      promptNeedle: "问答和 LSP 工具验收",
+        "请从普通输入框自然语言触发 request_user_input 和 LSP 工具验收：先向用户询问是否继续，然后读取 fixture TypeScript 文件的 document_symbol。不要使用命令入口。",
+      promptNeedle: "request_user_input 和 LSP 工具验收",
       targetTools: ASK_LSP_TOOLS,
       scriptedResponses: buildAskLspFixtureResponses(),
       buildAssertions({ evidencePackText, toolOutputText }) {
@@ -959,9 +960,11 @@ function buildBatchScenario(batchId, fixtureFiles) {
             toolOutputText.includes("document_symbol") ||
             toolOutputText.includes("LSP"),
           evidencePackMentionsAskLsp:
-            evidencePackText.includes("AskUserQuestion") ||
+            evidencePackText.includes("request_user_input") ||
             evidencePackText.includes("document_symbol") ||
             evidencePackText.includes("ask-lsp-tools"),
+          evidencePackDoesNotMentionAskUserQuestion:
+            !evidencePackText.includes("AskUserQuestion"),
         };
       },
     };

@@ -32,15 +32,6 @@ use uuid::Uuid;
 const LEGACY_DEFAULT_WORKSPACE_ID: &str = "workspace-default";
 const DEFAULT_PROJECT_NAME: &str = "默认项目";
 
-pub(crate) fn normalize_workspace_filter(value: Option<&str>) -> Option<&str> {
-    let value = value?.trim();
-    if value.is_empty() || value == LEGACY_DEFAULT_WORKSPACE_ID {
-        None
-    } else {
-        Some(value)
-    }
-}
-
 pub(crate) fn list_workspaces(
     db: &DbConnection,
 ) -> Result<WorkspaceListResponse, RuntimeCoreError> {

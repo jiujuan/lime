@@ -2,19 +2,27 @@
 //!
 //! 提供 Agent 会话和消息的持久化存储功能
 
-use crate::agent::types::{
-    AgentMessage, AgentSession, ContentPart, FunctionCall, MessageContent, ToolCall,
-};
+use crate::agent::types::AgentSession;
+#[cfg(test)]
+use crate::agent::types::{AgentMessage, ContentPart, FunctionCall, MessageContent, ToolCall};
+#[cfg(test)]
 use crate::database::ConversationWindowSummary;
+#[cfg(test)]
 use chrono::{Local, TimeZone};
 use rusqlite::{params, Connection};
+use std::collections::BTreeSet;
 
+#[cfg(test)]
 const JSON_RECURSION_LIMIT: usize = 50;
+#[cfg(test)]
 const HISTORY_TOOL_RESPONSE_INLINE_BYTES_LIMIT: usize = 64 * 1024;
+#[cfg(test)]
 const HISTORY_TOOL_RESPONSE_JSON_PARSE_BYTES_LIMIT: usize = 512 * 1024;
+#[cfg(test)]
 const HISTORY_TOOL_RESPONSE_OMITTED_TEXT: &str =
     "历史消息内容过大，首屏已省略完整内容；需要时可加载完整历史查看。";
 
+#[cfg(test)]
 fn history_tool_response_content_predicate_sql() -> &'static str {
     "(content_json LIKE '%\"toolResult\"%'
         OR content_json LIKE '%\"tool_result\"%'
@@ -25,6 +33,7 @@ fn history_tool_response_content_predicate_sql() -> &'static str {
         OR content_json LIKE '%\"type\": \"tool_response\"%')"
 }
 
+#[cfg(test)]
 fn history_content_json_projection_sql() -> String {
     let omitted_payload = serde_json::json!([
         {
@@ -58,6 +67,7 @@ fn history_content_json_projection_sql() -> String {
     )
 }
 
+#[cfg(test)]
 /// 解析消息内容 JSON，支持多种格式
 ///
 /// 支持的格式：
@@ -98,6 +108,7 @@ fn parse_message_content(content_json: &str) -> MessageContent {
     MessageContent::Text(content_json.to_string())
 }
 
+#[cfg(test)]
 fn normalize_json_type_token(value: &str) -> String {
     value
         .chars()
@@ -106,6 +117,7 @@ fn normalize_json_type_token(value: &str) -> String {
         .collect()
 }
 
+#[cfg(test)]
 fn push_non_empty(target: &mut Vec<String>, value: Option<&str>) {
     let Some(raw) = value else {
         return;
@@ -116,6 +128,7 @@ fn push_non_empty(target: &mut Vec<String>, value: Option<&str>) {
     }
 }
 
+#[cfg(test)]
 fn dedupe_preserve_order(items: Vec<String>) -> Vec<String> {
     let mut seen = std::collections::HashSet::new();
     let mut deduped = Vec::new();
@@ -127,6 +140,7 @@ fn dedupe_preserve_order(items: Vec<String>) -> Vec<String> {
     deduped
 }
 
+#[cfg(test)]
 fn collect_text_candidates_with_depth(
     value: &serde_json::Value,
     target: &mut Vec<String>,
@@ -162,10 +176,12 @@ fn collect_text_candidates_with_depth(
     }
 }
 
+#[cfg(test)]
 fn extract_tool_response_text(value: &serde_json::Value) -> Option<String> {
     extract_tool_response_text_with_depth(value, 0)
 }
 
+#[cfg(test)]
 fn extract_tool_response_text_with_depth(
     value: &serde_json::Value,
     depth: usize,
@@ -233,10 +249,12 @@ fn extract_tool_response_text_with_depth(
     }
 }
 
+#[cfg(test)]
 fn parse_content_parts_from_json(value: &serde_json::Value) -> Vec<ContentPart> {
     parse_content_parts_from_json_with_depth(value, 0)
 }
 
+#[cfg(test)]
 fn parse_content_parts_from_json_with_depth(
     value: &serde_json::Value,
     depth: usize,
@@ -255,6 +273,7 @@ fn parse_content_parts_from_json_with_depth(
     }
 }
 
+#[cfg(test)]
 fn parse_content_part_item(value: &serde_json::Value) -> Option<ContentPart> {
     let obj = value.as_object()?;
 
@@ -392,6 +411,7 @@ fn parse_content_part_item(value: &serde_json::Value) -> Option<ContentPart> {
     None
 }
 
+#[cfg(test)]
 /// 解析工具调用 JSON，兼容历史数据缺少 `type` 字段的情况
 fn parse_tool_calls(tool_calls_json: Option<&str>) -> Option<Vec<ToolCall>> {
     let json = tool_calls_json?;
@@ -504,6 +524,7 @@ impl AgentModelPatternMatch {
     }
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentModelUsageRow {
     pub model: String,
@@ -536,6 +557,7 @@ impl SessionArchiveFilter {
     }
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentMessageTextRow {
     pub session_id: String,
@@ -544,6 +566,7 @@ pub struct AgentMessageTextRow {
     pub timestamp_ms: i64,
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentMessageWindowInfo {
     pub oldest_message_id: Option<i64>,
@@ -551,6 +574,7 @@ pub struct AgentMessageWindowInfo {
     pub loaded_count: usize,
 }
 
+#[cfg(test)]
 fn parse_message_timestamp_to_millis(value: &str) -> Option<i64> {
     chrono::DateTime::parse_from_rfc3339(value)
         .ok()
@@ -558,6 +582,7 @@ fn parse_message_timestamp_to_millis(value: &str) -> Option<i64> {
         .or_else(|| parse_datetime_or_timestamp_to_millis(value))
 }
 
+#[cfg(test)]
 fn parse_datetime_or_timestamp_to_millis(value: &str) -> Option<i64> {
     if let Ok(v) = value.parse::<i64>() {
         if v > 1_000_000_000_000 {
@@ -602,6 +627,26 @@ fn map_agent_session_overview_row(
     })
 }
 
+fn normalize_cwd_filter_values(values: &[String]) -> Vec<String> {
+    let mut seen = BTreeSet::new();
+    values
+        .iter()
+        .filter_map(|value| {
+            let value = value.trim();
+            if value.is_empty() {
+                return None;
+            }
+            let trimmed = value.trim_end_matches(['/', '\\']);
+            Some(if trimmed.is_empty() {
+                value.to_string()
+            } else {
+                trimmed.to_string()
+            })
+        })
+        .filter(|value| seen.insert(value.clone()))
+        .collect()
+}
+
 impl AgentDao {
     /// 创建新会话
     pub fn create_session(
@@ -644,7 +689,8 @@ impl AgentDao {
         }
     }
 
-    /// 获取会话（包含消息）
+    /// 获取会话（包含旧 `agent_messages` 消息，仅测试保留）
+    #[cfg(test)]
     pub fn get_session_with_messages(
         conn: &Connection,
         session_id: &str,
@@ -658,7 +704,8 @@ impl AgentDao {
         Ok(Some(session))
     }
 
-    /// 获取会话（仅包含末尾消息）
+    /// 获取会话（仅包含旧 `agent_messages` 末尾消息，仅测试保留）
+    #[cfg(test)]
     pub fn get_session_with_messages_tail(
         conn: &Connection,
         session_id: &str,
@@ -667,7 +714,8 @@ impl AgentDao {
         Self::get_session_with_messages_tail_page(conn, session_id, limit, 0)
     }
 
-    /// 获取会话（按从最新消息向前的窗口读取），并保持返回顺序为正序。
+    /// 获取会话（按从最新旧消息向前的窗口读取），并保持返回顺序为正序，仅测试保留。
+    #[cfg(test)]
     pub fn get_session_with_messages_tail_page(
         conn: &Connection,
         session_id: &str,
@@ -683,7 +731,8 @@ impl AgentDao {
         Ok(Some(session))
     }
 
-    /// 获取会话（从指定消息 ID 之前读取更早窗口），并保持返回顺序为正序。
+    /// 获取会话（从指定旧消息 ID 之前读取更早窗口），并保持返回顺序为正序，仅测试保留。
+    #[cfg(test)]
     pub fn get_session_with_messages_before(
         conn: &Connection,
         session_id: &str,
@@ -714,10 +763,20 @@ impl AgentDao {
     pub fn list_session_overviews(
         conn: &Connection,
         archive_filter: SessionArchiveFilter,
-        workspace_id: Option<&str>,
+        cwd_filters: &[String],
         limit: Option<usize>,
     ) -> Result<Vec<AgentSessionOverviewRow>, rusqlite::Error> {
-        let limit = limit.map(|value| value as i64);
+        let limit_i64 = limit.map(|value| value as i64).unwrap_or(-1);
+        let cwd_filters = normalize_cwd_filter_values(cwd_filters);
+        let cwd_filter_sql = if cwd_filters.is_empty() {
+            String::new()
+        } else {
+            let placeholders = (0..cwd_filters.len())
+                .map(|index| format!("?{}", index + 2))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(" AND s.working_dir IN ({placeholders})")
+        };
         let archive_condition = match archive_filter {
             SessionArchiveFilter::ActiveOnly => "s.archived_at IS NULL",
             SessionArchiveFilter::ArchivedOnly => "s.archived_at IS NOT NULL",
@@ -736,13 +795,20 @@ impl AgentDao {
                AND instr(s.id, 'knowledge-builder-session-') != 1
                AND instr(s.id, '__lime_theme_context_search__-') != 1
                AND instr(s.id, 'persisted-usage-') != 1
-               AND (?1 IS NULL OR w.id = ?1)
+               {cwd_filter_sql}
              ORDER BY s.updated_at DESC
-             LIMIT COALESCE(?2, -1)",
+             LIMIT ?1",
         );
         let mut stmt = conn.prepare(&sql)?;
+        let mut query_params: Vec<&dyn rusqlite::ToSql> = vec![&limit_i64];
+        for cwd in &cwd_filters {
+            query_params.push(cwd);
+        }
 
-        let rows = stmt.query_map(params![workspace_id, limit], map_agent_session_overview_row)?;
+        let rows = stmt.query_map(
+            rusqlite::params_from_iter(query_params),
+            map_agent_session_overview_row,
+        )?;
 
         rows.collect()
     }
@@ -769,7 +835,8 @@ impl AgentDao {
         }
     }
 
-    /// 获取会话的消息数量
+    /// 获取旧 `agent_messages` 的消息数量，仅测试保留。
+    #[cfg(test)]
     pub fn get_message_count(
         conn: &Connection,
         session_id: &str,
@@ -805,6 +872,7 @@ impl AgentDao {
         )
     }
 
+    #[cfg(test)]
     pub fn summarize_by_model_pattern(
         conn: &Connection,
         model_pattern: &str,
@@ -853,6 +921,7 @@ impl AgentDao {
         )
     }
 
+    #[cfg(test)]
     pub fn count_messages_by_model_pattern(
         conn: &Connection,
         model_pattern: &str,
@@ -877,6 +946,7 @@ impl AgentDao {
         )
     }
 
+    #[cfg(test)]
     pub fn sum_message_chars_by_model_pattern(
         conn: &Connection,
         model_pattern: &str,
@@ -901,6 +971,7 @@ impl AgentDao {
         )
     }
 
+    #[cfg(test)]
     pub fn list_model_usage_by_model_pattern(
         conn: &Connection,
         model_pattern: &str,
@@ -965,6 +1036,7 @@ impl AgentDao {
         Ok(rows)
     }
 
+    #[cfg(test)]
     pub fn list_message_text_rows_by_model_pattern(
         conn: &Connection,
         model_pattern: &str,
@@ -1016,6 +1088,7 @@ impl AgentDao {
         Ok(result)
     }
 
+    #[cfg(test)]
     pub fn list_message_text_rows_by_session_id(
         conn: &Connection,
         session_id: &str,
@@ -1075,7 +1148,8 @@ impl AgentDao {
         Ok(rows > 0)
     }
 
-    /// 添加消息到会话
+    /// 添加消息到旧 `agent_messages`，仅测试保留。
+    #[cfg(test)]
     pub fn add_message(
         conn: &Connection,
         session_id: &str,
@@ -1136,7 +1210,8 @@ impl AgentDao {
         Ok(())
     }
 
-    /// 获取会话的所有消息
+    /// 获取旧 `agent_messages` 的所有消息，仅测试保留。
+    #[cfg(test)]
     pub fn get_messages(
         conn: &Connection,
         session_id: &str,
@@ -1152,7 +1227,8 @@ impl AgentDao {
         messages.collect()
     }
 
-    /// 获取会话末尾消息，并保持返回顺序为正序。
+    /// 获取旧 `agent_messages` 末尾消息，并保持返回顺序为正序，仅测试保留。
+    #[cfg(test)]
     pub fn get_messages_tail(
         conn: &Connection,
         session_id: &str,
@@ -1161,7 +1237,8 @@ impl AgentDao {
         Self::get_messages_tail_page(conn, session_id, limit, 0)
     }
 
-    /// 获取从最新消息向前偏移后的消息窗口，并保持返回顺序为正序。
+    /// 获取从最新旧消息向前偏移后的消息窗口，并保持返回顺序为正序，仅测试保留。
+    #[cfg(test)]
     pub fn get_messages_tail_page(
         conn: &Connection,
         session_id: &str,
@@ -1198,7 +1275,8 @@ impl AgentDao {
         messages.collect()
     }
 
-    /// 获取指定消息 ID 之前的更早消息窗口，并保持返回顺序为正序。
+    /// 获取指定旧消息 ID 之前的更早消息窗口，并保持返回顺序为正序，仅测试保留。
+    #[cfg(test)]
     pub fn get_messages_before(
         conn: &Connection,
         session_id: &str,
@@ -1234,6 +1312,7 @@ impl AgentDao {
         messages.collect()
     }
 
+    #[cfg(test)]
     fn get_message_window_ids(
         conn: &Connection,
         session_id: &str,
@@ -1288,6 +1367,7 @@ impl AgentDao {
         rows.collect()
     }
 
+    #[cfg(test)]
     pub fn get_message_window_info(
         conn: &Connection,
         session_id: &str,
@@ -1313,6 +1393,7 @@ impl AgentDao {
         })
     }
 
+    #[cfg(test)]
     pub fn get_message_timestamp_by_id(
         conn: &Connection,
         session_id: &str,
@@ -1331,6 +1412,7 @@ impl AgentDao {
         }
     }
 
+    #[cfg(test)]
     fn map_message_row(row: &rusqlite::Row<'_>) -> Result<AgentMessage, rusqlite::Error> {
         let role: String = row.get(0)?;
         let content_json: String = row.get(1)?;
@@ -1365,6 +1447,7 @@ impl AgentDao {
         })
     }
 
+    #[cfg(test)]
     pub fn update_latest_assistant_message_usage(
         conn: &Connection,
         session_id: &str,
@@ -1394,7 +1477,8 @@ impl AgentDao {
         Ok(rows > 0)
     }
 
-    /// 删除会话的所有消息
+    /// 删除旧 `agent_messages` 的所有消息，仅测试保留。
+    #[cfg(test)]
     pub fn delete_messages(conn: &Connection, session_id: &str) -> Result<(), rusqlite::Error> {
         conn.execute(
             "DELETE FROM agent_messages WHERE session_id = ?",
@@ -1871,20 +1955,20 @@ mod tests {
         .unwrap();
 
         let overviews =
-            AgentDao::list_session_overviews(&conn, SessionArchiveFilter::ActiveOnly, None, None)
+            AgentDao::list_session_overviews(&conn, SessionArchiveFilter::ActiveOnly, &[], None)
                 .unwrap();
         assert_eq!(overviews.len(), 2);
         assert_eq!(overviews[0].session.id, "session-b");
         assert_eq!(overviews[0].messages_count, 0);
         assert_eq!(overviews[0].archived_at, None);
         assert_eq!(overviews[1].session.id, "session-a");
-        assert_eq!(overviews[1].messages_count, 2);
+        assert_eq!(overviews[1].messages_count, 0);
 
         let overview = AgentDao::get_session_overview(&conn, "session-a")
             .unwrap()
             .expect("session-a overview");
         assert_eq!(overview.session.title.as_deref(), Some("标题 A"));
-        assert_eq!(overview.messages_count, 2);
+        assert_eq!(overview.messages_count, 0);
         assert_eq!(overview.session.working_dir.as_deref(), Some("/tmp/a"));
 
         AgentDao::rename_session(&conn, "session-a", "新的标题", "2026-03-12T09:00:00+08:00")
@@ -1929,13 +2013,13 @@ mod tests {
         .unwrap();
 
         let active_only =
-            AgentDao::list_session_overviews(&conn, SessionArchiveFilter::ActiveOnly, None, None)
+            AgentDao::list_session_overviews(&conn, SessionArchiveFilter::ActiveOnly, &[], None)
                 .unwrap();
         assert_eq!(active_only.len(), 1);
         assert_eq!(active_only[0].session.id, "session-active");
 
         let with_archived =
-            AgentDao::list_session_overviews(&conn, SessionArchiveFilter::All, None, None).unwrap();
+            AgentDao::list_session_overviews(&conn, SessionArchiveFilter::All, &[], None).unwrap();
         assert_eq!(with_archived.len(), 2);
         assert_eq!(with_archived[0].session.id, "session-active");
         assert_eq!(with_archived[1].session.id, "session-archived");
@@ -1989,20 +2073,16 @@ mod tests {
         )
         .unwrap();
 
-        let sessions = AgentDao::list_session_overviews(
-            &conn,
-            SessionArchiveFilter::ActiveOnly,
-            None,
-            Some(1),
-        )
-        .unwrap();
+        let sessions =
+            AgentDao::list_session_overviews(&conn, SessionArchiveFilter::ActiveOnly, &[], Some(1))
+                .unwrap();
 
         assert_eq!(sessions.len(), 1);
         assert_eq!(sessions[0].session.id, "session-visible");
     }
 
     #[test]
-    fn list_session_overviews_should_support_workspace_filter_and_archived_only() {
+    fn list_session_overviews_should_support_cwd_filter_and_archived_only() {
         let conn = setup_pattern_test_db();
 
         conn.execute(
@@ -2077,7 +2157,7 @@ mod tests {
         let archived_only = AgentDao::list_session_overviews(
             &conn,
             SessionArchiveFilter::ArchivedOnly,
-            Some("workspace-a"),
+            &["/tmp/workspace-a".to_string()],
             Some(5),
         )
         .unwrap();

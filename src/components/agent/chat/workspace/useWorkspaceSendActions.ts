@@ -93,6 +93,7 @@ import {
   buildWorkspaceSendText,
   hasModelSkillLaunchRequestMetadata,
   hasServiceSkillLaunchRequestMetadata,
+  serviceSkillLaunchRequiresProject,
   primeBrowserAssistBeforeSend,
   type ContextWorkspaceSummary,
   type EnsureBrowserAssistCanvasOptions,
@@ -2631,7 +2632,7 @@ export function useWorkspaceSendActions({
       };
       if (
         !projectId &&
-        !hasServiceSkillLaunchRequestMetadata(mergedRequestMetadataAfterLaunch)
+        serviceSkillLaunchRequiresProject(mergedRequestMetadataAfterLaunch)
       ) {
         sendOptions?.observer?.onError?.("请先选择项目后再开始对话");
         toast.error("请先选择项目后再开始对话");

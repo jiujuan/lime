@@ -521,7 +521,7 @@ describe("ToolCallDisplay command output", () => {
   it("正式工具卡不应额外展示原始工具名", () => {
     const { container } = renderTool({
       id: "tool-ask-user-1",
-      name: "AskUserQuestion",
+      name: "request_user_input",
       arguments: JSON.stringify({ question: "需要继续吗？" }),
       status: "completed",
       result: {

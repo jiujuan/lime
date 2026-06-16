@@ -1,0 +1,41 @@
+{
+  "name": "@limecloud/agent-capability-catalog",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Headless Agent capability catalog and policy helpers for shared runtime surfaces.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/limecloud/lime.git",
+    "directory": "packages/agent-capability-catalog"
+  },
+  "homepage": "https://github.com/limecloud/lime/tree/main/packages/agent-capability-catalog#readme",
+  "bugs": {
+    "url": "https://github.com/limecloud/lime/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "prepack": "npm run build",
+    "typecheck": "tsc --noEmit --project tsconfig.json",
+    "test": "npm run build && node --test tests/*.test.mjs"
+  },
+  "sideEffects": false
+}

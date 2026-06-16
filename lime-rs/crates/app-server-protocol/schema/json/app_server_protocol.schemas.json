@@ -3254,12 +3254,37 @@
       "type": "object"
     },
     "AgentSessionListParams": {
+      "$defs": {
+        "AgentSessionCwdFilter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ]
+        }
+      },
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "archivedOnly": {
           "type": [
             "boolean",
             "null"
+          ]
+        },
+        "cwd": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentSessionCwdFilter"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "includeArchived": {

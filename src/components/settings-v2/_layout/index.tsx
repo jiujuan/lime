@@ -64,11 +64,6 @@ const AboutSection = lazy(() =>
     default: module.AboutSection,
   })),
 );
-const HotkeysSettings = lazy(() =>
-  import("../general/hotkeys").then((module) => ({
-    default: module.HotkeysSettings,
-  })),
-);
 const MediaServicesSettings = lazy(() =>
   import("../agent/media-services").then((module) => ({
     default: module.MediaServicesSettings,
@@ -328,7 +323,6 @@ const ACTIVE_SETTINGS_TABS = new Set<SettingsTabs>([
   SettingsTabs.Profile,
   SettingsTabs.Stats,
   SettingsTabs.Appearance,
-  SettingsTabs.Hotkeys,
   SettingsTabs.Memory,
   SettingsTabs.ArchivedConversations,
   SettingsTabs.Providers,
@@ -366,8 +360,6 @@ function preloadSettingsTab(tab: SettingsTabs): Promise<unknown> | null {
       return import("../account/stats");
     case SettingsTabs.Appearance:
       return import("../general/appearance");
-    case SettingsTabs.Hotkeys:
-      return import("../general/hotkeys");
     case SettingsTabs.Memory:
       return import("../general/memory");
     case SettingsTabs.ArchivedConversations:
@@ -450,12 +442,6 @@ function renderSettingsContent(
       return withSettingsContentFallback(
         <AppearanceSettings />,
         t("settings.layout.loading.appearance"),
-      );
-
-    case SettingsTabs.Hotkeys:
-      return withSettingsContentFallback(
-        <HotkeysSettings />,
-        t("settings.layout.loading.hotkeys"),
       );
 
     case SettingsTabs.Memory:

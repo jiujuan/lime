@@ -121,10 +121,6 @@ function resolveProjectTooltip(project: ChatNavbarOpenedProject): string {
   });
 }
 
-function resolveProjectNameFromId(projectId: string): string {
-  return projectId.split(/[\\/]/).filter(Boolean).pop()?.trim() || projectId;
-}
-
 function buildOpenedProjectTabs(
   openedProjects: ChatNavbarOpenedProject[],
 ): ChatNavbarOpenedProject[] {
@@ -257,15 +253,7 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
     const hasCurrentProject = openedProjectTabs.some(
       (project) => normalizeProjectId(project.id) === normalizedProjectId,
     );
-    return hasCurrentProject
-      ? openedProjectTabs
-      : [
-          ...openedProjectTabs,
-          {
-            id: normalizedProjectId,
-            name: resolveProjectNameFromId(normalizedProjectId),
-          },
-        ];
+    return hasCurrentProject ? openedProjectTabs : [{ id: "", name: "" }];
   }, [normalizedProjectId, openedProjectTabs]);
   const canCloseProjectTabs = Boolean(
     onCloseProject && orderedOpenedProjectTabs.length > 1,

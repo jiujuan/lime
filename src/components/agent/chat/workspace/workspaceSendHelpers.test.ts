@@ -8,6 +8,7 @@ import {
   buildSubmissionPreviewMessages,
   buildWorkspaceRequestMetadata,
   createSubmissionPreviewSnapshot,
+  serviceSkillLaunchRequiresProject,
   resolveRuntimeTeamDispatchPreviewState,
 } from "./workspaceSendHelpers";
 
@@ -59,6 +60,31 @@ describe("workspaceSendHelpers runtime team preview", () => {
       shouldDismissGeneralWorkbenchEntryPrompt: true,
       browserRequirementMatch: null,
     });
+  });
+
+  it("普通 metadata 不应被判定为需要项目的服务技能启动", () => {
+    expect(
+      serviceSkillLaunchRequiresProject({
+        harness: {
+          theme: "general",
+          session_mode: "default",
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it("缺少 project_id 的服务技能启动应要求先进入项目", () => {
+    expect(
+      serviceSkillLaunchRequiresProject({
+        harness: {
+          service_scene_launch: {
+            service_scene_run: {
+              skill_id: "x-article-export",
+            },
+          },
+        },
+      }),
+    ).toBe(true);
   });
 
   it("浏览器任务应在 current send boundary 中保留 requirement 检测", () => {

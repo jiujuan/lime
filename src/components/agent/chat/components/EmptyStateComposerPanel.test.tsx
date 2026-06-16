@@ -102,6 +102,40 @@ describe("EmptyStateComposerPanel", () => {
     expect(connectedComposer?.contains(projectContextSlot ?? null)).toBe(true);
   });
 
+  it("没有真实项目时不应把 UUID 会话号显示成项目", () => {
+    const staleProjectId = "240ed157-3e7a-456c-a2c2-a05d499f5991";
+    const container = renderPanel({
+      isGeneralTheme: true,
+      projectId: staleProjectId,
+      openedProjects: [
+        {
+          id: staleProjectId,
+          name: staleProjectId,
+          rootPath: null,
+        },
+      ],
+    });
+
+    const trigger = container.querySelector(
+      '[data-testid="inputbar-project-context-project-trigger"]',
+    ) as HTMLButtonElement | null;
+
+    expect(trigger?.textContent).toContain("进入项目工作");
+    expect(trigger?.textContent).not.toContain(staleProjectId);
+    expect(container.textContent).not.toContain(staleProjectId);
+
+    act(() => {
+      trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const menu = document.body.querySelector(
+      '[data-testid="inputbar-project-context-menu"]',
+    );
+    expect(menu?.textContent).toContain("添加新项目");
+    expect(menu?.textContent).toContain("继续普通对话");
+    expect(menu?.textContent).not.toContain(staleProjectId);
+  });
+
   it("首页空态输入区应显示文件管理器按钮并触发开关", () => {
     const onToggleFileManager = vi.fn();
     const container = renderPanel({

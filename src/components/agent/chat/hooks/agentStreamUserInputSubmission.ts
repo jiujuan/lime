@@ -89,7 +89,7 @@ export async function submitAgentStreamUserInput(
       ensureSession: env.ensureSession,
       attemptSilentTurnRecovery: env.attemptSilentTurnRecovery,
       sessionIdRef: env.sessionIdRef,
-      getRequiredWorkspaceId: env.getRequiredWorkspaceId,
+      getWorkspaceIdForSubmit: env.getWorkspaceIdForSubmit,
       getSyncedSessionExecutionStrategy: env.getSyncedSessionExecutionStrategy,
       getSyncedSessionRecentPreferences: env.getSyncedSessionRecentPreferences,
       effectiveAccessMode: env.accessMode,

@@ -30,7 +30,7 @@ describe("createAgentStreamPreparedSendEnv", () => {
       sessionIdRef: { current: "session-1" } as MutableRefObject<string | null>,
       hasPendingPreparedSubmit: () => false,
       runPreparedSubmit: async (task) => task(),
-      getRequiredWorkspaceId: () => "workspace-1",
+      getWorkspaceIdForSubmit: () => "workspace-1",
       getSyncedSessionModelPreference: () => null,
       getSyncedSessionExecutionStrategy: () => "react",
       listenerMapRef: { current: new Map() },

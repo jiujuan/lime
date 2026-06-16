@@ -73,9 +73,15 @@ internal/roadmap/db/**
 !internal/roadmap/coding/
 internal/roadmap/coding/**
 !internal/roadmap/coding/*.md
+!internal/roadmap/agent-workspace/
+internal/roadmap/agent-workspace/**
+!internal/roadmap/agent-workspace/*.md
 !internal/roadmap/appserver/
 internal/roadmap/appserver/**
 !internal/roadmap/appserver/*.md
+!internal/roadmap/codeximport/
+internal/roadmap/codeximport/**
+!internal/roadmap/codeximport/*.md
 !internal/roadmap/lime-service-skill-cloud-config-prd.md
 !internal/roadmap/task/
 internal/roadmap/task/**

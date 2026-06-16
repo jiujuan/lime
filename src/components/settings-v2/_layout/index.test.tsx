@@ -68,9 +68,6 @@ vi.mock("../system/about", () => ({
 vi.mock("../agent/skills", () => ({
   ExtensionsSettings: () => <div>skills</div>,
 }));
-vi.mock("../general/hotkeys", () => ({
-  HotkeysSettings: () => <div>hotkeys</div>,
-}));
 vi.mock("../agent/media-services", () => ({
   MediaServicesSettings: () => <div>media-services</div>,
 }));
@@ -222,6 +219,21 @@ describe("SettingsLayoutV2 Profile Tab", () => {
 });
 
 describe("SettingsLayoutV2 Experimental Tab", () => {
+  it("旧快捷键设置直达入口应回退到设置首页", async () => {
+    const container = renderComponent(SettingsTabs.Hotkeys);
+    await flushEffects();
+    const text = container.textContent ?? "";
+    const sidebarProps = mockSettingsSidebar.mock.calls.at(-1)?.[0] as
+      | {
+          activeTab?: SettingsTabs;
+        }
+      | undefined;
+
+    expect(text).toContain("home");
+    expect(text).not.toContain("hotkeys");
+    expect(sidebarProps?.activeTab).toBe(SettingsTabs.Home);
+  });
+
   it("旧的执行轨迹页入口应直接回退到首页", async () => {
     const container = renderComponent(SettingsTabs.ExecutionTracker);
     await flushEffects();

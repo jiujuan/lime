@@ -175,4 +175,50 @@ describe("agentRuntime sessionClient current App Server boundary", () => {
       ),
     ).toEqual(["created", "updated", "archived", "deleted"]);
   });
+
+  it("cwd-only session create event must not publish an empty legacy workspaceId", async () => {
+    const appServerClient = appServerClientMock();
+    const sessionStartResult = {
+      session: {
+        sessionId: "session-cwd",
+        threadId: "thread-cwd",
+        appId: "desktop",
+        status: "idle" as const,
+        createdAt: "2026-06-07T00:00:00.000Z",
+        updatedAt: "2026-06-07T00:00:00.000Z",
+      },
+    };
+    vi.mocked(appServerClient.startSession).mockResolvedValueOnce({
+      id: 1,
+      result: sessionStartResult,
+      response: { id: 1, result: sessionStartResult },
+      notifications: [],
+      messages: [],
+    });
+    const client = createSessionClient({
+      appServerClient,
+    });
+    const listener = vi.fn();
+    window.addEventListener(AGENT_RUNTIME_SESSIONS_CHANGED_EVENT, listener);
+
+    try {
+      await client.createAgentRuntimeSession(" ", "空项目对话", undefined, {
+        workingDir: "/repo/skill-think",
+      });
+    } finally {
+      window.removeEventListener(
+        AGENT_RUNTIME_SESSIONS_CHANGED_EVENT,
+        listener,
+      );
+    }
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    const event = listener.mock.calls[0]?.[0];
+    expect(event).toBeInstanceOf(CustomEvent);
+    expect((event as CustomEvent).detail).toEqual({
+      reason: "created",
+      sessionId: "session-cwd",
+      workspaceId: undefined,
+    });
+  });
 });

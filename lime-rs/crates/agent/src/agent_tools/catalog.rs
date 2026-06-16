@@ -2,6 +2,7 @@ use crate::mcp::McpToolDefinition;
 use serde::{Deserialize, Serialize};
 
 pub const TOOL_SEARCH_TOOL_NAME: &str = "ToolSearch";
+pub const UPDATE_PLAN_TOOL_NAME: &str = "update_plan";
 pub const LIST_MCP_RESOURCES_TOOL_NAME: &str = "ListMcpResourcesTool";
 pub const READ_MCP_RESOURCE_TOOL_NAME: &str = "ReadMcpResourceTool";
 pub const SOCIAL_IMAGE_TOOL_NAME: &str = "social_generate_cover_image";
@@ -273,6 +274,15 @@ static NATIVE_TOOL_CATALOG: &[ToolCatalogEntry] = &[
         workspace_default_allow: true,
     },
     ToolCatalogEntry {
+        name: UPDATE_PLAN_TOOL_NAME,
+        profiles: CORE_PROFILES,
+        capabilities: PLAN_CAP,
+        lifecycle: ToolLifecycle::Current,
+        source: ToolSourceKind::AsterBuiltin,
+        permission_plane: ToolPermissionPlane::SessionAllowlist,
+        workspace_default_allow: true,
+    },
+    ToolCatalogEntry {
         name: "TaskOutput",
         profiles: CORE_PROFILES,
         capabilities: EXECUTION_CAP,
@@ -363,7 +373,7 @@ static NATIVE_TOOL_CATALOG: &[ToolCatalogEntry] = &[
         workspace_default_allow: true,
     },
     ToolCatalogEntry {
-        name: "AskUserQuestion",
+        name: "request_user_input",
         profiles: CORE_PROFILES,
         capabilities: PLAN_CAP,
         lifecycle: ToolLifecycle::Current,
@@ -694,7 +704,7 @@ pub fn native_tool_catalog() -> &'static [ToolCatalogEntry] {
 
 fn normalize_tool_catalog_alias(tool_name: &str) -> &str {
     match tool_catalog_reference_lookup_key(tool_name).as_str() {
-        "ask" | "requestuserinput" | "askuserquestiontool" => "AskUserQuestion",
+        "requestuserinput" | "requestuserinputtool" => "request_user_input",
         "brief" | "brieftool" | "sendusermessagetool" => "SendUserMessage",
         "spawnagent" | "subagenttask" | "agenttool" => "Agent",
         "sendinput" | "sendmessagetool" => "SendMessage",
@@ -736,6 +746,9 @@ fn normalize_tool_catalog_alias(tool_name: &str) -> &str {
         "teamdeletetool" => "TeamDelete",
         "listpeerstool" => "ListPeers",
         "toolsearchtool" | "toolsearch" | "mcpsystemtoolsearch" => "ToolSearch",
+        "updateplan" | "updateplantool" | "updateplan_tool" | "update_plan" => {
+            UPDATE_PLAN_TOOL_NAME
+        }
         "webfetchtool" | "webfetch" | "mcpsystemwebfetch" => "WebFetch",
         "websearchtool" | "websearch" | "mcpsystemwebsearch" => "WebSearch",
         "viewimage" | "viewimagetool" => VIEW_IMAGE_TOOL_NAME,
@@ -991,11 +1004,13 @@ mod tests {
                 .name,
             "SendMessage"
         );
+        assert!(tool_catalog_entry("ask").is_none());
+        assert!(tool_catalog_entry("AskUserQuestionTool").is_none());
         assert_eq!(
-            tool_catalog_entry("ask")
-                .expect("legacy ask should normalize")
+            tool_catalog_entry("request_user_input")
+                .expect("Codex request_user_input should be current")
                 .name,
-            "AskUserQuestion"
+            "request_user_input"
         );
         assert_eq!(
             tool_catalog_entry("remote_trigger")
@@ -1009,7 +1024,8 @@ mod tests {
     fn test_tool_catalog_entry_normalizes_reference_js_tool_names_to_current_surface() {
         let cases = [
             ("AgentTool", "Agent"),
-            ("AskUserQuestionTool", "AskUserQuestion"),
+            ("request_user_input", "request_user_input"),
+            ("RequestUserInputTool", "request_user_input"),
             ("BashTool", "Bash"),
             ("developer__shell", "Bash"),
             ("mcp__system__shell", "Bash"),
@@ -1060,6 +1076,9 @@ mod tests {
             ("TaskStopTool", "TaskStop"),
             ("KillShell", "TaskStop"),
             ("TaskUpdateTool", "TaskUpdate"),
+            ("update_plan", UPDATE_PLAN_TOOL_NAME),
+            ("UpdatePlan", UPDATE_PLAN_TOOL_NAME),
+            ("UpdatePlanTool", UPDATE_PLAN_TOOL_NAME),
             ("TeamCreateTool", "TeamCreate"),
             ("TeamDeleteTool", "TeamDelete"),
             ("ListPeersTool", "ListPeers"),

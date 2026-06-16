@@ -22,6 +22,7 @@ export interface TaskCenterRouteTabSyncIntent {
 }
 
 export interface TaskCenterTopicSwitchOptions {
+  allowDetachedSession?: true;
   forceRefresh?: true;
   resumeSessionStartHooks?: true;
 }
@@ -105,14 +106,22 @@ export function resolveInitialTaskSessionSwitchOptions(
 }
 
 export function resolveTaskCenterTopicSwitchOptions(params: {
+  allowDetachedSession?: boolean;
   shouldResume: boolean;
   forceRefresh?: boolean;
 }): TaskCenterTopicSwitchOptions | undefined {
-  if (!params.shouldResume && params.forceRefresh !== true) {
+  if (
+    params.allowDetachedSession !== true &&
+    !params.shouldResume &&
+    params.forceRefresh !== true
+  ) {
     return undefined;
   }
 
   return {
+    ...(params.allowDetachedSession === true
+      ? { allowDetachedSession: true }
+      : {}),
     ...(params.forceRefresh === true ? { forceRefresh: true } : {}),
     ...(params.shouldResume ? { resumeSessionStartHooks: true } : {}),
   };

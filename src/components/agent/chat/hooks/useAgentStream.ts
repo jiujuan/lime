@@ -120,7 +120,7 @@ interface UseAgentStreamOptions {
   currentStreamingSessionIdRef: MutableRefObject<string | null>;
   currentStreamingEventNameRef: MutableRefObject<string | null>;
   warnedKeysRef: MutableRefObject<Set<string>>;
-  getRequiredWorkspaceId: () => string;
+  getWorkspaceIdForSubmit: () => string | undefined;
   setWorkspacePathMissing: Dispatch<
     SetStateAction<WorkspacePathMissingState | null>
   >;
@@ -159,7 +159,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
     currentStreamingSessionIdRef,
     currentStreamingEventNameRef,
     warnedKeysRef,
-    getRequiredWorkspaceId,
+    getWorkspaceIdForSubmit,
     setWorkspacePathMissing,
     setMessages,
     setThreadItems,
@@ -208,7 +208,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
         hasPendingPreparedSubmit: () =>
           preparedSubmitGateRef.current.hasPending(),
         runPreparedSubmit: (task) => preparedSubmitGateRef.current.run(task),
-        getRequiredWorkspaceId,
+        getWorkspaceIdForSubmit,
         getSyncedSessionModelPreference,
         getSyncedSessionExecutionStrategy,
         getSyncedSessionRecentPreferences,
@@ -240,7 +240,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
       executionStrategy,
       ensureSession,
       executionRuntime,
-      getRequiredWorkspaceId,
+      getWorkspaceIdForSubmit,
       getSyncedSessionModelPreference,
       getSyncedSessionExecutionStrategy,
       getSyncedSessionRecentPreferences,

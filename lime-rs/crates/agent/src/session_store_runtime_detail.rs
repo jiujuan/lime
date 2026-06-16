@@ -1,7 +1,6 @@
 //! 运行态会话详情装配。
 
 use lime_core::database::DbConnection;
-use lime_core::database::agent_session_repository;
 use std::time::Instant;
 
 use super::session_store_runtime_projection::{
@@ -192,37 +191,7 @@ pub async fn get_runtime_session_detail_with_history_page(
 
     let usage_fallback_started_at = Instant::now();
     if let Some(session) = session.as_ref() {
-        if let Some(usage) =
-            apply_runtime_usage_fallback_to_latest_assistant_message(&mut detail.messages, session)
-        {
-            match db.lock() {
-                Ok(conn) => {
-                    if let Err(error) =
-                        agent_session_repository::update_latest_assistant_message_usage(
-                            &conn,
-                            session_id,
-                            usage.input_tokens,
-                            usage.output_tokens,
-                            usage.cached_input_tokens,
-                            usage.cache_creation_input_tokens,
-                        )
-                    {
-                        tracing::warn!(
-                            "[SessionStore] 运行态 usage 回填消息失败，已降级继续: session_id={}, error={}",
-                            session_id,
-                            error
-                        );
-                    }
-                }
-                Err(error) => {
-                    tracing::warn!(
-                        "[SessionStore] 运行态 usage 回填消息时数据库锁定失败，已降级继续: session_id={}, error={}",
-                        session_id,
-                        error
-                    );
-                }
-            }
-        }
+        apply_runtime_usage_fallback_to_latest_assistant_message(&mut detail.messages, session);
     }
     let usage_fallback_ms = usage_fallback_started_at.elapsed().as_millis();
 

@@ -4,7 +4,6 @@ import { normalizeLegacyToolSurfaceName } from "./agentTextNormalization";
 
 const REFERENCE_JS_TOOL_SURFACE_MAPPINGS = [
   ["AgentTool", "Agent"],
-  ["AskUserQuestionTool", "AskUserQuestion"],
   ["BashTool", "Bash"],
   ["developer__shell", "Bash"],
   ["mcp__system__shell", "Bash"],
@@ -13,6 +12,10 @@ const REFERENCE_JS_TOOL_SURFACE_MAPPINGS = [
   ["local_shell_call", "Bash"],
   ["BriefTool", "SendUserMessage"],
   ["ConfigTool", "Config"],
+  ["request_user_input", "request_user_input"],
+  ["RequestUserInputTool", "request_user_input"],
+  ["update_plan", "update_plan"],
+  ["UpdatePlanTool", "update_plan"],
   ["EnterPlanModeTool", "EnterPlanMode"],
   ["EnterWorktreeTool", "EnterWorktree"],
   ["ExitPlanModeTool", "ExitPlanMode"],
@@ -72,8 +75,8 @@ describe("agentTextNormalization", () => {
       expect(normalizeLegacyToolSurfaceName(toolName)).toBe(expected);
     }
 
-    expect(normalizeLegacyToolSurfaceName("RequestUserInputTool")).toBe(
-      "AskUserQuestion",
+    expect(normalizeLegacyToolSurfaceName("AskUserQuestionTool")).toBe(
+      "AskUserQuestionTool",
     );
     expect(normalizeLegacyToolSurfaceName("SyntheticOutputTool")).toBe(
       "StructuredOutput",

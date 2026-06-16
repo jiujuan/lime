@@ -459,6 +459,20 @@ describe("messageDisplaySanitizer", () => {
     ).toBe("");
   });
 
+  it("应隐藏 assistant 历史里带尾部空白的运行时错误包络", () => {
+    const text = [
+      "Ran into this error: Request failed: error sending request for url (https://api.example.invalid/v1/chat/completions)",
+      "",
+      "Please retry if you think this is a transient or recoverable error.  ",
+    ].join("\n");
+
+    expect(
+      sanitizeMessageTextForDisplay(text, {
+        role: "assistant",
+      }),
+    ).toBe("");
+  });
+
   it("不应清理用户消息里引用的运行时错误包络文本", () => {
     const text = [
       "Ran into this error: Server error: upstream temporarily unavailable.",

@@ -78,7 +78,7 @@ describe("agentStreamPreparedSendDispatch", () => {
       isThreadBusy: () => false,
       hasPendingPreparedSubmit: () => false,
       runPreparedSubmit,
-      getRequiredWorkspaceId: () => "workspace-1",
+      getWorkspaceIdForSubmit: () => "workspace-1",
       getSyncedSessionModelPreference: () => null,
       getSyncedSessionExecutionStrategy: (_sessionId) => "react",
       listenerMapRef: { current: new Map() },

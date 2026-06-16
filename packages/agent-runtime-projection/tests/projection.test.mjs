@@ -191,6 +191,14 @@ test("projectCodingWorkbenchViewFromEvents consumes current thread read model co
           command_argv: ["npm", "test"],
           command_argv_source: "argv",
           cwd: "app",
+          process_id: "process-command-install",
+          execution_process_status: "running",
+          execution_surface: "live_process",
+          output_bytes: 13,
+          output_omitted_bytes: 0,
+          output_truncated: false,
+          stdout_bytes: 13,
+          stderr_bytes: 0,
           output_refs: ["output://command-install"],
           output_preview: "running tests",
         },
@@ -226,6 +234,14 @@ test("projectCodingWorkbenchViewFromEvents consumes current thread read model co
   assert.equal(view.commands[0].command, "bash -lc 'npm test'");
   assert.equal(view.commands[0].canonicalCommand, "npm test");
   assert.deepEqual(view.commands[0].commandArgv, ["npm", "test"]);
+  assert.equal(view.commands[0].processId, "process-command-install");
+  assert.equal(view.commands[0].executionProcessStatus, "running");
+  assert.equal(view.commands[0].executionSurface, "live_process");
+  assert.equal(view.commands[0].outputBytes, 13);
+  assert.equal(view.commands[0].outputOmittedBytes, 0);
+  assert.equal(view.commands[0].outputTruncated, false);
+  assert.equal(view.commands[0].stdoutBytes, 13);
+  assert.equal(view.commands[0].stderrBytes, 0);
   assert.equal(view.commands[0].preview, "running tests");
   assert.equal(view.changeSummary?.changedFileCount, 1);
   assert.deepEqual(view.changeSummary?.changedFiles, ["src/App.tsx"]);

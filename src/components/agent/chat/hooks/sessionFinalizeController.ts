@@ -2,7 +2,9 @@ import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
 import { normalizeExecutionStrategy } from "./agentChatCoreUtils";
 
 export interface CrossWorkspaceSessionRestoreContext {
+  currentWorkingDir?: string | null;
   currentWorkspaceId: string;
+  knownWorkingDir?: string | null;
   knownWorkspaceId: string;
   topicId: string;
 }
@@ -31,24 +33,41 @@ export function resolveSessionKnownWorkspaceId(params: {
   );
 }
 
+export function normalizeSessionScopeWorkingDir(
+  workingDir?: string | null,
+): string | null {
+  const normalized = workingDir?.trim().replace(/[\\/]+$/u, "");
+  return normalized ? normalized : null;
+}
+
 export function isCrossWorkspaceSessionDetail(params: {
+  knownWorkingDir?: string | null;
   knownWorkspaceId?: string | null;
+  resolvedWorkingDir?: string | null;
   resolvedWorkspaceId?: string | null;
 }): boolean {
+  if (params.resolvedWorkingDir && params.knownWorkingDir) {
+    return params.knownWorkingDir !== params.resolvedWorkingDir;
+  }
+
   return Boolean(
     params.resolvedWorkspaceId &&
-    params.knownWorkspaceId &&
+      params.knownWorkspaceId &&
     params.knownWorkspaceId !== params.resolvedWorkspaceId,
   );
 }
 
 export function buildCrossWorkspaceSessionRestoreContext(params: {
+  knownWorkingDir?: string | null;
   knownWorkspaceId: string;
+  resolvedWorkingDir?: string | null;
   resolvedWorkspaceId: string;
   topicId: string;
 }): CrossWorkspaceSessionRestoreContext {
   return {
+    currentWorkingDir: params.resolvedWorkingDir ?? null,
     currentWorkspaceId: params.resolvedWorkspaceId,
+    knownWorkingDir: params.knownWorkingDir ?? null,
     knownWorkspaceId: params.knownWorkspaceId,
     topicId: params.topicId,
   };
@@ -56,14 +75,32 @@ export function buildCrossWorkspaceSessionRestoreContext(params: {
 
 export function buildSessionWorkspaceRestorePlan(params: {
   resolvedWorkspaceId?: string | null;
+  resolvedWorkingDir?: string | null;
+  runtimeWorkingDir?: string | null;
   runtimeWorkspaceId?: string | null;
   shadowWorkspaceId?: string | null;
   topicId: string;
+  topicWorkingDir?: string | null;
   topicWorkspaceId?: string | null;
 }): SessionWorkspaceRestorePlan {
-  const knownWorkspaceId = resolveSessionKnownWorkspaceId(params);
+  const resolvedWorkingDir = normalizeSessionScopeWorkingDir(
+    params.resolvedWorkingDir,
+  );
+  const knownWorkingDir =
+    normalizeSessionScopeWorkingDir(params.runtimeWorkingDir) ||
+    normalizeSessionScopeWorkingDir(params.topicWorkingDir);
+  const cwdMatchesCurrentScope = Boolean(
+    resolvedWorkingDir &&
+      knownWorkingDir &&
+      resolvedWorkingDir === knownWorkingDir,
+  );
+  const knownWorkspaceId = cwdMatchesCurrentScope
+    ? params.runtimeWorkspaceId || params.resolvedWorkspaceId || null
+    : resolveSessionKnownWorkspaceId(params);
   const shouldReject = isCrossWorkspaceSessionDetail({
+    knownWorkingDir,
     knownWorkspaceId,
+    resolvedWorkingDir,
     resolvedWorkspaceId: params.resolvedWorkspaceId,
   });
 
@@ -71,7 +108,9 @@ export function buildSessionWorkspaceRestorePlan(params: {
     crossWorkspaceContext:
       shouldReject && params.resolvedWorkspaceId && knownWorkspaceId
         ? buildCrossWorkspaceSessionRestoreContext({
+            knownWorkingDir,
             knownWorkspaceId,
+            resolvedWorkingDir,
             resolvedWorkspaceId: params.resolvedWorkspaceId,
             topicId: params.topicId,
           })

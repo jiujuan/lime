@@ -79,6 +79,42 @@ describe("useAsterAgentChat slash skill 执行链路", () => {
     }
   });
 
+  it("无项目普通对话应创建 detached 会话并发送到 Agent Runtime turn", async () => {
+    mockCreateAgentRuntimeSession.mockResolvedValue("session-detached-chat");
+    const harness = mountHook("");
+
+    try {
+      await flushEffects();
+
+      await act(async () => {
+        await harness
+          .getValue()
+          .sendMessage("你好", [], false, false, false, "react");
+      });
+
+      expect(mockCreateAgentRuntimeSession).toHaveBeenCalledWith(
+        undefined,
+        undefined,
+        "react",
+        expect.objectContaining({
+          runStartHooks: true,
+          workingDir: null,
+        }),
+      );
+      expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: "你好",
+          session_id: "session-detached-chat",
+        }),
+      );
+      expect(mockToast.error).not.toHaveBeenCalledWith(
+        expect.stringContaining("项目"),
+      );
+    } finally {
+      harness.unmount();
+    }
+  });
+
   it("命中 /compact 时应走本地压缩分支而非 chat_stream", async () => {
     const workspaceId = "ws-slash-compact";
     seedSession(workspaceId, "session-slash-compact");
@@ -172,7 +208,11 @@ describe("useAsterAgentChat slash skill 执行链路", () => {
         workspaceId,
         "重构输入命令",
         "react",
-        { runStartHooks: true },
+        {
+          runStartHooks: true,
+          workingDir: null,
+          metadata: undefined,
+        },
       );
       expect(mockSubmitAgentRuntimeTurn).not.toHaveBeenCalled();
       expect(harness.getValue().sessionId).toBe("session-slash-new");
@@ -262,6 +302,7 @@ describe("useAsterAgentChat slash skill 执行链路", () => {
         "react",
         {
           runStartHooks: true,
+          workingDir: null,
           metadata: {
             providerSelector: selectedProvider,
             modelName: selectedModel,

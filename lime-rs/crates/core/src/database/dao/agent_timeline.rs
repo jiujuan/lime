@@ -544,6 +544,31 @@ impl AgentTimelineDao {
         rows.collect()
     }
 
+    pub fn first_user_message_text_by_thread(
+        conn: &Connection,
+        thread_id: &str,
+    ) -> Result<Option<String>, rusqlite::Error> {
+        let mut stmt = conn.prepare(
+            "SELECT id, session_id, turn_id, sequence, status, started_at, completed_at,
+                    updated_at, payload_json
+             FROM agent_thread_items
+             WHERE session_id = ?1
+               AND item_type = 'user_message'
+             ORDER BY sequence ASC, started_at ASC, id ASC
+             LIMIT 1",
+        )?;
+
+        let mut rows = stmt.query(params![thread_id])?;
+        let Some(row) = rows.next()? else {
+            return Ok(None);
+        };
+        let item = Self::row_to_item(row)?;
+        Ok(match item.payload {
+            AgentThreadItemPayload::UserMessage { content } => Some(content),
+            _ => None,
+        })
+    }
+
     pub fn list_items_by_thread_tail(
         conn: &Connection,
         thread_id: &str,

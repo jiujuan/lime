@@ -1,77 +1,12 @@
 use super::unavailable;
 use super::NoopAppDataSource;
 use super::RuntimeCoreError;
-use crate::runtime::LegacyAgentSessionTranscript;
 use crate::runtime::ManagedObjectiveAuditUpdate;
 use app_server_protocol::*;
 use async_trait::async_trait;
 
 #[async_trait]
 pub trait SessionAppDataSource: Send + Sync {
-    async fn list_current_timeline_sessions(
-        &self,
-        _params: AgentSessionListParams,
-    ) -> Result<AgentSessionListResponse, RuntimeCoreError> {
-        Ok(AgentSessionListResponse::default())
-    }
-
-    async fn read_current_timeline_session(
-        &self,
-        _params: AgentSessionReadParams,
-    ) -> Result<Option<AgentSessionReadResponse>, RuntimeCoreError> {
-        Ok(None)
-    }
-
-    async fn update_current_timeline_session(
-        &self,
-        params: AgentSessionUpdateParams,
-    ) -> Result<AgentSessionUpdateResponse, RuntimeCoreError> {
-        Err(RuntimeCoreError::SessionNotFound(params.session_id))
-    }
-
-    async fn archive_many_current_timeline_sessions(
-        &self,
-        params: AgentSessionArchiveManyParams,
-    ) -> Result<AgentSessionArchiveManyResponse, RuntimeCoreError> {
-        let mut sessions = Vec::new();
-        for session_id in params.session_ids {
-            let response = self
-                .update_current_timeline_session(AgentSessionUpdateParams {
-                    session_id,
-                    archived: Some(true),
-                    ..AgentSessionUpdateParams::default()
-                })
-                .await?;
-            sessions.push(response.session);
-        }
-        Ok(AgentSessionArchiveManyResponse { sessions })
-    }
-
-    async fn list_legacy_agent_message_transcripts(
-        &self,
-        _params: AgentSessionListParams,
-    ) -> Result<Vec<LegacyAgentSessionTranscript>, RuntimeCoreError> {
-        Ok(Vec::new())
-    }
-
-    async fn read_legacy_agent_message_transcript(
-        &self,
-        _session_id: String,
-    ) -> Result<Option<LegacyAgentSessionTranscript>, RuntimeCoreError> {
-        Ok(None)
-    }
-
-    async fn clear_legacy_agent_message_sessions(
-        &self,
-        _session_ids: Vec<String>,
-    ) -> Result<usize, RuntimeCoreError> {
-        Ok(0)
-    }
-
-    async fn drop_empty_legacy_agent_message_tables(&self) -> Result<usize, RuntimeCoreError> {
-        Ok(0)
-    }
-
     async fn read_agent_session_objective(
         &self,
         _params: AgentSessionObjectiveReadParams,

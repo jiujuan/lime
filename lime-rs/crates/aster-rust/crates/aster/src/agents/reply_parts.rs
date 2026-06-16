@@ -1974,6 +1974,42 @@ mod tests {
         Ok(())
     }
 
+    #[tokio::test]
+    async fn prepare_tools_and_prompt_includes_plan_collaboration_instruction() -> anyhow::Result<()>
+    {
+        let agent = crate::agents::Agent::new();
+        let working_dir = std::env::current_dir()?;
+        let turn_context = TurnContextOverride {
+            collaboration_mode: Some("plan".to_string()),
+            ..TurnContextOverride::default()
+        };
+
+        let (tools, _toolshim_tools, system_prompt) =
+            crate::session_context::with_turn_context(Some(turn_context), async {
+                agent
+                    .prepare_tools_and_prompt(
+                        &working_dir,
+                        None,
+                        false,
+                        &ModelConfig::new("test-model").unwrap(),
+                    )
+                    .await
+            })
+            .await?;
+        let tool_names = tools
+            .iter()
+            .map(|tool| tool.name.to_string())
+            .collect::<Vec<_>>();
+
+        assert!(system_prompt.contains("plan mode for this turn"));
+        assert!(system_prompt.contains("<proposed_plan>"));
+        assert!(system_prompt.contains("Do not use update_plan in plan mode"));
+        assert!(system_prompt.contains("request_user_input"));
+        assert!(tool_names.iter().any(|name| name == "update_plan"));
+        assert!(tool_names.iter().any(|name| name == "request_user_input"));
+        Ok(())
+    }
+
     fn build_turn_context_with_tool_surface(mode: &str) -> TurnContextOverride {
         let mut runtime_metadata = serde_json::Map::new();
         runtime_metadata.insert(

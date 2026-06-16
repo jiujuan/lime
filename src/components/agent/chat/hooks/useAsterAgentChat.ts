@@ -43,7 +43,7 @@ type UseAsterAgentChatRuntimeOptions = UseAsterAgentChatOptions & {
   preserveRestoredMessages?: boolean;
 };
 
-const AUTO_TITLE_DEFERRED_LOAD_MS = 30_000;
+const AUTO_TITLE_DEFERRED_LOAD_MS = 400;
 const AUTO_TITLE_IDLE_TIMEOUT_MS = 2_000;
 
 function normalizeProviderSelection(value?: string | null): string {
@@ -55,6 +55,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     systemPrompt,
     onWriteFile,
     workspaceId,
+    workingDir,
     disableSessionRestore = false,
     initialTopicsLoadMode = "immediate",
     initialTopicsDeferredDelayMs,
@@ -104,6 +105,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
   const session = useAgentSession({
     runtime,
     workspaceId,
+    workingDir,
     disableSessionRestore,
     initialTopicsLoadMode,
     initialTopicsDeferredDelayMs,
@@ -361,7 +363,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     currentStreamingSessionIdRef,
     currentStreamingEventNameRef,
     warnedKeysRef: tools.warnedKeysRef,
-    getRequiredWorkspaceId: context.getRequiredWorkspaceId,
+    getWorkspaceIdForSubmit: context.getWorkspaceIdForSubmit,
     setWorkspacePathMissing: context.setWorkspacePathMissing,
     setMessages: session.setMessages,
     setThreadItems: session.setThreadItems,

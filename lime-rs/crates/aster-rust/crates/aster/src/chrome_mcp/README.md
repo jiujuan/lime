@@ -86,8 +86,7 @@ if should_enable_chrome_integration(Some(true)) {
 10. `get_page_text` - 获取页面文本
 11. `tabs_context_mcp` - 获取标签页信息
 12. `tabs_create_mcp` - 创建新标签页
-13. `update_plan` - 更新自动化计划
-14. `read_console_messages` - 读取控制台消息
-15. `read_network_requests` - 读取网络请求
-16. `shortcuts_list` - 列出快捷键
-17. `shortcuts_execute` - 执行快捷键
+13. `read_console_messages` - 读取控制台消息
+14. `read_network_requests` - 读取网络请求
+15. `shortcuts_list` - 列出快捷键
+16. `shortcuts_execute` - 执行快捷键

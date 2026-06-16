@@ -4,6 +4,7 @@ import {
   ChevronDown,
   ChevronUp,
   FileDiff,
+  FileText,
   Loader2,
   RotateCcw,
 } from "lucide-react";
@@ -23,6 +24,7 @@ interface FileChangesSummaryCardProps {
   aggregate: FileChangesAggregate;
   isStreaming?: boolean;
   onFileClick?: (path: string, content: string) => void;
+  onOpenFile?: (file: FileChangeSummary) => void;
   onUndo?: () =>
     | void
     | { restoredCount?: number }
@@ -105,6 +107,7 @@ export function FileChangesSummaryCard({
   aggregate,
   isStreaming = false,
   onFileClick,
+  onOpenFile,
   onUndo,
 }: FileChangesSummaryCardProps) {
   const { t } = useTranslation("agent");
@@ -121,9 +124,16 @@ export function FileChangesSummaryCard({
   const firstFilePath = files[0]?.path;
   const hasCollapsibleFileList = files.length > COLLAPSED_FILE_COUNT;
   const canUndo = Boolean(onUndo) && !isStreaming && undoState !== "success";
+  const primaryOpenLabel = onOpenFile
+    ? t("agentChat.fileChangesSummary.openFile")
+    : t("agentChat.fileChangesSummary.review");
 
   const openFileReview = (file: FileChangeSummary) => {
     setSelectedPath(file.path);
+    if (onOpenFile) {
+      onOpenFile(file);
+      return;
+    }
     const reviewFile = buildDiffReviewFile(file);
     const content = buildDiffFileCanvasContent({
       file: reviewFile,
@@ -249,8 +259,12 @@ export function FileChangesSummaryCard({
                 }
               }}
             >
-              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-              {t("agentChat.fileChangesSummary.review")}
+              {onOpenFile ? (
+                <FileText className="h-3.5 w-3.5" aria-hidden="true" />
+              ) : (
+                <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+              {primaryOpenLabel}
             </button>
           ) : null}
         </div>

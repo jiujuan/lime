@@ -1991,10 +1991,8 @@ export class ElectronHostCommands {
         message: "Electron current 暂未接入 shell 环境导入预览。",
         importedCount: 0,
         durationMs: null,
-        diagnostic: this.#diagnosticMeta("get_environment_preview"),
       },
       entries,
-      diagnostic: this.#diagnosticMeta("get_environment_preview"),
     };
   }
 

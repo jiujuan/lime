@@ -8,7 +8,6 @@ use app_server::EventLogWriter;
 use app_server::ExternalBackendConfig;
 use app_server::FilesystemFileCheckpointSnapshotStore;
 use app_server::FilesystemOutputSnapshotStore;
-use app_server::LegacyMessageCleanupPolicy;
 use app_server::LocalAppDataSource;
 use app_server::ProjectionStore;
 use app_server::SidecarStore;
@@ -27,7 +26,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 const APP_SERVER_DATA_DIR_ENV: &str = "APP_SERVER_DATA_DIR";
-const LEGACY_MESSAGE_CLEANUP_ENV: &str = "APP_SERVER_LEGACY_MESSAGE_CLEANUP";
 const PRODUCT_DB_MIGRATION_CLEANUP_ENV: &str = "APP_SERVER_PRODUCT_DB_MIGRATION_CLEANUP";
 
 struct InitializedDatabase {
@@ -56,7 +54,6 @@ struct CliConfig {
     backend_args: Vec<String>,
     backend_timeout_ms: u64,
     data_dir: Option<PathBuf>,
-    legacy_message_cleanup_policy: LegacyMessageCleanupPolicy,
     product_db_migration_cleanup_policy: ProductDbMigrationCleanupPolicy,
 }
 
@@ -75,7 +72,6 @@ fn parse_args() -> anyhow::Result<CliConfig> {
     parse_args_from_with_env(
         std::env::args().skip(1),
         std::env::var_os(APP_SERVER_DATA_DIR_ENV),
-        std::env::var_os(LEGACY_MESSAGE_CLEANUP_ENV),
         std::env::var_os(PRODUCT_DB_MIGRATION_CLEANUP_ENV),
     )
 }
@@ -129,8 +125,7 @@ async fn build_app_server(config: &CliConfig) -> anyhow::Result<AppServer> {
             AppServerRuntimeFactory::unavailable_runtime_core()
         }
     }
-    .with_app_data_source(app_data_source)
-    .with_legacy_message_cleanup_policy(config.legacy_message_cleanup_policy);
+    .with_app_data_source(app_data_source);
     if let Some(storage_roots) = initialized.storage_roots {
         runtime = runtime
             .with_file_checkpoint_snapshot_store(Arc::new(
@@ -241,13 +236,12 @@ fn cleanup_migrated_product_db_source_after_init(
 
 #[cfg(test)]
 fn parse_args_from(args: impl IntoIterator<Item = String>) -> anyhow::Result<CliConfig> {
-    parse_args_from_with_env(args, None, None, None)
+    parse_args_from_with_env(args, None, None)
 }
 
 fn parse_args_from_with_env(
     args: impl IntoIterator<Item = String>,
     data_dir_env: Option<OsString>,
-    legacy_message_cleanup_env: Option<OsString>,
     product_db_migration_cleanup_env: Option<OsString>,
 ) -> anyhow::Result<CliConfig> {
     let mut args = args.into_iter();
@@ -260,12 +254,6 @@ fn parse_args_from_with_env(
     let mut data_dir = data_dir_env
         .filter(|value| !value.is_empty())
         .map(PathBuf::from);
-    let mut legacy_message_cleanup_policy = legacy_message_cleanup_env
-        .and_then(|value| value.into_string().ok())
-        .map(|value| LegacyMessageCleanupPolicy::parse(&value))
-        .transpose()
-        .map_err(|error| anyhow::anyhow!(error))?
-        .unwrap_or_default();
     let mut product_db_migration_cleanup_policy = product_db_migration_cleanup_env
         .and_then(|value| value.into_string().ok())
         .map(|value| ProductDbMigrationCleanupPolicy::parse(&value))
@@ -279,11 +267,6 @@ fn parse_args_from_with_env(
                 anyhow::bail!("--data-dir requires a path");
             }
             data_dir = Some(PathBuf::from(value));
-            continue;
-        }
-        if let Some(value) = arg.strip_prefix("--legacy-message-cleanup=") {
-            legacy_message_cleanup_policy =
-                LegacyMessageCleanupPolicy::parse(value).map_err(|error| anyhow::anyhow!(error))?;
             continue;
         }
         if let Some(value) = arg.strip_prefix("--product-db-migration-cleanup=") {
@@ -337,13 +320,6 @@ fn parse_args_from_with_env(
                         anyhow::anyhow!("--data-dir requires a path")
                     })?));
             }
-            "--legacy-message-cleanup" => {
-                let value = args
-                    .next()
-                    .ok_or_else(|| anyhow::anyhow!("--legacy-message-cleanup requires a value"))?;
-                legacy_message_cleanup_policy = LegacyMessageCleanupPolicy::parse(&value)
-                    .map_err(|error| anyhow::anyhow!(error))?;
-            }
             "--product-db-migration-cleanup" => {
                 let value = args.next().ok_or_else(|| {
                     anyhow::anyhow!("--product-db-migration-cleanup requires a value")
@@ -354,7 +330,7 @@ fn parse_args_from_with_env(
             }
             "--help" | "-h" => {
                 println!(
-                    "Usage: app-server [--stdio] [--listen stdio://] [--backend external|runtime|mock|unavailable] [--backend-command path] [--backend-arg value] [--backend-timeout-ms ms] [--app-policy path] [--data-dir path] [--legacy-message-cleanup retain|clear-rows|drop-empty-tables] [--product-db-migration-cleanup retain|clear-rows|drop-tables|delete-file]"
+                    "Usage: app-server [--stdio] [--listen stdio://] [--backend external|runtime|mock|unavailable] [--backend-command path] [--backend-arg value] [--backend-timeout-ms ms] [--app-policy path] [--data-dir path] [--product-db-migration-cleanup retain|clear-rows|drop-tables|delete-file]"
                 );
                 std::process::exit(0);
             }
@@ -370,7 +346,6 @@ fn parse_args_from_with_env(
         backend_args,
         backend_timeout_ms,
         data_dir,
-        legacy_message_cleanup_policy,
         product_db_migration_cleanup_policy,
     })
 }
@@ -400,10 +375,6 @@ mod tests {
             DEFAULT_EXTERNAL_BACKEND_TIMEOUT_MS
         );
         assert_eq!(config.data_dir, None);
-        assert_eq!(
-            config.legacy_message_cleanup_policy,
-            LegacyMessageCleanupPolicy::DropEmptyTables
-        );
         assert_eq!(
             config.product_db_migration_cleanup_policy,
             ProductDbMigrationCleanupPolicy::DropTables
@@ -476,7 +447,6 @@ mod tests {
             ["--data-dir", "/tmp/cli-app-server"].map(str::to_string),
             Some(OsString::from("/tmp/env-app-server")),
             None,
-            None,
         )
         .expect("config");
 
@@ -489,53 +459,10 @@ mod tests {
             Vec::new(),
             Some(OsString::from("/tmp/env-app-server")),
             None,
-            None,
         )
         .expect("config");
 
         assert_eq!(config.data_dir, Some(PathBuf::from("/tmp/env-app-server")));
-    }
-
-    #[test]
-    fn parse_args_accepts_legacy_message_cleanup_policy() {
-        let config =
-            parse_args_from(["--legacy-message-cleanup", "drop-empty-tables"].map(str::to_string))
-                .expect("config");
-
-        assert_eq!(
-            config.legacy_message_cleanup_policy,
-            LegacyMessageCleanupPolicy::DropEmptyTables
-        );
-
-        let config = parse_args_from(["--legacy-message-cleanup=retain"].map(str::to_string))
-            .expect("config");
-
-        assert_eq!(
-            config.legacy_message_cleanup_policy,
-            LegacyMessageCleanupPolicy::Retain
-        );
-    }
-
-    #[test]
-    fn parse_args_defaults_legacy_message_cleanup_to_drop_empty_tables() {
-        let config = parse_args_from(Vec::new()).expect("config");
-
-        assert_eq!(
-            config.legacy_message_cleanup_policy,
-            LegacyMessageCleanupPolicy::DropEmptyTables
-        );
-    }
-
-    #[test]
-    fn parse_args_accepts_legacy_message_cleanup_env_fallback() {
-        let config =
-            parse_args_from_with_env(Vec::new(), None, Some(OsString::from("retain")), None)
-                .expect("config");
-
-        assert_eq!(
-            config.legacy_message_cleanup_policy,
-            LegacyMessageCleanupPolicy::Retain
-        );
     }
 
     #[test]
@@ -552,7 +479,6 @@ mod tests {
         let config = parse_args_from_with_env(
             ["--product-db-migration-cleanup=retain"].map(str::to_string),
             None,
-            None,
             Some(OsString::from("clear-rows")),
         )
         .expect("config");
@@ -562,9 +488,8 @@ mod tests {
             ProductDbMigrationCleanupPolicy::Retain
         );
 
-        let config =
-            parse_args_from_with_env(Vec::new(), None, None, Some(OsString::from("clear-rows")))
-                .expect("config");
+        let config = parse_args_from_with_env(Vec::new(), None, Some(OsString::from("clear-rows")))
+            .expect("config");
 
         assert_eq!(
             config.product_db_migration_cleanup_policy,
@@ -584,7 +509,6 @@ mod tests {
             backend_args: Vec::new(),
             backend_timeout_ms: DEFAULT_EXTERNAL_BACKEND_TIMEOUT_MS,
             data_dir: Some(data_dir.clone()),
-            legacy_message_cleanup_policy: LegacyMessageCleanupPolicy::ClearRows,
             product_db_migration_cleanup_policy: ProductDbMigrationCleanupPolicy::DropTables,
         };
 
@@ -643,7 +567,6 @@ mod tests {
             backend_args: Vec::new(),
             backend_timeout_ms: DEFAULT_EXTERNAL_BACKEND_TIMEOUT_MS,
             data_dir: Some(app_server_data_dir.clone()),
-            legacy_message_cleanup_policy: LegacyMessageCleanupPolicy::ClearRows,
             product_db_migration_cleanup_policy: ProductDbMigrationCleanupPolicy::DropTables,
         };
 
@@ -707,7 +630,6 @@ mod tests {
             backend_args: Vec::new(),
             backend_timeout_ms: DEFAULT_EXTERNAL_BACKEND_TIMEOUT_MS,
             data_dir: Some(app_server_data_dir.clone()),
-            legacy_message_cleanup_policy: LegacyMessageCleanupPolicy::ClearRows,
             product_db_migration_cleanup_policy: ProductDbMigrationCleanupPolicy::DeleteFile,
         };
 

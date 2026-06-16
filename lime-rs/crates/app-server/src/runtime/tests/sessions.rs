@@ -222,6 +222,107 @@ async fn queue_session_controls_use_current_runtime_core_read_model() {
 }
 
 #[tokio::test]
+async fn list_agent_sessions_derives_placeholder_title_from_first_user_message() {
+    let core = RuntimeCore::default();
+    core.start_session(AgentSessionStartParams {
+        session_id: Some("sess_auto_title".to_string()),
+        thread_id: Some("thread_auto_title".to_string()),
+        app_id: "agent-chat".to_string(),
+        workspace_id: Some("workspace-current".to_string()),
+        business_object_ref: Some(app_server_protocol::BusinessObjectRef {
+            kind: "agent.session".to_string(),
+            id: "sess_auto_title".to_string(),
+            title: Some("新对话".to_string()),
+            uri: None,
+            metadata: Some(json!({ "title": "新对话" })),
+        }),
+        locale: None,
+    })
+    .expect("session");
+
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: "sess_auto_title".to_string(),
+            turn_id: Some("turn_auto_title".to_string()),
+            input: AgentInput {
+                text: "整理今天的国际新闻".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: None,
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("turn");
+
+    let listed = core
+        .list_agent_sessions(AgentSessionListParams {
+            workspace_id: Some("workspace-current".to_string()),
+            limit: Some(20),
+            ..AgentSessionListParams::default()
+        })
+        .await
+        .expect("list sessions");
+
+    assert_eq!(listed.sessions.len(), 1);
+    assert_eq!(
+        listed.sessions[0].title.as_deref(),
+        Some("整理今天的国际新闻")
+    );
+}
+
+#[tokio::test]
+async fn list_agent_sessions_preserves_explicit_title_when_user_message_exists() {
+    let core = RuntimeCore::default();
+    core.start_session(AgentSessionStartParams {
+        session_id: Some("sess_manual_title".to_string()),
+        thread_id: Some("thread_manual_title".to_string()),
+        app_id: "agent-chat".to_string(),
+        workspace_id: Some("workspace-current".to_string()),
+        business_object_ref: Some(app_server_protocol::BusinessObjectRef {
+            kind: "agent.session".to_string(),
+            id: "sess_manual_title".to_string(),
+            title: Some("手动标题".to_string()),
+            uri: None,
+            metadata: Some(json!({ "title": "手动标题" })),
+        }),
+        locale: None,
+    })
+    .expect("session");
+
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: "sess_manual_title".to_string(),
+            turn_id: Some("turn_manual_title".to_string()),
+            input: AgentInput {
+                text: "不要覆盖我".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: None,
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("turn");
+
+    let listed = core
+        .list_agent_sessions(AgentSessionListParams {
+            workspace_id: Some("workspace-current".to_string()),
+            limit: Some(20),
+            ..AgentSessionListParams::default()
+        })
+        .await
+        .expect("list sessions");
+
+    assert_eq!(listed.sessions.len(), 1);
+    assert_eq!(listed.sessions[0].title.as_deref(), Some("手动标题"));
+}
+
+#[tokio::test]
 async fn second_active_turn_without_queue_fails_closed() {
     let backend = Arc::new(RunningCountingBackend {
         start_count: AtomicUsize::new(0),
@@ -578,7 +679,7 @@ async fn read_session_current_does_not_fallback_to_persistent_history() {
 }
 
 #[tokio::test]
-async fn read_session_current_repairs_and_reads_jsonl_projection_without_legacy_messages() {
+async fn read_session_current_repairs_and_reads_jsonl_projection() {
     let temp = tempfile::tempdir().expect("tempdir");
     let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
     let event_log_writer = Arc::new(EventLogWriter::new(&roots.event_log_root).expect("writer"));
@@ -617,13 +718,13 @@ async fn read_session_current_repairs_and_reads_jsonl_projection_without_legacy_
         .clear_session("sess_projection_read")
         .expect("simulate missing projection");
 
-    let legacy_data_source = Arc::new(TestCurrentTimelineDataSource::new(
+    let app_data_source = Arc::new(TestSessionDataSource::new(
         empty_agent_session_read_response("legacy_unexpected"),
     ));
     let restarted_core = RuntimeCore::default()
         .with_event_log_writer(event_log_writer)
         .with_projection_store(projection_store.clone())
-        .with_app_data_source(legacy_data_source.clone());
+        .with_app_data_source(app_data_source);
 
     let read = restarted_core
         .read_session_current(AgentSessionReadParams {
@@ -644,7 +745,6 @@ async fn read_session_current_repairs_and_reads_jsonl_projection_without_legacy_
     let detail = read.detail.expect("projection detail");
     assert_eq!(detail["projection_source"], "runtime.projection_1");
     assert_eq!(detail["thread_read"]["status"].as_str(), Some("completed"));
-    assert!(legacy_data_source.read_requests().is_empty());
     let projected = projection_store
         .read_session("sess_projection_read")
         .expect("read repaired projection")
@@ -653,369 +753,67 @@ async fn read_session_current_repairs_and_reads_jsonl_projection_without_legacy_
 }
 
 #[tokio::test]
-async fn list_agent_sessions_backfills_legacy_messages_to_jsonl_projection_and_clears_source() {
+async fn list_agent_sessions_derives_projection_title_from_first_user_message() {
     let temp = tempfile::tempdir().expect("tempdir");
     let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
     let event_log_writer = Arc::new(EventLogWriter::new(&roots.event_log_root).expect("writer"));
     let projection_store =
         Arc::new(ProjectionStore::initialize(&roots.projection_db_path).expect("projection"));
-    let data_source = Arc::new(
-        TestCurrentTimelineDataSource::new(empty_agent_session_read_response("unused"))
-            .with_legacy_transcripts(vec![LegacyAgentSessionTranscript {
-                session_id: "legacy-session".to_string(),
-                title: Some("旧历史会话".to_string()),
-                model: "agent:default".to_string(),
-                created_at: "2026-03-13T00:00:00Z".to_string(),
-                updated_at: "2026-03-13T00:00:02Z".to_string(),
-                archived_at: None,
-                workspace_id: Some("workspace-main".to_string()),
-                working_dir: Some("/tmp/legacy".to_string()),
-                execution_strategy: Some("react".to_string()),
-                provider_name: Some("openai".to_string()),
-                messages: vec![
-                    LegacyAgentMessage {
-                        message_id: 1,
-                        role: "user".to_string(),
-                        text: "旧消息".to_string(),
-                        timestamp: "2026-03-13T00:00:01Z".to_string(),
-                    },
-                    LegacyAgentMessage {
-                        message_id: 2,
-                        role: "assistant".to_string(),
-                        text: "旧回复".to_string(),
-                        timestamp: "2026-03-13T00:00:02Z".to_string(),
-                    },
-                ],
-            }]),
-    );
-    let core = RuntimeCore::default()
+    let core = RuntimeCore::with_backend(Arc::new(CompletedBackend))
         .with_event_log_writer(event_log_writer.clone())
-        .with_projection_store(projection_store.clone())
-        .with_app_data_source(data_source.clone());
+        .with_projection_store(projection_store.clone());
+    core.start_session(AgentSessionStartParams {
+        session_id: Some("sess_projection_title".to_string()),
+        thread_id: Some("thread_projection_title".to_string()),
+        app_id: "agent-chat".to_string(),
+        workspace_id: Some("workspace-current".to_string()),
+        business_object_ref: Some(app_server_protocol::BusinessObjectRef {
+            kind: "agent.session".to_string(),
+            id: "sess_projection_title".to_string(),
+            title: Some("未命名对话".to_string()),
+            uri: None,
+            metadata: Some(json!({
+                "title": "未命名对话",
+                "modelName": "fixture-model",
+            })),
+        }),
+        locale: None,
+    })
+    .expect("session");
 
-    let listed = core
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: "sess_projection_title".to_string(),
+            turn_id: Some("turn_projection_title".to_string()),
+            input: AgentInput {
+                text: "根据 Codex 方式生成标题".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: None,
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("turn");
+
+    let restarted_core = RuntimeCore::default()
+        .with_event_log_writer(event_log_writer)
+        .with_projection_store(projection_store);
+    let listed = restarted_core
         .list_agent_sessions(AgentSessionListParams {
-            workspace_id: Some("workspace-main".to_string()),
+            workspace_id: Some("workspace-current".to_string()),
             limit: Some(20),
             ..AgentSessionListParams::default()
         })
         .await
-        .expect("list sessions");
+        .expect("list projected sessions");
 
     assert_eq!(listed.sessions.len(), 1);
-    assert_eq!(listed.sessions[0].session_id, "legacy-session");
-    assert_eq!(listed.sessions[0].title.as_deref(), Some("旧历史会话"));
-    assert_eq!(listed.sessions[0].messages_count, 2);
+    assert_eq!(listed.sessions[0].session_id, "sess_projection_title");
     assert_eq!(
-        data_source.cleared_legacy_session_ids(),
-        vec!["legacy-session".to_string()]
+        listed.sessions[0].title.as_deref(),
+        Some("根据 Codex 方式生成标题")
     );
-    let records = event_log_writer
-        .read_session_events("legacy-session")
-        .expect("read jsonl");
-    assert_eq!(records.len(), 4);
-    assert_eq!(records[0].event.event_type, "turn.accepted");
-    assert_eq!(records[1].event.event_type, "message.created");
-    assert_eq!(records[2].event.event_type, "message.delta");
-    let projected = projection_store
-        .read_session("legacy-session")
-        .expect("read projection")
-        .expect("projection row");
-    assert_eq!(projected.session_id, "legacy-session");
-
-    let read = core
-        .read_session_current(AgentSessionReadParams {
-            session_id: "legacy-session".to_string(),
-            history_limit: None,
-            history_offset: None,
-            history_before_message_id: None,
-        })
-        .await
-        .expect("read legacy projection");
-    let detail = read.detail.expect("detail");
-    let messages = detail["messages"].as_array().expect("messages");
-    assert_eq!(messages.len(), 2);
-    assert_eq!(messages[0]["role"], "user");
-    assert_eq!(messages[0]["content"][0]["text"], "旧消息");
-    assert_eq!(messages[1]["role"], "assistant");
-    assert_eq!(messages[1]["content"][0]["text"], "旧回复");
-}
-
-#[tokio::test]
-async fn list_agent_sessions_can_retain_legacy_messages_by_cleanup_policy() {
-    let temp = tempfile::tempdir().expect("tempdir");
-    let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
-    let event_log_writer = Arc::new(EventLogWriter::new(&roots.event_log_root).expect("writer"));
-    let projection_store =
-        Arc::new(ProjectionStore::initialize(&roots.projection_db_path).expect("projection"));
-    let data_source = Arc::new(
-        TestCurrentTimelineDataSource::new(empty_agent_session_read_response("unused"))
-            .with_legacy_transcripts(vec![LegacyAgentSessionTranscript {
-                session_id: "legacy-session".to_string(),
-                title: Some("旧历史会话".to_string()),
-                model: "agent:default".to_string(),
-                created_at: "2026-03-13T00:00:00Z".to_string(),
-                updated_at: "2026-03-13T00:00:02Z".to_string(),
-                archived_at: None,
-                workspace_id: Some("workspace-main".to_string()),
-                working_dir: Some("/tmp/legacy".to_string()),
-                execution_strategy: Some("react".to_string()),
-                provider_name: Some("openai".to_string()),
-                messages: vec![
-                    LegacyAgentMessage {
-                        message_id: 1,
-                        role: "user".to_string(),
-                        text: "旧消息".to_string(),
-                        timestamp: "2026-03-13T00:00:01Z".to_string(),
-                    },
-                    LegacyAgentMessage {
-                        message_id: 2,
-                        role: "assistant".to_string(),
-                        text: "旧回复".to_string(),
-                        timestamp: "2026-03-13T00:00:02Z".to_string(),
-                    },
-                ],
-            }]),
-    );
-    let core = RuntimeCore::default()
-        .with_event_log_writer(event_log_writer.clone())
-        .with_projection_store(projection_store)
-        .with_app_data_source(data_source.clone())
-        .with_legacy_message_cleanup_policy(LegacyMessageCleanupPolicy::Retain);
-
-    let listed = core
-        .list_agent_sessions(AgentSessionListParams {
-            workspace_id: Some("workspace-main".to_string()),
-            limit: Some(20),
-            ..AgentSessionListParams::default()
-        })
-        .await
-        .expect("list sessions");
-
-    assert_eq!(listed.sessions.len(), 1);
-    assert_eq!(
-        event_log_writer
-            .read_session_events("legacy-session")
-            .expect("read jsonl")
-            .len(),
-        4
-    );
-    assert!(data_source.cleared_legacy_session_ids().is_empty());
-}
-
-#[tokio::test]
-async fn legacy_message_drop_empty_cleanup_failure_does_not_block_read_or_list() {
-    let temp = tempfile::tempdir().expect("tempdir");
-    let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
-    let event_log_writer = Arc::new(EventLogWriter::new(&roots.event_log_root).expect("writer"));
-    let projection_store =
-        Arc::new(ProjectionStore::initialize(&roots.projection_db_path).expect("projection"));
-    let data_source = Arc::new(
-        TestCurrentTimelineDataSource::new(empty_agent_session_read_response("unused"))
-            .with_legacy_transcripts(vec![LegacyAgentSessionTranscript {
-                session_id: "legacy-session".to_string(),
-                title: Some("旧历史会话".to_string()),
-                model: "agent:default".to_string(),
-                created_at: "2026-03-13T00:00:00Z".to_string(),
-                updated_at: "2026-03-13T00:00:02Z".to_string(),
-                archived_at: None,
-                workspace_id: Some("workspace-main".to_string()),
-                working_dir: Some("/tmp/legacy".to_string()),
-                execution_strategy: Some("react".to_string()),
-                provider_name: Some("openai".to_string()),
-                messages: vec![
-                    LegacyAgentMessage {
-                        message_id: 1,
-                        role: "user".to_string(),
-                        text: "旧消息".to_string(),
-                        timestamp: "2026-03-13T00:00:01Z".to_string(),
-                    },
-                    LegacyAgentMessage {
-                        message_id: 2,
-                        role: "assistant".to_string(),
-                        text: "旧回复".to_string(),
-                        timestamp: "2026-03-13T00:00:02Z".to_string(),
-                    },
-                ],
-            }])
-            .with_drop_empty_legacy_error("refuse to drop agent_messages: 27210 rows remain"),
-    );
-    let core = RuntimeCore::default()
-        .with_event_log_writer(event_log_writer.clone())
-        .with_projection_store(projection_store)
-        .with_app_data_source(data_source.clone());
-
-    let read = core
-        .read_session_current(AgentSessionReadParams {
-            session_id: "legacy-session".to_string(),
-            history_limit: None,
-            history_offset: None,
-            history_before_message_id: None,
-        })
-        .await
-        .expect("read session despite non-empty legacy table");
-    let detail = read.detail.expect("detail");
-    let messages = detail["messages"].as_array().expect("messages");
-    assert_eq!(messages.len(), 2);
-    assert_eq!(messages[0]["content"][0]["text"], "旧消息");
-    assert_eq!(messages[1]["content"][0]["text"], "旧回复");
-
-    let listed = core
-        .list_agent_sessions(AgentSessionListParams {
-            workspace_id: Some("workspace-main".to_string()),
-            limit: Some(20),
-            ..AgentSessionListParams::default()
-        })
-        .await
-        .expect("list sessions despite non-empty legacy table");
-
-    assert_eq!(listed.sessions.len(), 1);
-    assert_eq!(listed.sessions[0].session_id, "legacy-session");
-    assert_eq!(listed.sessions[0].messages_count, 2);
-    assert_eq!(
-        event_log_writer
-            .read_session_events("legacy-session")
-            .expect("read jsonl")
-            .len(),
-        4
-    );
-}
-
-#[tokio::test]
-async fn list_agent_sessions_clears_legacy_messages_after_interrupted_jsonl_backfill() {
-    let temp = tempfile::tempdir().expect("tempdir");
-    let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
-    let event_log_writer = Arc::new(EventLogWriter::new(&roots.event_log_root).expect("writer"));
-    let projection_store =
-        Arc::new(ProjectionStore::initialize(&roots.projection_db_path).expect("projection"));
-    for event in [
-        AgentEvent {
-            event_id: "legacy:legacy-session:1:turn.accepted".to_string(),
-            sequence: 1,
-            session_id: "legacy-session".to_string(),
-            thread_id: Some("legacy-session".to_string()),
-            turn_id: Some("legacy-turn-1".to_string()),
-            event_type: "turn.accepted".to_string(),
-            timestamp: "2026-03-13T00:00:01Z".to_string(),
-            payload: json!({
-                "source": "legacy_agent_messages_backfill",
-                "session": {
-                    "title": "旧历史会话",
-                    "model": "agent:default",
-                    "createdAt": "2026-03-13T00:00:00Z",
-                    "updatedAt": "2026-03-13T00:00:02Z",
-                    "workspaceId": "workspace-main",
-                    "workingDir": "/tmp/legacy",
-                    "executionStrategy": "react"
-                },
-            }),
-        },
-        AgentEvent {
-            event_id: "legacy:legacy-session:1:message.created".to_string(),
-            sequence: 2,
-            session_id: "legacy-session".to_string(),
-            thread_id: Some("legacy-session".to_string()),
-            turn_id: Some("legacy-turn-1".to_string()),
-            event_type: "message.created".to_string(),
-            timestamp: "2026-03-13T00:00:01Z".to_string(),
-            payload: json!({
-                "role": "user",
-                "visibility": "user_visible",
-                "input": { "text": "旧消息", "attachments": [] },
-                "content": { "kind": "inline_text", "text": "旧消息" },
-                "source": "legacy_agent_messages_backfill",
-            }),
-        },
-        AgentEvent {
-            event_id: "legacy:legacy-session:2:message.delta".to_string(),
-            sequence: 3,
-            session_id: "legacy-session".to_string(),
-            thread_id: Some("legacy-session".to_string()),
-            turn_id: Some("legacy-turn-1".to_string()),
-            event_type: "message.delta".to_string(),
-            timestamp: "2026-03-13T00:00:02Z".to_string(),
-            payload: json!({
-                "text": "旧回复",
-                "source": "legacy_agent_messages_backfill",
-            }),
-        },
-        AgentEvent {
-            event_id: "legacy:legacy-session:2:turn.completed".to_string(),
-            sequence: 4,
-            session_id: "legacy-session".to_string(),
-            thread_id: Some("legacy-session".to_string()),
-            turn_id: Some("legacy-turn-1".to_string()),
-            event_type: "turn.completed".to_string(),
-            timestamp: "2026-03-13T00:00:02Z".to_string(),
-            payload: json!({
-                "source": "legacy_agent_messages_backfill",
-            }),
-        },
-    ] {
-        event_log_writer
-            .append(&event)
-            .expect("append existing jsonl");
-    }
-    let data_source = Arc::new(
-        TestCurrentTimelineDataSource::new(empty_agent_session_read_response("unused"))
-            .with_legacy_transcripts(vec![LegacyAgentSessionTranscript {
-                session_id: "legacy-session".to_string(),
-                title: Some("旧历史会话".to_string()),
-                model: "agent:default".to_string(),
-                created_at: "2026-03-13T00:00:00Z".to_string(),
-                updated_at: "2026-03-13T00:00:02Z".to_string(),
-                archived_at: None,
-                workspace_id: Some("workspace-main".to_string()),
-                working_dir: Some("/tmp/legacy".to_string()),
-                execution_strategy: Some("react".to_string()),
-                provider_name: Some("openai".to_string()),
-                messages: vec![
-                    LegacyAgentMessage {
-                        message_id: 1,
-                        role: "user".to_string(),
-                        text: "旧消息".to_string(),
-                        timestamp: "2026-03-13T00:00:01Z".to_string(),
-                    },
-                    LegacyAgentMessage {
-                        message_id: 2,
-                        role: "assistant".to_string(),
-                        text: "旧回复".to_string(),
-                        timestamp: "2026-03-13T00:00:02Z".to_string(),
-                    },
-                ],
-            }]),
-    );
-    let core = RuntimeCore::default()
-        .with_event_log_writer(event_log_writer.clone())
-        .with_projection_store(projection_store.clone())
-        .with_app_data_source(data_source.clone());
-
-    let listed = core
-        .list_agent_sessions(AgentSessionListParams {
-            workspace_id: Some("workspace-main".to_string()),
-            limit: Some(20),
-            ..AgentSessionListParams::default()
-        })
-        .await
-        .expect("list sessions");
-
-    assert_eq!(listed.sessions.len(), 1);
-    assert_eq!(listed.sessions[0].session_id, "legacy-session");
-    assert_eq!(listed.sessions[0].messages_count, 2);
-    assert_eq!(
-        data_source.cleared_legacy_session_ids(),
-        vec!["legacy-session".to_string()]
-    );
-    assert_eq!(
-        event_log_writer
-            .read_session_events("legacy-session")
-            .expect("read existing jsonl")
-            .len(),
-        4
-    );
-    let projected = projection_store
-        .read_session("legacy-session")
-        .expect("read repaired projection")
-        .expect("projection row");
-    assert_eq!(projected.last_event_sequence, 4);
 }

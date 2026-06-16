@@ -344,6 +344,8 @@ export const METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE =
   "connectOpenDeepLink/resolve";
 export const METHOD_CONNECT_RELAY_API_KEY_SAVE = "connectRelayApiKey/save";
 export const METHOD_CONNECT_CALLBACK_SEND = "connectCallback/send";
+export const METHOD_CONVERSATION_IMPORT_SOURCE_SCAN =
+  "conversationImport/source/scan";
 
 export type AppServerMethodKind = "request" | "notification";
 
@@ -611,6 +613,7 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE, kind: "request" },
   { method: METHOD_CONNECT_RELAY_API_KEY_SAVE, kind: "request" },
   { method: METHOD_CONNECT_CALLBACK_SEND, kind: "request" },
+  { method: METHOD_CONVERSATION_IMPORT_SOURCE_SCAN, kind: "request" },
   { method: METHOD_AGENT_SESSION_START, kind: "request" },
   { method: METHOD_AGENT_SESSION_READ, kind: "request" },
   { method: METHOD_AGENT_SESSION_TURN_START, kind: "request" },
@@ -1146,6 +1149,7 @@ export type AgentSessionReadParams = {
 export type AgentSessionListParams = {
   includeArchived?: boolean;
   archivedOnly?: boolean;
+  cwd?: string | string[];
   workspaceId?: string;
   limit?: number;
 };
@@ -3672,6 +3676,60 @@ export type ConnectCallbackSendParams = {
 
 export type ConnectCallbackSendResponse = {
   delivered: boolean;
+};
+
+export type ConversationImportSourceClient = "codex" | "claude_code";
+
+export type ConversationImportSourceStatus =
+  | "ready"
+  | "missing"
+  | "unsupported"
+  | "error";
+
+export type ConversationImportThreadStatus =
+  | "not_imported"
+  | "imported"
+  | "conflict";
+
+export type ConversationImportSourceScanParams = {
+  sourceClient?: ConversationImportSourceClient;
+  sourceRoot?: string;
+  projectPath?: string;
+  query?: string;
+  includeArchived?: boolean;
+  limit?: number;
+  cursor?: string;
+};
+
+export type ConversationImportSourceSummary = {
+  sourceClient: ConversationImportSourceClient;
+  status: ConversationImportSourceStatus;
+  sourceRoot?: string;
+  readable: boolean;
+  threadCount: number;
+  indexedAt?: string;
+  statePath?: string;
+  message?: string;
+};
+
+export type ImportedThreadSummary = {
+  sourceClient: ConversationImportSourceClient;
+  sourceThreadId: string;
+  title?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  cwd?: string;
+  source?: string;
+  modelProvider?: string;
+  archived: boolean;
+  sourcePath?: string;
+  importStatus: ConversationImportThreadStatus;
+};
+
+export type ConversationImportSourceScanResponse = {
+  source: ConversationImportSourceSummary;
+  threads: ImportedThreadSummary[];
+  nextCursor?: string;
 };
 
 export type ProtocolSchemaGroup = "jsonrpc" | "v0";

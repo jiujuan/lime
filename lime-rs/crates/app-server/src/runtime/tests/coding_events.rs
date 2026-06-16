@@ -188,7 +188,15 @@ async fn read_model_projects_active_coding_activity_and_pending_action() {
                 "command.output",
                 json!({
                     "commandId": "cmd_active",
-                    "outputRef": "output://cmd_active"
+                    "outputRef": "output://cmd_active",
+                    "processId": "process-cmd-active",
+                    "executionProcessStatus": "running",
+                    "executionSurface": "live_process",
+                    "outputBytes": 14,
+                    "outputOmittedBytes": 0,
+                    "outputTruncated": false,
+                    "stdoutBytes": 14,
+                    "stderrBytes": 0
                 }),
             ),
             RuntimeEvent::new(
@@ -248,6 +256,14 @@ async fn read_model_projects_active_coding_activity_and_pending_action() {
     assert_eq!(commands[0]["command_summary"], "npm test");
     assert_eq!(commands[0]["command_argv"][0], "npm");
     assert_eq!(commands[0]["output_refs"][0], "output://cmd_active");
+    assert_eq!(commands[0]["process_id"], "process-cmd-active");
+    assert_eq!(commands[0]["execution_process_status"], "running");
+    assert_eq!(commands[0]["execution_surface"], "live_process");
+    assert_eq!(commands[0]["output_bytes"], 14);
+    assert_eq!(commands[0]["output_omitted_bytes"], 0);
+    assert_eq!(commands[0]["output_truncated"], false);
+    assert_eq!(commands[0]["stdout_bytes"], 14);
+    assert_eq!(commands[0]["stderr_bytes"], 0);
 
     let tests = thread_read["tests"].as_array().expect("tests");
     assert_eq!(tests.len(), 1);
@@ -928,7 +944,7 @@ async fn start_turn_hydrates_persisted_coding_snapshot_refs_into_runtime_state()
             ]
         })),
     };
-    let app_data_source = Arc::new(TestCurrentTimelineDataSource::new(persisted));
+    let app_data_source = Arc::new(TestSessionDataSource::new(persisted));
     let core = RuntimeCore::with_backend(Arc::new(CodingLifecycleBackend))
         .with_app_data_source(app_data_source)
         .with_output_snapshot_store(Arc::new(FilesystemOutputSnapshotStore::with_base_dir(

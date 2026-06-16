@@ -14,14 +14,7 @@ import {
   type ReactElement,
   type MouseEvent as ReactMouseEvent,
 } from "react";
-import {
-  Gift,
-  Moon,
-  Sun,
-  Search,
-  PanelLeftClose,
-  PanelLeftOpen,
-} from "lucide-react";
+import { Gift, Search, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { AgentPageParams, Page, PageParams } from "@/types/page";
@@ -35,12 +28,8 @@ import {
   buildClawAgentParams,
   buildHomeAgentParams,
 } from "@/lib/workspace/navigation";
+import { requestTaskCenterDraftTask } from "@/components/agent/chat/taskCenterDraftTaskEvents";
 import {
-  notifyTaskCenterTaskOpen,
-  requestTaskCenterDraftTask,
-} from "@/components/agent/chat/taskCenterDraftTaskEvents";
-import {
-  archiveManyAgentRuntimeSessions,
   deleteAgentRuntimeSession,
   updateAgentRuntimeSession,
   type AsterSessionInfo,
@@ -61,7 +50,6 @@ import {
 import { LIME_BRAND_LOGO_SRC, LIME_BRAND_NAME } from "@/lib/branding";
 import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
 import { AppSidebarAccountMenu } from "@/components/app-sidebar/AppSidebarAccountMenu";
-import { AppSidebarAppearancePopover } from "@/components/app-sidebar/AppSidebarAppearancePopover";
 import { AppSidebarConversationShelf } from "@/components/app-sidebar/AppSidebarConversationShelf";
 import { AppSidebarInviteDialog } from "@/components/app-sidebar/AppSidebarInviteDialog";
 import { AppSidebarSearchDialog } from "@/components/app-sidebar/AppSidebarSearchDialog";
@@ -70,6 +58,7 @@ import { useOpenedProjectSummaries } from "@/components/agent/chat/hooks/useOpen
 import { useAppSidebarAppearance } from "@/components/app-sidebar/useAppSidebarAppearance";
 import { useAppSidebarProjectActions } from "@/components/app-sidebar/useAppSidebarProjectActions";
 import { useAppSidebarSessions } from "@/components/app-sidebar/useAppSidebarSessions";
+import type { SidebarOpenedProjectSummary } from "@/components/app-sidebar/sidebarConversationGroups";
 import {
   AGENT_APP_RUNTIME_SIDEBAR_COLLAPSE_SOURCE,
   APP_SIDEBAR_COLLAPSED_STORAGE_KEY,
@@ -89,8 +78,9 @@ import {
   NavButton,
   NavLabel,
   FooterArea,
-  ActionRow,
-  AppearanceActionSlot,
+  FooterPrimaryActionRow,
+  FooterSettingsAction,
+  FooterUpdateActionSlot,
   IconActionButton,
   HeaderInviteButton,
   AccountActionSlot,
@@ -108,7 +98,6 @@ import {
 import {
   resolveAccountDisplayName,
   resolveAccountEmail,
-  resolveAccountInitial,
   resolveAccountPlanSummary,
   resolveAccountTenantLabel,
   resolveCloudBrandLabel,
@@ -169,6 +158,26 @@ interface AppSidebarProps {
 
 type SidebarNavItem = SidebarNavItemDefinition;
 
+function normalizeSidebarPath(value?: string | null): string | null {
+  const normalized = value?.trim().replace(/[\\/]+$/u, "");
+  return normalized ? normalized : null;
+}
+
+function resolveProjectIdForSession(
+  session: AsterSessionInfo,
+  projects: SidebarOpenedProjectSummary[],
+): string | null {
+  const sessionCwd = normalizeSidebarPath(session.working_dir);
+  if (!sessionCwd) {
+    return null;
+  }
+  return (
+    projects.find(
+      (project) => normalizeSidebarPath(project.rootPath) === sessionCwd,
+    )?.id ?? null
+  );
+}
+
 export function AppSidebar({
   currentPage,
   currentPageParams,
@@ -226,10 +235,6 @@ export function AppSidebar({
     "navigation.sidebar.account.freePlan",
     "免费版",
   );
-  const accountOpenSourceTitleLabel = t(
-    "navigation.sidebar.account.openSource.title",
-    "开源使用",
-  );
   const accountDefaultCloudBrandLabel = t(
     "navigation.sidebar.account.defaultCloudBrand",
     "Lime 云端",
@@ -268,7 +273,9 @@ export function AppSidebar({
   const activeAgentProjectId = isAgentWorkspace
     ? activeAgentPageParams?.projectId?.trim() || null
     : null;
-  const currentProjectId = activeAgentProjectId || rememberedProjectId;
+  const currentProjectId = activeAgentProjectId;
+  const projectScopedNavigationProjectId =
+    activeAgentProjectId || rememberedProjectId;
   const openedProjects = useOpenedProjectSummaries(
     activeAgentProjectId
       ? {
@@ -277,9 +284,20 @@ export function AppSidebar({
         }
       : null,
   );
-  const openedProjectIds = useMemo(
-    () => openedProjects.map((project) => project.id),
-    [openedProjects],
+  const conversationProjects = useMemo(() => {
+    if (!activeAgentProjectId) {
+      return openedProjects;
+    }
+    return openedProjects.filter(
+      (project) => project.id === activeAgentProjectId,
+    );
+  }, [activeAgentProjectId, openedProjects]);
+  const conversationProjectCwds = useMemo(
+    () =>
+      conversationProjects
+        .map((project) => project.rootPath?.trim())
+        .filter((rootPath): rootPath is string => Boolean(rootPath)),
+    [conversationProjects],
   );
   const currentSessionId =
     activeAgentPageParams?.initialSessionId?.trim() || null;
@@ -336,19 +354,7 @@ export function AppSidebar({
       );
     };
   }, []);
-  const {
-    appearanceColorSchemes,
-    appearanceControlRef,
-    appearancePopoverOpen,
-    appearanceThemeOptions,
-    colorSchemeId,
-    handleColorSchemeChange,
-    handleRandomColorScheme,
-    handleThemeModeChange,
-    setAppearancePopoverOpen,
-    themeState,
-    copy: appearanceCopy,
-  } = useAppSidebarAppearance();
+  const { themeState } = useAppSidebarAppearance();
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [languageMenuOpen, setLanguageMenuOpen] = useState(false);
   const [language, setLanguageState] = useState<LocalePreference>("zh-CN");
@@ -379,21 +385,19 @@ export function AppSidebar({
   const [inviteReloadKey, setInviteReloadKey] = useState(0);
   const [sidebarSearchOpen, setSidebarSearchOpen] = useState(false);
   const [sidebarSearchQuery, setSidebarSearchQuery] = useState("");
-  const { setLanguage: setI18nLanguage } = useI18nPatch();
 
   const [enabledNavItems, setEnabledNavItems] = useState<string[]>(
     DEFAULT_ENABLED_SIDEBAR_NAV_ITEM_IDS,
   );
+  const { setLanguage: setI18nLanguage } = useI18nPatch();
   const sidebarSearchInputRef = useRef<HTMLInputElement | null>(null);
   const accountControlRef = useRef<HTMLDivElement | null>(null);
   const reserveWindowControls = shouldReserveMacWindowControls();
 
   const openSidebarSearchDialog = useCallback(() => {
     setAccountMenuOpen(false);
-    setLanguageMenuOpen(false);
-    setAppearancePopoverOpen(false);
     setSidebarSearchOpen(true);
-  }, [setAppearancePopoverOpen]);
+  }, []);
 
   const closeSidebarSearchDialog = useCallback(() => {
     setSidebarSearchOpen(false);
@@ -482,12 +486,21 @@ export function AppSidebar({
     ).map(localizeSidebarNavItem);
   }, [enabledNavItems, localizeSidebarNavItem]);
 
-  const filteredFooterNavItems = useMemo<SidebarNavItem[]>(() => {
+  const settingsFooterNavItem = useMemo<SidebarNavItem | null>(() => {
+    return (
+      FOOTER_SIDEBAR_NAV_ITEMS.find((item) => item.id === "settings") ?? null
+    );
+  }, []);
+  const localizedSettingsFooterNavItem = useMemo<SidebarNavItem | null>(() => {
+    return settingsFooterNavItem
+      ? localizeSidebarNavItem(settingsFooterNavItem)
+      : null;
+  }, [localizeSidebarNavItem, settingsFooterNavItem]);
+  const accountMenuNavItems = useMemo<SidebarNavItem[]>(() => {
     return FOOTER_SIDEBAR_NAV_ITEMS.filter(
-      (item) =>
-        item.configurable === false || enabledNavItems.includes(item.id),
+      (item) => item.id !== "settings",
     ).map(localizeSidebarNavItem);
-  }, [enabledNavItems, localizeSidebarNavItem]);
+  }, [localizeSidebarNavItem]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -758,7 +771,8 @@ export function AppSidebar({
     visibleRecentSidebarSessions,
   } = useAppSidebarSessions({
     currentSessionId,
-    openedProjectIds,
+    openedProjectCwds: conversationProjectCwds,
+    requireOpenedProjectCwd: Boolean(activeAgentProjectId),
     shouldShowConversationList,
     sidebarSearchOpen,
     sidebarSearchQuery,
@@ -779,15 +793,19 @@ export function AppSidebar({
     return activePage === item.page;
   };
 
-  const tryOpenTaskCenterDraftFromSidebar = useCallback(() => {
-    return (
-      isAgentWorkspace && requestTaskCenterDraftTask({ source: "sidebar" })
-    );
-  }, [isAgentWorkspace]);
+  const tryOpenTaskCenterDraftFromSidebar = useCallback(
+    (projectId?: string | null) => {
+      return (
+        isAgentWorkspace &&
+        requestTaskCenterDraftTask({ source: "sidebar", projectId })
+      );
+    },
+    [isAgentWorkspace],
+  );
 
   const handleNavigate = (item: SidebarNavItem) => {
     if (item.id === "home-general") {
-      if (tryOpenTaskCenterDraftFromSidebar()) {
+      if (tryOpenTaskCenterDraftFromSidebar(currentProjectId)) {
         return;
       }
 
@@ -819,7 +837,7 @@ export function AppSidebar({
       const targetSessionId =
         currentSessionId ?? fallbackSessionId ?? undefined;
       const targetParams = buildClawAgentParams({
-        projectId: currentProjectId ?? undefined,
+        projectId: projectScopedNavigationProjectId ?? undefined,
         initialSessionId: targetSessionId,
       });
       const target = {
@@ -844,8 +862,8 @@ export function AppSidebar({
     }
 
     if (item.id === "skills") {
-      const targetParams = currentProjectId
-        ? { creationProjectId: currentProjectId }
+      const targetParams = projectScopedNavigationProjectId
+        ? { creationProjectId: projectScopedNavigationProjectId }
         : undefined;
       const target = {
         page: "skills" as Page,
@@ -926,17 +944,12 @@ export function AppSidebar({
     (session: AsterSessionInfo) => {
       deferConversationNavigation();
 
-      if (isClawTaskCenter) {
-        notifyTaskCenterTaskOpen({
-          sessionId: session.id,
-          workspaceId: session.workspace_id ?? currentProjectId ?? null,
-          source: "sidebar",
-        });
-        return;
-      }
-
+      const sessionProjectId = resolveProjectIdForSession(
+        session,
+        conversationProjects,
+      );
       const targetParams = buildClawAgentParams({
-        projectId: session.workspace_id ?? currentProjectId ?? undefined,
+        ...(sessionProjectId ? { projectId: sessionProjectId } : {}),
         initialSessionId: session.id,
       });
       const target = {
@@ -958,51 +971,67 @@ export function AppSidebar({
       requestedNavigationTargetRef.current = target;
       onNavigate(target.page, target.rawParams);
     },
-    [
-      currentProjectId,
-      deferConversationNavigation,
-      isClawTaskCenter,
-      onNavigate,
-    ],
+    [conversationProjects, deferConversationNavigation, onNavigate],
   );
 
-  const handleNavigateToNewTask = useCallback(() => {
-    if (tryOpenTaskCenterDraftFromSidebar()) {
-      return;
-    }
+  const handleNavigateToNewTask = useCallback(
+    (projectId?: string | null) => {
+      const normalizedProjectId = projectId?.trim() || null;
+      if (
+        isAgentWorkspace &&
+        requestTaskCenterDraftTask({
+          source: "sidebar",
+          projectId: normalizedProjectId,
+        })
+      ) {
+        return;
+      }
 
-    const targetParams = buildHomeAgentParams({
-      projectId: currentProjectId ?? undefined,
-    });
-    const target = {
-      page: "agent" as Page,
-      rawParams: targetParams,
-      paramsKey: serializeNavigationParams(targetParams),
-    } satisfies SidebarNavigationTarget;
+      const targetParams = buildHomeAgentParams({
+        projectId: normalizedProjectId ?? undefined,
+      });
+      const target = {
+        page: "agent" as Page,
+        rawParams: targetParams,
+        paramsKey: serializeNavigationParams(targetParams),
+      } satisfies SidebarNavigationTarget;
 
-    if (
-      isSameSidebarNavigationTarget(
-        target,
-        requestedNavigationTargetRef.current.page,
-        requestedNavigationTargetRef.current.rawParams,
-      )
-    ) {
-      return;
-    }
+      if (
+        isSameSidebarNavigationTarget(
+          target,
+          requestedNavigationTargetRef.current.page,
+          requestedNavigationTargetRef.current.rawParams,
+        )
+      ) {
+        return;
+      }
 
-    requestedNavigationTargetRef.current = target;
-    onNavigate(target.page, target.rawParams);
-  }, [currentProjectId, onNavigate, tryOpenTaskCenterDraftFromSidebar]);
+      requestedNavigationTargetRef.current = target;
+      onNavigate(target.page, target.rawParams);
+    },
+    [isAgentWorkspace, onNavigate],
+  );
+
+  const handleNavigateToProjectNewTask = useCallback(
+    (project: SidebarOpenedProjectSummary) => {
+      handleNavigateToNewTask(project.id);
+    },
+    [handleNavigateToNewTask],
+  );
+
+  const handleNavigateToStandaloneConversation = useCallback(() => {
+    handleNavigateToNewTask(null);
+  }, [handleNavigateToNewTask]);
 
   const projectActions = useAppSidebarProjectActions({
-    currentProjectId,
+    currentProjectId: projectScopedNavigationProjectId,
     onNavigate,
     refreshSidebarSessions,
   });
 
   const handleSidebarSearchCreateConversation = () => {
     closeSidebarSearchDialog();
-    handleNavigateToNewTask();
+    handleNavigateToStandaloneConversation();
   };
 
   const handleSidebarSearchNavigateToConversation = useCallback(
@@ -1011,11 +1040,17 @@ export function AppSidebar({
       recordAgentUiPerformanceMetric("sidebar.conversation.click", {
         sessionId: session.id,
         source: "sidebar_search",
-        workspaceId: session.workspace_id ?? currentProjectId ?? null,
+        cwd: session.working_dir ?? null,
+        projectId:
+          resolveProjectIdForSession(session, conversationProjects) ?? null,
       });
       handleNavigateToConversation(session);
     },
-    [closeSidebarSearchDialog, currentProjectId, handleNavigateToConversation],
+    [
+      closeSidebarSearchDialog,
+      handleNavigateToConversation,
+      conversationProjects,
+    ],
   );
 
   const handleSidebarSearchResultClick = useCallback(
@@ -1103,26 +1138,6 @@ export function AppSidebar({
     ],
   );
 
-  const handleArchiveManyConversations = useCallback(
-    async (sessions: AsterSessionInfo[]) => {
-      const sessionIds = sessions
-        .map((session) => session.id.trim())
-        .filter(Boolean);
-      if (sessionIds.length === 0) {
-        return;
-      }
-
-      try {
-        await archiveManyAgentRuntimeSessions(sessionIds);
-        await refreshSidebarSessions();
-      } catch (error) {
-        console.error("批量归档会话失败:", error);
-        await refreshSidebarSessions();
-      }
-    },
-    [refreshSidebarSessions],
-  );
-
   const handleDeleteConversation = useCallback(
     async (session: AsterSessionInfo) => {
       const title = resolveLocalizedSessionTitle(session);
@@ -1138,7 +1153,7 @@ export function AppSidebar({
         await deleteAgentRuntimeSession(session.id);
         toast.success(deleteConversationSuccessLabel);
         if (currentSessionId === session.id) {
-          handleNavigateToNewTask();
+          handleNavigateToStandaloneConversation();
         } else {
           await refreshSidebarSessions();
         }
@@ -1157,17 +1172,20 @@ export function AppSidebar({
       deleteConversationErrorLabel,
       deleteConversationSuccessLabel,
       formatDeleteConversationConfirm,
-      handleNavigateToNewTask,
+      handleNavigateToStandaloneConversation,
       removeSidebarSessionOptimistically,
       refreshSidebarSessions,
       resolveLocalizedSessionTitle,
     ],
   );
 
-  const currentLanguageLabel = resolveLocaleOptionLabel(language);
+  const accountLoginPromptTitleLabel = t(
+    "navigation.sidebar.account.loginPrompt.title",
+    "登录 Lime 云端",
+  );
   const accountDisplayName = resolveAccountDisplayName(
     cloudSessionState,
-    accountOpenSourceTitleLabel,
+    accountLoginPromptTitleLabel,
   );
   const accountEmail = resolveAccountEmail(cloudSessionState);
   const accountTenantLabel = resolveAccountTenantLabel(cloudSessionState);
@@ -1180,8 +1198,6 @@ export function AppSidebar({
     accountDefaultCloudBrandLabel,
     accountCloudSuffixLabel,
   );
-  const accountAvatarUrl = cloudSessionState?.session.user.avatarUrl?.trim();
-  const accountInitial = resolveAccountInitial(accountDisplayName);
   const hasCloudAccount = Boolean(cloudSessionState);
   const accountMetaLine =
     [accountEmail, accountTenantLabel].filter(Boolean).join(" · ") ||
@@ -1261,23 +1277,8 @@ export function AppSidebar({
     "选择界面语言",
   );
   const languageMenuLabel = interfaceLanguageLabel;
-  const accountOpenUserMenuLabel = t(
-    "navigation.sidebar.account.openMenu",
-    "打开用户菜单",
-  );
+  const currentLanguageLabel = resolveLocaleOptionLabel(language);
   const accountMenuLabel = t("navigation.sidebar.account.menu", "用户菜单");
-  const accountCloudStateLabel = t(
-    "navigation.sidebar.account.state.cloud",
-    "云端",
-  );
-  const accountLocalStateLabel = t(
-    "navigation.sidebar.account.state.local",
-    "本地可用",
-  );
-  const accountLocalTooltipLabel = t(
-    "navigation.sidebar.account.localTooltip",
-    "开源使用 · 本地可用",
-  );
   const connectCloudLabel = t("navigation.sidebar.account.connectCloud", {
     brand: cloudBrandLabel,
     defaultValue: "连接 {{brand}}",
@@ -1333,29 +1334,17 @@ export function AppSidebar({
     "navigation.sidebar.account.viewDetails",
     "查看详情",
   );
-  const accountOpenSourceInfoLabel = t(
-    "navigation.sidebar.account.openSource.info",
-    "开源使用说明",
-  );
-  const accountOpenSourceDescriptionLabel = t(
-    "navigation.sidebar.account.openSource.description",
+  const accountLoginPromptDescriptionLabel = t(
+    "navigation.sidebar.account.loginPrompt.description",
     {
       brand: cloudBrandLabel,
-      defaultValue:
-        "本地开源功能可直接使用；你可以先进入模型设置配置本地渠道，也可以按需连接 {{brand}} 同步账号、积分、套餐和商业化能力。",
+      defaultValue: "登录 {{brand}} 后同步账号、积分和套餐信息。",
     },
   );
-  const accountNoLoginAvailableLabel = t(
-    "navigation.sidebar.account.openSource.noLogin",
-    "不登录也可用",
+  const accountLoginPromptBadgeLabel = t(
+    "navigation.sidebar.account.loginPrompt.badge",
+    "未登录",
   );
-  const accountLocalModelConfigurableLabel = t(
-    "navigation.sidebar.account.openSource.localModel",
-    "本地模型可配置",
-  );
-  const accountButtonTooltip = hasCloudAccount
-    ? `${accountDisplayName}${accountEmail ? ` · ${accountEmail}` : ""}`
-    : accountLocalTooltipLabel;
   const inviteShare = inviteDashboard?.share;
   const inviteEntryLabel = t(
     "navigation.sidebar.invite.entry.label",
@@ -1493,7 +1482,6 @@ export function AppSidebar({
       });
       toast.success(accountLoginOpenedLabel);
       setAccountMenuOpen(false);
-      setLanguageMenuOpen(false);
     } catch (error) {
       const message =
         error instanceof Error && error.message.trim()
@@ -1553,27 +1541,6 @@ export function AppSidebar({
     }
   }, [cloudSessionState?.session.tenant.id]);
 
-  const handleCopyInviteText = useCallback(
-    async (value: string | undefined, successMessage: string) => {
-      const text = value?.trim();
-      if (!text) {
-        toast.info(inviteCopyEmptyLabel);
-        return;
-      }
-
-      try {
-        if (!navigator.clipboard?.writeText) {
-          throw new Error("clipboard unavailable");
-        }
-        await navigator.clipboard.writeText(text);
-        toast.success(successMessage);
-      } catch {
-        toast.error(inviteCopyFailedLabel);
-      }
-    },
-    [inviteCopyEmptyLabel, inviteCopyFailedLabel],
-  );
-
   const handleLanguageChange = useCallback(
     async (nextLanguage: LocalePreference) => {
       const previousLanguage = language;
@@ -1603,6 +1570,27 @@ export function AppSidebar({
     [language, setI18nLanguage],
   );
 
+  const handleCopyInviteText = useCallback(
+    async (value: string | undefined, successMessage: string) => {
+      const text = value?.trim();
+      if (!text) {
+        toast.info(inviteCopyEmptyLabel);
+        return;
+      }
+
+      try {
+        if (!navigator.clipboard?.writeText) {
+          throw new Error("clipboard unavailable");
+        }
+        await navigator.clipboard.writeText(text);
+        toast.success(successMessage);
+      } catch {
+        toast.error(inviteCopyFailedLabel);
+      }
+    },
+    [inviteCopyEmptyLabel, inviteCopyFailedLabel],
+  );
+
   return (
     <TooltipProvider>
       <Container
@@ -1623,9 +1611,7 @@ export function AppSidebar({
                 onClick={() =>
                   onNavigate(
                     "agent",
-                    buildHomeAgentParams({
-                      projectId: currentProjectId ?? undefined,
-                    }),
+                    buildHomeAgentParams(),
                   )
                 }
                 aria-label={homeAriaLabel}
@@ -1695,21 +1681,24 @@ export function AppSidebar({
 
           {shouldShowConversationList ? (
             <AppSidebarConversationShelf
-              openedProjects={openedProjects}
+              openedProjects={conversationProjects}
               recentSessions={visibleRecentSidebarSessions}
               currentSessionId={currentSessionId}
               recentLoading={shouldShowSessionLoadingState}
               hasMoreRecent={hasMoreRecentSidebarSessions}
               actionSessionId={sidebarSessionActionId}
-              onCreateConversation={handleNavigateToNewTask}
+              onCreateConversation={(project) => {
+                if (project) {
+                  handleNavigateToProjectNewTask(project);
+                  return;
+                }
+                handleNavigateToStandaloneConversation();
+              }}
               onNavigateToConversation={handleNavigateToConversation}
               onRenameConversation={handleRenameConversation}
               onDeleteConversation={handleDeleteConversation}
               onToggleArchive={(session, archived) => {
                 void handleToggleSessionArchive(session, archived);
-              }}
-              onArchiveManyConversations={(sessions) => {
-                void handleArchiveManyConversations(sessions);
               }}
               onToggleProjectPin={(project) => {
                 void projectActions.handleToggleProjectPin(project);
@@ -1735,169 +1724,119 @@ export function AppSidebar({
           $collapsed={collapsed}
           data-testid="app-sidebar-footer-area"
         >
-          <ActionRow $collapsed={collapsed}>
-            {!collapsed ? <div /> : null}
-            <AppearanceActionSlot
-              $collapsed={collapsed}
-              ref={appearanceControlRef}
-            >
-              {collapsed ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <IconActionButton
-                      $active={appearancePopoverOpen}
-                      onClick={() => {
-                        setAccountMenuOpen(false);
-                        setLanguageMenuOpen(false);
-                        setAppearancePopoverOpen((current) => !current);
-                      }}
-                      title={appearanceCopy.entryLabel}
-                      aria-label={appearanceCopy.entryLabel}
-                      aria-expanded={appearancePopoverOpen}
-                      aria-haspopup="dialog"
-                    >
-                      {themeState.effectiveThemeMode === "dark" ? (
-                        <Moon />
-                      ) : (
-                        <Sun />
-                      )}
-                    </IconActionButton>
-                  </TooltipTrigger>
-                  <TooltipContent side="right">
-                    {appearanceCopy.entryLabel}
-                  </TooltipContent>
-                </Tooltip>
-              ) : (
-                <IconActionButton
-                  $active={appearancePopoverOpen}
-                  onClick={() => {
-                    setAccountMenuOpen(false);
-                    setLanguageMenuOpen(false);
-                    setAppearancePopoverOpen((current) => !current);
-                  }}
-                  title={appearanceCopy.entryLabel}
-                  aria-label={appearanceCopy.entryLabel}
-                  aria-expanded={appearancePopoverOpen}
-                  aria-haspopup="dialog"
-                >
-                  {themeState.effectiveThemeMode === "dark" ? (
-                    <Moon />
-                  ) : (
-                    <Sun />
-                  )}
-                </IconActionButton>
-              )}
-
-              {appearancePopoverOpen ? (
-                <AppSidebarAppearancePopover
-                  themeMode={themeState.themeMode}
-                  colorSchemeId={colorSchemeId}
-                  themeOptions={appearanceThemeOptions}
-                  colorSchemes={appearanceColorSchemes}
-                  copy={appearanceCopy}
-                  onThemeModeChange={handleThemeModeChange}
-                  onColorSchemeChange={handleColorSchemeChange}
-                  onRandomColorScheme={handleRandomColorScheme}
-                />
-              ) : null}
-            </AppearanceActionSlot>
-          </ActionRow>
-
           <AccountActionSlot
             $collapsed={collapsed}
             ref={accountControlRef}
             data-testid="app-sidebar-account-slot"
           >
-            <AppUpdateEntry
-              collapsed={collapsed}
-              onOpenPanel={() => {
-                setAppearancePopoverOpen(false);
-                setLanguageMenuOpen(false);
-                setAccountMenuOpen(false);
-              }}
-            />
-
-            <AppSidebarAccountMenu
-              collapsed={collapsed}
-              accountMenuOpen={accountMenuOpen}
-              languageMenuOpen={languageMenuOpen}
-              accountDisplayName={accountDisplayName}
-              accountAvatarUrl={accountAvatarUrl}
-              accountInitial={accountInitial}
-              accountMetaLine={accountMetaLine}
-              hasCloudAccount={hasCloudAccount}
-              accountPlanSummary={accountPlanSummary}
-              accountLoginPending={accountLoginPending}
-              accountLoginError={accountLoginError}
-              accountLogoutPending={accountLogoutPending}
-              language={language}
-              navItems={filteredFooterNavItems}
-              copy={{
-                openUserMenuLabel: accountOpenUserMenuLabel,
-                buttonTooltip: accountButtonTooltip,
-                menuLabel: accountMenuLabel,
-                cloudStateLabel: accountCloudStateLabel,
-                localStateLabel: accountLocalStateLabel,
-                viewPlanDetailsLabel: accountViewPlanDetailsLabel,
-                viewDetailsLabel: accountViewDetailsLabel,
-                openSourceTitleLabel: accountOpenSourceTitleLabel,
-                openSourceInfoLabel: accountOpenSourceInfoLabel,
-                openSourceDescriptionLabel: accountOpenSourceDescriptionLabel,
-                freePlanLabel: accountFreePlanLabel,
-                noLoginAvailableLabel: accountNoLoginAvailableLabel,
-                localModelConfigurableLabel: accountLocalModelConfigurableLabel,
-                connectCloudLabel,
-                loginPendingLabel: accountLoginPendingLabel,
-                modelSettingsLabel: accountModelSettingsLabel,
-                interfaceLanguageLabel,
-                selectLanguageLabel,
-                languageMenuLabel,
-                currentLanguageLabel,
-                userCenterLabel: accountUserCenterLabel,
-                cloudBrandLabel,
-                aboutLabel: accountAboutLabel,
-                logoutLabel: accountLogoutLabel,
-                logoutPendingLabel: accountLogoutPendingLabel,
-                formatSwitchLanguageAria: (languageLabel) =>
-                  t("navigation.sidebar.account.switchLanguage", {
-                    language: languageLabel,
-                    defaultValue: "切换界面语言为{{language}}",
-                  }),
-              }}
-              isNavItemActive={isActive}
-              onToggleAccountMenu={() => {
-                setAppearancePopoverOpen(false);
-                setLanguageMenuOpen(false);
-                setAccountMenuOpen((current) => !current);
-              }}
-              onNavigateItem={(item) => {
-                setAccountMenuOpen(false);
-                handleNavigate(item);
-              }}
-              onToggleLanguageMenu={() =>
-                setLanguageMenuOpen((current) => !current)
-              }
-              onLanguageChange={(nextLanguage) => {
-                void handleLanguageChange(nextLanguage);
-              }}
-              onOpenBilling={() =>
-                void handleOpenAccountUserCenter("/billing?tab=usage")
-              }
-              onLogin={() => void handleAccountLogin()}
-              onOpenModelSettings={() =>
-                handleAccountMenuNavigate({
-                  tab: SettingsTabs.Providers,
-                  providerView: "settings",
-                })
-              }
-              onOpenUserCenter={() =>
-                void handleOpenAccountUserCenter("/welcome")
-              }
-              onOpenAbout={() =>
-                handleAccountMenuNavigate({ tab: SettingsTabs.About })
-              }
-              onLogout={() => void handleAccountLogout()}
-            />
+            {localizedSettingsFooterNavItem ? (
+              <FooterPrimaryActionRow
+                $collapsed={collapsed}
+                data-testid="app-sidebar-footer-primary-row"
+              >
+                <FooterSettingsAction $collapsed={collapsed}>
+                  <AppSidebarAccountMenu
+                    collapsed={collapsed}
+                    trigger={maybeWrapWithTooltip(
+                      <NavButton
+                        key="settings-account-menu"
+                        $active={accountMenuOpen}
+                        $collapsed={collapsed}
+                        onClick={() => {
+                          setLanguageMenuOpen(false);
+                          setAccountMenuOpen((current) => !current);
+                        }}
+                        title={localizedSettingsFooterNavItem.label}
+                        aria-label={localizedSettingsFooterNavItem.label}
+                        aria-current={accountMenuOpen ? "page" : undefined}
+                        aria-expanded={accountMenuOpen}
+                        aria-haspopup="dialog"
+                        data-testid="app-sidebar-account-button"
+                      >
+                        <localizedSettingsFooterNavItem.icon />
+                        <NavLabel $collapsed={collapsed}>
+                          {localizedSettingsFooterNavItem.label}
+                        </NavLabel>
+                      </NavButton>,
+                      localizedSettingsFooterNavItem.label,
+                    )}
+                    accountMenuOpen={accountMenuOpen}
+                    languageMenuOpen={languageMenuOpen}
+                    accountMetaLine={accountMetaLine}
+                    hasCloudAccount={hasCloudAccount}
+                    accountPlanSummary={accountPlanSummary}
+                    accountLoginPending={accountLoginPending}
+                    accountLoginError={accountLoginError}
+                    accountLogoutPending={accountLogoutPending}
+                    language={language}
+                    navItems={accountMenuNavItems}
+                    copy={{
+                      menuLabel: accountMenuLabel,
+                      viewPlanDetailsLabel: accountViewPlanDetailsLabel,
+                      viewDetailsLabel: accountViewDetailsLabel,
+                      loginPromptTitleLabel: accountLoginPromptTitleLabel,
+                      loginPromptDescriptionLabel:
+                        accountLoginPromptDescriptionLabel,
+                      loginPromptBadgeLabel: accountLoginPromptBadgeLabel,
+                      connectCloudLabel,
+                      loginPendingLabel: accountLoginPendingLabel,
+                      modelSettingsLabel: accountModelSettingsLabel,
+                      interfaceLanguageLabel,
+                      selectLanguageLabel,
+                      languageMenuLabel,
+                      currentLanguageLabel,
+                      userCenterLabel: accountUserCenterLabel,
+                      aboutLabel: accountAboutLabel,
+                      logoutLabel: accountLogoutLabel,
+                      logoutPendingLabel: accountLogoutPendingLabel,
+                      formatSwitchLanguageAria: (languageLabel) =>
+                        t("navigation.sidebar.account.switchLanguage", {
+                          language: languageLabel,
+                          defaultValue: "切换界面语言为{{language}}",
+                        }),
+                    }}
+                    isNavItemActive={isActive}
+                    onNavigateItem={(item) => {
+                      setAccountMenuOpen(false);
+                      setLanguageMenuOpen(false);
+                      handleNavigate(item);
+                    }}
+                    onToggleLanguageMenu={() =>
+                      setLanguageMenuOpen((current) => !current)
+                    }
+                    onLanguageChange={(nextLanguage) => {
+                      void handleLanguageChange(nextLanguage);
+                    }}
+                    onOpenBilling={() =>
+                      void handleOpenAccountUserCenter("/billing?tab=usage")
+                    }
+                    onLogin={() => void handleAccountLogin()}
+                    onOpenModelSettings={() =>
+                      handleAccountMenuNavigate({
+                        tab: SettingsTabs.Providers,
+                        providerView: "settings",
+                      })
+                    }
+                    onOpenUserCenter={() =>
+                      void handleOpenAccountUserCenter("/welcome")
+                    }
+                    onOpenAbout={() =>
+                      handleAccountMenuNavigate({ tab: SettingsTabs.About })
+                    }
+                    onLogout={() => void handleAccountLogout()}
+                  />
+                </FooterSettingsAction>
+                <FooterUpdateActionSlot $collapsed={collapsed}>
+                  <AppUpdateEntry
+                    collapsed={collapsed}
+                    onOpenPanel={() => {
+                      setAccountMenuOpen(false);
+                      setLanguageMenuOpen(false);
+                    }}
+                  />
+                </FooterUpdateActionSlot>
+              </FooterPrimaryActionRow>
+            ) : null}
           </AccountActionSlot>
         </FooterArea>
       </Container>

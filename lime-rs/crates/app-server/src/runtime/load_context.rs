@@ -1,7 +1,6 @@
 use super::projection_repair::ProjectionRepair;
 use super::projection_store::ProjectionReadSession;
 use super::read_model;
-use super::session_hydration;
 use super::turn_input_events;
 use super::RuntimeCore;
 use super::RuntimeCoreError;
@@ -29,20 +28,7 @@ impl RuntimeCore {
         if let Some(context) = self.load_projection_session(&params)? {
             return Ok(context);
         }
-        let response = self
-            .app_data_source
-            .read_current_timeline_session(params.clone())
-            .await?;
-        if let Some(response) = response {
-            let stored = session_hydration::hydrated_stored_session_from_response(response.clone());
-            return Ok(SessionLoadContext { response, stored });
-        }
-        self.backfill_legacy_agent_messages_for_session(&params.session_id)
-            .await?;
-        if let Some(context) = self.load_projection_session(&params)? {
-            return Ok(context);
-        }
-        return Err(RuntimeCoreError::SessionNotFound(params.session_id));
+        Err(RuntimeCoreError::SessionNotFound(params.session_id))
     }
 
     fn load_runtime_core_session(

@@ -40,8 +40,18 @@ const APP_SERVER_METHOD_SESSION_LIST = "agentSession/list";
 const APP_SERVER_METHOD_WORKSPACE_DEFAULT_ENSURE = "workspace/default/ensure";
 const NEWS_PROMPT = "整理今天的国际新闻";
 const CONTINUE_PROMPT = "继续输出";
+const PLAN_PROMPT = "先给我一个修复计划，不要直接改代码";
 const ASSISTANT_DONE_TEXT = "CLAW_NEWS_FIXTURE_DONE";
 const CONTINUE_DONE_TEXT = "CLAW_CONTINUE_FIXTURE_DONE";
+const PLAN_DONE_TEXT = "CLAW_PLAN_FIXTURE_DONE";
+const PLAN_STEPS = [
+  { step: "确认计划模式请求进入 App Server", status: "completed" },
+  { step: "输出 Codex 风格 proposed_plan", status: "in_progress" },
+  { step: "验证右侧计划轨显示", status: "pending" },
+];
+const PROPOSED_PLAN_BLOCK = `<proposed_plan>
+${PLAN_STEPS.map((step) => `- ${step.step}`).join("\\n")}
+</proposed_plan>`;
 const FIXTURE_PROVIDER = "fixture-provider";
 const FIXTURE_MODEL = "fixture-model";
 const SESSION_ID = `claw-chat-current-${Date.now()}-${process.pid}`;
@@ -78,7 +88,7 @@ Claw Chat Current Electron Fixture Smoke
   --app-url <url>        可选 renderer dev server，例如 http://127.0.0.1:1420/
   --evidence-dir <path>  证据目录
   --prefix <name>        证据文件前缀
-  --scenario <name>      complete | cancel | cancel-then-continue，默认 complete
+  --scenario <name>      complete | cancel | cancel-then-continue | plan，默认 complete
   --timeout-ms <ms>      总超时，默认 180000
   --interval-ms <ms>     轮询间隔，默认 500
   --keep-temp            保留临时目录便于调试
@@ -142,10 +152,12 @@ function parseArgs(argv) {
     throw new Error("--evidence-dir / --prefix 均不能为空");
   }
   if (
-    !["complete", "cancel", "cancel-then-continue"].includes(options.scenario)
+    !["complete", "cancel", "cancel-then-continue", "plan"].includes(
+      options.scenario,
+    )
   ) {
     throw new Error(
-      "--scenario 只能是 complete、cancel 或 cancel-then-continue",
+      "--scenario 只能是 complete、cancel、cancel-then-continue 或 plan",
     );
   }
   return options;
@@ -337,10 +349,13 @@ if (input.kind === "turnStart") {
   const inputText = input.request?.input?.text || "";
   const isEventReadProbe = inputText.includes("agentSession/event");
   const isContinuePrompt = inputText.includes("${CONTINUE_PROMPT}");
+  const isPlanPrompt = inputText.includes("${PLAN_PROMPT}");
   const assistantDoneText = isEventReadProbe
     ? "${EVENT_READ_PROBE_DONE_TEXT}"
     : isContinuePrompt
       ? "${CONTINUE_DONE_TEXT}"
+      : isPlanPrompt
+        ? "${PLAN_DONE_TEXT}"
     : "${ASSISTANT_DONE_TEXT}";
   const initialEvents = [
     {
@@ -350,6 +365,8 @@ if (input.kind === "turnStart") {
           ? "事件流 probe 已进入 RuntimeCore：\\n"
           : isContinuePrompt
             ? "继续输出已恢复：\\n"
+            : isPlanPrompt
+              ? "我先给出计划，不会直接改代码：\\n"
           : "以下是今日国际新闻简要整理：\\n"
       }
     }
@@ -412,6 +429,8 @@ if (input.kind === "turnStart") {
         payload: {
           text: isContinuePrompt
             ? "停止后的同一会话已经可以继续输出，并由 App Server current 终态收口。\\n"
+            : isPlanPrompt
+              ? "${PROPOSED_PLAN_BLOCK}\\n计划已写入右侧计划轨，等待你确认后再执行。\\n"
             : "1. 多国外交议题持续升温，地区安全与经贸协商仍是焦点。\\n2. 全球市场继续关注能源、供应链和主要央行政策变化。\\n3. 国际组织呼吁在气候、粮食与人道援助议题上保持协调。\\n"
         }
       },
@@ -859,7 +878,9 @@ async function bindGuiWorkspaceAndModelPreferences(page, workspaceId) {
   );
 }
 
-async function createFixtureSession(page, workspaceId, requestLog) {
+async function createFixtureSession(page, workspace, requestLog) {
+  const { workspaceId, rootPath } = workspace;
+  assert(rootPath, "workspace/default/ensure 未返回可用 rootPath");
   const session = await invokeAppServerFromPage(
     page,
     APP_SERVER_METHOD_SESSION_START,
@@ -868,12 +889,15 @@ async function createFixtureSession(page, workspaceId, requestLog) {
       threadId: THREAD_ID,
       appId: "desktop",
       workspaceId,
+      workingDir: rootPath,
       businessObjectRef: {
         kind: "agent.session",
         id: `agent-session:${workspaceId}:${SESSION_ID}`,
         title: SESSION_TITLE,
         metadata: {
           title: SESSION_TITLE,
+          workingDir: rootPath,
+          working_dir: rootPath,
           executionStrategy: "react",
           runStartHooks: false,
           harness: {
@@ -928,7 +952,7 @@ async function createFixtureSession(page, workspaceId, requestLog) {
 async function navigateGuiToWorkspaceScopedAgent(page, options, workspaceId) {
   const startedAt = Date.now();
   let lastSnapshot = null;
-  let clickedNewConversation = false;
+  let requestedSessionOpen = false;
 
   while (Date.now() - startedAt < options.timeoutMs) {
     const snapshot = await evaluatePageSnapshot(
@@ -956,11 +980,7 @@ async function navigateGuiToWorkspaceScopedAgent(page, options, workspaceId) {
             JSON.stringify(workspaceId),
           hasConversationList: Boolean(recentShelf),
           recentShelfText: recentShelf?.textContent || "",
-          hasNewConversationButton: buttons.some((button) =>
-            [button.title, button.text, button.aria].some((label) =>
-              label.includes("新建对话"),
-            ),
-          ),
+          hasSessionOpenRequest: window.__clawFixtureSessionOpenRequested === true,
           hasWorkspaceShell: Boolean(
             document.querySelector('[data-testid="agent-chat-workspace"]') ||
             document.querySelector('[data-testid="chat-workspace"]') ||
@@ -982,31 +1002,36 @@ async function navigateGuiToWorkspaceScopedAgent(page, options, workspaceId) {
     lastSnapshot = snapshot;
 
     if (
-      clickedNewConversation &&
+      requestedSessionOpen &&
       snapshot.hasConversationList &&
       snapshot.localStorageMatchesWorkspace
     ) {
       return snapshot;
     }
 
-    const clicked = await page.evaluate(() => {
-      const buttons = Array.from(document.querySelectorAll("button"));
-      const newConversationButton = buttons.find((button) => {
-        const label = [
-          button.getAttribute("title") || "",
-          button.getAttribute("aria-label") || "",
-          button.textContent || "",
-        ].join("\n");
-        return label.includes("新建对话");
-      });
-      if (newConversationButton instanceof HTMLElement) {
-        newConversationButton.click();
+    const requested = await page.evaluate(
+      ({ sessionId, workspaceId }) => {
+        window.__clawFixtureSessionOpenRequested = true;
+        window.dispatchEvent(
+          new CustomEvent("lime:task-center:open-task", {
+            cancelable: true,
+            detail: {
+              sessionId,
+              workspaceId,
+              source: "sidebar",
+            },
+          }),
+        );
         return true;
-      }
-      window.dispatchEvent(new Event("focus"));
-      return false;
-    });
-    clickedNewConversation = clickedNewConversation || clicked;
+      },
+      { sessionId: SESSION_ID, workspaceId },
+    );
+    if (!requested) {
+      await page.evaluate(() => {
+        window.dispatchEvent(new Event("focus"));
+      });
+    }
+    requestedSessionOpen = requestedSessionOpen || requested;
 
     await sleep(options.intervalMs);
   }
@@ -1078,6 +1103,7 @@ async function waitForGuiSessionVisible(page, options) {
 
 async function openFixtureSessionFromSidebar(page, options) {
   const startedAt = Date.now();
+  let lastSnapshot = null;
   while (Date.now() - startedAt < options.timeoutMs) {
     const clicked = await evaluatePageSnapshot(
       page,
@@ -1089,7 +1115,17 @@ async function openFixtureSessionFromSidebar(page, options) {
             candidate.getAttribute("aria-label") || "",
             candidate.textContent || "",
           ].join("\n");
-          return label.includes(title);
+          if (!label.includes(title)) {
+            return false;
+          }
+          const actionLabel = [
+            candidate.getAttribute("data-testid") || "",
+            candidate.getAttribute("aria-label") || "",
+            candidate.textContent || "",
+          ].join("\n");
+          return !/menu|more|action|archive|delete|favorite|rename|菜单|更多|操作|归档|删除|收藏|重命名/i.test(
+            actionLabel,
+          );
         });
         if (!button) {
           const moreButton = candidates.find((candidate) =>
@@ -1099,16 +1135,47 @@ async function openFixtureSessionFromSidebar(page, options) {
           return false;
         }
         button.click();
-        return true;
+        return {
+          clicked: true,
+          title: button.getAttribute("title") || "",
+          aria: button.getAttribute("aria-label") || "",
+          text: button.textContent || "",
+        };
       },
       { title: SESSION_TITLE },
     );
-    if (clicked) {
-      return;
+    if (clicked?.clicked) {
+      const inputReady = await evaluatePageSnapshot(page, () => {
+        const textarea = document.querySelector(
+          'textarea[name="agent-chat-message"]',
+        );
+        const bodyText = document.body?.innerText || "";
+        return {
+          hasTextarea: Boolean(textarea),
+          hasRecentConversationsShell: bodyText.includes("最近对话"),
+          textareaDisabled:
+            textarea instanceof HTMLTextAreaElement ? textarea.disabled : null,
+          bodyText,
+        };
+      });
+      lastSnapshot = {
+        clicked,
+        inputReady: sanitizeJson(inputReady),
+      };
+      if (
+        inputReady?.hasTextarea &&
+        inputReady?.textareaDisabled === false
+      ) {
+        return lastSnapshot;
+      }
     }
     await sleep(options.intervalMs);
   }
-  throw new Error(`侧栏未找到 Claw fixture 会话: ${SESSION_TITLE}`);
+  throw new Error(
+    `侧栏未打开 Claw fixture 会话: ${SESSION_TITLE}; snapshot=${JSON.stringify(
+      sanitizeJson(lastSnapshot),
+    )}`,
+  );
 }
 
 async function waitForInputReady(page, options) {
@@ -1225,6 +1292,83 @@ async function sendNewsPromptFromGui(page, options) {
   return await sendPromptFromGui(page, options, NEWS_PROMPT);
 }
 
+async function enablePlanModeFromGui(page, options) {
+  await waitForInputReady(page, options);
+  const opened = await page.evaluate(() => {
+    const buttons = Array.from(document.querySelectorAll("button"));
+    const trigger = buttons.find((button) => {
+      const label = [
+        button.getAttribute("data-testid") || "",
+        button.getAttribute("aria-label") || "",
+        button.getAttribute("title") || "",
+        button.textContent || "",
+      ].join("\n");
+      return (
+        label.includes("inputbar-plus-trigger") ||
+        label.includes("更多") ||
+        label.includes("添加") ||
+        /\bMore\b/i.test(label)
+      );
+    });
+    if (trigger instanceof HTMLElement) {
+      trigger.click();
+      return true;
+    }
+    return false;
+  });
+  assert(opened, "未找到输入区更多菜单按钮，无法切换 plan mode");
+
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const snapshot = await evaluatePageSnapshot(page, () => {
+      const menu = document.querySelector('[data-testid="inputbar-plus-menu"]');
+      const planButton = document.querySelector(
+        '[data-testid="inputbar-plus-plan-mode"]',
+      );
+      const statusChip = document.querySelector(
+        '[data-testid="inputbar-task-mode-status"]',
+      );
+      return {
+        menuVisible: Boolean(menu),
+        planButtonVisible: Boolean(planButton),
+        statusChipVisible: Boolean(statusChip),
+        statusText: statusChip?.textContent || "",
+        bodyText: document.body?.innerText || "",
+      };
+    });
+    lastSnapshot = snapshot;
+    if (snapshot?.planButtonVisible) {
+      await page.locator('[data-testid="inputbar-plus-plan-mode"]').click();
+      break;
+    }
+    await sleep(options.intervalMs);
+  }
+
+  const enabledStartedAt = Date.now();
+  while (Date.now() - enabledStartedAt < options.timeoutMs) {
+    const snapshot = await evaluatePageSnapshot(page, () => {
+      const statusChip = document.querySelector(
+        '[data-testid="inputbar-task-mode-status"]',
+      );
+      return {
+        statusChipVisible: Boolean(statusChip),
+        statusText: statusChip?.textContent || "",
+        bodyText: document.body?.innerText || "",
+      };
+    });
+    if (snapshot?.statusChipVisible) {
+      return sanitizeJson(snapshot);
+    }
+    lastSnapshot = snapshot;
+    await sleep(options.intervalMs);
+  }
+
+  throw new Error(
+    `Plan mode 未在输入区启用: ${JSON.stringify(sanitizeJson(lastSnapshot))}`,
+  );
+}
+
 async function waitForGuiChatCompleted(
   page,
   options,
@@ -1310,6 +1454,101 @@ async function waitForGuiChatCompleted(
   }
   throw new Error(
     `Claw GUI 未完成输入闭环: ${JSON.stringify(sanitizeJson(lastSnapshot))}`,
+  );
+}
+
+async function waitForGuiPlanCompleted(page, options) {
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const snapshot = await evaluatePageSnapshot(
+      page,
+      ({ prompt, doneText, planSteps }) => {
+        const text = document.body?.innerText || "";
+        const textarea = document.querySelector(
+          'textarea[name="agent-chat-message"]',
+        );
+        const rect = textarea?.getBoundingClientRect();
+        const style = textarea ? window.getComputedStyle(textarea) : null;
+        const textareaVisible = Boolean(
+          textarea &&
+            rect &&
+            rect.width > 16 &&
+            rect.height > 16 &&
+            style?.visibility !== "hidden" &&
+            style?.display !== "none",
+        );
+        const buttons = Array.from(document.querySelectorAll("button")).map(
+          (button) => ({
+            title: button.getAttribute("title") || "",
+            text: button.textContent || "",
+            aria: button.getAttribute("aria-label") || "",
+            disabled: button.disabled,
+          }),
+        );
+        const stopButtonVisible = buttons.some((button) => {
+          const label = [button.title, button.text, button.aria].join("\n");
+          return (
+            !button.disabled &&
+            (label.includes("停止") ||
+              label.includes("终止") ||
+              /\bStop\b/i.test(label))
+          );
+        });
+        const taskRailText =
+          document
+            .querySelector('[data-testid="task-center-run-control-surface"]')
+            ?.textContent ||
+          document
+            .querySelector('[data-testid="task-center-task-rail"]')
+            ?.textContent ||
+          text;
+        return {
+          url: window.location.href,
+          hasPrompt: text.includes(prompt),
+          hasPlanIntro: text.includes("我先给出计划"),
+          hasDoneText: text.includes(doneText),
+          hasPlanSection: taskRailText.includes("计划"),
+          hasAllPlanSteps: planSteps.every((step) =>
+            taskRailText.includes(step.step),
+          ),
+          planStepHits: planSteps.map((step) => ({
+            step: step.step,
+            visible: taskRailText.includes(step.step),
+          })),
+          proposedPlanVisible: planSteps.every((step) =>
+            taskRailText.includes(step.step),
+          ),
+          textareaVisible,
+          textareaDisabled:
+            textarea instanceof HTMLTextAreaElement ? textarea.disabled : null,
+          textareaValue:
+            textarea instanceof HTMLTextAreaElement ? textarea.value : null,
+          stopButtonVisible,
+          bodyText: text,
+          taskRailText,
+        };
+      },
+      { prompt: PLAN_PROMPT, doneText: PLAN_DONE_TEXT, planSteps: PLAN_STEPS },
+    );
+    if (!snapshot) {
+      await sleep(options.intervalMs);
+      continue;
+    }
+    lastSnapshot = snapshot;
+    if (
+      snapshot.hasPrompt &&
+      snapshot.hasAllPlanSteps &&
+      snapshot.textareaVisible &&
+      snapshot.textareaDisabled === false &&
+      snapshot.stopButtonVisible === false
+    ) {
+      return sanitizeJson(snapshot);
+    }
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `Claw GUI 未显示计划轨: ${JSON.stringify(sanitizeJson(lastSnapshot))}`,
   );
 }
 
@@ -1521,6 +1760,37 @@ async function waitForSessionReadCompleted(
   }
   throw new Error(
     `App Server read model 未完成输入闭环: ${JSON.stringify(
+      sanitizeJson(lastRead),
+    )}`,
+  );
+}
+
+async function waitForSessionReadPlanCompleted(page, options, requestLog) {
+  const startedAt = Date.now();
+  let lastRead = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const read = await invokeAppServerFromPage(
+      page,
+      APP_SERVER_METHOD_SESSION_READ,
+      {
+        sessionId: SESSION_ID,
+        historyLimit: 100,
+      },
+      requestLog,
+    );
+    lastRead = read.result;
+    const serialized = JSON.stringify(read.result || {});
+    if (
+      serialized.includes(PLAN_PROMPT) &&
+      serialized.includes(PLAN_DONE_TEXT) &&
+      PLAN_STEPS.every((step) => serialized.includes(step.step))
+    ) {
+      return read.result;
+    }
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `App Server read model 未读回计划工具结果: ${JSON.stringify(
       sanitizeJson(lastRead),
     )}`,
   );
@@ -1772,6 +2042,15 @@ function summarizeBackendLedger(backendLedger) {
   const latestTurnStart = turnStartEntries.at(-1) ?? null;
   const latestTurnCancel = turnCancelEntries.at(-1) ?? null;
   const asterChatRequest = latestTurnStart?.asterChatRequest ?? null;
+  const collaborationMode =
+    asterChatRequest?.turn_config?.metadata?.harness?.collaboration_mode
+      ?.mode ??
+    asterChatRequest?.turnConfig?.metadata?.harness?.collaborationMode?.mode ??
+    latestTurnStart?.runtimeOptions?.metadata?.harness?.collaboration_mode
+      ?.mode ??
+    latestTurnStart?.runtimeOptions?.metadata?.harness?.collaborationMode
+      ?.mode ??
+    null;
   return {
     kinds: backendLedger.map((entry) => entry.kind),
     turnStartCount: turnStartEntries.length,
@@ -1790,6 +2069,7 @@ function summarizeBackendLedger(backendLedger) {
           )
             ? asterChatRequest.web_search
             : null,
+          collaborationMode,
         })
       : null,
     latestTurnCancel: latestTurnCancel
@@ -1868,9 +2148,13 @@ async function run() {
     guiCanceled: null,
     continueInputSend: null,
     guiContinueCompleted: null,
+    planModeEnabled: null,
+    planInputSend: null,
+    guiPlanCompleted: null,
     readModelCompleted: null,
     readModelCanceled: null,
     readModelContinueCompleted: null,
+    readModelPlanCompleted: null,
     eventReadProbe: null,
     assertions: {},
     summary: summaryPath,
@@ -1956,7 +2240,7 @@ async function run() {
     logStage("create-fixture-session");
     const sessionCreation = await createFixtureSession(
       page,
-      workspace.workspaceId,
+      workspace,
       appServerRequests,
     );
     summary.sessionCreation = sanitizeJson({
@@ -1976,7 +2260,7 @@ async function run() {
       APP_SERVER_METHOD_SESSION_LIST,
       {
         includeArchived: true,
-        workspaceId: workspace.workspaceId,
+        cwd: workspace.rootPath,
         limit: 20,
       },
       appServerRequests,
@@ -2010,10 +2294,59 @@ async function run() {
     );
     await openFixtureSessionFromSidebar(page, options);
 
-    logStage("send-news-prompt-from-gui");
-    summary.inputSend = sanitizeJson(
-      await sendNewsPromptFromGui(page, options),
-    );
+    if (options.scenario === "plan") {
+      logStage("enable-plan-mode-from-gui");
+      summary.planModeEnabled = sanitizeJson(
+        await enablePlanModeFromGui(page, options),
+      );
+
+      logStage("send-plan-prompt-from-gui");
+      summary.planInputSend = sanitizeJson(
+        await sendPromptFromGui(page, options, PLAN_PROMPT),
+      );
+
+      logStage("wait-gui-plan-completed");
+      summary.guiPlanCompleted = sanitizeJson(
+        await waitForGuiPlanCompleted(page, options),
+      );
+
+      logStage("wait-read-model-plan-completed");
+      const readModelPlanCompleted = await waitForSessionReadPlanCompleted(
+        page,
+        options,
+        appServerRequests,
+      );
+      summary.readModelPlanCompleted = sanitizeJson({
+        detailItemCount: Array.isArray(readModelPlanCompleted?.detail?.items)
+          ? readModelPlanCompleted.detail.items.length
+          : null,
+        latestTurnStatus:
+          readModelPlanCompleted?.detail?.thread_read?.runtime_summary
+            ?.latestTurnStatus ??
+          readModelPlanCompleted?.detail?.thread_read?.status ??
+          readModelPlanCompleted?.detail?.status ??
+          null,
+        includesPrompt: JSON.stringify(readModelPlanCompleted || {}).includes(
+          PLAN_PROMPT,
+        ),
+        includesAssistantDone: JSON.stringify(
+          readModelPlanCompleted || {},
+        ).includes(PLAN_DONE_TEXT),
+        includesPlanItem:
+          JSON.stringify(readModelPlanCompleted || {}).includes("plan") ||
+          JSON.stringify(readModelPlanCompleted || {}).includes(
+            "proposed_plan",
+          ),
+        includesAllPlanSteps: PLAN_STEPS.every((step) =>
+          JSON.stringify(readModelPlanCompleted || {}).includes(step.step),
+        ),
+      });
+    } else {
+      logStage("send-news-prompt-from-gui");
+      summary.inputSend = sanitizeJson(
+        await sendNewsPromptFromGui(page, options),
+      );
+    }
 
     if (
       options.scenario === "cancel" ||
@@ -2112,7 +2445,7 @@ async function run() {
           ).includes("继续输出已恢复"),
         });
       }
-    } else {
+    } else if (options.scenario !== "plan") {
       logStage("wait-gui-completed");
       summary.guiCompleted = sanitizeJson(
         await waitForGuiChatCompleted(page, options),
@@ -2178,6 +2511,9 @@ async function run() {
     const newsTurnStart = backendLedger.find(
       (entry) => entry.kind === "turnStart" && entry.inputText === NEWS_PROMPT,
     );
+    const planTurnStart = backendLedger.find(
+      (entry) => entry.kind === "turnStart" && entry.inputText === PLAN_PROMPT,
+    );
     const continueTurnStart = backendLedger.find(
       (entry) =>
         entry.kind === "turnStart" && entry.inputText === CONTINUE_PROMPT,
@@ -2185,11 +2521,26 @@ async function run() {
     const latestTurnCancel = backendLedger
       .filter((entry) => entry.kind === "turnCancel")
       .at(-1);
-    const asterChatRequest = newsTurnStart?.asterChatRequest ?? {};
+    const asterChatRequest =
+      (options.scenario === "plan"
+        ? planTurnStart?.asterChatRequest
+        : newsTurnStart?.asterChatRequest) ?? {};
     const isCancelOnlyScenario = options.scenario === "cancel";
     const isCancelThenContinueScenario =
       options.scenario === "cancel-then-continue";
+    const isPlanScenario = options.scenario === "plan";
     const hasCancelPhase = isCancelOnlyScenario || isCancelThenContinueScenario;
+    const collaborationMode =
+      asterChatRequest?.turn_config?.metadata?.harness?.collaboration_mode
+        ?.mode ??
+      asterChatRequest?.turnConfig?.metadata?.harness?.collaborationMode
+        ?.mode ??
+      (isPlanScenario
+        ? planTurnStart?.runtimeOptions?.metadata?.harness?.collaboration_mode
+            ?.mode ??
+          planTurnStart?.runtimeOptions?.metadata?.harness?.collaborationMode
+            ?.mode
+        : null);
     const commonAssertions = {
       electronPreloadBridge: rendererSnapshot.electron === true,
       appServerJsonRpcUsed: appServerRequestMethods.includes(
@@ -2207,12 +2558,16 @@ async function run() {
       externalFixtureBackendUsed: backendLedger.some(
         (entry) => entry.kind === "turnStart",
       ),
-      fixturePromptReachedBackend: newsTurnStart?.inputText === NEWS_PROMPT,
+      fixturePromptReachedBackend: isPlanScenario
+        ? planTurnStart?.inputText === PLAN_PROMPT
+        : newsTurnStart?.inputText === NEWS_PROMPT,
       liveProviderNotUsed: backendLedger.every(
         (entry) =>
           entry.kind !== "turnStart" ||
-          (entry.providerPreference === FIXTURE_PROVIDER &&
-            entry.modelPreference === FIXTURE_MODEL),
+          ((!entry.providerPreference ||
+            entry.providerPreference === FIXTURE_PROVIDER) &&
+            (!entry.modelPreference ||
+              entry.modelPreference === FIXTURE_MODEL)),
       ),
       newsRequestDidNotForceRequiredSearch:
         asterChatRequest?.search_mode !== "required",
@@ -2220,19 +2575,24 @@ async function run() {
         !Object.prototype.hasOwnProperty.call(
           asterChatRequest || {},
           "web_search",
-        ),
+      ),
       guiUserMessageVisible: isCancelOnlyScenario
         ? summary.guiCanceled?.hasPrompt === true
         : isCancelThenContinueScenario
           ? summary.guiContinueCompleted?.hasPrompt === true &&
             summary.guiContinueCompleted?.bodyText?.includes(NEWS_PROMPT) ===
               true
+          : isPlanScenario
+            ? summary.guiPlanCompleted?.hasPrompt === true
           : summary.guiCompleted?.hasPrompt === true,
       guiAssistantOutputVisible: isCancelOnlyScenario
         ? summary.guiCanceled?.hasStoppedCopy === true
         : isCancelThenContinueScenario
           ? summary.guiContinueCompleted?.hasAssistantSummary === true ||
             summary.guiContinueCompleted?.hasDoneText === true
+          : isPlanScenario
+            ? summary.guiPlanCompleted?.hasPlanIntro === true ||
+              summary.guiPlanCompleted?.hasDoneText === true
           : summary.guiCompleted?.hasAssistantSummary === true ||
             summary.guiCompleted?.hasDoneText === true,
       guiInputRemainsReady: isCancelOnlyScenario
@@ -2241,12 +2601,17 @@ async function run() {
         : isCancelThenContinueScenario
           ? summary.guiContinueCompleted?.textareaVisible === true &&
             summary.guiContinueCompleted?.textareaDisabled === false
+          : isPlanScenario
+            ? summary.guiPlanCompleted?.textareaVisible === true &&
+              summary.guiPlanCompleted?.textareaDisabled === false
           : summary.guiCompleted?.textareaVisible === true &&
             summary.guiCompleted?.textareaDisabled === false,
       guiNotStuckStreaming: isCancelOnlyScenario
         ? summary.guiCanceled?.stopButtonVisible === false
         : isCancelThenContinueScenario
           ? summary.guiContinueCompleted?.stopButtonVisible === false
+          : isPlanScenario
+            ? summary.guiPlanCompleted?.stopButtonVisible === false
           : summary.guiCompleted?.stopButtonVisible === false,
       pageMentionsPromptAndAssistant: isCancelOnlyScenario
         ? pageText.includes(NEWS_PROMPT) &&
@@ -2259,16 +2624,39 @@ async function run() {
             pageText.includes(CONTINUE_PROMPT) &&
             (pageText.includes("继续输出已恢复") ||
               pageText.includes(CONTINUE_DONE_TEXT))
+          : isPlanScenario
+            ? pageText.includes(PLAN_PROMPT) &&
+              PLAN_STEPS.every((step) => pageText.includes(step.step))
           : pageText.includes(NEWS_PROMPT) &&
             (pageText.includes("今日国际新闻简要整理") ||
               pageText.includes(ASSISTANT_DONE_TEXT)),
       noInvokeErrors: !errorRaw,
       noConsoleErrors: consoleErrors.length === 0,
     };
-    const scenarioAssertions = hasCancelPhase
+    const scenarioAssertions = isPlanScenario
       ? {
-          usedCurrentTurnCancel: appServerRequestMethods.includes(
-            APP_SERVER_METHOD_SESSION_TURN_CANCEL,
+          planModeEnabledInGui:
+            summary.planModeEnabled?.statusChipVisible === true,
+          planPromptReachedBackend: planTurnStart?.inputText === PLAN_PROMPT,
+          planCollaborationModeReachedBackend: collaborationMode === "plan",
+          guiPlanRailVisible:
+            summary.guiPlanCompleted?.hasPlanSection === true ||
+            summary.guiPlanCompleted?.hasAllPlanSteps === true,
+          guiPlanStepsVisible:
+            summary.guiPlanCompleted?.hasAllPlanSteps === true,
+          readModelPlanCompleted:
+            summary.readModelPlanCompleted?.includesPrompt === true &&
+            summary.readModelPlanCompleted?.includesAssistantDone === true &&
+            summary.readModelPlanCompleted?.includesPlanItem === true &&
+            summary.readModelPlanCompleted?.includesAllPlanSteps === true,
+          proposedPlanVisible:
+            pageText.includes("计划") &&
+            PLAN_STEPS.every((step) => pageText.includes(step.step)),
+        }
+      : hasCancelPhase
+        ? {
+            usedCurrentTurnCancel: appServerRequestMethods.includes(
+              APP_SERVER_METHOD_SESSION_TURN_CANCEL,
           ),
           externalFixtureCancelUsed: backendLedger.some(
             (entry) => entry.kind === "turnCancel",
@@ -2309,7 +2697,7 @@ async function run() {
               }
             : {}),
         }
-      : {
+        : {
           noEpochFallbackTitle:
             summary.guiCompleted?.hasEpochFallbackTitle === false,
           readModelCompleted:
@@ -2348,6 +2736,13 @@ async function run() {
           "guiContinueCompleted",
           "readModelContinueCompleted",
           "backendRecordedCancelThenContinue",
+          "planModeEnabledInGui",
+          "planPromptReachedBackend",
+          "planCollaborationModeReachedBackend",
+          "guiPlanRailVisible",
+          "guiPlanStepsVisible",
+          "readModelPlanCompleted",
+          "proposedPlanVisible",
         ]
       : isCancelThenContinueScenario
         ? [
@@ -2356,7 +2751,32 @@ async function run() {
             "eventReadProbeObserved",
             "readModelEventReadAligned",
             "readModelToolCallAligned",
+            "planModeEnabledInGui",
+            "planPromptReachedBackend",
+            "planCollaborationModeReachedBackend",
+            "guiPlanRailVisible",
+            "guiPlanStepsVisible",
+            "readModelPlanCompleted",
+            "proposedPlanVisible",
           ]
+        : isPlanScenario
+          ? [
+              "usedCurrentTurnCancel",
+              "externalFixtureCancelUsed",
+              "fixtureCancelReachedBackend",
+              "guiStopClicked",
+              "readModelCanceled",
+              "continuePromptReachedBackend",
+              "guiContinueInputSubmitted",
+              "guiContinueCompleted",
+              "readModelContinueCompleted",
+              "backendRecordedCancelThenContinue",
+              "noEpochFallbackTitle",
+              "readModelCompleted",
+              "eventReadProbeObserved",
+              "readModelEventReadAligned",
+              "readModelToolCallAligned",
+            ]
         : [
             "usedCurrentTurnCancel",
             "externalFixtureCancelUsed",
@@ -2368,6 +2788,13 @@ async function run() {
             "guiContinueCompleted",
             "readModelContinueCompleted",
             "backendRecordedCancelThenContinue",
+            "planModeEnabledInGui",
+            "planPromptReachedBackend",
+            "planCollaborationModeReachedBackend",
+            "guiPlanRailVisible",
+            "guiPlanStepsVisible",
+            "readModelPlanCompleted",
+            "proposedPlanVisible",
           ];
     const assertions = {
       ...commonAssertions,

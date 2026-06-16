@@ -58,7 +58,39 @@ fn migrate_gallery_material_metadata_table(conn: &Connection) -> Result<(), rusq
     Ok(())
 }
 
+fn drop_retired_agent_runtime_tables(conn: &Connection) -> Result<(), rusqlite::Error> {
+    for index_name in [
+        "idx_a2ui_forms_session",
+        "idx_a2ui_forms_message",
+        "idx_agent_thread_incidents_turn_status",
+        "idx_agent_thread_incidents_thread_status_detected",
+        "idx_agent_turn_outcomes_thread_ended",
+        "idx_agent_thread_items_thread",
+        "idx_agent_thread_turns_session_started_desc",
+        "idx_agent_thread_turns_session",
+        "idx_agent_messages_session_id_desc",
+        "idx_agent_messages_session",
+    ] {
+        conn.execute(&format!("DROP INDEX IF EXISTS {index_name}"), [])?;
+    }
+
+    for table_name in [
+        "a2ui_forms",
+        "agent_thread_incidents",
+        "agent_turn_outcomes",
+        "agent_thread_items",
+        "agent_thread_turns",
+        "agent_messages",
+    ] {
+        conn.execute(&format!("DROP TABLE IF EXISTS {table_name}"), [])?;
+    }
+
+    Ok(())
+}
+
 pub fn create_tables(conn: &Connection) -> Result<(), rusqlite::Error> {
+    drop_retired_agent_runtime_tables(conn)?;
+
     // API Key Provider 配置表
     // _Requirements: 9.1_
     conn.execute(
@@ -644,172 +676,7 @@ pub fn create_tables(conn: &Connection) -> Result<(), rusqlite::Error> {
         [],
     )?;
 
-    // Agent 消息表
-    // 存储每个会话的消息历史
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS agent_messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id TEXT NOT NULL,
-            role TEXT NOT NULL,
-            content_json TEXT NOT NULL,
-            timestamp TEXT NOT NULL,
-            tool_calls_json TEXT,
-            tool_call_id TEXT,
-            reasoning_content TEXT,
-            input_tokens INTEGER,
-            output_tokens INTEGER,
-            cached_input_tokens INTEGER,
-            cache_creation_input_tokens INTEGER,
-            FOREIGN KEY (session_id) REFERENCES agent_sessions(id) ON DELETE CASCADE
-        )",
-        [],
-    )?;
-
-    let _ = conn.execute(
-        "ALTER TABLE agent_messages ADD COLUMN reasoning_content TEXT",
-        [],
-    );
-    let _ = conn.execute(
-        "ALTER TABLE agent_messages ADD COLUMN input_tokens INTEGER",
-        [],
-    );
-    let _ = conn.execute(
-        "ALTER TABLE agent_messages ADD COLUMN output_tokens INTEGER",
-        [],
-    );
-    let _ = conn.execute(
-        "ALTER TABLE agent_messages ADD COLUMN cached_input_tokens INTEGER",
-        [],
-    );
-    let _ = conn.execute(
-        "ALTER TABLE agent_messages ADD COLUMN cache_creation_input_tokens INTEGER",
-        [],
-    );
-
-    // 创建 agent_messages 索引
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_agent_messages_session ON agent_messages(session_id)",
-        [],
-    )?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_agent_messages_session_id_desc
-         ON agent_messages(session_id, id DESC)",
-        [],
-    )?;
-
     crate::database::managed_objective_repository::create_managed_objectives_table(conn)?;
-
-    // Agent turn 表
-    // 存储每一轮用户输入驱动的执行周期
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS agent_thread_turns (
-            id TEXT PRIMARY KEY,
-            session_id TEXT NOT NULL,
-            prompt_text TEXT NOT NULL DEFAULT '',
-            status TEXT NOT NULL,
-            started_at TEXT NOT NULL,
-            completed_at TEXT,
-            error_message TEXT,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            FOREIGN KEY (session_id) REFERENCES agent_sessions(id) ON DELETE CASCADE
-        )",
-        [],
-    )?;
-
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_agent_thread_turns_session
-         ON agent_thread_turns(session_id, started_at)",
-        [],
-    )?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_agent_thread_turns_session_started_desc
-         ON agent_thread_turns(session_id, started_at DESC, id DESC)",
-        [],
-    )?;
-
-    // Agent item 表
-    // 存储 turn 内一等事件项（plan / reasoning / tool / approval / artifact 等）
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS agent_thread_items (
-            id TEXT PRIMARY KEY,
-            session_id TEXT NOT NULL,
-            turn_id TEXT NOT NULL,
-            sequence INTEGER NOT NULL,
-            item_type TEXT NOT NULL,
-            status TEXT NOT NULL,
-            started_at TEXT NOT NULL,
-            completed_at TEXT,
-            updated_at TEXT NOT NULL,
-            payload_json TEXT NOT NULL,
-            FOREIGN KEY (session_id) REFERENCES agent_sessions(id) ON DELETE CASCADE,
-            FOREIGN KEY (turn_id) REFERENCES agent_thread_turns(id) ON DELETE CASCADE
-        )",
-        [],
-    )?;
-
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_agent_thread_items_thread
-         ON agent_thread_items(session_id, turn_id, sequence)",
-        [],
-    )?;
-
-    // Agent turn outcome 表
-    // 存储每个 turn 的稳定结果摘要，用于 operator-facing reliability 读模型
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS agent_turn_outcomes (
-            turn_id TEXT PRIMARY KEY,
-            thread_id TEXT NOT NULL,
-            outcome_type TEXT NOT NULL,
-            summary TEXT NOT NULL,
-            primary_cause TEXT,
-            retryable INTEGER NOT NULL DEFAULT 0,
-            details_json TEXT,
-            ended_at TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        )",
-        [],
-    )?;
-
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_agent_turn_outcomes_thread_ended
-         ON agent_turn_outcomes(thread_id, ended_at DESC)",
-        [],
-    )?;
-
-    // Agent thread incident 表
-    // 存储 thread 级当前活跃与已清理的 reliability incident
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS agent_thread_incidents (
-            id TEXT PRIMARY KEY,
-            thread_id TEXT NOT NULL,
-            turn_id TEXT,
-            item_id TEXT,
-            incident_type TEXT NOT NULL,
-            severity TEXT NOT NULL,
-            status TEXT NOT NULL,
-            title TEXT NOT NULL,
-            details_json TEXT,
-            detected_at TEXT NOT NULL,
-            cleared_at TEXT,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        )",
-        [],
-    )?;
-
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_agent_thread_incidents_thread_status_detected
-         ON agent_thread_incidents(thread_id, status, detected_at DESC)",
-        [],
-    )?;
-
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_agent_thread_incidents_turn_status
-         ON agent_thread_incidents(turn_id, status)",
-        [],
-    )?;
 
     // ============================================================================
     // Workspace 相关表
@@ -1218,37 +1085,6 @@ pub fn create_tables(conn: &Connection) -> Result<(), rusqlite::Error> {
     )?;
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_outline_nodes_parent_id ON outline_nodes(parent_id)",
-        [],
-    )?;
-
-    // ============================================================================
-    // A2UI 表单数据表
-    // 存储 AI 生成的交互式表单及用户填写的数据
-    // ============================================================================
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS a2ui_forms (
-            id TEXT PRIMARY KEY,
-            message_id INTEGER NOT NULL,
-            session_id TEXT NOT NULL,
-            a2ui_response_json TEXT NOT NULL,
-            form_data_json TEXT DEFAULT '{}',
-            submitted INTEGER DEFAULT 0,
-            submitted_at TEXT,
-            created_at INTEGER NOT NULL,
-            updated_at INTEGER NOT NULL,
-            FOREIGN KEY (message_id) REFERENCES agent_messages(id) ON DELETE CASCADE,
-            FOREIGN KEY (session_id) REFERENCES agent_sessions(id) ON DELETE CASCADE
-        )",
-        [],
-    )?;
-
-    // 创建 a2ui_forms 索引
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_a2ui_forms_message ON a2ui_forms(message_id)",
-        [],
-    )?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_a2ui_forms_session ON a2ui_forms(session_id)",
         [],
     )?;
 

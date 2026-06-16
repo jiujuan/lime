@@ -1,10 +1,10 @@
 # Lime DB 瘦身与 Codex-aligned 存储执行计划
 
 > 状态：进行中  
-> 更新时间：2026-06-15  
+> 更新时间：2026-06-16
 > 关联路线图：`internal/roadmap/db/README.md`  
 > 关联 PRD：`internal/roadmap/db/prd.md`  
-> 当前阶段：骨架优先顺序已重排；P5/S1 Sidecar contract 已完成；App Server data-dir 产品迁移、设置页 Provider 迁移 smoke、迁移源 Product DB 清理策略已补齐；历史会话 Electron smoke 已跑通；用户反馈基本对话不可用时，先按产品阻塞处理；已补 Electron sidecar stale stdin 重启重试和临时 workspace 污染自动回收，恢复真实对话闭环后再回到 S2/S3 守卫收口
+> 当前阶段：S4 旧 DAO / schema / `current_timeline` bridge 收口；JSONL Event Log + Projection DB 是 runtime/history current truth，`agent_messages` 与 `agent_thread_*` 只允许 migration/export/compat/test fixture，真实用户库 destructive drop 需单独确认
 
 ## 1. 主目标
 
@@ -137,6 +137,7 @@
 - `lime-rs/crates/core/src/app_paths.rs`：显式 `app-server` data-dir 初始化时，优先从同一 Electron `userData/lime.db` 迁移 Product DB；旧库选择信号已覆盖 settings、Provider UI 状态、非系统 Provider、providers、api_keys 等产品设置数据。
 - `lime-rs/crates/core/src/product_db_migration_cleanup.rs`：Product DB migration cleanup 独立模块，支持 `retain / clear-rows / drop-tables / delete-file`；默认 `drop-tables` 只清迁移源旧 `userData/lime.db` 的用户 schema/table/data，保留空 DB 文件。
 - `packages/app-server-client/src/index.ts`：`SidecarLaunchConfig.dataDir` 会组装为 `--data-dir <path>`，统一 env/dev/packaged sidecar 启动参数。
+- Agent / Claw 会话列表归属已按 Codex app-server `ThreadListParams.cwd` 口径重排：App Server `agentSession/list` 的 current 过滤事实源是 `cwd` / `working_dir` / 项目 `rootPath` 精确匹配；`workspace_id` / `workspaceId` 只作为 legacy 入参别名或返回兼容投影，不再作为会话归属外键。
 
 ## 8. 当前 blocker / 风险
 
@@ -148,6 +149,8 @@
 - `current_timeline` 仍是 compat bridge；它只允许保障旧 GUI projection 过渡，不应继续决定骨架优先级。
 - `agent_thread_items.payload_json` 已完成写入侧 bounded projection 收口；剩余风险是旧行兼容读取、`current_timeline` bridge 和 S4 历史表结构退场。
 - `request_logs/` 文件目录已经降为 `compat / migration-source`；P4-b 只补真实 request telemetry 的生产写入证据，不允许把 runtime event summary 伪造成 provider request log。
+- `src/components/AppSidebar.tsx` 已超过 1000 行；本轮只允许做最小接线，不继续追加业务逻辑。下一次侧栏架构治理应把会话分组、项目选择、请求参数构造和行级动作继续拆到 `src/components/app-sidebar/**` 的 VM / helper。
+- 数据库结构删除仍是高风险项：真实删除 `agent_sessions.workspace_id` 兼容投影、`projected_sessions.workspace_id`、旧 `agent_messages` / `agent_thread_*` 表或批量改写用户库，必须单独执行确认流程；本轮仅做非破坏性查询语义收口、schema/protocol 增量和 fixture 验证。
 
 ## 9. 本轮进度日志
 
@@ -231,15 +234,61 @@
 - S2 ChatDao 旧写 API 收口：`session_context_service` 的旧消息忽略回归不再通过 `ChatDao::add_message` 写 `agent_messages`，改为测试内显式 `insert_legacy_agent_messages` seed，语义从“调用旧产品 DAO”降级为“构造 legacy fixture”。同步将 `rust-chat-dao-agent-messages-product-api-leak` 扩展到 `ChatDao::add_message/delete_messages`，服务层 / app-server / websocket 不得重新通过 ChatDao 读写 `agent_messages`。
 - 本轮 ChatDao 收口验证：`cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-services session_context_service -- --nocapture` 通过（7 tests）；`npx vitest run "src/lib/governance/legacySurfaceCatalog.test.ts" -t "ChatDao|agent_messages|AgentDao|测试编译图" --silent=passed-only --disableConsoleIntercept` 通过（5 tests）；`npm run governance:legacy-report` 通过，`边界违规=0`，分类漂移候选仍为 2 个非 DB 项；`cargo fmt --manifest-path "lime-rs/Cargo.toml" -p lime-services --check` 与 `npx prettier --check "src/lib/governance/legacySurfaceCatalog.json" "src/lib/governance/legacySurfaceCatalog.test.ts" "internal/exec-plans/db-slimming-codex-alignment-plan.md"` 通过。
 - S2 `agent_thread_items.payload_json` 大正文收口：新增 `core/src/database/dao/agent_timeline_payload.rs` 承接 legacy timeline payload 裁剪规则，`AgentTimelineDao::upsert_item` 写入前即把大 file artifact 正文移除、把大 tool / command / web search output 截成 bounded summary；旧 DAO 仍只作为迁移期 GUI projection，JSONL Event Log + Sidecar 才是 runtime truth。同步把 `agent_timeline.rs` 从 1000 行降到 979 行，避免继续向中心 DAO 堆逻辑。
+- S2 snapshot / 路径边界复核：`outputSnapshotFile` / `checkpointSnapshotFile` / `sidecarRef` / `contentSha256` 命中仍集中在 writer、reader、projection、evidence 和测试夹具；runtime durable root 继续由 `StorageRoots` 从显式 `data_root` 派生，未发现 `dirs::*`、`APPDATA`、`Application Support`、`~/.lime` 等平台路径回流到 runtime store。
+- S2 AgentDao 旧消息写 API 收口：`session_store_tests.rs` 不再调用 `AgentDao::add_message` 构造 fixture，改为测试内显式 `insert_legacy_agent_message` seed 旧 `agent_messages` 数据；`rust-agent-session-direct-record-access` 扩展覆盖 `AgentDao::add_message/delete_messages/update_latest_assistant_message_usage/get_message_window_info/get_message_timestamp_by_id`，业务层不得重新通过 AgentDao 读写旧消息表。
+- S3 legacy migration 状态机落地第一刀：新增 `runtime/legacy_message_migration_state.rs`，`StorageRoots` 派生 `<data-root>/runtime/legacy-message-migration`，App Server 启动时初始化 `LegacyMessageMigrationStateStore` 并注入 `RuntimeCore`。`legacy_message_backfill` 现在按 `legacy_detected -> backfill_started -> event_log_written -> projection_repaired -> verified -> cleanup_applied -> completed` 写 per-session JSON marker；清理失败时 read/list 仍不阻塞，但 marker 停在 `verified`，下一次可继续清理，不会误写 `completed`。验证：`cargo fmt --manifest-path "lime-rs/Cargo.toml" -p app-server --check`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server legacy_message -- --nocapture`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server legacy_message_drop_empty_cleanup_failure_does_not_block_read_or_list -- --nocapture` 通过。
+- Agent / Claw 会话归属收口第一刀：参考 Codex `ThreadListParams.cwd`，把 Lime `AgentSessionListParams` 增加为 `cwd: string | string[]`；App Server 在 `normalize_agent_session_list_params` 中只把旧 `workspace_id` 解析为 workspace `root_path` 后转成 `cwd`，随后清掉 `workspace_id`。`SessionListScope` 统一规范化 cwd、去重、匹配；`ProjectionStore`、`current_timeline`、`legacy_message_backfill_source`、RuntimeCore memory sessions 均按 `working_dir` 过滤，不再按 `workspace_id` 归属。
+- DB Repository 收口第一刀：`AgentDao::list_session_overviews` 与 `agent_session_repository::list_session_overviews` 参数从 `workspace_id` 改为 `cwd_filters`，SQL 只使用 `s.working_dir IN (...)` 过滤；`LEFT JOIN workspaces w ON w.root_path = s.working_dir` 只保留为返回 `workspace_id` 兼容投影。`lime-agent::list_sessions_sync` 同步改为 cwd filters，相关测试改名为 cwd filter 语义。
+- 前端侧栏收口第一刀：项目会话列表请求构造使用 `openedProjectCwds` / `project.rootPath`；项目态缺少 cwd 时不发全局列表，避免把其他项目会话混入当前项目；侧栏分组只按 `session.working_dir` vs `project.rootPath`，无 `working_dir` 但带旧 `workspace_id` 的历史会话不进入 standalone。
+- 协议与外部标准同步：重新生成 App Server JSON schema 与 `packages/app-server-client/src/generated/protocol-types.ts`；修 `scripts/generate-protocol-types.mjs` 合并 schema 内联 `$defs`，确保 `AgentSessionCwdFilter` 被导出。同步 `/Users/coso/Documents/dev/ai/limecloud/agentui` 最新英文/中文 specification 与 session hydration 文档：`cwd/rootPath` 是 session scope 权威，`workspaceId/projectId` 只可作为宿主导航别名。
+- 本轮验证已通过：`cargo run --manifest-path "lime-rs/Cargo.toml" -p app-server-protocol --bin write_schema_fixtures`、`npm run generate:protocol-types`、`npm run check:protocol-types`、`cargo fmt --manifest-path "lime-rs/Cargo.toml" --all`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-core list_session_overviews`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent list_sessions_sync_should_support_cwd_filter_and_limit`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server session_list_scope`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server list_agent_sessions`。
+- 产品 smoke 修复：`smoke:agent-runtime-current-fixture` 初次失败在 Claw fixture `open-session-from-sidebar`，原因是 fixture 仍只写 `workspaceId`，而 current 侧栏已经按项目 `rootPath/cwd` 请求和分组，导致 fixture 会话被正确排除。修复 `scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs`：`agentSession/start` 写入 `workingDir` 和 metadata `workingDir/working_dir`，验证列表请求改用 `cwd: workspace.rootPath`。随后 `npx vitest run "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs" --silent=passed-only --disableConsoleIntercept`、`npm run smoke:claw-chat-current-fixture -- --scenario cancel-then-continue`、`npm run smoke:agent-runtime-current-fixture` 均通过。
+- GUI / Agent smoke 验证：`npm run smoke:agent-session-history-electron-fixture` 通过，覆盖真实 Electron `agentSession/start/read/update/list` 历史恢复；`npm run verify:gui-smoke` 通过，Electron smoke 中 stale sidecar `SIGTERM` 仍为收尾阶段既有噪音，未导致失败。`/Users/coso/Documents/dev/ai/limecloud/agentui` 执行 `npm run build` 通过。
+
+### 2026-06-16
+
+- 会话恢复和发送前确认二次收口：`Topic` 增加 `workingDir` 投影；`mapSessionToTopic`、`upsertTopicFromSessionDetail`、`upsertFreshSessionDraftTopic` 保留 `session.working_dir`；`sessionFinalizeController` 改为 cwd-first 判断，双方都有 cwd 时优先按 cwd 匹配并忽略旧 `workspaceId` shadow 不一致，只有缺少 cwd 时才回退旧 workspace 判断。
+- `useAgentSession` 发送和切换路径同步 cwd-first：`switchTopic` 传入 resolved/runtime/topic workingDir；`ensureSession` 发送前确认先比较 `detail.working_dir` 与当前 `normalizedWorkingDir`，runtime 没有 working_dir 时才比较 `workspace_id`；新建 draft topic 同步写入 `workingDir`，避免历史重开或旧 shadow 把当前项目会话误判为跨 workspace。
+- DB / DAO 盘点结论：当前会话列表 SQL 没有继续用 `workspace_id` 作为归属过滤；`AgentDao::list_session_overviews` 只用 `s.working_dir IN (...)`，`ProjectionStore` 只用 `working_dir IN (...)`，`workspace_id` 仅通过 `LEFT JOIN workspaces w ON w.root_path = s.working_dir` 或 projection 字段作为返回兼容投影。真正未清的是 `agent_sessions.workspace_id`、`projected_sessions.workspace_id`、旧 `agent_messages` / `agent_thread_*` schema 和兼容字段，属于 S4 destructive migration，需要单独确认。
+- 定向验证通过：`npx vitest run "src/components/agent/chat/hooks/sessionFinalizeController.test.ts" "src/components/agent/chat/hooks/agentSessionTopicViewModel.unit.test.ts" "src/components/agent/chat/hooks/useAsterAgentChat.test.tsx" --pool=forks --poolOptions.forks.singleFork=true --silent=passed-only --disableConsoleIntercept`（200 tests）、`npx tsc --noEmit --project tsconfig.json --pretty false`、`npm run test:contracts`、`npm run smoke:agent-runtime-current-fixture`、`npm run smoke:agent-session-history-electron-fixture`、`npm run verify:gui-smoke` 均通过。
+- Rust / 协议 / 治理验证通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server session_list_scope -- --nocapture`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server list_agent_sessions -- --nocapture`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-core list_session_overviews -- --nocapture`、`npm run check:protocol-types`、`npm run governance:legacy-report`、`git diff --check` 均通过；`governance:legacy-report` 边界违规为 0，剩余分类漂移候选仍是既有非 DB 项。
+- Playwright 交互复测通过：`http://127.0.0.1:1420/` 首页可见项目 `Skill Think Keep Audit 20260513`，输入框可输入且发送按钮可用；点击最近对话 `国际新闻整理` 后历史内容可见，包括用户消息 `你帮我整理一下今天的国际新闻` 和 assistant 区域；控制台 error 数量为 0。
+- S4 旧 DAO API 退场第一刀：删除 `agent_session_repository::get_session_with_messages*` 和 `update_latest_assistant_message_usage` 生产 wrapper；`session_store` 明确只通过 `get_session_without_messages` 读取 session metadata，历史窗口只从 `AgentTimelineDao` 读取；`session_store_runtime_detail` 只把 runtime usage 投影到当前 read model，不再写回旧 `agent_messages`。
+- `AgentDao` 旧 `agent_messages` 读写 API 降级为 `#[cfg(test)]`：`add_message/delete_messages/update_latest_assistant_message_usage/get_messages*/get_session_with_messages*/get_message_window_info/get_message_timestamp_by_id` 以及旧 message summary/text rows 只在 `lime-core` DAO 测试编译图保留；生产依赖方不能再调用这些 API。治理测试新增静态断言，要求这些旧 API 前必须有 `#[cfg(test)]`。
+- S4 定向验证通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent session_store -- --nocapture`（43 tests）、`cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-core database::dao::agent -- --nocapture`（34 tests）、`npx vitest run "src/lib/governance/legacySurfaceCatalog.test.ts" -t "agent_messages|AgentDao|测试编译图" --silent=passed-only --disableConsoleIntercept`（6 tests）、`npx prettier --check "src/lib/governance/legacySurfaceCatalog.test.ts"` 均通过。`session_overview_queries_and_rename_should_work` 已按 current 口径更新：即使旧 `agent_messages` 有行，overview `messages_count` 也固定不从旧表统计。
+- S4 收尾验证通过：`npm run governance:legacy-report` 通过（边界违规 0，剩余分类漂移候选仍为既有非 DB 项）、`npm run test:contracts` 通过、`npm run smoke:agent-runtime-current-fixture` 通过、`npm run smoke:agent-session-history-electron-fixture` 通过、`npm run verify:gui-smoke` 通过。`verify:gui-smoke` 中 repeated stale sidecar `SIGTERM` 仍为 smoke 收尾阶段关闭 sidecar 的既有噪音；本轮未对真实用户库执行手工 drop/delete。
+- 格式与 diff 检查通过：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --all --check`、`npx prettier --check "src/lib/governance/legacySurfaceCatalog.test.ts" "internal/exec-plans/db-slimming-codex-alignment-plan.md"`、`git diff --check` 均通过。
+- S4 `current_timeline` update/archive bridge 继续收口：`agentSession/update` 和 `agentSession/archiveMany` 改为 RuntimeCore memory -> Projection DB -> `current_timeline` compat miss fallback；Projection DB 新增非破坏性 metadata/update/archive 能力，`metadata_json` 保存 provider/model/recent 偏好，read model 输出 `execution_runtime`，历史重开不再依赖旧 timeline extension data。`current_timeline` 只补 projection miss 的 legacy session，不再承接已投影 session 的 title/model/archive 写入。
+- S4 update/archive 回归补齐：新增 `session_list_projection` 测试覆盖 Projection DB 与 stale `current_timeline` 同 session 时 update 不写旧表、archive 只把 Projection miss id 交给 compat；`TestCurrentTimelineDataSource` 记录 update/archive 调用，防止旧表前置写回流。
+- 本轮验证通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server session_list_projection -- --nocapture`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server list_agent_sessions -- --nocapture`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server session_list_scope -- --nocapture`、`cargo fmt --manifest-path "lime-rs/Cargo.toml" --all --check`、`npm run governance:legacy-report`、`npm run test:contracts`、`npm run smoke:agent-session-history-electron-fixture`、`npm run smoke:agent-runtime-current-fixture`、`npm run verify:gui-smoke` 均通过。`verify:gui-smoke` 中 repeated stale sidecar `SIGTERM` 仍为 smoke 收尾阶段关闭 sidecar 的既有噪音；本轮未对真实用户库执行手工 drop/delete。
+- S4 ChatDao 旧消息 API 退场第二刀：`ChatDao::list_sessions/add_message/get_messages/get_message_count/delete_messages/get_session_detail`、`map_message_row` 以及旧 `ChatMessage/ChatSessionDetail` 模型降级为 `#[cfg(test)]`，生产编译图只保留 `get_session` 这条会话元数据读取，用于服务层判断旧 general 会话后直接短路为空上下文，不再从 `agent_messages` 回读正文。
+- 新增 `src/lib/governance/chatDaoLegacyBoundary.test.ts` 作为窄边界守卫，要求 ChatDao 旧消息 API 必须停在测试编译图，同时避免继续向已超过 3800 行的 `legacySurfaceCatalog.test.ts` 增加新断言；该巨型测试文件后续应按治理主题拆分，退出条件是 legacy catalog 的大型分组断言迁到独立 boundary test。
+- S4 零引用 legacy 标题 helper 清理：删除 `runtime/session_title.rs::first_user_message_from_legacy_item`，避免 `AgentThreadItemPayload` 旧 projection helper 继续在 App Server 生产编译图产生 dead code warning；标题生成继续只从 explicit title、current `AgentInput` 和 runtime payload 提取。
+- 本轮 ChatDao / DB 边界验证通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-core database::dao::chat -- --nocapture`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-services session_context_service -- --nocapture`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server session_title -- --nocapture`、`npx vitest run "src/lib/governance/chatDaoLegacyBoundary.test.ts" --silent=passed-only --disableConsoleIntercept`、`npx vitest run "src/lib/governance/legacySurfaceCatalog.test.ts" -t "ChatDao|agent_messages|AgentDao|测试编译图" --silent=passed-only --disableConsoleIntercept`、`npm run governance:legacy-report`、`npm run test:contracts`、`npm run smoke:agent-session-history-electron-fixture`、`npm run smoke:agent-runtime-current-fixture`、`npm run verify:gui-smoke` 均通过。history fixture 证据显示 legacy `agent_messages` 已迁到 JSONL event log / `projection_1.sqlite`，旧 `agent_messages` / `a2ui_forms` 表不存在且 console errors 为空；`verify:gui-smoke` 的 stale sidecar `SIGTERM` 仍为收尾阶段既有噪音。
+- S4 `current_timeline` 列表 bridge 收口：`RuntimeCore::list_agent_sessions` 聚合顺序改为 Projection DB 优先，`current_timeline` 只补 Projection DB 没有的 legacy row，不再覆盖 current projection 的 title / model / updatedAt / workingDir / messages_count。新增 `session_list_projection` 回归，证明同一 session 同时存在 Projection DB 和 stale current_timeline row 时，列表采用 Projection DB。
+- 会话列表归属补缺：`SessionListScope` 同时持有 `cwd` 与保底 `workspace_id` filter。能从 workspace 解析出 `rootPath` 时继续转成 `cwd`；解析不到时保留 `workspace_id`，避免空项目 / 内存会话列表串入其他项目。`ProjectionStore`、`current_timeline` compat query、RuntimeCore memory sessions 与测试 data source 都走同一 scope matcher。
+- 本轮 current_timeline / scope 验证通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server list_agent_sessions_prefers_projection_over_stale_current_timeline_rows -- --nocapture`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server session_list_scope -- --nocapture`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server list_agent_sessions -- --nocapture`、`npm run governance:legacy-report`、`npm run test:contracts`、`npm run smoke:agent-session-history-electron-fixture`、`npm run smoke:agent-runtime-current-fixture`、`npm run verify:gui-smoke` 均通过。`verify:gui-smoke` 中 repeated stale sidecar `SIGTERM` 仍为 smoke 收尾阶段关闭 sidecar 的既有噪音；本轮未对真实用户库执行手工 drop/delete。
 
 ## 10. 下一刀
 
 下一刀优先级按产品阻塞动态调整：如果基本对话、输入框发送、assistant 输出、历史恢复或 Provider / 模型设置不可用，先恢复真实用户对话闭环；确认主链可用后再回到 S2/S3 骨架守卫。不要继续无扫描地扩大 Sidecar 实现面：
 
 1. 产品阻塞优先：真实用户环境无法对话时，先诊断 `userData/app-server/lime.db`、Provider / model 当前配置、`agentSession/start/read/list`、`agentSession/turn/start` 和 renderer console；只读检查真实库，不手工 drop/delete。
-2. 回到 S2：继续压缩 `agent_messages` 旧 DAO / migration 白名单；`AgentDao` 上层 direct 回读和 `ChatDao` 服务层读写回流已封成 `dead-candidate`，下一步只处理旧 DAO 物理退场和历史表 drop migration，不再恢复产品 fallback。
-3. `agent_thread_items.payload_json` 新写入已 bounded；后续只保留旧行兼容读取和 S4 表退场，不再把它列为新增大正文 owner。
-4. 扫描裸 `outputSnapshotFile` / `checkpointSnapshotFile`、缺少 `sidecarRef.sha256` 的 runtime event，以及 generated artifact / file checkpoint current snapshot 是否还有 inline content。
-5. 扫描业务层硬编码平台路径、`~/.lime`、repo root、temp/cache durable fact 写入；允许白名单仅限 `app_paths`、启动配置、迁移和测试 fixture。
-6. P4-b 只在 S2 后作为真实 request telemetry 证据项处理；找不到真实 source 时只更新 blocker，不伪造数据。
-7. 真实用户库清理仍需显式确认：本轮只在临时 fixture 验证清理旧 `lime.db`；不得对用户机器上的真实 `userData/lime.db` 执行手工 drop/delete。
+2. 会话归属下一刀：补 App Server / GUI smoke 覆盖“项目 A 只列出 cwd=A 的会话、空项目可以新建 cwd=A 的会话、历史重开按 cwd 恢复”，并继续把侧栏巨型文件剩余业务逻辑拆到 helper / VM。
+3. S4 旧 DAO/schema 退场：`AgentDao` / `ChatDao` 旧消息 API 已退出生产编译面，`current_timeline` list/update/archive 已退到 Projection miss compat；下一步准备 schema drop migration 方案，不再恢复产品 fallback。
+4. 数据库结构清理确认项：如果要删除 `workspace_id` 兼容列、旧 `agent_messages` / `agent_thread_*` 表或批量迁移真实用户库，必须先列出迁移 SQL、回滚/备份策略、影响范围和验证入口并获得明确确认。
+5. S5-A 可并行小刀：统一 Projection / Telemetry DB `open_connection` helper，补 WAL / NORMAL / busy_timeout / foreign_keys pragma，避免迁出主库后复制锁竞争问题。
+6. `agent_thread_items.payload_json` 新写入已 bounded；后续只保留旧行兼容读取和 S4 表退场，不再把它列为新增大正文 owner。
+7. 扫描裸 `outputSnapshotFile` / `checkpointSnapshotFile`、缺少 `sidecarRef.sha256` 的 runtime event，以及 generated artifact / file checkpoint current snapshot 是否还有 inline content。
+8. P4-b 只在 S4/S5 后作为真实 request telemetry 证据项处理；找不到真实 source 时只更新 blocker，不伪造数据。
+9. 真实用户库清理仍需显式确认：本轮只在临时 fixture 验证清理旧 `lime.db`；不得对用户机器上的真实 `userData/lime.db` 执行手工 drop/delete。
+
+## 11. 下次恢复入口
+
+从这里重新开始时，不要回到 P0/S1/S2 重新盘点，先按下面顺序执行：
+
+1. 先确认当前事实源：`JSONL Event Log / Projection DB / Sidecar / Telemetry DB / legacy-message-migration marker` 是 `current`；`agent_messages` 只允许 migration/backfill/export/test fixture 输入；产品 fallback 是 `dead`；`AgentDao` / `ChatDao` 旧消息 API 是 `dead-candidate`。
+2. 首选 S4 旧 DAO/schema 退场：盘点并删除或隔离 `AgentDao` / `ChatDao` 旧消息 API 的剩余生产编译面，准备 `agent_messages` / `a2ui_forms` schema drop migration，收口 `current_timeline` bridge。验证入口优先 `cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server legacy_message -- --nocapture`、相关 services/websocket 定向测试、`npm run governance:legacy-report`。
+3. 如果要先补可靠性，则做 S5-A：给 Projection DB / Telemetry DB 增加统一 `open_connection` helper，应用 WAL / NORMAL / busy_timeout / foreign_keys pragma；不引入连接池，不改 Product DB，不做 event log prune。
+4. 不要对真实用户库执行手工 drop/delete；真实数据删除必须通过已配置策略或另行确认。
+5. 如果真实 GUI 对话、历史、Provider 设置再次不可用，先按产品阻塞处理：只读诊断 `userData/app-server/lime.db`、Provider/model 配置和 App Server JSON-RPC 日志，确认可用后再继续 S4/S5。

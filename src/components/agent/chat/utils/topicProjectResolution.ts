@@ -43,12 +43,10 @@ export function normalizeProjectId(projectId: unknown): string | null {
 export function resolveTopicProjectId({
   topicBoundProjectId,
   lastProjectId,
-  defaultProjectId,
 }: ResolveTopicProjectIdOptions): string | null {
   return (
     normalizeProjectId(topicBoundProjectId) ||
-    normalizeProjectId(lastProjectId) ||
-    normalizeProjectId(defaultProjectId)
+    normalizeProjectId(lastProjectId)
   );
 }
 

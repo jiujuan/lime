@@ -261,7 +261,7 @@ describe("ToolCallDisplayViewModel", () => {
       }),
       baseToolCall({
         id: "ask-1",
-        name: "AskUserQuestion",
+        name: "request_user_input",
         status: "running",
         arguments: JSON.stringify({ question: "继续吗？" }),
         result: undefined,

@@ -26,6 +26,7 @@ mod gateway_runner;
 mod knowledge;
 mod objectives;
 mod read_model;
+mod session_list_projection;
 mod sessions;
 mod support;
 mod turn_lifecycle;

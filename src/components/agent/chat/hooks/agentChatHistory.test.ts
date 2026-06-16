@@ -646,6 +646,97 @@ describe("agentChatHistory", () => {
     });
   });
 
+  it("历史 timeline agent_message 只有 content 字段时仍应恢复最终正文", () => {
+    const detail: AsterSessionDetail = {
+      id: "session-timeline-content-final",
+      created_at: 1,
+      updated_at: 2,
+      messages: [],
+      turns: [
+        {
+          id: "turn-timeline-content-final",
+          thread_id: "session-timeline-content-final",
+          prompt_text:
+            "读取 internal/roadmap/agent-workspace/README.md 并总结一下",
+          status: "completed",
+          started_at: "2026-06-08T10:00:00.000Z",
+          completed_at: "2026-06-08T10:00:06.000Z",
+          created_at: "2026-06-08T10:00:00.000Z",
+          updated_at: "2026-06-08T10:00:06.000Z",
+        },
+      ],
+      items: [
+        {
+          id: "item-user-content-final",
+          thread_id: "session-timeline-content-final",
+          turn_id: "turn-timeline-content-final",
+          sequence: 1,
+          type: "user_message",
+          content:
+            "读取 internal/roadmap/agent-workspace/README.md 并总结一下",
+          status: "completed",
+          started_at: "2026-06-08T10:00:00.000Z",
+          completed_at: "2026-06-08T10:00:00.000Z",
+          updated_at: "2026-06-08T10:00:00.000Z",
+        } as never,
+        {
+          id: "item-read-file-content-final",
+          thread_id: "session-timeline-content-final",
+          turn_id: "turn-timeline-content-final",
+          sequence: 2,
+          type: "tool_call",
+          tool_name: "Read",
+          arguments: {
+            file_path: "internal/roadmap/agent-workspace/README.md",
+          },
+          output: "# Agent Workspace\n\n主线说明。",
+          success: true,
+          status: "completed",
+          started_at: "2026-06-08T10:00:01.000Z",
+          completed_at: "2026-06-08T10:00:02.000Z",
+          updated_at: "2026-06-08T10:00:02.000Z",
+        } as never,
+        {
+          id: "item-assistant-content-final",
+          thread_id: "session-timeline-content-final",
+          turn_id: "turn-timeline-content-final",
+          sequence: 3,
+          type: "agent_message",
+          content:
+            "这个 README 主要说明 Agent Workspace 的目标、阶段和当前交付边界。",
+          phase: "final_answer",
+          status: "completed",
+          started_at: "2026-06-08T10:00:05.000Z",
+          completed_at: "2026-06-08T10:00:06.000Z",
+          updated_at: "2026-06-08T10:00:06.000Z",
+        } as never,
+      ],
+    };
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "session-timeline-content-final",
+    );
+
+    expect(messages).toHaveLength(2);
+    expect(messages[1]).toMatchObject({
+      role: "assistant",
+      content:
+        "这个 README 主要说明 Agent Workspace 的目标、阶段和当前交付边界。",
+      toolCalls: [
+        {
+          id: "item-read-file-content-final",
+          name: "Read",
+          status: "completed",
+        },
+      ],
+    });
+    expect(messages[1]?.contentParts?.map((part) => part.type)).toEqual([
+      "tool_use",
+      "text",
+    ]);
+  });
+
   it("App Server 历史 turn 缺少旧 prompt_text 字段时不应中断会话恢复", () => {
     const detail: AsterSessionDetail = {
       id: "session-missing-legacy-text",

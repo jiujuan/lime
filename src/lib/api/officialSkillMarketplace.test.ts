@@ -4,13 +4,19 @@ import {
   installOfficialMarketplaceSkill,
   listOfficialSkillMarketplace,
 } from "./officialSkillMarketplace";
+import { resolveOemCloudRuntimeContext } from "./oemCloudRuntime";
 
 const skillsApiMock = vi.hoisted(() => ({
   installMarketplaceBundle: vi.fn(),
+  installFromDownloadUrl: vi.fn(),
 }));
 
 vi.mock("./skills", () => ({
   skillsApi: skillsApiMock,
+}));
+
+vi.mock("./oemCloudRuntime", () => ({
+  resolveOemCloudRuntimeContext: vi.fn(),
 }));
 
 function mockJsonResponse(payload: unknown, ok = true, status = 200) {
@@ -21,17 +27,122 @@ function mockJsonResponse(payload: unknown, ok = true, status = 200) {
   } as unknown as Response;
 }
 
+function mockTextResponse(text: string, ok = true, status = 200) {
+  return {
+    ok,
+    status,
+    text: vi.fn().mockResolvedValue(text),
+  } as unknown as Response;
+}
+
+function buildStaticMarketplaceHtml(skills: unknown[]) {
+  const escapedSkills = JSON.stringify(skills).replace(/"/g, '\\"');
+  return `<!doctype html><script>self.__next_f.push([1,"b:[\\"$\\",\\"$1\\",\\"c\\",{\\"children\\":[[\\"$\\",\\"$Le\\",null,{\\"skills\\":${escapedSkills}}]]}]"])</script>`;
+}
+
+const staticMarketplaceSkills = [
+  {
+    slug: "daily-trend-briefing",
+    title: "每日趋势摘要",
+    description: "围绕平台、赛道和地区先拉一版趋势摘要。",
+    summary: "每天开工前先看一眼真正值得做的方向。",
+    meta: "适合内容团队",
+    category: "研究",
+    launch: {
+      type: "curated_task",
+      taskId: "daily-trend-briefing",
+    },
+  },
+  {
+    slug: "viral-content-breakdown",
+    title: "爆款内容拆解",
+    description: "把一条高表现内容拆成可复用模板。",
+    summary: "拆钩子、结构和转化动作。",
+    meta: "1 个文件 · 1.0.0",
+    category: "研究",
+    launch: {
+      type: "service_skill",
+      skillId: "viral-content-breakdown",
+    },
+  },
+];
+
 describe("officialSkillMarketplace", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn());
+    vi.mocked(resolveOemCloudRuntimeContext).mockReturnValue(null);
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
     vi.clearAllMocks();
   });
 
-  it("应按官网 marketplace envelope 解析官方技能列表", async () => {
+  it("默认应从官网静态技能市场解析可安装官方技能列表", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValueOnce(
+      mockTextResponse(buildStaticMarketplaceHtml(staticMarketplaceSkills)),
+    );
+
+    const items = await listOfficialSkillMarketplace({ sort: "default" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://limeai.run/skills/",
+      expect.objectContaining({
+        method: "GET",
+        headers: { Accept: "text/html" },
+      }),
+    );
+    expect(items).toEqual([
+      expect.objectContaining({
+        id: "official:viral-content-breakdown",
+        name: "viral-content-breakdown",
+        aliases: [],
+        title: "爆款内容拆解",
+        summary: "拆钩子、结构和转化动作。",
+        category: "研究",
+        outputHint: "把一条高表现内容拆成可复用模板。",
+        version: "1.0.0",
+        sort: 1,
+      }),
+    ]);
+  });
+
+  it("有 OEM 运行时但未显式配置 marketplace API base 时仍应使用官网静态源", async () => {
+    vi.mocked(resolveOemCloudRuntimeContext).mockReturnValue({
+      baseUrl: "https://user.limeai.run",
+      controlPlaneBaseUrl: "https://user.limeai.run/api",
+      sceneBaseUrl: "https://user.limeai.run/scene-api",
+      gatewayBaseUrl: "https://user.limeai.run/gateway-api",
+      tenantId: "tenant-demo",
+      sessionToken: "session-token",
+      hubProviderName: null,
+      loginPath: "/login",
+      desktopClientId: "desktop-client",
+      desktopOauthRedirectUrl: "lime://oauth/callback",
+      desktopOauthNextPath: "/welcome",
+    });
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValueOnce(
+      mockTextResponse(buildStaticMarketplaceHtml(staticMarketplaceSkills)),
+    );
+
+    await expect(listOfficialSkillMarketplace()).resolves.toEqual([
+      expect.objectContaining({ name: "viral-content-breakdown" }),
+    ]);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://limeai.run/skills/",
+      expect.any(Object),
+    );
+  });
+
+  it("显式配置 API base 时应按官网 marketplace envelope 解析官方技能列表", async () => {
+    vi.stubEnv(
+      "VITE_LIME_SKILL_MARKETPLACE_API_BASE_URL",
+      "https://cloud.example.com/api/",
+    );
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockResolvedValueOnce(
       mockJsonResponse({
@@ -71,7 +182,7 @@ describe("officialSkillMarketplace", () => {
     const items = await listOfficialSkillMarketplace({ sort: "default" });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://lime-api.limeai.run/api/v1/public/service-skills/marketplace?sort=default",
+      "https://cloud.example.com/api/v1/public/service-skills/marketplace?sort=default",
       expect.objectContaining({
         method: "GET",
         headers: { Accept: "application/json" },
@@ -99,55 +210,93 @@ describe("officialSkillMarketplace", () => {
     ]);
   });
 
-  it("应解析官方技能安装包并保留文件校验信息", async () => {
+  it("默认应解析官网静态 bundle.json 并保留文件校验信息", async () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockResolvedValueOnce(
       mockJsonResponse({
-        code: 200,
-        message: "success",
-        data: {
-          manifestVersion: "agentskills.v1",
-          name: "analysis",
-          version: "2026.05",
-          contentHash: "sha256:bundle",
-          fileCount: 1,
-          files: [
-            {
-              path: "SKILL.md",
-              content: "# Analysis",
-              encoding: "utf-8",
-              sha256: "sha256:file",
-            },
-          ],
-        },
+        manifestVersion: "agentskills.v1",
+        name: "viral-content-breakdown",
+        version: "1.0.0",
+        contentHash: "sha256:bundle",
+        fileCount: 1,
+        files: [
+          {
+            path: "SKILL.md",
+            content: "# Viral Content Breakdown",
+            encoding: "utf-8",
+            sha256: "sha256:file",
+          },
+        ],
       }),
     );
 
     await expect(
-      getOfficialSkillMarketplaceBundle("analysis"),
+      getOfficialSkillMarketplaceBundle("viral-content-breakdown"),
     ).resolves.toEqual({
       manifestVersion: "agentskills.v1",
-      name: "analysis",
+      name: "viral-content-breakdown",
       aliases: [],
-      version: "2026.05",
+      version: "1.0.0",
       contentHash: "sha256:bundle",
       fileCount: 1,
       files: [
         {
           path: "SKILL.md",
-          content: "# Analysis",
+          content: "# Viral Content Breakdown",
           encoding: "utf-8",
           sha256: "sha256:file",
         },
       ],
     });
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://lime-api.limeai.run/api/v1/public/service-skills/marketplace/analysis/bundle",
+      "https://limeai.run/skill-packages/viral-content-breakdown/latest/bundle.json",
       expect.any(Object),
     );
   });
 
-  it("安装官方技能时应接受当前控制面 bundle 形态并进入 App Server 安装网关", async () => {
+  it("默认安装官方技能时应通过官网 ZIP 下载 URL 进入 App Server current 网关", async () => {
+    skillsApiMock.installFromDownloadUrl.mockResolvedValueOnce({
+      directory: "viral-content-breakdown",
+      inspection: {
+        content: "# Viral Content Breakdown",
+        metadata: {},
+        allowedTools: [],
+        resourceSummary: {
+          hasScripts: false,
+          hasReferences: false,
+          hasAssets: false,
+        },
+        standardCompliance: {
+          isStandard: true,
+          validationErrors: [],
+          deprecatedFields: [],
+        },
+      },
+    });
+
+    await expect(
+      installOfficialMarketplaceSkill("viral-content-breakdown"),
+    ).resolves.toEqual(
+      expect.objectContaining({ directory: "viral-content-breakdown" }),
+    );
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(skillsApiMock.installFromDownloadUrl).toHaveBeenCalledWith(
+      {
+        skillName: "viral-content-breakdown",
+        downloadUrl:
+          "https://limeai.run/skill-packages/viral-content-breakdown/latest/viral-content-breakdown.zip",
+      },
+      "lime",
+    );
+    expect(skillsApiMock.installMarketplaceBundle).not.toHaveBeenCalled();
+  });
+
+  it("显式配置 API base 时安装官方技能应接受控制面 bundle 并进入 App Server 安装网关", async () => {
+    vi.stubEnv(
+      "VITE_LIME_SKILL_MARKETPLACE_API_BASE_URL",
+      "https://cloud.example.com/api",
+    );
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockResolvedValueOnce(
       mockJsonResponse({
@@ -194,7 +343,7 @@ describe("officialSkillMarketplace", () => {
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://lime-api.limeai.run/api/v1/public/service-skills/marketplace/analysis/bundle",
+      "https://cloud.example.com/api/v1/public/service-skills/marketplace/analysis/bundle",
       expect.any(Object),
     );
     expect(skillsApiMock.installMarketplaceBundle).toHaveBeenCalledWith(
@@ -216,9 +365,14 @@ describe("officialSkillMarketplace", () => {
       },
       "lime",
     );
+    expect(skillsApiMock.installFromDownloadUrl).not.toHaveBeenCalled();
   });
 
   it("接口返回错误时应透传服务端 message", async () => {
+    vi.stubEnv(
+      "VITE_LIME_SKILL_MARKETPLACE_API_BASE_URL",
+      "https://cloud.example.com/api",
+    );
     vi.mocked(fetch).mockResolvedValueOnce(
       mockJsonResponse(
         {
@@ -236,6 +390,10 @@ describe("officialSkillMarketplace", () => {
   });
 
   it("业务 envelope 返回错误时应透传服务端 message", async () => {
+    vi.stubEnv(
+      "VITE_LIME_SKILL_MARKETPLACE_API_BASE_URL",
+      "https://cloud.example.com/api",
+    );
     vi.mocked(fetch).mockResolvedValueOnce(
       mockJsonResponse({
         code: 500,
@@ -250,6 +408,10 @@ describe("officialSkillMarketplace", () => {
   });
 
   it("列表 data 不是 marketplace item page 时应 fail closed", async () => {
+    vi.stubEnv(
+      "VITE_LIME_SKILL_MARKETPLACE_API_BASE_URL",
+      "https://cloud.example.com/api",
+    );
     vi.mocked(fetch).mockResolvedValueOnce(
       mockJsonResponse({
         code: 0,
@@ -264,6 +426,10 @@ describe("officialSkillMarketplace", () => {
   });
 
   it("列表 item 缺少关键字段时应 fail closed", async () => {
+    vi.stubEnv(
+      "VITE_LIME_SKILL_MARKETPLACE_API_BASE_URL",
+      "https://cloud.example.com/api",
+    );
     vi.mocked(fetch).mockResolvedValueOnce(
       mockJsonResponse({
         code: 0,
@@ -287,6 +453,10 @@ describe("officialSkillMarketplace", () => {
   });
 
   it("安装包缺少 bundle 关键字段时应 fail closed 且不进入安装 facade", async () => {
+    vi.stubEnv(
+      "VITE_LIME_SKILL_MARKETPLACE_API_BASE_URL",
+      "https://cloud.example.com/api",
+    );
     vi.mocked(fetch).mockResolvedValueOnce(
       mockJsonResponse({
         code: 0,
@@ -310,9 +480,14 @@ describe("officialSkillMarketplace", () => {
       "The official skill bundle is invalid",
     );
     expect(skillsApiMock.installMarketplaceBundle).not.toHaveBeenCalled();
+    expect(skillsApiMock.installFromDownloadUrl).not.toHaveBeenCalled();
   });
 
   it("安装包文件缺少 content 时应 fail closed", async () => {
+    vi.stubEnv(
+      "VITE_LIME_SKILL_MARKETPLACE_API_BASE_URL",
+      "https://cloud.example.com/api",
+    );
     vi.mocked(fetch).mockResolvedValueOnce(
       mockJsonResponse({
         code: 0,
@@ -339,6 +514,10 @@ describe("officialSkillMarketplace", () => {
   });
 
   it("安装包 fileCount 与 files 不一致时应 fail closed", async () => {
+    vi.stubEnv(
+      "VITE_LIME_SKILL_MARKETPLACE_API_BASE_URL",
+      "https://cloud.example.com/api",
+    );
     vi.mocked(fetch).mockResolvedValueOnce(
       mockJsonResponse({
         code: 0,

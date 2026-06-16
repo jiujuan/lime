@@ -152,14 +152,20 @@ impl CodingEventMirror {
         let Some(tool) = self.tools.get_mut(tool_id) else {
             return Vec::new();
         };
-        if !is_shell_tool(&tool.name) || delta.trim().is_empty() {
+        let has_visible_output = !delta.trim().is_empty();
+        let has_process_metadata = metadata_has_process_lifecycle(metadata);
+        if !is_shell_tool(&tool.name) || (!has_visible_output && !has_process_metadata) {
             return Vec::new();
         }
 
-        tool.emitted_output = true;
+        if has_visible_output {
+            tool.emitted_output = true;
+        }
         let output_ref = output_ref_from_metadata(metadata, "command")
             .unwrap_or_else(|| command_output_ref(tool_id));
         let ref_ids = output_ref_ids(metadata, &output_ref);
+        let preview =
+            has_visible_output.then(|| truncate_chars(delta, COMMAND_OUTPUT_PREVIEW_CHARS));
         vec![RuntimeEvent::new(
             "command.output",
             compact_object(json!({
@@ -168,7 +174,7 @@ impl CodingEventMirror {
                 "outputRef": output_ref,
                 "refIds": ref_ids,
                 "kind": output_kind,
-                "preview": truncate_chars(delta, COMMAND_OUTPUT_PREVIEW_CHARS),
+                "preview": preview,
                 "source": "runtime_tool_stream",
                 "metadata": metadata.cloned(),
             })),
@@ -209,6 +215,7 @@ impl CodingEventMirror {
             command_text.or_else(|| command_facts.as_ref().map(|facts| facts.command.clone()));
         let exit_code = metadata.and_then(|metadata| metadata_i64(metadata, &["exit_code"]));
         let status = command_status(exit_code, result.success);
+        let process_metadata = shell_process_lifecycle_metadata(tool_id, metadata, status);
         let mut events = Vec::new();
 
         if !tool.emitted_output && !result.output.trim().is_empty() {
@@ -217,20 +224,24 @@ impl CodingEventMirror {
             let ref_ids = output_ref_ids(metadata, &output_ref);
             events.push(RuntimeEvent::new(
                 "command.output",
-                compact_object(json!({
-                    "commandId": tool_id,
-                    "toolCallId": tool_id,
-                    "outputRef": output_ref,
-                    "refIds": ref_ids,
-                    "preview": truncate_chars(&result.output, COMMAND_OUTPUT_PREVIEW_CHARS),
-                    "source": "runtime_tool_result",
-                })),
+                compact_object(merge_object_fields(
+                    json!({
+                        "commandId": tool_id,
+                        "toolCallId": tool_id,
+                        "outputRef": output_ref,
+                        "refIds": ref_ids,
+                        "preview": truncate_chars(&result.output, COMMAND_OUTPUT_PREVIEW_CHARS),
+                        "source": "runtime_tool_result",
+                        "metadata": process_metadata.clone(),
+                    }),
+                    &process_metadata,
+                )),
             ));
         }
 
         events.push(RuntimeEvent::new(
             "command.exited",
-            compact_object(json!({
+            compact_object(merge_object_fields(json!({
                 "commandId": tool_id,
                 "toolCallId": tool_id,
                 "command": command,
@@ -244,7 +255,7 @@ impl CodingEventMirror {
                 "cwd": metadata.and_then(|metadata| metadata_string(metadata, &["cwd"])),
                 "shell": metadata.and_then(|metadata| metadata_string(metadata, &["shell"])),
                 "source": "runtime_tool",
-            })),
+            }), &process_metadata)),
         ));
         events.extend(patch_terminal_events(tool_id, tool, result));
 
@@ -630,6 +641,18 @@ fn metadata_i64(metadata: &HashMap<String, Value>, keys: &[&str]) -> Option<i64>
         .and_then(value_i64)
 }
 
+fn metadata_u64(metadata: &HashMap<String, Value>, keys: &[&str]) -> Option<u64> {
+    keys.iter()
+        .find_map(|key| metadata.get(*key))
+        .and_then(value_u64)
+}
+
+fn metadata_bool(metadata: &HashMap<String, Value>, keys: &[&str]) -> Option<bool> {
+    keys.iter()
+        .find_map(|key| metadata.get(*key))
+        .and_then(value_bool)
+}
+
 fn metadata_string_array(metadata: &HashMap<String, Value>, keys: &[&str]) -> Vec<String> {
     keys.iter()
         .filter_map(|key| metadata.get(*key))
@@ -685,6 +708,14 @@ fn value_u64(value: &Value) -> Option<u64> {
         .as_u64()
         .or_else(|| value.as_i64().and_then(|value| u64::try_from(value).ok()))
         .or_else(|| value.as_str()?.trim().parse::<u64>().ok())
+}
+
+fn value_bool(value: &Value) -> Option<bool> {
+    value.as_bool().or_else(|| match value.as_str()?.trim() {
+        "true" | "TRUE" | "True" | "1" => Some(true),
+        "false" | "FALSE" | "False" | "0" => Some(false),
+        _ => None,
+    })
 }
 
 fn command_status(exit_code: Option<i64>, success: bool) -> &'static str {
@@ -801,6 +832,60 @@ fn output_ref_ids(
     dedupe_non_empty(refs)
 }
 
+fn shell_process_lifecycle_metadata(
+    tool_id: &str,
+    metadata: Option<&HashMap<String, Value>>,
+    status: &str,
+) -> Value {
+    let process_id = metadata
+        .and_then(|metadata| metadata_string(metadata, &["processId", "process_id"]))
+        .unwrap_or_else(|| format!("process-{tool_id}"));
+    let execution_process_status = metadata
+        .and_then(|metadata| {
+            metadata_string(
+                metadata,
+                &["executionProcessStatus", "execution_process_status"],
+            )
+        })
+        .unwrap_or_else(|| command_status_to_process_status(status));
+    let execution_surface = metadata
+        .and_then(|metadata| metadata_string(metadata, &["executionSurface", "execution_surface"]))
+        .unwrap_or_else(|| "embedded".to_string());
+
+    compact_object(json!({
+        "processId": process_id,
+        "executionProcessStatus": execution_process_status,
+        "executionSurface": execution_surface,
+        "outputBytes": metadata.and_then(|metadata| metadata_u64(metadata, &["outputBytes", "output_bytes"])),
+        "outputOmittedBytes": metadata.and_then(|metadata| metadata_u64(metadata, &["outputOmittedBytes", "output_omitted_bytes"])),
+        "outputTruncated": metadata.and_then(|metadata| metadata_bool(metadata, &["outputTruncated", "output_truncated"])),
+        "stdoutBytes": metadata.and_then(|metadata| metadata_u64(metadata, &["stdoutBytes", "stdout_bytes"])),
+        "stderrBytes": metadata.and_then(|metadata| metadata_u64(metadata, &["stderrBytes", "stderr_bytes"])),
+    }))
+}
+
+fn command_status_to_process_status(status: &str) -> String {
+    match status {
+        "passed" | "completed" => "exited".to_string(),
+        "failed" => "failed".to_string(),
+        "canceled" | "cancelled" => "terminated".to_string(),
+        _ => status.to_string(),
+    }
+}
+
+fn metadata_has_process_lifecycle(metadata: Option<&HashMap<String, Value>>) -> bool {
+    let Some(metadata) = metadata else {
+        return false;
+    };
+    metadata_string(metadata, &["processId", "process_id"]).is_some()
+        || metadata_string(
+            metadata,
+            &["executionProcessStatus", "execution_process_status"],
+        )
+        .is_some()
+        || metadata_string(metadata, &["executionSurface", "execution_surface"]).is_some()
+}
+
 fn artifact_refs_from_metadata(
     metadata: Option<&HashMap<String, Value>>,
     artifact_id: &str,
@@ -865,6 +950,16 @@ fn truncate_chars(value: &str, max_chars: usize) -> String {
         output.push(character);
     }
     output
+}
+
+fn merge_object_fields(mut value: Value, fields: &Value) -> Value {
+    let (Some(object), Some(fields)) = (value.as_object_mut(), fields.as_object()) else {
+        return value;
+    };
+    for (key, value) in fields {
+        object.insert(key.clone(), value.clone());
+    }
+    value
 }
 
 fn compact_object(value: Value) -> Value {

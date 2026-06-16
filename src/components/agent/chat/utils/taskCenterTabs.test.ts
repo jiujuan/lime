@@ -343,6 +343,16 @@ describe("taskCenterTabs", () => {
       forceRefresh: true,
       resumeSessionStartHooks: true,
     });
+
+    expect(
+      resolveTaskCenterTopicSwitchOptions({
+        allowDetachedSession: true,
+        shouldResume: false,
+        forceRefresh: false,
+      }),
+    ).toEqual({
+      allowDetachedSession: true,
+    });
   });
 
   it("重复打开当前活跃任务时应跳过 switch，避免清空已渲染消息", () => {
