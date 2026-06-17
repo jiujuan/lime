@@ -11,6 +11,7 @@ interface ThinkingBlockProps {
   groupMarker?: string;
   isStreaming?: boolean;
   hideSummary?: boolean;
+  preserveSourceText?: boolean;
 }
 
 export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
@@ -20,12 +21,16 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
   groupMarker = "•",
   isStreaming = false,
   hideSummary = false,
+  preserveSourceText = false,
 }) => {
   const [expanded, setExpanded] = React.useState(defaultExpanded);
   const previousDefaultExpandedRef = React.useRef(defaultExpanded);
   const thinkingDisplay = useMemo(
-    () => resolveThinkingDisplayParts(content, isStreaming),
-    [content, isStreaming],
+    () =>
+      resolveThinkingDisplayParts(content, isStreaming, {
+        preserveSourceText,
+      }),
+    [content, isStreaming, preserveSourceText],
   );
   const hasBody = thinkingDisplay.body.length > 0;
 

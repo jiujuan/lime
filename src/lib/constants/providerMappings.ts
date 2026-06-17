@@ -60,7 +60,7 @@ const PROVIDER_TYPE_TO_REGISTRY_ID: Record<string, string> = {
 const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   gemini: "Gemini",
   qwen: "通义千问",
-  codex: "Codex",
+  codex: "本地 CLI",
   claude: "Claude",
   openai: "OpenAI",
   anthropic: "Anthropic",

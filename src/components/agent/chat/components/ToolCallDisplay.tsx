@@ -79,6 +79,7 @@ import {
   readRecordString,
   resolveCommandOutputStreams,
   resolveCommandToolSummary,
+  resolveImportedSourceToolPresentation,
   resolveSkillInvocationContentInfo,
   resolveToolResultPath,
   type ToolResultNotice,
@@ -410,8 +411,14 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
     ],
   );
   const resultMetadata = useMemo(
-    () => normalizeToolResultMetadata(toolCall.result?.metadata),
-    [toolCall.result?.metadata],
+    () => {
+      const metadata = {
+        ...(normalizeToolResultMetadata(toolCall.metadata) || {}),
+        ...(normalizeToolResultMetadata(toolCall.result?.metadata) || {}),
+      };
+      return Object.keys(metadata).length > 0 ? metadata : undefined;
+    },
+    [toolCall.metadata, toolCall.result?.metadata],
   );
   const skillInvocationContentInfo = useMemo(
     () =>
@@ -491,6 +498,10 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
       isResultFailure,
     }).map((key) => t(`agentChat.toolCall.resultNotice.${key}`));
   }, [isResultFailure, resultMetadata, t]);
+  const importedSourcePresentation = useMemo(
+    () => resolveImportedSourceToolPresentation(toolCall),
+    [toolCall],
+  );
   const commandSummary = useMemo(
     () =>
       resolveCommandToolSummary({
@@ -1159,6 +1170,19 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
           className="mb-2 ml-6 mt-1.5 space-y-2"
           data-testid="tool-call-result-panel"
         >
+          {importedSourcePresentation ? (
+            <div
+              className="rounded-[12px] border border-slate-200 bg-slate-50 px-3 py-2"
+              data-testid="tool-call-imported-source-command-record"
+            >
+              <div className="text-[11px] font-semibold text-slate-700">
+                {t("agentChat.toolCall.importedCommandRecord.title")}
+              </div>
+              <p className="mt-1 text-[11px] leading-5 text-slate-600">
+                {t("agentChat.toolCall.importedCommandRecord.description")}
+              </p>
+            </div>
+          ) : null}
           {commandSummary ? (
             <div
               className="rounded-[12px] border border-slate-200 bg-slate-50 px-3 py-2"
@@ -1661,9 +1685,16 @@ function WorkToolCallGroup({
   const hasRunning = toolCalls.some((item) => item.status === "running");
   const hasFailed = toolCalls.some((item) => item.status === "failed");
   const [expanded, setExpanded] = useState(hasRunning || hasFailed);
-  const headline = buildToolGroupHeadline(toolCalls);
-  const preview = buildToolGroupPreview(toolCalls, (count) =>
-    t("agentChat.toolCall.group.hiddenItems", { count }),
+  const formatImportedSourceCommandRecord = (count?: number) =>
+    t("agentChat.toolCall.importedCommandRecord.groupTitle", { count });
+  const headline = buildToolGroupHeadline(
+    toolCalls,
+    formatImportedSourceCommandRecord,
+  );
+  const preview = buildToolGroupPreview(
+    toolCalls,
+    (count) => t("agentChat.toolCall.group.hiddenItems", { count }),
+    formatImportedSourceCommandRecord,
   );
 
   useEffect(() => {

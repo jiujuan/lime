@@ -5,4 +5,6 @@ export * from "./executionGraph.js";
 export * from "./refs.js";
 export * from "./runtimeFacts.js";
 export * from "./subagents.js";
+export * from "./tools.js";
 export * from "./projectionView.js";
+export * from "./workbench.js";

@@ -212,7 +212,7 @@ function buildCompletedAudioTaskIndex(): ListMediaTaskArtifactsOutput {
       snapshot_count: 1,
       contract_keys: ["voice_generation"],
       execution_profile_keys: ["voice_generation_profile"],
-      executor_adapter_keys: ["service_skill:voice_runtime"],
+      executor_adapter_keys: [],
       limecore_policy_refs: [
         "client_scenes",
         "tenant_feature_flags",
@@ -242,7 +242,7 @@ function buildCompletedAudioTaskIndex(): ListMediaTaskArtifactsOutput {
           provider_id: "limecore",
           model: "voice-pro",
           execution_profile_key: "voice_generation_profile",
-          executor_adapter_key: "service_skill:voice_runtime",
+          executor_adapter_key: null,
           limecore_policy_refs: [
             "client_scenes",
             "tenant_feature_flags",
@@ -308,7 +308,7 @@ function buildFailedAudioTaskIndex(): ListMediaTaskArtifactsOutput {
       snapshot_count: 1,
       contract_keys: ["voice_generation"],
       execution_profile_keys: ["voice_generation_profile"],
-      executor_adapter_keys: ["service_skill:voice_runtime"],
+      executor_adapter_keys: [],
       limecore_policy_refs: [
         "client_scenes",
         "tenant_feature_flags",
@@ -338,7 +338,7 @@ function buildFailedAudioTaskIndex(): ListMediaTaskArtifactsOutput {
           provider_id: "missing-provider",
           model: "voice-pro",
           execution_profile_key: "voice_generation_profile",
-          executor_adapter_key: "service_skill:voice_runtime",
+          executor_adapter_key: null,
           limecore_policy_refs: [
             "client_scenes",
             "tenant_feature_flags",

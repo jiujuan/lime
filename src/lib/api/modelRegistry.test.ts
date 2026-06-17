@@ -42,6 +42,70 @@ function expectAppServerRequest(
   expect(appServerRequestMock).toHaveBeenNthCalledWith(index, method, params);
 }
 
+function createModelInfo(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "gpt-4.1",
+    displayName: "GPT-4.1",
+    providerId: "openai",
+    providerName: "OpenAI",
+    family: null,
+    tier: "pro",
+    capabilities: {
+      vision: false,
+      tools: true,
+      streaming: true,
+      jsonMode: true,
+      functionCalling: true,
+      reasoning: false,
+      reasoningEffort: null,
+    },
+    taskFamilies: ["chat"],
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    runtimeFeatures: ["streaming"],
+    deploymentSource: "user_cloud",
+    managementPlane: "local_settings",
+    canonicalModelId: null,
+    providerModelId: null,
+    aliasSource: null,
+    pricing: null,
+    limits: {},
+    status: "active",
+    releaseDate: null,
+    isLatest: false,
+    description: null,
+    source: "api",
+    createdAt: 1,
+    updatedAt: 2,
+    ...overrides,
+  };
+}
+
+function createProviderInfo(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "openai",
+    name: "OpenAI",
+    providerType: "openai",
+    apiHost: "https://api.openai.com",
+    group: "global",
+    enabled: true,
+    isSystem: true,
+    sortOrder: 1,
+    apiVersion: null,
+    project: null,
+    location: null,
+    region: null,
+    customModels: [],
+    promptCacheMode: null,
+    apiKeyCount: 0,
+    apiKeys: [],
+    legacyIds: [],
+    createdAt: null,
+    updatedAt: null,
+    ...overrides,
+  };
+}
+
 describe("modelRegistry API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -51,14 +115,7 @@ describe("modelRegistry API", () => {
 
   it("getModelRegistry 应缓存并复用同一轮读取结果", async () => {
     resolveAppServerRequest({
-      models: [
-        {
-          id: "gpt-4.1",
-          display_name: "GPT-4.1",
-          provider_id: "openai",
-          provider_name: "OpenAI",
-        },
-      ],
+      models: [createModelInfo()],
     });
 
     const [first, second] = await Promise.all([
@@ -105,23 +162,14 @@ describe("modelRegistry API", () => {
 
   it("refreshModelRegistry 后应失效缓存并触发下一次重新读取", async () => {
     resolveAppServerRequest({
-      models: [
-        {
-          id: "gpt-4.1",
-          display_name: "GPT-4.1",
-          provider_id: "openai",
-          provider_name: "OpenAI",
-        },
-      ],
+      models: [createModelInfo()],
     });
     resolveAppServerRequest({
       models: [
-        {
+        createModelInfo({
           id: "gpt-5",
-          display_name: "GPT-5",
-          provider_id: "openai",
-          provider_name: "OpenAI",
-        },
+          displayName: "GPT-5",
+        }),
       ],
     });
 
@@ -139,18 +187,16 @@ describe("modelRegistry API", () => {
   it("searchModels 应基于 App Server current 模型列表做前端过滤", async () => {
     resolveAppServerRequest({
       models: [
-        {
+        createModelInfo({
           id: "openai/gpt-4.1",
-          display_name: "GPT-4.1",
-          provider_id: "openai",
-          provider_name: "OpenAI",
-        },
-        {
+          displayName: "GPT-4.1",
+        }),
+        createModelInfo({
           id: "anthropic/claude-sonnet-4",
-          display_name: "Claude Sonnet 4",
-          provider_id: "anthropic",
-          provider_name: "Anthropic",
-        },
+          displayName: "Claude Sonnet 4",
+          providerId: "anthropic",
+          providerName: "Anthropic",
+        }),
       ],
     });
 
@@ -189,10 +235,15 @@ describe("modelRegistry API", () => {
       },
     });
     resolveAppServerRequest({
-      models: [{ id: "openai/gpt-4.1", provider_id: "openai" }],
+      models: [createModelInfo({ id: "openai/gpt-4.1" })],
     });
     resolveAppServerRequest({
-      models: [{ id: "openai/gpt-4.1-mini", tier: "mini" }],
+      models: [
+        createModelInfo({
+          id: "openai/gpt-4.1-mini",
+          tier: "mini",
+        }),
+      ],
     });
 
     await expect(getModelPreferences()).resolves.toEqual([
@@ -240,7 +291,7 @@ describe("modelRegistry API", () => {
 
   it("Provider 实时模型抓取应通过 App Server current", async () => {
     resolveAppServerRequest({
-      models: [{ id: "gpt-4.1", provider_id: "openai" }],
+      models: [createModelInfo()],
       source: "Api",
       error: null,
       requestUrl: "https://api.openai.com/v1/models",
@@ -297,11 +348,14 @@ describe("modelRegistry API", () => {
   it("getModelRegistryProviderIds 应通过 App Server provider list 派生去重 id", async () => {
     resolveAppServerRequest({
       providers: [
-        { id: "openai", name: "OpenAI" },
-        { id: "anthropic", name: "Anthropic" },
-        { id: "openai", name: "OpenAI duplicate" },
-        { id: "", name: "invalid empty" },
-        { name: "missing id" },
+        createProviderInfo(),
+        createProviderInfo({
+          id: "anthropic",
+          name: "Anthropic",
+          providerType: "anthropic",
+        }),
+        createProviderInfo({ id: "openai", name: "OpenAI duplicate" }),
+        createProviderInfo({ id: "", name: "invalid empty" }),
       ],
     });
 

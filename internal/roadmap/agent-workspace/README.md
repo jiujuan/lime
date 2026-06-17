@@ -1,7 +1,7 @@
 # Agent Workspace 评测路线图
 
-> 状态：batch-1-local-evidence
-> 更新时间：2026-06-16
+> 状态：batch-1-plus-session-restore-evidence
+> 更新时间：2026-06-17
 > 目标：把 Agent Workspace 对齐 Codex App、Claude CoWork / Claude Code、AgentUI / AG-UI 的评测标准拆成可执行、可回归、可逐项补证的领域评分卡。
 
 ## 1. 使用方式
@@ -25,7 +25,7 @@
 | 4 | 较完整，有事实源、测试或 smoke 证据 |
 | 5 | 可作为稳定标准能力或公开基准能力对外宣称 |
 
-当前所有分数都是 **静态审计评分**。正式分数必须由 GUI / runtime / fixture / smoke / Playwright 证据替换；qcloop 因 token 成本高，当前不作为默认测评手段。
+当前所有分数以静态审计为基线，并逐步由 GUI / runtime / fixture / smoke / Playwright 证据替换；qcloop 因 token 成本高，当前不作为默认测评手段。已经有正式本地 evidence 的场景在第 10 节单独列出。
 
 ## 2. 领域文件
 
@@ -47,7 +47,7 @@
 | `search-browser-research.md` | Search / Browser / Research | 2.4 | web 搜索、browser 操作、来源引用、WebArena / OSWorld 对齐 |
 | `hitl-safety.md` | HITL / 审批 / 安全 | 3.0 | approval、sandbox、权限升级、受控写回 |
 | `artifacts-evidence.md` | Artifact / Evidence / Replay | 3.5 | 交付物、版本、diff、证据包、review、replay |
-| `sessions-performance.md` | Session / 性能 / 恢复 | 3.2 | current session history Electron fixture 已证明 persisted timeline archive/readback/unarchive/readback 与 hydrate detail 形状；仍缺长历史、draft、运行中恢复和性能指标 |
+| `sessions-performance.md` | Session / 性能 / 恢复 | 3.3 | current session history Electron fixture 已证明 persisted timeline archive/readback/unarchive/readback 与 hydrate detail 形状；本地历史导入 session restore evidence 又证明导入消息、工具细节和同会话续聊可恢复；仍缺长历史、draft、运行中恢复和性能指标 |
 | `multi-agent-team.md` | Multi-agent / Team | 3.0 | subagent lineage、handoff、team roster、worker notification、review lane |
 | `evaluation-harness.md` | 评测 Harness | 3.3 | task/trial/grader/transcript、P0 场景、外部 benchmark 子集 |
 
@@ -248,11 +248,11 @@ Agent Workspace 评测体系达到 `4.0+` 的最低条件：
 
 ## 9. 当前完成判定
 
-本文档集完成的是 Agent Workspace 能力评测的静态基线、领域拆分和 Batch 1 本地证据。当前可以把 `basic-streaming` 与 `run-control-surface` 计入正式本地 evidence；其余 P0 场景仍需要逐项补证后，才可以把 Agent Workspace 当前分数升级为完整产品评分。
+本文档集完成的是 Agent Workspace 能力评测的静态基线、领域拆分、Batch 1 本地证据和一份 `agent-workspace-session-restore` 导入恢复专项 evidence。当前可以把 `basic-streaming`、`run-control-surface`、`run-control-restore` 与 `session-restore` 的已列文件计入正式本地 evidence；其余 P0 场景仍需要逐项补证后，才可以把 Agent Workspace 当前分数升级为完整产品评分。
 
 本轮评测路线图文档完成度：`100%`。
 
-整体 Agent Workspace 目标完成度估算：`83%`。口径是：底层 runtime / projection / evidence 约完成较高，任务区域已具备 plan / tool-run / model / permission / reasoning / workspace / objective / diffstat / sources / subagents / outputs / approval 摘要，并新增同一区域只读运行控制区，能把 environment / run / plan / goal / sources / participants / outputs / split lane 汇总展示；计划、执行和产物明细已统一在同一运行控制区内呈现，输出仍可点击打开并保留溢出计数；任务轨道接线与历史恢复投影延迟已拆出独立 hook，并已补齐 `workflowSteps=[]` 时从结构化 plan thread item 与 `todoItems` 恢复计划清单的主路径；本轮新增 `agent-workspace-run-control-restore` 正式 evidence，证明 deterministic UI 恢复态可在同一区域恢复 environment、plan、goal、sources、subagents、diffstat、approval 和 output，真实 Electron session history fixture 也已证明 current `agentSession/list/read/update` 的归档、恢复和重启 readback 链路；这些状态继续从 `threadRead.context_summary`、`threadRead.evidence_summary`、`threadRead.artifacts`、`threadRead.change_summary`、`todoItems`、`child_subagent_sessions` 以及 `web_search` / `file_artifact` timeline 派生，不解析 assistant Markdown；最终桌面工作台体验、完整 citation consistency、Split review、pause/steer 控制闭环、Skill / MCP 专项 GUI evidence、coding 闭环、browser/search 实测和完整 P0 Evidence Pack 仍需要继续补证。
+整体 Agent Workspace 目标完成度估算：`84%`。口径是：底层 runtime / projection / evidence 约完成较高，任务区域已具备 plan / tool-run / model / permission / reasoning / workspace / objective / diffstat / sources / subagents / outputs / approval 摘要，并新增同一区域只读运行控制区，能把 environment / run / plan / goal / sources / participants / outputs / split lane 汇总展示；计划、执行和产物明细已统一在同一运行控制区内呈现，输出仍可点击打开并保留溢出计数；任务轨道接线与历史恢复投影延迟已拆出独立 hook，并已补齐 `workflowSteps=[]` 时从结构化 plan thread item 与 `todoItems` 恢复计划清单的主路径；`agent-workspace-run-control-restore` 正式 evidence 证明 deterministic UI 恢复态可在同一区域恢复 environment、plan、goal、sources、subagents、diffstat、approval 和 output，真实 Electron session history fixture 也已证明 current `agentSession/list/read/update` 的归档、恢复和重启 readback 链路；本轮新增 `agent-workspace-session-restore` 正式 evidence，证明本地历史导入会话能恢复消息、reasoning、command、patch、web search、approval 细节，并在同一个 current `AgentSession` 继续对话，同时不会把导入支持能力显示成消息主线 banner、环境信息或 run control 独立状态卡；这些状态继续从 `threadRead.context_summary`、`threadRead.evidence_summary`、`threadRead.artifacts`、`threadRead.change_summary`、`todoItems`、`child_subagent_sessions` 以及 timeline / provenance facts 派生，不解析 assistant Markdown；最终桌面工作台体验、完整 citation consistency、Split review、pause/steer 控制闭环、Skill / MCP 专项 GUI evidence、coding 闭环、browser/search 实测和完整 P0 Evidence Pack 仍需要继续补证。
 
 ## 10. 当前本地 Evidence 状态
 
@@ -261,6 +261,7 @@ Agent Workspace 评测体系达到 `4.0+` 的最低条件：
 | `agent-workspace-basic-streaming` | `evidence/agent-workspace-basic-streaming.20260616-0807.json` | `pass` | 真实 Electron fixture 已证明 prompt / output / completed、read model 对齐、consoleErrors=0，可替换 streaming / protocol / harness 的本地正式证据 |
 | `agent-workspace-run-control-surface` | `evidence/agent-workspace-run-control-surface.20260616-0807.json` | `pass` | 已生成正式 pass evidence；同一区域只读运行控制区可见，覆盖 environment / run / plan / goal / sources / participants / outputs / split lane 的基础断言 |
 | `agent-workspace-run-control-restore` | `evidence/agent-workspace-run-control-restore.20260616-1255.json` | `pass` | 已生成正式 pass evidence；恢复态同一区域可见 environment / plan / goal / sources / subagents / diffstat / approval / output，真实 Electron session history fixture 证明 current `agentSession/list/read/update` 归档、恢复和重启 readback 链路 |
+| `agent-workspace-session-restore` | `evidence/agent-workspace-session-restore.20260617-1559.json` | `pass` | 已生成正式 pass evidence；本地历史导入会话经真实 Electron current 链路恢复 messages、reasoning、command、patch、web search、approval，并在同一 current session 续聊；同时断言导入支持能力不进入消息主线 banner、环境信息或 run control 独立状态卡 |
 | `agent-workspace-run-control-surface` | 任务轨道运行控制区 implementation | `implemented-local-verified` | 已接入 workflow steps、message artifacts、activity logs、creation task events，并从 `projectedThreadItems` 恢复 `tool_call`、`command_execution`、`web_search`、`file_artifact` 与结构化 `plan`；当 `workflowSteps=[]` 时可从历史 plan thread item 恢复计划清单，缺 plan item 时再从 `todoItems` 恢复 completed / in_progress / pending 状态；同一区域展示计划步骤、工具 / 执行活动、运行摘要短标签，覆盖 plan / tool-run / model / permission / reasoning / workspace / objective / diffstat / sources / subagents facts；已收回旧 plan / activity / output 重复段落，计划、执行、结果和产物明细统一在运行控制区内展示；来源摘要来自 `threadRead.context_summary.sources/retrieval_refs/team_memory_refs`、`threadRead.evidence_summary.evidence_refs`、`threadRead.artifacts` 与搜索 / 文件 timeline，不解析 assistant Markdown；已移除环境浮层静态来源图标占位，来源详情在任务轨道真实来源标签下直接可见，并能显示 `已关联` / `待补证据` / `待补来源` 三类基础来源一致性状态；输出文件行可点击打开，保留去重后的轻量列表和溢出计数；任务轨道 props / 输出路径解析已收敛到 `useWorkspaceTaskRailRuntime`，恢复期运行投影延迟已收敛到 `useSessionRuntimeProjectionDeferral`；已通过 unit / integration / runtime path 解析回归、i18n、current fixture、GUI smoke 和正式 evidence |
 | `agent-workspace-hitl-approval` | 顶部环境浮层审批摘要 implementation | `implemented-local-verified` | 已从 current `pendingActions` / `submittedActionsInFlight` 派生最多 2 条轻量确认摘要；工具确认可在同一区域触发既有 `onRespondToAction` approve / reject，问答类只展示等待状态；已从 `projectedThreadItems` 的 `approval_request` / `request_user_input` completed read model 派生最近已允许 / 已拒绝 / 已回答回显，点击处理后不会只消失；不新增协议、不展示敏感参数；已通过 view model / toolbar integration / runtime passthrough 回归，仍需正式 runtime resolved evidence 文件 |
 

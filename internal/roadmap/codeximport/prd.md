@@ -554,7 +554,7 @@ MVP 完成时必须满足：
 - [x] preview message/event、导入 runtime event、turn metadata 和 assistant delta 均带 item 级 `ConversationImportSourceProvenance`，可回溯 Codex rollout line seq / event type / payload type / call id / source path。
 - [x] preview/commit 返回 `ConversationImportFidelitySummary`，并把 `codexImportFidelity` 写入 session business object 与 turn metadata，UI 可展示工具、命令、补丁、审批、MCP、搜索、unsupported 和预算裁剪覆盖度。
 - [x] renderer 不直接读取外部 source 文件。
-- [ ] 结构测试覆盖敏感文件 denylist、unknown event、幂等导入、missing rollout。当前已覆盖 unknown/unsupported 计数、幂等导入、missing rollout；敏感文件 denylist 仍需补结构测试。
+- [x] 结构测试覆盖敏感文件 denylist、unknown event、幂等导入、missing rollout。当前已覆盖 unknown/unsupported 计数、幂等导入、missing rollout；敏感文件 denylist 已补 `conversation_import::tests::security`，覆盖 state DB 敏感路径、显式 preview source path 与 commit source root 越界拒绝。
 
 ## 17. 里程碑
 

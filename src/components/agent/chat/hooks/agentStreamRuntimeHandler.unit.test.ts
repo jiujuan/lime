@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AgentEvent, AgentThreadItem } from "@/lib/api/agentProtocol";
+import {
+  parseAgentEvent,
+  type AgentEvent,
+  type AgentThreadItem,
+} from "@/lib/api/agentProtocol";
 import type { Message } from "../types";
 import {
   clearAgentUiProjectionEvents,
@@ -303,6 +307,164 @@ describe("agentStreamRuntimeHandler", () => {
     ]);
   });
 
+  it("应把 App Server tool.failed 事件投影成失败工具终态", () => {
+    clearAgentUiProjectionEvents();
+    let messages: Message[] = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-05-09T10:00:00.000Z"),
+        toolCalls: [
+          {
+            id: "tool-failed-1",
+            name: "Bash",
+            arguments: "{}",
+            status: "running",
+            startTime: new Date("2026-05-09T10:00:00.000Z"),
+          },
+        ],
+        contentParts: [
+          {
+            type: "tool_use",
+            toolCall: {
+              id: "tool-failed-1",
+              name: "Bash",
+              arguments: "{}",
+              status: "running",
+              startTime: new Date("2026-05-09T10:00:00.000Z"),
+            },
+          },
+        ],
+      },
+    ];
+    let threadItems: AgentThreadItem[] = [
+      {
+        id: "tool-failed-1",
+        thread_id: "session-1",
+        turn_id: "turn-1",
+        type: "tool_call",
+        sequence: 1,
+        status: "in_progress",
+        started_at: "2026-05-09T10:00:00.000Z",
+        updated_at: "2026-05-09T10:00:00.000Z",
+        tool_name: "Bash",
+      },
+    ];
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const setThreadItems = vi.fn(
+      (
+        value:
+          | AgentThreadItem[]
+          | ((prev: AgentThreadItem[]) => AgentThreadItem[]),
+      ) => {
+        threadItems =
+          typeof value === "function" ? value(threadItems) : value;
+      },
+    );
+    const parsed = parseAgentEvent({
+      type: "tool.failed",
+      toolCallId: "tool-failed-1",
+      status: "failed",
+      error: "exit code 101",
+      output: "test failed",
+      metadata: {
+        failureCategory: "test_failed",
+      },
+    });
+
+    expect(parsed).toBeTruthy();
+    handleTurnStreamEvent({
+      data: parsed as AgentEvent,
+      requestState: {
+        accumulatedContent: "",
+        queuedTurnId: "turn-1",
+        requestLogId: null,
+        requestStartedAt: 0,
+        requestFinished: false,
+      },
+      callbacks: {
+        activateStream: () => {},
+        isStreamActivated: () => true,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener: () => {},
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch: () => true,
+        upsertQueuedTurn: () => {},
+        removeQueuedTurnState: () => {},
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+        appendThinkingToParts: (parts) => parts,
+      },
+      eventName: "agent-runtime-test",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-1",
+      activeSessionId: "session-1",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react",
+      content: "",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>([
+        ["tool-failed-1", "Bash"],
+      ]),
+      setMessages: setMessages as never,
+      setPendingActions: vi.fn() as never,
+      setThreadItems: setThreadItems as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: vi.fn() as never,
+    });
+
+    expect(messages[0]?.toolCalls?.[0]).toMatchObject({
+      id: "tool-failed-1",
+      status: "failed",
+      result: {
+        success: false,
+        output: "test failed",
+        error: "exit code 101",
+      },
+    });
+    expect(messages[0]?.contentParts?.[0]).toMatchObject({
+      type: "tool_use",
+      toolCall: {
+        id: "tool-failed-1",
+        status: "failed",
+        result: {
+          success: false,
+          output: "test failed",
+          error: "exit code 101",
+        },
+      },
+    });
+    expect(threadItems[0]).toMatchObject({
+      id: "tool-failed-1",
+      type: "tool_call",
+      status: "failed",
+      output: "test failed",
+      error: "exit code 101",
+    });
+    expect(
+      selectAgentUiProjectionEvents(conversationProjectionStore.getSnapshot()),
+    ).toEqual([
+      expect.objectContaining({
+        type: "tool.failed",
+        sourceType: "tool_end",
+        toolCallId: "tool-failed-1",
+      }),
+    ]);
+  });
+
   it("收到 turn_completed 时应把 usage 写回 assistant 消息", () => {
     let messages: Message[] = [
       {
@@ -386,7 +548,7 @@ describe("agentStreamRuntimeHandler", () => {
     });
   });
 
-  it("收到 turn_completed 时不等待 turn_completed 也应完成 assistant 消息", () => {
+  it("收到 turn_completed 时应保留已累积正文而不是用终态标记覆盖", () => {
     let messages: Message[] = [
       {
         id: "assistant-turn-completed",
@@ -398,7 +560,8 @@ describe("agentStreamRuntimeHandler", () => {
       },
     ];
     const requestState = {
-      accumulatedContent: "以下是今日国际新闻简要整理。",
+      accumulatedContent:
+        "我先给出计划，不会直接改代码：\n<proposed_plan>\n- 确认计划模式请求进入 App Server\n- 输出 proposed_plan\n</proposed_plan>",
       queuedTurnId: "queued-news",
       requestLogId: null,
       requestStartedAt: 0,
@@ -481,16 +644,21 @@ describe("agentStreamRuntimeHandler", () => {
       setIsSending: setIsSending as never,
     });
 
-    expect(onComplete).toHaveBeenCalledWith("CLAW_NEWS_FIXTURE_DONE");
+    expect(onComplete).toHaveBeenCalledWith(
+      "我先给出计划，不会直接改代码：\n<proposed_plan>\n- 确认计划模式请求进入 App Server\n- 输出 proposed_plan\n</proposed_plan>",
+    );
     expect(messages[0]).toMatchObject({
-      content: "CLAW_NEWS_FIXTURE_DONE",
+      content:
+        "我先给出计划，不会直接改代码：\n<proposed_plan>\n- 确认计划模式请求进入 App Server\n- 输出 proposed_plan\n</proposed_plan>",
       isThinking: false,
       usage: {
         input_tokens: 120,
         output_tokens: 24,
       },
     });
-    expect(requestState.accumulatedContent).toBe("CLAW_NEWS_FIXTURE_DONE");
+    expect(requestState.accumulatedContent).toBe(
+      "我先给出计划，不会直接改代码：\n<proposed_plan>\n- 确认计划模式请求进入 App Server\n- 输出 proposed_plan\n</proposed_plan>",
+    );
     expect(removeQueuedTurnState).toHaveBeenCalledWith(["queued-news"]);
     expect(setIsSending).toHaveBeenCalledWith(false);
     expect(disposeListener).toHaveBeenCalledTimes(1);

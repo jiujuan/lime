@@ -277,6 +277,39 @@ describe("useWorkspaceInputbarSceneRuntime", () => {
     ).toBeNull();
   });
 
+  it("应在 Plan 确认态替换底部输入框而不是叠加渲染", () => {
+    const container = renderHookNode(
+      createDefaultProps({
+        planDecisionAccessory: (
+          <div data-testid="plan-composer-decision-panel">计划确认</div>
+        ),
+      }),
+    );
+
+    expect(
+      container.querySelector('[data-testid="plan-composer-decision-panel"]'),
+    ).not.toBeNull();
+    expect(container.textContent).toContain("计划确认");
+    expect(container.querySelector('[data-testid="inputbar-mock"]')).toBeNull();
+  });
+
+  it("非 Plan 决策态仍应把附加面板作为输入区 overlay accessory 渲染", () => {
+    const container = renderHookNode(
+      createDefaultProps({
+        generalWorkbenchEntryPrompt: {
+          title: "继续上次工作",
+          description: "补充上下文后继续。",
+          actionLabel: "继续",
+        },
+      }),
+    );
+
+    expect(
+      container.querySelector('[data-testid="inputbar-mock"]'),
+    ).not.toBeNull();
+    expect(container.textContent).toContain("继续上次工作");
+  });
+
   it("应把工作区 task 偏好映射为 Inputbar plan 受控状态", () => {
     const setChatToolPreferences = vi.fn();
     renderHookNode(

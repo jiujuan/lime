@@ -70,7 +70,7 @@ fn resolve_codex_provider_and_model(
             Ok::<_, String>((item.provider.id, model))
         })
         .transpose()?
-        .ok_or_else(|| "未找到启用且含可用 Key 的 Codex Provider".to_string())
+        .ok_or_else(|| "未找到启用且含可用 Key 的本地 CLI Provider".to_string())
 }
 
 #[tokio::test]
@@ -82,12 +82,12 @@ async fn test_real_codex_stream_emits_tool_events() {
 
     let db = init_database().expect("初始化数据库失败");
     let (provider_id, model_name) =
-        resolve_codex_provider_and_model(&db).expect("解析 Codex Provider/模型失败");
+        resolve_codex_provider_and_model(&db).expect("解析本地 CLI Provider/模型失败");
     let session_id = format!("real-codex-tool-{}", Uuid::new_v4());
 
     let state = AsterAgentState::new();
     state
-        .configure_provider_from_pool(&db, &provider_id, &model_name, &session_id, None)
+        .configure_provider_from_pool(&db, &provider_id, &model_name, &session_id, None, None)
         .await
         .expect("配置 Provider 失败");
 

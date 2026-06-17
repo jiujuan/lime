@@ -1,0 +1,49 @@
+{
+  "$defs": {
+    "ModelRefSource": {
+      "enum": [
+        "direct_provider_config",
+        "explicit",
+        "fallback",
+        "host_options",
+        "oem_policy",
+        "profile_slot",
+        "runtime_options",
+        "session_default",
+        "task"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "modelId": {
+      "type": "string"
+    },
+    "providerId": {
+      "type": "string"
+    },
+    "routingSlot": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "source": {
+      "$ref": "#/$defs/ModelRefSource"
+    },
+    "variant": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "modelId",
+    "providerId",
+    "source"
+  ],
+  "title": "ModelRef",
+  "type": "object"
+}

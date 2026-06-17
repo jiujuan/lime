@@ -6,7 +6,7 @@ import {
 } from "./providerModelCompatibility";
 
 describe("resolveProviderModelCompatibility", () => {
-  it("应将 codex provider 的 gpt-5.3-codex 自动降级到 gpt-5.2-codex", () => {
+  it("应将本地 CLI Provider 的 gpt-5.3-codex 自动降级到 gpt-5.2-codex", () => {
     const result = resolveProviderModelCompatibility({
       providerType: "custom-123",
       configuredProviderType: "codex",
@@ -18,7 +18,7 @@ describe("resolveProviderModelCompatibility", () => {
     expect(result.reason).toContain("gpt-5.2-codex");
   });
 
-  it("非 codex provider 不应调整模型", () => {
+  it("非本地 CLI Provider 不应调整模型", () => {
     const result = resolveProviderModelCompatibility({
       providerType: "anthropic",
       configuredProviderType: "anthropic",
@@ -29,7 +29,7 @@ describe("resolveProviderModelCompatibility", () => {
     expect(result.model).toBe("gpt-5.3-codex");
   });
 
-  it("codex provider 的其他模型不应调整", () => {
+  it("本地 CLI Provider 的其他模型不应调整", () => {
     const result = resolveProviderModelCompatibility({
       providerType: "codex",
       configuredProviderType: "codex",
@@ -48,8 +48,8 @@ describe("resolveProviderModelCompatibility", () => {
     });
 
     expect(issue).toEqual({
-      code: "codex_chatgpt_account_unsupported",
-      message: "当前 Codex 登录态不支持该模型",
+      code: "local_cli_account_model_unsupported",
+      message: "当前本地 CLI 登录态不支持该模型",
       suggestedModel: "gpt-5.2-codex",
     });
   });
@@ -68,8 +68,8 @@ describe("resolveProviderModelCompatibility", () => {
       {
         model: "gpt-5.3-codex",
         issue: {
-          code: "codex_chatgpt_account_unsupported",
-          message: "当前 Codex 登录态不支持该模型",
+          code: "local_cli_account_model_unsupported",
+          message: "当前本地 CLI 登录态不支持该模型",
           suggestedModel: "gpt-5.2-codex",
         },
       },

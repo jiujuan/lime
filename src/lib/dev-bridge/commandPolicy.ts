@@ -52,6 +52,7 @@ const noMockFallbackCompatCommands = new Set<string>([
 ]);
 
 const electronHostNoMockFallbackCommands = new Set([
+  "open_file_preview_window",
   "open_system_settings_url",
   "save_layered_design_project_export",
   "read_layered_design_project_export",
@@ -102,6 +103,7 @@ const devBridgeStartupTruthCommands = new Set([
 ]);
 
 const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
+const APP_SERVER_DRAIN_EVENTS_COMMAND = "app_server_drain_events";
 const APP_SERVER_AGENT_SESSION_LIST_METHOD = "agentSession/list";
 const APP_SERVER_AGENT_TURN_START_METHOD = "agentSession/turn/start";
 const APP_SERVER_AGENT_APP_UI_RUNTIME_START_METHOD = "agentAppUiRuntime/start";
@@ -291,6 +293,9 @@ export function resolveDevBridgeCommandTimeoutProfile(
     return "knowledge-compile";
   }
   if (isAppServerCurrentMethodCommand(command, args)) {
+    return "app-server-read";
+  }
+  if (command === APP_SERVER_DRAIN_EVENTS_COMMAND) {
     return "app-server-read";
   }
   if (command.startsWith("agent_app_runtime_")) {

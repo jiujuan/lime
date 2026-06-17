@@ -477,6 +477,25 @@ pub fn read_file_preview(path: &str, max_size: Option<usize>) -> FilePreview {
     let extension = get_file_extension(&path_buf);
     let is_text = is_text_file(extension.as_deref());
 
+    if document_preview::is_supported_document(&path_buf) {
+        return match document_preview::extract_document_text_from_path(&path_buf, Some(max_size)) {
+            Ok(content) => FilePreview {
+                path: path.to_string(),
+                content: Some(content),
+                is_binary: false,
+                size,
+                error: None,
+            },
+            Err(error) => FilePreview {
+                path: path.to_string(),
+                content: None,
+                is_binary: false,
+                size,
+                error: Some(error.to_string()),
+            },
+        };
+    }
+
     if !is_text {
         return FilePreview {
             path: path.to_string(),
@@ -617,6 +636,7 @@ pub async fn get_file_name(path: String) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
 
     #[test]
     fn test_list_home_directory() {
@@ -665,5 +685,36 @@ mod tests {
         assert!(!is_text_file(Some("png")));
         assert!(!is_text_file(Some("exe")));
         assert!(!is_text_file(None));
+    }
+
+    #[test]
+    fn read_file_preview_extracts_docx_text() {
+        let temp_dir = tempfile::tempdir().expect("应创建临时目录");
+        let docx_path = temp_dir.path().join("demo.docx");
+        let buffer = {
+            let mut buffer = std::io::Cursor::new(Vec::new());
+            {
+                let mut writer = zip::ZipWriter::new(&mut buffer);
+                let options = zip::write::FileOptions::default();
+                writer
+                    .start_file("word/document.xml", options)
+                    .expect("应创建 document.xml");
+                writer
+                    .write_all(
+                        r#"<w:document><w:body><w:p><w:r><w:t>DOCX 正文</w:t></w:r></w:p></w:body></w:document>"#
+                            .as_bytes(),
+                    )
+                    .expect("应写入 document.xml");
+                writer.finish().expect("应完成 docx");
+            }
+            buffer.into_inner()
+        };
+        fs::write(&docx_path, buffer).expect("应写入 docx fixture");
+
+        let preview = read_file_preview(&docx_path.to_string_lossy(), Some(1024));
+
+        assert!(!preview.is_binary);
+        assert_eq!(preview.content.as_deref(), Some("DOCX 正文"));
+        assert!(preview.error.is_none());
     }
 }

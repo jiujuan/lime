@@ -39,6 +39,18 @@ describe("resolveThinkingDisplayParts", () => {
     expect(parts.preview).toBe("");
   });
 
+  it("导入来源回放需要保留原始思考文本", () => {
+    const parts = resolveThinkingDisplayParts(
+      "I need to inspect the test failure first.",
+      false,
+      { preserveSourceText: true },
+    );
+
+    expect(parts.statusLabel).toBe("已完成思考");
+    expect(parts.body).toBe("I need to inspect the test failure first.");
+    expect(parts.preview).toBe("I need to inspect the test failure first.");
+  });
+
   it("应过滤单句英文检索过程短语", () => {
     const parts = resolveThinkingDisplayParts("Searching for news", true);
 

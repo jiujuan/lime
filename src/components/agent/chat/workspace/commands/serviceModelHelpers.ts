@@ -55,25 +55,12 @@ export function resolveServiceModelSendOverrides(params: {
   }
 
   if (!preference && serviceSceneRun) {
-    const sceneModel = typeof serviceSceneRun.model === "string"
-      ? serviceSceneRun.model
-      : undefined;
+    const sceneModel =
+      typeof serviceSceneRun.model === "string"
+        ? serviceSceneRun.model
+        : undefined;
     if (sceneModel) {
       return { modelOverride: sceneModel };
-    }
-    const preferredProviderId =
-      typeof serviceSceneRun.preferred_provider_id === "string"
-        ? serviceSceneRun.preferred_provider_id.trim()
-        : "";
-    const preferredModelId =
-      typeof serviceSceneRun.preferred_model_id === "string"
-        ? serviceSceneRun.preferred_model_id.trim()
-        : "";
-    if (preferredProviderId && preferredModelId) {
-      return {
-        providerOverride: preferredProviderId,
-        modelOverride: preferredModelId,
-      };
     }
   }
 

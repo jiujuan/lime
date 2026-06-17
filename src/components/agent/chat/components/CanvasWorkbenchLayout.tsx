@@ -92,6 +92,7 @@ export type { CanvasWorkbenchPreviewTarget };
 
 export interface CanvasWorkbenchPreviewOpenRequest {
   requestKey: string | number;
+  selectionKey?: string | null;
   filePath?: string | null;
 }
 
@@ -273,6 +274,7 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     loadingDirectories,
     toggleDirectory,
     refreshDirectorySubtree,
+    openDocumentSelection,
     handleSelectWorkspaceFile,
   } = useCanvasWorkbenchDocumentState({
     artifacts,
@@ -410,9 +412,9 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
   );
   const isPreviewOnlyFileOpen = Boolean(
     previewOnlyFilePath &&
-      activeDocumentPaths.some((candidatePath) =>
-        doesPreviewOnlyPathMatch(previewOnlyFilePath, candidatePath),
-      ),
+    activeDocumentPaths.some((candidatePath) =>
+      doesPreviewOnlyPathMatch(previewOnlyFilePath, candidatePath),
+    ),
   );
   const hasReviewSurface =
     isCodingWorkbench || Boolean(changeView) || documentDiffLines.length > 0;
@@ -471,11 +473,25 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     if (!previewOpenRequest) {
       return;
     }
+    const selectionKey = previewOpenRequest.selectionKey?.trim();
+    if (selectionKey) {
+      if (documentContext?.selectionKey !== selectionKey) {
+        setPreviewOnlyFilePath(previewOpenRequest.filePath?.trim() || null);
+        openDocumentSelection(selectionKey);
+        return;
+      }
+      setActiveTab(previewModeState.defaultMode);
+      setPreviewOnlyFilePath(previewOpenRequest.filePath?.trim() || null);
+      onPreviewOpenRequestHandled?.(previewOpenRequest.requestKey);
+      return;
+    }
     setPreviewOnlyFilePath(previewOpenRequest.filePath?.trim() || null);
     setActiveTab(previewModeState.defaultMode);
     onPreviewOpenRequestHandled?.(previewOpenRequest.requestKey);
   }, [
     onPreviewOpenRequestHandled,
+    openDocumentSelection,
+    documentContext?.selectionKey,
     previewModeState.defaultMode,
     previewOpenRequest,
     setActiveTab,
@@ -516,11 +532,7 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
       },
       ...basePrimaryTabs,
     ];
-  }, [
-    basePrimaryTabs,
-    documentContext,
-    previewModeState.defaultMode,
-  ]);
+  }, [basePrimaryTabs, documentContext, previewModeState.defaultMode]);
 
   const handleCopyPath = useCallback(async () => {
     if (!activeSelectionPath) {

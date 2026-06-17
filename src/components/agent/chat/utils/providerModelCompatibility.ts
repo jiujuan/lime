@@ -11,7 +11,7 @@ export interface ProviderModelCompatibilityResult {
 }
 
 export interface ProviderModelCompatibilityIssue {
-  code: "codex_chatgpt_account_unsupported";
+  code: "local_cli_account_model_unsupported";
   message: string;
   suggestedModel?: string;
 }
@@ -29,13 +29,13 @@ export function getProviderModelCompatibilityIssue({
   const normalizedConfiguredType = normalize(configuredProviderType);
   const normalizedModel = normalize(model);
 
-  const isCodexProvider =
+  const isLocalCliProvider =
     normalizedProviderType === "codex" || normalizedConfiguredType === "codex";
 
-  if (isCodexProvider && normalizedModel === "gpt-5.3-codex") {
+  if (isLocalCliProvider && normalizedModel === "gpt-5.3-codex") {
     return {
-      code: "codex_chatgpt_account_unsupported",
-      message: "当前 Codex 登录态不支持该模型",
+      code: "local_cli_account_model_unsupported",
+      message: "当前本地 CLI 登录态不支持该模型",
       suggestedModel: "gpt-5.2-codex",
     };
   }
@@ -57,7 +57,7 @@ export function resolveProviderModelCompatibility({
     return {
       model: issue.suggestedModel,
       changed: true,
-      reason: `当前 Codex 登录态与 ${model} 兼容性不足，已自动切换到 ${issue.suggestedModel}。`,
+      reason: `当前本地 CLI 登录态与 ${model} 兼容性不足，已自动切换到 ${issue.suggestedModel}。`,
     };
   }
 

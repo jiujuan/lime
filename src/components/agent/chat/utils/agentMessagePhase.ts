@@ -15,7 +15,11 @@ export function isAgentMessageCommentaryPhase(
 export function isAgentMessageFinalAnswerPhase(
   phase?: string | null,
 ): boolean {
-  return normalizeAgentMessagePhase(phase) === AGENT_MESSAGE_PHASE_FINAL_ANSWER;
+  const normalized = normalizeAgentMessagePhase(phase);
+  return (
+    normalized === AGENT_MESSAGE_PHASE_FINAL_ANSWER ||
+    normalized === "final"
+  );
 }
 
 export function shouldUseAgentMessageAsFinalText(
@@ -23,7 +27,9 @@ export function shouldUseAgentMessageAsFinalText(
 ): boolean {
   const normalized = normalizeAgentMessagePhase(phase);
   return (
-    normalized === null || normalized === AGENT_MESSAGE_PHASE_FINAL_ANSWER
+    normalized === null ||
+    normalized === AGENT_MESSAGE_PHASE_FINAL_ANSWER ||
+    normalized === "final"
   );
 }
 

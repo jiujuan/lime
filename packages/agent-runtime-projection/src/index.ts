@@ -25,5 +25,6 @@ export * from "./subagents.js";
 export * from "./subagentStatusEvents.js";
 export * from "./threadItems.js";
 export * from "./toolEvents.js";
+export * from "./toolSurface.js";
 export * from "./readModel.js";
 export * from "./uiState.js";

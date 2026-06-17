@@ -78,6 +78,7 @@ import {
   METHOD_CONVERSATION_IMPORT_SOURCE_SCAN,
   METHOD_CONVERSATION_IMPORT_THREAD_COMMIT,
   METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW,
+  METHOD_CONVERSATION_IMPORT_THREAD_RUNTIME_EVENTS_READ,
   METHOD_EVIDENCE_EXPORT,
   METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT,
   METHOD_EXECUTION_PROCESS_INTERRUPT,
@@ -398,6 +399,8 @@ import {
   type ConnectRelayApiKeySaveResponse,
   type ConversationImportSourceScanParams,
   type ConversationImportSourceScanResponse,
+  type ConversationImportThreadRuntimeEventsReadParams,
+  type ConversationImportThreadRuntimeEventsReadResponse,
   type ConversationImportThreadCommitParams,
   type ConversationImportThreadCommitResponse,
   type ConversationImportThreadPreviewParams,
@@ -2126,6 +2129,15 @@ export class AppServerClient {
     params: ConversationImportThreadCommitParams,
   ): JsonRpcRequest {
     return this.request(METHOD_CONVERSATION_IMPORT_THREAD_COMMIT, params);
+  }
+
+  readConversationImportRuntimeEvents(
+    params: ConversationImportThreadRuntimeEventsReadParams,
+  ): JsonRpcRequest {
+    return this.request(
+      METHOD_CONVERSATION_IMPORT_THREAD_RUNTIME_EVENTS_READ,
+      params,
+    );
   }
 
   startTurn(params: AgentSessionTurnStartParams): JsonRpcRequest {
@@ -4743,6 +4755,19 @@ export class AppServerConnection {
     );
   }
 
+  async readConversationImportRuntimeEvents(
+    params: ConversationImportThreadRuntimeEventsReadParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<
+    AppServerRequestResult<ConversationImportThreadRuntimeEventsReadResponse>
+  > {
+    return await this.request<ConversationImportThreadRuntimeEventsReadResponse>(
+      this.client.readConversationImportRuntimeEvents(params),
+      METHOD_CONVERSATION_IMPORT_THREAD_RUNTIME_EVENTS_READ,
+      options,
+    );
+  }
+
   async startTurn(
     params: AgentSessionTurnStartParams,
     options: AppServerRequestOptions = {},
@@ -5648,7 +5673,10 @@ export async function connectAppServerSidecar(
   }
 }
 
-function appendSidecarStderr(error: unknown, stderrLines: readonly string[]): void {
+function appendSidecarStderr(
+  error: unknown,
+  stderrLines: readonly string[],
+): void {
   if (!(error instanceof Error) || stderrLines.length === 0) {
     return;
   }

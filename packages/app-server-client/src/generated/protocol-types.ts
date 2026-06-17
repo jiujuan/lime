@@ -18,15 +18,15 @@ export interface AgentAppCloudReleaseDescriptor {
 }
 
 export interface AgentAppDeleteDataExecutionEvidence {
-  blockedTargets?: (AgentAppDeleteDataTargetEvidence)[];
-  blockerCodes?: (string)[];
+  blockedTargets?: AgentAppDeleteDataTargetEvidence[];
+  blockerCodes?: string[];
   dataRoot: string;
   failedTarget?: AgentAppDeleteDataTargetEvidence | null;
   generatedAt: string;
-  missingTargets?: (AgentAppDeleteDataTargetEvidence)[];
+  missingTargets?: AgentAppDeleteDataTargetEvidence[];
   postDeleteResidualAudit: AgentAppDeleteDataPostDeleteResidualAudit;
-  removedTargets?: (AgentAppDeleteDataTargetEvidence)[];
-  retainedTargets?: (AgentAppDeleteDataTargetEvidence)[];
+  removedTargets?: AgentAppDeleteDataTargetEvidence[];
+  retainedTargets?: AgentAppDeleteDataTargetEvidence[];
   status: string;
 }
 
@@ -35,13 +35,13 @@ export interface AgentAppDeleteDataPostDeleteResidualAudit {
   checkedTargetCount: number;
   failedTarget?: AgentAppDeleteDataTargetEvidence | null;
   remainingTargetCount: number;
-  remainingTargets?: (AgentAppDeleteDataTargetEvidence)[];
+  remainingTargets?: AgentAppDeleteDataTargetEvidence[];
   status: string;
 }
 
 export interface AgentAppDeleteDataTargetEvidence {
   action: string;
-  blockerCodes?: (string)[];
+  blockerCodes?: string[];
   error?: null | string;
   kind: string;
   reason: string;
@@ -60,8 +60,8 @@ export interface AgentAppInstalledDisabledSetParams {
 }
 
 export interface AgentAppInstalledListResponse {
-  issues?: (unknown)[];
-  states?: (unknown)[];
+  issues?: unknown[];
+  states?: unknown[];
 }
 
 export interface AgentAppInstalledSaveParams {
@@ -122,7 +122,7 @@ export interface AgentAppShellPrepareParams {
 
 export interface AgentAppShellPrepareResponse {
   appId?: null | string;
-  blockerCodes?: (string)[];
+  blockerCodes?: string[];
   descriptorVersion?: number | null;
   devShell: boolean;
   entryKey?: null | string;
@@ -178,8 +178,8 @@ export interface AgentAppUninstallRehearsalResponse {
   mode: string;
   packageHash?: null | string;
   retainedTargetCount: number;
-  targets?: (AgentAppUninstallRehearsalTarget)[];
-  warnings?: (string)[];
+  targets?: AgentAppUninstallRehearsalTarget[];
+  warnings?: string[];
 }
 
 export interface AgentAppUninstallRehearsalTarget {
@@ -191,7 +191,7 @@ export interface AgentAppUninstallRehearsalTarget {
 }
 
 export interface AgentAppUninstallResponse {
-  blockerCodes?: (string)[];
+  blockerCodes?: string[];
   deleteEvidence?: AgentAppDeleteDataExecutionEvidence | null;
   list: AgentAppInstalledListResponse;
   missingTargetCount: number;
@@ -218,7 +218,7 @@ export interface AgentEvent {
 }
 
 export interface AgentInput {
-  attachments?: (AgentAttachment)[];
+  attachments?: AgentAttachment[];
   text: string;
 }
 
@@ -262,7 +262,10 @@ export interface AgentSessionActionScope {
   turnId?: null | string;
 }
 
-export type AgentSessionActionType = "ask_user" | "elicitation" | "tool_confirmation";
+export type AgentSessionActionType =
+  | "ask_user"
+  | "elicitation"
+  | "tool_confirmation";
 
 export interface AgentSessionAnalysisHandoffExportParams {
   locale?: null | string;
@@ -272,7 +275,7 @@ export interface AgentSessionAnalysisHandoffExportParams {
 export interface AgentSessionAnalysisHandoffExportResponse {
   analysisAbsoluteRoot: string;
   analysisRelativeRoot: string;
-  artifacts?: (AgentSessionHandoffArtifact)[];
+  artifacts?: AgentSessionHandoffArtifact[];
   copyPrompt: string;
   evidencePackRelativeRoot: string;
   exportedAt: string;
@@ -291,11 +294,11 @@ export interface AgentSessionAnalysisHandoffExportResponse {
 }
 
 export interface AgentSessionArchiveManyParams {
-  sessionIds?: (string)[];
+  sessionIds?: string[];
 }
 
 export interface AgentSessionArchiveManyResponse {
-  sessions?: (AgentSessionOverview)[];
+  sessions?: AgentSessionOverview[];
 }
 
 export interface AgentSessionCompactParams {
@@ -306,7 +309,7 @@ export interface AgentSessionCompactParams {
 export interface AgentSessionCompactResponse {
   compacted: boolean;
   session: AgentSession;
-  turns?: (AgentTurn)[];
+  turns?: AgentTurn[];
 }
 
 export interface AgentSessionEventParams {
@@ -323,8 +326,8 @@ export interface AgentSessionFileCheckpointDetail {
   sessionId: string;
   snapshotPath: string;
   threadId: string;
-  validationIssues?: (string)[];
-  versionHistory?: (unknown)[];
+  validationIssues?: string[];
+  versionHistory?: unknown[];
 }
 
 export interface AgentSessionFileCheckpointDiffParams {
@@ -352,7 +355,7 @@ export interface AgentSessionFileCheckpointListParams {
 
 export interface AgentSessionFileCheckpointListResponse {
   checkpointCount: number;
-  checkpoints?: (AgentSessionFileCheckpointSummary)[];
+  checkpoints?: AgentSessionFileCheckpointSummary[];
   sessionId: string;
   threadId: string;
 }
@@ -411,7 +414,7 @@ export interface AgentSessionHandoffBundleExportParams {
 
 export interface AgentSessionHandoffBundleExportResponse {
   activeSubagentCount: number;
-  artifacts?: (AgentSessionHandoffArtifact)[];
+  artifacts?: AgentSessionHandoffArtifact[];
   bundleAbsoluteRoot: string;
   bundleRelativeRoot: string;
   exportedAt: string;
@@ -438,7 +441,7 @@ export interface AgentSessionListParams {
 }
 
 export interface AgentSessionListResponse {
-  sessions?: (AgentSessionOverview)[];
+  sessions?: AgentSessionOverview[];
 }
 
 export interface AgentSessionObjectiveAuditParams {
@@ -487,7 +490,7 @@ export interface AgentSessionObjectiveSetParams {
   objectiveText: string;
   riskPolicy?: unknown;
   sessionId: string;
-  successCriteria?: (string)[];
+  successCriteria?: string[];
   workspaceId?: null | string;
 }
 
@@ -528,7 +531,7 @@ export interface AgentSessionQueuedTurnPromoteResponse {
   promoted: boolean;
   queuedTurnId: string;
   session: AgentSession;
-  turns?: (AgentTurn)[];
+  turns?: AgentTurn[];
 }
 
 export interface AgentSessionQueuedTurnRemoveParams {
@@ -540,7 +543,7 @@ export interface AgentSessionQueuedTurnRemoveResponse {
   queuedTurnId: string;
   removed: boolean;
   session: AgentSession;
-  turns?: (AgentTurn)[];
+  turns?: AgentTurn[];
 }
 
 export interface AgentSessionReadParams {
@@ -553,7 +556,7 @@ export interface AgentSessionReadParams {
 export interface AgentSessionReadResponse {
   detail?: unknown;
   session: AgentSession;
-  turns?: (AgentTurn)[];
+  turns?: AgentTurn[];
 }
 
 export interface AgentSessionReplayCaseExportParams {
@@ -562,7 +565,7 @@ export interface AgentSessionReplayCaseExportParams {
 }
 
 export interface AgentSessionReplayCaseExportResponse {
-  artifacts?: (AgentSessionHandoffArtifact)[];
+  artifacts?: AgentSessionHandoffArtifact[];
   evidencePackRelativeRoot: string;
   exportedAt: string;
   handoffBundleRelativeRoot: string;
@@ -597,25 +600,25 @@ export interface AgentSessionReviewDecision {
   chosenFixStrategy?: string;
   decisionStatus: string;
   decisionSummary?: string;
-  followupActions?: (string)[];
+  followupActions?: string[];
   humanReviewer?: string;
   notes?: string;
-  regressionRequirements?: (string)[];
+  regressionRequirements?: string[];
   riskLevel: string;
-  riskTags?: (string)[];
+  riskTags?: string[];
 }
 
 export interface AgentSessionReviewDecisionSaveParams {
   chosenFixStrategy?: string;
   decisionStatus: string;
   decisionSummary?: string;
-  followupActions?: (string)[];
+  followupActions?: string[];
   humanReviewer?: string;
   locale?: null | string;
   notes?: string;
-  regressionRequirements?: (string)[];
+  regressionRequirements?: string[];
   riskLevel: string;
-  riskTags?: (string)[];
+  riskTags?: string[];
   sessionId: string;
 }
 
@@ -626,11 +629,11 @@ export interface AgentSessionReviewDecisionTemplateExportParams {
 
 export interface AgentSessionReviewDecisionTemplateExportResponse {
   analysisAbsoluteRoot: string;
-  analysisArtifacts?: (AgentSessionHandoffArtifact)[];
+  analysisArtifacts?: AgentSessionHandoffArtifact[];
   analysisRelativeRoot: string;
-  artifacts?: (AgentSessionHandoffArtifact)[];
+  artifacts?: AgentSessionHandoffArtifact[];
   decision: AgentSessionReviewDecision;
-  decisionStatusOptions?: (string)[];
+  decisionStatusOptions?: string[];
   defaultDecisionStatus: string;
   evidencePackRelativeRoot: string;
   exportedAt: string;
@@ -640,9 +643,9 @@ export interface AgentSessionReviewDecisionTemplateExportResponse {
   queuedTurnCount: number;
   replayCaseRelativeRoot: string;
   reviewAbsoluteRoot: string;
-  reviewChecklist?: (string)[];
+  reviewChecklist?: string[];
   reviewRelativeRoot: string;
-  riskLevelOptions?: (string)[];
+  riskLevelOptions?: string[];
   sessionId: string;
   threadId: string;
   threadStatus: string;
@@ -664,7 +667,13 @@ export interface AgentSessionStartResponse {
   session: AgentSession;
 }
 
-export type AgentSessionStatus = "canceled" | "completed" | "failed" | "idle" | "running" | "waitingAction";
+export type AgentSessionStatus =
+  | "canceled"
+  | "completed"
+  | "failed"
+  | "idle"
+  | "running"
+  | "waitingAction";
 
 export interface AgentSessionThreadResumeParams {
   resumeContract?: RuntimeResumeContract | null;
@@ -674,7 +683,7 @@ export interface AgentSessionThreadResumeParams {
 export interface AgentSessionThreadResumeResponse {
   resumed: boolean;
   session: AgentSession;
-  turns?: (AgentTurn)[];
+  turns?: AgentTurn[];
 }
 
 export interface AgentSessionToolInventoryReadParams {
@@ -734,9 +743,19 @@ export interface AgentTurn {
   turnId: string;
 }
 
-export type AgentTurnStatus = "accepted" | "canceled" | "completed" | "failed" | "queued" | "running" | "waitingAction";
+export type AgentTurnStatus =
+  | "accepted"
+  | "canceled"
+  | "completed"
+  | "failed"
+  | "queued"
+  | "running"
+  | "waitingAction";
 
-export type ArtifactContentStatus = "available" | "notRequested" | "unavailable";
+export type ArtifactContentStatus =
+  | "available"
+  | "notRequested"
+  | "unavailable";
 
 export interface ArtifactReadParams {
   artifactRef?: null | string;
@@ -748,7 +767,7 @@ export interface ArtifactReadParams {
 }
 
 export interface ArtifactReadResponse {
-  artifacts?: (ArtifactSummary)[];
+  artifacts?: ArtifactSummary[];
   nextCursor?: null | string;
 }
 
@@ -765,6 +784,20 @@ export interface ArtifactSummary {
   status?: null | string;
   title?: null | string;
   turnId?: null | string;
+}
+
+export type AuthKind =
+  | "api_key_ref"
+  | "direct_api_key"
+  | "no_auth"
+  | "oem_managed";
+
+export interface AuthMaterialRef {
+  credentialRef?: null | string;
+  headerName?: null | string;
+  headerPrefix?: null | string;
+  kind: AuthKind;
+  providerId?: null | string;
 }
 
 export interface AutomationJobCreateParams {
@@ -788,7 +821,7 @@ export interface AutomationJobIdParams {
 }
 
 export interface AutomationJobListResponse {
-  jobs?: (unknown)[];
+  jobs?: unknown[];
 }
 
 export interface AutomationJobReadResponse {
@@ -801,7 +834,7 @@ export interface AutomationJobRunHistoryParams {
 }
 
 export interface AutomationJobRunHistoryResponse {
-  runs?: (unknown)[];
+  runs?: unknown[];
 }
 
 export interface AutomationJobRunNowResponse {
@@ -857,7 +890,7 @@ export interface BusinessObjectRef {
 export interface CapabilityDescriptor {
   description?: null | string;
   id: string;
-  methods?: (string)[];
+  methods?: string[];
   title: string;
 }
 
@@ -870,9 +903,27 @@ export interface CapabilityListParams {
 }
 
 export interface CapabilityListResponse {
-  capabilities?: (CapabilityDescriptor)[];
+  capabilities?: CapabilityDescriptor[];
   nextCursor?: null | string;
   runtimeCapabilityManifest?: RuntimeCapabilityManifest | null;
+}
+
+export interface CapabilityRequirement {
+  capabilities?: string[];
+  inputModalities?: string[];
+  outputModalities?: string[];
+  runtimeFeatures?: string[];
+  taskFamilies?: string[];
+}
+
+export interface CapabilitySnapshot {
+  capabilities?: ModelCapabilitiesInfo;
+  inputModalities?: string[];
+  outputModalities?: string[];
+  reasonCode?: null | string;
+  runtimeFeatures?: string[];
+  source?: null | string;
+  taskFamilies?: string[];
 }
 
 export interface ChannelProbeParams {
@@ -886,7 +937,7 @@ export interface ChannelProbeResponse {
 }
 
 export interface ClientCapabilities {
-  eventMethods?: (string)[];
+  eventMethods?: string[];
   experimental?: boolean;
 }
 
@@ -982,7 +1033,7 @@ export interface ConversationImportPreviewEvent {
 }
 
 export interface ConversationImportPreviewMessage {
-  attachments?: (AgentAttachment)[];
+  attachments?: AgentAttachment[];
   omittedBytes?: number;
   provenance?: ConversationImportSourceProvenance | null;
   role: string;
@@ -1000,7 +1051,7 @@ export interface ConversationImportPreviewSummary {
   rolloutEventItems: number;
   truncated: boolean;
   unsupportedCount: number;
-  warnings?: (string)[];
+  warnings?: string[];
 }
 
 export type ConversationImportSourceClient = "claude_code" | "codex";
@@ -1030,10 +1081,14 @@ export interface ConversationImportSourceScanParams {
 export interface ConversationImportSourceScanResponse {
   nextCursor?: null | string;
   source: ConversationImportSourceSummary;
-  threads?: (ImportedThreadSummary)[];
+  threads?: ImportedThreadSummary[];
 }
 
-export type ConversationImportSourceStatus = "error" | "missing" | "ready" | "unsupported";
+export type ConversationImportSourceStatus =
+  | "error"
+  | "missing"
+  | "ready"
+  | "unsupported";
 
 export interface ConversationImportSourceSummary {
   indexedAt?: null | string;
@@ -1049,6 +1104,7 @@ export interface ConversationImportSourceSummary {
 export interface ConversationImportThreadCommitParams {
   appId?: null | string;
   confirmed?: boolean;
+  replaceExisting?: boolean | null;
   sourceClient?: ConversationImportSourceClient | null;
   sourcePath?: null | string;
   sourceRoot?: null | string;
@@ -1063,7 +1119,7 @@ export interface ConversationImportThreadCommitResponse {
   session: AgentSession;
   summary: ConversationImportPreviewSummary;
   thread: ImportedThreadSummary;
-  warnings?: (string)[];
+  warnings?: string[];
 }
 
 export interface ConversationImportThreadPreviewParams {
@@ -1075,14 +1131,17 @@ export interface ConversationImportThreadPreviewParams {
 }
 
 export interface ConversationImportThreadPreviewResponse {
-  events?: (ConversationImportPreviewEvent)[];
-  messages?: (ConversationImportPreviewMessage)[];
+  events?: ConversationImportPreviewEvent[];
+  messages?: ConversationImportPreviewMessage[];
   source: ConversationImportSourceSummary;
   summary: ConversationImportPreviewSummary;
   thread: ImportedThreadSummary;
 }
 
-export type ConversationImportThreadStatus = "conflict" | "imported" | "not_imported";
+export type ConversationImportThreadStatus =
+  | "conflict"
+  | "imported"
+  | "not_imported";
 
 export interface DiagnosticsCapabilityRoutingMetricsSnapshot {
   allCandidatesExcludedTotal: number;
@@ -1102,7 +1161,7 @@ export interface DiagnosticsIdempotencyDiagnostics {
 }
 
 export interface DiagnosticsMetricConfig {
-  cacheableStatusCodes?: (number)[];
+  cacheableStatusCodes?: number[];
   enabled: boolean;
   headerName?: null | string;
   maxBodyBytes?: number | null;
@@ -1137,6 +1196,22 @@ export interface DiagnosticsTelemetrySummary {
   totalTokens: number;
 }
 
+export interface EndpointInfo {
+  apiVersion?: null | string;
+  baseUrl?: null | string;
+  kind: EndpointKind;
+  location?: null | string;
+  project?: null | string;
+  region?: null | string;
+}
+
+export type EndpointKind =
+  | "direct_request"
+  | "local"
+  | "oem_gateway"
+  | "openai_compatible"
+  | "provider_base_url";
+
 export interface EvidenceExportParams {
   includeArtifacts?: boolean | null;
   includeEvents?: boolean | null;
@@ -1146,12 +1221,12 @@ export interface EvidenceExportParams {
 }
 
 export interface EvidenceExportResponse {
-  artifacts?: (ArtifactSummary)[];
-  events?: (AgentEvent)[];
+  artifacts?: ArtifactSummary[];
+  events?: AgentEvent[];
   evidencePack?: EvidencePackSummary | null;
   exportedAt: string;
   session: AgentSession;
-  turns?: (AgentTurn)[];
+  turns?: AgentTurn[];
 }
 
 export interface EvidencePackArtifact {
@@ -1163,11 +1238,11 @@ export interface EvidencePackArtifact {
 }
 
 export interface EvidencePackSummary {
-  artifacts?: (EvidencePackArtifact)[];
+  artifacts?: EvidencePackArtifact[];
   completionAuditSummary?: unknown;
   exportedAt: string;
   itemCount: number;
-  knownGaps?: (string)[];
+  knownGaps?: string[];
   latestTurnStatus?: null | string;
   observabilitySummary?: unknown;
   packAbsoluteRoot?: null | string;
@@ -1185,7 +1260,7 @@ export interface ExecutionProcessDrainOutputParams {
 }
 
 export interface ExecutionProcessDrainOutputResponse {
-  deltas?: (ExecutionProcessOutputDelta)[];
+  deltas?: ExecutionProcessOutputDelta[];
 }
 
 export type ExecutionProcessEmptyResponse = Record<string, unknown>;
@@ -1223,7 +1298,7 @@ export interface ExecutionProcessSnapshot {
 
 export interface ExecutionProcessStartParams {
   approvalPolicy?: null | string;
-  command: (string)[];
+  command: string[];
   cwd?: null | string;
   env?: Record<string, unknown>;
   processId: string;
@@ -1238,7 +1313,13 @@ export interface ExecutionProcessStartResponse {
   snapshot: ExecutionProcessSnapshot;
 }
 
-export type ExecutionProcessStatus = "exited" | "failed" | "interrupted" | "running" | "starting" | "terminated";
+export type ExecutionProcessStatus =
+  | "exited"
+  | "failed"
+  | "interrupted"
+  | "running"
+  | "starting"
+  | "terminated";
 
 export interface ExecutionProcessStatusResponse {
   snapshot: ExecutionProcessSnapshot;
@@ -1263,7 +1344,7 @@ export interface FileSystemDeleteFileParams {
 }
 
 export interface FileSystemDirectoryListing {
-  entries?: (FileSystemFileEntry)[];
+  entries?: FileSystemFileEntry[];
   error?: null | string;
   parentPath?: null | string;
   path: string;
@@ -1308,6 +1389,8 @@ export interface FileSystemRenameFileParams {
   oldPath: string;
 }
 
+export type FramingKind = "json" | "ndjson" | "sse";
+
 export interface GalleryMaterial {
   content?: null | string;
   createdAt: number;
@@ -1319,7 +1402,7 @@ export interface GalleryMaterial {
   mimeType?: null | string;
   name: string;
   projectId: string;
-  tags?: (string)[];
+  tags?: string[];
   type: string;
 }
 
@@ -1332,7 +1415,7 @@ export interface GalleryMaterialFilterParams {
 }
 
 export interface GalleryMaterialListResponse {
-  materials?: (GalleryMaterial)[];
+  materials?: GalleryMaterial[];
 }
 
 export interface GalleryMaterialLookupParams {
@@ -1341,7 +1424,7 @@ export interface GalleryMaterialLookupParams {
 
 export interface GalleryMaterialMetadata {
   colorSchemeJson?: null | string;
-  colors?: (string)[];
+  colors?: string[];
   createdAt: number;
   elementCount?: number | null;
   fabricJson?: null | string;
@@ -1360,7 +1443,7 @@ export interface GalleryMaterialMetadata {
 
 export interface GalleryMaterialMetadataCreateParams {
   colorSchemeJson?: null | string;
-  colors?: unknown | null;
+  colors?: string[] | null;
   elementCount?: number | null;
   fabricJson?: null | string;
   height?: number | null;
@@ -1545,22 +1628,22 @@ export interface KnowledgeCompilePackResponse {
   pack: unknown;
   run: unknown;
   selectedSourceCount: number;
-  warnings?: (string)[];
+  warnings?: string[];
 }
 
 export interface KnowledgeContextResolutionResponse {
   fencedContext: string;
   grounding?: null | string;
-  missing?: (string)[];
+  missing?: string[];
   packName: string;
   runId?: null | string;
   runPath?: null | string;
-  selectedFiles?: (string)[];
-  selectedViews?: (unknown)[];
-  sourceAnchors?: (string)[];
+  selectedFiles?: string[];
+  selectedViews?: unknown[];
+  sourceAnchors?: string[];
   status: string;
   tokenEstimate: number;
-  warnings?: (unknown)[];
+  warnings?: unknown[];
 }
 
 export interface KnowledgeImportSourceParams {
@@ -1584,7 +1667,7 @@ export interface KnowledgeListPacksParams {
 }
 
 export interface KnowledgeListPacksResponse {
-  packs?: (unknown)[];
+  packs?: unknown[];
   rootPath: string;
   workingDir: string;
 }
@@ -1607,7 +1690,7 @@ export interface KnowledgeResolveContextParams {
   activation?: null | string;
   maxChars?: number | null;
   name: string;
-  packs?: (KnowledgeResolveContextPackParams)[];
+  packs?: KnowledgeResolveContextPackParams[];
   runReason?: null | string;
   task?: null | string;
   workingDir: string;
@@ -1643,11 +1726,11 @@ export interface KnowledgeValidateContextRunParams {
 }
 
 export interface KnowledgeValidateContextRunResponse {
-  errors?: (string)[];
+  errors?: string[];
   runId?: null | string;
   status?: null | string;
   valid: boolean;
-  warnings?: (string)[];
+  warnings?: string[];
 }
 
 export interface LogArtifactEntry {
@@ -1669,7 +1752,7 @@ export interface LogEntry {
 }
 
 export interface LogListResponse {
-  entries?: (LogEntry)[];
+  entries?: LogEntry[];
 }
 
 export interface LogPersistedTailParams {
@@ -1677,7 +1760,7 @@ export interface LogPersistedTailParams {
 }
 
 export interface LogPersistedTailResponse {
-  entries?: (LogEntry)[];
+  entries?: LogEntry[];
 }
 
 export interface LogStorageDiagnosticsResponse {
@@ -1686,8 +1769,8 @@ export interface LogStorageDiagnosticsResponse {
   currentLogSizeBytes?: number | null;
   inMemoryLogCount: number;
   logDirectory?: null | string;
-  rawResponseFiles?: (LogArtifactEntry)[];
-  relatedLogFiles?: (LogArtifactEntry)[];
+  rawResponseFiles?: LogArtifactEntry[];
+  relatedLogFiles?: LogArtifactEntry[];
 }
 
 export interface ManagedObjective {
@@ -1696,7 +1779,7 @@ export interface ManagedObjective {
   budgetPolicy?: unknown;
   continuationPolicy?: unknown;
   createdAt: string;
-  lastArtifactRefs?: (string)[];
+  lastArtifactRefs?: string[];
   lastAuditSummary?: null | string;
   lastEvidencePackRef?: null | string;
   objectiveId: string;
@@ -1705,26 +1788,37 @@ export interface ManagedObjective {
   ownerKind: string;
   riskPolicy?: unknown;
   status: ManagedObjectiveStatus;
-  successCriteria?: (string)[];
+  successCriteria?: string[];
   updatedAt: string;
   workspaceId?: null | string;
 }
 
-export type ManagedObjectiveStatus = "active" | "blocked" | "budget_limited" | "completed" | "failed" | "needs_input" | "paused" | "verifying";
+export type ManagedObjectiveStatus =
+  | "active"
+  | "blocked"
+  | "budget_limited"
+  | "completed"
+  | "failed"
+  | "needs_input"
+  | "paused"
+  | "verifying";
 
-export type McpContent = {
-  text: string;
-  type: "text";
-} | {
-  data: string;
-  mime_type: string;
-  type: "image";
-} | {
-  blob?: null | string;
-  text?: null | string;
-  type: "resource";
-  uri: string;
-};
+export type McpContent =
+  | {
+      text: string;
+      type: "text";
+    }
+  | {
+      data: string;
+      mime_type: string;
+      type: "image";
+    }
+  | {
+      blob?: null | string;
+      text?: null | string;
+      type: "resource";
+      uri: string;
+    };
 
 export interface McpPromptGetParams {
   arguments?: Record<string, unknown>;
@@ -1733,11 +1827,11 @@ export interface McpPromptGetParams {
 
 export interface McpPromptGetResponse {
   description?: null | string;
-  messages?: (McpPromptMessage)[];
+  messages?: McpPromptMessage[];
 }
 
 export interface McpPromptListResponse {
-  prompts?: (unknown)[];
+  prompts?: unknown[];
 }
 
 export interface McpPromptMessage {
@@ -1746,7 +1840,7 @@ export interface McpPromptMessage {
 }
 
 export interface McpResourceListResponse {
-  resources?: (unknown)[];
+  resources?: unknown[];
 }
 
 export interface McpResourceReadParams {
@@ -1780,13 +1874,13 @@ export interface McpServerImportFromAppParams {
 
 export interface McpServerImportFromAppResponse {
   importedCount: number;
-  servers?: (unknown)[];
+  servers?: unknown[];
 }
 
 export type McpServerLifecycleResponse = Record<string, unknown>;
 
 export interface McpServerListResponse {
-  servers?: (unknown)[];
+  servers?: unknown[];
 }
 
 export interface McpServerStartParams {
@@ -1794,7 +1888,7 @@ export interface McpServerStartParams {
 }
 
 export interface McpServerStatusListResponse {
-  servers?: (unknown)[];
+  servers?: unknown[];
 }
 
 export interface McpServerStopParams {
@@ -1811,7 +1905,7 @@ export interface McpToolCallParams {
 }
 
 export interface McpToolCallResponse {
-  content?: (McpContent)[];
+  content?: McpContent[];
   is_error: boolean;
 }
 
@@ -1827,7 +1921,7 @@ export interface McpToolListForContextParams {
 }
 
 export interface McpToolListResponse {
-  tools?: (unknown)[];
+  tools?: unknown[];
 }
 
 export interface McpToolSearchParams {
@@ -1861,7 +1955,7 @@ export interface MediaTaskArtifactAudioCreateParams {
   providerId?: null | string;
   rawText?: null | string;
   requestedTarget?: null | string;
-  requiredCapabilities?: (string)[];
+  requiredCapabilities?: string[];
   routingSlot?: null | string;
   runtimeContract?: unknown;
   sessionId?: null | string;
@@ -1896,15 +1990,15 @@ export interface MediaTaskArtifactImageCreateParams {
   prompt: string;
   providerId?: null | string;
   rawText?: null | string;
-  referenceImages?: (string)[];
+  referenceImages?: string[];
   requestedTarget?: null | string;
-  requiredCapabilities?: (string)[];
+  requiredCapabilities?: string[];
   routingSlot?: null | string;
   runtimeContract?: unknown;
   sessionId?: null | string;
   size?: null | string;
   slotId?: null | string;
-  storyboardSlots?: (ImageStoryboardSlotInput)[];
+  storyboardSlots?: ImageStoryboardSlotInput[];
   style?: null | string;
   targetOutputId?: null | string;
   targetOutputRefId?: null | string;
@@ -1940,7 +2034,7 @@ export interface MediaTaskArtifactListResponse {
   filters: MediaTaskArtifactListFilters;
   modality_runtime_contracts?: unknown;
   success: boolean;
-  tasks?: (MediaTaskArtifactResponse)[];
+  tasks?: MediaTaskArtifactResponse[];
   total: number;
   workspace_root: string;
 }
@@ -1986,7 +2080,7 @@ export interface MediaTaskArtifactVideoCreateParams {
   providerId?: null | string;
   rawText?: null | string;
   requestedTarget?: null | string;
-  requiredCapabilities?: (string)[];
+  requiredCapabilities?: string[];
   resolution?: null | string;
   routingSlot?: null | string;
   runtimeContract?: unknown;
@@ -1997,17 +2091,55 @@ export interface MediaTaskArtifactVideoCreateParams {
   turnId?: null | string;
 }
 
+export interface ModelCapabilitiesInfo {
+  functionCalling: boolean;
+  jsonMode: boolean;
+  reasoning: boolean;
+  reasoningEffort?: unknown;
+  streaming: boolean;
+  tools: boolean;
+  vision: boolean;
+}
+
+export interface ModelInfo {
+  aliasSource?: null | string;
+  canonicalModelId?: null | string;
+  capabilities?: ModelCapabilitiesInfo;
+  createdAt: number;
+  deploymentSource: string;
+  description?: null | string;
+  displayName: string;
+  family?: null | string;
+  id: string;
+  inputModalities?: string[];
+  isLatest?: boolean;
+  limits: unknown;
+  managementPlane: string;
+  outputModalities?: string[];
+  pricing?: unknown;
+  providerId: string;
+  providerModelId?: null | string;
+  providerName: string;
+  releaseDate?: null | string;
+  runtimeFeatures?: string[];
+  source: string;
+  status: string;
+  taskFamilies?: string[];
+  tier: string;
+  updatedAt: number;
+}
+
 export interface ModelListParams {
   providerId?: null | string;
   tier?: null | string;
 }
 
 export interface ModelListResponse {
-  models?: (unknown)[];
+  models?: ModelInfo[];
 }
 
 export interface ModelPreferencesListResponse {
-  preferences?: (unknown)[];
+  preferences?: unknown[];
 }
 
 export interface ModelProviderAliasListResponse {
@@ -2023,7 +2155,7 @@ export interface ModelProviderAliasReadResponse {
 }
 
 export interface ModelProviderCatalogListResponse {
-  providers?: (unknown)[];
+  providers?: ProviderInfo[];
 }
 
 export interface ModelProviderConfigExportParams {
@@ -2039,7 +2171,7 @@ export interface ModelProviderConfigImportParams {
 }
 
 export interface ModelProviderConfigImportResponse {
-  errors?: (string)[];
+  errors?: string[];
   importedApiKeys: number;
   importedProviders: number;
   skippedProviders: number;
@@ -2047,7 +2179,14 @@ export interface ModelProviderConfigImportResponse {
 }
 
 export interface ModelProviderCreateParams {
-  provider: unknown;
+  apiHost: string;
+  apiVersion?: null | string;
+  location?: null | string;
+  name: string;
+  project?: null | string;
+  promptCacheMode?: null | string;
+  providerType: string;
+  region?: null | string;
 }
 
 export interface ModelProviderDeleteParams {
@@ -2067,7 +2206,7 @@ export interface ModelProviderFetchModelsResponse {
   error?: null | string;
   errorKind?: null | string;
   fromCache: boolean;
-  models?: (unknown)[];
+  models?: ModelInfo[];
   requestUrl?: null | string;
   shouldPromptError: boolean;
   source: string;
@@ -2108,11 +2247,11 @@ export interface ModelProviderKeyUpdateParams {
 }
 
 export interface ModelProviderKeyWriteResponse {
-  key: unknown;
+  key: ProviderKeyInfo;
 }
 
 export interface ModelProviderListResponse {
-  providers?: (unknown)[];
+  providers?: ProviderInfo[];
 }
 
 export type ModelProviderMutationResponse = Record<string, unknown>;
@@ -2122,7 +2261,7 @@ export interface ModelProviderReadParams {
 }
 
 export interface ModelProviderReadResponse {
-  provider?: unknown;
+  provider?: ProviderInfo | null;
 }
 
 export interface ModelProviderSortOrderItem {
@@ -2131,7 +2270,7 @@ export interface ModelProviderSortOrderItem {
 }
 
 export interface ModelProviderSortOrdersUpdateParams {
-  sortOrders?: (ModelProviderSortOrderItem)[];
+  sortOrders?: ModelProviderSortOrderItem[];
 }
 
 export interface ModelProviderTestChatParams {
@@ -2156,7 +2295,7 @@ export interface ModelProviderTestConnectionParams {
 export interface ModelProviderTestConnectionResponse {
   error?: null | string;
   latencyMs?: number | null;
-  models?: unknown | null;
+  models?: string[] | null;
   success: boolean;
 }
 
@@ -2174,17 +2313,78 @@ export interface ModelProviderUiStateWriteParams {
 }
 
 export interface ModelProviderUpdateParams {
-  patch: unknown;
+  apiHost?: null | string;
+  apiVersion?: null | string;
+  customModels?: string[] | null;
+  enabled?: boolean | null;
+  location?: null | string;
+  name?: null | string;
+  project?: null | string;
+  promptCacheMode?: null | string;
   providerId: string;
+  providerType?: null | string;
+  region?: null | string;
+  sortOrder?: number | null;
 }
 
 export interface ModelProviderWriteResponse {
-  provider: unknown;
+  provider: ProviderInfo;
 }
+
+export interface ModelRef {
+  modelId: string;
+  providerId: string;
+  routingSlot?: null | string;
+  source: ModelRefSource;
+  variant?: null | string;
+}
+
+export type ModelRefSource =
+  | "direct_provider_config"
+  | "explicit"
+  | "fallback"
+  | "host_options"
+  | "oem_policy"
+  | "profile_slot"
+  | "runtime_options"
+  | "session_default"
+  | "task";
 
 export interface ModelSyncStateReadResponse {
   syncState: unknown;
 }
+
+export type ModelTaskKind =
+  | "chat"
+  | "embedding"
+  | "image_edit"
+  | "image_generate"
+  | "moderation"
+  | "rerank"
+  | "transcription_generate"
+  | "video_generate"
+  | "voice_generate";
+
+export interface ModelTaskRequest {
+  contentId?: null | string;
+  modalityContractKey?: null | string;
+  modelRef?: ModelRef | null;
+  requirements: CapabilityRequirement;
+  routingSlot?: null | string;
+  sessionId?: null | string;
+  source: ModelTaskSource;
+  taskKind: ModelTaskKind;
+  threadId?: null | string;
+  traceId?: null | string;
+  turnId?: null | string;
+}
+
+export type ModelTaskSource =
+  | "agent_app"
+  | "agent_turn"
+  | "automation"
+  | "media_task_artifact"
+  | "provider_probe";
 
 export interface OpenDeepLinkPayload {
   action?: null | string;
@@ -2224,13 +2424,18 @@ export interface ProjectGitCommitListParams {
 }
 
 export interface ProjectGitCommitListResponse {
-  commits?: (ProjectGitCommit)[];
+  commits?: ProjectGitCommit[];
   hasGitRepository: boolean;
   repositoryRoot?: null | string;
   rootPath: string;
 }
 
-export type ProjectGitDiffBase = "branch" | "commit" | "previousConversation" | "staged" | "unstaged";
+export type ProjectGitDiffBase =
+  | "branch"
+  | "commit"
+  | "previousConversation"
+  | "staged"
+  | "unstaged";
 
 export interface ProjectGitDiffParams {
   base?: ProjectGitDiffBase | null;
@@ -2254,7 +2459,7 @@ export interface ProjectGitStatusParams {
 }
 
 export interface ProjectGitStatusResponse {
-  branches?: (string)[];
+  branches?: string[];
   currentBranch?: null | string;
   hasGitRepository: boolean;
   repositoryRoot?: null | string;
@@ -2294,7 +2499,7 @@ export interface ProjectMaterial {
   mimeType?: null | string;
   name: string;
   projectId: string;
-  tags?: (string)[];
+  tags?: string[];
   type: string;
 }
 
@@ -2310,7 +2515,7 @@ export type ProjectMaterialDeleteResponse = Record<string, unknown>;
 
 export interface ProjectMaterialFilter {
   searchQuery?: null | string;
-  tags?: unknown | null;
+  tags?: string[] | null;
   type?: null | string;
 }
 
@@ -2318,7 +2523,7 @@ export interface ProjectMaterialImportFromUrlParams {
   description?: null | string;
   name: string;
   projectId: string;
-  tags?: unknown | null;
+  tags?: string[] | null;
   type: string;
   url: string;
 }
@@ -2329,7 +2534,7 @@ export interface ProjectMaterialListParams {
 }
 
 export interface ProjectMaterialListResponse {
-  materials?: (ProjectMaterial)[];
+  materials?: ProjectMaterial[];
 }
 
 export interface ProjectMaterialLookupParams {
@@ -2343,7 +2548,7 @@ export interface ProjectMaterialResponse {
 export interface ProjectMaterialUpdate {
   description?: null | string;
   name?: null | string;
-  tags?: unknown | null;
+  tags?: string[] | null;
 }
 
 export interface ProjectMaterialUpdateParams {
@@ -2357,7 +2562,7 @@ export interface ProjectMaterialUploadParams {
   filePath?: null | string;
   name: string;
   projectId: string;
-  tags?: unknown | null;
+  tags?: string[] | null;
   type: string;
 }
 
@@ -2377,24 +2582,27 @@ export interface ProjectShellSessionDrainEventsParams {
 }
 
 export interface ProjectShellSessionDrainEventsResponse {
-  events?: (ProjectShellSessionEvent)[];
+  events?: ProjectShellSessionEvent[];
 }
 
-export type ProjectShellSessionEvent = {
-  data: string;
-  session_id: string;
-  stream: ProjectShellSessionStream;
-  type: "data";
-} | {
-  exit_code?: number | null;
-  session_id: string;
-  signal?: null | string;
-  type: "exit";
-} | {
-  message: string;
-  session_id: string;
-  type: "error";
-};
+export type ProjectShellSessionEvent =
+  | {
+      data: string;
+      session_id: string;
+      stream: ProjectShellSessionStream;
+      type: "data";
+    }
+  | {
+      exit_code?: number | null;
+      session_id: string;
+      signal?: null | string;
+      type: "exit";
+    }
+  | {
+      message: string;
+      session_id: string;
+      type: "error";
+    };
 
 export interface ProjectShellSessionKillParams {
   sessionId: string;
@@ -2429,6 +2637,108 @@ export interface ProjectShellSessionWriteParams {
   sessionId: string;
 }
 
+export type ProtocolKind =
+  | "anthropic_messages"
+  | "bedrock_converse"
+  | "codex_responses"
+  | "fal"
+  | "gemini_generate_content"
+  | "ollama_chat"
+  | "openai_chat"
+  | "openai_images"
+  | "openai_responses"
+  | "unknown"
+  | "vertex_gemini";
+
+export interface ProviderInfo {
+  apiHost: string;
+  apiKeyCount: number;
+  apiKeys?: ProviderKeyInfo[];
+  apiVersion?: null | string;
+  createdAt?: null | string;
+  customModels?: string[];
+  enabled: boolean;
+  group: string;
+  id: string;
+  isSystem: boolean;
+  legacyIds?: string[];
+  location?: null | string;
+  name: string;
+  project?: null | string;
+  promptCacheMode?: null | string;
+  providerType: string;
+  region?: null | string;
+  sortOrder: number;
+  updatedAt?: null | string;
+}
+
+export interface ProviderKeyInfo {
+  alias?: null | string;
+  apiKeyMasked: string;
+  createdAt: string;
+  enabled: boolean;
+  errorCount: number;
+  id: string;
+  lastUsedAt?: null | string;
+  providerId: string;
+  usageCount: number;
+}
+
+export interface ResolvedModelRoute {
+  auth: AuthMaterialRef;
+  capabilitySnapshot: CapabilitySnapshot;
+  decision: RoutingDecision;
+  defaults: RouteDefaults;
+  endpoint: EndpointInfo;
+  failure?: RouteFailure | null;
+  framing: FramingKind;
+  model?: ModelInfo | null;
+  modelRef: ModelRef;
+  protocol: ProtocolKind;
+  provider?: ProviderInfo | null;
+  transport: TransportKind;
+}
+
+export interface RouteDefaults {
+  forceResponsesApi?: boolean | null;
+  promptCacheMode?: null | string;
+  reasoningEffort?: null | string;
+  toolshim?: boolean | null;
+  toolshimModel?: null | string;
+}
+
+export interface RouteFailure {
+  capabilityGap?: null | string;
+  category: RouteFailureCategory;
+  message?: null | string;
+  modelId?: null | string;
+  providerId?: null | string;
+  reasonCode: string;
+  retryable?: boolean;
+}
+
+export type RouteFailureCategory =
+  | "capability_gap"
+  | "internal_error"
+  | "missing_credential"
+  | "model_unavailable"
+  | "no_candidate"
+  | "provider_disabled"
+  | "provider_needs_setup"
+  | "unsupported_endpoint"
+  | "unsupported_protocol";
+
+export interface RoutingDecision {
+  candidateCount?: number;
+  capabilityGap?: null | string;
+  decisionReason: string;
+  decisionSource: string;
+  fallbackChain?: string[];
+  routingMode: string;
+  serviceModelSlot?: null | string;
+  settingsSource?: null | string;
+}
+
 export interface RuntimeCapabilityEntry {
   detail?: null | string;
   id: string;
@@ -2440,7 +2750,7 @@ export interface RuntimeCapabilityEntry {
 }
 
 export interface RuntimeCapabilityManifest {
-  capabilities?: (RuntimeCapabilityEntry)[];
+  capabilities?: RuntimeCapabilityEntry[];
   generatedAt: string;
   providerId?: null | string;
   runtimeId: string;
@@ -2471,9 +2781,9 @@ export interface RuntimeResumeActionDecision {
 
 export interface RuntimeResumeContract {
   createdAt: string;
-  decisions?: (RuntimeResumeActionDecision)[];
+  decisions?: RuntimeResumeActionDecision[];
   expiresAt?: null | string;
-  openActionIds?: (string)[];
+  openActionIds?: string[];
   resumeMode: string;
   runtimeId: string;
   schemaVersion: string;
@@ -2530,7 +2840,7 @@ export interface SessionFileIdParams {
 }
 
 export interface SessionFileListResponse {
-  files?: (SessionFileEntry)[];
+  files?: SessionFileEntry[];
 }
 
 export interface SessionFileMeta {
@@ -2584,11 +2894,11 @@ export interface SkillDownloadInstallResponse {
 }
 
 export interface SkillInstalledDirectoriesListResponse {
-  directories?: (string)[];
+  directories?: string[];
 }
 
 export interface SkillListResponse {
-  skills?: (unknown)[];
+  skills?: unknown[];
 }
 
 export interface SkillLocalDetailInspectParams {
@@ -2598,7 +2908,7 @@ export interface SkillLocalDetailInspectParams {
 
 export interface SkillLocalDetailInspectResponse {
   directory: string;
-  files?: (unknown)[];
+  files?: unknown[];
   inspection: unknown;
 }
 
@@ -2658,11 +2968,11 @@ export interface SkillMarketplaceBundleFile {
 }
 
 export interface SkillMarketplaceInstallParams {
-  aliases?: (string)[];
+  aliases?: string[];
   app: string;
   contentHash?: string;
   fileCount?: number;
-  files?: (SkillMarketplaceBundleFile)[];
+  files?: SkillMarketplaceBundleFile[];
   manifestVersion: string;
   name: string;
   version: string;
@@ -2693,7 +3003,7 @@ export interface SkillPackageLocalInspectParams {
 
 export interface SkillPackageLocalInspectResponse {
   directory: string;
-  files?: (unknown)[];
+  files?: unknown[];
   inspection: unknown;
 }
 
@@ -2751,7 +3061,7 @@ export interface SkillRepositoryEntry {
 }
 
 export interface SkillRepositoryListResponse {
-  repos?: (SkillRepositoryEntry)[];
+  repos?: SkillRepositoryEntry[];
 }
 
 export interface SkillRepositorySaveParams {
@@ -2780,11 +3090,13 @@ export interface StructuredOutputContract {
 export interface SupportBundleExportResponse {
   bundlePath: string;
   generatedAt: string;
-  includedSections?: (string)[];
-  omittedSections?: (string)[];
+  includedSections?: string[];
+  omittedSections?: string[];
   outputDirectory: string;
   platform: string;
 }
+
+export type TransportKind = "http" | "local_process" | "sidecar";
 
 export interface UnifiedMemory {
   archived: boolean;
@@ -2796,7 +3108,7 @@ export interface UnifiedMemory {
   metadata: UnifiedMemoryMetadata;
   session_id: string;
   summary: string;
-  tags?: (string)[];
+  tags?: string[];
   title: string;
   updated_at: number;
 }
@@ -2813,7 +3125,12 @@ export interface UnifiedMemoryAnalyzeParams {
   to_timestamp?: number | null;
 }
 
-export type UnifiedMemoryCategory = "activity" | "context" | "experience" | "identity" | "preference";
+export type UnifiedMemoryCategory =
+  | "activity"
+  | "context"
+  | "experience"
+  | "identity"
+  | "preference";
 
 export interface UnifiedMemoryCategoryCount {
   category: UnifiedMemoryCategory;
@@ -2831,7 +3148,7 @@ export interface UnifiedMemoryCreateRequest {
   importance?: number | null;
   session_id: string;
   summary: string;
-  tags?: unknown | null;
+  tags?: string[] | null;
   title: string;
 }
 
@@ -2880,13 +3197,13 @@ export interface UnifiedMemoryListParams {
 }
 
 export interface UnifiedMemoryListResponse {
-  memories?: (UnifiedMemory)[];
+  memories?: UnifiedMemory[];
 }
 
 export interface UnifiedMemoryMetadata {
   access_count: number;
   confidence: number;
-  embedding?: unknown | null;
+  embedding?: number[] | null;
   importance: number;
   last_accessed_at?: number | null;
   source: UnifiedMemorySource;
@@ -2912,7 +3229,7 @@ export interface UnifiedMemorySemanticSearchParams {
 export type UnifiedMemorySource = "auto_extracted" | "imported" | "manual";
 
 export interface UnifiedMemoryStatsResponse {
-  categories?: (UnifiedMemoryCategoryCount)[];
+  categories?: UnifiedMemoryCategoryCount[];
   memory_count: number;
   storage_used: number;
   total_entries: number;
@@ -2930,7 +3247,7 @@ export interface UnifiedMemoryUpdateRequest {
   content?: null | string;
   importance?: number | null;
   summary?: null | string;
-  tags?: unknown | null;
+  tags?: string[] | null;
   title?: null | string;
 }
 
@@ -2939,7 +3256,7 @@ export interface UnifiedMemoryWriteResponse {
 }
 
 export interface UsageStatsDailyTrendsListResponse {
-  trends?: (UsageStatsDailyUsage)[];
+  trends?: UsageStatsDailyUsage[];
 }
 
 export interface UsageStatsDailyUsage {
@@ -2949,7 +3266,7 @@ export interface UsageStatsDailyUsage {
 }
 
 export interface UsageStatsModelRankingListResponse {
-  ranking?: (UsageStatsModelUsage)[];
+  ranking?: UsageStatsModelUsage[];
 }
 
 export interface UsageStatsModelUsage {
@@ -3017,7 +3334,7 @@ export interface VoiceAsrCredentialIdParams {
 }
 
 export interface VoiceAsrCredentialListResponse {
-  credentials?: (VoiceAsrCredential)[];
+  credentials?: VoiceAsrCredential[];
 }
 
 export type VoiceAsrCredentialMutationResponse = Record<string, unknown>;
@@ -3041,7 +3358,12 @@ export interface VoiceAsrOpenAiConfig {
   proxy_url?: null | string;
 }
 
-export type VoiceAsrProviderType = "baidu" | "openai" | "sense_voice_local" | "whisper_local" | "xunfei";
+export type VoiceAsrProviderType =
+  | "baidu"
+  | "openai"
+  | "sense_voice_local"
+  | "whisper_local"
+  | "xunfei";
 
 export interface VoiceAsrSenseVoiceLocalConfig {
   model_dir?: null | string;
@@ -3079,7 +3401,7 @@ export interface VoiceInstructionIdParams {
 }
 
 export interface VoiceInstructionListResponse {
-  instructions?: (VoiceInstruction)[];
+  instructions?: VoiceInstruction[];
 }
 
 export type VoiceInstructionMutationResponse = Record<string, unknown>;
@@ -3110,7 +3432,7 @@ export interface VoiceModelTestTranscribeFileResponse {
 }
 
 export interface WechatChannelAccountListResponse {
-  accounts?: (WechatConfiguredAccount)[];
+  accounts?: WechatConfiguredAccount[];
 }
 
 export interface WechatChannelAccountRemoveParams {
@@ -3177,7 +3499,7 @@ export interface WindowsStartupCheck {
 
 export interface WindowsStartupDiagnosticsResponse {
   appDataDir?: null | string;
-  checks?: (WindowsStartupCheck)[];
+  checks?: WindowsStartupCheck[];
   comspecEnv?: null | string;
   currentDir?: null | string;
   currentExe?: null | string;
@@ -3225,7 +3547,7 @@ export interface WorkspaceEnsureReadyResponse {
 }
 
 export interface WorkspaceListResponse {
-  workspaces?: (unknown)[];
+  workspaces?: unknown[];
 }
 
 export interface WorkspacePathReadParams {
@@ -3258,7 +3580,7 @@ export interface WorkspaceRegisteredSkillsListParams {
 }
 
 export interface WorkspaceRegisteredSkillsListResponse {
-  skills?: (unknown)[];
+  skills?: unknown[];
 }
 
 export interface WorkspaceSkillBindingsListParams {
@@ -3282,7 +3604,7 @@ export interface WorkspaceUpdateParams {
   name?: null | string;
   rootPath?: null | string;
   settings?: unknown;
-  tags?: unknown | null;
+  tags?: string[] | null;
 }
 
 export interface WorkspaceUpdateResponse {
@@ -3316,4 +3638,33 @@ export interface jsonRpcResponse {
 
 export type requestId = number | string;
 
-export type AgentSessionCwdFilter = string | (string)[];
+export interface ConversationImportRuntimeEventDetail {
+  eventIndex: number;
+  eventType: string;
+  payload: unknown;
+  sourceEventIndex: number;
+  turnIndex: number;
+}
+
+export interface ConversationImportThreadRuntimeEventsReadParams {
+  eventType?: null | string;
+  limit?: number;
+  offset?: number;
+  sessionId: string;
+  turnIndex?: number;
+}
+
+export interface ConversationImportThreadRuntimeEventsReadResponse {
+  events?: ConversationImportRuntimeEventDetail[];
+  limit: number;
+  materializedRuntimeEvents: number;
+  nextOffset?: number | null;
+  offset: number;
+  projection?: unknown;
+  sessionId: string;
+  sidecarRuntimeEvents: number;
+  sourceRuntimeEvents: number;
+  totalEvents: number;
+}
+
+export type AgentSessionCwdFilter = string | string[];

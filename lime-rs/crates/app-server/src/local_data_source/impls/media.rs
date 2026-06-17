@@ -7,7 +7,14 @@ impl MediaAppDataSource for LocalAppDataSource {
         &self,
         params: MediaTaskArtifactImageCreateParams,
     ) -> Result<MediaTaskArtifactResponse, RuntimeCoreError> {
-        media_tasks::create_image_media_task_artifact(params).map_err(data_error)
+        let route_assessment = media_tasks::assess_image_route(
+            &self.db,
+            &self.api_key_provider_service,
+            &self.model_registry_service,
+            &params,
+        )
+        .await;
+        media_tasks::create_image_media_task_artifact(params, route_assessment).map_err(data_error)
     }
 
     async fn create_audio_media_task_artifact(
@@ -21,7 +28,14 @@ impl MediaAppDataSource for LocalAppDataSource {
         &self,
         params: MediaTaskArtifactVideoCreateParams,
     ) -> Result<MediaTaskArtifactResponse, RuntimeCoreError> {
-        media_tasks::create_video_media_task_artifact(params).map_err(data_error)
+        let route_assessment = media_tasks::assess_video_route(
+            &self.db,
+            &self.api_key_provider_service,
+            &self.model_registry_service,
+            &params,
+        )
+        .await;
+        media_tasks::create_video_media_task_artifact(params, route_assessment).map_err(data_error)
     }
 
     async fn complete_audio_media_task_artifact(

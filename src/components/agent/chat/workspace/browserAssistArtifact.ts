@@ -4,7 +4,10 @@ import { mergeArtifacts } from "../utils/messageArtifacts";
 export const GENERAL_BROWSER_ASSIST_ARTIFACT_ID = "browser-assist:general";
 
 function shouldPreserveGeneralArtifact(artifact: Artifact): boolean {
-  return artifact.meta.persistOutsideMessages === true;
+  return (
+    artifact.meta.persistOutsideMessages === true ||
+    artifact.meta.previewArtifact === true
+  );
 }
 
 export function asRecord(value: unknown): Record<string, unknown> | null {

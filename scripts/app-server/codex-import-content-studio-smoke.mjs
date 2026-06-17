@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import { access, stat } from "node:fs/promises";
-import { homedir } from "node:os";
+import { access, mkdtemp, rm, stat } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -45,8 +45,8 @@ async function main() {
     path.join(homedir(), ".codex");
 
   await assertDirectory(projectPath, "Codex import smoke project path");
-  await assertDirectory(sourceRoot, "Codex home");
-  await assertFile(path.join(sourceRoot, "state_5.sqlite"), "Codex state DB");
+  await assertDirectory(sourceRoot, "source home");
+  await assertFile(path.join(sourceRoot, "state_5.sqlite"), "source state DB");
 
   const binaryResolution = resolveSidecarBinaryPath({
     devBinaryPath,
@@ -68,14 +68,15 @@ async function main() {
   const readTimeoutMs = Number(
     process.env.CODEX_IMPORT_SMOKE_READ_TIMEOUT_MS || 30_000,
   );
+  const dataDir = await resolveSmokeDataDir();
 
   console.log(
-    `[smoke:codex-import-content-studio] using app-server=${binaryPath} source=${binaryResolution.source} initializeTimeoutMs=${initializeTimeoutMs} previewTimeoutMs=${previewTimeoutMs} commitTimeoutMs=${commitTimeoutMs} readTimeoutMs=${readTimeoutMs}`,
+    `[smoke:codex-import-content-studio] using app-server=${binaryPath} source=${binaryResolution.source} dataDir=${dataDir.path} initializeTimeoutMs=${initializeTimeoutMs} previewTimeoutMs=${previewTimeoutMs} commitTimeoutMs=${commitTimeoutMs} readTimeoutMs=${readTimeoutMs}`,
   );
 
   const connected = await connectAppServerSidecar(
     {
-      ...stdioSidecar(binaryPath),
+      ...stdioSidecar(binaryPath, undefined, dataDir.path),
       backendMode: "unavailable",
     },
     {
@@ -107,7 +108,7 @@ async function main() {
     );
     const threads = scanResult.result.threads;
     assertEqual(scanResult.result.source.status, "ready", "source status");
-    assertAtLeast(threads.length, 1, "content-studio Codex thread count");
+    assertAtLeast(threads.length, 1, "content-studio source thread count");
     assertAtLeast(
       scanResult.result.source.threadCount,
       threads.length,
@@ -126,7 +127,7 @@ async function main() {
         `selected thread ${selectedThread.sourceThreadId} is missing sourcePath`,
       );
     }
-    await assertFile(selectedThread.sourcePath, "selected Codex rollout");
+    await assertFile(selectedThread.sourcePath, "selected source rollout");
 
     const previewResult = await connection.previewConversationImportThread(
       {
@@ -221,7 +222,31 @@ async function main() {
     );
   } finally {
     await connected.sidecar.close();
+    await dataDir.cleanup();
   }
+}
+
+async function resolveSmokeDataDir() {
+  const explicitDataDir = process.env.CODEX_IMPORT_SMOKE_DATA_DIR?.trim();
+  if (explicitDataDir) {
+    return {
+      path: explicitDataDir,
+      cleanup: async () => {},
+    };
+  }
+
+  const dataDir = await mkdtemp(
+    path.join(tmpdir(), "codex-import-content-studio-app-server-"),
+  );
+  const keepDataDir = process.env.CODEX_IMPORT_SMOKE_KEEP_DATA_DIR === "1";
+  return {
+    path: dataDir,
+    cleanup: async () => {
+      if (!keepDataDir) {
+        await rm(dataDir, { recursive: true, force: true });
+      }
+    },
+  };
 }
 
 function selectThread(threads) {
@@ -260,7 +285,7 @@ async function importAllThreads({
     if (!thread.sourcePath) {
       throw new Error(`thread ${thread.sourceThreadId} is missing sourcePath`);
     }
-    await assertFile(thread.sourcePath, `Codex rollout ${thread.sourceThreadId}`);
+    await assertFile(thread.sourcePath, `source rollout ${thread.sourceThreadId}`);
 
     const previewResult = await connection.previewConversationImportThread(
       {
@@ -480,18 +505,18 @@ function assertDryRunSummary(summary, { label, expectCreatesSession }) {
 function assertCodexMetadata(actual, fallback) {
   const metadata = actual || fallback || {};
   if (metadata.model !== undefined) {
-    assert(typeof metadata.model === "string", "Codex model should be a string");
+    assert(typeof metadata.model === "string", "source model should be a string");
   }
   if (metadata.reasoningEffort !== undefined) {
     assert(
       typeof metadata.reasoningEffort === "string",
-      "Codex reasoningEffort should be a string",
+      "source reasoningEffort should be a string",
     );
   }
   if (metadata.cliVersion !== undefined) {
     assert(
       typeof metadata.cliVersion === "string",
-      "Codex cliVersion should be a string",
+      "source cliVersion should be a string",
     );
   }
 }

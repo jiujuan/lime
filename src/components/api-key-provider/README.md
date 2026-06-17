@@ -67,7 +67,7 @@ function ProviderSettingsPage() {
 
 `resolveRegistryProviderId` 的核心规则：
 
-1. codex 协议强制 `codex`
+1. 本地 CLI 协议强制使用对应 registry id
 2. 系统 Provider Catalog 别名映射
 3. 最小 legacy ID 映射
 4. providerType 回退

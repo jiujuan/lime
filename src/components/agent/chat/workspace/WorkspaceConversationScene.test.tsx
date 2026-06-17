@@ -4,12 +4,15 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkspaceConversationScene } from "./WorkspaceConversationScene";
 
-const { mockWorkspaceMainArea, mockWorkspacePendingA2UIPanel } = vi.hoisted(
-  () => ({
+const {
+  mockWorkspaceMainArea,
+  mockWorkspacePendingA2UIPanel,
+  mockMessageList,
+} = vi.hoisted(() => ({
     mockWorkspaceMainArea: vi.fn(),
     mockWorkspacePendingA2UIPanel: vi.fn(),
-  }),
-);
+    mockMessageList: vi.fn(),
+  }));
 
 vi.mock("../components/CanvasWorkbenchLayout", () => ({
   CanvasWorkbenchLayout: (props: { topRightTools?: React.ReactNode }) => (
@@ -88,18 +91,19 @@ vi.mock("../components/EmptyState", () => ({
 }));
 
 vi.mock("../components/MessageList", () => ({
-  MessageList: ({
-    leadingContent,
-    trailingContent,
-  }: {
+  MessageList: (props: {
     leadingContent?: React.ReactNode;
     trailingContent?: React.ReactNode;
-  }) => (
-    <div data-testid="message-list-stub">
-      {leadingContent}
-      {trailingContent}
-    </div>
-  ),
+  }) => {
+    mockMessageList(props);
+    const { leadingContent, trailingContent } = props;
+    return (
+      <div data-testid="message-list-stub">
+        {leadingContent}
+        {trailingContent}
+      </div>
+    );
+  },
 }));
 
 vi.mock("./WorkspacePendingA2UIPanel", () => ({
@@ -162,6 +166,40 @@ vi.mock("./WorkspaceMainArea", () => ({
 }));
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
+
+function importedThreadItems() {
+  return [
+    {
+      id: "imported-command",
+      type: "command_execution",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+      sequence: 1,
+      status: "completed",
+      command: "npm test",
+      cwd: "/workspace/imported-local-history",
+      metadata: {
+        source_client: "codex",
+        source_provenance: {
+          sourceClient: "codex",
+          sourceThreadId: "thread-codex-20260617abcdef",
+        },
+        codexImportFidelity: {
+          messages: 6,
+          reasoning: 2,
+          commands: 1,
+          tools: 4,
+          patches: 1,
+          approvals: 1,
+          webSearch: 1,
+        },
+      },
+      started_at: "2026-06-17T10:00:00.000Z",
+      completed_at: "2026-06-17T10:00:01.000Z",
+      updated_at: "2026-06-17T10:00:01.000Z",
+    },
+  ];
+}
 
 function renderScene(
   props?: Partial<React.ComponentProps<typeof WorkspaceConversationScene>>,
@@ -311,6 +349,49 @@ afterEach(() => {
 });
 
 describe("WorkspaceConversationScene", () => {
+  it("普通导入会话不应在主线消息列表前展示独立导入状态条", () => {
+    const container = renderScene({
+      messageListProps: {
+        messages: [
+          {
+            id: "imported-user",
+            role: "user",
+            content: "请帮我修复运行时问题",
+            timestamp: new Date("2026-06-17T10:00:00.000Z"),
+          },
+          {
+            id: "imported-assistant",
+            role: "assistant",
+            content: "已完成修复并补充测试。",
+            timestamp: new Date("2026-06-17T10:00:01.000Z"),
+          },
+        ],
+        turns: [],
+        threadItems: importedThreadItems(),
+        currentTurnId: null,
+        threadRead: false,
+        pendingActions: [],
+        submittedActionsInFlight: [],
+        queuedTurns: [],
+        isSending: false,
+        onInterruptCurrentTurn: vi.fn(),
+      } as any,
+    });
+
+    const banner = container.querySelector(
+      '[data-testid="imported-source-banner"]',
+    );
+    expect(
+      mockMessageList.mock.calls.some((call) => Boolean(call[0]?.leadingContent)),
+    ).toBe(false);
+    expect(banner).toBeNull();
+    expect(container.textContent).not.toContain("本地历史导入");
+    expect(container.textContent).not.toContain("已还原");
+    expect(container.textContent).not.toContain("imported_read_only");
+    expect(container.textContent).not.toContain("thread-codex");
+    expect(container.textContent).not.toContain("npm test");
+  });
+
   it("生成应显示当前带入的灵感横条", () => {
     const container = renderScene({
       creationReplaySurface: {

@@ -43,7 +43,6 @@ import NebiusIcon from "./nebius.svg?react";
 import nanoGptIconUrl from "./nano-gpt.png?url";
 import MorphIcon from "./morph.svg?react";
 import OpenaiIcon from "./openai.svg?react";
-import opencodeIconUrl from "./opencode.png?url";
 import OvhcloudIcon from "./ovhcloud.svg?react";
 import AlibabaIcon from "./alibaba.svg?react";
 import CopilotIcon from "./copilot.svg?react";
@@ -190,7 +189,6 @@ const LucidqueryIcon = createImageIconComponent(
 const IoNetIcon = createImageIconComponent(ioNetIconUrl, "IO.net");
 const NanoGptIcon = createImageIconComponent(nanoGptIconUrl, "NanoGPT");
 const NewapiIcon = createImageIconComponent(newapiIconUrl, "New API");
-const OpencodeIcon = createImageIconComponent(opencodeIconUrl, "OpenCode");
 const RequestyIcon = createImageIconComponent(requestyIconUrl, "Requesty");
 const SubmodelIcon = createImageIconComponent(submodelIconUrl, "Submodel");
 const VeniceIcon = createImageIconComponent(veniceIconUrl, "Venice");
@@ -231,7 +229,6 @@ const iconComponents: Record<string, ComponentType<SVGProps<SVGSVGElement>>> = {
   nebius: NebiusIcon,
   "nano-gpt": NanoGptIcon,
   openai: OpenaiIcon,
-  opencode: OpencodeIcon,
   ovhcloud: OvhcloudIcon,
   alibaba: AlibabaIcon,
   copilot: CopilotIcon,

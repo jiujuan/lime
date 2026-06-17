@@ -216,6 +216,34 @@ describe("agentProtocol", () => {
     });
   });
 
+  it("应将 App Server current message.delta 解析为现有正文增量事件", () => {
+    expect(
+      parseAgentEvent({
+        type: "message.delta",
+        text: "<proposed_plan>\n- 确认计划模式\n</proposed_plan>",
+      }),
+    ).toEqual({
+      type: "text_delta",
+      text: "<proposed_plan>\n- 确认计划模式\n</proposed_plan>",
+    });
+
+    expect(
+      parseAgentEvent({
+        type: "message.delta_batch",
+        payload: {
+          text: "第一段\n第二段",
+          chunks: ["第一段\n", "第二段"],
+          boundary: "newline",
+        },
+      }),
+    ).toEqual({
+      type: "text_delta_batch",
+      text: "第一段\n第二段",
+      chunks: ["第一段\n", "第二段"],
+      boundary: "newline",
+    });
+  });
+
   it("应解析工具进度与工具输出增量事件", () => {
     expect(
       parseAgentEvent({
@@ -339,6 +367,49 @@ describe("agentProtocol", () => {
       result: {
         success: true,
         output: '{"total":2}',
+        error: undefined,
+        images: undefined,
+        metadata: undefined,
+      },
+    });
+
+    expect(
+      parseAgentEvent({
+        type: "tool.failed",
+        toolCallId: "tool-3",
+        status: "failed",
+        error: "exit code 101",
+        output: "test failed",
+        metadata: {
+          failureCategory: "test_failed",
+        },
+      }),
+    ).toEqual({
+      type: "tool_end",
+      tool_id: "tool-3",
+      result: {
+        success: false,
+        output: "test failed",
+        error: "exit code 101",
+        images: undefined,
+        metadata: {
+          failureCategory: "test_failed",
+        },
+      },
+    });
+
+    expect(
+      parseAgentEvent({
+        type: "tool_failed",
+        tool_id: "tool-4",
+        output: "permission denied",
+      }),
+    ).toEqual({
+      type: "tool_end",
+      tool_id: "tool-4",
+      result: {
+        success: false,
+        output: "permission denied",
         error: undefined,
         images: undefined,
         metadata: undefined,

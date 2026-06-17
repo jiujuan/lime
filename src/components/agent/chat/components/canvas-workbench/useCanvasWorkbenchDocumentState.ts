@@ -86,6 +86,7 @@ interface UseCanvasWorkbenchDocumentStateResult {
   refreshDirectorySubtree: ReturnType<
     typeof useCanvasWorkbenchFileTreeState
   >["refreshDirectorySubtree"];
+  openDocumentSelection: (selectionKey: string) => void;
   handleSelectWorkspaceFile: (path: string) => Promise<void>;
   shouldShowSessionTab: boolean;
 }
@@ -378,6 +379,7 @@ export function useCanvasWorkbenchDocumentState({
     loadingDirectories,
     toggleDirectory,
     refreshDirectorySubtree,
+    openDocumentSelection: handleOpenDocumentSelection,
     handleSelectWorkspaceFile,
     shouldShowSessionTab,
   };

@@ -479,7 +479,22 @@ fn configure_process_stdio_and_env(
     }
 }
 
+fn docker_available() -> bool {
+    std::process::Command::new("docker")
+        .arg("version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
 /// 检测最佳沙箱类型
+#[cfg(target_os = "windows")]
+pub fn detect_best_sandbox() -> SandboxType {
+    SandboxType::RestrictedToken
+}
+
+/// 检测最佳沙箱类型
+#[cfg(not(target_os = "windows"))]
 pub fn detect_best_sandbox() -> SandboxType {
     #[cfg(target_os = "linux")]
     {
@@ -507,18 +522,8 @@ pub fn detect_best_sandbox() -> SandboxType {
         }
     }
 
-    #[cfg(target_os = "windows")]
-    {
-        return SandboxType::RestrictedToken;
-    }
-
     // 检查 Docker
-    if std::process::Command::new("docker")
-        .arg("version")
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
-    {
+    if docker_available() {
         return SandboxType::Docker;
     }
 
@@ -560,11 +565,7 @@ pub fn get_sandbox_capabilities() -> SandboxCapabilities {
         caps.restricted_token = true;
     }
 
-    caps.docker = std::process::Command::new("docker")
-        .arg("version")
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false);
+    caps.docker = docker_available();
 
     caps
 }
@@ -611,6 +612,12 @@ mod tests {
     fn restricted_token_capability_is_false_off_windows() {
         let caps = get_sandbox_capabilities();
         assert!(!caps.restricted_token);
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn detect_best_sandbox_uses_restricted_token_on_windows() {
+        assert_eq!(detect_best_sandbox(), SandboxType::RestrictedToken);
     }
 
     #[tokio::test]

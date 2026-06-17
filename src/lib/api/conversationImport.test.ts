@@ -3,7 +3,9 @@ import { safeInvoke } from "@/lib/dev-bridge";
 import {
   commitConversationImportThread,
   previewConversationImportThread,
+  readConversationImportRuntimeEvents,
   scanConversationImportSource,
+  type ConversationImportThreadRuntimeEventsReadResponse,
   type ConversationImportSourceScanResponse,
   type ConversationImportThreadCommitResponse,
   type ConversationImportThreadPreviewResponse,
@@ -89,7 +91,9 @@ function appServerPreviewResponse(): ConversationImportThreadPreviewResponse {
         budgetDropped: 0,
       },
       truncated: false,
-      warnings: ["Some Codex rollout items are counted but not shown in preview."],
+      warnings: [
+        "Some source rollout items are counted but not shown in preview.",
+      ],
     },
     messages: [
       {
@@ -185,7 +189,31 @@ function appServerCommitResponse(): ConversationImportThreadCommitResponse {
     importedMessages: 2,
     importedTurns: 1,
     canContinue: true,
-    warnings: ["Imported Codex user/assistant messages."],
+    warnings: ["Imported source user/assistant messages."],
+  };
+}
+
+function appServerRuntimeEventsResponse(): ConversationImportThreadRuntimeEventsReadResponse {
+  return {
+    sessionId: "sess-imported",
+    offset: 80,
+    limit: 20,
+    totalEvents: 90,
+    sourceRuntimeEvents: 454,
+    materializedRuntimeEvents: 404,
+    sidecarRuntimeEvents: 50,
+    events: [
+      {
+        sourceEventIndex: 401,
+        turnIndex: 0,
+        eventIndex: 401,
+        eventType: "command.started",
+        payload: {
+          commandId: "call_exec_80",
+          command: "echo 80",
+        },
+      },
+    ],
   };
 }
 
@@ -329,6 +357,35 @@ describe("conversationImport API", () => {
     expect(safeInvoke).not.toHaveBeenCalled();
   });
 
+  it("重新导入时应透传 replaceExisting 到 App Server current 主链", async () => {
+    const result = appServerCommitResponse();
+    appServerRequestMock.mockResolvedValueOnce({ result });
+
+    await expect(
+      commitConversationImportThread({
+        sourceClient: "codex",
+        sourceRoot: "/Users/example/.codex",
+        sourceThreadId: "thread-1",
+        workspaceId: "workspace-1",
+        confirmed: true,
+        replaceExisting: true,
+      }),
+    ).resolves.toEqual(result);
+
+    expect(appServerRequestMock).toHaveBeenCalledWith(
+      "conversationImport/thread/commit",
+      {
+        sourceClient: "codex",
+        sourceRoot: "/Users/example/.codex",
+        sourceThreadId: "thread-1",
+        workspaceId: "workspace-1",
+        confirmed: true,
+        replaceExisting: true,
+      },
+    );
+    expect(safeInvoke).not.toHaveBeenCalled();
+  });
+
   it("线程导入响应形状异常时应 fail closed", async () => {
     appServerRequestMock.mockResolvedValueOnce({
       result: {
@@ -349,6 +406,49 @@ describe("conversationImport API", () => {
       }),
     ).rejects.toThrow(
       "conversationImport/thread/commit returned an invalid thread commit shape",
+    );
+    expect(safeInvoke).not.toHaveBeenCalled();
+  });
+
+  it("应通过 App Server current 主链分页读取导入运行时完整事件", async () => {
+    const result = appServerRuntimeEventsResponse();
+    appServerRequestMock.mockResolvedValueOnce({ result });
+
+    await expect(
+      readConversationImportRuntimeEvents({
+        sessionId: "sess-imported",
+        offset: 80,
+        limit: 20,
+        turnIndex: 0,
+        eventType: "command.started",
+      }),
+    ).resolves.toEqual(result);
+
+    expect(appServerRequestMock).toHaveBeenCalledWith(
+      "conversationImport/thread/runtimeEvents/read",
+      {
+        sessionId: "sess-imported",
+        offset: 80,
+        limit: 20,
+        turnIndex: 0,
+        eventType: "command.started",
+      },
+    );
+    expect(safeInvoke).not.toHaveBeenCalled();
+  });
+
+  it("导入运行时完整事件响应形状异常时应 fail closed", async () => {
+    appServerRequestMock.mockResolvedValueOnce({
+      result: {
+        sessionId: "sess-imported",
+        events: [{ eventType: "command.started" }],
+      },
+    });
+
+    await expect(
+      readConversationImportRuntimeEvents({ sessionId: "sess-imported" }),
+    ).rejects.toThrow(
+      "conversationImport/thread/runtimeEvents/read returned an invalid runtime event detail shape",
     );
     expect(safeInvoke).not.toHaveBeenCalled();
   });

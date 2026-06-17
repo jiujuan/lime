@@ -18,7 +18,7 @@ export const SENSENOVA_OPENAI_COMPATIBLE_API_HOST =
 export const PROVIDER_TYPE_OPTIONS: { value: ProviderType; label: string }[] = [
   { value: "openai", label: "OpenAI 兼容" },
   { value: "openai-response", label: "OpenAI Responses API" },
-  { value: "codex", label: "Codex CLI" },
+  { value: "codex", label: "本地 CLI" },
   { value: "anthropic", label: "Anthropic" },
   { value: "anthropic-compatible", label: "Anthropic 兼容" },
   { value: "gemini", label: "Gemini" },
@@ -55,7 +55,7 @@ export const PROVIDER_TYPE_FIELDS: Record<ProviderType, string[]> = {
 
 const SPECIAL_PROVIDER_PROTOCOL_HINTS: Partial<Record<ProviderType, string>> = {
   codex:
-    "Codex 保留 Lime 的专属协议与模型别名能力，会继续使用独立的 Codex 模型映射与鉴权链路。",
+    "本地 CLI 保留专属协议与模型别名能力，会继续使用独立的模型映射与鉴权链路。",
   anthropic:
     "Anthropic 继续使用原生协议，不会被收敛到普通 OpenAI 兼容请求格式。",
   "anthropic-compatible":

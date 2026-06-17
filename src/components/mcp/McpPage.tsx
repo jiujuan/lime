@@ -5,13 +5,16 @@ import { McpServer } from "@/lib/api/mcp";
 import { cn } from "@/lib/utils";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { HelpTip } from "@/components/HelpTip";
+import { useTranslation } from "react-i18next";
 
 // 预设 MCP 服务器配置
 const mcpPresets = [
   {
     id: "filesystem",
-    name: "Filesystem",
-    description: "文件系统访问",
+    nameKey: "settings.mcpPage.preset.filesystem.name",
+    defaultName: "Filesystem",
+    descriptionKey: "settings.mcpPage.preset.filesystem.description",
+    defaultDescription: "文件系统访问",
     server_config: {
       command: "npx",
       args: ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/dir"],
@@ -19,8 +22,10 @@ const mcpPresets = [
   },
   {
     id: "github",
-    name: "GitHub",
-    description: "GitHub API",
+    nameKey: "settings.mcpPage.preset.github.name",
+    defaultName: "GitHub",
+    descriptionKey: "settings.mcpPage.preset.github.description",
+    defaultDescription: "GitHub API",
     server_config: {
       command: "npx",
       args: ["-y", "@modelcontextprotocol/server-github"],
@@ -29,8 +34,10 @@ const mcpPresets = [
   },
   {
     id: "postgres",
-    name: "PostgreSQL",
-    description: "数据库访问",
+    nameKey: "settings.mcpPage.preset.postgres.name",
+    defaultName: "PostgreSQL",
+    descriptionKey: "settings.mcpPage.preset.postgres.description",
+    defaultDescription: "数据库访问",
     server_config: {
       command: "npx",
       args: ["-y", "@modelcontextprotocol/server-postgres"],
@@ -39,8 +46,10 @@ const mcpPresets = [
   },
   {
     id: "custom",
-    name: "自定义",
-    description: "自定义配置",
+    nameKey: "settings.mcpPage.preset.custom.name",
+    defaultName: "自定义",
+    descriptionKey: "settings.mcpPage.preset.custom.description",
+    defaultDescription: "自定义配置",
     server_config: {
       command: "",
       args: [],
@@ -67,6 +76,7 @@ interface McpPageProps {
 }
 
 export function McpPage({ hideHeader = false }: McpPageProps) {
+  const { t } = useTranslation("settings");
   const {
     servers,
     loading,
@@ -105,21 +115,41 @@ export function McpPage({ hideHeader = false }: McpPageProps) {
         ? await importFromApp(appType)
         : await importFromAllApps();
       if (count > 0) {
-        alert(`成功导入/更新 ${count} 个 MCP 服务器配置`);
+        alert(
+          t("settings.mcpPage.toast.importSuccess", {
+            count,
+            defaultValue: "成功导入/更新 {{count}} 个 MCP 服务器配置",
+          }),
+        );
       } else {
-        alert("没有找到 MCP 配置可导入");
+        alert(
+          t(
+            "settings.mcpPage.toast.importEmpty",
+            "没有找到 MCP 配置可导入",
+          ),
+        );
       }
     } catch (e) {
-      alert("导入失败: " + (e instanceof Error ? e.message : String(e)));
+      alert(
+        t("settings.mcpPage.toast.importFailed", {
+          message: e instanceof Error ? e.message : String(e),
+          defaultValue: "导入失败：{{message}}",
+        }),
+      );
     }
   };
 
   const handleSyncToLive = async () => {
     try {
       await syncAllToLive();
-      alert("同步完成");
+      alert(t("settings.mcpPage.toast.syncSuccess", "同步完成"));
     } catch (e) {
-      alert("同步失败: " + (e instanceof Error ? e.message : String(e)));
+      alert(
+        t("settings.mcpPage.toast.syncFailed", {
+          message: e instanceof Error ? e.message : String(e),
+          defaultValue: "同步失败：{{message}}",
+        }),
+      );
     }
   };
 
@@ -156,8 +186,8 @@ export function McpPage({ hideHeader = false }: McpPageProps) {
     if (preset) {
       setSelectedPreset(presetId);
       if (presetId !== "custom") {
-        setEditName(preset.name);
-        setEditDescription(preset.description);
+        setEditName(t(preset.nameKey, preset.defaultName));
+        setEditDescription(t(preset.descriptionKey, preset.defaultDescription));
       }
       setEditConfig(JSON.stringify(preset.server_config, null, 2));
       setConfigError(null);
@@ -170,13 +200,15 @@ export function McpPage({ hideHeader = false }: McpPageProps) {
       JSON.parse(value);
       setConfigError(null);
     } catch {
-      setConfigError("JSON 格式错误");
+      setConfigError(t("settings.mcpPage.error.invalidJson", "JSON 格式错误"));
     }
   };
 
   const handleSave = async () => {
     if (!editName.trim()) {
-      alert("请输入服务器名称");
+      alert(
+        t("settings.mcpPage.toast.nameRequired", "请输入服务器名称"),
+      );
       return;
     }
 
@@ -184,7 +216,9 @@ export function McpPage({ hideHeader = false }: McpPageProps) {
     try {
       serverConfig = JSON.parse(editConfig);
     } catch {
-      setConfigError("JSON 格式错误，无法保存");
+      setConfigError(
+        t("settings.mcpPage.error.invalidJsonCannotSave", "JSON 格式错误，无法保存"),
+      );
       return;
     }
 
@@ -215,7 +249,12 @@ export function McpPage({ hideHeader = false }: McpPageProps) {
         });
       }
     } catch (e) {
-      alert("保存失败: " + (e instanceof Error ? e.message : String(e)));
+      alert(
+        t("settings.mcpPage.toast.saveFailed", {
+          message: e instanceof Error ? e.message : String(e),
+          defaultValue: "保存失败：{{message}}",
+        }),
+      );
     } finally {
       setSaving(false);
     }
@@ -239,7 +278,7 @@ export function McpPage({ hideHeader = false }: McpPageProps) {
     const apps: string[] = [];
     if (server.enabled_lime) apps.push("Lime");
     if (server.enabled_claude) apps.push("Claude");
-    if (server.enabled_codex) apps.push("Codex");
+    if (server.enabled_codex) apps.push("本地 CLI");
     if (server.enabled_gemini) apps.push("Gemini");
     return apps;
   };
@@ -249,9 +288,14 @@ export function McpPage({ hideHeader = false }: McpPageProps) {
       {!hideHeader && (
         <div className="mb-4 flex items-start justify-between">
           <div>
-            <h2 className="text-2xl font-bold">MCP 服务器</h2>
+            <h2 className="text-2xl font-bold">
+              {t("settings.mcpPage.title", "MCP 服务器")}
+            </h2>
             <p className="text-muted-foreground">
-              管理 Model Context Protocol 服务器配置，同步到外部应用
+              {t(
+                "settings.mcpPage.description",
+                "管理 Model Context Protocol 服务器配置，同步到外部应用",
+              )}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -261,12 +305,17 @@ export function McpPage({ hideHeader = false }: McpPageProps) {
                 onClick={() => setShowImportMenu(!showImportMenu)}
                 disabled={importing}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border hover:bg-muted text-sm"
-                title="从外部应用导入 MCP 配置"
+                title={t(
+                  "settings.mcpPage.import.title",
+                  "从外部应用导入 MCP 配置",
+                )}
               >
                 <Download
                   className={cn("h-4 w-4", importing && "animate-pulse")}
                 />
-                {importing ? "导入中..." : "导入"}
+                {importing
+                  ? t("settings.mcpPage.import.loading", "导入中...")
+                  : t("settings.mcpPage.import.action", "导入")}
               </button>
               {showImportMenu && (
                 <div className="absolute right-0 top-full mt-1 w-40 py-1 bg-popover border rounded-lg shadow-lg z-10">
@@ -274,25 +323,25 @@ export function McpPage({ hideHeader = false }: McpPageProps) {
                     onClick={() => handleImport()}
                     className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted"
                   >
-                    全部导入
+                    {t("settings.mcpPage.import.all", "全部导入")}
                   </button>
                   <button
                     onClick={() => handleImport("claude")}
                     className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted"
                   >
-                    从 Claude
+                    {t("settings.mcpPage.import.claude", "从 Claude")}
                   </button>
                   <button
                     onClick={() => handleImport("codex")}
                     className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted"
                   >
-                    从 Codex
+                    {t("settings.mcpPage.import.localCli", "从本地 CLI")}
                   </button>
                   <button
                     onClick={() => handleImport("gemini")}
                     className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted"
                   >
-                    从 Gemini CLI
+                    {t("settings.mcpPage.import.gemini", "从 Gemini CLI")}
                   </button>
                 </div>
               )}
@@ -301,10 +350,13 @@ export function McpPage({ hideHeader = false }: McpPageProps) {
             <button
               onClick={handleSyncToLive}
               className={`flex items-center gap-1.5 ${mcpPrimaryActionButtonClassName}`}
-              title="同步配置到所有外部应用"
+              title={t(
+                "settings.mcpPage.sync.title",
+                "同步配置到所有外部应用",
+              )}
             >
               <Upload className="h-4 w-4" />
-              同步
+              {t("settings.mcpPage.sync.action", "同步")}
             </button>
           </div>
         </div>
@@ -318,12 +370,17 @@ export function McpPage({ hideHeader = false }: McpPageProps) {
               onClick={() => setShowImportMenu(!showImportMenu)}
               disabled={importing}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border hover:bg-muted text-sm"
-              title="从外部应用导入 MCP 配置"
+              title={t(
+                "settings.mcpPage.import.title",
+                "从外部应用导入 MCP 配置",
+              )}
             >
               <Download
                 className={cn("h-4 w-4", importing && "animate-pulse")}
               />
-              {importing ? "导入中..." : "导入"}
+              {importing
+                ? t("settings.mcpPage.import.loading", "导入中...")
+                : t("settings.mcpPage.import.action", "导入")}
             </button>
             {showImportMenu && (
               <div className="absolute right-0 top-full mt-1 w-40 py-1 bg-popover border rounded-lg shadow-lg z-10">
@@ -331,25 +388,25 @@ export function McpPage({ hideHeader = false }: McpPageProps) {
                   onClick={() => handleImport()}
                   className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted"
                 >
-                  全部导入
+                  {t("settings.mcpPage.import.all", "全部导入")}
                 </button>
                 <button
                   onClick={() => handleImport("claude")}
                   className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted"
                 >
-                  从 Claude
+                  {t("settings.mcpPage.import.claude", "从 Claude")}
                 </button>
                 <button
                   onClick={() => handleImport("codex")}
                   className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted"
                 >
-                  从 Codex
+                  {t("settings.mcpPage.import.localCli", "从本地 CLI")}
                 </button>
                 <button
                   onClick={() => handleImport("gemini")}
                   className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted"
                 >
-                  从 Gemini CLI
+                  {t("settings.mcpPage.import.gemini", "从 Gemini CLI")}
                 </button>
               </div>
             )}
@@ -358,22 +415,37 @@ export function McpPage({ hideHeader = false }: McpPageProps) {
           <button
             onClick={handleSyncToLive}
             className={`flex items-center gap-1.5 ${mcpPrimaryActionButtonClassName}`}
-            title="同步配置到所有外部应用"
+            title={t(
+              "settings.mcpPage.sync.title",
+              "同步配置到所有外部应用",
+            )}
           >
             <Upload className="h-4 w-4" />
-            同步
+            {t("settings.mcpPage.sync.action", "同步")}
           </button>
         </div>
       )}
 
-      <HelpTip title="什么是 MCP？" variant="blue">
+      <HelpTip title={t("settings.mcpPage.help.title", "什么是 MCP？")} variant="blue">
         <ul className="list-disc list-inside space-y-1 text-sm text-emerald-700 dark:text-emerald-300">
           <li>
-            MCP (Model Context Protocol) 是 AI 工具扩展协议，让 AI
-            能访问文件系统、数据库等外部资源
+            {t(
+              "settings.mcpPage.help.protocol",
+              "MCP (Model Context Protocol) 是 AI 工具扩展协议，让 AI 能访问文件系统、数据库等外部资源",
+            )}
           </li>
-          <li>在此添加 MCP 服务器后，可同步到 Claude、Codex、Gemini CLI</li>
-          <li>也可从这些工具导入已有的 MCP 配置，统一管理</li>
+          <li>
+            {t(
+              "settings.mcpPage.help.sync",
+              "在此添加 MCP 服务器后，可同步到 Claude、本地 CLI、Gemini CLI",
+            )}
+          </li>
+          <li>
+            {t(
+              "settings.mcpPage.help.import",
+              "也可从这些工具导入已有的 MCP 配置，统一管理",
+            )}
+          </li>
         </ul>
       </HelpTip>
 
@@ -388,12 +460,14 @@ export function McpPage({ hideHeader = false }: McpPageProps) {
         {/* 左侧列表 */}
         <div className="w-64 flex flex-col border rounded-lg">
           <div className="p-3 border-b flex items-center justify-between">
-            <span className="text-sm font-medium">服务器列表</span>
+            <span className="text-sm font-medium">
+              {t("settings.mcpPage.serverList.title", "服务器列表")}
+            </span>
             <div className="flex gap-1">
               <button
                 onClick={refresh}
                 className="p-1.5 rounded hover:bg-muted"
-                title="刷新"
+                title={t("settings.mcpPage.action.refresh", "刷新")}
               >
                 <RefreshCw
                   className={cn("h-4 w-4", loading && "animate-spin")}
@@ -402,7 +476,7 @@ export function McpPage({ hideHeader = false }: McpPageProps) {
               <button
                 onClick={handleCreateNew}
                 className="p-1.5 rounded hover:bg-muted text-primary"
-                title="新建"
+                title={t("settings.mcpPage.action.create", "新建")}
               >
                 <Plus className="h-4 w-4" />
               </button>
@@ -416,12 +490,14 @@ export function McpPage({ hideHeader = false }: McpPageProps) {
               </div>
             ) : servers.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground text-sm">
-                <p>暂无 MCP 服务器</p>
+                <p>
+                  {t("settings.mcpPage.empty.title", "暂无 MCP 服务器")}
+                </p>
                 <button
                   onClick={handleCreateNew}
                   className="text-primary hover:underline mt-1"
                 >
-                  添加第一个
+                  {t("settings.mcpPage.empty.action", "添加第一个")}
                 </button>
               </div>
             ) : (
@@ -466,8 +542,18 @@ export function McpPage({ hideHeader = false }: McpPageProps) {
           {!selectedServer && !isCreating ? (
             <div className="flex-1 flex items-center justify-center text-muted-foreground">
               <div className="text-center">
-                <p>选择一个 MCP 服务器进行编辑</p>
-                <p className="text-sm mt-1">或点击 + 添加新的服务器</p>
+                <p>
+                  {t(
+                    "settings.mcpPage.noSelection.title",
+                    "选择一个 MCP 服务器进行编辑",
+                  )}
+                </p>
+                <p className="text-sm mt-1">
+                  {t(
+                    "settings.mcpPage.noSelection.description",
+                    "或点击 + 添加新的服务器",
+                  )}
+                </p>
               </div>
             </div>
           ) : (
@@ -475,13 +561,15 @@ export function McpPage({ hideHeader = false }: McpPageProps) {
               <div className="p-4 border-b space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="font-semibold">
-                    {isCreating ? "添加 MCP 服务器" : "编辑 MCP 服务器"}
+                    {isCreating
+                      ? t("settings.mcpPage.editor.createTitle", "添加 MCP 服务器")
+                      : t("settings.mcpPage.editor.editTitle", "编辑 MCP 服务器")}
                   </h3>
                   {selectedServer && (
                     <button
                       onClick={() => handleDeleteClick(selectedServer.id)}
                       className="p-1.5 rounded hover:bg-destructive/10 text-destructive"
-                      title="删除"
+                      title={t("settings.mcpPage.action.delete", "删除")}
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -492,7 +580,7 @@ export function McpPage({ hideHeader = false }: McpPageProps) {
                 {isCreating && (
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-muted-foreground">
-                      预设:
+                      {t("settings.mcpPage.preset.label", "预设：")}
                     </span>
                     <div className="flex flex-wrap gap-1.5">
                       {mcpPresets.map((preset) => (
@@ -507,7 +595,7 @@ export function McpPage({ hideHeader = false }: McpPageProps) {
                               : "border-transparent bg-muted text-muted-foreground hover:bg-muted/80",
                           )}
                         >
-                          {preset.name}
+                          {t(preset.nameKey, preset.defaultName)}
                         </button>
                       ))}
                     </div>
@@ -518,26 +606,33 @@ export function McpPage({ hideHeader = false }: McpPageProps) {
                 <div className="flex gap-3">
                   <div className="flex-1">
                     <label className="block text-xs font-medium mb-1 text-muted-foreground">
-                      名称 <span className="text-destructive">*</span>
+                      {t("settings.mcpPage.form.name", "名称")}{" "}
+                      <span className="text-destructive">*</span>
                     </label>
                     <input
                       type="text"
                       value={editName}
                       onChange={(e) => setEditName(e.target.value)}
                       className="w-full px-2.5 py-1.5 rounded border bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm"
-                      placeholder="服务器名称"
+                      placeholder={t(
+                        "settings.mcpPage.form.namePlaceholder",
+                        "服务器名称",
+                      )}
                     />
                   </div>
                   <div className="flex-1">
                     <label className="block text-xs font-medium mb-1 text-muted-foreground">
-                      描述
+                      {t("settings.mcpPage.form.description", "描述")}
                     </label>
                     <input
                       type="text"
                       value={editDescription}
                       onChange={(e) => setEditDescription(e.target.value)}
                       className="w-full px-2.5 py-1.5 rounded border bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm"
-                      placeholder="可选描述"
+                      placeholder={t(
+                        "settings.mcpPage.form.descriptionPlaceholder",
+                        "可选描述",
+                      )}
                     />
                   </div>
                 </div>
@@ -545,7 +640,7 @@ export function McpPage({ hideHeader = false }: McpPageProps) {
                 {/* 同步到哪些应用 - 横排 */}
                 <div className="flex items-center gap-3">
                   <span className="text-xs font-medium text-muted-foreground">
-                    同步到:
+                    {t("settings.mcpPage.form.syncTo", "同步到：")}
                   </span>
                   <label className="flex items-center gap-1.5 cursor-pointer">
                     <input
@@ -554,7 +649,9 @@ export function McpPage({ hideHeader = false }: McpPageProps) {
                       onChange={(e) => setEnabledLime(e.target.checked)}
                       className="w-3.5 h-3.5 rounded border-gray-300"
                     />
-                    <span className="text-xs">Lime</span>
+                    <span className="text-xs">
+                      {t("settings.mcpPage.app.lime", "Lime")}
+                    </span>
                   </label>
                   <label className="flex items-center gap-1.5 cursor-pointer">
                     <input
@@ -563,7 +660,9 @@ export function McpPage({ hideHeader = false }: McpPageProps) {
                       onChange={(e) => setEnabledClaude(e.target.checked)}
                       className="w-3.5 h-3.5 rounded border-gray-300"
                     />
-                    <span className="text-xs">Claude</span>
+                    <span className="text-xs">
+                      {t("settings.mcpPage.app.claude", "Claude")}
+                    </span>
                   </label>
                   <label className="flex items-center gap-1.5 cursor-pointer">
                     <input
@@ -572,7 +671,9 @@ export function McpPage({ hideHeader = false }: McpPageProps) {
                       onChange={(e) => setEnabledCodex(e.target.checked)}
                       className="w-3.5 h-3.5 rounded border-gray-300"
                     />
-                    <span className="text-xs">Codex</span>
+                    <span className="text-xs">
+                      {t("settings.mcpPage.app.localCli", "本地 CLI")}
+                    </span>
                   </label>
                   <label className="flex items-center gap-1.5 cursor-pointer">
                     <input
@@ -581,7 +682,9 @@ export function McpPage({ hideHeader = false }: McpPageProps) {
                       onChange={(e) => setEnabledGemini(e.target.checked)}
                       className="w-3.5 h-3.5 rounded border-gray-300"
                     />
-                    <span className="text-xs">Gemini CLI</span>
+                    <span className="text-xs">
+                      {t("settings.mcpPage.app.gemini", "Gemini CLI")}
+                    </span>
                   </label>
                 </div>
               </div>
@@ -589,7 +692,7 @@ export function McpPage({ hideHeader = false }: McpPageProps) {
               {/* JSON 配置编辑器 */}
               <div className="flex-1 p-4 flex flex-col min-h-0">
                 <label className="block text-xs font-medium mb-1.5 text-muted-foreground">
-                  服务器配置 (JSON)
+                  {t("settings.mcpPage.form.config", "服务器配置 (JSON)")}
                 </label>
                 <textarea
                   value={editConfig}
@@ -598,7 +701,10 @@ export function McpPage({ hideHeader = false }: McpPageProps) {
                     "flex-1 w-full px-3 py-2 rounded-lg border bg-muted/50 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none font-mono text-sm resize-none",
                     configError && "border-destructive",
                   )}
-                  placeholder='{"command": "npx", "args": [...], "env": {...}}'
+                  placeholder={t(
+                    "settings.mcpPage.form.configPlaceholder",
+                    '{"command": "npx", "args": [...], "env": {...}}',
+                  )}
                 />
                 {configError && (
                   <p className="text-xs text-destructive mt-1">{configError}</p>
@@ -613,14 +719,16 @@ export function McpPage({ hideHeader = false }: McpPageProps) {
                   }}
                   className="px-3 py-1.5 rounded border hover:bg-muted text-sm"
                 >
-                  取消
+                  {t("settings.mcpPage.action.cancel", "取消")}
                 </button>
                 <button
                   onClick={handleSave}
                   disabled={saving || !editName.trim() || !!configError}
                   className={`${mcpPrimaryActionButtonClassName} disabled:opacity-50`}
                 >
-                  {saving ? "保存中..." : "保存"}
+                  {saving
+                    ? t("settings.mcpPage.action.saving", "保存中...")
+                    : t("settings.mcpPage.action.save", "保存")}
                 </button>
               </div>
             </>
@@ -630,8 +738,11 @@ export function McpPage({ hideHeader = false }: McpPageProps) {
 
       <ConfirmDialog
         isOpen={!!deleteConfirm}
-        title="删除确认"
-        message="确定要删除这个 MCP 服务器吗？"
+        title={t("settings.mcpPage.delete.title", "删除确认")}
+        message={t(
+          "settings.mcpPage.delete.message",
+          "确定要删除这个 MCP 服务器吗？",
+        )}
         onConfirm={handleDeleteConfirm}
         onCancel={() => setDeleteConfirm(null)}
       />

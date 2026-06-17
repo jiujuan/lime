@@ -1,11 +1,52 @@
 #!/usr/bin/env node
 
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import electronPath from "electron";
 import { _electron as electron } from "playwright";
+import {
+  CONTINUE_ASSISTANT_TEXT,
+  CONTINUE_USER_TEXT,
+  IMPORTED_ASSISTANT_TEXT,
+  IMPORTED_CWD,
+  IMPORTED_REASONING_TEXT,
+  IMPORTED_USER_TEXT,
+  LEGACY_CONTINUATION_SENTINEL,
+  REQUIRED_BACKEND_METHODS,
+  SOURCE_THREAD_ID,
+  createClickThroughFixtureRuntimeEnv,
+  readBackendLedger,
+} from "./lib/local-history-import-click-through-fixture.mjs";
+import {
+  clearInvokeBuffers,
+  clickSidebarImport,
+  collectImportedSessionVisualAudit,
+  confirmImport,
+  inspectEnvironmentPopoverImportBoundary,
+  inspectImportedAttachmentPreview,
+  inspectImportedFilePreviewArtifacts,
+  inspectImportedHistoryBanner,
+  inspectSidebarImportDiscoverability,
+  sendFollowUpFromGui,
+  summarizeContinuationSnapshot,
+  summarizeImportPreviewSnapshot,
+  summarizeImportedDetailsSnapshot,
+  waitForContinuationVisible,
+  waitForImportPreview,
+  waitForImportedSessionDetails,
+} from "./lib/local-history-import-click-through-gui.mjs";
+import {
+  APP_SERVER_HANDLE_JSON_LINES_COMMAND,
+  assert,
+  initializeAppServer,
+  invokeAppServerFromPage,
+  sanitizeJson,
+  sanitizeText,
+  sleep,
+  waitForRendererReady,
+  writeJsonFile,
+} from "./lib/local-history-import-smoke-utils.mjs";
 import { resolveElectronAppServerRuntimeEnv } from "../lib/electron-app-server-assets.mjs";
 import { resolveDevAppServerBinary } from "../lib/electron-dev-sidecar.mjs";
 
@@ -25,30 +66,20 @@ const DEFAULTS = {
 };
 
 const LOG_PREFIX = "[smoke:codex-import-click-through-fixture]";
-const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
-const SOURCE_THREAD_ID = "codex-import-click-through-thread";
-const IMPORTED_USER_TEXT = "请运行测试并修复失败";
-const IMPORTED_REASONING_TEXT = "I need to inspect the test failure first.";
-const IMPORTED_ASSISTANT_TEXT = "已完成修复。";
-const CONTINUE_USER_TEXT = "在这个导入会话里继续总结下一步";
-const CONTINUE_ASSISTANT_TEXT = "CODEX_IMPORT_CLICK_THROUGH_DONE";
-const IMPORTED_CWD = "/workspace/imported-codex";
-const REQUIRED_BACKEND_METHODS = [
-  "conversationImport/source/scan",
-  "conversationImport/thread/preview",
-  "conversationImport/thread/commit",
-  "agentSession/read",
-  "agentSession/turn/start",
-];
+const RPC_ID_PREFIX = "codex-import-click-through";
+const APP_SERVER_CLIENT_INFO = {
+  name: "codex-import-click-through-fixture",
+  version: "1.0.0",
+};
 
 function printHelp() {
   console.log(`
-Codex Import Click-through Electron Fixture Smoke
+Local History Import Click-through Electron Fixture Smoke
 
 用途:
-  启动真实 Electron Desktop Host，从侧边栏点击“导入 Codex 对话”，
-  在确认弹窗中预览临时 Codex 会话，点击确认导入后进入 Lime 会话页，
-  验证导入消息、Codex 细节还原和 task rail 上下文可见，再通过真实
+  启动真实 Electron Desktop Host，从侧边栏点击“本地历史导入”，
+  在确认弹窗中预览临时本地历史会话，点击确认导入后进入 Lime 会话页，
+  验证导入消息、导入细节还原和 task rail 上下文可见，再通过真实
   输入框发送 follow-up，证明同一导入 session 可继续对话。
 
 边界:
@@ -124,696 +155,8 @@ function parseArgs(argv) {
   return options;
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function assert(condition, message) {
-  if (!condition) {
-    throw new Error(message);
-  }
-}
-
 function logStage(stage) {
   console.log(`${LOG_PREFIX} stage=${stage}`);
-}
-
-function sanitizeText(value) {
-  const sanitized = String(value ?? "")
-    .replace(
-      /((?:api[_-]?key|authorization|password|secret|session|token)[^=\s]*=)(["']?)[^\s"']+/gi,
-      "$1$2[redacted]",
-    )
-    .replace(/(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, "$1[redacted]")
-    .replace(/sk-[A-Za-z0-9._-]+/g, "sk-[redacted]");
-  return sanitized.length > 2_000
-    ? `${sanitized.slice(0, 2_000)}... [truncated ${
-        sanitized.length - 2_000
-      } chars]`
-    : sanitized;
-}
-
-function sanitizeJson(value, depth = 0) {
-  if (depth > 8) {
-    return "[truncated-depth]";
-  }
-  if (typeof value === "string") {
-    return sanitizeText(value);
-  }
-  if (
-    value === null ||
-    value === undefined ||
-    typeof value === "number" ||
-    typeof value === "boolean"
-  ) {
-    return value ?? null;
-  }
-  if (Array.isArray(value)) {
-    return value.slice(0, 120).map((item) => sanitizeJson(item, depth + 1));
-  }
-  if (typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value)
-        .slice(0, 180)
-        .map(([key, item]) => [key, sanitizeJson(item, depth + 1)]),
-    );
-  }
-  return sanitizeText(String(value));
-}
-
-function writeJsonFile(filePath, value) {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`);
-}
-
-function createTempRuntimeEnv() {
-  const tempRoot = fs.mkdtempSync(
-    path.join(os.tmpdir(), "codex-import-click-through-"),
-  );
-  const home = path.join(tempRoot, "home");
-  const xdgDataHome = path.join(tempRoot, "xdg-data");
-  const localAppData = path.join(tempRoot, "local-app-data");
-  const roamingAppData = path.join(tempRoot, "roaming-app-data");
-  const electronUserDataDir = path.join(tempRoot, "electron-user-data");
-  const sourceRoot = path.join(tempRoot, "codex-home");
-  const sessionsDir = path.join(sourceRoot, "sessions");
-  const backendPath = path.join(tempRoot, "codex-import-backend.mjs");
-  const backendLedgerPath = path.join(tempRoot, "codex-import-backend.jsonl");
-  const rolloutPath = path.join(sessionsDir, `${SOURCE_THREAD_ID}.jsonl`);
-  const sessionIndexPath = path.join(sourceRoot, "session_index.jsonl");
-
-  for (const dir of [
-    home,
-    xdgDataHome,
-    localAppData,
-    roamingAppData,
-    electronUserDataDir,
-    sourceRoot,
-    sessionsDir,
-  ]) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-
-  fs.writeFileSync(backendLedgerPath, "");
-  writeFixtureBackend(backendPath);
-  writeCodexRolloutFixture(rolloutPath);
-  writeSessionIndexFixture(sessionIndexPath, rolloutPath);
-
-  return {
-    tempRoot,
-    electronUserDataDir,
-    sourceRoot,
-    rolloutPath,
-    sessionIndexPath,
-    backendPath,
-    backendLedgerPath,
-    env: {
-      ...process.env,
-      HOME: home,
-      XDG_DATA_HOME: xdgDataHome,
-      APPDATA: roamingAppData,
-      LOCALAPPDATA: localAppData,
-      CODEX_HOME: sourceRoot,
-    },
-  };
-}
-
-function writeFixtureBackend(backendPath) {
-  fs.writeFileSync(
-    backendPath,
-    `#!/usr/bin/env node
-import { appendFileSync, readFileSync } from "node:fs";
-
-const ledgerPath = process.argv[2];
-const input = JSON.parse(readFileSync(0, "utf8"));
-
-if (ledgerPath) {
-  appendFileSync(ledgerPath, JSON.stringify({
-    kind: input.kind,
-    request: input.request,
-    recordedAt: new Date().toISOString()
-  }) + "\\n");
-}
-
-if (input.kind === "turnStart") {
-  console.log(JSON.stringify({
-    events: [
-      {
-        type: "message.delta",
-        payload: {
-          backend: "codex-import-click-through-fixture",
-          text: "${CONTINUE_ASSISTANT_TEXT}"
-        }
-      },
-      {
-        type: "turn.completed",
-        payload: {
-          status: "completed",
-          text: "${CONTINUE_ASSISTANT_TEXT}"
-        }
-      }
-    ]
-  }));
-  process.exit(0);
-}
-
-console.log(JSON.stringify({ events: [] }));
-`,
-    { mode: 0o755 },
-  );
-}
-
-function writeSessionIndexFixture(sessionIndexPath, rolloutPath) {
-  const line = {
-    id: SOURCE_THREAD_ID,
-    thread_name: "Codex 导入点击闭环",
-    title: "Codex 导入点击闭环",
-    created_at: "2026-06-16T00:00:00.000Z",
-    updated_at: "2026-06-16T00:00:09.000Z",
-    cwd: IMPORTED_CWD,
-    path: rolloutPath,
-  };
-  fs.writeFileSync(sessionIndexPath, `${JSON.stringify(line)}\n`);
-}
-
-function writeCodexRolloutFixture(rolloutPath) {
-  const lines = [
-    {
-      timestamp: "2026-06-16T00:00:00.000Z",
-      type: "session_meta",
-      payload: {
-        id: SOURCE_THREAD_ID,
-        timestamp: "2026-06-16T00:00:00.000Z",
-        cwd: IMPORTED_CWD,
-        source: "cli",
-        model_provider: "openai",
-        model: "gpt-5.5",
-        reasoning_effort: "high",
-        approval_policy: "on-request",
-        sandbox_policy: "workspace-write",
-        memory_mode: "enabled",
-      },
-    },
-    {
-      timestamp: "2026-06-16T00:00:01.000Z",
-      type: "event_msg",
-      payload: {
-        type: "user_message",
-        message: `## My request for Codex: ${IMPORTED_USER_TEXT}`,
-      },
-    },
-    {
-      timestamp: "2026-06-16T00:00:02.000Z",
-      type: "response_item",
-      payload: {
-        type: "reasoning",
-        content: [{ type: "reasoning_text", text: IMPORTED_REASONING_TEXT }],
-      },
-    },
-    {
-      timestamp: "2026-06-16T00:00:03.000Z",
-      type: "response_item",
-      payload: {
-        type: "function_call",
-        id: "call_exec",
-        call_id: "call_exec",
-        name: "exec_command",
-        arguments: JSON.stringify({
-          cmd: "npm test",
-          workdir: IMPORTED_CWD,
-        }),
-      },
-    },
-    {
-      timestamp: "2026-06-16T00:00:04.000Z",
-      type: "event_msg",
-      payload: {
-        type: "exec_approval_request",
-        call_id: "call_exec",
-        command: ["npm", "test"],
-      },
-    },
-    {
-      timestamp: "2026-06-16T00:00:05.000Z",
-      type: "response_item",
-      payload: {
-        type: "function_call_output",
-        call_id: "call_exec",
-        output: "Exit code: 0\\nWall time: 0 seconds\\nOutput:\\nok",
-      },
-    },
-    {
-      timestamp: "2026-06-16T00:00:06.000Z",
-      type: "response_item",
-      payload: {
-        type: "web_search_call",
-        id: "call_search",
-        call_id: "call_search",
-        action: "search_query",
-        query: "Lime Codex import",
-      },
-    },
-    {
-      timestamp: "2026-06-16T00:00:07.000Z",
-      type: "event_msg",
-      payload: {
-        type: "web_search_end",
-        call_id: "call_search",
-        action: "search_query",
-        query: "Lime Codex import",
-      },
-    },
-    {
-      timestamp: "2026-06-16T00:00:08.000Z",
-      type: "event_msg",
-      payload: {
-        type: "patch_apply_end",
-        call_id: "call_patch",
-        success: true,
-        changes: {
-          "/workspace/imported-codex/src/lib.rs": { type: "modify" },
-        },
-      },
-    },
-    {
-      timestamp: "2026-06-16T00:00:09.000Z",
-      type: "event_msg",
-      payload: {
-        type: "agent_message",
-        message: IMPORTED_ASSISTANT_TEXT,
-      },
-    },
-  ];
-  fs.writeFileSync(
-    rolloutPath,
-    `${lines.map((line) => JSON.stringify(line)).join("\n")}\n`,
-  );
-}
-
-function readBackendLedger(ledgerPath) {
-  if (!fs.existsSync(ledgerPath)) {
-    return [];
-  }
-  return fs
-    .readFileSync(ledgerPath, "utf8")
-    .split(/\r?\n/u)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => JSON.parse(line));
-}
-
-function isTransientPageEvaluationError(error) {
-  const message = error instanceof Error ? error.message : String(error ?? "");
-  return (
-    message.includes("Execution context was destroyed") ||
-    message.includes("most likely because of a navigation") ||
-    message.includes("Cannot find context with specified id")
-  );
-}
-
-async function evaluatePageSnapshot(page, pageFunction, arg) {
-  try {
-    return await page.evaluate(pageFunction, arg);
-  } catch (error) {
-    if (isTransientPageEvaluationError(error)) {
-      return null;
-    }
-    throw error;
-  }
-}
-
-async function waitForRendererReady(page, options, onSnapshot) {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < options.timeoutMs) {
-    const snapshot = await evaluatePageSnapshot(page, () => ({
-      url: window.location.href,
-      title: document.title || "",
-      electron: window.__LIME_ELECTRON__ === true,
-      hasInvokeBridge: typeof window.electronAPI?.invoke === "function",
-      supportsAppServer:
-        typeof window.electronAPI?.supportsCommand === "function" &&
-        window.electronAPI.supportsCommand("app_server_handle_json_lines"),
-      startupVisible: Boolean(
-        document.querySelector("[data-lime-startup-shell]"),
-      ),
-      appSidebarVisible: Boolean(
-        document.querySelector('[data-testid="app-sidebar"]'),
-      ),
-      bodyText: document.body?.innerText || "",
-    }));
-    if (!snapshot) {
-      await sleep(options.intervalMs);
-      continue;
-    }
-    onSnapshot?.(snapshot);
-    if (
-      snapshot.electron &&
-      snapshot.hasInvokeBridge &&
-      snapshot.supportsAppServer &&
-      !snapshot.startupVisible &&
-      snapshot.appSidebarVisible
-    ) {
-      return snapshot;
-    }
-    await sleep(options.intervalMs);
-  }
-  throw new Error("Electron renderer / App Server bridge 未就绪");
-}
-
-async function clearInvokeBuffers(page) {
-  await page.evaluate(() => {
-    window.localStorage.removeItem("lime_invoke_error_buffer_v1");
-    window.localStorage.removeItem("lime_invoke_trace_buffer_v1");
-  });
-}
-
-async function invokeAppServerFromPage(page, method, params = {}) {
-  return await page.evaluate(
-    async ({ command, method, params }) => {
-      const invoke = window.electronAPI?.invoke;
-      if (typeof invoke !== "function") {
-        throw new Error("Electron preload invoke bridge is unavailable");
-      }
-      const id = `codex-import-click-through-${Date.now()}-${Math.random()}`;
-      const response = await invoke(command, {
-        request: {
-          lines: [
-            JSON.stringify({
-              jsonrpc: "2.0",
-              id,
-              method,
-              params,
-            }),
-          ],
-        },
-      });
-      const messages = Array.isArray(response?.lines)
-        ? response.lines
-            .map((line) => {
-              try {
-                return JSON.parse(line);
-              } catch {
-                return null;
-              }
-            })
-            .filter(Boolean)
-        : [];
-      const error = messages.find(
-        (message) => message?.id === id && message.error,
-      );
-      if (error) {
-        throw new Error(`${method} failed: ${JSON.stringify(error.error)}`);
-      }
-      const result = messages.find(
-        (message) =>
-          message?.id === id &&
-          Object.prototype.hasOwnProperty.call(message, "result"),
-      );
-      if (!result) {
-        throw new Error(`${method} did not return a JSON-RPC result`);
-      }
-      return {
-        result: result.result,
-        messages,
-      };
-    },
-    {
-      command: APP_SERVER_HANDLE_JSON_LINES_COMMAND,
-      method,
-      params,
-    },
-  );
-}
-
-async function initializeAppServer(page) {
-  const initialize = await invokeAppServerFromPage(page, "initialize", {
-    clientInfo: {
-      name: "codex-import-click-through-fixture",
-      version: "1.0.0",
-    },
-    capabilities: { eventMethods: ["agentSession/event"] },
-  });
-  await page.evaluate(async (command) => {
-    await window.electronAPI.invoke(command, {
-      request: {
-        lines: [JSON.stringify({ jsonrpc: "2.0", method: "initialized" })],
-      },
-    });
-  }, APP_SERVER_HANDLE_JSON_LINES_COMMAND);
-  return initialize.result;
-}
-
-async function waitForUiSnapshot(page, options, predicate, failureLabel) {
-  const startedAt = Date.now();
-  let lastSnapshot = null;
-  while (Date.now() - startedAt < options.timeoutMs) {
-    const snapshot = await evaluatePageSnapshot(page, () => {
-      const bodyText = document.body?.innerText || "";
-      const dialog = document.querySelector(
-        '[data-testid="app-sidebar-conversation-import-dialog"]',
-      );
-      const textarea = document.querySelector(
-        'textarea[name="agent-chat-message"]',
-      );
-      const sendButton = Array.from(document.querySelectorAll("button")).find(
-        (button) => {
-          const label = [
-            button.getAttribute("aria-label") || "",
-            button.getAttribute("title") || "",
-            button.textContent || "",
-          ].join("\n");
-          return label.includes("发送") || /\bSend\b/i.test(label);
-        },
-      );
-      return {
-        url: window.location.href,
-        title: document.title || "",
-        bodyText,
-        dialogVisible: Boolean(dialog),
-        importButtonVisible: Boolean(
-          document.querySelector(
-            '[data-testid="app-sidebar-import-conversation-button"]',
-          ),
-        ),
-        importConfirmVisible: Boolean(
-          document.querySelector(
-            '[data-testid="app-sidebar-conversation-import-confirm"]',
-          ),
-        ),
-        importConfirmDisabled:
-          document.querySelector(
-            '[data-testid="app-sidebar-conversation-import-confirm"]',
-          ) instanceof HTMLButtonElement
-            ? document.querySelector(
-                '[data-testid="app-sidebar-conversation-import-confirm"]',
-              ).disabled
-            : null,
-        textareaVisible: textarea instanceof HTMLTextAreaElement,
-        textareaDisabled:
-          textarea instanceof HTMLTextAreaElement ? textarea.disabled : null,
-        textareaValue:
-          textarea instanceof HTMLTextAreaElement ? textarea.value : null,
-        sendButtonVisible: sendButton instanceof HTMLButtonElement,
-        sendButtonDisabled:
-          sendButton instanceof HTMLButtonElement ? sendButton.disabled : null,
-        traceRaw: window.localStorage.getItem("lime_invoke_trace_buffer_v1"),
-        errorRaw: window.localStorage.getItem("lime_invoke_error_buffer_v1"),
-      };
-    });
-    if (!snapshot) {
-      await sleep(options.intervalMs);
-      continue;
-    }
-    lastSnapshot = snapshot;
-    if (predicate(snapshot)) {
-      return snapshot;
-    }
-    await sleep(options.intervalMs);
-  }
-  throw new Error(
-    `${failureLabel}: ${JSON.stringify(sanitizeJson(lastSnapshot))}`,
-  );
-}
-
-async function clickSidebarImport(page, options) {
-  await waitForUiSnapshot(
-    page,
-    options,
-    (snapshot) => snapshot.importButtonVisible,
-    "侧边栏导入按钮未出现",
-  );
-  await page.locator('[data-testid="app-sidebar-import-conversation-button"]').click();
-}
-
-async function waitForImportPreview(page, options) {
-  return await waitForUiSnapshot(
-    page,
-    options,
-    (snapshot) =>
-      snapshot.dialogVisible &&
-      snapshot.importConfirmVisible &&
-      snapshot.importConfirmDisabled === false &&
-      snapshot.bodyText.includes("Codex 导入点击闭环") &&
-      snapshot.bodyText.includes(IMPORTED_USER_TEXT) &&
-      snapshot.bodyText.includes(IMPORTED_ASSISTANT_TEXT) &&
-      snapshot.bodyText.includes("Codex 细节还原") &&
-      snapshot.bodyText.includes("工具") &&
-      snapshot.bodyText.includes("命令") &&
-      snapshot.bodyText.includes("补丁") &&
-      snapshot.bodyText.includes("审批") &&
-      snapshot.bodyText.includes("搜索"),
-    "Codex 导入弹窗预览未完成",
-  );
-}
-
-async function confirmImport(page, options) {
-  await page
-    .locator('[data-testid="app-sidebar-conversation-import-confirm"]')
-    .click();
-  return await waitForUiSnapshot(
-    page,
-    options,
-    (snapshot) =>
-      !snapshot.dialogVisible &&
-      snapshot.textareaVisible &&
-      snapshot.bodyText.includes(IMPORTED_USER_TEXT) &&
-      snapshot.bodyText.includes(IMPORTED_ASSISTANT_TEXT),
-    "确认导入后未进入可继续对话的会话页",
-  );
-}
-
-function hasAnyText(snapshot, values) {
-  return values.some((value) => snapshot.bodyText.includes(value));
-}
-
-function summarizeImportedDetailsSnapshot(snapshot, readModelSummary = null) {
-  const bodyText = snapshot?.bodyText || "";
-  return {
-    hasImportedUserMessage: bodyText.includes(IMPORTED_USER_TEXT),
-    hasImportedAssistantMessage: bodyText.includes(IMPORTED_ASSISTANT_TEXT),
-    hasReasoningVisible:
-      bodyText.includes(IMPORTED_REASONING_TEXT) ||
-      bodyText.includes("已完成思考") ||
-      (bodyText.includes("已完成") && bodyText.includes("步骤")) ||
-      readModelSummary?.hasReasoningItem === true,
-    hasCommandText: bodyText.includes("npm test"),
-    hasCommandItem: readModelSummary?.hasCommandItem === true,
-    hasPatchText:
-      hasAnyText({ bodyText }, ["补丁", "Patch", "patch"]) &&
-      hasAnyText({ bodyText }, ["已编辑", "文件", "src/lib.rs"]),
-    hasSearchEvidence:
-      hasAnyText({ bodyText }, ["搜索", "Search", "web search"]) ||
-      readModelSummary?.hasWebSearchItem === true,
-    hasApprovalText:
-      hasAnyText({ bodyText }, [
-        "导入的权限记录",
-        "已导入，只读记录",
-        "审批",
-        "确认",
-        "权限请求",
-        "Approval",
-        "approval",
-      ]),
-    hidesRawImportedCommand:
-      !bodyText.includes("Approve Codex command") &&
-      !bodyText.includes("imported_read_only"),
-  };
-}
-
-function summarizeContinuationSnapshot(snapshot) {
-  const bodyText = snapshot?.bodyText || "";
-  return {
-    hasContinueUserMessage: bodyText.includes(CONTINUE_USER_TEXT),
-    hasContinueAssistantMessage: bodyText.includes(CONTINUE_ASSISTANT_TEXT),
-  };
-}
-
-async function waitForImportedSessionDetails(page, options) {
-  return await waitForUiSnapshot(
-    page,
-    options,
-    (snapshot) => {
-      const summary = summarizeImportedDetailsSnapshot(snapshot);
-      return (
-        snapshot.textareaVisible &&
-        summary.hasImportedUserMessage &&
-        summary.hasImportedAssistantMessage &&
-        summary.hasReasoningVisible &&
-        summary.hasPatchText &&
-        summary.hasApprovalText &&
-        summary.hidesRawImportedCommand
-      );
-    },
-    "导入后的会话页未还原 Codex 细节",
-  );
-}
-
-async function sendFollowUpFromGui(page, options) {
-  await waitForUiSnapshot(
-    page,
-    options,
-    (snapshot) => snapshot.textareaVisible && snapshot.textareaDisabled === false,
-    "续聊输入框未就绪",
-  );
-  const textarea = page.locator('textarea[name="agent-chat-message"]').first();
-  await textarea.fill(CONTINUE_USER_TEXT);
-  await waitForUiSnapshot(
-    page,
-    options,
-    (snapshot) => snapshot.textareaValue === CONTINUE_USER_TEXT,
-    "续聊输入未进入 textarea",
-  );
-  const clicked = await page.evaluate(() => {
-    const buttons = Array.from(document.querySelectorAll("button"));
-    const sendButton = buttons.find((button) => {
-      const label = [
-        button.getAttribute("aria-label") || "",
-        button.getAttribute("title") || "",
-        button.textContent || "",
-      ].join("\n");
-      return (
-        (label.includes("发送") || /\bSend\b/i.test(label)) && !button.disabled
-      );
-    });
-    if (sendButton instanceof HTMLElement) {
-      sendButton.click();
-      return {
-        clicked: true,
-        label:
-          sendButton.getAttribute("aria-label") ||
-          sendButton.getAttribute("title") ||
-          sendButton.textContent ||
-          "send",
-      };
-    }
-    return {
-      clicked: false,
-      labels: buttons.map((button) =>
-        [
-          button.getAttribute("aria-label") || "",
-          button.getAttribute("title") || "",
-          button.textContent || "",
-        ].join(" / "),
-      ),
-    };
-  });
-  assert(
-    clicked?.clicked,
-    `未找到可点击发送按钮: ${JSON.stringify(sanitizeJson(clicked))}`,
-  );
-  return clicked;
-}
-
-async function waitForContinuationVisible(page, options) {
-  return await waitForUiSnapshot(
-    page,
-    options,
-    (snapshot) =>
-      snapshot.textareaVisible &&
-      snapshot.bodyText.includes(CONTINUE_USER_TEXT) &&
-      snapshot.bodyText.includes(CONTINUE_ASSISTANT_TEXT),
-    "续聊消息未在同一会话页完成",
-  );
 }
 
 function contentTextFromMessage(message) {
@@ -826,6 +169,10 @@ function contentTextFromMessage(message) {
     })
     .join("")
     .trim();
+}
+
+function normalizeComparablePath(value) {
+  return String(value ?? "").replace(/\\/g, "/");
 }
 
 function summarizeReadModel(readResult) {
@@ -865,12 +212,17 @@ function summarizeReadModel(readResult) {
         item?.type === "command_execution" &&
         String(item?.command || "").includes("npm test"),
     ),
-    hasPatchItem: items.some(
-      (item) =>
-        item?.type === "patch" &&
-        Array.isArray(item?.paths) &&
-        item.paths.includes("/workspace/imported-codex/src/lib.rs"),
-    ),
+    hasPatchItem: items.some((item) => {
+      if (item?.type !== "patch" || !Array.isArray(item?.paths)) {
+        return false;
+      }
+      const expectedPath = normalizeComparablePath(
+        path.join(IMPORTED_CWD, "src", "lib.rs"),
+      );
+      return item.paths.some(
+        (itemPath) => normalizeComparablePath(itemPath) === expectedPath,
+      );
+    }),
     hasWebSearchItem: items.some(
       (item) =>
         item?.type === "web_search" &&
@@ -879,8 +231,13 @@ function summarizeReadModel(readResult) {
     ),
     hasApprovalItem: items.some(
       (item) =>
-        item?.type === "approval_request" &&
-        item?.request_id === "call_exec",
+        item?.type === "approval_request" && item?.request_id === "call_exec",
+    ),
+    hasImportedAttachment: messages.some(
+      (message) =>
+        message?.role === "user" &&
+        Array.isArray(message?.attachments) &&
+        message.attachments.some((attachment) => attachment?.kind === "image"),
     ),
   };
 }
@@ -889,10 +246,15 @@ async function waitForImportedReadModel(page, options, sessionId) {
   const startedAt = Date.now();
   let latest = null;
   while (Date.now() - startedAt < options.timeoutMs) {
-    latest = await invokeAppServerFromPage(page, "agentSession/read", {
-      sessionId,
-      historyLimit: 100,
-    });
+    latest = await invokeAppServerFromPage(
+      page,
+      "agentSession/read",
+      {
+        sessionId,
+        historyLimit: 100,
+      },
+      { idPrefix: RPC_ID_PREFIX },
+    );
     const summary = summarizeReadModel(latest.result);
     if (
       summary.hasImportedUserMessage &&
@@ -968,16 +330,55 @@ function summarizeBackendLedger(backendLedger, sessionId) {
     backendInputText: backendTurnStart?.request?.input?.text ?? null,
     backendMetadataImported:
       backendRuntimeOptions?.metadata?.imported === true ||
-      backendRuntimeOptions?.hostOptions?.asterChatRequest?.turn_config?.metadata
-        ?.imported === true,
+      backendRuntimeOptions?.hostOptions?.asterChatRequest?.turn_config
+        ?.metadata?.imported === true,
     backendCwd:
       backendRuntimeOptions?.hostOptions?.asterChatRequest?.turn_config?.cwd ??
       null,
-    backendSessionMatches: backendTurnStart?.request?.session?.sessionId === sessionId,
+    backendSessionMatches:
+      backendTurnStart?.request?.session?.sessionId === sessionId,
   };
 }
 
-async function extractClickThroughSummary(page, readModelSummary, backendLedger) {
+function summarizeImportedFilePreviewArtifacts(previewSummary) {
+  if (!previewSummary) {
+    return null;
+  }
+  const summarize = (item) =>
+    item
+      ? {
+          fileName: item.fileName,
+          kind: item.kind,
+          selector: item.selector,
+          workbenchVisible: item.workbenchVisible === true,
+          previewPanelVisible: item.previewPanelVisible === true,
+          markdownPreviewVisible: item.markdownPreviewVisible === true,
+          htmlPreviewVisible: item.htmlPreviewVisible === true,
+          codePreviewVisible: item.codePreviewVisible === true,
+          emptySurfaceVisible: item.emptySurfaceVisible === true,
+          htmlPreviewSrc: item.htmlPreviewSrc || "",
+          bodyTextLength:
+            typeof item.bodyText === "string" ? item.bodyText.length : 0,
+          workbenchTextLength:
+            typeof item.workbenchText === "string"
+              ? item.workbenchText.length
+              : 0,
+        }
+      : null;
+  return {
+    openedAllImportedPreviewArtifacts:
+      previewSummary.openedAllImportedPreviewArtifacts === true,
+    markdown: summarize(previewSummary.markdown),
+    html: summarize(previewSummary.html),
+    docx: summarize(previewSummary.docx),
+  };
+}
+
+async function extractClickThroughSummary(
+  page,
+  readModelSummary,
+  backendLedger,
+) {
   return await page.evaluate(
     ({
       requiredMethods,
@@ -990,8 +391,12 @@ async function extractClickThroughSummary(page, readModelSummary, backendLedger)
       readModelSummary,
       backendLedger,
     }) => {
-      const traceRaw = window.localStorage.getItem("lime_invoke_trace_buffer_v1");
-      const errorRaw = window.localStorage.getItem("lime_invoke_error_buffer_v1");
+      const traceRaw = window.localStorage.getItem(
+        "lime_invoke_trace_buffer_v1",
+      );
+      const errorRaw = window.localStorage.getItem(
+        "lime_invoke_error_buffer_v1",
+      );
       const bodyText = document.body?.innerText || "";
       return {
         url: window.location.href,
@@ -1000,23 +405,18 @@ async function extractClickThroughSummary(page, readModelSummary, backendLedger)
         traceRaw,
         errorRaw,
         bodyTextLength: bodyText.length,
-        hasDialogPreview: bodyText.includes("Codex 细节还原"),
-        hasImportedSourceTaskRail:
-          bodyText.includes("Codex 导入") ||
-          bodyText.includes("导入来源") ||
-          bodyText.includes(sourceThreadId),
+        hasDialogPreview: bodyText.includes("导入细节还原"),
+        hasImportedSourceTaskRail: bodyText.includes(sourceThreadId),
         hasImportedUserMessage: bodyText.includes(importedUserText),
         hasImportedAssistantMessage: bodyText.includes(importedAssistantText),
-        hasReasoningVisible:
-          bodyText.includes(importedReasoningText) ||
-          bodyText.includes("已完成思考") ||
-          (bodyText.includes("已完成") && bodyText.includes("步骤")) ||
-          readModelSummary?.hasReasoningItem === true,
+        hasReasoningVisible: bodyText.includes(importedReasoningText),
+        hasReasoningItem: readModelSummary?.hasReasoningItem === true,
         hasCommandText:
-          bodyText.includes("npm test") ||
+          bodyText.includes("导入的命令记录") ||
+          bodyText.includes("Imported command record") ||
           readModelSummary?.hasCommandItem === true,
         hidesRawImportedCommand:
-          !bodyText.includes("Approve Codex command") &&
+          !bodyText.includes("Approve imported command") &&
           !bodyText.includes("imported_read_only"),
         hasPatchText:
           bodyText.includes("补丁") ||
@@ -1038,6 +438,9 @@ async function extractClickThroughSummary(page, readModelSummary, backendLedger)
           bodyText.includes("approval"),
         hasContinueUserMessage: bodyText.includes(continueUserText),
         hasContinueAssistantMessage: bodyText.includes(continueAssistantText),
+        hidesFixtureSentinel: !bodyText.includes(
+          "CODEX_IMPORT_CLICK_THROUGH_DONE",
+        ),
         readModelSummary,
         backendLedgerLength: Array.isArray(backendLedger)
           ? backendLedger.length
@@ -1079,12 +482,13 @@ async function run() {
     options.evidenceDir,
     `${options.prefix}.png`,
   );
+  const visualScreenshotDir = path.join(options.evidenceDir, "visual-audit");
   const failureScreenshotPath = path.join(
     options.evidenceDir,
     `${options.prefix}-failure.png`,
   );
 
-  const runtimeEnv = createTempRuntimeEnv();
+  const runtimeEnv = createClickThroughFixtureRuntimeEnv();
   const appServerBinary = resolveDevAppServerBinary({
     env: runtimeEnv.env,
     repoRoot: process.cwd(),
@@ -1119,6 +523,7 @@ async function run() {
     backendSummary: null,
     consoleErrors: [],
     screenshot: null,
+    visualAudit: null,
     rawEvidence: rawEvidencePath,
     backendLedgerEvidence: backendLedgerEvidencePath,
     summary: summaryPath,
@@ -1130,9 +535,16 @@ async function run() {
   const rendererSnapshots = [];
   const appServerRequests = [];
   let previewSnapshot = null;
+  let previewSummary = null;
   let importedPageSnapshot = null;
   let importedDetailsSnapshot = null;
   let importedDetailsSummary = null;
+  let importedHistoryBannerSummary = null;
+  let importedAttachmentPreviewSummary = null;
+  let importedFilePreviewArtifactsSummary = null;
+  let sidebarImportDiscoverabilitySummary = null;
+  let environmentPopoverSummary = null;
+  let visualAuditSummary = null;
   let sendClick = null;
   let continuationSnapshot = null;
   let continuationSummary = null;
@@ -1176,26 +588,80 @@ async function run() {
     await page.setViewportSize({ width: 1440, height: 1000 });
 
     logStage("wait-renderer");
-    const rendererSnapshot = await waitForRendererReady(page, options, (snapshot) => {
-      rendererSnapshots.push(sanitizeJson(snapshot));
-    });
+    const rendererSnapshot = await waitForRendererReady(
+      page,
+      options,
+      (snapshot) => {
+        rendererSnapshots.push(sanitizeJson(snapshot));
+      },
+    );
     summary.electronPreloadBridge =
       rendererSnapshot.electron && rendererSnapshot.hasInvokeBridge;
     await clearInvokeBuffers(page);
     appServerRequests.push({ method: "initialize", source: "script-probe" });
-    await initializeAppServer(page);
+    await initializeAppServer(page, APP_SERVER_CLIENT_INFO, {
+      eventMethods: ["agentSession/event"],
+    });
 
     logStage("click-sidebar-import");
     await clickSidebarImport(page, options);
 
     logStage("wait-import-preview");
     previewSnapshot = await waitForImportPreview(page, options);
+    previewSummary = summarizeImportPreviewSnapshot(previewSnapshot);
+    assert(
+      previewSummary.hidesRawSourceEventNames,
+      "导入预览暴露了 source event / payload 内部字段",
+    );
+    assert(
+      previewSummary.hasReadableSourceLabels,
+      "导入预览未展示可读的来源行和消息类型",
+    );
 
     logStage("confirm-import");
     importedPageSnapshot = await confirmImport(page, options);
 
     logStage("wait-imported-details");
     importedDetailsSnapshot = await waitForImportedSessionDetails(
+      page,
+      options,
+    );
+
+    logStage("inspect-imported-history-banner");
+    importedHistoryBannerSummary = await inspectImportedHistoryBanner(
+      page,
+      options,
+    );
+    assert(
+      importedHistoryBannerSummary.hiddenFromMainTimeline,
+      "导入会话主线不应展示本地历史摘要",
+    );
+
+    logStage("inspect-imported-attachment-preview");
+    importedAttachmentPreviewSummary = await inspectImportedAttachmentPreview(
+      page,
+      options,
+    );
+
+    logStage("inspect-imported-file-preview-artifacts");
+    importedFilePreviewArtifactsSummary =
+      await inspectImportedFilePreviewArtifacts(page, options);
+
+    logStage("inspect-sidebar-import-discoverability");
+    sidebarImportDiscoverabilitySummary =
+      await inspectSidebarImportDiscoverability(page, options);
+    assert(sidebarImportDiscoverabilitySummary.visible, "侧栏会话入口不可见");
+    assert(
+      sidebarImportDiscoverabilitySummary.importedEntryVisible,
+      "导入会话未出现在侧栏会话入口",
+    );
+    assert(
+      !sidebarImportDiscoverabilitySummary.emptyStateOnly,
+      "侧栏导入后仍只显示空态",
+    );
+
+    logStage("inspect-environment-popover-import-boundary");
+    environmentPopoverSummary = await inspectEnvironmentPopoverImportBoundary(
       page,
       options,
     );
@@ -1221,8 +687,14 @@ async function run() {
     readModel = await waitForImportedReadModel(page, options, sessionId);
     const backendSummary = summarizeBackendLedger(backendLedger, sessionId);
     summary.backendSummary = sanitizeJson(backendSummary);
-    assert(backendSummary.backendTurnStartSeen, "external backend 未收到 turnStart");
-    assert(backendSummary.backendSessionMatches, "backend turnStart 不属于导入 session");
+    assert(
+      backendSummary.backendTurnStartSeen,
+      "external backend 未收到 turnStart",
+    );
+    assert(
+      backendSummary.backendSessionMatches,
+      "backend turnStart 不属于导入 session",
+    );
     assert(
       typeof backendSummary.backendTurnId === "string" &&
         backendSummary.backendTurnId.length > 0,
@@ -1251,6 +723,10 @@ async function run() {
       readModel.summary,
     );
     continuationSummary = summarizeContinuationSnapshot(continuationSnapshot);
+    assert(
+      continuationSummary.hidesFixtureSentinel,
+      "续聊输出暴露了 fixture 哨兵文本",
+    );
     const traceMethods = Array.from(
       new Set([
         ...extractInvokeTraceMethods(clickThroughSummary.traceRaw),
@@ -1264,20 +740,35 @@ async function run() {
       missingRequiredMethods.length === 0,
       `GUI 点击链路缺少 App Server method trace: ${missingRequiredMethods.join(", ")}`,
     );
-    assert(importedDetailsSummary.hasImportedUserMessage, "页面未显示导入用户消息");
+    assert(
+      importedDetailsSummary.hasImportedUserMessage,
+      "页面未显示导入用户消息",
+    );
     assert(
       importedDetailsSummary.hasImportedAssistantMessage,
       "页面未显示导入助手消息",
     );
     assert(
       importedDetailsSummary.hasReasoningVisible,
-      "页面或 read model 未保留导入 reasoning",
+      "页面未显示导入 reasoning 原文",
+    );
+    assert(
+      readModel.summary.hasReasoningItem,
+      "read model 未保留导入 reasoning",
     );
     summary.readModelSummary = sanitizeJson(readModel.summary);
     assert(readModel.summary.hasCommandItem, "read model 未保留导入 command");
     assert(
+      readModel.summary.hasImportedAttachment,
+      "read model 未保留导入图片附件",
+    );
+    assert(
+      importedDetailsSummary.hasCommandRecordVisible,
+      "页面未显示导入 command 的友好记录",
+    );
+    assert(
       importedDetailsSummary.hidesRawImportedCommand,
-      "页面暴露了 Codex 原始审批命令或导入内部字段",
+      "页面暴露了原始审批命令或导入内部字段",
     );
     assert(importedDetailsSummary.hasPatchText, "页面未显示导入 patch");
     assert(
@@ -1293,6 +784,16 @@ async function run() {
       continuationSummary.hasContinueAssistantMessage,
       "页面未显示续聊助手消息",
     );
+
+    logStage("collect-visual-audit");
+    fs.mkdirSync(visualScreenshotDir, { recursive: true });
+    visualAuditSummary = await collectImportedSessionVisualAudit(
+      page,
+      options,
+      visualScreenshotDir,
+    );
+    await page.setViewportSize({ width: 1440, height: 1000 });
+
     assert(
       !clickThroughSummary.errorRaw,
       `invoke error buffer 非空: ${clickThroughSummary.errorRaw}`,
@@ -1305,7 +806,16 @@ async function run() {
     summary.clickThroughSummary = sanitizeJson({
       ...clickThroughSummary,
       importedDetailsSummary,
+      importedHistoryBannerSummary,
+      importedAttachmentPreviewSummary,
+      importedFilePreviewArtifactsSummary:
+        summarizeImportedFilePreviewArtifacts(
+          importedFilePreviewArtifactsSummary,
+        ),
+      sidebarImportDiscoverabilitySummary,
       continuationSummary,
+      environmentPopoverSummary,
+      visualAuditSummary,
       traceMethods,
       missingRequiredMethods,
       traceRaw: undefined,
@@ -1317,9 +827,15 @@ async function run() {
       sanitizeJson({
         rendererSnapshots,
         previewSnapshot,
+        previewSummary,
         importedPageSnapshot,
         importedDetailsSnapshot,
         importedDetailsSummary,
+        importedHistoryBannerSummary,
+        importedAttachmentPreviewSummary,
+        importedFilePreviewArtifactsSummary,
+        environmentPopoverSummary,
+        visualAuditSummary,
         sendClick,
         continuationSnapshot,
         continuationSummary,
@@ -1328,7 +844,16 @@ async function run() {
         clickThroughSummary: {
           ...clickThroughSummary,
           importedDetailsSummary,
+          importedHistoryBannerSummary,
+          importedAttachmentPreviewSummary,
+          importedFilePreviewArtifactsSummary:
+            summarizeImportedFilePreviewArtifacts(
+              importedFilePreviewArtifactsSummary,
+            ),
+          sidebarImportDiscoverabilitySummary,
           continuationSummary,
+          environmentPopoverSummary,
+          visualAuditSummary,
           traceMethods,
         },
       }),
@@ -1337,6 +862,7 @@ async function run() {
 
     await page.screenshot({ path: screenshotPath, fullPage: true });
     summary.screenshot = screenshotPath;
+    summary.visualAudit = sanitizeJson(visualAuditSummary);
     summary.consoleErrors = consoleErrors;
     summary.ok = true;
     summary.completedAt = new Date().toISOString();
@@ -1353,9 +879,16 @@ async function run() {
       sanitizeJson({
         rendererSnapshots,
         previewSnapshot,
+        previewSummary,
         importedPageSnapshot,
         importedDetailsSnapshot,
         importedDetailsSummary,
+        importedHistoryBannerSummary,
+        importedAttachmentPreviewSummary,
+        importedFilePreviewArtifactsSummary,
+        sidebarImportDiscoverabilitySummary,
+        environmentPopoverSummary,
+        visualAuditSummary,
         sendClick,
         continuationSnapshot,
         continuationSummary,

@@ -1,3 +1,4 @@
+use super::super::provenance;
 use app_server_protocol::{ConversationImportSourceClient, ConversationImportSourceProvenance};
 use serde_json::{json, Map, Value};
 use std::collections::BTreeSet;
@@ -52,9 +53,42 @@ pub(super) fn event_msg_runtime_events(
         return Vec::new();
     };
     let mut events = match payload.get("type").and_then(Value::as_str) {
+        Some("patch_apply_begin") => vec![patch_apply_begin_event(payload)],
         Some("patch_apply_end") => vec![patch_apply_end_event(payload)],
+        Some("mcp_tool_call_begin") => vec![mcp_tool_call_begin_event(payload)],
         Some("mcp_tool_call_end") => vec![mcp_tool_call_end_event(payload)],
+        Some("dynamic_tool_call_request") => vec![dynamic_tool_call_started_event(payload)],
+        Some("dynamic_tool_call_response") => vec![dynamic_tool_call_finished_event(payload)],
+        Some("view_image_tool_call") => vec![view_image_tool_call_event(payload)],
+        Some("image_generation_begin") => vec![image_generation_started_event(payload)],
+        Some("image_generation_end") => vec![image_generation_finished_event(payload)],
         Some("web_search_end") => vec![web_search_end_event(payload)],
+        Some("item_completed") => item_completed_event(payload).into_iter().collect(),
+        Some("hook_prompt") => hook_prompt_event(payload).into_iter().collect(),
+        Some("context_compacted") => vec![context_compaction_event(payload)],
+        Some("entered_review_mode") => entered_review_mode_event(payload).into_iter().collect(),
+        Some("exited_review_mode") => exited_review_mode_event(payload).into_iter().collect(),
+        Some("sub_agent_activity") | Some("subagent_activity") => {
+            vec![subagent_activity_event(payload)]
+        }
+        Some(
+            "collab_agent_spawn_begin"
+            | "collab_agent_interaction_begin"
+            | "collab_waiting_begin"
+            | "collab_close_begin"
+            | "collab_resume_begin",
+        ) => {
+            vec![collab_agent_tool_event(payload, true)]
+        }
+        Some(
+            "collab_agent_spawn_end"
+            | "collab_agent_interaction_end"
+            | "collab_waiting_end"
+            | "collab_close_end"
+            | "collab_resume_end",
+        ) => {
+            vec![collab_agent_tool_event(payload, false)]
+        }
         Some("exec_approval_request") | Some("apply_patch_approval_request") => {
             vec![action_required_event(payload)]
         }
@@ -75,7 +109,7 @@ pub(super) fn event_msg_runtime_events(
 pub(super) fn source_provenance_value(
     provenance: &ConversationImportSourceProvenance,
 ) -> Option<Value> {
-    serde_json::to_value(provenance).ok()
+    provenance::source_provenance_value(provenance)
 }
 
 pub(super) fn source_provenance(
@@ -83,39 +117,21 @@ pub(super) fn source_provenance(
     source_event_seq: usize,
     payload: Option<&Value>,
 ) -> ConversationImportSourceProvenance {
-    let payload_type = payload
-        .and_then(|value| value.get("type"))
-        .and_then(Value::as_str)
-        .map(str::to_string);
-    ConversationImportSourceProvenance {
-        source_client: ConversationImportSourceClient::Codex,
-        source_thread_id: None,
-        source_path: None,
-        source_event_type: source_event_type.map(str::to_string),
-        source_event_seq: Some(source_event_seq),
-        source_payload_type: payload_type,
-        source_call_id: payload.and_then(call_id),
-        source_role: payload
-            .and_then(|value| string_field(value, &["role"]))
-            .filter(|value| !value.trim().is_empty()),
-        source_channel: payload
-            .and_then(|value| string_field(value, &["channel"]))
-            .filter(|value| !value.trim().is_empty()),
-    }
+    provenance::source_provenance(
+        ConversationImportSourceClient::Codex,
+        source_event_type,
+        source_event_seq,
+        payload,
+        payload.and_then(call_id),
+    )
 }
 
 pub(super) fn enrich_source_provenance(
-    mut provenance: ConversationImportSourceProvenance,
+    provenance: ConversationImportSourceProvenance,
     source_thread_id: Option<&str>,
     source_path: Option<&str>,
 ) -> ConversationImportSourceProvenance {
-    if provenance.source_thread_id.is_none() {
-        provenance.source_thread_id = source_thread_id.map(str::to_string);
-    }
-    if provenance.source_path.is_none() {
-        provenance.source_path = source_path.map(str::to_string);
-    }
-    provenance
+    provenance::enrich_source_provenance(provenance, source_thread_id, source_path)
 }
 
 fn apply_provenance_to_runtime_events(
@@ -136,8 +152,14 @@ fn apply_provenance_to_runtime_events(
 
 fn tool_start_events_from_response_item(payload: &Value) -> Vec<ImportedRuntimeEvent> {
     let mut events = vec![tool_started_from_response_item(payload)];
-    if tool_name(payload).as_deref() == Some("exec_command") {
-        events.push(command_started_from_response_item(payload));
+    match tool_name(payload).as_deref() {
+        Some("exec_command") => events.push(command_started_from_response_item(payload)),
+        Some("update_plan") => {
+            if let Some(event) = plan_final_from_response_item(payload) {
+                events.push(event);
+            }
+        }
+        _ => {}
     }
     events
 }
@@ -152,7 +174,7 @@ fn tool_finish_events_from_response_item(
 fn tool_started_from_response_item(payload: &Value) -> ImportedRuntimeEvent {
     let call_id = call_id(payload);
     let tool_name = tool_name(payload);
-    let arguments = response_item_arguments(payload);
+    let arguments = parsed_arguments(payload);
     let mut event_payload = Map::new();
     insert_string(&mut event_payload, "toolCallId", call_id);
     insert_string(&mut event_payload, "toolName", tool_name.clone());
@@ -250,6 +272,74 @@ fn response_item_reasoning_event(payload: &Value) -> Option<ImportedRuntimeEvent
     ))
 }
 
+fn plan_final_from_response_item(payload: &Value) -> Option<ImportedRuntimeEvent> {
+    let arguments = parsed_arguments(payload)?;
+    let plan = plan_steps(&arguments);
+    if plan.is_empty() {
+        return None;
+    }
+    let text = plan_markdown(&plan);
+    Some(ImportedRuntimeEvent::new(
+        "plan.final",
+        compact_json(json!({
+            "planId": call_id(payload),
+            "toolCallId": call_id(payload),
+            "toolName": "update_plan",
+            "name": "update_plan",
+            "status": "completed",
+            "text": text,
+            "explanation": string_field(&arguments, &["explanation"]),
+            "plan": plan,
+            "arguments": arguments,
+            "sourceClient": "codex",
+            "sourceEventType": payload.get("type").and_then(Value::as_str),
+        })),
+    ))
+}
+
+fn item_completed_event(payload: &Value) -> Option<ImportedRuntimeEvent> {
+    let item = payload.get("item")?;
+    if !item
+        .get("type")
+        .and_then(Value::as_str)
+        .is_some_and(|item_type| item_type == "Plan" || item_type == "plan")
+    {
+        return None;
+    }
+    let text = string_field(item, &["text"])?;
+    Some(ImportedRuntimeEvent::new(
+        "plan.final",
+        compact_json(json!({
+            "planId": string_field(item, &["id"]),
+            "sourceItemId": string_field(item, &["id"]),
+            "status": "completed",
+            "text": text,
+            "sourceClient": "codex",
+            "sourceEventType": "item_completed",
+        })),
+    ))
+}
+
+fn mcp_tool_call_begin_event(payload: &Value) -> ImportedRuntimeEvent {
+    let invocation = payload.get("invocation").cloned();
+    let tool_name = mcp_tool_name(invocation.as_ref());
+    ImportedRuntimeEvent::new(
+        "tool.started",
+        compact_json(json!({
+            "toolCallId": call_id(payload),
+            "toolName": tool_name,
+            "name": tool_name,
+            "status": "in_progress",
+            "arguments": invocation.as_ref().and_then(|value| value.get("arguments")).cloned(),
+            "server": invocation.as_ref().and_then(|value| string_field(value, &["server"])),
+            "mcpAppResourceUri": string_field(payload, &["mcp_app_resource_uri", "mcpAppResourceUri"]),
+            "pluginId": string_field(payload, &["plugin_id", "pluginId"]),
+            "sourceClient": "codex",
+            "sourceEventType": "mcp_tool_call_begin",
+        })),
+    )
+}
+
 fn mcp_tool_call_end_event(payload: &Value) -> ImportedRuntimeEvent {
     let invocation = payload.get("invocation").cloned();
     let result = payload.get("result").cloned();
@@ -259,16 +349,7 @@ fn mcp_tool_call_end_event(payload: &Value) -> ImportedRuntimeEvent {
     } else {
         "tool.failed"
     };
-    let tool_name = invocation
-        .as_ref()
-        .and_then(|value| string_field(value, &["tool"]))
-        .map(|tool| {
-            invocation
-                .as_ref()
-                .and_then(|value| string_field(value, &["server"]))
-                .map(|server| format!("mcp__{server}__{tool}"))
-                .unwrap_or(tool)
-        });
+    let tool_name = mcp_tool_name(invocation.as_ref());
     ImportedRuntimeEvent::new(
         event_type,
         compact_json(json!({
@@ -278,10 +359,124 @@ fn mcp_tool_call_end_event(payload: &Value) -> ImportedRuntimeEvent {
             "status": if success { "completed" } else { "failed" },
             "success": success,
             "arguments": invocation.as_ref().and_then(|value| value.get("arguments")).cloned(),
+            "server": invocation.as_ref().and_then(|value| string_field(value, &["server"])),
+            "mcpAppResourceUri": string_field(payload, &["mcp_app_resource_uri", "mcpAppResourceUri"]),
+            "pluginId": string_field(payload, &["plugin_id", "pluginId"]),
             "result": result,
             "output": result.as_ref().map(Value::to_string),
             "sourceClient": "codex",
             "sourceEventType": "mcp_tool_call_end",
+        })),
+    )
+}
+
+fn dynamic_tool_call_started_event(payload: &Value) -> ImportedRuntimeEvent {
+    let tool_name = dynamic_tool_name(payload);
+    ImportedRuntimeEvent::new(
+        "tool.started",
+        compact_json(json!({
+            "toolCallId": call_id(payload),
+            "toolName": tool_name,
+            "name": tool_name,
+            "status": "in_progress",
+            "arguments": payload.get("arguments").cloned(),
+            "namespace": string_field(payload, &["namespace"]),
+            "sourceClient": "codex",
+            "sourceEventType": "dynamic_tool_call_request",
+        })),
+    )
+}
+
+fn dynamic_tool_call_finished_event(payload: &Value) -> ImportedRuntimeEvent {
+    let success = payload
+        .get("success")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    let event_type = if success {
+        "tool.result"
+    } else {
+        "tool.failed"
+    };
+    let tool_name = dynamic_tool_name(payload);
+    let output = dynamic_tool_output(payload);
+    ImportedRuntimeEvent::new(
+        event_type,
+        compact_json(json!({
+            "toolCallId": call_id(payload),
+            "toolName": tool_name,
+            "name": tool_name,
+            "status": if success { "completed" } else { "failed" },
+            "success": success,
+            "arguments": payload.get("arguments").cloned(),
+            "namespace": string_field(payload, &["namespace"]),
+            "contentItems": payload.get("content_items")
+                .or_else(|| payload.get("contentItems"))
+                .cloned(),
+            "output": output,
+            "sourceClient": "codex",
+            "sourceEventType": "dynamic_tool_call_response",
+        })),
+    )
+}
+
+fn view_image_tool_call_event(payload: &Value) -> ImportedRuntimeEvent {
+    let path = string_field(payload, &["path"]);
+    ImportedRuntimeEvent::new(
+        "tool.result",
+        compact_json(json!({
+            "toolCallId": call_id(payload),
+            "toolName": "view_image",
+            "name": "view_image",
+            "status": "completed",
+            "success": true,
+            "arguments": path.as_ref().map(|path| json!({ "path": path })),
+            "output": path.as_ref().map(|path| format!("Viewed image: {path}")),
+            "path": path,
+            "sourceClient": "codex",
+            "sourceEventType": "view_image_tool_call",
+        })),
+    )
+}
+
+fn image_generation_started_event(payload: &Value) -> ImportedRuntimeEvent {
+    ImportedRuntimeEvent::new(
+        "tool.started",
+        compact_json(json!({
+            "toolCallId": call_id(payload),
+            "toolName": "image_generation",
+            "name": "image_generation",
+            "status": "in_progress",
+            "arguments": payload.get("prompt")
+                .and_then(Value::as_str)
+                .map(|prompt| json!({ "prompt": prompt })),
+            "sourceClient": "codex",
+            "sourceEventType": "image_generation_begin",
+        })),
+    )
+}
+
+fn image_generation_finished_event(payload: &Value) -> ImportedRuntimeEvent {
+    let status = string_field(payload, &["status"]).unwrap_or_else(|| "completed".to_string());
+    let success = !matches!(status.as_str(), "failed" | "error" | "cancelled" | "canceled");
+    let output = string_field(payload, &["result"])
+        .or_else(|| string_field(payload, &["saved_path", "savedPath"]))
+        .or_else(|| string_field(payload, &["revised_prompt", "revisedPrompt"]));
+    ImportedRuntimeEvent::new(
+        if success { "tool.result" } else { "tool.failed" },
+        compact_json(json!({
+            "toolCallId": call_id(payload),
+            "toolName": "image_generation",
+            "name": "image_generation",
+            "status": if success { "completed" } else { "failed" },
+            "success": success,
+            "arguments": {
+                "revisedPrompt": string_field(payload, &["revised_prompt", "revisedPrompt"]),
+                "savedPath": string_field(payload, &["saved_path", "savedPath"]),
+            },
+            "output": output,
+            "result": string_field(payload, &["result"]),
+            "sourceClient": "codex",
+            "sourceEventType": "image_generation_end",
         })),
     )
 }
@@ -340,6 +535,22 @@ fn patch_apply_end_event(payload: &Value) -> ImportedRuntimeEvent {
     )
 }
 
+fn patch_apply_begin_event(payload: &Value) -> ImportedRuntimeEvent {
+    let paths = changed_paths(payload);
+    ImportedRuntimeEvent::new(
+        "patch.started",
+        compact_json(json!({
+            "patchId": call_id(payload),
+            "toolCallId": call_id(payload),
+            "paths": paths,
+            "changedFiles": paths,
+            "changes": payload.get("changes").cloned(),
+            "sourceClient": "codex",
+            "sourceEventType": "patch_apply_begin",
+        })),
+    )
+}
+
 fn action_required_event(payload: &Value) -> ImportedRuntimeEvent {
     let request_id = call_id(payload)
         .or_else(|| string_field(payload, &["id", "request_id"]))
@@ -366,6 +577,118 @@ fn action_required_event(payload: &Value) -> ImportedRuntimeEvent {
             "sourceClient": "codex",
             "sourceEventType": source_type,
             "importedReadOnly": true,
+        })),
+    )
+}
+
+fn hook_prompt_event(payload: &Value) -> Option<ImportedRuntimeEvent> {
+    let text = hook_prompt_text(payload)?;
+    Some(ImportedRuntimeEvent::new(
+        "reasoning.completed",
+        compact_json(json!({
+            "text": text,
+            "summary": [text],
+            "sourceClient": "codex",
+            "sourceEventType": "hook_prompt",
+        })),
+    ))
+}
+
+fn context_compaction_event(payload: &Value) -> ImportedRuntimeEvent {
+    ImportedRuntimeEvent::new(
+        "context.compaction.completed",
+        compact_json(json!({
+            "compactionId": call_id(payload),
+            "stage": "completed",
+            "trigger": string_field(payload, &["trigger"]).unwrap_or_else(|| "auto".to_string()),
+            "detail": string_field(payload, &["detail", "message", "summary"]),
+            "sourceClient": "codex",
+            "sourceEventType": "context_compacted",
+        })),
+    )
+}
+
+fn entered_review_mode_event(payload: &Value) -> Option<ImportedRuntimeEvent> {
+    let review = review_text(payload).unwrap_or_else(|| "Review requested.".to_string());
+    Some(ImportedRuntimeEvent::new(
+        "reasoning.completed",
+        compact_json(json!({
+            "text": review,
+            "summary": [review],
+            "sourceClient": "codex",
+            "sourceEventType": "entered_review_mode",
+        })),
+    ))
+}
+
+fn exited_review_mode_event(payload: &Value) -> Option<ImportedRuntimeEvent> {
+    let review = review_text(payload)?;
+    Some(ImportedRuntimeEvent::new(
+        "message.delta",
+        compact_json(json!({
+            "text": review,
+            "phase": "commentary",
+            "imported": true,
+            "sourceClient": "codex",
+            "sourceEventType": "exited_review_mode",
+        })),
+    ))
+}
+
+fn subagent_activity_event(payload: &Value) -> ImportedRuntimeEvent {
+    let kind = string_field(payload, &["kind"]).unwrap_or_else(|| "started".to_string());
+    let status_label = match kind.trim().to_ascii_lowercase().as_str() {
+        "started" => "running",
+        "interacted" => "running",
+        "interrupted" => "aborted",
+        "completed" => "completed",
+        "failed" => "failed",
+        _ => kind.as_str(),
+    };
+    ImportedRuntimeEvent::new(
+        "subagent.activity",
+        compact_json(json!({
+            "activityId": string_field(payload, &["event_id", "eventId", "id"])
+                .or_else(|| call_id(payload)),
+            "statusLabel": status_label,
+            "status": match status_label {
+                "failed" => "failed",
+                "running" => "in_progress",
+                _ => "completed",
+            },
+            "title": string_field(payload, &["agent_path", "agentPath", "title"]),
+            "summary": string_field(payload, &["summary", "message", "prompt"]),
+            "sessionId": string_field(payload, &["agent_thread_id", "agentThreadId", "session_id", "sessionId"]),
+            "role": string_field(payload, &["role", "kind"]),
+            "model": string_field(payload, &["model"]),
+            "sourceClient": "codex",
+            "sourceEventType": payload.get("type").and_then(Value::as_str),
+        })),
+    )
+}
+
+fn collab_agent_tool_event(payload: &Value, in_progress: bool) -> ImportedRuntimeEvent {
+    let success = !collab_agent_failed(payload);
+    let event_type = if in_progress {
+        "tool.started"
+    } else if success {
+        "tool.result"
+    } else {
+        "tool.failed"
+    };
+    let tool_name = collab_tool_name(payload);
+    ImportedRuntimeEvent::new(
+        event_type,
+        compact_json(json!({
+            "toolCallId": call_id(payload),
+            "toolName": tool_name,
+            "name": tool_name,
+            "status": if in_progress { "in_progress" } else if success { "completed" } else { "failed" },
+            "success": if in_progress { None } else { Some(success) },
+            "arguments": collab_tool_arguments(payload),
+            "output": collab_tool_output(payload),
+            "sourceClient": "codex",
+            "sourceEventType": payload.get("type").and_then(Value::as_str),
         })),
     )
 }
@@ -473,7 +796,7 @@ fn approval_prompt(payload: &Value) -> Option<String> {
                     .join(" ")
             })
             .filter(|value| !value.trim().is_empty());
-        command.map(|command| format!("Approve Codex command: {command}"))
+        command.map(|command| format!("Approve imported command: {command}"))
     })
 }
 
@@ -483,6 +806,162 @@ fn approval_tool_name(payload: &Value) -> Option<String> {
         Some("apply_patch_approval_request") => Some("apply_patch".to_string()),
         _ => string_field(payload, &["tool", "tool_name", "toolName", "name"]),
     }
+}
+
+fn mcp_tool_name(invocation: Option<&Value>) -> Option<String> {
+    invocation
+        .and_then(|value| string_field(value, &["tool"]))
+        .map(|tool| {
+            invocation
+                .and_then(|value| string_field(value, &["server"]))
+                .map(|server| format!("mcp__{server}__{tool}"))
+                .unwrap_or(tool)
+        })
+}
+
+fn dynamic_tool_name(payload: &Value) -> Option<String> {
+    string_field(payload, &["tool", "name"]).map(|tool| {
+        string_field(payload, &["namespace"])
+            .filter(|namespace| !namespace.trim().is_empty())
+            .map(|namespace| format!("{namespace}.{tool}"))
+            .unwrap_or(tool)
+    })
+}
+
+fn dynamic_tool_output(payload: &Value) -> Option<String> {
+    payload
+        .get("content_items")
+        .or_else(|| payload.get("contentItems"))
+        .and_then(dynamic_tool_content_items_text)
+        .or_else(|| response_item_output(payload))
+}
+
+fn dynamic_tool_content_items_text(value: &Value) -> Option<String> {
+    let items = value.as_array()?;
+    let text = items
+        .iter()
+        .filter_map(|item| string_field(item, &["text", "image_url", "imageUrl"]))
+        .collect::<Vec<_>>()
+        .join("\n");
+    (!text.trim().is_empty()).then_some(text)
+}
+
+fn hook_prompt_text(payload: &Value) -> Option<String> {
+    let fragments = payload.get("fragments")?.as_array()?;
+    let text = fragments
+        .iter()
+        .filter_map(|fragment| string_field(fragment, &["text"]))
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    (!text.trim().is_empty()).then_some(text)
+}
+
+fn review_text(payload: &Value) -> Option<String> {
+    string_field(payload, &["review", "user_facing_hint", "userFacingHint"])
+        .or_else(|| {
+            payload
+                .get("review_output")
+                .or_else(|| payload.get("reviewOutput"))
+                .map(Value::to_string)
+        })
+        .or_else(|| string_field(payload, &["message", "summary"]))
+}
+
+fn collab_agent_failed(payload: &Value) -> bool {
+    let status = payload.get("status");
+    status
+        .and_then(Value::as_str)
+        .map(|value| matches!(value.trim(), "failed" | "errored" | "not_found" | "notFound"))
+        .unwrap_or(false)
+        || status
+            .and_then(Value::as_object)
+            .and_then(|object| object.keys().next())
+            .map(|key| {
+                matches!(
+                    key.as_str(),
+                    "errored" | "Errored" | "not_found" | "notFound" | "NotFound"
+                )
+            })
+            .unwrap_or(false)
+}
+
+fn collab_tool_name(payload: &Value) -> String {
+    match payload.get("type").and_then(Value::as_str) {
+        Some("collab_agent_spawn_begin" | "collab_agent_spawn_end") => "agent".to_string(),
+        Some("collab_agent_interaction_begin" | "collab_agent_interaction_end") => {
+            "send_message".to_string()
+        }
+        Some("collab_waiting_begin" | "collab_waiting_end") => "wait_agent".to_string(),
+        Some("collab_close_begin" | "collab_close_end") => "close_agent".to_string(),
+        Some("collab_resume_begin" | "collab_resume_end") => "resume_agent".to_string(),
+        _ => "collab_agent".to_string(),
+    }
+}
+
+fn collab_tool_arguments(payload: &Value) -> Value {
+    compact_json(json!({
+        "senderThreadId": string_field(payload, &["sender_thread_id", "senderThreadId"]),
+        "receiverThreadId": string_field(payload, &["receiver_thread_id", "receiverThreadId"]),
+        "receiverThreadIds": payload.get("receiver_thread_ids")
+            .or_else(|| payload.get("receiverThreadIds"))
+            .cloned(),
+        "newThreadId": string_field(payload, &["new_thread_id", "newThreadId"]),
+        "prompt": string_field(payload, &["prompt"]),
+        "model": string_field(payload, &["model"]),
+        "reasoningEffort": string_field(payload, &["reasoning_effort", "reasoningEffort"]),
+        "statuses": payload.get("statuses").cloned(),
+        "status": payload.get("status").cloned(),
+    }))
+}
+
+fn collab_tool_output(payload: &Value) -> Option<String> {
+    string_field(payload, &["summary", "message"])
+        .or_else(|| string_field(payload, &["new_thread_id", "newThreadId"]))
+        .or_else(|| payload.get("status").map(Value::to_string))
+}
+
+fn plan_steps(arguments: &Value) -> Vec<Value> {
+    arguments
+        .get("plan")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|item| {
+            let step = string_field(item, &["step"])?;
+            let status = plan_step_status(item)?;
+            Some(json!({
+                "step": step,
+                "status": status,
+            }))
+        })
+        .collect()
+}
+
+fn plan_step_status(item: &Value) -> Option<&'static str> {
+    match item.get("status").and_then(Value::as_str)?.trim() {
+        "pending" => Some("pending"),
+        "in_progress" | "in-progress" | "inProgress" => Some("in_progress"),
+        "completed" => Some("completed"),
+        _ => None,
+    }
+}
+
+fn plan_markdown(plan: &[Value]) -> String {
+    plan.iter()
+        .filter_map(|item| {
+            let step = item.get("step").and_then(Value::as_str)?.trim();
+            if step.is_empty() {
+                return None;
+            }
+            let status = item
+                .get("status")
+                .and_then(Value::as_str)
+                .unwrap_or("pending");
+            let marker = if status == "completed" { "[x]" } else { "[ ]" };
+            Some(format!("- {marker} {step}"))
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn call_id(payload: &Value) -> Option<String> {
@@ -565,21 +1044,5 @@ fn truncate_output_preview(value: &str) -> String {
 }
 
 fn compact_json(value: Value) -> Value {
-    match value {
-        Value::Object(map) => Value::Object(
-            map.into_iter()
-                .filter_map(|(key, value)| {
-                    if value.is_null() {
-                        return None;
-                    }
-                    if matches!(&value, Value::Array(items) if items.is_empty()) {
-                        return None;
-                    }
-                    Some((key, compact_json(value)))
-                })
-                .collect(),
-        ),
-        Value::Array(items) => Value::Array(items.into_iter().map(compact_json).collect()),
-        value => value,
-    }
+    provenance::compact_json(value)
 }

@@ -74,6 +74,15 @@ impl EventLogWriter {
         Ok(records)
     }
 
+    pub fn clear_session(&self, session_id: &str) -> Result<(), String> {
+        let path = self.session_path(session_id);
+        match fs::remove_file(&path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(format!("无法删除 event log {}: {error}", path.display())),
+        }
+    }
+
     fn session_path(&self, session_id: &str) -> PathBuf {
         self.root
             .join("sessions")
@@ -136,5 +145,18 @@ mod tests {
         assert_eq!(records.len(), 2);
         assert_eq!(records[0].event.sequence, 1);
         assert_eq!(records[1].event.sequence, 2);
+    }
+
+    #[test]
+    fn clear_session_removes_session_event_log() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let writer = EventLogWriter::new(temp.path()).expect("writer");
+        writer.append(&event(1)).expect("append");
+
+        writer.clear_session("session-a").expect("clear");
+
+        let records = writer.read_session_events("session-a").expect("records");
+        assert!(records.is_empty());
+        writer.clear_session("session-a").expect("clear missing");
     }
 }

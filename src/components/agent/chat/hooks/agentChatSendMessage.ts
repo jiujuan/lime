@@ -1,11 +1,11 @@
-import type { CodexSlashStatusSnapshot } from "../commands";
-import { executeCodexSlashCommand, parseCodexSlashCommand } from "../commands";
+import type { SlashCommandStatusSnapshot } from "../commands";
+import { executeSlashCommand, parseSlashCommand } from "../commands";
 import { recordSlashEntryUsage } from "../skill-selection/slashEntryUsage";
 import type { ClearMessagesOptions, SendMessageFn } from "./agentChatShared";
 import { normalizeExecutionStrategy } from "./agentChatCoreUtils";
 
 interface CreateAgentChatSendMessageOptions {
-  baseStatusSnapshot: CodexSlashStatusSnapshot;
+  baseStatusSnapshot: SlashCommandStatusSnapshot;
   rawSendMessage: SendMessageFn;
   compactSession: () => Promise<void>;
   clearMessages: (options?: ClearMessagesOptions) => void;
@@ -43,15 +43,15 @@ export function createAgentChatSendMessage(
     sendOptions,
   ) => {
     if (!skipUserMessage) {
-      const parsedCodexCommand = parseCodexSlashCommand(content);
-      if (parsedCodexCommand) {
+      const parsedSlashCommand = parseSlashCommand(content);
+      if (parsedSlashCommand) {
         const effectiveModel =
           modelOverride?.trim() || baseStatusSnapshot.model;
         const effectiveExecutionStrategy = normalizeExecutionStrategy(
           executionStrategyOverride || baseStatusSnapshot.executionStrategy,
         );
-        const handled = await executeCodexSlashCommand({
-          command: parsedCodexCommand,
+        const handled = await executeSlashCommand({
+          command: parsedSlashCommand,
           statusSnapshot: {
             ...baseStatusSnapshot,
             model: effectiveModel,

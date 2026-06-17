@@ -37,6 +37,7 @@ reqwest = { workspace = true, features = ["json", "rustls-tls-native-roots"] }
 
 [dependencies]
 aster-models = { path = "../aster-models", version = "0.27.2" }
+document-preview = { path = "../../../document-preview" }
 lru = "0.12"
 rmcp = { workspace = true, features = [
     "client",

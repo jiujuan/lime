@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "eventType": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "limit": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "offset": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "sessionId": {
+      "type": "string"
+    },
+    "turnIndex": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "sessionId"
+  ],
+  "title": "ConversationImportThreadRuntimeEventsReadParams",
+  "type": "object"
+}

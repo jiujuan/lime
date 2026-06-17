@@ -1,20 +1,20 @@
 use super::codex::{self, events::ImportedRuntimeEvent, ImportedTimelineItem};
 use super::commit_events::{
-    apply_runtime_event_budget, enrich_imported_runtime_event_payload,
-    normalize_imported_runtime_events, ImportedRuntimeEventTurn,
+    enrich_imported_runtime_event_payload,
+    materialize_imported_runtime_events_for_default_projection, ImportedRuntimeEventNormalizer,
+    ImportedRuntimeEventProjectionSummary,
 };
 use super::import_status;
+use super::provenance::{self, ImportProvenance};
 use crate::runtime::{new_id, timestamp};
-use crate::{RuntimeCore, RuntimeCoreError, RuntimeEvent};
+use crate::{RuntimeCore, RuntimeCoreError, RuntimeEvent, SidecarWriteRequest};
 use app_server_protocol::{
     AgentAttachment, AgentInput, AgentSessionStartParams, AgentSessionStatus, AgentTurn,
     AgentTurnStatus, BusinessObjectRef, ConversationImportSourceClient,
-    ConversationImportSourceStatus, ConversationImportThreadCommitParams,
-    ConversationImportThreadCommitResponse, ConversationImportThreadStatus, RuntimeOptions,
+    ConversationImportThreadCommitParams, ConversationImportThreadCommitResponse,
+    ConversationImportThreadStatus,
 };
 use serde_json::json;
-use serde_json::Value;
-use std::path::PathBuf;
 
 const DEFAULT_IMPORT_APP_ID: &str = "content-studio";
 
@@ -45,11 +45,11 @@ fn commit_codex_thread(
     params: ConversationImportThreadCommitParams,
 ) -> Result<ConversationImportThreadCommitResponse, RuntimeCoreError> {
     let source_root = codex::resolve_home(params.source_root.as_deref()).ok_or_else(|| {
-        RuntimeCoreError::Backend("unable to resolve Codex home directory".to_string())
+        RuntimeCoreError::Backend("unable to resolve source home directory".to_string())
     })?;
     if !source_root.is_dir() {
         return Err(RuntimeCoreError::Backend(
-            "Codex home directory does not exist".to_string(),
+            "source home directory does not exist".to_string(),
         ));
     }
 
@@ -61,10 +61,10 @@ fn commit_codex_thread(
     preview.thread.source_path = Some(codex::path_to_string(&source_path));
     preview.thread.import_status = ConversationImportThreadStatus::Imported;
 
-    let mut turns = imported_turns(&preview.timeline);
+    let turns = imported_turns(&preview.timeline);
     if turns.is_empty() {
         return Err(RuntimeCoreError::Backend(
-            "Codex rollout does not contain importable user messages".to_string(),
+            "source rollout does not contain importable user messages".to_string(),
         ));
     }
     if let Some(session) = import_status::imported_session_for_thread(
@@ -72,35 +72,32 @@ fn commit_codex_thread(
         ConversationImportSourceClient::Codex,
         &preview.thread.source_thread_id,
     ) {
-        preview.thread.import_status = ConversationImportThreadStatus::Imported;
-        preview.summary.dry_run.will_create_session = false;
-        preview.summary.dry_run.will_append_to_existing_session = true;
-        let warnings = preview.summary.warnings.clone();
-        return Ok(ConversationImportThreadCommitResponse {
-            session,
-            thread: preview.thread,
-            imported_messages: preview.summary.dry_run.will_import_messages,
-            imported_turns: preview.summary.dry_run.will_import_turns,
-            summary: preview.summary,
-            can_continue: true,
-            warnings,
-        });
+        if params.replace_existing.unwrap_or(false) {
+            clear_existing_imported_session(core, &session.session_id)?;
+        } else {
+            preview.thread.import_status = ConversationImportThreadStatus::Imported;
+            preview.summary.dry_run.will_create_session = false;
+            preview.summary.dry_run.will_append_to_existing_session = true;
+            let warnings = preview.summary.warnings.clone();
+            return Ok(ConversationImportThreadCommitResponse {
+                session,
+                thread: preview.thread,
+                imported_messages: preview.summary.dry_run.will_import_messages,
+                imported_turns: preview.summary.dry_run.will_import_turns,
+                summary: preview.summary,
+                can_continue: true,
+                warnings,
+            });
+        }
     }
-    let runtime_event_budget = apply_runtime_event_budget(&mut turns);
-    preview.summary.fidelity.budget_dropped = runtime_event_budget.dropped_events;
+    preview.summary.fidelity.budget_dropped = 0;
 
-    let provenance = ImportProvenance {
-        source_thread_id: preview.thread.source_thread_id.clone(),
-        source_root: codex::path_to_string(&source_root),
-        source_path: codex::path_to_string(&source_path),
-        source: preview.thread.source.clone(),
-        cwd: preview.thread.cwd.clone(),
-        model_provider: preview.thread.model_provider.clone(),
-        model: metadata_string(preview.thread.metadata.as_ref(), "model"),
-        reasoning_effort: metadata_string(preview.thread.metadata.as_ref(), "reasoningEffort"),
-        metadata: preview.thread.metadata.clone(),
-        fidelity: preview.summary.fidelity.clone(),
-    };
+    let provenance = ImportProvenance::for_thread(
+        &preview.thread,
+        &source_root,
+        &source_path,
+        &preview.summary.fidelity,
+    );
 
     let session = core
         .start_session(AgentSessionStartParams {
@@ -123,25 +120,27 @@ fn commit_codex_thread(
         })?
         .session;
 
-    let imported_turns = append_imported_turns(core, &session.session_id, turns, &provenance)?;
-    let imported_messages = preview.summary.dry_run.will_import_messages;
-    let mut warnings = preview.summary.warnings.clone();
-    if preview.summary.unsupported_count > 0 || preview.summary.rollout_event_items > 0 {
-        warnings.push(
-            "Imported Codex messages and supported tool/patch timeline events; unsupported rollout items remain as provenance only."
-                .to_string(),
-        );
-    }
-    if runtime_event_budget.dropped_events > 0 {
-        warnings.push(format!(
-            "Skipped {} high-volume Codex runtime events after preserving {} command tool calls, {} other tool calls, and all patch/action events.",
-            runtime_event_budget.dropped_events,
-            runtime_event_budget.retained_command_tool_calls,
-            runtime_event_budget.retained_other_tool_calls,
-        ));
-    }
+    let prepared_turns = prepare_imported_turns(turns);
+    let projection_summary = summarize_prepared_turns(&prepared_turns);
+    let sidecar_ref =
+        persist_imported_runtime_event_sidecar(core, &session.session_id, &prepared_turns)?;
+    attach_import_projection_metadata(
+        core,
+        &session.session_id,
+        &projection_summary,
+        sidecar_ref.as_ref(),
+    )?;
 
-    let mut session = session;
+    let imported_turns =
+        append_imported_turns(core, &session.session_id, prepared_turns, &provenance)?;
+    let imported_messages = preview.summary.dry_run.will_import_messages;
+    let warnings = provenance::commit_warnings(
+        &preview.summary.warnings,
+        preview.summary.unsupported_count,
+        preview.summary.rollout_event_items,
+    );
+
+    let (mut session, _) = core.session_snapshot(&session.session_id)?;
     session.status = AgentSessionStatus::Completed;
 
     Ok(ConversationImportThreadCommitResponse {
@@ -155,67 +154,104 @@ fn commit_codex_thread(
     })
 }
 
+fn clear_existing_imported_session(
+    core: &RuntimeCore,
+    session_id: &str,
+) -> Result<(), RuntimeCoreError> {
+    {
+        let mut state = core
+            .state
+            .lock()
+            .expect("runtime core state mutex poisoned");
+        state.sessions.remove(session_id);
+    }
+    if let Some(projection_store) = core.projection_store.as_ref() {
+        projection_store
+            .clear_session(session_id)
+            .map_err(RuntimeCoreError::Backend)?;
+    }
+    if let Some(event_log_writer) = core.event_log_writer.as_ref() {
+        event_log_writer
+            .clear_session(session_id)
+            .map_err(RuntimeCoreError::Backend)?;
+    }
+    Ok(())
+}
+
 fn resolve_source_path(
     source_root: &std::path::Path,
     params: &ConversationImportThreadCommitParams,
-) -> Result<(PathBuf, Option<app_server_protocol::ImportedThreadSummary>), RuntimeCoreError> {
-    let (mut source_path, indexed_thread) =
-        match codex::normalize_filter(params.source_path.as_deref()) {
-            Some(path) => (PathBuf::from(path), None),
-            None => {
-                let thread_id = codex::normalize_filter(params.source_thread_id.as_deref())
-                    .ok_or_else(|| {
-                        RuntimeCoreError::Backend(
-                            "conversation import commit requires sourceThreadId or sourcePath"
-                                .to_string(),
-                        )
-                    })?;
-                let thread = codex::find_thread(source_root, &thread_id).ok_or_else(|| {
+) -> Result<
+    (
+        std::path::PathBuf,
+        Option<app_server_protocol::ImportedThreadSummary>,
+    ),
+    RuntimeCoreError,
+> {
+    let (source_path, indexed_thread) = match codex::normalize_filter(params.source_path.as_deref())
+    {
+        Some(path) => (
+            codex::resolve_user_supplied_rollout_path(source_root, &path).ok_or_else(|| {
+                RuntimeCoreError::Backend(
+                    "source path must be a Codex rollout JSONL file inside source root".to_string(),
+                )
+            })?,
+            None,
+        ),
+        None => {
+            let thread_id = codex::normalize_filter(params.source_thread_id.as_deref())
+                .ok_or_else(|| {
                     RuntimeCoreError::Backend(
-                        "unable to resolve Codex rollout path for thread".to_string(),
+                        "conversation import commit requires sourceThreadId or sourcePath"
+                            .to_string(),
                     )
                 })?;
-                let path = thread
-                    .source_path
-                    .as_deref()
-                    .map(PathBuf::from)
-                    .ok_or_else(|| {
-                        RuntimeCoreError::Backend(
-                            "unable to resolve Codex rollout path for thread".to_string(),
-                        )
-                    })?;
-                (path, Some(thread))
-            }
-        };
-    if !source_path.is_absolute() {
-        source_path = source_root.join(source_path);
-    }
-    if !source_path.is_file() {
-        return Err(RuntimeCoreError::Backend(format!(
-            "Codex rollout file does not exist: {}",
-            source_path.display()
-        )));
-    }
+            let thread = codex::find_thread(source_root, &thread_id).ok_or_else(|| {
+                RuntimeCoreError::Backend(
+                    "unable to resolve source rollout path for thread".to_string(),
+                )
+            })?;
+            let path = thread
+                .source_path
+                .as_deref()
+                .and_then(|value| codex::resolve_existing_source_path(source_root, Some(value)))
+                .ok_or_else(|| {
+                    RuntimeCoreError::Backend(
+                        "unable to resolve source rollout path for thread".to_string(),
+                    )
+                })?;
+            (path, Some(thread))
+        }
+    };
     Ok((source_path, indexed_thread))
 }
 
 struct ImportedTurn {
     user_text: String,
     user_attachments: Vec<AgentAttachment>,
+    user_timestamp: Option<String>,
     user_provenance: Option<app_server_protocol::ConversationImportSourceProvenance>,
-    assistant_text: Option<String>,
-    assistant_provenance: Option<app_server_protocol::ConversationImportSourceProvenance>,
-    runtime_events: Vec<ImportedRuntimeEvent>,
+    events: Vec<ImportedTurnEvent>,
 }
 
-impl ImportedRuntimeEventTurn for ImportedTurn {
-    fn runtime_events(&self) -> &[ImportedRuntimeEvent] {
-        &self.runtime_events
-    }
+struct PreparedImportedTurn {
+    user_text: String,
+    user_attachments: Vec<AgentAttachment>,
+    user_timestamp: Option<String>,
+    user_provenance: Option<app_server_protocol::ConversationImportSourceProvenance>,
+    source_events: Vec<ImportedRuntimeEvent>,
+    materialized_events: Vec<ImportedRuntimeEvent>,
+    projection_summary: ImportedRuntimeEventProjectionSummary,
+}
 
-    fn runtime_events_mut(&mut self) -> &mut Vec<ImportedRuntimeEvent> {
-        &mut self.runtime_events
-    }
+enum ImportedTurnEvent {
+    AssistantMessage(ImportedAssistantMessage),
+    Runtime(ImportedRuntimeEvent),
+}
+
+struct ImportedAssistantMessage {
+    text: String,
+    provenance: Option<app_server_protocol::ConversationImportSourceProvenance>,
 }
 
 fn imported_turns(timeline: &[ImportedTimelineItem]) -> Vec<ImportedTurn> {
@@ -224,11 +260,10 @@ fn imported_turns(timeline: &[ImportedTimelineItem]) -> Vec<ImportedTurn> {
         String,
         Vec<AgentAttachment>,
         Option<String>,
+        Option<String>,
         Option<app_server_protocol::ConversationImportSourceProvenance>,
     )> = None;
-    let mut pending_assistant = String::new();
-    let mut pending_assistant_provenance = None;
-    let mut pending_runtime_events = Vec::new();
+    let mut pending_events = Vec::new();
     let mut leading_runtime_events = Vec::new();
 
     for item in timeline {
@@ -236,10 +271,12 @@ fn imported_turns(timeline: &[ImportedTimelineItem]) -> Vec<ImportedTurn> {
             ImportedTimelineItem::Message(message) => match message.role.as_str() {
                 "user" => {
                     if pending_user.as_mut().is_some_and(
-                        |(text, attachments, source_type, provenance)| {
+                        |(text, attachments, source_type, timestamp, provenance)| {
                             if text.trim() != message.text.trim()
-                                || message.source_type.as_deref() != Some("response_item")
-                                || source_type.as_deref() != Some("event_msg")
+                                || !is_duplicate_source_user_message(
+                                    source_type.as_deref(),
+                                    message.source_type.as_deref(),
+                                )
                             {
                                 return false;
                             }
@@ -252,6 +289,9 @@ fn imported_turns(timeline: &[ImportedTimelineItem]) -> Vec<ImportedTurn> {
                                     attachments.push(attachment.clone());
                                 }
                             }
+                            if timestamp.is_none() {
+                                *timestamp = message.timestamp.clone();
+                            }
                             if provenance.is_none() {
                                 *provenance = message.provenance.clone();
                             }
@@ -260,29 +300,30 @@ fn imported_turns(timeline: &[ImportedTimelineItem]) -> Vec<ImportedTurn> {
                     ) {
                         continue;
                     }
-                    flush_imported_turn(
-                        &mut turns,
-                        &mut pending_user,
-                        &mut pending_assistant,
-                        &mut pending_assistant_provenance,
-                        &mut pending_runtime_events,
-                    );
+                    flush_imported_turn(&mut turns, &mut pending_user, &mut pending_events);
                     pending_user = Some((
                         message.text.clone(),
                         message.attachments.clone(),
                         message.source_type.clone(),
+                        message.timestamp.clone(),
                         message.provenance.clone(),
                     ));
-                    pending_runtime_events.append(&mut leading_runtime_events);
+                    pending_events.extend(
+                        leading_runtime_events
+                            .drain(..)
+                            .map(ImportedTurnEvent::Runtime),
+                    );
                 }
                 "assistant" => {
                     if pending_user.is_some() {
-                        if !pending_assistant.is_empty() {
-                            pending_assistant.push_str("\n\n");
-                        }
-                        pending_assistant.push_str(&message.text);
-                        if pending_assistant_provenance.is_none() {
-                            pending_assistant_provenance = message.provenance.clone();
+                        let text = message.text.trim();
+                        if !text.is_empty() {
+                            pending_events.push(ImportedTurnEvent::AssistantMessage(
+                                ImportedAssistantMessage {
+                                    text: text.to_string(),
+                                    provenance: message.provenance.clone(),
+                                },
+                            ));
                         }
                     }
                 }
@@ -290,20 +331,14 @@ fn imported_turns(timeline: &[ImportedTimelineItem]) -> Vec<ImportedTurn> {
             },
             ImportedTimelineItem::RuntimeEvent(event) => {
                 if pending_user.is_some() {
-                    pending_runtime_events.push(event.clone());
+                    pending_events.push(ImportedTurnEvent::Runtime(event.clone()));
                 } else {
                     leading_runtime_events.push(event.clone());
                 }
             }
         }
     }
-    flush_imported_turn(
-        &mut turns,
-        &mut pending_user,
-        &mut pending_assistant,
-        &mut pending_assistant_provenance,
-        &mut pending_runtime_events,
-    );
+    flush_imported_turn(&mut turns, &mut pending_user, &mut pending_events);
     turns
 }
 
@@ -313,38 +348,37 @@ fn flush_imported_turn(
         String,
         Vec<AgentAttachment>,
         Option<String>,
+        Option<String>,
         Option<app_server_protocol::ConversationImportSourceProvenance>,
     )>,
-    pending_assistant: &mut String,
-    pending_assistant_provenance: &mut Option<
-        app_server_protocol::ConversationImportSourceProvenance,
-    >,
-    pending_runtime_events: &mut Vec<ImportedRuntimeEvent>,
+    pending_events: &mut Vec<ImportedTurnEvent>,
 ) {
-    let Some((user_text, user_attachments, _source_type, user_provenance)) = pending_user.take()
+    let Some((user_text, user_attachments, _source_type, user_timestamp, user_provenance)) =
+        pending_user.take()
     else {
-        pending_assistant.clear();
-        *pending_assistant_provenance = None;
-        pending_runtime_events.clear();
+        pending_events.clear();
         return;
     };
-    let assistant_text =
-        (!pending_assistant.trim().is_empty()).then(|| pending_assistant.trim().to_string());
-    pending_assistant.clear();
     turns.push(ImportedTurn {
         user_text,
         user_attachments,
+        user_timestamp,
         user_provenance,
-        assistant_text,
-        assistant_provenance: pending_assistant_provenance.take(),
-        runtime_events: std::mem::take(pending_runtime_events),
+        events: std::mem::take(pending_events),
     });
+}
+
+fn is_duplicate_source_user_message(existing: Option<&str>, candidate: Option<&str>) -> bool {
+    matches!(
+        (existing, candidate),
+        (Some("event_msg"), Some("response_item")) | (Some("response_item"), Some("event_msg"))
+    )
 }
 
 fn append_imported_turns(
     core: &RuntimeCore,
     session_id: &str,
-    turns: Vec<ImportedTurn>,
+    turns: Vec<PreparedImportedTurn>,
     provenance: &ImportProvenance,
 ) -> Result<usize, RuntimeCoreError> {
     let (session, _) = core.session_snapshot(session_id)?;
@@ -353,7 +387,10 @@ fn append_imported_turns(
 
     for imported_turn in turns {
         let turn_id = new_id("turn");
-        let started_at = timestamp();
+        let started_at = imported_turn
+            .user_timestamp
+            .clone()
+            .unwrap_or_else(timestamp);
         {
             let mut state = core
                 .state
@@ -368,11 +405,11 @@ fn append_imported_turns(
                 session_id: session_id.to_string(),
                 thread_id: thread_id.clone(),
                 status: AgentTurnStatus::Running,
-                started_at: Some(started_at),
+                started_at: Some(started_at.clone()),
                 completed_at: None,
             };
             stored.session.status = AgentSessionStatus::Running;
-            stored.session.updated_at = timestamp();
+            stored.session.updated_at = started_at;
             stored.turn_inputs.insert(
                 turn_id.clone(),
                 AgentInput {
@@ -387,40 +424,184 @@ fn append_imported_turns(
             stored.turns.push(turn);
         }
 
-        let mut events = Vec::new();
-        if let Some(assistant_text) = imported_turn.assistant_text {
-            events.push(RuntimeEvent::new(
-                "message.delta",
-                json!({
-                    "text": assistant_text,
-                    "imported": true,
-                    "sourceClient": "codex",
-                    "sourceProvenance": imported_turn.assistant_provenance,
-                }),
-            ));
-        }
-        let (runtime_events, has_terminal_event) =
-            normalize_imported_runtime_events(imported_turn.runtime_events);
-        events.extend(runtime_events.into_iter().map(|event| {
-            RuntimeEvent::new(
-                event.event_type,
-                enrich_imported_runtime_event_payload(event.payload),
-            )
-        }));
-        if !has_terminal_event {
-            events.push(RuntimeEvent::new(
-                "turn.completed",
-                json!({
-                    "imported": true,
-                    "sourceClient": "codex",
-                }),
-            ));
-        }
+        let events: Vec<RuntimeEvent> = imported_turn
+            .materialized_events
+            .into_iter()
+            .map(|event| {
+                RuntimeEvent::new(
+                    event.event_type,
+                    enrich_imported_runtime_event_payload(event.payload),
+                )
+            })
+            .collect();
         core.append_runtime_events(session_id, &thread_id, Some(&turn_id), events)?;
         imported += 1;
     }
 
     Ok(imported)
+}
+
+fn prepare_imported_turns(turns: Vec<ImportedTurn>) -> Vec<PreparedImportedTurn> {
+    turns
+        .into_iter()
+        .map(|turn| {
+            let (mut source_events, has_terminal_event) =
+                normalize_imported_turn_events(turn.events);
+            if !has_terminal_event {
+                source_events.push(ImportedRuntimeEvent::new(
+                    "turn.completed",
+                    json!({
+                        "imported": true,
+                        "sourceClient": "codex",
+                    }),
+                ));
+            }
+            let (materialized_events, projection_summary) =
+                materialize_imported_runtime_events_for_default_projection(source_events.clone());
+            PreparedImportedTurn {
+                user_text: turn.user_text,
+                user_attachments: turn.user_attachments,
+                user_timestamp: turn.user_timestamp,
+                user_provenance: turn.user_provenance,
+                source_events,
+                materialized_events,
+                projection_summary,
+            }
+        })
+        .collect()
+}
+
+fn summarize_prepared_turns(
+    turns: &[PreparedImportedTurn],
+) -> ImportedRuntimeEventProjectionSummary {
+    let mut summary = ImportedRuntimeEventProjectionSummary::default();
+    for turn in turns {
+        summary.merge(&turn.projection_summary);
+    }
+    summary
+}
+
+fn persist_imported_runtime_event_sidecar(
+    core: &RuntimeCore,
+    session_id: &str,
+    turns: &[PreparedImportedTurn],
+) -> Result<Option<crate::runtime::SidecarRef>, RuntimeCoreError> {
+    let Some(sidecar_store) = core.sidecar_store.as_ref() else {
+        return Ok(None);
+    };
+    let mut lines = Vec::new();
+    for (turn_index, turn) in turns.iter().enumerate() {
+        for (event_index, event) in turn.source_events.iter().enumerate() {
+            lines.push(
+                serde_json::to_string(&json!({
+                    "turnIndex": turn_index,
+                    "eventIndex": event_index,
+                    "eventType": event.event_type,
+                    "payload": event.payload.clone(),
+                }))
+                .map_err(|error| {
+                    RuntimeCoreError::Backend(format!(
+                        "unable to serialize imported runtime event sidecar: {error}"
+                    ))
+                })?,
+            );
+        }
+    }
+    let reference = sidecar_store
+        .write_text(&SidecarWriteRequest {
+            session_id: session_id.to_string(),
+            kind: "conversation_import_runtime_events".to_string(),
+            logical_id: "normalized-runtime-events".to_string(),
+            relative_path: crate::runtime::sidecar_store::session_scoped_relative_path(
+                session_id,
+                "conversation-import/runtime-events.jsonl",
+            ),
+            content: lines.join("\n"),
+        })
+        .map_err(RuntimeCoreError::Backend)?;
+    Ok(Some(reference))
+}
+
+fn attach_import_projection_metadata(
+    core: &RuntimeCore,
+    session_id: &str,
+    projection_summary: &ImportedRuntimeEventProjectionSummary,
+    sidecar_ref: Option<&crate::runtime::SidecarRef>,
+) -> Result<(), RuntimeCoreError> {
+    let mut state = core
+        .state
+        .lock()
+        .expect("runtime core state mutex poisoned");
+    let stored = state
+        .sessions
+        .get_mut(session_id)
+        .ok_or_else(|| RuntimeCoreError::SessionNotFound(session_id.to_string()))?;
+    let reference = stored
+        .session
+        .business_object_ref
+        .get_or_insert_with(|| BusinessObjectRef {
+            kind: import_status::IMPORTED_CONVERSATION_KIND.to_string(),
+            id: session_id.to_string(),
+            title: None,
+            uri: None,
+            metadata: None,
+        });
+    let metadata = reference.metadata.get_or_insert_with(|| json!({}));
+    if !metadata.is_object() {
+        *metadata = json!({});
+    }
+    let Some(object) = metadata.as_object_mut() else {
+        return Ok(());
+    };
+    object.insert(
+        "importedRuntimeProjection".to_string(),
+        provenance::compact_json(json!({
+            "mode": "default_window",
+            "sourceRuntimeEvents": projection_summary.source_runtime_events,
+            "materializedRuntimeEvents": projection_summary.materialized_runtime_events,
+            "sidecarRuntimeEvents": projection_summary.sidecar_runtime_events,
+            "materializedCommandToolCalls": projection_summary.materialized_command_tool_calls,
+            "materializedOtherToolCalls": projection_summary.materialized_other_tool_calls,
+            "skippedCommandToolCalls": projection_summary.skipped_command_tool_calls,
+            "skippedOtherToolCalls": projection_summary.skipped_other_tool_calls,
+            "commandToolCallLimit": projection_summary.command_tool_call_limit,
+            "otherToolCallLimit": projection_summary.other_tool_call_limit,
+            "defaultReadModel": "materialized_window",
+            "fullFidelity": "source_rollout_or_sidecar",
+            "sidecar": sidecar_ref,
+        })),
+    );
+    Ok(())
+}
+
+fn normalize_imported_turn_events(
+    events: Vec<ImportedTurnEvent>,
+) -> (Vec<ImportedRuntimeEvent>, bool) {
+    let mut normalized = Vec::new();
+    let mut normalizer = ImportedRuntimeEventNormalizer::new();
+
+    for event in events {
+        match event {
+            ImportedTurnEvent::AssistantMessage(message) => {
+                normalized.push(ImportedRuntimeEvent::new(
+                    "message.delta",
+                    json!({
+                        "text": message.text,
+                        "imported": true,
+                        "sourceClient": "codex",
+                        "sourceProvenance": message.provenance,
+                    }),
+                ));
+            }
+            ImportedTurnEvent::Runtime(runtime_event) => {
+                normalized.extend(normalizer.push(runtime_event));
+            }
+        }
+    }
+
+    normalized.extend(normalizer.finish());
+
+    (normalized, normalizer.has_terminal_event())
 }
 
 fn import_business_object_ref(
@@ -431,269 +612,18 @@ fn import_business_object_ref(
     thread: &app_server_protocol::ImportedThreadSummary,
     fidelity: &app_server_protocol::ConversationImportFidelitySummary,
 ) -> BusinessObjectRef {
-    let metadata =
-        import_session_metadata(source_thread_id, source_root, source_path, thread, fidelity);
+    let metadata = provenance::import_session_metadata(
+        source_thread_id,
+        source_root,
+        source_path,
+        thread,
+        fidelity,
+    );
     BusinessObjectRef {
         kind: import_status::IMPORTED_CONVERSATION_KIND.to_string(),
         id: source_thread_id.to_string(),
         title: title.map(str::to_string),
         uri: Some(codex::path_to_string(source_path)),
         metadata: Some(metadata),
-    }
-}
-
-struct ImportProvenance {
-    source_thread_id: String,
-    source_root: String,
-    source_path: String,
-    source: Option<String>,
-    cwd: Option<String>,
-    model_provider: Option<String>,
-    model: Option<String>,
-    reasoning_effort: Option<String>,
-    metadata: Option<Value>,
-    fidelity: app_server_protocol::ConversationImportFidelitySummary,
-}
-
-impl ImportProvenance {
-    fn turn_runtime_options(
-        &self,
-        user_provenance: Option<&app_server_protocol::ConversationImportSourceProvenance>,
-    ) -> RuntimeOptions {
-        let metadata = self.turn_metadata(user_provenance);
-        let cwd = self.cwd.clone();
-        let model_provider = self.model_provider.clone();
-        let model = self.model.clone();
-        let reasoning_effort = self.reasoning_effort.clone();
-        let approval_policy = metadata_string(self.metadata.as_ref(), "approvalPolicy");
-        let approvals_reviewer = metadata_string(self.metadata.as_ref(), "approvalsReviewer");
-        let sandbox_policy = metadata_value(self.metadata.as_ref(), "sandboxPolicy");
-        let service_tier = metadata_string(self.metadata.as_ref(), "serviceTier");
-        let collaboration_mode = metadata_string(self.metadata.as_ref(), "collaborationMode");
-        let personality = metadata_value(self.metadata.as_ref(), "personality");
-        RuntimeOptions {
-            provider_preference: self.model_provider.clone(),
-            model_preference: self.model.clone(),
-            metadata: Some(metadata.clone()),
-            host_options: Some(compact_json(json!({
-                "asterChatRequest": {
-                    "project_root": cwd.clone(),
-                    "cwd": cwd.clone(),
-                    "provider_preference": model_provider.clone(),
-                    "model_preference": model.clone(),
-                    "reasoning_effort": reasoning_effort.clone(),
-                    "approval_policy": approval_policy.clone(),
-                    "approvals_reviewer": approvals_reviewer.clone(),
-                    "sandbox_policy": sandbox_policy.clone(),
-                    "service_tier": service_tier.clone(),
-                    "collaboration_mode": collaboration_mode.clone(),
-                    "personality": personality.clone(),
-                    "metadata": metadata.clone(),
-                    "turn_config": {
-                        "project_root": cwd.clone(),
-                        "cwd": cwd,
-                        "provider_preference": model_provider.clone(),
-                        "model_preference": model,
-                        "reasoning_effort": reasoning_effort,
-                        "approval_policy": approval_policy,
-                        "approvals_reviewer": approvals_reviewer,
-                        "sandbox_policy": sandbox_policy,
-                        "service_tier": service_tier,
-                        "collaboration_mode": collaboration_mode,
-                        "personality": personality,
-                        "metadata": metadata,
-                    }
-                }
-            }))),
-            ..RuntimeOptions::default()
-        }
-    }
-
-    fn turn_metadata(
-        &self,
-        user_provenance: Option<&app_server_protocol::ConversationImportSourceProvenance>,
-    ) -> Value {
-        json!({
-            "imported": true,
-            "sourceClient": "codex",
-            "sourceThreadId": self.source_thread_id,
-            "sourceRoot": self.source_root,
-            "sourcePath": self.source_path,
-            "source": self.source,
-            "cwd": self.cwd,
-            "workingDir": self.cwd,
-            "modelProvider": self.model_provider,
-            "modelName": self.model,
-            "reasoningEffort": self.reasoning_effort,
-            "approvalPolicy": metadata_string(self.metadata.as_ref(), "approvalPolicy"),
-            "approvalsReviewer": metadata_string(self.metadata.as_ref(), "approvalsReviewer"),
-            "sandboxPolicy": metadata_value(self.metadata.as_ref(), "sandboxPolicy"),
-            "serviceTier": metadata_string(self.metadata.as_ref(), "serviceTier"),
-            "threadSource": metadata_string(self.metadata.as_ref(), "threadSource"),
-            "memoryMode": metadata_string(self.metadata.as_ref(), "memoryMode"),
-            "agentPath": metadata_string(self.metadata.as_ref(), "agentPath"),
-            "importedThreadSettings": imported_thread_settings(
-                self.cwd.clone(),
-                self.model_provider.clone(),
-                self.model.clone(),
-                self.reasoning_effort.clone(),
-                self.metadata.as_ref(),
-            ),
-            "importedContinuation": imported_continuation(
-                self.cwd.clone(),
-                self.model_provider.clone(),
-                self.model.clone(),
-                self.reasoning_effort.clone(),
-                self.metadata.as_ref(),
-            ),
-            "codexMetadata": self.metadata,
-            "codexImportFidelity": self.fidelity,
-            "userSourceProvenance": user_provenance,
-        })
-    }
-}
-
-fn import_session_metadata(
-    source_thread_id: &str,
-    source_root: &std::path::Path,
-    source_path: &std::path::Path,
-    thread: &app_server_protocol::ImportedThreadSummary,
-    fidelity: &app_server_protocol::ConversationImportFidelitySummary,
-) -> Value {
-    let model = metadata_string(thread.metadata.as_ref(), "model");
-    let reasoning_effort = metadata_string(thread.metadata.as_ref(), "reasoningEffort");
-    let imported_thread_settings = imported_thread_settings(
-        thread.cwd.clone(),
-        thread.model_provider.clone(),
-        model.clone(),
-        reasoning_effort.clone(),
-        thread.metadata.as_ref(),
-    );
-    let imported_continuation = imported_continuation(
-        thread.cwd.clone(),
-        thread.model_provider.clone(),
-        model.clone(),
-        reasoning_effort.clone(),
-        thread.metadata.as_ref(),
-    );
-    json!({
-        "sourceClient": "codex",
-        "sourceThreadId": source_thread_id,
-        "sourceRoot": codex::path_to_string(source_root),
-        "sourcePath": codex::path_to_string(source_path),
-        "sourceStatus": ConversationImportSourceStatus::Ready,
-        "statePath": codex::newest_state_db(source_root).map(|path| codex::path_to_string(&path)),
-        "cwd": thread.cwd,
-        "workingDir": thread.cwd,
-        "source": thread.source,
-        "providerName": thread.model_provider,
-        "modelProvider": thread.model_provider,
-        "modelName": model,
-        "model": model,
-        "reasoningEffort": reasoning_effort,
-        "approvalPolicy": metadata_string(thread.metadata.as_ref(), "approvalPolicy"),
-        "approvalsReviewer": metadata_string(thread.metadata.as_ref(), "approvalsReviewer"),
-        "sandboxPolicy": metadata_value(thread.metadata.as_ref(), "sandboxPolicy"),
-        "serviceTier": metadata_string(thread.metadata.as_ref(), "serviceTier"),
-        "threadSource": metadata_string(thread.metadata.as_ref(), "threadSource"),
-        "memoryMode": metadata_string(thread.metadata.as_ref(), "memoryMode"),
-        "agentPath": metadata_string(thread.metadata.as_ref(), "agentPath"),
-        "cliVersion": metadata_string(thread.metadata.as_ref(), "cliVersion"),
-        "gitSha": metadata_string(thread.metadata.as_ref(), "gitSha"),
-        "gitBranch": metadata_string(thread.metadata.as_ref(), "gitBranch"),
-        "gitOriginUrl": metadata_string(thread.metadata.as_ref(), "gitOriginUrl"),
-        "importedThreadSettings": imported_thread_settings,
-        "importedContinuation": imported_continuation,
-        "importedMemory": imported_memory(thread.metadata.as_ref()),
-        "archived": thread.archived,
-        "codexMetadata": thread.metadata,
-        "codexImportFidelity": fidelity,
-        "importedAt": timestamp(),
-    })
-}
-
-fn imported_thread_settings(
-    cwd: Option<String>,
-    model_provider: Option<String>,
-    model: Option<String>,
-    reasoning_effort: Option<String>,
-    metadata: Option<&Value>,
-) -> Value {
-    compact_json(json!({
-        "cwd": cwd,
-        "modelProvider": model_provider,
-        "model": model,
-        "effort": reasoning_effort,
-        "summary": metadata_value(metadata, "reasoningSummary"),
-        "approvalPolicy": metadata_string(metadata, "approvalPolicy"),
-        "approvalsReviewer": metadata_string(metadata, "approvalsReviewer"),
-        "sandboxPolicy": metadata_value(metadata, "sandboxPolicy"),
-        "activePermissionProfile": metadata_value(metadata, "activePermissionProfile"),
-        "serviceTier": metadata_string(metadata, "serviceTier"),
-        "collaborationMode": metadata_string(metadata, "collaborationMode"),
-        "personality": metadata_value(metadata, "personality"),
-    }))
-}
-
-fn imported_continuation(
-    cwd: Option<String>,
-    model_provider: Option<String>,
-    model: Option<String>,
-    reasoning_effort: Option<String>,
-    metadata: Option<&Value>,
-) -> Value {
-    compact_json(json!({
-        "cwd": cwd,
-        "workingDir": cwd,
-        "modelProvider": model_provider,
-        "providerName": model_provider,
-        "model": model,
-        "modelName": model,
-        "reasoningEffort": reasoning_effort,
-        "approvalPolicy": metadata_string(metadata, "approvalPolicy"),
-        "approvalsReviewer": metadata_string(metadata, "approvalsReviewer"),
-        "sandboxPolicy": metadata_value(metadata, "sandboxPolicy"),
-        "serviceTier": metadata_string(metadata, "serviceTier"),
-        "threadSource": metadata_string(metadata, "threadSource"),
-        "memoryMode": metadata_string(metadata, "memoryMode"),
-        "agentPath": metadata_string(metadata, "agentPath"),
-    }))
-}
-
-fn imported_memory(metadata: Option<&Value>) -> Value {
-    compact_json(json!({
-        "mode": metadata_string(metadata, "memoryMode"),
-        "agentPath": metadata_string(metadata, "agentPath"),
-        "agentNickname": metadata_string(metadata, "agentNickname"),
-        "agentRole": metadata_string(metadata, "agentRole"),
-    }))
-}
-
-fn metadata_string(metadata: Option<&Value>, key: &str) -> Option<String> {
-    metadata?
-        .get(key)
-        .and_then(Value::as_str)
-        .map(str::to_string)
-        .filter(|value| !value.trim().is_empty())
-}
-
-fn metadata_value(metadata: Option<&Value>, key: &str) -> Option<Value> {
-    metadata?.get(key).filter(|value| !value.is_null()).cloned()
-}
-
-fn compact_json(value: Value) -> Value {
-    match value {
-        Value::Object(object) => {
-            let compacted = object
-                .into_iter()
-                .filter_map(|(key, value)| {
-                    let value = compact_json(value);
-                    (!value.is_null()).then_some((key, value))
-                })
-                .collect();
-            Value::Object(compacted)
-        }
-        Value::Array(values) => Value::Array(values.into_iter().map(compact_json).collect()),
-        value => value,
     }
 }

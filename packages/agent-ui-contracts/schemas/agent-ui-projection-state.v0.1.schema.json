@@ -9,6 +9,8 @@
     "timeline",
     "graph",
     "tools",
+    "toolCalls",
+    "mcp",
     "actions",
     "artifacts",
     "evidence",
@@ -34,6 +36,12 @@
     },
     "tools": {
       "type": "array"
+    },
+    "toolCalls": {
+      "type": "object"
+    },
+    "mcp": {
+      "type": "object"
     },
     "actions": {
       "type": "array"

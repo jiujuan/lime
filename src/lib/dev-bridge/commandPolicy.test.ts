@@ -177,6 +177,10 @@ describe("commandPolicy", () => {
     expect(shouldDisallowMockFallbackCommand("open_system_settings_url")).toBe(
       true,
     );
+    expect(isBridgeTruthCommand("open_file_preview_window")).toBe(false);
+    expect(shouldDisallowMockFallbackCommand("open_file_preview_window")).toBe(
+      true,
+    );
   });
 
   it("P6 Session files 旧写读链已退役，不再作为 DevBridge policy surface", () => {
@@ -551,6 +555,11 @@ describe("commandPolicy", () => {
             }),
           ],
         },
+      }),
+    ).toBe("app-server-read");
+    expect(
+      resolveDevBridgeCommandTimeoutProfile("app_server_drain_events", {
+        request: { limit: 20 },
       }),
     ).toBe("app-server-read");
     expect(resolveDevBridgeCommandTimeoutProfile("unknown_command")).toBe(

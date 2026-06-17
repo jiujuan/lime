@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Skill } from "@/lib/api/skills";
 import type { ServiceSkillHomeItem } from "@/components/agent/chat/service-skills/types";
-import type { CodexSlashCommandDefinition } from "../commands";
+import type { SlashCommandDefinition } from "../commands";
 import type {
   BuiltinInputCommand,
   RuntimeSceneSlashCommand,
@@ -55,9 +55,9 @@ function createBuiltinCommand(
 }
 
 function createSlashCommand(
-  overrides: Partial<CodexSlashCommandDefinition> &
-    Pick<CodexSlashCommandDefinition, "key" | "commandPrefix" | "kind">,
-): CodexSlashCommandDefinition {
+  overrides: Partial<SlashCommandDefinition> &
+    Pick<SlashCommandDefinition, "key" | "commandPrefix" | "kind">,
+): SlashCommandDefinition {
   return {
     commandName: overrides.key,
     label: overrides.key,
@@ -125,7 +125,7 @@ function buildEmptyParams() {
   return {
     mentionQuery: "",
     builtinCommands: [] as BuiltinInputCommand[],
-    slashCommands: [] as CodexSlashCommandDefinition[],
+    slashCommands: [] as SlashCommandDefinition[],
     sceneCommands: [] as RuntimeSceneSlashCommand[],
     mentionServiceSkills: [],
     serviceSkillGroups: [],

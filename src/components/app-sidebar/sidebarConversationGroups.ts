@@ -82,7 +82,6 @@ export function buildSidebarConversationGroups({
   );
   const standaloneSessions = scopedSessions.filter(
     (session) =>
-      !normalizePath(session.working_dir) &&
       !normalizeId(session.workspace_id) &&
       !projectSessionIds.has(session.id),
   );

@@ -1,0 +1,92 @@
+{
+  "$defs": {
+    "ModelCapabilitiesInfo": {
+      "properties": {
+        "functionCalling": {
+          "type": "boolean"
+        },
+        "jsonMode": {
+          "type": "boolean"
+        },
+        "reasoning": {
+          "type": "boolean"
+        },
+        "reasoningEffort": true,
+        "streaming": {
+          "type": "boolean"
+        },
+        "tools": {
+          "type": "boolean"
+        },
+        "vision": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "functionCalling",
+        "jsonMode",
+        "reasoning",
+        "streaming",
+        "tools",
+        "vision"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "capabilities": {
+      "$ref": "#/$defs/ModelCapabilitiesInfo",
+      "default": {
+        "functionCalling": false,
+        "jsonMode": false,
+        "reasoning": false,
+        "streaming": false,
+        "tools": false,
+        "vision": false
+      }
+    },
+    "inputModalities": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "outputModalities": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "reasonCode": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "runtimeFeatures": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "source": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "taskFamilies": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "title": "CapabilitySnapshot",
+  "type": "object"
+}

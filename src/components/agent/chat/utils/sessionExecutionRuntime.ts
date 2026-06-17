@@ -130,15 +130,58 @@ export function createExecutionRuntimeFromSessionDetail(
   };
 }
 
+export function isImportedSourceExecutionRuntime(
+  runtime?:
+    | (Pick<
+        AsterSessionExecutionRuntime,
+        "provider_selector" | "provider_name" | "model_name"
+      > & {
+        imported_continuation?: unknown;
+        imported_thread_settings?: unknown;
+        source_client?: string | null;
+      })
+    | null,
+): boolean {
+  const record = runtime as Record<string, unknown> | null | undefined;
+  if (!record) {
+    return false;
+  }
+
+  const sourceClient =
+    typeof record.source_client === "string"
+      ? record.source_client.trim().toLowerCase()
+      : typeof record.sourceClient === "string"
+        ? record.sourceClient.trim().toLowerCase()
+        : "";
+  return Boolean(
+    sourceClient ||
+    record.imported_continuation ||
+    record.importedContinuation ||
+    record.imported_thread_settings ||
+    record.importedThreadSettings,
+  );
+}
+
 export function createSessionModelPreferenceFromExecutionRuntime(
-  runtime?: Pick<
-    AsterSessionExecutionRuntime,
-    "provider_selector" | "provider_name" | "model_name"
-  > | null,
+  runtime?:
+    | (Pick<
+        AsterSessionExecutionRuntime,
+        "provider_selector" | "provider_name" | "model_name"
+      > & {
+        imported_continuation?: unknown;
+        imported_thread_settings?: unknown;
+        source_client?: string | null;
+      })
+    | null,
 ): SessionModelPreference | null {
+  const importedRuntimeWithoutCurrentSelection =
+    isImportedSourceExecutionRuntime(runtime) &&
+    !runtime?.provider_selector?.trim();
   const providerType =
     runtime?.provider_selector?.trim() ||
-    runtime?.provider_name?.trim() ||
+    (importedRuntimeWithoutCurrentSelection
+      ? null
+      : runtime?.provider_name?.trim()) ||
     null;
   const model = runtime?.model_name?.trim() || null;
 

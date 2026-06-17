@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "enum": [
+    "direct_provider_config",
+    "explicit",
+    "fallback",
+    "host_options",
+    "oem_policy",
+    "profile_slot",
+    "runtime_options",
+    "session_default",
+    "task"
+  ],
+  "title": "ModelRefSource",
+  "type": "string"
+}

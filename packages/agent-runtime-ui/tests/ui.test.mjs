@@ -13,12 +13,16 @@ import {
 } from "@limecloud/agent-runtime-projection";
 
 import {
+  AgentWorkbenchSurface,
+  AgentWorkbenchTaskCard,
   AgentTimeline,
   AgentUiProjectionView,
   ArtifactRefList,
   EvidenceRefList,
+  McpSurface,
   RuntimeFactsPanel,
   SubagentsView,
+  ToolCallSurface,
 } from "../dist/index.js";
 
 test("AgentTimeline renders user and assistant messages", () => {
@@ -100,6 +104,209 @@ test("RuntimeFactsPanel renders action button and fact counts", () => {
   assert.match(markup, /Reject/);
   assert.match(markup, /data-action-decision="approve"/);
   assert.match(markup, /data-action-decision="reject"/);
+});
+
+test("AgentWorkbenchTaskCard renders standard task capsule", () => {
+  const markup = renderToStaticMarkup(
+    React.createElement(AgentWorkbenchTaskCard, {
+      view: {
+        taskTitle: "内容协作",
+        statusLabel: "协作中",
+        sourceCount: 2,
+        toolCount: 1,
+        pendingActionCount: 0,
+        artifactCount: 1,
+        evidenceCount: 1,
+        taskCount: 0,
+        hasRuntimeFacts: true,
+        shouldShowRuntimePanel: true,
+        checkpoints: [
+          { id: "input", title: "读取需求与输入源", state: "done", count: 2 },
+          { id: "artifact", title: "生成可审核草稿", state: "active", count: 1 },
+        ],
+      },
+      labels: {
+        sourceLabel: "输入源",
+        artifactLabel: "交付物",
+        taskLabel: "当前任务",
+        statusLabel: "状态",
+        checkpointLabel: "进度",
+      },
+    }),
+  );
+
+  assert.match(markup, /agent-workbench-task-card/);
+  assert.match(markup, /内容协作/);
+  assert.match(markup, /读取需求与输入源/);
+  assert.match(markup, /data-checkpoint-state="active"/);
+});
+
+test("AgentWorkbenchSurface renders full controlled workbench shell", () => {
+  const state = projectAgentUiState({
+    executionEvents: [
+      {
+        id: "evt-tool",
+        kind: "tool",
+        status: "completed",
+        eventClass: "tool.result",
+        title: "读取资料",
+        toolCallId: "tool-1",
+        payload: {
+          toolName: "web_search",
+          toolFamily: "webSearch",
+          outputPreview: "检索完成",
+        },
+        artifactRefs: ["artifact-1"],
+        evidenceRefs: ["evidence-1"],
+        sequence: 1,
+        createdAt: "2026-06-07T00:00:00.000Z",
+      },
+    ],
+    sourceCount: 2,
+  });
+  const markup = renderToStaticMarkup(
+    React.createElement(AgentWorkbenchSurface, {
+      view: {
+        taskTitle: "内容协作",
+        statusLabel: "协作中",
+        sourceCount: 2,
+        toolCount: 1,
+        pendingActionCount: 0,
+        artifactCount: 1,
+        evidenceCount: 1,
+        taskCount: 0,
+        hasRuntimeFacts: true,
+        shouldShowRuntimePanel: true,
+        checkpoints: [
+          { id: "input", title: "读取需求与输入源", state: "done", count: 2 },
+          { id: "artifact", title: "生成可审核草稿", state: "active", count: 1 },
+        ],
+      },
+      state,
+      messages: [
+        { id: "m1", role: "user", content: "生成主图 Prompt", createdAt: "2026-06-07T00:00:00.000Z" },
+      ],
+      toolbar: React.createElement("button", { type: "button" }, "工具栏"),
+      composer: React.createElement("textarea", { defaultValue: "继续修改" }),
+      labels: {
+        sourceLabel: "输入源",
+        artifactLabel: "交付物",
+        runtimeLabel: "运行事实",
+        messagePartsAriaLabel: "协作对话",
+      },
+    }),
+  );
+
+  assert.match(markup, /agent-workbench-surface/);
+  assert.match(markup, /工具栏/);
+  assert.match(markup, /内容协作/);
+  assert.match(markup, /读取需求与输入源/);
+  assert.match(markup, /生成主图 Prompt/);
+  assert.match(markup, /agent-workbench-runtime-panel open/);
+  assert.match(markup, /运行事实/);
+  assert.match(markup, /agent-tool-calls/);
+  assert.match(markup, /data-tool-family="webSearch"/);
+  assert.match(markup, /继续修改/);
+});
+
+test("ToolCallSurface and McpSurface render standard tool and MCP contracts", () => {
+  const state = projectAgentUiState({
+    executionEvents: [
+      {
+        id: "evt-mcp-search-start",
+        kind: "tool",
+        status: "running",
+        eventClass: "tool.started",
+        title: "搜索代码",
+        toolCallId: "tool-mcp-search",
+        payload: {
+          toolName: "mcp__github__search_code",
+          toolFamily: "mcp",
+          mcpServer: "github",
+          inputSummary: "query: AgentUiProjectionView",
+        },
+        sequence: 1,
+        createdAt: "2026-06-07T00:00:00.000Z",
+      },
+      {
+        id: "evt-mcp-search-end",
+        kind: "tool",
+        status: "completed",
+        eventClass: "tool.result",
+        title: "搜索代码完成",
+        toolCallId: "tool-mcp-search",
+        payload: {
+          toolName: "mcp__github__search_code",
+          toolFamily: "mcp",
+          mcpServer: "github",
+          outputPreview: "找到 4 个文件",
+        },
+        artifactRefs: ["artifact-search-result"],
+        evidenceRefs: ["evidence-search-source"],
+        sequence: 2,
+        createdAt: "2026-06-07T00:00:01.000Z",
+      },
+      {
+        id: "evt-mcp-mutation",
+        kind: "tool",
+        status: "blocked",
+        eventClass: "tool.failed",
+        title: "创建 Issue 需要授权",
+        toolCallId: "tool-mcp-mutation",
+        payload: {
+          toolName: "mcp__github__create_issue",
+          toolFamily: "mcp",
+          mcpServer: "github",
+          errorPreview: "缺少 GitHub 授权",
+        },
+        sequence: 3,
+        createdAt: "2026-06-07T00:00:02.000Z",
+      },
+    ],
+    sourceCount: 1,
+  });
+
+  const markup = renderToStaticMarkup(
+    React.createElement(
+      React.Fragment,
+      null,
+      React.createElement(ToolCallSurface, {
+        surface: state.toolCalls,
+        ariaLabel: "工具调用",
+        toolStatusLabel: (status) => `状态:${status}`,
+      }),
+      React.createElement(McpSurface, {
+        surface: state.mcp,
+        ariaLabel: "MCP 调用",
+        serversAriaLabel: "MCP 服务",
+        toolsAriaLabel: "MCP 工具",
+        operationLabel: (operation) => `操作:${operation}`,
+        statusLabel: (status) => `状态:${status}`,
+      }),
+    ),
+  );
+
+  assert.match(markup, /工具调用/);
+  assert.match(markup, /MCP 调用/);
+  assert.match(markup, /MCP 服务/);
+  assert.match(markup, /MCP 工具/);
+  assert.match(markup, /agent-tool-calls/);
+  assert.match(markup, /data-tool-call-count="2"/);
+  assert.match(markup, /data-tool-name="mcp__github__search_code"/);
+  assert.match(markup, /data-tool-family="mcp"/);
+  assert.match(markup, /data-mcp-server="github"/);
+  assert.match(markup, /data-mcp-operation="search"/);
+  assert.match(markup, /data-mcp-operation="mutation"/);
+  assert.match(markup, /data-mcp-tool-count="2"/);
+  assert.match(markup, /data-failed-mcp-tool-count="1"/);
+  assert.match(markup, /artifact-search-result/);
+  assert.match(markup, /找到 4 个文件/);
+  assert.match(markup, /缺少 GitHub 授权/);
+});
+
+test("ToolCallSurface and McpSurface are exported from the package entry point", () => {
+  assert.equal(typeof ToolCallSurface, "function");
+  assert.equal(typeof McpSurface, "function");
 });
 
 test("RuntimeFactsPanel accepts host-provided labels", () => {
@@ -220,6 +427,7 @@ test("AgentUiProjectionView renders standard projection surfaces", () => {
   assert.match(markup, /Process timeline/);
   assert.match(markup, /agent-process-entry completed/);
   assert.match(markup, /Tool calls/);
+  assert.match(markup, /agent-tool-calls/);
   assert.match(markup, /Action required/);
   assert.match(markup, /需要确认/);
   assert.match(markup, /Open model settings/);

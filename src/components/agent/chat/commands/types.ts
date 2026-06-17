@@ -1,28 +1,28 @@
 import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
 
-export type CodexSlashCommandSupport = "supported" | "unsupported";
-export type CodexSlashCommandKind = "local_action" | "prompt_action" | "info";
+export type SlashCommandSupport = "supported" | "unsupported";
+export type SlashCommandKind = "local_action" | "prompt_action" | "info";
 
-export interface CodexSlashCommandDefinition {
+export interface SlashCommandDefinition {
   key: string;
   commandName: string;
   commandPrefix: `/${string}`;
   label: string;
   description: string;
   aliases: string[];
-  kind: CodexSlashCommandKind;
-  support: CodexSlashCommandSupport;
+  kind: SlashCommandKind;
+  support: SlashCommandSupport;
   argumentHint?: string;
 }
 
-export interface ParsedCodexSlashCommand {
-  definition: CodexSlashCommandDefinition;
+export interface ParsedSlashCommand {
+  definition: SlashCommandDefinition;
   commandName: string;
   userInput: string;
   rawContent: string;
 }
 
-export interface CodexSlashStatusSnapshot {
+export interface SlashCommandStatusSnapshot {
   sessionId: string | null;
   currentTurnId: string | null;
   providerType: string;
@@ -32,9 +32,9 @@ export interface CodexSlashStatusSnapshot {
   isSending: boolean;
 }
 
-export interface ExecuteCodexSlashCommandParams {
-  command: ParsedCodexSlashCommand;
-  statusSnapshot: CodexSlashStatusSnapshot;
+export interface ExecuteSlashCommandParams {
+  command: ParsedSlashCommand;
+  statusSnapshot: SlashCommandStatusSnapshot;
   sendPrompt: (prompt: string) => Promise<void>;
   compactSession: () => Promise<void>;
   clearMessages: (options?: {
@@ -46,5 +46,5 @@ export interface ExecuteCodexSlashCommandParams {
   notifyInfo: (message: string) => void;
   notifySuccess: (message: string) => void;
   onOpenSubagents?: () => void;
-  onExecutedCommand?: (command: ParsedCodexSlashCommand) => void;
+  onExecutedCommand?: (command: ParsedSlashCommand) => void;
 }

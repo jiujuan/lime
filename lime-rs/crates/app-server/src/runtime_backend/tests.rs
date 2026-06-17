@@ -12,7 +12,9 @@ use app_server_protocol::AgentSessionStatus;
 use app_server_protocol::AgentTurn;
 use app_server_protocol::AgentTurnStatus;
 use app_server_protocol::BusinessObjectRef;
+use app_server_protocol::ProtocolKind;
 use app_server_protocol::RuntimeOptions;
+use lime_agent::AsterProviderProtocol;
 use lime_agent::{AgentEvent as RuntimeAgentEvent, AgentToolResult, RequestToolPolicyMode};
 use std::collections::HashMap;
 use tempfile::TempDir;
@@ -92,6 +94,14 @@ fn request_with_session_metadata(metadata: Value) -> ExecutionRequest {
         metadata: Some(metadata),
     });
     request.runtime_options = None;
+    request
+}
+
+fn imported_request_with_session_metadata(metadata: Value) -> ExecutionRequest {
+    let mut request = request_with_session_metadata(metadata);
+    if let Some(reference) = request.session.business_object_ref.as_mut() {
+        reference.kind = "conversation.import".to_string();
+    }
     request
 }
 
@@ -214,6 +224,41 @@ fn host_provider_config_without_direct_credentials_stays_database_backed() {
     assert_eq!(selection.provider, "database-openai");
     assert_eq!(selection.model, "gpt-4.1");
     assert_eq!(selection.source, "host_options_provider_config");
+}
+
+#[test]
+fn imported_session_source_model_is_not_session_default_route() {
+    let request = imported_request_with_session_metadata(json!({
+        "providerName": "openai",
+        "modelName": "gpt-5.5",
+        "sourceClient": "codex",
+        "importedContinuation": {
+            "modelProvider": "openai",
+            "model": "gpt-5.5"
+        }
+    }));
+
+    assert!(selection_from_session_default(&request).is_none());
+}
+
+#[test]
+fn imported_session_current_provider_selector_remains_session_default_route() {
+    let request = imported_request_with_session_metadata(json!({
+        "providerSelector": "custom-current-provider",
+        "providerName": "openai",
+        "modelName": "gpt-5.5",
+        "sourceClient": "codex",
+        "importedContinuation": {
+            "modelProvider": "openai",
+            "model": "gpt-5.5"
+        }
+    }));
+
+    let selection = selection_from_session_default(&request).expect("selection");
+
+    assert_eq!(selection.provider, "custom-current-provider");
+    assert_eq!(selection.model, "gpt-5.5");
+    assert_eq!(selection.source, "session_default");
 }
 
 #[test]
@@ -1398,4 +1443,25 @@ fn host_turn_config_reasoning_and_thinking_are_preserved() {
         .expect("runtime metadata");
 
     assert_eq!(runtime_metadata["thinkingEnabled"], true);
+}
+
+#[test]
+fn route_protocol_is_projected_to_aster_adapter_protocol() {
+    let config = super::provider_config_with_route_protocol(
+        lime_agent::ProviderConfig {
+            provider_name: "openai".to_string(),
+            provider_selector: Some("fixture-openai".to_string()),
+            model_name: "gpt-4.1".to_string(),
+            api_key: Some("fixture-key".to_string()),
+            base_url: Some("http://127.0.0.1:56599".to_string()),
+            credential_uuid: Some("credential-1".to_string()),
+            reasoning_effort: None,
+            protocol: None,
+            toolshim: false,
+            toolshim_model: None,
+        },
+        super::aster_provider_protocol_from_route(&ProtocolKind::OpenaiResponses),
+    );
+
+    assert_eq!(config.protocol, Some(AsterProviderProtocol::Responses));
 }

@@ -9,6 +9,7 @@ import type { ChatToolPreferences } from "./chatToolPreferences";
 import { normalizeHarnessSessionMode } from "./harnessSessionMode";
 import { normalizeExecutionStrategy } from "../hooks/agentChatCoreUtils";
 import { compactSubmitOpToolPreferences } from "./submitOpToolPreferenceCompaction";
+import { isImportedSourceExecutionRuntime } from "./sessionExecutionRuntime";
 
 const HARNESS_CONTENT_ID_KEYS = ["content_id", "contentId"] as const;
 const HARNESS_ACCESS_MODE_KEYS = ["access_mode", "accessMode"] as const;
@@ -490,11 +491,18 @@ export function buildSubmitOpRuntimeCompaction(
   const syncedProviderSelector =
     syncedSessionModelPreference?.providerType?.trim() || null;
   const syncedModelName = syncedSessionModelPreference?.model?.trim() || null;
+  const importedRuntimeWithoutCurrentSelection =
+    isImportedSourceExecutionRuntime(executionRuntime) &&
+    !executionRuntime?.provider_selector?.trim();
   const runtimeProviderSelector =
     executionRuntime?.provider_selector?.trim() ||
-    executionRuntime?.provider_name?.trim() ||
+    (importedRuntimeWithoutCurrentSelection
+      ? null
+      : executionRuntime?.provider_name?.trim()) ||
     null;
-  const runtimeModelName = executionRuntime?.model_name?.trim() || null;
+  const runtimeModelName = importedRuntimeWithoutCurrentSelection
+    ? null
+    : executionRuntime?.model_name?.trim() || null;
   const knownProviderSelector =
     syncedProviderSelector || runtimeProviderSelector;
   const knownModelName = syncedModelName || runtimeModelName;

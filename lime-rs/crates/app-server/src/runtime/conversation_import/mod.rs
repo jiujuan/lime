@@ -4,13 +4,16 @@ use app_server_protocol::{
     ConversationImportSourceScanResponse, ConversationImportSourceStatus,
     ConversationImportSourceSummary, ConversationImportThreadCommitParams,
     ConversationImportThreadCommitResponse, ConversationImportThreadPreviewParams,
-    ConversationImportThreadPreviewResponse,
+    ConversationImportThreadPreviewResponse, ConversationImportThreadRuntimeEventsReadParams,
+    ConversationImportThreadRuntimeEventsReadResponse,
 };
 
 mod codex;
 mod commit;
 mod commit_events;
 mod import_status;
+mod provenance;
+mod runtime_event_detail;
 
 impl RuntimeCore {
     pub async fn scan_conversation_import_source(
@@ -36,6 +39,13 @@ impl RuntimeCore {
         params: ConversationImportThreadCommitParams,
     ) -> Result<ConversationImportThreadCommitResponse, RuntimeCoreError> {
         commit::commit_conversation_import_thread(self, params)
+    }
+
+    pub async fn read_conversation_import_runtime_events(
+        &self,
+        params: ConversationImportThreadRuntimeEventsReadParams,
+    ) -> Result<ConversationImportThreadRuntimeEventsReadResponse, RuntimeCoreError> {
+        runtime_event_detail::read_conversation_import_runtime_events(self, params).await
     }
 }
 

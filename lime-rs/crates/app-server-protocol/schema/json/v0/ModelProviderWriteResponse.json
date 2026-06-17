@@ -1,7 +1,169 @@
 {
+  "$defs": {
+    "ProviderInfo": {
+      "properties": {
+        "apiHost": {
+          "type": "string"
+        },
+        "apiKeyCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "apiKeys": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ProviderKeyInfo"
+          },
+          "type": "array"
+        },
+        "apiVersion": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "createdAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "customModels": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "group": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "isSystem": {
+          "type": "boolean"
+        },
+        "legacyIds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "location": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "project": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "promptCacheMode": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "providerType": {
+          "type": "string"
+        },
+        "region": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sortOrder": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "updatedAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "apiHost",
+        "apiKeyCount",
+        "enabled",
+        "group",
+        "id",
+        "isSystem",
+        "name",
+        "providerType",
+        "sortOrder"
+      ],
+      "type": "object"
+    },
+    "ProviderKeyInfo": {
+      "properties": {
+        "alias": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "apiKeyMasked": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "errorCount": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "lastUsedAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "providerId": {
+          "type": "string"
+        },
+        "usageCount": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "apiKeyMasked",
+        "createdAt",
+        "enabled",
+        "errorCount",
+        "id",
+        "providerId",
+        "usageCount"
+      ],
+      "type": "object"
+    }
+  },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
-    "provider": true
+    "provider": {
+      "$ref": "#/$defs/ProviderInfo"
+    }
   },
   "required": [
     "provider"

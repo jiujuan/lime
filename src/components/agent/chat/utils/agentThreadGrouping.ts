@@ -12,6 +12,10 @@ import { summarizeThreadProcessBatch } from "./toolBatchGrouping";
 import { resolveAgentThreadToolProcessPreview } from "./toolProcessSummary";
 import { normalizeProcessDisplayText } from "./processDisplayText";
 import { resolveAgentRuntimeErrorPresentation } from "./agentRuntimeErrorPresentation";
+import {
+  hasImportedSourceProcessItem,
+  isImportedSourceMetadata,
+} from "./importedSourceProcess";
 
 export type AgentThreadGroupKind =
   | "process"
@@ -897,36 +901,51 @@ function buildPreviewLines(
   return lines;
 }
 
-function isImportedCodexMetadata(metadata: unknown): boolean {
-  const record = asRecord(metadata);
-  if (!record) {
-    return false;
+function summarizeImportedSourceProcessBatch(items: AgentThreadItem[]): {
+  title: string;
+  supportingLines: string[];
+  countLabel: string;
+  rawDetailLabel: string;
+} | null {
+  if (!hasImportedSourceProcessItem(items)) {
+    return null;
   }
 
-  return (
-    record.imported === true ||
-    record.imported_synthetic === true ||
-    record.importedSynthetic === true ||
-    record.source_client === "codex" ||
-    record.sourceClient === "codex"
-  );
-}
+  const commandCount = items.filter(
+    (item) =>
+      (item.type === "command_execution" || item.type === "tool_call") &&
+      isImportedSourceMetadata(item.metadata),
+  ).length;
+  const reasoningCount = items.filter(
+    (item) =>
+      item.type === "reasoning" &&
+      item.text.trim().length > 0 &&
+      isImportedSourceMetadata(item.metadata),
+  ).length;
+  const searchCount = items.filter(
+    (item) =>
+      item.type === "web_search" && isImportedSourceMetadata(item.metadata),
+  ).length;
+  const patchCount = items.filter(
+    (item) => item.type === "patch" && isImportedSourceMetadata(item.metadata),
+  ).length;
 
-function hasImportedCodexProcessItem(items: AgentThreadItem[]): boolean {
-  return items.some((item) => {
-    if (
-      item.type !== "tool_call" &&
-      item.type !== "command_execution" &&
-      item.type !== "patch" &&
-      item.type !== "web_search" &&
-      item.type !== "approval_request" &&
-      item.type !== "request_user_input"
-    ) {
-      return false;
-    }
+  const supportingLines = [
+    reasoningCount > 0 ? `已完成思考 ${reasoningCount} 条` : null,
+    commandCount > 0 ? `命令记录 ${commandCount} 条` : null,
+    searchCount > 0 ? `搜索记录 ${searchCount} 条` : null,
+    patchCount > 0 ? `文件变更 ${patchCount} 条` : null,
+  ].filter((line): line is string => Boolean(line));
 
-    return isImportedCodexMetadata(item.metadata);
-  });
+  return {
+    title: "导入的命令记录",
+    supportingLines:
+      supportingLines.length > 0
+        ? supportingLines
+        : ["从本地历史导入的执行记录"],
+    countLabel: `${items.length} 步`,
+    rawDetailLabel: "展开查看导入过程",
+  };
 }
 
 function shouldDefaultExpand(
@@ -937,7 +956,7 @@ function shouldDefaultExpand(
   if (kind === "approval" || kind === "alert") {
     return true;
   }
-  if (kind === "process" && hasImportedCodexProcessItem(items)) {
+  if (kind === "process" && hasImportedSourceProcessItem(items)) {
     return true;
   }
   return status !== "completed";
@@ -995,28 +1014,40 @@ export function buildAgentThreadDisplayModel(
         entry.type === "turn_summary" ||
         entry.type === "context_compaction",
     );
+    const importedProcessSummary =
+      current.kind === "process"
+        ? summarizeImportedSourceProcessBatch(current.items)
+        : null;
     const processBatchSummary =
-      current.kind === "process" && !hasReasoningProcessItem
+      current.kind === "process" &&
+      !hasReasoningProcessItem &&
+      !importedProcessSummary
         ? summarizeThreadProcessBatch(current.items)
         : null;
     const startedAt =
       current.items[0]?.started_at || current.items[0]?.updated_at || "";
     const completedAt = current.items[current.items.length - 1]?.completed_at;
     const forceExpanded =
-      current.kind === "process" && hasImportedCodexProcessItem(current.items);
+      current.kind === "process" && hasImportedSourceProcessItem(current.items);
     const block: AgentThreadOrderedBlock = {
       id: current.items.map((entry) => entry.id).join(":"),
       kind: current.kind,
-      title: processBatchSummary?.title || resolveBlockTitle(current.kind),
+      title:
+        importedProcessSummary?.title ||
+        processBatchSummary?.title ||
+        resolveBlockTitle(current.kind),
       status,
       items: current.items,
       previewLines:
+        importedProcessSummary?.supportingLines ||
         processBatchSummary?.supportingLines ||
         buildPreviewLines(current.kind, current.items),
       countLabel:
+        importedProcessSummary?.countLabel ||
         processBatchSummary?.countLabel ||
         resolveCountLabel(current.kind, current.items.length),
       rawDetailLabel:
+        importedProcessSummary?.rawDetailLabel ||
         processBatchSummary?.rawDetailLabel ||
         (current.kind === "approval"
           ? "查看待处理项"

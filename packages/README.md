@@ -1,6 +1,6 @@
 # Lime Packages
 
-本目录是 Lime 对外复用的 TypeScript / React / CLI 包集合。其他 App 接入 Agent、App Server 或 Claw 迁移能力时，先从本文件判断“该装哪些包、放在哪一层、哪些事情不能放进共享包”，再进入单包 `README.md` 查 API 细节。
+本目录是 Lime 对外复用的 TypeScript / React / CLI 包集合。其他 App 接入 Agent、App Server 或相关工作台能力时，先从本文件判断“该装哪些包、放在哪一层、哪些事情不能放进共享包”，再进入单包 `README.md` 查 API 细节。
 
 这些包不是一个必须全量安装的 SDK。它们按职责拆成五层：
 
@@ -69,7 +69,7 @@ Task automation
 | `@limecloud/agent-ui-contracts` | `npm install @limecloud/agent-ui-contracts` | `@limecloud/agent-ui-contracts` | contracts / adapter / tests | 共享 Agent UI event、runtime read model、message、timeline、graph、Subagents、fixtures、validation 类型 | 投影逻辑、React 组件、App Server client | `AgentRuntimeExecutionEvent`、`AgentUiProjectionState`、`agentUiConformanceFixtures`、`validateRuntimeEvent` |
 | `@limecloud/agent-runtime-projection` | `npm install @limecloud/agent-runtime-projection` | `@limecloud/agent-runtime-projection` | frontend adapter / store selector | `executionEvents` -> messages、timeline、graph、actions、tools、artifacts、evidence、summary、Subagents | transport、React 渲染、业务文案、session 持久化 | `projectAgentUiState`、`projectAgentRuntimeReadModel`、`replayAppServerFacts`、`projectAgentUiStateFromSessionSnapshot` |
 | `@limecloud/agent-runtime-ui` | `npm install @limecloud/agent-runtime-ui` | `@limecloud/agent-runtime-ui` | React App presentation layer | 渲染 `AgentUiProjectionState`、消息部件、过程时间线、执行图、action / artifact / evidence / subagents primitives | 调用 App Server、管理 store、打开业务页面、全局主题和产品文案 | `AgentUiProjectionView`、`UIMessagePartsView`、`ProcessTimelineView`、`ExecutionGraphView`、`RuntimeFactsPanel` |
-| `@limecloud/agent-capability-catalog` | `npm install @limecloud/agent-capability-catalog` | `@limecloud/agent-capability-catalog` | Product App / workbench adapter / Claw migration | 稳定 capability id、alias 归一、metadata contract、tool policy、allowlist 校验 | 启动 turn、订阅 events、渲染工作台、定义业务 Prompt | `resolveAgentCapabilityIds`、`buildAgentCapabilityPolicy`、`validateAgentCapabilities`、`AGENT_CAPABILITY_DEFINITIONS` |
+| `@limecloud/agent-capability-catalog` | `npm install @limecloud/agent-capability-catalog` | `@limecloud/agent-capability-catalog` | Product App / workbench adapter | 稳定 capability id、alias 归一、metadata contract、tool policy、allowlist 校验 | 启动 turn、订阅 events、渲染工作台、定义业务 Prompt | `resolveAgentCapabilityIds`、`buildAgentCapabilityPolicy`、`validateAgentCapabilities`、`AGENT_CAPABILITY_DEFINITIONS` |
 | `@limecloud/agent-workbench-adapter` | `npm install @limecloud/agent-workbench-adapter` | `@limecloud/agent-workbench-adapter` | Product App workbench controller | quick intent -> capability policy、composer submit mode、runtime facts summary、`lime.agent` turn payload 拼装 | React state、CSS、IPC、session store、provider key、业务文案 | `DEFAULT_AGENT_WORKBENCH_INTENTS`、`resolveWorkbenchIntentCapabilityPolicy`、`resolveWorkbenchSubmitMode`、`summarizeAgentRuntimeFacts`、`buildAgentTurnStartPayload` |
 | `@limecloud/lime-cli` | `npm install -g @limecloud/lime-cli` | `lime` binary | CLI / automation | `lime media image generate`、`lime media video generate`、`lime task ...`、`lime skill ...`、`lime doctor` | App runtime、React UI、业务应用状态 | `lime` 命令 |
 
@@ -155,7 +155,7 @@ const runtime = createAgentRuntimeClientFromSessionGateway({
 
 ### 3. Product workbench 从 quick intent 拼 turn payload
 
-适合从 Claw / Agent App / Content Studio 迁移 composer、quick intent、capability policy 的页面。UI 只保存当前输入和业务对象；intent 到 capability policy 的规则走共享包。
+适合从 Agent App / Content Studio 迁移 composer、quick intent、capability policy 的页面。UI 只保存当前输入和业务对象；intent 到 capability policy 的规则走共享包。
 
 ```ts
 import {

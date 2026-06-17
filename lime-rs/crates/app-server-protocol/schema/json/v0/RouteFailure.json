@@ -1,0 +1,61 @@
+{
+  "$defs": {
+    "RouteFailureCategory": {
+      "enum": [
+        "capability_gap",
+        "internal_error",
+        "missing_credential",
+        "model_unavailable",
+        "no_candidate",
+        "provider_disabled",
+        "provider_needs_setup",
+        "unsupported_endpoint",
+        "unsupported_protocol"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "capabilityGap": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "category": {
+      "$ref": "#/$defs/RouteFailureCategory"
+    },
+    "message": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "modelId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "providerId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "reasonCode": {
+      "type": "string"
+    },
+    "retryable": {
+      "default": false,
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "category",
+    "reasonCode"
+  ],
+  "title": "RouteFailure",
+  "type": "object"
+}

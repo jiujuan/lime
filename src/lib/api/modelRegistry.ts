@@ -20,16 +20,15 @@ import {
   METHOD_MODEL_PROVIDER_ALIAS_READ,
   METHOD_MODEL_PROVIDER_FETCH_MODELS,
   METHOD_MODEL_SYNC_STATE_READ,
+  type ModelInfo,
   type ModelListParams,
+  type ModelListResponse,
   type ModelProviderFetchModelsResponse,
   type ModelProviderListResponse,
+  type ProviderInfo,
 } from "../../../packages/app-server-client/src/protocol";
 
 type ModelRegistryAppServerClient = Pick<AppServerClient, "request">;
-
-type ModelListAppServerResponse = {
-  models?: EnhancedModelMetadata[] | null;
-};
 
 type ModelPreferencesListAppServerResponse = {
   preferences?: UserModelPreference[] | null;
@@ -51,6 +50,67 @@ type ModelProviderIdRecord = {
   id?: unknown;
 };
 
+function toSnakeModelInfo(model: ModelInfo): EnhancedModelMetadata {
+  return {
+    id: model.id,
+    display_name: model.displayName,
+    provider_id: model.providerId,
+    provider_name: model.providerName,
+    family: model.family ?? null,
+    tier: model.tier as EnhancedModelMetadata["tier"],
+    capabilities: {
+      vision: Boolean(model.capabilities?.vision),
+      tools: Boolean(model.capabilities?.tools),
+      streaming: Boolean(model.capabilities?.streaming),
+      json_mode: Boolean(model.capabilities?.jsonMode),
+      function_calling: Boolean(model.capabilities?.functionCalling),
+      reasoning: Boolean(model.capabilities?.reasoning),
+      reasoning_effort:
+        (model.capabilities?.reasoningEffort as
+          | EnhancedModelMetadata["capabilities"]["reasoning_effort"]
+          | undefined) ?? null,
+    },
+    task_families: (model.taskFamilies ??
+      []) as EnhancedModelMetadata["task_families"],
+    input_modalities: (model.inputModalities ??
+      []) as EnhancedModelMetadata["input_modalities"],
+    output_modalities: (model.outputModalities ??
+      []) as EnhancedModelMetadata["output_modalities"],
+    runtime_features: (model.runtimeFeatures ??
+      []) as EnhancedModelMetadata["runtime_features"],
+    deployment_source:
+      model.deploymentSource as EnhancedModelMetadata["deployment_source"],
+    management_plane:
+      model.managementPlane as EnhancedModelMetadata["management_plane"],
+    canonical_model_id: model.canonicalModelId ?? null,
+    provider_model_id: model.providerModelId ?? null,
+    alias_source:
+      (model.aliasSource as EnhancedModelMetadata["alias_source"]) ?? null,
+    pricing: (model.pricing as EnhancedModelMetadata["pricing"]) ?? null,
+    limits: model.limits as EnhancedModelMetadata["limits"],
+    status: model.status as EnhancedModelMetadata["status"],
+    release_date: model.releaseDate ?? null,
+    is_latest: Boolean(model.isLatest),
+    description: model.description ?? null,
+    source: model.source as EnhancedModelMetadata["source"],
+    created_at: model.createdAt,
+    updated_at: model.updatedAt,
+  };
+}
+
+function assertModelInfos(
+  models: ModelInfo[] | null | undefined,
+  method: string,
+): EnhancedModelMetadata[] {
+  if (!Array.isArray(models)) {
+    if (method === METHOD_MODEL_LIST) {
+      throw new Error("App Server model/list did not return models");
+    }
+    throw new Error(`App Server ${method} did not return models`);
+  }
+  return models.map(toSnakeModelInfo);
+}
+
 async function requestModelRegistryAppServer<T>(
   method: string,
   params: unknown,
@@ -63,15 +123,11 @@ async function requestModelRegistryAppServer<T>(
 async function readModelsFromAppServer(
   params: ModelListParams = {},
 ): Promise<EnhancedModelMetadata[]> {
-  const response =
-    await requestModelRegistryAppServer<ModelListAppServerResponse>(
-      METHOD_MODEL_LIST,
-      params,
-    );
-  if (!Array.isArray(response.models)) {
-    throw new Error("App Server model/list did not return models");
-  }
-  return response.models;
+  const response = await requestModelRegistryAppServer<ModelListResponse>(
+    METHOD_MODEL_LIST,
+    params,
+  );
+  return assertModelInfos(response.models, "model/list");
 }
 
 interface ModelRegistryQueryOptions {
@@ -151,13 +207,9 @@ function assertModelProviderIds(
   return Array.from(
     new Set(
       response.providers
-        .map((provider) => {
-          if (!provider || typeof provider !== "object") {
-            return "";
-          }
-          const { id } = provider as ModelProviderIdRecord;
-          return typeof id === "string" ? id.trim() : "";
-        })
+        .map((provider: ProviderInfo | ModelProviderIdRecord) =>
+          typeof provider.id === "string" ? provider.id.trim() : "",
+        )
         .filter((providerId) => providerId.length > 0),
     ),
   );
@@ -346,9 +398,7 @@ export async function fetchProviderModelsAuto(
       { providerId },
     );
   return {
-    models: Array.isArray(response.models)
-      ? (response.models as EnhancedModelMetadata[])
-      : [],
+    models: assertModelInfos(response.models, "modelProvider/fetchModels"),
     source: response.source === "Api" ? "Api" : "Error",
     error: response.error ?? null,
     request_url: response.requestUrl ?? null,

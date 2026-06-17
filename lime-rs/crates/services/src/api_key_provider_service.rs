@@ -151,8 +151,8 @@ mod tests {
             |row| row.get::<_, String>(0),
         )
         .optional()
-        .map_err(|e| format!("查询 Codex Provider 失败: {e}"))?
-        .ok_or_else(|| "未找到可用的 Codex Provider，请先在设置中配置并启用".to_string())
+        .map_err(|e| format!("查询本地 CLI Provider 失败: {e}"))?
+        .ok_or_else(|| "未找到可用的本地 CLI Provider，请先在设置中配置并启用".to_string())
     }
 
     #[test]
@@ -1089,7 +1089,7 @@ data: [DONE]\n";
 
         let db = init_database().expect("初始化数据库失败");
         let service = ApiKeyProviderService::new();
-        let provider_id = resolve_real_codex_provider_id(&db).expect("解析 Codex Provider 失败");
+        let provider_id = resolve_real_codex_provider_id(&db).expect("解析本地 CLI Provider 失败");
         let model = lime_core::env_compat::var(&["LIME_REAL_MODEL", "PROXYCAST_REAL_MODEL"])
             .unwrap_or_else(|| "gpt-5.3-codex".to_string());
         let prompt = lime_core::env_compat::var(&["LIME_REAL_PROMPT", "PROXYCAST_REAL_PROMPT"])

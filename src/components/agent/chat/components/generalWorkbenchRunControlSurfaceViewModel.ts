@@ -407,7 +407,7 @@ export function buildGeneralWorkbenchRunControlSurfaceProjection({
     .map((id) => findContextItem(contextItems, id))
     .filter((item): item is GeneralWorkbenchTaskRailContextItem =>
       Boolean(item),
-    );
+  );
   const goalItem = findContextItem(contextItems, "objective");
   const sourceItem = findContextItem(contextItems, "sources");
   const participantItem = findContextItem(contextItems, "subtasks");

@@ -86,10 +86,6 @@ impl<'a> AppendingRuntimeEventSink<'a> {
         self.events
     }
 
-    fn extend_events(&mut self, events: Vec<AgentEvent>) {
-        self.events.extend(events);
-    }
-
     fn emit_failure(&mut self, error: &RuntimeCoreError) -> Result<(), RuntimeCoreError> {
         self.emit(RuntimeEvent::new(
             "turn.failed",
@@ -317,16 +313,6 @@ impl RuntimeCore {
         };
 
         let events = if let Some(event_callback) = event_callback {
-            let initial_events = self.append_runtime_events(
-                &session.session_id,
-                &session.thread_id,
-                Some(&turn.turn_id),
-                Vec::new(),
-            )?;
-            let initial_events_persisted = !initial_events.is_empty();
-            for event in &initial_events {
-                event_callback(event.clone())?;
-            }
             let mut sink = AppendingRuntimeEventSink::new(
                 self.state.clone(),
                 self.file_checkpoint_snapshot_store.clone(),
@@ -339,10 +325,9 @@ impl RuntimeCore {
                 turn.turn_id.clone(),
                 event_callback,
             );
-            sink.extend_events(initial_events);
             let backend_result = self.backend.start_turn(request, &mut sink).await;
             if let Err(error) = backend_result {
-                if initial_events_persisted || sink.emitted_count() > 0 {
+                if sink.emitted_count() > 0 {
                     sink.emit_failure(&error)?;
                 } else {
                     self.rollback_started_turn(
@@ -356,17 +341,10 @@ impl RuntimeCore {
             let events = sink.into_events();
             events
         } else {
-            let mut events = self.append_runtime_events(
-                &session.session_id,
-                &session.thread_id,
-                Some(&turn.turn_id),
-                Vec::new(),
-            )?;
-            let initial_events_persisted = !events.is_empty();
             let mut sink = CollectingRuntimeEventSink::default();
             let backend_result = self.backend.start_turn(request, &mut sink).await;
             if let Err(error) = backend_result {
-                if initial_events_persisted || sink.emitted_count() > 0 {
+                if sink.emitted_count() > 0 {
                     sink.emit_failure(&error)?;
                     if let Err(append_error) = self.append_runtime_events(
                         &session.session_id,
@@ -374,13 +352,11 @@ impl RuntimeCore {
                         Some(&turn.turn_id),
                         sink.into_events(),
                     ) {
-                        if !initial_events_persisted {
-                            self.rollback_started_turn(
-                                &session.session_id,
-                                &turn.turn_id,
-                                previous_session,
-                            );
-                        }
+                        self.rollback_started_turn(
+                            &session.session_id,
+                            &turn.turn_id,
+                            previous_session,
+                        );
                         return Err(append_error);
                     }
                 } else {
@@ -398,11 +374,15 @@ impl RuntimeCore {
                 Some(&turn.turn_id),
                 sink.into_events(),
             ) {
-                Ok(mut backend_events) => {
-                    events.append(&mut backend_events);
-                    events
+                Ok(backend_events) => backend_events,
+                Err(error) => {
+                    self.rollback_started_turn(
+                        &session.session_id,
+                        &turn.turn_id,
+                        previous_session,
+                    );
+                    return Err(error);
                 }
-                Err(error) => return Err(error),
             }
         };
         let response_turn = self

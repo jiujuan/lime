@@ -170,7 +170,7 @@
     },
     {
       "profile_key": "voice_generation_profile",
-      "lifecycle": "current",
+      "lifecycle": "compat",
       "supported_contracts": [
         "voice_generation"
       ],
@@ -205,13 +205,12 @@
       "fallback_behavior": [
         "surface_provider_unconfigured",
         "surface_capability_gap",
-        "do_not_fallback_to_legacy_tts_test_command"
+        "do_not_fallback_to_legacy_tts_test_command",
+        "metadata_only_until_audio_worker_consumes_resolved_route"
       ],
       "evidence_events": [
         "runtime_identity_bound",
-        "execution_profile_decision",
-        "executor_invoked",
-        "artifact_written"
+        "execution_profile_decision"
       ],
       "audit_fields": [
         "session_id",
@@ -223,7 +222,7 @@
         "model",
         "audio_output_status"
       ],
-      "notes": "配音 profile 使用本地 ServiceSkill 与 audio_task/audio_output，不把 LimeCore 当默认执行器。"
+      "notes": "配音 profile 当前只保留 GUI / Skill 元数据与 audio_task 草稿索引，不代表可执行音频 worker。退出条件是 audio worker 或 RuntimeCore provider protocol mapper 消费 ResolvedModelRoute 并写入 model_route_execution 后再恢复 current。"
     },
     {
       "profile_key": "audio_transcription_profile",
@@ -505,7 +504,7 @@
     },
     {
       "adapter_key": "service_skill:voice_runtime",
-      "lifecycle": "current",
+      "lifecycle": "compat",
       "executor_kind": "service_skill",
       "binding_key": "voice_runtime",
       "supported_contracts": [
@@ -534,10 +533,9 @@
         "executor_error"
       ],
       "evidence_events": [
-        "executor_invoked",
-        "artifact_written"
+        "execution_profile_decision"
       ],
-      "notes": "Voice runtime 通过本地 ServiceSkill/worker 写 audio_task/audio_output，不默认云执行。"
+      "notes": "Voice runtime adapter 当前只是 service scene 元数据绑定，不代表已存在可执行音频 worker；恢复 current 的退出条件是消费 ResolvedModelRoute 并写入 model_route_execution。"
     },
     {
       "adapter_key": "skill:transcription_generate",

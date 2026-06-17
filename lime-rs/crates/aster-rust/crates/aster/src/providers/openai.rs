@@ -203,13 +203,8 @@ impl OpenAiProvider {
         )
     }
 
-    fn looks_like_codex_responses_model(model_name: &str) -> bool {
-        let normalized = model_name.trim().to_ascii_lowercase();
-        normalized.starts_with("gpt-5") && normalized.contains("codex")
-    }
-
-    fn uses_responses_api(model_name: &str) -> bool {
-        Self::force_responses_api() || Self::looks_like_codex_responses_model(model_name)
+    fn uses_responses_api(_model_name: &str) -> bool {
+        Self::force_responses_api()
     }
 
     fn is_first_party_openai_host(host: &str) -> bool {
@@ -694,13 +689,11 @@ mod tests {
     use std::collections::HashMap;
 
     #[test]
-    fn test_uses_responses_api_for_codex_models_without_force_flag() {
+    fn test_uses_responses_api_requires_route_adapter_flag() {
         std::env::remove_var("OPENAI_FORCE_RESPONSES_API");
 
-        assert!(OpenAiProvider::uses_responses_api("gpt-5-codex"));
-        assert!(OpenAiProvider::uses_responses_api("gpt-5.1-codex"));
-        assert!(OpenAiProvider::uses_responses_api("gpt-5.2-codex"));
-        assert!(OpenAiProvider::uses_responses_api("gpt-5.3-codex"));
+        assert!(!OpenAiProvider::uses_responses_api("gpt-5-codex"));
+        assert!(!OpenAiProvider::uses_responses_api("gpt-5.1-codex"));
         assert!(!OpenAiProvider::uses_responses_api("gpt-4o"));
     }
 

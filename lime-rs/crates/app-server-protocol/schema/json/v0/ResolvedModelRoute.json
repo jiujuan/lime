@@ -1,0 +1,772 @@
+{
+  "$defs": {
+    "AuthKind": {
+      "enum": [
+        "api_key_ref",
+        "direct_api_key",
+        "no_auth",
+        "oem_managed"
+      ],
+      "type": "string"
+    },
+    "AuthMaterialRef": {
+      "properties": {
+        "credentialRef": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "headerName": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "headerPrefix": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "kind": {
+          "$ref": "#/$defs/AuthKind"
+        },
+        "providerId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object"
+    },
+    "CapabilitySnapshot": {
+      "properties": {
+        "capabilities": {
+          "$ref": "#/$defs/ModelCapabilitiesInfo",
+          "default": {
+            "functionCalling": false,
+            "jsonMode": false,
+            "reasoning": false,
+            "streaming": false,
+            "tools": false,
+            "vision": false
+          }
+        },
+        "inputModalities": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "outputModalities": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "reasonCode": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "runtimeFeatures": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "source": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "taskFamilies": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "EndpointInfo": {
+      "properties": {
+        "apiVersion": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "baseUrl": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "kind": {
+          "$ref": "#/$defs/EndpointKind"
+        },
+        "location": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "project": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "region": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object"
+    },
+    "EndpointKind": {
+      "enum": [
+        "direct_request",
+        "local",
+        "oem_gateway",
+        "openai_compatible",
+        "provider_base_url"
+      ],
+      "type": "string"
+    },
+    "FramingKind": {
+      "enum": [
+        "json",
+        "ndjson",
+        "sse"
+      ],
+      "type": "string"
+    },
+    "ModelCapabilitiesInfo": {
+      "properties": {
+        "functionCalling": {
+          "type": "boolean"
+        },
+        "jsonMode": {
+          "type": "boolean"
+        },
+        "reasoning": {
+          "type": "boolean"
+        },
+        "reasoningEffort": true,
+        "streaming": {
+          "type": "boolean"
+        },
+        "tools": {
+          "type": "boolean"
+        },
+        "vision": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "functionCalling",
+        "jsonMode",
+        "reasoning",
+        "streaming",
+        "tools",
+        "vision"
+      ],
+      "type": "object"
+    },
+    "ModelInfo": {
+      "properties": {
+        "aliasSource": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "canonicalModelId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "capabilities": {
+          "$ref": "#/$defs/ModelCapabilitiesInfo",
+          "default": {
+            "functionCalling": false,
+            "jsonMode": false,
+            "reasoning": false,
+            "streaming": false,
+            "tools": false,
+            "vision": false
+          }
+        },
+        "createdAt": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "deploymentSource": {
+          "type": "string"
+        },
+        "description": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "family": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "inputModalities": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "isLatest": {
+          "default": false,
+          "type": "boolean"
+        },
+        "limits": true,
+        "managementPlane": {
+          "type": "string"
+        },
+        "outputModalities": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "pricing": true,
+        "providerId": {
+          "type": "string"
+        },
+        "providerModelId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "providerName": {
+          "type": "string"
+        },
+        "releaseDate": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "runtimeFeatures": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "source": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "taskFamilies": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "tier": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "createdAt",
+        "deploymentSource",
+        "displayName",
+        "id",
+        "limits",
+        "managementPlane",
+        "providerId",
+        "providerName",
+        "source",
+        "status",
+        "tier",
+        "updatedAt"
+      ],
+      "type": "object"
+    },
+    "ModelRef": {
+      "properties": {
+        "modelId": {
+          "type": "string"
+        },
+        "providerId": {
+          "type": "string"
+        },
+        "routingSlot": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "source": {
+          "$ref": "#/$defs/ModelRefSource"
+        },
+        "variant": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "modelId",
+        "providerId",
+        "source"
+      ],
+      "type": "object"
+    },
+    "ModelRefSource": {
+      "enum": [
+        "direct_provider_config",
+        "explicit",
+        "fallback",
+        "host_options",
+        "oem_policy",
+        "profile_slot",
+        "runtime_options",
+        "session_default",
+        "task"
+      ],
+      "type": "string"
+    },
+    "ProtocolKind": {
+      "enum": [
+        "anthropic_messages",
+        "bedrock_converse",
+        "codex_responses",
+        "fal",
+        "gemini_generate_content",
+        "ollama_chat",
+        "openai_chat",
+        "openai_images",
+        "openai_responses",
+        "unknown",
+        "vertex_gemini"
+      ],
+      "type": "string"
+    },
+    "ProviderInfo": {
+      "properties": {
+        "apiHost": {
+          "type": "string"
+        },
+        "apiKeyCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "apiKeys": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ProviderKeyInfo"
+          },
+          "type": "array"
+        },
+        "apiVersion": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "createdAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "customModels": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "group": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "isSystem": {
+          "type": "boolean"
+        },
+        "legacyIds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "location": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "project": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "promptCacheMode": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "providerType": {
+          "type": "string"
+        },
+        "region": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sortOrder": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "updatedAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "apiHost",
+        "apiKeyCount",
+        "enabled",
+        "group",
+        "id",
+        "isSystem",
+        "name",
+        "providerType",
+        "sortOrder"
+      ],
+      "type": "object"
+    },
+    "ProviderKeyInfo": {
+      "properties": {
+        "alias": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "apiKeyMasked": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "errorCount": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "lastUsedAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "providerId": {
+          "type": "string"
+        },
+        "usageCount": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "apiKeyMasked",
+        "createdAt",
+        "enabled",
+        "errorCount",
+        "id",
+        "providerId",
+        "usageCount"
+      ],
+      "type": "object"
+    },
+    "RouteDefaults": {
+      "properties": {
+        "forceResponsesApi": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "promptCacheMode": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "reasoningEffort": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "toolshim": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "toolshimModel": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "RouteFailure": {
+      "properties": {
+        "capabilityGap": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "category": {
+          "$ref": "#/$defs/RouteFailureCategory"
+        },
+        "message": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "modelId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "providerId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "reasonCode": {
+          "type": "string"
+        },
+        "retryable": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "category",
+        "reasonCode"
+      ],
+      "type": "object"
+    },
+    "RouteFailureCategory": {
+      "enum": [
+        "capability_gap",
+        "internal_error",
+        "missing_credential",
+        "model_unavailable",
+        "no_candidate",
+        "provider_disabled",
+        "provider_needs_setup",
+        "unsupported_endpoint",
+        "unsupported_protocol"
+      ],
+      "type": "string"
+    },
+    "RoutingDecision": {
+      "properties": {
+        "candidateCount": {
+          "default": 0,
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "capabilityGap": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "decisionReason": {
+          "type": "string"
+        },
+        "decisionSource": {
+          "type": "string"
+        },
+        "fallbackChain": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "routingMode": {
+          "type": "string"
+        },
+        "serviceModelSlot": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "settingsSource": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "decisionReason",
+        "decisionSource",
+        "routingMode"
+      ],
+      "type": "object"
+    },
+    "TransportKind": {
+      "enum": [
+        "http",
+        "local_process",
+        "sidecar"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "auth": {
+      "$ref": "#/$defs/AuthMaterialRef"
+    },
+    "capabilitySnapshot": {
+      "$ref": "#/$defs/CapabilitySnapshot"
+    },
+    "decision": {
+      "$ref": "#/$defs/RoutingDecision"
+    },
+    "defaults": {
+      "$ref": "#/$defs/RouteDefaults"
+    },
+    "endpoint": {
+      "$ref": "#/$defs/EndpointInfo"
+    },
+    "failure": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RouteFailure"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "framing": {
+      "$ref": "#/$defs/FramingKind"
+    },
+    "model": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ModelInfo"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "modelRef": {
+      "$ref": "#/$defs/ModelRef"
+    },
+    "protocol": {
+      "$ref": "#/$defs/ProtocolKind"
+    },
+    "provider": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ProviderInfo"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "transport": {
+      "$ref": "#/$defs/TransportKind"
+    }
+  },
+  "required": [
+    "auth",
+    "capabilitySnapshot",
+    "decision",
+    "defaults",
+    "endpoint",
+    "framing",
+    "modelRef",
+    "protocol",
+    "transport"
+  ],
+  "title": "ResolvedModelRoute",
+  "type": "object"
+}

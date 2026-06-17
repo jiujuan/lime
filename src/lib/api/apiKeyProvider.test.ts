@@ -29,6 +29,46 @@ function expectAppServerRequest(
   expect(appServerRequestMock).toHaveBeenNthCalledWith(index, method, params);
 }
 
+function createProviderInfo(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "openai",
+    name: "OpenAI",
+    providerType: "openai",
+    apiHost: "https://api.openai.com",
+    group: "global",
+    enabled: true,
+    isSystem: true,
+    sortOrder: 1,
+    apiVersion: null,
+    project: null,
+    location: null,
+    region: null,
+    customModels: [],
+    promptCacheMode: null,
+    apiKeyCount: 1,
+    apiKeys: [createProviderKeyInfo()],
+    legacyIds: [],
+    createdAt: "2026-06-17T00:00:00Z",
+    updatedAt: "2026-06-17T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function createProviderKeyInfo(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "key-1",
+    providerId: "openai",
+    apiKeyMasked: "sk-test****1234",
+    alias: null,
+    enabled: true,
+    usageCount: 0,
+    errorCount: 0,
+    lastUsedAt: null,
+    createdAt: "2026-06-17T00:00:00Z",
+    ...overrides,
+  };
+}
+
 describe("apiKeyProvider API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -38,16 +78,7 @@ describe("apiKeyProvider API", () => {
 
   it("Provider 列表应通过 App Server modelProvider/list 读取", async () => {
     resolveAppServerRequest({
-      providers: [
-        {
-          id: "openai",
-          name: "OpenAI",
-          type: "openai",
-          enabled: true,
-          api_key_count: 1,
-          api_keys: [{ id: "key-1", provider_id: "openai", enabled: true }],
-        },
-      ],
+      providers: [createProviderInfo()],
     });
 
     await expect(apiKeyProviderApi.getProviders()).resolves.toEqual([
@@ -60,17 +91,7 @@ describe("apiKeyProvider API", () => {
 
   it("系统 Provider Catalog 应通过 App Server modelProvider/catalog/list 读取", async () => {
     resolveAppServerRequest({
-      providers: [
-        {
-          id: "openai",
-          name: "OpenAI",
-          type: "openai",
-          api_host: "https://api.openai.com",
-          group: "global",
-          sort_order: 1,
-          legacy_ids: [],
-        },
-      ],
+      providers: [createProviderInfo()],
     });
 
     await expect(apiKeyProviderApi.getSystemProviderCatalog()).resolves.toEqual(
@@ -99,7 +120,7 @@ describe("apiKeyProvider API", () => {
 
   it("应通过 App Server current 执行 provider side-effect 命令", async () => {
     resolveAppServerRequest({
-      key: { id: "key-1", provider_id: "openai", enabled: true },
+      key: createProviderKeyInfo(),
     });
     resolveAppServerRequest({
       success: true,
@@ -131,6 +152,75 @@ describe("apiKeyProvider API", () => {
     expect(safeInvoke).not.toHaveBeenCalled();
   });
 
+  it("Provider create/update 应发送 typed App Server 参数", async () => {
+    resolveAppServerRequest({
+      provider: createProviderInfo({
+        id: "custom",
+        name: "Custom",
+        providerType: "openai-compatible",
+        apiHost: "https://api.example.com/v1",
+        isSystem: false,
+        apiKeyCount: 0,
+        apiKeys: [],
+      }),
+    });
+    resolveAppServerRequest({
+      provider: createProviderInfo({
+        id: "custom",
+        name: "Custom Renamed",
+        providerType: "openai-compatible",
+        apiHost: "https://api.example.com/v2",
+        isSystem: false,
+        apiKeyCount: 0,
+        customModels: ["custom-model"],
+        apiKeys: [],
+      }),
+    });
+
+    await expect(
+      apiKeyProviderApi.addCustomProvider({
+        name: "Custom",
+        type: "openai-compatible",
+        api_host: "https://api.example.com/v1",
+        prompt_cache_mode: "automatic",
+      }),
+    ).resolves.toEqual(expect.objectContaining({ id: "custom" }));
+    await expect(
+      apiKeyProviderApi.updateProvider("custom", {
+        name: "Custom Renamed",
+        api_host: "https://api.example.com/v2",
+        custom_models: ["custom-model"],
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({ custom_models: ["custom-model"] }),
+    );
+
+    expectAppServerRequest(1, "modelProvider/create", {
+      name: "Custom",
+      providerType: "openai-compatible",
+      apiHost: "https://api.example.com/v1",
+      apiVersion: undefined,
+      project: undefined,
+      location: undefined,
+      region: undefined,
+      promptCacheMode: "automatic",
+    });
+    expectAppServerRequest(2, "modelProvider/update", {
+      providerId: "custom",
+      name: "Custom Renamed",
+      providerType: undefined,
+      apiHost: "https://api.example.com/v2",
+      enabled: undefined,
+      sortOrder: undefined,
+      apiVersion: undefined,
+      project: undefined,
+      location: undefined,
+      region: undefined,
+      promptCacheMode: undefined,
+      customModels: ["custom-model"],
+    });
+  });
+
   it("不应继续暴露旧 API Key 迁移 API", () => {
     expect("getLegacyApiKeyCredentials" in apiKeyProviderApi).toBe(false);
     expect("migrateLegacyCredentials" in apiKeyProviderApi).toBe(false);
@@ -139,16 +229,7 @@ describe("apiKeyProvider API", () => {
 
   it("getProviders 应缓存并复用同一轮读取结果", async () => {
     resolveAppServerRequest({
-      providers: [
-        {
-          id: "openai",
-          name: "OpenAI",
-          type: "openai",
-          enabled: true,
-          api_key_count: 1,
-          api_keys: [{ id: "key-1", provider_id: "openai", enabled: true }],
-        },
-      ],
+      providers: [createProviderInfo()],
     });
 
     const [first, second] = await Promise.all([
@@ -165,27 +246,18 @@ describe("apiKeyProvider API", () => {
 
   it("forceRefresh 应绕过 Provider 缓存", async () => {
     resolveAppServerRequest({
-      providers: [
-        {
-          id: "openai",
-          name: "OpenAI",
-          type: "openai",
-          enabled: true,
-          api_key_count: 1,
-          api_keys: [],
-        },
-      ],
+      providers: [createProviderInfo({ apiKeys: [] })],
     });
     resolveAppServerRequest({
       providers: [
-        {
+        createProviderInfo({
           id: "deepseek",
           name: "DeepSeek",
-          type: "deepseek",
-          enabled: true,
-          api_key_count: 2,
-          api_keys: [],
-        },
+          providerType: "deepseek",
+          apiHost: "https://api.deepseek.com",
+          apiKeyCount: 2,
+          apiKeys: [],
+        }),
       ],
     });
 
@@ -213,15 +285,12 @@ describe("apiKeyProvider API", () => {
 
     resolveAppServerRequest({
       providers: [
-        {
+        createProviderInfo({
           id: "custom-openai-images",
           name: "OpenAI-gpt-images-2",
-          type: "openai",
-          enabled: true,
-          api_key_count: 1,
-          custom_models: ["gpt-images-2"],
-          api_keys: [],
-        },
+          customModels: ["gpt-images-2"],
+          apiKeys: [],
+        }),
       ],
     });
 
@@ -237,30 +306,17 @@ describe("apiKeyProvider API", () => {
 
   it("写操作成功后应失效缓存", async () => {
     resolveAppServerRequest({
-      providers: [
-        {
-          id: "openai",
-          name: "OpenAI",
-          type: "openai",
-          enabled: true,
-          api_key_count: 1,
-          api_keys: [],
-        },
-      ],
+      providers: [createProviderInfo({ apiKeys: [] })],
     });
     resolveAppServerRequest({
-      key: { id: "key-2", provider_id: "openai", enabled: true },
+      key: createProviderKeyInfo({ id: "key-2" }),
     });
     resolveAppServerRequest({
       providers: [
-        {
-          id: "openai",
-          name: "OpenAI",
-          type: "openai",
-          enabled: true,
-          api_key_count: 2,
-          api_keys: [{ id: "key-2", provider_id: "openai", enabled: true }],
-        },
+        createProviderInfo({
+          apiKeyCount: 2,
+          apiKeys: [createProviderKeyInfo({ id: "key-2" })],
+        }),
       ],
     });
 

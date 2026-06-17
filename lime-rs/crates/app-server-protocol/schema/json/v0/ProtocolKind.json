@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "enum": [
+    "anthropic_messages",
+    "bedrock_converse",
+    "codex_responses",
+    "fal",
+    "gemini_generate_content",
+    "ollama_chat",
+    "openai_chat",
+    "openai_images",
+    "openai_responses",
+    "unknown",
+    "vertex_gemini"
+  ],
+  "title": "ProtocolKind",
+  "type": "string"
+}

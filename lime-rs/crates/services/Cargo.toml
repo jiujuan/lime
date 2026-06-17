@@ -15,6 +15,7 @@ local-sensevoice = ["voice-core/local-sensevoice"]
 lime-core.workspace = true
 lime-providers.workspace = true
 voice-core.workspace = true
+document-preview.workspace = true
 
 # 序列化
 serde.workspace = true

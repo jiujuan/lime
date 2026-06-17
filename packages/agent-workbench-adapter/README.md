@@ -2,7 +2,7 @@
 
 `@limecloud/agent-workbench-adapter` 是 Agent 工作台的 headless adapter。它不渲染 UI，只把产品页面的 intent、composer 状态、runtime facts 和 turn payload 拼成可复用的标准结构。
 
-目标是让 Claw、Agent App、Content Studio 这类 surface 共享工作台控制逻辑，而不是重复开发整套前端页面。
+目标是让 Agent App、Content Studio 这类 surface 共享工作台控制逻辑，而不是重复开发整套前端页面。
 
 ## Boundary
 
@@ -11,6 +11,8 @@
 - quick intent / task kind 到 runtime capability policy 的映射。
 - composer 提交模式判断：start、send、queue、disabled。
 - runtime facts 摘要：sources、tools、pending actions、artifacts、evidence、tasks。
+- Agent 工作台任务视图模型：当前任务、状态、事实计数、检查点和运行面板开关。
+- Agent 工作台 runtime facts 判断：是否存在可展示的事实面。
 - `lime.agent` / `agentSession/turn/start` payload 拼装。
 
 这个包不负责：
@@ -42,4 +44,3 @@ const payload = buildAgentTurnStartPayload({
   capabilityHints: policy.capabilityHints,
 });
 ```
-

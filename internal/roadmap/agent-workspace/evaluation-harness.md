@@ -27,6 +27,7 @@
 | `evidence/agent-workspace-basic-streaming.20260616-0807.json` | Batch 1 streaming 场景正式 evidence；`pass`，可计入正式分 |
 | `evidence/agent-workspace-run-control-surface.20260616-0807.json` | Batch 1 run control surface 正式 evidence；`pass`，可计入 run-observability 的本地正式证据 |
 | `evidence/agent-workspace-run-control-restore.20260616-1255.json` | Batch 1 run control restore 正式 evidence；`pass`，证明恢复态同一区域可恢复 environment / plan / goal / sources / subagents / diffstat / approval / output，并有真实 Electron session history fixture |
+| `evidence/agent-workspace-session-restore.20260617-1559.json` | Session restore 场景导入恢复专项正式 evidence；`pass`，证明本地历史导入会话可恢复消息 / 工具细节并同会话续聊，且不会把导入支持能力展示成 Workspace 主线状态卡 |
 | AgentUI conformance fixtures | 可作为 UI projection 标准样本 |
 | 公开 benchmark | SWE-bench、Terminal-Bench、WebArena、OSWorld 可作为外部能力映射 |
 
@@ -84,4 +85,4 @@
 
 ## 7. 下一刀
 
-先不用 qcloop。`local-eval-manifest.json`、`evidence-template.json` 和 `evidence/README.md` 已作为本地轻量入口；Batch 1 现在已有三份正式 pass evidence：`agent-workspace-basic-streaming`、`agent-workspace-run-control-surface` 与 `agent-workspace-run-control-restore`。下一刀不再继续补只读 run rail 样例，而是转向 `run-control-split-review` 或 `run-control-permission-chip`，证明 split review、approval writeback、pause / steer 这类控制动作能回写 runtime 并恢复。
+先不用 qcloop。`local-eval-manifest.json`、`evidence-template.json` 和 `evidence/README.md` 已作为本地轻量入口；Batch 1 现在已有三份正式 pass evidence：`agent-workspace-basic-streaming`、`agent-workspace-run-control-surface` 与 `agent-workspace-run-control-restore`，并补了一份 `agent-workspace-session-restore` 导入恢复专项 evidence。下一刀不再继续补只读 run rail 或导入展示样例，而是转向 `agent-workspace-tool-call`、`agent-workspace-hitl-approval`、`run-control-split-review` 或 `run-control-permission-chip`，证明工具生命周期、approval writeback、pause / steer 和 split review 这类动作能回写 runtime 并恢复。

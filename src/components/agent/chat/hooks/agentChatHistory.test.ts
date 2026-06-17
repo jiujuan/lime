@@ -125,6 +125,7 @@ describe("agentChatHistory", () => {
         {
           role: "user",
           timestamp: 1780704000,
+          runtimeTurnId: "turn-app-server-message-user",
           content: [
             {
               type: "text",
@@ -135,6 +136,7 @@ describe("agentChatHistory", () => {
         {
           role: "assistant",
           timestamp: 1780704002,
+          runtime_turn_id: "turn-app-server-message-assistant",
           content: [
             {
               type: "text",
@@ -164,6 +166,7 @@ describe("agentChatHistory", () => {
           text: "请整理 App Server 对话历史",
         },
       ],
+      runtimeTurnId: "turn-app-server-message-user",
     });
     expect(messages[1]).toMatchObject({
       role: "assistant",
@@ -174,7 +177,56 @@ describe("agentChatHistory", () => {
           text: "已从 App Server detail.messages 读取。",
         },
       ],
+      runtimeTurnId: "turn-app-server-message-assistant",
     });
+  });
+
+  it("历史 tool_response 应继承同一工具请求参数以恢复文件预览入口", () => {
+    const detail: AsterSessionDetail = {
+      id: "session-history-tool-response-arguments",
+      created_at: 1,
+      updated_at: 2,
+      messages: [
+        {
+          role: "assistant",
+          timestamp: 1780704050,
+          content: [
+            {
+              type: "tool_request",
+              id: "call-read-imported-preview",
+              tool_name: "read_file",
+              arguments: {
+                path: "/workspace/imported-local-history/docs/imported-preview.md",
+              },
+            } as never,
+            {
+              type: "tool_response",
+              id: "call-read-imported-preview",
+              success: true,
+              output: "导入会话 Markdown 预览内容",
+            } as never,
+          ],
+        },
+      ],
+    };
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "session-history-tool-response-arguments",
+    );
+
+    const completedToolPart = messages[0]?.contentParts?.find(
+      (part) =>
+        part.type === "tool_use" &&
+        part.toolCall.id === "call-read-imported-preview" &&
+        part.toolCall.status === "completed",
+    );
+    expect(completedToolPart?.type).toBe("tool_use");
+    if (completedToolPart?.type === "tool_use") {
+      expect(completedToolPart.toolCall.arguments).toBe(
+        '{"path":"/workspace/imported-local-history/docs/imported-preview.md"}',
+      );
+    }
   });
 
   it("App Server thread_read.tool_calls 应合入已恢复助手消息", () => {
@@ -319,11 +371,14 @@ describe("agentChatHistory", () => {
       ),
     ).toEqual(["tool_use", "text"]);
 
-    const compactMessagesWithoutTimelineFallback =
-      hydrateSessionDetailMessages(detail, "session-app-server-tool-calls", {
+    const compactMessagesWithoutTimelineFallback = hydrateSessionDetailMessages(
+      detail,
+      "session-app-server-tool-calls",
+      {
         compactCompletedHistory: true,
         includeTimelineFallback: false,
-      });
+      },
+    );
 
     expect(compactMessagesWithoutTimelineFallback).toHaveLength(2);
     expect(compactMessagesWithoutTimelineFallback[1]).toMatchObject({
@@ -350,7 +405,7 @@ describe("agentChatHistory", () => {
     ).toEqual(["tool_use", "text"]);
   });
 
-  it("Codex 导入的 detail.items 应按 turn 合入已恢复助手消息", () => {
+  it("本地历史导入的 detail.items 应按 turn 合入已恢复助手消息", () => {
     const detail: AsterSessionDetail = {
       id: "session-codex-import-timeline",
       thread_id: "thread-codex-import-timeline",
@@ -407,6 +462,10 @@ describe("agentChatHistory", () => {
           cwd: "/workspace/app",
           aggregated_output: "Exit code: 0\nOutput:\nok",
           exit_code: 0,
+          metadata: {
+            imported: true,
+            source_client: "codex",
+          },
           started_at: "2026-06-16T00:00:02.000Z",
           completed_at: "2026-06-16T00:00:03.000Z",
           updated_at: "2026-06-16T00:00:03.000Z",
@@ -463,7 +522,7 @@ describe("agentChatHistory", () => {
           request_id: "approval-codex",
           action_type: "tool_confirmation",
           tool_name: "exec_command",
-          prompt: "Approve Codex command: npm test",
+          prompt: "Approve imported command: npm test",
           response: { decision: "imported_read_only" },
           started_at: "2026-06-16T00:00:03.400Z",
           completed_at: "2026-06-16T00:00:03.500Z",
@@ -490,6 +549,12 @@ describe("agentChatHistory", () => {
           result: {
             success: true,
             output: "Exit code: 0\nOutput:\nok",
+            metadata: {
+              imported: true,
+              source_client: "codex",
+              exit_code: 0,
+              cwd: "/workspace/app",
+            },
           },
         },
         {
@@ -518,6 +583,308 @@ describe("agentChatHistory", () => {
       "action_required",
       "text",
     ]);
+    expect(messages[1]?.contentParts?.[1]).toMatchObject({
+      type: "tool_use",
+      toolCall: {
+        id: "command-codex",
+        result: {
+          metadata: {
+            imported: true,
+            source_client: "codex",
+            exit_code: 0,
+            cwd: "/workspace/app",
+          },
+        },
+      },
+    });
+  });
+
+  it("本地历史导入的 reasoning 不应被 thread_read 工具摘要覆盖", () => {
+    const detail: AsterSessionDetail = {
+      id: "session-codex-import-thread-read",
+      thread_id: "thread-codex-import-thread-read",
+      created_at: 1,
+      updated_at: 2,
+      messages: [
+        {
+          id: "turn-codex:user",
+          role: "user",
+          timestamp: 1_781_000_001,
+          content: [{ type: "text", text: "run it" }] as never,
+        },
+        {
+          id: "turn-codex:assistant",
+          role: "assistant",
+          timestamp: 1_781_000_004,
+          runtimeTurnId: "turn-codex",
+          content: [{ type: "text", text: "done" }] as never,
+        } as never,
+      ],
+      turns: [
+        {
+          id: "turn-codex",
+          thread_id: "thread-codex-import-thread-read",
+          prompt_text: "run it",
+          status: "completed",
+          started_at: "2026-06-16T00:00:01.000Z",
+          completed_at: "2026-06-16T00:00:04.000Z",
+          created_at: "2026-06-16T00:00:01.000Z",
+          updated_at: "2026-06-16T00:00:04.000Z",
+        },
+      ],
+      items: [
+        {
+          id: "reasoning-codex",
+          thread_id: "thread-codex-import-thread-read",
+          turn_id: "turn-codex",
+          sequence: 1,
+          type: "reasoning",
+          status: "completed",
+          text: "I need to inspect the test failure first.",
+          metadata: {
+            imported: true,
+            source_client: "codex",
+          },
+          started_at: "2026-06-16T00:00:01.150Z",
+          completed_at: "2026-06-16T00:00:01.150Z",
+          updated_at: "2026-06-16T00:00:01.150Z",
+        } as never,
+        {
+          id: "command-codex",
+          thread_id: "thread-codex-import-thread-read",
+          turn_id: "turn-codex",
+          sequence: 2,
+          type: "command_execution",
+          status: "completed",
+          command: "npm test",
+          cwd: "/workspace/app",
+          aggregated_output: "Exit code: 0\nOutput:\nok",
+          exit_code: 0,
+          metadata: {
+            imported: true,
+            source_client: "codex",
+          },
+          started_at: "2026-06-16T00:00:02.000Z",
+          completed_at: "2026-06-16T00:00:03.000Z",
+          updated_at: "2026-06-16T00:00:03.000Z",
+        } as never,
+        {
+          id: "assistant-codex",
+          thread_id: "thread-codex-import-thread-read",
+          turn_id: "turn-codex",
+          sequence: 3,
+          type: "agent_message",
+          status: "completed",
+          text: "done",
+          started_at: "2026-06-16T00:00:04.000Z",
+          completed_at: "2026-06-16T00:00:04.000Z",
+          updated_at: "2026-06-16T00:00:04.000Z",
+        } as never,
+      ],
+      thread_read: {
+        thread_id: "thread-codex-import-thread-read",
+        status: "completed",
+        profile_status: "completed",
+        turns: [
+          {
+            turn_id: "turn-codex",
+            status: "completed",
+          },
+        ],
+        tool_calls: [
+          {
+            id: "command-codex",
+            turn_id: "turn-codex",
+            tool_name: "exec_command",
+            status: "completed",
+            output_preview: "ok",
+            started_at: "2026-06-16T00:00:02.000Z",
+            completed_at: "2026-06-16T00:00:03.000Z",
+          },
+        ],
+      } as never,
+    };
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "session-codex-import-thread-read",
+    );
+
+    expect(messages).toHaveLength(2);
+    expect(messages[1]?.contentParts?.map((part) => part.type)).toEqual([
+      "thinking",
+      "tool_use",
+      "text",
+    ]);
+    expect(messages[1]?.contentParts?.[0]).toEqual({
+      type: "thinking",
+      text: "I need to inspect the test failure first.",
+      metadata: {
+        imported: true,
+        source_client: "codex",
+      },
+    });
+  });
+
+  it("本地历史导入会话不应把旧失败 turn 冒充为当前处理失败", () => {
+    const detail: AsterSessionDetail = {
+      id: "session-imported-failed-history",
+      thread_id: "thread-imported-failed-history",
+      created_at: 1,
+      updated_at: 2,
+      execution_runtime: {
+        session_id: "session-imported-failed-history",
+        source: "session",
+        source_client: "codex",
+        imported_continuation: {
+          cwd: "/workspace/app",
+        },
+      } as never,
+      messages: [
+        {
+          id: "turn-imported-failed:user",
+          role: "user",
+          timestamp: 1_781_000_001,
+          runtimeTurnId: "turn-imported-failed",
+          content: [{ type: "text", text: "run failed command" }] as never,
+        },
+        {
+          id: "turn-imported-failed:assistant",
+          role: "assistant",
+          timestamp: 1_781_000_002,
+          runtimeTurnId: "turn-imported-failed",
+          content: [{ type: "text", text: "历史中这次命令失败了。" }] as never,
+        },
+      ],
+      turns: [
+        {
+          id: "turn-imported-failed",
+          thread_id: "thread-imported-failed-history",
+          prompt_text: "run failed command",
+          status: "failed",
+          started_at: "2026-06-16T00:00:01.000Z",
+          completed_at: "2026-06-16T00:00:02.000Z",
+          created_at: "2026-06-16T00:00:01.000Z",
+          updated_at: "2026-06-16T00:00:02.000Z",
+        },
+      ],
+      thread_read: {
+        thread_id: "thread-imported-failed-history",
+        status: "failed",
+        profile_status: "failed",
+        turns: [
+          {
+            turn_id: "turn-imported-failed",
+            status: "failed",
+            native_status: "failed",
+          },
+        ],
+        pending_requests: [],
+        incidents: [],
+        queued_turns: [],
+        tool_calls: [],
+        diagnostics: {
+          latest_turn_status: "failed",
+          latest_turn_error_message: "Exit code: 1",
+          latest_turn_completed_at: "2026-06-16T00:00:02.000Z",
+        },
+      } as never,
+    };
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "session-imported-failed-history",
+    );
+
+    expect(messages).toHaveLength(2);
+    expect(messages.map((message) => message.content)).toEqual([
+      "run failed command",
+      "历史中这次命令失败了。",
+    ]);
+    expect(messages.some((message) => message.runtimeStatus)).toBe(false);
+    expect(messages.map((message) => message.content).join("\n")).not.toContain(
+      "当前处理失败",
+    );
+  });
+
+  it("camelCase 本地历史导入会话同样不应把旧失败 turn 冒充为当前处理失败", () => {
+    const detail: AsterSessionDetail = {
+      id: "session-imported-failed-history-camel",
+      thread_id: "thread-imported-failed-history-camel",
+      created_at: 1,
+      updated_at: 2,
+      execution_runtime: {
+        session_id: "session-imported-failed-history-camel",
+        source: "session",
+        sourceClient: "codex",
+        importedContinuation: {
+          cwd: "/workspace/app",
+        },
+      } as never,
+      messages: [
+        {
+          id: "turn-imported-failed-camel:user",
+          role: "user",
+          timestamp: 1_781_000_001,
+          runtimeTurnId: "turn-imported-failed-camel",
+          content: [{ type: "text", text: "run failed command" }] as never,
+        },
+        {
+          id: "turn-imported-failed-camel:assistant",
+          role: "assistant",
+          timestamp: 1_781_000_002,
+          runtimeTurnId: "turn-imported-failed-camel",
+          content: [{ type: "text", text: "历史中这次命令失败了。" }] as never,
+        },
+      ],
+      turns: [
+        {
+          id: "turn-imported-failed-camel",
+          thread_id: "thread-imported-failed-history-camel",
+          prompt_text: "run failed command",
+          status: "failed",
+          started_at: "2026-06-16T00:00:01.000Z",
+          completed_at: "2026-06-16T00:00:02.000Z",
+          created_at: "2026-06-16T00:00:01.000Z",
+          updated_at: "2026-06-16T00:00:02.000Z",
+        },
+      ],
+      thread_read: {
+        thread_id: "thread-imported-failed-history-camel",
+        status: "failed",
+        profile_status: "failed",
+        turns: [
+          {
+            turn_id: "turn-imported-failed-camel",
+            status: "failed",
+            native_status: "failed",
+          },
+        ],
+        pending_requests: [],
+        incidents: [],
+        queued_turns: [],
+        tool_calls: [],
+        diagnostics: {
+          latest_turn_status: "failed",
+          latest_turn_error_message: "Exit code: 1",
+          latest_turn_completed_at: "2026-06-16T00:00:02.000Z",
+        },
+      } as never,
+    };
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "session-imported-failed-history-camel",
+    );
+
+    expect(messages.map((message) => message.content)).toEqual([
+      "run failed command",
+      "历史中这次命令失败了。",
+    ]);
+    expect(messages.some((message) => message.runtimeStatus)).toBe(false);
+    expect(messages.map((message) => message.content).join("\n")).not.toContain(
+      "当前处理失败",
+    );
   });
 
   it("App Server thread_read.tool_calls 与 artifact summary 同时存在时仍应保留工具过程", () => {
@@ -699,6 +1066,121 @@ describe("agentChatHistory", () => {
     expect(messages[1]?.content).toBe("已收到图片");
   });
 
+  it("应从本地历史导入消息的顶层附件恢复图片并保留用户文本", () => {
+    const detail: AsterSessionDetail = {
+      id: "session-imported-attachment",
+      created_at: 1,
+      updated_at: 2,
+      messages: [
+        {
+          role: "user",
+          timestamp: 1710000200,
+          content: [
+            {
+              type: "text",
+              text: "请运行测试并修复失败",
+            },
+          ],
+          attachments: [
+            {
+              kind: "image",
+              uri: "data:image/png;base64,aGVsbG8=",
+              metadata: {
+                mediaType: "image/png",
+                index: 0,
+                detail: "low",
+              },
+            },
+          ],
+        } as never,
+        {
+          role: "assistant",
+          timestamp: 1710000201,
+          content: [{ type: "output_text", text: "已收到导入图片。" } as never],
+        },
+      ],
+    };
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "session-imported-attachment",
+    );
+
+    expect(messages).toHaveLength(2);
+    expect(messages[0]).toMatchObject({
+      role: "user",
+      content: "请运行测试并修复失败",
+      images: [
+        {
+          mediaType: "image/png",
+          data: "aGVsbG8=",
+          sourceUri: "data:image/png;base64,aGVsbG8=",
+          previewUrl: "data:image/png;base64,aGVsbG8=",
+          metadata: {
+            mediaType: "image/png",
+            index: 0,
+            detail: "low",
+          },
+          index: 0,
+        },
+      ],
+    });
+    expect(messages[1]?.content).toBe("已收到导入图片。");
+  });
+
+  it("本地历史导入消息同时包含 content image 和 attachment 时不应重复展示图片", () => {
+    const detail: AsterSessionDetail = {
+      id: "session-imported-attachment-dedupe",
+      created_at: 1,
+      updated_at: 2,
+      messages: [
+        {
+          role: "user",
+          timestamp: 1710000200,
+          content: [
+            {
+              type: "text",
+              text: "请运行测试并修复失败",
+            },
+            {
+              type: "image",
+              uri: "data:image/png;base64,aGVsbG8=",
+              metadata: {
+                mediaType: "image/png",
+                index: 0,
+              },
+            },
+          ],
+          attachments: [
+            {
+              kind: "image",
+              uri: "data:image/png;base64,aGVsbG8=",
+              metadata: {
+                mediaType: "image/png",
+                index: 0,
+              },
+            },
+          ],
+        } as never,
+      ],
+    };
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "session-imported-attachment-dedupe",
+    );
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.content).toBe("请运行测试并修复失败");
+    expect(messages[0]?.images).toHaveLength(1);
+    expect(messages[0]?.images?.[0]).toMatchObject({
+      mediaType: "image/png",
+      data: "aGVsbG8=",
+      sourceUri: "data:image/png;base64,aGVsbG8=",
+      previewUrl: "data:image/png;base64,aGVsbG8=",
+    });
+  });
+
   it("应从历史消息的 thinking 字段恢复完整思考过程", () => {
     const detail: AsterSessionDetail = {
       id: "session-1",
@@ -842,8 +1324,7 @@ describe("agentChatHistory", () => {
           turn_id: "turn-timeline-content-final",
           sequence: 1,
           type: "user_message",
-          content:
-            "读取 internal/roadmap/agent-workspace/README.md 并总结一下",
+          content: "读取 internal/roadmap/agent-workspace/README.md 并总结一下",
           status: "completed",
           started_at: "2026-06-08T10:00:00.000Z",
           completed_at: "2026-06-08T10:00:00.000Z",

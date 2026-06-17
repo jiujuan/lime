@@ -37,7 +37,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 
-use crate::credential_bridge::{create_aster_provider, AsterProviderConfig, CredentialBridge};
+use crate::credential_bridge::{
+    create_aster_provider, AsterProviderConfig, AsterProviderProtocol, CredentialBridge,
+};
 use crate::protocol::AgentActionRequiredScope;
 use crate::provider_continuation_state::{
     resolve_provider_continuation_capability, ProviderContinuationCapability,
@@ -132,8 +134,8 @@ pub struct ProviderConfig {
     pub credential_uuid: Option<String>,
     /// 当前回合显式推理强度（仅在上游 /models 接口声明支持时由前端传入）
     pub reasoning_effort: Option<String>,
-    /// 是否强制 OpenAI provider 使用 Responses API
-    pub force_responses_api: bool,
+    /// App Server RouteResolver 派生出的 Aster 执行协议
+    pub protocol: Option<AsterProviderProtocol>,
     /// 当前回合是否需要用 toolshim 兼容无原生 tools 的模型
     pub toolshim: bool,
     /// toolshim 解释器模型（可与实际回复模型不同）
@@ -143,10 +145,7 @@ pub struct ProviderConfig {
 impl ProviderContinuationCapable for ProviderConfig {
     fn provider_continuation_capability(&self) -> ProviderContinuationCapability {
         resolve_provider_continuation_capability(
-            &self.provider_name,
-            self.provider_selector.as_deref(),
-            &self.model_name,
-            self.force_responses_api,
+            self.protocol,
         )
     }
 
@@ -310,7 +309,7 @@ impl AsterAgentState {
                 .clone()
                 .unwrap_or_else(|| format!("manual:{session_id}")),
             reasoning_effort: config.reasoning_effort.clone(),
-            force_responses_api: config.force_responses_api,
+            protocol: config.protocol,
             toolshim: config.toolshim,
             toolshim_model: config.toolshim_model.clone(),
         })
@@ -359,6 +358,7 @@ impl AsterAgentState {
         model: &str,
         session_id: &str,
         reasoning_effort: Option<String>,
+        protocol: Option<AsterProviderProtocol>,
     ) -> Result<AsterProviderConfig, String> {
         // 确保 Agent 已初始化（使用带数据库的版本）
         self.init_agent_with_db(db).await?;
@@ -370,6 +370,7 @@ impl AsterAgentState {
             .await
             .map_err(|e| format!("从 API Key Provider 选择凭证失败: {e}"))?;
         aster_config.reasoning_effort = reasoning_effort;
+        aster_config.protocol = protocol;
 
         // 创建 Provider
         let provider = create_aster_provider(&aster_config)
@@ -394,7 +395,7 @@ impl AsterAgentState {
             base_url: aster_config.base_url.clone(),
             credential_uuid: Some(aster_config.credential_uuid.clone()),
             reasoning_effort: aster_config.reasoning_effort.clone(),
-            force_responses_api: aster_config.force_responses_api,
+            protocol: aster_config.protocol,
             toolshim: aster_config.toolshim,
             toolshim_model: aster_config.toolshim_model.clone(),
         };
@@ -864,7 +865,7 @@ mod tests {
             base_url: None,
             credential_uuid: None,
             reasoning_effort: None,
-            force_responses_api: false,
+            protocol: Some(AsterProviderProtocol::ChatCompletions),
             toolshim: false,
             toolshim_model: None,
         };
@@ -889,7 +890,7 @@ mod tests {
             base_url: None,
             credential_uuid: None,
             reasoning_effort: None,
-            force_responses_api: true,
+            protocol: Some(AsterProviderProtocol::Responses),
             toolshim: false,
             toolshim_model: None,
         };
@@ -914,7 +915,7 @@ mod tests {
             base_url: None,
             credential_uuid: None,
             reasoning_effort: None,
-            force_responses_api: false,
+            protocol: None,
             toolshim: false,
             toolshim_model: None,
         };

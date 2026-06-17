@@ -901,15 +901,19 @@ function isReadOnlyImportedDecision(value: string | undefined): boolean {
 
 function resolveSubmittedPermissionDecisionLabel(
   decision: string | undefined,
-  translate: ReturnType<typeof useTranslation>["t"],
+  labels: {
+    allowed: string;
+    denied: string;
+    importedReadOnly: string;
+  },
 ): string {
   if (isDeniedSubmittedAnswer(decision)) {
-    return translate("agentChat.decisionPanel.permission.result.denied");
+    return labels.denied;
   }
   if (isReadOnlyImportedDecision(decision)) {
-    return translate("agentChat.decisionPanel.permission.result.importedReadOnly");
+    return labels.importedReadOnly;
   }
-  return translate("agentChat.decisionPanel.permission.result.allowed");
+  return labels.allowed;
 }
 
 export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
@@ -957,6 +961,13 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
   const isRuntimeActionConfirmation = isRuntimeActionConfirmationRequestId(
     request.requestId,
   );
+  const permissionDecisionLabels = {
+    allowed: String(t("agentChat.decisionPanel.permission.result.allowed")),
+    denied: String(t("agentChat.decisionPanel.permission.result.denied")),
+    importedReadOnly: String(
+      t("agentChat.decisionPanel.permission.result.importedReadOnly"),
+    ),
+  };
   const toolConfirmationArgumentRows = resolveToolConfirmationArgumentRows(
     request.arguments,
     {
@@ -1200,7 +1211,10 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
                   {t("agentChat.decisionPanel.permission.resultLabel")}
                 </span>
                 <span className="font-medium text-foreground">
-                  {resolveSubmittedPermissionDecisionLabel(submittedDecision, t)}
+                  {resolveSubmittedPermissionDecisionLabel(
+                    submittedDecision,
+                    permissionDecisionLabels,
+                  )}
                 </span>
               </div>
               <div className="rounded-lg border border-border bg-background px-3 py-2">
@@ -1223,7 +1237,10 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
                   {t("agentChat.decisionPanel.permission.resultLabel")}
                 </span>
                 <span className="font-medium text-foreground">
-                  {resolveSubmittedPermissionDecisionLabel(submittedDecision, t)}
+                  {resolveSubmittedPermissionDecisionLabel(
+                    submittedDecision,
+                    permissionDecisionLabels,
+                  )}
                 </span>
               </div>
               <div className="grid gap-2 sm:grid-cols-2">

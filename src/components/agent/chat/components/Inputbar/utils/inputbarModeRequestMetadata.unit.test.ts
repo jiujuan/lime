@@ -70,7 +70,7 @@ describe("inputbarModeRequestMetadata", () => {
     });
   });
 
-  it("计划模式应作为 Codex collaboration mode 投影，且不创建 update_plan 工具语义", () => {
+  it("计划模式应作为协作模式投影，且不创建 update_plan 工具语义", () => {
     const metadata = buildInputbarModeRequestMetadata(undefined, {
       planEnabled: true,
       source: "plus_menu",

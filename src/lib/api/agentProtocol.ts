@@ -101,6 +101,8 @@ export interface AgentMessage {
   role: string;
   content: AgentMessageContent[];
   timestamp: number;
+  runtimeTurnId?: string;
+  runtime_turn_id?: string;
   usage?: AgentTokenUsage;
 }
 
@@ -309,6 +311,7 @@ export interface AgentToolCallState {
   arguments?: string;
   status: "running" | "completed" | "failed";
   result?: AgentToolExecutionResult;
+  metadata?: Record<string, unknown>;
   progress?: AgentToolProgressPayload & { updatedAt?: Date };
   startTime: Date;
   endTime?: Date;
@@ -980,7 +983,21 @@ function normalizeToolExecutionResult(
   const rawResult = normalizeRecord(event.result);
   const source = rawResult || event;
   const error = typeof source.error === "string" ? source.error : undefined;
-  const success = typeof source.success === "boolean" ? source.success : !error;
+  const status =
+    typeof source.status === "string"
+      ? source.status
+      : typeof event.status === "string"
+        ? event.status
+        : undefined;
+  const rawType = typeof event.type === "string" ? event.type : undefined;
+  const success =
+    typeof source.success === "boolean"
+      ? source.success
+      : rawType === "tool.failed" ||
+          rawType === "tool_failed" ||
+          status === "failed"
+        ? false
+        : !error;
 
   return {
     success,
@@ -1090,16 +1107,29 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
         turn: event.turn as AgentThreadTurn,
       };
     case "text_delta":
+    case "message.delta":
       return {
         type: "text_delta",
-        text: (event.text as string) || "",
+        text: pickStringField(event, "text", "delta", "message", "content") || "",
       };
-    case "text_delta_batch": {
-      const text = (event.text as string) || "";
+    case "text_delta_batch":
+    case "message.delta_batch":
+    case "message.batch": {
+      const payload = normalizeRecord(event.payload);
+      const text =
+        pickStringField(event, "text", "delta", "message", "content") ||
+        (payload
+          ? pickStringField(payload, "text", "delta", "message", "content")
+          : "") ||
+        "";
       const chunks = Array.isArray(event.chunks)
         ? event.chunks.filter(
             (chunk): chunk is string => typeof chunk === "string",
           )
+        : payload && Array.isArray(payload.chunks)
+          ? payload.chunks.filter(
+              (chunk): chunk is string => typeof chunk === "string",
+            )
         : text
           ? [text]
           : [];
@@ -1108,7 +1138,11 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
         text,
         chunks,
         boundary:
-          typeof event.boundary === "string" ? event.boundary : "provider",
+          typeof event.boundary === "string"
+            ? event.boundary
+            : payload && typeof payload.boundary === "string"
+              ? payload.boundary
+              : "provider",
       };
     }
     case "reasoning_delta":
@@ -1132,9 +1166,13 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
     case "tool_end":
     case "tool_result":
     case "tool.result":
+    case "tool.failed":
+    case "tool_failed":
       return {
         type: "tool_end",
-        tool_id: pickStringField(event, "tool_id", "toolId", "id") || "",
+        tool_id:
+          pickStringField(event, "tool_id", "toolId", "toolCallId", "id") ||
+          "",
         result: normalizeToolExecutionResult(event),
       };
     case "tool_progress": {

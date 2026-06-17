@@ -13,6 +13,7 @@ import React, {
   useCallback,
 } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import type { Character } from "@/lib/api/memory";
 import type { Skill } from "@/lib/api/skills";
 import {
@@ -33,8 +34,8 @@ import type {
 } from "@/components/agent/chat/service-skills/types";
 import { toast } from "sonner";
 import {
-  filterCodexSlashCommands,
-  type CodexSlashCommandDefinition,
+  filterSlashCommands,
+  type SlashCommandDefinition,
 } from "../commands";
 import {
   filterBuiltinCommands,
@@ -255,6 +256,7 @@ export function CharacterMention({
   onNavigateToSettings,
   inputCompletionEnabled = true,
 }: CharacterMentionProps) {
+  const { t } = useTranslation("agent");
   const [showMentions, setShowMentions] = useState(false);
   const [mentionQuery, setMentionQuery] = useState("");
   const [triggerMode, setTriggerMode] = useState<TriggerMode>("mention");
@@ -295,7 +297,7 @@ export function CharacterMention({
     [mentionQuery, serviceSkills],
   );
   const filteredSlashCommands = useMemo(
-    () => filterCodexSlashCommands(mentionQuery),
+    () => filterSlashCommands(mentionQuery),
     [mentionQuery],
   );
   const filteredRuntimeSceneCommands = useMemo(
@@ -734,7 +736,7 @@ export function CharacterMention({
   };
 
   const handleSelectSlashCommand = (
-    command: CodexSlashCommandDefinition,
+    command: SlashCommandDefinition,
     options?: { replayText?: string },
   ) => {
     const textarea = inputRef.current;
@@ -1201,7 +1203,7 @@ export function CharacterMention({
             <Suspense
               fallback={
                 <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-                  加载中...
+                  {t("agentChat.characterMention.loading", "加载中...")}
                 </div>
               }
             >

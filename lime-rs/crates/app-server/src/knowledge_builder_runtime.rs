@@ -181,7 +181,14 @@ async fn configure_builder_provider(
     requested_model: &str,
 ) -> Result<(), String> {
     let mut configure_result = agent_state
-        .configure_provider_from_pool(db, requested_provider, requested_model, session_id, None)
+        .configure_provider_from_pool(
+            db,
+            requested_provider,
+            requested_model,
+            session_id,
+            None,
+            None,
+        )
         .await;
 
     if configure_result.is_err() {
@@ -201,6 +208,7 @@ async fn configure_builder_provider(
                     fallback_provider,
                     fallback_model,
                     session_id,
+                    None,
                     None,
                 )
                 .await

@@ -632,6 +632,7 @@ export function useWorkspaceConversationSceneRuntime({
   const effectiveCanvasWorkbenchRootPath =
     projectRootPath?.trim() || canvasWorkbenchRootPath?.trim() || null;
   const taskRailProps = useWorkspaceTaskRailRuntime({
+    sessionId,
     workflowSteps: steps,
     messages: displayMessages,
     activityLogs,

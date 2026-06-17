@@ -289,7 +289,7 @@ Hint: If you intentionally split a file, update governance/file-size-baseline.js
 
 ### 6.3 自动更新脚本（可选，P2 后期补）
 
-路径：`scripts/update-file-size-baseline.mjs`
+路径：`scripts/governance/update-file-size-baseline.mjs`
 
 功能：
 - 扫描当前代码，重新计算所有 `oversizedFrozen` 文件的行数。

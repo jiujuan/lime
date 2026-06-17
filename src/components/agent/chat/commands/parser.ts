@@ -1,14 +1,14 @@
-import { CODEX_SLASH_COMMANDS } from "./catalog";
+import { SLASH_COMMANDS } from "./catalog";
 import type {
-  CodexSlashCommandDefinition,
-  ParsedCodexSlashCommand,
+  SlashCommandDefinition,
+  ParsedSlashCommand,
 } from "./types";
 
 const SLASH_COMMAND_REGEX = /^\/([a-zA-Z0-9._-]+)(?:\s+([\s\S]*))?$/;
 
-const COMMAND_LOOKUP = new Map<string, CodexSlashCommandDefinition>();
+const COMMAND_LOOKUP = new Map<string, SlashCommandDefinition>();
 
-for (const command of CODEX_SLASH_COMMANDS) {
+for (const command of SLASH_COMMANDS) {
   COMMAND_LOOKUP.set(command.commandName.toLowerCase(), command);
   for (const alias of command.aliases) {
     COMMAND_LOOKUP.set(alias.toLowerCase(), command);
@@ -19,22 +19,22 @@ function normalizeQuery(query: string): string {
   return query.trim().replace(/^\//, "").toLowerCase();
 }
 
-export function resolveCodexSlashCommand(
+export function resolveSlashCommand(
   commandName: string,
-): CodexSlashCommandDefinition | null {
+): SlashCommandDefinition | null {
   return COMMAND_LOOKUP.get(commandName.trim().toLowerCase()) ?? null;
 }
 
-export function parseCodexSlashCommand(
+export function parseSlashCommand(
   content: string,
-): ParsedCodexSlashCommand | null {
+): ParsedSlashCommand | null {
   const match = content.match(SLASH_COMMAND_REGEX);
   if (!match) {
     return null;
   }
 
   const [, commandName, userInput] = match;
-  const definition = resolveCodexSlashCommand(commandName);
+  const definition = resolveSlashCommand(commandName);
   if (!definition) {
     return null;
   }
@@ -47,15 +47,15 @@ export function parseCodexSlashCommand(
   };
 }
 
-export function filterCodexSlashCommands(
+export function filterSlashCommands(
   query: string,
   options: { includeUnsupported?: boolean } = {},
-): CodexSlashCommandDefinition[] {
+): SlashCommandDefinition[] {
   const { includeUnsupported = true } = options;
   const normalizedQuery = normalizeQuery(query);
   const candidates = includeUnsupported
-    ? CODEX_SLASH_COMMANDS
-    : CODEX_SLASH_COMMANDS.filter((command) => command.support === "supported");
+    ? SLASH_COMMANDS
+    : SLASH_COMMANDS.filter((command) => command.support === "supported");
 
   if (!normalizedQuery) {
     return candidates;
@@ -75,14 +75,14 @@ export function filterCodexSlashCommands(
   });
 }
 
-export function getSupportedCodexSlashCommands() {
-  return CODEX_SLASH_COMMANDS.filter(
+export function getSupportedSlashCommands() {
+  return SLASH_COMMANDS.filter(
     (command) => command.support === "supported",
   );
 }
 
-export function getUnsupportedCodexSlashCommands() {
-  return CODEX_SLASH_COMMANDS.filter(
+export function getUnsupportedSlashCommands() {
+  return SLASH_COMMANDS.filter(
     (command) => command.support === "unsupported",
   );
 }

@@ -1,0 +1,17 @@
+[package]
+name = "document-preview"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lib]
+name = "document_preview"
+path = "src/lib.rs"
+doctest = false
+
+[dependencies]
+zip.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

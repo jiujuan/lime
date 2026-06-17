@@ -59,6 +59,8 @@ export interface AgentMessage {
     role: string;
     content: AgentMessageContent[];
     timestamp: number;
+    runtimeTurnId?: string;
+    runtime_turn_id?: string;
     usage?: AgentTokenUsage;
 }
 export interface AgentArtifactSignal {
@@ -218,6 +220,7 @@ export interface AgentToolCallState {
     arguments?: string;
     status: "running" | "completed" | "failed";
     result?: AgentToolExecutionResult;
+    metadata?: Record<string, unknown>;
     progress?: AgentToolProgressPayload & {
         updatedAt?: Date;
     };

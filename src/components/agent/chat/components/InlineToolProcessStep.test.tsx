@@ -22,6 +22,7 @@ interface RenderResult {
 
 interface RenderOptions {
   isMessageStreaming?: boolean;
+  onFileClick?: (fileName: string, content: string) => void;
   onOpenSavedSiteContent?: (target: unknown) => void;
 }
 
@@ -40,6 +41,7 @@ function renderTool(
       <InlineToolProcessStep
         toolCall={toolCall}
         isMessageStreaming={options?.isMessageStreaming}
+        onFileClick={options?.onFileClick}
         onOpenSavedSiteContent={options?.onOpenSavedSiteContent}
       />,
     );
@@ -196,6 +198,78 @@ describe("InlineToolProcessStep", () => {
       "&lt;text&gt;正在整理&lt;/text&gt;",
     );
     expect(container.textContent).toContain("&lt;spinner /&gt;");
+  });
+
+  it("文件工具应暴露稳定打开入口并携带原始文件路径", () => {
+    const onFileClick = vi.fn();
+    const { container } = renderTool(
+      {
+        id: "tool-read-file-open-1",
+        name: "read_file",
+        arguments: JSON.stringify({
+          path: "/tmp/imported-local-history/docs/imported-preview.docx",
+        }),
+        status: "completed",
+        result: {
+          success: true,
+          output: "导入会话 DOCX 预览内容",
+        },
+        startTime: new Date("2026-06-17T10:08:00.000Z"),
+        endTime: new Date("2026-06-17T10:08:01.000Z"),
+      },
+      { onFileClick },
+    );
+
+    const button = container.querySelector(
+      '[data-testid="inline-tool-open-file"]',
+    ) as HTMLButtonElement | null;
+
+    expect(button).not.toBeNull();
+    expect(button?.getAttribute("data-file-path")).toBe(
+      "/tmp/imported-local-history/docs/imported-preview.docx",
+    );
+
+    act(() => {
+      button?.click();
+    });
+
+    expect(onFileClick).toHaveBeenCalledWith(
+      "/tmp/imported-local-history/docs/imported-preview.docx",
+      "",
+    );
+  });
+
+  it("导入文件工具参数为对象时也应暴露稳定打开入口", () => {
+    const onFileClick = vi.fn();
+    const filePath = "/tmp/imported-local-history/docs/imported-preview.md";
+    const { container } = renderTool(
+      {
+        id: "tool-read-file-open-object-1",
+        name: "read_file",
+        arguments: { path: filePath },
+        status: "completed",
+        result: {
+          success: true,
+          output: "导入会话 Markdown 预览内容",
+        },
+        startTime: new Date("2026-06-17T10:08:00.000Z"),
+        endTime: new Date("2026-06-17T10:08:01.000Z"),
+      } as ToolCallState,
+      { onFileClick },
+    );
+
+    const button = container.querySelector(
+      '[data-testid="inline-tool-open-file"]',
+    ) as HTMLButtonElement | null;
+
+    expect(button).not.toBeNull();
+    expect(button?.getAttribute("data-file-path")).toBe(filePath);
+
+    act(() => {
+      button?.click();
+    });
+
+    expect(onFileClick).toHaveBeenCalledWith(filePath, "");
   });
 
   it("工具详情遇到 TypeScript 尖括号语法时也应转义再渲染", () => {

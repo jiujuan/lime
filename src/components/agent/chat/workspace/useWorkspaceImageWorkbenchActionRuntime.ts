@@ -486,14 +486,8 @@ export function useWorkspaceImageWorkbenchActionRuntime({
               ? trackedTask.applyTarget.anchorText || undefined
               : undefined,
           style: undefined,
-          providerId:
-            imageWorkbenchSelectedProviderId ||
-            trackedTask?.runtimeContract?.providerId ||
-            undefined,
-          model:
-            imageWorkbenchSelectedModelId ||
-            trackedTask?.runtimeContract?.model ||
-            undefined,
+          providerId: imageWorkbenchSelectedProviderId || undefined,
+          model: imageWorkbenchSelectedModelId || undefined,
           sessionId: imageWorkbenchSessionKey,
           projectId: projectId || undefined,
           contentId: contentId || undefined,

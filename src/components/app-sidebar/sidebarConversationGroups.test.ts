@@ -34,7 +34,7 @@ const openedProjects: SidebarOpenedProjectSummary[] = [
 ];
 
 describe("sidebarConversationGroups", () => {
-  it("只为已打开项目建立项目分组，并把项目会话挂到对应项目下", () => {
+  it("只为已打开项目建立项目分组，并把未匹配项目的本地目录会话放回对话区", () => {
     const groups = buildSidebarConversationGroups({
       openedProjects,
       sessions: [
@@ -55,10 +55,11 @@ describe("sidebarConversationGroups", () => {
       sessions: [{ id: "b-1" }],
     });
     expect(groups.standaloneSessions.map((item) => item.id)).toEqual([
+      "hidden-1",
       "standalone-1",
     ]);
     expect(flattenSidebarConversationGroups(groups).map((item) => item.id)).toEqual(
-      ["a-1", "b-1", "standalone-1"],
+      ["a-1", "b-1", "hidden-1", "standalone-1"],
     );
   });
 
@@ -79,7 +80,9 @@ describe("sidebarConversationGroups", () => {
       "workspace-project",
       "cwd-project",
     ]);
-    expect(groups.standaloneSessions.map((item) => item.id)).toEqual([]);
+    expect(groups.standaloneSessions.map((item) => item.id)).toEqual([
+      "cwd-standalone",
+    ]);
   });
 
   it("左侧导航只构建未归档会话分组", () => {

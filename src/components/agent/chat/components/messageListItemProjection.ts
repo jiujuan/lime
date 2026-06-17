@@ -13,7 +13,6 @@ import {
   sanitizeContentPartsForDisplay,
   sanitizeMessageTextForDisplay,
 } from "../utils/messageDisplaySanitizer";
-import { shouldUseAgentMessageAsFinalText } from "../utils/agentMessagePhase";
 import { hasStructuredHistoricalContentHint } from "../projection/historicalMessageHydrationProjection";
 import { isRuntimeStatusDiagnosticsOnly } from "../utils/turnSummaryPresentation";
 import type { MessageListRenderGroup } from "./MessageList.types";
@@ -24,8 +23,8 @@ import {
   parseLeadingUserCommandTag,
   resolveInstalledSkillMessageLabel,
 } from "./messageListUserContentState";
-import { toActionRequired } from "./timeline-utils/itemConverters";
 import { resolveKnowledgeSourceFromArtifacts } from "./messageListKnowledgeSource";
+import { buildTimelineInlineContentParts } from "./messageListTimelineContentParts";
 import {
   resolveImageWorkbenchMessageDisplayState,
   resolveImageWorkbenchProcessDisplayState,
@@ -47,6 +46,7 @@ import {
 } from "./messageListInlineProcess";
 import { shouldRenderAssistantRuntimeStatusPill } from "./messageAssistantMetaFooterState";
 import { resolveAgentRuntimeErrorPresentation } from "../utils/agentRuntimeErrorPresentation";
+import { hasImportedSourceProcessItem } from "../utils/importedSourceProcess";
 import {
   MESSAGE_LIST_COMPACT_HISTORICAL_ASSISTANT_PREVIEW_CHARS,
   MESSAGE_LIST_COMPACT_HISTORICAL_ASSISTANT_THRESHOLD,
@@ -135,68 +135,6 @@ function hasInlineProcessContentParts(
 }
 
 type MessageContentPart = NonNullable<Message["contentParts"]>[number];
-
-function stringifyTimelineArguments(value: unknown): string | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (typeof value === "string") {
-    return value;
-  }
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
-}
-
-function resolveTimelineToolStatus(
-  status: AgentThreadItem["status"],
-): Extract<
-  NonNullable<Message["toolCalls"]>[number]["status"],
-  "running" | "completed" | "failed"
-> {
-  if (status === "in_progress") {
-    return "running";
-  }
-  return status;
-}
-
-function appendTextContentPart(
-  parts: MessageContentPart[],
-  text: string | undefined,
-) {
-  const normalized = text?.trim();
-  if (!normalized) {
-    return;
-  }
-
-  const lastPart = parts[parts.length - 1];
-  if (lastPart?.type === "text") {
-    lastPart.text = `${lastPart.text}\n${normalized}`;
-    return;
-  }
-
-  parts.push({ type: "text", text: normalized });
-}
-
-function appendThinkingContentPart(
-  parts: MessageContentPart[],
-  text: string | undefined,
-) {
-  const normalized = text?.trim();
-  if (!normalized) {
-    return;
-  }
-
-  const lastPart = parts[parts.length - 1];
-  if (lastPart?.type === "thinking") {
-    lastPart.text = `${lastPart.text}\n\n${normalized}`;
-    return;
-  }
-
-  parts.push({ type: "thinking", text: normalized });
-}
 
 function hasProcessBoundaryContentPart(
   parts?: Message["contentParts"],
@@ -315,201 +253,6 @@ function resolveProcessSeparatedContentParts(
   });
 
   return filtered.length > 0 ? filtered : undefined;
-}
-
-function buildTimelineToolContentPart(
-  item: AgentThreadItem,
-): MessageContentPart | null {
-  if (item.type === "tool_call") {
-    const status = resolveTimelineToolStatus(item.status);
-    return {
-      type: "tool_use",
-      toolCall: {
-        id: item.id,
-        name: item.tool_name,
-        arguments: stringifyTimelineArguments(item.arguments),
-        status,
-        startTime: new Date(item.started_at),
-        endTime: item.completed_at ? new Date(item.completed_at) : undefined,
-        result:
-          status === "running"
-            ? undefined
-            : {
-                success: item.success !== false && !item.error,
-                output: item.output || "",
-                error: item.error || undefined,
-                metadata:
-                  item.metadata &&
-                  typeof item.metadata === "object" &&
-                  !Array.isArray(item.metadata)
-                    ? (item.metadata as Record<string, unknown>)
-                    : undefined,
-              },
-      },
-    };
-  }
-
-  if (item.type === "command_execution") {
-    const status = resolveTimelineToolStatus(item.status);
-    const metadata =
-      item.metadata && typeof item.metadata === "object" && !Array.isArray(item.metadata)
-        ? (item.metadata as Record<string, unknown>)
-        : undefined;
-    return {
-      type: "tool_use",
-      toolCall: {
-        id: item.id,
-        name: "Bash",
-        arguments: stringifyTimelineArguments({
-          command: item.command,
-          cwd: item.cwd,
-        }),
-        status,
-        startTime: new Date(item.started_at),
-        endTime: item.completed_at ? new Date(item.completed_at) : undefined,
-        result:
-          status === "running"
-            ? undefined
-            : {
-                success: item.exit_code === undefined || item.exit_code === 0,
-                output: item.aggregated_output || "",
-                error: item.error || undefined,
-                metadata:
-                  item.exit_code === undefined
-                    ? metadata
-                    : { ...metadata, exit_code: item.exit_code },
-              },
-      },
-    };
-  }
-
-  if (item.type === "web_search") {
-    const status = resolveTimelineToolStatus(item.status);
-    const metadata =
-      item.metadata && typeof item.metadata === "object" && !Array.isArray(item.metadata)
-        ? (item.metadata as Record<string, unknown>)
-        : undefined;
-    return {
-      type: "tool_use",
-      toolCall: {
-        id: item.id,
-        name: "web_search",
-        arguments: stringifyTimelineArguments({
-          action: item.action || "web_search",
-          query: item.query || item.action || "",
-        }),
-        status,
-        startTime: new Date(item.started_at),
-        endTime: item.completed_at ? new Date(item.completed_at) : undefined,
-        result:
-          status === "running"
-            ? undefined
-            : {
-                success: status !== "failed",
-                output: item.output || "",
-                metadata,
-              },
-      },
-    };
-  }
-
-  return null;
-}
-
-function buildTimelineActionContentPart(
-  item: AgentThreadItem,
-): MessageContentPart | null {
-  if (item.type !== "approval_request" && item.type !== "request_user_input") {
-    return null;
-  }
-
-  const actionRequired = toActionRequired(item);
-  if (!actionRequired) {
-    return null;
-  }
-
-  return {
-    type: "action_required",
-    actionRequired,
-  };
-}
-
-function buildTimelineInlineContentParts(params: {
-  displayContent: string;
-  existingContentParts?: Message["contentParts"];
-  items?: AgentThreadItem[];
-}): Message["contentParts"] | undefined {
-  const items = params.items || [];
-  const hasAgentMessage = items.some(
-    (item) =>
-      item.type === "agent_message" &&
-      shouldUseAgentMessageAsFinalText(item.phase) &&
-      item.text.trim().length > 0,
-  );
-  if (!hasAgentMessage) {
-    return undefined;
-  }
-
-  const reasoningCount = items.filter(
-    (item) => item.type === "reasoning" && item.text.trim().length > 0,
-  ).length;
-  const toolLikeCount = items.filter(
-    (item) =>
-      item.type === "tool_call" ||
-      item.type === "command_execution" ||
-      item.type === "patch" ||
-      item.type === "web_search",
-  ).length;
-  const actionLikeCount = items.filter(
-    (item) =>
-      item.type === "approval_request" || item.type === "request_user_input",
-  ).length;
-  if (reasoningCount < 2 && toolLikeCount === 0 && actionLikeCount === 0) {
-    return undefined;
-  }
-
-  const parts: MessageContentPart[] = [];
-  for (const item of items) {
-    if (item.type === "reasoning") {
-      appendThinkingContentPart(parts, item.text);
-      continue;
-    }
-
-    if (
-      item.type === "agent_message" &&
-      shouldUseAgentMessageAsFinalText(item.phase)
-    ) {
-      appendTextContentPart(parts, item.text);
-      continue;
-    }
-
-    const toolPart = buildTimelineToolContentPart(item);
-    if (toolPart) {
-      parts.push(toolPart);
-      continue;
-    }
-
-    const actionPart = buildTimelineActionContentPart(item);
-    if (actionPart) {
-      parts.push(actionPart);
-    }
-  }
-
-  const hasTextPart = parts.some(
-    (part) => part.type === "text" && part.text.trim().length > 0,
-  );
-  if (!hasTextPart) {
-    return undefined;
-  }
-
-  const fileChangeParts = (params.existingContentParts || []).filter(
-    (part) => part.type === "file_changes_batch",
-  );
-  if (fileChangeParts.length > 0) {
-    parts.push(...fileChangeParts);
-  }
-
-  return parts;
 }
 
 function ensureInlineThinkingContentPart(params: {
@@ -1070,6 +813,8 @@ export function resolveMessageListItemProjection({
   const primaryTimelineKey = primaryTimeline
     ? `leading:${primaryTimeline.turn.id}`
     : null;
+  const hasImportedSourcePrimaryTimeline =
+    hasImportedSourceProcessItem(primaryTimeline?.items);
   const arePrimaryTimelineDetailsDeferred =
     Boolean(primaryTimeline) &&
     shouldDeferThreadItemsScan &&
@@ -1084,6 +829,7 @@ export function resolveMessageListItemProjection({
     (arePrimaryTimelineDetailsDeferred ||
       primaryTimeline.items.length >=
         MESSAGE_LIST_HISTORICAL_TIMELINE_COMPACT_ITEM_THRESHOLD) &&
+    !hasImportedSourcePrimaryTimeline &&
     !expandedHistoricalTimelineKeys.has(primaryTimelineKey!);
   const shouldRenderPrimaryTimelineOutsideBubble =
     message.role === "assistant" &&

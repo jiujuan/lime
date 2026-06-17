@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "eventIndex": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "eventType": {
+      "type": "string"
+    },
+    "payload": true,
+    "sourceEventIndex": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "turnIndex": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "eventIndex",
+    "eventType",
+    "payload",
+    "sourceEventIndex",
+    "turnIndex"
+  ],
+  "title": "ConversationImportRuntimeEventDetail",
+  "type": "object"
+}

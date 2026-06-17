@@ -1,7 +1,60 @@
 {
+  "$defs": {
+    "ProviderKeyInfo": {
+      "properties": {
+        "alias": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "apiKeyMasked": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "errorCount": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "lastUsedAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "providerId": {
+          "type": "string"
+        },
+        "usageCount": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "apiKeyMasked",
+        "createdAt",
+        "enabled",
+        "errorCount",
+        "id",
+        "providerId",
+        "usageCount"
+      ],
+      "type": "object"
+    }
+  },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
-    "key": true
+    "key": {
+      "$ref": "#/$defs/ProviderKeyInfo"
+    }
   },
   "required": [
     "key"

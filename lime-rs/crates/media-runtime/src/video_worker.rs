@@ -4,6 +4,7 @@ use std::time::Duration;
 use chrono::Utc;
 use serde_json::{json, Map, Value};
 
+use super::model_route;
 use super::{
     load_task_output, patch_task_artifact, read_payload_string, MediaRuntimeError, MediaTaskOutput,
     TaskArtifactPatch, TaskErrorRecord, TaskProgress,
@@ -83,7 +84,19 @@ where
         return Ok(queued_output);
     }
 
-    let prepared_input = match prepare_video_task_input(&queued_output) {
+    let routed_output = match apply_video_route_preflight(
+        workspace_root,
+        task_id,
+        queued_output,
+        &mut on_update,
+    )? {
+        Ok(output) => output,
+        Err(task_error) => {
+            return mark_video_task_failed(workspace_root, task_id, task_error, &mut on_update);
+        }
+    };
+
+    let prepared_input = match prepare_video_task_input(&routed_output) {
         Ok(prepared_input) => prepared_input,
         Err(message) => {
             let task_error =
@@ -220,13 +233,20 @@ where
 
 fn prepare_video_task_input(task: &MediaTaskOutput) -> Result<PreparedVideoTaskInput, String> {
     let payload = &task.record.payload;
+    let resolved_route = model_route::resolved_model_route_from_payload(payload);
     let prompt = read_payload_string(payload, &["prompt"])
         .ok_or_else(|| "视频任务缺少 prompt，无法继续执行".to_string())?;
 
     Ok(PreparedVideoTaskInput {
         prompt,
-        provider_id: read_payload_string(payload, &["provider_id", "providerId"]),
-        model: read_payload_string(payload, &["model"]),
+        provider_id: resolved_route
+            .as_ref()
+            .and_then(|route| route.provider_id.clone())
+            .or_else(|| read_payload_string(payload, &["provider_id", "providerId"])),
+        model: resolved_route
+            .as_ref()
+            .and_then(|route| route.model_id.clone())
+            .or_else(|| read_payload_string(payload, &["model"])),
         aspect_ratio: read_payload_string(payload, &["aspect_ratio", "aspectRatio"]),
         resolution: read_payload_string(payload, &["resolution"]),
         duration: read_payload_u64(payload, &["duration"]),
@@ -236,6 +256,38 @@ fn prepare_video_task_input(task: &MediaTaskOutput) -> Result<PreparedVideoTaskI
         generate_audio: read_payload_bool(payload, &["generate_audio", "generateAudio"]),
         camera_fixed: read_payload_bool(payload, &["camera_fixed", "cameraFixed"]),
     })
+}
+
+fn apply_video_route_preflight(
+    workspace_root: &Path,
+    task_id: &str,
+    output: MediaTaskOutput,
+    on_update: &mut impl FnMut(&MediaTaskOutput),
+) -> Result<Result<MediaTaskOutput, TaskErrorRecord>, MediaRuntimeError> {
+    let preflight = model_route::video_route_payload_preflight(&output.record.payload);
+    if let Some(failure) = preflight.failure {
+        return Ok(Err(build_video_task_error(
+            &failure.code,
+            failure.message,
+            failure.retryable,
+            "routing",
+        )));
+    };
+    let Some(payload_patch) = preflight.payload_patch else {
+        return Ok(Ok(output));
+    };
+
+    let migrated = patch_video_task(
+        workspace_root,
+        task_id,
+        TaskArtifactPatch {
+            payload_patch: Some(payload_patch),
+            current_attempt_worker_id: Some(Some(VIDEO_TASK_RUNNER_WORKER_ID.to_string())),
+            ..TaskArtifactPatch::default()
+        },
+    )?;
+    on_update(&migrated);
+    Ok(Ok(migrated))
 }
 
 async fn request_video_generation_for_executor(

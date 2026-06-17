@@ -1,5 +1,7 @@
 mod coding_events;
 mod model_registry_metadata;
+mod model_route_contract;
+mod model_route_resolver;
 mod model_routing;
 mod tool_events;
 mod tool_inventory;
@@ -12,12 +14,13 @@ use crate::ExecutionRequest;
 use crate::RuntimeCoreError;
 use crate::RuntimeEvent;
 use crate::RuntimeEventSink;
-use app_server_protocol::AgentSessionActionType;
+use app_server_protocol::{AgentSessionActionType, ProtocolKind};
 use async_trait::async_trait;
 use lime_agent::{
     initialize_aster_runtime, stream_reply_with_policy, AgentActionRequiredScope,
     AgentEvent as RuntimeAgentEvent, AsterAgentState, ProviderConfig,
 };
+use lime_agent::AsterProviderProtocol;
 use lime_core::config::{load_config, ToolExecutionPolicyConfig, WorkspaceSandboxConfig};
 use lime_core::database::{self, DbConnection};
 use lime_services::api_key_provider_service::ApiKeyProviderService;
@@ -70,67 +73,52 @@ impl RuntimeBackend {
             &requested_selection,
             requested_selection.reasoning_effort.clone(),
         );
-        let routing_resolution = model_routing::resolve_ready_routing(
+        let route_resolution = model_route_resolver::resolve_chat_model_route(
             &db,
             &self.api_key_provider_service,
             &request,
             &requested_selection,
             direct_provider_config.as_ref(),
         )
-        .map_err(backend_error)?;
-        let selection = routing_resolution.selection;
-        let model_routing = routing_resolution.routing;
-        let provider_readiness = routing_resolution.readiness;
-        let model_registry = model_registry_metadata::resolve_runtime_model_registry_metadata(
-            &db,
-            &self.api_key_provider_service,
-            &selection,
-            direct_provider_config.as_ref(),
-        )
         .await
         .map_err(backend_error)?;
+        let selection = route_resolution.selection.clone();
 
         sink.emit(RuntimeEvent::new(
             "routing.decision.made",
-            model_routing::routing_decision_payload(
-                &selection,
-                &model_routing,
-                &provider_readiness,
-                &model_registry,
-            ),
+            route_resolution.decision_payload.clone(),
         ))?;
-        if requested_selection != selection {
+        if let Some(payload) = route_resolution.fallback_payload.as_ref() {
             sink.emit(RuntimeEvent::new(
                 "routing.fallback.applied",
-                model_routing::routing_fallback_applied_payload(
-                    &requested_selection,
-                    &selection,
-                    &model_routing,
-                    &provider_readiness,
-                    &model_registry,
-                    &routing_resolution.attempted,
-                ),
+                payload.clone(),
             ))?;
         }
-        if !provider_readiness.ready {
+        if let Some(route_failure) = route_resolution.resolved_route.failure.as_ref() {
             sink.emit(RuntimeEvent::new(
                 "routing.not_possible",
-                model_routing::routing_not_possible_payload_with_attempts(
-                    &selection,
-                    &model_routing,
-                    &provider_readiness,
-                    &model_registry,
-                    &routing_resolution.attempted,
-                ),
+                route_resolution
+                    .not_possible_payload
+                    .clone()
+                    .unwrap_or_else(|| route_resolution.decision_payload.clone()),
             ))?;
+            let route_blocker = route_failure
+                .capability_gap
+                .as_deref()
+                .unwrap_or(&route_failure.reason_code);
             return Err(RuntimeCoreError::Backend(format!(
-                "App Server runtime backend provider '{}' is not ready for coding model slot '{}'",
+                "App Server runtime backend route '{}' is not executable for provider '{}' and coding model slot '{}'",
+                route_blocker,
                 selection.provider,
-                model_routing.service_model_slot()
+                route_resolution.service_model_slot()
             )));
         }
 
         let provider_config = if let Some(provider_config) = direct_provider_config {
+            let provider_config = provider_config_with_route_protocol(
+                provider_config,
+                aster_provider_protocol_from_route(&route_resolution.resolved_route.protocol),
+            );
             self.agent_state
                 .configure_provider(provider_config.clone(), &session_scope.session_id, &db)
                 .await
@@ -144,6 +132,7 @@ impl RuntimeBackend {
                 &selection.model,
                 &session_scope.session_id,
                 selection.reasoning_effort.clone(),
+                aster_provider_protocol_from_route(&route_resolution.resolved_route.protocol),
             )
             .await
             .map_err(backend_error)?
@@ -413,9 +402,10 @@ async fn provider_config_from_pool(
     model: &str,
     session_id: &str,
     reasoning_effort: Option<String>,
+    protocol: Option<AsterProviderProtocol>,
 ) -> Result<ProviderConfig, String> {
     let aster_config = agent_state
-        .configure_provider_from_pool(db, provider, model, session_id, reasoning_effort)
+        .configure_provider_from_pool(db, provider, model, session_id, reasoning_effort, protocol)
         .await?;
     Ok(ProviderConfig {
         provider_name: aster_config.provider_name,
@@ -425,10 +415,28 @@ async fn provider_config_from_pool(
         base_url: aster_config.base_url,
         credential_uuid: Some(aster_config.credential_uuid),
         reasoning_effort: aster_config.reasoning_effort,
-        force_responses_api: aster_config.force_responses_api,
+        protocol: aster_config.protocol,
         toolshim: aster_config.toolshim,
         toolshim_model: aster_config.toolshim_model,
     })
+}
+
+fn aster_provider_protocol_from_route(protocol: &ProtocolKind) -> Option<AsterProviderProtocol> {
+    match protocol {
+        ProtocolKind::OpenaiResponses | ProtocolKind::CodexResponses => {
+            Some(AsterProviderProtocol::Responses)
+        }
+        ProtocolKind::OpenaiChat => Some(AsterProviderProtocol::ChatCompletions),
+        _ => None,
+    }
+}
+
+fn provider_config_with_route_protocol(
+    mut config: ProviderConfig,
+    protocol: Option<AsterProviderProtocol>,
+) -> ProviderConfig {
+    config.protocol = protocol.or(config.protocol);
+    config
 }
 
 fn emit_runtime_agent_event_with_coding_mirror(

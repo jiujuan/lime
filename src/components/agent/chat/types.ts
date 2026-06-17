@@ -17,6 +17,11 @@ export type {
 export interface MessageImage {
   data: string;
   mediaType: string;
+  sourceUri?: string;
+  sourcePath?: string;
+  previewUrl?: string;
+  metadata?: Record<string, unknown>;
+  index?: number;
 }
 
 export interface MessagePathReference {
@@ -199,6 +204,11 @@ export type MessagePreviewTarget =
       selection?: MessageImageWorkbenchPreviewSelection;
     }
   | {
+      kind: "message_attachment";
+      attachment: MessageImage;
+      index: number;
+    }
+  | {
       kind: "task";
       preview: MessageTaskPreview;
     };
@@ -214,6 +224,7 @@ export type MessagePreviewTarget =
  */
 interface AgentUiProjectionContentPartMeta {
   agentUiEvent?: AgentUiProjectionEvent;
+  metadata?: Record<string, unknown>;
 }
 
 export type ContentPart =

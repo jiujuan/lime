@@ -6,6 +6,7 @@ use lime_agent::{
     merge_system_prompt_with_runtime_agents_for_project, resolve_request_tool_policy_with_mode,
     ProviderConfig, RequestToolPolicy, RequestToolPolicyMode, SessionConfigBuilder,
 };
+pub(super) use runtime_core::RuntimeModelSelection;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -85,14 +86,15 @@ pub(super) fn selection_from_host_provider_config(
 pub(super) fn selection_from_session_default(
     request: &ExecutionRequest,
 ) -> Option<RuntimeModelSelection> {
-    let metadata = request
-        .session
-        .business_object_ref
-        .as_ref()?
-        .metadata
-        .as_ref()?;
+    let business_object_ref = request.session.business_object_ref.as_ref()?;
+    let metadata = business_object_ref.metadata.as_ref()?;
     let provider = session_default_provider(metadata)?;
     let model = session_default_model(metadata)?;
+    if business_object_ref.kind == "conversation.import"
+        && !session_default_has_current_provider_selector(metadata)
+    {
+        return None;
+    }
     Some(RuntimeModelSelection {
         provider,
         model,
@@ -117,6 +119,21 @@ fn session_default_provider(metadata: &Value) -> Option<String> {
             "/execution_runtime/provider_name",
         ],
     )
+}
+
+fn session_default_has_current_provider_selector(metadata: &Value) -> bool {
+    json_pointer_string(
+        metadata,
+        &[
+            "/providerSelector",
+            "/provider_selector",
+            "/executionRuntime/providerSelector",
+            "/execution_runtime/provider_selector",
+            "/extensionData/lime_provider_routing.v0/providerSelector",
+            "/extensionData/lime_provider_routing.v0/provider_selector",
+        ],
+    )
+    .is_some()
 }
 
 fn session_default_model(metadata: &Value) -> Option<String> {
@@ -286,7 +303,7 @@ pub(super) fn direct_provider_config_from_request(
         base_url: request.base_url.clone(),
         credential_uuid: None,
         reasoning_effort,
-        force_responses_api: false,
+        protocol: None,
         toolshim: matches!(
             request.tool_call_strategy,
             Some(RuntimeToolCallStrategy::ToolShim)
@@ -819,14 +836,6 @@ struct ConfigureProviderRequest {
 enum RuntimeToolCallStrategy {
     Native,
     ToolShim,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct RuntimeModelSelection {
-    pub(super) provider: String,
-    pub(super) model: String,
-    pub(super) source: &'static str,
-    pub(super) reasoning_effort: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

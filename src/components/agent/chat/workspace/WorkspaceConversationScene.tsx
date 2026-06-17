@@ -306,6 +306,7 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
   generalWorkbenchMessageViewportBottomPadding?: string;
   messageListProps: WorkspaceChatContentParams["messageListProps"];
   taskRail?: {
+    sessionId?: string | null;
     workflowSteps: GeneralWorkbenchWorkflowStepInput[];
     messages: MessageListProps["messages"];
     activityLogs?: SidebarActivityLog[];
@@ -709,7 +710,6 @@ export function WorkspaceConversationScene({
     fileManagerOpen,
     onToggleFileManager,
   });
-
   const chatContent = renderWorkspaceChatContent({
     entryBannerVisible,
     entryBannerMessage,

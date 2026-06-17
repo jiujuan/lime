@@ -155,7 +155,7 @@ describe("InputbarCore", () => {
     );
   });
 
-  it("左侧加号应打开 Codex 风格设置浮层并触发工具动作", async () => {
+  it("左侧加号应打开输入设置浮层并触发工具动作", async () => {
     const onAddFiles = vi.fn();
     const onToggleTask = vi.fn();
     const onToggleObjective = vi.fn();

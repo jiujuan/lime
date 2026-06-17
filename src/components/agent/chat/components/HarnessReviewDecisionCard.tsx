@@ -316,7 +316,7 @@ function ReviewDecisionBoundaryCard() {
       <div className="mt-2 text-xs leading-5 text-emerald-900">
         {agentText(
           "agentChat.harness.generated.be6144aa41",
-          "运行时事实继续以 aster-rust 的 session / thread / turn 为准，外部分析形状对齐 Codex 的交接习惯，但最终是否接受修复、补哪些回归，必须由开发者写入 review decision。",
+          "运行时事实继续以 aster-rust 的 session / thread / turn 为准，外部分析形状对齐会话交接习惯，但最终是否接受修复、补哪些回归，必须由开发者写入 review decision。",
         )}
       </div>
     </div>

@@ -13,9 +13,7 @@ import {
   buildGeneralWorkbenchTaskRailProjection,
   type GeneralWorkbenchTaskRailItemStatus,
 } from "./generalWorkbenchTaskRailViewModel";
-import {
-  buildGeneralWorkbenchRunControlSurfaceProjection,
-} from "./generalWorkbenchRunControlSurfaceViewModel";
+import { buildGeneralWorkbenchRunControlSurfaceProjection } from "./generalWorkbenchRunControlSurfaceViewModel";
 
 type TaskRailTranslate = NonNullable<
   Parameters<typeof buildGeneralWorkbenchTaskRailProjection>[0]["t"]
@@ -31,6 +29,8 @@ const t = ((key: string, values?: Record<string, unknown>) => {
     "generalWorkbench.taskRail.activityOverflow": "另有 {{count}} 项执行",
     "generalWorkbench.taskRail.approval.askTitle": "等待回答",
     "generalWorkbench.taskRail.approval.elicitationTitle": "等待补充",
+    "generalWorkbench.taskRail.approval.importedReadOnlyTitle":
+      "导入的权限记录",
     "generalWorkbench.taskRail.approval.toolTitle": "确认 {{tool}}",
     "generalWorkbench.taskRail.approval.status.answered": "已回答",
     "generalWorkbench.taskRail.approval.status.approved": "已允许",
@@ -40,32 +40,6 @@ const t = ((key: string, values?: Record<string, unknown>) => {
     "generalWorkbench.taskRail.context.access.current": "按需确认",
     "generalWorkbench.taskRail.context.access.fullAccess": "完全访问",
     "generalWorkbench.taskRail.context.access.readOnly": "只读",
-    "generalWorkbench.taskRail.context.imported": "导入",
-    "generalWorkbench.taskRail.context.importedDetail.approvals":
-      "确认 {{count}}",
-    "generalWorkbench.taskRail.context.importedDetail.commands":
-      "命令 {{count}}",
-    "generalWorkbench.taskRail.context.importedDetail.messages":
-      "消息 {{count}}",
-    "generalWorkbench.taskRail.context.importedDetail.patches":
-      "补丁 {{count}}",
-    "generalWorkbench.taskRail.context.importedDetail.reasoning":
-      "思考 {{count}}",
-    "generalWorkbench.taskRail.context.importedDetail.tools":
-      "工具 {{count}}",
-    "generalWorkbench.taskRail.context.importedDetail.webSearch":
-      "搜索 {{count}}",
-    "generalWorkbench.taskRail.context.importedStatus.partial": "部分保留",
-    "generalWorkbench.taskRail.context.importedStatus.partialTitle":
-      "有 {{unsupported}} 项未完整映射，{{budgetDropped}} 项因预算裁剪",
-    "generalWorkbench.taskRail.context.importedStatus.restored": "已还原",
-    "generalWorkbench.taskRail.context.importedStatus.restoredTitle":
-      "导入细节已进入当前会话轨迹",
-    "generalWorkbench.taskRail.context.importedThreadTitle":
-      "源线程 {{thread}}",
-    "generalWorkbench.taskRail.context.importedTitle": "来自 {{source}}",
-    "generalWorkbench.taskRail.context.importedValue": "{{source}} 导入",
-    "generalWorkbench.taskRail.context.importedValueFallback": "已导入",
     "generalWorkbench.taskRail.context.model": "模型",
     "generalWorkbench.taskRail.context.objective": "目标",
     "generalWorkbench.taskRail.context.permission": "权限",
@@ -80,12 +54,10 @@ const t = ((key: string, values?: Record<string, unknown>) => {
     "generalWorkbench.taskRail.context.sourcesStatus.linked": "已关联",
     "generalWorkbench.taskRail.context.sourcesStatus.linkedTitle":
       "已关联 {{evidence}} 条证据",
-    "generalWorkbench.taskRail.context.sourcesStatus.missingSource":
-      "待补来源",
+    "generalWorkbench.taskRail.context.sourcesStatus.missingSource": "待补来源",
     "generalWorkbench.taskRail.context.sourcesStatus.missingSourceTitle":
       "缺少 {{missing}} 项上下文来源",
-    "generalWorkbench.taskRail.context.sourcesStatus.needsEvidence":
-      "待补证据",
+    "generalWorkbench.taskRail.context.sourcesStatus.needsEvidence": "待补证据",
     "generalWorkbench.taskRail.context.sourcesStatus.needsEvidenceTitle":
       "已有 {{sources}} 个来源，缺少证据引用",
     "generalWorkbench.taskRail.context.sourcesTitle": "来源：{{sources}}",
@@ -110,11 +82,9 @@ const t = ((key: string, values?: Record<string, unknown>) => {
     "generalWorkbench.taskRail.context.workspace": "工作区",
     "generalWorkbench.taskRail.surface.activityCount": "{{count}} 项",
     "generalWorkbench.taskRail.surface.activityFailed": "{{failed}} 项需处理",
-    "generalWorkbench.taskRail.surface.activityRunning":
-      "{{running}} 项进行中",
+    "generalWorkbench.taskRail.surface.activityRunning": "{{running}} 项进行中",
     "generalWorkbench.taskRail.surface.approvalCount": "{{count}} 条",
-    "generalWorkbench.taskRail.surface.approvalPending":
-      "{{count}} 条待确认",
+    "generalWorkbench.taskRail.surface.approvalPending": "{{count}} 条待确认",
     "generalWorkbench.taskRail.surface.branch": "分支",
     "generalWorkbench.taskRail.surface.environmentTitle": "环境",
     "generalWorkbench.taskRail.surface.gitStatus": "Git",
@@ -200,7 +170,9 @@ function assistantMessage(overrides: Partial<Message> = {}): Message {
   };
 }
 
-function statuses(items: Array<{ status: GeneralWorkbenchTaskRailItemStatus }>) {
+function statuses(
+  items: Array<{ status: GeneralWorkbenchTaskRailItemStatus }>,
+) {
   return items.map((item) => item.status);
 }
 
@@ -575,6 +547,60 @@ describe("buildGeneralWorkbenchTaskRailProjection", () => {
       {
         id: "todo:2:跑 GUI 冒烟",
         title: "跑 GUI 冒烟",
+        status: "pending",
+        meta: "步骤 3",
+      },
+    ]);
+  });
+
+  it("历史 plan thread item 带结构化 metadata 时应恢复多步骤计划", () => {
+    const projection = buildGeneralWorkbenchTaskRailProjection({
+      workflowSteps: [],
+      completedSteps: 0,
+      progressPercent: 0,
+      messages: [],
+      groupedActivityLogs: [],
+      groupedCreationTaskEvents: [],
+      threadItems: [
+        {
+          id: "plan-update",
+          type: "plan",
+          thread_id: "thread-1",
+          turn_id: "turn-1",
+          sequence: 1,
+          status: "completed",
+          text: "- [x] 读取导入事件\n- [ ] 展示计划块",
+          metadata: {
+            plan: [
+              { step: "读取导入事件", status: "completed" },
+              { step: "展示计划块", status: "in_progress" },
+              { step: "补充验证", status: "pending" },
+            ],
+          },
+          started_at: "2026-06-16T10:00:00.000Z",
+          completed_at: "2026-06-16T10:00:01.000Z",
+          updated_at: "2026-06-16T10:00:01.000Z",
+        },
+      ],
+      t,
+    });
+
+    expect(projection.planItems).toEqual([
+      {
+        id: "plan-update:0:读取导入事件",
+        title: "读取导入事件",
+        status: "completed",
+        meta: "步骤 1",
+      },
+      {
+        id: "plan-update:1:展示计划块",
+        title: "展示计划块",
+        status: "running",
+        meta: "步骤 2",
+      },
+      {
+        id: "plan-update:2:补充验证",
+        title: "补充验证",
         status: "pending",
         meta: "步骤 3",
       },
@@ -978,7 +1004,7 @@ describe("buildGeneralWorkbenchTaskRailProjection", () => {
                 output: "Plan updated",
                 metadata: {
                   plan: [
-                    { step: "读取 Codex plan 工具", status: "completed" },
+                    { step: "读取计划工具", status: "completed" },
                     { step: "接入 Lime 工具面", status: "in_progress" },
                     { step: "验证前端计划显示", status: "pending" },
                   ],
@@ -996,8 +1022,8 @@ describe("buildGeneralWorkbenchTaskRailProjection", () => {
 
     expect(projection.planItems).toEqual([
       {
-        id: "message-tool-plan:tool-plan:0:读取 Codex plan 工具",
-        title: "读取 Codex plan 工具",
+        id: "message-tool-plan:tool-plan:0:读取计划工具",
+        title: "读取计划工具",
         status: "completed",
         meta: "步骤 1",
       },
@@ -1026,7 +1052,7 @@ describe("buildGeneralWorkbenchTaskRailProjection", () => {
         assistantMessage({
           id: "assistant-plan",
           content:
-            "先说明\n<proposed_plan>\n- 确认计划模式请求进入 App Server\n- 输出 Codex 风格 proposed_plan\n- 验证右侧计划轨显示\n</proposed_plan>\n计划已生成。",
+            "先说明\n<proposed_plan>\n- 确认计划模式请求进入 App Server\n- 输出结构化 proposed_plan\n- 验证右侧计划轨显示\n</proposed_plan>\n计划已生成。",
           toolCalls: [],
           artifacts: [],
         }),
@@ -1044,8 +1070,8 @@ describe("buildGeneralWorkbenchTaskRailProjection", () => {
         meta: "步骤 1",
       },
       {
-        id: "message-proposed-plan:assistant-plan:1:输出 Codex 风格 proposed_plan",
-        title: "输出 Codex 风格 proposed_plan",
+        id: "message-proposed-plan:assistant-plan:1:输出结构化 proposed_plan",
+        title: "输出结构化 proposed_plan",
         status: "pending",
         meta: "步骤 2",
       },
@@ -1120,9 +1146,7 @@ describe("buildGeneralWorkbenchTaskRailProjection", () => {
     });
 
     expect(projection.items).toEqual([]);
-    expect(projection.emptyText).toBe(
-      "发送任务后，这里会显示进度和输出。",
-    );
+    expect(projection.emptyText).toBe("发送任务后，这里会显示进度和输出。");
   });
 
   it("应把运行摘要投影为短标签并只在工作区显示目录名", () => {
@@ -1388,7 +1412,7 @@ describe("buildGeneralWorkbenchTaskRailProjection", () => {
     );
   });
 
-  it("应从 Codex 导入 thread item metadata 恢复来源和还原覆盖摘要", () => {
+  it("本地历史导入 metadata 不应进入主线任务 rail，只保留来源证据", () => {
     const sourceProvenance = {
       sourceClient: "codex",
       sourceThreadId: "thread-codex-20260617abcdef",
@@ -1459,7 +1483,7 @@ describe("buildGeneralWorkbenchTaskRailProjection", () => {
         turn_id: "turn-1",
         sequence: 3,
         status: "completed",
-        query: "Codex App thread model",
+        query: "Imported thread model",
         output: "found sources",
         metadata: {
           source_client: "codex",
@@ -1510,35 +1534,62 @@ describe("buildGeneralWorkbenchTaskRailProjection", () => {
       t,
     });
 
-    expect(projection.contextItems).toEqual(
+    expect(projection.contextItems).not.toEqual(
       expect.arrayContaining([
-        {
-          id: "imported-source",
-          label: "导入",
-          value: "Codex 导入",
-          title:
-            "来自 Codex · 源线程 thread-codex-20260617abcdef · 消息 6 / 思考 2 / 命令 1 / 工具 4",
-          detailLabels: ["消息 6", "思考 2", "命令 1"],
-          detailOverflowLabel: "另有 4 项",
-          detailStatus: {
-            label: "已还原",
-            tone: "success",
-            title: "导入细节已进入当前会话轨迹",
-          },
-        },
         expect.objectContaining({
-          id: "sources",
-          label: "来源",
-          value: "2 项",
-          title:
-            "来源：rollout-thread-codex-20260617abcdef.jsonl / Codex App thread model",
-          detailLabels: [
-            "rollout-thread-codex-20260617abcdef.jsonl",
-            "Codex App thread model",
-          ],
+          id: "imported-source",
         }),
       ]),
     );
+    expect(projection.contextItems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "sources",
+          label: "来源",
+          value: "1 项",
+          title: "来源：Imported thread model",
+          detailLabels: ["Imported thread model"],
+        }),
+      ]),
+    );
+    const sourcesItem = projection.contextItems.find(
+      (item) => item.id === "sources",
+    );
+    expect(sourcesItem?.title).not.toContain("codex");
+    expect(sourcesItem?.title).not.toContain(".codex");
+    expect(sourcesItem?.title).not.toContain("rollout-thread");
+
+    const runControlProjection =
+      buildGeneralWorkbenchRunControlSurfaceProjection({
+        contextItems: projection.contextItems,
+        planItems: projection.planItems,
+        planOverflowCount: projection.planOverflowCount,
+        activityItems: projection.activityItems,
+        activityOverflowCount: projection.activityOverflowCount,
+        approvalItems: projection.approvalItems,
+        approvalOverflowCount: projection.approvalOverflowCount,
+        outputItems: projection.outputItems,
+        outputOverflowCount: projection.outputOverflowCount,
+        threadRead: { thread_id: "thread-1" },
+        t,
+      });
+
+    expect(runControlProjection.sourceItem).toEqual(
+      expect.objectContaining({
+        id: "sources",
+        value: "1 项",
+      }),
+    );
+    expect(runControlProjection).not.toHaveProperty("importedItem");
+    expect(projection.approvalItems).toEqual([
+      expect.objectContaining({
+        id: "approval-resolved:approval-shell",
+        title: "导入的权限记录",
+        status: "resolved",
+        canRespond: false,
+      }),
+    ]);
+    expect(projection.approvalItems[0]?.title).not.toContain("Allow npm test");
   });
 
   it("缺少上下文来源时应展示待补来源状态", () => {

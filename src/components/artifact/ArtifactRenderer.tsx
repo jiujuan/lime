@@ -17,8 +17,11 @@ import { useTranslation } from "react-i18next";
 import {
   AlertCircle,
   AlertTriangle,
+  FileAudio,
   FileCode2,
   FileText,
+  FileVideo,
+  Image as ImageIcon,
   LayoutTemplate,
   Loader2,
   RefreshCw,
@@ -26,6 +29,7 @@ import {
 import { cn } from "@/lib/utils";
 import { artifactRegistry } from "@/lib/artifact/registry";
 import { useDebouncedValue } from "@/lib/artifact/hooks";
+import { resolveLocalFilePreviewUrl } from "@/lib/api/fileSystem";
 import {
   resolveArtifactProtocolDocumentPayload,
   resolveArtifactProtocolFilePath,
@@ -189,6 +193,13 @@ function resolveEmptyArtifactSurfaceState(
   artifact: Pick<Artifact, "content" | "error" | "meta" | "status" | "type">,
 ): EmptyArtifactSurfaceState | null {
   if (artifact.type === "browser_assist") {
+    return null;
+  }
+
+  if (
+    artifact.meta.previewArtifact === true &&
+    artifact.meta.renderMode === "media"
+  ) {
     return null;
   }
 
@@ -583,6 +594,115 @@ const FallbackRenderer: React.FC<{
 });
 FallbackRenderer.displayName = "FallbackRenderer";
 
+function readStringMeta(meta: Artifact["meta"], key: string): string | null {
+  const value = meta[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function resolvePreviewArtifactContentKind(artifact: Artifact): string | null {
+  if (artifact.meta.previewArtifact !== true) {
+    return null;
+  }
+  return readStringMeta(artifact.meta, "contentKind");
+}
+
+function resolvePreviewArtifactFileUrl(artifact: Artifact): string | null {
+  const content = artifact.content.trim();
+  const previewUrl = readStringMeta(artifact.meta, "previewUrl");
+  const sourcePath =
+    readStringMeta(artifact.meta, "filePath") ||
+    readStringMeta(artifact.meta, "sourcePath");
+
+  if (previewUrl) {
+    return previewUrl;
+  }
+  if (
+    content.startsWith("asset://") ||
+    content.startsWith("file://") ||
+    content.startsWith("http://") ||
+    content.startsWith("https://")
+  ) {
+    return content;
+  }
+  if (sourcePath) {
+    return resolveLocalFilePreviewUrl(sourcePath) || sourcePath;
+  }
+  return null;
+}
+
+const PreviewMediaRenderer: React.FC<{
+  artifact: Artifact;
+  contentKind: string;
+  tone?: "dark" | "light";
+}> = memo(({ artifact, contentKind, tone = "dark" }) => {
+  const mediaUrl = resolvePreviewArtifactFileUrl(artifact);
+  const filename =
+    readStringMeta(artifact.meta, "filename") || artifact.title || "preview";
+  const isLight = tone === "light";
+  const shellClassName = cn(
+    "flex h-full min-h-[320px] flex-col",
+    isLight ? "bg-background" : "bg-[#1e2227]",
+  );
+  const frameClassName = cn(
+    "m-6 flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-2xl border",
+    isLight ? "border-border bg-muted/30" : "border-white/10 bg-black/20",
+  );
+
+  if (!mediaUrl) {
+    const Icon =
+      contentKind === "audio"
+        ? FileAudio
+        : contentKind === "video"
+          ? FileVideo
+          : ImageIcon;
+    return (
+      <div className={shellClassName}>
+        <div className={frameClassName}>
+          <div
+            className={cn(
+              "flex flex-col items-center gap-3 text-sm",
+              isLight ? "text-muted-foreground" : "text-gray-400",
+            )}
+          >
+            <Icon className="h-8 w-8" />
+            <span>{filename}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={shellClassName}>
+      <div className={frameClassName}>
+        {contentKind === "image" ? (
+          <img
+            src={mediaUrl}
+            alt={filename}
+            className="max-h-full max-w-full object-contain"
+            data-testid="preview-artifact-image"
+          />
+        ) : contentKind === "audio" ? (
+          <audio
+            src={mediaUrl}
+            controls
+            className="w-full max-w-xl"
+            data-testid="preview-artifact-audio"
+          />
+        ) : (
+          <video
+            src={mediaUrl}
+            controls
+            className="max-h-full max-w-full"
+            data-testid="preview-artifact-video"
+          />
+        )}
+      </div>
+    </div>
+  );
+});
+PreviewMediaRenderer.displayName = "PreviewMediaRenderer";
+
 // ============================================================================
 // 主组件
 // ============================================================================
@@ -700,6 +820,8 @@ export const ArtifactRenderer: React.FC<ArtifactRendererComponentProps> = memo(
     // 获取渲染器注册项
     const entry = artifactRegistry.get(artifact.type);
     const emptySurfaceState = resolveEmptyArtifactSurfaceState(artifact);
+    const previewArtifactContentKind =
+      resolvePreviewArtifactContentKind(artifact);
     const effectiveViewMode =
       viewMode ?? resolveDefaultArtifactViewMode(artifact);
 
@@ -771,6 +893,25 @@ export const ArtifactRenderer: React.FC<ArtifactRendererComponentProps> = memo(
             isStreaming={isStreaming}
             onContentChange={onContentChange}
             canvasFactoryProps={canvasFactoryProps}
+          />
+          {(isStreaming || isCompleting) && (
+            <StreamingIndicator isCompleting={isCompleting} />
+          )}
+        </div>
+      );
+    }
+
+    if (
+      previewArtifactContentKind === "image" ||
+      previewArtifactContentKind === "audio" ||
+      previewArtifactContentKind === "video"
+    ) {
+      return (
+        <div className={cn("relative h-full", className)}>
+          <PreviewMediaRenderer
+            artifact={debouncedArtifact}
+            contentKind={previewArtifactContentKind}
+            tone={tone}
           />
           {(isStreaming || isCompleting) && (
             <StreamingIndicator isCompleting={isCompleting} />

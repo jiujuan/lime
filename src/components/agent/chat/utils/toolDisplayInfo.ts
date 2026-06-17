@@ -2134,13 +2134,23 @@ export const humanizeToolName = (toolName: string): string =>
     .trim() || "工具调用";
 
 export const parseToolCallArguments = (
-  value?: string,
+  value?: unknown,
 ): Record<string, ToolCallArgumentValue> => {
-  if (!value) return {};
+  if (value === undefined || value === null) return {};
+  if (typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, ToolCallArgumentValue>;
+  }
+  if (typeof value !== "string" || !value.trim()) return {};
   try {
     const parsed = JSON.parse(value);
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
       return parsed as Record<string, ToolCallArgumentValue>;
+    }
+    if (typeof parsed === "string" && parsed.trim()) {
+      const nested = JSON.parse(parsed);
+      if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+        return nested as Record<string, ToolCallArgumentValue>;
+      }
     }
   } catch {
     // ignore parse failure
@@ -2742,11 +2752,34 @@ const buildContentWorkbenchGroupHeadline = (
   );
 };
 
-export const buildToolGroupHeadline = (toolCalls: ToolCallState[]): string => {
+function isImportedSourceToolCall(toolCall: ToolCallState): boolean {
+  const metadata = toolCall.result?.metadata;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return false;
+  }
+
+  return (
+    metadata.imported === true ||
+    metadata.imported_synthetic === true ||
+    metadata.importedSynthetic === true ||
+    metadata.source_client === "codex" ||
+    metadata.sourceClient === "codex"
+  );
+}
+
+export const buildToolGroupHeadline = (
+  toolCalls: ToolCallState[],
+  formatImportedSourceCommandRecord: (count?: number) => string = () =>
+    "导入的命令记录",
+): string => {
   const first = toolCalls[0]!;
   const info = getToolDisplayInfo(first.name, first.status);
   const failed = toolCalls.some((item) => item.status === "failed");
   const running = toolCalls.some((item) => item.status === "running");
+  const importedToolCount = toolCalls.filter(isImportedSourceToolCall).length;
+  if (importedToolCount > 0) {
+    return formatImportedSourceCommandRecord(importedToolCount);
+  }
 
   const contentWorkbenchHeadline =
     buildContentWorkbenchGroupHeadline(toolCalls);

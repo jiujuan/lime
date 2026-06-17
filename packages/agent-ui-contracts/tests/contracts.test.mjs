@@ -89,24 +89,25 @@ test("agent ui contracts publish adapter and runtime type declarations", async (
   );
 
   const indexDeclarations = await readDeclaration("index");
-  assert.equal(
-    indexDeclarations,
-    [
-      'export type * from "./capabilities";',
-      'export type * from "./events";',
-      'export * from "./fixtures.js";',
-      'export type * from "./graph";',
-      'export type * from "./messages";',
-      'export type * from "./projection";',
-      'export type * from "./runtime";',
-      'export * from "./runtimeTerminal.js";',
-      'export * from "./schemas.js";',
-      'export * from "./sequenceVerifier.js";',
-      'export type * from "./timeline";',
-      'export * from "./validation.js";',
-      "",
-    ].join("\n"),
-  );
+    assert.equal(
+      indexDeclarations,
+      [
+        'export type * from "./capabilities";',
+        'export type * from "./events";',
+        'export * from "./fixtures.js";',
+        'export type * from "./graph";',
+        'export type * from "./messages";',
+        'export type * from "./projection";',
+        'export type * from "./runtime";',
+        'export * from "./runtimeTerminal.js";',
+        'export * from "./schemas.js";',
+        'export * from "./sequenceVerifier.js";',
+        'export type * from "./timeline";',
+        'export type * from "./tools";',
+        'export * from "./validation.js";',
+        "",
+      ].join("\n"),
+    );
 
   const typeDeclarations = [
     await readDeclaration("capabilities"),
@@ -115,6 +116,7 @@ test("agent ui contracts publish adapter and runtime type declarations", async (
     await readDeclaration("runtime"),
     await readDeclaration("runtimeTerminal"),
     await readDeclaration("projection"),
+    await readDeclaration("tools"),
     await readDeclaration("schemas"),
     await readDeclaration("messages"),
     await readDeclaration("timeline"),
@@ -155,9 +157,14 @@ test("agent ui contracts publish adapter and runtime type declarations", async (
   assert.match(typeDeclarations, /export type AgentUiEvidenceRefView/);
   assert.match(typeDeclarations, /export interface AgentUiSubagentsModel/);
   assert.match(typeDeclarations, /export interface AgentUiProjectionState/);
+  assert.match(typeDeclarations, /export interface AgentUiToolCallView/);
+  assert.match(typeDeclarations, /export interface AgentUiToolSurfaceModel/);
+  assert.match(typeDeclarations, /export interface AgentUiMcpSurfaceModel/);
   assert.match(typeDeclarations, /artifacts: AgentUiArtifactRefView\[\]/);
   assert.match(typeDeclarations, /evidence: AgentUiEvidenceRefView\[\]/);
   assert.match(typeDeclarations, /subagents: AgentUiSubagentsModel/);
+  assert.match(typeDeclarations, /toolCalls: AgentUiToolSurfaceModel/);
+  assert.match(typeDeclarations, /mcp: AgentUiMcpSurfaceModel/);
   assert.match(typeDeclarations, /actions\?: AgentRuntimeActionProjection\[\]/);
   assert.match(typeDeclarations, /export interface AgentUiFixture/);
   assert.match(

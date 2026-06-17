@@ -1325,8 +1325,15 @@ export function handleTurnStreamEvent({
         resetStreamedReasoningSegment(requestState);
       }
       if (data.text?.trim() && !shouldPreserveAssistantContent) {
-        requestState.accumulatedContent = data.text;
-        requestState.renderedContent = data.text;
+        const completedText = data.text;
+        const existingContent = requestState.accumulatedContent;
+        const nextContent = !existingContent.trim()
+          ? completedText
+          : completedText.startsWith(existingContent)
+            ? completedText
+            : existingContent;
+        requestState.accumulatedContent = nextContent;
+        requestState.renderedContent = nextContent;
         requestState.hasMeaningfulCompletionSignal = true;
       }
       const turnCompletedPlan = buildAgentStreamFinalDonePlan({

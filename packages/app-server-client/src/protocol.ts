@@ -350,6 +350,8 @@ export const METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW =
   "conversationImport/thread/preview";
 export const METHOD_CONVERSATION_IMPORT_THREAD_COMMIT =
   "conversationImport/thread/commit";
+export const METHOD_CONVERSATION_IMPORT_THREAD_RUNTIME_EVENTS_READ =
+  "conversationImport/thread/runtimeEvents/read";
 
 export type AppServerMethodKind = "request" | "notification";
 
@@ -620,6 +622,10 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_CONVERSATION_IMPORT_SOURCE_SCAN, kind: "request" },
   { method: METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW, kind: "request" },
   { method: METHOD_CONVERSATION_IMPORT_THREAD_COMMIT, kind: "request" },
+  {
+    method: METHOD_CONVERSATION_IMPORT_THREAD_RUNTIME_EVENTS_READ,
+    kind: "request",
+  },
   { method: METHOD_AGENT_SESSION_START, kind: "request" },
   { method: METHOD_AGENT_SESSION_READ, kind: "request" },
   { method: METHOD_AGENT_SESSION_TURN_START, kind: "request" },
@@ -3434,195 +3440,6 @@ export type AgentSessionEventNotification = JsonRpcNotification & {
   params: AgentSessionEventParams;
 };
 
-export type ModelListParams = {
-  providerId?: string;
-  tier?: string;
-};
-
-export type ModelListResponse = {
-  models: unknown[];
-};
-
-export type ModelPreferencesListResponse = {
-  preferences: unknown[];
-};
-
-export type ModelSyncStateReadResponse = {
-  syncState: unknown;
-};
-
-export type ModelProviderListResponse = {
-  providers: unknown[];
-};
-
-export type ModelProviderCatalogListResponse = {
-  providers: unknown[];
-};
-
-export type ModelProviderReadParams = {
-  providerId: string;
-};
-
-export type ModelProviderReadResponse = {
-  provider?: unknown;
-};
-
-export type ModelProviderCreateParams = {
-  provider: unknown;
-};
-
-export type ModelProviderWriteResponse = {
-  provider: unknown;
-};
-
-export type ModelProviderUpdateParams = {
-  providerId: string;
-  patch: unknown;
-};
-
-export type ModelProviderDeleteParams = {
-  providerId: string;
-};
-
-export type ModelProviderDeleteResponse = {
-  deleted: boolean;
-};
-
-export type ModelProviderSortOrderItem = {
-  providerId: string;
-  sortOrder: number;
-};
-
-export type ModelProviderSortOrdersUpdateParams = {
-  sortOrders: ModelProviderSortOrderItem[];
-};
-
-export type ModelProviderMutationResponse = Record<string, never>;
-
-export type ModelProviderConfigExportParams = {
-  includeKeys?: boolean;
-};
-
-export type ModelProviderConfigExportResponse = {
-  configJson: string;
-};
-
-export type ModelProviderConfigImportParams = {
-  configJson: string;
-};
-
-export type ModelProviderConfigImportResponse = {
-  success: boolean;
-  importedProviders: number;
-  importedApiKeys: number;
-  skippedProviders: number;
-  errors: string[];
-};
-
-export type ModelProviderTestConnectionParams = {
-  providerId: string;
-  modelName?: string;
-};
-
-export type ModelProviderTestConnectionResponse = {
-  success: boolean;
-  latencyMs?: number;
-  error?: string;
-  models?: string[];
-};
-
-export type ModelProviderTestChatParams = {
-  providerId: string;
-  modelName?: string;
-  prompt: string;
-};
-
-export type ModelProviderTestChatResponse = {
-  success: boolean;
-  latencyMs?: number;
-  error?: string;
-  content?: string;
-  raw?: string;
-};
-
-export type ModelProviderFetchModelsParams = {
-  providerId: string;
-};
-
-export type ModelProviderFetchModelsResponse = {
-  models: unknown[];
-  source: string;
-  error?: string | null;
-  requestUrl?: string | null;
-  diagnosticHint?: string | null;
-  errorKind?: string | null;
-  shouldPromptError?: boolean;
-  fromCache?: boolean;
-};
-
-export type ModelProviderKeyCreateParams = {
-  providerId: string;
-  apiKey: string;
-  alias?: string;
-  replaceExisting?: boolean;
-};
-
-export type ModelProviderKeyWriteResponse = {
-  key: unknown;
-};
-
-export type ModelProviderKeyUpdateParams = {
-  keyId: string;
-  enabled?: boolean;
-  alias?: string;
-};
-
-export type ModelProviderKeyDeleteParams = {
-  keyId: string;
-};
-
-export type ModelProviderKeyDeleteResponse = {
-  deleted: boolean;
-};
-
-export type ModelProviderKeyNextParams = {
-  providerId: string;
-};
-
-export type ModelProviderKeyNextResponse = {
-  apiKey?: string;
-  keyId?: string;
-};
-
-export type ModelProviderKeyEventParams = {
-  keyId: string;
-};
-
-export type ModelProviderUiStateReadParams = {
-  key: string;
-};
-
-export type ModelProviderUiStateReadResponse = {
-  value?: string;
-};
-
-export type ModelProviderUiStateWriteParams = {
-  key: string;
-  value: string;
-};
-
-export type ModelProviderAliasReadParams = {
-  provider: string;
-};
-
-export type ModelProviderAliasReadResponse = {
-  config?: unknown;
-};
-
-export type ModelProviderAliasListResponse = {
-  configs: Record<string, unknown>;
-};
-
 export type ConnectDeepLinkResolveParams = {
   url: string;
 };
@@ -3723,6 +3540,7 @@ export type ConversationImportThreadCommitParams = {
   workspaceId?: string;
   appId?: string;
   confirmed: boolean;
+  replaceExisting?: boolean;
 };
 
 export type ConversationImportSourceSummary = {
@@ -3839,6 +3657,35 @@ export type ConversationImportThreadCommitResponse = {
   importedTurns: number;
   canContinue: boolean;
   warnings: string[];
+};
+
+export type ConversationImportThreadRuntimeEventsReadParams = {
+  sessionId: string;
+  offset?: number;
+  limit?: number;
+  turnIndex?: number;
+  eventType?: string;
+};
+
+export type ConversationImportRuntimeEventDetail = {
+  sourceEventIndex: number;
+  turnIndex: number;
+  eventIndex: number;
+  eventType: string;
+  payload: unknown;
+};
+
+export type ConversationImportThreadRuntimeEventsReadResponse = {
+  sessionId: string;
+  offset: number;
+  limit: number;
+  totalEvents: number;
+  nextOffset?: number;
+  sourceRuntimeEvents: number;
+  materializedRuntimeEvents: number;
+  sidecarRuntimeEvents: number;
+  projection?: unknown;
+  events: ConversationImportRuntimeEventDetail[];
 };
 
 export type ProtocolSchemaGroup = "jsonrpc" | "v0";

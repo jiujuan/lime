@@ -402,6 +402,108 @@ describe("agentThreadGrouping", () => {
     expect(model.orderedBlocks[0]?.rawDetailLabel).toBe("展开查看搜索来源");
   });
 
+  it("本地历史导入过程摘要应保留命令记录入口而不泄漏原始命令", () => {
+    const importedMetadata = {
+      imported: true,
+      imported_synthetic: true,
+      source_client: "codex",
+    };
+    const items: AgentThreadItem[] = [
+      {
+        ...createBaseItem("cmd-imported", 1),
+        type: "command_execution",
+        command: "npm test",
+        cwd: "/workspace/imported-codex",
+        aggregated_output: "ok",
+        metadata: importedMetadata,
+      },
+      {
+        ...createBaseItem("search-imported", 2),
+        type: "web_search",
+        action: "search_query",
+        output: '"search_query"',
+        metadata: importedMetadata,
+      },
+    ];
+
+    const model = buildAgentThreadDisplayModel(items);
+
+    expect(model.orderedBlocks).toHaveLength(1);
+    expect(model.orderedBlocks[0]?.title).toBe("导入的命令记录");
+    expect(model.orderedBlocks[0]?.previewLines).toEqual([
+      "命令记录 1 条",
+      "搜索记录 1 条",
+    ]);
+    expect(model.orderedBlocks[0]?.countLabel).toBe("2 步");
+    expect(model.orderedBlocks[0]?.rawDetailLabel).toBe("展开查看导入过程");
+    expect(model.orderedBlocks[0]?.defaultExpanded).toBe(true);
+    expect(model.orderedBlocks[0]?.forceExpanded).toBe(true);
+    expect(model.orderedBlocks[0]?.title).not.toContain("npm test");
+    expect(model.orderedBlocks[0]?.previewLines.join("\n")).not.toContain(
+      "npm test",
+    );
+  });
+
+  it("本地历史导入混合推理过程仍应保留命令记录入口", () => {
+    const importedMetadata = {
+      imported: true,
+      imported_synthetic: true,
+      source_client: "codex",
+    };
+    const items: AgentThreadItem[] = [
+      {
+        ...createBaseItem("assistant-imported-progress", 1),
+        type: "agent_message",
+        text: "我会先运行测试并检查失败。",
+        metadata: importedMetadata,
+      },
+      {
+        ...createBaseItem("reasoning-imported", 2),
+        type: "reasoning",
+        text: "需要先确认测试失败点。",
+        metadata: importedMetadata,
+      },
+      {
+        ...createBaseItem("cmd-imported", 3),
+        type: "command_execution",
+        command: "npm test",
+        cwd: "/workspace/imported-codex",
+        aggregated_output: "ok",
+        metadata: importedMetadata,
+      },
+      {
+        ...createBaseItem("search-imported", 5),
+        type: "web_search",
+        action: "search_query",
+        output: '"search_query"',
+        metadata: importedMetadata,
+      },
+      {
+        ...createBaseItem("patch-imported", 6),
+        type: "patch",
+        text: "Patch changed /workspace/imported-codex/src/lib.rs",
+        paths: ["/workspace/imported-codex/src/lib.rs"],
+        metadata: importedMetadata,
+      },
+    ];
+
+    const model = buildAgentThreadDisplayModel(items);
+
+    expect(model.orderedBlocks).toHaveLength(1);
+    expect(model.orderedBlocks[0]?.title).toBe("导入的命令记录");
+    expect(model.orderedBlocks[0]?.previewLines).toEqual([
+      "已完成思考 1 条",
+      "命令记录 1 条",
+      "搜索记录 1 条",
+      "文件变更 1 条",
+    ]);
+    expect(model.orderedBlocks[0]?.defaultExpanded).toBe(true);
+    expect(model.orderedBlocks[0]?.forceExpanded).toBe(true);
+    expect(model.orderedBlocks[0]?.previewLines.join("\n")).not.toContain(
+      "npm test",
+    );
+  });
+
   it("交互与任务结果预览应使用更直白的用户文案", () => {
     const items: AgentThreadItem[] = [
       {

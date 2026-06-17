@@ -73,37 +73,154 @@ export const parseDataUrlToHistoryImage = (
   return {
     mediaType,
     data: payload,
+    sourceUri: normalized,
+    previewUrl: normalized,
   };
 };
+
+function readStringField(
+  record: Record<string, unknown>,
+  ...keys: string[]
+): string | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return undefined;
+}
+
+function readRecordField(
+  record: Record<string, unknown>,
+  ...keys: string[]
+): Record<string, unknown> | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return value as Record<string, unknown>;
+    }
+  }
+  return undefined;
+}
+
+function readOptionalNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.trunc(value)
+    : undefined;
+}
+
+function normalizeHistoryImageMetadata(
+  value: unknown,
+): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  return Object.fromEntries(Object.entries(value));
+}
+
+function normalizeHistoryImageFromUri(params: {
+  uri: string;
+  metadata?: Record<string, unknown>;
+  fallbackMediaType?: string;
+}): MessageImage | null {
+  const uri = params.uri.trim();
+  if (!uri) {
+    return null;
+  }
+
+  const dataUrlImage = parseDataUrlToHistoryImage(uri);
+  const metadata = params.metadata;
+  const mediaType =
+    readStringField(metadata || {}, "mediaType", "media_type", "mimeType") ||
+    params.fallbackMediaType ||
+    dataUrlImage?.mediaType ||
+    "image/png";
+  const sourcePath =
+    readStringField(metadata || {}, "localPath", "local_path", "path") ||
+    (uri.startsWith("/") || /^[a-zA-Z]:[\\/]/.test(uri) ? uri : undefined);
+  const index = readOptionalNumber(metadata?.index);
+
+  if (dataUrlImage) {
+    return {
+      ...dataUrlImage,
+      mediaType,
+      metadata,
+      index,
+    };
+  }
+
+  return {
+    mediaType,
+    data: "",
+    sourceUri: uri,
+    sourcePath,
+    previewUrl: sourcePath ? undefined : uri,
+    metadata,
+    index,
+  };
+}
 
 export const normalizeHistoryImagePart = (
   rawPart: Record<string, unknown>,
 ): MessageImage | null => {
+  const metadata = normalizeHistoryImageMetadata(rawPart.metadata);
+  const uri = readStringField(rawPart, "uri");
+  if (uri) {
+    return normalizeHistoryImageFromUri({
+      uri,
+      metadata,
+      fallbackMediaType: readStringField(
+        rawPart,
+        "mime_type",
+        "media_type",
+        "mediaType",
+      ),
+    });
+  }
+
   if (typeof rawPart.data === "string" && rawPart.data.trim()) {
     const mediaType =
-      (typeof rawPart.mime_type === "string" && rawPart.mime_type.trim()) ||
-      (typeof rawPart.media_type === "string" && rawPart.media_type.trim()) ||
+      readStringField(rawPart, "mime_type", "media_type", "mediaType") ||
       "image/png";
     return {
       mediaType,
       data: rawPart.data.trim(),
+      metadata,
+      index: readOptionalNumber(metadata?.index),
     };
   }
 
   const imageUrlValue = rawPart.image_url ?? rawPart.url;
   if (typeof imageUrlValue === "string") {
-    return parseDataUrlToHistoryImage(imageUrlValue);
+    return normalizeHistoryImageFromUri({
+      uri: imageUrlValue,
+      metadata,
+      fallbackMediaType: readStringField(
+        rawPart,
+        "mime_type",
+        "media_type",
+        "mediaType",
+      ),
+    });
   }
 
   if (imageUrlValue && typeof imageUrlValue === "object") {
-    const imageUrlRecord = imageUrlValue as Record<string, unknown>;
-    const nestedUrl =
-      (typeof imageUrlRecord.url === "string" && imageUrlRecord.url) ||
-      (typeof imageUrlRecord.image_url === "string" &&
-        imageUrlRecord.image_url) ||
-      "";
+    const imageUrlRecord =
+      readRecordField(rawPart, "image_url", "url") ||
+      (imageUrlValue as Record<string, unknown>);
+    const nestedUrl = readStringField(imageUrlRecord, "url", "image_url") || "";
     if (nestedUrl) {
-      return parseDataUrlToHistoryImage(nestedUrl);
+      return normalizeHistoryImageFromUri({
+        uri: nestedUrl,
+        metadata,
+        fallbackMediaType: readStringField(
+          imageUrlRecord,
+          "mime_type",
+          "media_type",
+          "mediaType",
+        ),
+      });
     }
   }
 

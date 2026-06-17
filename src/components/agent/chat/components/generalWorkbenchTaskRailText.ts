@@ -34,6 +34,8 @@ export function fallbackTranslate(key: string, options?: Record<string, unknown>
       return "等待补充";
     case "generalWorkbench.taskRail.approval.toolTitle":
       return `确认 ${options?.tool ?? ""}`;
+    case "generalWorkbench.taskRail.approval.importedReadOnlyTitle":
+      return "导入的权限记录";
     case "generalWorkbench.taskRail.approval.status.approved":
       return "已允许";
     case "generalWorkbench.taskRail.approval.status.rejected":
@@ -42,6 +44,34 @@ export function fallbackTranslate(key: string, options?: Record<string, unknown>
       return "已回答";
     case "generalWorkbench.taskRail.approval.status.resolved":
       return "已处理";
+    case "generalWorkbench.taskRail.importedRuntime.open":
+      return "查看完整记录";
+    case "generalWorkbench.taskRail.importedRuntime.close":
+      return "收起完整记录";
+    case "generalWorkbench.taskRail.importedRuntime.title":
+      return "完整运行记录";
+    case "generalWorkbench.taskRail.importedRuntime.summary":
+      return `已默认展示 ${materialized ?? 0} / ${total ?? 0} 条，完整记录保留 ${sidecar ?? 0} 条`;
+    case "generalWorkbench.taskRail.importedRuntime.loading":
+      return "正在读取完整记录";
+    case "generalWorkbench.taskRail.importedRuntime.loadMore":
+      return "加载更多";
+    case "generalWorkbench.taskRail.importedRuntime.empty":
+      return "暂无更多记录";
+    case "generalWorkbench.taskRail.importedRuntime.error":
+      return "完整记录读取失败";
+    case "generalWorkbench.taskRail.importedRuntime.eventMeta":
+      return `轮次 ${options?.turn ?? ""} · 事件 ${options?.event ?? ""}`;
+    case "generalWorkbench.taskRail.importedRuntime.payload.empty":
+      return "空负载";
+    case "generalWorkbench.taskRail.importedRuntime.payload.record":
+      return `${options?.count ?? 0} 个字段`;
+    case "generalWorkbench.taskRail.importedRuntime.payload.array":
+      return `${options?.count ?? 0} 项`;
+    case "generalWorkbench.taskRail.importedRuntime.payload.scalar":
+      return `${options?.type ?? ""}`;
+    case "generalWorkbench.taskRail.importedRuntime.payload.scalarLength":
+      return `${options?.type ?? ""} · ${options?.count ?? 0} 字符`;
     case "generalWorkbench.taskRail.context.model":
       return "模型";
     case "generalWorkbench.taskRail.context.permission":
@@ -50,38 +80,6 @@ export function fallbackTranslate(key: string, options?: Record<string, unknown>
       return "思考";
     case "generalWorkbench.taskRail.context.workspace":
       return "工作区";
-    case "generalWorkbench.taskRail.context.imported":
-      return "导入";
-    case "generalWorkbench.taskRail.context.importedValue":
-      return `${options?.source ?? ""} 导入`;
-    case "generalWorkbench.taskRail.context.importedValueFallback":
-      return "已导入";
-    case "generalWorkbench.taskRail.context.importedTitle":
-      return `来自 ${options?.source ?? ""}`;
-    case "generalWorkbench.taskRail.context.importedThreadTitle":
-      return `源线程 ${options?.thread ?? ""}`;
-    case "generalWorkbench.taskRail.context.importedDetail.messages":
-      return `消息 ${options?.count ?? 0}`;
-    case "generalWorkbench.taskRail.context.importedDetail.reasoning":
-      return `思考 ${options?.count ?? 0}`;
-    case "generalWorkbench.taskRail.context.importedDetail.commands":
-      return `命令 ${options?.count ?? 0}`;
-    case "generalWorkbench.taskRail.context.importedDetail.tools":
-      return `工具 ${options?.count ?? 0}`;
-    case "generalWorkbench.taskRail.context.importedDetail.patches":
-      return `补丁 ${options?.count ?? 0}`;
-    case "generalWorkbench.taskRail.context.importedDetail.approvals":
-      return `确认 ${options?.count ?? 0}`;
-    case "generalWorkbench.taskRail.context.importedDetail.webSearch":
-      return `搜索 ${options?.count ?? 0}`;
-    case "generalWorkbench.taskRail.context.importedStatus.restored":
-      return "已还原";
-    case "generalWorkbench.taskRail.context.importedStatus.restoredTitle":
-      return "导入细节已进入当前会话轨迹";
-    case "generalWorkbench.taskRail.context.importedStatus.partial":
-      return "部分保留";
-    case "generalWorkbench.taskRail.context.importedStatus.partialTitle":
-      return `有 ${options?.unsupported ?? 0} 项未完整映射，${options?.budgetDropped ?? 0} 项因预算裁剪`;
     case "generalWorkbench.taskRail.context.objective":
       return "目标";
     case "generalWorkbench.taskRail.context.sources":

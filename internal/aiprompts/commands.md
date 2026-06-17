@@ -459,7 +459,7 @@ Skill 执行链路同样遵循单一命令边界。当前前端入口为 `src/li
 
 `Claw` 的纯文本配音命令也应沿同一条服务型技能主链收敛：
 
-- Agent 驱动的配音命令：`@配音` / `@voice` / `@dubbing` / `@dub` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会优先从当前 `serviceSkills` / seeded fallback 中解析配音能力；若现有兜底 ID 仍沿用 `cloud-video-dubbing` 之类历史命名，也只允许按“本地 service skill 标识”理解，不得再把它解释成云执行能力。后续把结构化 `service_scene_launch` 写入 `request_metadata.harness.service_scene_launch` 时，只保留 `scene_key=voice_runtime`、`entry_source=at_voice_command` 这类本地路由提示，不再注入 `scene_base_url / session_token` 一类云端运行上下文。Rust 侧 `runtime_turn.rs`、`prompt_context.rs` 与 `tool_runtime/service_skill_tools.rs` 会把当前 turn 切到 `workbench`，并强约束当前回合直接按本地 `service_scene_launch` 上下文执行；若实现里仍保留 `lime_run_service_skill` 等历史 helper 名，也必须只作为 compat 护栏，不再代表 current 执行桥。当前上下文缺少明确配音要求时，允许 Agent 最多追问 1 个关键问题；但不能退回普通聊天解释、不能伪造“配音已完成”，也不能重新回流到旧的本地 TTS 测试命令。
+- Agent 驱动的配音命令：`@配音` / `@voice` / `@dubbing` / `@dub` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会优先从当前 `serviceSkills` / seeded fallback 中解析配音能力；若现有兜底 ID 仍沿用 `cloud-video-dubbing` 之类历史命名，也只允许按“本地 service skill 标识”理解，不得再把它解释成云执行能力。结构化 `service_scene_launch` 只保留 `scene_key=voice_runtime`、`entry_source=at_voice_command` 这类本地路由提示，不再注入 `scene_base_url / session_token` 一类云端运行上下文。当前 `voice_generation` 是 `metadata_only` compat：可以写 GUI / Skill 元数据和 `audio_task` 草稿索引，但不得声称本地 ServiceSkill 已真实生成音频、不得写 `resolved_route` / `model_route_execution`、不得把 `service_skill:voice_runtime` 继续描述成 current 执行桥。接入 audio worker 或 RuntimeCore provider protocol mapper 后，才允许把它恢复为可执行 route。
 
 `Claw` 的纯文本浏览器命令也应沿同一条真实浏览器工具主链收敛：
 

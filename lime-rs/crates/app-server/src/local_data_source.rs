@@ -28,6 +28,7 @@ mod impls;
 mod knowledge;
 mod mcp;
 mod media_tasks;
+mod model_projection;
 mod model_providers;
 mod project_materials;
 mod session_files;

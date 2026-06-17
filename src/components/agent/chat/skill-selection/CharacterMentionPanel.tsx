@@ -21,7 +21,7 @@ import type {
   ServiceSkillGroup,
   ServiceSkillHomeItem,
 } from "@/components/agent/chat/service-skills/types";
-import type { CodexSlashCommandDefinition } from "../commands";
+import type { SlashCommandDefinition } from "../commands";
 import type {
   BuiltinInputCommand,
   RuntimeSceneSlashCommand,
@@ -41,7 +41,7 @@ interface CharacterMentionPanelProps {
   mode: "mention" | "slash";
   mentionQuery: string;
   builtinCommands: BuiltinInputCommand[];
-  slashCommands: CodexSlashCommandDefinition[];
+  slashCommands: SlashCommandDefinition[];
   sceneCommands: RuntimeSceneSlashCommand[];
   mentionServiceSkills: ServiceSkillHomeItem[];
   serviceSkillGroups?: ServiceSkillGroup[];

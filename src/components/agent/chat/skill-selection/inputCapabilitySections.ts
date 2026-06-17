@@ -12,7 +12,7 @@ import type {
   ServiceSkillSlotValues,
 } from "@/components/agent/chat/service-skills/types";
 import { resolveMentionCommandPrefillReplayText } from "@/components/agent/chat/utils/mentionCommandReplayText";
-import type { CodexSlashCommandDefinition } from "../commands";
+import type { SlashCommandDefinition } from "../commands";
 import type {
   BuiltinInputCommand,
   RuntimeSceneSlashCommand,
@@ -82,7 +82,7 @@ export type InputCapabilityDescriptor =
     })
   | (InputCapabilityBase & {
       kind: "slash_command";
-      command: CodexSlashCommandDefinition;
+      command: SlashCommandDefinition;
       replayText?: string;
     })
   | (InputCapabilityBase & {
@@ -491,7 +491,7 @@ interface BuildInputCapabilitySectionsParams {
   mode: "mention" | "slash";
   mentionQuery: string;
   builtinCommands: BuiltinInputCommand[];
-  slashCommands: CodexSlashCommandDefinition[];
+  slashCommands: SlashCommandDefinition[];
   sceneCommands: RuntimeSceneSlashCommand[];
   mentionServiceSkills: ServiceSkillHomeItem[];
   serviceSkillGroups?: ServiceSkillGroup[];
@@ -537,8 +537,8 @@ function resolveDisplayTitleFromCommandLike(item: {
 }
 
 function compareSlashCommandsForEmptyQuery(
-  left: CodexSlashCommandDefinition,
-  right: CodexSlashCommandDefinition,
+  left: SlashCommandDefinition,
+  right: SlashCommandDefinition,
 ): number {
   const emptyQueryOrder: Record<string, number> = {
     new: 10,
@@ -638,7 +638,7 @@ function resolveInputCommandSectionMeta(
 }
 
 function resolveSlashCommandSectionMeta(
-  command: Pick<CodexSlashCommandDefinition, "kind">,
+  command: Pick<SlashCommandDefinition, "kind">,
   copy: InputCapabilitySectionsCopy,
 ): InputCommandSectionMeta {
   const groupKey =

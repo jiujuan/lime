@@ -18,7 +18,7 @@
 export type ProviderType =
   | "openai" // 标准 OpenAI Chat Completions API
   | "openai-response" // OpenAI Responses API (支持 Reasoning)
-  | "codex" // Codex CLI 协议 (使用 /responses 端点)
+  | "codex" // 本地 CLI Responses 协议
   | "anthropic" // Anthropic Messages API
   | "anthropic-compatible" // Anthropic 兼容格式 (system 为数组格式)
   | "gemini" // Google Gemini API

@@ -94,6 +94,8 @@ interface ModalityRuntimeContractRecord {
   modality?: string;
   required_capabilities?: string[];
   routing_slot?: string;
+  route_execution_status?: string;
+  route_execution_exit_condition?: string;
   limecore_policy_refs?: string[];
   executor_binding?: unknown;
   bound_entries?: ModalityRuntimeContractEntryBinding[];
@@ -173,6 +175,8 @@ export interface ModalityRuntimeContractBinding {
     modality: string;
     routing_slot: string;
     required_capabilities: string[];
+    route_execution_status?: string;
+    route_execution_exit_condition?: string;
     limecore_policy_refs: string[];
     limecore_policy_snapshot: LimeCorePolicySnapshot;
     executor_binding?: unknown;
@@ -516,6 +520,10 @@ export function resolveModalityRuntimeContractBinding(
       : [...params.fallbackRequiredCapabilities];
   const routingSlot =
     readTrimmedString(contract?.routing_slot) ?? params.fallbackRoutingSlot;
+  const routeExecutionStatus =
+    readTrimmedString(contract?.route_execution_status) ?? undefined;
+  const routeExecutionExitCondition =
+    readTrimmedString(contract?.route_execution_exit_condition) ?? undefined;
   const limecorePolicyRefs = readStringArray(contract?.limecore_policy_refs);
   const limecorePolicySnapshot = buildLimeCorePolicySnapshot(
     limecorePolicyRefs,
@@ -524,6 +532,7 @@ export function resolveModalityRuntimeContractBinding(
   const profileBinding = resolveModalityExecutionProfileBinding({
     contractKey,
     executorBinding: contract?.executor_binding,
+    allowDefaultAdapter: routeExecutionStatus !== "metadata_only",
   });
   const boundEntrySources = Array.from(
     new Set(
@@ -549,6 +558,8 @@ export function resolveModalityRuntimeContractBinding(
       modality,
       routing_slot: routingSlot,
       required_capabilities: requiredCapabilities,
+      route_execution_status: routeExecutionStatus,
+      route_execution_exit_condition: routeExecutionExitCondition,
       limecore_policy_refs: limecorePolicyRefs,
       limecore_policy_snapshot: limecorePolicySnapshot,
       executor_binding: contract?.executor_binding,

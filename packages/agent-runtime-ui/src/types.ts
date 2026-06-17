@@ -4,14 +4,22 @@ import type {
   AgentUiProjectionState,
   AgentUiArtifactRefView,
   AgentUiEvidenceRefView,
+  AgentUiMcpOperationKind,
+  AgentUiMcpServerView,
+  AgentUiMcpSurfaceModel,
+  AgentUiMcpToolCallView,
   AgentUiRefView,
   AgentUiSubagentActivityView,
   AgentUiSubagentDelegationView,
   AgentUiSubagentsModel,
   AgentUiSubagentThreadView,
+  AgentUiToolCallView,
+  AgentUiToolFamily,
+  AgentUiToolSurfaceModel,
   AgentRuntimeActionProjection,
   AgentRuntimeEventProjection,
   AgentRuntimeExecutionEvent,
+  AgentRuntimeExecutionEventStatus,
   AgentRuntimeReadModel,
   ExecutionGraphNode,
   ProcessTimelineEntry,
@@ -39,6 +47,92 @@ export interface AgentTimelineProps<TMessage extends AgentTimelineMessage = Agen
   messageTitle?: (message: TMessage) => ReactNode;
   messageMeta?: (message: TMessage) => ReactNode;
   messagePreview?: (message: TMessage) => ReactNode;
+}
+
+export type AgentWorkbenchTaskCheckpointState = "done" | "active" | "idle" | "blocked";
+
+export interface AgentWorkbenchTaskCheckpoint {
+  id: "input" | "artifact" | "human-action" | "evidence" | string;
+  title: string;
+  state: AgentWorkbenchTaskCheckpointState;
+  count: number;
+}
+
+export interface AgentWorkbenchTaskView {
+  taskTitle: string;
+  statusLabel: string;
+  sourceCount: number;
+  toolCount: number;
+  pendingActionCount: number;
+  artifactCount: number;
+  evidenceCount: number;
+  taskCount: number;
+  hasRuntimeFacts: boolean;
+  shouldShowRuntimePanel: boolean;
+  checkpoints: AgentWorkbenchTaskCheckpoint[];
+}
+
+export interface AgentWorkbenchTaskCardProps {
+  view: AgentWorkbenchTaskView;
+  labels?: Pick<
+    AgentWorkbenchTaskSurfaceLabels,
+    "sourceLabel" | "artifactLabel" | "taskLabel" | "statusLabel" | "checkpointLabel"
+  >;
+}
+
+export interface AgentWorkbenchTaskSurfaceLabels {
+  workspaceLabel?: ReactNode;
+  taskLabel?: ReactNode;
+  statusLabel?: ReactNode;
+  sourceLabel?: ReactNode;
+  artifactLabel?: ReactNode;
+  checkpointLabel?: ReactNode;
+  runtimeLabel?: ReactNode;
+  messagePartsAriaLabel?: string;
+  runtimeSummaryAriaLabel?: string;
+  executionEventsAriaLabel?: string;
+  actionRequiredAriaLabel?: string;
+  artifactRefsAriaLabel?: string;
+  evidenceRefsAriaLabel?: string;
+  toolGroupAriaLabel?: string;
+  toolCallsAriaLabel?: string;
+  mcpSurfaceAriaLabel?: string;
+  mcpServersAriaLabel?: string;
+  mcpToolsAriaLabel?: string;
+  roleLabel?: (role: AgentMessageRole) => string;
+  messageTitle?: (message: AgentTimelineMessage) => ReactNode;
+  messageMeta?: (message: AgentTimelineMessage) => ReactNode;
+  messagePreview?: (message: AgentTimelineMessage) => ReactNode;
+  actionButtonLabel?: (action: AgentRuntimeActionProjection) => ReactNode;
+  eventStatusLabel?: (event: AgentRuntimeEventProjection) => ReactNode;
+  toolFamilyLabel?: (family: AgentUiToolFamily) => ReactNode;
+  toolStatusLabel?: (status: AgentRuntimeExecutionEventStatus) => ReactNode;
+  toolTitle?: (tool: AgentUiToolCallView) => ReactNode;
+  toolMeta?: (tool: AgentUiToolCallView) => ReactNode;
+  toolPreview?: (tool: AgentUiToolCallView) => ReactNode;
+  mcpOperationLabel?: (operation: AgentUiMcpOperationKind) => ReactNode;
+  mcpServerTitle?: (server: AgentUiMcpServerView) => ReactNode;
+  mcpServerMeta?: (server: AgentUiMcpServerView) => ReactNode;
+  mcpToolTitle?: (tool: AgentUiMcpToolCallView) => ReactNode;
+  mcpToolMeta?: (tool: AgentUiMcpToolCallView) => ReactNode;
+  mcpToolPreview?: (tool: AgentUiMcpToolCallView) => ReactNode;
+}
+
+export interface AgentWorkbenchSurfaceProps<TEvent extends AgentRuntimeExecutionEvent = AgentRuntimeExecutionEvent, TMessage extends AgentTimelineMessage = AgentTimelineMessage> {
+  view: AgentWorkbenchTaskView;
+  state: AgentUiProjectionState<TEvent>;
+  messages?: readonly TMessage[];
+  className?: string;
+  toolbar?: ReactNode;
+  composer?: ReactNode;
+  emptyMessages?: ReactNode;
+  artifact?: ReactNode;
+  runtimePanelOpen?: boolean;
+  onResolveAction?: AgentRuntimeActionResolver<TEvent>;
+  onSelectArtifactRef?: ArtifactRefListProps["onSelectRef"];
+  onSelectEvidenceRef?: EvidenceRefListProps["onSelectRef"];
+  onOpenSubagentThread?: SubagentsViewProps["onOpenThread"];
+  labels?: AgentWorkbenchTaskSurfaceLabels;
 }
 
 export type AgentRuntimeActionResolver<TEvent extends AgentRuntimeExecutionEvent = AgentRuntimeExecutionEvent> = (
@@ -86,6 +180,61 @@ export interface ToolGroupProps<TEvent extends AgentRuntimeExecutionEvent = Agen
   empty?: ReactNode;
   ariaLabel?: string;
   eventStatusLabel?: (event: AgentRuntimeEventProjection<TEvent>) => ReactNode;
+}
+
+export interface ToolCallCardProps {
+  tool: AgentUiToolCallView;
+  toolFamilyLabel?: (family: AgentUiToolFamily) => ReactNode;
+  toolTitle?: (tool: AgentUiToolCallView) => ReactNode;
+  toolMeta?: (tool: AgentUiToolCallView) => ReactNode;
+  toolPreview?: (tool: AgentUiToolCallView) => ReactNode;
+  statusLabel?: (status: AgentRuntimeExecutionEventStatus) => ReactNode;
+}
+
+export interface ToolCallSurfaceProps {
+  surface?: AgentUiToolSurfaceModel;
+  empty?: ReactNode;
+  ariaLabel?: string;
+  toolFamilyLabel?: ToolCallCardProps["toolFamilyLabel"];
+  toolTitle?: ToolCallCardProps["toolTitle"];
+  toolMeta?: ToolCallCardProps["toolMeta"];
+  toolPreview?: ToolCallCardProps["toolPreview"];
+  toolStatusLabel?: ToolCallCardProps["statusLabel"];
+}
+
+export interface McpServerListProps {
+  servers?: readonly AgentUiMcpServerView[];
+  empty?: ReactNode;
+  ariaLabel?: string;
+  serverTitle?: (server: AgentUiMcpServerView) => ReactNode;
+  serverMeta?: (server: AgentUiMcpServerView) => ReactNode;
+  statusLabel?: (status: AgentRuntimeExecutionEventStatus) => ReactNode;
+}
+
+export interface McpToolListProps {
+  tools?: readonly AgentUiMcpToolCallView[];
+  empty?: ReactNode;
+  ariaLabel?: string;
+  toolTitle?: (tool: AgentUiMcpToolCallView) => ReactNode;
+  toolMeta?: (tool: AgentUiMcpToolCallView) => ReactNode;
+  toolPreview?: (tool: AgentUiMcpToolCallView) => ReactNode;
+  operationLabel?: (operation: AgentUiMcpOperationKind) => ReactNode;
+  statusLabel?: (status: AgentRuntimeExecutionEventStatus) => ReactNode;
+}
+
+export interface McpSurfaceProps {
+  surface?: AgentUiMcpSurfaceModel;
+  empty?: ReactNode;
+  ariaLabel?: string;
+  serversAriaLabel?: string;
+  toolsAriaLabel?: string;
+  serverTitle?: McpServerListProps["serverTitle"];
+  serverMeta?: McpServerListProps["serverMeta"];
+  toolTitle?: McpToolListProps["toolTitle"];
+  toolMeta?: McpToolListProps["toolMeta"];
+  toolPreview?: McpToolListProps["toolPreview"];
+  operationLabel?: McpToolListProps["operationLabel"];
+  statusLabel?: McpToolListProps["statusLabel"];
 }
 
 export interface ActionRequiredListProps<TEvent extends AgentRuntimeExecutionEvent = AgentRuntimeExecutionEvent> {
@@ -153,6 +302,10 @@ export interface AgentUiProjectionViewLabels<TEvent extends AgentRuntimeExecutio
   runtimeSummaryAriaLabel?: string;
   executionEventsAriaLabel?: string;
   toolGroupAriaLabel?: string;
+  toolCallsAriaLabel?: string;
+  mcpSurfaceAriaLabel?: string;
+  mcpServersAriaLabel?: string;
+  mcpToolsAriaLabel?: string;
   actionRequiredAriaLabel?: string;
   summaryLabels?: RuntimeFactsSummaryProps<TEvent>["summaryLabels"];
   roleLabel?: UIMessagePartsViewProps["roleLabel"];
@@ -179,6 +332,17 @@ export interface AgentUiProjectionViewLabels<TEvent extends AgentRuntimeExecutio
   subagentActivityMeta?: SubagentActivityListProps["activityMeta"];
   actionButtonLabel?: RuntimeFactCardProps<TEvent>["actionButtonLabel"];
   eventStatusLabel?: RuntimeFactCardProps<TEvent>["eventStatusLabel"];
+  toolFamilyLabel?: (family: AgentUiToolFamily) => ReactNode;
+  toolStatusLabel?: ToolCallSurfaceProps["toolStatusLabel"];
+  toolTitle?: ToolCallSurfaceProps["toolTitle"];
+  toolMeta?: ToolCallSurfaceProps["toolMeta"];
+  toolPreview?: ToolCallSurfaceProps["toolPreview"];
+  mcpOperationLabel?: McpToolListProps["operationLabel"];
+  mcpServerTitle?: McpSurfaceProps["serverTitle"];
+  mcpServerMeta?: McpSurfaceProps["serverMeta"];
+  mcpToolTitle?: McpSurfaceProps["toolTitle"];
+  mcpToolMeta?: McpSurfaceProps["toolMeta"];
+  mcpToolPreview?: McpSurfaceProps["toolPreview"];
 }
 
 export interface AgentUiProjectionViewProps<TEvent extends AgentRuntimeExecutionEvent = AgentRuntimeExecutionEvent> {

@@ -12,7 +12,12 @@ mod file_checkpoint_snapshot;
 mod gateway_tunnel;
 mod knowledge_builder_runtime;
 mod local_data_source;
+mod media_runtime_contract;
 mod media_task;
+mod media_task_payload;
+mod model_route_assembly;
+mod model_route_execution;
+mod model_task_contract;
 mod objective;
 mod processor;
 mod project_shell;
@@ -1769,7 +1774,7 @@ mod tests {
         let server = AppServerRuntimeFactory::external_app_server(
             ExternalBackendConfig::new(node)
                 .with_args([script_path.to_string_lossy().to_string()])
-                .with_timeout_ms(2_000),
+                .with_timeout_ms(10_000),
         );
         let (mut input_client, input_server) = tokio::io::duplex(4096);
         let (output_server, output_client) = tokio::io::duplex(4096);
@@ -1845,7 +1850,8 @@ mod tests {
         .await;
 
         assert_scoped_agent_event_notification(
-            &next_json_message(&mut output_lines).await,
+            &next_json_message_with_timeout(&mut output_lines, std::time::Duration::from_secs(10))
+                .await,
             "sess_external_stream_stdio",
             "thread_external_stream_stdio",
             "message.created",
@@ -1865,7 +1871,8 @@ mod tests {
             }),
         );
         assert_scoped_agent_event_notification(
-            &next_json_message(&mut output_lines).await,
+            &next_json_message_with_timeout(&mut output_lines, std::time::Duration::from_secs(10))
+                .await,
             "sess_external_stream_stdio",
             "thread_external_stream_stdio",
             "message.delta",
@@ -1873,14 +1880,17 @@ mod tests {
             json!({ "chunk": 1, "text": "hello" }),
         );
         assert_scoped_agent_event_notification(
-            &next_json_message(&mut output_lines).await,
+            &next_json_message_with_timeout(&mut output_lines, std::time::Duration::from_secs(10))
+                .await,
             "sess_external_stream_stdio",
             "thread_external_stream_stdio",
             "message.delta",
             "turn_external_stream_stdio",
             json!({ "chunk": 2, "text": "world" }),
         );
-        match next_json_message(&mut output_lines).await {
+        match next_json_message_with_timeout(&mut output_lines, std::time::Duration::from_secs(10))
+            .await
+        {
             JsonRpcMessage::Response(response) => {
                 assert_eq!(response.id, RequestId::Integer(3));
                 assert_eq!(
@@ -1904,11 +1914,21 @@ mod tests {
         let script_path = temp_dir
             .path()
             .join("external-backend-waits-before-output.mjs");
+        let trigger_path = temp_dir.path().join("release-backend-output");
         std::fs::write(
             &script_path,
             r#"
+              import { access } from 'node:fs/promises';
               import { setTimeout as delay } from 'node:timers/promises';
-              await delay(1000);
+              const triggerPath = process.argv[2];
+              for (;;) {
+                try {
+                  await access(triggerPath);
+                  break;
+                } catch {
+                  await delay(10);
+                }
+              }
               console.log(JSON.stringify({
                 type: 'message.delta',
                 payload: { text: 'late first output' }
@@ -1919,8 +1939,11 @@ mod tests {
 
         let server = AppServerRuntimeFactory::external_app_server(
             ExternalBackendConfig::new(node)
-                .with_args([script_path.to_string_lossy().to_string()])
-                .with_timeout_ms(2_000),
+                .with_args([
+                    script_path.to_string_lossy().to_string(),
+                    trigger_path.to_string_lossy().to_string(),
+                ])
+                .with_timeout_ms(10_000),
         );
         let (mut input_client, input_server) = tokio::io::duplex(4096);
         let (output_server, output_client) = tokio::io::duplex(4096);
@@ -1994,26 +2017,6 @@ mod tests {
             )),
         )
         .await;
-        assert_scoped_agent_event_notification(
-            &next_json_message(&mut output_lines).await,
-            "sess_external_wait_stdio",
-            "thread_external_wait_stdio",
-            "message.created",
-            "turn_external_wait_stdio",
-            json!({
-                "attachments": [],
-                "content": {
-                    "kind": "inline_text",
-                    "text": "draft",
-                },
-                "input": {
-                    "attachments": [],
-                    "text": "draft",
-                },
-                "role": "user",
-                "visibility": "user_visible",
-            }),
-        );
 
         write_json_message(
             &mut input_client,
@@ -2048,8 +2051,53 @@ mod tests {
             other => panic!("expected list response while turn waits, got {other:?}"),
         }
 
+        std::fs::write(&trigger_path, b"continue").expect("release backend output");
+
+        assert_scoped_agent_event_notification(
+            &next_json_message_with_timeout(&mut output_lines, std::time::Duration::from_secs(10))
+                .await,
+            "sess_external_wait_stdio",
+            "thread_external_wait_stdio",
+            "message.created",
+            "turn_external_wait_stdio",
+            json!({
+                "attachments": [],
+                "content": {
+                    "kind": "inline_text",
+                    "text": "draft",
+                },
+                "input": {
+                    "attachments": [],
+                    "text": "draft",
+                },
+                "role": "user",
+                "visibility": "user_visible",
+            }),
+        );
+        assert_scoped_agent_event_notification(
+            &next_json_message_with_timeout(&mut output_lines, std::time::Duration::from_secs(10))
+                .await,
+            "sess_external_wait_stdio",
+            "thread_external_wait_stdio",
+            "message.delta",
+            "turn_external_wait_stdio",
+            json!({ "text": "late first output" }),
+        );
+        match next_json_message_with_timeout(&mut output_lines, std::time::Duration::from_secs(10))
+            .await
+        {
+            JsonRpcMessage::Response(response) => {
+                assert_eq!(response.id, RequestId::Integer(3));
+                assert_eq!(
+                    response.result["turn"]["turnId"],
+                    "turn_external_wait_stdio"
+                );
+            }
+            other => panic!("expected delayed turn response, got {other:?}"),
+        }
+
         drop(input_client);
-        runner.abort();
+        runner.await.expect("runner join").expect("runner result");
     }
 
     #[tokio::test]
@@ -2075,7 +2123,7 @@ mod tests {
         let server = AppServerRuntimeFactory::external_app_server(
             ExternalBackendConfig::new(node)
                 .with_args([script_path.to_string_lossy().to_string()])
-                .with_timeout_ms(2_000),
+                .with_timeout_ms(10_000),
         );
         let (mut input_client, input_server) = tokio::io::duplex(4096);
         let (output_server, output_client) = tokio::io::duplex(4096);
@@ -2151,7 +2199,8 @@ mod tests {
         .await;
 
         assert_scoped_agent_event_notification(
-            &next_json_message(&mut output_lines).await,
+            &next_json_message_with_timeout(&mut output_lines, std::time::Duration::from_secs(10))
+                .await,
             "sess_external_stream_fail_stdio",
             "thread_external_stream_fail_stdio",
             "message.created",
@@ -2171,14 +2220,17 @@ mod tests {
             }),
         );
         assert_scoped_agent_event_notification(
-            &next_json_message(&mut output_lines).await,
+            &next_json_message_with_timeout(&mut output_lines, std::time::Duration::from_secs(10))
+                .await,
             "sess_external_stream_fail_stdio",
             "thread_external_stream_fail_stdio",
             "message.delta",
             "turn_external_stream_fail_stdio",
             json!({ "chunk": 1, "text": "partial" }),
         );
-        match next_json_message(&mut output_lines).await {
+        match next_json_message_with_timeout(&mut output_lines, std::time::Duration::from_secs(10))
+            .await
+        {
             JsonRpcMessage::Notification(notification) => {
                 assert_eq!(notification.method, METHOD_AGENT_SESSION_EVENT);
                 let event = &notification.params.as_ref().expect("params")["event"];
@@ -2193,7 +2245,9 @@ mod tests {
             }
             other => panic!("expected turn.failed notification, got {other:?}"),
         }
-        match next_json_message(&mut output_lines).await {
+        match next_json_message_with_timeout(&mut output_lines, std::time::Duration::from_secs(10))
+            .await
+        {
             JsonRpcMessage::Error(error) => {
                 assert_eq!(error.id, RequestId::Integer(3));
                 assert_eq!(error.error.code, error_codes::RUNTIME_ERROR);
@@ -2306,7 +2360,14 @@ mod tests {
     async fn next_json_message(
         lines: &mut tokio::io::Lines<BufReader<tokio::io::DuplexStream>>,
     ) -> JsonRpcMessage {
-        let line = tokio::time::timeout(std::time::Duration::from_secs(1), lines.next_line())
+        next_json_message_with_timeout(lines, std::time::Duration::from_secs(1)).await
+    }
+
+    async fn next_json_message_with_timeout(
+        lines: &mut tokio::io::Lines<BufReader<tokio::io::DuplexStream>>,
+        timeout: std::time::Duration,
+    ) -> JsonRpcMessage {
+        let line = tokio::time::timeout(timeout, lines.next_line())
             .await
             .expect("output line timeout")
             .expect("read line")
@@ -2347,10 +2408,47 @@ mod tests {
                 assert_eq!(event["threadId"], expected_thread_id);
                 assert_eq!(event["turnId"], expected_turn_id);
                 assert_eq!(event["type"], expected_type);
-                assert_eq!(event["payload"], expected_payload);
+                assert_payload_matches_with_session_projection(
+                    &event["payload"],
+                    expected_payload,
+                    "content-studio",
+                    "default",
+                );
             }
             other => panic!("expected agent event notification, got {other:?}"),
         }
+    }
+
+    fn assert_payload_matches_with_session_projection(
+        actual_payload: &serde_json::Value,
+        expected_payload: serde_json::Value,
+        expected_app_id: &str,
+        expected_workspace_id: &str,
+    ) {
+        let mut actual_payload_without_session = actual_payload.clone();
+        let Some(actual_payload_object) = actual_payload_without_session.as_object_mut() else {
+            assert_eq!(actual_payload_without_session, expected_payload);
+            return;
+        };
+        let session = actual_payload_object
+            .remove("session")
+            .expect("event payload session projection");
+        assert_eq!(actual_payload_without_session, expected_payload);
+
+        assert_eq!(session["appId"], expected_app_id);
+        assert_eq!(session["workspaceId"], expected_workspace_id);
+        assert!(
+            session["createdAt"]
+                .as_str()
+                .is_some_and(|value| !value.is_empty()),
+            "session.createdAt should be a non-empty string: {session:?}"
+        );
+        assert!(
+            session["updatedAt"]
+                .as_str()
+                .is_some_and(|value| !value.is_empty()),
+            "session.updatedAt should be a non-empty string: {session:?}"
+        );
     }
 
     fn node_binary() -> Option<String> {

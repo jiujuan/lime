@@ -98,7 +98,7 @@ export function renderModelSelector(
   const root = createRoot(container);
 
   const mergedProps: ModelSelectorProps = {
-    providerType: "custom-codex",
+    providerType: "custom-local-cli",
     setProviderType: vi.fn(),
     model: "gpt-5.3-codex",
     setModel: vi.fn(),

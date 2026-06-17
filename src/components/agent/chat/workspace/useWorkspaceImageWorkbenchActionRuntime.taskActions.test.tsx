@@ -281,6 +281,70 @@ describe("useWorkspaceImageWorkbenchActionRuntime task actions", () => {
     expect(toast.success).toHaveBeenCalledWith("已重新创建图片任务");
   });
 
+  it("草稿重试不应从 runtimeContract 展示元数据恢复 provider/model 路由", async () => {
+    const getImageTask = vi.fn().mockRejectedValue(new Error("not found"));
+    const createImageGenerationTask = vi.fn().mockResolvedValue({
+      task_id: "task-image-retry-with-route-resolver",
+      task_type: "image_generate",
+      status: "pending_submit",
+    });
+    const currentImageWorkbenchState: HookProps["currentImageWorkbenchState"] =
+      {
+        ...createInitialSessionImageWorkbenchState(),
+        tasks: [
+          {
+            id: "draft-image-runtime-contract-1",
+            sessionId: "draft-image-runtime-contract-1",
+            mode: "generate",
+            status: "error",
+            prompt: "复用当前路由生成插画",
+            rawText: "复用当前路由生成插画",
+            expectedCount: 1,
+            outputIds: [],
+            targetOutputId: null,
+            createdAt: 100,
+            hookImageIds: [],
+            applyTarget: null,
+            taskFilePath: null,
+            artifactPath: null,
+            runtimeContract: {
+              contractKey: "image_generation",
+              routingSlot: "image_generation_model",
+              providerId: "legacy-provider-from-display",
+              model: "legacy-model-from-display",
+            },
+          },
+        ],
+      };
+    const { render } = renderHook({
+      currentImageWorkbenchState,
+      createImageGenerationTask,
+      getImageTask,
+      imageWorkbenchSelectedModelId: undefined,
+      imageWorkbenchSelectedProviderId: undefined,
+    });
+
+    await render();
+
+    await act(async () => {
+      emitImageWorkbenchTaskAction({
+        action: "retry",
+        taskId: "draft-image-runtime-contract-1",
+        projectId: "project-1",
+        contentId: null,
+      });
+      await Promise.resolve();
+    });
+
+    expect(createImageGenerationTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerId: undefined,
+        model: undefined,
+        entrySource: "image_workbench_retry",
+      }),
+    );
+  });
+
   it("跨根目录图片任务应优先使用 task file 进行重试与取消", async () => {
     const externalTaskPath =
       "/Users/youmin/.lime/tasks/image_generate/task-image-external-1.json";

@@ -46,11 +46,7 @@ export async function openProjectPathWithTool(
 
 export async function getHomeDirectory(): Promise<string> {
   const result = await safeInvoke<string>("get_home_dir");
-  assertNotDiagnosticFacade(
-    "get_home_dir",
-    result,
-    FILE_SHELL_CURRENT_SURFACE,
-  );
+  assertNotDiagnosticFacade("get_home_dir", result, FILE_SHELL_CURRENT_SURFACE);
   if (typeof result !== "string" || !result.trim()) {
     throw new Error("get_home_dir did not return a home directory");
   }
@@ -103,44 +99,16 @@ export async function openHtmlPreviewWindow(
   }
 
   try {
-    const { WebviewWindow } = await import("@/lib/desktop-host/webviewWindow");
-    const url = convertLocalFileSrc(path);
-    const label = `html-preview-${hashPathForWindowLabel(path)}`;
-    const existingWindow = await WebviewWindow.getByLabel(label).catch(
-      () => null,
-    );
-
-    if (existingWindow) {
-      await existingWindow.show().catch(() => undefined);
-      await existingWindow.setFocus().catch(() => undefined);
-      return true;
-    }
-
-    const previewWindow = new WebviewWindow(label, {
-      url,
-      title: options?.title?.trim() || extractFileName(path) || path,
-      width: 1280,
-      height: 860,
-      minWidth: 860,
-      minHeight: 560,
-      center: true,
-      visible: true,
-      focus: true,
-      resizable: true,
-      decorations: true,
+    const result = await safeInvoke("open_file_preview_window", {
+      path,
+      title: options?.title?.trim() || extractFileName(path) || undefined,
     });
-
-    return await Promise.race([
-      new Promise<boolean>((resolve) => {
-        void previewWindow.once("desktop-host://created", () => resolve(true));
-      }),
-      new Promise<boolean>((resolve) => {
-        void previewWindow.once("desktop-host://error", () => resolve(false));
-      }),
-      new Promise<boolean>((resolve) =>
-        window.setTimeout(() => resolve(true), 160),
-      ),
-    ]);
+    assertNotDiagnosticFacade(
+      "open_file_preview_window",
+      result,
+      FILE_SHELL_CURRENT_SURFACE,
+    );
+    return isFilePreviewWindowOpenResult(result) && result.opened === true;
   } catch (error) {
     console.warn("[HTML 预览] 打开 Desktop Host 独立窗口失败:", error);
     return false;
@@ -152,10 +120,13 @@ function extractFileName(path: string): string {
   return normalized.split("/").pop()?.trim() || "";
 }
 
-function hashPathForWindowLabel(path: string): string {
-  let hash = 0;
-  for (let index = 0; index < path.length; index += 1) {
-    hash = (hash * 31 + path.charCodeAt(index)) >>> 0;
-  }
-  return hash.toString(36);
+function isFilePreviewWindowOpenResult(
+  value: unknown,
+): value is { opened: boolean } {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    typeof (value as { opened?: unknown }).opened === "boolean",
+  );
 }

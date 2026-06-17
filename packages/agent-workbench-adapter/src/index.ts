@@ -67,6 +67,7 @@ export interface AgentRuntimeFactLike {
 export interface AgentRuntimeReadModelLike {
   sourceCount?: number;
   events?: readonly AgentRuntimeFactLike[];
+  visibleEvents?: readonly AgentRuntimeFactLike[];
   pendingActions?: readonly unknown[];
   artifactRefs?: readonly string[];
   evidenceRefs?: readonly string[];
@@ -81,6 +82,47 @@ export interface AgentRuntimeFactSummary {
   evidenceCount: number;
   taskCount: number;
   hasRuntimeFacts: boolean;
+}
+
+export interface AgentWorkbenchSessionLike {
+  title?: string;
+  status?: string;
+  inputSourceIds?: readonly unknown[];
+  sourceSnapshots?: readonly unknown[];
+}
+
+export type AgentWorkbenchTaskCheckpointState = "done" | "active" | "idle" | "blocked";
+
+export interface AgentWorkbenchTaskCheckpoint {
+  id: "input" | "artifact" | "human-action" | "evidence" | string;
+  title: string;
+  state: AgentWorkbenchTaskCheckpointState;
+  count: number;
+}
+
+export interface ProjectAgentWorkbenchTaskViewInput {
+  session?: AgentWorkbenchSessionLike;
+  readModel?: AgentRuntimeReadModelLike;
+  runtimeSummary?: AgentRuntimeFactSummary;
+  fallbackTitle?: string;
+  statusLabel?: string;
+  inputAttachmentCount?: number;
+  artifactCount?: number;
+  activeArtifact?: boolean;
+}
+
+export interface AgentWorkbenchTaskView {
+  taskTitle: string;
+  statusLabel: string;
+  sourceCount: number;
+  toolCount: number;
+  pendingActionCount: number;
+  artifactCount: number;
+  evidenceCount: number;
+  taskCount: number;
+  hasRuntimeFacts: boolean;
+  shouldShowRuntimePanel: boolean;
+  checkpoints: AgentWorkbenchTaskCheckpoint[];
 }
 
 export interface ResolveAgentWorkbenchIntentInput extends ResolveAgentWorkbenchIntentPolicyInput {
@@ -487,6 +529,98 @@ export function summarizeAgentRuntimeFacts(readModel: AgentRuntimeReadModelLike,
       taskCount ||
       events.length
     ),
+  };
+}
+
+export function agentWorkbenchSessionStatusLabel(status?: string): string {
+  if (status === "waiting-user") return "待补充";
+  if (status === "draft-created") return "已出草稿";
+  if (status === "blocked") return "待配置";
+  if (status === "closed") return "已关闭";
+  if (status === "active") return "协作中";
+  return status?.trim() || "待启动";
+}
+
+function sessionSourceCount(session?: AgentWorkbenchSessionLike): number {
+  return session?.sourceSnapshots?.length ?? session?.inputSourceIds?.length ?? 0;
+}
+
+export function hasAgentWorkbenchRuntimeFacts(
+  readModel: AgentRuntimeReadModelLike,
+  summary: AgentRuntimeFactSummary = summarizeAgentRuntimeFacts(readModel),
+): boolean {
+  if (summary.sourceCount || summary.toolCount || summary.pendingActionCount || summary.artifactCount) {
+    return true;
+  }
+
+  const events = readModel.visibleEvents ?? readModel.events ?? [];
+  return events.some((event) => {
+    const eventClass = event.eventClass ?? event.source?.eventClass ?? "";
+    return event.surface === "tool" ||
+      event.surface === "human-action" ||
+      event.status === "failed" ||
+      event.status === "blocked" ||
+      eventClass.startsWith("tool.") ||
+      eventClass.startsWith("action.");
+  });
+}
+
+export function projectAgentWorkbenchTaskView(
+  input: ProjectAgentWorkbenchTaskViewInput,
+): AgentWorkbenchTaskView {
+  const readModel = input.readModel ?? {};
+  const runtimeSummary = input.runtimeSummary ?? summarizeAgentRuntimeFacts(readModel, {
+    artifactCount: input.artifactCount,
+  });
+  const sourceCount = runtimeSummary.sourceCount + sessionSourceCount(input.session) + (input.inputAttachmentCount ?? 0);
+  const artifactCount = runtimeSummary.artifactCount + (input.activeArtifact && runtimeSummary.artifactCount === 0 ? 1 : 0);
+  const pendingActionCount = runtimeSummary.pendingActionCount;
+  const evidenceCount = runtimeSummary.evidenceCount;
+  const hasRuntimeFacts = Boolean(
+    runtimeSummary.hasRuntimeFacts ||
+    sourceCount ||
+    artifactCount ||
+    pendingActionCount ||
+    evidenceCount,
+  );
+
+  return {
+    taskTitle: input.session?.title?.trim() || input.fallbackTitle?.trim() || "Agent 协作",
+    statusLabel: input.statusLabel ?? agentWorkbenchSessionStatusLabel(input.session?.status),
+    sourceCount,
+    toolCount: runtimeSummary.toolCount,
+    pendingActionCount,
+    artifactCount,
+    evidenceCount,
+    taskCount: runtimeSummary.taskCount,
+    hasRuntimeFacts,
+    shouldShowRuntimePanel: hasRuntimeFacts,
+    checkpoints: [
+      {
+        id: "input",
+        title: "读取需求与输入源",
+        state: sourceCount > 0 || input.session ? "done" : "idle",
+        count: sourceCount,
+      },
+      {
+        id: "artifact",
+        title: "生成可审核草稿",
+        state: artifactCount > 0 || input.activeArtifact ? "done" : input.session?.status === "active" ? "active" : "idle",
+        count: artifactCount,
+      },
+      {
+        id: "human-action",
+        title: "等待人工确认",
+        state: pendingActionCount > 0 ? "active" : input.session?.status === "blocked" ? "blocked" : "idle",
+        count: pendingActionCount,
+      },
+      {
+        id: "evidence",
+        title: "沉淀证据与交付记录",
+        state: evidenceCount > 0 ? "done" : artifactCount > 0 ? "active" : "idle",
+        count: evidenceCount,
+      },
+    ],
   };
 }
 

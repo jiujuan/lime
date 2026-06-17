@@ -20,6 +20,18 @@ use std::sync::Arc;
 
 use crate::provider_safety::wrap_provider_with_safety;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AsterProviderProtocol {
+    ChatCompletions,
+    Responses,
+}
+
+impl AsterProviderProtocol {
+    pub fn uses_responses_api(self) -> bool {
+        matches!(self, Self::Responses)
+    }
+}
+
 /// 凭证桥接错误
 #[derive(Debug, Clone)]
 pub enum CredentialBridgeError {
@@ -63,8 +75,8 @@ pub struct AsterProviderConfig {
     pub credential_uuid: String,
     /// 当前回合显式推理强度
     pub reasoning_effort: Option<String>,
-    /// 是否强制 OpenAI provider 使用 Responses API（用于 Codex 等兼容链路）
-    pub force_responses_api: bool,
+    /// App Server RouteResolver 派生出的 Aster 执行协议
+    pub protocol: Option<AsterProviderProtocol>,
     /// 当前回合是否启用 toolshim
     pub toolshim: bool,
     /// toolshim 解释器模型
@@ -173,7 +185,7 @@ impl CredentialBridge {
             credential.provider_type
         );
 
-        let (provider_name, api_key, base_url, force_responses_api) = match &credential.credential {
+        let (provider_name, api_key, base_url) = match &credential.credential {
             // OpenAI API Key - 根据 provider_type_hint 确定实际的 Provider
             RuntimeCredentialData::OpenAIKey { api_key, base_url } => {
                 let resolved_api_type = self.resolve_api_provider_type_hint(db, provider_type_hint);
@@ -189,7 +201,6 @@ impl CredentialBridge {
                     provider.to_string(),
                     Some(api_key.clone()),
                     base_url.clone(),
-                    resolved_api_type == Some(ApiProviderType::Codex),
                 )
             }
 
@@ -199,7 +210,6 @@ impl CredentialBridge {
                 "anthropic".to_string(),
                 Some(api_key.clone()),
                 base_url.clone(),
-                false,
             ),
 
             // Gemini API Key
@@ -209,7 +219,6 @@ impl CredentialBridge {
                 "google".to_string(),
                 Some(api_key.clone()),
                 base_url.clone(),
-                false,
             ),
 
             // Vertex AI
@@ -219,7 +228,6 @@ impl CredentialBridge {
                 "gcpvertexai".to_string(),
                 Some(api_key.clone()),
                 base_url.clone(),
-                false,
             ),
         };
 
@@ -231,7 +239,7 @@ impl CredentialBridge {
             base_url,
             credential_uuid: credential.uuid.clone(),
             reasoning_effort: None,
-            force_responses_api,
+            protocol: None,
             toolshim: false,
             toolshim_model: None,
         })
@@ -369,7 +377,7 @@ fn is_first_party_anthropic_base_url(base_url: &str) -> bool {
 }
 
 fn should_disable_provider_default_fast_model(config: &AsterProviderConfig) -> bool {
-    if config.force_responses_api {
+    if config.protocol.is_some_and(AsterProviderProtocol::uses_responses_api) {
         return false;
     }
 
@@ -580,7 +588,7 @@ fn set_provider_env_vars(config: &AsterProviderConfig) {
     }
 
     if config.provider_name == "openai" {
-        if config.force_responses_api {
+        if config.protocol.is_some_and(AsterProviderProtocol::uses_responses_api) {
             std::env::set_var("OPENAI_FORCE_RESPONSES_API", "1");
         } else {
             std::env::remove_var("OPENAI_FORCE_RESPONSES_API");
@@ -753,7 +761,7 @@ mod tests {
             base_url: Some("https://example.com/openai".to_string()),
             credential_uuid: "test-uuid".to_string(),
             reasoning_effort: None,
-            force_responses_api: true,
+            protocol: Some(AsterProviderProtocol::Responses),
             toolshim: false,
             toolshim_model: None,
         };
@@ -789,7 +797,7 @@ mod tests {
             base_url: Some("https://api.openai.com/v1".to_string()),
             credential_uuid: "test-uuid".to_string(),
             reasoning_effort: None,
-            force_responses_api: true,
+            protocol: Some(AsterProviderProtocol::Responses),
             toolshim: false,
             toolshim_model: None,
         };
@@ -825,7 +833,7 @@ mod tests {
             base_url: None,
             credential_uuid: "test-uuid".to_string(),
             reasoning_effort: None,
-            force_responses_api: false,
+            protocol: None,
             toolshim: false,
             toolshim_model: None,
         };
@@ -853,7 +861,7 @@ mod tests {
             base_url: Some("https://open.bigmodel.cn/api/paas/v4".to_string()),
             credential_uuid: "test-uuid".to_string(),
             reasoning_effort: None,
-            force_responses_api: false,
+            protocol: None,
             toolshim: false,
             toolshim_model: None,
         };
@@ -871,7 +879,7 @@ mod tests {
             base_url: Some("https://api.openai.com/v1".to_string()),
             credential_uuid: "test-uuid".to_string(),
             reasoning_effort: None,
-            force_responses_api: false,
+            protocol: Some(AsterProviderProtocol::ChatCompletions),
             toolshim: false,
             toolshim_model: None,
         };
@@ -880,16 +888,16 @@ mod tests {
     }
 
     #[test]
-    fn test_should_keep_provider_default_fast_model_for_codex_responses_route() {
+    fn test_should_keep_provider_default_fast_model_for_responses_route() {
         let config = AsterProviderConfig {
             provider_name: "openai".to_string(),
-            provider_selector: Some("codex".to_string()),
-            model_name: "gpt-5.3-codex".to_string(),
+            provider_selector: Some("custom-responses".to_string()),
+            model_name: "gpt-5.3".to_string(),
             api_key: Some("test-key".to_string()),
             base_url: Some("https://example.com/openai".to_string()),
             credential_uuid: "test-uuid".to_string(),
             reasoning_effort: None,
-            force_responses_api: true,
+            protocol: Some(AsterProviderProtocol::Responses),
             toolshim: false,
             toolshim_model: None,
         };
@@ -907,7 +915,7 @@ mod tests {
             base_url: Some("https://token-plan-cn.xiaomimimo.com/anthropic".to_string()),
             credential_uuid: "test-uuid".to_string(),
             reasoning_effort: None,
-            force_responses_api: false,
+            protocol: None,
             toolshim: false,
             toolshim_model: None,
         };
@@ -925,7 +933,7 @@ mod tests {
             base_url: Some("https://api.anthropic.com".to_string()),
             credential_uuid: "test-uuid".to_string(),
             reasoning_effort: None,
-            force_responses_api: false,
+            protocol: None,
             toolshim: false,
             toolshim_model: None,
         };
@@ -985,7 +993,7 @@ mod tests {
             base_url: Some("https://llm.limeai.run#lime_tenant_id=tenant-0001".to_string()),
             credential_uuid: "test-uuid".to_string(),
             reasoning_effort: None,
-            force_responses_api: false,
+            protocol: None,
             toolshim: false,
             toolshim_model: None,
         };
@@ -1021,7 +1029,7 @@ mod tests {
             base_url: Some("https://api.openai.com/v1".to_string()),
             credential_uuid: "test-uuid".to_string(),
             reasoning_effort: None,
-            force_responses_api: false,
+            protocol: None,
             toolshim: false,
             toolshim_model: None,
         };
@@ -1050,7 +1058,7 @@ mod tests {
             base_url: Some("https://open.bigmodel.cn/api/anthropic".to_string()),
             credential_uuid: "test-uuid".to_string(),
             reasoning_effort: None,
-            force_responses_api: false,
+            protocol: None,
             toolshim: false,
             toolshim_model: None,
         };
@@ -1086,7 +1094,7 @@ mod tests {
             base_url: Some("https://api.anthropic.com".to_string()),
             credential_uuid: "test-uuid".to_string(),
             reasoning_effort: None,
-            force_responses_api: false,
+            protocol: None,
             toolshim: false,
             toolshim_model: None,
         };
@@ -1110,7 +1118,7 @@ mod tests {
             base_url: Some("http://127.0.0.1:11434".to_string()),
             credential_uuid: "test-uuid".to_string(),
             reasoning_effort: Some("high".to_string()),
-            force_responses_api: false,
+            protocol: None,
             toolshim: true,
             toolshim_model: Some("glm-5.1:cloud".to_string()),
         };

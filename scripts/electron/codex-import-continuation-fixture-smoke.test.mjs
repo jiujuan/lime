@@ -28,7 +28,7 @@ describe("codex import continuation Electron fixture smoke guard", () => {
     expect(content).toContain("app_server_handle_json_lines");
   });
 
-  it("imports Codex rollout details then continues the same current session", () => {
+  it("imports source rollout details then continues the same current session", () => {
     const content = readSmokeScript();
 
     expect(content).toContain('"conversationImport/thread/commit"');

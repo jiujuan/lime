@@ -6438,8 +6438,6 @@ Extract it into the Agent Skills directory.`,
       expect(mockSendMessage.mock.calls[0]?.[8]).toMatchObject({
         displayContent:
           "@配音 目标语言: 英文 风格: 科技感 给这个新品视频做一版发布配音稿",
-        providerOverride: "openai-tts",
-        modelOverride: "gpt-4o-mini-tts",
         requestMetadata: {
           harness: {
             service_scene_launch: {
@@ -6458,9 +6456,9 @@ Extract it into the Agent Skills directory.`,
                 runtime_contract: expect.objectContaining({
                   contract_key: "voice_generation",
                   routing_slot: "voice_generation_model",
-                  executor_binding: expect.objectContaining({
-                    binding_key: "voice_runtime",
-                  }),
+                  route_execution_status: "metadata_only",
+                  route_execution_exit_condition:
+                    expect.stringContaining("ResolvedModelRoute"),
                 }),
                 project_id: "project-1",
                 target_language: "英文",
@@ -6473,6 +6471,10 @@ Extract it into the Agent Skills directory.`,
           },
         },
       });
+      expect(
+        mockSendMessage.mock.calls[0]?.[8]?.providerOverride,
+      ).toBeUndefined();
+      expect(mockSendMessage.mock.calls[0]?.[8]?.modelOverride).toBeUndefined();
       expect(listMentionEntryUsage()).toEqual([
         expect.objectContaining({
           kind: "builtin_command",

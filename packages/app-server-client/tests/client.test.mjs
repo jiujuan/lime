@@ -106,6 +106,7 @@ const {
   METHOD_CONVERSATION_IMPORT_SOURCE_SCAN,
   METHOD_CONVERSATION_IMPORT_THREAD_COMMIT,
   METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW,
+  METHOD_CONVERSATION_IMPORT_THREAD_RUNTIME_EVENTS_READ,
   METHOD_EVIDENCE_EXPORT,
   METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT,
   METHOD_EXECUTION_PROCESS_INTERRUPT,
@@ -1906,10 +1907,7 @@ test("builds connect deep link requests with current methods", () => {
     limit: 20,
   });
   assert.equal(importPreview.id, 7);
-  assert.equal(
-    importPreview.method,
-    METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW,
-  );
+  assert.equal(importPreview.method, METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW);
   assert.deepEqual(importPreview.params, {
     sourceClient: "codex",
     sourceRoot: "/Users/example/.codex",
@@ -1924,16 +1922,32 @@ test("builds connect deep link requests with current methods", () => {
     confirmed: true,
   });
   assert.equal(importCommit.id, 8);
-  assert.equal(
-    importCommit.method,
-    METHOD_CONVERSATION_IMPORT_THREAD_COMMIT,
-  );
+  assert.equal(importCommit.method, METHOD_CONVERSATION_IMPORT_THREAD_COMMIT);
   assert.deepEqual(importCommit.params, {
     sourceClient: "codex",
     sourceRoot: "/Users/example/.codex",
     sourceThreadId: "thread-1",
     workspaceId: "workspace-1",
     confirmed: true,
+  });
+  const importRuntimeEvents = client.readConversationImportRuntimeEvents({
+    sessionId: "sess-imported",
+    offset: 80,
+    limit: 20,
+    turnIndex: 0,
+    eventType: "command.started",
+  });
+  assert.equal(importRuntimeEvents.id, 9);
+  assert.equal(
+    importRuntimeEvents.method,
+    METHOD_CONVERSATION_IMPORT_THREAD_RUNTIME_EVENTS_READ,
+  );
+  assert.deepEqual(importRuntimeEvents.params, {
+    sessionId: "sess-imported",
+    offset: 80,
+    limit: 20,
+    turnIndex: 0,
+    eventType: "command.started",
   });
 });
 
@@ -2290,6 +2304,10 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_CONVERSATION_IMPORT_SOURCE_SCAN, kind: "request" },
     { method: METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW, kind: "request" },
     { method: METHOD_CONVERSATION_IMPORT_THREAD_COMMIT, kind: "request" },
+    {
+      method: METHOD_CONVERSATION_IMPORT_THREAD_RUNTIME_EVENTS_READ,
+      kind: "request",
+    },
     { method: METHOD_AGENT_SESSION_START, kind: "request" },
     { method: METHOD_AGENT_SESSION_READ, kind: "request" },
     { method: METHOD_AGENT_SESSION_TURN_START, kind: "request" },

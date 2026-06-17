@@ -82,11 +82,7 @@
       "implementation_status": "current",
       "truth_sources": ["audio_task_artifact", "runtime_timeline_event"],
       "viewer_surfaces": ["audio_player"],
-      "evidence_events": [
-        "runtime_identity_bound",
-        "executor_invoked",
-        "artifact_written"
-      ],
+      "evidence_events": ["runtime_identity_bound", "artifact_written"],
       "task_index_fields": [
         "task_id",
         "contract_key",
@@ -112,7 +108,7 @@
         "updated_at"
       ],
       "current_contracts": ["voice_generation"],
-      "notes": "标准 audio_generate task file，voice_generation 的 primary source。"
+      "notes": "标准 audio_generate task file，当前只作为 voice_generation 的任务 / 元数据事实源；可执行音频 route 接入前不声明 executor_invoked。"
     },
     {
       "kind": "audio_output",
@@ -121,7 +117,7 @@
       "implementation_status": "current",
       "truth_sources": ["audio_task_artifact", "runtime_timeline_event"],
       "viewer_surfaces": ["audio_player"],
-      "evidence_events": ["executor_invoked", "artifact_written"],
+      "evidence_events": ["artifact_written"],
       "task_index_fields": [
         "task_id",
         "contract_key",
@@ -148,7 +144,7 @@
         "updated_at"
       ],
       "current_contracts": ["voice_generation"],
-      "notes": "音频完成/失败输出，必须保留 mime、duration、provider、error code 等事实。"
+      "notes": "音频完成/失败输出，必须保留 mime、duration、provider、error code 等事实；可执行音频 route 接入前不声明 executor_invoked。"
     },
     {
       "kind": "transcript",

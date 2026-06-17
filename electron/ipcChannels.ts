@@ -51,6 +51,7 @@ export const ELECTRON_HOST_COMMANDS = [
   "get_voice_shortcut_runtime_status",
   "analyze_layered_design_flat_image",
   "open_external_url",
+  "open_file_preview_window",
   "open_system_settings_url",
   "open_with_default_app",
   "project_memory_get",

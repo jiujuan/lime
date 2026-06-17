@@ -76,7 +76,6 @@ function mountDraftSendRuntime({
       });
     }, [
       homePendingPreviewRequest,
-      onSnapshot,
       taskCenterDraftSendRequest,
     ]);
 

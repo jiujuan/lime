@@ -3,8 +3,11 @@ import type { ReactNode } from "react";
 import type {
   AgentRuntimeActionProjection,
   AgentRuntimeEventProjection,
+  AgentRuntimeExecutionEventStatus,
   ExecutionGraphNode,
+  AgentUiMcpOperationKind,
   ProcessTimelineEntry,
+  AgentUiToolFamily,
   UIMessagePart,
 } from "@limecloud/agent-ui-contracts";
 
@@ -84,4 +87,39 @@ export function defaultEventStatusLabel(event: AgentRuntimeEventProjection): Rea
   if (event.displayStatusKey === "agent.status.actionRequired") return "Action required";
   if (event.displayStatusKey === "agent.status.actionResolved") return "Resolved";
   return "Pending";
+}
+
+export function defaultToolFamilyLabel(family: AgentUiToolFamily): ReactNode {
+  if (family === "webSearch") return "Web search";
+  if (family === "webFetch") return "Web fetch";
+  if (family === "mcp") return "MCP";
+  if (family === "skill") return "Skill";
+  if (family === "command") return "Command";
+  if (family === "browser") return "Browser";
+  if (family === "file") return "File";
+  if (family === "tool") return "Tool";
+  return family;
+}
+
+export function defaultToolStatusLabel(status: AgentRuntimeExecutionEventStatus): ReactNode {
+  if (status === "completed") return "Completed";
+  if (status === "running") return "Running";
+  if (status === "blocked") return "Blocked";
+  if (status === "failed") return "Failed";
+  if (status === "canceled" || status === "cancelled") return "Canceled";
+  if (status === "pending") return "Pending";
+  return status;
+}
+
+export function defaultMcpOperationLabel(operation: AgentUiMcpOperationKind): ReactNode {
+  if (operation === "search") return "Search";
+  if (operation === "list") return "List";
+  if (operation === "read") return "Read";
+  if (operation === "browser") return "Browser";
+  if (operation === "mutation") return "Mutation";
+  if (operation === "resource") return "Resource";
+  if (operation === "prompt") return "Prompt";
+  if (operation === "auth") return "Auth";
+  if (operation === "tool") return "Tool";
+  return operation;
 }

@@ -29,6 +29,7 @@ React 是 peer dependency：
 - 渲染 `UIMessageParts` 消息部件。
 - 渲染 `ProcessTimeline` 过程时间线。
 - 渲染 `ExecutionGraph` 执行图。
+- 渲染 `AgentWorkbenchSurface` / `AgentWorkbenchTaskCard` 标准工作台 shell。
 - 渲染 `state.subagents` 标准子代理模型。
 - 渲染 Agent 消息时间线。
 - 渲染运行事实摘要。
@@ -110,6 +111,8 @@ const replay = replayAppServerFacts({
 | Execution graph | `state.graph` | projection 负责 parent/child edge；宿主负责布局密度。 |
 | Action required | `state.actions` | 宿主通过 runtime client 提交 action response。 |
 | Tool group | `state.tools` | projection 负责 tool lifecycle 解释。 |
+| Tool calls | `state.toolCalls` | projection 负责工具调用、事件分组与 MCP 归并。 |
+| MCP surface | `state.mcp` | projection 负责 MCP server / tool 归类与状态汇总。 |
 | Subagents | `state.subagents` | projection 负责子代理线程、委派调用、活动摘要和隔离摘要。 |
 | Artifact refs | `state.artifacts` | 宿主负责打开 artifact workspace 或详情页。 |
 | Evidence refs | `state.evidence` | 宿主负责打开 evidence pack、review 或 replay。 |
@@ -122,6 +125,8 @@ const replay = replayAppServerFacts({
 | 组件 | 输入 | 用途 |
 | --- | --- | --- |
 | `AgentUiProjectionView` | `AgentUiProjectionState` | 标准组合入口，渲染消息、过程、事实栏、action 和 graph。 |
+| `AgentWorkbenchSurface` | workbench view/state | 标准工作台 shell，渲染 task card、消息、运行事实、artifact 和 composer slot。 |
+| `AgentWorkbenchTaskCard` | workbench task view | 标准任务胶囊，渲染当前任务、状态、检查点与事实计数。 |
 | `UIMessagePartsView` | `UIMessageParts` | 渲染标准消息部件。 |
 | `ProcessTimelineView` | `ProcessTimeline` | 渲染线性执行过程。 |
 | `ExecutionGraphView` | `ExecutionGraph` | 渲染 run / task / tool / subagent 结构。 |
@@ -136,6 +141,11 @@ const replay = replayAppServerFacts({
 | `RuntimeFactsSummary` | `AgentRuntimeReadModel` | 渲染 source / action / artifact / evidence 计数。 |
 | `RuntimeEventList` | `AgentRuntimeEventProjection[]` | 渲染一般 runtime event 列表。 |
 | `ToolGroup` | tool events | 渲染工具调用分组。 |
+| `ToolCallSurface` | `state.toolCalls` | 渲染标准工具调用 surface。 |
+| `ToolCallCard` | `AgentUiToolCallView` | 渲染单个工具调用卡片。 |
+| `McpSurface` | `state.mcp` | 渲染 MCP server 与 MCP tools surface。 |
+| `McpServerList` | `AgentUiMcpServerView[]` | 渲染 MCP server 汇总。 |
+| `McpToolList` | `AgentUiMcpToolCallView[]` | 渲染 MCP tool 调用卡片。 |
 | `ActionRequiredList` | action events | 渲染待处理 action。 |
 | `RuntimeFactCard` | runtime event | 渲染单个 runtime fact。 |
 | `ActionCard` / `EvidenceCard` / `ArtifactCard` | runtime event | 语义化 card alias，方便宿主样式分层。 |
@@ -204,6 +214,13 @@ src/index.ts           -> barrel exports only
 - `agent-process-entry`
 - `agent-execution-events`
 - `agent-tool-group`
+- `agent-tool-calls`
+- `agent-tool-call`
+- `agent-mcp-surface`
+- `agent-mcp-servers`
+- `agent-mcp-server`
+- `agent-mcp-tools`
+- `agent-mcp-tool`
 - `agent-action-required-list`
 - `agent-subagents`
 - `agent-subagent-threads`

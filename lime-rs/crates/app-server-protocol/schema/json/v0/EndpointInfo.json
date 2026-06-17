@@ -1,0 +1,55 @@
+{
+  "$defs": {
+    "EndpointKind": {
+      "enum": [
+        "direct_request",
+        "local",
+        "oem_gateway",
+        "openai_compatible",
+        "provider_base_url"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "apiVersion": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "baseUrl": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "kind": {
+      "$ref": "#/$defs/EndpointKind"
+    },
+    "location": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "project": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "region": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "kind"
+  ],
+  "title": "EndpointInfo",
+  "type": "object"
+}

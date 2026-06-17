@@ -526,6 +526,40 @@ describe("ArtifactRenderer 空内容态", () => {
     expect(container.textContent).toContain("主题 通用");
   });
 
+  it("source-backed 图片 preview artifact 应用媒体视图渲染", () => {
+    const container = renderArtifact(
+      createArtifact({
+        type: "document",
+        title: "hero.png",
+        content: "asset:///tmp/lime/images/hero.png",
+        status: "complete",
+        meta: {
+          previewArtifact: true,
+          isSourceBacked: true,
+          contentKind: "image",
+          renderMode: "media",
+          previewUrl: "asset:///tmp/lime/images/hero.png",
+          filePath: "/tmp/lime/images/hero.png",
+          filename: "hero.png",
+        },
+      }),
+    );
+
+    const image = container.querySelector<HTMLImageElement>(
+      '[data-testid="preview-artifact-image"]',
+    );
+
+    expect(image).not.toBeNull();
+    expect(image?.getAttribute("src")).toBe(
+      "asset:///tmp/lime/images/hero.png",
+    );
+    expect(image?.getAttribute("alt")).toBe("hero.png");
+    expect(container.textContent).not.toContain("<figure");
+    expect(
+      container.querySelector('[data-testid="artifact-empty-surface"]'),
+    ).toBeNull();
+  });
+
   it("结构化阅读面应渲染摘要卡、统计卡与来源附录", async () => {
     const container = renderArtifact(
       createArtifact({

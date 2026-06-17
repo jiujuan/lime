@@ -9,6 +9,31 @@ import {
 import { SUPPORTED_LOCALES } from "../locales";
 
 describe("i18n namespace loader", () => {
+  it("普通本地化展示文案不暴露底层来源品牌", () => {
+    const resources = loadBundledI18nResources();
+    const forbiddenPattern = /\bcodex\b/i;
+    const allowedValueFragments = [
+      "gpt-5-codex",
+      "gpt-5.2-codex",
+      "gpt-5.3-codex",
+    ];
+
+    for (const locale of SUPPORTED_LOCALES) {
+      for (const [namespace, entries] of Object.entries(resources[locale])) {
+        for (const [key, value] of Object.entries(entries)) {
+          if (allowedValueFragments.some((fragment) => value.includes(fragment))) {
+            continue;
+          }
+
+          expect(
+            forbiddenPattern.test(value),
+            `${locale}/${namespace}.${key} should use source-neutral display copy`,
+          ).toBe(false);
+        }
+      }
+    }
+  });
+
   it("Agent 首字前状态文案覆盖所有支持 locale", () => {
     const resources = loadBundledI18nResources();
     const phases = [
@@ -118,7 +143,6 @@ describe("i18n namespace loader", () => {
         "agentChat.navbar.environment.noGit",
         "agentChat.navbar.environment.noProjectRoot",
         "agentChat.navbar.environment.open",
-        "agentChat.navbar.environment.source",
         "agentChat.navbar.environment.submit",
         "agentChat.navbar.environment.submitUnavailable",
         "agentChat.navbar.environment.title",

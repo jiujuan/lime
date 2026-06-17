@@ -440,12 +440,12 @@ describe("DecisionPanel ask_user", () => {
     expect(container.textContent).not.toContain("取消");
   });
 
-  it("Codex 导入的已处理权限请求应显示友好摘要而不是原始命令和 JSON", () => {
+  it("本地历史导入的已处理权限请求应显示友好摘要而不是原始命令和 JSON", () => {
     const request: ActionRequired = {
       requestId: "approval-codex-imported",
       actionType: "tool_confirmation",
       toolName: "exec_command",
-      prompt: "Approve Codex command: npm test",
+      prompt: "Approve imported command: npm test",
       status: "submitted",
       submittedUserData: {
         decision: "imported_read_only",
@@ -463,9 +463,9 @@ describe("DecisionPanel ask_user", () => {
     expect(container.textContent).toContain("处理结果");
     expect(container.textContent).toContain("已导入，只读记录");
     expect(container.textContent).toContain("记录说明");
-    expect(container.textContent).toContain("从 Codex 导入的历史审批记录");
+    expect(container.textContent).toContain("从本地历史导入的历史审批记录");
     expect(container.textContent).toContain("只读历史记录，不会重新执行");
-    expect(container.textContent).not.toContain("Approve Codex command");
+    expect(container.textContent).not.toContain("Approve imported command");
     expect(container.textContent).not.toContain("影响范围");
     expect(container.textContent).not.toContain("本次授权");
     expect(container.textContent).not.toContain("/workspace/app");

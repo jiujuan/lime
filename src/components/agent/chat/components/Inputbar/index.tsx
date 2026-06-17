@@ -42,13 +42,14 @@ const SecondaryControlsRow = styled.div`
   left: 8px;
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: stretch;
   align-items: flex-end;
   gap: 8px;
   pointer-events: none;
   z-index: 80;
 
   > * {
+    flex: 1 1 100%;
     pointer-events: auto;
     max-width: 100%;
   }

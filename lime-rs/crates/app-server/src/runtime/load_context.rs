@@ -28,6 +28,9 @@ impl RuntimeCore {
         if let Some(context) = self.load_projection_session(&params)? {
             return Ok(context);
         }
+        if let Some(context) = self.load_app_data_session(params.clone()).await? {
+            return Ok(context);
+        }
         Err(RuntimeCoreError::SessionNotFound(params.session_id))
     }
 
@@ -68,6 +71,18 @@ impl RuntimeCore {
             return Ok(None);
         };
         Ok(Some(projection_load_context(projection, events)))
+    }
+
+    async fn load_app_data_session(
+        &self,
+        params: AgentSessionReadParams,
+    ) -> Result<Option<SessionLoadContext>, RuntimeCoreError> {
+        let Some(response) = self.app_data_source.read_agent_session(params).await? else {
+            return Ok(None);
+        };
+        let stored =
+            super::session_hydration::hydrated_stored_session_from_response(response.clone());
+        Ok(Some(SessionLoadContext { response, stored }))
     }
 }
 

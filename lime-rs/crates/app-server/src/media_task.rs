@@ -1,3 +1,11 @@
+use crate::media_runtime_contract::{
+    runtime_contract_projection_from_payload, VOICE_GENERATION_CONTRACT_KEY,
+    VOICE_GENERATION_ROUTING_SLOT,
+};
+use crate::media_task_payload::{
+    create_audio_payload, create_image_payload, create_video_payload, AUDIO_TASK_DEFAULT_MIME_TYPE,
+};
+use crate::model_task_contract::MediaRouteAssessment;
 use app_server_protocol::MediaTaskArtifactAudioCompleteParams;
 use app_server_protocol::MediaTaskArtifactAudioCreateParams;
 use app_server_protocol::MediaTaskArtifactImageCreateParams;
@@ -23,14 +31,7 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::Path;
 
-const AUDIO_TASK_DEFAULT_MIME_TYPE: &str = "audio/mpeg";
 const AUDIO_TASK_COMPLETION_WORKER_ID: &str = "app-server-audio-output-writer";
-const IMAGE_GENERATION_CONTRACT_KEY: &str = "image_generation";
-const VIDEO_GENERATION_CONTRACT_KEY: &str = "video_generation";
-const VOICE_GENERATION_CONTRACT_KEY: &str = "voice_generation";
-const IMAGE_GENERATION_ROUTING_SLOT: &str = "image_generation_model";
-const VIDEO_GENERATION_ROUTING_SLOT: &str = "video_generation_model";
-const VOICE_GENERATION_ROUTING_SLOT: &str = "voice_generation_model";
 
 fn data_error(error: impl std::fmt::Display) -> String {
     error.to_string()
@@ -54,13 +55,6 @@ fn normalize_optional_string(value: Option<String>) -> Option<String> {
             Some(trimmed.to_string())
         }
     })
-}
-
-fn normalize_string_list(values: Vec<String>) -> Vec<String> {
-    values
-        .into_iter()
-        .filter_map(|value| normalize_optional_string(Some(value)))
-        .collect()
 }
 
 fn maybe_json_string(value: &Value, keys: &[&str]) -> Option<String> {
@@ -146,234 +140,6 @@ fn sha256_json(value: &Value) -> sha2::digest::Output<sha2::Sha256> {
     sha2::Sha256::digest(serde_json::to_string(value).unwrap_or_default().as_bytes())
 }
 
-fn image_runtime_contract(params: &MediaTaskArtifactImageCreateParams) -> Value {
-    params.runtime_contract.clone().unwrap_or_else(|| {
-        json!({
-            "contract_key": IMAGE_GENERATION_CONTRACT_KEY,
-            "modality": "image",
-            "routing_slot": IMAGE_GENERATION_ROUTING_SLOT,
-            "required_capabilities": ["image_generation"],
-            "execution_profile": {
-                "profile_key": "image_generation_profile"
-            },
-            "executor_adapter": {
-                "adapter_key": "app-server:media_task_artifact:image"
-            },
-            "executor_binding": {
-                "executor_kind": "app_server",
-                "binding_key": "mediaTaskArtifact/image/create"
-            },
-            "limecore_policy_refs": [
-                "model_catalog",
-                "provider_offer",
-                "tenant_feature_flags"
-            ]
-        })
-    })
-}
-
-fn audio_runtime_contract(params: &MediaTaskArtifactAudioCreateParams) -> Value {
-    params.runtime_contract.clone().unwrap_or_else(|| {
-        json!({
-            "contract_key": VOICE_GENERATION_CONTRACT_KEY,
-            "modality": "audio",
-            "routing_slot": VOICE_GENERATION_ROUTING_SLOT,
-            "required_capabilities": ["voice_generation"],
-            "execution_profile": {
-                "profile_key": "voice_generation_profile"
-            },
-            "executor_adapter": {
-                "adapter_key": "app-server:media_task_artifact:audio"
-            },
-            "executor_binding": {
-                "executor_kind": "app_server",
-                "binding_key": "mediaTaskArtifact/audio/create"
-            },
-            "limecore_policy_refs": [
-                "model_catalog",
-                "provider_offer",
-                "tenant_feature_flags"
-            ]
-        })
-    })
-}
-
-fn video_runtime_contract(params: &MediaTaskArtifactVideoCreateParams) -> Value {
-    params.runtime_contract.clone().unwrap_or_else(|| {
-        json!({
-            "contract_key": VIDEO_GENERATION_CONTRACT_KEY,
-            "modality": "video",
-            "routing_slot": VIDEO_GENERATION_ROUTING_SLOT,
-            "required_capabilities": ["video_generation"],
-            "execution_profile": {
-                "profile_key": "video_generation_profile"
-            },
-            "executor_adapter": {
-                "adapter_key": "app-server:media_task_artifact:video"
-            },
-            "executor_binding": {
-                "executor_kind": "app_server",
-                "binding_key": "mediaTaskArtifact/video/create"
-            },
-            "limecore_policy_refs": [
-                "model_catalog",
-                "provider_offer",
-                "tenant_feature_flags"
-            ]
-        })
-    })
-}
-
-fn create_image_payload(params: &MediaTaskArtifactImageCreateParams) -> Value {
-    let modality_contract_key = normalize_optional_string(params.modality_contract_key.clone())
-        .unwrap_or_else(|| IMAGE_GENERATION_CONTRACT_KEY.to_string());
-    let modality =
-        normalize_optional_string(params.modality.clone()).unwrap_or_else(|| "image".to_string());
-    let routing_slot = normalize_optional_string(params.routing_slot.clone())
-        .unwrap_or_else(|| IMAGE_GENERATION_ROUTING_SLOT.to_string());
-    let required_capabilities = if params.required_capabilities.is_empty() {
-        vec!["image_generation".to_string()]
-    } else {
-        normalize_string_list(params.required_capabilities.clone())
-    };
-
-    json!({
-        "prompt": params.prompt,
-        "title_generation_result": params.title_generation_result,
-        "persona_context": params.persona_context,
-        "presentation": params.presentation,
-        "taste_context": params.taste_context,
-        "mode": params.mode,
-        "raw_text": params.raw_text,
-        "layout_hint": params.layout_hint,
-        "size": params.size,
-        "aspect_ratio": params.aspect_ratio,
-        "count": params.count.unwrap_or(1),
-        "usage": params.usage,
-        "style": params.style,
-        "provider_id": params.provider_id,
-        "model": params.model,
-        "executor_mode": params.executor_mode,
-        "outer_model": params.outer_model,
-        "session_id": params.session_id,
-        "thread_id": params.thread_id,
-        "turn_id": params.turn_id,
-        "project_id": params.project_id,
-        "content_id": params.content_id,
-        "entry_source": normalize_optional_string(params.entry_source.clone()).unwrap_or_else(|| "at_image_command".to_string()),
-        "modality_contract_key": modality_contract_key,
-        "modality": modality,
-        "required_capabilities": required_capabilities,
-        "routing_slot": routing_slot,
-        "runtime_contract": image_runtime_contract(params),
-        "requested_target": params.requested_target,
-        "slot_id": params.slot_id,
-        "anchor_hint": params.anchor_hint,
-        "anchor_section_title": params.anchor_section_title,
-        "anchor_text": params.anchor_text,
-        "target_output_id": params.target_output_id,
-        "target_output_ref_id": params.target_output_ref_id,
-        "reference_images": params.reference_images,
-        "storyboard_slots": params.storyboard_slots,
-    })
-}
-
-fn create_video_payload(params: &MediaTaskArtifactVideoCreateParams) -> Value {
-    let modality_contract_key = normalize_optional_string(params.modality_contract_key.clone())
-        .unwrap_or_else(|| VIDEO_GENERATION_CONTRACT_KEY.to_string());
-    let modality =
-        normalize_optional_string(params.modality.clone()).unwrap_or_else(|| "video".to_string());
-    let routing_slot = normalize_optional_string(params.routing_slot.clone())
-        .unwrap_or_else(|| VIDEO_GENERATION_ROUTING_SLOT.to_string());
-    let required_capabilities = if params.required_capabilities.is_empty() {
-        vec!["video_generation".to_string()]
-    } else {
-        normalize_string_list(params.required_capabilities.clone())
-    };
-
-    json!({
-        "prompt": params.prompt,
-        "project_root_path": params.project_root_path,
-        "raw_text": params.raw_text,
-        "aspect_ratio": params.aspect_ratio,
-        "resolution": params.resolution,
-        "duration": params.duration,
-        "image_url": params.image_url,
-        "end_image_url": params.end_image_url,
-        "seed": params.seed,
-        "generate_audio": params.generate_audio,
-        "camera_fixed": params.camera_fixed,
-        "provider_id": params.provider_id,
-        "model": params.model,
-        "session_id": params.session_id,
-        "thread_id": params.thread_id,
-        "turn_id": params.turn_id,
-        "project_id": params.project_id,
-        "content_id": params.content_id,
-        "entry_source": normalize_optional_string(params.entry_source.clone()).unwrap_or_else(|| "video_workspace".to_string()),
-        "modality_contract_key": modality_contract_key,
-        "modality": modality,
-        "required_capabilities": required_capabilities,
-        "routing_slot": routing_slot,
-        "runtime_contract": video_runtime_contract(params),
-        "requested_target": normalize_optional_string(params.requested_target.clone()).unwrap_or_else(|| "video".to_string()),
-    })
-}
-
-fn create_audio_payload(params: &MediaTaskArtifactAudioCreateParams) -> Value {
-    let modality_contract_key = normalize_optional_string(params.modality_contract_key.clone())
-        .unwrap_or_else(|| VOICE_GENERATION_CONTRACT_KEY.to_string());
-    let modality =
-        normalize_optional_string(params.modality.clone()).unwrap_or_else(|| "audio".to_string());
-    let routing_slot = normalize_optional_string(params.routing_slot.clone())
-        .unwrap_or_else(|| VOICE_GENERATION_ROUTING_SLOT.to_string());
-    let required_capabilities = if params.required_capabilities.is_empty() {
-        vec!["voice_generation".to_string()]
-    } else {
-        normalize_string_list(params.required_capabilities.clone())
-    };
-    let source_text = params.source_text.trim();
-    let mime_type = normalize_optional_string(params.mime_type.clone())
-        .unwrap_or_else(|| AUDIO_TASK_DEFAULT_MIME_TYPE.to_string());
-
-    json!({
-        "prompt": source_text,
-        "source_text": source_text,
-        "raw_text": params.raw_text,
-        "voice": params.voice,
-        "voice_style": params.voice_style,
-        "target_language": params.target_language,
-        "mime_type": mime_type,
-        "audio_path": params.audio_path,
-        "duration_ms": params.duration_ms,
-        "provider_id": params.provider_id,
-        "model": params.model,
-        "session_id": params.session_id,
-        "thread_id": params.thread_id,
-        "turn_id": params.turn_id,
-        "project_id": params.project_id,
-        "content_id": params.content_id,
-        "entry_source": normalize_optional_string(params.entry_source.clone()).unwrap_or_else(|| "at_voice_command".to_string()),
-        "modality_contract_key": modality_contract_key,
-        "modality": modality,
-        "required_capabilities": required_capabilities,
-        "routing_slot": routing_slot,
-        "runtime_contract": audio_runtime_contract(params),
-        "requested_target": normalize_optional_string(params.requested_target.clone()).unwrap_or_else(|| "voice".to_string()),
-        "audio_output": {
-            "kind": "audio_output",
-            "status": "pending",
-            "audio_path": params.audio_path,
-            "mime_type": mime_type,
-            "duration_ms": params.duration_ms,
-            "source_text": source_text,
-            "voice": params.voice,
-            "voice_style": params.voice_style,
-            "target_language": params.target_language,
-        }
-    })
-}
-
 fn response_from_output(output: MediaTaskOutput) -> Result<MediaTaskArtifactResponse, String> {
     let value = serde_json::to_value(output).map_err(data_error)?;
     serde_json::from_value(value).map_err(data_error)
@@ -428,22 +194,7 @@ fn task_payload(output: &MediaTaskOutput) -> &Value {
 }
 
 fn media_task_contract_key(output: &MediaTaskOutput) -> Option<String> {
-    maybe_json_string(
-        task_payload(output),
-        &["modality_contract_key", "modalityContractKey"],
-    )
-    .or_else(|| {
-        task_payload(output)
-            .get("runtime_contract")
-            .or_else(|| task_payload(output).get("runtimeContract"))
-            .and_then(|value| {
-                value
-                    .get("contract_key")
-                    .or_else(|| value.get("contractKey"))
-                    .and_then(Value::as_str)
-            })
-            .and_then(|value| normalize_optional_string(Some(value.to_string())))
-    })
+    runtime_contract_projection_from_payload(task_payload(output)).contract_key
 }
 
 fn media_task_routing_outcome(output: &MediaTaskOutput) -> String {
@@ -525,9 +276,7 @@ fn build_modality_runtime_contract_index(outputs: &[MediaTaskOutput]) -> Value {
 
     for output in outputs {
         let payload = task_payload(output);
-        let runtime_contract = payload
-            .get("runtime_contract")
-            .or_else(|| payload.get("runtimeContract"));
+        let runtime_contract = runtime_contract_projection_from_payload(payload);
         let contract_key = media_task_contract_key(output);
         let modality = maybe_json_string(payload, &["modality"]);
         let entry_key = maybe_json_string(
@@ -539,61 +288,11 @@ fn build_modality_runtime_contract_index(outputs: &[MediaTaskOutput]) -> Value {
         let content_id = maybe_json_string(payload, &["content_id", "contentId"]);
         let model = maybe_json_string(payload, &["model"]);
         let routing_slot = maybe_json_string(payload, &["routing_slot", "routingSlot"]);
-        let execution_profile_key = runtime_contract
-            .and_then(|value| {
-                value
-                    .get("execution_profile")
-                    .or_else(|| value.get("executionProfile"))
-            })
-            .and_then(|value| value.get("profile_key").or_else(|| value.get("profileKey")))
-            .and_then(Value::as_str)
-            .and_then(|value| normalize_optional_string(Some(value.to_string())));
-        let executor_adapter_key = runtime_contract
-            .and_then(|value| {
-                value
-                    .get("executor_adapter")
-                    .or_else(|| value.get("executorAdapter"))
-            })
-            .and_then(|value| value.get("adapter_key").or_else(|| value.get("adapterKey")))
-            .and_then(Value::as_str)
-            .and_then(|value| normalize_optional_string(Some(value.to_string())));
-        let executor_kind = runtime_contract
-            .and_then(|value| {
-                value
-                    .get("executor_binding")
-                    .or_else(|| value.get("executorBinding"))
-            })
-            .and_then(|value| {
-                value
-                    .get("executor_kind")
-                    .or_else(|| value.get("executorKind"))
-            })
-            .and_then(Value::as_str)
-            .and_then(|value| normalize_optional_string(Some(value.to_string())));
-        let executor_binding_key = runtime_contract
-            .and_then(|value| {
-                value
-                    .get("executor_binding")
-                    .or_else(|| value.get("executorBinding"))
-            })
-            .and_then(|value| value.get("binding_key").or_else(|| value.get("bindingKey")))
-            .and_then(Value::as_str)
-            .and_then(|value| normalize_optional_string(Some(value.to_string())));
-        let policy_refs = runtime_contract
-            .and_then(|value| {
-                value
-                    .get("limecore_policy_refs")
-                    .or_else(|| value.get("limecorePolicyRefs"))
-            })
-            .and_then(Value::as_array)
-            .map(|items| {
-                items
-                    .iter()
-                    .filter_map(Value::as_str)
-                    .filter_map(|value| normalize_optional_string(Some(value.to_string())))
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
+        let execution_profile_key = runtime_contract.execution_profile_key.clone();
+        let executor_adapter_key = runtime_contract.executor_adapter_key.clone();
+        let executor_kind = runtime_contract.executor_kind.clone();
+        let executor_binding_key = runtime_contract.executor_binding_key.clone();
+        let policy_refs = runtime_contract.policy_refs.clone();
         let audio_output = payload
             .get("audio_output")
             .or_else(|| payload.get("audioOutput"));
@@ -737,6 +436,7 @@ fn build_modality_runtime_contract_index(outputs: &[MediaTaskOutput]) -> Value {
 
 pub fn create_image_generation_task_artifact(
     params: MediaTaskArtifactImageCreateParams,
+    route_assessment: Option<MediaRouteAssessment>,
 ) -> Result<MediaTaskArtifactResponse, String> {
     let workspace_root = normalize_required_string(&params.project_root_path, "projectRootPath")?;
     let prompt = normalize_required_string(&params.prompt, "prompt")?;
@@ -747,7 +447,7 @@ pub fn create_image_generation_task_artifact(
         Path::new(&workspace_root),
         MediaTaskType::ImageGenerate,
         normalize_optional_string(params.title.clone()),
-        create_image_payload(&params),
+        create_image_payload(&params, route_assessment.as_ref()),
         TaskWriteOptions {
             status: Some("pending_submit".to_string()),
             output_path: None,
@@ -788,6 +488,7 @@ pub fn create_audio_generation_task_artifact(
 
 pub fn create_video_generation_task_artifact(
     params: MediaTaskArtifactVideoCreateParams,
+    route_assessment: Option<MediaRouteAssessment>,
 ) -> Result<MediaTaskArtifactResponse, String> {
     let workspace_root = normalize_required_string(&params.project_root_path, "projectRootPath")?;
     let prompt = normalize_required_string(&params.prompt, "prompt")?;
@@ -799,7 +500,7 @@ pub fn create_video_generation_task_artifact(
         Path::new(&workspace_root),
         MediaTaskType::VideoGenerate,
         normalize_optional_string(params.title.clone()),
-        create_video_payload(&params),
+        create_video_payload(&params, route_assessment.as_ref()),
         TaskWriteOptions {
             status: Some("pending_submit".to_string()),
             output_path: output_path.as_deref(),

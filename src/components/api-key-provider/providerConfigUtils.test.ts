@@ -324,7 +324,7 @@ describe("模型辅助函数", () => {
       }),
       createModel({
         id: "gpt-5.3-codex",
-        display_name: "GPT-5.3 Codex",
+        display_name: "GPT-5.3 Reasoning",
         release_date: "2026-02-05",
         is_latest: true,
       }),
@@ -345,7 +345,7 @@ describe("模型辅助函数", () => {
       }),
       createModel({
         id: "gpt-5.3-codex",
-        display_name: "GPT-5.3 Codex",
+        display_name: "GPT-5.3 Reasoning",
         release_date: "2026-02-05",
         is_latest: true,
       }),

@@ -38,6 +38,7 @@
     "get_file_name",
     "reveal_in_finder",
     "open_with_default_app",
+    "open_file_preview_window",
     "open_project_path_with_tool",
     "run_project_shell_command",
     "project_shell_session_start",

@@ -125,7 +125,7 @@ describe("AgentThreadTimeline", () => {
     ).toHaveLength(0);
   });
 
-  it("Codex 导入过程应在完成态历史中默认展开工具细节", () => {
+  it("本地历史导入过程应在完成态历史中默认展开工具细节", () => {
     const container = renderTimeline(
       [
         {
@@ -144,7 +144,7 @@ describe("AgentThreadTimeline", () => {
           ...createBaseItem("search-imported", 2),
           type: "web_search",
           action: "search_query",
-          query: "Lime Codex import",
+          query: "Lime history import",
           output: "search result summary",
           metadata: {
             imported: true,
@@ -166,7 +166,7 @@ describe("AgentThreadTimeline", () => {
 
     expect(block?.open).toBe(true);
     expect(container.textContent).toContain("npm test");
-    expect(container.textContent).toContain("Lime Codex import");
+    expect(container.textContent).toContain("Lime history import");
     expect(
       container.querySelectorAll('[data-testid="tool-call-item"]'),
     ).toHaveLength(2);

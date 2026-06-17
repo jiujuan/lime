@@ -3,6 +3,7 @@ import {
   resolveBrowserControlRuntimeContractBinding,
   resolveImageGenerationRuntimeContractBinding,
   resolveTextTransformRuntimeContractBinding,
+  resolveVoiceGenerationRuntimeContractBinding,
 } from "./modalityRuntimeContracts";
 import {
   resolveExecutorAdapterKey,
@@ -87,6 +88,33 @@ describe("modalityExecutionProfiles", () => {
         ]),
       }),
     );
+  });
+
+  it("voice_generation profile 在 audio worker 接入前只能作为 metadata-only compat", () => {
+    const binding = resolveVoiceGenerationRuntimeContractBinding();
+
+    expect(binding.runtimeContract).toEqual(
+      expect.objectContaining({
+        route_execution_status: "metadata_only",
+        route_execution_exit_condition: expect.stringContaining(
+          "model_route_execution",
+        ),
+      }),
+    );
+    expect(binding.executionProfile).toEqual(
+      expect.objectContaining({
+        lifecycle: "compat",
+        profile_key: "voice_generation_profile",
+        fallback_behavior: expect.arrayContaining([
+          "metadata_only_until_audio_worker_consumes_resolved_route",
+        ]),
+      }),
+    );
+    expect(binding.executionProfile?.fallback_behavior).toEqual(
+      expect.arrayContaining(["do_not_fallback_to_legacy_tts_test_command"]),
+    );
+    expect(binding.executorAdapterKey).toBeUndefined();
+    expect(binding.executorAdapter).toBeUndefined();
   });
 
   it("直接 resolver 应按 contract key 返回同一份 profile 绑定", () => {

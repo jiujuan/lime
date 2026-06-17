@@ -1,3 +1,4 @@
+use crate::credential_bridge::AsterProviderProtocol;
 use serde::{Deserialize, Serialize};
 
 fn normalize_optional_text(value: Option<String>) -> Option<String> {
@@ -8,15 +9,6 @@ fn normalize_optional_text(value: Option<String>) -> Option<String> {
     } else {
         Some(trimmed.to_string())
     }
-}
-
-fn normalize_identifier(value: Option<&str>) -> Option<String> {
-    normalize_optional_text(value.map(str::to_string)).map(|value| value.to_ascii_lowercase())
-}
-
-fn is_openai_responses_model(model_name: &str) -> bool {
-    let normalized = model_name.trim().to_ascii_lowercase();
-    normalized.starts_with("gpt-5") && normalized.contains("codex")
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -41,21 +33,9 @@ impl ProviderContinuationCapability {
 }
 
 pub fn resolve_provider_continuation_capability(
-    provider_name: &str,
-    provider_selector: Option<&str>,
-    model_name: &str,
-    force_responses_api: bool,
+    protocol: Option<AsterProviderProtocol>,
 ) -> ProviderContinuationCapability {
-    let provider_name = normalize_identifier(Some(provider_name));
-    let provider_selector = normalize_identifier(provider_selector);
-    let provider_candidates = [provider_selector.as_deref(), provider_name.as_deref()];
-
-    if provider_candidates
-        .iter()
-        .flatten()
-        .any(|candidate| candidate.contains("openai"))
-        && (force_responses_api || is_openai_responses_model(model_name))
-    {
+    if protocol.is_some_and(AsterProviderProtocol::uses_responses_api) {
         return ProviderContinuationCapability::PreviousResponseId;
     }
 
@@ -144,6 +124,7 @@ mod tests {
         resolve_provider_continuation_capability, ProviderContinuationCapability,
         ProviderContinuationState,
     };
+    use crate::credential_bridge::AsterProviderProtocol;
 
     #[test]
     fn test_provider_continuation_state_defaults_to_history_replay_only() {
@@ -189,49 +170,18 @@ mod tests {
     }
 
     #[test]
-    fn test_resolve_provider_continuation_capability_detects_openai_responses_routes() {
+    fn test_resolve_provider_continuation_capability_uses_route_protocol_only() {
         assert_eq!(
-            resolve_provider_continuation_capability(
-                "openai",
-                Some("openai"),
-                "gpt-5-codex",
-                false
-            ),
+            resolve_provider_continuation_capability(Some(AsterProviderProtocol::Responses)),
             ProviderContinuationCapability::PreviousResponseId
         );
         assert_eq!(
-            resolve_provider_continuation_capability(
-                "openai",
-                Some("deepseek"),
-                "deepseek-r1",
-                false
-            ),
-            ProviderContinuationCapability::HistoryReplayOnly
-        );
-    }
-
-    #[test]
-    fn test_resolve_provider_continuation_capability_treats_retired_kiro_as_history_replay_only() {
-        assert_eq!(
-            resolve_provider_continuation_capability("kiro", Some("kiro"), "claude-3.7", false),
+            resolve_provider_continuation_capability(Some(AsterProviderProtocol::ChatCompletions)),
             ProviderContinuationCapability::HistoryReplayOnly
         );
         assert_eq!(
-            resolve_provider_continuation_capability(
-                "kiro",
-                Some("codewhisperer"),
-                "claude-3.7",
-                false
-            ),
+            resolve_provider_continuation_capability(None),
             ProviderContinuationCapability::HistoryReplayOnly
-        );
-    }
-
-    #[test]
-    fn test_resolve_provider_continuation_capability_respects_force_responses_api() {
-        assert_eq!(
-            resolve_provider_continuation_capability("openai", Some("openai"), "gpt-4o", true),
-            ProviderContinuationCapability::PreviousResponseId
         );
     }
 }

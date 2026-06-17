@@ -453,7 +453,6 @@ const LOCAL_PROVIDER_IDS = new Set([
   "lmstudio",
   "ollama",
   "ollama-cloud",
-  "opencode",
 ]);
 
 const RESOURCE_PROVIDER_API_HOSTS: Record<string, string> = {

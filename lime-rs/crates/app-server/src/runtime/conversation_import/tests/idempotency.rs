@@ -68,6 +68,129 @@ fn committing_same_codex_thread_reuses_existing_imported_session() {
 }
 
 #[tokio::test]
+async fn committing_same_codex_thread_with_replace_existing_reimports_source() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
+    let event_log_writer = Arc::new(EventLogWriter::new(&roots.event_log_root).expect("writer"));
+    let projection_store =
+        Arc::new(ProjectionStore::initialize(&roots.projection_db_path).expect("projection"));
+    let rollout_path = temp.path().join("rollout-thread-replace.jsonl");
+    write_rollout_with_assistant_reply(
+        &rollout_path,
+        "thread-replace",
+        "/workspace/replace",
+        "replace import",
+        "old imported reply",
+    );
+    let core = RuntimeCore::default()
+        .with_event_log_writer(event_log_writer.clone())
+        .with_projection_store(projection_store.clone());
+
+    let first = commit::commit_conversation_import_thread(
+        &core,
+        ConversationImportThreadCommitParams {
+            source_root: Some(temp.path().to_string_lossy().into_owned()),
+            source_path: Some(rollout_path.to_string_lossy().into_owned()),
+            confirmed: true,
+            ..Default::default()
+        },
+    )
+    .expect("first commit");
+    assert!(projection_store
+        .read_session_projection(&first.session.session_id)
+        .expect("old projection read")
+        .is_some());
+    assert!(!event_log_writer
+        .read_session_events(&first.session.session_id)
+        .expect("old events")
+        .is_empty());
+
+    write_rollout_with_assistant_reply(
+        &rollout_path,
+        "thread-replace",
+        "/workspace/replace",
+        "replace import",
+        "new imported reply",
+    );
+    let second = commit::commit_conversation_import_thread(
+        &core,
+        ConversationImportThreadCommitParams {
+            source_root: Some(temp.path().to_string_lossy().into_owned()),
+            source_path: Some(rollout_path.to_string_lossy().into_owned()),
+            confirmed: true,
+            replace_existing: Some(true),
+            ..Default::default()
+        },
+    )
+    .expect("replace commit");
+
+    assert_ne!(second.session.session_id, first.session.session_id);
+    assert_eq!(
+        core.state
+            .lock()
+            .expect("runtime core state mutex poisoned")
+            .sessions
+            .len(),
+        1
+    );
+    assert!(projection_store
+        .read_session_projection(&first.session.session_id)
+        .expect("old projection after replace")
+        .is_none());
+    assert!(event_log_writer
+        .read_session_events(&first.session.session_id)
+        .expect("old event log after replace")
+        .is_empty());
+    assert!(projection_store
+        .read_session_projection(&second.session.session_id)
+        .expect("new projection after replace")
+        .is_some());
+
+    let missing_old = core
+        .read_session_current(AgentSessionReadParams {
+            session_id: first.session.session_id.clone(),
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .await
+        .expect_err("old imported session should be cleared");
+    assert!(matches!(
+        missing_old,
+        RuntimeCoreError::SessionNotFound(session_id) if session_id == first.session.session_id
+    ));
+
+    let read = core
+        .read_session_current(AgentSessionReadParams {
+            session_id: second.session.session_id.clone(),
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .await
+        .expect("read replaced session");
+    let messages = read
+        .detail
+        .as_ref()
+        .and_then(|detail| detail.get("messages"))
+        .and_then(serde_json::Value::as_array)
+        .expect("read messages");
+    let assistant_texts = messages
+        .iter()
+        .filter(|message| {
+            message.get("role").and_then(serde_json::Value::as_str) == Some("assistant")
+        })
+        .filter_map(|message| {
+            message
+                .pointer("/content/0/text")
+                .and_then(serde_json::Value::as_str)
+        })
+        .collect::<Vec<_>>();
+    assert!(assistant_texts.contains(&"new imported reply"));
+    assert!(!assistant_texts.contains(&"old imported reply"));
+}
+
+#[tokio::test]
 async fn committing_same_codex_thread_after_restart_reuses_projected_session() {
     let temp = tempfile::tempdir().expect("tempdir");
     let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
@@ -231,7 +354,8 @@ async fn committing_same_codex_thread_after_restart_reuses_projected_session() {
         .expect("continue imported session after restart");
     let requests = backend.requests.lock().expect("requests mutex poisoned");
     let request = requests.last().expect("recorded continuation request");
-    assert_eq!(request.provider_preference.as_deref(), Some("openai"));
+    assert_eq!(request.provider_preference.as_deref(), None);
+    assert_eq!(request.model_preference.as_deref(), None);
     assert_eq!(
         request
             .runtime_options
@@ -316,4 +440,30 @@ async fn scan_and_preview_mark_previously_imported_codex_thread() {
         preview.thread.import_status,
         ConversationImportThreadStatus::Imported
     );
+}
+
+fn write_rollout_with_assistant_reply(
+    path: &std::path::Path,
+    thread_id: &str,
+    cwd: &str,
+    user_message: &str,
+    assistant_reply: &str,
+) {
+    fs::write(
+        path,
+        [
+            codex_session_meta_line(thread_id, cwd, user_message),
+            serde_json::json!({
+                "timestamp": "2026-06-16T00:00:02.000Z",
+                "type": "event_msg",
+                "payload": {
+                    "type": "agent_message",
+                    "message": assistant_reply
+                }
+            })
+            .to_string(),
+        ]
+        .join("\n"),
+    )
+    .expect("write rollout with assistant reply");
 }

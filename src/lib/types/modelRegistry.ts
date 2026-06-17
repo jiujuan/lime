@@ -1,7 +1,7 @@
 /**
  * 模型注册表类型定义
  *
- * 借鉴 opencode 的模型管理方式，定义增强的模型元数据结构
+ * 基于多协议模型运行时的目录管理方式，定义增强的模型元数据结构
  */
 
 /** 模型能力 */
@@ -256,7 +256,7 @@ export interface ModelAlias {
 
 /** Provider 的别名配置 */
 export interface ProviderAliasConfig {
-  /** Provider ID（如 "openai"、"codex"） */
+  /** Provider ID（如 "openai"、"anthropic"） */
   provider: string;
   /** 描述 */
   description: string | null;

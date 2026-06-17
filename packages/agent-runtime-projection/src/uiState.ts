@@ -11,6 +11,8 @@ import type {
   AgentUiRefView,
   AgentUiRuntimeStatusView,
   AgentUiSubagentsModel,
+  AgentUiMcpSurfaceModel,
+  AgentUiToolSurfaceModel,
   ExecutionGraphNode,
   ExecutionGraphNodeType,
   ProcessTimelineEntry,
@@ -22,6 +24,10 @@ import {
   createAgentRuntimeReadModelAccumulator,
   projectAgentRuntimeReadModel,
 } from "./readModel.js";
+import {
+  projectAgentUiMcpSurface,
+  projectAgentUiToolSurface,
+} from "./toolSurface.js";
 import {
   buildAgentUiSubagentsModel,
   createAgentUiSubagentsModelAccumulator,
@@ -550,6 +556,8 @@ function buildStateSnapshot<TEvent extends AgentRuntimeExecutionEvent>(
     timeline: ProcessTimelineEntry[];
     graphNodes: Map<string, ExecutionGraphNode>;
     tools: AgentRuntimeEventProjection<TEvent>[];
+    toolCalls: AgentUiToolSurfaceModel;
+    mcp: AgentUiMcpSurfaceModel;
     actions: AgentRuntimeEventProjection<TEvent>[];
     artifacts: Map<string, AgentUiRefView>;
     evidence: Map<string, AgentUiRefView>;
@@ -565,6 +573,8 @@ function buildStateSnapshot<TEvent extends AgentRuntimeExecutionEvent>(
     timeline: input.timeline.map(cloneTimelineEntry),
     graph: Array.from(input.graphNodes.values()).map(cloneGraphNode),
     tools: input.tools,
+    toolCalls: input.toolCalls,
+    mcp: input.mcp,
     actions: input.actions,
     artifacts: Array.from(input.artifacts.values()).map(
       cloneRefView,
@@ -597,6 +607,8 @@ export function projectAgentUiState<
     (event) => event.surface === "human-action",
   );
   const tools = readModel.events.filter((event) => event.surface === "tool");
+  const toolCalls = projectAgentUiToolSurface(readModel.events);
+  const mcp = projectAgentUiMcpSurface(toolCalls);
   const diagnostics = executionEvents
     .filter(
       (event) =>
@@ -617,6 +629,8 @@ export function projectAgentUiState<
     timeline,
     graph,
     tools,
+    toolCalls,
+    mcp,
     actions,
     artifacts: collectRefViews(
       executionEvents,
@@ -684,6 +698,8 @@ export function createAgentUiProjector<
 
   function stateSnapshot(): AgentUiProjectionState<TEvent> {
     const readModel = readModelAccumulator.getReadModel();
+    const tools = readModelAccumulator.getEventsBySurface("tool");
+    const toolCalls = projectAgentUiToolSurface(readModel.events);
     syncMissingRefViews(artifactRefs, readModel.artifactRefs);
     syncMissingRefViews(evidenceRefs, readModel.evidenceRefs);
     return buildStateSnapshot<TEvent>({
@@ -691,7 +707,9 @@ export function createAgentUiProjector<
       messages,
       timeline,
       graphNodes,
-      tools: readModelAccumulator.getEventsBySurface("tool"),
+      tools,
+      toolCalls,
+      mcp: projectAgentUiMcpSurface(toolCalls),
       actions: readModelAccumulator.getEventsBySurface("human-action"),
       artifacts: artifactRefs,
       evidence: evidenceRefs,

@@ -33,6 +33,7 @@ import {
   METHOD_AGENT_SESSION_UPDATE,
   METHOD_ARTIFACT_READ,
   METHOD_CAPABILITY_LIST,
+  METHOD_CONVERSATION_IMPORT_THREAD_RUNTIME_EVENTS_READ,
   METHOD_EVIDENCE_EXPORT,
   METHOD_FILE_SYSTEM_CREATE_DIRECTORY,
   METHOD_FILE_SYSTEM_CREATE_FILE,
@@ -215,6 +216,8 @@ import {
   type CapabilityDescriptor,
   type CapabilityListParams,
   type CapabilityListResponse,
+  type ConversationImportThreadRuntimeEventsReadParams,
+  type ConversationImportThreadRuntimeEventsReadResponse,
   type RuntimeCapabilityManifest,
   type RuntimeResumeContract,
   type ClientCapabilities,
@@ -408,6 +411,8 @@ export const APP_SERVER_METHOD_PROJECT_GIT_BRANCH_CREATE =
 export const APP_SERVER_METHOD_PROJECT_GIT_WORKTREE_CREATE =
   METHOD_PROJECT_GIT_WORKTREE_CREATE;
 export const APP_SERVER_METHOD_EVIDENCE_EXPORT = METHOD_EVIDENCE_EXPORT;
+export const APP_SERVER_METHOD_CONVERSATION_IMPORT_THREAD_RUNTIME_EVENTS_READ =
+  METHOD_CONVERSATION_IMPORT_THREAD_RUNTIME_EVENTS_READ;
 export const APP_SERVER_METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT =
   METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT;
 export const APP_SERVER_METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT =
@@ -703,6 +708,10 @@ export type AppServerAgentSessionStartParams = AgentSessionStartParams;
 export type AppServerAgentSessionListParams = AgentSessionListParams;
 export type AppServerAgentSessionListResponse = AgentSessionListResponse;
 export type AppServerAgentSessionReadParams = AgentSessionReadParams;
+export type AppServerConversationImportThreadRuntimeEventsReadParams =
+  ConversationImportThreadRuntimeEventsReadParams;
+export type AppServerConversationImportThreadRuntimeEventsReadResponse =
+  ConversationImportThreadRuntimeEventsReadResponse;
 export type AppServerAgentSessionToolInventoryReadParams =
   AgentSessionToolInventoryReadParams;
 export type AppServerAgentInput = AgentInput;
@@ -1351,6 +1360,17 @@ export class AppServerClient {
   ): Promise<AppServerRequestResult<AppServerAgentSessionReadResponse>> {
     return await this.request<AppServerAgentSessionReadResponse>(
       APP_SERVER_METHOD_AGENT_SESSION_READ,
+      params,
+    );
+  }
+
+  async readConversationImportRuntimeEvents(
+    params: AppServerConversationImportThreadRuntimeEventsReadParams,
+  ): Promise<
+    AppServerRequestResult<AppServerConversationImportThreadRuntimeEventsReadResponse>
+  > {
+    return await this.request<AppServerConversationImportThreadRuntimeEventsReadResponse>(
+      APP_SERVER_METHOD_CONVERSATION_IMPORT_THREAD_RUNTIME_EVENTS_READ,
       params,
     );
   }

@@ -214,18 +214,22 @@ describe("useWorkspaceArtifactPreviewActions", () => {
     expect(setLayoutMode).not.toHaveBeenCalled();
   });
 
-  it("通用模式打开文件预览时应直接切到真实文件画布，而不是再包装成 artifact", async () => {
+  it("通用模式打开文件预览时应投影为 source-backed preview artifact", async () => {
     const upsertGeneralArtifact = vi.fn();
     const setGeneralCanvasState = vi.fn();
     const setSelectedArtifactId = vi.fn();
+    const setArtifactViewMode = vi.fn();
     const setLayoutMode = vi.fn();
     const suppressBrowserAssistCanvasAutoOpen = vi.fn();
+    const onRequestCanvasPreviewOpen = vi.fn();
     const { render, getValue } = renderHook({
       upsertGeneralArtifact,
       setGeneralCanvasState,
       setSelectedArtifactId,
+      setArtifactViewMode,
       setLayoutMode,
       suppressBrowserAssistCanvasAutoOpen,
+      onRequestCanvasPreviewOpen,
     });
 
     await render();
@@ -237,18 +241,141 @@ describe("useWorkspaceArtifactPreviewActions", () => {
       );
     });
 
-    expect(upsertGeneralArtifact).not.toHaveBeenCalled();
-    expect(suppressBrowserAssistCanvasAutoOpen).toHaveBeenCalledTimes(1);
-    expect(setSelectedArtifactId).toHaveBeenCalledWith(null);
-    expect(setLayoutMode).toHaveBeenCalledWith("chat-canvas");
-    expect(setGeneralCanvasState).toHaveBeenCalledWith(
+    expect(upsertGeneralArtifact).toHaveBeenCalledTimes(1);
+    const artifact = upsertGeneralArtifact.mock.calls[0]?.[0] as Artifact;
+    expect(artifact).toEqual(
       expect.objectContaining({
-        isOpen: true,
-        contentType: "markdown",
-        filename: ".lime/artifacts/thread-1/report.md",
+        id: expect.stringMatching(/^preview-file-/),
+        type: "document",
+        title: "report.md",
         content: "# 研究简报\n\n这里是预览内容。",
+        meta: expect.objectContaining({
+          previewArtifact: true,
+          isSourceBacked: true,
+          source: "file",
+          sourceRef: ".lime/artifacts/thread-1/report.md",
+          sourcePath: ".lime/artifacts/thread-1/report.md",
+          filePath: ".lime/artifacts/thread-1/report.md",
+          filename: "report.md",
+          contentKind: "markdown",
+          renderMode: "canvas",
+          lifecycle: "transient",
+        }),
       }),
     );
+    expect(suppressBrowserAssistCanvasAutoOpen).toHaveBeenCalledTimes(1);
+    expect(setSelectedArtifactId).toHaveBeenCalledWith(artifact.id);
+    expect(onRequestCanvasPreviewOpen).toHaveBeenCalledWith({
+      filePath: ".lime/artifacts/thread-1/report.md",
+      selectionKey: `artifact:${artifact.id}`,
+    });
+    expect(setArtifactViewMode).toHaveBeenCalledWith("preview", {
+      artifactId: artifact.id,
+    });
+    expect(setLayoutMode).toHaveBeenCalledWith("chat-canvas");
+    expect(setGeneralCanvasState).toHaveBeenCalledWith(expect.any(Function));
+  });
+
+  it("通用模式打开媒体 preview artifact 时不应再按空文件懒加载", async () => {
+    const readSessionFile = vi.fn(async () => ({
+      path: "message-1:attachment:0",
+      content: "",
+      isBinary: true,
+      size: 0,
+    }));
+    const upsertGeneralArtifact = vi.fn();
+    const setGeneralCanvasState = vi.fn();
+    const setSelectedArtifactId = vi.fn();
+    const setArtifactViewMode = vi.fn();
+    const setLayoutMode = vi.fn();
+    const suppressBrowserAssistCanvasAutoOpen = vi.fn();
+    const onRequestCanvasPreviewOpen = vi.fn();
+    const artifact = createArtifact({
+      id: "preview-session_file-message-attachment",
+      title: "attachment-1",
+      content: "data:image/png;base64,aGVsbG8=",
+      meta: {
+        previewArtifact: true,
+        isSourceBacked: true,
+        source: "session_file",
+        sourceRef: "message-1:attachment:0",
+        sourcePath: "message-1:attachment:0",
+        filePath: "message-1:attachment:0",
+        filename: "attachment-1",
+        contentKind: "image",
+        renderMode: "media",
+        previewUrl: "data:image/png;base64,aGVsbG8=",
+      },
+    });
+    const { render, getValue } = renderHook({
+      readSessionFile,
+      upsertGeneralArtifact,
+      setGeneralCanvasState,
+      setSelectedArtifactId,
+      setArtifactViewMode,
+      setLayoutMode,
+      suppressBrowserAssistCanvasAutoOpen,
+      onRequestCanvasPreviewOpen,
+      isGeneralCanvasOpen: true,
+    });
+
+    await render();
+
+    act(() => {
+      getValue().handleArtifactClick(artifact);
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(readSessionFile).not.toHaveBeenCalled();
+    expect(upsertGeneralArtifact).toHaveBeenCalledTimes(1);
+    expect(upsertGeneralArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: artifact.id,
+        meta: expect.objectContaining({
+          previewArtifact: true,
+          contentKind: "image",
+          renderMode: "media",
+          previewUrl: "data:image/png;base64,aGVsbG8=",
+        }),
+      }),
+    );
+    expect(suppressBrowserAssistCanvasAutoOpen).toHaveBeenCalledTimes(1);
+    expect(setGeneralCanvasState).toHaveBeenCalledWith(expect.any(Function));
+    const resetGeneralCanvas = setGeneralCanvasState.mock
+      .calls[0]?.[0] as (state: {
+      isOpen: boolean;
+      contentType: string;
+      content: string;
+      filename?: string;
+      sourcePath?: string;
+      isEditing: boolean;
+    }) => unknown;
+    expect(
+      resetGeneralCanvas({
+        isOpen: true,
+        contentType: "markdown",
+        content: "# 上轮对话",
+        filename: "上轮对话.md",
+        sourcePath: "/tmp/last-turn.md",
+        isEditing: true,
+      }),
+    ).toEqual({
+      isOpen: false,
+      contentType: "empty",
+      content: "",
+      filename: undefined,
+      sourcePath: undefined,
+      isEditing: false,
+    });
+    expect(setSelectedArtifactId).toHaveBeenCalledWith(artifact.id);
+    expect(setArtifactViewMode).toHaveBeenCalledWith("preview", {
+      artifactId: artifact.id,
+    });
+    expect(onRequestCanvasPreviewOpen).not.toHaveBeenCalled();
+    expect(setLayoutMode).toHaveBeenCalledWith("chat-canvas");
   });
 
   it("通用模式打开 LayeredDesignDocument 工程文件应进入 canvas:design 主链", async () => {
@@ -532,13 +659,15 @@ describe("useWorkspaceArtifactPreviewActions", () => {
     });
   });
 
-  it("点击占位任务文件时应按需读取会话内容并打开通用画布", async () => {
+  it("点击占位任务文件时应按需读取会话内容并打开 preview artifact", async () => {
     const readSessionFile = vi.fn(async () => "# 会话主稿\n\n按需恢复");
     const setTaskFiles = vi.fn();
     const setGeneralCanvasState = vi.fn();
     const setSelectedArtifactId = vi.fn();
+    const setArtifactViewMode = vi.fn();
     const setLayoutMode = vi.fn();
     const suppressBrowserAssistCanvasAutoOpen = vi.fn();
+    const upsertGeneralArtifact = vi.fn();
     const placeholderFile = {
       id: "session-file:content-posts/draft.md",
       name: "content-posts/draft.md",
@@ -562,9 +691,11 @@ describe("useWorkspaceArtifactPreviewActions", () => {
         },
       ],
       readSessionFile,
+      upsertGeneralArtifact,
       setTaskFiles,
       setGeneralCanvasState,
       setSelectedArtifactId,
+      setArtifactViewMode,
       setLayoutMode,
       suppressBrowserAssistCanvasAutoOpen,
     });
@@ -595,19 +726,29 @@ describe("useWorkspaceArtifactPreviewActions", () => {
       }),
     ]);
     expect(suppressBrowserAssistCanvasAutoOpen).toHaveBeenCalledTimes(1);
-    expect(setSelectedArtifactId).toHaveBeenCalledWith(null);
-    expect(setLayoutMode).toHaveBeenCalledWith("chat-canvas");
-    expect(setGeneralCanvasState).toHaveBeenCalledWith(
+    expect(upsertGeneralArtifact).toHaveBeenCalledTimes(1);
+    const openedArtifact = upsertGeneralArtifact.mock.calls[0]?.[0] as Artifact;
+    expect(openedArtifact).toEqual(
       expect.objectContaining({
-        isOpen: true,
-        filename: "content-posts/draft.md",
+        id: expect.stringMatching(/^preview-file-/),
+        title: "draft.md",
         content: "# 会话主稿\n\n按需恢复",
-        contentType: "markdown",
+        meta: expect.objectContaining({
+          previewArtifact: true,
+          sourceRef: "content-posts/draft.md",
+          contentKind: "markdown",
+        }),
       }),
     );
+    expect(setSelectedArtifactId).toHaveBeenCalledWith(openedArtifact?.id);
+    expect(setArtifactViewMode).toHaveBeenCalledWith("preview", {
+      artifactId: openedArtifact?.id,
+    });
+    expect(setLayoutMode).toHaveBeenCalledWith("chat-canvas");
+    expect(setGeneralCanvasState).toHaveBeenCalledWith(expect.any(Function));
   });
 
-  it("通用模式打开真实 HTML 路径时应读取文件并保留 sourcePath 供 Desktop Host 预览", async () => {
+  it("通用模式打开真实 HTML 路径时应读取文件并投影为支持 Desktop Host 预览的 artifact", async () => {
     const readFilePreviewSpy = vi
       .spyOn(fileBrowserModule, "readFilePreview")
       .mockResolvedValue({
@@ -619,13 +760,19 @@ describe("useWorkspaceArtifactPreviewActions", () => {
       });
     const setGeneralCanvasState = vi.fn();
     const setSelectedArtifactId = vi.fn();
+    const setArtifactViewMode = vi.fn();
     const setLayoutMode = vi.fn();
     const suppressBrowserAssistCanvasAutoOpen = vi.fn();
+    const upsertGeneralArtifact = vi.fn();
+    const onRequestCanvasPreviewOpen = vi.fn();
     const { render, getValue } = renderHook({
+      upsertGeneralArtifact,
       setGeneralCanvasState,
       setSelectedArtifactId,
+      setArtifactViewMode,
       setLayoutMode,
       suppressBrowserAssistCanvasAutoOpen,
+      onRequestCanvasPreviewOpen,
     });
 
     await render();
@@ -639,18 +786,106 @@ describe("useWorkspaceArtifactPreviewActions", () => {
       "/tmp/project/prototype.html",
       64 * 1024,
     );
-    expect(setSelectedArtifactId).toHaveBeenCalledWith(null);
-    expect(setLayoutMode).toHaveBeenCalledWith("chat-canvas");
-    expect(setGeneralCanvasState).toHaveBeenCalledWith(
+    expect(upsertGeneralArtifact).toHaveBeenCalledTimes(1);
+    const artifact = upsertGeneralArtifact.mock.calls[0]?.[0] as Artifact;
+    expect(artifact).toEqual(
       expect.objectContaining({
-        isOpen: true,
-        filename: "/tmp/project/prototype.html",
-        sourcePath: "/tmp/project/prototype.html",
+        type: "html",
+        title: "prototype.html",
         content: "<!doctype html><html><body>Lime</body></html>",
-        contentType: "html",
-        language: "html",
+        meta: expect.objectContaining({
+          previewArtifact: true,
+          sourcePath: "/tmp/project/prototype.html",
+          filePath: "/tmp/project/prototype.html",
+          contentKind: "html",
+          renderMode: "external_window",
+          capabilities: expect.objectContaining({
+            externalWindow: true,
+          }),
+        }),
       }),
     );
+    expect(setSelectedArtifactId).toHaveBeenCalledWith(artifact.id);
+    expect(onRequestCanvasPreviewOpen).toHaveBeenCalledWith({
+      filePath: "/tmp/project/prototype.html",
+      selectionKey: `artifact:${artifact.id}`,
+    });
+    expect(setArtifactViewMode).toHaveBeenCalledWith("preview", {
+      artifactId: artifact.id,
+    });
+    expect(setLayoutMode).toHaveBeenCalledWith("chat-canvas");
+    expect(setGeneralCanvasState).toHaveBeenCalledWith(expect.any(Function));
+  });
+
+  it("通用模式打开真实 DOCX 路径时应读取抽取文本并投影为 document_text artifact", async () => {
+    const docxPath =
+      "/Users/coso/Documents/other/谢晶_个人IP知识库v1.0_深澜智能.docx";
+    const readFilePreviewSpy = vi
+      .spyOn(fileBrowserModule, "readFilePreview")
+      .mockResolvedValue({
+        path: docxPath,
+        content: "个人 IP 知识库\n\n深澜智能",
+        isBinary: false,
+        size: 55007,
+        error: null,
+      });
+    const setGeneralCanvasState = vi.fn();
+    const setSelectedArtifactId = vi.fn();
+    const setArtifactViewMode = vi.fn();
+    const setLayoutMode = vi.fn();
+    const suppressBrowserAssistCanvasAutoOpen = vi.fn();
+    const upsertGeneralArtifact = vi.fn();
+    const onRequestCanvasPreviewOpen = vi.fn();
+    const { render, getValue } = renderHook({
+      upsertGeneralArtifact,
+      setGeneralCanvasState,
+      setSelectedArtifactId,
+      setArtifactViewMode,
+      setLayoutMode,
+      suppressBrowserAssistCanvasAutoOpen,
+      onRequestCanvasPreviewOpen,
+    });
+
+    await render();
+
+    await act(async () => {
+      getValue().handleFileClick(docxPath, "");
+      await flushAsyncWork();
+    });
+
+    expect(readFilePreviewSpy).toHaveBeenCalledWith(docxPath, 64 * 1024);
+    expect(upsertGeneralArtifact).toHaveBeenCalledTimes(1);
+    const artifact = upsertGeneralArtifact.mock.calls[0]?.[0] as Artifact;
+    expect(artifact).toEqual(
+      expect.objectContaining({
+        type: "document",
+        title: "谢晶_个人IP知识库v1.0_深澜智能.docx",
+        content: "个人 IP 知识库\n\n深澜智能",
+        meta: expect.objectContaining({
+          previewArtifact: true,
+          isSourceBacked: true,
+          source: "file",
+          sourceRef: docxPath,
+          sourcePath: docxPath,
+          filePath: docxPath,
+          filename: "谢晶_个人IP知识库v1.0_深澜智能.docx",
+          fileKind: "docx",
+          contentKind: "document",
+          renderMode: "document_text",
+          lifecycle: "transient",
+        }),
+      }),
+    );
+    expect(setSelectedArtifactId).toHaveBeenCalledWith(artifact.id);
+    expect(onRequestCanvasPreviewOpen).toHaveBeenCalledWith({
+      filePath: docxPath,
+      selectionKey: `artifact:${artifact.id}`,
+    });
+    expect(setArtifactViewMode).toHaveBeenCalledWith("preview", {
+      artifactId: artifact.id,
+    });
+    expect(setLayoutMode).toHaveBeenCalledWith("chat-canvas");
+    expect(setGeneralCanvasState).toHaveBeenCalledWith(expect.any(Function));
   });
 
   it("点击占位任务文件时应按需读取会话内容并更新主题工作台画布", async () => {

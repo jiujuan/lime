@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "candidateCount": {
+      "default": 0,
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "capabilityGap": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "decisionReason": {
+      "type": "string"
+    },
+    "decisionSource": {
+      "type": "string"
+    },
+    "fallbackChain": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "routingMode": {
+      "type": "string"
+    },
+    "serviceModelSlot": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "settingsSource": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "decisionReason",
+    "decisionSource",
+    "routingMode"
+  ],
+  "title": "RoutingDecision",
+  "type": "object"
+}

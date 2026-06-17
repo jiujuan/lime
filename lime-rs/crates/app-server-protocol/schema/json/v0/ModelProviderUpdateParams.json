@@ -1,13 +1,81 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
-    "patch": true,
+    "apiHost": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "apiVersion": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "customModels": {
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "enabled": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "location": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "name": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "project": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "promptCacheMode": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
     "providerId": {
       "type": "string"
+    },
+    "providerType": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "region": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "sortOrder": {
+      "format": "int32",
+      "type": [
+        "integer",
+        "null"
+      ]
     }
   },
   "required": [
-    "patch",
     "providerId"
   ],
   "title": "ModelProviderUpdateParams",

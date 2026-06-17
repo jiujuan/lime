@@ -233,7 +233,7 @@ mod tests {
                 base_url: Some("http://127.0.0.1:56599".to_string()),
                 credential_uuid: None,
                 reasoning_effort: None,
-                force_responses_api: false,
+                protocol: None,
                 toolshim: false,
                 toolshim_model: None,
             }),

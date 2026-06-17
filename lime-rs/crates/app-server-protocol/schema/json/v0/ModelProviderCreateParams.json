@@ -1,10 +1,50 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
-    "provider": true
+    "apiHost": {
+      "type": "string"
+    },
+    "apiVersion": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "location": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "name": {
+      "type": "string"
+    },
+    "project": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "promptCacheMode": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "providerType": {
+      "type": "string"
+    },
+    "region": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
   },
   "required": [
-    "provider"
+    "apiHost",
+    "name",
+    "providerType"
   ],
   "title": "ModelProviderCreateParams",
   "type": "object"

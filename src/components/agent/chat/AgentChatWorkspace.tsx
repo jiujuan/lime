@@ -27,6 +27,10 @@ import {
   useArtifactDisplayState,
 } from "./hooks/useArtifactDisplayState";
 import type { TopicBranchStatus } from "./hooks/useTopicBranchBoard";
+import { useFileManagerSidebar } from "./hooks/useFileManagerSidebar";
+import { useBrowserWorkspaceHomeHint } from "./hooks/useBrowserWorkspaceHomeHint";
+import { usePathReferences } from "./hooks/usePathReferences";
+import { useWorkspaceWorkbenchRequests } from "./hooks/useWorkspaceWorkbenchRequests";
 import { useSessionFiles } from "./hooks/useSessionFiles";
 import { useContentSync } from "./hooks/useContentSync";
 import { useDeveloperFeatureFlags } from "@/hooks/useDeveloperFeatureFlags";
@@ -35,11 +39,7 @@ import { useServiceModelsConfig } from "@/hooks/useServiceModelsConfig";
 import { useSoulArtifactVoiceGenerationBrief } from "@/hooks/useSoulArtifactVoiceGenerationBrief";
 import { useTrayModelShortcuts } from "./hooks/useTrayModelShortcuts";
 import { SettingsTabs } from "@/types/settings";
-import {
-  type CanvasWorkbenchBrowserOpenRequest,
-  type CanvasWorkbenchLayoutMode,
-  type CanvasWorkbenchPreviewOpenRequest,
-} from "./components/CanvasWorkbenchLayout";
+import { type CanvasWorkbenchLayoutMode } from "./components/CanvasWorkbenchLayout";
 import type { CreationMode } from "./components/types";
 import { type TaskFile } from "./components/TaskFiles";
 import { useWorkflow } from "@/components/workspace/hooks/useWorkflow";
@@ -59,6 +59,7 @@ import {
   selectedArtifactIdAtom,
 } from "@/lib/artifact/store";
 import type { Artifact } from "@/lib/artifact/types";
+import { createPreviewArtifact } from "@/lib/artifact/previewArtifact";
 import { useAtomValue, useSetAtom } from "jotai";
 import { generateGeneralWorkbenchPrompt } from "@/lib/workspace/workbenchPrompt";
 import { generateProjectMemoryPrompt } from "@/lib/workspace/workbenchPrompt";
@@ -100,9 +101,9 @@ import {
 import type { TaskCenterDraftSendRequest } from "./homePendingPreview";
 
 import type {
+  ConfirmResponse,
   Message,
   MessageImage,
-  MessagePathReference,
   MessagePreviewTarget,
   SiteSavedContentTarget,
   WriteArtifactContext,
@@ -169,6 +170,7 @@ import { useWorkspaceCanvasSceneRuntime } from "./workspace/useWorkspaceCanvasSc
 import { useWorkspaceCanvasMessageSyncRuntime } from "./workspace/useWorkspaceCanvasMessageSyncRuntime";
 import { useWorkspaceConversationSceneRuntime } from "./workspace/useWorkspaceConversationSceneRuntime";
 import { useWorkspaceInputbarSceneRuntime } from "./workspace/useWorkspaceInputbarSceneRuntime";
+import { PlanComposerDecisionPanel } from "./workspace/PlanComposerDecisionPanel";
 import { useWorkspaceNavigationActions } from "./workspace/useWorkspaceNavigationActions";
 import { useWorkspaceWriteFileAction } from "./workspace/useWorkspaceWriteFileAction";
 import { useWorkspaceArtifactPreviewActions } from "./workspace/useWorkspaceArtifactPreviewActions";
@@ -218,6 +220,11 @@ import { useWorkspaceGeneralWorkbenchScaffoldRuntime } from "./workspace/useWork
 import { useWorkspaceTopicSwitch } from "./workspace/useWorkspaceTopicSwitch";
 import { useWorkspaceA2UIRuntime } from "./workspace/useWorkspaceA2UIRuntime";
 import { useWorkspaceSceneGateRuntime } from "./workspace/useWorkspaceSceneGateRuntime";
+import {
+  filterPlanComposerDecisionFromPendingActions,
+  selectLatestPlanComposerDecision,
+} from "./workspace/planComposerDecision";
+import { selectProposedPlanImplementationDecision } from "./workspace/planImplementationDecision";
 import { useWorkspaceGeneralWorkbenchSidebarRuntime } from "./workspace/useWorkspaceGeneralWorkbenchSidebarRuntime";
 import { useWorkspaceGeneralWorkbenchRuntime } from "./workspace/useWorkspaceGeneralWorkbenchRuntime";
 import { useWorkspaceTeamSessionRuntime } from "./workspace/useWorkspaceTeamSessionRuntime";
@@ -236,9 +243,7 @@ import {
   updateExpertAgentInstanceSkillRefs,
 } from "@/features/experts";
 import { FileManagerSidebar } from "./components/FileManager/FileManagerSidebar";
-import {
-  subscribeTaskCenterDraftTaskRequests,
-} from "./taskCenterDraftTaskEvents";
+import { subscribeTaskCenterDraftTaskRequests } from "./taskCenterDraftTaskEvents";
 import type { GeneralWorkbenchFollowUpActionPayload } from "./components/generalWorkbenchSidebarContract";
 import { RuntimeReviewDecisionDialog } from "./components/RuntimeReviewDecisionDialog";
 import {
@@ -264,7 +269,6 @@ import type { ArtifactTimelineOpenTarget } from "./utils/artifactTimelineNavigat
 import { createUnifiedMemory } from "@/lib/api/unifiedMemory";
 import { getDefaultGuidePromptByTheme } from "./utils/defaultGuidePrompt";
 import { shouldShowChatLayout } from "./utils/chatLayoutVisibility";
-import { mergePathReferences } from "./utils/pathReferences";
 import {
   applyTaskCenterRouteTabSyncToMap,
   initializeTaskCenterOpenTabMap,
@@ -353,12 +357,8 @@ import { buildSkillsPageParamsFromMessage } from "./utils/skillScaffoldDraft";
 import { resolveAgentChatWorkspaceShellViewModel } from "./agentChatWorkspaceShellViewModel";
 import { AutomationJobDialog } from "@/components/settings-v2/system/automation/AutomationJobDialog";
 import {
-  APP_SIDEBAR_COLLAPSE_EVENT,
   BLANK_HOME_DEFERRED_LOAD_MS,
-  BROWSER_WORKSPACE_HOME_HINT_AUTO_HIDE_MS,
   BROWSER_WORKSPACE_HOME_HINT_MESSAGE,
-  BROWSER_WORKSPACE_HOME_HINT_STORAGE_KEY,
-  FILE_MANAGER_NAV_COLLAPSE_BREAKPOINT_PX,
   GENERAL_BROWSER_ASSIST_PROFILE_KEY,
   NOOP_SET_CHAT_MESSAGES,
   RECENT_CONVERSATIONS_IDLE_DEFERRED_LOAD_MS,
@@ -371,7 +371,6 @@ import {
   isTaskCenterDraftTabId,
   isTransientWorkspaceBridgeError,
   isUsableKnowledgeSourceText,
-  loadFileManagerSidebarOpen,
   mergeExpertSkillRefsIntoRequestMetadata,
   normalizeVideoAspectRatio,
   normalizeVideoResolution,
@@ -381,7 +380,6 @@ import {
   resolveTaskCenterHomeSurfaceState,
   resolveTaskPreviewArtifact,
   resolveVideoCanvasStatusFromPreview,
-  saveFileManagerSidebarOpen,
   shouldAutoRecoverWorkspacePathMissing,
   type TaskCenterDraftTab,
 } from "./workspace/agentChatWorkspaceHelpers";
@@ -467,23 +465,18 @@ export function AgentChatWorkspace({
     () => defaultTopicSidebarVisible,
   );
   const [input, setInput] = useState("");
-  const [pathReferences, setPathReferences] = useState<MessagePathReference[]>(
-    [],
-  );
-  const [fileManagerSidebarOpen, setFileManagerSidebarOpen] = useState(() =>
-    loadFileManagerSidebarOpen(),
-  );
-  const fileManagerAppSidebarCollapsedRef = useRef(false);
-  const handleSetFileManagerSidebarOpen = useCallback((open: boolean) => {
-    setFileManagerSidebarOpen(open);
-    saveFileManagerSidebarOpen(open);
+  const {
+    pathReferences,
+    addPathReferences: handleAddPathReferences,
+    removePathReference: handleRemovePathReference,
+    clearPathReferences: handleClearPathReferences,
+  } = usePathReferences();
+  const handleCollapseTopicSidebarForFileManager = useCallback(() => {
+    setShowSidebar(false);
   }, []);
-  const handleAddPathReferences = useCallback(
-    (references: MessagePathReference[]) => {
-      setPathReferences((current) => mergePathReferences(current, references));
-    },
-    [],
-  );
+  const fileManagerSidebar = useFileManagerSidebar({
+    onCollapseTopicSidebar: handleCollapseTopicSidebarForFileManager,
+  });
   const handleInstallSkillPackageFromFileManager = useCallback(
     (entry: { path: string; name: string }) => {
       _onNavigate?.("skills", {
@@ -495,14 +488,6 @@ export function AgentChatWorkspace({
     },
     [_onNavigate],
   );
-  const handleRemovePathReference = useCallback((id: string) => {
-    setPathReferences((current) =>
-      current.filter((reference) => reference.id !== id),
-    );
-  }, []);
-  const handleClearPathReferences = useCallback(() => {
-    setPathReferences([]);
-  }, []);
   const [runtimeInitialInputCapability, setRuntimeInitialInputCapability] =
     useState<AgentInitialInputCapabilityParams>();
   const [runtimeEntryBannerMessage, setRuntimeEntryBannerMessage] = useState<
@@ -514,8 +499,6 @@ export function AgentChatWorkspace({
   const [entryBannerVisible, setEntryBannerVisible] = useState(
     Boolean(effectiveEntryBannerMessage),
   );
-  const [browserWorkspaceHintVisible, setBrowserWorkspaceHintVisible] =
-    useState(false);
   const shouldBootstrapCanvasOnEntry =
     Boolean(contentId) && isSpecializedWorkbenchTheme(normalizedEntryTheme);
   const shouldKeepNewTaskHomeSessionRestoreDisabled =
@@ -583,6 +566,14 @@ export function AgentChatWorkspace({
   const shouldPreserveBlankHomeSurface =
     shouldPreserveEntryThemeOnHome && normalizedEntryTheme === "general";
   const shouldUseBrowserWorkspaceHomeChrome = shouldPreserveBlankHomeSurface;
+  const {
+    browserWorkspaceHintVisible,
+    dismissBrowserWorkspaceHint: handleDismissBrowserWorkspaceHint,
+  } = useBrowserWorkspaceHomeHint({
+    enabled: shouldUseBrowserWorkspaceHomeChrome,
+    projectId,
+    entryBannerMessage,
+  });
   const shouldPrioritizeInitialSessionEntry =
     normalizedInitialSessionId !== null && !contentId;
   const shouldPrioritizeInitialPromptEntry =
@@ -646,48 +637,6 @@ export function AgentChatWorkspace({
   useEffect(() => {
     setEntryBannerVisible(Boolean(effectiveEntryBannerMessage));
   }, [effectiveEntryBannerMessage]);
-
-  useEffect(() => {
-    if (
-      !shouldUseBrowserWorkspaceHomeChrome ||
-      !projectId ||
-      entryBannerMessage
-    ) {
-      return;
-    }
-
-    try {
-      if (
-        window.localStorage.getItem(BROWSER_WORKSPACE_HOME_HINT_STORAGE_KEY) ===
-        "true"
-      ) {
-        return;
-      }
-
-      window.localStorage.setItem(
-        BROWSER_WORKSPACE_HOME_HINT_STORAGE_KEY,
-        "true",
-      );
-    } catch {
-      // 本地存储不可用时仍展示一次提示，避免首开闭环静默失败。
-    }
-
-    setBrowserWorkspaceHintVisible(true);
-  }, [entryBannerMessage, projectId, shouldUseBrowserWorkspaceHomeChrome]);
-
-  useEffect(() => {
-    if (!browserWorkspaceHintVisible) {
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      setBrowserWorkspaceHintVisible(false);
-    }, BROWSER_WORKSPACE_HOME_HINT_AUTO_HIDE_MS);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [browserWorkspaceHintVisible]);
 
   const pageMountedAtRef = useRef(Date.now());
 
@@ -1291,59 +1240,8 @@ export function AgentChatWorkspace({
   >("desktop");
   const [canvasWorkbenchLayoutMode, setCanvasWorkbenchLayoutMode] =
     useState<CanvasWorkbenchLayoutMode>("split");
-  const [browserWorkbenchOpenRequest, setBrowserWorkbenchOpenRequest] =
-    useState<CanvasWorkbenchBrowserOpenRequest | null>(null);
-  const [
-    canvasWorkbenchPreviewOpenRequest,
-    setCanvasWorkbenchPreviewOpenRequest,
-  ] = useState<CanvasWorkbenchPreviewOpenRequest | null>(null);
-  const [focusedArtifactBlockId, setFocusedArtifactBlockId] = useState<
-    string | null
-  >(null);
-  const [artifactBlockFocusRequestKey, setArtifactBlockFocusRequestKey] =
-    useState(0);
-  const [focusedTimelineItemId, setFocusedTimelineItemId] = useState<
-    string | null
-  >(null);
-  const [timelineFocusRequestKey, setTimelineFocusRequestKey] = useState(0);
-  const browserWorkbenchRequestKeyRef = useRef(0);
-  const canvasWorkbenchPreviewRequestKeyRef = useRef(0);
+  const workbenchRequests = useWorkspaceWorkbenchRequests();
   const autoCollapsedTopicSidebarRef = useRef(false);
-
-  const requestBrowserWorkbenchOpen = useCallback((url: string | null) => {
-    browserWorkbenchRequestKeyRef.current += 1;
-    setBrowserWorkbenchOpenRequest({
-      requestKey: browserWorkbenchRequestKeyRef.current,
-      url,
-    });
-  }, []);
-  const requestCanvasWorkbenchPreviewOpen = useCallback(
-    (filePath: string | null) => {
-      canvasWorkbenchPreviewRequestKeyRef.current += 1;
-      setCanvasWorkbenchPreviewOpenRequest({
-        requestKey: canvasWorkbenchPreviewRequestKeyRef.current,
-        filePath,
-      });
-    },
-    [],
-  );
-
-  const handleBrowserWorkbenchOpenRequestHandled = useCallback(
-    (requestKey: string | number) => {
-      setBrowserWorkbenchOpenRequest((current) =>
-        current?.requestKey === requestKey ? null : current,
-      );
-    },
-    [],
-  );
-  const handleCanvasWorkbenchPreviewOpenRequestHandled = useCallback(
-    (requestKey: string | number) => {
-      setCanvasWorkbenchPreviewOpenRequest((current) =>
-        current?.requestKey === requestKey ? null : current,
-      );
-    },
-    [],
-  );
 
   // 跳转到技能主页面
   const handleNavigateToSkillSettings = useCallback(() => {
@@ -2477,7 +2375,8 @@ export function AgentChatWorkspace({
     setLayoutMode,
     upsertGeneralArtifact,
     generalBrowserAssistProfileKey: GENERAL_BROWSER_ASSIST_PROFILE_KEY,
-    onBrowserWorkbenchOpenRequest: requestBrowserWorkbenchOpen,
+    onBrowserWorkbenchOpenRequest:
+      workbenchRequests.requestBrowserWorkbenchOpen,
   });
   const initialHarnessBrowserAssist = useMemo(() => {
     return asRecord(
@@ -3902,10 +3801,7 @@ export function AgentChatWorkspace({
       },
       { level: "warn" },
     );
-  }, [
-    project,
-    workspacePathMissing,
-  ]);
+  }, [project, workspacePathMissing]);
   useEffect(() => {
     const pendingRetry = pendingWorkspacePathRetryRef.current;
     if (!pendingRetry) {
@@ -4810,6 +4706,8 @@ export function AgentChatWorkspace({
     readSessionFile,
     suppressBrowserAssistCanvasAutoOpen,
     onOpenBrowserRuntimeForArtifact: handleOpenBrowserRuntimeForBrowserAssist,
+    onRequestCanvasPreviewOpen:
+      workbenchRequests.requestCanvasWorkbenchPreviewOpen,
     upsertGeneralArtifact,
     setSelectedArtifactId,
     setArtifactViewMode: applyAutoArtifactViewMode,
@@ -4821,7 +4719,7 @@ export function AgentChatWorkspace({
   });
   const handleWorkspaceFileClick = useCallback(
     (fileName: string, content: string) => {
-      setFocusedArtifactBlockId(null);
+      workbenchRequests.clearFocusedArtifactBlock();
       const normalizedFileName = fileName.trim();
       if (content.trim() || !normalizedFileName) {
         handleFileClick(fileName, content);
@@ -4856,7 +4754,13 @@ export function AgentChatWorkspace({
         });
       })();
     },
-    [handleFileClick, handleHarnessLoadFilePreview, project?.rootPath, t],
+    [
+      handleFileClick,
+      handleHarnessLoadFilePreview,
+      project?.rootPath,
+      t,
+      workbenchRequests,
+    ],
   );
   const openProjectFilePreviewInCanvas = useCallback(
     async ({
@@ -4943,10 +4847,60 @@ export function AgentChatWorkspace({
   );
   const handleWorkspaceArtifactClick = useCallback(
     (artifact: Artifact) => {
-      setFocusedArtifactBlockId(null);
+      workbenchRequests.clearFocusedArtifactBlock();
       handleArtifactClick(artifact);
     },
-    [handleArtifactClick],
+    [handleArtifactClick, workbenchRequests],
+  );
+  const openMessageAttachmentPreview = useCallback(
+    (
+      target: Extract<MessagePreviewTarget, { kind: "message_attachment" }>,
+      message: Message,
+    ) => {
+      const attachment = target.attachment;
+      const sourceRef =
+        attachment.sourcePath?.trim() ||
+        attachment.sourceUri?.trim() ||
+        `${message.id}:attachment:${target.index}`;
+      const sourceUri = attachment.sourceUri?.trim();
+      const canUseSourceUriAsPreview =
+        Boolean(sourceUri) &&
+        (/^(data|https?|file|asset):/u.test(sourceUri || "") ||
+          sourceUri?.startsWith("//"));
+      const previewUrl =
+        attachment.previewUrl?.trim() ||
+        (canUseSourceUriAsPreview ? sourceUri : undefined) ||
+        (attachment.data.trim()
+          ? `data:${attachment.mediaType || "image/png"};base64,${attachment.data.trim()}`
+          : undefined);
+      const sourcePath = attachment.sourcePath?.trim() || sourceRef;
+      const projection = createPreviewArtifact({
+        source: "session_file",
+        sourceRef,
+        path: sourcePath,
+        title: `attachment-${target.index + 1}`,
+        content: "",
+        isBinary: true,
+        mimeType: attachment.mediaType,
+        previewUrl,
+        meta: {
+          openedFrom: "message-attachment",
+          messageId: message.id,
+          attachmentIndex: target.index,
+        },
+      });
+      upsertGeneralArtifact(projection.artifact);
+      handleWorkspaceArtifactClick(projection.artifact);
+      workbenchRequests.requestCanvasWorkbenchPreviewOpen({
+        filePath: sourcePath,
+        selectionKey: `artifact:${projection.artifact.id}`,
+      });
+    },
+    [
+      handleWorkspaceArtifactClick,
+      workbenchRequests,
+      upsertGeneralArtifact,
+    ],
   );
   const handleOpenMessagePreview = useCallback(
     (target: MessagePreviewTarget, message: Message) => {
@@ -4973,6 +4927,11 @@ export function AgentChatWorkspace({
           }),
         );
         openCanvasForReason("user_open_message_preview", setLayoutMode);
+        return;
+      }
+
+      if (target.kind === "message_attachment") {
+        openMessageAttachmentPreview(target, message);
         return;
       }
 
@@ -5025,6 +4984,7 @@ export function AgentChatWorkspace({
     [
       handleWorkspaceArtifactClick,
       handleWorkspaceFileClick,
+      openMessageAttachmentPreview,
       messages,
       sessionId,
       setCanvasState,
@@ -5060,7 +5020,9 @@ export function AgentChatWorkspace({
         handleWorkspaceFileClick(target.filePath, content);
 
         if (target.openMode === "file_preview") {
-          requestCanvasWorkbenchPreviewOpen(target.filePath);
+          workbenchRequests.requestCanvasWorkbenchPreviewOpen({
+            filePath: target.filePath,
+          });
         }
 
         const normalizedBlockId = target.blockId?.trim();
@@ -5068,15 +5030,14 @@ export function AgentChatWorkspace({
           return;
         }
 
-        setFocusedArtifactBlockId(normalizedBlockId);
-        setArtifactBlockFocusRequestKey((current) => current + 1);
+        workbenchRequests.focusArtifactBlock(normalizedBlockId);
       })();
     },
     [
       handleHarnessLoadFilePreview,
       handleWorkspaceFileClick,
       project?.rootPath,
-      requestCanvasWorkbenchPreviewOpen,
+      workbenchRequests,
     ],
   );
   const siteSkillSavedContentTarget = useMemo(
@@ -5659,18 +5620,18 @@ export function AgentChatWorkspace({
       sceneAppExecutionSummaryState,
     ],
   );
-  const handleJumpToTimelineItem = useCallback((itemId: string) => {
-    const normalizedItemId = itemId.trim();
-    if (!normalizedItemId) {
-      return;
-    }
+  const handleJumpToTimelineItem = useCallback(
+    (itemId: string) => {
+      if (!workbenchRequests.jumpToTimelineItem(itemId)) {
+        return;
+      }
 
-    setLayoutMode((current) =>
-      current === "canvas" ? "chat-canvas" : current,
-    );
-    setFocusedTimelineItemId(normalizedItemId);
-    setTimelineFocusRequestKey((current) => current + 1);
-  }, []);
+      setLayoutMode((current) =>
+        current === "canvas" ? "chat-canvas" : current,
+      );
+    },
+    [workbenchRequests],
+  );
   const triggerAIGuideRef = useRef(triggerAIGuide);
   triggerAIGuideRef.current = triggerAIGuide;
 
@@ -6133,6 +6094,153 @@ export function AgentChatWorkspace({
       }),
     [initialInputCapability, runtimeInitialInputCapability],
   );
+  const planComposerDecision = useMemo(
+    () => selectLatestPlanComposerDecision(pendingActions),
+    [pendingActions],
+  );
+  const planComposerPendingActions = useMemo(
+    () =>
+      filterPlanComposerDecisionFromPendingActions(
+        pendingActions,
+        planComposerDecision,
+      ) ?? [],
+    [pendingActions, planComposerDecision],
+  );
+  const [dismissedLocalPlanRequestIds, setDismissedLocalPlanRequestIds] =
+    useState<Set<string>>(() => new Set());
+  const [submittedLocalPlanRequestIds, setSubmittedLocalPlanRequestIds] =
+    useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    setDismissedLocalPlanRequestIds(new Set());
+    setSubmittedLocalPlanRequestIds(new Set());
+  }, [sessionId]);
+  const localPlanImplementationDecision = useMemo(
+    () =>
+      !planComposerDecision && !isSending
+        ? selectProposedPlanImplementationDecision({
+            dismissedRequestIds: dismissedLocalPlanRequestIds,
+            messages: displayMessages,
+            planState: harnessState.plan,
+            submittedRequestIds: submittedLocalPlanRequestIds,
+            threadItems: effectiveThreadItems,
+          })
+        : null,
+    [
+      harnessState.plan,
+      dismissedLocalPlanRequestIds,
+      displayMessages,
+      effectiveThreadItems,
+      isSending,
+      planComposerDecision,
+      submittedLocalPlanRequestIds,
+    ],
+  );
+  const handleDismissLocalPlanImplementationDecision = useCallback(
+    (requestId: string) => {
+      setDismissedLocalPlanRequestIds((previous) => {
+        if (previous.has(requestId)) {
+          return previous;
+        }
+        const next = new Set(previous);
+        next.add(requestId);
+        return next;
+      });
+    },
+    [],
+  );
+  const handleLocalPlanImplementationSubmit = useCallback(
+    async (response: ConfirmResponse) => {
+      const requestId = response.requestId.trim();
+      if (!requestId) {
+        return;
+      }
+      if (!response.confirmed) {
+        handleDismissLocalPlanImplementationDecision(requestId);
+        return;
+      }
+
+      const userData = asRecord(response.userData);
+      const adjustment =
+        (typeof userData?.answer === "string" ? userData.answer.trim() : "") ||
+        (typeof response.response === "string" ? response.response.trim() : "");
+      const acceptedLabel = t("agentChat.planComposerDecision.option.accept");
+      const sendResult = adjustment && adjustment !== acceptedLabel
+        ? await handleSendRef.current(
+          [],
+          undefined,
+          undefined,
+          adjustment,
+          "react",
+          undefined,
+          {
+            requestMetadata: {
+              harness: {
+                collaboration_mode: {
+                  mode: "plan",
+                  source: "plan_implementation_adjustment",
+                },
+                preferences: {
+                  task: true,
+                  task_mode: true,
+                },
+                task_mode_enabled: true,
+              },
+            },
+            skipSceneCommandRouting: true,
+            toolPreferencesOverride: {
+              ...effectiveChatToolPreferences,
+              task: true,
+            },
+          },
+        )
+        : await handleSendRef.current(
+            [],
+            undefined,
+            undefined,
+            "Implement the plan.",
+            "react",
+            undefined,
+            {
+              skipSceneCommandRouting: true,
+              toolPreferencesOverride: {
+                ...effectiveChatToolPreferences,
+                task: false,
+              },
+            },
+          );
+
+      if (!sendResult) {
+        return;
+      }
+
+      setSubmittedLocalPlanRequestIds((previous) => {
+        if (previous.has(requestId)) {
+          return previous;
+        }
+        const next = new Set(previous);
+        next.add(requestId);
+        return next;
+      });
+    },
+    [
+      effectiveChatToolPreferences,
+      handleDismissLocalPlanImplementationDecision,
+      handleSendRef,
+      t,
+    ],
+  );
+  const planDecisionAccessory = planComposerDecision ? (
+    <PlanComposerDecisionPanel
+      request={planComposerDecision}
+      onSubmit={handlePermissionResponse}
+    />
+  ) : localPlanImplementationDecision ? (
+    <PlanComposerDecisionPanel
+      request={localPlanImplementationDecision.action}
+      onSubmit={handleLocalPlanImplementationSubmit}
+      onDismiss={handleDismissLocalPlanImplementationDecision}
+    />
+  ) : undefined;
   const generalWorkbenchHarnessDialog = (
     <GeneralWorkbenchHarnessDialogSection
       enabled={
@@ -6156,7 +6264,7 @@ export function AgentChatWorkspace({
       turns={turns}
       threadItems={effectiveThreadItems}
       currentTurnId={currentTurnId}
-      pendingActions={pendingActions}
+      pendingActions={planComposerPendingActions}
       submittedActionsInFlight={submittedActionsInFlight}
       onRespondToAction={handlePermissionResponse}
       queuedTurns={queuedTurns}
@@ -6386,56 +6494,6 @@ export function AgentChatWorkspace({
     [initialCreationReplay, persistInspirationDraft, sessionId],
   );
 
-  const fileManagerAvailable = true;
-  const handleToggleFileManagerSidebar = useCallback(() => {
-    if (!fileManagerAvailable) {
-      return;
-    }
-    handleSetFileManagerSidebarOpen(!fileManagerSidebarOpen);
-  }, [
-    fileManagerAvailable,
-    fileManagerSidebarOpen,
-    handleSetFileManagerSidebarOpen,
-  ]);
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    if (!fileManagerSidebarOpen) {
-      if (fileManagerAppSidebarCollapsedRef.current) {
-        fileManagerAppSidebarCollapsedRef.current = false;
-        window.dispatchEvent(
-          new CustomEvent(APP_SIDEBAR_COLLAPSE_EVENT, {
-            detail: { collapsed: false, source: "file-manager" },
-          }),
-        );
-      }
-      return;
-    }
-
-    fileManagerAppSidebarCollapsedRef.current = true;
-    window.dispatchEvent(
-      new CustomEvent(APP_SIDEBAR_COLLAPSE_EVENT, {
-        detail: { collapsed: true, source: "file-manager" },
-      }),
-    );
-    if (window.innerWidth <= FILE_MANAGER_NAV_COLLAPSE_BREAKPOINT_PX) {
-      setShowSidebar(false);
-    }
-    return () => {
-      if (!fileManagerAppSidebarCollapsedRef.current) {
-        return;
-      }
-      fileManagerAppSidebarCollapsedRef.current = false;
-      window.dispatchEvent(
-        new CustomEvent(APP_SIDEBAR_COLLAPSE_EVENT, {
-          detail: { collapsed: false, source: "file-manager" },
-        }),
-      );
-    };
-  }, [fileManagerSidebarOpen]);
-
   const inputbarScene = useWorkspaceInputbarSceneRuntime({
     contextVariant: agentEntry === "claw" ? "task-center" : "default",
     setMentionedCharacters,
@@ -6505,7 +6563,7 @@ export function AgentChatWorkspace({
     currentTurnId,
     threadRead,
     activeExecutionRuntime,
-    pendingActions,
+    pendingActions: planComposerPendingActions,
     submittedActionsInFlight,
     onRespondToAction: handlePermissionResponse,
     messages: displayMessages,
@@ -6522,6 +6580,7 @@ export function AgentChatWorkspace({
     generalWorkbenchEntryPrompt,
     handleRestartGeneralWorkbenchEntryPrompt,
     handleContinueGeneralWorkbenchEntryPrompt,
+    planDecisionAccessory,
     generalWorkbenchEnabled:
       generalHarnessEntryEnabled && !suppressHomeNavbarUtilityActions,
     harnessPanelVisible:
@@ -6545,9 +6604,9 @@ export function AgentChatWorkspace({
     onAddPathReferences: handleAddPathReferences,
     onRemovePathReference: handleRemovePathReference,
     onClearPathReferences: handleClearPathReferences,
-    fileManagerOpen: fileManagerAvailable && fileManagerSidebarOpen,
-    onToggleFileManager: fileManagerAvailable
-      ? handleToggleFileManagerSidebar
+    fileManagerOpen: fileManagerSidebar.fileManagerOpen,
+    onToggleFileManager: fileManagerSidebar.fileManagerAvailable
+      ? fileManagerSidebar.toggleFileManagerSidebar
       : undefined,
     inputCompletionEnabled,
   });
@@ -6631,8 +6690,8 @@ export function AgentChatWorkspace({
     onArtifactBlockRewriteRun: handleArtifactBlockRewriteRun,
     renderArtifactWorkbenchToolbarActions,
     threadItems: effectiveThreadItems,
-    focusedBlockId: focusedArtifactBlockId,
-    blockFocusRequestKey: artifactBlockFocusRequestKey,
+    focusedBlockId: workbenchRequests.focusedArtifactBlockId,
+    blockFocusRequestKey: workbenchRequests.artifactBlockFocusRequestKey,
     onJumpToTimelineItem: handleJumpToTimelineItem,
     handleCloseCanvas,
     currentImageWorkbenchState,
@@ -6787,7 +6846,6 @@ export function AgentChatWorkspace({
       input,
       openTaskCenterDraftTab,
       sessionId,
-      shouldRenderTaskCenterEmbeddedHome,
       taskCenterWorkspaceId,
       turns.length,
     ],
@@ -6840,7 +6898,7 @@ export function AgentChatWorkspace({
   const sceneThreadRead = shouldHideCurrentSessionContent ? null : threadRead;
   const scenePendingActions = shouldHideCurrentSessionContent
     ? []
-    : pendingActions;
+    : planComposerPendingActions;
   const sceneSubmittedActionsInFlight = shouldHideCurrentSessionContent
     ? []
     : submittedActionsInFlight;
@@ -6876,12 +6934,14 @@ export function AgentChatWorkspace({
     shellChromeRuntime,
     generalWorkbenchHarnessDialog,
     currentImageWorkbenchActive: currentImageWorkbenchState.active,
-    browserWorkbenchOpenRequest,
+    browserWorkbenchOpenRequest:
+      workbenchRequests.browserWorkbenchOpenRequest,
     onBrowserWorkbenchOpenRequestHandled:
-      handleBrowserWorkbenchOpenRequestHandled,
-    canvasWorkbenchPreviewOpenRequest,
+      workbenchRequests.handleBrowserWorkbenchOpenRequestHandled,
+    canvasWorkbenchPreviewOpenRequest:
+      workbenchRequests.canvasWorkbenchPreviewOpenRequest,
     onCanvasWorkbenchPreviewOpenRequestHandled:
-      handleCanvasWorkbenchPreviewOpenRequestHandled,
+      workbenchRequests.handleCanvasWorkbenchPreviewOpenRequestHandled,
     projectId: projectId ?? null,
     openedProjects,
     onCloseProject: handleCloseOpenedProject,
@@ -6891,9 +6951,7 @@ export function AgentChatWorkspace({
       : undefined,
     workspaceHintVisible:
       shouldUseBrowserWorkspaceHomeChrome && browserWorkspaceHintVisible,
-    onDismissWorkspaceHint: () => {
-      setBrowserWorkspaceHintVisible(false);
-    },
+    onDismissWorkspaceHint: handleDismissBrowserWorkspaceHint,
     projectRootPath: project?.rootPath || null,
     canvasWorkbenchRootPath,
     projectCharacters: projectMemory?.characters || [],
@@ -6910,9 +6968,9 @@ export function AgentChatWorkspace({
       inputbarScene.onImportPathReferenceAsKnowledge,
     onRemovePathReference: handleRemovePathReference,
     onClearPathReferences: handleClearPathReferences,
-    fileManagerOpen: fileManagerAvailable && fileManagerSidebarOpen,
-    onToggleFileManager: fileManagerAvailable
-      ? handleToggleFileManagerSidebar
+    fileManagerOpen: fileManagerSidebar.fileManagerOpen,
+    onToggleFileManager: fileManagerSidebar.fileManagerAvailable
+      ? fileManagerSidebar.toggleFileManagerSidebar
       : undefined,
     sceneAppExecutionSummaryCard,
     serviceSkillExecutionCard,
@@ -7042,14 +7100,14 @@ export function AgentChatWorkspace({
     setCanvasWorkbenchLayoutMode,
     workspacePathMissing: Boolean(workspacePathMissing),
     workspaceHealthError,
-    focusedTimelineItemId,
-    timelineFocusRequestKey,
+    focusedTimelineItemId: workbenchRequests.focusedTimelineItemId,
+    timelineFocusRequestKey: workbenchRequests.timelineFocusRequestKey,
   });
 
   const fileManagerNode =
-    fileManagerAvailable && fileManagerSidebarOpen ? (
+    fileManagerSidebar.fileManagerOpen ? (
       <FileManagerSidebar
-        onClose={() => handleSetFileManagerSidebarOpen(false)}
+        onClose={fileManagerSidebar.closeFileManagerSidebar}
         onAddPathReferences={handleAddPathReferences}
         onImportAsKnowledge={inputbarScene.onImportPathReferenceAsKnowledge}
         onOpenFileInWorkspace={(entry) => {

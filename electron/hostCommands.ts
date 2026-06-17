@@ -72,6 +72,7 @@ import {
 } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import type { ElectronAppServerHost } from "./appServerHost";
 import {
   normalizeProjectShellTimeout,
@@ -218,6 +219,12 @@ type ProjectShellSessionEvent =
 type ProjectShellSessionDrainEventsResponse = {
   events: ProjectShellSessionEvent[];
 };
+type OpenFilePreviewWindowResult = {
+  opened: true;
+  reused: boolean;
+  url: string;
+  title: string;
+};
 
 const CONFIG_FILE = "config.json";
 const LAYERED_DESIGN_EXPORT_ROOT = ".lime/layered-designs";
@@ -342,6 +349,8 @@ export class ElectronHostCommands {
         return await this.#saveExperimentalConfig(args);
       case "open_external_url":
         return await this.#openExternalUrl(args);
+      case "open_file_preview_window":
+        return await this.#openFilePreviewWindow(args);
       case "open_system_settings_url":
         return await this.#openSystemSettingsUrl(args);
       case "reveal_in_finder":
@@ -488,6 +497,17 @@ export class ElectronHostCommands {
     const normalizedUrl = normalizeSystemSettingsUrl(url);
     await shell.openExternal(normalizedUrl);
     return {};
+  }
+
+  async #openFilePreviewWindow(
+    args: HostArgs,
+  ): Promise<OpenFilePreviewWindowResult> {
+    const request = readRequest(args);
+    const targetPath = readRequiredAbsolutePath(request, "path");
+    const requestedTitle = readString(request, "title");
+    const title = requestedTitle || path.basename(targetPath) || targetPath;
+    const url = pathToFileURL(targetPath).toString();
+    return openFilePreviewBrowserWindow(url, title);
   }
 
   #revealInFinder(args: HostArgs): Record<string, never> {
@@ -1492,7 +1512,7 @@ export class ElectronHostCommands {
     const response = await this.#appServerRequest<ModelProviderListResponse>(
       METHOD_MODEL_PROVIDER_LIST,
     );
-    return response.providers;
+    return response.providers ?? [];
   }
 
   async #listModels(params: AppServerParams = {}): Promise<unknown[]> {
@@ -1500,7 +1520,7 @@ export class ElectronHostCommands {
       METHOD_MODEL_LIST,
       params,
     );
-    return response.models;
+    return response.models ?? [];
   }
 
   async #listWorkspaces(): Promise<unknown[]> {
@@ -2166,13 +2186,18 @@ export class ElectronHostCommands {
     const report = readRecord(args, "report");
     const level = readString(report, "level") ?? "info";
     const message = readString(report, "message") ?? "";
-    console.log(`[electron-renderer:${level}] ${message}`);
+    safeWriteElectronHostLog("log", `[electron-renderer:${level}] ${message}`);
   }
 
   #reportFrontendCrash(args: HostArgs): void {
     const report = readRecord(args, "report") ?? {};
     const message = readString(report, "message") ?? "renderer crash report";
-    console.error("[electron-renderer:crash]", message, report);
+    safeWriteElectronHostLog(
+      "error",
+      "[electron-renderer:crash]",
+      message,
+      report,
+    );
   }
 
   #configPath(): string {
@@ -2260,6 +2285,48 @@ function openAgentAppShellBrowserWindow(
       multiAppManagement: false,
       runtimeBypass: false,
     },
+  };
+}
+
+function openFilePreviewBrowserWindow(
+  url: string,
+  title: string,
+): OpenFilePreviewWindowResult {
+  const existing = BrowserWindow.getAllWindows().find(
+    (window) => window.webContents.getURL() === url,
+  );
+  const targetWindow =
+    existing ??
+    new BrowserWindow({
+      width: 1280,
+      height: 860,
+      minWidth: 860,
+      minHeight: 560,
+      title,
+      show: false,
+      backgroundColor: "#f8fafc",
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+      },
+    });
+
+  if (!existing) {
+    void targetWindow.loadURL(url);
+    targetWindow.once("ready-to-show", () => {
+      targetWindow.show();
+    });
+  } else {
+    targetWindow.show();
+  }
+  targetWindow.focus();
+
+  return {
+    opened: true,
+    reused: Boolean(existing),
+    url,
+    title,
   };
 }
 
@@ -3185,18 +3252,6 @@ function readNumber(value: unknown, key: string): number | null {
   return typeof next === "number" && Number.isFinite(next) ? next : null;
 }
 
-function readBooleanParam(
-  value: unknown,
-  inputKey: string,
-  outputKey: string,
-): AppServerParams {
-  const record = toRecord(value);
-  if (!record || typeof record[inputKey] !== "boolean") {
-    return {};
-  }
-  return { [outputKey]: record[inputKey] };
-}
-
 function readStringParam(
   value: unknown,
   inputKey: string,
@@ -3599,3 +3654,68 @@ function buildDefaultConfig(): Record<string, unknown> {
     },
   };
 }
+
+type ElectronHostLogMethod = "log" | "error";
+const CLOSED_OUTPUT_STREAM_ERROR_HANDLER_INSTALLED = Symbol.for(
+  "lime.electron.hostCommands.closedOutputStreamErrorHandlerInstalled",
+);
+
+type ElectronHostOutputStream = {
+  [CLOSED_OUTPUT_STREAM_ERROR_HANDLER_INSTALLED]?: boolean;
+  on?: (event: "error", listener: (error: unknown) => void) => unknown;
+};
+
+function safeWriteElectronHostLog(
+  method: ElectronHostLogMethod,
+  ...args: unknown[]
+): void {
+  try {
+    console[method](...args);
+  } catch (error) {
+    if (!isClosedOutputStreamError(error)) {
+      throw error;
+    }
+  }
+}
+
+function installClosedOutputStreamErrorHandler(stream: unknown): void {
+  if (!stream || typeof stream !== "object") {
+    return;
+  }
+
+  const outputStream = stream as ElectronHostOutputStream;
+  if (
+    outputStream[CLOSED_OUTPUT_STREAM_ERROR_HANDLER_INSTALLED] ||
+    typeof outputStream.on !== "function"
+  ) {
+    return;
+  }
+
+  Object.defineProperty(
+    outputStream,
+    CLOSED_OUTPUT_STREAM_ERROR_HANDLER_INSTALLED,
+    {
+      value: true,
+    },
+  );
+  outputStream.on("error", (error: unknown) => {
+    if (!isClosedOutputStreamError(error)) {
+      throw error;
+    }
+  });
+}
+
+function isClosedOutputStreamError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+  const code = "code" in error ? String(error.code) : "";
+  return (
+    code === "EPIPE" ||
+    code === "ERR_STREAM_DESTROYED" ||
+    code === "ERR_STREAM_WRITE_AFTER_END"
+  );
+}
+
+installClosedOutputStreamErrorHandler(process.stdout);
+installClosedOutputStreamErrorHandler(process.stderr);

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "enum": [
+    "chat",
+    "embedding",
+    "image_edit",
+    "image_generate",
+    "moderation",
+    "rerank",
+    "transcription_generate",
+    "video_generate",
+    "voice_generate"
+  ],
+  "title": "ModelTaskKind",
+  "type": "string"
+}

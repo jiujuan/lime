@@ -1,9 +1,180 @@
 {
+  "$defs": {
+    "ModelCapabilitiesInfo": {
+      "properties": {
+        "functionCalling": {
+          "type": "boolean"
+        },
+        "jsonMode": {
+          "type": "boolean"
+        },
+        "reasoning": {
+          "type": "boolean"
+        },
+        "reasoningEffort": true,
+        "streaming": {
+          "type": "boolean"
+        },
+        "tools": {
+          "type": "boolean"
+        },
+        "vision": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "functionCalling",
+        "jsonMode",
+        "reasoning",
+        "streaming",
+        "tools",
+        "vision"
+      ],
+      "type": "object"
+    },
+    "ModelInfo": {
+      "properties": {
+        "aliasSource": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "canonicalModelId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "capabilities": {
+          "$ref": "#/$defs/ModelCapabilitiesInfo",
+          "default": {
+            "functionCalling": false,
+            "jsonMode": false,
+            "reasoning": false,
+            "streaming": false,
+            "tools": false,
+            "vision": false
+          }
+        },
+        "createdAt": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "deploymentSource": {
+          "type": "string"
+        },
+        "description": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "family": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "inputModalities": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "isLatest": {
+          "default": false,
+          "type": "boolean"
+        },
+        "limits": true,
+        "managementPlane": {
+          "type": "string"
+        },
+        "outputModalities": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "pricing": true,
+        "providerId": {
+          "type": "string"
+        },
+        "providerModelId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "providerName": {
+          "type": "string"
+        },
+        "releaseDate": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "runtimeFeatures": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "source": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "taskFamilies": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "tier": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "createdAt",
+        "deploymentSource",
+        "displayName",
+        "id",
+        "limits",
+        "managementPlane",
+        "providerId",
+        "providerName",
+        "source",
+        "status",
+        "tier",
+        "updatedAt"
+      ],
+      "type": "object"
+    }
+  },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
     "models": {
       "default": [],
-      "items": true,
+      "items": {
+        "$ref": "#/$defs/ModelInfo"
+      },
       "type": "array"
     }
   },

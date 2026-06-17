@@ -1,7 +1,7 @@
 /**
  * @file 文件改动摘要（前端）
  * @description 解析工具结果里的 `file_change` metadata，聚合成消息级的文件改动汇总，
- *   供 StreamingRenderer 渲染 codex 风格的「N 个文件已更改 (+X −Y) · 在此审查」卡。
+ *   供 StreamingRenderer 渲染「N 个文件已更改 (+X −Y) · 在此审查」卡。
  *
  * 数据来源优先级：
  * 1. 后端工具结果 metadata.file_change（write/edit/batch_edit，跨模型一致）；

@@ -3,6 +3,8 @@ import {
   METHOD_CONVERSATION_IMPORT_SOURCE_SCAN,
   METHOD_CONVERSATION_IMPORT_THREAD_COMMIT,
   METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW,
+  METHOD_CONVERSATION_IMPORT_THREAD_RUNTIME_EVENTS_READ,
+  type ConversationImportRuntimeEventDetail,
   type ConversationImportSourceClient,
   type ConversationImportSourceProvenance,
   type ConversationImportSourceScanParams,
@@ -13,6 +15,8 @@ import {
   type ConversationImportThreadStatus,
   type ConversationImportThreadPreviewParams,
   type ConversationImportThreadPreviewResponse,
+  type ConversationImportThreadRuntimeEventsReadParams,
+  type ConversationImportThreadRuntimeEventsReadResponse,
   type ImportedThreadSummary,
 } from "../../../packages/app-server-client/src/protocol";
 
@@ -27,6 +31,9 @@ export type {
   ConversationImportThreadCommitResponse,
   ConversationImportThreadPreviewParams,
   ConversationImportThreadPreviewResponse,
+  ConversationImportThreadRuntimeEventsReadParams,
+  ConversationImportThreadRuntimeEventsReadResponse,
+  ConversationImportRuntimeEventDetail,
   ImportedThreadSummary,
 };
 
@@ -57,7 +64,9 @@ function isAgentSession(value: unknown): boolean {
   );
 }
 
-function isImportedThreadSummary(value: unknown): value is ImportedThreadSummary {
+function isImportedThreadSummary(
+  value: unknown,
+): value is ImportedThreadSummary {
   if (!isRecord(value)) {
     return false;
   }
@@ -253,6 +262,41 @@ function assertConversationImportThreadCommitResponse(
   }
 }
 
+function isRuntimeEventDetail(
+  value: unknown,
+): value is ConversationImportRuntimeEventDetail {
+  return (
+    isRecord(value) &&
+    typeof value.sourceEventIndex === "number" &&
+    typeof value.turnIndex === "number" &&
+    typeof value.eventIndex === "number" &&
+    typeof value.eventType === "string" &&
+    value.payload !== undefined
+  );
+}
+
+function assertConversationImportRuntimeEventsReadResponse(
+  value: unknown,
+): asserts value is ConversationImportThreadRuntimeEventsReadResponse {
+  if (
+    !isRecord(value) ||
+    typeof value.sessionId !== "string" ||
+    typeof value.offset !== "number" ||
+    typeof value.limit !== "number" ||
+    typeof value.totalEvents !== "number" ||
+    !isOptionalNumber(value.nextOffset) ||
+    typeof value.sourceRuntimeEvents !== "number" ||
+    typeof value.materializedRuntimeEvents !== "number" ||
+    typeof value.sidecarRuntimeEvents !== "number" ||
+    !Array.isArray(value.events) ||
+    !value.events.every(isRuntimeEventDetail)
+  ) {
+    throw new Error(
+      `${METHOD_CONVERSATION_IMPORT_THREAD_RUNTIME_EVENTS_READ} returned an invalid runtime event detail shape`,
+    );
+  }
+}
+
 export async function scanConversationImportSource(
   params: ConversationImportSourceScanParams = {},
   appServerClient: ConversationImportAppServerClient = new AppServerClient(),
@@ -289,5 +333,18 @@ export async function commitConversationImportThread(
       params,
     );
   assertConversationImportThreadCommitResponse(response.result);
+  return response.result;
+}
+
+export async function readConversationImportRuntimeEvents(
+  params: ConversationImportThreadRuntimeEventsReadParams,
+  appServerClient: ConversationImportAppServerClient = new AppServerClient(),
+): Promise<ConversationImportThreadRuntimeEventsReadResponse> {
+  const response =
+    await appServerClient.request<ConversationImportThreadRuntimeEventsReadResponse>(
+      METHOD_CONVERSATION_IMPORT_THREAD_RUNTIME_EVENTS_READ,
+      params,
+    );
+  assertConversationImportRuntimeEventsReadResponse(response.result);
   return response.result;
 }

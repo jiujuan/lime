@@ -7,6 +7,13 @@ use async_trait::async_trait;
 
 #[async_trait]
 pub trait SessionAppDataSource: Send + Sync {
+    async fn read_agent_session(
+        &self,
+        _params: AgentSessionReadParams,
+    ) -> Result<Option<AgentSessionReadResponse>, RuntimeCoreError> {
+        Ok(None)
+    }
+
     async fn read_agent_session_objective(
         &self,
         _params: AgentSessionObjectiveReadParams,

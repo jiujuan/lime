@@ -194,6 +194,8 @@ const PHASE7_REQUIRED_ENTRY_BINDINGS = new Map([
   ["web_research", ["at_search_command"]],
   ["text_transform", ["at_summary_command"]],
 ]);
+const METADATA_ONLY_ROUTE_EXECUTION_STATUS = "metadata_only";
+const ROUTE_EXECUTION_EVIDENCE_EVENTS = new Set(["executor_invoked"]);
 
 function collectUniqueObjects(errors, collection, keyName, label) {
   const result = new Map();
@@ -322,6 +324,12 @@ function looksLikeEntryKey(contractKey) {
 function validateExecutor(errors, contract) {
   const contractKey = contract.contract_key;
   const executor = contract.executor_binding;
+  if (
+    contract.route_execution_status === METADATA_ONLY_ROUTE_EXECUTION_STATUS &&
+    executor === undefined
+  ) {
+    return;
+  }
   pushIf(
     errors,
     !isPlainObject(executor),
@@ -806,6 +814,13 @@ function validateContractArtifactGraph(errors, contract, artifactGraphRefs) {
       !hasIntersection(contract.evidence_events, artifact.evidence_events),
       `${contractKey}.artifact_kinds ${artifactKind} has no evidence_events intersection with artifact graph`,
     );
+    pushIf(
+      errors,
+      contract.route_execution_status ===
+        METADATA_ONLY_ROUTE_EXECUTION_STATUS &&
+        containsAny(artifact.evidence_events, ROUTE_EXECUTION_EVIDENCE_EVENTS),
+      `${contractKey}.artifact_kinds ${artifactKind} must not declare executor_invoked in artifact graph while route_execution_status is metadata_only`,
+    );
   }
 }
 
@@ -829,6 +844,93 @@ function validateSubset(errors, label, actualValues, requiredValues) {
       errors,
       !actualSet.has(requiredValue),
       `${label} must include ${requiredValue}`,
+    );
+  }
+}
+
+function containsAny(values, disallowedValues) {
+  if (!Array.isArray(values)) {
+    return false;
+  }
+  return values.some((value) => disallowedValues.has(value));
+}
+
+function validateMetadataOnlyRouteExecution(
+  errors,
+  contractKey,
+  contract,
+  profile,
+  adapter,
+) {
+  if (
+    contract.route_execution_status !== METADATA_ONLY_ROUTE_EXECUTION_STATUS
+  ) {
+    return;
+  }
+
+  pushIf(
+    errors,
+    !isNonEmptyString(contract.route_execution_exit_condition),
+    `${contractKey}.route_execution_exit_condition must be set while route_execution_status is metadata_only`,
+  );
+  pushIf(
+    errors,
+    containsAny(contract.evidence_events, ROUTE_EXECUTION_EVIDENCE_EVENTS),
+    `${contractKey}.evidence_events must not include executor_invoked while route_execution_status is metadata_only`,
+  );
+
+  if (profile) {
+    pushIf(
+      errors,
+      profile.lifecycle === "current",
+      `execution profile ${profile.profile_key} must not be current while ${contractKey}.route_execution_status is metadata_only`,
+    );
+    pushIf(
+      errors,
+      containsAny(profile.evidence_events, ROUTE_EXECUTION_EVIDENCE_EVENTS),
+      `execution profile ${profile.profile_key}.evidence_events must not include executor_invoked while ${contractKey}.route_execution_status is metadata_only`,
+    );
+  }
+
+  if (adapter) {
+    pushIf(
+      errors,
+      adapter.lifecycle === "current",
+      `executor adapter ${adapter.adapter_key} must not be current while ${contractKey}.route_execution_status is metadata_only`,
+    );
+    pushIf(
+      errors,
+      containsAny(adapter.evidence_events, ROUTE_EXECUTION_EVIDENCE_EVENTS),
+      `executor adapter ${adapter.adapter_key}.evidence_events must not include executor_invoked while ${contractKey}.route_execution_status is metadata_only`,
+    );
+  }
+}
+
+function validateMetadataOnlyProfileAdapters(
+  errors,
+  contractKey,
+  contract,
+  profile,
+  adapterMap,
+) {
+  if (
+    contract.route_execution_status !== METADATA_ONLY_ROUTE_EXECUTION_STATUS ||
+    !isPlainObject(profile) ||
+    !Array.isArray(profile.executor_adapter_keys)
+  ) {
+    return;
+  }
+
+  for (const adapterKey of profile.executor_adapter_keys) {
+    if (!isNonEmptyString(adapterKey)) {
+      continue;
+    }
+    validateMetadataOnlyRouteExecution(
+      errors,
+      contractKey,
+      contract,
+      null,
+      adapterMap.get(adapterKey) ?? null,
     );
   }
 }
@@ -1117,11 +1219,33 @@ function validateExecutionProfiles(
           [adapterKey],
         );
       }
+      validateMetadataOnlyRouteExecution(
+        errors,
+        contractKey,
+        contract,
+        profile,
+        adapterKey ? adapterMap.get(adapterKey) : null,
+      );
+      validateMetadataOnlyProfileAdapters(
+        errors,
+        contractKey,
+        contract,
+        profile,
+        adapterMap,
+      );
     }
   }
 
   for (const [contractKey, contract] of contractMap.entries()) {
+    const adapterKey = resolveExecutorAdapterKey(contract.executor_binding);
     if (contract.lifecycle !== "current") {
+      validateMetadataOnlyRouteExecution(
+        errors,
+        contractKey,
+        contract,
+        null,
+        adapterKey ? adapterMap.get(adapterKey) : null,
+      );
       continue;
     }
     pushIf(
@@ -1129,7 +1253,6 @@ function validateExecutionProfiles(
       !supportedContractsByProfile.has(contractKey),
       `current contract ${contractKey} must be covered by an execution profile`,
     );
-    const adapterKey = resolveExecutorAdapterKey(contract.executor_binding);
     const adapter = adapterKey ? adapterMap.get(adapterKey) : null;
     pushIf(
       errors,

@@ -10,12 +10,12 @@ Workspace 是 Lime 应用层的概念，用于组织和管理 AI Agent 的工作
 
 基于对 Cursor、Claude Code、Manus、AI21 等产品的调研，总结出以下关键洞察：
 
-| 来源 | 核心观点 |
-|------|---------|
-| Manus (philschmid.de) | "Share memory by communicating, don't communicate by sharing memory" |
-| AI21 | "Agents that only read can share an environment. Agents that write need isolation" |
-| Cursor | Shadow Workspace 实现后台 AI 迭代，不影响用户体验 |
-| Claude Code | 通过 `--add-dir` 支持多目录，`CLAUDE.md` 实现层级配置 |
+| 来源                  | 核心观点                                                                           |
+| --------------------- | ---------------------------------------------------------------------------------- |
+| Manus (philschmid.de) | "Share memory by communicating, don't communicate by sharing memory"               |
+| AI21                  | "Agents that only read can share an environment. Agents that write need isolation" |
+| Cursor                | Shadow Workspace 实现后台 AI 迭代，不影响用户体验                                  |
+| Claude Code           | 通过 `--add-dir` 支持多目录，`CLAUDE.md` 实现层级配置                              |
 
 ### 核心原则
 
@@ -23,17 +23,18 @@ Workspace 是 Lime 应用层的概念，用于组织和管理 AI Agent 的工作
 2. **最小有效 context** - 只传递必要的 context，避免 context pollution
 3. **Workspace = 边界** - 文件系统边界 + context 边界 + 配置边界
 
-## 文件工作区优先规则
+## 工作区预览规则
 
-对 Lime 的通用工作区，真实文件是第一事实源，`artifact` 只作为增强层存在。
+对 Lime 的通用工作区，真实文件仍是文件内容的业务事实源，但右侧打开链路必须统一走 `Preview Artifact Contract`。
 
 固定实施规则：
 
-1. 用户显式打开项目文件、导出 Markdown、历史任务里的真实文件时，右侧预览必须直接消费真实文件内容，不得先合成 `artifact` 再打开。
-2. `artifact` 继续承担结构化增量写入、工具过程增强、viewer 能力增强，但不能反向定义“当前主稿是什么”。
-3. 当通用工作区正在预览一个具名真实文件时，默认 artifact 自动选中必须让位，避免画布漂移到 `*.artifact.json` 或其他包装稿。
-4. Markdown 预览要以当前文件路径作为基准解析相对图片路径，保证同目录 `images/` 等资源能直接渲染。
+1. 用户显式打开项目文件、导出 Markdown、历史任务里的真实文件时，先把 source 投影成 source-backed preview artifact，再通过统一 artifact workbench 打开。
+2. preview artifact 只表达 UI 打开和展示能力，不反向定义“当前主稿是什么”；写回真实文件必须由显式保存动作完成。
+3. `ArtifactDocument v1` 继续承担正式交付物、结构化增量写入、版本、diff、导出；普通文件预览默认不升级为正式文档。
+4. Markdown / HTML 预览要以当前文件路径作为基准解析相对图片路径，保证同目录 `images/` 等资源能直接渲染。
 5. 文件标题、默认预览、工作台下载/打开动作应尽量保留项目内相对路径；只有在实际读取磁盘时才解析绝对路径。
+6. 二进制、DOCX、图片、URL、任务结果、知识库命中、Agent App shell entry 都应进入同一 preview projection，再按 `contentKind / renderMode / capabilities` 退化到文本、媒体、独立窗口、系统打开或 unsupported。
 
 ## 架构设计
 
@@ -69,14 +70,12 @@ Workspace 是 Lime 应用层的概念，用于组织和管理 AI Agent 的工作
 - 一个 Workspace 可以包含多个 Session（同一 working_dir）
 - Lime 按 Workspace 分组显示 Session 列表
 
-
-
 ## 数据模型
 
-### Workspace 类型定义
+### Workspace 协议投影
 
 ```rust
-// lime/lime-rs/src/workspace/types.rs
+// lime-rs/crates/app-server-protocol/src/protocol/v0/workspaces.rs
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -134,58 +133,56 @@ CREATE TABLE workspaces (
 CREATE INDEX idx_workspaces_root_path ON workspaces(root_path);
 ```
 
-
-
 ## 核心接口
 
-### WorkspaceManager
+### Workspace App Server Owner
 
 ```rust
-// lime/lime-rs/src/workspace/manager.rs
+// lime-rs/crates/app-server/src/runtime/workspaces.rs
 
 impl WorkspaceManager {
     /// 创建新 workspace
     pub async fn create(&self, name: String, root_path: PathBuf) -> Result<Workspace>;
-    
+
     /// 获取 workspace
     pub async fn get(&self, id: &WorkspaceId) -> Result<Workspace>;
-    
+
     /// 列出所有 workspace
     pub async fn list(&self) -> Result<Vec<Workspace>>;
-    
+
     /// 更新 workspace
     pub async fn update(&self, id: &WorkspaceId, updates: WorkspaceUpdate) -> Result<Workspace>;
-    
+
     /// 删除 workspace
     pub async fn delete(&self, id: &WorkspaceId) -> Result<()>;
-    
+
     /// 设置默认 workspace
     pub async fn set_default(&self, id: &WorkspaceId) -> Result<()>;
-    
+
     /// 获取默认 workspace
     pub async fn get_default(&self) -> Result<Option<Workspace>>;
-    
+
     /// 获取 workspace 下的所有 sessions（通过 working_dir 关联）
     pub async fn list_sessions(&self, workspace_id: &WorkspaceId) -> Result<Vec<Session>> {
         let workspace = self.get(workspace_id).await?;
-        
+
         // 使用 Aster 的 SessionManager，按 working_dir 过滤
         let all_sessions = aster::session::SessionManager::list_sessions().await?;
-        
+
         Ok(all_sessions
             .into_iter()
             .filter(|s| s.working_dir == workspace.root_path)
             .collect())
     }
-    
+
     /// 在 workspace 中创建新 session
     pub async fn create_session(
-        &self, 
-        workspace_id: &WorkspaceId, 
+        &self,
+        workspace_id: &WorkspaceId,
         name: String
     ) -> Result<Session> {
         let workspace = self.get(workspace_id).await?;
-        
+
         // 使用 Aster 的 SessionManager
         aster::session::SessionManager::create_session(
             workspace.root_path.clone(),
@@ -215,8 +212,6 @@ const sessionListRequest = {
 ```
 
 旧 workspace 桥接入口只允许作为 compat facade 委托 current 数据源，不得承接新业务逻辑或作为新测试的可交付证据。
-
-
 
 ## 目录结构
 
@@ -256,19 +251,19 @@ interface Workspace {
 export function WorkspaceSelector() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [current, setCurrent] = useState<Workspace | null>(null);
-  
+
   useEffect(() => {
-    invoke('workspace_list').then(setWorkspaces);
-    invoke('workspace_get_default').then(setCurrent);
+    listWorkspaces().then(setWorkspaces);
+    readDefaultWorkspace().then(setCurrent);
   }, []);
-  
+
   const switchWorkspace = async (id: string) => {
-    await invoke('workspace_set_default', { id });
+    await updateWorkspace({ id, isDefault: true });
     const ws = workspaces.find(w => w.id === id);
     setCurrent(ws || null);
     // 触发 session 列表刷新
   };
-  
+
   return (
     <Select value={current?.id} onValueChange={switchWorkspace}>
       {workspaces.map(ws => (
@@ -287,29 +282,32 @@ export function WorkspaceSelector() {
 ## 实现优先级
 
 ### Phase 1: 基础功能
+
 1. 数据库 schema 迁移
-2. WorkspaceManager 核心 CRUD
-3. legacy adapter 命令实现
+2. App Server Workspace owner 核心 CRUD
+3. 前端 API 网关接入 App Server JSON-RPC
 4. WorkspaceSelector 组件
 
 ### Phase 2: 集成功能
+
 1. Session 列表按 Workspace 分组
 2. 创建 Session 时自动关联当前 Workspace
 3. Workspace 级别的 MCP 配置
 
 ### Phase 3: 高级功能
+
 1. 临时 Workspace 支持
 2. Workspace 导入/导出
 3. Workspace 级别的 Provider 配置
 
 ## 设计决策
 
-| 决策点 | 选择 | 理由 |
-|--------|------|------|
-| Workspace 存储位置 | Lime 应用层 | 不修改 Aster 框架，保持框架通用性 |
-| 与 Session 关系 | 通过 working_dir 关联 | 利用 Aster 现有字段，无需修改框架 |
-| 配置存储 | 独立目录 + 数据库 | 配置文件便于编辑，元数据存数据库 |
-| 默认 Workspace | 支持 | 新 Session 自动关联默认 Workspace |
+| 决策点             | 选择                  | 理由                              |
+| ------------------ | --------------------- | --------------------------------- |
+| Workspace 存储位置 | Lime 应用层           | 不修改 Aster 框架，保持框架通用性 |
+| 与 Session 关系    | 通过 working_dir 关联 | 利用 Aster 现有字段，无需修改框架 |
+| 配置存储           | 独立目录 + 数据库     | 配置文件便于编辑，元数据存数据库  |
+| 默认 Workspace     | 支持                  | 新 Session 自动关联默认 Workspace |
 
 ## 参考资料
 

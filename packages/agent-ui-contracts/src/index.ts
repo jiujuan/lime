@@ -9,4 +9,5 @@ export * from "./runtimeTerminal.js";
 export * from "./schemas.js";
 export * from "./sequenceVerifier.js";
 export type * from "./timeline";
+export type * from "./tools";
 export * from "./validation.js";

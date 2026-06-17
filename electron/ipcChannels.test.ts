@@ -128,12 +128,17 @@ describe("electron/ipcChannels", () => {
     );
     expect(isElectronHostCommand("site_list_adapters")).toBe(false);
     expect(isElectronHostCommand("open_external_url")).toBe(true);
+    expect(isElectronHostCommand("open_file_preview_window")).toBe(true);
     expect(isElectronHostCommand("embedded_browser_view_mount")).toBe(true);
-    expect(isElectronHostCommand("embedded_browser_view_set_bounds")).toBe(true);
+    expect(isElectronHostCommand("embedded_browser_view_set_bounds")).toBe(
+      true,
+    );
     expect(isElectronHostCommand("embedded_browser_view_navigate")).toBe(true);
     expect(isElectronHostCommand("embedded_browser_view_reload")).toBe(true);
     expect(isElectronHostCommand("embedded_browser_view_go_back")).toBe(true);
-    expect(isElectronHostCommand("embedded_browser_view_go_forward")).toBe(true);
+    expect(isElectronHostCommand("embedded_browser_view_go_forward")).toBe(
+      true,
+    );
     expect(isElectronHostCommand("embedded_browser_view_destroy")).toBe(true);
     expect(isElectronHostCommand("open_system_settings_url")).toBe(true);
     expect(isElectronHostCommand("open_with_default_app")).toBe(true);

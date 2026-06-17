@@ -120,6 +120,56 @@ describe("submitOpRuntimeCompaction", () => {
     expect(result.shouldSubmitModelPreference).toBe(true);
   });
 
+  it("本地历史导入来源模型不应裁掉当前 provider/model 提交", () => {
+    const result = buildSubmitOpRuntimeCompaction({
+      executionRuntime: {
+        session_id: "session-imported-source-runtime",
+        source: "session",
+        provider_name: "openai",
+        model_name: "gpt-5.4",
+        source_client: "codex",
+        imported_continuation: {
+          modelProvider: "openai",
+          model: "gpt-5.4",
+        },
+      },
+      syncedRecentPreferences: null,
+      syncedSessionModelPreference: null,
+      syncedExecutionStrategy: null,
+      effectiveExecutionStrategy: "react",
+      effectiveProviderType: "custom-current-provider",
+      effectiveModel: "gpt-5.5",
+    });
+
+    expect(result.shouldSubmitProviderPreference).toBe(true);
+    expect(result.shouldSubmitModelPreference).toBe(true);
+  });
+
+  it("camelCase 本地历史导入来源模型不应裁掉当前 provider/model 提交", () => {
+    const result = buildSubmitOpRuntimeCompaction({
+      executionRuntime: {
+        session_id: "session-imported-source-runtime-camel",
+        source: "session",
+        provider_name: "openai",
+        model_name: "gpt-5.4",
+        sourceClient: "codex",
+        importedContinuation: {
+          modelProvider: "openai",
+          model: "gpt-5.4",
+        },
+      } as never,
+      syncedRecentPreferences: null,
+      syncedSessionModelPreference: null,
+      syncedExecutionStrategy: null,
+      effectiveExecutionStrategy: "react",
+      effectiveProviderType: "custom-current-provider",
+      effectiveModel: "gpt-5.5",
+    });
+
+    expect(result.shouldSubmitProviderPreference).toBe(true);
+    expect(result.shouldSubmitModelPreference).toBe(true);
+  });
+
   it("应迁移未同步的旧 thinking preference，并保留其他显式变更 metadata", () => {
     const result = buildSubmitOpRuntimeCompaction({
       requestMetadata: {

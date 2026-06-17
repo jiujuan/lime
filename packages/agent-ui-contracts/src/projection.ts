@@ -8,6 +8,10 @@ import type {
   AgentRuntimeReadModel,
 } from "./runtime";
 import type { ProcessTimeline } from "./timeline";
+import type {
+  AgentUiMcpSurfaceModel,
+  AgentUiToolSurfaceModel,
+} from "./tools";
 
 export type AgentUiHydrationStatus =
   | "idle"
@@ -151,6 +155,8 @@ export interface AgentUiProjectionState<
   timeline: ProcessTimeline;
   graph: ExecutionGraph;
   tools: AgentRuntimeEventProjection<TEvent>[];
+  toolCalls: AgentUiToolSurfaceModel;
+  mcp: AgentUiMcpSurfaceModel;
   actions: AgentRuntimeEventProjection<TEvent>[];
   artifacts: AgentUiArtifactRefView[];
   evidence: AgentUiEvidenceRefView[];

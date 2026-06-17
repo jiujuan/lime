@@ -4,8 +4,9 @@ import { ExecutionGraphView } from "./executionGraph.js";
 import { UIMessagePartsView } from "./messages.js";
 import { ProcessTimelineView } from "./processTimeline.js";
 import { ArtifactRefList, EvidenceRefList } from "./refs.js";
-import { ActionRequiredList, RuntimeEventList, RuntimeFactsSummary, ToolGroup } from "./runtimeFacts.js";
+import { ActionRequiredList, RuntimeEventList, RuntimeFactsSummary } from "./runtimeFacts.js";
 import { SubagentsView } from "./subagents.js";
+import { McpSurface, ToolCallSurface } from "./tools.js";
 import type { AgentUiProjectionViewProps } from "./types.js";
 
 export function AgentUiProjectionView<TEvent extends AgentRuntimeExecutionEvent = AgentRuntimeExecutionEvent>({
@@ -57,10 +58,27 @@ export function AgentUiProjectionView<TEvent extends AgentRuntimeExecutionEvent 
           actionButtonLabel={labels?.actionButtonLabel}
           eventStatusLabel={labels?.eventStatusLabel}
         />
-        <ToolGroup
-          tools={state.tools}
-          ariaLabel={labels?.toolGroupAriaLabel}
-          eventStatusLabel={labels?.eventStatusLabel}
+        <ToolCallSurface
+          surface={state.toolCalls}
+          ariaLabel={labels?.toolCallsAriaLabel ?? labels?.toolGroupAriaLabel}
+          toolFamilyLabel={labels?.toolFamilyLabel}
+          toolTitle={labels?.toolTitle}
+          toolMeta={labels?.toolMeta}
+          toolPreview={labels?.toolPreview}
+          toolStatusLabel={labels?.toolStatusLabel}
+        />
+        <McpSurface
+          surface={state.mcp}
+          ariaLabel={labels?.mcpSurfaceAriaLabel}
+          serversAriaLabel={labels?.mcpServersAriaLabel}
+          toolsAriaLabel={labels?.mcpToolsAriaLabel}
+          serverTitle={labels?.mcpServerTitle}
+          serverMeta={labels?.mcpServerMeta}
+          toolTitle={labels?.mcpToolTitle}
+          toolMeta={labels?.mcpToolMeta}
+          toolPreview={labels?.mcpToolPreview}
+          operationLabel={labels?.mcpOperationLabel}
+          statusLabel={labels?.toolStatusLabel}
         />
         <RuntimeEventList
           events={otherEvents}

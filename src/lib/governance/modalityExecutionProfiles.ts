@@ -43,6 +43,7 @@ export interface ModalityArtifactPolicySnapshot {
 
 export interface ModalityExecutionProfileSnapshot {
   profile_key: string;
+  lifecycle?: string;
   supported_contracts: string[];
   model_role_slots: string[];
   permission_profile_keys: string[];
@@ -56,6 +57,7 @@ export interface ModalityExecutionProfileSnapshot {
 
 export interface ModalityExecutorAdapterSnapshot {
   adapter_key: string;
+  lifecycle?: string;
   executor_kind: string;
   binding_key: string;
   supported_contracts: string[];
@@ -145,6 +147,7 @@ function toProfileSnapshot(
   }
   return {
     profile_key: profileKey,
+    lifecycle: readTrimmedString(profile.lifecycle) ?? undefined,
     supported_contracts: readStringArray(profile.supported_contracts),
     model_role_slots: readStringArray(profile.model_role_slots),
     permission_profile_keys: readStringArray(profile.permission_profile_keys),
@@ -168,6 +171,7 @@ function toAdapterSnapshot(
   }
   return {
     adapter_key: adapterKey,
+    lifecycle: readTrimmedString(adapter.lifecycle) ?? undefined,
     executor_kind: executorKind,
     binding_key: bindingKey,
     supported_contracts: readStringArray(adapter.supported_contracts),
@@ -194,6 +198,7 @@ export function resolveExecutorAdapterKey(
 export function resolveModalityExecutionProfileBinding(params: {
   contractKey: string;
   executorBinding?: unknown;
+  allowDefaultAdapter?: boolean;
 }): ModalityExecutionProfileBinding | null {
   const contractKey = params.contractKey.trim();
   if (!contractKey) {
@@ -210,7 +215,9 @@ export function resolveModalityExecutionProfileBinding(params: {
 
   const adapterKey =
     resolveExecutorAdapterKey(params.executorBinding) ??
-    executionProfile.executor_adapter_keys[0] ??
+    (params.allowDefaultAdapter === false
+      ? null
+      : executionProfile.executor_adapter_keys[0]) ??
     null;
   const executorAdapter = adapterKey
     ? getAdapters()

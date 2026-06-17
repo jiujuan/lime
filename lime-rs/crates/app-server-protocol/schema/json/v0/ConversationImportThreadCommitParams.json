@@ -20,6 +20,12 @@
       "default": false,
       "type": "boolean"
     },
+    "replaceExisting": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
     "sourceClient": {
       "anyOf": [
         {

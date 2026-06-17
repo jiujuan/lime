@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   isToolResultSuccessful,
+  normalizeHistoryImagePart,
   normalizeIncomingToolResult,
   normalizeToolResultImages,
 } from "./agentChatToolResult";
@@ -66,5 +67,52 @@ describe("agentChatToolResult", () => {
       },
     ]);
     expect(result?.output).not.toContain("base64");
+  });
+
+  it("应保留历史 data URL 图片附件的来源 URI", () => {
+    expect(
+      normalizeHistoryImagePart({
+        type: "input_image",
+        uri: "data:image/png;base64,aW1hZ2U=",
+        metadata: {
+          mediaType: "image/png",
+          index: 2,
+        },
+      }),
+    ).toEqual({
+      data: "aW1hZ2U=",
+      mediaType: "image/png",
+      sourceUri: "data:image/png;base64,aW1hZ2U=",
+      previewUrl: "data:image/png;base64,aW1hZ2U=",
+      metadata: {
+        mediaType: "image/png",
+        index: 2,
+      },
+      index: 2,
+    });
+  });
+
+  it("应保留历史本地图片附件的 sourcePath", () => {
+    expect(
+      normalizeHistoryImagePart({
+        type: "image",
+        uri: "/tmp/imported-local.png",
+        metadata: {
+          localPath: "/tmp/imported-local.png",
+          index: 1,
+        },
+      }),
+    ).toEqual({
+      data: "",
+      mediaType: "image/png",
+      sourceUri: "/tmp/imported-local.png",
+      sourcePath: "/tmp/imported-local.png",
+      previewUrl: undefined,
+      metadata: {
+        localPath: "/tmp/imported-local.png",
+        index: 1,
+      },
+      index: 1,
+    });
   });
 });

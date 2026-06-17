@@ -1,6 +1,6 @@
 # Agent Workspace Session / 性能 / 恢复评分卡
 
-> 当前静态分：`3.2 / 5`  
+> 当前静态分：`3.3 / 5`
 > 目标：验证 Agent Workspace 是否能长期承载多 workspace、多 thread、长历史、运行中恢复和后台任务。
 
 ## 1. 5 分标准
@@ -24,12 +24,13 @@
 | Lime MessageList 长历史窗口 / session hydrate 相关测试 | 前端性能有基础 |
 | AgentUI session hydration | shell first、recent messages、timeline/tool/artifact 按需加载是标准 |
 | `evidence/agent-workspace-run-control-restore.20260616-1255.json` | 已证明恢复态同一区域可恢复 environment、plan、goal、sources、subagents、diffstat、approval、output；真实 Electron session history fixture 证明 current `agentSession/list/read/update` archive/readback/unarchive/readback |
+| `evidence/agent-workspace-session-restore.20260617-1559.json` | 已证明本地历史导入会话经真实 Electron current 链路恢复 messages、reasoning、command、patch、web search、approval，并在同一 current `AgentSession` 继续对话；同时断言导入支持能力不作为消息主线 banner、环境信息或 run control 独立状态卡出现 |
 
 ## 3. 评分维度
 
 | 评测项 | 当前分 | 必须补证 |
 | --- | ---: | --- |
-| Session restore | 3.4 | 运行中恢复、live run 深水位和恢复后控制动作 |
+| Session restore | 3.6 | 运行中恢复、live run 深水位和恢复后控制动作 |
 | Progressive hydration | 3.0 | 首屏不等全量 timeline |
 | Workspace / conversation tabs | 2.5 | Agent Workspace 专属 shell 实现实测 |
 | Draft persistence | 2.5 | per-thread draft 恢复 |
@@ -59,4 +60,4 @@
 
 把 `session-restore-running` 做成专项 smoke，覆盖运行中切换回来后的 running / interrupted / completed 分类、右侧运行控制区和继续输入状态。
 
-跨域要求：`run-observability.md` 的右栏 / 底栏状态也必须纳入 session restore；只恢复消息列表不算桌面工作台恢复完成。`session-restore-completed` 的基础链路已由 `agent-workspace-run-control-restore.20260616-1255.json` 覆盖，后续重点转向运行中恢复和长历史性能。
+跨域要求：`run-observability.md` 的右栏 / 底栏状态也必须纳入 session restore；只恢复消息列表不算桌面工作台恢复完成。`session-restore-completed` 的基础链路已由 `agent-workspace-run-control-restore.20260616-1255.json` 覆盖，本地历史导入恢复与同会话续聊已由 `agent-workspace-session-restore.20260617-1559.json` 覆盖。后续重点转向运行中恢复、长历史性能和 draft 恢复。

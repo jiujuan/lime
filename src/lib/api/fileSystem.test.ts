@@ -12,42 +12,12 @@ import {
   resolveLocalFilePreviewUrl,
 } from "./fileSystem";
 
-const { mockWebviewWindow, mockGetByLabel } = vi.hoisted(() => {
-  const ctor = vi.fn().mockImplementation(function (
-    this: {
-      label: string;
-      options: Record<string, unknown>;
-      once: (event: string, handler: () => void) => Promise<() => void>;
-    },
-    label: string,
-    options: Record<string, unknown>,
-  ) {
-    this.label = label;
-    this.options = options;
-    this.once = vi.fn((_event: string, handler: () => void) => {
-      handler();
-      return Promise.resolve(() => undefined);
-    });
-  });
-
-  return {
-    mockWebviewWindow: ctor,
-    mockGetByLabel: vi.fn(),
-  };
-});
-
 vi.mock("@/lib/dev-bridge", () => ({
   safeInvoke: vi.fn(),
 }));
 
 vi.mock("@/lib/desktop-host/core", () => ({
   convertFileSrc: vi.fn(),
-}));
-
-vi.mock("@/lib/desktop-host/webviewWindow", () => ({
-  WebviewWindow: Object.assign(mockWebviewWindow, {
-    getByLabel: mockGetByLabel,
-  }),
 }));
 
 vi.mock("@/lib/desktop-runtime", () => ({
@@ -61,7 +31,6 @@ describe("fileSystem API", () => {
     vi.mocked(convertFileSrc).mockImplementation((path: string) => {
       return `asset://${path}`;
     });
-    mockGetByLabel.mockResolvedValue(null);
   });
 
   it("应代理 reveal_in_finder", async () => {
@@ -144,7 +113,9 @@ describe("fileSystem API", () => {
     await expect(revealPathInFinder("/tmp/demo.txt")).rejects.toThrow(
       "reveal_in_finder did not return empty Electron host result",
     );
-    await expect(openPathWithDefaultApp("/tmp/demo.txt")).resolves.toBeUndefined();
+    await expect(
+      openPathWithDefaultApp("/tmp/demo.txt"),
+    ).resolves.toBeUndefined();
     await expect(openPathWithDefaultApp("/tmp/demo.txt")).rejects.toThrow(
       "open_with_default_app did not return empty Electron host result",
     );
@@ -199,38 +170,42 @@ describe("fileSystem API", () => {
     expect(resolveLocalFilePreviewUrl("/tmp/demo.html")).toBeNull();
   });
 
-  it("Desktop Host 环境应使用 WebviewWindow 打开 HTML 预览", async () => {
+  it("Desktop Host 环境应通过 Electron Host 打开 HTML 预览窗口", async () => {
     vi.mocked(hasDesktopHostInvokeCapability).mockReturnValue(true);
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      opened: true,
+      reused: false,
+      url: "file:///tmp/lime/prototype.html",
+      title: "prototype.html",
+    });
 
     await expect(
       openHtmlPreviewWindow("/tmp/lime/prototype.html"),
     ).resolves.toBe(true);
 
-    expect(mockWebviewWindow).toHaveBeenCalledWith(
-      expect.stringMatching(/^html-preview-/),
-      expect.objectContaining({
-        url: "asset:///tmp/lime/prototype.html",
-        title: "prototype.html",
-        width: 1280,
-      }),
-    );
+    expect(safeInvoke).toHaveBeenCalledWith("open_file_preview_window", {
+      path: "/tmp/lime/prototype.html",
+      title: "prototype.html",
+    });
   });
 
-  it("已有 HTML 预览窗口时应复用并聚焦", async () => {
+  it("已有 HTML 预览窗口时接受 Electron Host 复用结果", async () => {
     vi.mocked(hasDesktopHostInvokeCapability).mockReturnValue(true);
-    const existingWindow = {
-      show: vi.fn().mockResolvedValue(undefined),
-      setFocus: vi.fn().mockResolvedValue(undefined),
-    };
-    mockGetByLabel.mockResolvedValue(existingWindow);
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      opened: true,
+      reused: true,
+      url: "file:///tmp/lime/prototype.html",
+      title: "prototype.html",
+    });
 
     await expect(
       openHtmlPreviewWindow("/tmp/lime/prototype.html"),
     ).resolves.toBe(true);
 
-    expect(existingWindow.show).toHaveBeenCalledTimes(1);
-    expect(existingWindow.setFocus).toHaveBeenCalledTimes(1);
-    expect(mockWebviewWindow).not.toHaveBeenCalled();
+    expect(safeInvoke).toHaveBeenCalledWith("open_file_preview_window", {
+      path: "/tmp/lime/prototype.html",
+      title: "prototype.html",
+    });
   });
 
   it("非 Desktop Host 环境不应创建 HTML 预览窗口", async () => {
@@ -240,6 +215,24 @@ describe("fileSystem API", () => {
       openHtmlPreviewWindow("/tmp/lime/prototype.html"),
     ).resolves.toBe(false);
 
-    expect(mockWebviewWindow).not.toHaveBeenCalled();
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "open_file_preview_window",
+      expect.anything(),
+    );
+  });
+
+  it("HTML 预览窗口命令收到诊断 facade 时应 fail closed", async () => {
+    vi.mocked(hasDesktopHostInvokeCapability).mockReturnValue(true);
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      diagnostic: {
+        source: "electron-host-diagnostic",
+        command: "open_file_preview_window",
+        status: "degraded",
+      },
+    });
+
+    await expect(
+      openHtmlPreviewWindow("/tmp/lime/prototype.html"),
+    ).resolves.toBe(false);
   });
 });

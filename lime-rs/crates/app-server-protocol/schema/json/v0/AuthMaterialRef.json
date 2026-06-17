@@ -1,0 +1,48 @@
+{
+  "$defs": {
+    "AuthKind": {
+      "enum": [
+        "api_key_ref",
+        "direct_api_key",
+        "no_auth",
+        "oem_managed"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "credentialRef": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "headerName": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "headerPrefix": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "kind": {
+      "$ref": "#/$defs/AuthKind"
+    },
+    "providerId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "kind"
+  ],
+  "title": "AuthMaterialRef",
+  "type": "object"
+}

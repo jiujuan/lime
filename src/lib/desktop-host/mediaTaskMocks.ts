@@ -145,15 +145,11 @@ function resolveMockMediaTaskProtocol(
         modality: "audio",
         required_capabilities: ["text_generation", "voice_generation"],
         routing_slot: "voice_generation_model",
-        executor_binding: {
-          executor_kind: "service_skill",
-          binding_key: "voice_runtime",
-        },
+        route_execution_status: "metadata_only",
+        route_execution_exit_condition:
+          "audio worker or RuntimeCore provider protocol mapper consumes ResolvedModelRoute and writes model_route_execution for voice_generation",
         execution_profile: {
           profile_key: "voice_generation_profile",
-        },
-        executor_adapter: {
-          adapter_key: "service_skill:voice_runtime",
         },
         limecore_policy_refs: limecorePolicyRefs,
         limecore_policy_snapshot:
@@ -1132,7 +1128,10 @@ function listMockMediaTaskArtifacts(args: any) {
   };
 }
 
-export function createMediaTaskMockHandlers(): Record<string, (args: any) => any> {
+export function createMediaTaskMockHandlers(): Record<
+  string,
+  (args: any) => any
+> {
   return {
     create_image_generation_task_artifact: (args: any) =>
       buildMockMediaTaskOutput(args),

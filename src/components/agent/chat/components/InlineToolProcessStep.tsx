@@ -45,6 +45,7 @@ import {
   isLimeTaskProtocolFailure,
   resolveLimeTaskProtocolFailureDisplayText,
 } from "../utils/limeTaskProtocolNoise";
+import { resolveImportedSourceToolPresentation } from "./ToolCallDisplayViewModel";
 
 interface InlineToolProcessStepProps {
   toolCall: ToolCallState;
@@ -471,10 +472,13 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     [toolCall.name, toolCall.status],
   );
   const ToolIcon = toolDisplay.icon;
-  const metadata = useMemo(
-    () => asRecord(toolCall.result?.metadata),
-    [toolCall.result?.metadata],
-  );
+  const metadata = useMemo(() => {
+    const merged = {
+      ...(asRecord(toolCall.metadata) || {}),
+      ...(asRecord(toolCall.result?.metadata) || {}),
+    };
+    return Object.keys(merged).length > 0 ? merged : null;
+  }, [toolCall.metadata, toolCall.result?.metadata]);
   const filePath = useMemo(() => resolveToolFilePath(parsedArgs), [parsedArgs]);
   const fileContent = useMemo(() => {
     const content = parsedArgs.content || parsedArgs.text;
@@ -503,21 +507,38 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
         })
       : null;
   }, [rawResultText, toolCall.name, toolCall.status]);
+  const importedSourcePresentation = useMemo(
+    () => resolveImportedSourceToolPresentation(toolCall),
+    [toolCall],
+  );
   const headline = useMemo(
     () =>
-      limeTaskProtocolFailureText ||
-      buildToolHeadline({
-        toolDisplay,
-        subject,
-        toolName: toolCall.name,
-      }),
-    [limeTaskProtocolFailureText, subject, toolCall.name, toolDisplay],
+      importedSourcePresentation
+        ? t("agentChat.toolCall.importedCommandRecord.title")
+        : limeTaskProtocolFailureText ||
+          buildToolHeadline({
+            toolDisplay,
+            subject,
+            toolName: toolCall.name,
+          }),
+    [
+      importedSourcePresentation,
+      limeTaskProtocolFailureText,
+      subject,
+      t,
+      toolCall.name,
+      toolDisplay,
+    ],
   );
   const processNarrative = useMemo(
     () => resolveToolProcessNarrative(toolCall),
     [toolCall],
   );
   const resultText = useMemo(() => {
+    if (importedSourcePresentation) {
+      return t("agentChat.toolCall.importedCommandRecord.description");
+    }
+
     if (toolCall.status !== "failed") {
       return (
         resolveTaskBoardResultDetailText({
@@ -536,11 +557,13 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
       resolveToolErrorDetailText(toolCall.name, rawResultText) || rawResultText
     );
   }, [
+    importedSourcePresentation,
     metadata,
     processNarrative.postSummary,
     processNarrative.preSummary,
     processNarrative.summary,
     rawResultText,
+    t,
     toolCall.name,
     toolCall.status,
   ]);
@@ -564,9 +587,9 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
       normalizeToolResultImages(
         toolCall.result?.images,
         rawResultText,
-        toolCall.result?.metadata,
+        metadata,
       ) || [],
-    [rawResultText, toolCall.result?.images, toolCall.result?.metadata],
+    [metadata, rawResultText, toolCall.result?.images],
   );
   const isToolSearch = useMemo(
     () => normalizeToolNameKey(toolCall.name) === "toolsearch",
@@ -670,8 +693,9 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
       toolCall.status === "running" && toolCall.progress?.message
         ? `进度：${toolCall.progress.message}`
         : null;
-    const preferredSummary =
-      toolCall.status === "running"
+    const preferredSummary = importedSourcePresentation
+      ? t("agentChat.toolCall.importedCommandRecord.description")
+      : toolCall.status === "running"
         ? streamingOutputSummary ||
           progressSummary ||
           processNarrative.preSummary
@@ -684,10 +708,12 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     return normalizeSummaryLine(preferredSummary, headline);
   }, [
     headline,
+    importedSourcePresentation,
     processNarrative.postSource,
     processNarrative.postSummary,
     processNarrative.preSummary,
     structuredResultPreview,
+    t,
     toolCall.progress?.message,
     toolCall.status,
   ]);
@@ -881,6 +907,8 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
               {hasOpenableFile ? (
                 <button
                   type="button"
+                  data-testid="inline-tool-open-file"
+                  data-file-path={filePath || undefined}
                   className="rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
                   title={t("agentChat.toolCall.openInCanvas")}
                   aria-label={t("agentChat.toolCall.openInCanvasWithTarget", {

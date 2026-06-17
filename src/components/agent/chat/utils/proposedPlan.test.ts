@@ -56,11 +56,11 @@ describe("proposedPlan", () => {
   it("应兼容历史 fixture 中的字面换行", () => {
     expect(
       extractLatestProposedPlanItems(
-        "说明\n<proposed_plan>确认计划模式请求进入 App Server\\n- 输出 Codex 风格 proposed_plan\\n- 验证右侧计划轨显示</proposed_plan>",
+        "说明\n<proposed_plan>确认计划模式请求进入 App Server\\n- 输出结构化 proposed_plan\\n- 验证右侧计划轨显示</proposed_plan>",
       ),
     ).toEqual([
       { text: "确认计划模式请求进入 App Server", status: "in_progress" },
-      { text: "输出 Codex 风格 proposed_plan", status: "pending" },
+      { text: "输出结构化 proposed_plan", status: "pending" },
       { text: "验证右侧计划轨显示", status: "pending" },
     ]);
   });

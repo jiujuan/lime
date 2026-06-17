@@ -71,6 +71,22 @@ npm run governance:scripts
 - `scripts/check-import-boundaries.mjs`：导入边界治理入口，后续可迁到 `scripts/governance/`
 - `scripts/generate-protocol-types.mjs`：App Server 协议类型生成入口，后续可迁到 `scripts/app-server/`
 
+### Governance 脚本
+
+文件体量棘轮的检查入口仍是历史根脚本 `scripts/check-file-size-governance.mjs`，对外使用：
+
+```bash
+npm run governance:file-size
+```
+
+基线刷新入口位于 `scripts/governance/update-file-size-baseline.mjs`，只在 R-60 维护或拆分收口后手动执行：
+
+```bash
+npm run governance:file-size:update
+```
+
+该脚本会重扫非测试、非生成的前端 / Rust 源文件，更新 `governance/file-size-baseline.json`，不进入 CI 自动链路。
+
 ### i18n 脚本
 
 i18n workflow、report、benchmark、检测脚本和测试已整体迁到 `scripts/i18n/`。对外仍优先使用 `package.json` 里的 `detect-translations` 与 `i18n:*` npm scripts，不直接依赖根目录脚本路径。
@@ -134,9 +150,13 @@ Agent Runtime smoke 与 Service Skill 入口 smoke 已迁到 `scripts/agent-runt
 
 `npm run smoke:agent-session-history-electron-fixture` 是真实 Electron 历史恢复 fixture：通过 preload `app_server_handle_json_lines` 验证 App Server current `agentSession/start/read/update/list` 形状、最近对话可见和 hydrate detail 数组；它使用 `APP_SERVER_BACKEND_MODE=unavailable`，不触发 turn，也不调用模型后端。
 
-`npm run smoke:codex-import-continuation-electron-fixture` 是真实 Electron Codex 导入续聊 fixture：通过 preload `app_server_handle_json_lines` 导入一条 Codex rollout fixture，验证 `agentSession/read.detail.items` 能恢复 reasoning、command、patch、web search、approval，再在同一个导入 session 上调用 `agentSession/turn/start` 继续对话。它使用本地 external backend fixture，不调用正式模型，不走 App Server mock backend、renderer mock fallback 或 legacy runtime command。
+`npm run smoke:codex-import-continuation-electron-fixture` 是真实 Electron 本地历史导入续聊 fixture：通过 preload `app_server_handle_json_lines` 导入一条本地 rollout fixture，验证 `agentSession/read.detail.items` 能恢复 reasoning、command、patch、web search、approval，再在同一个导入 session 上调用 `agentSession/turn/start` 继续对话。它使用本地 external backend fixture，不调用正式模型，不走 App Server mock backend、renderer mock fallback 或 legacy runtime command。
 
-`npm run smoke:codex-import-click-through-electron-fixture` 是真实 Electron Codex 导入点击闭环 fixture：使用临时 `CODEX_HOME` 写入 `session_index.jsonl` 与 rollout JSONL，从侧边栏点击“导入 Codex 对话”，在确认弹窗预览“Codex 细节还原”后点击确认，进入 Lime 会话页验证导入消息、reasoning、command、patch、web search、approval 可见，再通过真实输入框发送 follow-up。它使用本地 external backend fixture，不读取真实 `~/.codex`，不调用正式模型，不走 App Server mock backend、renderer mock fallback 或 legacy runtime command。
+`npm run smoke:codex-import-click-through-electron-fixture` 是真实 Electron 本地历史导入点击闭环 fixture：使用临时 `CODEX_HOME` 写入 `session_index.jsonl` 与 rollout JSONL，从侧边栏点击“本地历史导入”，在确认弹窗预览“导入细节还原”后点击确认，稳定进入导入会话页，验证导入消息、reasoning、友好命令记录、patch、web search、approval 默认可见，再通过真实输入框发送 follow-up。该入口同时覆盖 commit 后导航不被 task-center 旧 tab fallback 抢回、imported timeline 工具细节默认展开、预览不暴露 raw source event / payload 字段、续聊不暴露 fixture 哨兵、消息列表主线不展示 `imported-source-banner` 或“本地历史导入 / 已还原”独立状态条；环境信息弹层不重复展示导入主线卡，也不暴露 `Approve Codex command` / `npm test` / 原始 thread id 等内部细节，以及同一 session 的 `agentSession/turn/start` backend ledger。脚本还会在 `visual-audit/` 下输出 `desktop / compact / narrow` 三种视口截图，并把输入框可见性、消息列表可见性、导入细节可见性和无导入主线卡写入 summary。它使用本地 external backend fixture，不读取真实 `~/.codex`，不调用正式模型，不走 App Server mock backend、renderer mock fallback 或 legacy runtime command。
+
+`npm run smoke:local-history-import-visual-audit` 是本地历史导入的产品视觉边界审计：复用真实 Electron 点击闭环 fixture，再检查 `desktop / compact / narrow` 三视口的消息列表、输入框、导入命令 / 补丁 / 搜索 / 审批记录、无导入主线 banner / run control 卡，并扫描 GUI 可见文本，确保除导入来源 / provenance / fixture / 协议枚举外不泄漏来源品牌字眼。该入口仍使用临时本地历史 fixture 和 external backend，不读取真实用户历史目录，不调用正式模型。
+
+`npm run smoke:local-history-import-real-sample-visual-audit` 是真实样本 GUI 审计入口：启动真实 Electron Desktop Host 与隔离 App Server data 目录，从真实 content-studio 本地历史源只读 scan/preview，选择最长/最复杂线程导入后从侧边栏打开会话，采集 `desktop / compact / narrow` 三视口与 `top / middle / bottom` 滚动截图，并验证输入框、消息列表、导入命令 / 补丁 / 搜索 / 审批记录可见，普通 GUI 不暴露 source path、source thread id、raw event 字段或来源品牌字眼。该入口使用 `APP_SERVER_BACKEND_MODE=unavailable`，不调用正式模型，不走 App Server mock backend、renderer mock fallback，也不把真实对话正文写入证据 JSON。
 
 `npm run smoke:code-artifact-workbench-electron-fixture` 是真实 Electron 代码产物工作台 fixture：使用本地 external backend fixture 生成 `artifact.snapshot`、标准 coding facts 与 `turn.final_done`，再从 GUI 历史会话打开工作台，验证代码产物入口、变更 / 输出 / 日志面板和工作台可见性；传入 `--scenario gui-coding-input` 时会先通过真实 GUI 输入框发送 coding 请求，再验证同一套 Workbench 证据。它不调用正式模型，不走 App Server mock backend。
 

@@ -159,6 +159,9 @@ export interface AsterSessionExecutionRuntime {
   provider_selector?: string | null;
   provider_name?: string | null;
   model_name?: string | null;
+  source_client?: string | null;
+  imported_continuation?: Record<string, unknown> | null;
+  imported_thread_settings?: Record<string, unknown> | null;
   execution_strategy?: AsterExecutionStrategy | null;
   output_schema_runtime?: AsterTurnOutputSchemaRuntime | null;
   source: AsterSessionExecutionRuntimeSource;

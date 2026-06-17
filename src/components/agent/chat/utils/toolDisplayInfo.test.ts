@@ -6,6 +6,8 @@ import {
   extractSearchQueryLabel,
   getToolDisplayInfo,
   normalizeToolNameKey,
+  parseToolCallArguments,
+  resolveToolFilePath,
   resolveToolPrimarySubject,
   resolveUserFacingToolDisplayLabel,
   resolveToolDisplayLabel,
@@ -97,6 +99,31 @@ describe("toolDisplayInfo", () => {
     );
     expect(normalizeToolNameKey("AgentOutputTool")).toBe("taskoutput");
     expect(normalizeToolNameKey("BashOutputTool")).toBe("taskoutput");
+  });
+
+  it("应兼容导入来源中被双层 JSON 编码的工具参数", () => {
+    const encoded = JSON.stringify(
+      JSON.stringify({
+        path: "/workspace/imported-local-history/docs/imported-preview.md",
+      }),
+    );
+
+    expect(parseToolCallArguments(encoded)).toEqual({
+      path: "/workspace/imported-local-history/docs/imported-preview.md",
+    });
+  });
+
+  it("应兼容导入来源中已结构化的工具参数对象", () => {
+    const parsed = parseToolCallArguments({
+      path: "/workspace/imported-local-history/docs/imported-preview.md",
+    });
+
+    expect(parsed).toEqual({
+      path: "/workspace/imported-local-history/docs/imported-preview.md",
+    });
+    expect(resolveToolFilePath(parsed)).toBe(
+      "/workspace/imported-local-history/docs/imported-preview.md",
+    );
   });
 
   it("应为参考 JS 工具目录名解析出当前展示文案", () => {
@@ -283,7 +310,7 @@ describe("toolDisplayInfo", () => {
     ).toBe("已发起");
   });
 
-  it("Codex 导入的 exec_command 应展示真实命令而不是只显示工具名", () => {
+  it("本地历史导入的 exec_command 应展示真实命令而不是只显示工具名", () => {
     const subject = resolveToolPrimarySubject(
       "exec_command",
       { command: "npm test", cwd: "/workspace/imported-codex" },

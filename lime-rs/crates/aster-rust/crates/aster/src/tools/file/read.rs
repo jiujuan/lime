@@ -178,6 +178,46 @@ impl ReadTool {
 // =============================================================================
 
 impl ReadTool {
+    pub async fn read_document(
+        &self,
+        path: &Path,
+        context: &ToolContext,
+    ) -> Result<String, ToolError> {
+        let full_path = self.resolve_path(path, context);
+
+        if !full_path.exists() {
+            return Err(ToolError::execution_failed(format!(
+                "Document not found: {}",
+                full_path.display()
+            )));
+        }
+
+        let metadata = fs::metadata(&full_path)?;
+        let text = document_preview::extract_document_text_from_path(
+            &full_path,
+            Some(MAX_TEXT_FILE_SIZE as usize),
+        )
+        .map_err(|error| ToolError::execution_failed(error.to_string()))?;
+        let content = fs::read(&full_path)?;
+        self.record_file_read(&full_path, &content, &metadata)?;
+
+        let mut output = Vec::new();
+        output.push(format!("[Document Text Preview: {}]", full_path.display()));
+        output.push(format!("Size: {} bytes", metadata.len()));
+        output.push(String::new());
+        output.push(text);
+
+        debug!("Read document preview: {}", full_path.display());
+
+        Ok(output.join("\n"))
+    }
+
+    pub fn is_document_file(path: &Path) -> bool {
+        document_preview::is_supported_document(path)
+    }
+}
+
+impl ReadTool {
     /// Read a text file with line numbers
     ///
     /// Returns the file content with line numbers prefixed.
@@ -927,6 +967,13 @@ impl Tool for ReadTool {
                 .with_metadata("analysis_type", serde_json::json!("enhanced_computational")));
         }
 
+        if Self::is_document_file(path) {
+            let content = self.read_document(path, context).await?;
+            return Ok(ToolResult::success(content)
+                .with_metadata("file_type", serde_json::json!("document"))
+                .with_metadata("analysis_type", serde_json::json!("document_text")));
+        }
+
         // Enhanced text file reading with intelligent analysis
         let range = self.extract_line_range(&params);
         let text_output_mode = self.extract_text_output_mode(&params);
@@ -1393,6 +1440,13 @@ mod tests {
         assert!(ReadTool::is_text_file(Path::new("test.unknown")));
     }
 
+    #[test]
+    fn test_is_document_file() {
+        assert!(ReadTool::is_document_file(Path::new("test.docx")));
+        assert!(ReadTool::is_document_file(Path::new("test.DOCX")));
+        assert!(!ReadTool::is_document_file(Path::new("test.zip")));
+    }
+
     #[tokio::test]
     async fn test_read_text_file() {
         let temp_dir = TempDir::new().unwrap();
@@ -1414,6 +1468,36 @@ mod tests {
         assert!(result.contains("3 | Line 3"));
 
         // Check history was recorded
+        assert!(tool.read_history.read().unwrap().has_read(&file_path));
+    }
+
+    #[tokio::test]
+    async fn test_read_docx_document_without_zip_noise() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("knowledge.docx");
+        let mut buffer = std::io::Cursor::new(Vec::new());
+        {
+            let mut writer = zip::ZipWriter::new(&mut buffer);
+            let options = zip::write::FileOptions::default();
+            writer.start_file("word/document.xml", options).unwrap();
+            writer
+                .write_all(
+                    r#"<w:document><w:body><w:p><w:r><w:t>个人 IP 知识库</w:t></w:r></w:p></w:body></w:document>"#
+                        .as_bytes(),
+                )
+                .unwrap();
+            writer.finish().unwrap();
+        }
+        fs::write(&file_path, buffer.into_inner()).unwrap();
+
+        let tool = create_read_tool();
+        let context = create_test_context(temp_dir.path());
+
+        let result = tool.read_document(&file_path, &context).await.unwrap();
+
+        assert!(result.contains("个人 IP 知识库"));
+        assert!(!result.contains("PK"));
+        assert!(!result.contains("word/document.xml"));
         assert!(tool.read_history.read().unwrap().has_read(&file_path));
     }
 

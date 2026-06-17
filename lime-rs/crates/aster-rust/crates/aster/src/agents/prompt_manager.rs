@@ -25,9 +25,36 @@ use std::path::Path;
 
 const MAX_EXTENSIONS: usize = 5;
 const MAX_TOOLS: usize = 50;
-const PLAN_COLLABORATION_INSTRUCTION: &str = r#"You are running in plan mode for this turn. Do not implement code changes or perform mutating actions. Explore only as needed to produce a decision-complete plan.
+const PLAN_COLLABORATION_INSTRUCTION: &str = r#"You are now in Plan mode for this turn. Plan mode is a collaboration mode, not the update_plan checklist tool. Stay in Plan mode until the current turn ends; user wording such as "continue", "implement", or "do it" means plan that execution, not perform it.
 
-When the plan is ready, output it inside exactly one <proposed_plan>...</proposed_plan> block so the client can render it as a plan item. Do not use update_plan in plan mode; update_plan is only a checklist/progress tool for non-plan collaboration modes. If you need a decision from the user while planning, use request_user_input."#;
+Mode rules:
+- Do not implement code changes, write files, apply patches, run migrations, run codegen, or perform other mutating actions.
+- You may do non-mutating exploration that improves the plan, such as reading files, searching the repo, inspecting schemas/configs, or running checks that do not change repo-tracked files.
+- Resolve discoverable repo facts through non-mutating exploration before asking the user.
+- Use request_user_input for material product or implementation decisions that cannot be discovered from the repo.
+- Do not use update_plan in Plan mode; update_plan is only a checklist/progress tool for non-plan collaboration modes.
+
+When the plan is decision-complete, output exactly one <proposed_plan> block so the client can render it as a plan item. The opening and closing tags must each be on their own line, and the plan content must start on the line after <proposed_plan>. Use Markdown inside the block. Do not ask "should I proceed?" after the block.
+
+Required shape:
+<proposed_plan>
+plan content
+</proposed_plan>"#;
+
+fn current_turn_is_plan_mode() -> bool {
+    current_turn_context()
+        .as_ref()
+        .and_then(|context| context.collaboration_mode.as_deref())
+        .is_some_and(|mode| matches!(mode.trim(), "plan" | "planning"))
+}
+
+fn append_plan_collaboration_instruction(mut prompt: String) -> String {
+    if current_turn_is_plan_mode() {
+        prompt.push_str("\n\n# Plan Mode Instructions:\n\n");
+        prompt.push_str(PLAN_COLLABORATION_INSTRUCTION);
+    }
+    prompt
+}
 
 pub struct PromptManager {
     /// 完全覆盖系统提示词（向后兼容）
@@ -216,11 +243,12 @@ impl<'a> SystemPromptBuilder<'a, PromptManager> {
         if self.session_prompt_override {
             let override_prompt = self.session_prompt.as_deref().unwrap_or("");
             let sanitized_override_prompt = sanitize_unicode_tags(override_prompt);
-            return prompt_template::render_inline_once(
+            let prompt = prompt_template::render_inline_once(
                 &sanitized_override_prompt,
                 &capabilities_context,
             )
             .unwrap_or_else(|_| override_prompt.to_string());
+            return append_plan_collaboration_instruction(prompt);
         }
 
         // 构建提示词：全局 override 优先，否则使用分层结构。
@@ -253,11 +281,7 @@ impl<'a> SystemPromptBuilder<'a, PromptManager> {
             );
         }
 
-        if current_turn_context()
-            .as_ref()
-            .and_then(|context| context.collaboration_mode.as_deref())
-            .is_some_and(|mode| matches!(mode.trim(), "plan" | "planning"))
-        {
+        if current_turn_is_plan_mode() {
             system_prompt_extras.push(PLAN_COLLABORATION_INSTRUCTION.to_string());
         }
 

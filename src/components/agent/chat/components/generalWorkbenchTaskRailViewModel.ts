@@ -272,10 +272,17 @@ function buildThreadPlanItems(
   threadItems: readonly AgentThreadItem[] | undefined,
   t: MinimalTranslate,
 ): GeneralWorkbenchTaskRailPlanItem[] {
-  return (threadItems ?? [])
-    .filter((item): item is Extract<AgentThreadItem, { type: "plan" }> =>
+  const planItems = (threadItems ?? []).filter(
+    (item): item is Extract<AgentThreadItem, { type: "plan" }> =>
       item.type === "plan" && item.text.trim().length > 0,
-    )
+  );
+  const structuredPlanItems = buildStructuredThreadPlanItems(planItems, t);
+  if (structuredPlanItems.length > 0) {
+    return structuredPlanItems;
+  }
+
+  return planItems
+    .filter((item) => item.text.trim().length > 0)
     .map((item, index) => ({
       id: item.id,
       title: item.text.trim(),
@@ -289,6 +296,74 @@ function buildThreadPlanItems(
         },
       ),
     }));
+}
+
+function buildStructuredThreadPlanItems(
+  planItems: readonly Extract<AgentThreadItem, { type: "plan" }>[],
+  t: MinimalTranslate,
+): GeneralWorkbenchTaskRailPlanItem[] {
+  for (const item of [...planItems].reverse()) {
+    const steps = readStructuredPlanSteps(item.metadata);
+    if (steps.length === 0) {
+      continue;
+    }
+    return steps.map((step, index) => ({
+      id: `${item.id}:${index}:${step.step}`,
+      title: step.step,
+      status: normalizeStructuredPlanStatus(step.status),
+      meta: translateTaskRailText(
+        t,
+        "generalWorkbench.taskRail.stepMeta",
+        "步骤 {{index}}",
+        {
+          index: index + 1,
+        },
+      ),
+    }));
+  }
+  return [];
+}
+
+function readStructuredPlanSteps(
+  metadata: unknown,
+): Array<{ step: string; status: string }> {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return [];
+  }
+  const plan = (metadata as { plan?: unknown }).plan;
+  if (!Array.isArray(plan)) {
+    return [];
+  }
+  return plan.flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      return [];
+    }
+    const record = item as { step?: unknown; status?: unknown };
+    const step = typeof record.step === "string" ? record.step.trim() : "";
+    const status =
+      typeof record.status === "string" ? record.status.trim() : "";
+    if (!step || !status) {
+      return [];
+    }
+    return [{ step, status }];
+  });
+}
+
+function normalizeStructuredPlanStatus(
+  status: string,
+): GeneralWorkbenchTaskRailItemStatus {
+  switch (status) {
+    case "completed":
+      return "completed";
+    case "in_progress":
+    case "inProgress":
+    case "in-progress":
+      return "running";
+    case "failed":
+      return "failed";
+    default:
+      return "pending";
+  }
 }
 
 function buildTodoPlanItems(
@@ -823,8 +898,8 @@ export function buildGeneralWorkbenchTaskRailProjection({
         : translateTaskRailText(
             t,
             "generalWorkbench.taskRail.empty.noSteps",
-          "发送任务后，这里会显示进度和输出。",
-        ),
+            "发送任务后，这里会显示进度和输出。",
+          ),
     outputOverflowCount: Math.max(outputItems.length - 4, 0),
   };
 }

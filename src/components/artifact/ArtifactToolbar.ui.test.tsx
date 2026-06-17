@@ -7,6 +7,7 @@ import { registerLightweightRenderers } from "./renderers";
 import { ArtifactToolbar } from "./ArtifactToolbar";
 
 const openHtmlPreviewWindowMock = vi.hoisted(() => vi.fn());
+const openPathWithDefaultAppMock = vi.hoisted(() => vi.fn());
 const hasDesktopHostInvokeCapabilityMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/api/fileSystem", async (importActual) => {
@@ -14,6 +15,7 @@ vi.mock("@/lib/api/fileSystem", async (importActual) => {
   return {
     ...actual,
     openHtmlPreviewWindow: openHtmlPreviewWindowMock,
+    openPathWithDefaultApp: openPathWithDefaultAppMock,
   };
 });
 
@@ -92,6 +94,7 @@ beforeEach(async () => {
 
   registerLightweightRenderers();
   openHtmlPreviewWindowMock.mockResolvedValue(false);
+  openPathWithDefaultAppMock.mockResolvedValue(undefined);
   hasDesktopHostInvokeCapabilityMock.mockReturnValue(false);
   await changeLimeLocale("en-US");
 });
@@ -216,6 +219,69 @@ describe("ArtifactToolbar", () => {
     expect(consoleError).toHaveBeenCalledWith(
       "Desktop Host HTML 预览窗口创建失败",
     );
+    expect(openWindow).not.toHaveBeenCalled();
+  });
+
+  it("source-backed preview artifact 应按 renderMode 使用独立窗口", async () => {
+    openHtmlPreviewWindowMock.mockResolvedValueOnce(true);
+    const openWindow = vi.fn();
+    vi.spyOn(window, "open").mockImplementation(openWindow);
+    const container = renderToolbar(
+      buildArtifact({
+        type: "document",
+        title: "prototype.html",
+        content: "",
+        meta: {
+          previewArtifact: true,
+          sourcePath: "/tmp/lime/artifacts/prototype.html",
+          renderMode: "external_window",
+          capabilities: {
+            externalWindow: true,
+          },
+        },
+      }),
+    );
+
+    await act(async () => {
+      queryButtonByTitle(container, "Open in new window")?.click();
+      await Promise.resolve();
+    });
+
+    expect(openHtmlPreviewWindowMock).toHaveBeenCalledWith(
+      "/tmp/lime/artifacts/prototype.html",
+      { title: "prototype.html" },
+    );
+    expect(openWindow).not.toHaveBeenCalled();
+  });
+
+  it("system_open preview artifact 应通过系统默认应用打开真实文件", async () => {
+    const openWindow = vi.fn();
+    vi.spyOn(window, "open").mockImplementation(openWindow);
+    const container = renderToolbar(
+      buildArtifact({
+        type: "document",
+        title: "archive.zip",
+        content: "该文件暂不支持在工作台内嵌预览。",
+        meta: {
+          previewArtifact: true,
+          sourcePath: "/tmp/lime/archive.zip",
+          renderMode: "system_open",
+          capabilities: {
+            systemOpen: true,
+          },
+        },
+      }),
+    );
+
+    await act(async () => {
+      queryButtonByTitle(container, "Open in new window")?.click();
+      await Promise.resolve();
+    });
+
+    expect(openPathWithDefaultAppMock).toHaveBeenCalledWith(
+      "/tmp/lime/archive.zip",
+    );
+    expect(openHtmlPreviewWindowMock).not.toHaveBeenCalled();
     expect(openWindow).not.toHaveBeenCalled();
   });
 });

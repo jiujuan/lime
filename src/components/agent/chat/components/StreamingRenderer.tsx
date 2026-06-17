@@ -621,6 +621,8 @@ type StreamingProcessEntry =
       id: string;
       text: string;
       defaultExpanded?: boolean;
+      preserveSourceText?: boolean;
+      metadata?: Record<string, unknown>;
     }
   | {
       kind: "tool";
@@ -633,7 +635,10 @@ type StreamingProcessEntry =
       actionRequired: ActionRequired;
     };
 
-function buildStreamingProcessSummary(entries: StreamingProcessEntry[]): {
+function buildStreamingProcessSummary(
+  entries: StreamingProcessEntry[],
+  formatImportedSourceCommandRecord: (count?: number) => string,
+): {
   summaryText: string;
   descriptor: ToolBatchSummaryDescriptor | null;
   metaText: string | null;
@@ -645,8 +650,17 @@ function buildStreamingProcessSummary(entries: StreamingProcessEntry[]): {
   const thinkingCount = entries.filter(
     (entry) => entry.kind === "thinking",
   ).length;
+  const importedToolCount = toolEntries.filter((entry) =>
+    isImportedToolCall(entry.toolCall),
+  ).length;
+  const hasImportedThinking =
+    entries.some(
+      (entry) =>
+        entry.kind === "thinking" && isImportedProcessMetadata(entry.metadata),
+    ) ||
+    (importedToolCount > 0 && thinkingCount > 0);
   const batchDescriptor =
-    toolEntries.length > 1
+    toolEntries.length > 1 && importedToolCount === 0
       ? summarizeStreamingToolBatch(toolEntries.map((entry) => entry.toolCall))
       : null;
   if (batchDescriptor) {
@@ -659,6 +673,20 @@ function buildStreamingProcessSummary(entries: StreamingProcessEntry[]): {
 
   const toolCount = toolEntries.length;
   if (toolCount > 0) {
+    if (importedToolCount > 0) {
+      return {
+        summaryText: formatImportedSourceCommandRecord(importedToolCount),
+        descriptor: null,
+        metaText:
+          [
+            hasImportedThinking ? "已完成思考" : null,
+            toolCount > 1 ? `导入过程 ${toolCount} 个步骤` : null,
+          ]
+            .filter(Boolean)
+            .join("，") || null,
+      };
+    }
+
     const toolCalls = toolEntries.map((entry) => entry.toolCall);
     const families = new Set(
       toolCalls.map(
@@ -667,7 +695,10 @@ function buildStreamingProcessSummary(entries: StreamingProcessEntry[]): {
     );
     if (families.size === 1) {
       return {
-        summaryText: buildToolGroupHeadline(toolCalls),
+        summaryText: buildToolGroupHeadline(
+          toolCalls,
+          formatImportedSourceCommandRecord,
+        ),
         descriptor: null,
         metaText: null,
       };
@@ -740,13 +771,17 @@ function buildStreamingProcessSummary(entries: StreamingProcessEntry[]): {
   if (toolCount === 0) {
     if (thinkingCount > 0) {
       const firstThinking = entries.find((entry) => entry.kind === "thinking");
-      const summaryText =
+      const thinkingDisplay =
         firstThinking?.kind === "thinking"
           ? resolveThinkingDisplayParts(
               firstThinking.text,
               firstThinking.defaultExpanded === true,
-            ).statusLabel
-          : "已完成思考";
+            )
+          : null;
+      const summaryText =
+        hasImportedThinking && thinkingDisplay?.preview
+          ? thinkingDisplay.preview
+          : thinkingDisplay?.statusLabel || "已完成思考";
       return {
         summaryText,
         descriptor: null,
@@ -783,8 +818,15 @@ function shouldAutoExpandProcessEntries(
   if (
     entries.some(
       (entry) =>
-        entry.kind === "tool" &&
-        isImportedProcessMetadata(entry.toolCall.result?.metadata),
+        entry.kind === "thinking" && isImportedProcessMetadata(entry.metadata),
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    entries.some(
+      (entry) => entry.kind === "tool" && isImportedToolCall(entry.toolCall),
     )
   ) {
     return true;
@@ -808,6 +850,14 @@ function shouldAutoExpandProcessEntries(
   }
 
   return entries.every((entry) => entry.kind === "thinking");
+}
+
+function isImportedToolCall(toolCall: ToolCallState): boolean {
+  const possibleToolMetadata = (toolCall as { metadata?: unknown }).metadata;
+  return (
+    isImportedProcessMetadata(toolCall.result?.metadata) ||
+    isImportedProcessMetadata(possibleToolMetadata)
+  );
 }
 
 function isImportedProcessMetadata(metadata: unknown): boolean {
@@ -843,11 +893,15 @@ const StreamingProcessGroup: React.FC<{
     groupMarker: string,
   ) => React.ReactNode;
 }> = ({ entries, defaultExpanded = false, renderEntry }) => {
+  const { t } = useTranslation("agent");
   const [expanded, setExpanded] = React.useState(defaultExpanded);
   const previousDefaultExpandedRef = React.useRef(defaultExpanded);
   const { summaryText, descriptor, metaText } = useMemo(
-    () => buildStreamingProcessSummary(entries),
-    [entries],
+    () =>
+      buildStreamingProcessSummary(entries, (count?: number) =>
+        t("agentChat.toolCall.importedCommandRecord.groupTitle", { count }),
+      ),
+    [entries, t],
   );
 
   React.useEffect(() => {
@@ -1359,6 +1413,9 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
     const renderProcessEntry = React.useCallback(
       (entry: StreamingProcessEntry, grouped: boolean, groupMarker: string) => {
         if (entry.kind === "thinking") {
+          const preserveThinkingSourceText =
+            entry.preserveSourceText ||
+            isImportedProcessMetadata(entry.metadata);
           return (
             <ThinkingBlock
               key={entry.id}
@@ -1367,7 +1424,8 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
               grouped={grouped}
               groupMarker={groupMarker}
               hideSummary={grouped}
-              isStreaming={isStreaming}
+              isStreaming={isStreaming && !preserveThinkingSourceText}
+              preserveSourceText={preserveThinkingSourceText}
             />
           );
         }
@@ -1422,13 +1480,30 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
         const toolCount = entries.filter(
           (entry) => entry.kind === "tool",
         ).length;
+        const hasImportedProcess = entries.some(
+          (entry) =>
+            (entry.kind === "thinking" &&
+              isImportedProcessMetadata(entry.metadata)) ||
+            (entry.kind === "tool" && isImportedToolCall(entry.toolCall)),
+        );
+        const processEntries = hasImportedProcess
+          ? entries.map((entry) =>
+              entry.kind === "thinking"
+                ? {
+                    ...entry,
+                    defaultExpanded: entry.defaultExpanded ?? true,
+                    preserveSourceText: true,
+                  }
+                : entry,
+            )
+          : entries;
         if (options?.forceGroup || (toolCount > 0 && entries.length > 1)) {
           return (
             <StreamingProcessGroup
               key={key}
-              entries={entries}
+              entries={processEntries}
               defaultExpanded={shouldAutoExpandProcessEntries(
-                entries,
+                processEntries,
                 isStreaming,
               )}
               renderEntry={renderProcessEntry}
@@ -1436,7 +1511,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
           );
         }
 
-        return entries.map((entry) => (
+        return processEntries.map((entry) => (
           <React.Fragment key={entry.id}>
             {renderProcessEntry(entry, false, "•")}
           </React.Fragment>
@@ -1690,7 +1765,9 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
             kind: "thinking",
             id: `thinking-${index}`,
             text: part.text,
-            defaultExpanded: isStreaming,
+            defaultExpanded:
+              isStreaming || isImportedProcessMetadata(part.metadata),
+            metadata: part.metadata,
           });
           return;
         }

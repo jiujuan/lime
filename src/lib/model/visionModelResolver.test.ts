@@ -70,7 +70,7 @@ describe("resolveVisionModel", () => {
     const models = [
       createModel("gpt-5.3-codex", {
         provider_id: "codex",
-        provider_name: "Codex",
+        provider_name: "Local CLI",
         capabilities: {
           vision: true,
           tools: true,

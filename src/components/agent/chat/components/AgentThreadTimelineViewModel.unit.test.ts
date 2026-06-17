@@ -237,7 +237,7 @@ describe("AgentThreadTimelineViewModel", () => {
     });
   });
 
-  it("Codex 导入过程块即使是完成态历史，也应允许默认物化详情", () => {
+  it("本地历史导入过程块即使是完成态历史，也应允许默认物化详情", () => {
     expect(
       buildTimelineBlockRenderPlan({
         block: block({
@@ -255,7 +255,7 @@ describe("AgentThreadTimelineViewModel", () => {
               },
             }),
             baseItem("search-imported", "web_search", {
-              query: "Lime Codex import",
+              query: "Lime history import",
               action: "search_query",
               metadata: {
                 imported: true,

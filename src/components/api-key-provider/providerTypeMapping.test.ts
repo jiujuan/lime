@@ -66,7 +66,7 @@ describe("providerTypeMapping", () => {
     expect(resolved).toBe("deepseek");
   });
 
-  it("codex 类型应强制解析到 codex", () => {
+  it("本地 CLI 类型应强制解析到对应 registry id", () => {
     const resolved = resolveRegistryProviderId("custom-anything", {
       providerType: "codex",
       catalogAliasMap: null,

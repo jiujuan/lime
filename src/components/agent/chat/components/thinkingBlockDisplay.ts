@@ -8,12 +8,20 @@ export interface ThinkingDisplayParts {
   preview: string;
 }
 
+interface ThinkingDisplayOptions {
+  preserveSourceText?: boolean;
+}
+
 export function resolveThinkingDisplayParts(
   content: string,
   isStreaming: boolean,
+  options: ThinkingDisplayOptions = {},
 ): ThinkingDisplayParts {
-  const trimmed = sanitizeThinkingDisplayText(
-    normalizeProcessDisplayText(content),
+  const normalized = normalizeProcessDisplayText(content);
+  const trimmed = (
+    options.preserveSourceText
+      ? normalized
+      : sanitizeThinkingDisplayText(normalized)
   ).trim();
   const statusLabel = isStreaming ? "思考中" : "已完成思考";
 

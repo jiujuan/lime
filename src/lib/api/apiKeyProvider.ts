@@ -42,6 +42,8 @@ import {
   type ModelProviderTestConnectionResponse as AppServerModelProviderTestConnectionResponse,
   type ModelProviderUiStateReadResponse as AppServerModelProviderUiStateReadResponse,
   type ModelProviderWriteResponse as AppServerModelProviderWriteResponse,
+  type ProviderInfo,
+  type ProviderKeyInfo,
 } from "../../../packages/app-server-client/src/protocol";
 
 type ApiKeyProviderAppServerClient = Pick<AppServerClient, "request">;
@@ -78,6 +80,68 @@ function cloneProviderList(
   }));
 }
 
+function toProviderDisplay(provider: ProviderInfo): ProviderDisplay {
+  return {
+    id: provider.id,
+    name: provider.name,
+    type: provider.providerType,
+    api_host: provider.apiHost,
+    is_system: provider.isSystem,
+    group: provider.group,
+    enabled: provider.enabled,
+    sort_order: provider.sortOrder,
+    api_version: provider.apiVersion ?? undefined,
+    project: provider.project ?? undefined,
+    location: provider.location ?? undefined,
+    region: provider.region ?? undefined,
+    custom_models: [...(provider.customModels ?? [])],
+    prompt_cache_mode:
+      (provider.promptCacheMode as ProviderDeclaredPromptCacheMode | null) ??
+      null,
+    api_key_count: provider.apiKeyCount,
+    created_at: provider.createdAt ?? "",
+    updated_at: provider.updatedAt ?? "",
+  };
+}
+
+function toApiKeyDisplay(apiKey: ProviderKeyInfo): ApiKeyDisplay {
+  return {
+    id: apiKey.id,
+    provider_id: apiKey.providerId,
+    api_key_masked: apiKey.apiKeyMasked,
+    alias: apiKey.alias ?? undefined,
+    enabled: apiKey.enabled,
+    usage_count: apiKey.usageCount,
+    error_count: apiKey.errorCount,
+    last_used_at: apiKey.lastUsedAt ?? undefined,
+    created_at: apiKey.createdAt,
+  };
+}
+
+function toProviderWithKeysDisplay(
+  provider: ProviderInfo,
+): ProviderWithKeysDisplay {
+  return {
+    ...toProviderDisplay(provider),
+    api_keys: (provider.apiKeys ?? []).map(toApiKeyDisplay),
+  };
+}
+
+function toSystemProviderCatalogItem(
+  provider: ProviderInfo,
+): SystemProviderCatalogItem {
+  return {
+    id: provider.id,
+    name: provider.name,
+    type: provider.providerType,
+    api_host: provider.apiHost,
+    group: provider.group,
+    sort_order: provider.sortOrder,
+    api_version: provider.apiVersion ?? undefined,
+    legacy_ids: [...(provider.legacyIds ?? [])],
+  };
+}
+
 function normalizeModelProviderListResponse(
   response: AppServerModelProviderListResponse | null | undefined,
 ): ProviderWithKeysDisplay[] {
@@ -89,7 +153,7 @@ function normalizeModelProviderListResponse(
     throw new Error("App Server modelProvider/list did not return providers");
   }
 
-  return response.providers as ProviderWithKeysDisplay[];
+  return response.providers.map(toProviderWithKeysDisplay);
 }
 
 function normalizeModelProviderCatalogListResponse(
@@ -107,7 +171,7 @@ function normalizeModelProviderCatalogListResponse(
     );
   }
 
-  return response.providers as SystemProviderCatalogItem[];
+  return response.providers.map(toSystemProviderCatalogItem);
 }
 
 function normalizeProviderReadResponse(
@@ -116,7 +180,9 @@ function normalizeProviderReadResponse(
   if (!response || typeof response !== "object") {
     throw new Error("App Server modelProvider/read did not return provider");
   }
-  return (response.provider ?? null) as ProviderWithKeysDisplay | null;
+  return response.provider
+    ? toProviderWithKeysDisplay(response.provider)
+    : null;
 }
 
 function normalizeProviderWriteResponse(
@@ -125,7 +191,37 @@ function normalizeProviderWriteResponse(
   if (!response || typeof response !== "object" || !response.provider) {
     throw new Error("App Server modelProvider write did not return provider");
   }
-  return response.provider as ProviderDisplay;
+  return toProviderDisplay(response.provider);
+}
+
+function toCreateProviderParams(request: AddCustomProviderRequest) {
+  return {
+    name: request.name,
+    providerType: request.type,
+    apiHost: request.api_host,
+    apiVersion: request.api_version,
+    project: request.project,
+    location: request.location,
+    region: request.region,
+    promptCacheMode: request.prompt_cache_mode,
+  };
+}
+
+function toUpdateProviderParams(id: string, request: UpdateProviderRequest) {
+  return {
+    providerId: id,
+    name: request.name,
+    providerType: request.type,
+    apiHost: request.api_host,
+    enabled: request.enabled,
+    sortOrder: request.sort_order,
+    apiVersion: request.api_version,
+    project: request.project,
+    location: request.location,
+    region: request.region,
+    promptCacheMode: request.prompt_cache_mode,
+    customModels: request.custom_models,
+  };
 }
 
 function normalizeProviderDeleteResponse(
@@ -143,14 +239,16 @@ function normalizeProviderKeyWriteResponse(
   if (!response || typeof response !== "object" || !response.key) {
     throw new Error("App Server modelProviderKey write did not return key");
   }
-  return response.key as ApiKeyDisplay;
+  return toApiKeyDisplay(response.key);
 }
 
 function normalizeProviderKeyDeleteResponse(
   response: AppServerModelProviderKeyDeleteResponse | null | undefined,
 ): boolean {
   if (!response || typeof response.deleted !== "boolean") {
-    throw new Error("App Server modelProviderKey/delete did not return deleted");
+    throw new Error(
+      "App Server modelProviderKey/delete did not return deleted",
+    );
   }
   return response.deleted;
 }
@@ -168,7 +266,9 @@ function normalizeUiStateReadResponse(
   response: AppServerModelProviderUiStateReadResponse | null | undefined,
 ): string | null {
   if (!response || typeof response !== "object") {
-    throw new Error("App Server modelProviderUiState/read did not return value");
+    throw new Error(
+      "App Server modelProviderUiState/read did not return value",
+    );
   }
   return response.value ?? null;
 }
@@ -459,7 +559,7 @@ export const apiKeyProviderApi = {
     return invalidateAfterMutation(
       requestApiKeyProviderAppServer<AppServerModelProviderWriteResponse>(
         METHOD_MODEL_PROVIDER_CREATE,
-        { provider: request },
+        toCreateProviderParams(request),
       ).then(normalizeProviderWriteResponse),
     );
   },
@@ -474,7 +574,7 @@ export const apiKeyProviderApi = {
     return invalidateAfterMutation(
       requestApiKeyProviderAppServer<AppServerModelProviderWriteResponse>(
         METHOD_MODEL_PROVIDER_UPDATE,
-        { providerId: id, patch: request },
+        toUpdateProviderParams(id, request),
       ).then(normalizeProviderWriteResponse),
     );
   },
@@ -595,10 +695,10 @@ export const apiKeyProviderApi = {
    * 设置 UI 状态
    */
   async setUiState(key: string, value: string): Promise<void> {
-    await requestApiKeyProviderAppServer(
-      METHOD_MODEL_PROVIDER_UI_STATE_WRITE,
-      { key, value },
-    );
+    await requestApiKeyProviderAppServer(METHOD_MODEL_PROVIDER_UI_STATE_WRITE, {
+      key,
+      value,
+    });
   },
 
   /**
@@ -607,15 +707,12 @@ export const apiKeyProviderApi = {
    */
   async updateSortOrders(sortOrders: [string, number][]): Promise<void> {
     return invalidateAfterMutation(
-      requestApiKeyProviderAppServer(
-        METHOD_MODEL_PROVIDER_SORT_ORDERS_UPDATE,
-        {
-          sortOrders: sortOrders.map(([providerId, sortOrder]) => ({
-            providerId,
-            sortOrder,
-          })),
-        },
-      ).then(() => undefined),
+      requestApiKeyProviderAppServer(METHOD_MODEL_PROVIDER_SORT_ORDERS_UPDATE, {
+        sortOrders: sortOrders.map(([providerId, sortOrder]) => ({
+          providerId,
+          sortOrder,
+        })),
+      }).then(() => undefined),
     );
   },
 

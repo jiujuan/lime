@@ -59,7 +59,8 @@ pub use aster_state_support::{
     load_workspace_lime_skills, message_helpers, reload_lime_skills, SessionConfigBuilder,
 };
 pub use credential_bridge::{
-    create_aster_provider, AsterProviderConfig, CredentialBridge, CredentialBridgeError,
+    create_aster_provider, AsterProviderConfig, AsterProviderProtocol, CredentialBridge,
+    CredentialBridgeError,
 };
 pub use durable_memory_fs::{
     durable_memory_permission_pattern, is_virtual_memory_path, resolve_durable_memory_root,

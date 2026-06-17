@@ -75,12 +75,12 @@ beforeEach(async () => {
   mockUseConfiguredProviders.mockReturnValue({
     providers: [
       {
-        key: "custom-codex",
-        label: "Codex Custom",
-        registryId: "custom-codex",
+        key: "custom-local-cli",
+        label: "Local CLI Custom",
+        registryId: "custom-local-cli",
         fallbackRegistryId: "codex",
         type: "codex",
-        providerId: "custom-codex",
+        providerId: "custom-local-cli",
         apiHost: "https://api.openai.com/v1",
       },
     ],
@@ -171,7 +171,7 @@ describe("ModelSelector", () => {
       autoLoad: false,
     });
     expect(mockUseProviderModels).toHaveBeenCalledWith(
-      expect.objectContaining({ key: "custom-codex" }),
+      expect.objectContaining({ key: "custom-local-cli" }),
       expect.objectContaining({
         returnFullMetadata: true,
         autoLoad: false,
@@ -224,7 +224,7 @@ describe("ModelSelector", () => {
     });
 
     expect(mockUseProviderModels).toHaveBeenCalledWith(
-      expect.objectContaining({ key: "custom-codex" }),
+      expect.objectContaining({ key: "custom-local-cli" }),
       expect.objectContaining({
         returnFullMetadata: true,
         autoLoad: true,
@@ -476,12 +476,12 @@ describe("ModelSelector", () => {
           apiHost: "https://llm.limeai.run",
         },
         {
-          key: "custom-codex",
-          label: "Codex Custom",
-          registryId: "custom-codex",
+          key: "custom-local-cli",
+          label: "Local CLI Custom",
+          registryId: "custom-local-cli",
           fallbackRegistryId: "codex",
           type: "codex",
-          providerId: "custom-codex",
+          providerId: "custom-local-cli",
           apiHost: "https://api.openai.com/v1",
         },
       ],
@@ -508,7 +508,7 @@ describe("ModelSelector", () => {
     expect(pageText).toContain("云端模型");
     expect(pageText).toContain("本地与自定义");
     expect(pageText).toContain("Lime 云端");
-    expect(pageText).toContain("Codex Custom");
+    expect(pageText).toContain("Local CLI Custom");
     expect(pageText).toContain("gpt-5.5");
     expect(pageText).toContain("deepseek-v4-flash");
     expect(pageText).not.toContain("暂无可用模型");

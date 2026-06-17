@@ -1,0 +1,184 @@
+{
+  "$defs": {
+    "CapabilityRequirement": {
+      "properties": {
+        "capabilities": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "inputModalities": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "outputModalities": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "runtimeFeatures": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "taskFamilies": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "ModelRef": {
+      "properties": {
+        "modelId": {
+          "type": "string"
+        },
+        "providerId": {
+          "type": "string"
+        },
+        "routingSlot": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "source": {
+          "$ref": "#/$defs/ModelRefSource"
+        },
+        "variant": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "modelId",
+        "providerId",
+        "source"
+      ],
+      "type": "object"
+    },
+    "ModelRefSource": {
+      "enum": [
+        "direct_provider_config",
+        "explicit",
+        "fallback",
+        "host_options",
+        "oem_policy",
+        "profile_slot",
+        "runtime_options",
+        "session_default",
+        "task"
+      ],
+      "type": "string"
+    },
+    "ModelTaskKind": {
+      "enum": [
+        "chat",
+        "embedding",
+        "image_edit",
+        "image_generate",
+        "moderation",
+        "rerank",
+        "transcription_generate",
+        "video_generate",
+        "voice_generate"
+      ],
+      "type": "string"
+    },
+    "ModelTaskSource": {
+      "enum": [
+        "agent_app",
+        "agent_turn",
+        "automation",
+        "media_task_artifact",
+        "provider_probe"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "contentId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "modalityContractKey": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "modelRef": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ModelRef"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "requirements": {
+      "$ref": "#/$defs/CapabilityRequirement"
+    },
+    "routingSlot": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "sessionId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "source": {
+      "$ref": "#/$defs/ModelTaskSource"
+    },
+    "taskKind": {
+      "$ref": "#/$defs/ModelTaskKind"
+    },
+    "threadId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "traceId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "turnId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "requirements",
+    "source",
+    "taskKind"
+  ],
+  "title": "ModelTaskRequest",
+  "type": "object"
+}

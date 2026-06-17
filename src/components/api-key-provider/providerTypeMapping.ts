@@ -187,7 +187,7 @@ function buildValidationCandidates(
  * 解析最终用于 model_registry 的 provider_id
  *
  * 优先级：
- * 1) codex 协议强制 `codex`
+ * 1) 本地 CLI 协议强制使用对应 registry id
  * 2) Catalog alias 映射
  * 3) 旧的静态/legacy ID 映射
  * 4) Provider 类型映射（无模型注册表上下文时作为回退）

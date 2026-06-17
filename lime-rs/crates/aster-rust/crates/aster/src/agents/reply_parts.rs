@@ -2001,12 +2001,49 @@ mod tests {
             .map(|tool| tool.name.to_string())
             .collect::<Vec<_>>();
 
-        assert!(system_prompt.contains("plan mode for this turn"));
+        assert!(system_prompt.contains("Plan mode for this turn"));
+        assert!(system_prompt.contains("not the update_plan checklist tool"));
+        assert!(system_prompt.contains("Do not implement code changes"));
+        assert!(
+            system_prompt.contains("The opening and closing tags must each be on their own line")
+        );
         assert!(system_prompt.contains("<proposed_plan>"));
-        assert!(system_prompt.contains("Do not use update_plan in plan mode"));
+        assert!(system_prompt.contains("Do not use update_plan in Plan mode"));
         assert!(system_prompt.contains("request_user_input"));
         assert!(tool_names.iter().any(|name| name == "update_plan"));
         assert!(tool_names.iter().any(|name| name == "request_user_input"));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn prepare_tools_and_prompt_keeps_plan_instruction_with_session_prompt_override(
+    ) -> anyhow::Result<()> {
+        let agent = crate::agents::Agent::new();
+        let working_dir = std::env::current_dir()?;
+        let turn_context = TurnContextOverride {
+            collaboration_mode: Some("plan".to_string()),
+            ..TurnContextOverride::default()
+        };
+
+        let (_tools, _toolshim_tools, system_prompt) =
+            crate::session_context::with_turn_context(Some(turn_context), async {
+                agent
+                    .prepare_tools_and_prompt(
+                        &working_dir,
+                        Some("Custom session prompt."),
+                        true,
+                        &ModelConfig::new("test-model").unwrap(),
+                    )
+                    .await
+            })
+            .await?;
+
+        assert!(system_prompt.starts_with("Custom session prompt."));
+        assert!(system_prompt.contains("# Plan Mode Instructions:"));
+        assert!(system_prompt.contains("Plan mode for this turn"));
+        assert!(system_prompt.contains("<proposed_plan>"));
+        assert!(system_prompt.contains("request_user_input"));
+        assert!(system_prompt.contains("Do not use update_plan in Plan mode"));
         Ok(())
     }
 

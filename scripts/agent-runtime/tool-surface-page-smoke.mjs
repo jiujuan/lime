@@ -852,7 +852,7 @@ function buildCodeRuntimeModelFixture() {
   const nowSeconds = Math.floor(Date.now() / 1000);
   return {
     id: CODE_FIXTURE_MODEL_ID,
-    display_name: "GPT-5 Codex Smoke",
+    display_name: "GPT-5 Reasoning Smoke",
     provider_id: CODE_FIXTURE_PROVIDER_ID,
     provider_name: "Smoke OpenAI",
     family: "gpt-5",

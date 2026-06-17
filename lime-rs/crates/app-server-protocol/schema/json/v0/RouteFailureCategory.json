@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "enum": [
+    "capability_gap",
+    "internal_error",
+    "missing_credential",
+    "model_unavailable",
+    "no_candidate",
+    "provider_disabled",
+    "provider_needs_setup",
+    "unsupported_endpoint",
+    "unsupported_protocol"
+  ],
+  "title": "RouteFailureCategory",
+  "type": "string"
+}

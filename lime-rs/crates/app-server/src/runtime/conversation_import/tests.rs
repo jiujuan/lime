@@ -16,6 +16,7 @@ mod evidence;
 mod idempotency;
 mod path_resolution;
 mod runtime_events;
+mod security;
 
 #[test]
 fn scans_codex_state_db_with_filters_and_cursor() {
@@ -301,9 +302,21 @@ INSERT INTO threads (
 
     let requests = backend.requests.lock().expect("requests mutex poisoned");
     let request = requests.last().expect("recorded request");
-    assert_eq!(request.provider_preference.as_deref(), Some("openai"));
-    assert_eq!(request.model_preference.as_deref(), Some("gpt-5.5"));
+    assert_eq!(request.provider_preference.as_deref(), None);
+    assert_eq!(request.model_preference.as_deref(), None);
     let runtime_options = request.runtime_options.as_ref().expect("runtime options");
+    assert_eq!(runtime_options.provider_preference.as_deref(), None);
+    assert_eq!(runtime_options.model_preference.as_deref(), None);
+    assert!(runtime_options
+        .host_options
+        .as_ref()
+        .and_then(|value| value.pointer("/asterChatRequest/provider_preference"))
+        .is_none());
+    assert!(runtime_options
+        .host_options
+        .as_ref()
+        .and_then(|value| value.pointer("/asterChatRequest/turn_config/provider_preference"))
+        .is_none());
     assert_eq!(
         runtime_options
             .host_options

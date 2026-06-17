@@ -12,6 +12,7 @@ import { createServer } from "node:http";
 import { promisify } from "node:util";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -30,8 +31,6 @@ const execFileAsync = promisify(execFile);
 const {
   browserWindowCtorMock,
   browserWindowGetAllWindowsMock,
-  contentViewAddChildViewMock,
-  contentViewRemoveChildViewMock,
   getFileIconMock,
   getPathMock,
   loadUrlMock,
@@ -44,9 +43,6 @@ const {
   showItemInFolderMock,
   openProjectPathWithLocalToolMock,
   runProjectShellCommandMock,
-  webContentsDestroyMock,
-  webContentsLoadUrlMock,
-  webContentsReloadMock,
   webContentsViewCtorMock,
 } = vi.hoisted(() => {
   const loadUrlMock = vi.fn();
@@ -99,9 +95,10 @@ const {
       setWindowOpenHandler: vi.fn(),
     },
   }));
+  const browserWindowGetAllWindowsMock = vi.fn((): MockBrowserWindow[] => []);
   return {
     browserWindowCtorMock,
-    browserWindowGetAllWindowsMock: vi.fn(() => []),
+    browserWindowGetAllWindowsMock,
     contentViewAddChildViewMock,
     contentViewRemoveChildViewMock,
     getFileIconMock: vi.fn(),
@@ -125,6 +122,13 @@ const {
 const tempDirs: string[] = [];
 const TEST_REMOTE_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lwcdVwAAAABJRU5ErkJggg==";
+type MockBrowserWindow = {
+  focus: ReturnType<typeof vi.fn>;
+  show: ReturnType<typeof vi.fn>;
+  webContents: {
+    getURL: () => string;
+  };
+};
 type AppServerRequestMock = (
   method: string,
   params?: unknown,
@@ -361,6 +365,96 @@ describe("ElectronHostCommands retired API Key Provider facade", () => {
     await expect(host.invoke(command, {})).rejects.toThrow(
       `Electron host command is not implemented: ${command}`,
     );
+  });
+});
+
+describe("ElectronHostCommands frontend debug logging", () => {
+  it("report_frontend_debug_log 通过 Host 日志通道写入并返回 null", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir);
+
+    await expect(
+      host.invoke("report_frontend_debug_log", {
+        report: {
+          level: "debug",
+          message: "AgentChatPage.loadData.start",
+        },
+      }),
+    ).resolves.toBeNull();
+
+    expect(logSpy).toHaveBeenCalledWith(
+      "[electron-renderer:debug] AgentChatPage.loadData.start",
+    );
+  });
+
+  it("report_frontend_debug_log 忽略已关闭 stdout 管道的 EPIPE", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {
+      const error = new Error("write EPIPE") as Error & { code: string };
+      error.code = "EPIPE";
+      throw error;
+    });
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir);
+
+    await expect(
+      host.invoke("report_frontend_debug_log", {
+        report: {
+          level: "info",
+          message: "renderer debug after parent pipe closed",
+        },
+      }),
+    ).resolves.toBeNull();
+  });
+
+  it("report_frontend_debug_log 不吞掉非管道类日志错误", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {
+      throw new Error("unexpected console failure");
+    });
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir);
+
+    await expect(
+      host.invoke("report_frontend_debug_log", {
+        report: {
+          message: "renderer debug",
+        },
+      }),
+    ).rejects.toThrow("unexpected console failure");
+  });
+
+  it("report_frontend_debug_log 处理 stdout 异步 EPIPE 事件时不触发 uncaughtException", async () => {
+    const uncaughtExceptionSpy = vi.fn();
+    process.once("uncaughtException", uncaughtExceptionSpy);
+
+    process.stdout.emit(
+      "error",
+      Object.assign(new Error("write EPIPE"), {
+        code: "EPIPE",
+      }),
+    );
+    await Promise.resolve();
+
+    process.removeListener("uncaughtException", uncaughtExceptionSpy);
+    expect(uncaughtExceptionSpy).not.toHaveBeenCalled();
+  });
+
+  it("report_frontend_crash 忽略已关闭 stderr 管道的 EPIPE", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {
+      const error = new Error("write EPIPE") as Error & { code: string };
+      error.code = "EPIPE";
+      throw error;
+    });
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir);
+
+    await expect(
+      host.invoke("report_frontend_crash", {
+        report: {
+          message: "renderer crashed after parent pipe closed",
+        },
+      }),
+    ).resolves.toEqual({ success: true });
   });
 });
 
@@ -968,6 +1062,86 @@ describe("ElectronHostCommands local file shell facade", () => {
     await expect(
       host.invoke("open_with_default_app", { path: "/tmp/missing.txt" }),
     ).rejects.toThrow("Cannot open file");
+  });
+
+  it("open_file_preview_window 通过 Electron BrowserWindow 打开本地文件 URL", async () => {
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir);
+    const targetPath = path.join(userDataDir, "prototype.html");
+
+    await expect(
+      host.invoke("open_file_preview_window", {
+        path: targetPath,
+        title: "Prototype",
+      }),
+    ).resolves.toEqual({
+      opened: true,
+      reused: false,
+      url: expect.stringMatching(/^file:\/\//),
+      title: "Prototype",
+    });
+
+    const expectedUrl = pathToFileURL(targetPath).toString();
+    expect(loadUrlMock).toHaveBeenCalledWith(expectedUrl);
+    expect(browserWindowCtorMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        width: 1280,
+        minWidth: 860,
+        title: "Prototype",
+        show: false,
+      }),
+    );
+    expect(showWindowMock).toHaveBeenCalledTimes(1);
+    expect(focusWindowMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("open_file_preview_window 已存在同 URL 窗口时复用并聚焦", async () => {
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir);
+    const targetPath = path.join(userDataDir, "prototype.html");
+    const expectedUrl = pathToFileURL(targetPath).toString();
+    const existingWindow = {
+      contentView: {
+        addChildView: vi.fn(),
+        removeChildView: vi.fn(),
+      },
+      focus: focusWindowMock,
+      isDestroyed: () => false,
+      loadURL: loadUrlMock,
+      off: vi.fn(),
+      on: vi.fn(),
+      once: vi.fn(),
+      show: showWindowMock,
+      webContents: {
+        getURL: () => expectedUrl,
+      },
+    };
+    browserWindowGetAllWindowsMock.mockReturnValueOnce([existingWindow]);
+
+    await expect(
+      host.invoke("open_file_preview_window", { path: targetPath }),
+    ).resolves.toEqual({
+      opened: true,
+      reused: true,
+      url: expectedUrl,
+      title: "prototype.html",
+    });
+
+    expect(browserWindowCtorMock).not.toHaveBeenCalled();
+    expect(loadUrlMock).not.toHaveBeenCalled();
+    expect(showWindowMock).toHaveBeenCalledTimes(1);
+    expect(focusWindowMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("open_file_preview_window 拒绝相对路径", async () => {
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir);
+
+    await expect(
+      host.invoke("open_file_preview_window", {
+        path: "relative/prototype.html",
+      }),
+    ).rejects.toThrow("path 必须是绝对路径");
   });
 
   it("open_project_path_with_tool 应按工具类型走 Electron shell 或本地工具封装", async () => {
@@ -2003,9 +2177,10 @@ describe("ElectronHostCommands system utilities", () => {
       },
     });
 
-    const result = (await host.invoke(
-      "get_environment_preview",
-    )) as Record<string, unknown>;
+    const result = (await host.invoke("get_environment_preview")) as Record<
+      string,
+      unknown
+    >;
     const shellImport = result.shellImport as Record<string, unknown>;
 
     expect(result).not.toHaveProperty("diagnostic");

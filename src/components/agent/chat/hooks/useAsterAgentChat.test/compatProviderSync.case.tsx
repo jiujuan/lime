@@ -347,4 +347,71 @@ describe("useAsterAgentChat 兼容接口 - provider sync", () => {
       harness.unmount();
     }
   });
+
+  it("导入会话的来源模型不应阻止续聊提交当前 Lime provider/model", async () => {
+    const workspaceId = "ws-imported-source-runtime-model";
+    const topicId = "topic-imported-source-runtime-model";
+    const selectedProvider = "custom-current-provider";
+    const selectedModel = "gpt-5.5";
+    localStorage.setItem(
+      `agent_pref_provider_${workspaceId}`,
+      JSON.stringify(selectedProvider),
+    );
+    localStorage.setItem(
+      `agent_pref_model_${workspaceId}`,
+      JSON.stringify(selectedModel),
+    );
+    mockGetAgentRuntimeSession.mockResolvedValue({
+      id: topicId,
+      messages: [],
+      execution_strategy: "react",
+      execution_runtime: {
+        session_id: topicId,
+        source: "session",
+        provider_name: "openai",
+        model_name: "gpt-5.4",
+        source_client: "codex",
+        imported_continuation: {
+          modelProvider: "openai",
+          model: "gpt-5.4",
+        },
+      },
+    });
+
+    const harness = mountHook(workspaceId);
+
+    try {
+      await flushEffects();
+      await act(async () => {
+        await harness.getValue().switchTopic(topicId);
+      });
+      await flushEffects();
+      mockSubmitAgentRuntimeTurn.mockClear();
+
+      await act(async () => {
+        await harness
+          .getValue()
+          .sendMessage(
+            "基于导入历史继续处理",
+            [],
+            false,
+            false,
+            false,
+            "react",
+          );
+      });
+
+      expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
+      expect(
+        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.turn_config
+          ?.provider_preference,
+      ).toBe(selectedProvider);
+      expect(
+        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.turn_config
+          ?.model_preference,
+      ).toBe(selectedModel);
+    } finally {
+      harness.unmount();
+    }
+  });
 });

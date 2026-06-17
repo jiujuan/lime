@@ -1,906 +1,164 @@
-# Lime 高配版 Artifacts 路线图
-
-> 状态：进行中，P1 / P2 已落地，P3 已闭环，rewrite typed patch 与 current incremental 合同已落地
-> 更新时间：2026-03-31
-> 运行时边界：发送边界、prompt 组装、turn metadata、Team 委派与协议瘦身以 `internal/aiprompts/query-loop.md`、`internal/aiprompts/task-agent-taxonomy.md`、`internal/aiprompts/state-history-telemetry.md` 与 `internal/exec-plans/upstream-runtime-alignment-plan.md` 为准；本文只定义 Artifact 产品层与 Workbench 主线
-> 目标：把 Lime 从“能显示文件/画布的聊天工作台”升级为“交付物优先的 Artifact Workbench”，让回复不再只是普通 Markdown，而是可扫描、可编辑、可版本化、可复用的正式产物
->
-> 配套文档：
-> - `internal/roadmap/artifacts/architecture-blueprint.md`
-> - `internal/roadmap/artifacts/artifact-document-v1.md`
-> - `internal/roadmap/artifacts/framework-boundary.md`
-> - `internal/roadmap/artifacts/system-prompt-and-schema-contract.md`
+# Lime Artifacts Current 路线图
 
-## 1. 文档依据
+> 状态：current，Preview Artifact Contract 已进入导入历史与文件预览主链
+> 更新时间：2026-06-17
+> 主目标：Codex 导入对话、Lime 原生对话、任务结果、文件、图片、DOCX、HTML、URL、Agent App shell entry 等所有可打开对象，都通过统一预览合同进入右侧工作台或独立窗口；正式交付物继续由 `ArtifactDocument v1` 承接。
 
-本文不是从抽象概念反推，而是基于当前仓库现役实现与设计约束编写。
+## 当前结论
 
-关键事实源：
+Lime 不再采用“文件预览优先于 artifact”的双轨规则。
 
-- `internal/aiprompts/overview.md`
-- `internal/aiprompts/design-language.md`
-- `src/lib/artifact/types.ts`
-- `src/lib/artifact/parser.ts`
-- `src/components/artifact/ArtifactRenderer.tsx`
-- `src/components/artifact/ArtifactToolbar.tsx`
-- `src/components/agent/chat/components/MarkdownRenderer.tsx`
-- `src/components/agent/chat/hooks/useArtifactDisplayState.ts`
-- `src/components/agent/chat/components/AgentThreadTimeline.tsx`
-- `src/components/agent/chat/workspace/workbenchPreview.tsx`
-- `src/components/agent/chat/workspace/WorkspaceCanvasContent.tsx`
-- `src/lib/workspace/workbenchCanvas.ts`
-- `src/components/workspace/document/DocumentRenderer.tsx`
-- `src/components/workspace/document/editor/NotionEditor.tsx`
-- `lime-rs/src/services/agent_timeline_service.rs`
+新的事实源划分固定为：
 
-从这些事实源可以确认：
+- `Preview Artifact Contract`：全局 UI 投影层，负责打开、选中、展示、独立窗口、系统打开、来源能力、临时生命周期。
+- `ArtifactDocument v1`：正式交付物事实源，负责报告、PRD、方案、研究、对比、计划等可编辑、可版本化、可导出的长期文档。
+- 业务事实源：文件、任务、URL、知识库、App Server session、Agent App runtime、数据库记录仍保留在各自 domain；preview artifact 只引用它们，不接管它们。
 
-1. Lime 已经是 `Artifact First` 方向，而不是纯聊天产品。
-2. 当前前端已经具备 `ArtifactRenderer + CanvasWorkbench + Timeline + Tiptap 编辑器` 这四块关键底座。
-3. 当前 Artifact 系统仍以“文件快照/Markdown 内容”作为主要载体，还不是“结构化交付物协议”。
-4. 当前回复的美观度问题，本质不是“模型不会写”，而是“产物协议、渲染层、交互层还没有真正收敛成一个系统”。
+一句话：
 
-## 1.1 当前已落地能力
+**打开链路 artifact 化，业务事实源不 artifact 化。**
 
-以下链路已经在当前仓库进入实现态：
+## 外部参考与取舍
 
-1. `runtime_turn` 已接入 Artifact 专属 prompt 组装服务。
-2. Artifact 回合已支持 turn-level `output_schema` 注入，不再只依赖 prompt hint。
-3. 后端已具备 `ArtifactDocument v1` 的 validator / repair / fallback / workspace 落盘能力。
-4. Timeline snapshot metadata 已可回灌 `artifactDocument`，前端在 `content` 为空时也能直接渲染结构化文档。
-5. 前端已落地最小 `artifact-protocol` 壳层，用于统一 runtime metadata 中的 `artifactDocument` 与 `artifact_path(s)` 读取合同。
-6. 后端已支持最小 current-first 增量应用链，并兼容 ingest `artifact_ops`；可把 `artifact.upsert_block / attach_source / finalize_version` 等操作应用到已有 `ArtifactDocument` 并生成新版本。
-7. 右侧已接入最小 `ArtifactWorkbenchShell`，包含阅读面与 `概览 / 来源 / 版本 / 差异` inspector。
-8. 当前版本已支持最小 block diff 摘要，以及来源项 / 差异项到文档 block 的 Workbench 内跳转。
-9. `rewrite` 已把 `artifact_target_block_id` 贯通到 prompt / output schema / ops apply / persist 链路，非目标 block 的 op 会在运行时被忽略并记录 issue。
-10. `rewrite` 现已支持专用 `artifact_rewrite_patch` envelope，并接受正式单条 incremental op；`artifact_ops` 只保留兼容回退，用于逐步收紧模型输出合同。
-11. 前端 `src/lib/artifact-document/*` 已补齐 current-first operation candidate 读取边界，可统一识别正式单条 incremental op、`artifact_rewrite_patch` 与 `artifact_ops` compat 回退。
-12. Rust `artifact_ops_service` 内部 apply 已切到 normalized action 列表；`current incremental` 与 `artifact_rewrite_patch` 不再先包成 `artifact_ops`，后者只保留 compat 输入壳。
-13. Artifact Workbench 的 Markdown / HTML / Artifact JSON 导出已接入统一桌面导出链，复用保存对话框与 `save_exported_document` 主路径，不再走浏览器下载旁路。
+本轮补充参考了 Context7、WebSearch 与本地 `/Users/coso/Documents/dev/js/ag-ui`。WebSearch 只采用官方 / 一手资料：
 
-这意味着当前主线已经从“只有路线图”推进到“结构合同 + 版本快照 + Workbench inspector 闭环”。当前仍然属于后续阶段的，主要是编辑态 / 展示态 / 导出态的进一步同源、更完整的导出格式与分享链，以及在模型稳定后进一步收紧 rewrite 的 `artifact_ops` compat 分支。
+- AG-UI 的可借鉴点是事件与 UI 投影分离：`RUN_* / STEP_*` 管生命周期，`TEXT_MESSAGE_* / MESSAGES_SNAPSHOT` 管消息，`TOOL_CALL_*` 管工具，`STATE_SNAPSHOT / STATE_DELTA` 管状态，`CUSTOM / ACTIVITY_*` 承接展示扩展。Lime 吸收“snapshot + delta 可重建、UI projection 不抢业务事实源”的原则，不直接套 AG-UI wire format。参考：`https://docs.ag-ui.com/concepts/events` 与本地 `docs/ag_ui.md`。
+- OpenAI Apps SDK 的可借鉴点是 `structuredContent` 与组件 `_meta` 分离：模型可见结构和组件渲染元数据不混写。Lime 对应为 `ArtifactDocument` 与 `PreviewArtifact.meta` 分层。参考：`https://developers.openai.com/apps-sdk/reference`、`https://developers.openai.com/apps-sdk/build/chatgpt-ui`。
+- Vercel AI SDK / Generative UI 的可借鉴点是 message parts / tool parts 有明确生命周期，工具结果可以映射为专用组件，但组件不是持久业务状态本身。Lime 对应为不同 `contentKind / renderMode` 的 preview projection。参考：`https://ai-sdk.dev/docs/reference/ai-sdk-core/ui-message`、`https://ai-sdk.dev/docs/ai-sdk-ui/streaming-data`。
+- Claude Artifacts 的可借鉴点是“对话旁边的独立工作区、可查看/修改/复用的内容对象”。Lime 对应为右侧 Workbench 与必要时的 Electron 独立窗口。
 
-## 2. 现状判断
+## Current 事实源
 
-## 2.1 Lime 已经具备的能力
+前端 current：
 
-- 有聊天主入口与工作台分栏能力，支持右侧预览区。
-- 有 Artifact 类型系统、解析器、统一渲染入口、工具栏与列表。
-- 有 Document Canvas 与 Tiptap 编辑器，可承载更高级的文档编辑体验。
-- 有 Agent Timeline，可记录 turn、item、artifact snapshot、warning、error。
-- 有 Workspace 概念，可作为 Artifact 的上下文边界与持久化边界。
+- `src/lib/artifact/types.ts`：现有轻量 artifact 类型。
+- `src/lib/artifact/previewArtifact.ts`：Preview Artifact Contract 的投影 helper。
+- `src/components/agent/chat/workspace/useWorkspaceArtifactPreviewActions.ts`：Workspace 文件/产物点击统一打开入口。
+- `src/components/agent/chat/AgentChatWorkspace.tsx`：消息附件、任务预览与 timeline 文件打开统一投影到 preview artifact / workbench selection。
+- `src/components/agent/chat/components/canvas-workbench/CanvasWorkbenchPreviewModePanel.tsx`：workbench 内直接消费媒体 / system-open / unsupported preview artifact，不再把图片伪装成 Markdown/Code。
+- `src/components/agent/chat/workspace/workbenchPreview.tsx`：右侧工作台预览入口。
+- `src/components/artifact/*`：渲染器、工具栏、HTML 独立窗口动作。
 
-这说明 Lime 不需要再造第二套“文档产品”，而是要把现有能力从“散件”收敛成“Artifact Workbench”。
+后端 current：
 
-## 2.2 当前短板
+- `lime-rs/crates/services/src/file_browser_service.rs`：文件预览读取与文档文本投影。
+- `lime-rs/crates/document-preview/`：DOCX 等文档预览抽取。
+- App Server / RuntimeCore / services / agent crates：对话、任务、事件、artifact snapshot、evidence 的事实源。
+- Electron Desktop Host：只承接本地桌面壳能力，如文件预览独立窗口、系统打开、Finder/Explorer 定位。
 
-当前体验之所以还不够像 Ribbi / Manus / Claude Artifacts 的高配版本，主要有五个结构性问题：
+明确不是 current：
 
-### 1) 回复仍以消息文本为主，Artifact 只是附属物
+- `lime-rs/src/**`、旧 Tauri command wrapper、旧 `agent_runtime_*` 作为新增能力落点。
+- 组件内直接散落 `WebviewWindow`、裸 `invoke` 或浏览器下载旁路。
+- “真实文件直接画布、artifact 另走一套”的双轨预览策略。
 
-`MarkdownRenderer.tsx` 负责把 assistant 文本渲染成较好的 Markdown，但主心智仍然是“消息正文”。  
-这会导致：
+## Preview Artifact Contract v1
 
-- 模型把重要内容写在消息里，而不是交付区
-- 视觉上仍然像聊天气泡，而不是正式报告
-- 后续编辑、复用、导出、版本比较都不自然
+Preview artifact 是普通 `Artifact` 的 source-backed 投影，`meta` 必须至少表达：
 
-### 2) Artifact 模型还是“文件/片段导向”，不是“结构化文档导向”
+- `previewArtifact: true`
+- `isSourceBacked: true`
+- `source`: `file | artifact | task | knowledge | url | session_file | app | database_record`
+- `sourceRef`: 稳定引用，优先使用路径、URL、task id 或 domain id
+- `sourcePath` / `filePath` / `filename`
+- `contentKind`: `text | markdown | code | html | image | document | audio | video | binary | app_shell | unsupported`
+- `renderMode`: `inline | canvas | media | document_text | external_window | system_open | unsupported`
+- `lifecycle: "transient"`，除非用户显式保存或 domain 明确要求持久化
+- `capabilities`: `preview / edit / save / reveal / systemOpen / externalWindow` 等布尔能力
 
-当前 `Artifact` 的核心字段是：
+规则：
 
-- `type`
-- `title`
-- `content`
-- `meta`
+1. 用户点击任何可预览对象，都先投影为 preview artifact，再走 `openArtifactInWorkbench`。
+2. `openArtifactInWorkbench` 是通用工作台的唯一 upsert 入口；文件、任务文件、LayeredDesign 与附件点击只负责构造 projection 并委托打开，避免同一 preview artifact 被写入两次。
+3. workbench 打开必须同时携带稳定 selection key，例如 `artifact:<previewArtifact.id>`；只更新 `selectedArtifactId` 不足以证明右侧工作台已切换。
+4. preview artifact 默认不写入正式消息产物历史，不污染 `ArtifactDocument` 版本。
+5. 内容来自真实 source；编辑必须显式保存才写回 source。
+6. HTML 允许在右侧 iframe 预览，也允许经 Electron Desktop Host 打开独立窗口。
+7. DOCX 不再按 UTF-8 lossless 读取 ZIP 字节；必须先抽取可读文本。
+8. 图片、音频、视频必须写入 `meta.previewUrl` 并由媒体 renderer 消费；不得把 `<img>` / `<audio>` / `<video>` HTML 字符串塞进 document renderer。
+9. 二进制不可内嵌时仍进入同一 preview artifact，renderMode 退化到 `system_open` 或 `unsupported`，而不是消失。
 
-这对代码块、HTML、Mermaid 足够，但对高质量报告类交付物不够。  
-缺的是：
+## 与 ArtifactDocument v1 的边界
 
-- section / block 层级
-- citations / references
-- summary / scorecard / callout / table / checklist 等语义块
-- 版本差异与局部 patch
+`ArtifactDocument v1` 只负责正式交付物：
 
-### 3) Timeline、Canvas、Document Editor 还没有同源
+- 报告、PRD、方案、研究、对比、路线图、执行摘要。
+- block、source、version、rewrite、diff、export。
+- 模型输出 schema、validator、repair、fallback。
 
-当前：
+它不负责：
 
-- Timeline 记录的是过程事件
-- Canvas 展示的是当前 artifact 预览
-- DocumentCanvas 编辑的是内容画布
+- 普通文件列表里的图片/DOCX/HTML 预览。
+- 任务 JSON 状态文件本身。
+- URL 快照、Agent App shell window、数据库记录详情的业务事实。
+- 所有 source-backed 临时打开行为。
 
-三者都与 Artifact 相关，但还没有统一到同一个交付物主模型。
+如果 preview artifact 被用户“另存为正式文档”或 Agent 明确生成正式交付物，才升级为 `ArtifactDocument v1`。
 
-### 4) 当前 parser 仍以 fence/markdown 提取为主
+## 实施阶段
 
-`src/lib/artifact/parser.ts` 现在主要做：
+### P0：文档与旧规则清理
 
-- ` ```artifact ... ` 提取
-- 普通代码块推断
-- plainText 与 artifact 分离
-
-这适合兼容模式，不适合作为高配版的长期事实源。  
-高配版必须从“解析文本里有什么 artifact”升级为“运行时明确产出什么 artifact block”。
-
-### 5) 编辑态与展示态还不是一个产品闭环
-
-当前有 Tiptap 编辑器，但它主要存在于 `document canvas` 内。  
-高配版需要的是：
-
-- 先生成
-- 再预览
-- 再局部重写
-- 再比对版本
-- 再导出/复用
-
-这些动作要围绕同一个 Artifact Document 完成，而不是在聊天、画布、文件之间来回切换。
-
-## 3. 核心决策
-
-## 3.1 产品主张
-
-Lime 的高配版 Artifacts 应该明确采用：
-
-**Chat for reasoning, Artifact for delivery。**
-
-含义：
-
-- 聊天区负责目标澄清、任务推进、过程解释、追问与协作
-- Artifact Workbench 负责正式产物的创建、阅读、编辑、对比、导出与沉淀
-- Timeline 负责过程透明，而不是承担最终阅读面
-
-换句话说：
-
-**消息区不是最终作品区。**
-
-## 3.2 长期事实源
-
-长期统一到：
-
-**结构化 Artifact Document + 版本化 Block Tree + 可编辑 Workbench**
-
-而不是：
-
-- 普通 Markdown 长文
-- 单个大字符串 HTML
-- 临时 artifact fence 解析结果
-
-## 3.3 技术主栈决策
-
-高配版建议采用：
-
-**Tiptap / ProseMirror 作为主编辑引擎，但不作为顶层长期 canonical model。**
-
-更准确地说：
-
-- `ArtifactDocument JSON` 才是产品层长期事实源
-- `Tiptap / ProseMirror JSON` 是编辑器层载荷与 rich_text block 的工作表示
-- `Markdown / HTML / PDF` 是导出与分发表达
-
-理由：
-
-1. Tiptap / ProseMirror 非常适合富文本编辑、schema 约束、节点扩展、局部事务与协同增强。
-2. 但它的 JSON 结构本质上贴近编辑器内部 schema，不适合作为整个平台的顶层产品对象。
-3. Lime 的 Artifact 不只是富文本，还包括来源、评分块、表格块、执行绑定、浏览器会话引用、导出记录等领域对象。
-4. 如果把这些全部硬塞进 ProseMirror 节点树，未来的迁移、查询、导出、跨端实现和协议演进成本会被放大。
-
-因此建议采用四层模型：
-
-- 兼容输入层：Markdown / artifact fence / 文件快照
-- 运行时协议层：Artifact Parts / Block Ops
-- 产品持久化层：ArtifactDocument JSON
-- 编辑器载荷层：RichText Block 内可使用 Tiptap / ProseMirror JSON
-
-## 3.4 框架层决策
-
-在重新评估 `aster-rust blueprint` 与 `codex-rs` 之后，路线图增加一条硬决策：
-
-**不要把 Artifact Workbench 直接建立在 Blueprint 抽象之上。**
-
-更合适的长期分层是：
-
-- Lime：产品层交付物与工作台
-- Aster Runtime：通用 `thread / turn / item / event / output schema`
-- Blueprint：可选的长周期 planning module
-
-判断依据见：
-
-- `internal/roadmap/artifacts/framework-boundary.md`
-
-这条决策很关键，因为一旦把文档交付协议和任务树执行框架混在一起，后面每扩一种 Artifact 类型，都会反向污染 runtime。
-
-## 4. 目标与非目标
-
-## 4.1 总目标
-
-为 Lime 建立一套统一的 Artifact Workbench，让高价值回复默认沉淀为：
-
-`结构化交付物 -> 专用阅读面 -> 局部可编辑 -> 可版本比较 -> 可导出复用`
-
-## 4.2 子目标
-
-1. 让“报告、方案、规划、研究、执行摘要、表格型结论”默认进入 Artifact Workbench，而不是只停留在消息正文。
-2. 让回复具备更强的视觉层级：摘要卡、提示框、表格、评分块、引用块、来源区、版本条。
-3. 让 Artifact 在会话中持续增量更新，而不是每轮都生成一个新的孤岛文件。
-4. 让编辑态、展示态、导出态围绕同一份 Artifact Document 运转。
-5. 让 Service Skill、Automation、Browser Assist、Theme Workbench 的产物最终都能落到同一套 Artifact Workbench。
-
-## 4.3 非目标
-
-1. 不做通用网页搭建器。
-2. 不在第一阶段做任意 React 组件执行沙箱。
-3. 不让模型直接输出大量不受控 HTML 作为主协议。
-4. 不重写现有全部 Canvas，只做收敛与增量替换。
-5. 不把所有回复都强制转成 Artifact，短问答仍可保持轻量聊天。
-
-## 5. 目标产品形态
-
-## 5.1 三栏心智
-
-高配版建议把主界面稳定为三种职责：
-
-| 区域 | 主职责 | 说明 |
-|------|------|------|
-| Conversation | 对话、追问、任务推进 | 保留聊天心智，但弱化“大段正式正文” |
-| Artifact Workbench | 阅读、编辑、比对、导出 | 正式交付面 |
-| Timeline / Inspector | 过程、工具、来源、状态 | 可折叠的执行与证据面 |
-
-这与当前 Lime 的工作台分栏方向一致，不需要推翻现有 UI 模式。
-
-## 5.2 Artifact Workbench 的核心视图
-
-每个 Artifact Document 至少支持五种视图：
-
-1. `阅读视图`
-   - 报告式排版
-   - 强层级和可扫描性
-2. `源码视图`
-   - Markdown / JSON / 原始块数据
-3. `编辑视图`
-   - Tiptap 可编辑文档
-4. `版本对比视图`
-   - 上一版本与当前版本差异
-5. `来源视图`
-   - citations、搜索结果、文件引用、工具产物引用
-
-## 5.3 回复升级规则
-
-不是所有回复都进入高配 Artifact。
-
-建议由运行时按任务意图决定：
-
-| 场景 | 默认形态 |
-|------|------|
-| 简短问答 | 普通消息 |
-| 研究、汇总、总结、方案、PRD、roadmap | Artifact Document |
-| 表格、评分、对比、清单 | Artifact 内语义块 |
-| 浏览器实时会话 | Browser Assist Artifact |
-| 图片/海报/文档主题工作台 | Theme Canvas / Artifact Workbench |
-
-判断原则：
-
-- 有明确交付物时，Artifact 优先
-- 需要多轮持续改写时，Artifact 优先
-- 只是即时回答问题时，消息优先
-
-## 6. 信息架构
-
-## 6.1 核心对象模型
-
-建议新增或收敛为以下产品对象：
-
-### ArtifactDocument
-
-正式交付物实体。
-
-建议字段：
-
-| 字段 | 说明 |
-|------|------|
-| `id` | Artifact 文档 ID |
-| `threadId` | 所属 thread |
-| `workspaceId` | 所属 workspace |
-| `theme` | 主题域，当前统一为 general |
-| `kind` | `report / plan / brief / table / dashboard / canvas` |
-| `title` | 标题 |
-| `status` | `draft / streaming / ready / failed / archived` |
-| `currentVersionId` | 当前版本 |
-| `sourceRunId` | 来源 turn/run |
-| `deliveryMode` | `inline / docked / fullscreen / exported` |
-
-### ArtifactVersion
-
-文档版本实体。
-
-建议字段：
-
-| 字段 | 说明 |
-|------|------|
-| `id` | 版本 ID |
-| `artifactId` | 所属文档 |
-| `versionNo` | 递增版本号 |
-| `documentSnapshot` | ArtifactDocument JSON 快照 |
-| `editorPayloads` | 可选的编辑器层载荷快照，如 rich_text block 的 Tiptap JSON |
-| `markdownSnapshot` | 兼容导出快照 |
-| `summary` | 版本摘要 |
-| `createdBy` | `agent / user / automation` |
-| `createdAt` | 创建时间 |
-
-### ArtifactBlock
-
-文档内部结构块。
-
-建议首批支持：
-
-- `heading`
-- `paragraph`
-- `summary_card`
-- `key_points`
-- `callout`
-- `table`
-- `checklist`
-- `score_grid`
-- `quote`
-- `citation_list`
-- `image`
-- `code_block`
-- `divider`
-
-### ArtifactSourceLink
-
-来源绑定。
-
-建议字段：
-
-| 字段 | 说明 |
-|------|------|
-| `artifactId` | 文档 ID |
-| `blockId` | 对应 block |
-| `sourceType` | `web / file / tool / message / search_result` |
-| `sourceRef` | 来源引用 |
-| `label` | 显示名称 |
-| `locator` | 行号、URL、toolCallId 等定位信息 |
-
-### ArtifactRunBinding
-
-交付物与执行过程的绑定关系。
-
-建议字段：
-
-| 字段 | 说明 |
-|------|------|
-| `artifactId` | 文档 ID |
-| `threadId` | thread |
-| `turnId` | turn |
-| `itemId` | timeline item |
-| `bindingType` | `primary_output / intermediate / exported` |
-
-## 6.2 与现有 `Artifact` 的关系
-
-当前 `src/lib/artifact/types.ts` 不应直接废弃，而应定位为：
-
-- 兼容层 Artifact
-- 流式展示与轻量渲染容器
-
-高配版建议新增一层更长期的 `ArtifactDocument` 模型。  
-关系如下：
-
-- `Artifact`：运行时 UI 容器
-- `ArtifactDocument`：产品层正式交付物
-- `ArtifactVersion`：持久化版本
-- `ArtifactBlock`：结构化文档语义块
-
-## 7. 协议设计
-
-## 7.1 为什么要引入协议层
-
-如果继续让模型只输出普通 Markdown，前端只能“尽量渲染好看”。  
-高配版需要的是：
-
-- 模型明确声明自己在生成什么类型的交付物
-- 前端知道哪些内容属于摘要卡、表格、结论、提醒、引用
-- 后端能在流式过程中做版本记录与落盘
-
-因此需要从“文本解析”升级为“结构化产物协议”。
-
-但这里要注意：
-
-**结构化产物协议属于 Lime 产品层，不等于 runtime 协议。**
-
-runtime 协议更接近 `codex` 的做法：
-
-- turn 级 `outputSchema`
-- item lifecycle
-- approval / elicitation / interrupt
-- event stream
-
-Artifact Workbench 应建立在这层稳定 runtime substrate 之上，而不是反过来把产品协议塞进框架层。
-
-## 7.2 三层协议
-
-### A. Message Parts 协议
-
-用于聊天流中的即时显示。
-
-建议 part 类型：
-
-- `text`
-- `reasoning_summary`
-- `tool_call`
-- `tool_result`
-- `artifact_intent`
-- `artifact_progress`
-- `artifact_block`
-- `citation`
-
-这层用于：
-
-- 消息区轻量回显
-- Timeline 过程展示
-- Workbench 流式创建状态
-
-### B. Artifact Ops 协议
-
-用于构建正式交付物。
-
-建议操作：
-
-- `artifact.create`
-- `artifact.set_meta`
-- `artifact.upsert_block`
-- `artifact.reorder_blocks`
-- `artifact.remove_block`
-- `artifact.attach_source`
-- `artifact.finalize_version`
-- `artifact.fail`
-
-每个 block 必须有稳定 `blockId`，这样才支持：
-
-- 流式增量更新
-- 局部重写
-- 版本 diff
-- 引用与块绑定
-
-### C. Persisted Snapshot 协议
-
-最终持久化为：
-
-- `artifact_document_json`
-- `editor_payload_snapshot`
-- `markdown_snapshot`
-- `render_manifest`
-
-其中：
-
-- `artifact_document_json` 是长期事实源
-- `editor_payload_snapshot` 是编辑器层快照，不是产品层 canonical
-- `markdown_snapshot` 负责兼容导出
-- `render_manifest` 负责阅读态性能与缓存
-
-## 7.3 与当前 parser 的关系
-
-`src/lib/artifact/parser.ts` 应保留，但角色需要降级为：
-
-### current
-
-- 兼容旧模型输出
-- 解析 fence/code block
-- 在没有结构化协议时尽量抽出 artifact
-
-### future
-
-- 仅作为 fallback ingest
-- 不再承担高配版主生成链路
-
-## 8. 前端架构
-
-## 8.1 Workbench Shell
-
-建议新增统一的 `ArtifactWorkbenchShell`，作为右侧或全屏交付物容器。
-
-应复用：
-
-- `workbenchPreview.tsx`
-- `WorkspaceCanvasContent.tsx`
-- `ArtifactToolbar`
-- `ArtifactRenderer`
-
-但职责要更清晰：
-
-- Shell 负责布局、视图切换、侧栏、版本条、来源抽屉
-- Renderer 负责块渲染
-- Editor 负责编辑
-- Timeline/Inspector 负责过程与证据
-
-## 8.2 阅读态渲染器
-
-阅读态不建议继续只靠通用 Markdown CSS。  
-应改为：
-
-**Artifact Block Renderer Registry -> 自定义 React 组件**
-
-其中：
-
-- 语义块直接走业务组件渲染
-- rich_text block 可选使用 Tiptap Static Renderer
-
-每个语义块对应稳定组件：
-
-- 摘要卡
-- 指标卡
-- 对比表
-- 提示框
-- 评分矩阵
-- 来源列表
-
-这样才能做到：
-
-- 风格稳定
-- 留白稳定
-- 层级稳定
-- 多次生成看起来像同一产品，而不是不同模型的随机输出
-
-## 8.3 编辑态
-
-编辑态建议直接复用并扩展现有 `NotionEditor.tsx`：
-
-- 支持块级选中
-- 支持局部 AI 改写
-- 支持引用插入
-- 支持固定模板块
-- 支持 slash command 插入语义块
-
-不建议新起第二套富文本编辑器。
-
-## 8.4 版本比较
-
-高配版必须把“上一版/最新版”作为一等能力。
-
-当前 `useArtifactDisplayState.ts` 已经有“上一版本占位”思路。  
-下一步应该升级为真正的版本系统：
-
-- block diff
-- 章节级变化高亮
-- 用户确认采纳/回退
-
-## 8.5 来源与证据层
-
-漂亮的回复如果没有证据层，会变成只是“看起来专业”。
-
-因此 Workbench 需要固定的来源面：
-
-- 本地文件引用
-- 搜索结果引用
-- 网页来源
-- tool 输出来源
-- timeline item 引用
-
-阅读态中可用上标或尾注形式呈现，点击后跳到右侧来源抽屉。
-
-## 8.6 UI / UX 原则
-
-遵守 `internal/aiprompts/design-language.md`，并针对 Artifact Workbench 补充以下原则：
-
-1. 主表面使用实体白底，不用半透明磨砂主容器。
-2. 正文排版优先中文阅读节奏，避免文档像英文博客模板。
-3. 强调色只用于：
-   - 状态
-   - 关键结论
-   - 引导操作
-4. 表格、提示框、指标卡必须来自统一组件，不允许模型自由拼样式。
-5. 右侧阅读面优先长时间可读，不做营销风大横幅。
-
-## 9. 后端与持久化
-
-## 9.1 数据库建议
-
-建议新增以下表：
-
-### `artifact_documents`
-
-- 文档主表
-- 归属 workspace / thread / theme
-
-### `artifact_versions`
-
-- 版本表
-- 保存 `artifact_document_json`、可选 `editor_payload_snapshot`、`markdown_snapshot` 与版本摘要
-
-### `artifact_sources`
-
-- block 到 source 的映射
-
-### `artifact_exports`
-
-- 导出记录
-- 记录导出格式、路径、时间
-
-### `artifact_run_bindings`
-
-- 连接 timeline turn/item 与 artifact
-
-## 9.2 文件系统策略
-
-Lime 是本地优先产品，Artifact 应支持落盘，但不能写死平台路径。
-
-要求：
-
-1. 落盘路径通过 Workspace 或应用目录 API 解析。
-2. 导出格式首期支持：
-   - Markdown
-   - HTML
-   - PDF
-   - JSON
-3. 自动保存使用原子写入策略，避免写入中断造成损坏。
-4. Windows/macOS 都走统一目录解析，不写死 `~/Library/...`。
-
-## 9.3 与 Timeline 的关系
-
-`lime-rs/src/services/agent_timeline_service.rs` 当前已能投影 `ArtifactSnapshot`。  
-高配版建议扩展为：
-
-- timeline 记录过程
-- artifact document 记录产物
-- 两者通过 `artifact_run_bindings` 连接
-
-原则：
-
-- Timeline 不直接承担正式阅读面
-- Artifact 不丢失来源过程
-
-## 10. Agent 与编排策略
-
-## 10.1 产物生成策略
-
-高配版不建议一开始就拆成很多 formatter 子 agent。  
-首期先统一协议，再逐步增强编排。
-
-建议顺序：
-
-1. 先让主 agent 明确输出 `artifact_intent`
-2. 再通过 `artifact ops` 生成结构化块
-3. 最后可选地引入 `formatter/refiner` 子阶段
-
-## 10.2 Prompt 约束
-
-系统提示词需要明确：
-
-1. 当任务目标是报告、方案、roadmap、总结、研究时，优先生成 Artifact Document。
-2. 消息区只保留：
-   - 简短说明
-   - 进度
-   - 下一步
-3. 不把完整长文再次重复贴回聊天区。
-4. 优先使用 block 语义，而不是自由拼 HTML。
-
-## 10.3 与 Service Skills 的关系
-
-当前正在推进 `ServiceSkill`。  
-高配版 Artifact Workbench 可以成为 ServiceSkill 的统一交付面：
-
-- `instant`：生成一份 Artifact Document
-- `scheduled`：定期生成新版本
-- `managed`：持续维护同一文档或同一档案集
-
-这会让 ServiceSkill 从“启动器”真正闭环到“交付物系统”。
-
-## 11. 分阶段路线图
-
-## Phase 0：协议与壳层对齐
-
-目标：
-
-- 明确长期对象模型与协议边界
-- 不大改 UI，只先收口事实源
-
-交付：
-
-1. 定义 `ArtifactDocument / ArtifactVersion / ArtifactSourceLink` 类型
-2. 明确 `Artifact` 兼容层与 `ArtifactDocument` 长期层的关系
-3. 定义 `artifact ops` 事件协议
-4. 新增 Workbench Shell 设计稿与组件边界
-
-不做：
-
-- 大规模 UI 改版
-- 完整编辑器改造
-
-## Phase 1：高质量阅读态 Workbench
-
-目标：
-
-- 先把“看起来高级”做出来
-- 回复从普通 Markdown 升级为报告式交付物
-
-交付：
-
-1. 新增 `ArtifactWorkbenchShell`
-2. 新增首批语义块：
-   - `summary_card`
-   - `callout`
-   - `table`
-   - `checklist`
-   - `score_grid`
-   - `citation_list`
-3. 消息区与 Artifact Workbench 分工明确
-4. 高价值回复默认进入右侧交付面
-
-验收：
-
-- 用户不打开源码，也能一眼扫读主要结论
-- 报告类回复在视觉上明显区别于普通消息
-
-## Phase 2：可编辑 Artifact Document
-
-目标：
-
-- 让 Artifact 不只是预览面，而是正式编辑面
-
-交付：
-
-1. 以 `ArtifactDocument JSON` 作为正式持久化模型
-2. 在 `rich_text` block 内引入 Tiptap / ProseMirror 编辑载荷
-3. 将现有 `NotionEditor` 融入 Artifact Workbench
-4. 支持局部块编辑、局部 AI 改写、块插入
-5. 支持自动保存与版本生成
-
-验收：
-
-- 用户能直接在 Workbench 上编辑，而不是跳回消息区重来
-- 编辑后的结果不会丢失结构与样式
-
-## Phase 3：版本、差异与来源闭环
-
-目标：
-
-- 让 Artifact 成为长期资产，而不是一次性结果
-
-交付：
-
-1. 版本列表与版本摘要（已落地）
-2. block diff（最小闭环已落地）
-3. source drawer / citations（已落地，支持来源项 -> block 跳转）
-4. timeline item 与 artifact block 双向跳转（已落地）
-
-验收：
-
-- 用户能知道“新版本改了什么”
-- 用户能知道“这段内容从哪里来”
-
-## Phase 4：Artifact First 产品化
-
-目标：
-
-- 让 Artifact Workbench 成为 Lime 的统一交付层
-
-交付：
-
-1. ServiceSkill 默认输出 Artifact
-2. Automation 定时生成 Artifact 版本
-3. Browser Assist / Search / File 结果可沉淀到同一文档
-4. 支持导出、分享、归档、项目复用
-
-验收：
-
-- 用户可以把 Lime 当作持续生成与维护交付物的工作台
-- 交付物在会话结束后仍具备长期价值
-
-## 12. 仓库落地建议
-
-## 12.1 建议优先复用的现有模块
-
-| 现有模块 | 建议角色 |
-|------|------|
-| `src/components/artifact/*` | 保留为渲染与工具栏底座 |
-| `src/lib/artifact/*` | 保留为兼容层与基础状态层 |
-| `workbenchPreview.tsx` | 升级为 Artifact Workbench 入口壳 |
-| `WorkspaceCanvasContent.tsx` | 继续承载右侧主预览容器 |
-| `NotionEditor.tsx` | 作为编辑态主内核 |
-| `AgentThreadTimeline.tsx` | 作为过程层和来源层入口 |
-| `workbenchCanvas.ts + CanvasFactory.tsx` | 继续承接主题类 Canvas 共享网关与渲染分发 |
-
-## 12.2 建议新增的目录
-
-建议新增：
-
-```text
-src/components/artifact-workbench/
-src/lib/artifact-document/
-src/lib/artifact-protocol/
-lime-rs/src/services/artifact_document_service.rs
-```
-
-职责建议：
-
-- `artifact-workbench/`：壳层、视图切换、侧栏、版本条、来源抽屉
-- `artifact-document/`：对象模型、版本管理、diff、序列化
-- `artifact-protocol/`：artifact ops、part 映射、兼容层；当前已先落地 metadata/path 读取壳层，后续继续向完整协议边界收敛
-- `artifact_document_service.rs`：持久化与查询
-
-如果后续同步推进 `aster-rust`，则建议新增独立 runtime 模块，而不是继续堆进 `blueprint/`：
-
-```text
-lime-rs/crates/aster-rust/crates/aster/src/runtime/
-```
-
-这部分是框架层远期方向，不覆盖 Lime 当前仓库已确定的运行时收口主计划。
-
-建议职责：
-
-- `thread / turn / item`
-- `event bus`
-- `prompt composer`
-- `output schema`
-- `approval / elicitation / interrupt`
-- `state persistence`
-
-## 12.3 迁移原则
-
-1. 不直接删除旧 Artifact 系统，先把它降级成兼容层。
-2. 不直接替换所有 Canvas，只先把通用报告类产物接到新 Workbench。
-3. 优先打通 `general` 主链下的高价值文本产物。
-4. 在协议稳定前，不急着让所有模型都严格产出结构化块。
-5. 不让 `blueprint` 直接接管 Artifact 主链，Blueprint 只作为可选 planning capability 接入。
-
-## 12.4 运行时迁移原则
-
-本节只表达 Artifact 产品侧对 runtime 的依赖顺序，不替代上述 current 文档已经锁定的发送边界、Team 委派、状态模型与统一排期。
-
-1. 先把 `system prompt + output schema + validator` 的控制链建立起来。
-2. 再把 Stage 1 / Stage 2 生成链升级为标准 turn。
-3. 再定义 item / delta / version / diff 事件。
-4. 最后才考虑把 Blueprint 接入某些“复杂规划型 Artifact”场景。
-
-## 13. 成功指标
-
-上线后建议重点观察：
-
-1. 报告类任务中，Artifact 打开率与停留时长。
-2. 用户对同一 Artifact 的二次编辑率。
-3. 版本比较的使用率。
-4. 导出率与复制率。
-5. 消息区长文占比是否下降。
-6. 用户是否更少要求“帮我重新整理得更清晰一点”。
-
-## 14. 风险与约束
-
-## 14.1 主要风险
-
-1. 同时维护产品层 JSON、编辑器载荷和导出快照，容易漂移。
-2. 过早做成任意页面搭建器，会把范围做爆。
-3. 语义块过多、过复杂，会压垮 prompt 与 renderer。
-4. 如果没有来源层，最终只会变成“更好看的幻觉输出”。
-
-## 14.2 控制原则
-
-1. `ArtifactDocument JSON` 是正式事实源；Tiptap / ProseMirror JSON 只存在于编辑器层或 rich_text block 内。
-2. 首批只做有限 block 集，不追求无限扩展。
-3. 先把阅读态与编辑态打通，再做复杂自动排版。
-4. 任何导出与落盘都必须通过 workspace / 应用目录 API 解析路径。
-5. system prompt 不是唯一控制点，必须叠加 turn 级 schema 与 validator。
-
-## 15. 最终结论
-
-Lime 不缺“漂亮回复”的单点技巧，缺的是：
-
-**统一的 Artifact Product Model。**
-
-你们现有代码已经具备高配版所需的 70% 基础设施：
-
-- 有工作台
-- 有 artifact
-- 有 timeline
-- 有 canvas
-- 有 Tiptap
-
-真正要补的是剩下这 30%：
-
-- 正式交付物对象
-- 结构化协议
-- 报告式阅读面
-- 版本与来源闭环
-
-因此最优路径不是“继续调 Markdown 样式”，而是：
-
-**把 Artifact 从“聊天的附件”升级为“Lime 的正式交付层”。**
+- 清理 `internal/roadmap/artifacts/*` 中旧 `lime-rs/src/**` 落点。
+- 更新 `internal/aiprompts/workspace.md`，删除“不得先合成 artifact”的旧规则。
+- 写明 Preview Artifact Contract 与 ArtifactDocument 的边界。
+
+### P1：全局 Preview Projection
+
+- 新增 `src/lib/artifact/previewArtifact.ts`。
+- Workspace 文件点击改成 source-backed preview artifact。
+- 保留 `canvas:design` 等专用 artifact 主链。
+- 补纯单元测试与 Workspace hook 回归。
+
+### P2：文档与乱码修复
+
+- 接入 `lime-rs/crates/document-preview`。
+- `file_browser_service.read_file_preview` 对 DOCX 返回 `document_text` 文本预览。
+- Aster `ReadTool` 对 DOCX 走文档抽取，避免 `String::from_utf8_lossy` 读取 ZIP 乱码。
+
+### P3：Electron 独立预览窗口迁移
+
+- 新增 Electron Host current 命令 `open_file_preview_window`。
+- 前端 `src/lib/api/fileSystem.ts` 只通过 `safeInvoke` 进入，不再动态导入 test-only `WebviewWindow`。
+- 同步 IPC 白名单、host 测试、API 测试和契约检查。
+
+### P4：全场景扩展
+
+- 图片、音视频、URL、任务结果、知识库命中、Agent App shell entry、数据库记录详情全部补 projection。
+- 对每类 source 明确 `contentKind / renderMode / capabilities`。
+- 媒体类 preview artifact 已由 workbench renderer 消费 `contentKind / renderMode / previewUrl`；Codex 导入消息图片点击会生成 `source=session_file` 的 preview artifact，并通过 `previewOpenRequest.selectionKey` 精确打开右侧图片预览。
+- GUI smoke 覆盖 Codex 导入对话打开文件、DOCX、HTML、图片和继续对话。
+
+## 2026-06-17 实施记录
+
+- Codex 导入用户消息附件已作为 `Message.images` 恢复，保留 `sourceUri / sourcePath / previewUrl / metadata / index`，不再只保留文本占位。
+- 消息图片点击统一投影为 `source=session_file` 的 preview artifact；`contentKind=image`、`renderMode=media`、`previewUrl` 由 `ArtifactRenderer` 消费。
+- 右侧 `CanvasWorkbenchLayout` 新增 `previewOpenRequest.selectionKey`，用于把 workbench 文档选择精确切到 `artifact:<id>`；这修复了只选中 artifact store 但 workbench 仍显示“审查/输出/日志”的问题。
+- `CanvasWorkbenchPreviewModePanel` 对 `renderMode=media/system_open/unsupported` 的 preview artifact 直接委托 `ArtifactRenderer`，普通 Markdown/Code artifact 仍走原 workbench 文档预览模式。
+- 通用工作台文件、占位任务文件、LayeredDesign 与懒加载 artifact 统一由 `openArtifactInWorkbench` 写入 artifact store，避免先 upsert projection 再打开导致同一预览被写入两次。
+- 顶部标签口径收敛为“审查 / 真实文件 / 新建工具入口”：`Markdown / HTML / Code` 只作为预览模式控制，不作为顶层标签；真实文件名可作为当前文档 tab 展示。
+- 已按 Context7 与本地 `/Users/coso/Documents/dev/js/ag-ui` 复核 artifacts / agent UI 参考：AG-UI 的核心可借鉴点是 message / tool / state / activity 事件分层和 snapshot-delta 可重建性；Lime 当前决策保持为“业务事实源不 artifact 化，打开链路 projection artifact 化”，不引入第二套 AG-UI runtime wire format。
+- 导入点击闭环 fixture 已扩展真实文件预览证据：临时本地历史源会生成 Markdown、HTML、DOCX 三个真实文件，导入后的工具轨 `read_file` 打开按钮统一带 `inline-tool-open-file` 定位并调用 Workspace 文件打开链路；GUI smoke 点击后断言 Markdown / DOCX 在 Artifact Workbench 可读、HTML 进入 iframe 预览，DOCX 不出现 `PK`、`word/document.xml`、`[Content_Types].xml` 等 ZIP/OpenXML 噪音。
+- 导入过程组已补 reasoning 保真守卫：当本地历史同一回合同时包含 reasoning、命令、多个 `read_file` 文件工具、搜索和 patch 时，MessageList 仍把 reasoning 投影为 inline `thinking` part；StreamingRenderer 在同组导入工具轨下保留 reasoning 原文与“已完成思考”状态，避免文件预览工具轨把第一条思考刷掉。
+- App Server `thread_read.tool_calls` 现在从 `tool.started` 保留 `arguments`，并在合并 `tool.result` 完成态时继续带回 `read_file.arguments.path`；导入工具轨因此可以从历史 `tool_response` 恢复文件打开入口。
+- 通用文件 preview artifact 打开时会同步发送 `previewOpenRequest.selectionKey=artifact:<id>`，驱动 `CanvasWorkbenchLayout` 从上一次图片 / 审查 / 日志选择切到当前文件；`renderMode=media/system_open/unsupported` 的媒体预览仍由调用方的显式 selection request 处理，避免图片附件被普通文件选择逻辑抢焦点。
+- 验证：
+  - `npx vitest run "src/components/agent/chat/components/CanvasWorkbenchLayout.test.tsx" -t "previewOpenRequest 命中媒体 preview artifact"` 通过。
+  - `npx vitest run "src/lib/artifact/previewArtifact.test.ts" "src/components/agent/chat/workspace/useWorkspaceArtifactPreviewActions.test.tsx" "src/components/agent/chat/workspace/browserAssistArtifact.unit.test.ts"` 通过。
+  - `npx vitest run "src/components/agent/chat/components/CanvasWorkbenchLayout.test.tsx"` 通过。
+  - `npx eslint --max-warnings 0 "src/components/agent/chat/AgentChatWorkspace.tsx" "src/components/agent/chat/components/CanvasWorkbenchLayout.tsx" "src/components/agent/chat/components/canvas-workbench/CanvasWorkbenchPreviewModePanel.tsx" "src/components/agent/chat/components/canvas-workbench/useCanvasWorkbenchDocumentState.ts" "src/components/agent/chat/components/CanvasWorkbenchLayout.test.tsx"` 通过。
+  - `node scripts/electron/codex-import-click-through-fixture-smoke.mjs --app-url "http://127.0.0.1:1421/" --timeout-ms 120000` 通过，覆盖导入预览、确认导入、图片附件点击、继续对话和视觉审计。
+  - `npm run smoke:codex-import-click-through-electron-fixture -- --app-url "http://127.0.0.1:1420/" --timeout-ms 180000` 通过，summary `ok=true`、`consoleErrors=[]`、Markdown / HTML / DOCX `openedAllImportedPreviewArtifacts=true`、三视口视觉审计通过。
+  - `npx vitest run "src/components/agent/chat/components/InlineToolProcessStep.test.tsx" "scripts/electron/codex-import-click-through-fixture-smoke.test.mjs" --silent=passed-only --disableConsoleIntercept` 通过，覆盖导入工具轨文件打开入口和 click-through fixture 的 Markdown / HTML / DOCX 预览守卫。
+  - `npx vitest run "src/components/agent/chat/components/StreamingRenderer.test.tsx" "src/components/agent/chat/utils/agentThreadGrouping.test.ts" "src/components/agent/chat/components/MessageList.test.tsx" --silent=passed-only --disableConsoleIntercept` 通过，覆盖导入 reasoning 与多文件工具轨混合展示。
+
+## 完成标准
+
+当前阶段完成必须同时满足：
+
+1. Codex 导入对话中的文件、HTML、DOCX、图片等对象不会丢消息、乱码或走空白预览。
+2. Workspace 点击文件与点击正式 artifact 使用同一打开链路。
+3. `ArtifactDocument v1` 仍只承接正式交付物，不被普通文件预览污染。
+4. Electron 独立窗口能力由 Desktop Host current 命令承接。
+5. 文档中不再把 `lime-rs/src/**`、旧 Tauri command、旧 `agent_runtime_*` 写成 current 实施落点。
+6. 定向前端、Electron、Rust 测试通过；GUI 主路径至少跑最小 smoke 或明确记录阻塞。

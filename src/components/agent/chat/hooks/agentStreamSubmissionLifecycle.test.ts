@@ -341,6 +341,7 @@ describe("agentStreamSubmissionLifecycle", () => {
       "user-image",
       "assistant-image",
     ]);
+    expect(messages[0]?.runtimeTurnId).toBe(lifecycle.pendingTurnKey);
     expect(messages[1]?.runtimeStatus).toEqual(runtimeStatus);
     expect(messages[1]?.runtimeTurnId).toBe(lifecycle.pendingTurnKey);
     expect(messages[1]?.imageWorkbenchPreview?.taskId).toBe("draft-image-1");

@@ -1,4 +1,5 @@
 import type { AsterSessionInfo } from "@/lib/api/agentRuntime";
+import type { ConversationImportThreadCommitResponse } from "@/lib/api/conversationImport";
 import { isAuxiliaryAgentSessionId } from "@/lib/api/agentRuntime/sessionIdentity";
 import { resolveSidebarSessionTitle } from "./sidebarSessionFormatting";
 
@@ -39,8 +40,10 @@ export function hasCachedSidebarSessionEntry(
 }
 
 function compareSidebarSessionTimeDesc(left?: number, right?: number): number {
-  const leftValue = Number.isFinite(left) ? left : 0;
-  const rightValue = Number.isFinite(right) ? right : 0;
+  const leftValue =
+    typeof left === "number" && Number.isFinite(left) ? left : 0;
+  const rightValue =
+    typeof right === "number" && Number.isFinite(right) ? right : 0;
   return rightValue - leftValue;
 }
 
@@ -123,4 +126,40 @@ export function matchesSidebarSessionTitle(
   return normalizeSidebarSearchText(
     resolveSidebarSessionTitle(session, fallbackTitle),
   ).includes(normalizedQuery);
+}
+
+function parseTimestampSeconds(value?: string | null): number | null {
+  if (!value) {
+    return null;
+  }
+  const timestampMs = Date.parse(value);
+  if (!Number.isFinite(timestampMs)) {
+    return null;
+  }
+  return Math.floor(timestampMs / 1000);
+}
+
+export function buildImportedSidebarSession(
+  response: ConversationImportThreadCommitResponse,
+): AsterSessionInfo {
+  const createdAt =
+    parseTimestampSeconds(response.session.createdAt) ??
+    parseTimestampSeconds(response.thread.createdAt) ??
+    Math.floor(Date.now() / 1000);
+  const updatedAt =
+    parseTimestampSeconds(response.session.updatedAt) ??
+    parseTimestampSeconds(response.thread.updatedAt) ??
+    createdAt;
+
+  return {
+    id: response.session.sessionId,
+    name: response.thread.title?.trim() || undefined,
+    created_at: createdAt,
+    updated_at: updatedAt,
+    archived_at: response.thread.archived ? updatedAt : null,
+    model: response.thread.modelProvider,
+    messages_count: response.importedMessages,
+    workspace_id: response.session.workspaceId,
+    working_dir: response.thread.cwd,
+  };
 }

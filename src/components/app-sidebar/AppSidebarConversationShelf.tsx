@@ -5,21 +5,9 @@ import {
   useState,
   type MouseEvent,
 } from "react";
-import { createPortal } from "react-dom";
 import styled from "styled-components";
 import { useTranslation } from "react-i18next";
-import {
-  Archive,
-  ChevronRight,
-  FileInput,
-  FolderOpen,
-  FolderPlus,
-  MoreHorizontal,
-  MessageSquarePlus,
-  Pencil,
-  Pin,
-  Trash2,
-} from "lucide-react";
+import { FileInput, MessageSquarePlus } from "lucide-react";
 import type { AsterSessionInfo } from "@/lib/api/agentRuntime";
 import {
   formatSidebarSessionMeta,
@@ -27,6 +15,15 @@ import {
 } from "@/components/app-sidebar/sidebarSessionFormatting";
 import { AppSidebarConversationRow } from "@/components/app-sidebar/AppSidebarConversationRow";
 import { AppSidebarConversationEmptyState } from "@/components/app-sidebar/AppSidebarConversationEmptyState";
+import { AppSidebarProjectConversationGroups } from "@/components/app-sidebar/AppSidebarProjectConversationGroups";
+import {
+  AppSidebarConversationMenus,
+  CONVERSATION_MENU_APPROX_HEIGHT,
+  CONVERSATION_MENU_VIEWPORT_MARGIN,
+  CONVERSATION_MENU_WIDTH,
+  type ConversationMenuState,
+  type ProjectMenuState,
+} from "@/components/app-sidebar/AppSidebarConversationMenus";
 import {
   buildSidebarConversationGroups,
   type SidebarOpenedProjectSummary,
@@ -42,6 +39,7 @@ interface AppSidebarConversationShelfProps {
   actionSessionId: string | null;
   onCreateConversation: (project?: SidebarOpenedProjectSummary) => void;
   onImportConversation?: (project?: SidebarOpenedProjectSummary) => void;
+  importableProjectIds?: ReadonlySet<string>;
   onNavigateToConversation: (session: AsterSessionInfo) => void;
   onRenameConversation?: (session: AsterSessionInfo) => void;
   onDeleteConversation?: (session: AsterSessionInfo) => void;
@@ -56,21 +54,6 @@ interface AppSidebarConversationShelfProps {
 
 const FAVORITE_SESSION_IDS_STORAGE_KEY =
   "lime.app-sidebar.favorite-session-ids";
-const CONVERSATION_MENU_WIDTH = 188;
-const CONVERSATION_MENU_APPROX_HEIGHT = 252;
-const CONVERSATION_MENU_VIEWPORT_MARGIN = 12;
-
-type ConversationMenuState = {
-  session: AsterSessionInfo;
-  top: number;
-  left: number;
-} | null;
-
-type ProjectMenuState = {
-  project: SidebarOpenedProjectSummary;
-  top: number;
-  left: number;
-} | null;
 
 function loadFavoriteSessionIds(): string[] {
   if (typeof window === "undefined") {
@@ -100,13 +83,11 @@ function persistFavoriteSessionIds(sessionIds: string[]) {
   );
 }
 
-function resolveProjectDisplayName(project: SidebarOpenedProjectSummary) {
-  return project.name.trim() || project.id;
-}
-
 function compareSessionTimeDesc(left?: number, right?: number): number {
-  const leftValue = Number.isFinite(left) ? left : 0;
-  const rightValue = Number.isFinite(right) ? right : 0;
+  const leftValue =
+    typeof left === "number" && Number.isFinite(left) ? left : 0;
+  const rightValue =
+    typeof right === "number" && Number.isFinite(right) ? right : 0;
   return rightValue - leftValue;
 }
 
@@ -225,108 +206,6 @@ const ConversationList = styled.div`
   }
 `;
 
-const ProjectGroup = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-`;
-
-const ProjectHeader = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 4px;
-`;
-
-const ProjectButton = styled.button`
-  min-height: 34px;
-  min-width: 0;
-  flex: 1;
-  border: none;
-  border-radius: 11px;
-  background: transparent;
-  color: var(--sidebar-foreground);
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 0 10px;
-  cursor: pointer;
-  text-align: left;
-  transition:
-    background-color 0.16s ease,
-    color 0.16s ease;
-
-  &:hover {
-    background: var(--sidebar-hover);
-  }
-
-  svg {
-    width: 15px;
-    height: 15px;
-    flex-shrink: 0;
-    color: var(--sidebar-muted);
-  }
-`;
-
-const ProjectChevron = styled.span<{ $collapsed: boolean }>`
-  width: 15px;
-  height: 15px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  color: var(--sidebar-muted);
-  transform: rotate(${({ $collapsed }) => ($collapsed ? "0deg" : "90deg")});
-  transition:
-    transform 0.16s ease,
-    color 0.16s ease;
-`;
-
-const ProjectName = styled.span`
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 13px;
-  font-weight: 650;
-`;
-
-const ProjectMenuButton = styled.button`
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: 9px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  color: var(--sidebar-muted);
-  cursor: pointer;
-  opacity: 0.76;
-  transition:
-    background-color 0.16s ease,
-    color 0.16s ease,
-    opacity 0.16s ease;
-
-  &:hover {
-    background: var(--sidebar-hover);
-    color: var(--sidebar-foreground);
-    opacity: 1;
-  }
-
-  svg {
-    width: 15px;
-    height: 15px;
-  }
-`;
-
-const ProjectConversationList = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding-left: 14px;
-`;
-
 const ConversationListMoreButton = styled.button`
   width: 100%;
   min-height: 32px;
@@ -349,68 +228,6 @@ const ConversationListMoreButton = styled.button`
   }
 `;
 
-const ConversationMenuSurface = styled.div`
-  position: fixed;
-  z-index: 110;
-  width: ${CONVERSATION_MENU_WIDTH}px;
-  padding: 8px;
-  border-radius: 16px;
-  border: 1px solid var(--lime-card-subtle-border, rgba(226, 240, 226, 0.9));
-  background: var(--lime-surface, #ffffff);
-  color: var(--lime-text-strong, #0f172a);
-  box-shadow:
-    0 22px 64px rgba(15, 23, 42, 0.18),
-    0 1px 0 rgba(255, 255, 255, 0.76) inset;
-`;
-
-const ConversationMenuItem = styled.button<{ $danger?: boolean }>`
-  width: 100%;
-  min-height: 36px;
-  border: none;
-  border-radius: 10px;
-  background: transparent;
-  color: ${({ $danger }) =>
-    $danger
-      ? "var(--lime-danger, #b91c1c)"
-      : "var(--lime-text-strong, #0f172a)"};
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 10px;
-  cursor: pointer;
-  text-align: left;
-  font-size: 13px;
-  font-weight: 650;
-  transition:
-    background-color 0.16s ease,
-    color 0.16s ease;
-
-  &:hover {
-    background: ${({ $danger }) =>
-      $danger
-        ? "var(--lime-danger-soft, #fff1f2)"
-        : "var(--lime-surface-hover, #f4fdf4)"};
-  }
-
-  &:disabled {
-    color: var(--sidebar-muted);
-    cursor: not-allowed;
-    opacity: 0.52;
-  }
-
-  &:disabled:hover {
-    background: transparent;
-  }
-
-  svg {
-    width: 15px;
-    height: 15px;
-    flex-shrink: 0;
-    color: ${({ $danger }) =>
-      $danger ? "var(--lime-danger, #b91c1c)" : "var(--sidebar-muted)"};
-  }
-`;
-
 export function AppSidebarConversationShelf({
   openedProjects = [],
   recentSessions,
@@ -420,6 +237,7 @@ export function AppSidebarConversationShelf({
   actionSessionId,
   onCreateConversation,
   onImportConversation,
+  importableProjectIds,
   onNavigateToConversation,
   onRenameConversation,
   onDeleteConversation,
@@ -559,10 +377,9 @@ export function AppSidebarConversationShelf({
     });
   }, []);
 
-  const runMenuAction = useCallback((action: () => void) => {
+  const closeMenus = useCallback(() => {
     setMenuState(null);
     setProjectMenuState(null);
-    action();
   }, []);
 
   const sortedConversationGroups = useMemo(() => {
@@ -597,11 +414,11 @@ export function AppSidebarConversationShelf({
   );
   const importConversationLabel = t(
     "navigation.sidebar.conversations.importConversation",
-    "导入 Codex 对话",
+    "导入对话",
   );
   const importProjectConversationLabel = t(
     "navigation.sidebar.conversations.importProjectConversation",
-    "导入 Codex 对话到此项目",
+    "导入本地历史对话到此项目",
   );
   const loadingRecentLabel = t(
     "navigation.sidebar.conversations.loadingRecent",
@@ -672,159 +489,6 @@ export function AppSidebarConversationShelf({
     "项目操作",
   );
 
-  const renderConversationMenu = () => {
-    if (!menuState || typeof document === "undefined") {
-      return null;
-    }
-
-    const { session, top, left } = menuState;
-    const title = resolveLocalizedSessionTitle(session);
-    const favorite = favoriteSessionIds.includes(session.id);
-
-    return createPortal(
-      <ConversationMenuSurface
-        role="menu"
-        aria-label={t("navigation.sidebar.conversations.menu.ariaLabel", {
-          title,
-          defaultValue: "{{title}} 操作菜单",
-        })}
-        style={{ top, left }}
-        data-testid="app-sidebar-conversation-menu"
-        onClick={(event) => event.stopPropagation()}
-      >
-        {onRenameConversation ? (
-          <ConversationMenuItem
-            type="button"
-            role="menuitem"
-            data-testid="app-sidebar-conversation-menu-rename"
-            onClick={() => runMenuAction(() => onRenameConversation(session))}
-          >
-            <Pencil />
-            {renameActionLabel}
-          </ConversationMenuItem>
-        ) : null}
-        <ConversationMenuItem
-          type="button"
-          role="menuitem"
-          aria-pressed={favorite}
-          data-testid="app-sidebar-conversation-menu-favorite"
-          onClick={() => runMenuAction(() => toggleFavoriteSession(session))}
-        >
-          <Pin />
-          {favorite ? unfavoriteActionLabel : favoriteActionLabel}
-        </ConversationMenuItem>
-        <ConversationMenuItem
-          type="button"
-          role="menuitem"
-          data-testid="app-sidebar-conversation-menu-archive"
-          onClick={() => runMenuAction(() => onToggleArchive(session, true))}
-        >
-          <Archive />
-          {archiveActionLabel}
-        </ConversationMenuItem>
-        {onDeleteConversation ? (
-          <ConversationMenuItem
-            type="button"
-            role="menuitem"
-            $danger
-            data-testid="app-sidebar-conversation-menu-delete"
-            onClick={() => runMenuAction(() => onDeleteConversation(session))}
-          >
-            <Trash2 />
-            {deleteActionLabel}
-          </ConversationMenuItem>
-        ) : null}
-      </ConversationMenuSurface>,
-      document.body,
-    );
-  };
-
-  const renderProjectMenu = () => {
-    if (!projectMenuState || typeof document === "undefined") {
-      return null;
-    }
-
-    const { project, top, left } = projectMenuState;
-    const title = resolveProjectDisplayName(project);
-    const pinned = Boolean(project.isFavorite);
-
-    return createPortal(
-      <ConversationMenuSurface
-        role="menu"
-        aria-label={t(
-          "navigation.sidebar.conversations.projectMenu.ariaLabel",
-          {
-            title,
-            defaultValue: "{{title}} 项目菜单",
-          },
-        )}
-        style={{ top, left }}
-        data-testid="app-sidebar-project-menu"
-        onClick={(event) => event.stopPropagation()}
-      >
-        {onToggleProjectPin ? (
-          <ConversationMenuItem
-            type="button"
-            role="menuitem"
-            data-testid="app-sidebar-project-menu-pin"
-            onClick={() => runMenuAction(() => onToggleProjectPin(project))}
-          >
-            <Pin />
-            {pinned ? projectUnpinActionLabel : projectPinActionLabel}
-          </ConversationMenuItem>
-        ) : null}
-        {onRevealProject ? (
-          <ConversationMenuItem
-            type="button"
-            role="menuitem"
-            data-testid="app-sidebar-project-menu-reveal"
-            onClick={() => runMenuAction(() => onRevealProject(project))}
-          >
-            <FolderOpen />
-            {projectRevealActionLabel}
-          </ConversationMenuItem>
-        ) : null}
-        {onCreateProjectWorktree ? (
-          <ConversationMenuItem
-            type="button"
-            role="menuitem"
-            data-testid="app-sidebar-project-menu-worktree"
-            onClick={() =>
-              runMenuAction(() => onCreateProjectWorktree(project))
-            }
-          >
-            <FolderPlus />
-            {projectWorktreeActionLabel}
-          </ConversationMenuItem>
-        ) : null}
-        {onRenameProject ? (
-          <ConversationMenuItem
-            type="button"
-            role="menuitem"
-            data-testid="app-sidebar-project-menu-rename"
-            onClick={() => runMenuAction(() => onRenameProject(project))}
-          >
-            <Pencil />
-            {projectRenameActionLabel}
-          </ConversationMenuItem>
-        ) : null}
-        {onRemoveProject ? (
-          <ConversationMenuItem
-            type="button"
-            role="menuitem"
-            $danger
-            data-testid="app-sidebar-project-menu-remove"
-            onClick={() => runMenuAction(() => onRemoveProject(project))}
-          >
-            <Trash2 />
-            {projectRemoveActionLabel}
-          </ConversationMenuItem>
-        ) : null}
-      </ConversationMenuSurface>,
-      document.body,
-    );
-  };
-
   const renderConversationRow = (session: AsterSessionInfo) => {
     const active = currentSessionId === session.id;
     const title = resolveLocalizedSessionTitle(session);
@@ -852,88 +516,6 @@ export function AppSidebarConversationShelf({
     );
   };
 
-  const renderProjectGroups = () => {
-    return sortedConversationGroups.projectSections.map((section) => {
-      const projectName = resolveProjectDisplayName(section.project);
-      const collapsed = collapsedProjectIds.has(section.project.id);
-      return (
-        <ProjectGroup
-          key={section.project.id}
-          data-testid="app-sidebar-project-conversation-group"
-        >
-          <ProjectHeader>
-            <ProjectButton
-              type="button"
-              title={projectName}
-              aria-expanded={!collapsed}
-              onClick={() => toggleProjectCollapsed(section.project.id)}
-            >
-              <ProjectChevron $collapsed={collapsed}>
-                <ChevronRight />
-              </ProjectChevron>
-              <FolderOpen />
-              <ProjectName>{projectName}</ProjectName>
-            </ProjectButton>
-            <ProjectMenuButton
-              type="button"
-              aria-label={t(
-                "navigation.sidebar.conversations.newProjectConversationFor",
-                {
-                  title: projectName,
-                  defaultValue: "在 {{title}} 新建对话",
-                },
-              )}
-              title={newProjectConversationLabel}
-              data-testid="app-sidebar-project-new-conversation"
-              onClick={() => onCreateConversation(section.project)}
-            >
-              <MessageSquarePlus />
-            </ProjectMenuButton>
-            {onImportConversation ? (
-              <ProjectMenuButton
-                type="button"
-                aria-label={t(
-                  "navigation.sidebar.conversations.importProjectConversationFor",
-                  {
-                    title: projectName,
-                    defaultValue: "导入 Codex 对话到 {{title}}",
-                  },
-                )}
-                title={importProjectConversationLabel}
-                data-testid="app-sidebar-project-import-conversation"
-                onClick={() => onImportConversation(section.project)}
-              >
-                <FileInput />
-              </ProjectMenuButton>
-            ) : null}
-            <ProjectMenuButton
-              type="button"
-              aria-label={t(
-                "navigation.sidebar.conversations.projectMenu.open",
-                {
-                  title: projectName,
-                  defaultValue: "打开 {{title}} 项目菜单",
-                },
-              )}
-              title={projectMoreActionsLabel}
-              data-testid="app-sidebar-project-menu-button"
-              onClick={(event) => openProjectMenu(event, section.project)}
-            >
-              <MoreHorizontal />
-            </ProjectMenuButton>
-          </ProjectHeader>
-          {!collapsed ? (
-            <ProjectConversationList>
-              {section.sessions.length > 0
-                ? section.sessions.map((session) => renderConversationRow(session))
-                : null}
-            </ProjectConversationList>
-          ) : null}
-        </ProjectGroup>
-      );
-    });
-  };
-
   const projectsSection = (
     <ConversationSection>
       <ConversationSectionHeader>
@@ -942,9 +524,32 @@ export function AppSidebarConversationShelf({
         </ConversationSectionTitle>
       </ConversationSectionHeader>
       <ConversationList data-testid="app-sidebar-project-conversations">
-        {recentLoading
-          ? <AppSidebarConversationEmptyState text={loadingRecentLabel} />
-          : renderProjectGroups()}
+        {recentLoading ? (
+          <AppSidebarConversationEmptyState text={loadingRecentLabel} />
+        ) : (
+          <AppSidebarProjectConversationGroups
+            projectSections={sortedConversationGroups.projectSections}
+            collapsedProjectIds={collapsedProjectIds}
+            newProjectConversationLabel={newProjectConversationLabel}
+            projectMoreActionsLabel={projectMoreActionsLabel}
+            formatNewProjectConversationForLabel={(projectName) =>
+              t("navigation.sidebar.conversations.newProjectConversationFor", {
+                title: projectName,
+                defaultValue: "在 {{title}} 新建对话",
+              })
+            }
+            formatOpenProjectMenuLabel={(projectName) =>
+              t("navigation.sidebar.conversations.projectMenu.open", {
+                title: projectName,
+                defaultValue: "打开 {{title}} 项目菜单",
+              })
+            }
+            renderConversationRow={renderConversationRow}
+            onCreateConversation={onCreateConversation}
+            onToggleProjectCollapsed={toggleProjectCollapsed}
+            onOpenProjectMenu={openProjectMenu}
+          />
+        )}
       </ConversationList>
     </ConversationSection>
   );
@@ -979,13 +584,15 @@ export function AppSidebarConversationShelf({
         </ConversationSectionActions>
       </ConversationSectionHeader>
       <ConversationList data-testid="app-sidebar-recent-conversations">
-        {recentLoading
-          ? <AppSidebarConversationEmptyState text={loadingRecentLabel} />
-          : sortedConversationGroups.standaloneSessions.length > 0
-            ? sortedConversationGroups.standaloneSessions.map((session) =>
-                renderConversationRow(session),
-              )
-            : <AppSidebarConversationEmptyState text={emptyStandaloneLabel} />}
+        {recentLoading ? (
+          <AppSidebarConversationEmptyState text={loadingRecentLabel} />
+        ) : sortedConversationGroups.standaloneSessions.length > 0 ? (
+          sortedConversationGroups.standaloneSessions.map((session) =>
+            renderConversationRow(session),
+          )
+        ) : (
+          <AppSidebarConversationEmptyState text={emptyStandaloneLabel} />
+        )}
         {hasMoreRecent ? (
           <ConversationListMoreButton type="button" onClick={onShowMoreRecent}>
             {moreRecentLabel}
@@ -1000,8 +607,55 @@ export function AppSidebarConversationShelf({
       {projectsSection}
       {conversationsSection}
 
-      {renderConversationMenu()}
-      {renderProjectMenu()}
+      <AppSidebarConversationMenus
+        conversationMenuState={menuState}
+        projectMenuState={projectMenuState}
+        favoriteSessionIds={favoriteSessionIds}
+        importableProjectIds={importableProjectIds}
+        resolveSessionTitle={resolveLocalizedSessionTitle}
+        onCloseMenus={closeMenus}
+        onToggleFavoriteSession={toggleFavoriteSession}
+        onRenameConversation={onRenameConversation}
+        onDeleteConversation={onDeleteConversation}
+        onToggleArchive={onToggleArchive}
+        onToggleProjectPin={onToggleProjectPin}
+        onRevealProject={onRevealProject}
+        onCreateProjectWorktree={onCreateProjectWorktree}
+        onRenameProject={onRenameProject}
+        onRemoveProject={onRemoveProject}
+        onImportConversation={onImportConversation}
+        conversationLabels={{
+          ariaLabel: (title) =>
+            t("navigation.sidebar.conversations.menu.ariaLabel", {
+              title,
+              defaultValue: "{{title}} 操作菜单",
+            }),
+          rename: renameActionLabel,
+          favorite: favoriteActionLabel,
+          unfavorite: unfavoriteActionLabel,
+          archive: archiveActionLabel,
+          delete: deleteActionLabel,
+        }}
+        projectLabels={{
+          ariaLabel: (title) =>
+            t("navigation.sidebar.conversations.projectMenu.ariaLabel", {
+              title,
+              defaultValue: "{{title}} 项目菜单",
+            }),
+          pin: projectPinActionLabel,
+          unpin: projectUnpinActionLabel,
+          reveal: projectRevealActionLabel,
+          createWorktree: projectWorktreeActionLabel,
+          importConversation: importProjectConversationLabel,
+          importConversationFor: (title) =>
+            t("navigation.sidebar.conversations.importProjectConversationFor", {
+              title,
+              defaultValue: "导入本地历史对话到 {{title}}",
+            }),
+          rename: projectRenameActionLabel,
+          remove: projectRemoveActionLabel,
+        }}
+      />
     </ConversationShelf>
   );
 }

@@ -16,6 +16,7 @@ import {
   SIDEBAR_SESSION_LOAD_RESTART_DEFER_MS,
 } from "./AppSidebar.constants";
 import {
+  buildImportedSidebarSession,
   buildSidebarSessionRequestLimit,
   buildVisibleSidebarSessions,
   hasCachedSidebarSessionEntry,
@@ -24,6 +25,7 @@ import {
   sortSidebarSessions,
   splitSidebarSessionResult,
 } from "./sidebarSessions";
+import type { ConversationImportThreadCommitResponse } from "@/lib/api/conversationImport";
 
 interface UseAppSidebarSessionsParams {
   currentSessionId: string | null;
@@ -99,6 +101,9 @@ export function useAppSidebarSessions({
   conversationUntitledLabel,
 }: UseAppSidebarSessionsParams) {
   const sidebarSessionsRef = useRef<AsterSessionInfo[]>([]);
+  const optimisticSidebarSessionsRef = useRef<Map<string, AsterSessionInfo>>(
+    new Map(),
+  );
   const [sidebarSessions, setSidebarSessions] = useState<AsterSessionInfo[]>(
     [],
   );
@@ -253,9 +258,16 @@ export function useAppSidebarSessions({
       const listDurationMs = Date.now() - startedAt;
       const sortStartedAt = Date.now();
       const sortedSessions = mergeSidebarSessions(sessionGroups);
+      for (const session of sortedSessions) {
+        optimisticSidebarSessionsRef.current.delete(session.id);
+      }
+      const nextSessions = sortSidebarSessions([
+        ...sortedSessions,
+        ...optimisticSidebarSessionsRef.current.values(),
+      ]);
       const sortDurationMs = Date.now() - sortStartedAt;
       const { hasMore } = splitSidebarSessionResult({
-        sessions: sortedSessions,
+        sessions: nextSessions,
         visibleCount: recentSessionsVisibleCount,
         pageSize: SIDEBAR_RECENT_SESSION_PAGE_SIZE,
       });
@@ -263,7 +275,7 @@ export function useAppSidebarSessions({
         hasMore,
         limit: recentSessionRequestLimit,
         listDurationMs,
-        sessionsCount: sortedSessions.length,
+        sessionsCount: nextSessions.length,
         sortDurationMs,
         totalDurationMs: Date.now() - startedAt,
         visibleCount: recentSessionsVisibleCount,
@@ -283,7 +295,7 @@ export function useAppSidebarSessions({
           throttleMs: 1000,
         },
       );
-      setSidebarSessions(sortedSessions);
+      setSidebarSessions(nextSessions);
       setSidebarSessionsHasMore(hasMore);
     } catch (error) {
       console.warn("加载导航任务列表失败:", error);
@@ -559,6 +571,9 @@ export function useAppSidebarSessions({
 
   const renameSidebarSessionOptimistically = useCallback(
     (nextSession: AsterSessionInfo) => {
+      if (optimisticSidebarSessionsRef.current.has(nextSession.id)) {
+        optimisticSidebarSessionsRef.current.set(nextSession.id, nextSession);
+      }
       setSidebarSessions((current) =>
         sortSidebarSessions(
           current.map((item) =>
@@ -572,6 +587,9 @@ export function useAppSidebarSessions({
 
   const moveSidebarSessionArchiveStateOptimistically = useCallback(
     (nextSession: AsterSessionInfo) => {
+      if (optimisticSidebarSessionsRef.current.has(nextSession.id)) {
+        optimisticSidebarSessionsRef.current.set(nextSession.id, nextSession);
+      }
       setSidebarSessions((current) =>
         sortSidebarSessions(
           current
@@ -585,6 +603,7 @@ export function useAppSidebarSessions({
 
   const removeSidebarSessionOptimistically = useCallback(
     (sessionId: string) => {
+      optimisticSidebarSessionsRef.current.delete(sessionId);
       setSidebarSessions((current) =>
         current.filter((item) => item.id !== sessionId),
       );
@@ -592,7 +611,25 @@ export function useAppSidebarSessions({
     [],
   );
 
+  const addImportedSidebarSessionOptimistically = useCallback(
+    (response: ConversationImportThreadCommitResponse) => {
+      const importedSession = buildImportedSidebarSession(response);
+      optimisticSidebarSessionsRef.current.set(
+        importedSession.id,
+        importedSession,
+      );
+      setSidebarSessions((current) =>
+        sortSidebarSessions([
+          importedSession,
+          ...current.filter((item) => item.id !== importedSession.id),
+        ]),
+      );
+    },
+    [],
+  );
+
   return {
+    addImportedSidebarSessionOptimistically,
     beginSidebarSessionAction,
     clearSidebarSessionAction,
     deferConversationNavigation,

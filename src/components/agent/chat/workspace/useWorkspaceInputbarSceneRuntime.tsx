@@ -56,10 +56,16 @@ interface SoulArtifactVoiceAccessoryProps {
 
 const InputbarOverlayAccessoryStack = styled.div`
   display: flex;
+  width: 100%;
   max-width: 100%;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: stretch;
   gap: 8px;
+`;
+
+const PlanDecisionInputbarReplacement = styled.div`
+  width: min(100%, 900px);
+  max-width: 100%;
 `;
 
 const SoulArtifactVoiceCard = styled.div`
@@ -295,6 +301,7 @@ interface UseWorkspaceInputbarScenePresentationRuntimeParams {
     generalWorkbenchEntryPrompt: GeneralWorkbenchEntryPromptState | null;
     onRestartGeneralWorkbenchEntryPrompt: () => void;
     onContinueGeneralWorkbenchEntryPrompt: () => Promise<void> | void;
+    planDecisionAccessory?: ReactNode;
     soulArtifactVoiceGenerationBrief?: Record<string, unknown> | null;
     soulArtifactVoiceEnabledForTurn: boolean;
     onSoulArtifactVoiceEnabledForTurnChange: (enabled: boolean) => void;
@@ -440,7 +447,11 @@ function useWorkspaceInputbarScenePresentationRuntime({
         {soulArtifactVoiceAccessory}
       </InputbarOverlayAccessoryStack>
     ) : undefined;
-  const inputbarNode = (
+  const inputbarNode = inputbarPresentation.planDecisionAccessory ? (
+    <PlanDecisionInputbarReplacement data-testid="plan-decision-inputbar-replacement">
+      {inputbarPresentation.planDecisionAccessory}
+    </PlanDecisionInputbarReplacement>
+  ) : (
     <Inputbar {...workspaceInputbarProps} overlayAccessory={overlayAccessory} />
   );
   const generalWorkbenchDialog = (
@@ -548,6 +559,7 @@ interface UseWorkspaceInputbarSceneRuntimeParams {
   generalWorkbenchEntryPrompt: InputbarPresentationParams["generalWorkbenchEntryPrompt"];
   handleRestartGeneralWorkbenchEntryPrompt: InputbarPresentationParams["onRestartGeneralWorkbenchEntryPrompt"];
   handleContinueGeneralWorkbenchEntryPrompt: InputbarPresentationParams["onContinueGeneralWorkbenchEntryPrompt"];
+  planDecisionAccessory?: InputbarPresentationParams["planDecisionAccessory"];
   generalWorkbenchEnabled: boolean;
   harnessPanelVisible: GeneralWorkbenchDialogParams["open"];
   setHarnessPanelVisible: GeneralWorkbenchDialogParams["onOpenChange"];
@@ -651,6 +663,7 @@ export function useWorkspaceInputbarSceneRuntime({
   generalWorkbenchEntryPrompt,
   handleRestartGeneralWorkbenchEntryPrompt,
   handleContinueGeneralWorkbenchEntryPrompt,
+  planDecisionAccessory,
   generalWorkbenchEnabled,
   harnessPanelVisible,
   setHarnessPanelVisible,
@@ -844,6 +857,7 @@ export function useWorkspaceInputbarSceneRuntime({
         handleRestartGeneralWorkbenchEntryPrompt,
       onContinueGeneralWorkbenchEntryPrompt:
         handleContinueGeneralWorkbenchEntryPrompt,
+      planDecisionAccessory,
       soulArtifactVoiceGenerationBrief,
       soulArtifactVoiceEnabledForTurn,
       onSoulArtifactVoiceEnabledForTurnChange,

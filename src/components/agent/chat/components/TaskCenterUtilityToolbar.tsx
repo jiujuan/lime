@@ -62,10 +62,12 @@ import {
   type GeneralWorkbenchCreationTaskEvent,
 } from "./generalWorkbenchWorkflowData";
 import { TaskCenterTaskRail } from "./TaskCenterTaskRail";
+import { hasImportedSourceProcessItem } from "../utils/importedSourceProcess";
 
 interface TaskCenterUtilityToolbarProps {
   projectRootPath?: string | null;
   taskRail?: {
+    sessionId?: string | null;
     workflowSteps: GeneralWorkbenchWorkflowStepInput[];
     messages: Message[];
     activityLogs?: SidebarActivityLog[];
@@ -277,6 +279,15 @@ export function TaskCenterUtilityToolbar({
       t: taskRailTranslate,
     });
   }, [taskRail, taskRailTranslate]);
+  const importedRuntimeDetail = React.useMemo(() => {
+    const sessionId = taskRail?.sessionId?.trim() || null;
+    return {
+      enabled:
+        Boolean(sessionId) &&
+        hasImportedSourceProcessItem(taskRail?.threadItems),
+      sessionId,
+    };
+  }, [taskRail?.sessionId, taskRail?.threadItems]);
   const runControlSurfaceProjection = React.useMemo(() => {
     if (!taskRailProjection) {
       return null;
@@ -486,13 +497,14 @@ export function TaskCenterUtilityToolbar({
               </button>
             </div>
             {taskRailProjection ? (
-              <TaskCenterTaskRail
-                projection={taskRailProjection}
-                runControlSurfaceProjection={runControlSurfaceProjection}
-                onOpenOutput={taskRail?.onOpenOutput}
-                onRespondToAction={taskRail?.onRespondToAction}
-                t={taskRailTranslate}
-              />
+            <TaskCenterTaskRail
+              projection={taskRailProjection}
+              runControlSurfaceProjection={runControlSurfaceProjection}
+              onOpenOutput={taskRail?.onOpenOutput}
+              onRespondToAction={taskRail?.onRespondToAction}
+              importedRuntimeDetail={importedRuntimeDetail}
+              t={taskRailTranslate}
+            />
             ) : null}
           </PopoverContent>
         </Popover>

@@ -42,26 +42,26 @@
 
 ## 4. Contract 字段
 
-| 字段 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| `contract_key` | string | 是 | 底层能力主键，不能是入口名 |
-| `lifecycle` | string | 是 | `current` / `compat` / `deprecated` / `dead` |
-| `modality` | string | 是 | `text` / `image` / `audio` / `video` / `browser` / `document` / `code` / `mixed` |
-| `runtime_identity` | string[] | 是 | 运行关联键，例如 `session_id`、`thread_id`、`turn_id` |
-| `input_context_kinds` | string[] | 是 | 输入上下文类型 |
-| `required_capabilities` | string[] | 是 | 模型/工具/执行能力需求 |
-| `permission_profile_keys` | string[] | 是 | 权限面需求 |
-| `routing_slot` | string | 是 | 模型角色槽位 |
-| `executor_binding` | object | 是 | 执行器描述 |
-| `truth_source` | string[] | 是 | 唯一事实源 |
-| `artifact_kinds` | string[] | 是 | 输出 artifact kind |
-| `viewer_surface` | string[] | 是 | viewer / workspace 消费面 |
-| `evidence_events` | string[] | 是 | evidence pack 必须导出的事件 |
-| `limecore_policy_refs` | string[] | 是 | LimeCore 只作为目录/策略/offer/audit 事实源 |
-| `fallback_policy` | string[] | 是 | 降级或阻断策略 |
-| `detour_policy` | object | 是 | 允许/禁止的偏航工具 |
-| `owner_surface` | string | 是 | current owner |
-| `bound_entries` | object[] | 是 | 上层入口绑定；Phase 0/1 默认允许为空 |
+| 字段                      | 类型     | 必填                         | 说明                                                                                 |
+| ------------------------- | -------- | ---------------------------- | ------------------------------------------------------------------------------------ |
+| `contract_key`            | string   | 是                           | 底层能力主键，不能是入口名                                                           |
+| `lifecycle`               | string   | 是                           | `current` / `compat` / `deprecated` / `dead`                                         |
+| `modality`                | string   | 是                           | `text` / `image` / `audio` / `video` / `browser` / `document` / `code` / `mixed`     |
+| `runtime_identity`        | string[] | 是                           | 运行关联键，例如 `session_id`、`thread_id`、`turn_id`                                |
+| `input_context_kinds`     | string[] | 是                           | 输入上下文类型                                                                       |
+| `required_capabilities`   | string[] | 是                           | 模型/工具/执行能力需求                                                               |
+| `permission_profile_keys` | string[] | 是                           | 权限面需求                                                                           |
+| `routing_slot`            | string   | 是                           | 模型角色槽位                                                                         |
+| `executor_binding`        | object   | 可执行 current contract 必填 | 执行器描述；`route_execution_status=metadata_only` 的 compat contract 不应伪造该字段 |
+| `truth_source`            | string[] | 是                           | 唯一事实源                                                                           |
+| `artifact_kinds`          | string[] | 是                           | 输出 artifact kind                                                                   |
+| `viewer_surface`          | string[] | 是                           | viewer / workspace 消费面                                                            |
+| `evidence_events`         | string[] | 是                           | evidence pack 必须导出的事件                                                         |
+| `limecore_policy_refs`    | string[] | 是                           | LimeCore 只作为目录/策略/offer/audit 事实源                                          |
+| `fallback_policy`         | string[] | 是                           | 降级或阻断策略                                                                       |
+| `detour_policy`           | object   | 是                           | 允许/禁止的偏航工具                                                                  |
+| `owner_surface`           | string   | 是                           | current owner                                                                        |
+| `bound_entries`           | object[] | 是                           | 上层入口绑定；Phase 0/1 默认允许为空                                                 |
 
 ## 5. Executor binding
 
@@ -98,7 +98,10 @@ Phase 7 才允许大量补 entry binding。
   "launch_metadata_path": "harness.image_skill_launch",
   "entry_source": "at_image_command",
   "default_input_mapping": ["user_text", "selected_assets"],
-  "entry_visibility_policy": ["skill_catalog_visible", "profile_allows_image_generation"]
+  "entry_visibility_policy": [
+    "skill_catalog_visible",
+    "profile_allows_image_generation"
+  ]
 }
 ```
 
@@ -139,4 +142,4 @@ npm run governance:modality-contracts
 6. entry binding 不携带底层事实源字段。
 7. entry binding 必须声明 `entry_source`，且 `launch_metadata_path` 必须留在 `harness.*`。
 8. `artifact_kinds` 必须存在于 artifact graph，并与 contract 的 truth source、viewer、evidence 至少各有一个交集。
-9. current contract 必须被 execution profile 覆盖，且 `executor_binding` 必须能解析到已声明 executor adapter。
+9. current contract 必须被 execution profile 覆盖；可执行 current contract 的 `executor_binding` 必须能解析到已声明 executor adapter。`route_execution_status=metadata_only` 的 compat contract 必须声明退出条件，不能为了满足 adapter 校验补假执行器。

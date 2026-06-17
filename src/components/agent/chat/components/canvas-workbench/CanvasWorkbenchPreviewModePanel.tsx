@@ -2,6 +2,7 @@ import { memo, type ReactNode } from "react";
 import { Code2, Eye, FileCode2, FileText, Globe2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { resolveLocalFilePreviewUrl } from "@/lib/api/fileSystem";
+import { ArtifactRenderer } from "@/components/artifact";
 import { CodePreview } from "@/components/general-chat/canvas";
 import { MarkdownRenderer } from "../MarkdownRenderer";
 import type { CanvasWorkbenchResolvedSelection } from "../CanvasWorkbenchLayoutViewModel";
@@ -45,6 +46,25 @@ function resolvePreviewTitle(
     modeState.path ||
     context?.title ||
     ""
+  );
+}
+
+function shouldRenderArtifactDirectly(
+  artifact: NonNullable<
+    Extract<
+      CanvasWorkbenchResolvedSelection["target"],
+      { kind: "artifact" | "synthetic-artifact" }
+    >["artifact"]
+  >,
+): boolean {
+  if (artifact.meta.previewArtifact !== true) {
+    return false;
+  }
+
+  return (
+    artifact.meta.renderMode === "media" ||
+    artifact.meta.renderMode === "system_open" ||
+    artifact.meta.renderMode === "unsupported"
   );
 }
 
@@ -127,6 +147,16 @@ export const CanvasWorkbenchPreviewModePanel = memo(
     }
 
     const title = resolvePreviewTitle(context, modeState);
+    const artifactPreviewCandidate =
+      context.target.kind === "artifact" ||
+      context.target.kind === "synthetic-artifact"
+        ? context.target.artifact
+        : null;
+    const artifactPreview =
+      artifactPreviewCandidate &&
+      shouldRenderArtifactDirectly(artifactPreviewCandidate)
+        ? artifactPreviewCandidate
+        : null;
     const htmlPreviewUrl =
       mode === "html"
         ? resolveLocalFilePreviewUrl(context.selectionPath)
@@ -189,7 +219,13 @@ export const CanvasWorkbenchPreviewModePanel = memo(
         </div>
 
         <div className="min-h-0 flex-1 overflow-hidden bg-white">
-          {mode === "markdown" ? (
+          {artifactPreview ? (
+            <ArtifactRenderer
+              artifact={artifactPreview}
+              hideToolbar={true}
+              tone="light"
+            />
+          ) : mode === "markdown" ? (
             <div
               data-testid="canvas-workbench-markdown-preview"
               className="h-full overflow-auto bg-white px-6 py-5"

@@ -1,8 +1,9 @@
 # 架构债证据底座
 
-> 状态：evidence（2026-06-11 实测，结论可复查）
+> 状态：evidence（2026-06-11 实测采集，2026-06-17 复核标注治理进展）
 > 采集方式：依赖图扫描 + import grep + 文件大纲抽查 + 本轮 `project_git` 新增方法的真实写集
 > 用途：支撑 `progressive-refactor-plan.md` 的优先级排序；任何条目的优先级争议先回到本文件核对证据
+> 复核约定：原始证据（2026-06-11 快照）保留不改；治理后状态用 **【2026-06-17 复核】** 行内标注，便于对照"病灶 → 已修"
 
 所有路径相对仓库根。行数为采集日快照，复查时允许漂移。
 
@@ -29,6 +30,8 @@ src/lib/api/projectGit.ts                                         # 前端网关
 
 **结论**：1 个能力 ≈ 10+ 文件触点，其中 protocol crate 4 处注册 + TS 2 处手抄是纯机械劳动。这是 runtime.rs / processor.rs / protocol.ts 三个最大文件持续膨胀的直接机制，也是协议漂移（Rust/TS 不一致）的常驻风险源。
 
+> **【2026-06-17 复核】** TS 侧人肉同步已消除：`protocol.ts` 顶部转为 `// @generated types re-export`，类型来自 `generated/protocol-types.ts`（3641 行，自定义 JSON Schema→TS 转换器生成），生成/漂移检查脚本 `generate:protocol-types` / `check:protocol-types` 已就位。剩余仅 Rust 侧 4 处注册的宏收敛（R-10 二期，可选）。
+
 ---
 
 ## 轴 B · App Server 双中心 Facade
@@ -43,6 +46,8 @@ src/lib/api/projectGit.ts                                         # 前端网关
 **佐证**：`local_data_source.rs` 周边已经长出子模块结构（`local_data_source/agent_apps/`、`automation/`、`knowledge/` 等），说明仓库已有"按 domain 拆模块"的成熟先例，唯独 processor/runtime 的方法注册没有跟上。
 
 **结论**：拆 8000 行为 4 个 2000 行文件不解决问题；要改的是**注册模式**——按 domain 把 handler 和 RuntimeCore 方法下放到 `runtime/<domain>.rs` + 注册表/宏接线，让新增方法默认不触碰中心文件。
+
+> **【2026-06-17 复核】** 已落地：`runtime.rs` **8105 → 588 行**（仅结构体 + 接线），实现下放到 `runtime/` 52 个 domain 子模块；`processor.rs` 单文件 → `processor/` 目录 24 个 domain 模块（`mod.rs` 2444 行做 dispatch）；`runtime/tests.rs` 4428 行已下放到 `runtime/tests/*.rs` 各 domain。新增方法的标准写集不再撑大中心文件。剩余：`processor/mod.rs` 仍偏大、aster `agent.rs`（R-21）未动。
 
 ---
 

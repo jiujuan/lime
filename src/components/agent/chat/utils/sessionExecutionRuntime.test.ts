@@ -132,6 +132,54 @@ describe("sessionExecutionRuntime", () => {
     });
   });
 
+  it("本地历史导入来源模型不应伪装为当前会话模型偏好", () => {
+    expect(
+      createSessionModelPreferenceFromExecutionRuntime({
+        provider_selector: null,
+        provider_name: "openai",
+        model_name: "gpt-5.4",
+        source_client: "codex",
+        imported_continuation: {
+          modelProvider: "openai",
+          model: "gpt-5.4",
+        },
+      }),
+    ).toBeNull();
+  });
+
+  it("camelCase 本地历史导入来源模型同样不应伪装为当前会话模型偏好", () => {
+    expect(
+      createSessionModelPreferenceFromExecutionRuntime({
+        provider_selector: null,
+        provider_name: "openai",
+        model_name: "gpt-5.4",
+        sourceClient: "codex",
+        importedContinuation: {
+          modelProvider: "openai",
+          model: "gpt-5.4",
+        },
+      } as never),
+    ).toBeNull();
+  });
+
+  it("本地历史导入会话已写入当前 provider_selector 后可还原模型偏好", () => {
+    expect(
+      createSessionModelPreferenceFromExecutionRuntime({
+        provider_selector: "custom-current-provider",
+        provider_name: "openai",
+        model_name: "gpt-5.4",
+        source_client: "codex",
+        imported_continuation: {
+          modelProvider: "openai",
+          model: "gpt-5.4",
+        },
+      }),
+    ).toEqual({
+      providerType: "custom-current-provider",
+      model: "gpt-5.4",
+    });
+  });
+
   it("应将 legacy general workbench alias recent_session_mode 归一为 general_workbench", () => {
     expect(
       createExecutionRuntimeFromSessionDetail({

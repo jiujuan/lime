@@ -145,6 +145,8 @@ fn runtime_user_message_from_turn(
     Some(json!({
         "id": format!("{}:user", turn.turn_id),
         "role": "user",
+        "runtimeTurnId": turn.turn_id,
+        "runtime_turn_id": turn.turn_id,
         "content": content,
         "attachments": input.attachments,
         "timestamp": timestamp_seconds(turn.started_at.as_deref()),
@@ -415,6 +417,37 @@ fn model_routing_from_event(event: &AgentEvent) -> serde_json::Value {
         "requested_selection",
         "requested_selection",
     );
+    merge_optional_payload_value(
+        &mut routing,
+        &event.payload,
+        "modelTaskRequest",
+        "modelTaskRequest",
+    );
+    merge_optional_payload_value(
+        &mut routing,
+        &event.payload,
+        "model_task_request",
+        "model_task_request",
+    );
+    merge_optional_payload_value(
+        &mut routing,
+        &event.payload,
+        "resolvedRoute",
+        "resolvedRoute",
+    );
+    merge_optional_payload_value(
+        &mut routing,
+        &event.payload,
+        "resolved_route",
+        "resolved_route",
+    );
+    merge_optional_payload_value(&mut routing, &event.payload, "routeFailure", "routeFailure");
+    merge_optional_payload_value(
+        &mut routing,
+        &event.payload,
+        "route_failure",
+        "route_failure",
+    );
     routing.insert(
         "sourceEventId".to_string(),
         serde_json::Value::String(event.event_id.clone()),
@@ -600,6 +633,9 @@ fn tool_call_from_event(event: &AgentEvent) -> Option<serde_json::Value> {
     record.insert("id".to_string(), json!(id));
     if let Some(tool_name) = string_field(payload, &["tool_name", "toolName", "name"]) {
         record.insert("tool_name".to_string(), json!(tool_name));
+    }
+    if let Some(arguments) = payload.get("arguments").cloned() {
+        record.insert("arguments".to_string(), arguments);
     }
     record.insert("status".to_string(), json!(status));
     record.insert(

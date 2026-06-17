@@ -18,7 +18,19 @@ import {
   type ConversationImportThreadPreviewResponse,
   type ImportedThreadSummary,
 } from "@/lib/api/conversationImport";
-import { formatDate, formatNumber } from "@/i18n/format";
+import { formatNumber } from "@/i18n/format";
+import {
+  buildImportPreviewMetaText,
+  buildSourceProvenanceLabels,
+  formatImportOptionalDate,
+  firstImportableThread,
+  isImportedThread,
+  normalizeOptional,
+  resolveImportSourceClientLabel,
+  resolveImportThreadSecondaryText,
+  resolveImportThreadTitle,
+  truncateImportPreviewText,
+} from "./conversationImportDialogViewModel";
 
 const SCAN_LIMIT = 40;
 const PREVIEW_LIMIT = 12;
@@ -29,57 +41,10 @@ interface AppSidebarConversationImportDialogProps {
   projectPath?: string | null;
   projectName?: string | null;
   onClose: () => void;
-  onImported: (response: ConversationImportThreadCommitResponse) => void;
+  onImported: (responses: ConversationImportThreadCommitResponse[]) => void;
 }
 
 type ImportStage = "idle" | "scanning" | "previewing" | "committing";
-
-function normalizeOptional(value?: string | null): string | undefined {
-  const normalized = value?.trim();
-  return normalized ? normalized : undefined;
-}
-
-function resolveThreadTitle(thread?: ImportedThreadSummary | null) {
-  return (
-    normalizeOptional(thread?.title) ||
-    normalizeOptional(thread?.sourceThreadId) ||
-    "Codex"
-  );
-}
-
-function firstImportableThread(threads: ImportedThreadSummary[]) {
-  return (
-    threads.find((thread) => thread.importStatus === "not_imported") ??
-    threads[0] ??
-    null
-  );
-}
-
-function formatOptionalDate(value: string | undefined, locale: string) {
-  if (!value) {
-    return null;
-  }
-  return formatDate(value, {
-    locale,
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function sourceClientLabel(sourceClient: string | undefined) {
-  return sourceClient === "claude_code" ? "Claude Code" : "Codex";
-}
-
-function truncatePreviewText(text: string) {
-  const normalized = text.replace(/\s+/g, " ").trim();
-  if (normalized.length <= 220) {
-    return normalized;
-  }
-  return `${normalized.slice(0, 220)}...`;
-}
 
 export function AppSidebarConversationImportDialog({
   isOpen,
@@ -108,17 +73,28 @@ export function AppSidebarConversationImportDialog({
   );
   const loading = stage === "scanning" || stage === "previewing";
   const committing = stage === "committing";
-  const threadTitle = resolveThreadTitle(preview?.thread ?? selectedThread);
+  const threadTitle = resolveImportThreadTitle(
+    preview?.thread ?? selectedThread,
+  );
+  const replaceExisting = isImportedThread(preview?.thread ?? selectedThread);
+  const commitThreads = useMemo(
+    () =>
+      threads.filter((thread) =>
+        ["not_imported", "imported"].includes(thread.importStatus),
+      ),
+    [threads],
+  );
   const dryRun = preview?.summary.dryRun;
   const fidelity = preview?.summary.fidelity;
   const targetLabel =
     normalizeOptional(projectName) ||
     normalizeOptional(workspaceId) ||
     t("navigation.sidebar.importDialog.target.standalone", "独立对话");
-  const selectedUpdatedAt = formatOptionalDate(
+  const selectedUpdatedAt = formatImportOptionalDate(
     preview?.thread.updatedAt ?? selectedThread?.updatedAt,
     i18n.language,
   );
+  const previewMetaText = buildImportPreviewMetaText(selectedUpdatedAt, t);
 
   const loadPreview = useCallback(
     async (thread: ImportedThreadSummary, nextSourceRoot?: string) => {
@@ -136,43 +112,51 @@ export function AppSidebarConversationImportDialog({
     [],
   );
 
-  const loadThreads = useCallback(async (nextSourceRoot?: string) => {
-    setStage("scanning");
-    setError(null);
-    setPreview(null);
-    try {
-      const result = await scanConversationImportSource({
-        sourceClient: "codex",
-        sourceRoot: nextSourceRoot,
-        projectPath: normalizeOptional(projectPath),
-        includeArchived: false,
-        limit: SCAN_LIMIT,
-      });
-      const nextThreads = result.threads;
-      setThreads(nextThreads);
-      const nextSelected = firstImportableThread(nextThreads);
-      setSelectedThreadId(nextSelected?.sourceThreadId ?? null);
-      if (nextSelected) {
-        await loadPreview(
-          nextSelected,
-          result.source.sourceRoot ?? nextSourceRoot,
+  const loadThreads = useCallback(
+    async (nextSourceRoot?: string) => {
+      setStage("scanning");
+      setError(null);
+      setPreview(null);
+      try {
+        let cursor: string | undefined;
+        let resolvedSourceRoot = nextSourceRoot;
+        const nextThreads: ImportedThreadSummary[] = [];
+        do {
+          const result = await scanConversationImportSource({
+            sourceClient: "codex",
+            sourceRoot: resolvedSourceRoot,
+            projectPath: normalizeOptional(projectPath),
+            includeArchived: false,
+            limit: SCAN_LIMIT,
+            ...(cursor ? { cursor } : {}),
+          });
+          resolvedSourceRoot = result.source.sourceRoot ?? resolvedSourceRoot;
+          nextThreads.push(...result.threads);
+          cursor = result.nextCursor ?? undefined;
+        } while (cursor);
+        setThreads(nextThreads);
+        const nextSelected = firstImportableThread(nextThreads);
+        setSelectedThreadId(nextSelected?.sourceThreadId ?? null);
+        if (nextSelected) {
+          await loadPreview(nextSelected, resolvedSourceRoot);
+        }
+      } catch (scanError) {
+        setThreads([]);
+        setSelectedThreadId(null);
+        setError(
+          scanError instanceof Error && scanError.message.trim()
+            ? scanError.message.trim()
+            : t(
+                "navigation.sidebar.importDialog.error.scan",
+                "读取本地历史对话失败",
+              ),
         );
+      } finally {
+        setStage("idle");
       }
-    } catch (scanError) {
-      setThreads([]);
-      setSelectedThreadId(null);
-      setError(
-        scanError instanceof Error && scanError.message.trim()
-          ? scanError.message.trim()
-          : t(
-              "navigation.sidebar.importDialog.error.scan",
-              "读取 Codex 对话失败",
-            ),
-      );
-    } finally {
-      setStage("idle");
-    }
-  }, [loadPreview, projectPath, t]);
+    },
+    [loadPreview, projectPath, t],
+  );
 
   useEffect(() => {
     sourceRootRef.current = sourceRoot;
@@ -210,34 +194,46 @@ export function AppSidebarConversationImportDialog({
         setStage("idle");
       }
     },
-    [committing, loadPreview, loading, preview?.source.sourceRoot, sourceRoot, t],
+    [
+      committing,
+      loadPreview,
+      loading,
+      preview?.source.sourceRoot,
+      sourceRoot,
+      t,
+    ],
   );
 
   const handleCommit = useCallback(async () => {
-    const thread = preview?.thread ?? selectedThread;
-    if (!thread) {
+    if (commitThreads.length === 0) {
       return;
     }
 
     setStage("committing");
     setError(null);
     try {
-      const result = await commitConversationImportThread({
-        sourceClient: "codex",
-        sourceRoot: preview?.source.sourceRoot ?? sourceRoot,
-        sourceThreadId: thread.sourceThreadId,
-        sourcePath: thread.sourcePath,
-        workspaceId: normalizeOptional(workspaceId),
-        confirmed: true,
-      });
-      onImported(result);
+      const resolvedSourceRoot = preview?.source.sourceRoot ?? sourceRoot;
+      const results: ConversationImportThreadCommitResponse[] = [];
+      for (const thread of commitThreads) {
+        const result = await commitConversationImportThread({
+          sourceClient: "codex",
+          sourceRoot: resolvedSourceRoot,
+          sourceThreadId: thread.sourceThreadId,
+          sourcePath: thread.sourcePath,
+          workspaceId: normalizeOptional(workspaceId),
+          confirmed: true,
+          ...(isImportedThread(thread) ? { replaceExisting: true } : {}),
+        });
+        results.push(result);
+      }
+      onImported(results);
     } catch (commitError) {
       setError(
         commitError instanceof Error && commitError.message.trim()
           ? commitError.message.trim()
           : t(
               "navigation.sidebar.importDialog.error.commit",
-              "导入 Codex 对话失败",
+              "导入本地历史对话失败",
             ),
       );
     } finally {
@@ -245,9 +241,8 @@ export function AppSidebarConversationImportDialog({
     }
   }, [
     onImported,
+    commitThreads,
     preview?.source.sourceRoot,
-    preview?.thread,
-    selectedThread,
     sourceRoot,
     t,
     workspaceId,
@@ -282,16 +277,16 @@ export function AppSidebarConversationImportDialog({
         <header className="border-b border-slate-200 bg-slate-50 px-6 py-5">
           <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
             <FileInput className="h-3.5 w-3.5" />
-            {t("navigation.sidebar.importDialog.eyebrow", "Codex 对话导入")}
+            {t("navigation.sidebar.importDialog.eyebrow", "本地历史导入")}
           </div>
           <div className="mt-3 max-w-3xl">
             <h2 className="text-xl font-semibold text-slate-950">
-              {t("navigation.sidebar.importDialog.title", "导入 Codex 对话")}
+              {t("navigation.sidebar.importDialog.title", "导入本地历史对话")}
             </h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">
               {t(
                 "navigation.sidebar.importDialog.description",
-                "先读取 Codex 本地对话并生成预览，确认后写入 Lime 当前会话主链。",
+                "先读取本地历史对话并生成预览，确认后写入当前会话。",
               )}
             </p>
           </div>
@@ -303,14 +298,14 @@ export function AppSidebarConversationImportDialog({
               <label className="block text-xs font-semibold text-slate-600">
                 {t(
                   "navigation.sidebar.importDialog.sourceRoot.label",
-                  "Codex 数据目录",
+                  "本地历史数据目录",
                 )}
                 <input
                   value={sourceRootInput}
                   onChange={(event) => setSourceRootInput(event.target.value)}
                   placeholder={t(
                     "navigation.sidebar.importDialog.sourceRoot.placeholder",
-                    "自动使用 CODEX_HOME 或 ~/.codex",
+                    "自动使用历史数据默认目录",
                   )}
                   className="mt-2 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-300"
                   disabled={committing}
@@ -353,8 +348,8 @@ export function AppSidebarConversationImportDialog({
                 {threads.length > 0 ? (
                   threads.map((thread) => {
                     const active = selectedThreadId === thread.sourceThreadId;
-                    const title = resolveThreadTitle(thread);
-                    const updatedAt = formatOptionalDate(
+                    const title = resolveImportThreadTitle(thread);
+                    const updatedAt = formatImportOptionalDate(
                       thread.updatedAt,
                       i18n.language,
                     );
@@ -378,9 +373,11 @@ export function AppSidebarConversationImportDialog({
                               {title}
                             </span>
                             <span className="mt-1 block truncate text-xs text-slate-500">
-                              {updatedAt ||
-                                thread.cwd ||
-                                thread.sourceThreadId}
+                              {resolveImportThreadSecondaryText(
+                                thread,
+                                updatedAt,
+                                t,
+                              )}
                             </span>
                           </span>
                         </span>
@@ -392,11 +389,11 @@ export function AppSidebarConversationImportDialog({
                     {loading
                       ? t(
                           "navigation.sidebar.importDialog.empty.loading",
-                          "正在读取 Codex 对话",
+                          "正在读取本地历史对话",
                         )
                       : t(
                           "navigation.sidebar.importDialog.empty.noThreads",
-                          "没有找到可导入的 Codex 对话",
+                          "没有找到可导入的本地历史对话",
                         )}
                   </div>
                 )}
@@ -408,21 +405,15 @@ export function AppSidebarConversationImportDialog({
             <div className="grid grid-cols-3 gap-3 border-b border-slate-200 p-4">
               <div className="rounded-xl border border-slate-200 bg-white p-3">
                 <span className="text-xs font-semibold text-slate-500">
-                  {t(
-                    "navigation.sidebar.importDialog.meta.source",
-                    "来源",
-                  )}
+                  {t("navigation.sidebar.importDialog.meta.source", "来源")}
                 </span>
                 <strong className="mt-1 block text-sm text-slate-950">
-                  {sourceClientLabel(preview?.source.sourceClient)}
+                  {resolveImportSourceClientLabel(preview?.source.sourceClient)}
                 </strong>
               </div>
               <div className="rounded-xl border border-slate-200 bg-white p-3">
                 <span className="text-xs font-semibold text-slate-500">
-                  {t(
-                    "navigation.sidebar.importDialog.meta.target",
-                    "导入到",
-                  )}
+                  {t("navigation.sidebar.importDialog.meta.target", "导入到")}
                 </span>
                 <strong className="mt-1 block truncate text-sm text-slate-950">
                   {targetLabel}
@@ -430,10 +421,7 @@ export function AppSidebarConversationImportDialog({
               </div>
               <div className="rounded-xl border border-slate-200 bg-white p-3">
                 <span className="text-xs font-semibold text-slate-500">
-                  {t(
-                    "navigation.sidebar.importDialog.meta.messages",
-                    "消息",
-                  )}
+                  {t("navigation.sidebar.importDialog.meta.messages", "消息")}
                 </span>
                 <strong className="mt-1 block text-sm text-slate-950">
                   {preview
@@ -469,17 +457,7 @@ export function AppSidebarConversationImportDialog({
                           {threadTitle}
                         </h3>
                         <p className="mt-2 text-sm leading-6 text-slate-500">
-                          {t("navigation.sidebar.importDialog.preview.meta", {
-                            threadId: preview.thread.sourceThreadId,
-                            updatedAt:
-                              selectedUpdatedAt ||
-                              t(
-                                "navigation.sidebar.importDialog.preview.unknownTime",
-                                "未知时间",
-                              ),
-                            defaultValue:
-                              "Codex thread {{threadId}} · {{updatedAt}}",
-                          })}
+                          {previewMetaText}
                         </p>
                       </div>
                       {preview.thread.importStatus === "imported" ? (
@@ -597,7 +575,7 @@ export function AppSidebarConversationImportDialog({
                           <span className="text-xs font-semibold text-slate-600">
                             {t(
                               "navigation.sidebar.importDialog.fidelity.title",
-                              "Codex 细节还原",
+                              "导入细节还原",
                             )}
                           </span>
                           <span className="text-xs font-medium text-slate-500">
@@ -710,68 +688,64 @@ export function AppSidebarConversationImportDialog({
                       )}
                     </h4>
                     <div className="space-y-2">
-                      {preview.messages.map((message, index) => (
-                        <article
-                          key={`${message.role}-${index}`}
-                          className="rounded-2xl border border-slate-200 bg-white p-4"
-                        >
-                          <div className="mb-2 flex items-center justify-between gap-3">
-                            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
-                              {message.role === "assistant"
-                                ? t(
-                                    "navigation.sidebar.importDialog.role.assistant",
-                                    "Codex",
-                                  )
-                                : t(
-                                    "navigation.sidebar.importDialog.role.user",
-                                    "用户",
-                                  )}
-                            </span>
-                            <span className="flex flex-wrap justify-end gap-2">
-                              {message.truncated ? (
-                                <span className="text-xs font-medium text-amber-700">
-                                  {t(
-                                    "navigation.sidebar.importDialog.messages.truncated",
-                                    "已截断",
-                                  )}
-                                </span>
-                              ) : null}
-                              {(message.attachments ?? []).length > 0 ? (
-                                <span className="text-xs font-medium text-emerald-700">
-                                  {t(
-                                    "navigation.sidebar.importDialog.messages.attachments",
-                                    "附件 {{count}}",
-                                    {
-                                      count: (message.attachments ?? []).length,
-                                    },
-                                  )}
-                                </span>
-                              ) : null}
-                            </span>
-                          </div>
-                          {message.provenance ? (
-                            <div className="mb-2 flex flex-wrap gap-2 text-[11px] font-medium text-slate-500">
-                              <span>
-                                {message.provenance.sourceEventType}
-                                {message.provenance.sourceEventSeq
-                                  ? ` #${message.provenance.sourceEventSeq}`
-                                  : ""}
+                      {preview.messages.map((message, index) => {
+                        const provenanceLabels = buildSourceProvenanceLabels(
+                          message.provenance,
+                          t,
+                        );
+                        return (
+                          <article
+                            key={`${message.role}-${index}`}
+                            className="rounded-2xl border border-slate-200 bg-white p-4"
+                          >
+                            <div className="mb-2 flex items-center justify-between gap-3">
+                              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                                {message.role === "assistant"
+                                  ? t(
+                                      "navigation.sidebar.importDialog.role.assistant",
+                                      "助手",
+                                    )
+                                  : t(
+                                      "navigation.sidebar.importDialog.role.user",
+                                      "用户",
+                                    )}
                               </span>
-                              {message.provenance.sourcePayloadType ? (
-                                <span>
-                                  {message.provenance.sourcePayloadType}
-                                </span>
-                              ) : null}
-                              {message.provenance.sourceCallId ? (
-                                <span>{message.provenance.sourceCallId}</span>
-                              ) : null}
+                              <span className="flex flex-wrap justify-end gap-2">
+                                {message.truncated ? (
+                                  <span className="text-xs font-medium text-amber-700">
+                                    {t(
+                                      "navigation.sidebar.importDialog.messages.truncated",
+                                      "已截断",
+                                    )}
+                                  </span>
+                                ) : null}
+                                {(message.attachments ?? []).length > 0 ? (
+                                  <span className="text-xs font-medium text-emerald-700">
+                                    {t(
+                                      "navigation.sidebar.importDialog.messages.attachments",
+                                      "附件 {{count}}",
+                                      {
+                                        count: (message.attachments ?? [])
+                                          .length,
+                                      },
+                                    )}
+                                  </span>
+                                ) : null}
+                              </span>
                             </div>
-                          ) : null}
-                          <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">
-                            {truncatePreviewText(message.text)}
-                          </p>
-                        </article>
-                      ))}
+                            {provenanceLabels.length > 0 ? (
+                              <div className="mb-2 flex flex-wrap gap-2 text-[11px] font-medium text-slate-500">
+                                {provenanceLabels.map((label) => (
+                                  <span key={label}>{label}</span>
+                                ))}
+                              </div>
+                            ) : null}
+                            <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                              {truncateImportPreviewText(message.text)}
+                            </p>
+                          </article>
+                        );
+                      })}
                     </div>
                   </section>
                 </div>
@@ -788,7 +762,7 @@ export function AppSidebarConversationImportDialog({
                   ) : (
                     t(
                       "navigation.sidebar.importDialog.preview.empty",
-                      "请选择一条 Codex 对话查看预览",
+                      "请选择一条本地历史对话查看预览",
                     )
                   )}
                 </div>
@@ -797,10 +771,15 @@ export function AppSidebarConversationImportDialog({
 
             <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4">
               <p className="max-w-xl text-xs leading-5 text-slate-500">
-                {t(
-                  "navigation.sidebar.importDialog.confirmNotice",
-                  "确认后只写入 Lime 会话，不修改 Codex 本地数据；后续继续对话仍走 Lime 多模型运行时。",
-                )}
+                {replaceExisting
+                  ? t(
+                      "navigation.sidebar.importDialog.confirmNotice.replace",
+                      "会先清理已导入会话并重新导入，不修改本地历史数据；后续继续对话仍走多模型运行时。",
+                    )
+                  : t(
+                      "navigation.sidebar.importDialog.confirmNotice",
+                      "确认后只写入当前会话，不修改本地历史数据；后续继续对话仍走多模型运行时。",
+                    )}
               </p>
               <div className="flex items-center gap-2">
                 <button
@@ -814,20 +793,27 @@ export function AppSidebarConversationImportDialog({
                 <button
                   type="button"
                   className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-900 bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={!preview || loading || committing}
+                  disabled={commitThreads.length === 0 || loading || committing}
                   onClick={() => void handleCommit()}
                   data-testid="app-sidebar-conversation-import-confirm"
                 >
-                  {committing ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  {committing ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : null}
                   {committing
                     ? t(
                         "navigation.sidebar.importDialog.action.importing",
                         "正在导入",
                       )
-                    : t(
-                        "navigation.sidebar.importDialog.action.confirm",
-                        "确认导入",
-                      )}
+                    : replaceExisting
+                      ? t(
+                          "navigation.sidebar.importDialog.action.replace",
+                          "清理并重新导入",
+                        )
+                      : t(
+                          "navigation.sidebar.importDialog.action.confirm",
+                          "确认导入",
+                        )}
                 </button>
               </div>
             </footer>

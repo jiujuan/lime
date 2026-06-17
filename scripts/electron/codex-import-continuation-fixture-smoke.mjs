@@ -347,7 +347,7 @@ function writeCodexRolloutFixture(rolloutPath) {
         id: "call_search",
         call_id: "call_search",
         action: "search_query",
-        query: "Lime Codex import",
+        query: "Lime history import",
       },
     },
     {
@@ -357,7 +357,7 @@ function writeCodexRolloutFixture(rolloutPath) {
         type: "web_search_end",
         call_id: "call_search",
         action: "search_query",
-        query: "Lime Codex import",
+        query: "Lime history import",
       },
     },
     {

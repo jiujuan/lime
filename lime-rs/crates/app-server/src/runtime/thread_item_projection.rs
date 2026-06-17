@@ -1,3 +1,5 @@
+mod plan;
+
 use super::raw_string_field;
 use super::string_array_field;
 use super::string_field;
@@ -13,11 +15,17 @@ pub(super) fn thread_items_from_events(stored: &StoredSession) -> Vec<Value> {
     let mut command_items = HashMap::<String, Value>::new();
     let mut patch_items = HashMap::<String, Value>::new();
     let mut approval_items = HashMap::<String, Value>::new();
+    let mut context_compaction_items = HashMap::<String, Value>::new();
+    let mut subagent_items = HashMap::<String, Value>::new();
 
     for event in &stored.events {
         match event.event_type.as_str() {
             "message.delta" => {
                 if let Some(item) = agent_message_item(stored, event) {
+                    if is_imported_agent_message_event(event) {
+                        items.push(item);
+                        continue;
+                    }
                     if let Some(turn_id) = event.turn_id.as_deref() {
                         if let Some(existing_index) = last_text_item_by_turn.get(turn_id).copied() {
                             merge_agent_message_item(&mut items[existing_index], &item);
@@ -30,6 +38,11 @@ pub(super) fn thread_items_from_events(stored: &StoredSession) -> Vec<Value> {
             }
             "reasoning.delta" | "reasoning.summary" | "reasoning.completed" => {
                 if let Some(item) = reasoning_item(stored, event) {
+                    items.push(item);
+                }
+            }
+            "plan.delta" | "plan.final" => {
+                if let Some(item) = plan::plan_item(stored, event) {
                     items.push(item);
                 }
             }
@@ -46,18 +59,25 @@ pub(super) fn thread_items_from_events(stored: &StoredSession) -> Vec<Value> {
             | "action.expired" => {
                 upsert_approval_item(stored, event, &mut approval_items);
             }
+            "context.compaction.started" | "context.compaction.completed" => {
+                upsert_context_compaction_item(stored, event, &mut context_compaction_items);
+            }
+            "subagent.activity" => {
+                upsert_subagent_activity_item(stored, event, &mut subagent_items);
+            }
             _ => {}
         }
     }
 
     items.extend(command_items.into_values());
-    items.extend(
-        tool_items
-            .into_values()
-            .filter(|item| !item_tool_name(item).is_some_and(|name| is_command_tool_name(&name))),
-    );
+    items.extend(tool_items.into_values().filter(|item| {
+        !item_tool_name(item)
+            .is_some_and(|name| is_command_tool_name(&name) || is_update_plan_tool_name(&name))
+    }));
     items.extend(patch_items.into_values());
     items.extend(approval_items.into_values());
+    items.extend(context_compaction_items.into_values());
+    items.extend(subagent_items.into_values());
     sort_thread_items(&mut items);
     items
 }
@@ -89,6 +109,16 @@ fn item_timestamp(item: &Value) -> String {
 
 fn item_id(item: &Value) -> String {
     string_field(item, &["id"]).unwrap_or_default()
+}
+
+fn is_imported_agent_message_event(event: &AgentEvent) -> bool {
+    event
+        .payload
+        .get("imported")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+        || string_field(&event.payload, &["sourceClient", "source_client"])
+            .is_some_and(|value| !value.trim().is_empty())
 }
 
 fn item_tool_name(item: &Value) -> Option<String> {
@@ -354,6 +384,108 @@ fn upsert_approval_item(
     merge_lifecycle_metadata(object, event);
 }
 
+fn upsert_context_compaction_item(
+    stored: &StoredSession,
+    event: &AgentEvent,
+    items: &mut HashMap<String, Value>,
+) {
+    let id = context_compaction_id(&event.payload).unwrap_or_else(|| event.event_id.clone());
+    let status = match event.event_type.as_str() {
+        "context.compaction.started" => "in_progress",
+        _ => "completed",
+    };
+    let entry = items.entry(id.clone()).or_insert_with(|| {
+        lifecycle_base_item(stored, event, &id, "context_compaction", status)
+    });
+    let Some(object) = entry.as_object_mut() else {
+        return;
+    };
+
+    update_lifecycle_item(object, event, status);
+    merge_optional_field(
+        object,
+        "stage",
+        string_field(&event.payload, &["stage"])
+            .or_else(|| {
+                Some(if status == "completed" {
+                    "completed".to_string()
+                } else {
+                    "started".to_string()
+                })
+            })
+            .map(Value::String),
+    );
+    merge_optional_field(
+        object,
+        "trigger",
+        string_field(&event.payload, &["trigger"]).map(Value::String),
+    );
+    merge_optional_field(
+        object,
+        "detail",
+        raw_string_field(&event.payload, &["detail", "message", "summary"]).map(Value::String),
+    );
+    merge_lifecycle_metadata(object, event);
+}
+
+fn upsert_subagent_activity_item(
+    stored: &StoredSession,
+    event: &AgentEvent,
+    items: &mut HashMap<String, Value>,
+) {
+    let id = subagent_activity_id(&event.payload).unwrap_or_else(|| event.event_id.clone());
+    let status = string_field(&event.payload, &["status"])
+        .map(|value| match value.as_str() {
+            "in_progress" | "running" => "in_progress",
+            "failed" => "failed",
+            _ => "completed",
+        })
+        .unwrap_or("completed");
+    let entry = items
+        .entry(id.clone())
+        .or_insert_with(|| lifecycle_base_item(stored, event, &id, "subagent_activity", status));
+    let Some(object) = entry.as_object_mut() else {
+        return;
+    };
+
+    update_lifecycle_item(object, event, status);
+    merge_optional_field(
+        object,
+        "status_label",
+        string_field(&event.payload, &["statusLabel", "status_label", "kind"])
+            .or_else(|| Some(status.to_string()))
+            .map(Value::String),
+    );
+    merge_optional_field(
+        object,
+        "title",
+        raw_string_field(&event.payload, &["title", "agentPath", "agent_path"])
+            .map(Value::String),
+    );
+    merge_optional_field(
+        object,
+        "summary",
+        raw_string_field(&event.payload, &["summary", "message", "prompt"]).map(Value::String),
+    );
+    merge_optional_field(
+        object,
+        "role",
+        string_field(&event.payload, &["role", "kind"]).map(Value::String),
+    );
+    merge_optional_field(
+        object,
+        "model",
+        string_field(&event.payload, &["model"]).map(Value::String),
+    );
+    merge_optional_field(
+        object,
+        "session_id",
+        string_field(&event.payload, &["sessionId", "session_id", "agentThreadId", "agent_thread_id"])
+            .map(Value::String),
+    );
+    merge_lifecycle_metadata(object, event);
+}
+
 fn lifecycle_base_item(
     stored: &StoredSession,
     event: &AgentEvent,
@@ -459,6 +591,9 @@ fn merge_lifecycle_metadata(object: &mut Map<String, Value>, event: &AgentEvent)
     if let Some(value) = event.payload.get("importedSynthetic").cloned() {
         metadata.insert("imported_synthetic".to_string(), value);
     }
+    if let Some(value) = event.payload.get("importedIncomplete").cloned() {
+        metadata.insert("imported_incomplete".to_string(), value);
+    }
 }
 
 fn merge_metadata_array(metadata: &mut Map<String, Value>, key: &str, value: Value) {
@@ -504,6 +639,36 @@ fn action_id(payload: &Value) -> Option<String> {
     string_field(
         payload,
         &["requestId", "request_id", "actionId", "action_id", "id"],
+    )
+}
+
+fn context_compaction_id(payload: &Value) -> Option<String> {
+    string_field(
+        payload,
+        &[
+            "compactionId",
+            "compaction_id",
+            "contextCompactionId",
+            "context_compaction_id",
+            "id",
+        ],
+    )
+}
+
+fn subagent_activity_id(payload: &Value) -> Option<String> {
+    string_field(
+        payload,
+        &[
+            "activityId",
+            "activity_id",
+            "eventId",
+            "event_id",
+            "sessionId",
+            "session_id",
+            "agentThreadId",
+            "agent_thread_id",
+            "id",
+        ],
     )
 }
 
@@ -708,6 +873,9 @@ fn event_metadata(event: &AgentEvent) -> Value {
     if let Some(value) = event.payload.get("importedSynthetic").cloned() {
         metadata.insert("imported_synthetic".to_string(), value);
     }
+    if let Some(value) = event.payload.get("importedIncomplete").cloned() {
+        metadata.insert("imported_incomplete".to_string(), value);
+    }
     Value::Object(metadata)
 }
 
@@ -734,6 +902,16 @@ fn is_web_search_tool_name(value: &str) -> bool {
         value.trim(),
         "web_search" | "webSearch" | "search_query" | "WebSearch"
     )
+}
+
+fn is_update_plan_tool_name(value: &str) -> bool {
+    let normalized = value
+        .trim()
+        .chars()
+        .filter(|character| !matches!(character, '_' | '-' | ' '))
+        .collect::<String>()
+        .to_ascii_lowercase();
+    matches!(normalized.as_str(), "updateplan" | "updateplantool")
 }
 
 fn tool_output(payload: &Value) -> Option<String> {

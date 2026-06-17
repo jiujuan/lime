@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  agentWorkbenchSessionStatusLabel,
   buildAgentWorkbenchSessionStartRequest,
   buildAgentTurnStartPayload,
+  hasAgentWorkbenchRuntimeFacts,
+  projectAgentWorkbenchTaskView,
   resolveAgentWorkbenchIntentDescriptor,
   resolveAgentWorkbenchPermissionMode,
   resolveAgentWorkbenchSkills,
@@ -114,6 +117,81 @@ test("summarizes runtime facts from projection-like read model", () => {
     taskCount: 1,
     hasRuntimeFacts: true,
   });
+});
+
+test("detects visible workbench runtime facts without React state", () => {
+  assert.equal(hasAgentWorkbenchRuntimeFacts({ events: [] }), false);
+  assert.equal(hasAgentWorkbenchRuntimeFacts({
+    visibleEvents: [
+      { surface: "tool", status: "completed", source: { eventClass: "tool.result" } },
+    ],
+  }), true);
+  assert.equal(hasAgentWorkbenchRuntimeFacts({
+    visibleEvents: [
+      { status: "blocked", eventClass: "model.blocked" },
+    ],
+  }), true);
+  assert.equal(hasAgentWorkbenchRuntimeFacts({
+    visibleEvents: [
+      { surface: "human-action", source: { eventClass: "action.required" } },
+    ],
+  }), true);
+});
+
+test("maps workbench session status labels", () => {
+  assert.equal(agentWorkbenchSessionStatusLabel("waiting-user"), "待补充");
+  assert.equal(agentWorkbenchSessionStatusLabel("draft-created"), "已出草稿");
+  assert.equal(agentWorkbenchSessionStatusLabel("active"), "协作中");
+  assert.equal(agentWorkbenchSessionStatusLabel(undefined), "待启动");
+});
+
+test("projects workbench task facts without React state", () => {
+  const view = projectAgentWorkbenchTaskView({
+    session: {
+      title: "主图脚本协作",
+      status: "waiting-user",
+      inputSourceIds: ["source-1"],
+    },
+    readModel: {
+      sourceCount: 1,
+      events: [
+        { surface: "tool", source: { eventClass: "tool.started" } },
+      ],
+      pendingActions: [{}],
+      artifactRefs: ["artifact-1"],
+      evidenceRefs: ["evidence-1"],
+      taskRefs: ["task-1"],
+    },
+    inputAttachmentCount: 2,
+  });
+
+  assert.equal(view.taskTitle, "主图脚本协作");
+  assert.equal(view.statusLabel, "待补充");
+  assert.equal(view.sourceCount, 4);
+  assert.equal(view.toolCount, 1);
+  assert.equal(view.pendingActionCount, 1);
+  assert.equal(view.artifactCount, 1);
+  assert.equal(view.evidenceCount, 1);
+  assert.equal(view.taskCount, 1);
+  assert.equal(view.shouldShowRuntimePanel, true);
+  assert.deepEqual(view.checkpoints.map((checkpoint) => [checkpoint.id, checkpoint.state, checkpoint.count]), [
+    ["input", "done", 4],
+    ["artifact", "done", 1],
+    ["human-action", "active", 1],
+    ["evidence", "done", 1],
+  ]);
+});
+
+test("projects empty workbench task as idle task surface", () => {
+  const view = projectAgentWorkbenchTaskView({
+    fallbackTitle: "内容协作",
+  });
+
+  assert.equal(view.taskTitle, "内容协作");
+  assert.equal(view.statusLabel, "待启动");
+  assert.equal(view.hasRuntimeFacts, false);
+  assert.equal(view.shouldShowRuntimePanel, false);
+  assert.deepEqual(view.checkpoints.map((checkpoint) => checkpoint.state), ["idle", "idle", "idle", "idle"]);
 });
 
 test("builds a lime.agent turn payload with capability policy", () => {

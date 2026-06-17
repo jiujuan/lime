@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "enum": [
+    "direct_request",
+    "local",
+    "oem_gateway",
+    "openai_compatible",
+    "provider_base_url"
+  ],
+  "title": "EndpointKind",
+  "type": "string"
+}

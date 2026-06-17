@@ -1,11 +1,11 @@
 import {
-  buildCodexSlashHelpMessage,
-  buildCodexSlashModelMessage,
-  buildCodexSlashPrompt,
-  buildCodexSlashStatusMessage,
-  buildUnsupportedCodexSlashCommandMessage,
+  buildSlashCommandHelpMessage,
+  buildSlashCommandModelMessage,
+  buildSlashCommandPrompt,
+  buildSlashCommandStatusMessage,
+  buildUnsupportedSlashCommandMessage,
 } from "./formatter";
-import type { ExecuteCodexSlashCommandParams } from "./types";
+import type { ExecuteSlashCommandParams } from "./types";
 
 function ensureSessionMutationAllowed(
   isSending: boolean,
@@ -22,8 +22,8 @@ function ensureSessionMutationAllowed(
   return false;
 }
 
-export async function executeCodexSlashCommand(
-  params: ExecuteCodexSlashCommandParams,
+export async function executeSlashCommand(
+  params: ExecuteSlashCommandParams,
 ): Promise<boolean> {
   const {
     command,
@@ -72,11 +72,11 @@ export async function executeCodexSlashCommand(
       return true;
     }
     case "help":
-      appendAssistantMessage(buildCodexSlashHelpMessage());
+      appendAssistantMessage(buildSlashCommandHelpMessage());
       onExecutedCommand?.(command);
       return true;
     case "status":
-      appendAssistantMessage(buildCodexSlashStatusMessage(statusSnapshot));
+      appendAssistantMessage(buildSlashCommandStatusMessage(statusSnapshot));
       onExecutedCommand?.(command);
       return true;
     case "model":
@@ -86,7 +86,7 @@ export async function executeCodexSlashCommand(
         );
         return true;
       }
-      appendAssistantMessage(buildCodexSlashModelMessage(statusSnapshot));
+      appendAssistantMessage(buildSlashCommandModelMessage(statusSnapshot));
       onExecutedCommand?.(command);
       return true;
     case "subagents":
@@ -96,7 +96,7 @@ export async function executeCodexSlashCommand(
     case "review":
     case "diff":
     case "init": {
-      const prompt = buildCodexSlashPrompt(command);
+      const prompt = buildSlashCommandPrompt(command);
       if (prompt) {
         await sendPrompt(prompt);
         onExecutedCommand?.(command);
@@ -106,7 +106,7 @@ export async function executeCodexSlashCommand(
     }
     default:
       if (command.definition.support === "unsupported") {
-        notifyInfo(buildUnsupportedCodexSlashCommandMessage(command));
+        notifyInfo(buildUnsupportedSlashCommandMessage(command));
         return true;
       }
       return false;

@@ -20,6 +20,7 @@ import type { GeneralWorkbenchWorkflowStepInput } from "../components/generalWor
 import { resolveAbsoluteWorkspacePath } from "./workspacePath";
 
 export interface WorkspaceTaskRailRuntimeInput {
+  sessionId?: string | null;
   workflowSteps: GeneralWorkbenchWorkflowStepInput[];
   messages: Message[];
   activityLogs?: SidebarActivityLog[];
@@ -41,6 +42,7 @@ export interface WorkspaceTaskRailRuntimeInput {
 }
 
 export interface WorkspaceTaskRailProps {
+  sessionId?: string | null;
   workflowSteps: GeneralWorkbenchWorkflowStepInput[];
   messages: Message[];
   activityLogs?: SidebarActivityLog[];
@@ -104,6 +106,7 @@ export function buildWorkspaceTaskRailRuntimeContext({
 }
 
 export function useWorkspaceTaskRailRuntime({
+  sessionId,
   workflowSteps,
   messages,
   activityLogs,
@@ -138,6 +141,7 @@ export function useWorkspaceTaskRailRuntime({
 
   return useMemo(
     () => ({
+      sessionId,
       workflowSteps,
       messages,
       activityLogs,
@@ -162,6 +166,7 @@ export function useWorkspaceTaskRailRuntime({
       onRespondToAction,
     }),
     [
+      sessionId,
       accessMode,
       activityLogs,
       creationTaskEvents,

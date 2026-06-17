@@ -11,18 +11,18 @@
 
 一句话事实源声明：
 
-> 后续所有基础 Prompt、system prompt、subagent prompt、plan prompt、augmentation 顺序与 diagnostics 判断，统一向 `runtime_turn.rs -> prompt_context.rs / prompt services -> TurnInputEnvelope -> aster PromptManager / embedded prompts` 这一条 current 主链收敛。
+> 后续所有基础 Prompt、system prompt、subagent prompt、plan prompt、augmentation 顺序与 diagnostics 判断，统一向 `App Server runtime_backend/request_context.rs -> lime_agent prompt modules / TurnInputEnvelope -> aster PromptManager / embedded prompts` 这一条 current 主链收敛。
 
-路径边界：`runtime_turn.rs`、`prompt_context.rs` 目前仍位于 `lime-rs/src/commands/aster_agent_cmd/**`，只能作为现有行为锚点和迁移来源。新增 Prompt 能力、augmentation stage、diagnostics 或 provider prompt 组装逻辑应进入 App Server / RuntimeCore / prompt services / `lime-rs/crates/agent`，不能继续在 `lime-rs/src/commands/**` 新增业务逻辑、compat wrapper 或退场 stub。
+路径边界：`lime-rs/src/**` 已删除；旧 `runtime_turn.rs`、`prompt_context.rs` 只允许从 git history / 执行计划只读参考，不是 current owner。新增 Prompt 能力、augmentation stage、diagnostics 或 provider prompt 组装逻辑应进入 App Server / RuntimeCore / prompt services / `lime-rs/crates/agent`，不能恢复 `lime-rs/src/commands/**` 业务逻辑、compat wrapper 或退场 stub。
 
 ## Current 主链总览
 
 ```text
-runtime_turn.rs
+lime-rs/crates/app-server/src/runtime_backend/request_context.rs
   -> 选择 base session prompt 来源（project > session > frontend > none）
   -> merge_system_prompt_with_runtime_agents(...)
-  -> build_full_runtime_system_prompt(...) / build_fast_chat_system_prompt(...)
-  -> apply_service_skill_preload_prompt_stage(...)（仅 FullRuntime）
+  -> merge_system_prompt_with_request_tool_policy(...)
+  -> 可选 merge_system_prompt_with_web_search_preflight_context(...)
   -> TurnInputEnvelope 记录 base/final prompt 与 augmentation stages
   -> SessionConfig.system_prompt
 
@@ -37,15 +37,16 @@ aster Agent::prepare_tools_and_prompt(...)
 
 关键事实：
 
-- `runtime_turn.rs` 里记录的 `base_system_prompt_len / final_system_prompt_len` 只覆盖 Lime 侧的 `session prompt` 片段，不等于 provider 侧最终收到的完整 system prompt 长度。
+- `TurnInputEnvelope` 里记录的 `base_system_prompt_len / final_system_prompt_len` 只覆盖 Lime 侧的 `session prompt` 片段，不等于 provider 侧最终收到的完整 system prompt 长度。
 - provider 最终 prompt 还会再经过 Aster `PromptManager` 包一层 `Identity + Capabilities + hints`。
-- 因此，排查“Prompt 为什么变长”“Prompt cache 为什么失效”时，不能只看 `prompt_context.rs`，还要一起看 Aster 的 `PromptManager` 和扩展工具面变化。
+- 因此，排查“Prompt 为什么变长”“Prompt cache 为什么失效”时，不能只看历史 `prompt_context.rs` 锚点，必须先看 App Server request context、`TurnInputEnvelope`、Aster `PromptManager` 和扩展工具面变化。
 
 ## 基础 Prompt 的 current 事实源
 
 ### 1. Base Session Prompt 入口
 
-- `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs`
+- `lime-rs/crates/app-server/src/runtime_backend/request_context.rs`
+- `lime-rs/crates/agent/src/aster_state_support.rs`
 - 优先级固定为：
   1. `project prompt`
   2. `session prompt`
@@ -54,18 +55,14 @@ aster Agent::prepare_tools_and_prompt(...)
 
 对应实现：
 
-- `AsterAgentState::build_project_system_prompt(...)`
+- `build_project_system_prompt(...)`
 - `session_state_snapshot.system_prompt()`
 - `request.system_prompt`
 - `TurnInputEnvelopeBuilder::set_base_system_prompt(...)`
 
 ### 2. Lime 侧 augmentation 主链
 
-- `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs`
-- `lime-rs/src/commands/aster_agent_cmd/prompt_context.rs`
-- `lime-rs/src/services/memory_profile_prompt_service.rs`
-- `lime-rs/src/services/artifact_prompt_service.rs`
-- `lime-rs/src/services/web_search_prompt_service.rs`
+- `lime-rs/crates/app-server/src/runtime_backend/request_context.rs`
 - `lime-rs/crates/agent/src/request_tool_policy.rs`
 - `lime-rs/crates/agent/src/prompt/runtime_agents.rs`
 - `lime-rs/crates/agent/src/turn_input_envelope.rs`
@@ -109,7 +106,7 @@ FastChat 固定顺序：
 2. `ExplicitLocalPathFocus`
 3. `RequestToolPolicy`
 
-这里的“固定顺序”以 `runtime_turn.rs` 和 `TurnPromptAugmentationStageKind` 为准；文档、前端假设或样板说明不得自行重排。
+这里的“固定顺序”以 App Server request context 和 `TurnPromptAugmentationStageKind` 为准；文档、前端假设或样板说明不得自行重排。
 
 ### 3. Aster 侧最终包装
 
@@ -122,7 +119,7 @@ FastChat 固定顺序：
 
 1. `identity.md` 或 `AgentIdentity.custom_prompt`
 2. `Session Context`
-   Lime 在 `runtime_turn.rs` 组好的 session prompt 会放在这里
+   Lime 在 App Server request context 组好的 session prompt 会放在这里
 3. `capabilities.md`
    由 extensions、frontend instructions、tool 数量、mode 等上下文渲染
 4. 额外指令
@@ -156,11 +153,7 @@ FastChat 固定顺序：
 
 以下路径是当前唯一允许继续演进的基础 Prompt 事实源：
 
-- `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 现有行为锚点；新逻辑迁向 RuntimeCore / prompt services
-- `lime-rs/src/commands/aster_agent_cmd/prompt_context.rs` 现有行为锚点；新逻辑迁向 RuntimeCore / prompt services
-- `lime-rs/src/services/memory_profile_prompt_service.rs`
-- `lime-rs/src/services/artifact_prompt_service.rs`
-- `lime-rs/src/services/web_search_prompt_service.rs`
+- `lime-rs/crates/app-server/src/runtime_backend/request_context.rs`
 - `lime-rs/crates/agent/src/request_tool_policy.rs`
 - `lime-rs/crates/agent/src/prompt/runtime_agents.rs`
 - `lime-rs/crates/agent/src/turn_input_envelope.rs`
@@ -209,12 +202,11 @@ FastChat 固定顺序：
 
 可以定义基础 Prompt 的边界：
 
-- `runtime_turn.rs`
-- `prompt_context.rs`
-- 统一 prompt services
-- `request_tool_policy.rs`
-- `runtime_agents.rs`
-- `turn_input_envelope.rs`
+- `lime-rs/crates/app-server/src/runtime_backend/request_context.rs`
+- `lime-rs/crates/agent/src/request_tool_policy.rs`
+- `lime-rs/crates/agent/src/prompt/runtime_agents.rs`
+- `lime-rs/crates/agent/src/turn_input_envelope.rs`
+- `lime-rs/crates/agent/src/aster_state_support.rs`
 - Aster `PromptManager` 与有明确调用点的 embedded templates
 
 只能消费、解释或验证基础 Prompt 的边界：
@@ -238,7 +230,7 @@ FastChat 固定顺序：
 - 改 `system prompt`
 - 改 `subagent prompt`
 - 改 `plan prompt`
-- 改 `prompt_context.rs`
+- 改 App Server request context 或历史 `prompt_context.rs` 迁移锚点
 - 改 augmentation 顺序或 marker
 - 改 `TurnInputEnvelope` diagnostics
 - 排查 token、Prompt Cache、prompt 变长、无声注入等问题
@@ -249,5 +241,5 @@ FastChat 固定顺序：
 
 - Lime 的基础 Prompt 主链不是某一份前端 `systemPrompt`、某一份 PRD，或某个样板包
 - Lime 的基础 Prompt 主链也不是单独某个 builder 文件
-- 真正的 current 主链是 “`runtime_turn` 先组 session prompt，再由 Aster `PromptManager` 包装成最终 provider prompt”
+- 真正的 current 主链是 “App Server request context 先组 session prompt，再由 Aster `PromptManager` 包装成最终 provider prompt”
 - 后续所有 Prompt 相关治理，必须围绕这条主链做减法和收口，而不是再新增平级 builder、平级模板或平级文档解释

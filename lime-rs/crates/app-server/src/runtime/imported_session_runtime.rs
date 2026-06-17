@@ -40,19 +40,6 @@ fn default_runtime_options_for_session(session: &AgentSession) -> Option<Runtime
         &[imported_continuation, thread_settings, Some(metadata)],
         &["cwd", "workingDir", "working_dir"],
     );
-    let provider = string_alias_from_sources(
-        &[imported_continuation, thread_settings, Some(metadata)],
-        &[
-            "modelProvider",
-            "model_provider",
-            "providerName",
-            "provider_name",
-        ],
-    );
-    let model = string_alias_from_sources(
-        &[imported_continuation, thread_settings, Some(metadata)],
-        &["model", "modelName", "model_name"],
-    );
     let reasoning_effort = string_alias_from_sources(
         &[imported_continuation, thread_settings, Some(metadata)],
         &["effort", "reasoningEffort", "reasoning_effort"],
@@ -96,8 +83,6 @@ fn default_runtime_options_for_session(session: &AgentSession) -> Option<Runtime
             "workspace_id": session.workspace_id,
             "project_root": cwd,
             "cwd": cwd,
-            "provider_preference": provider,
-            "model_preference": model,
             "reasoning_effort": reasoning_effort,
             "approval_policy": approval_policy,
             "approvals_reviewer": approvals_reviewer,
@@ -109,8 +94,6 @@ fn default_runtime_options_for_session(session: &AgentSession) -> Option<Runtime
             "turn_config": {
                 "project_root": cwd,
                 "cwd": cwd,
-                "provider_preference": provider,
-                "model_preference": model,
                 "reasoning_effort": reasoning_effort,
                 "reasoning_summary": reasoning_summary,
                 "approval_policy": approval_policy,
@@ -126,8 +109,6 @@ fn default_runtime_options_for_session(session: &AgentSession) -> Option<Runtime
     }));
 
     Some(RuntimeOptions {
-        provider_preference: provider,
-        model_preference: model,
         metadata: Some(continuation_metadata(
             metadata,
             thread_settings,

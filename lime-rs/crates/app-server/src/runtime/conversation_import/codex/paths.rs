@@ -3,6 +3,31 @@ use std::path::{Path, PathBuf};
 
 const SESSIONS_SUBDIR: &str = "sessions";
 const ARCHIVED_SESSIONS_SUBDIR: &str = "archived_sessions";
+const SENSITIVE_SOURCE_FILE_NAMES: &[&str] = &[
+    "auth.json",
+    "config.json",
+    "config.toml",
+    "credentials.json",
+    "credential.json",
+    "secrets.json",
+    "secret.json",
+    "tokens.json",
+    "token.json",
+];
+
+pub(super) fn resolve_user_supplied_rollout_path(
+    source_root: &Path,
+    source_path: &str,
+) -> Option<PathBuf> {
+    let source_path = super::normalize_filter(Some(source_path))?;
+    let path = PathBuf::from(source_path);
+    let path = if path.is_absolute() {
+        path
+    } else {
+        source_root.join(path)
+    };
+    existing_allowed_rollout_path(source_root, &path)
+}
 
 pub(super) fn resolve_existing_source_path(
     source_root: &Path,
@@ -15,7 +40,7 @@ pub(super) fn resolve_existing_source_path(
     } else {
         source_root.join(path)
     };
-    existing_rollout_path(&path)
+    existing_allowed_rollout_path(source_root, &path)
 }
 
 pub(super) fn find_rollout_path_by_thread_id(
@@ -58,11 +83,16 @@ fn find_rollout_path_in_subdir(
                 continue;
             };
             if rollout_file_name_matches_thread(file_name.as_str(), thread_id) {
-                return existing_rollout_path(&path);
+                return existing_allowed_rollout_path(source_root, &path);
             }
         }
     }
     None
+}
+
+fn existing_allowed_rollout_path(source_root: &Path, path: &Path) -> Option<PathBuf> {
+    let path = existing_rollout_path(path)?;
+    is_allowed_rollout_path(source_root, &path).then_some(path)
 }
 
 fn existing_rollout_path(path: &Path) -> Option<PathBuf> {
@@ -94,4 +124,25 @@ fn is_rollout_jsonl_name(name: &str) -> bool {
 fn rollout_file_name_matches_thread(name: &str, thread_id: &str) -> bool {
     name.strip_suffix(".jsonl")
         .is_some_and(|stem| stem.ends_with(thread_id))
+}
+
+fn is_allowed_rollout_path(source_root: &Path, path: &Path) -> bool {
+    let Some(file_name) = path.file_name().and_then(|value| value.to_str()) else {
+        return false;
+    };
+    let lower_name = file_name.to_ascii_lowercase();
+    if SENSITIVE_SOURCE_FILE_NAMES.contains(&lower_name.as_str()) {
+        return false;
+    }
+    if plain_rollout_file_name(path).is_none() {
+        return false;
+    }
+
+    let Ok(canonical_root) = source_root.canonicalize() else {
+        return false;
+    };
+    let Ok(canonical_path) = path.canonicalize() else {
+        return false;
+    };
+    canonical_path.starts_with(canonical_root)
 }

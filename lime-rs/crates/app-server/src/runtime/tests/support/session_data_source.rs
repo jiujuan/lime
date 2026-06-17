@@ -1,7 +1,7 @@
 use super::super::*;
 
 pub(in crate::runtime::tests) struct TestSessionDataSource {
-    _persisted: Option<AgentSessionReadResponse>,
+    persisted: Option<AgentSessionReadResponse>,
     workspace: Option<serde_json::Value>,
     objective: Mutex<Option<ManagedObjective>>,
     audit_updates: Mutex<Vec<ManagedObjectiveAuditUpdate>>,
@@ -11,7 +11,7 @@ pub(in crate::runtime::tests) struct TestSessionDataSource {
 impl TestSessionDataSource {
     pub(in crate::runtime::tests) fn new(persisted: AgentSessionReadResponse) -> Self {
         Self {
-            _persisted: Some(persisted),
+            persisted: Some(persisted),
             workspace: None,
             objective: Mutex::new(None),
             audit_updates: Mutex::new(Vec::new()),
@@ -101,6 +101,17 @@ pub(in crate::runtime::tests) fn managed_objective(session_id: &str) -> ManagedO
 
 #[async_trait]
 impl SessionAppDataSource for TestSessionDataSource {
+    async fn read_agent_session(
+        &self,
+        params: AgentSessionReadParams,
+    ) -> Result<Option<AgentSessionReadResponse>, RuntimeCoreError> {
+        Ok(self
+            .persisted
+            .as_ref()
+            .filter(|response| response.session.session_id == params.session_id)
+            .cloned())
+    }
+
     async fn read_agent_session_objective(
         &self,
         _params: AgentSessionObjectiveReadParams,

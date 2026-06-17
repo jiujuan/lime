@@ -262,6 +262,7 @@ export const appendTextToParts = (
 export const appendThinkingToHistoryParts = (
   parts: ContentPart[],
   text: string,
+  metadata?: Record<string, unknown>,
 ): ContentPart[] => {
   if (!text) {
     return parts;
@@ -274,6 +275,7 @@ export const appendThinkingToHistoryParts = (
     nextParts[nextParts.length - 1] = {
       type: "thinking",
       text: lastPart.text + text,
+      metadata: lastPart.metadata ?? metadata,
     };
     return nextParts;
   }
@@ -281,6 +283,7 @@ export const appendThinkingToHistoryParts = (
   nextParts.push({
     type: "thinking",
     text,
+    ...(metadata ? { metadata } : {}),
   });
   return nextParts;
 };
@@ -525,7 +528,110 @@ function mergeHydratedContentParts(
     return merged;
   }
 
+  if (localHasProcess && remoteHasProcess) {
+    const merged: ContentPart[] = [...local];
+    const toolUseIndexById = new Map<string, number>();
+    const actionRequiredIndexById = new Map<string, number>();
+    merged.forEach((part, index) => {
+      if (part.type === "tool_use") {
+        toolUseIndexById.set(part.toolCall.id, index);
+        return;
+      }
+      if (part.type === "action_required") {
+        actionRequiredIndexById.set(part.actionRequired.requestId, index);
+      }
+    });
+
+    for (const part of remote) {
+      if (part.type === "tool_use") {
+        const existingIndex = toolUseIndexById.get(part.toolCall.id);
+        if (existingIndex !== undefined) {
+          const current = merged[existingIndex];
+          if (current?.type === "tool_use") {
+            merged[existingIndex] = mergeToolUseContentPart(current, part);
+          }
+          continue;
+        }
+        toolUseIndexById.set(part.toolCall.id, merged.length);
+        merged.push(part);
+        continue;
+      }
+
+      if (part.type === "action_required") {
+        const existingIndex = actionRequiredIndexById.get(
+          part.actionRequired.requestId,
+        );
+        if (existingIndex !== undefined) {
+          merged[existingIndex] = part;
+          continue;
+        }
+        actionRequiredIndexById.set(
+          part.actionRequired.requestId,
+          merged.length,
+        );
+        merged.push(part);
+        continue;
+      }
+
+      if (part.type === "text" && part.text.trim()) {
+        const alreadyHasSameText = merged.some(
+          (candidate) =>
+            candidate.type === "text" &&
+            candidate.text.trim() === part.text.trim(),
+        );
+        if (!alreadyHasSameText) {
+          merged.push(part);
+        }
+        continue;
+      }
+
+      merged.push(part);
+    }
+    return sortProcessContentParts(merged);
+  }
+
   return remote;
+}
+
+function contentPartSortTime(part: ContentPart): number | null {
+  if (part.type === "tool_use") {
+    const value = part.toolCall.startTime ?? part.toolCall.endTime;
+    const timestamp = value instanceof Date ? value.getTime() : NaN;
+    return Number.isNaN(timestamp) ? null : timestamp;
+  }
+  if (part.type === "action_required") {
+    const value = part.actionRequired.timestamp;
+    const timestamp = value instanceof Date ? value.getTime() : NaN;
+    return Number.isNaN(timestamp) ? null : timestamp;
+  }
+  return null;
+}
+
+function sortProcessContentParts(parts: ContentPart[]): ContentPart[] {
+  return parts
+    .map((part, index) => ({
+      part,
+      index,
+      timestamp: contentPartSortTime(part),
+    }))
+    .sort((left, right) => {
+      const leftIsText = left.part.type === "text";
+      const rightIsText = right.part.type === "text";
+      if (leftIsText !== rightIsText) {
+        return leftIsText ? 1 : -1;
+      }
+
+      if (left.timestamp !== null && right.timestamp !== null) {
+        if (left.timestamp !== right.timestamp) {
+          return left.timestamp - right.timestamp;
+        }
+      } else if (left.timestamp !== null || right.timestamp !== null) {
+        return left.timestamp !== null ? 1 : -1;
+      }
+
+      return left.index - right.index;
+    })
+    .map(({ part }) => part);
 }
 
 function hasRenderableAssistantTextContent(message: Message): boolean {
@@ -851,6 +957,7 @@ function hydrateSessionDetailMessagesFromThreadItems(
       draft.contentParts = appendThinkingToHistoryParts(
         draft.contentParts || [],
         item.text,
+        asHistoryRecord(item.metadata) ?? undefined,
       );
       draft.timestamp = parseHistoryTimestamp(
         item.completed_at || item.updated_at || item.started_at,
@@ -870,25 +977,41 @@ function hydrateSessionDetailMessagesFromThreadItems(
         continue;
       }
       const toolArguments = toolCall.arguments;
+      const itemMetadata =
+        toolCall.metadata && typeof toolCall.metadata === "object"
+          ? toolCall.metadata
+          : undefined;
       const normalizedResult =
         toolCall.result && typeof toolCall.result === "object"
           ? {
               ...toolCall.result,
-              metadata: normalizeToolResultMetadata(
-                toolCall.result.metadata,
-                toolCall.result.output || "",
-                toolCall.result.error || "",
-              ),
+              metadata:
+                normalizeToolResultMetadata(
+                  toolCall.result.metadata,
+                  toolCall.result.output || "",
+                  toolCall.result.error || "",
+                ) || itemMetadata,
             }
           : toolCall.result;
+      const normalizedToolCall =
+        normalizedResult && typeof normalizedResult === "object"
+          ? {
+              ...toolCall,
+              metadata: itemMetadata,
+              result: normalizedResult,
+            }
+          : {
+              ...toolCall,
+              metadata: itemMetadata,
+            };
       draft.toolCalls = mergeByKey(
         draft.toolCalls,
-        [toolCall],
+        [normalizedToolCall],
         (tool) => tool.id,
       );
       draft.contentParts = [
         ...(draft.contentParts || []),
-        { type: "tool_use", toolCall },
+        { type: "tool_use", toolCall: normalizedToolCall },
       ];
       const normalizedResultRecord =
         normalizedResult &&
@@ -937,7 +1060,10 @@ function hydrateSessionDetailMessagesFromThreadItems(
       continue;
     }
 
-    if (item.type === "approval_request" || item.type === "request_user_input") {
+    if (
+      item.type === "approval_request" ||
+      item.type === "request_user_input"
+    ) {
       const actionRequired = toActionRequired(item);
       if (!actionRequired) {
         continue;
@@ -1039,6 +1165,34 @@ function isFailedHistoryStatus(value: unknown): boolean {
   return status === "failed" || status === "error";
 }
 
+function isImportedHistorySession(detail: AsterSessionDetail): boolean {
+  const runtime = detail.execution_runtime;
+  const runtimeRecord =
+    runtime && typeof runtime === "object" && !Array.isArray(runtime)
+      ? (runtime as Record<string, unknown>)
+      : null;
+  if (
+    readHistoryString(runtimeRecord?.source_client) ||
+    readHistoryString(runtimeRecord?.sourceClient) ||
+    runtimeRecord?.imported_continuation ||
+    runtimeRecord?.importedContinuation ||
+    runtimeRecord?.imported_thread_settings ||
+    runtimeRecord?.importedThreadSettings
+  ) {
+    return true;
+  }
+
+  const threadReadRecord = asHistoryRecord(detail.thread_read);
+  const diagnostics = asHistoryRecord(threadReadRecord?.diagnostics);
+  const runtimeSummary = asHistoryRecord(threadReadRecord?.runtime_summary);
+  return Boolean(
+    readHistoryString(diagnostics?.source_client) ||
+    readHistoryString(diagnostics?.sourceClient) ||
+    readHistoryString(runtimeSummary?.source_client) ||
+    readHistoryString(runtimeSummary?.sourceClient),
+  );
+}
+
 function findLatestFailedRuntimeTurnId(
   detail: AsterSessionDetail,
 ): string | null {
@@ -1110,6 +1264,10 @@ function hydrateFailedRuntimeReadModelMessage(
   detail: AsterSessionDetail,
   topicId: string,
 ): Message | null {
+  if (isImportedHistorySession(detail)) {
+    return null;
+  }
+
   const diagnostics = detail.thread_read?.diagnostics;
   if (!isFailedHistoryStatus(diagnostics?.latest_turn_status)) {
     return null;
@@ -2470,9 +2628,9 @@ function shouldMergeLocalAssistantProcessState(
   const remoteContent = normalizeSignatureText(remoteMessage.content);
   return Boolean(
     localContent &&
-      remoteContent &&
-      localContent === remoteContent &&
-      !isOmittedHistoryContentProjection(remoteMessage),
+    remoteContent &&
+    localContent === remoteContent &&
+    !isOmittedHistoryContentProjection(remoteMessage),
   );
 }
 
@@ -3054,8 +3212,79 @@ export const mergeHydratedMessagesWithLocalState = (
 const messageImageSignature = (images?: MessageImage[]): string => {
   if (!images || images.length === 0) return "";
   return images
-    .map((image) => `${image.mediaType}:${image.data.slice(0, 64)}`)
+    .map(
+      (image) =>
+        `${image.mediaType}:${image.sourcePath || ""}:${image.sourceUri || ""}:${image.previewUrl || ""}:${image.data.slice(0, 64)}`,
+    )
     .join("|");
+};
+
+const messageImageIdentity = (image: MessageImage): string => {
+  return [
+    image.mediaType,
+    image.sourcePath || "",
+    image.sourceUri || "",
+    image.previewUrl || "",
+    image.data.slice(0, 128),
+  ].join("::");
+};
+
+const appendUniqueMessageImage = (
+  images: MessageImage[],
+  image: MessageImage,
+) => {
+  const identity = messageImageIdentity(image);
+  if (images.some((current) => messageImageIdentity(current) === identity)) {
+    return;
+  }
+  images.push(image);
+};
+
+const normalizeHistoryAttachmentImage = (
+  attachment: unknown,
+): MessageImage | null => {
+  if (
+    !attachment ||
+    typeof attachment !== "object" ||
+    Array.isArray(attachment)
+  ) {
+    return null;
+  }
+  const record = attachment as Record<string, unknown>;
+  const kind = normalizeHistoryPartType(record.kind ?? record.type);
+  if (
+    kind &&
+    kind !== "image" &&
+    kind !== "input_image" &&
+    kind !== "image_url"
+  ) {
+    return null;
+  }
+
+  return normalizeHistoryImagePart({
+    ...record,
+    type: kind || "image",
+  });
+};
+
+const appendHistoryMessageAttachments = (
+  images: MessageImage[],
+  message: unknown,
+) => {
+  if (!message || typeof message !== "object" || Array.isArray(message)) {
+    return;
+  }
+  const attachments = (message as Record<string, unknown>).attachments;
+  if (!Array.isArray(attachments)) {
+    return;
+  }
+
+  for (const attachment of attachments) {
+    const normalizedImage = normalizeHistoryAttachmentImage(attachment);
+    if (normalizedImage) {
+      appendUniqueMessageImage(images, normalizedImage);
+    }
+  }
 };
 
 const messageToolCallsSignature = (
@@ -3313,7 +3542,7 @@ export const hydrateSessionDetailMessages = (
         ) {
           const normalizedImage = normalizeHistoryImagePart(part);
           if (normalizedImage) {
-            images.push(normalizedImage);
+            appendUniqueMessageImage(images, normalizedImage);
           }
           continue;
         }
@@ -3405,6 +3634,7 @@ export const hydrateSessionDetailMessages = (
           const toolCall = {
             id: part.id,
             name: toolName,
+            arguments: toolArguments,
             status: success ? ("completed" as const) : ("failed" as const),
             startTime: messageTimestamp,
             endTime: messageTimestamp,
@@ -3453,6 +3683,8 @@ export const hydrateSessionDetailMessages = (
         contentParts.push({ type: "text", text: resolved });
       }
 
+      appendHistoryMessageAttachments(images, msg);
+
       const rawContent = textParts.join("\n").trim();
       let normalizedRole =
         msg.role === "tool" ? "assistant" : (msg.role as "user" | "assistant");
@@ -3492,6 +3724,9 @@ export const hydrateSessionDetailMessages = (
         return [];
       }
 
+      const runtimeTurnId =
+        readHistoryString(msg.runtimeTurnId) ||
+        readHistoryString(msg.runtime_turn_id);
       const hydratedMessage: Message = {
         id: `${topicId}-${historyAbsoluteStartIndex + index}`,
         role: normalizedRole,
@@ -3506,6 +3741,7 @@ export const hydrateSessionDetailMessages = (
         thinkingContent: extractThinkingContentFromParts(sanitizedContentParts),
         imageWorkbenchPreview,
         taskPreview,
+        runtimeTurnId: runtimeTurnId || undefined,
       };
 
       return [
@@ -3528,21 +3764,35 @@ export const hydrateSessionDetailMessages = (
     ...threadReadToolCallMessages,
     ...(failedRuntimeMessage ? [failedRuntimeMessage] : []),
   ];
-  const timelineFallbackMessages =
+  const threadItemTimelineMessages =
     options.includeTimelineFallback === false
       ? []
-      : [
-          ...hydrateSessionDetailMessagesFromThreadItems(detail, topicId),
-          ...hydrateSessionDetailMessagesFromArtifacts(detail, topicId),
-        ];
+      : hydrateSessionDetailMessagesFromThreadItems(detail, topicId);
+  const artifactTimelineMessages =
+    options.includeTimelineFallback === false
+      ? []
+      : hydrateSessionDetailMessagesFromArtifacts(detail, topicId);
+  const timelineFallbackMessages = [
+    ...threadItemTimelineMessages,
+    ...artifactTimelineMessages,
+  ];
+  const hasThreadItemProcessMessages = threadItemTimelineMessages.some(
+    (message) =>
+      message.role === "assistant" &&
+      ((message.contentParts || []).some(contentPartContainsProcess) ||
+        (message.toolCalls?.length || 0) > 0 ||
+        (message.actionRequests?.length || 0) > 0),
+  );
   const timelineMessages =
     readModelProcessMessages.length === 0 &&
     timelineFallbackMessages.length === 0
       ? []
       : mergeAdjacentAssistantMessages(
           dedupeAdjacentHistoryMessages([
+            ...(hasThreadItemProcessMessages ? threadItemTimelineMessages : []),
             ...readModelProcessMessages,
-            ...timelineFallbackMessages,
+            ...(hasThreadItemProcessMessages ? [] : threadItemTimelineMessages),
+            ...artifactTimelineMessages,
           ]),
         );
 

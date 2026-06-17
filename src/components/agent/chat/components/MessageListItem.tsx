@@ -24,9 +24,7 @@ import { MessageActionButtons } from "./MessageActionButtons";
 import { MessageImageAttachments } from "./MessageImageAttachments";
 import { MessageAssistantBody } from "./MessageAssistantBody";
 import { MessageAssistantMetaFooter } from "./MessageAssistantMetaFooter";
-import {
-  resolveMessageAssistantMetaFooterState,
-} from "./messageAssistantMetaFooterState";
+import { resolveMessageAssistantMetaFooterState } from "./messageAssistantMetaFooterState";
 import { MessageTimelineSection } from "./MessageTimelineSection";
 import { MessageUserBody } from "./MessageUserBody";
 import type { MessageListRenderGroup } from "./MessageList.types";
@@ -500,7 +498,22 @@ export function MessageListItem({
               />
             )}
 
-            <MessageImageAttachments images={msg.images} />
+            <MessageImageAttachments
+              images={msg.images}
+              onOpenImage={
+                onOpenMessagePreview
+                  ? (attachment, index) =>
+                      onOpenMessagePreview(
+                        {
+                          kind: "message_attachment",
+                          attachment,
+                          index,
+                        },
+                        msg,
+                      )
+                  : undefined
+              }
+            />
 
             {msg.role === "assistant" &&
             visibleAssistantArtifacts.length > 0 ? (
@@ -515,9 +528,9 @@ export function MessageListItem({
             {msg.role === "assistant" &&
             trailingTimeline &&
             !shouldRenderFirstTokenRuntimeStatus &&
-            !shouldPinTrailingTimelineBeforeBubble ? (
-              trailingTimelineNode
-            ) : null}
+            !shouldPinTrailingTimelineBeforeBubble
+              ? trailingTimelineNode
+              : null}
 
             {assistantMetaFooter}
 

@@ -130,6 +130,16 @@ export function createAgentStreamSubmissionLifecycle(
   const pendingItemKey = createPendingItemKey(pendingTurnKey);
   const requestTurnId = crypto.randomUUID();
   const eventName = `aster_stream_${assistantMsgId}`;
+  const turnUserMsg = userMsg
+    ? {
+        ...userMsg,
+        runtimeTurnId: userMsg.runtimeTurnId || pendingTurnKey,
+      }
+    : null;
+  const turnAssistantMsg = {
+    ...assistantMsg,
+    runtimeTurnId: assistantMsg.runtimeTurnId || pendingTurnKey,
+  };
   const shouldCreateRuntimeSummary = runtimeStatusPresentation !== "transient";
   const toolLogIdByToolId = new Map<string, string>();
   const toolStartedAtByToolId = new Map<string, number>();
@@ -266,9 +276,9 @@ export function createAgentStreamSubmissionLifecycle(
       let nextMessages = prev;
 
       if (!hasAssistantMsg) {
-        nextMessages = [...nextMessages, assistantMsg];
+        nextMessages = [...nextMessages, turnAssistantMsg];
       }
-      if (!hasUserMsg && userMsg) {
+      if (!hasUserMsg && turnUserMsg) {
         const assistantIndex = nextMessages.findIndex(
           (msg) => msg.id === assistantMsgId,
         );
@@ -276,13 +286,18 @@ export function createAgentStreamSubmissionLifecycle(
           assistantIndex >= 0
             ? [
                 ...nextMessages.slice(0, assistantIndex),
-                userMsg,
+                turnUserMsg,
                 ...nextMessages.slice(assistantIndex),
               ]
-            : [...nextMessages, userMsg];
+            : [...nextMessages, turnUserMsg];
       }
       return nextMessages.map((msg) =>
-        msg.id === assistantMsgId
+        msg.id === userMsgId && turnUserMsg
+          ? {
+              ...msg,
+              runtimeTurnId: msg.runtimeTurnId || pendingTurnKey,
+            }
+          : msg.id === assistantMsgId
           ? {
               ...msg,
               runtimeStatus: effectiveWaitingRuntimeStatus,
@@ -333,7 +348,12 @@ export function createAgentStreamSubmissionLifecycle(
   if (!expectingQueue) {
     setMessages((prev) =>
       prev.map((msg) =>
-        msg.id === assistantMsgId
+        msg.id === userMsgId && turnUserMsg
+          ? {
+              ...msg,
+              runtimeTurnId: msg.runtimeTurnId || pendingTurnKey,
+            }
+          : msg.id === assistantMsgId
           ? {
               ...msg,
               runtimeTurnId: msg.runtimeTurnId || pendingTurnKey,

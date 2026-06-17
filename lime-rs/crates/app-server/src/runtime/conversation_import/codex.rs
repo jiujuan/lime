@@ -35,7 +35,7 @@ pub(super) fn scan_source(
     params: ConversationImportSourceScanParams,
 ) -> Result<ConversationImportSourceScanResponse, RuntimeCoreError> {
     let source_root = resolve_home(params.source_root.as_deref()).ok_or_else(|| {
-        RuntimeCoreError::Backend("unable to resolve Codex home directory".to_string())
+        RuntimeCoreError::Backend("unable to resolve source home directory".to_string())
     })?;
     let limit = params.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
     let cursor = parse_cursor(params.cursor.as_deref())?;
@@ -52,7 +52,7 @@ pub(super) fn scan_source(
                 false,
                 0,
                 None,
-                Some("Codex home directory does not exist".to_string()),
+                Some("source home directory does not exist".to_string()),
             ),
             threads: Vec::new(),
             next_cursor: None,
@@ -128,16 +128,23 @@ pub(super) fn preview_thread(
     params: ConversationImportThreadPreviewParams,
 ) -> Result<ConversationImportThreadPreviewResponse, RuntimeCoreError> {
     let source_root = resolve_home(params.source_root.as_deref()).ok_or_else(|| {
-        RuntimeCoreError::Backend("unable to resolve Codex home directory".to_string())
+        RuntimeCoreError::Backend("unable to resolve source home directory".to_string())
     })?;
     if !source_root.is_dir() {
         return Err(RuntimeCoreError::Backend(
-            "Codex home directory does not exist".to_string(),
+            "source home directory does not exist".to_string(),
         ));
     }
 
-    let (mut source_path, indexed_thread) = match normalize_filter(params.source_path.as_deref()) {
-        Some(path) => (PathBuf::from(path), None),
+    let (source_path, indexed_thread) = match normalize_filter(params.source_path.as_deref()) {
+        Some(path) => (
+            paths::resolve_user_supplied_rollout_path(&source_root, &path).ok_or_else(|| {
+                RuntimeCoreError::Backend(
+                    "source path must be a Codex rollout JSONL file inside source root".to_string(),
+                )
+            })?,
+            None,
+        ),
         None => {
             let thread_id =
                 normalize_filter(params.source_thread_id.as_deref()).ok_or_else(|| {
@@ -148,30 +155,21 @@ pub(super) fn preview_thread(
                 })?;
             let thread = find_thread(&source_root, &thread_id).ok_or_else(|| {
                 RuntimeCoreError::Backend(
-                    "unable to resolve Codex rollout path for thread".to_string(),
+                    "unable to resolve source rollout path for thread".to_string(),
                 )
             })?;
             let path = thread
                 .source_path
                 .as_deref()
-                .map(PathBuf::from)
+                .and_then(|value| paths::resolve_existing_source_path(&source_root, Some(value)))
                 .ok_or_else(|| {
                     RuntimeCoreError::Backend(
-                        "unable to resolve Codex rollout path for thread".to_string(),
+                        "unable to resolve source rollout path for thread".to_string(),
                     )
                 })?;
             (path, Some(thread))
         }
     };
-    if !source_path.is_absolute() {
-        source_path = source_root.join(source_path);
-    }
-    if !source_path.is_file() {
-        return Err(RuntimeCoreError::Backend(format!(
-            "Codex rollout file does not exist: {}",
-            source_path.display()
-        )));
-    }
 
     let mut preview = parse_rollout(
         &source_path,
@@ -214,6 +212,20 @@ pub(super) fn parse_rollout_for_import(
     path: &Path,
 ) -> Result<CodexRolloutPreview, RuntimeCoreError> {
     parse_rollout(path, CodexRolloutParseMode::Import)
+}
+
+pub(super) fn resolve_user_supplied_rollout_path(
+    source_root: &Path,
+    source_path: &str,
+) -> Option<PathBuf> {
+    paths::resolve_user_supplied_rollout_path(source_root, source_path)
+}
+
+pub(super) fn resolve_existing_source_path(
+    source_root: &Path,
+    source_path: Option<&str>,
+) -> Option<PathBuf> {
+    paths::resolve_existing_source_path(source_root, source_path)
 }
 
 pub(super) enum CodexRolloutParseMode {
@@ -366,7 +378,7 @@ fn parse_rollout(
     if summary.unsupported_count > 0 {
         summary
             .warnings
-            .push("Some Codex rollout items are counted but not shown in preview.".to_string());
+            .push("Some source rollout items are counted but not shown in preview.".to_string());
     }
     Ok(CodexRolloutPreview {
         thread,
@@ -443,14 +455,14 @@ pub(super) fn merge_indexed_thread_metadata(
 fn open_rollout_reader(path: &Path) -> Result<Box<dyn Read>, RuntimeCoreError> {
     let file = fs::File::open(path).map_err(|err| {
         RuntimeCoreError::Backend(format!(
-            "unable to read Codex rollout file {}: {err}",
+            "unable to read source rollout file {}: {err}",
             path.display()
         ))
     })?;
     if path_to_string(path).ends_with(COMPRESSED_ROLLOUT_SUFFIX) {
         let decoder = zstd::stream::read::Decoder::new(file).map_err(|err| {
             RuntimeCoreError::Backend(format!(
-                "unable to decode compressed Codex rollout file {}: {err}",
+                "unable to decode compressed source rollout file {}: {err}",
                 path.display()
             ))
         })?;
@@ -605,12 +617,37 @@ fn record_event_msg_fidelity(
     };
     match payload.get("type").and_then(Value::as_str) {
         Some("patch_apply_end") => fidelity.patches += 1,
-        Some("mcp_tool_call_end") => {
+        Some("mcp_tool_call_begin" | "mcp_tool_call_end") => {
             fidelity.mcp += 1;
             if mapped_runtime_events > 0 {
                 fidelity.tools += 1;
             }
         }
+        Some("dynamic_tool_call_request" | "dynamic_tool_call_response")
+        | Some("view_image_tool_call" | "image_generation_begin" | "image_generation_end")
+        | Some(
+            "collab_agent_spawn_begin"
+            | "collab_agent_spawn_end"
+            | "collab_agent_interaction_begin"
+            | "collab_agent_interaction_end"
+            | "collab_waiting_begin"
+            | "collab_waiting_end"
+            | "collab_close_begin"
+            | "collab_close_end"
+            | "collab_resume_begin"
+            | "collab_resume_end",
+        ) => {
+            if mapped_runtime_events > 0 {
+                fidelity.tools += 1;
+            }
+        }
+        Some("hook_prompt" | "entered_review_mode") => {
+            if mapped_runtime_events > 0 {
+                fidelity.reasoning += 1;
+            }
+        }
+        Some("context_compacted" | "sub_agent_activity" | "subagent_activity")
+        | Some("exited_review_mode") => {}
         Some("web_search_end") => {
             fidelity.web_search += 1;
             if mapped_runtime_events > 0 {

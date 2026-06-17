@@ -19,16 +19,8 @@ const LEGACY_USER_MEMORY_FILE_NAMES: &[&str] = &["AGENTS.md", "AGENT.md", "instr
 const WORKSPACE_RUNTIME_DIR_NAME: &str = ".lime";
 const WORKSPACE_LOCAL_RUNTIME_AGENTS_FILE_NAME: &str = "AGENTS.local.md";
 const SKILL_PROVIDER_DIRS: &[&str] = &[
-    ".agents",
-    ".warp",
-    ".claude",
-    ".codex",
-    ".cursor",
-    ".gemini",
-    ".copilot",
-    ".factory",
+    ".agents", ".warp", ".claude", ".codex", ".cursor", ".gemini", ".copilot", ".factory",
     ".github",
-    ".opencode",
 ];
 const USER_SIGNAL_TABLES: &[&str] = &[
     "contents",

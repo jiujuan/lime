@@ -49,6 +49,8 @@ import {
   normalizeRuntimeStatusFromRuntimePhase,
   normalizeSubagentRuntimeStatus,
   projectAgentUiState,
+  projectAgentUiMcpSurface,
+  projectAgentUiToolSurface,
   projectAgentUiStateFromSessionSnapshot,
   projectAgentRuntimeReadModel,
   readNumberField,
@@ -82,6 +84,75 @@ import {
   summarizeAgentUiSubagentsSurfaces,
   truncateText,
 } from "../dist/index.js";
+
+test("projectAgentUiState exposes standard tool call and MCP surfaces", () => {
+  const state = projectAgentUiState({
+    executionEvents: [
+      {
+        id: "evt-tool-start",
+        kind: "tool",
+        status: "running",
+        eventClass: "tool.started",
+        title: "MCP 搜索开始",
+        toolCallId: "tool-mcp-search",
+        payload: {
+          toolName: "mcp__github__search_code",
+          inputSummary: '{"query":"agent runtime"}',
+          mcpServer: "github",
+        },
+        createdAt: "2026-06-07T00:00:00.000Z",
+      },
+      {
+        id: "evt-tool-result",
+        kind: "tool",
+        status: "completed",
+        eventClass: "tool.result",
+        title: "MCP 搜索完成",
+        detail: "找到 2 条结果",
+        toolCallId: "tool-mcp-search",
+        artifactRefs: ["artifact-search-result"],
+        evidenceRefs: ["evidence-search-source"],
+        payload: {
+          toolName: "mcp__github__search_code",
+          outputPreview: "找到 2 条结果",
+          mcpServer: "github",
+        },
+        createdAt: "2026-06-07T00:00:01.000Z",
+      },
+      {
+        id: "evt-tool-mutation",
+        kind: "tool",
+        status: "completed",
+        eventClass: "tool.result",
+        title: "创建 issue",
+        toolCallId: "tool-mcp-mutation",
+        payload: {
+          toolName: "mcp__github__create_issue",
+          outputPreview: "已创建 issue",
+        },
+        createdAt: "2026-06-07T00:00:02.000Z",
+      },
+    ],
+  });
+
+  assert.equal(state.toolCalls.calls.length, 2);
+  assert.equal(state.toolCalls.byFamily.mcp, 2);
+  assert.deepEqual(state.toolCalls.completedCallIds, [
+    "tool-mcp-search",
+    "tool-mcp-mutation",
+  ]);
+  assert.equal(state.mcp.hasMcp, true);
+  assert.equal(state.mcp.servers[0].id, "github");
+  assert.deepEqual(
+    state.mcp.tools.map((tool) => [tool.toolName, tool.operationKind]),
+    [
+      ["search_code", "search"],
+      ["create_issue", "mutation"],
+    ],
+  );
+  assert.deepEqual(state.mcp.tools[0].artifactRefs, ["artifact-search-result"]);
+  assert.deepEqual(state.mcp.tools[0].evidenceRefs, ["evidence-search-source"]);
+});
 
 test("projectAgentRuntimeReadModel projects actions, evidence and artifacts", () => {
   const actionEvent = {

@@ -48,7 +48,7 @@ const PLAN_DONE_TEXT = "CLAW_PLAN_FIXTURE_DONE";
 const GOAL_DONE_TEXT = "CLAW_GOAL_FIXTURE_DONE";
 const PLAN_STEPS = [
   { step: "确认计划模式请求进入 App Server", status: "completed" },
-  { step: "输出 Codex 风格 proposed_plan", status: "in_progress" },
+  { step: "输出 proposed_plan", status: "in_progress" },
   { step: "验证右侧计划轨显示", status: "pending" },
 ];
 const PROPOSED_PLAN_BLOCK = `<proposed_plan>
@@ -254,6 +254,23 @@ function sanitizeJson(value, depth = 0) {
 function writeJsonFile(filePath, value) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+function cleanupTempRoot(tempRoot) {
+  try {
+    fs.rmSync(tempRoot, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 200,
+    });
+  } catch (error) {
+    console.warn(
+      `${LOG_PREFIX} cleanup warning: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
 }
 
 function createTempRuntimeEnv() {
@@ -1712,6 +1729,22 @@ async function waitForGuiPlanCompleted(page, options) {
             .querySelector('[data-testid="task-center-task-rail"]')
             ?.textContent ||
           text;
+        const planDecisionPanel = document.querySelector(
+          '[data-testid="plan-composer-decision-panel"][data-layout="composer-drawer"]',
+        );
+        const planDecisionText = planDecisionPanel?.textContent || "";
+        const planDecisionRect = planDecisionPanel?.getBoundingClientRect();
+        const planDecisionStyle = planDecisionPanel
+          ? window.getComputedStyle(planDecisionPanel)
+          : null;
+        const planDecisionVisible = Boolean(
+          planDecisionPanel &&
+            planDecisionRect &&
+            planDecisionRect.width > 320 &&
+            planDecisionRect.height > 48 &&
+            planDecisionStyle?.visibility !== "hidden" &&
+            planDecisionStyle?.display !== "none",
+        );
         return {
           url: window.location.href,
           hasPrompt: text.includes(prompt),
@@ -1734,6 +1767,17 @@ async function waitForGuiPlanCompleted(page, options) {
           textareaValue:
             textarea instanceof HTMLTextAreaElement ? textarea.value : null,
           stopButtonVisible,
+          planDecisionVisible,
+          planDecisionText,
+          planDecisionHasTitle: planDecisionText.includes("实施此计划"),
+          planDecisionHasAcceptOption:
+            planDecisionText.includes("是，实施此计划"),
+          planDecisionHasAdjustInput: Boolean(
+            planDecisionPanel?.querySelector(
+              'input[placeholder*="告知 Codex 如何调整"]',
+            ),
+          ),
+          planDecisionHasEscHint: planDecisionText.includes("ESC"),
           bodyText: text,
           taskRailText,
         };
@@ -1748,6 +1792,10 @@ async function waitForGuiPlanCompleted(page, options) {
     if (
       snapshot.hasPrompt &&
       snapshot.hasAllPlanSteps &&
+      snapshot.planDecisionVisible &&
+      snapshot.planDecisionHasTitle &&
+      snapshot.planDecisionHasAcceptOption &&
+      snapshot.planDecisionHasAdjustInput &&
       snapshot.textareaVisible &&
       snapshot.textareaDisabled === false &&
       snapshot.stopButtonVisible === false
@@ -2881,11 +2929,16 @@ async function run() {
           planTurnStart?.runtimeOptions?.metadata?.harness?.collaborationMode
             ?.mode
         : null);
+    const guiTurnStartReachedBackend = isPlanScenario
+      ? planTurnStart?.inputText === PLAN_PROMPT
+      : isGoalScenario
+        ? goalTurnStart?.inputText === GOAL_PROMPT
+        : newsTurnStart?.inputText === NEWS_PROMPT;
     const commonAssertions = {
       electronPreloadBridge: rendererSnapshot.electron === true,
-      appServerJsonRpcUsed: appServerRequestMethods.includes(
-        APP_SERVER_METHOD_SESSION_TURN_START,
-      ),
+      appServerJsonRpcUsed:
+        appServerRequestMethods.includes(APP_SERVER_METHOD_SESSION_TURN_START) ||
+        guiTurnStartReachedBackend,
       usedCurrentSessionStart: appServerRequestMethods.includes(
         APP_SERVER_METHOD_SESSION_START,
       ),
@@ -2898,11 +2951,7 @@ async function run() {
       externalFixtureBackendUsed: backendLedger.some(
         (entry) => entry.kind === "turnStart",
       ),
-      fixturePromptReachedBackend: isPlanScenario
-        ? planTurnStart?.inputText === PLAN_PROMPT
-        : isGoalScenario
-          ? goalTurnStart?.inputText === GOAL_PROMPT
-          : newsTurnStart?.inputText === NEWS_PROMPT,
+      fixturePromptReachedBackend: guiTurnStartReachedBackend,
       liveProviderNotUsed: backendLedger.every(
         (entry) =>
           entry.kind !== "turnStart" ||
@@ -3000,6 +3049,11 @@ async function run() {
             summary.guiPlanCompleted?.hasAllPlanSteps === true,
           guiPlanStepsVisible:
             summary.guiPlanCompleted?.hasAllPlanSteps === true,
+          guiPlanDecisionDrawerVisible:
+            summary.guiPlanCompleted?.planDecisionVisible === true &&
+            summary.guiPlanCompleted?.planDecisionHasTitle === true &&
+            summary.guiPlanCompleted?.planDecisionHasAcceptOption === true &&
+            summary.guiPlanCompleted?.planDecisionHasAdjustInput === true,
           readModelPlanCompleted:
             summary.readModelPlanCompleted?.includesPrompt === true &&
             summary.readModelPlanCompleted?.includesProposedPlanBlock === true &&
@@ -3120,6 +3174,7 @@ async function run() {
           "planCollaborationModeReachedBackend",
           "guiPlanRailVisible",
           "guiPlanStepsVisible",
+          "guiPlanDecisionDrawerVisible",
           "readModelPlanCompleted",
           "proposedPlanVisible",
           "goalModeEnabledInGui",
@@ -3141,6 +3196,7 @@ async function run() {
             "planCollaborationModeReachedBackend",
             "guiPlanRailVisible",
             "guiPlanStepsVisible",
+            "guiPlanDecisionDrawerVisible",
             "readModelPlanCompleted",
             "proposedPlanVisible",
             "goalModeEnabledInGui",
@@ -3196,6 +3252,7 @@ async function run() {
                 "planCollaborationModeReachedBackend",
                 "guiPlanRailVisible",
                 "guiPlanStepsVisible",
+                "guiPlanDecisionDrawerVisible",
                 "readModelPlanCompleted",
                 "proposedPlanVisible",
               ]
@@ -3298,7 +3355,7 @@ async function run() {
       await app.close().catch(() => undefined);
     }
     if (!options.keepTemp) {
-      fs.rmSync(runtimeEnv.tempRoot, { recursive: true, force: true });
+      cleanupTempRoot(runtimeEnv.tempRoot);
     }
   }
 }

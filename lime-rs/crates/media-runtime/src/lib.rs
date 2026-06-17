@@ -12,6 +12,7 @@ use thiserror::Error;
 use tokio::task::JoinSet;
 use uuid::Uuid;
 
+mod model_route;
 mod video_worker;
 
 pub use video_worker::{
@@ -1138,6 +1139,38 @@ fn read_payload_string(payload: &Value, keys: &[&str]) -> Option<String> {
     })
 }
 
+fn apply_image_route_preflight(
+    workspace_root: &Path,
+    task_id: &str,
+    output: MediaTaskOutput,
+    on_update: &mut impl FnMut(&MediaTaskOutput),
+) -> Result<Result<MediaTaskOutput, TaskErrorRecord>, MediaRuntimeError> {
+    let preflight = model_route::image_route_payload_preflight(&output.record.payload);
+    if let Some(failure) = preflight.failure {
+        return Ok(Err(build_image_task_error(
+            &failure.code,
+            failure.message,
+            failure.retryable,
+            "routing",
+        )));
+    };
+    let Some(payload_patch) = preflight.payload_patch else {
+        return Ok(Ok(output));
+    };
+
+    let migrated = patch_image_task(
+        workspace_root,
+        task_id,
+        TaskArtifactPatch {
+            payload_patch: Some(payload_patch),
+            current_attempt_worker_id: Some(Some(IMAGE_TASK_RUNNER_WORKER_ID.to_string())),
+            ..TaskArtifactPatch::default()
+        },
+    )?;
+    on_update(&migrated);
+    Ok(Ok(migrated))
+}
+
 fn read_payload_positive_u32(payload: &Value, keys: &[&str]) -> Option<u32> {
     keys.iter().find_map(|key| {
         let value = payload.get(*key)?;
@@ -1440,6 +1473,7 @@ fn build_request_slots(
 
 fn prepare_image_task_input(task: &MediaTaskOutput) -> Result<PreparedImageTaskInput, String> {
     let payload = &task.record.payload;
+    let resolved_route = model_route::resolved_model_route_from_payload(payload);
     let prompt = read_payload_string(payload, &["prompt"])
         .ok_or_else(|| "图片任务缺少 prompt，无法继续执行".to_string())?;
     let layout_hint = read_payload_string(payload, &["layout_hint", "layoutHint"]);
@@ -1468,15 +1502,27 @@ fn prepare_image_task_input(task: &MediaTaskOutput) -> Result<PreparedImageTaskI
 
     Ok(PreparedImageTaskInput {
         prompt,
-        model: read_payload_string(payload, &["model"]).unwrap_or_default(),
+        model: resolved_route
+            .as_ref()
+            .and_then(|route| route.model_id.clone())
+            .or_else(|| read_payload_string(payload, &["model"]))
+            .unwrap_or_default(),
         size: read_payload_string(payload, &["size"]),
         count: request_slots.len() as u32,
         style: read_payload_string(payload, &["style"]),
-        provider_id: read_payload_string(payload, &["provider_id", "providerId"]),
-        executor_mode: normalize_image_generation_executor_mode(read_payload_string(
-            payload,
-            &["executor_mode", "executorMode"],
-        )),
+        provider_id: resolved_route
+            .as_ref()
+            .and_then(|route| route.provider_id.clone())
+            .or_else(|| read_payload_string(payload, &["provider_id", "providerId"])),
+        executor_mode: normalize_image_generation_executor_mode(
+            resolved_route
+                .as_ref()
+                .and_then(|route| {
+                    model_route::image_executor_mode_from_route_protocol(route.protocol.as_deref())
+                        .map(ToString::to_string)
+                })
+                .or_else(|| read_payload_string(payload, &["executor_mode", "executorMode"])),
+        ),
         outer_model: read_payload_string(payload, &["outer_model", "outerModel"]),
         layout_hint,
         postprocess_plan,
@@ -2638,7 +2684,19 @@ where
         return Ok(queued_output);
     }
 
-    let prepared_input = match prepare_image_task_input(&queued_output) {
+    let routed_output = match apply_image_route_preflight(
+        workspace_root,
+        task_id,
+        queued_output,
+        &mut on_update,
+    )? {
+        Ok(output) => output,
+        Err(task_error) => {
+            return mark_image_task_failed(workspace_root, task_id, task_error, &mut on_update);
+        }
+    };
+
+    let prepared_input = match prepare_image_task_input(&routed_output) {
         Ok(prepared_input) => prepared_input,
         Err(message) => {
             let task_error =

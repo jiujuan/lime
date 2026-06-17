@@ -92,9 +92,12 @@ function schemaToTs(schema, indent = 0) {
       .join(" | ");
   }
 
-  // 数组类型：type: ["null", "string"] → string | null
+  // 联合类型：type: ["array", "null"] 也要保留 items 结构，不能退化成 unknown。
   if (Array.isArray(schema.type)) {
-    return schema.type.map((t) => primitiveToTs(t)).join(" | ");
+    const variants = schema.type.map((type) =>
+      schemaToTs({ ...schema, type }, indent),
+    );
+    return Array.from(new Set(variants)).join(" | ");
   }
 
   // 对象类型
@@ -214,7 +217,16 @@ function generateTypes() {
   // 确保输出目录存在
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   fs.writeFileSync(OUTPUT_PATH, output, "utf8");
-  console.log(`✅ 已写入 ${OUTPUT_PATH} (${output.length} bytes)`);
+  formatGeneratedOutput();
+  const formattedLength = fs.readFileSync(OUTPUT_PATH, "utf8").length;
+  console.log(`✅ 已写入 ${OUTPUT_PATH} (${formattedLength} bytes)`);
+}
+
+function formatGeneratedOutput() {
+  execFileSync("npx", ["prettier", "--write", OUTPUT_PATH], {
+    cwd: REPO_ROOT,
+    stdio: "ignore",
+  });
 }
 
 function collectSchemaDefinitions(bundle) {
