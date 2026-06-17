@@ -124,6 +124,54 @@ describe("AgentThreadTimeline", () => {
       container.querySelectorAll('[data-testid="tool-call-item"]'),
     ).toHaveLength(0);
   });
+
+  it("Codex 导入过程应在完成态历史中默认展开工具细节", () => {
+    const container = renderTimeline(
+      [
+        {
+          ...createBaseItem("command-imported", 1),
+          type: "command_execution",
+          command: "npm test",
+          cwd: "/workspace/imported-codex",
+          aggregated_output: "Exit code: 0\nOutput:\nok",
+          exit_code: 0,
+          metadata: {
+            imported: true,
+            source_client: "codex",
+          },
+        },
+        {
+          ...createBaseItem("search-imported", 2),
+          type: "web_search",
+          action: "search_query",
+          query: "Lime Codex import",
+          output: "search result summary",
+          metadata: {
+            imported: true,
+            source_client: "codex",
+          },
+        },
+      ] as AgentThreadItem[],
+      {
+        turn: {
+          status: "completed",
+        },
+        collapseInactiveDetails: true,
+      },
+    );
+
+    const block = container.querySelector<HTMLDetailsElement>(
+      '[data-testid="agent-thread-block:1:process"]',
+    );
+
+    expect(block?.open).toBe(true);
+    expect(container.textContent).toContain("npm test");
+    expect(container.textContent).toContain("Lime Codex import");
+    expect(
+      container.querySelectorAll('[data-testid="tool-call-item"]'),
+    ).toHaveLength(2);
+  });
+
   it("连续执行流里有运行中步骤时，应聚合为一个高亮过程块", () => {
     const items: AgentThreadItem[] = [
       {

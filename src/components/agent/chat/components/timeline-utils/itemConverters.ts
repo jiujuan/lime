@@ -81,33 +81,43 @@ export function toToolCallState(item: AgentThreadItem): ToolCallState | null {
         endTime: item.completed_at ? new Date(item.completed_at) : undefined,
       };
     case "command_execution":
-      return {
-        id: item.id,
-        name: "exec_command",
-        arguments: JSON.stringify(
-          { command: item.command, cwd: item.cwd },
-          null,
-          2,
-        ),
-        status: mapItemStatus(item.status),
-        result:
-          item.aggregated_output !== undefined ||
-          item.error !== undefined ||
-          item.exit_code !== undefined
-            ? {
-                success:
-                  item.status === "completed" && item.error === undefined,
-                output: item.aggregated_output || "",
-                error: item.error,
-                metadata:
-                  item.exit_code !== undefined
-                    ? { exit_code: item.exit_code, cwd: item.cwd }
-                    : { cwd: item.cwd },
-              }
-            : undefined,
-        startTime: new Date(item.started_at),
-        endTime: item.completed_at ? new Date(item.completed_at) : undefined,
-      };
+      {
+        const metadata =
+          item.metadata && typeof item.metadata === "object"
+            ? (item.metadata as Record<string, unknown>)
+            : {};
+        return {
+          id: item.id,
+          name: "exec_command",
+          arguments: JSON.stringify(
+            { command: item.command, cwd: item.cwd },
+            null,
+            2,
+          ),
+          status: mapItemStatus(item.status),
+          result:
+            item.aggregated_output !== undefined ||
+            item.error !== undefined ||
+            item.exit_code !== undefined ||
+            item.metadata !== undefined
+              ? {
+                  success:
+                    item.status === "completed" && item.error === undefined,
+                  output: item.aggregated_output || "",
+                  error: item.error,
+                  metadata: {
+                    ...metadata,
+                    ...(item.exit_code !== undefined
+                      ? { exit_code: item.exit_code }
+                      : {}),
+                    cwd: item.cwd,
+                  },
+                }
+              : undefined,
+          startTime: new Date(item.started_at),
+          endTime: item.completed_at ? new Date(item.completed_at) : undefined,
+        };
+      }
     case "patch":
       return {
         id: item.id,
@@ -138,28 +148,35 @@ export function toToolCallState(item: AgentThreadItem): ToolCallState | null {
         endTime: item.completed_at ? new Date(item.completed_at) : undefined,
       };
     case "web_search":
-      return {
-        id: item.id,
-        name: "web_search",
-        arguments:
-          item.query !== undefined
-            ? JSON.stringify(
-                { action: item.action || "web_search", query: item.query },
-                null,
-                2,
-              )
-            : undefined,
-        status: mapItemStatus(item.status),
-        result:
-          item.output !== undefined
-            ? {
-                success: item.status !== "failed",
-                output: item.output,
-              }
-            : undefined,
-        startTime: new Date(item.started_at),
-        endTime: item.completed_at ? new Date(item.completed_at) : undefined,
-      };
+      {
+        const metadata =
+          item.metadata && typeof item.metadata === "object"
+            ? (item.metadata as Record<string, unknown>)
+            : undefined;
+        return {
+          id: item.id,
+          name: "web_search",
+          arguments:
+            item.query !== undefined
+              ? JSON.stringify(
+                  { action: item.action || "web_search", query: item.query },
+                  null,
+                  2,
+                )
+              : undefined,
+          status: mapItemStatus(item.status),
+          result:
+            item.output !== undefined || metadata
+              ? {
+                  success: item.status !== "failed",
+                  output: item.output || "",
+                  metadata,
+                }
+              : undefined,
+          startTime: new Date(item.started_at),
+          endTime: item.completed_at ? new Date(item.completed_at) : undefined,
+        };
+      }
     default:
       return null;
   }
