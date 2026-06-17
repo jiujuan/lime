@@ -161,7 +161,7 @@ checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
 name = "app-server"
-version = "1.71.0"
+version = "1.72.0"
 dependencies = [
  "anyhow",
  "app-server-protocol",
@@ -188,6 +188,7 @@ dependencies = [
  "patch-apply",
  "portable-pty",
  "reqwest 0.12.28",
+ "runtime-core",
  "rusqlite",
  "scopeguard",
  "serde",
@@ -206,7 +207,7 @@ dependencies = [
 
 [[package]]
 name = "app-server-client"
-version = "1.71.0"
+version = "1.72.0"
 dependencies = [
  "app-server-protocol",
  "app-server-transport",
@@ -217,7 +218,7 @@ dependencies = [
 
 [[package]]
 name = "app-server-daemon"
-version = "1.71.0"
+version = "1.72.0"
 dependencies = [
  "app-server-protocol",
  "app-server-transport",
@@ -229,7 +230,7 @@ dependencies = [
 
 [[package]]
 name = "app-server-protocol"
-version = "1.71.0"
+version = "1.72.0"
 dependencies = [
  "schemars",
  "serde",
@@ -238,7 +239,7 @@ dependencies = [
 
 [[package]]
 name = "app-server-test-client"
-version = "1.71.0"
+version = "1.72.0"
 dependencies = [
  "anyhow",
  "app-server-client",
@@ -249,7 +250,7 @@ dependencies = [
 
 [[package]]
 name = "app-server-transport"
-version = "1.71.0"
+version = "1.72.0"
 dependencies = [
  "app-server-protocol",
  "serde_json",
@@ -313,6 +314,7 @@ dependencies = [
  "cron",
  "dashmap 6.1.0",
  "dirs 5.0.1",
+ "document-preview",
  "encoding_rs",
  "etcetera 0.11.0",
  "fs2",
@@ -2210,6 +2212,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "document-preview"
+version = "1.72.0"
+dependencies = [
+ "tempfile",
+ "zip",
+]
+
+[[package]]
 name = "dotenvy"
 version = "0.15.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3915,7 +3925,7 @@ dependencies = [
 
 [[package]]
 name = "lime-agent"
-version = "1.71.0"
+version = "1.72.0"
 dependencies = [
  "anyhow",
  "aster-core",
@@ -3946,7 +3956,7 @@ dependencies = [
 
 [[package]]
 name = "lime-browser-runtime"
-version = "1.71.0"
+version = "1.72.0"
 dependencies = [
  "chrono",
  "futures",
@@ -3963,7 +3973,7 @@ dependencies = [
 
 [[package]]
 name = "lime-cli"
-version = "1.71.0"
+version = "1.72.0"
 dependencies = [
  "clap",
  "lime-core",
@@ -3975,7 +3985,7 @@ dependencies = [
 
 [[package]]
 name = "lime-config"
-version = "1.71.0"
+version = "1.72.0"
 dependencies = [
  "async-trait",
  "lime-core",
@@ -3991,7 +4001,7 @@ dependencies = [
 
 [[package]]
 name = "lime-core"
-version = "1.71.0"
+version = "1.72.0"
 dependencies = [
  "aster-models",
  "async-trait",
@@ -4047,7 +4057,7 @@ dependencies = [
 
 [[package]]
 name = "lime-gateway"
-version = "1.71.0"
+version = "1.72.0"
 dependencies = [
  "aes",
  "async-trait",
@@ -4075,7 +4085,7 @@ dependencies = [
 
 [[package]]
 name = "lime-infra"
-version = "1.71.0"
+version = "1.72.0"
 dependencies = [
  "chrono",
  "dashmap 5.5.3",
@@ -4097,7 +4107,7 @@ dependencies = [
 
 [[package]]
 name = "lime-knowledge"
-version = "1.71.0"
+version = "1.72.0"
 dependencies = [
  "chrono",
  "hex",
@@ -4110,7 +4120,7 @@ dependencies = [
 
 [[package]]
 name = "lime-mcp"
-version = "1.71.0"
+version = "1.72.0"
 dependencies = [
  "async-trait",
  "dirs 5.0.1",
@@ -4126,7 +4136,7 @@ dependencies = [
 
 [[package]]
 name = "lime-media-runtime"
-version = "1.71.0"
+version = "1.72.0"
 dependencies = [
  "axum 0.7.9",
  "base64 0.22.1",
@@ -4158,7 +4168,7 @@ dependencies = [
 
 [[package]]
 name = "lime-processor"
-version = "1.71.0"
+version = "1.72.0"
 dependencies = [
  "async-trait",
  "lime-core",
@@ -4177,7 +4187,7 @@ dependencies = [
 
 [[package]]
 name = "lime-providers"
-version = "1.71.0"
+version = "1.72.0"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -4232,7 +4242,7 @@ dependencies = [
 
 [[package]]
 name = "lime-server"
-version = "1.71.0"
+version = "1.72.0"
 dependencies = [
  "aster-core",
  "async-stream",
@@ -4275,7 +4285,7 @@ dependencies = [
 
 [[package]]
 name = "lime-server-utils"
-version = "1.71.0"
+version = "1.72.0"
 dependencies = [
  "axum 0.7.9",
  "futures",
@@ -4290,7 +4300,7 @@ dependencies = [
 
 [[package]]
 name = "lime-services"
-version = "1.71.0"
+version = "1.72.0"
 dependencies = [
  "anyhow",
  "aster-core",
@@ -4299,6 +4309,7 @@ dependencies = [
  "chrono",
  "dashmap 5.5.3",
  "dirs 5.0.1",
+ "document-preview",
  "futures",
  "glob",
  "indexmap 2.13.0",
@@ -4333,7 +4344,7 @@ dependencies = [
 
 [[package]]
 name = "lime-skills"
-version = "1.71.0"
+version = "1.72.0"
 dependencies = [
  "async-trait",
  "dirs 5.0.1",
@@ -4351,7 +4362,7 @@ dependencies = [
 
 [[package]]
 name = "lime-websocket"
-version = "1.71.0"
+version = "1.72.0"
 dependencies = [
  "axum 0.7.9",
  "chrono",
@@ -5371,7 +5382,7 @@ checksum = "b867cad97c0791bbd3aaa6472142568c6c9e8f71937e98379f584cfb0cf35bec"
 
 [[package]]
 name = "patch-apply"
-version = "1.71.0"
+version = "1.72.0"
 dependencies = [
  "tempfile",
  "thiserror 1.0.69",
@@ -6329,6 +6340,15 @@ dependencies = [
  "spki",
  "subtle",
  "zeroize",
+]
+
+[[package]]
+name = "runtime-core"
+version = "1.72.0"
+dependencies = [
+ "app-server-protocol",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

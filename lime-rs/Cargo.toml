@@ -11,7 +11,7 @@ exclude = [
 resolver = "2"
 
 [workspace.package]
-version = "1.71.0"
+version = "1.72.0"
 edition = "2021"
 authors = ["coso"]
 repository = "https://github.com/aiclientproxy/lime"
@@ -37,6 +37,7 @@ lime-embedding = { path = "crates/embedding", default-features = false }
 lime-gateway = { path = "crates/gateway" }
 lime-browser-runtime = { path = "crates/browser-runtime" }
 lime-media-runtime = { path = "crates/media-runtime" }
+runtime-core = { path = "crates/runtime-core" }
 lime-knowledge = { path = "crates/knowledge" }
 app-server = { path = "crates/app-server" }
 app-server-client = { path = "crates/app-server-client" }
@@ -46,6 +47,7 @@ app-server-test-client = { path = "crates/app-server-test-client" }
 app-server-transport = { path = "crates/app-server-transport" }
 patch-apply = { path = "crates/patch-apply" }
 voice-core = { path = "crates/voice-core" }
+document-preview = { path = "crates/document-preview" }
 aster = { package = "aster-core", path = "crates/aster-rust/crates/aster" }
 aster-models = { path = "crates/aster-rust/crates/aster-models" }
 

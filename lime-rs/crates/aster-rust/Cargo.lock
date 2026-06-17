@@ -206,6 +206,7 @@ dependencies = [
  "ctor",
  "dashmap",
  "dirs 5.0.1",
+ "document-preview",
  "dotenvy",
  "encoding_rs",
  "env-lock",
@@ -1982,6 +1983,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4b8a88685455ed29a21542a33abd9cb6510b6b129abadabdcef0f4c55bc8f61"
 dependencies = [
  "litrs",
+]
+
+[[package]]
+name = "document-preview"
+version = "1.72.0"
+dependencies = [
+ "zip",
 ]
 
 [[package]]

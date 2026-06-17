@@ -5,7 +5,7 @@
   "workspaces": [
     "packages/*"
   ],
-  "version": "1.71.0",
+  "version": "1.72.0",
   "description": "AI content workspace for Chinese creators: desktop writing, research, prompt management, knowledge base, and multi-model workflows.",
   "keywords": [
     "ai",
@@ -46,6 +46,7 @@
     "governance:modality-contracts": "node scripts/check-modality-runtime-contracts.mjs",
     "governance:scripts": "node scripts/check-scripts-governance.mjs",
     "governance:file-size": "node scripts/check-file-size-governance.mjs",
+    "governance:file-size:update": "node scripts/governance/update-file-size-baseline.mjs",
     "governance:electron-release-workflow": "node scripts/electron/release-workflow-guard.mjs",
     "generate:protocol-types": "node scripts/generate-protocol-types.mjs",
     "check:protocol-types": "node scripts/generate-protocol-types.mjs --check",
@@ -88,7 +89,7 @@
     "test:watch": "node --max-old-space-size=8192 ./node_modules/vitest/vitest.mjs",
     "test:frontend": "npm run lint && npm run typecheck && npm test",
     "test:bridge": "npm test -- src/lib/dev-bridge/safeInvoke.test.ts src/lib/desktop-host/core.test.ts",
-    "test:contracts": "node scripts/check-app-server-client-contract.mjs && node scripts/check-command-contracts.mjs && node scripts/check-harness-contracts.mjs && npm run governance:modality-contracts && npm run governance:scripts && npm run governance:electron-release-workflow && npm run harness:cleanup-report:check && npm run docs:boundary",
+    "test:contracts": "npm run check:protocol-types && node scripts/check-app-server-client-contract.mjs && node scripts/check-command-contracts.mjs && node scripts/check-harness-contracts.mjs && npm run governance:modality-contracts && npm run governance:scripts && npm run governance:electron-release-workflow && npm run harness:cleanup-report:check && npm run docs:boundary",
     "test:rust": "cargo test --manifest-path \"lime-rs/Cargo.toml\"",
     "test:rust:unit": "node scripts/run-rust-layer.mjs unit",
     "test:rust:integration": "node scripts/run-rust-layer.mjs integration",
@@ -197,6 +198,8 @@
     "smoke:agent-session-history-electron-fixture": "node scripts/electron/session-history-fixture-smoke.mjs",
     "smoke:codex-import-continuation-electron-fixture": "node scripts/electron/codex-import-continuation-fixture-smoke.mjs",
     "smoke:codex-import-click-through-electron-fixture": "node scripts/electron/codex-import-click-through-fixture-smoke.mjs",
+    "smoke:local-history-import-visual-audit": "node scripts/electron/local-history-import-visual-audit-smoke.mjs",
+    "smoke:local-history-import-real-sample-visual-audit": "node scripts/electron/local-history-import-real-sample-visual-audit-smoke.mjs",
     "smoke:settings-provider-migration-electron-fixture": "node scripts/electron/settings-provider-migration-fixture-smoke.mjs",
     "smoke:code-artifact-workbench-electron-fixture": "node scripts/electron/code-artifact-workbench-fixture-smoke.mjs",
     "smoke:claw-chat-current-fixture": "node scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
