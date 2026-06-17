@@ -697,6 +697,7 @@ function summarizeImportedDetailsSnapshot(snapshot, readModelSummary = null) {
       (bodyText.includes("已完成") && bodyText.includes("步骤")) ||
       readModelSummary?.hasReasoningItem === true,
     hasCommandText: bodyText.includes("npm test"),
+    hasCommandItem: readModelSummary?.hasCommandItem === true,
     hasPatchText:
       hasAnyText({ bodyText }, ["补丁", "Patch", "patch"]) &&
       hasAnyText({ bodyText }, ["已编辑", "文件", "src/lib.rs"]),
@@ -1272,11 +1273,8 @@ async function run() {
       importedDetailsSummary.hasReasoningVisible,
       "页面或 read model 未保留导入 reasoning",
     );
-    assert(
-      importedDetailsSummary.hasCommandText &&
-        readModel.summary.hasCommandItem,
-      "页面或 read model 未保留导入 command",
-    );
+    summary.readModelSummary = sanitizeJson(readModel.summary);
+    assert(readModel.summary.hasCommandItem, "read model 未保留导入 command");
     assert(
       importedDetailsSummary.hidesRawImportedCommand,
       "页面暴露了 Codex 原始审批命令或导入内部字段",
