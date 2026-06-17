@@ -236,4 +236,42 @@ describe("AgentThreadTimelineViewModel", () => {
       shouldRenderSingleItemInline: false,
     });
   });
+
+  it("Codex 导入过程块即使是完成态历史，也应允许默认物化详情", () => {
+    expect(
+      buildTimelineBlockRenderPlan({
+        block: block({
+          kind: "process",
+          status: "completed",
+          defaultExpanded: true,
+          forceExpanded: true,
+          items: [
+            baseItem("command-imported", "command_execution", {
+              command: "npm test",
+              cwd: "/workspace/imported-codex",
+              metadata: {
+                imported: true,
+                source_client: "codex",
+              },
+            }),
+            baseItem("search-imported", "web_search", {
+              query: "Lime Codex import",
+              action: "search_query",
+              metadata: {
+                imported: true,
+                source_client: "codex",
+              },
+            }),
+          ],
+        }),
+        isExpanded: true,
+        preferInlineDetails: false,
+        deferCompletedSingleDetails: true,
+        hasStructuredThinkingInlinePreview: noStructuredPreview,
+      }),
+    ).toMatchObject({
+      shouldRenderGroupedToolRows: true,
+      shouldMaterializeDetailEntries: true,
+    });
+  });
 });

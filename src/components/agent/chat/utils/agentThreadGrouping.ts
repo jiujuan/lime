@@ -37,6 +37,7 @@ export interface AgentThreadOrderedBlock {
   countLabel: string;
   rawDetailLabel: string;
   defaultExpanded: boolean;
+  forceExpanded?: boolean;
   startedAt: string;
   completedAt?: string;
 }
@@ -51,6 +52,7 @@ export interface AgentThreadSemanticGroup {
   countLabel: string;
   rawDetailLabel: string;
   defaultExpanded: boolean;
+  forceExpanded?: boolean;
 }
 
 export interface AgentThreadDisplayModel {
@@ -895,11 +897,47 @@ function buildPreviewLines(
   return lines;
 }
 
+function isImportedCodexMetadata(metadata: unknown): boolean {
+  const record = asRecord(metadata);
+  if (!record) {
+    return false;
+  }
+
+  return (
+    record.imported === true ||
+    record.imported_synthetic === true ||
+    record.importedSynthetic === true ||
+    record.source_client === "codex" ||
+    record.sourceClient === "codex"
+  );
+}
+
+function hasImportedCodexProcessItem(items: AgentThreadItem[]): boolean {
+  return items.some((item) => {
+    if (
+      item.type !== "tool_call" &&
+      item.type !== "command_execution" &&
+      item.type !== "patch" &&
+      item.type !== "web_search" &&
+      item.type !== "approval_request" &&
+      item.type !== "request_user_input"
+    ) {
+      return false;
+    }
+
+    return isImportedCodexMetadata(item.metadata);
+  });
+}
+
 function shouldDefaultExpand(
   kind: AgentThreadGroupKind,
   status: AgentThreadItemStatus,
+  items: AgentThreadItem[] = [],
 ): boolean {
   if (kind === "approval" || kind === "alert") {
+    return true;
+  }
+  if (kind === "process" && hasImportedCodexProcessItem(items)) {
     return true;
   }
   return status !== "completed";
@@ -964,6 +1002,8 @@ export function buildAgentThreadDisplayModel(
     const startedAt =
       current.items[0]?.started_at || current.items[0]?.updated_at || "";
     const completedAt = current.items[current.items.length - 1]?.completed_at;
+    const forceExpanded =
+      current.kind === "process" && hasImportedCodexProcessItem(current.items);
     const block: AgentThreadOrderedBlock = {
       id: current.items.map((entry) => entry.id).join(":"),
       kind: current.kind,
@@ -985,7 +1025,8 @@ export function buildAgentThreadDisplayModel(
             : current.kind === "subagent"
               ? "查看子任务详情"
               : "查看执行过程"),
-      defaultExpanded: shouldDefaultExpand(current.kind, status),
+      defaultExpanded: shouldDefaultExpand(current.kind, status, current.items),
+      ...(forceExpanded ? { forceExpanded: true } : {}),
       startedAt,
       completedAt,
     };
@@ -1003,6 +1044,7 @@ export function buildAgentThreadDisplayModel(
         countLabel: block.countLabel,
         rawDetailLabel: block.rawDetailLabel,
         defaultExpanded: block.defaultExpanded,
+        ...(block.forceExpanded ? { forceExpanded: true } : {}),
       });
     }
   };

@@ -192,6 +192,11 @@ export function resolveExpandedBlockIndexes(params: {
   const expanded = new Set<number>();
 
   blocks.forEach((block, index) => {
+    if (block.forceExpanded) {
+      expanded.add(index);
+      return;
+    }
+
     if (
       isCurrentTurn &&
       turn.status === "running" &&

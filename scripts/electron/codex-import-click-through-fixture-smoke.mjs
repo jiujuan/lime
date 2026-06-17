@@ -731,21 +731,18 @@ async function waitForImportedSessionDetails(page, options) {
   return await waitForUiSnapshot(
     page,
     options,
-    (snapshot) =>
-      snapshot.textareaVisible &&
-      snapshot.bodyText.includes(IMPORTED_USER_TEXT) &&
-      snapshot.bodyText.includes(IMPORTED_ASSISTANT_TEXT) &&
-      snapshot.bodyText.includes("已完成") &&
-      snapshot.bodyText.includes("步骤") &&
-      snapshot.bodyText.includes("npm test") &&
-      snapshot.bodyText.includes("导入的权限记录") &&
-      snapshot.bodyText.includes("已导入，只读记录") &&
-      snapshot.bodyText.includes("只读历史记录") &&
-      !snapshot.bodyText.includes("Approve Codex command") &&
-      !snapshot.bodyText.includes("imported_read_only") &&
-      hasAnyText(snapshot, ["补丁", "Patch", "patch"]) &&
-      hasAnyText(snapshot, ["已编辑", "文件", "src/lib.rs"]) &&
-      hasAnyText(snapshot, ["权限记录", "审批", "Approval", "approval"]),
+    (snapshot) => {
+      const summary = summarizeImportedDetailsSnapshot(snapshot);
+      return (
+        snapshot.textareaVisible &&
+        summary.hasImportedUserMessage &&
+        summary.hasImportedAssistantMessage &&
+        summary.hasReasoningVisible &&
+        summary.hasPatchText &&
+        summary.hasApprovalText &&
+        summary.hidesRawImportedCommand
+      );
+    },
     "导入后的会话页未还原 Codex 细节",
   );
 }
