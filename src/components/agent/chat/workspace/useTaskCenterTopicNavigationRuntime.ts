@@ -26,7 +26,6 @@ import {
 } from "../utils/taskCenterTabs";
 import { resolveTaskCenterDraftClosePlan } from "./taskCenterDraftTabs";
 import { normalizeProjectId } from "../utils/topicProjectResolution";
-import { rememberInitialSessionNavigationStart } from "./useWorkspaceInitialSessionNavigation";
 import type { TaskCenterDraftSendRequest } from "../homePendingPreview";
 
 type AgentEntry = "new-task" | "claw";
@@ -185,6 +184,7 @@ export function useTaskCenterTopicNavigationRuntime({
       }
 
       taskCenterDraftSurfaceActiveRef.current = false;
+      clearTaskCenterEmbeddedHomeSession(topicId);
       resetLocalImageWorkbenchSessionScope();
       setTaskCenterTransitionTopicId(topicId);
       setTaskCenterDetachedTopicId(isDetachedTopic ? topicId : null);
@@ -196,7 +196,6 @@ export function useTaskCenterTopicNavigationRuntime({
         upsertTaskCenterOpenTab(topicId, topicWorkspaceId);
       }
       markTaskCenterLocalSessionOverride(topicId);
-      rememberInitialSessionNavigationStart(topicId);
       const switchResult = await switchTopic(topicId, switchOptions);
       if (switchResult === "busy") {
         scheduleMinimumDelayIdleTask(
@@ -233,6 +232,7 @@ export function useTaskCenterTopicNavigationRuntime({
       activeTaskCenterDraftTabIdRef,
       agentEntry,
       clearEntryPendingA2UI,
+      clearTaskCenterEmbeddedHomeSession,
       markTaskCenterLocalSessionOverride,
       messagesLength,
       replaceTaskCenterOpenTabs,

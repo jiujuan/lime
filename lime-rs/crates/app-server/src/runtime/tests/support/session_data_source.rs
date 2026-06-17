@@ -2,6 +2,7 @@ use super::super::*;
 
 pub(in crate::runtime::tests) struct TestSessionDataSource {
     _persisted: Option<AgentSessionReadResponse>,
+    workspace: Option<serde_json::Value>,
     objective: Mutex<Option<ManagedObjective>>,
     audit_updates: Mutex<Vec<ManagedObjectiveAuditUpdate>>,
     knowledge_compile_requests: Mutex<Vec<lime_knowledge::KnowledgeCompilePackRequest>>,
@@ -11,9 +12,17 @@ impl TestSessionDataSource {
     pub(in crate::runtime::tests) fn new(persisted: AgentSessionReadResponse) -> Self {
         Self {
             _persisted: Some(persisted),
+            workspace: None,
             objective: Mutex::new(None),
             audit_updates: Mutex::new(Vec::new()),
             knowledge_compile_requests: Mutex::new(Vec::new()),
+        }
+    }
+
+    pub(in crate::runtime::tests) fn with_workspace(self, workspace: serde_json::Value) -> Self {
+        Self {
+            workspace: Some(workspace),
+            ..self
         }
     }
 
@@ -161,7 +170,17 @@ impl KnowledgeAppDataSource for TestSessionDataSource {
     }
 }
 
-impl WorkspaceAppDataSource for TestSessionDataSource {}
+#[async_trait]
+impl WorkspaceAppDataSource for TestSessionDataSource {
+    async fn read_workspace(
+        &self,
+        _params: WorkspaceReadParams,
+    ) -> Result<WorkspaceReadResponse, RuntimeCoreError> {
+        Ok(WorkspaceReadResponse {
+            workspace: self.workspace.clone(),
+        })
+    }
+}
 impl SkillAppDataSource for TestSessionDataSource {}
 impl WorkspaceSkillBindingAppDataSource for TestSessionDataSource {}
 impl GatewayAppDataSource for TestSessionDataSource {}

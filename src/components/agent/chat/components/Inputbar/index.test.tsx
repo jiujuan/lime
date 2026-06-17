@@ -20,6 +20,10 @@ import {
 } from "../../utils/curatedTaskTemplates";
 import type { InputbarSendPayload } from "./inputbarSendPayload";
 
+const { setAgentRuntimeObjectiveMock } = vi.hoisted(() => ({
+  setAgentRuntimeObjectiveMock: vi.fn(),
+}));
+
 const mockCharacterMention = vi.fn<
   (props: {
     characters?: Character[];
@@ -199,6 +203,21 @@ function MockInputbarCoreView(props: MockInputbarCoreProps) {
 vi.mock("./components/InputbarCore", () => ({
   InputbarCore: (props: MockInputbarCoreProps) => (
     <MockInputbarCoreView {...props} />
+  ),
+}));
+
+vi.mock("./components/InputbarObjectiveInlinePanel", () => ({
+  InputbarObjectiveInlinePanel: (props: {
+    sessionId: string;
+    workspaceId?: string | null;
+    runtimeBusy?: boolean;
+  }) => (
+    <div
+      data-testid="inputbar-objective-inline-panel"
+      data-session-id={props.sessionId}
+      data-workspace-id={props.workspaceId ?? ""}
+      data-runtime-busy={String(Boolean(props.runtimeBusy))}
+    />
   ),
 }));
 
@@ -590,6 +609,10 @@ vi.mock("sonner", () => ({
     success: vi.fn(),
     error: vi.fn(),
   },
+}));
+
+vi.mock("@/lib/api/agentRuntime", () => ({
+  setAgentRuntimeObjective: setAgentRuntimeObjectiveMock,
 }));
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
@@ -1067,10 +1090,12 @@ describe("Inputbar", () => {
 
   it("加号菜单开启 plan 和 goal 后发送应下传 mode metadata", async () => {
     const onSend = vi.fn();
+    setAgentRuntimeObjectiveMock.mockResolvedValue(null);
     renderInputbar({
       input: "继续执行当前任务",
       onSend,
       activeTheme: "general",
+      projectId: "project-inputbar-plan-goal",
       sessionId: "thread-inputbar-plan-goal",
     });
 
@@ -1099,6 +1124,12 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
+    expect(setAgentRuntimeObjectiveMock).toHaveBeenCalledWith({
+      sessionId: "thread-inputbar-plan-goal",
+      workspaceId: "project-inputbar-plan-goal",
+      objectiveText: "继续执行当前任务",
+      successCriteria: [],
+    });
     expectInputbarSend(onSend, {
       sendOptions: {
         displayContent: "继续执行当前任务",
@@ -1122,7 +1153,7 @@ describe("Inputbar", () => {
               status: "active",
               set: {
                 threadId: "thread-inputbar-plan-goal",
-                objective: null,
+                objective: "继续执行当前任务",
                 status: "active",
                 tokenBudget: null,
               },
@@ -1133,10 +1164,14 @@ describe("Inputbar", () => {
               status: "active",
               set: {
                 threadId: "thread-inputbar-plan-goal",
-                objective: null,
+                objective: "继续执行当前任务",
                 status: "active",
                 tokenBudget: null,
               },
+            },
+            managed_objective: {
+              objective_text: "继续执行当前任务",
+              source: "inputbar",
             },
           },
         },
@@ -1146,6 +1181,51 @@ describe("Inputbar", () => {
         },
       },
     });
+  });
+
+  it("开启 Goal 时应在输入区上方显示可编辑的追求目标面板", async () => {
+    const { container } = renderInputbar({
+      activeTheme: "general",
+      projectId: "project-goal",
+      sessionId: "thread-inputbar-goal-panel",
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(
+      container.querySelector('[data-testid="inputbar-objective-inline-panel"]'),
+    ).toBeNull();
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="inputbar-plus-objective"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const objectivePanel = container.querySelector(
+      '[data-testid="inputbar-objective-inline-panel"]',
+    );
+    expect(objectivePanel).toBeTruthy();
+    expect(objectivePanel?.getAttribute("data-session-id")).toBe(
+      "thread-inputbar-goal-panel",
+    );
+    expect(objectivePanel?.getAttribute("data-workspace-id")).toBe(
+      "project-goal",
+    );
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="inputbar-objective-status"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(
+      container.querySelector('[data-testid="inputbar-objective-inline-panel"]'),
+    ).toBeNull();
   });
 
   it("Plan 和 Goal 开启后应在左侧显示可单独关闭的状态标签，模型放在右侧", async () => {

@@ -166,7 +166,7 @@ pub fn get_agent_session_workspace_id(
         )
         .optional()
         .map_err(|error| format!("读取目标 owner 会话失败: {error}"))?
-        .ok_or_else(|| format!("目标 owner 会话不存在: {session_id}"))?;
+        .unwrap_or(None);
 
     let Some(working_dir) = working_dir
         .as_deref()
@@ -252,7 +252,6 @@ pub fn upsert_objective(
         )
         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, '[]', ?12, ?12)
         ON CONFLICT(owner_kind, owner_id) DO UPDATE SET
-            objective_id = excluded.objective_id,
             workspace_id = excluded.workspace_id,
             objective_text = excluded.objective_text,
             success_criteria_json = excluded.success_criteria_json,
@@ -466,7 +465,7 @@ mod tests {
     }
 
     #[test]
-    fn upsert_replaces_owner_objective_and_keeps_single_row() {
+    fn upsert_edits_owner_objective_and_keeps_single_row() {
         let conn = setup_db();
         let first = upsert_objective(
             &conn,
@@ -505,9 +504,77 @@ mod tests {
             })
             .unwrap();
         assert_eq!(count, 1);
-        assert_ne!(first.objective_id, second.objective_id);
+        assert_eq!(first.objective_id, second.objective_id);
         assert_eq!(second.objective_text, "完成第二版");
         assert_eq!(second.status, ManagedObjectiveStatus::Active);
+    }
+
+    #[test]
+    fn upsert_edits_existing_goal_and_reactivates_without_new_goal_id() {
+        let conn = setup_db();
+        let first = upsert_objective(
+            &conn,
+            ManagedObjectiveUpsert {
+                workspace_id: Some("workspace-1".to_string()),
+                owner_kind: MANAGED_OBJECTIVE_OWNER_AGENT_SESSION.to_string(),
+                owner_id: "session-1".to_string(),
+                objective_text: "完成第一版".to_string(),
+                success_criteria: vec!["通过验证".to_string()],
+                budget_policy: None,
+                risk_policy: None,
+                approval_policy: None,
+                continuation_policy: None,
+            },
+        )
+        .unwrap();
+        update_objective_audit_by_owner(
+            &conn,
+            MANAGED_OBJECTIVE_OWNER_AGENT_SESSION,
+            "session-1",
+            ManagedObjectiveAuditUpdate {
+                status: ManagedObjectiveStatus::Completed,
+                last_audit_summary: Some("decision=completed".to_string()),
+                last_evidence_pack_ref: Some(".lime/evidence/pack".to_string()),
+                last_artifact_refs: vec!["artifact.md".to_string()],
+                blocker_reason: None,
+            },
+        )
+        .unwrap();
+
+        let edited = upsert_objective(
+            &conn,
+            ManagedObjectiveUpsert {
+                workspace_id: Some("workspace-1".to_string()),
+                owner_kind: MANAGED_OBJECTIVE_OWNER_AGENT_SESSION.to_string(),
+                owner_id: "session-1".to_string(),
+                objective_text: "完成第二版".to_string(),
+                success_criteria: Vec::new(),
+                budget_policy: None,
+                risk_policy: None,
+                approval_policy: None,
+                continuation_policy: None,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(edited.objective_id, first.objective_id);
+        assert_eq!(edited.created_at, first.created_at);
+        assert_eq!(edited.objective_text, "完成第二版");
+        assert_eq!(edited.status, ManagedObjectiveStatus::Active);
+        assert_eq!(edited.last_audit_summary, None);
+        assert_eq!(edited.last_evidence_pack_ref, None);
+        assert!(edited.last_artifact_refs.is_empty());
+        assert_eq!(edited.blocker_reason, None);
+    }
+
+    #[test]
+    fn missing_agent_session_workspace_resolves_to_none() {
+        let conn = setup_db();
+
+        let workspace_id =
+            get_agent_session_workspace_id(&conn, "session-not-yet-persisted").unwrap();
+
+        assert_eq!(workspace_id, None);
     }
 
     #[test]

@@ -780,6 +780,16 @@ function shouldAutoExpandProcessEntries(
   entries: StreamingProcessEntry[],
   isMessageStreaming: boolean,
 ): boolean {
+  if (
+    entries.some(
+      (entry) =>
+        entry.kind === "tool" &&
+        isImportedProcessMetadata(entry.toolCall.result?.metadata),
+    )
+  ) {
+    return true;
+  }
+
   if (!isMessageStreaming) {
     return false;
   }
@@ -798,6 +808,20 @@ function shouldAutoExpandProcessEntries(
   }
 
   return entries.every((entry) => entry.kind === "thinking");
+}
+
+function isImportedProcessMetadata(metadata: unknown): boolean {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return false;
+  }
+  const record = metadata as Record<string, unknown>;
+  return (
+    record.imported === true ||
+    record.imported_synthetic === true ||
+    record.importedSynthetic === true ||
+    record.source_client === "codex" ||
+    record.sourceClient === "codex"
+  );
 }
 
 const GroupedProcessShell: React.FC<{

@@ -1,5 +1,6 @@
 import type { AgentThreadItem } from "../types";
 import type { AgentToolCallState } from "@/lib/api/agentProtocol";
+import type { Message } from "../types";
 import type {
   GeneralWorkbenchTaskRailItemStatus,
   GeneralWorkbenchTaskRailPlanItem,
@@ -8,6 +9,7 @@ import {
   type MinimalTranslate,
   translateTaskRailText,
 } from "./generalWorkbenchTaskRailText";
+import { extractLatestProposedPlanItems } from "../utils/proposedPlan";
 
 type UpdatePlanStepStatus = "pending" | "in_progress" | "completed";
 
@@ -61,6 +63,12 @@ function normalizeRailStatus(
     return "running";
   }
   return "pending";
+}
+
+function normalizeProposedPlanStatus(
+  status: "pending" | "in_progress" | "completed",
+): GeneralWorkbenchTaskRailItemStatus {
+  return normalizeRailStatus(status);
 }
 
 function readPlanSteps(value: unknown): UpdatePlanStep[] {
@@ -152,5 +160,32 @@ export function buildUpdatePlanItemsFromThreadItems(
     });
   }
 
+  return [];
+}
+
+export function buildProposedPlanItemsFromMessages(
+  messages: readonly Message[] | undefined,
+  t: MinimalTranslate,
+): GeneralWorkbenchTaskRailPlanItem[] {
+  for (const message of [...(messages ?? [])].reverse()) {
+    if (message.role !== "assistant") {
+      continue;
+    }
+    const items = extractLatestProposedPlanItems(message.content);
+    if (items.length === 0) {
+      continue;
+    }
+    return items.map((item, index) => ({
+      id: `message-proposed-plan:${message.id}:${index}:${item.text}`,
+      title: item.text,
+      status: normalizeProposedPlanStatus(item.status),
+      meta: translateTaskRailText(
+        t,
+        "generalWorkbench.taskRail.stepMeta",
+        "步骤 {{index}}",
+        { index: index + 1 },
+      ),
+    }));
+  }
   return [];
 }

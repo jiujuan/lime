@@ -36,6 +36,10 @@ function sessionBelongsToProject(
   session: AsterSessionInfo,
   project: SidebarOpenedProjectSummary,
 ): boolean {
+  if (normalizeId(session.workspace_id) === normalizeId(project.id)) {
+    return true;
+  }
+
   const projectRoot = normalizePath(project.rootPath);
   const sessionCwd = normalizePath(session.working_dir);
   return Boolean(projectRoot && sessionCwd && projectRoot === sessionCwd);

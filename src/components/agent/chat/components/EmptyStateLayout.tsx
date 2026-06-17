@@ -55,6 +55,11 @@ const PageContainer = styled.div.attrs({
     );
 `;
 
+const FIRST_SCREEN_OFFSET_Y = "100px";
+const FIRST_SCREEN_OFFSET_STYLE = {
+  "--empty-state-first-screen-offset-y": FIRST_SCREEN_OFFSET_Y,
+} as React.CSSProperties;
+
 const ContentWrapper = styled.div.attrs({
   className: EMPTY_STATE_CONTENT_WRAPPER_CLASSNAME,
 })`
@@ -69,10 +74,24 @@ const ContentWrapper = styled.div.attrs({
   scroll-snap-align: start;
   scroll-snap-stop: always;
   animation: ${contentReveal} 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
-  padding: 0.45rem 0.25rem 4.7rem;
+  padding: calc(
+      0.45rem +
+        var(--empty-state-first-screen-offset-y, ${FIRST_SCREEN_OFFSET_Y})
+    )
+    0.25rem 4.7rem;
 
   @media (prefers-reduced-motion: reduce) {
     animation: none;
+  }
+
+  @media (max-height: 860px) {
+    padding-top: calc(
+      0.45rem +
+        min(
+          var(--empty-state-first-screen-offset-y, ${FIRST_SCREEN_OFFSET_Y}),
+          8vh
+        )
+    );
   }
 `;
 
@@ -87,19 +106,19 @@ const ComposerGlowFrame = styled.div`
     right: clamp(1.5rem, 9vw, 7rem);
     bottom: -1.1rem;
     z-index: 0;
-    height: clamp(34px, 5vw, 58px);
+    height: clamp(24px, 4vw, 44px);
     border-radius: 999px;
     background: linear-gradient(
       90deg,
       transparent 0%,
-      rgba(187, 247, 208, 0.18) 16%,
-      rgba(110, 231, 183, 0.36) 42%,
-      rgba(45, 212, 191, 0.34) 58%,
-      rgba(186, 230, 253, 0.18) 84%,
+      rgba(187, 247, 208, 0.08) 16%,
+      rgba(110, 231, 183, 0.16) 42%,
+      rgba(45, 212, 191, 0.14) 58%,
+      rgba(186, 230, 253, 0.08) 84%,
       transparent 100%
     );
-    filter: blur(18px);
-    opacity: 0.86;
+    filter: blur(20px);
+    opacity: 0.46;
     pointer-events: none;
   }
 
@@ -306,7 +325,10 @@ export function EmptyStateLayout({
 
   return (
     <PageContainer ref={pageContainerRef}>
-      <ContentWrapper>
+      <ContentWrapper
+        data-testid="empty-state-first-screen"
+        style={FIRST_SCREEN_OFFSET_STYLE}
+      >
         <EmptyStateHero
           eyebrow={heroCopy.eyebrow}
           title=""

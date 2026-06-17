@@ -47,7 +47,15 @@ impl SessionListScope {
     }
 
     pub fn matches_session(&self, workspace_id: Option<&str>, cwd: Option<&str>) -> bool {
-        self.matches_workspace(workspace_id) && self.matches_cwd(cwd)
+        match (
+            self.workspace_id_filters.is_empty(),
+            self.cwd_filters.is_empty(),
+        ) {
+            (true, true) => true,
+            (false, true) => self.matches_workspace(workspace_id),
+            (true, false) => self.matches_cwd(cwd),
+            (false, false) => self.matches_workspace(workspace_id) || self.matches_cwd(cwd),
+        }
     }
 }
 
@@ -135,6 +143,21 @@ mod tests {
 
         assert!(scope.matches_session(Some("workspace-main"), None));
         assert!(!scope.matches_session(Some("workspace-other"), None));
+        assert!(!scope.matches_session(None, None));
+    }
+
+    #[test]
+    fn scope_matches_workspace_or_cwd_when_workspace_expands_to_root_path() {
+        let scope = SessionListScope::from_params(&AgentSessionListParams {
+            workspace_id: Some("workspace-main".to_string()),
+            cwd: Some(AgentSessionCwdFilter::One("/repo/main".to_string())),
+            ..AgentSessionListParams::default()
+        });
+
+        assert!(scope.matches_session(Some("workspace-main"), None));
+        assert!(scope.matches_session(None, Some("/repo/main/")));
+        assert!(scope.matches_session(Some("workspace-other"), Some("/repo/main")));
+        assert!(!scope.matches_session(Some("workspace-other"), Some("/repo/other")));
         assert!(!scope.matches_session(None, None));
     }
 }

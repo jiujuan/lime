@@ -62,7 +62,6 @@ const LIVE_WEB_TOOL_PROMPT = [
 const MODEL_AVAILABILITY_PROMPT = "请只回复 QC_OK。";
 const MAX_MODEL_AVAILABILITY_CANDIDATES = 12;
 const FAST_RESPONSE_MODE_STORAGE_KEY = "lime:agent-fast-response-mode";
-const TASK_CENTER_OPEN_TASK_EVENT = "lime:task-center:open-task";
 const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
 const APP_SERVER_DRAIN_EVENTS_COMMAND = "app_server_drain_events";
 const APP_SERVER_METHOD_AGENT_SESSION_READ = "agentSession/read";
@@ -1371,38 +1370,39 @@ function isLikelyDetachedBlankTaskSnapshot(snapshot) {
   );
 }
 
-async function dispatchTaskCenterOpenTask(page, sessionId, workspaceId) {
+async function openSessionFromSidebar(page, sessionId) {
   return page
     .evaluate(
-      ({
-        eventName,
-        sessionId: targetSessionId,
-        workspaceId: targetWorkspaceId,
-      }) => {
+      ({ sessionId: targetSessionId }) => {
         const normalizedSessionId = String(targetSessionId || "").trim();
         if (!normalizedSessionId) {
-          return { dispatched: false, reason: "missing-session-id" };
+          return { opened: false, reason: "missing-session-id" };
         }
 
-        const event = new CustomEvent(eventName, {
-          cancelable: true,
-          detail: {
-            sessionId: normalizedSessionId,
-            workspaceId: targetWorkspaceId || null,
-            source: "conversation_shelf",
-          },
+        const buttons = Array.from(
+          document.querySelectorAll(
+            '[data-testid="app-sidebar-conversation-open"], button',
+          ),
+        );
+        const target = buttons.find((button) => {
+          const label = [
+            button.getAttribute("data-session-id") || "",
+            button.getAttribute("title") || "",
+            button.getAttribute("aria-label") || "",
+            button.textContent || "",
+          ].join("\n");
+          return label.includes(normalizedSessionId);
         });
-        const notCanceled = window.dispatchEvent(event);
-        return { dispatched: true, canceled: !notCanceled };
+        if (!(target instanceof HTMLElement)) {
+          return { opened: false, reason: "session-entry-missing" };
+        }
+        target.click();
+        return { opened: true, reason: "clicked-sidebar-session" };
       },
-      {
-        eventName: TASK_CENTER_OPEN_TASK_EVENT,
-        sessionId,
-        workspaceId,
-      },
+      { sessionId },
     )
     .catch((error) => ({
-      dispatched: false,
+      opened: false,
       reason: error instanceof Error ? error.message : String(error),
     }));
 }
@@ -1889,8 +1889,8 @@ async function main() {
     summary.longTurnId = longTurnId;
     summary.longSubmitAppServer = appServerTurnEvidenceFromRecord(longSubmit);
     summary.longSubmitTurnConfig = longRequest.turn_config || null;
-    summary.longTurnOpenDispatches = [
-      await dispatchTaskCenterOpenTask(page, sessionId, workspaceId),
+    summary.longTurnOpenAttempts = [
+      await openSessionFromSidebar(page, sessionId),
     ];
     summary.longTurnVisibleSnapshot = await waitForCondition(
       "等待长 turn 会话挂载",
@@ -1910,7 +1910,7 @@ async function main() {
       return null;
     });
 
-    let lastOpenDispatchAt = Date.now();
+    let lastOpenAttemptAt = Date.now();
     const firstDelta = await waitForCondition(
       "等待首个流式增量与停止按钮",
       async () => {
@@ -1920,11 +1920,11 @@ async function main() {
         }
         if (
           isLikelyDetachedBlankTaskSnapshot(snapshot) &&
-          Date.now() - lastOpenDispatchAt >= 2_000
+          Date.now() - lastOpenAttemptAt >= 2_000
         ) {
-          lastOpenDispatchAt = Date.now();
-          summary.longTurnOpenDispatches.push(
-            await dispatchTaskCenterOpenTask(page, sessionId, workspaceId),
+          lastOpenAttemptAt = Date.now();
+          summary.longTurnOpenAttempts.push(
+            await openSessionFromSidebar(page, sessionId),
           );
         }
         const session = await readAppServerSession(
@@ -2067,10 +2067,9 @@ async function main() {
       .catch(() => undefined);
 
     logStage("restore-interrupted-session-before-recovery");
-    summary.beforeRecoveryOpenDispatch = await dispatchTaskCenterOpenTask(
+    summary.beforeRecoveryOpenAttempt = await openSessionFromSidebar(
       page,
       sessionId,
-      workspaceId,
     );
     summary.beforeRecoverySnapshot = await waitForCondition(
       "等待中断会话重新挂载",
@@ -2204,8 +2203,8 @@ async function main() {
       summary.recoveryDetachedSnapshot = detachedSnapshot;
       if (isLikelyDetachedBlankTaskSnapshot(detachedSnapshot)) {
         logStage("restore-session-after-recovery-persisted");
-        summary.recoveryVisibleRestoreDispatch =
-          await dispatchTaskCenterOpenTask(page, followSessionId, workspaceId);
+        summary.recoveryVisibleRestoreAttempt =
+          await openSessionFromSidebar(page, followSessionId);
         recoverySnapshot = await waitForCondition(
           "等待重新打开目标会话后 GUI 出现恢复结果",
           async () => {

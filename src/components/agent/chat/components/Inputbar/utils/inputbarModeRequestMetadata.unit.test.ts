@@ -17,6 +17,7 @@ describe("inputbarModeRequestMetadata", () => {
       },
       {
         goalEnabled: true,
+        objectiveText: "持续推进目标",
         planEnabled: true,
         source: "inputbar",
         subagentEnabled: true,
@@ -45,7 +46,7 @@ describe("inputbarModeRequestMetadata", () => {
           status: "active",
           set: {
             threadId: "thread-goal-1",
-            objective: null,
+            objective: "持续推进目标",
             status: "active",
             tokenBudget: null,
           },
@@ -56,13 +57,39 @@ describe("inputbarModeRequestMetadata", () => {
           status: "active",
           set: {
             threadId: "thread-goal-1",
-            objective: null,
+            objective: "持续推进目标",
             status: "active",
             tokenBudget: null,
           },
         },
+        managed_objective: {
+          objective_text: "持续推进目标",
+          source: "inputbar",
+        },
       },
     });
+  });
+
+  it("计划模式应作为 Codex collaboration mode 投影，且不创建 update_plan 工具语义", () => {
+    const metadata = buildInputbarModeRequestMetadata(undefined, {
+      planEnabled: true,
+      source: "plus_menu",
+    });
+
+    expect(metadata).toMatchObject({
+      harness: {
+        task_mode_enabled: true,
+        collaboration_mode: {
+          mode: "plan",
+          source: "plus_menu",
+        },
+        preferences: {
+          task: true,
+          task_mode: true,
+        },
+      },
+    });
+    expect(JSON.stringify(metadata)).not.toContain("update_plan");
   });
 
   it("未开启 plan 时不生成 toolPreferencesOverride", () => {

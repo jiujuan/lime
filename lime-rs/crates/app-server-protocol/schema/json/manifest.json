@@ -256,6 +256,14 @@
     },
     {
       "kind": "request",
+      "method": "conversationImport/thread/commit"
+    },
+    {
+      "kind": "request",
+      "method": "conversationImport/thread/preview"
+    },
+    {
+      "kind": "request",
       "method": "diagnostics/logStorage/read"
     },
     {
@@ -1193,11 +1201,21 @@
       "ConnectPayload",
       "ConnectRelayApiKeySaveParams",
       "ConnectRelayApiKeySaveResponse",
+      "ConversationImportFidelitySummary",
+      "ConversationImportPreviewDryRun",
+      "ConversationImportPreviewEvent",
+      "ConversationImportPreviewMessage",
+      "ConversationImportPreviewSummary",
       "ConversationImportSourceClient",
+      "ConversationImportSourceProvenance",
       "ConversationImportSourceScanParams",
       "ConversationImportSourceScanResponse",
       "ConversationImportSourceStatus",
       "ConversationImportSourceSummary",
+      "ConversationImportThreadCommitParams",
+      "ConversationImportThreadCommitResponse",
+      "ConversationImportThreadPreviewParams",
+      "ConversationImportThreadPreviewResponse",
       "ConversationImportThreadStatus",
       "DiagnosticsCapabilityRoutingMetricsSnapshot",
       "DiagnosticsIdempotencyDiagnostics",

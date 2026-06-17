@@ -2329,9 +2329,15 @@ export function expectAppServerResponse<T>(
 }
 
 export function isAppServerJsonRpcNotification(
-  message: AppServerJsonRpcMessage,
+  message: unknown,
 ): message is AppServerJsonRpcNotification {
-  return isJsonRpcNotification(message);
+  if (!message || typeof message !== "object" || Array.isArray(message)) {
+    return false;
+  }
+  if (!("method" in message) || "id" in message) {
+    return false;
+  }
+  return isJsonRpcNotification(message as AppServerJsonRpcMessage);
 }
 
 export function isAppServerJsonRpcResponse<T = unknown>(

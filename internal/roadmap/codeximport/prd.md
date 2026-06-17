@@ -3,7 +3,7 @@ title: Lime Codex 对话导入与跨 Agent 客户端兼容 PRD
 status: draft
 repo: lime
 owner: app-server-runtime
-updated: 2026-06-16
+updated: 2026-06-17
 ---
 
 # Lime Codex 对话导入与跨 Agent 客户端兼容 PRD
@@ -197,6 +197,24 @@ Lime SessionDetail 是唯一内部事实源
 | Artifacts | 文件变更、截图、图片、sidecar refs。 |
 | Provenance | 原始路径、source event id、import adapter version。 |
 
+### 8.4 Codex Fidelity Matrix
+
+Codex 导入预览和确认结果必须同时回答“导入了什么”和“哪些细节被完整还原 / 仅保留来源”。当前口径如下：
+
+| Codex source item | Lime 投影 | Fidelity 计数 | Provenance |
+| --- | --- | --- | --- |
+| `event_msg.user_message` / `response_item.message(role=user)` | `AgentInput.text` + `AgentInput.attachments`，read model user message | `messages`、`attachments` | message `provenance`、turn `userSourceProvenance` |
+| `event_msg.agent_message` / `response_item.message(role=assistant)` | `message.delta(imported=true)`，read model assistant message | `messages` | `message.delta.sourceProvenance` |
+| `response_item.reasoning` | 只计入摘要，后续 run rail 可下钻 source ref | `reasoning` | item provenance |
+| `function_call/custom_tool_call/tool_search/web_search` 及 output | `tool.started/result/failed`，必要时 `command.started/output/exited` | `tools`、`commands`、`webSearch` | runtime event `sourceProvenance` |
+| `event_msg.mcp_tool_call_end` / `web_search_end` | `tool.result/failed` | `tools`、`mcp`、`webSearch` | runtime event `sourceProvenance` |
+| `event_msg.patch_apply_end` | `patch.applied/failed` | `patches` | runtime event `sourceProvenance` |
+| `exec_approval_request` / `apply_patch_approval_request` | imported read-only `action.required/action.resolved` | `approvals` | runtime event `sourceProvenance` |
+| compacted / turn context / unknown item | 不写运行态事件，只保留 summary warning 和 item provenance 口径 | `unsupported`、`provenanceOnly` | 不阻塞其它 item |
+| 超预算高容量 tool event | 保留代表性 command/tool/patch/action，超预算进入 warning | `budgetDropped` | 仍保留 session/turn fidelity summary |
+
+`ConversationImportFidelitySummary` 的计数口径是 source item / mapped runtime event 级别，不承诺是去重后的 unique tool call 数。这样可以让导入预览、导入后 session metadata、evidence pack 和 Agent Workspace run rail 使用同一套事实，而不需要另建一套外部 transcript trace store。
+
 ## 9. 核心需求
 
 ### 9.1 Source discovery
@@ -344,6 +362,7 @@ External transcript
 2. `AgentRuntimeThreadReadModel` 是继续执行后的线程状态事实源。
 3. Evidence / replay / review 只能消费同源 read model 与 export context。
 4. 外部 transcript 只作为 migration/import source，不作为长期产品 fallback。
+5. item 级来源细节进入 `ConversationImportSourceProvenance`、runtime event payload、turn metadata 和 evidence pack；不新增独立 trace store，也不让 renderer 直接引用 Codex rollout 作为 UI 事实源。
 
 ## 12. 时序图
 
@@ -524,16 +543,18 @@ export interface ImportedConversationBundle {
 
 MVP 完成时必须满足：
 
-- [ ] 新增 Codex source discovery，默认识别 `CODEX_HOME` 或平台默认 `.codex`。
-- [ ] 可分页列出 Codex `threads` metadata。
-- [ ] 可读取一个 rollout JSONL 并生成 read-only preview。
-- [ ] 可 dry-run 显示将导入的 message / timeline / artifact / unsupported event 数量。
-- [ ] 可 commit 导入为 Lime 会话，并通过 `agentSession/read` 读取。
-- [ ] 导入会话可打开 Agent UI projection。
-- [ ] 导入会话可继续新 turn，且新 turn 走 Lime runtime。
-- [ ] evidence/export 能包含导入 provenance。
-- [ ] renderer 不直接读取外部 source 文件。
-- [ ] 结构测试覆盖敏感文件 denylist、unknown event、幂等导入、missing rollout。
+- [x] 新增 Codex source discovery，默认识别 `CODEX_HOME` 或平台默认 `.codex`。
+- [x] 可分页列出 Codex `threads` metadata。
+- [x] 可读取一个 rollout JSONL 并生成 read-only preview。
+- [x] 可 dry-run 显示将导入的 message / timeline / artifact / unsupported event 数量。`summary.dryRun` 已显式返回将创建/复用 session、Lime 投影写入消息数、turn 数、timeline item 数、附件数和 unsupported item 数；`summary.messageCount` 仍保留 Codex raw message item 计数。
+- [x] 可 commit 导入为 Lime 会话，并通过 `agentSession/read` 读取。
+- [x] 导入会话可打开 Agent UI projection。
+- [x] 导入会话可继续新 turn，且新 turn 走 Lime runtime。
+- [x] evidence/export 能包含导入 provenance。
+- [x] preview message/event、导入 runtime event、turn metadata 和 assistant delta 均带 item 级 `ConversationImportSourceProvenance`，可回溯 Codex rollout line seq / event type / payload type / call id / source path。
+- [x] preview/commit 返回 `ConversationImportFidelitySummary`，并把 `codexImportFidelity` 写入 session business object 与 turn metadata，UI 可展示工具、命令、补丁、审批、MCP、搜索、unsupported 和预算裁剪覆盖度。
+- [x] renderer 不直接读取外部 source 文件。
+- [ ] 结构测试覆盖敏感文件 denylist、unknown event、幂等导入、missing rollout。当前已覆盖 unknown/unsupported 计数、幂等导入、missing rollout；敏感文件 denylist 仍需补结构测试。
 
 ## 17. 里程碑
 

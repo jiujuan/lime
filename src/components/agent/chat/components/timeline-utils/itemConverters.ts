@@ -108,6 +108,35 @@ export function toToolCallState(item: AgentThreadItem): ToolCallState | null {
         startTime: new Date(item.started_at),
         endTime: item.completed_at ? new Date(item.completed_at) : undefined,
       };
+    case "patch":
+      return {
+        id: item.id,
+        name: "apply_patch",
+        arguments: JSON.stringify(
+          { paths: item.paths ?? item.summary ?? [] },
+          null,
+          2,
+        ),
+        status: mapItemStatus(item.status),
+        result:
+          item.stdout !== undefined ||
+          item.stderr !== undefined ||
+          item.success !== undefined
+            ? {
+                success:
+                  item.success ??
+                  (item.status === "completed" && item.stderr === undefined),
+                output: item.stdout || item.text || "",
+                error: item.stderr,
+                metadata:
+                  item.metadata && typeof item.metadata === "object"
+                    ? (item.metadata as Record<string, unknown>)
+                    : undefined,
+              }
+            : undefined,
+        startTime: new Date(item.started_at),
+        endTime: item.completed_at ? new Date(item.completed_at) : undefined,
+      };
     case "web_search":
       return {
         id: item.id,

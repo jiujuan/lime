@@ -71,6 +71,8 @@
 
 综合静态分：`3.5 / 5`。Lime 不是没有底层能力，问题已经从“缺统一控制面”收敛为“已有同一区域只读 run control surface，且恢复主链已经有正式证据，但控制闭环仍不完整”。这些事实源仍分散在 runtime strip、general workbench、coding panels、evidence panels 和输入栏里，不过现在已能在任务轨道里以单一只读 surface 方式收敛展示 environment / run / plan / goal / sources / participants / outputs；其中 plan 清单不再只依赖当前 `workflowSteps`，历史 plan thread item 和 `todoItems` 也能恢复到同一区域。本轮新增 `agent-workspace-run-control-restore.20260616-1255.json`，证明 deterministic UI 恢复态可恢复 environment、objective、plan、sources、subagents、diffstat、approval 和 output，真实 Electron session history fixture 也证明 current `agentSession/list/read/update` 的归档、恢复和重启 readback 链路。
 
+Codex 导入会话现在给 run rail 补齐了一类关键前置事实：`ConversationImportSourceProvenance` 进入 preview message/event、导入 runtime event payload、turn metadata 和 assistant delta；`ConversationImportFidelitySummary` 进入 session business object 与 turn metadata。前端 `GeneralWorkbenchTaskRail` 已从 `agentSession/read.detail.items[].metadata.sourceProvenance` 和 `codexImportFidelity` 投影出 `imported-source` 上下文项，展示来源线程、已还原/部分保留状态，以及 messages / reasoning / commands / tools / patches / approvals / web search 计数。后续 Sources slot / Tool status / Plan detail 下钻不得重新读取 Codex rollout 或从 assistant 文本猜测来源，应优先消费 `agentSession/read`、`evidence/export` 中的这些结构化事实。这样导入历史和新运行事件可以在同一 run control surface 中按 source event seq、payload type、call id、tool/command/patch/approval 计数定位。
+
 ## 5. 支持与完善路径
 
 ### 5.1 先定义单一投影对象
@@ -107,6 +109,8 @@ AgentRunControlSurfaceViewModel
     sources[]
     artifactRefs[]
     evidenceRefs[]
+    sourceProvenance[]
+    fidelitySummary
   controls
     permissionProfile
     sandboxProfile

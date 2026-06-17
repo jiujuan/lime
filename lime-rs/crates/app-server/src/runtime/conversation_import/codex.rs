@@ -1,0 +1,743 @@
+use app_server_protocol::{
+    ConversationImportFidelitySummary, ConversationImportPreviewEvent,
+    ConversationImportPreviewMessage, ConversationImportPreviewSummary,
+    ConversationImportSourceClient, ConversationImportSourceProvenance,
+    ConversationImportSourceScanParams, ConversationImportSourceScanResponse,
+    ConversationImportSourceStatus, ConversationImportSourceSummary,
+    ConversationImportThreadPreviewParams, ConversationImportThreadPreviewResponse,
+    ConversationImportThreadStatus, ImportedThreadSummary,
+};
+use chrono::{SecondsFormat, Utc};
+use serde::Deserialize;
+use serde_json::Value;
+use std::fs;
+use std::io::{BufRead, BufReader, Read};
+use std::path::{Path, PathBuf};
+
+use crate::RuntimeCoreError;
+
+mod dry_run;
+pub(super) mod events;
+mod media;
+mod messages;
+mod paths;
+mod state;
+
+const DEFAULT_LIMIT: usize = 50;
+const MAX_LIMIT: usize = 200;
+const DEFAULT_PREVIEW_LIMIT: usize = 20;
+pub(super) const MAX_PREVIEW_LIMIT: usize = 100;
+pub(super) const MAX_PREVIEW_TEXT_BYTES: usize = 4_000;
+pub(super) const USER_MESSAGE_BEGIN: &str = "## My request for Codex:";
+const COMPRESSED_ROLLOUT_SUFFIX: &str = ".zst";
+
+pub(super) fn scan_source(
+    params: ConversationImportSourceScanParams,
+) -> Result<ConversationImportSourceScanResponse, RuntimeCoreError> {
+    let source_root = resolve_home(params.source_root.as_deref()).ok_or_else(|| {
+        RuntimeCoreError::Backend("unable to resolve Codex home directory".to_string())
+    })?;
+    let limit = params.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
+    let cursor = parse_cursor(params.cursor.as_deref())?;
+    let include_archived = params.include_archived.unwrap_or(false);
+    let project_path = normalize_filter(params.project_path.as_deref());
+    let query = normalize_filter(params.query.as_deref()).map(|value| value.to_lowercase());
+
+    if !source_root.is_dir() {
+        return Ok(ConversationImportSourceScanResponse {
+            source: source_summary(
+                ConversationImportSourceClient::Codex,
+                ConversationImportSourceStatus::Missing,
+                Some(&source_root),
+                false,
+                0,
+                None,
+                Some("Codex home directory does not exist".to_string()),
+            ),
+            threads: Vec::new(),
+            next_cursor: None,
+        });
+    }
+
+    let state_path = state::newest_state_db(&source_root);
+    let mut threads = match state_path.as_deref() {
+        Some(path) => state::scan_state_db(path).unwrap_or_else(|_| Vec::new()),
+        None => Vec::new(),
+    };
+
+    if threads.is_empty() {
+        threads = scan_session_index(&source_root);
+    }
+
+    for thread in &mut threads {
+        repair_thread_source_path(&source_root, thread);
+    }
+
+    let filtered = threads
+        .into_iter()
+        .filter(|thread| thread.source_path.is_some())
+        .filter(|thread| include_archived || !thread.archived)
+        .filter(|thread| match project_path.as_deref() {
+            Some(project_path) => thread.cwd.as_deref() == Some(project_path),
+            None => true,
+        })
+        .filter(|thread| match query.as_deref() {
+            Some(query) => {
+                thread
+                    .title
+                    .as_deref()
+                    .unwrap_or_default()
+                    .to_lowercase()
+                    .contains(query)
+                    || thread.source_thread_id.to_lowercase().contains(query)
+                    || thread
+                        .cwd
+                        .as_deref()
+                        .unwrap_or_default()
+                        .to_lowercase()
+                        .contains(query)
+            }
+            None => true,
+        })
+        .collect::<Vec<_>>();
+
+    let total = filtered.len();
+    let page = filtered
+        .into_iter()
+        .skip(cursor)
+        .take(limit)
+        .collect::<Vec<_>>();
+    let next_cursor = (cursor + page.len() < total).then(|| (cursor + page.len()).to_string());
+
+    Ok(ConversationImportSourceScanResponse {
+        source: source_summary(
+            ConversationImportSourceClient::Codex,
+            ConversationImportSourceStatus::Ready,
+            Some(&source_root),
+            true,
+            total,
+            state_path.as_deref(),
+            None,
+        ),
+        threads: page,
+        next_cursor,
+    })
+}
+
+pub(super) fn preview_thread(
+    params: ConversationImportThreadPreviewParams,
+) -> Result<ConversationImportThreadPreviewResponse, RuntimeCoreError> {
+    let source_root = resolve_home(params.source_root.as_deref()).ok_or_else(|| {
+        RuntimeCoreError::Backend("unable to resolve Codex home directory".to_string())
+    })?;
+    if !source_root.is_dir() {
+        return Err(RuntimeCoreError::Backend(
+            "Codex home directory does not exist".to_string(),
+        ));
+    }
+
+    let (mut source_path, indexed_thread) = match normalize_filter(params.source_path.as_deref()) {
+        Some(path) => (PathBuf::from(path), None),
+        None => {
+            let thread_id =
+                normalize_filter(params.source_thread_id.as_deref()).ok_or_else(|| {
+                    RuntimeCoreError::Backend(
+                        "conversation import preview requires sourceThreadId or sourcePath"
+                            .to_string(),
+                    )
+                })?;
+            let thread = find_thread(&source_root, &thread_id).ok_or_else(|| {
+                RuntimeCoreError::Backend(
+                    "unable to resolve Codex rollout path for thread".to_string(),
+                )
+            })?;
+            let path = thread
+                .source_path
+                .as_deref()
+                .map(PathBuf::from)
+                .ok_or_else(|| {
+                    RuntimeCoreError::Backend(
+                        "unable to resolve Codex rollout path for thread".to_string(),
+                    )
+                })?;
+            (path, Some(thread))
+        }
+    };
+    if !source_path.is_absolute() {
+        source_path = source_root.join(source_path);
+    }
+    if !source_path.is_file() {
+        return Err(RuntimeCoreError::Backend(format!(
+            "Codex rollout file does not exist: {}",
+            source_path.display()
+        )));
+    }
+
+    let mut preview = parse_rollout(
+        &source_path,
+        CodexRolloutParseMode::Preview {
+            limit: params.limit.unwrap_or(DEFAULT_PREVIEW_LIMIT),
+        },
+    )?;
+    if let Some(indexed_thread) = indexed_thread {
+        merge_indexed_thread_metadata(&mut preview.thread, indexed_thread);
+    }
+    preview.thread.source_path = Some(path_to_string(&source_path));
+    Ok(ConversationImportThreadPreviewResponse {
+        source: source_summary(
+            ConversationImportSourceClient::Codex,
+            ConversationImportSourceStatus::Ready,
+            Some(&source_root),
+            true,
+            1,
+            state::newest_state_db(&source_root).as_deref(),
+            Some(
+                "Preview is read-only. Import commit still requires user confirmation.".to_string(),
+            ),
+        ),
+        thread: preview.thread,
+        summary: preview.summary,
+        messages: preview.messages,
+        events: preview.events,
+    })
+}
+
+pub(super) struct CodexRolloutPreview {
+    pub(super) thread: ImportedThreadSummary,
+    pub(super) summary: ConversationImportPreviewSummary,
+    pub(super) messages: Vec<ConversationImportPreviewMessage>,
+    pub(super) events: Vec<ConversationImportPreviewEvent>,
+    pub(super) timeline: Vec<ImportedTimelineItem>,
+}
+
+pub(super) fn parse_rollout_for_import(
+    path: &Path,
+) -> Result<CodexRolloutPreview, RuntimeCoreError> {
+    parse_rollout(path, CodexRolloutParseMode::Import)
+}
+
+pub(super) enum CodexRolloutParseMode {
+    Preview { limit: usize },
+    Import,
+}
+
+fn parse_rollout(
+    path: &Path,
+    mode: CodexRolloutParseMode,
+) -> Result<CodexRolloutPreview, RuntimeCoreError> {
+    let limit = match mode {
+        CodexRolloutParseMode::Preview { limit } => limit.clamp(1, MAX_PREVIEW_LIMIT),
+        CodexRolloutParseMode::Import => usize::MAX,
+    };
+    let reader = open_rollout_reader(path)?;
+
+    let mut thread = ImportedThreadSummary {
+        source_client: ConversationImportSourceClient::Codex,
+        source_thread_id: path
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .unwrap_or("unknown")
+            .to_string(),
+        source_path: Some(path_to_string(path)),
+        import_status: ConversationImportThreadStatus::NotImported,
+        ..Default::default()
+    };
+    let mut summary = ConversationImportPreviewSummary::default();
+    let mut messages = Vec::new();
+    let mut events = Vec::new();
+    let mut timeline = Vec::new();
+
+    for (line_index, line) in BufReader::new(reader)
+        .lines()
+        .map_while(Result::ok)
+        .enumerate()
+    {
+        summary.line_count += 1;
+        let Ok(value) = serde_json::from_str::<Value>(&line) else {
+            summary.unsupported_count += 1;
+            summary.fidelity.unsupported += 1;
+            continue;
+        };
+        let timestamp = value
+            .get("timestamp")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned);
+        let source_event_type = value.get("type").and_then(Value::as_str);
+        let source_event_seq = line_index + 1;
+        let provenance =
+            events::source_provenance(source_event_type, source_event_seq, value.get("payload"));
+        match source_event_type {
+            Some("session_meta") => apply_session_meta_to_thread(&mut thread, value.get("payload")),
+            Some("response_item") => {
+                if let Some(message) = messages::response_item_preview_message(
+                    value.get("payload"),
+                    timestamp,
+                    &mode,
+                    Some(provenance.clone()),
+                ) {
+                    let timeline_message = message.clone();
+                    if messages::push_preview_message(&mut messages, message, limit) {
+                        summary.truncated = true;
+                    }
+                    messages::push_timeline_message(&mut timeline, timeline_message);
+                } else {
+                    let runtime_events = events::response_item_runtime_events(
+                        value.get("payload"),
+                        Some(&provenance),
+                    );
+                    record_response_item_fidelity(
+                        &mut summary.fidelity,
+                        value.get("payload"),
+                        runtime_events.len(),
+                    );
+                    if runtime_events.is_empty() {
+                        summary.unsupported_count += 1;
+                        summary.fidelity.unsupported += 1;
+                        summary.fidelity.provenance_only += 1;
+                    } else {
+                        timeline.extend(
+                            runtime_events
+                                .into_iter()
+                                .map(ImportedTimelineItem::RuntimeEvent),
+                        );
+                    }
+                }
+            }
+            Some("event_msg") => {
+                summary.rollout_event_items += 1;
+                if let Some(message) = messages::event_msg_preview_message(
+                    value.get("payload"),
+                    timestamp.clone(),
+                    &mode,
+                    Some(provenance.clone()),
+                ) {
+                    if thread.title.is_none() && message.role == "user" {
+                        thread.title =
+                            Some(messages::truncate_preview_text(&message.text, 80).text);
+                    }
+                    let timeline_message = message.clone();
+                    if messages::push_preview_message(&mut messages, message, limit) {
+                        summary.truncated = true;
+                    }
+                    messages::push_timeline_message(&mut timeline, timeline_message);
+                } else {
+                    let runtime_events =
+                        events::event_msg_runtime_events(value.get("payload"), Some(&provenance));
+                    record_event_msg_fidelity(
+                        &mut summary.fidelity,
+                        value.get("payload"),
+                        runtime_events.len(),
+                    );
+                    timeline.extend(
+                        runtime_events
+                            .into_iter()
+                            .map(ImportedTimelineItem::RuntimeEvent),
+                    );
+                }
+                if events.len() >= limit {
+                    summary.truncated = true;
+                } else if let Some(event) =
+                    messages::event_preview(value.get("payload"), timestamp, Some(provenance))
+                {
+                    events.push(event);
+                }
+            }
+            Some("compacted") | Some("turn_context") | Some("inter_agent_communication") => {
+                summary.unsupported_count += 1;
+                summary.fidelity.unsupported += 1;
+                summary.fidelity.provenance_only += 1;
+            }
+            _ => {
+                summary.unsupported_count += 1;
+                summary.fidelity.unsupported += 1;
+                summary.fidelity.provenance_only += 1;
+            }
+        }
+    }
+
+    enrich_preview_provenance(
+        &mut messages,
+        &mut events,
+        &mut timeline,
+        &thread.source_thread_id,
+        Some(path_to_string(path)),
+    );
+    dry_run::apply_summary(&mut summary, &timeline);
+    if summary.unsupported_count > 0 {
+        summary
+            .warnings
+            .push("Some Codex rollout items are counted but not shown in preview.".to_string());
+    }
+    Ok(CodexRolloutPreview {
+        thread,
+        summary,
+        messages,
+        events,
+        timeline,
+    })
+}
+
+#[derive(Debug, Clone)]
+pub(super) enum ImportedTimelineItem {
+    Message(ConversationImportPreviewMessage),
+    RuntimeEvent(events::ImportedRuntimeEvent),
+}
+
+pub(super) fn find_thread(source_root: &Path, thread_id: &str) -> Option<ImportedThreadSummary> {
+    let state_threads = state::newest_state_db(source_root)
+        .and_then(|state_path| state::scan_state_db(&state_path).ok())
+        .unwrap_or_default();
+    state_threads
+        .into_iter()
+        .chain(scan_session_index(source_root))
+        .filter(|thread| thread.source_thread_id == thread_id)
+        .find_map(|mut thread| {
+            repair_thread_source_path(source_root, &mut thread).then_some(thread)
+        })
+}
+
+fn repair_thread_source_path(source_root: &Path, thread: &mut ImportedThreadSummary) -> bool {
+    if let Some(path) =
+        paths::resolve_existing_source_path(source_root, thread.source_path.as_deref())
+    {
+        thread.source_path = Some(path_to_string(&path));
+        return true;
+    }
+
+    if let Some(path) = paths::find_rollout_path_by_thread_id(
+        source_root,
+        &thread.source_thread_id,
+        thread.archived,
+    ) {
+        thread.source_path = Some(path_to_string(&path));
+        return true;
+    }
+
+    thread.source_path = None;
+    false
+}
+
+pub(super) fn merge_indexed_thread_metadata(
+    thread: &mut ImportedThreadSummary,
+    indexed: ImportedThreadSummary,
+) {
+    thread.source_thread_id = indexed.source_thread_id;
+    thread.title = indexed.title.or_else(|| thread.title.clone());
+    thread.created_at = indexed.created_at.or_else(|| thread.created_at.clone());
+    thread.updated_at = indexed.updated_at.or_else(|| thread.updated_at.clone());
+    thread.cwd = indexed.cwd.or_else(|| thread.cwd.clone());
+    thread.source = indexed.source.or_else(|| thread.source.clone());
+    thread.model_provider = indexed
+        .model_provider
+        .or_else(|| thread.model_provider.clone());
+    thread.archived = indexed.archived;
+    thread.import_status = indexed.import_status;
+    if let Some(metadata) = indexed
+        .metadata
+        .and_then(|metadata| metadata.as_object().cloned())
+    {
+        state::merge_thread_metadata(thread, metadata);
+    }
+}
+
+fn open_rollout_reader(path: &Path) -> Result<Box<dyn Read>, RuntimeCoreError> {
+    let file = fs::File::open(path).map_err(|err| {
+        RuntimeCoreError::Backend(format!(
+            "unable to read Codex rollout file {}: {err}",
+            path.display()
+        ))
+    })?;
+    if path_to_string(path).ends_with(COMPRESSED_ROLLOUT_SUFFIX) {
+        let decoder = zstd::stream::read::Decoder::new(file).map_err(|err| {
+            RuntimeCoreError::Backend(format!(
+                "unable to decode compressed Codex rollout file {}: {err}",
+                path.display()
+            ))
+        })?;
+        return Ok(Box::new(decoder));
+    }
+    Ok(Box::new(file))
+}
+
+fn apply_session_meta_to_thread(thread: &mut ImportedThreadSummary, payload: Option<&Value>) {
+    let Some(payload) = payload else {
+        return;
+    };
+    let meta = payload.get("meta").unwrap_or(payload);
+    if let Some(id) = meta.get("id").and_then(Value::as_str) {
+        thread.source_thread_id = id.to_string();
+    }
+    if thread.created_at.is_none() {
+        thread.created_at = meta
+            .get("timestamp")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned);
+    }
+    if thread.updated_at.is_none() {
+        thread.updated_at = thread.created_at.clone();
+    }
+    thread.cwd = meta
+        .get("cwd")
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
+        .or_else(|| thread.cwd.clone());
+    thread.source = meta
+        .get("source")
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
+        .or_else(|| thread.source.clone());
+    thread.model_provider = meta
+        .get("model_provider")
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
+        .or_else(|| thread.model_provider.clone());
+    let metadata = state::codex_thread_metadata_from_session_meta(meta);
+    if !metadata.is_empty() {
+        state::merge_thread_metadata(thread, metadata);
+    }
+}
+
+fn enrich_preview_provenance(
+    messages: &mut [ConversationImportPreviewMessage],
+    events: &mut [ConversationImportPreviewEvent],
+    timeline: &mut [ImportedTimelineItem],
+    source_thread_id: &str,
+    source_path: Option<String>,
+) {
+    for message in messages {
+        if let Some(provenance) = message.provenance.take() {
+            message.provenance = Some(events::enrich_source_provenance(
+                provenance,
+                Some(source_thread_id),
+                source_path.as_deref(),
+            ));
+        }
+    }
+    for event in events {
+        if let Some(provenance) = event.provenance.take() {
+            event.provenance = Some(events::enrich_source_provenance(
+                provenance,
+                Some(source_thread_id),
+                source_path.as_deref(),
+            ));
+        }
+    }
+    for item in timeline {
+        match item {
+            ImportedTimelineItem::Message(message) => {
+                if let Some(provenance) = message.provenance.take() {
+                    message.provenance = Some(events::enrich_source_provenance(
+                        provenance,
+                        Some(source_thread_id),
+                        source_path.as_deref(),
+                    ));
+                }
+            }
+            ImportedTimelineItem::RuntimeEvent(event) => {
+                enrich_runtime_event_provenance(event, source_thread_id, source_path.as_deref());
+            }
+        }
+    }
+}
+
+fn enrich_runtime_event_provenance(
+    event: &mut events::ImportedRuntimeEvent,
+    source_thread_id: &str,
+    source_path: Option<&str>,
+) {
+    let Some(Value::Object(object)) = event.payload.get("sourceProvenance").cloned() else {
+        return;
+    };
+    let Ok(provenance) =
+        serde_json::from_value::<ConversationImportSourceProvenance>(Value::Object(object))
+    else {
+        return;
+    };
+    let provenance =
+        events::enrich_source_provenance(provenance, Some(source_thread_id), source_path);
+    if let Some(value) = events::source_provenance_value(&provenance) {
+        if let Value::Object(ref mut payload) = event.payload {
+            payload.insert("sourceProvenance".to_string(), value);
+        }
+    }
+}
+
+fn record_response_item_fidelity(
+    fidelity: &mut ConversationImportFidelitySummary,
+    payload: Option<&Value>,
+    mapped_runtime_events: usize,
+) {
+    let Some(payload) = payload else {
+        return;
+    };
+    match payload.get("type").and_then(Value::as_str) {
+        Some("reasoning") => fidelity.reasoning += 1,
+        Some("function_call")
+        | Some("function_call_output")
+        | Some("custom_tool_call")
+        | Some("custom_tool_call_output")
+        | Some("tool_search_call")
+        | Some("tool_search_output") => {
+            if mapped_runtime_events > 0 {
+                fidelity.tools += 1;
+            }
+            if tool_name_from_payload(payload).as_deref() == Some("exec_command") {
+                fidelity.commands += 1;
+            }
+        }
+        Some("web_search_call") => {
+            if mapped_runtime_events > 0 {
+                fidelity.web_search += 1;
+                fidelity.tools += 1;
+            }
+        }
+        _ => {}
+    }
+}
+
+fn record_event_msg_fidelity(
+    fidelity: &mut ConversationImportFidelitySummary,
+    payload: Option<&Value>,
+    mapped_runtime_events: usize,
+) {
+    let Some(payload) = payload else {
+        return;
+    };
+    match payload.get("type").and_then(Value::as_str) {
+        Some("patch_apply_end") => fidelity.patches += 1,
+        Some("mcp_tool_call_end") => {
+            fidelity.mcp += 1;
+            if mapped_runtime_events > 0 {
+                fidelity.tools += 1;
+            }
+        }
+        Some("web_search_end") => {
+            fidelity.web_search += 1;
+            if mapped_runtime_events > 0 {
+                fidelity.tools += 1;
+            }
+        }
+        Some("exec_approval_request") | Some("apply_patch_approval_request") => {
+            fidelity.approvals += 1;
+        }
+        _ => {}
+    }
+}
+
+fn tool_name_from_payload(payload: &Value) -> Option<String> {
+    payload
+        .get("name")
+        .and_then(Value::as_str)
+        .or_else(|| payload.get("tool").and_then(Value::as_str))
+        .or_else(|| payload.get("tool_name").and_then(Value::as_str))
+        .or_else(|| payload.get("toolName").and_then(Value::as_str))
+        .map(str::to_string)
+}
+
+pub(super) fn source_summary(
+    source_client: ConversationImportSourceClient,
+    status: ConversationImportSourceStatus,
+    source_root: Option<&Path>,
+    readable: bool,
+    thread_count: usize,
+    state_path: Option<&Path>,
+    message: Option<String>,
+) -> ConversationImportSourceSummary {
+    ConversationImportSourceSummary {
+        source_client,
+        status,
+        source_root: source_root.map(path_to_string),
+        readable,
+        thread_count,
+        indexed_at: Some(now_timestamp()),
+        state_path: state_path.map(path_to_string),
+        message,
+    }
+}
+
+pub(super) fn resolve_home(explicit_root: Option<&str>) -> Option<PathBuf> {
+    if let Some(root) = normalize_filter(explicit_root) {
+        return Some(PathBuf::from(root));
+    }
+    if let Some(root) = std::env::var_os("CODEX_HOME") {
+        return Some(PathBuf::from(root));
+    }
+    dirs::home_dir().map(|home| home.join(".codex"))
+}
+
+pub(super) fn newest_state_db(source_root: &Path) -> Option<PathBuf> {
+    state::newest_state_db(source_root)
+}
+
+#[derive(Debug, Deserialize)]
+struct SessionIndexLine {
+    #[serde(default)]
+    id: Option<String>,
+    #[serde(default)]
+    thread_name: Option<String>,
+    #[serde(default)]
+    title: Option<String>,
+    #[serde(default)]
+    updated_at: Option<String>,
+    #[serde(default)]
+    created_at: Option<String>,
+    #[serde(default)]
+    cwd: Option<String>,
+    #[serde(default)]
+    path: Option<String>,
+}
+
+fn scan_session_index(source_root: &Path) -> Vec<ImportedThreadSummary> {
+    let path = source_root.join("session_index.jsonl");
+    let file = match fs::File::open(path) {
+        Ok(file) => file,
+        Err(_) => return Vec::new(),
+    };
+    BufReader::new(file)
+        .lines()
+        .map_while(Result::ok)
+        .filter_map(|line| serde_json::from_str::<SessionIndexLine>(&line).ok())
+        .filter_map(|line| {
+            let id = normalize_filter(line.id.as_deref())?;
+            Some(ImportedThreadSummary {
+                source_client: ConversationImportSourceClient::Codex,
+                source_thread_id: id,
+                title: normalize_filter(line.title.as_deref())
+                    .or_else(|| normalize_filter(line.thread_name.as_deref())),
+                created_at: line.created_at,
+                updated_at: line.updated_at,
+                cwd: normalize_filter(line.cwd.as_deref()),
+                source: Some("session_index".to_string()),
+                model_provider: None,
+                archived: false,
+                source_path: normalize_filter(line.path.as_deref()),
+                import_status: ConversationImportThreadStatus::NotImported,
+                metadata: None,
+            })
+        })
+        .collect()
+}
+
+fn parse_cursor(cursor: Option<&str>) -> Result<usize, RuntimeCoreError> {
+    match normalize_filter(cursor) {
+        Some(cursor) => cursor.parse::<usize>().map_err(|_| {
+            RuntimeCoreError::Backend("conversation import cursor must be a number".to_string())
+        }),
+        None => Ok(0),
+    }
+}
+
+pub(super) fn normalize_filter(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+pub(super) fn now_timestamp() -> String {
+    Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true)
+}
+
+pub(super) fn path_to_string(path: &Path) -> String {
+    path.to_string_lossy().into_owned()
+}

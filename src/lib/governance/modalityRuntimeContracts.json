@@ -28,7 +28,7 @@
       "permission_profile_keys": [
         "write_artifacts",
         "media_upload",
-        "ask_user_question"
+        "request_user_input"
       ],
       "routing_slot": "image_generation_model",
       "executor_binding": {
@@ -66,7 +66,7 @@
       ],
       "detour_policy": {
         "allowed": [
-          "ask_user_question",
+          "request_user_input",
           "catalog_declared_model_bound_image_skill_launch"
         ],
         "denied": [
@@ -232,7 +232,7 @@
       "permission_profile_keys": [
         "browser_control",
         "web_search",
-        "ask_user_question"
+        "request_user_input"
       ],
       "routing_slot": "browser_reasoning_model",
       "executor_binding": {
@@ -266,7 +266,7 @@
         "block_on_browser_control_denied"
       ],
       "detour_policy": {
-        "allowed": ["ask_user_question", "web_search_after_user_approval"],
+        "allowed": ["request_user_input", "web_search_after_user_approval"],
         "denied": [
           "web_search_as_browser_substitute",
           "free_bash",
@@ -377,7 +377,7 @@
       "permission_profile_keys": [
         "read_files",
         "write_artifacts",
-        "ask_user_question"
+        "request_user_input"
       ],
       "routing_slot": "base_model",
       "executor_binding": {
@@ -410,7 +410,7 @@
         "block_on_file_unavailable"
       ],
       "detour_policy": {
-        "allowed": ["ask_user_question"],
+        "allowed": ["request_user_input"],
         "denied": ["frontend_direct_pdf_parse", "generic_chat_summary_only"]
       },
       "owner_surface": "agent_runtime",
@@ -456,7 +456,7 @@
         "write_artifacts",
         "media_upload",
         "service_api_call",
-        "ask_user_question"
+        "request_user_input"
       ],
       "routing_slot": "voice_generation_model",
       "executor_binding": {
@@ -492,7 +492,7 @@
         "block_on_media_upload_denied"
       ],
       "detour_policy": {
-        "allowed": ["ask_user_question"],
+        "allowed": ["request_user_input"],
         "denied": [
           "legacy_tts_test_command",
           "cloud_run_without_explicit_scene"
@@ -543,7 +543,7 @@
         "write_artifacts",
         "media_upload",
         "service_api_call",
-        "ask_user_question"
+        "request_user_input"
       ],
       "routing_slot": "audio_transcription_model",
       "executor_binding": {
@@ -580,7 +580,7 @@
         "block_on_no_audio_transcription_model"
       ],
       "detour_policy": {
-        "allowed": ["ask_user_question"],
+        "allowed": ["request_user_input"],
         "denied": [
           "frontend_direct_asr",
           "generic_file_transcript",
@@ -632,7 +632,7 @@
       "permission_profile_keys": [
         "web_search",
         "write_artifacts",
-        "ask_user_question"
+        "request_user_input"
       ],
       "routing_slot": "report_generation_model",
       "executor_binding": {
@@ -669,7 +669,7 @@
         "block_on_source_unavailable"
       ],
       "detour_policy": {
-        "allowed": ["ask_user_question", "web_search"],
+        "allowed": ["request_user_input", "web_search"],
         "denied": [
           "model_memory_only_answer",
           "local_file_search_before_research_skill"
@@ -778,7 +778,7 @@
       "permission_profile_keys": [
         "read_files",
         "write_artifacts",
-        "ask_user_question"
+        "request_user_input"
       ],
       "routing_slot": "base_model",
       "executor_binding": {
@@ -812,7 +812,7 @@
         "block_on_file_unavailable"
       ],
       "detour_policy": {
-        "allowed": ["ask_user_question", "local_file_read_when_explicit_path"],
+        "allowed": ["request_user_input", "local_file_read_when_explicit_path"],
         "denied": [
           "frontend_direct_text_transform",
           "tool_search_before_text_transform_skill",

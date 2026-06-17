@@ -355,6 +355,17 @@ function resolveItemActivityDescriptor(item: AgentThreadItem): {
           normalizeActivityText(item.error || item.aggregated_output) ||
           normalizeActivityText(item.command),
       };
+    case "patch":
+      return {
+        title: item.status === "failed" ? "补丁失败" : "代码变更",
+        detail: normalizeActivityText(
+          item.stderr ||
+            item.stdout ||
+            item.paths?.join("、") ||
+            item.summary?.join("、") ||
+            item.text,
+        ),
+      };
     case "web_search":
       return {
         title: item.output ? "检索结果" : "检索查询",

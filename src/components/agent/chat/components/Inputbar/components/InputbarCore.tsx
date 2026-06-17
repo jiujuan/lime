@@ -103,6 +103,8 @@ interface InputbarCoreProps {
   connectedContextBar?: boolean;
   /** Enter 发送延后一帧，优先释放首页首帧渲染。 */
   deferSendOnEnter?: boolean;
+  /** 当前输入所属会话，仅用于运行态可观测性与稳定回归定位。 */
+  sessionId?: string | null;
   activeTheme?: string;
   queuedTurns?: QueuedTurnSnapshot[];
   onPromoteQueuedTurn?: (queuedTurnId: string) => void | Promise<boolean>;
@@ -150,6 +152,7 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
   visualVariant = "default",
   connectedContextBar = false,
   deferSendOnEnter = false,
+  sessionId = null,
   activeTheme,
   queuedTurns = [],
   onPromoteQueuedTurn,
@@ -498,6 +501,7 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
                   <StyledTextarea
                     ref={textareaRef}
                     {...textareaProps}
+                    data-session-id={sessionId || undefined}
                     className={textareaClassName}
                   />
                 </InputColumn>

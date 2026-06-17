@@ -9,6 +9,7 @@ type AgentChatPageShellInput = Pick<
   | "initialKnowledgePackSelection"
   | "initialPendingServiceSkillLaunch"
   | "initialProjectFileOpenTarget"
+  | "initialSessionId"
   | "initialSiteSkillLaunch"
   | "initialUserImages"
   | "initialUserPrompt"
@@ -37,6 +38,7 @@ export function resolveAgentChatPageShellViewModel(
 
   const hasDirectWorkspaceIntent =
     hasText(props.initialUserPrompt) ||
+    hasText(props.initialSessionId) ||
     Boolean(props.initialUserImages?.length) ||
     hasText(props.initialSiteSkillLaunch?.adapterName) ||
     hasText(props.initialPendingServiceSkillLaunch?.skillId) ||

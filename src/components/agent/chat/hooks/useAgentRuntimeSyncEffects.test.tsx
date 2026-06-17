@@ -711,6 +711,34 @@ describe("useAgentRuntimeSyncEffects", () => {
     }
   });
 
+  it("未观察到 running 快照时也应在 read model 已完成后收起发送态", async () => {
+    const settleActiveRuntimeStream = vi.fn();
+    const harness = await mountHook({
+      isSending: true,
+      threadReadStatus: "completed",
+      threadTurns: [
+        createThreadTurn({
+          status: "completed",
+          started_at: "2026-03-29T00:04:55.000Z",
+          completed_at: "2026-03-29T00:05:01.000Z",
+          updated_at: "2026-03-29T00:05:01.000Z",
+        }),
+      ],
+      settleActiveRuntimeStream,
+    });
+
+    try {
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(settleActiveRuntimeStream).toHaveBeenCalledTimes(1);
+      expect(settleActiveRuntimeStream).toHaveBeenCalledWith("session-1");
+    } finally {
+      harness.unmount();
+    }
+  });
+
   it("当前 turn 的 text_delta 不应触发完整 read model 刷新", async () => {
     const refreshSessionDetail = vi.fn(async () => true);
     const listeners = new Map<string, (event: { payload: unknown }) => void>();

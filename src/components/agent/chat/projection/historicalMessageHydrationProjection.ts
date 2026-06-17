@@ -53,7 +53,7 @@ export function hasStructuredHistoricalContentHint(content: string): boolean {
   return STRUCTURED_HISTORY_CONTENT_RE.test(content);
 }
 
-function hasRunningHistoricalProcessContentParts(
+function hasHistoricalProcessContentParts(
   message: HistoricalConversationMessageLike,
 ): boolean {
   return Boolean(
@@ -62,14 +62,12 @@ function hasRunningHistoricalProcessContentParts(
         return false;
       }
       const type = (part as { type?: unknown }).type;
-      if (type !== "tool_use") {
-        return false;
-      }
-      const toolCall = (part as { toolCall?: unknown }).toolCall;
-      if (!toolCall || typeof toolCall !== "object") {
-        return false;
-      }
-      return (toolCall as { status?: unknown }).status === "running";
+      return (
+        type === "thinking" ||
+        type === "tool_use" ||
+        type === "action_required" ||
+        type === "file_changes_batch"
+      );
     }),
   );
 }
@@ -85,7 +83,7 @@ export function isHistoricalAssistantMessageHydrationCandidate<
     message.role === "assistant" &&
     !message.isThinking &&
     !message.thinkingContent &&
-    !hasRunningHistoricalProcessContentParts(message) &&
+    !hasHistoricalProcessContentParts(message) &&
     (message.toolCalls?.length ?? 0) === 0 &&
     (message.actionRequests?.length ?? 0) === 0
   );

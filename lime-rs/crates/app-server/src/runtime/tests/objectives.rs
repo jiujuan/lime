@@ -3,31 +3,85 @@ use super::*;
 
 #[tokio::test]
 async fn objective_continue_fails_closed_when_pending_requests_exist() {
-    let mut persisted = empty_agent_session_read_response("sess_objective_continue");
+    let session_id = "sess_objective_continue";
+    let turn_id = "turn_objective_continue";
+    let mut persisted = empty_agent_session_read_response(session_id);
     persisted.session.workspace_id = Some("workspace-main".to_string());
-    persisted.detail = Some(json!({
-        "thread_read": {
-            "pending_requests": [
-                {
-                    "id": "request-1",
-                    "type": "ask_user"
-                }
-            ],
-            "queued_turns": []
-        }
-    }));
     let app_data_source = Arc::new(
-        TestSessionDataSource::new(persisted)
-            .with_objective(managed_objective("sess_objective_continue")),
+        TestSessionDataSource::new(persisted).with_objective(managed_objective(session_id)),
     );
     let backend = Arc::new(RecordingBackend::default());
     let core =
         RuntimeCore::with_backend(backend.clone()).with_app_data_source(app_data_source.clone());
+    core.start_session(AgentSessionStartParams {
+        session_id: Some(session_id.to_string()),
+        thread_id: Some("thread_objective_continue".to_string()),
+        app_id: "desktop".to_string(),
+        workspace_id: Some("workspace-main".to_string()),
+        business_object_ref: None,
+        locale: None,
+    })
+    .expect("session");
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: session_id.to_string(),
+            turn_id: Some(turn_id.to_string()),
+            input: AgentInput {
+                text: "首轮".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: None,
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("initial turn");
+    core.append_external_runtime_events(
+        session_id,
+        Some(turn_id),
+        vec![
+            RuntimeEvent::new(
+                "tool.started",
+                json!({
+                    "toolCallId": "tool_needs_approval",
+                    "toolName": "Shell"
+                }),
+            ),
+            RuntimeEvent::new(
+                "action.required",
+                json!({
+                    "requestId": "request-1",
+                    "actionType": "ask_user",
+                    "toolCallId": "tool_needs_approval",
+                    "prompt": "继续之前需要用户确认"
+                }),
+            ),
+        ],
+    )
+    .expect("pending action event");
+    let read = core
+        .read_session(AgentSessionReadParams {
+            session_id: session_id.to_string(),
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .expect("read session");
+    assert_eq!(
+        read.detail
+            .as_ref()
+            .and_then(|detail| detail.pointer("/thread_read/pending_requests"))
+            .and_then(serde_json::Value::as_array)
+            .map(Vec::len),
+        Some(1)
+    );
 
     let error = core
         .continue_agent_session_objective(
             AgentSessionObjectiveContinueParams {
-                session_id: "sess_objective_continue".to_string(),
+                session_id: session_id.to_string(),
                 owner_kind: None,
                 owner_id: None,
             },
@@ -36,14 +90,23 @@ async fn objective_continue_fails_closed_when_pending_requests_exist() {
         .await
         .expect_err("pending request should block objective continuation");
 
-    assert!(error
-        .to_string()
-        .contains("当前会话还有 1 个待处理请求，不能继续推进目标"));
+    assert!(error.to_string().contains("不能继续推进目标"));
+    assert!(
+        backend
+            .requests
+            .lock()
+            .expect("test backend requests mutex poisoned")
+            .iter()
+            .filter(|request| request.session.session_id == session_id)
+            .count()
+            == 1
+    );
     assert!(backend
         .requests
         .lock()
         .expect("test backend requests mutex poisoned")
-        .is_empty());
+        .iter()
+        .all(|request| request.input.text != "继续推进当前目标。"));
 }
 
 #[tokio::test]

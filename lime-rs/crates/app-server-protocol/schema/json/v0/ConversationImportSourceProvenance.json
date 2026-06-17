@@ -1,0 +1,72 @@
+{
+  "$defs": {
+    "ConversationImportSourceClient": {
+      "enum": [
+        "claude_code",
+        "codex"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "sourceCallId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "sourceChannel": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "sourceClient": {
+      "$ref": "#/$defs/ConversationImportSourceClient"
+    },
+    "sourceEventSeq": {
+      "format": "uint",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "sourceEventType": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "sourcePath": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "sourcePayloadType": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "sourceRole": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "sourceThreadId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "sourceClient"
+  ],
+  "title": "ConversationImportSourceProvenance",
+  "type": "object"
+}

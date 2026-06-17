@@ -430,6 +430,25 @@ describe("MessageList", () => {
     expect(messageColumn?.className).not.toContain("justify-end");
   });
 
+  it("对话列表顶部应保留工作台呼吸区，避免首条消息贴近窗口顶栏", () => {
+    const container = render([
+      {
+        id: "msg-top-spacing",
+        role: "user",
+        content: "整理一下今天的国际新闻",
+        timestamp: new Date("2026-06-01T02:57:00.000Z"),
+      } as Message,
+    ]);
+
+    const scrollContainer = container.querySelector<HTMLElement>(
+      '[data-testid="message-list-scroll-container"]',
+    );
+
+    expect(scrollContainer).not.toBeNull();
+    expect(scrollContainer?.className).toMatch(/sc-/);
+    expect(document.head.textContent).toContain("padding:22px 0 16px");
+  });
+
   it("用户消息应使用紧凑中性气泡，并把时间与操作区放在气泡外", async () => {
     const onEditMessage = vi.fn();
     const container = await renderZh(
@@ -2321,7 +2340,9 @@ describe("MessageList", () => {
     expect(container.textContent).toContain("整理今天的国际新闻");
     expect(container.textContent).toContain("当前处理失败");
     expect(
-      container.querySelector('[data-testid="assistant-streaming-inline-indicator"]'),
+      container.querySelector(
+        '[data-testid="assistant-streaming-inline-indicator"]',
+      ),
     ).toBeNull();
     expect(
       container.querySelector('[data-testid="message-runtime-status-pill"]'),
@@ -2345,8 +2366,7 @@ describe("MessageList", () => {
       {
         id: "msg-assistant-news-complete",
         role: "assistant",
-        content:
-          "根据多源检索结果，以下是 2026年6月7日 的主要国际新闻整理。",
+        content: "根据多源检索结果，以下是 2026年6月7日 的主要国际新闻整理。",
         contentParts: [
           {
             type: "text",
@@ -2357,7 +2377,7 @@ describe("MessageList", () => {
             toolCall: {
               id: "tool-web-search-stale-running",
               name: "WebSearch",
-              arguments: "{\"query\":\"2026年6月7日 国际新闻\"}",
+              arguments: '{"query":"2026年6月7日 国际新闻"}',
               status: "running",
               startTime: now,
             },
@@ -2371,7 +2391,7 @@ describe("MessageList", () => {
           {
             id: "tool-web-search-stale-running",
             name: "WebSearch",
-            arguments: "{\"query\":\"2026年6月7日 国际新闻\"}",
+            arguments: '{"query":"2026年6月7日 国际新闻"}',
             status: "running",
             startTime: now,
           },
@@ -2388,7 +2408,9 @@ describe("MessageList", () => {
     expect(container.textContent).toContain("整理今天的国际新闻");
     expect(container.textContent).toContain("主要国际新闻整理");
     expect(
-      container.querySelector('[data-testid="assistant-streaming-inline-indicator"]'),
+      container.querySelector(
+        '[data-testid="assistant-streaming-inline-indicator"]',
+      ),
     ).toBeNull();
     expect(
       container.querySelector('[data-testid="message-runtime-status-pill"]'),
@@ -6558,7 +6580,7 @@ describe("MessageList", () => {
     expect(
       Boolean(
         pinnedFileTimeline!.compareDocumentPosition(assistantBubble!) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
+        Node.DOCUMENT_POSITION_FOLLOWING,
       ),
     ).toBe(true);
   });

@@ -346,6 +346,10 @@ export const METHOD_CONNECT_RELAY_API_KEY_SAVE = "connectRelayApiKey/save";
 export const METHOD_CONNECT_CALLBACK_SEND = "connectCallback/send";
 export const METHOD_CONVERSATION_IMPORT_SOURCE_SCAN =
   "conversationImport/source/scan";
+export const METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW =
+  "conversationImport/thread/preview";
+export const METHOD_CONVERSATION_IMPORT_THREAD_COMMIT =
+  "conversationImport/thread/commit";
 
 export type AppServerMethodKind = "request" | "notification";
 
@@ -614,6 +618,8 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_CONNECT_RELAY_API_KEY_SAVE, kind: "request" },
   { method: METHOD_CONNECT_CALLBACK_SEND, kind: "request" },
   { method: METHOD_CONVERSATION_IMPORT_SOURCE_SCAN, kind: "request" },
+  { method: METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW, kind: "request" },
+  { method: METHOD_CONVERSATION_IMPORT_THREAD_COMMIT, kind: "request" },
   { method: METHOD_AGENT_SESSION_START, kind: "request" },
   { method: METHOD_AGENT_SESSION_READ, kind: "request" },
   { method: METHOD_AGENT_SESSION_TURN_START, kind: "request" },
@@ -3701,6 +3707,24 @@ export type ConversationImportSourceScanParams = {
   cursor?: string;
 };
 
+export type ConversationImportThreadPreviewParams = {
+  sourceClient?: ConversationImportSourceClient;
+  sourceRoot?: string;
+  sourceThreadId?: string;
+  sourcePath?: string;
+  limit?: number;
+};
+
+export type ConversationImportThreadCommitParams = {
+  sourceClient?: ConversationImportSourceClient;
+  sourceRoot?: string;
+  sourceThreadId?: string;
+  sourcePath?: string;
+  workspaceId?: string;
+  appId?: string;
+  confirmed: boolean;
+};
+
 export type ConversationImportSourceSummary = {
   sourceClient: ConversationImportSourceClient;
   status: ConversationImportSourceStatus;
@@ -3724,12 +3748,97 @@ export type ImportedThreadSummary = {
   archived: boolean;
   sourcePath?: string;
   importStatus: ConversationImportThreadStatus;
+  metadata?: unknown;
 };
 
 export type ConversationImportSourceScanResponse = {
   source: ConversationImportSourceSummary;
   threads: ImportedThreadSummary[];
   nextCursor?: string;
+};
+
+export type ConversationImportSourceProvenance = {
+  sourceClient: ConversationImportSourceClient;
+  sourceThreadId?: string;
+  sourcePath?: string;
+  sourceEventType?: string;
+  sourceEventSeq?: number;
+  sourcePayloadType?: string;
+  sourceCallId?: string;
+  sourceRole?: string;
+  sourceChannel?: string;
+};
+
+export type ConversationImportFidelitySummary = {
+  messages: number;
+  reasoning: number;
+  tools: number;
+  commands: number;
+  patches: number;
+  approvals: number;
+  mcp: number;
+  webSearch: number;
+  attachments: number;
+  unsupported: number;
+  provenanceOnly: number;
+  budgetDropped: number;
+};
+
+export type ConversationImportPreviewMessage = {
+  role: string;
+  text: string;
+  attachments: AgentAttachment[];
+  truncated: boolean;
+  omittedBytes: number;
+  timestamp?: string;
+  sourceType?: string;
+  provenance?: ConversationImportSourceProvenance;
+};
+
+export type ConversationImportPreviewEvent = {
+  kind: string;
+  timestamp?: string;
+  label?: string;
+  provenance?: ConversationImportSourceProvenance;
+};
+
+export type ConversationImportPreviewDryRun = {
+  willCreateSession: boolean;
+  willAppendToExistingSession: boolean;
+  willImportMessages: number;
+  willImportTurns: number;
+  willImportTimelineItems: number;
+  willImportAttachments: number;
+  unsupportedItems: number;
+};
+
+export type ConversationImportPreviewSummary = {
+  lineCount: number;
+  messageCount: number;
+  rolloutEventItems: number;
+  unsupportedCount: number;
+  dryRun: ConversationImportPreviewDryRun;
+  fidelity: ConversationImportFidelitySummary;
+  truncated: boolean;
+  warnings: string[];
+};
+
+export type ConversationImportThreadPreviewResponse = {
+  source: ConversationImportSourceSummary;
+  thread: ImportedThreadSummary;
+  summary: ConversationImportPreviewSummary;
+  messages: ConversationImportPreviewMessage[];
+  events: ConversationImportPreviewEvent[];
+};
+
+export type ConversationImportThreadCommitResponse = {
+  session: AgentSession;
+  thread: ImportedThreadSummary;
+  summary: ConversationImportPreviewSummary;
+  importedMessages: number;
+  importedTurns: number;
+  canContinue: boolean;
+  warnings: string[];
 };
 
 export type ProtocolSchemaGroup = "jsonrpc" | "v0";

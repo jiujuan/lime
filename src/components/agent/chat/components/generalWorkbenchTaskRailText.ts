@@ -50,6 +50,38 @@ export function fallbackTranslate(key: string, options?: Record<string, unknown>
       return "思考";
     case "generalWorkbench.taskRail.context.workspace":
       return "工作区";
+    case "generalWorkbench.taskRail.context.imported":
+      return "导入";
+    case "generalWorkbench.taskRail.context.importedValue":
+      return `${options?.source ?? ""} 导入`;
+    case "generalWorkbench.taskRail.context.importedValueFallback":
+      return "已导入";
+    case "generalWorkbench.taskRail.context.importedTitle":
+      return `来自 ${options?.source ?? ""}`;
+    case "generalWorkbench.taskRail.context.importedThreadTitle":
+      return `源线程 ${options?.thread ?? ""}`;
+    case "generalWorkbench.taskRail.context.importedDetail.messages":
+      return `消息 ${options?.count ?? 0}`;
+    case "generalWorkbench.taskRail.context.importedDetail.reasoning":
+      return `思考 ${options?.count ?? 0}`;
+    case "generalWorkbench.taskRail.context.importedDetail.commands":
+      return `命令 ${options?.count ?? 0}`;
+    case "generalWorkbench.taskRail.context.importedDetail.tools":
+      return `工具 ${options?.count ?? 0}`;
+    case "generalWorkbench.taskRail.context.importedDetail.patches":
+      return `补丁 ${options?.count ?? 0}`;
+    case "generalWorkbench.taskRail.context.importedDetail.approvals":
+      return `确认 ${options?.count ?? 0}`;
+    case "generalWorkbench.taskRail.context.importedDetail.webSearch":
+      return `搜索 ${options?.count ?? 0}`;
+    case "generalWorkbench.taskRail.context.importedStatus.restored":
+      return "已还原";
+    case "generalWorkbench.taskRail.context.importedStatus.restoredTitle":
+      return "导入细节已进入当前会话轨迹";
+    case "generalWorkbench.taskRail.context.importedStatus.partial":
+      return "部分保留";
+    case "generalWorkbench.taskRail.context.importedStatus.partialTitle":
+      return `有 ${options?.unsupported ?? 0} 项未完整映射，${options?.budgetDropped ?? 0} 项因预算裁剪`;
     case "generalWorkbench.taskRail.context.objective":
       return "目标";
     case "generalWorkbench.taskRail.context.sources":

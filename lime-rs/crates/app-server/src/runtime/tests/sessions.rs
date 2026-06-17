@@ -74,6 +74,72 @@ async fn list_agent_sessions_projects_runtime_core_sessions_only() {
 }
 
 #[tokio::test]
+async fn list_agent_sessions_keeps_workspace_id_filter_when_workspace_root_is_available() {
+    let app_data_source = Arc::new(
+        TestSessionDataSource::new(empty_agent_session_read_response("legacy_unexpected"))
+            .with_workspace(json!({
+                "id": "workspace-current",
+                "rootPath": "/tmp/current",
+            })),
+    );
+    let core = RuntimeCore::default().with_app_data_source(app_data_source);
+    core.start_session(AgentSessionStartParams {
+        session_id: Some("sess_workspace_only".to_string()),
+        thread_id: Some("thread_workspace_only".to_string()),
+        app_id: "desktop".to_string(),
+        workspace_id: Some("workspace-current".to_string()),
+        business_object_ref: Some(app_server_protocol::BusinessObjectRef {
+            kind: "agent.session".to_string(),
+            id: "sess_workspace_only".to_string(),
+            title: Some("Workspace Only Session".to_string()),
+            uri: None,
+            metadata: Some(json!({
+                "modelName": "fixture-model",
+                "executionStrategy": "react"
+            })),
+        }),
+        locale: None,
+    })
+    .expect("workspace-only session");
+    core.start_session(AgentSessionStartParams {
+        session_id: Some("sess_cwd_only".to_string()),
+        thread_id: Some("thread_cwd_only".to_string()),
+        app_id: "desktop".to_string(),
+        workspace_id: None,
+        business_object_ref: Some(app_server_protocol::BusinessObjectRef {
+            kind: "agent.session".to_string(),
+            id: "sess_cwd_only".to_string(),
+            title: Some("Cwd Only Session".to_string()),
+            uri: None,
+            metadata: Some(json!({
+                "workingDir": "/tmp/current",
+                "modelName": "fixture-model",
+                "executionStrategy": "react"
+            })),
+        }),
+        locale: None,
+    })
+    .expect("cwd-only session");
+
+    let response = core
+        .list_agent_sessions(AgentSessionListParams {
+            workspace_id: Some("workspace-current".to_string()),
+            limit: Some(20),
+            ..AgentSessionListParams::default()
+        })
+        .await
+        .expect("list sessions");
+    let ids = response
+        .sessions
+        .iter()
+        .map(|session| session.session_id.as_str())
+        .collect::<Vec<_>>();
+
+    assert!(ids.contains(&"sess_workspace_only"));
+    assert!(ids.contains(&"sess_cwd_only"));
+}
+
+#[tokio::test]
 async fn queue_session_controls_use_current_runtime_core_read_model() {
     let core = RuntimeCore::default();
     core.start_session(AgentSessionStartParams {
@@ -786,7 +852,7 @@ async fn list_agent_sessions_derives_projection_title_from_first_user_message() 
             session_id: "sess_projection_title".to_string(),
             turn_id: Some("turn_projection_title".to_string()),
             input: AgentInput {
-                text: "根据 Codex 方式生成标题".to_string(),
+                text: "根据原生方式生成标题".to_string(),
                 attachments: Vec::new(),
             },
             runtime_options: None,
@@ -814,6 +880,6 @@ async fn list_agent_sessions_derives_projection_title_from_first_user_message() 
     assert_eq!(listed.sessions[0].session_id, "sess_projection_title");
     assert_eq!(
         listed.sessions[0].title.as_deref(),
-        Some("根据 Codex 方式生成标题")
+        Some("根据原生方式生成标题")
     );
 }

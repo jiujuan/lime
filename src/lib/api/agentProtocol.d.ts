@@ -105,6 +105,7 @@ interface AgentThreadItemBase {
     started_at: string;
     completed_at?: string;
     updated_at: string;
+    metadata?: unknown;
 }
 export interface AgentThreadUserMessageItem extends AgentThreadItemBase {
     type: "user_message";
@@ -140,6 +141,16 @@ export interface AgentThreadCommandExecutionItem extends AgentThreadItemBase {
     aggregated_output?: string;
     exit_code?: number;
     error?: string;
+}
+export interface AgentThreadPatchItem extends AgentThreadItemBase {
+    type: "patch";
+    text: string;
+    summary?: string[];
+    paths?: string[];
+    success?: boolean;
+    stdout?: string;
+    stderr?: string;
+    metadata?: unknown;
 }
 export interface AgentThreadWebSearchItem extends AgentThreadItemBase {
     type: "web_search";
@@ -200,7 +211,7 @@ export interface AgentThreadTurnSummaryItem extends AgentThreadItemBase {
     text: string;
     metadata?: Record<string, unknown>;
 }
-export type AgentThreadItem = AgentThreadUserMessageItem | AgentThreadAgentMessageItem | AgentThreadPlanItem | AgentThreadReasoningItem | AgentThreadToolCallItem | AgentThreadCommandExecutionItem | AgentThreadWebSearchItem | AgentThreadApprovalRequestItem | AgentThreadRequestUserInputItem | AgentThreadFileArtifactItem | AgentThreadSubagentActivityItem | AgentThreadWarningItem | AgentThreadContextCompactionItem | AgentThreadErrorItem | AgentThreadTurnSummaryItem;
+export type AgentThreadItem = AgentThreadUserMessageItem | AgentThreadAgentMessageItem | AgentThreadPlanItem | AgentThreadReasoningItem | AgentThreadToolCallItem | AgentThreadCommandExecutionItem | AgentThreadPatchItem | AgentThreadWebSearchItem | AgentThreadApprovalRequestItem | AgentThreadRequestUserInputItem | AgentThreadFileArtifactItem | AgentThreadSubagentActivityItem | AgentThreadWarningItem | AgentThreadContextCompactionItem | AgentThreadErrorItem | AgentThreadTurnSummaryItem;
 export interface AgentToolCallState {
     id: string;
     name: string;

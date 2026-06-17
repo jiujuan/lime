@@ -41,16 +41,18 @@ const APP_SERVER_METHOD_WORKSPACE_DEFAULT_ENSURE = "workspace/default/ensure";
 const NEWS_PROMPT = "整理今天的国际新闻";
 const CONTINUE_PROMPT = "继续输出";
 const PLAN_PROMPT = "先给我一个修复计划，不要直接改代码";
+const GOAL_PROMPT = "本周完成 Goal E2E 修复";
 const ASSISTANT_DONE_TEXT = "CLAW_NEWS_FIXTURE_DONE";
 const CONTINUE_DONE_TEXT = "CLAW_CONTINUE_FIXTURE_DONE";
 const PLAN_DONE_TEXT = "CLAW_PLAN_FIXTURE_DONE";
+const GOAL_DONE_TEXT = "CLAW_GOAL_FIXTURE_DONE";
 const PLAN_STEPS = [
   { step: "确认计划模式请求进入 App Server", status: "completed" },
   { step: "输出 Codex 风格 proposed_plan", status: "in_progress" },
   { step: "验证右侧计划轨显示", status: "pending" },
 ];
 const PROPOSED_PLAN_BLOCK = `<proposed_plan>
-${PLAN_STEPS.map((step) => `- ${step.step}`).join("\\n")}
+${PLAN_STEPS.map((step) => `- ${step.step}`).join("\n")}
 </proposed_plan>`;
 const FIXTURE_PROVIDER = "fixture-provider";
 const FIXTURE_MODEL = "fixture-model";
@@ -88,7 +90,7 @@ Claw Chat Current Electron Fixture Smoke
   --app-url <url>        可选 renderer dev server，例如 http://127.0.0.1:1420/
   --evidence-dir <path>  证据目录
   --prefix <name>        证据文件前缀
-  --scenario <name>      complete | cancel | cancel-then-continue | plan，默认 complete
+  --scenario <name>      complete | cancel | cancel-then-continue | plan | goal，默认 complete
   --timeout-ms <ms>      总超时，默认 180000
   --interval-ms <ms>     轮询间隔，默认 500
   --keep-temp            保留临时目录便于调试
@@ -152,12 +154,12 @@ function parseArgs(argv) {
     throw new Error("--evidence-dir / --prefix 均不能为空");
   }
   if (
-    !["complete", "cancel", "cancel-then-continue", "plan"].includes(
+    !["complete", "cancel", "cancel-then-continue", "plan", "goal"].includes(
       options.scenario,
     )
   ) {
     throw new Error(
-      "--scenario 只能是 complete、cancel、cancel-then-continue 或 plan",
+      "--scenario 只能是 complete、cancel、cancel-then-continue、plan 或 goal",
     );
   }
   return options;
@@ -299,6 +301,7 @@ function createTempRuntimeEnv() {
 }
 
 function writeFixtureBackend(backendPath) {
+  const proposedPlanFixtureText = `${PROPOSED_PLAN_BLOCK}\n计划已写入右侧计划轨，等待你确认后再执行。\n`;
   fs.writeFileSync(
     backendPath,
     `#!/usr/bin/env node
@@ -309,8 +312,32 @@ const cancelSignalPath = process.argv[3];
 const input = JSON.parse(readFileSync(0, "utf8"));
 const asterChatRequest = input.request?.runtimeOptions?.hostOptions?.asterChatRequest;
 
-if (ledgerPath) {
+function appendLedgerEntry(entry) {
+  if (!ledgerPath) {
+    return;
+  }
   appendFileSync(ledgerPath, JSON.stringify({
+    ...entry,
+    recordedAt: new Date().toISOString()
+  }) + "\\n");
+}
+
+function emitEvents(events) {
+  appendLedgerEntry({
+    kind: "backendEmit",
+    sessionId: input.request?.session?.sessionId,
+    turnId: input.request?.turn?.turnId,
+    eventCount: events.length,
+    eventTypes: events.map((event) => event?.type).filter(Boolean)
+  });
+  console.log(JSON.stringify({ events }));
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+appendLedgerEntry({
     kind: input.kind,
     sessionId: input.request?.session?.sessionId,
     turnId: input.request?.turn?.turnId,
@@ -318,10 +345,8 @@ if (ledgerPath) {
     providerPreference: input.request?.providerPreference,
     modelPreference: input.request?.modelPreference,
     runtimeOptions: input.request?.runtimeOptions,
-    asterChatRequest,
-    recordedAt: new Date().toISOString()
-  }) + "\\n");
-}
+    asterChatRequest
+});
 
 if (input.kind === "turnCancel") {
   if (cancelSignalPath) {
@@ -331,17 +356,15 @@ if (input.kind === "turnCancel") {
       recordedAt: new Date().toISOString()
     }) + "\\n");
   }
-  console.log(JSON.stringify({
-    events: [
-      {
-        type: "turn.canceled",
-        payload: {
-          status: "canceled",
-          reason: "user_cancelled"
-        }
+  emitEvents([
+    {
+      type: "turn.canceled",
+      payload: {
+        status: "canceled",
+        reason: "user_cancelled"
       }
-    ]
-  }));
+    }
+  ]);
   process.exit(0);
 }
 
@@ -350,12 +373,15 @@ if (input.kind === "turnStart") {
   const isEventReadProbe = inputText.includes("agentSession/event");
   const isContinuePrompt = inputText.includes("${CONTINUE_PROMPT}");
   const isPlanPrompt = inputText.includes("${PLAN_PROMPT}");
+  const isGoalPrompt = inputText.includes("${GOAL_PROMPT}");
   const assistantDoneText = isEventReadProbe
     ? "${EVENT_READ_PROBE_DONE_TEXT}"
     : isContinuePrompt
       ? "${CONTINUE_DONE_TEXT}"
       : isPlanPrompt
         ? "${PLAN_DONE_TEXT}"
+        : isGoalPrompt
+          ? "${GOAL_DONE_TEXT}"
     : "${ASSISTANT_DONE_TEXT}";
   const initialEvents = [
     {
@@ -367,17 +393,26 @@ if (input.kind === "turnStart") {
             ? "继续输出已恢复：\\n"
             : isPlanPrompt
               ? "我先给出计划，不会直接改代码：\\n"
+              : isGoalPrompt
+                ? "追求目标已进入当前回合：\\n"
           : "以下是今日国际新闻简要整理：\\n"
       }
     }
   ];
+  const followupText = isContinuePrompt
+    ? "停止后的同一会话已经可以继续输出，并由 App Server current 终态收口。\\n"
+    : isPlanPrompt
+      ? ${JSON.stringify(proposedPlanFixtureText)}
+      : isGoalPrompt
+        ? "目标已绑定到本轮请求，后续会围绕 ${GOAL_PROMPT} 收口。\\n"
+        : "1. 多国外交议题持续升温，地区安全与经贸协商仍是焦点。\\n2. 全球市场继续关注能源、供应链和主要央行政策变化。\\n3. 国际组织呼吁在气候、粮食与人道援助议题上保持协调。\\n";
   const shouldWaitForCancel =
     (process.env.CLAW_CHAT_FIXTURE_SCENARIO === "cancel" ||
       process.env.CLAW_CHAT_FIXTURE_SCENARIO === "cancel-then-continue") &&
     !isEventReadProbe &&
     !isContinuePrompt;
   if (shouldWaitForCancel) {
-    console.log(JSON.stringify({ events: initialEvents }));
+    emitEvents(initialEvents);
     const startedAt = Date.now();
     while (Date.now() - startedAt < 120000) {
       try {
@@ -388,65 +423,67 @@ if (input.kind === "turnStart") {
       } catch {
         // 等待 turnCancel 写入 signal。
       }
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await sleep(100);
     }
     console.error("cancel scenario timed out waiting for turnCancel");
     process.exit(2);
   }
 
-  console.log(JSON.stringify({
-    events: [
-      ...initialEvents,
-      ...(isEventReadProbe
-        ? [
-            {
-              type: "tool.started",
-              payload: {
-                toolCallId: "${EVENT_READ_PROBE_TOOL_CALL_ID}",
-                toolName: "${EVENT_READ_PROBE_TOOL_NAME}",
-                tool_name: "${EVENT_READ_PROBE_TOOL_NAME}",
-                arguments: {
-                  url: "https://example.com/claw-event-read",
-                  purpose: "claw-chat-current-fixture-event-read"
-                }
-              }
-            },
-            {
-              type: "tool.result",
-              payload: {
-                toolCallId: "${EVENT_READ_PROBE_TOOL_CALL_ID}",
-                toolName: "${EVENT_READ_PROBE_TOOL_NAME}",
-                tool_name: "${EVENT_READ_PROBE_TOOL_NAME}",
-                outputPreview: "${EVENT_READ_PROBE_TOOL_OUTPUT}",
-                output: "${EVENT_READ_PROBE_TOOL_OUTPUT}",
-                success: true
-              }
-            }
-          ]
-        : []),
+  emitEvents(initialEvents);
+  await sleep(120);
+  if (isEventReadProbe) {
+    emitEvents([
       {
-        type: "message.delta",
+        type: "tool.started",
         payload: {
-          text: isContinuePrompt
-            ? "停止后的同一会话已经可以继续输出，并由 App Server current 终态收口。\\n"
-            : isPlanPrompt
-              ? "${PROPOSED_PLAN_BLOCK}\\n计划已写入右侧计划轨，等待你确认后再执行。\\n"
-            : "1. 多国外交议题持续升温，地区安全与经贸协商仍是焦点。\\n2. 全球市场继续关注能源、供应链和主要央行政策变化。\\n3. 国际组织呼吁在气候、粮食与人道援助议题上保持协调。\\n"
-        }
-      },
-      {
-        type: "turn.completed",
-        payload: {
-          status: "completed",
-          text: assistantDoneText
+          toolCallId: "${EVENT_READ_PROBE_TOOL_CALL_ID}",
+          toolName: "${EVENT_READ_PROBE_TOOL_NAME}",
+          tool_name: "${EVENT_READ_PROBE_TOOL_NAME}",
+          arguments: {
+            url: "https://example.com/claw-event-read",
+            purpose: "claw-chat-current-fixture-event-read"
+          }
         }
       }
-    ]
-  }));
+    ]);
+    await sleep(80);
+    emitEvents([
+      {
+        type: "tool.result",
+        payload: {
+          toolCallId: "${EVENT_READ_PROBE_TOOL_CALL_ID}",
+          toolName: "${EVENT_READ_PROBE_TOOL_NAME}",
+          tool_name: "${EVENT_READ_PROBE_TOOL_NAME}",
+          outputPreview: "${EVENT_READ_PROBE_TOOL_OUTPUT}",
+          output: "${EVENT_READ_PROBE_TOOL_OUTPUT}",
+          success: true
+        }
+      }
+    ]);
+    await sleep(80);
+  }
+  emitEvents([
+    {
+      type: "message.delta",
+      payload: {
+        text: followupText
+      }
+    }
+  ]);
+  await sleep(120);
+  emitEvents([
+    {
+      type: "turn.completed",
+      payload: {
+        status: "completed",
+        text: assistantDoneText
+      }
+    }
+  ]);
   process.exit(0);
 }
 
-console.log(JSON.stringify({ events: [] }));
+emitEvents([]);
 `,
     { mode: 0o755 },
   );
@@ -689,61 +726,73 @@ async function clearInvokeBuffers(page) {
 
 async function invokeAppServerFromPage(page, method, params = {}, requestLog) {
   requestLog?.push({ method, params: sanitizeJson(params) });
-  return await page.evaluate(
-    async ({ command, method, params }) => {
-      const invoke = window.electronAPI?.invoke;
-      if (typeof invoke !== "function") {
-        throw new Error("Electron preload invoke bridge is unavailable");
-      }
-      const id = `claw-chat-current-${Date.now()}-${Math.random()}`;
-      const response = await invoke(command, {
-        request: {
-          lines: [
-            JSON.stringify({
-              jsonrpc: "2.0",
-              id,
-              method,
-              params,
-            }),
-          ],
+  let lastError = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await page.evaluate(
+        async ({ command, method, params }) => {
+          const invoke = window.electronAPI?.invoke;
+          if (typeof invoke !== "function") {
+            throw new Error("Electron preload invoke bridge is unavailable");
+          }
+          const id = `claw-chat-current-${Date.now()}-${Math.random()}`;
+          const response = await invoke(command, {
+            request: {
+              lines: [
+                JSON.stringify({
+                  jsonrpc: "2.0",
+                  id,
+                  method,
+                  params,
+                }),
+              ],
+            },
+          });
+          const messages = Array.isArray(response?.lines)
+            ? response.lines
+                .map((line) => {
+                  try {
+                    return JSON.parse(line);
+                  } catch {
+                    return null;
+                  }
+                })
+                .filter(Boolean)
+            : [];
+          const error = messages.find(
+            (message) => message?.id === id && message.error,
+          );
+          if (error) {
+            throw new Error(`${method} failed: ${JSON.stringify(error.error)}`);
+          }
+          const result = messages.find(
+            (message) =>
+              message?.id === id &&
+              Object.prototype.hasOwnProperty.call(message, "result"),
+          );
+          if (!result) {
+            throw new Error(`${method} did not return a JSON-RPC result`);
+          }
+          return {
+            result: result.result,
+            messages,
+          };
         },
-      });
-      const messages = Array.isArray(response?.lines)
-        ? response.lines
-            .map((line) => {
-              try {
-                return JSON.parse(line);
-              } catch {
-                return null;
-              }
-            })
-            .filter(Boolean)
-        : [];
-      const error = messages.find(
-        (message) => message?.id === id && message.error,
+        {
+          command: APP_SERVER_HANDLE_JSON_LINES_COMMAND,
+          method,
+          params,
+        },
       );
-      if (error) {
-        throw new Error(`${method} failed: ${JSON.stringify(error.error)}`);
+    } catch (error) {
+      if (!isTransientPageEvaluationError(error) || attempt === 2) {
+        throw error;
       }
-      const result = messages.find(
-        (message) =>
-          message?.id === id &&
-          Object.prototype.hasOwnProperty.call(message, "result"),
-      );
-      if (!result) {
-        throw new Error(`${method} did not return a JSON-RPC result`);
-      }
-      return {
-        result: result.result,
-        messages,
-      };
-    },
-    {
-      command: APP_SERVER_HANDLE_JSON_LINES_COMMAND,
-      method,
-      params,
-    },
-  );
+      lastError = error;
+      await sleep(250);
+    }
+  }
+  throw lastError ?? new Error(`${method} App Server invocation failed`);
 }
 
 async function drainAppServerEventsFromPage(page, limit = 50) {
@@ -830,8 +879,32 @@ async function bindGuiWorkspaceAndModelPreferences(page, workspaceId) {
       const sessionProviderKey = `agent_topic_model_pref_${workspaceId}_${sessionId}`;
       const sessionWorkspaceKey = `agent_session_workspace_${sessionId}`;
       const lastProjectKey = "agent_last_project_id";
+      const openedProjectIdsKey = "agent_opened_project_ids";
+
+      const openedProjectIds = (() => {
+        try {
+          const parsed = JSON.parse(
+            window.localStorage.getItem(openedProjectIdsKey) || "[]",
+          );
+          return Array.isArray(parsed)
+            ? parsed.filter(
+                (projectId) =>
+                  typeof projectId === "string" && projectId.trim(),
+              )
+            : [];
+        } catch {
+          return [];
+        }
+      })();
+      const nextOpenedProjectIds = Array.from(
+        new Set([...openedProjectIds, workspaceId]),
+      );
 
       window.localStorage.setItem(lastProjectKey, JSON.stringify(workspaceId));
+      window.localStorage.setItem(
+        openedProjectIdsKey,
+        JSON.stringify(nextOpenedProjectIds),
+      );
       window.localStorage.setItem(providerKey, JSON.stringify(provider));
       window.localStorage.setItem(modelKey, JSON.stringify(model));
       window.localStorage.setItem(migratedKey, JSON.stringify(true));
@@ -859,10 +932,18 @@ async function bindGuiWorkspaceAndModelPreferences(page, workspaceId) {
           },
         }),
       );
+      window.dispatchEvent(
+        new CustomEvent("agent-opened-project-ids-changed", {
+          detail: {
+            projectIds: nextOpenedProjectIds,
+          },
+        }),
+      );
       window.dispatchEvent(new Event("focus"));
 
       return {
         lastProject: window.localStorage.getItem(lastProjectKey),
+        openedProjects: window.localStorage.getItem(openedProjectIdsKey),
         provider: window.localStorage.getItem(providerKey),
         model: window.localStorage.getItem(modelKey),
         sessionProvider: window.localStorage.getItem(sessionProviderKey),
@@ -952,7 +1033,6 @@ async function createFixtureSession(page, workspace, requestLog) {
 async function navigateGuiToWorkspaceScopedAgent(page, options, workspaceId) {
   const startedAt = Date.now();
   let lastSnapshot = null;
-  let requestedSessionOpen = false;
 
   while (Date.now() - startedAt < options.timeoutMs) {
     const snapshot = await evaluatePageSnapshot(
@@ -980,7 +1060,6 @@ async function navigateGuiToWorkspaceScopedAgent(page, options, workspaceId) {
             JSON.stringify(workspaceId),
           hasConversationList: Boolean(recentShelf),
           recentShelfText: recentShelf?.textContent || "",
-          hasSessionOpenRequest: window.__clawFixtureSessionOpenRequested === true,
           hasWorkspaceShell: Boolean(
             document.querySelector('[data-testid="agent-chat-workspace"]') ||
             document.querySelector('[data-testid="chat-workspace"]') ||
@@ -1002,36 +1081,15 @@ async function navigateGuiToWorkspaceScopedAgent(page, options, workspaceId) {
     lastSnapshot = snapshot;
 
     if (
-      requestedSessionOpen &&
       snapshot.hasConversationList &&
       snapshot.localStorageMatchesWorkspace
     ) {
       return snapshot;
     }
 
-    const requested = await page.evaluate(
-      ({ sessionId, workspaceId }) => {
-        window.__clawFixtureSessionOpenRequested = true;
-        window.dispatchEvent(
-          new CustomEvent("lime:task-center:open-task", {
-            cancelable: true,
-            detail: {
-              sessionId,
-              workspaceId,
-              source: "sidebar",
-            },
-          }),
-        );
-        return true;
-      },
-      { sessionId: SESSION_ID, workspaceId },
-    );
-    if (!requested) {
-      await page.evaluate(() => {
-        window.dispatchEvent(new Event("focus"));
-      });
-    }
-    requestedSessionOpen = requestedSessionOpen || requested;
+    await page.evaluate(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
 
     await sleep(options.intervalMs);
   }
@@ -1101,7 +1159,7 @@ async function waitForGuiSessionVisible(page, options) {
   );
 }
 
-async function openFixtureSessionFromSidebar(page, options) {
+async function openFixtureSessionFromSidebar(page, options, requestLog) {
   const startedAt = Date.now();
   let lastSnapshot = null;
   let lastClick = null;
@@ -1156,11 +1214,32 @@ async function openFixtureSessionFromSidebar(page, options) {
     }
 
     if (lastClick?.clicked) {
+      const readModel = await invokeAppServerFromPage(
+        page,
+        APP_SERVER_METHOD_SESSION_READ,
+        {
+          sessionId: SESSION_ID,
+          historyLimit: 1,
+        },
+        requestLog,
+      ).catch((error) => ({
+        error: error instanceof Error ? error.message : String(error),
+      }));
       const inputReady = await evaluatePageSnapshot(
         page,
         ({ title }) => {
           const textarea = document.querySelector(
             'textarea[name="agent-chat-message"]',
+          );
+          const rect = textarea?.getBoundingClientRect();
+          const style = textarea ? window.getComputedStyle(textarea) : null;
+          const textareaVisible = Boolean(
+            textarea &&
+              rect &&
+              rect.width > 16 &&
+              rect.height > 16 &&
+              style?.visibility !== "hidden" &&
+              style?.display !== "none",
           );
           const menu = document.querySelector(
             '[data-testid="app-sidebar-conversation-menu"]',
@@ -1170,9 +1249,20 @@ async function openFixtureSessionFromSidebar(page, options) {
           return {
             url: window.location.href,
             hasTextarea: Boolean(textarea),
+            textareaVisible,
             hasConversationMenu: Boolean(menu),
             hasSessionTitleInMain: mainText.includes(title),
             hasRecentConversationsShell: mainText.includes("最近对话"),
+            hasMessageList: Boolean(
+              document.querySelector('[data-testid="message-list"]') ||
+                document.querySelector('[data-testid="message-list-frame"]'),
+            ),
+            isRestoringSessionShell:
+              mainText.includes("正在恢复生成会话") ||
+              bodyText.includes("正在恢复生成会话"),
+            hasInputbarCore: Boolean(
+              document.querySelector('[data-testid="inputbar-core-container"]'),
+            ),
             hasWorkspaceShell: Boolean(
               document.querySelector('[data-testid="agent-chat-workspace"]') ||
                 document.querySelector('[data-testid="chat-workspace"]') ||
@@ -1192,13 +1282,35 @@ async function openFixtureSessionFromSidebar(page, options) {
       lastSnapshot = {
         clicked: lastClick,
         inputReady: sanitizeJson(inputReady),
+        readModel: sanitizeJson({
+          hasDetail: Boolean(readModel?.result?.detail),
+          sessionId:
+            readModel?.result?.session?.sessionId ??
+            readModel?.result?.session?.session_id ??
+            readModel?.result?.detail?.session?.sessionId ??
+            readModel?.result?.detail?.session?.session_id ??
+            null,
+          error: readModel?.error ?? null,
+        }),
       };
+      const readModelSessionId =
+        readModel?.result?.session?.sessionId ??
+        readModel?.result?.session?.session_id ??
+        readModel?.result?.detail?.session?.sessionId ??
+        readModel?.result?.detail?.session?.session_id ??
+        null;
       if (
         inputReady?.hasTextarea &&
+        inputReady?.hasInputbarCore &&
+        inputReady?.textareaVisible &&
         inputReady?.textareaDisabled === false &&
-        inputReady?.hasWorkspaceShell &&
+        readModelSessionId === SESSION_ID &&
         !inputReady?.hasConversationMenu &&
-        !inputReady?.hasRecentConversationsShell
+        !inputReady?.hasRecentConversationsShell &&
+        !inputReady?.isRestoringSessionShell &&
+        !isTaskCenterHomeText(inputReady?.mainText || "") &&
+        !isTaskCenterHomeText(inputReady?.bodyText || "") &&
+        (inputReady?.hasSessionTitleInMain || inputReady?.hasMessageList)
       ) {
         return lastSnapshot;
       }
@@ -1242,6 +1354,7 @@ async function waitForInputReady(page, options) {
           document.querySelector('[data-testid="inputbar-core-container"]'),
         ),
         bodyText: document.body?.innerText || "",
+        mainText: document.querySelector("main")?.textContent || "",
       };
     });
     if (!snapshot) {
@@ -1251,8 +1364,13 @@ async function waitForInputReady(page, options) {
     lastSnapshot = snapshot;
     if (
       snapshot.hasTextarea &&
+      snapshot.hasInputbarCore &&
       snapshot.textareaVisible &&
-      snapshot.textareaDisabled === false
+      snapshot.textareaDisabled === false &&
+      !snapshot.mainText.includes("最近对话") &&
+      !snapshot.mainText.includes("正在恢复生成会话") &&
+      !isTaskCenterHomeText(snapshot.mainText || "") &&
+      !isTaskCenterHomeText(snapshot.bodyText || "")
     ) {
       return snapshot;
     }
@@ -1326,9 +1444,22 @@ async function sendNewsPromptFromGui(page, options) {
   return await sendPromptFromGui(page, options, NEWS_PROMPT);
 }
 
-async function enablePlanModeFromGui(page, options) {
+async function enableInputbarPlusModeFromGui(
+  page,
+  options,
+  { label, menuTestId, statusTestId, statusText },
+) {
   await waitForInputReady(page, options);
+  await page.locator('textarea[name="agent-chat-message"]').first().focus();
   const opened = await page.evaluate(() => {
+    const directTrigger = document.querySelector(
+      '[data-testid="inputbar-plus-trigger"]',
+    );
+    if (directTrigger instanceof HTMLElement) {
+      directTrigger.click();
+      return { clicked: true, method: "testid" };
+    }
+
     const buttons = Array.from(document.querySelectorAll("button"));
     const trigger = buttons.find((button) => {
       const label = [
@@ -1346,52 +1477,78 @@ async function enablePlanModeFromGui(page, options) {
     });
     if (trigger instanceof HTMLElement) {
       trigger.click();
-      return true;
+      return { clicked: true, method: "label" };
     }
-    return false;
+    return {
+      clicked: false,
+      buttons: buttons.map((button) => ({
+        testId: button.getAttribute("data-testid") || "",
+        aria: button.getAttribute("aria-label") || "",
+        title: button.getAttribute("title") || "",
+        text: button.textContent || "",
+        disabled: button.disabled,
+      })),
+    };
   });
-  assert(opened, "未找到输入区更多菜单按钮，无法切换 plan mode");
+  assert(
+    opened?.clicked,
+    `未找到输入区更多菜单按钮，无法切换 ${label}: ${JSON.stringify(
+      sanitizeJson(opened),
+    )}`,
+  );
 
   const startedAt = Date.now();
   let lastSnapshot = null;
+  let clickedModeButton = false;
   while (Date.now() - startedAt < options.timeoutMs) {
-    const snapshot = await evaluatePageSnapshot(page, () => {
+    const snapshot = await evaluatePageSnapshot(page, ({ menuTestId, statusTestId }) => {
       const menu = document.querySelector('[data-testid="inputbar-plus-menu"]');
-      const planButton = document.querySelector(
-        '[data-testid="inputbar-plus-plan-mode"]',
-      );
-      const statusChip = document.querySelector(
-        '[data-testid="inputbar-task-mode-status"]',
-      );
+      const modeButton = document.querySelector(`[data-testid="${menuTestId}"]`);
+      const statusChip = statusTestId
+        ? document.querySelector(`[data-testid="${statusTestId}"]`)
+        : null;
       return {
         menuVisible: Boolean(menu),
-        planButtonVisible: Boolean(planButton),
+        modeButtonVisible: Boolean(modeButton),
         statusChipVisible: Boolean(statusChip),
         statusText: statusChip?.textContent || "",
         bodyText: document.body?.innerText || "",
       };
-    });
+    }, { menuTestId, statusTestId });
     lastSnapshot = snapshot;
-    if (snapshot?.planButtonVisible) {
-      await page.locator('[data-testid="inputbar-plus-plan-mode"]').click();
+    if (snapshot?.modeButtonVisible) {
+      await page.locator(`[data-testid="${menuTestId}"]`).click();
+      clickedModeButton = true;
       break;
     }
     await sleep(options.intervalMs);
   }
+  assert(
+    clickedModeButton,
+    `未找到 ${label} 菜单项: ${JSON.stringify(sanitizeJson(lastSnapshot))}`,
+  );
 
   const enabledStartedAt = Date.now();
-  while (Date.now() - enabledStartedAt < options.timeoutMs) {
-    const snapshot = await evaluatePageSnapshot(page, () => {
-      const statusChip = document.querySelector(
-        '[data-testid="inputbar-task-mode-status"]',
-      );
+  const enabledTimeoutMs = Math.max(
+    options.intervalMs,
+    options.timeoutMs - (enabledStartedAt - startedAt),
+  );
+  while (Date.now() - enabledStartedAt < enabledTimeoutMs) {
+    const snapshot = await evaluatePageSnapshot(page, ({ statusTestId, statusText }) => {
+      const statusChip = statusTestId
+        ? document.querySelector(`[data-testid="${statusTestId}"]`)
+        : null;
       return {
         statusChipVisible: Boolean(statusChip),
         statusText: statusChip?.textContent || "",
         bodyText: document.body?.innerText || "",
       };
-    });
-    if (snapshot?.statusChipVisible) {
+    }, { statusTestId, statusText });
+    const hasExpectedText =
+      !statusText ||
+      snapshot?.statusText?.includes(statusText) ||
+      snapshot?.bodyText?.includes(statusText);
+    if (snapshot?.statusChipVisible && hasExpectedText) {
       return sanitizeJson(snapshot);
     }
     lastSnapshot = snapshot;
@@ -1399,8 +1556,26 @@ async function enablePlanModeFromGui(page, options) {
   }
 
   throw new Error(
-    `Plan mode 未在输入区启用: ${JSON.stringify(sanitizeJson(lastSnapshot))}`,
+    `${label} 未在输入区启用: ${JSON.stringify(sanitizeJson(lastSnapshot))}`,
   );
+}
+
+async function enablePlanModeFromGui(page, options) {
+  return await enableInputbarPlusModeFromGui(page, options, {
+    label: "Plan mode",
+    menuTestId: "inputbar-plus-plan-mode",
+    statusTestId: "inputbar-task-mode-status",
+    statusText: "",
+  });
+}
+
+async function enableGoalModeFromGui(page, options) {
+  return await enableInputbarPlusModeFromGui(page, options, {
+    label: "追求目标",
+    menuTestId: "inputbar-plus-objective",
+    statusTestId: "inputbar-objective-status",
+    statusText: "追求目标",
+  });
 }
 
 async function waitForGuiChatCompleted(
@@ -1816,7 +1991,8 @@ async function waitForSessionReadPlanCompleted(page, options, requestLog) {
     const serialized = JSON.stringify(read.result || {});
     if (
       serialized.includes(PLAN_PROMPT) &&
-      serialized.includes(PLAN_DONE_TEXT) &&
+      serialized.includes("<proposed_plan>") &&
+      serialized.includes("</proposed_plan>") &&
       PLAN_STEPS.every((step) => serialized.includes(step.step))
     ) {
       return read.result;
@@ -1824,7 +2000,7 @@ async function waitForSessionReadPlanCompleted(page, options, requestLog) {
     await sleep(options.intervalMs);
   }
   throw new Error(
-    `App Server read model 未读回计划工具结果: ${JSON.stringify(
+    `App Server read model 未读回 proposed_plan 计划块: ${JSON.stringify(
       sanitizeJson(lastRead),
     )}`,
   );
@@ -2073,8 +2249,24 @@ function summarizeBackendLedger(backendLedger) {
   const turnCancelEntries = backendLedger.filter(
     (entry) => entry.kind === "turnCancel",
   );
+  const backendEmitEntries = backendLedger.filter(
+    (entry) => entry.kind === "backendEmit",
+  );
   const latestTurnStart = turnStartEntries.at(-1) ?? null;
   const latestTurnCancel = turnCancelEntries.at(-1) ?? null;
+  const latestTurnEmitEntries =
+    latestTurnStart?.turnId == null
+      ? []
+      : backendEmitEntries.filter(
+          (entry) => entry.turnId === latestTurnStart.turnId,
+        );
+  const latestTurnEmitTimes = latestTurnEmitEntries
+    .map((entry) => Date.parse(entry.recordedAt))
+    .filter((timestamp) => Number.isFinite(timestamp));
+  const latestTurnEmitSpanMs =
+    latestTurnEmitTimes.length >= 2
+      ? Math.max(...latestTurnEmitTimes) - Math.min(...latestTurnEmitTimes)
+      : 0;
   const asterChatRequest = latestTurnStart?.asterChatRequest ?? null;
   const collaborationMode =
     asterChatRequest?.turn_config?.metadata?.harness?.collaboration_mode
@@ -2089,6 +2281,12 @@ function summarizeBackendLedger(backendLedger) {
     kinds: backendLedger.map((entry) => entry.kind),
     turnStartCount: turnStartEntries.length,
     turnCancelCount: turnCancelEntries.length,
+    backendEmitCount: backendEmitEntries.length,
+    latestTurnBackendEmitCount: latestTurnEmitEntries.length,
+    latestTurnBackendEmitSpanMs: latestTurnEmitSpanMs,
+    latestTurnBackendEmitTypes: latestTurnEmitEntries.map(
+      (entry) => entry.eventTypes,
+    ),
     latestTurnStart: latestTurnStart
       ? sanitizeJson({
           sessionId: latestTurnStart.sessionId,
@@ -2113,6 +2311,35 @@ function summarizeBackendLedger(backendLedger) {
         })
       : null,
   };
+}
+
+function readHarnessMetadataFromTurnStart(turnStart) {
+  const asterChatRequest = turnStart?.asterChatRequest ?? {};
+  return (
+    asterChatRequest?.turn_config?.metadata?.harness ??
+    asterChatRequest?.turnConfig?.metadata?.harness ??
+    turnStart?.runtimeOptions?.metadata?.harness ??
+    {}
+  );
+}
+
+function readObjectiveTextFromHarness(harness) {
+  return (
+    harness?.thread_goal?.set?.objective ??
+    harness?.threadGoal?.set?.objective ??
+    harness?.goal?.set?.objective ??
+    harness?.managed_objective?.objective_text ??
+    harness?.managedObjective?.objectiveText ??
+    null
+  );
+}
+
+function isTaskCenterHomeText(text) {
+  return (
+    text.includes("青柠一下，灵感即来") ||
+    text.includes("你可以从这些任务开始") ||
+    text.includes("向下滑，看看 Lime 可以帮你做什么")
+  );
 }
 
 async function run() {
@@ -2186,10 +2413,14 @@ async function run() {
     planModeEnabled: null,
     planInputSend: null,
     guiPlanCompleted: null,
+    goalModeEnabled: null,
+    goalInputSend: null,
+    guiGoalCompleted: null,
     readModelCompleted: null,
     readModelCanceled: null,
     readModelContinueCompleted: null,
     readModelPlanCompleted: null,
+    readModelGoalCompleted: null,
     eventReadProbe: null,
     assertions: {},
     summary: summaryPath,
@@ -2328,7 +2559,7 @@ async function run() {
       await waitForGuiSessionVisible(page, options),
     );
     summary.guiSessionOpened = sanitizeJson(
-      await openFixtureSessionFromSidebar(page, options),
+      await openFixtureSessionFromSidebar(page, options, appServerRequests),
     );
 
     if (options.scenario === "plan") {
@@ -2354,6 +2585,12 @@ async function run() {
         appServerRequests,
       );
       summary.readModelPlanCompleted = sanitizeJson({
+        latestTurnCompleted:
+          readModelPlanCompleted?.detail?.status === "completed" ||
+          readModelPlanCompleted?.detail?.thread_read?.status ===
+            "completed" ||
+          readModelPlanCompleted?.detail?.thread_read?.runtime_summary
+            ?.latestTurnStatus === "completed",
         detailItemCount: Array.isArray(readModelPlanCompleted?.detail?.items)
           ? readModelPlanCompleted.detail.items.length
           : null,
@@ -2366,6 +2603,13 @@ async function run() {
         includesPrompt: JSON.stringify(readModelPlanCompleted || {}).includes(
           PLAN_PROMPT,
         ),
+        includesProposedPlanBlock:
+          JSON.stringify(readModelPlanCompleted || {}).includes(
+            "<proposed_plan>",
+          ) &&
+          JSON.stringify(readModelPlanCompleted || {}).includes(
+            "</proposed_plan>",
+          ),
         includesAssistantDone: JSON.stringify(
           readModelPlanCompleted || {},
         ).includes(PLAN_DONE_TEXT),
@@ -2377,6 +2621,57 @@ async function run() {
         includesAllPlanSteps: PLAN_STEPS.every((step) =>
           JSON.stringify(readModelPlanCompleted || {}).includes(step.step),
         ),
+      });
+    } else if (options.scenario === "goal") {
+      logStage("enable-goal-mode-from-gui");
+      summary.goalModeEnabled = sanitizeJson(
+        await enableGoalModeFromGui(page, options),
+      );
+
+      logStage("send-goal-prompt-from-gui");
+      summary.goalInputSend = sanitizeJson(
+        await sendPromptFromGui(page, options, GOAL_PROMPT),
+      );
+
+      logStage("wait-gui-goal-completed");
+      summary.guiGoalCompleted = sanitizeJson(
+        await waitForGuiChatCompleted(page, options, {
+          prompt: GOAL_PROMPT,
+          doneText: GOAL_DONE_TEXT,
+          summaryText: "目标已绑定到本轮请求",
+        }),
+      );
+
+      logStage("wait-read-model-goal-completed");
+      const readModelGoalCompleted = await waitForSessionReadCompleted(
+        page,
+        options,
+        appServerRequests,
+        {
+          prompt: GOAL_PROMPT,
+          doneText: GOAL_DONE_TEXT,
+          summaryText: "目标已绑定到本轮请求",
+        },
+      );
+      summary.readModelGoalCompleted = sanitizeJson({
+        detailItemCount: Array.isArray(readModelGoalCompleted?.detail?.items)
+          ? readModelGoalCompleted.detail.items.length
+          : null,
+        latestTurnStatus:
+          readModelGoalCompleted?.detail?.thread_read?.runtime_summary
+            ?.latestTurnStatus ??
+          readModelGoalCompleted?.detail?.thread_read?.status ??
+          readModelGoalCompleted?.detail?.status ??
+          null,
+        includesPrompt: JSON.stringify(readModelGoalCompleted || {}).includes(
+          GOAL_PROMPT,
+        ),
+        includesAssistantDone: JSON.stringify(
+          readModelGoalCompleted || {},
+        ).includes(GOAL_DONE_TEXT),
+        includesAssistantSummary: JSON.stringify(
+          readModelGoalCompleted || {},
+        ).includes("目标已绑定到本轮请求"),
       });
     } else {
       logStage("send-news-prompt-from-gui");
@@ -2482,7 +2777,7 @@ async function run() {
           ).includes("继续输出已恢复"),
         });
       }
-    } else if (options.scenario !== "plan") {
+    } else if (options.scenario !== "plan" && options.scenario !== "goal") {
       logStage("wait-gui-completed");
       summary.guiCompleted = sanitizeJson(
         await waitForGuiChatCompleted(page, options),
@@ -2551,6 +2846,9 @@ async function run() {
     const planTurnStart = backendLedger.find(
       (entry) => entry.kind === "turnStart" && entry.inputText === PLAN_PROMPT,
     );
+    const goalTurnStart = backendLedger.find(
+      (entry) => entry.kind === "turnStart" && entry.inputText === GOAL_PROMPT,
+    );
     const continueTurnStart = backendLedger.find(
       (entry) =>
         entry.kind === "turnStart" && entry.inputText === CONTINUE_PROMPT,
@@ -2558,15 +2856,20 @@ async function run() {
     const latestTurnCancel = backendLedger
       .filter((entry) => entry.kind === "turnCancel")
       .at(-1);
-    const asterChatRequest =
-      (options.scenario === "plan"
-        ? planTurnStart?.asterChatRequest
-        : newsTurnStart?.asterChatRequest) ?? {};
     const isCancelOnlyScenario = options.scenario === "cancel";
     const isCancelThenContinueScenario =
       options.scenario === "cancel-then-continue";
     const isPlanScenario = options.scenario === "plan";
+    const isGoalScenario = options.scenario === "goal";
+    const asterChatRequest =
+      (isPlanScenario
+        ? planTurnStart?.asterChatRequest
+        : isGoalScenario
+          ? goalTurnStart?.asterChatRequest
+          : newsTurnStart?.asterChatRequest) ?? {};
     const hasCancelPhase = isCancelOnlyScenario || isCancelThenContinueScenario;
+    const goalHarness = readHarnessMetadataFromTurnStart(goalTurnStart);
+    const goalObjectiveText = readObjectiveTextFromHarness(goalHarness);
     const collaborationMode =
       asterChatRequest?.turn_config?.metadata?.harness?.collaboration_mode
         ?.mode ??
@@ -2597,7 +2900,9 @@ async function run() {
       ),
       fixturePromptReachedBackend: isPlanScenario
         ? planTurnStart?.inputText === PLAN_PROMPT
-        : newsTurnStart?.inputText === NEWS_PROMPT,
+        : isGoalScenario
+          ? goalTurnStart?.inputText === GOAL_PROMPT
+          : newsTurnStart?.inputText === NEWS_PROMPT,
       liveProviderNotUsed: backendLedger.every(
         (entry) =>
           entry.kind !== "turnStart" ||
@@ -2621,6 +2926,8 @@ async function run() {
               true
           : isPlanScenario
             ? summary.guiPlanCompleted?.hasPrompt === true
+            : isGoalScenario
+              ? summary.guiGoalCompleted?.hasPrompt === true
           : summary.guiCompleted?.hasPrompt === true,
       guiAssistantOutputVisible: isCancelOnlyScenario
         ? summary.guiCanceled?.hasStoppedCopy === true
@@ -2630,6 +2937,9 @@ async function run() {
           : isPlanScenario
             ? summary.guiPlanCompleted?.hasPlanIntro === true ||
               summary.guiPlanCompleted?.hasDoneText === true
+            : isGoalScenario
+              ? summary.guiGoalCompleted?.hasAssistantSummary === true ||
+                summary.guiGoalCompleted?.hasDoneText === true
           : summary.guiCompleted?.hasAssistantSummary === true ||
             summary.guiCompleted?.hasDoneText === true,
       guiInputRemainsReady: isCancelOnlyScenario
@@ -2641,6 +2951,9 @@ async function run() {
           : isPlanScenario
             ? summary.guiPlanCompleted?.textareaVisible === true &&
               summary.guiPlanCompleted?.textareaDisabled === false
+            : isGoalScenario
+              ? summary.guiGoalCompleted?.textareaVisible === true &&
+                summary.guiGoalCompleted?.textareaDisabled === false
           : summary.guiCompleted?.textareaVisible === true &&
             summary.guiCompleted?.textareaDisabled === false,
       guiNotStuckStreaming: isCancelOnlyScenario
@@ -2649,6 +2962,8 @@ async function run() {
           ? summary.guiContinueCompleted?.stopButtonVisible === false
           : isPlanScenario
             ? summary.guiPlanCompleted?.stopButtonVisible === false
+            : isGoalScenario
+              ? summary.guiGoalCompleted?.stopButtonVisible === false
           : summary.guiCompleted?.stopButtonVisible === false,
       pageMentionsPromptAndAssistant: isCancelOnlyScenario
         ? pageText.includes(NEWS_PROMPT) &&
@@ -2664,6 +2979,10 @@ async function run() {
           : isPlanScenario
             ? pageText.includes(PLAN_PROMPT) &&
               PLAN_STEPS.every((step) => pageText.includes(step.step))
+            : isGoalScenario
+              ? pageText.includes(GOAL_PROMPT) &&
+                (pageText.includes("目标已绑定到本轮请求") ||
+                  pageText.includes(GOAL_DONE_TEXT))
           : pageText.includes(NEWS_PROMPT) &&
             (pageText.includes("今日国际新闻简要整理") ||
               pageText.includes(ASSISTANT_DONE_TEXT)),
@@ -2683,13 +3002,36 @@ async function run() {
             summary.guiPlanCompleted?.hasAllPlanSteps === true,
           readModelPlanCompleted:
             summary.readModelPlanCompleted?.includesPrompt === true &&
-            summary.readModelPlanCompleted?.includesAssistantDone === true &&
+            summary.readModelPlanCompleted?.includesProposedPlanBlock === true &&
             summary.readModelPlanCompleted?.includesPlanItem === true &&
-            summary.readModelPlanCompleted?.includesAllPlanSteps === true,
+            summary.readModelPlanCompleted?.includesAllPlanSteps === true &&
+            summary.readModelPlanCompleted?.latestTurnCompleted === true,
           proposedPlanVisible:
             pageText.includes("计划") &&
             PLAN_STEPS.every((step) => pageText.includes(step.step)),
         }
+      : isGoalScenario
+        ? {
+            goalModeEnabledInGui:
+              summary.goalModeEnabled?.statusChipVisible === true &&
+              summary.goalModeEnabled?.statusText?.includes("追求目标") === true,
+            goalPromptReachedBackend: goalTurnStart?.inputText === GOAL_PROMPT,
+            goalObjectiveTextReachedBackend: goalObjectiveText === GOAL_PROMPT,
+            goalManagedObjectiveReachedBackend:
+              goalHarness?.managed_objective?.objective_text === GOAL_PROMPT ||
+              goalHarness?.managedObjective?.objectiveText === GOAL_PROMPT,
+            guiGoalCompleted:
+              summary.guiGoalCompleted?.hasPrompt === true &&
+              (summary.guiGoalCompleted?.hasAssistantSummary === true ||
+                summary.guiGoalCompleted?.hasDoneText === true) &&
+              summary.guiGoalCompleted?.textareaVisible === true &&
+              summary.guiGoalCompleted?.textareaDisabled === false &&
+              summary.guiGoalCompleted?.stopButtonVisible === false,
+            readModelGoalCompleted:
+              summary.readModelGoalCompleted?.includesPrompt === true &&
+              (summary.readModelGoalCompleted?.includesAssistantDone === true ||
+                summary.readModelGoalCompleted?.includesAssistantSummary === true),
+          }
       : hasCancelPhase
         ? {
             usedCurrentTurnCancel: appServerRequestMethods.includes(
@@ -2780,6 +3122,12 @@ async function run() {
           "guiPlanStepsVisible",
           "readModelPlanCompleted",
           "proposedPlanVisible",
+          "goalModeEnabledInGui",
+          "goalPromptReachedBackend",
+          "goalObjectiveTextReachedBackend",
+          "goalManagedObjectiveReachedBackend",
+          "guiGoalCompleted",
+          "readModelGoalCompleted",
         ]
       : isCancelThenContinueScenario
         ? [
@@ -2795,6 +3143,12 @@ async function run() {
             "guiPlanStepsVisible",
             "readModelPlanCompleted",
             "proposedPlanVisible",
+            "goalModeEnabledInGui",
+            "goalPromptReachedBackend",
+            "goalObjectiveTextReachedBackend",
+            "goalManagedObjectiveReachedBackend",
+            "guiGoalCompleted",
+            "readModelGoalCompleted",
           ]
         : isPlanScenario
           ? [
@@ -2813,7 +3167,38 @@ async function run() {
               "eventReadProbeObserved",
               "readModelEventReadAligned",
               "readModelToolCallAligned",
+              "goalModeEnabledInGui",
+              "goalPromptReachedBackend",
+              "goalObjectiveTextReachedBackend",
+              "goalManagedObjectiveReachedBackend",
+              "guiGoalCompleted",
+              "readModelGoalCompleted",
             ]
+          : isGoalScenario
+            ? [
+                "usedCurrentTurnCancel",
+                "externalFixtureCancelUsed",
+                "fixtureCancelReachedBackend",
+                "guiStopClicked",
+                "readModelCanceled",
+                "continuePromptReachedBackend",
+                "guiContinueInputSubmitted",
+                "guiContinueCompleted",
+                "readModelContinueCompleted",
+                "backendRecordedCancelThenContinue",
+                "noEpochFallbackTitle",
+                "readModelCompleted",
+                "eventReadProbeObserved",
+                "readModelEventReadAligned",
+                "readModelToolCallAligned",
+                "planModeEnabledInGui",
+                "planPromptReachedBackend",
+                "planCollaborationModeReachedBackend",
+                "guiPlanRailVisible",
+                "guiPlanStepsVisible",
+                "readModelPlanCompleted",
+                "proposedPlanVisible",
+              ]
         : [
             "usedCurrentTurnCancel",
             "externalFixtureCancelUsed",
@@ -2832,6 +3217,12 @@ async function run() {
             "guiPlanStepsVisible",
             "readModelPlanCompleted",
             "proposedPlanVisible",
+            "goalModeEnabledInGui",
+            "goalPromptReachedBackend",
+            "goalObjectiveTextReachedBackend",
+            "goalManagedObjectiveReachedBackend",
+            "guiGoalCompleted",
+            "readModelGoalCompleted",
           ];
     const assertions = {
       ...commonAssertions,

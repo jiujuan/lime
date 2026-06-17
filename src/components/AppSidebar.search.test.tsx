@@ -152,7 +152,7 @@ describe("AppSidebar search", () => {
     expect(dialog?.textContent).not.toContain("查看更多对话");
     expect(mockListAgentRuntimeSessions).toHaveBeenLastCalledWith({
       limit: 21,
-      workspaceId: "project-1",
+      cwd: "/repo/project-1",
     });
   });
 

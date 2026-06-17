@@ -134,6 +134,10 @@ Agent Runtime smoke 与 Service Skill 入口 smoke 已迁到 `scripts/agent-runt
 
 `npm run smoke:agent-session-history-electron-fixture` 是真实 Electron 历史恢复 fixture：通过 preload `app_server_handle_json_lines` 验证 App Server current `agentSession/start/read/update/list` 形状、最近对话可见和 hydrate detail 数组；它使用 `APP_SERVER_BACKEND_MODE=unavailable`，不触发 turn，也不调用模型后端。
 
+`npm run smoke:codex-import-continuation-electron-fixture` 是真实 Electron Codex 导入续聊 fixture：通过 preload `app_server_handle_json_lines` 导入一条 Codex rollout fixture，验证 `agentSession/read.detail.items` 能恢复 reasoning、command、patch、web search、approval，再在同一个导入 session 上调用 `agentSession/turn/start` 继续对话。它使用本地 external backend fixture，不调用正式模型，不走 App Server mock backend、renderer mock fallback 或 legacy runtime command。
+
+`npm run smoke:codex-import-click-through-electron-fixture` 是真实 Electron Codex 导入点击闭环 fixture：使用临时 `CODEX_HOME` 写入 `session_index.jsonl` 与 rollout JSONL，从侧边栏点击“导入 Codex 对话”，在确认弹窗预览“Codex 细节还原”后点击确认，进入 Lime 会话页验证导入消息、reasoning、command、patch、web search、approval 可见，再通过真实输入框发送 follow-up。它使用本地 external backend fixture，不读取真实 `~/.codex`，不调用正式模型，不走 App Server mock backend、renderer mock fallback 或 legacy runtime command。
+
 `npm run smoke:code-artifact-workbench-electron-fixture` 是真实 Electron 代码产物工作台 fixture：使用本地 external backend fixture 生成 `artifact.snapshot`、标准 coding facts 与 `turn.final_done`，再从 GUI 历史会话打开工作台，验证代码产物入口、变更 / 输出 / 日志面板和工作台可见性；传入 `--scenario gui-coding-input` 时会先通过真实 GUI 输入框发送 coding 请求，再验证同一套 Workbench 证据。它不调用正式模型，不走 App Server mock backend。
 
 `npm run smoke:claw-chat-current-fixture` 是更重的真实 Electron GUI fixture：通过真实输入框发送“整理今天的国际新闻”，验证用户输入可见、assistant 完成态输出可见、输入框不消失、App Server `agentSession/turn/start` 走 current JSON-RPC、WebSearch 不按关键词强制 required，并使用本地 external backend fixture 代替正式模型后端。修 Agent Runtime / Claw 输入、流式卡住、历史 hydrate 或新闻请求链路时，先跑聚合 guard，再按需要显式跑该入口；修无法停止或停止后无法继续输出时，还必须跑 `--scenario cancel-then-continue`，证明同一 current session 停止后能再次从 GUI 输入“继续输出”并完成第二轮。

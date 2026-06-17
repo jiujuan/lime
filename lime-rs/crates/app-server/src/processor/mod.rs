@@ -117,6 +117,8 @@ use app_server_protocol::METHOD_CONNECT_DEEP_LINK_RESOLVE;
 use app_server_protocol::METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE;
 use app_server_protocol::METHOD_CONNECT_RELAY_API_KEY_SAVE;
 use app_server_protocol::METHOD_CONVERSATION_IMPORT_SOURCE_SCAN;
+use app_server_protocol::METHOD_CONVERSATION_IMPORT_THREAD_COMMIT;
+use app_server_protocol::METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW;
 use app_server_protocol::METHOD_DIAGNOSTICS_LOG_STORAGE_READ;
 use app_server_protocol::METHOD_DIAGNOSTICS_SERVER_READ;
 use app_server_protocol::METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT;
@@ -938,7 +940,16 @@ impl RequestProcessor {
             }
             METHOD_CONNECT_CALLBACK_SEND => self.handle_connect_callback_send_impl(params).await,
             METHOD_CONVERSATION_IMPORT_SOURCE_SCAN => {
-                self.handle_conversation_import_source_scan_impl(params).await
+                self.handle_conversation_import_source_scan_impl(params)
+                    .await
+            }
+            METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW => {
+                self.handle_conversation_import_thread_preview_impl(params)
+                    .await
+            }
+            METHOD_CONVERSATION_IMPORT_THREAD_COMMIT => {
+                self.handle_conversation_import_thread_commit_impl(params)
+                    .await
             }
             METHOD_AGENT_SESSION_TURN_START => self.handle_turn_start(params, event_callback).await,
             METHOD_AGENT_SESSION_TURN_CANCEL => self.handle_turn_cancel(params).await,

@@ -167,6 +167,19 @@ export function useWorkspaceTopicSwitch({
         });
 
         if (
+          options?.allowDetachedSession === true &&
+          !currentProjectId &&
+          !topicBoundProjectId
+        ) {
+          logAgentDebug("AgentChatPage", "switchTopic.detachedSessionFastPath", {
+            topicId,
+          });
+          finishResolutionIfNeeded();
+          await runTopicSwitch(topicId, options, { skipBeforeSwitch: true });
+          return "success" as const;
+        }
+
+        if (
           currentProjectId &&
           (!topicBoundProjectId || topicBoundProjectId === currentProjectId)
         ) {

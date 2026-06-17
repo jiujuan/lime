@@ -9,6 +9,11 @@ export interface ProposedPlanBlockSegment {
   isComplete: boolean;
 }
 
+export interface ProposedPlanItem {
+  text: string;
+  status: "pending" | "in_progress" | "completed";
+}
+
 export type ProposedPlanSegment =
   | ProposedPlanTextSegment
   | ProposedPlanBlockSegment;
@@ -59,7 +64,7 @@ export function splitProposedPlanSegments(text: string): ProposedPlanSegment[] {
     if (closeIndex === -1) {
       segments.push({
         type: "plan",
-        content: text.slice(planStart).trim(),
+        content: normalizePlanText(text.slice(planStart)).trim(),
         isComplete: false,
       });
       break;
@@ -67,7 +72,7 @@ export function splitProposedPlanSegments(text: string): ProposedPlanSegment[] {
 
     segments.push({
       type: "plan",
-      content: text.slice(planStart, closeIndex).trim(),
+      content: normalizePlanText(text.slice(planStart, closeIndex)).trim(),
       isComplete: true,
     });
     cursor = closeIndex + CLOSE_TAG.length;
@@ -87,4 +92,52 @@ export function stripProposedPlanBlocks(text: string): string {
     .join("")
     .replace(/\n{2,}/g, "\n")
     .trim();
+}
+
+function normalizePlanText(text: string): string {
+  return text.includes("\\n") ? text.replace(/\\n/g, "\n") : text;
+}
+
+function stripPlanMarker(line: string): string {
+  return line
+    .replace(/^\s*(?:[-*+]|\d+[.)])\s+/, "")
+    .replace(/^\s*\[[ xX-]\]\s+/, "")
+    .trim();
+}
+
+export function parseProposedPlanItems(content: string): ProposedPlanItem[] {
+  const normalized = normalizePlanText(content);
+  const rawLines = normalized
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const candidateLines = rawLines.filter((line) =>
+    /^\s*(?:[-*+]|\d+[.)])\s+/.test(line),
+  );
+  const lines =
+    candidateLines.length > 0 && candidateLines.length === rawLines.length
+      ? candidateLines
+      : rawLines;
+
+  return lines
+    .map(stripPlanMarker)
+    .filter((text) => text.length > 0)
+    .map((text, index) => ({
+      text,
+      status: index === 0 ? "in_progress" : "pending",
+    }));
+}
+
+export function extractLatestProposedPlanItems(
+  text: string | null | undefined,
+): ProposedPlanItem[] {
+  if (!text) {
+    return [];
+  }
+  const planSegments = splitProposedPlanSegments(text).filter(
+    (segment): segment is ProposedPlanBlockSegment => segment.type === "plan",
+  );
+  const latestPlan = planSegments.at(-1);
+  return latestPlan ? parseProposedPlanItems(latestPlan.content) : [];
 }

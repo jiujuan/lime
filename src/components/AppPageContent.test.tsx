@@ -355,6 +355,40 @@ describe("AppPageContent", () => {
     });
   });
 
+  it("agent 页面切换 initialSessionId 应重建 AgentChatPage 实例", async () => {
+    const rendered = renderContentWithNavigationState({
+      currentPage: "agent",
+      pageParams: {
+        agentEntry: "new-task",
+        projectId: "project-1",
+        theme: "general",
+      } satisfies AgentPageParams,
+    });
+    await flushEffects();
+
+    expect(agentChatLifecycle.mounts).toBe(1);
+    expect(agentChatLifecycle.unmounts).toBe(0);
+
+    rendered.rerender({
+      currentPage: "agent",
+      pageParams: {
+        agentEntry: "claw",
+        projectId: "project-1",
+        theme: "general",
+        initialSessionId: "session-opened-from-sidebar",
+      } satisfies AgentPageParams,
+    });
+    await flushEffects();
+
+    expect(agentChatLifecycle.mounts).toBe(2);
+    expect(agentChatLifecycle.unmounts).toBe(1);
+    expect(latestAgentChatProps.value).toMatchObject({
+      agentEntry: "claw",
+      projectId: "project-1",
+      initialSessionId: "session-opened-from-sidebar",
+    });
+  });
+
   it("agent 页面切换 newChatAt 不应重建 AgentChatPage 实例", async () => {
     const rendered = renderContentWithNavigationState({
       currentPage: "agent",

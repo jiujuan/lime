@@ -9,7 +9,6 @@ import { AppSidebar as AppSidebarComponent } from "./AppSidebar";
 import { changeLimeLocale as changeLimeLocaleImpl } from "@/i18n/createI18n";
 import {
   TASK_CENTER_CREATE_DRAFT_TASK_EVENT as TASK_CENTER_CREATE_DRAFT_TASK_EVENT_VALUE,
-  TASK_CENTER_OPEN_TASK_EVENT as TASK_CENTER_OPEN_TASK_EVENT_VALUE,
 } from "@/components/agent/chat/taskCenterDraftTaskEvents";
 import { LIME_COLOR_SCHEME_STORAGE_KEY as LIME_COLOR_SCHEME_STORAGE_KEY_VALUE } from "@/lib/appearance/colorSchemes";
 import { LIME_THEME_STORAGE_KEY as LIME_THEME_STORAGE_KEY_VALUE } from "@/lib/appearance/themeMode";
@@ -28,7 +27,6 @@ export const LIME_COLOR_SCHEME_STORAGE_KEY =
 export const LIME_THEME_STORAGE_KEY = LIME_THEME_STORAGE_KEY_VALUE;
 export const TASK_CENTER_CREATE_DRAFT_TASK_EVENT =
   TASK_CENTER_CREATE_DRAFT_TASK_EVENT_VALUE;
-export const TASK_CENTER_OPEN_TASK_EVENT = TASK_CENTER_OPEN_TASK_EVENT_VALUE;
 export const getStoredOemCloudSessionState = getStoredOemCloudSessionStateImpl;
 export const setOemCloudBootstrapSnapshot = setOemCloudBootstrapSnapshotImpl;
 export const setStoredOemCloudSessionState = setStoredOemCloudSessionStateImpl;
@@ -47,6 +45,9 @@ const {
   mockRevealPathInFinder,
   mockUpdateAgentRuntimeSession,
   mockDeleteAgentRuntimeSession,
+  mockScanConversationImportSource,
+  mockPreviewConversationImportThread,
+  mockCommitConversationImportThread,
   mockSetI18nLanguage,
   mockScheduleMinimumDelayIdleTask,
   mockLogoutClient,
@@ -82,6 +83,9 @@ const {
   mockRevealPathInFinder: vi.fn(),
   mockUpdateAgentRuntimeSession: vi.fn(),
   mockDeleteAgentRuntimeSession: vi.fn(),
+  mockScanConversationImportSource: vi.fn(),
+  mockPreviewConversationImportThread: vi.fn(),
+  mockCommitConversationImportThread: vi.fn(),
   mockSetI18nLanguage: vi.fn(),
   mockScheduleMinimumDelayIdleTask: vi.fn((task: () => void) => {
     task();
@@ -129,7 +133,10 @@ export {
   mockEnsureProjectWorkspace,
   mockCreateProjectGitWorktree,
   mockRevealPathInFinder,
+  mockScanConversationImportSource,
   mockLogoutClient,
+  mockPreviewConversationImportThread,
+  mockCommitConversationImportThread,
   mockOpenExternalUrl,
   mockOpenUpdateWindow,
   mockRecordUpdateNotificationAction,
@@ -165,6 +172,12 @@ vi.mock("@/lib/api/agentRuntime", () => ({
   deleteAgentRuntimeSession: mockDeleteAgentRuntimeSession,
   listAgentRuntimeSessions: mockListAgentRuntimeSessions,
   updateAgentRuntimeSession: mockUpdateAgentRuntimeSession,
+}));
+
+vi.mock("@/lib/api/conversationImport", () => ({
+  scanConversationImportSource: mockScanConversationImportSource,
+  previewConversationImportThread: mockPreviewConversationImportThread,
+  commitConversationImportThread: mockCommitConversationImportThread,
 }));
 
 vi.mock("@/lib/api/agentApps", () => ({
@@ -483,6 +496,193 @@ export async function resetAppSidebarTest() {
   mockRevealPathInFinder.mockResolvedValue(undefined);
   mockUpdateAgentRuntimeSession.mockResolvedValue(undefined);
   mockDeleteAgentRuntimeSession.mockResolvedValue(undefined);
+  mockScanConversationImportSource.mockResolvedValue({
+    source: {
+      sourceClient: "codex",
+      status: "ready",
+      sourceRoot: "/Users/example/.codex",
+      readable: true,
+      threadCount: 1,
+      indexedAt: "2026-06-16T00:00:00.000Z",
+      statePath: "/Users/example/.codex/state_5.sqlite",
+    },
+    threads: [
+      {
+        sourceClient: "codex",
+        sourceThreadId: "codex-thread-1",
+        title: "Codex 修复记录",
+        createdAt: "2026-06-15T00:00:00.000Z",
+        updatedAt: "2026-06-16T00:00:00.000Z",
+        cwd: "/repo/project-1",
+        source: "cli",
+        modelProvider: "openai",
+        archived: false,
+        sourcePath: "/Users/example/.codex/sessions/codex-thread-1.jsonl",
+        importStatus: "not_imported",
+      },
+    ],
+  });
+  mockPreviewConversationImportThread.mockResolvedValue({
+    source: {
+      sourceClient: "codex",
+      status: "ready",
+      sourceRoot: "/Users/example/.codex",
+      readable: true,
+      threadCount: 1,
+      indexedAt: "2026-06-16T00:00:00.000Z",
+      statePath: "/Users/example/.codex/state_5.sqlite",
+    },
+    thread: {
+      sourceClient: "codex",
+      sourceThreadId: "codex-thread-1",
+      title: "Codex 修复记录",
+      createdAt: "2026-06-15T00:00:00.000Z",
+      updatedAt: "2026-06-16T00:00:00.000Z",
+      cwd: "/repo/project-1",
+      source: "cli",
+      modelProvider: "openai",
+      archived: false,
+      sourcePath: "/Users/example/.codex/sessions/codex-thread-1.jsonl",
+      importStatus: "not_imported",
+    },
+    summary: {
+      lineCount: 8,
+      messageCount: 2,
+      rolloutEventItems: 2,
+      unsupportedCount: 1,
+      dryRun: {
+        willCreateSession: true,
+        willAppendToExistingSession: false,
+        willImportMessages: 2,
+        willImportTurns: 1,
+        willImportTimelineItems: 4,
+        willImportAttachments: 1,
+        unsupportedItems: 1,
+      },
+      fidelity: {
+        messages: 2,
+        reasoning: 0,
+        tools: 2,
+        commands: 1,
+        patches: 1,
+        approvals: 0,
+        mcp: 0,
+        webSearch: 0,
+        attachments: 1,
+        unsupported: 1,
+        provenanceOnly: 1,
+        budgetDropped: 0,
+      },
+      truncated: false,
+      warnings: ["工具事件会作为来源信息保留，不会伪造成 Lime 工具时间线。"],
+    },
+    messages: [
+      {
+        role: "user",
+        text: "请帮我修复运行时问题",
+        attachments: [
+          {
+            kind: "image",
+            uri: "data:image/png;base64,preview",
+            metadata: {
+              sourceType: "event_msg",
+              codexField: "images",
+              mediaType: "image/png",
+            },
+          },
+        ],
+        truncated: false,
+        omittedBytes: 0,
+        timestamp: "2026-06-16T00:00:00.000Z",
+        sourceType: "event_msg",
+        provenance: {
+          sourceClient: "codex",
+          sourceThreadId: "codex-thread-1",
+          sourcePath: "/Users/example/.codex/sessions/codex-thread-1.jsonl",
+          sourceEventType: "event_msg",
+          sourceEventSeq: 2,
+          sourcePayloadType: "user_message",
+        },
+      },
+      {
+        role: "assistant",
+        text: "已完成修复并补充测试。",
+        attachments: [],
+        truncated: false,
+        omittedBytes: 0,
+        timestamp: "2026-06-16T00:00:01.000Z",
+        sourceType: "event_msg",
+        provenance: {
+          sourceClient: "codex",
+          sourceThreadId: "codex-thread-1",
+          sourcePath: "/Users/example/.codex/sessions/codex-thread-1.jsonl",
+          sourceEventType: "event_msg",
+          sourceEventSeq: 3,
+          sourcePayloadType: "agent_message",
+        },
+      },
+    ],
+    events: [],
+  });
+  mockCommitConversationImportThread.mockResolvedValue({
+    session: {
+      sessionId: "session-imported",
+      threadId: "thread-imported",
+      appId: "content-studio",
+      workspaceId: "project-1",
+      status: "completed",
+      createdAt: "2026-06-16T00:00:00.000Z",
+      updatedAt: "2026-06-16T00:00:01.000Z",
+    },
+    thread: {
+      sourceClient: "codex",
+      sourceThreadId: "codex-thread-1",
+      title: "Codex 修复记录",
+      createdAt: "2026-06-15T00:00:00.000Z",
+      updatedAt: "2026-06-16T00:00:00.000Z",
+      cwd: "/repo/project-1",
+      source: "cli",
+      modelProvider: "openai",
+      archived: false,
+      sourcePath: "/Users/example/.codex/sessions/codex-thread-1.jsonl",
+      importStatus: "imported",
+    },
+    summary: {
+      lineCount: 8,
+      messageCount: 2,
+      rolloutEventItems: 2,
+      unsupportedCount: 1,
+      dryRun: {
+        willCreateSession: true,
+        willAppendToExistingSession: false,
+        willImportMessages: 2,
+        willImportTurns: 1,
+        willImportTimelineItems: 4,
+        willImportAttachments: 1,
+        unsupportedItems: 1,
+      },
+      fidelity: {
+        messages: 2,
+        reasoning: 0,
+        tools: 2,
+        commands: 1,
+        patches: 1,
+        approvals: 0,
+        mcp: 0,
+        webSearch: 0,
+        attachments: 1,
+        unsupported: 1,
+        provenanceOnly: 1,
+        budgetDropped: 0,
+      },
+      truncated: false,
+      warnings: [],
+    },
+    importedMessages: 2,
+    importedTurns: 1,
+    canContinue: true,
+    warnings: [],
+  });
   mockCheckForUpdates.mockResolvedValue({
     current: "1.57.0",
     latest: null,

@@ -97,6 +97,7 @@
   "agentChat.agentUiProjection.sourceType.evidence_projection": "Evidence record",
   "agentChat.agentUiProjection.sourceType.item_completed": "History item",
   "agentChat.agentUiProjection.sourceType.performance_metric": "Performance metric",
+  "agentChat.agentUiProjection.sourceType.patch": "ファイル変更",
   "agentChat.agentUiProjection.sourceType.queue_added": "Queue update",
   "agentChat.agentUiProjection.sourceType.remote_task_projection": "Remote task",
   "agentChat.agentUiProjection.sourceType.runtime_status": "Runtime status",

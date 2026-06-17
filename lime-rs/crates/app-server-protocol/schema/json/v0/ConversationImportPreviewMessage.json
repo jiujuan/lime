@@ -1,0 +1,144 @@
+{
+  "$defs": {
+    "AgentAttachment": {
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "metadata": true,
+        "uri": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object"
+    },
+    "ConversationImportSourceClient": {
+      "enum": [
+        "claude_code",
+        "codex"
+      ],
+      "type": "string"
+    },
+    "ConversationImportSourceProvenance": {
+      "properties": {
+        "sourceCallId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sourceChannel": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sourceClient": {
+          "$ref": "#/$defs/ConversationImportSourceClient"
+        },
+        "sourceEventSeq": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "sourceEventType": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sourcePath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sourcePayloadType": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sourceRole": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sourceThreadId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "sourceClient"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "attachments": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/AgentAttachment"
+      },
+      "type": "array"
+    },
+    "omittedBytes": {
+      "default": 0,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "provenance": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ConversationImportSourceProvenance"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "role": {
+      "type": "string"
+    },
+    "sourceType": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "text": {
+      "type": "string"
+    },
+    "timestamp": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "truncated": {
+      "default": false,
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "role",
+    "text"
+  ],
+  "title": "ConversationImportPreviewMessage",
+  "type": "object"
+}

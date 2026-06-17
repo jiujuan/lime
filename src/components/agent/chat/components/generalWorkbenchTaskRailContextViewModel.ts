@@ -21,6 +21,21 @@ type TaskRailThreadReadModel = AgentRuntimeThreadReadModel & {
   change_summary?: TaskRailChangeSummaryReadModel | null;
 };
 
+interface CodexImportFidelityCounts {
+  messages?: number | null;
+  attachments?: number | null;
+  reasoning?: number | null;
+  tools?: number | null;
+  commands?: number | null;
+  patches?: number | null;
+  approvals?: number | null;
+  mcp?: number | null;
+  webSearch?: number | null;
+  unsupported?: number | null;
+  provenanceOnly?: number | null;
+  budgetDropped?: number | null;
+}
+
 export interface GeneralWorkbenchTaskRailContextInput {
   providerType?: string | null;
   model?: string | null;
@@ -48,6 +63,9 @@ export interface GeneralWorkbenchTaskRailContextInput {
   subtaskActiveCount?: number | null;
   subtaskCompletedCount?: number | null;
   subtaskFailedCount?: number | null;
+  importedSourceClient?: string | null;
+  importedSourceThreadId?: string | null;
+  importedFidelityCounts?: CodexImportFidelityCounts | null;
 }
 
 export interface GeneralWorkbenchTaskRailContextItem {
@@ -102,6 +120,134 @@ function recordString(
     }
   }
   return null;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function recordNumber(
+  record: Record<string, unknown>,
+  keys: readonly string[],
+): number | null {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+      return Math.floor(value);
+    }
+  }
+  return null;
+}
+
+function compactSourceClientLabel(value: unknown): string | null {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) {
+    return null;
+  }
+  if (raw.toLowerCase() === "codex") {
+    return "Codex";
+  }
+  return truncateText(raw.replace(/[_-]+/g, " "), 32);
+}
+
+function readThreadItemMetadata(
+  item: AgentThreadItem,
+): Record<string, unknown> | null {
+  return asRecord((item as unknown as { metadata?: unknown }).metadata);
+}
+
+function readSourceProvenanceRecord(
+  item: AgentThreadItem,
+): Record<string, unknown> | null {
+  const metadata = readThreadItemMetadata(item);
+  const candidates = [
+    metadata?.source_provenance,
+    metadata?.sourceProvenance,
+    (item as unknown as { sourceProvenance?: unknown }).sourceProvenance,
+    (item as unknown as { source_provenance?: unknown }).source_provenance,
+  ];
+  for (const candidate of candidates) {
+    const record = asRecord(candidate);
+    if (record) {
+      return record;
+    }
+  }
+  return null;
+}
+
+function readFidelityCounts(value: unknown): CodexImportFidelityCounts | null {
+  const record = asRecord(value);
+  if (!record) {
+    return null;
+  }
+
+  const counts: CodexImportFidelityCounts = {
+    messages: recordNumber(record, ["messages"]),
+    attachments: recordNumber(record, ["attachments"]),
+    reasoning: recordNumber(record, ["reasoning"]),
+    tools: recordNumber(record, ["tools"]),
+    commands: recordNumber(record, ["commands"]),
+    patches: recordNumber(record, ["patches"]),
+    approvals: recordNumber(record, ["approvals"]),
+    mcp: recordNumber(record, ["mcp"]),
+    webSearch: recordNumber(record, ["webSearch", "web_search"]),
+    unsupported: recordNumber(record, ["unsupported"]),
+    provenanceOnly: recordNumber(record, [
+      "provenanceOnly",
+      "provenance_only",
+    ]),
+    budgetDropped: recordNumber(record, ["budgetDropped", "budget_dropped"]),
+  };
+
+  return Object.values(counts).some((count) => typeof count === "number")
+    ? counts
+    : null;
+}
+
+function resolveImportedFidelityCounts(
+  threadItems: readonly AgentThreadItem[] | undefined,
+): CodexImportFidelityCounts | null {
+  for (const item of threadItems ?? []) {
+    const metadata = readThreadItemMetadata(item);
+    const counts = readFidelityCounts(
+      metadata?.codexImportFidelity ?? metadata?.codex_import_fidelity,
+    );
+    if (counts) {
+      return counts;
+    }
+  }
+  return null;
+}
+
+function collectImportedSourceContext(
+  threadItems: readonly AgentThreadItem[] | undefined,
+): Pick<
+  GeneralWorkbenchTaskRailContextInput,
+  "importedSourceClient" | "importedSourceThreadId"
+> {
+  for (const item of threadItems ?? []) {
+    const metadata = readThreadItemMetadata(item);
+    const provenance = readSourceProvenanceRecord(item);
+    const sourceClient =
+      recordString(metadata ?? {}, ["source_client", "sourceClient"]) ??
+      recordString(provenance ?? {}, ["sourceClient", "source_client"]);
+    const sourceThreadId = recordString(provenance ?? {}, [
+      "sourceThreadId",
+      "source_thread_id",
+      "threadId",
+      "thread_id",
+    ]);
+    if (sourceClient || sourceThreadId) {
+      return {
+        importedSourceClient: sourceClient,
+        importedSourceThreadId: sourceThreadId,
+      };
+    }
+  }
+
+  return {};
 }
 
 function compactSourceLabel(value: unknown): string | null {
@@ -196,6 +342,17 @@ function collectThreadItemSourceLabels(
   const labels: string[] = [];
 
   for (const item of threadItems ?? []) {
+    const provenance = readSourceProvenanceRecord(item);
+    appendSourceLabel(
+      labels,
+      recordString(provenance ?? {}, [
+        "sourcePath",
+        "source_path",
+        "sourceThreadId",
+        "source_thread_id",
+      ]),
+    );
+
     if (item.type === "web_search") {
       appendSourceLabel(labels, item.query || item.action);
       continue;
@@ -594,6 +751,154 @@ function buildSubtasksContextItem(
   };
 }
 
+function buildImportedContextItem(
+  context: GeneralWorkbenchTaskRailContextInput,
+  t: MinimalTranslate,
+): GeneralWorkbenchTaskRailContextItem | null {
+  const sourceClientLabel = compactSourceClientLabel(context.importedSourceClient);
+  const fidelity = context.importedFidelityCounts ?? null;
+  if (!sourceClientLabel && !fidelity && !context.importedSourceThreadId) {
+    return null;
+  }
+
+  const detailLabels: string[] = [];
+  const appendCount = (
+    labelKey: string,
+    fallback: string,
+    count?: number | null,
+  ) => {
+    if (!count) {
+      return;
+    }
+    detailLabels.push(
+      translateTaskRailText(t, labelKey, fallback, { count }),
+    );
+  };
+
+  appendCount(
+    "generalWorkbench.taskRail.context.importedDetail.messages",
+    "消息 {{count}}",
+    fidelity?.messages,
+  );
+  appendCount(
+    "generalWorkbench.taskRail.context.importedDetail.reasoning",
+    "思考 {{count}}",
+    fidelity?.reasoning,
+  );
+  appendCount(
+    "generalWorkbench.taskRail.context.importedDetail.commands",
+    "命令 {{count}}",
+    fidelity?.commands,
+  );
+  appendCount(
+    "generalWorkbench.taskRail.context.importedDetail.tools",
+    "工具 {{count}}",
+    fidelity?.tools,
+  );
+  appendCount(
+    "generalWorkbench.taskRail.context.importedDetail.patches",
+    "补丁 {{count}}",
+    fidelity?.patches,
+  );
+  appendCount(
+    "generalWorkbench.taskRail.context.importedDetail.approvals",
+    "确认 {{count}}",
+    fidelity?.approvals,
+  );
+  appendCount(
+    "generalWorkbench.taskRail.context.importedDetail.webSearch",
+    "搜索 {{count}}",
+    fidelity?.webSearch,
+  );
+
+  const truncatedThreadId = context.importedSourceThreadId
+    ? truncateText(context.importedSourceThreadId, 36)
+    : null;
+  const value = sourceClientLabel
+    ? translateTaskRailText(
+        t,
+        "generalWorkbench.taskRail.context.importedValue",
+        "{{source}} 导入",
+        { source: sourceClientLabel },
+      )
+    : translateTaskRailText(
+        t,
+        "generalWorkbench.taskRail.context.importedValueFallback",
+        "已导入",
+      );
+  const titleParts = [
+    sourceClientLabel
+      ? translateTaskRailText(
+          t,
+          "generalWorkbench.taskRail.context.importedTitle",
+          "来自 {{source}}",
+          { source: sourceClientLabel },
+        )
+      : null,
+    truncatedThreadId
+      ? translateTaskRailText(
+          t,
+          "generalWorkbench.taskRail.context.importedThreadTitle",
+          "源线程 {{thread}}",
+          { thread: truncatedThreadId },
+        )
+      : null,
+    detailLabels.length > 0 ? detailLabels.slice(0, 4).join(" / ") : null,
+  ].filter(Boolean);
+  const budgetDropped = positiveInteger(fidelity?.budgetDropped ?? null);
+  const unsupported = positiveInteger(fidelity?.unsupported ?? null);
+
+  return {
+    id: "imported-source",
+    label: translateTaskRailText(
+      t,
+      "generalWorkbench.taskRail.context.imported",
+      "导入",
+    ),
+    value,
+    title: titleParts.join(" · ") || null,
+    detailLabels: detailLabels.slice(0, 3),
+    detailOverflowLabel:
+      detailLabels.length > 3
+        ? translateTaskRailText(
+            t,
+            "generalWorkbench.taskRail.context.sourcesOverflow",
+            "另有 {{count}} 项",
+            { count: detailLabels.length - 3 },
+          )
+        : null,
+    detailStatus:
+      budgetDropped > 0 || unsupported > 0
+        ? {
+            label: translateTaskRailText(
+              t,
+              "generalWorkbench.taskRail.context.importedStatus.partial",
+              "部分保留",
+            ),
+            tone: "warning",
+            title: translateTaskRailText(
+              t,
+              "generalWorkbench.taskRail.context.importedStatus.partialTitle",
+              "有 {{unsupported}} 项未完整映射，{{budgetDropped}} 项因预算裁剪",
+              { unsupported, budgetDropped },
+            ),
+          }
+        : {
+            label: translateTaskRailText(
+              t,
+              "generalWorkbench.taskRail.context.importedStatus.restored",
+              "已还原",
+            ),
+            tone: "success",
+            title: translateTaskRailText(
+              t,
+              "generalWorkbench.taskRail.context.importedStatus.restoredTitle",
+              "导入细节已进入当前会话轨迹",
+            ),
+          },
+  };
+}
+
 export function buildGeneralWorkbenchTaskRailRuntimeContext({
   context,
   threadRead,
@@ -695,6 +1000,15 @@ export function buildGeneralWorkbenchTaskRailRuntimeContext({
     });
   }
 
+  const importedSource = collectImportedSourceContext(threadItems);
+  nextContext.importedSourceClient =
+    nextContext.importedSourceClient ?? importedSource.importedSourceClient;
+  nextContext.importedSourceThreadId =
+    nextContext.importedSourceThreadId ?? importedSource.importedSourceThreadId;
+  nextContext.importedFidelityCounts =
+    nextContext.importedFidelityCounts ??
+    resolveImportedFidelityCounts(threadItems);
+
   return nextContext;
 }
 
@@ -762,6 +1076,11 @@ export function buildGeneralWorkbenchTaskRailContextItems(
       value: basename(workspacePath),
       title: workspacePath,
     });
+  }
+
+  const importedItem = buildImportedContextItem(context, t);
+  if (importedItem) {
+    items.push(importedItem);
   }
 
   const objectiveItem = buildObjectiveContextItem(context, t);

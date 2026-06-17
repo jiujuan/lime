@@ -68,6 +68,9 @@ describe("agentChatPageShellViewModel", () => {
       initialUserPrompt: "请直接开始处理任务",
     });
     expectForced({
+      initialSessionId: "session-from-sidebar",
+    });
+    expectForced({
       initialUserImages: [{ data: "image-data", mediaType: "image/png" }],
     });
   });
@@ -143,6 +146,21 @@ describe("agentChatPageShellViewModel", () => {
       shouldForceClawWorkspace: false,
       effectiveAgentEntry: "claw",
       effectiveShowChatPanel: false,
+    });
+  });
+
+  it("claw 入口携带 initialSessionId 时应打开聊天面板", () => {
+    expect(
+      resolve({
+        agentEntry: "claw",
+        showChatPanel: true,
+        initialSessionId: "session-from-sidebar",
+      }),
+    ).toEqual({
+      hasDirectWorkspaceIntent: true,
+      shouldForceClawWorkspace: false,
+      effectiveAgentEntry: "claw",
+      effectiveShowChatPanel: true,
     });
   });
 });

@@ -1,20 +1,32 @@
 import { AppServerClient } from "@/lib/api/appServer";
 import {
   METHOD_CONVERSATION_IMPORT_SOURCE_SCAN,
+  METHOD_CONVERSATION_IMPORT_THREAD_COMMIT,
+  METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW,
   type ConversationImportSourceClient,
+  type ConversationImportSourceProvenance,
   type ConversationImportSourceScanParams,
   type ConversationImportSourceScanResponse,
   type ConversationImportSourceStatus,
+  type ConversationImportThreadCommitParams,
+  type ConversationImportThreadCommitResponse,
   type ConversationImportThreadStatus,
+  type ConversationImportThreadPreviewParams,
+  type ConversationImportThreadPreviewResponse,
   type ImportedThreadSummary,
 } from "../../../packages/app-server-client/src/protocol";
 
 export type {
+  ConversationImportSourceProvenance,
   ConversationImportSourceClient,
   ConversationImportSourceScanParams,
   ConversationImportSourceScanResponse,
   ConversationImportSourceStatus,
   ConversationImportThreadStatus,
+  ConversationImportThreadCommitParams,
+  ConversationImportThreadCommitResponse,
+  ConversationImportThreadPreviewParams,
+  ConversationImportThreadPreviewResponse,
   ImportedThreadSummary,
 };
 
@@ -32,6 +44,19 @@ function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === "string";
 }
 
+function isAgentSession(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.sessionId === "string" &&
+    typeof value.threadId === "string" &&
+    typeof value.appId === "string" &&
+    isOptionalString(value.workspaceId) &&
+    typeof value.status === "string" &&
+    typeof value.createdAt === "string" &&
+    typeof value.updatedAt === "string"
+  );
+}
+
 function isImportedThreadSummary(value: unknown): value is ImportedThreadSummary {
   if (!isRecord(value)) {
     return false;
@@ -47,7 +72,113 @@ function isImportedThreadSummary(value: unknown): value is ImportedThreadSummary
     isOptionalString(value.modelProvider) &&
     typeof value.archived === "boolean" &&
     isOptionalString(value.sourcePath) &&
-    THREAD_STATUSES.has(String(value.importStatus))
+    THREAD_STATUSES.has(String(value.importStatus)) &&
+    (value.metadata === undefined ||
+      value.metadata === null ||
+      typeof value.metadata !== "function")
+  );
+}
+
+function isOptionalNumber(value: unknown): value is number | undefined {
+  return value === undefined || typeof value === "number";
+}
+
+function isSourceProvenance(
+  value: unknown,
+): value is ConversationImportSourceProvenance {
+  if (value === undefined) {
+    return true;
+  }
+  return (
+    isRecord(value) &&
+    SOURCE_CLIENTS.has(String(value.sourceClient)) &&
+    isOptionalString(value.sourceThreadId) &&
+    isOptionalString(value.sourcePath) &&
+    isOptionalString(value.sourceEventType) &&
+    isOptionalNumber(value.sourceEventSeq) &&
+    isOptionalString(value.sourcePayloadType) &&
+    isOptionalString(value.sourceCallId) &&
+    isOptionalString(value.sourceRole) &&
+    isOptionalString(value.sourceChannel)
+  );
+}
+
+function isPreviewMessage(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.role === "string" &&
+    typeof value.text === "string" &&
+    Array.isArray(value.attachments) &&
+    value.attachments.every(
+      (attachment) =>
+        isRecord(attachment) &&
+        typeof attachment.kind === "string" &&
+        isOptionalString(attachment.uri) &&
+        (attachment.metadata === undefined ||
+          attachment.metadata === null ||
+          typeof attachment.metadata !== "function"),
+    ) &&
+    typeof value.truncated === "boolean" &&
+    typeof value.omittedBytes === "number" &&
+    isOptionalString(value.timestamp) &&
+    isOptionalString(value.sourceType) &&
+    isSourceProvenance(value.provenance)
+  );
+}
+
+function isPreviewEvent(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.kind === "string" &&
+    isOptionalString(value.timestamp) &&
+    isOptionalString(value.label) &&
+    isSourceProvenance(value.provenance)
+  );
+}
+
+function isPreviewDryRun(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.willCreateSession === "boolean" &&
+    typeof value.willAppendToExistingSession === "boolean" &&
+    typeof value.willImportMessages === "number" &&
+    typeof value.willImportTurns === "number" &&
+    typeof value.willImportTimelineItems === "number" &&
+    typeof value.willImportAttachments === "number" &&
+    typeof value.unsupportedItems === "number"
+  );
+}
+
+function isFidelitySummary(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.messages === "number" &&
+    typeof value.reasoning === "number" &&
+    typeof value.tools === "number" &&
+    typeof value.commands === "number" &&
+    typeof value.patches === "number" &&
+    typeof value.approvals === "number" &&
+    typeof value.mcp === "number" &&
+    typeof value.webSearch === "number" &&
+    typeof value.attachments === "number" &&
+    typeof value.unsupported === "number" &&
+    typeof value.provenanceOnly === "number" &&
+    typeof value.budgetDropped === "number"
+  );
+}
+
+function isPreviewSummary(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.lineCount === "number" &&
+    typeof value.messageCount === "number" &&
+    typeof value.rolloutEventItems === "number" &&
+    typeof value.unsupportedCount === "number" &&
+    isPreviewDryRun(value.dryRun) &&
+    isFidelitySummary(value.fidelity) &&
+    typeof value.truncated === "boolean" &&
+    Array.isArray(value.warnings) &&
+    value.warnings.every((warning) => typeof warning === "string")
   );
 }
 
@@ -79,6 +210,49 @@ function assertConversationImportSourceScanResponse(
   }
 }
 
+function assertConversationImportThreadPreviewResponse(
+  value: unknown,
+): asserts value is ConversationImportThreadPreviewResponse {
+  if (
+    !isRecord(value) ||
+    !isRecord(value.source) ||
+    !isImportedThreadSummary(value.thread) ||
+    !isPreviewSummary(value.summary) ||
+    !Array.isArray(value.messages) ||
+    !value.messages.every(isPreviewMessage) ||
+    !Array.isArray(value.events) ||
+    !value.events.every(isPreviewEvent)
+  ) {
+    throw new Error(
+      `${METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW} returned an invalid thread preview shape`,
+    );
+  }
+  assertConversationImportSourceScanResponse({
+    source: value.source,
+    threads: [],
+  });
+}
+
+function assertConversationImportThreadCommitResponse(
+  value: unknown,
+): asserts value is ConversationImportThreadCommitResponse {
+  if (
+    !isRecord(value) ||
+    !isAgentSession(value.session) ||
+    !isImportedThreadSummary(value.thread) ||
+    !isPreviewSummary(value.summary) ||
+    typeof value.importedMessages !== "number" ||
+    typeof value.importedTurns !== "number" ||
+    typeof value.canContinue !== "boolean" ||
+    !Array.isArray(value.warnings) ||
+    !value.warnings.every((warning) => typeof warning === "string")
+  ) {
+    throw new Error(
+      `${METHOD_CONVERSATION_IMPORT_THREAD_COMMIT} returned an invalid thread commit shape`,
+    );
+  }
+}
+
 export async function scanConversationImportSource(
   params: ConversationImportSourceScanParams = {},
   appServerClient: ConversationImportAppServerClient = new AppServerClient(),
@@ -89,5 +263,31 @@ export async function scanConversationImportSource(
       params,
     );
   assertConversationImportSourceScanResponse(response.result);
+  return response.result;
+}
+
+export async function previewConversationImportThread(
+  params: ConversationImportThreadPreviewParams,
+  appServerClient: ConversationImportAppServerClient = new AppServerClient(),
+): Promise<ConversationImportThreadPreviewResponse> {
+  const response =
+    await appServerClient.request<ConversationImportThreadPreviewResponse>(
+      METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW,
+      params,
+    );
+  assertConversationImportThreadPreviewResponse(response.result);
+  return response.result;
+}
+
+export async function commitConversationImportThread(
+  params: ConversationImportThreadCommitParams,
+  appServerClient: ConversationImportAppServerClient = new AppServerClient(),
+): Promise<ConversationImportThreadCommitResponse> {
+  const response =
+    await appServerClient.request<ConversationImportThreadCommitResponse>(
+      METHOD_CONVERSATION_IMPORT_THREAD_COMMIT,
+      params,
+    );
+  assertConversationImportThreadCommitResponse(response.result);
   return response.result;
 }

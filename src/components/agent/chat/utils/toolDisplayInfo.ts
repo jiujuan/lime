@@ -2163,7 +2163,11 @@ export const resolveToolPrimarySubject = (
 
   if (filePath) return getFileName(filePath);
 
-  if (normalizedName === "bash" || normalizedName.includes("shell")) {
+  if (
+    normalizedName === "bash" ||
+    normalizedName === "execcommand" ||
+    normalizedName.includes("shell")
+  ) {
     return resolveToolArgumentPreview(args, ["command", "cmd", "cwd"]);
   }
 

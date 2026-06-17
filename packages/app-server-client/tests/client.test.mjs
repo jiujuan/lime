@@ -104,6 +104,8 @@ const {
   METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE,
   METHOD_CONNECT_RELAY_API_KEY_SAVE,
   METHOD_CONVERSATION_IMPORT_SOURCE_SCAN,
+  METHOD_CONVERSATION_IMPORT_THREAD_COMMIT,
+  METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW,
   METHOD_EVIDENCE_EXPORT,
   METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT,
   METHOD_EXECUTION_PROCESS_INTERRUPT,
@@ -1855,6 +1857,12 @@ test("builds connect deep link requests with current methods", () => {
     includeArchived: true,
     limit: 20,
   });
+  const importPreview = client.previewConversationImportThread({
+    sourceClient: "codex",
+    sourceRoot: "/Users/example/.codex",
+    sourceThreadId: "thread-1",
+    limit: 10,
+  });
 
   assert.equal(connect.id, 1);
   assert.equal(connect.method, METHOD_CONNECT_DEEP_LINK_RESOLVE);
@@ -1896,6 +1904,36 @@ test("builds connect deep link requests with current methods", () => {
     query: "runtime",
     includeArchived: true,
     limit: 20,
+  });
+  assert.equal(importPreview.id, 7);
+  assert.equal(
+    importPreview.method,
+    METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW,
+  );
+  assert.deepEqual(importPreview.params, {
+    sourceClient: "codex",
+    sourceRoot: "/Users/example/.codex",
+    sourceThreadId: "thread-1",
+    limit: 10,
+  });
+  const importCommit = client.commitConversationImportThread({
+    sourceClient: "codex",
+    sourceRoot: "/Users/example/.codex",
+    sourceThreadId: "thread-1",
+    workspaceId: "workspace-1",
+    confirmed: true,
+  });
+  assert.equal(importCommit.id, 8);
+  assert.equal(
+    importCommit.method,
+    METHOD_CONVERSATION_IMPORT_THREAD_COMMIT,
+  );
+  assert.deepEqual(importCommit.params, {
+    sourceClient: "codex",
+    sourceRoot: "/Users/example/.codex",
+    sourceThreadId: "thread-1",
+    workspaceId: "workspace-1",
+    confirmed: true,
   });
 });
 
@@ -2250,6 +2288,8 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_CONNECT_RELAY_API_KEY_SAVE, kind: "request" },
     { method: METHOD_CONNECT_CALLBACK_SEND, kind: "request" },
     { method: METHOD_CONVERSATION_IMPORT_SOURCE_SCAN, kind: "request" },
+    { method: METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW, kind: "request" },
+    { method: METHOD_CONVERSATION_IMPORT_THREAD_COMMIT, kind: "request" },
     { method: METHOD_AGENT_SESSION_START, kind: "request" },
     { method: METHOD_AGENT_SESSION_READ, kind: "request" },
     { method: METHOD_AGENT_SESSION_TURN_START, kind: "request" },
@@ -2516,6 +2556,14 @@ test("exports app-server method catalog with request and notification kinds", ()
   assert.equal(isAppServerRequestMethod(METHOD_CONNECT_CALLBACK_SEND), true);
   assert.equal(
     isAppServerRequestMethod(METHOD_CONVERSATION_IMPORT_SOURCE_SCAN),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_CONVERSATION_IMPORT_THREAD_COMMIT),
     true,
   );
   assert.equal(isAppServerRequestMethod(METHOD_VOICE_INSTRUCTION_LIST), true);

@@ -214,6 +214,9 @@ describe("AppSidebar navigation", () => {
     const mainNavButtons = Array.from(
       container.querySelectorAll('[data-testid="app-sidebar-main-nav"] button'),
     ).map((button) => button.getAttribute("aria-label"));
+    const menuScroll = container.querySelector(
+      '[data-testid="app-sidebar-menu-scroll"]',
+    );
     const footerArea = container.querySelector(
       '[data-testid="app-sidebar-footer-area"]',
     );
@@ -227,6 +230,9 @@ describe("AppSidebar navigation", () => {
     expect(
       container.querySelector('[data-testid="app-sidebar-footer-nav"]'),
     ).toBeNull();
+    expect(menuScroll).not.toBeNull();
+    expect(getComputedStyle(menuScroll as Element).flexGrow).toBe("0");
+    expect(getComputedStyle(menuScroll as Element).flexShrink).toBe("1");
     expect(footerArea).not.toBeNull();
     expect(getComputedStyle(footerArea as Element).paddingBottom).toBe("16px");
   });

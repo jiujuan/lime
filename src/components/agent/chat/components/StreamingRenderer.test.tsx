@@ -455,6 +455,68 @@ describe("StreamingRenderer", () => {
     );
   });
 
+  it("Codex 导入工具组应默认展开并显示命令参数", () => {
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "codex-import-command",
+            name: "Bash",
+            arguments: JSON.stringify({
+              command: "npm test",
+              cwd: "/workspace/imported-codex",
+            }),
+            status: "completed",
+            result: {
+              success: true,
+              output: "Exit code: 0\nOutput:\nok",
+              metadata: {
+                imported: true,
+                source_client: "codex",
+                exit_code: 0,
+              },
+            },
+            startTime: new Date("2026-06-02T09:00:00.000Z"),
+            endTime: new Date("2026-06-02T09:00:01.000Z"),
+          },
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "codex-import-search",
+            name: "web_search",
+            arguments: JSON.stringify({
+              action: "search_query",
+              query: "Lime Codex import",
+            }),
+            status: "completed",
+            result: {
+              success: true,
+              output: "search result summary",
+              metadata: {
+                imported: true,
+                source_client: "codex",
+              },
+            },
+            startTime: new Date("2026-06-02T09:00:02.000Z"),
+            endTime: new Date("2026-06-02T09:00:03.000Z"),
+          },
+        },
+      ],
+    });
+
+    const processGroup = container.querySelector(
+      '[data-testid="streaming-process-group"]',
+    );
+    const processGroupButton = processGroup?.querySelector("button");
+
+    expect(processGroupButton?.getAttribute("aria-expanded")).toBe("true");
+    expect(container.textContent).toContain("npm test");
+    expect(container.textContent).toContain("Lime Codex import");
+  });
+
   it("应过滤 assistant 正文中的工具协议残留", () => {
     const { container } = renderHarness({
       content:
@@ -1260,7 +1322,9 @@ describe("StreamingRenderer", () => {
 
     expect(processGroup?.getAttribute("aria-expanded")).toBe("false");
     expect(container.textContent).toContain("调研简报");
-    expect(container.textContent).toContain("失败 2 个步骤");
+    expect(container.textContent).toContain("已搜索网页 1 次");
+    expect(container.textContent).toContain("current sources");
+    expect(container.textContent).toContain("https://example.com/source");
     expect(container.textContent).not.toContain("Execution failed");
     expect(container.textContent).not.toContain("Fetching data issues");
   });
@@ -1505,6 +1569,78 @@ describe("StreamingRenderer", () => {
     expect(
       container.querySelector('[data-testid="inline-tool-process-step"]'),
     ).toBeNull();
+  });
+
+  it("网页搜索失败批次应折叠诊断 JSON，避免错误详情铺满对话", () => {
+    const missingCredentialOutput = JSON.stringify({
+      metadata: {
+        durationSeconds: 0.12,
+        web_search: {
+          attempts: [
+            {
+              provider: "tavily",
+              error: "缺少环境变量 TAVILY_API_KEY",
+            },
+          ],
+        },
+      },
+      output: "缺少环境变量 TAVILY_API_KEY",
+    });
+    const failedSearchToolCalls = Array.from({ length: 4 }, (_, index) => ({
+      type: "tool_use" as const,
+      toolCall: {
+        id: `tool-news-failed-search-${index + 1}`,
+        name: "web_search",
+        arguments: JSON.stringify({
+          query: `international news source ${index + 1}`,
+        }),
+        status: "failed" as const,
+        result: {
+          success: false,
+          output: missingCredentialOutput,
+          error: missingCredentialOutput,
+        },
+        startTime: new Date(`2026-06-02T09:00:0${index}.000Z`),
+        endTime: new Date(`2026-06-02T09:00:0${index + 1}.000Z`),
+      },
+    }));
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "text",
+          text: "我先联网核实今天的国际新闻。",
+        },
+        ...failedSearchToolCalls,
+        {
+          type: "text",
+          text: "## 国际新闻简报\n\n- 当前搜索链路缺少凭证，先基于已有上下文整理。",
+        },
+      ],
+      isStreaming: false,
+    });
+
+    const processGroupButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="streaming-process-group"] button',
+    );
+
+    expect(processGroupButton?.textContent).toContain("已搜索网页 4 次");
+    expect(container.textContent).toContain("国际新闻简报");
+    expect(container.textContent).toContain("international news source 4");
+    expect(container.textContent).not.toContain('"metadata"');
+    expect(container.textContent).not.toContain("TAVILY_API_KEY");
+    expect(
+      container.querySelector('[data-testid="inline-tool-process-step"]'),
+    ).toBeNull();
+
+    act(() => {
+      processGroupButton?.click();
+    });
+
+    expect(container.textContent).toContain("international news source 1");
+    expect(container.textContent).toContain("international news source 4");
+    expect(container.textContent).not.toContain('"metadata"');
+    expect(container.textContent).not.toContain("TAVILY_API_KEY");
   });
 
   it("交错工具之间的过程状态自述不应作为正文块显示", () => {
@@ -2370,7 +2506,9 @@ describe("StreamingRenderer", () => {
     });
 
     const markdownNodes = Array.from(
-      container.querySelectorAll<HTMLElement>('[data-testid="markdown-renderer"]'),
+      container.querySelectorAll<HTMLElement>(
+        '[data-testid="markdown-renderer"]',
+      ),
     );
     const introNode = markdownNodes.find((node) =>
       node.textContent?.includes("先把内容工作台任务放在正确位置。"),

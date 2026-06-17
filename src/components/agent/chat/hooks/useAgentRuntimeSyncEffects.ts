@@ -95,8 +95,17 @@ function isTerminalRuntimeStatus(status?: string | null): boolean {
   return isRuntimeSettledStatusValue(status);
 }
 
+function isExplicitTerminalRuntimeStatus(status?: string | null): boolean {
+  const normalizedStatus = (status || "").trim().toLowerCase();
+  return normalizedStatus !== "idle" && isTerminalRuntimeStatus(status);
+}
+
 function hasRunningTurn(threadTurns: AgentThreadTurn[]): boolean {
   return threadTurns.some((turn) => turn.status === "running");
+}
+
+function hasTerminalTurn(threadTurns: AgentThreadTurn[]): boolean {
+  return threadTurns.some((turn) => isTerminalRuntimeStatus(turn.status));
 }
 
 interface UseAgentRuntimeSyncEffectsOptions {
@@ -184,7 +193,10 @@ export function useAgentRuntimeSyncEffects(
     if (!sessionId || !isSending || !settleActiveRuntimeStream) {
       return;
     }
-    if (!observedActiveRuntimeWorkRef.current) {
+    const hasTerminalReadModel =
+      isExplicitTerminalRuntimeStatus(threadReadStatus) ||
+      hasTerminalTurn(threadTurns);
+    if (!observedActiveRuntimeWorkRef.current && !hasTerminalReadModel) {
       return;
     }
     if (queuedTurnCount > 0 || hasRunningTurn(threadTurns)) {

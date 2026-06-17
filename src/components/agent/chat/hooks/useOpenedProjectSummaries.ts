@@ -25,6 +25,7 @@ function isUuidLike(value?: string | null): boolean {
 
 function isDisplayableProjectSummary(
   project?: OpenedProjectSummary | null,
+  options: { allowPlaceholder?: boolean } = {},
 ): project is OpenedProjectSummary {
   if (!project) {
     return false;
@@ -36,6 +37,9 @@ function isDisplayableProjectSummary(
     return false;
   }
   if (projectRootPath) {
+    return true;
+  }
+  if (options.allowPlaceholder && projectId && projectName) {
     return true;
   }
   return !(isUuidLike(projectId) && projectName === projectId);
@@ -73,7 +77,9 @@ export function compactOpenedProjectSummaries(
 ): OpenedProjectSummary[] {
   return projectIds.flatMap((projectId) => {
     if (projectId === normalizeProjectId(currentProjectSummary?.id)) {
-      return isDisplayableProjectSummary(currentProjectSummary)
+      return isDisplayableProjectSummary(currentProjectSummary, {
+        allowPlaceholder: true,
+      })
         ? [currentProjectSummary]
         : [];
     }

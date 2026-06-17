@@ -60,4 +60,26 @@ describe("compactOpenedProjectSummaries", () => {
       },
     ]);
   });
+
+  it("当前项目即使暂时只有 UUID 占位，也应保留用于会话范围查询", () => {
+    const placeholderId = "240ed157-3e7a-456c-a2c2-a05d499f5991";
+
+    expect(
+      compactOpenedProjectSummaries(
+        [placeholderId],
+        {},
+        {
+          id: placeholderId,
+          name: placeholderId,
+          rootPath: null,
+        },
+      ),
+    ).toEqual([
+      {
+        id: placeholderId,
+        name: placeholderId,
+        rootPath: null,
+      },
+    ]);
+  });
 });

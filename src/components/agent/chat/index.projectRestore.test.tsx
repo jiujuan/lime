@@ -11,7 +11,6 @@ import {
   observedWorkspaceIds,
   renderPage,
 } from "./index.testFixtures";
-import { notifyTaskCenterTaskOpen } from "./taskCenterDraftTaskEvents";
 
 const {
   mockEnsureWorkspaceReady,
@@ -29,20 +28,15 @@ describe("AgentChatPage 话题切换项目恢复", () => {
       JSON.stringify("project-topic"),
     );
 
-    renderPage();
+    const mounted = mountPage();
     await flushEffects();
 
-    expect(
-      notifyTaskCenterTaskOpen({
-        sessionId: "topic-a",
-        source: "conversation_shelf",
-      }),
-    ).toBe(true);
+    mounted.rerender({ initialSessionId: "topic-a" });
     await flushEffects();
 
     const switchTopicMock = mockUseAgentChatUnified.mock.results[0]?.value
       ?.switchTopic as ReturnType<typeof vi.fn>;
-    expect(switchTopicMock).toHaveBeenCalledWith("topic-a");
+    expect(switchTopicMock).toHaveBeenCalledWith("topic-a", expect.objectContaining({ allowDetachedSession: true }));
 
     const workspaceHookOrder = getHookCallOrderForWorkspace("project-topic");
     const switchTopicOrder = switchTopicMock.mock.invocationCallOrder[0];
@@ -57,15 +51,10 @@ describe("AgentChatPage 话题切换项目恢复", () => {
       JSON.stringify("topic-project"),
     );
 
-    renderPage({ projectId: "locked-project" });
+    const mounted = mountPage({ projectId: "locked-project" });
     await flushEffects();
 
-    expect(
-      notifyTaskCenterTaskOpen({
-        sessionId: "topic-a",
-        source: "conversation_shelf",
-      }),
-    ).toBe(true);
+    mounted.rerender({ initialSessionId: "topic-a" });
     await flushEffects();
 
     const switchTopicMock = mockUseAgentChatUnified.mock.results[0]?.value
@@ -89,15 +78,10 @@ describe("AgentChatPage 话题切换项目恢复", () => {
       createProject("default-new"),
     );
 
-    renderPage();
+    const mounted = mountPage();
     await flushEffects();
 
-    expect(
-      notifyTaskCenterTaskOpen({
-        sessionId: "topic-a",
-        source: "conversation_shelf",
-      }),
-    ).toBe(true);
+    mounted.rerender({ initialSessionId: "topic-a" });
     await flushEffects();
 
     const switchTopicMock = mockUseAgentChatUnified.mock.results[0]?.value
@@ -106,7 +90,7 @@ describe("AgentChatPage 话题切换项目恢复", () => {
     expect(mockToast.info).not.toHaveBeenCalledWith(
       "未找到可用项目，已自动创建默认项目",
     );
-    expect(switchTopicMock).not.toHaveBeenCalledWith("topic-a");
+    expect(switchTopicMock).not.toHaveBeenCalledWith("topic-a", expect.objectContaining({ allowDetachedSession: true }));
     expect(observedWorkspaceIds[observedWorkspaceIds.length - 1]).toBe(
       "",
     );

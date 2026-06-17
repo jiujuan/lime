@@ -949,7 +949,73 @@ export interface ConnectRelayApiKeySaveResponse {
   providerName: string;
 }
 
+export interface ConversationImportFidelitySummary {
+  approvals: number;
+  attachments: number;
+  budgetDropped: number;
+  commands: number;
+  mcp: number;
+  messages: number;
+  patches: number;
+  provenanceOnly: number;
+  reasoning: number;
+  tools: number;
+  unsupported: number;
+  webSearch: number;
+}
+
+export interface ConversationImportPreviewDryRun {
+  unsupportedItems: number;
+  willAppendToExistingSession: boolean;
+  willCreateSession: boolean;
+  willImportAttachments: number;
+  willImportMessages: number;
+  willImportTimelineItems: number;
+  willImportTurns: number;
+}
+
+export interface ConversationImportPreviewEvent {
+  kind: string;
+  label?: null | string;
+  provenance?: ConversationImportSourceProvenance | null;
+  timestamp?: null | string;
+}
+
+export interface ConversationImportPreviewMessage {
+  attachments?: (AgentAttachment)[];
+  omittedBytes?: number;
+  provenance?: ConversationImportSourceProvenance | null;
+  role: string;
+  sourceType?: null | string;
+  text: string;
+  timestamp?: null | string;
+  truncated?: boolean;
+}
+
+export interface ConversationImportPreviewSummary {
+  dryRun: ConversationImportPreviewDryRun;
+  fidelity?: ConversationImportFidelitySummary;
+  lineCount: number;
+  messageCount: number;
+  rolloutEventItems: number;
+  truncated: boolean;
+  unsupportedCount: number;
+  warnings?: (string)[];
+}
+
 export type ConversationImportSourceClient = "claude_code" | "codex";
+
+export interface ConversationImportSourceProvenance {
+  sourceCallId?: null | string;
+  sourceChannel?: null | string;
+  sourceClient: ConversationImportSourceClient;
+  sourceEventSeq?: number | null;
+  sourceEventType?: null | string;
+  sourcePath?: null | string;
+  sourcePayloadType?: null | string;
+  sourceRole?: null | string;
+  sourceThreadId?: null | string;
+}
 
 export interface ConversationImportSourceScanParams {
   cursor?: null | string;
@@ -978,6 +1044,42 @@ export interface ConversationImportSourceSummary {
   statePath?: null | string;
   status: ConversationImportSourceStatus;
   threadCount?: number;
+}
+
+export interface ConversationImportThreadCommitParams {
+  appId?: null | string;
+  confirmed?: boolean;
+  sourceClient?: ConversationImportSourceClient | null;
+  sourcePath?: null | string;
+  sourceRoot?: null | string;
+  sourceThreadId?: null | string;
+  workspaceId?: null | string;
+}
+
+export interface ConversationImportThreadCommitResponse {
+  canContinue: boolean;
+  importedMessages: number;
+  importedTurns: number;
+  session: AgentSession;
+  summary: ConversationImportPreviewSummary;
+  thread: ImportedThreadSummary;
+  warnings?: (string)[];
+}
+
+export interface ConversationImportThreadPreviewParams {
+  limit?: number | null;
+  sourceClient?: ConversationImportSourceClient | null;
+  sourcePath?: null | string;
+  sourceRoot?: null | string;
+  sourceThreadId?: null | string;
+}
+
+export interface ConversationImportThreadPreviewResponse {
+  events?: (ConversationImportPreviewEvent)[];
+  messages?: (ConversationImportPreviewMessage)[];
+  source: ConversationImportSourceSummary;
+  summary: ConversationImportPreviewSummary;
+  thread: ImportedThreadSummary;
 }
 
 export type ConversationImportThreadStatus = "conflict" | "imported" | "not_imported";
@@ -1411,6 +1513,7 @@ export interface ImportedThreadSummary {
   createdAt?: null | string;
   cwd?: null | string;
   importStatus: ConversationImportThreadStatus;
+  metadata?: unknown;
   modelProvider?: null | string;
   source?: null | string;
   sourceClient: ConversationImportSourceClient;

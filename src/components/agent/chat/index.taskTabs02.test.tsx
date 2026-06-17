@@ -9,7 +9,6 @@ import {
   mountPage,
 } from "./index.testFixtures";
 import { buildHomeAgentParams } from "@/lib/workspace/navigation";
-import { notifyTaskCenterTaskOpen } from "./taskCenterDraftTaskEvents";
 import { TASK_CENTER_OPEN_TAB_IDS_STORAGE_KEY } from "./utils/taskCenterTabs";
 
 describe("AgentChatPage 任务中心初始会话标签", () => {
@@ -119,17 +118,12 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     });
     await flushEffects();
 
-    expect(
-      notifyTaskCenterTaskOpen({
-        sessionId: "topic-a",
-        workspaceId: "workspace-test",
-        source: "conversation_shelf",
-      }),
-    ).toBe(true);
-    mounted.rerender();
+    mounted.rerender({
+      initialSessionId: "topic-a",
+    });
     await flushEffects();
 
-    expect(switchTopic).toHaveBeenCalledWith("topic-a");
+    expect(switchTopic).toHaveBeenCalledWith("topic-a", expect.objectContaining({ allowDetachedSession: true }));
     expect(
       mounted.container
         .querySelector('[data-testid="task-center-tab-topic-a"]')
@@ -147,7 +141,7 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     await flushEffects();
   });
 
-  it("外层侧边栏通知打开历史会话后，路由追平不应覆盖已有会话标签", async () => {
+  it("外层侧边栏打开历史会话后，路由追平不应覆盖已有会话标签", async () => {
     const state: Record<string, unknown> = createMockAgentChatUnifiedState({
       sessionId: "topic-current",
       topics: [
@@ -178,20 +172,12 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     });
     await flushEffects();
 
-    expect(
-      notifyTaskCenterTaskOpen({
-        sessionId: "topic-next",
-        workspaceId: "workspace-test",
-        source: "sidebar",
-      }),
-    ).toBe(true);
-    await flushEffects();
-    expect(switchTopic).toHaveBeenCalledWith("topic-next");
-
     mounted.rerender({
       initialSessionId: "topic-next",
     });
     await flushEffects();
+    expect(switchTopic).toHaveBeenCalledWith("topic-next", expect.objectContaining({ allowDetachedSession: true }));
+
     mounted.rerender();
     await flushEffects();
 
@@ -247,23 +233,19 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     state.switchTopic = switchTopic;
     installMockAgentChatUnifiedState(state);
 
-    mountPage({
+    const mounted = mountPage({
       agentEntry: "claw",
       initialSessionId: "topic-current",
       projectId: "workspace-test",
     });
     await flushEffects();
 
-    expect(
-      notifyTaskCenterTaskOpen({
-        sessionId: "topic-a",
-        workspaceId: "workspace-test",
-        source: "conversation_shelf",
-      }),
-    ).toBe(true);
+    mounted.rerender({
+      initialSessionId: "topic-a",
+    });
     await flushEffects();
 
-    expect(switchTopic).toHaveBeenNthCalledWith(1, "topic-a");
+    expect(switchTopic).toHaveBeenNthCalledWith(1, "topic-a", expect.objectContaining({ allowDetachedSession: true }));
     expect(setMessages).not.toHaveBeenCalledWith([]);
   });
 
@@ -284,12 +266,20 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     });
     await flushEffects();
 
-    clickButton(mounted.container, "task-center-tab-create-button");
+    const createButton = mounted.container.querySelector<HTMLButtonElement>(
+      '[data-testid="task-center-tab-create-button"]',
+    );
+    expect(createButton).not.toBeNull();
+    createButton?.click();
     await flushEffects();
     mounted.rerender();
     await flushEffects();
 
-    clickButton(mounted.container, "task-center-tab-create-button");
+    mounted.container
+      .querySelector<HTMLButtonElement>(
+        '[data-testid="task-center-tab-create-button"]',
+      )
+      ?.click();
     await flushEffects();
     mounted.rerender();
     await flushEffects();
@@ -308,7 +298,7 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     expect(onNavigate).not.toHaveBeenCalled();
   });
 
-  it("new-task 首页收到外层侧栏打开历史会话时应立即切换会话", async () => {
+  it("new-task 首页收到 current route 历史会话时应立即切换会话", async () => {
     const state: Record<string, unknown> = createMockAgentChatUnifiedState({
       sessionId: null,
       topics: [
@@ -332,18 +322,15 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     });
     await flushEffects();
 
-    expect(
-      notifyTaskCenterTaskOpen({
-        sessionId: "topic-next",
-        workspaceId: "workspace-test",
-        source: "sidebar",
-      }),
-    ).toBe(true);
+    mounted.rerender({
+      agentEntry: "claw",
+      initialSessionId: "topic-next",
+    });
     await flushEffects();
     mounted.rerender();
     await flushEffects();
 
-    expect(switchTopic).toHaveBeenCalledWith("topic-next");
+    expect(switchTopic).toHaveBeenCalledWith("topic-next", expect.objectContaining({ allowDetachedSession: true }));
     expect(
       mounted.container
         .querySelector('[data-testid="task-center-tab-topic-next"]')

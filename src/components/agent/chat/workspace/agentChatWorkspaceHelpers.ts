@@ -48,6 +48,7 @@ interface ResolveTaskCenterHomeSurfaceStateParams {
   draftSurfaceActive: boolean;
   shouldSuppressDraftContent: boolean;
   sessionSwitchPending: boolean;
+  hasInitialSessionRoute?: boolean;
   hasConversationActivity: boolean;
   sessionId?: string | null;
   embeddedHomeSessionIds: ReadonlySet<string>;
@@ -215,11 +216,30 @@ export function resolveTaskCenterDraftSendTitle(text: string): string {
   return normalized.length > preview.length ? `${preview}...` : preview;
 }
 
+export function isTaskCenterDraftSendPendingForLayout({
+  hasDraftSendRequest,
+  hasDisplayMessages,
+  isSending,
+  queuedTurnCount,
+}: {
+  hasDraftSendRequest: boolean;
+  hasDisplayMessages: boolean;
+  isSending: boolean;
+  queuedTurnCount: number;
+}): boolean {
+  if (!hasDraftSendRequest) {
+    return false;
+  }
+
+  return !hasDisplayMessages || isSending || queuedTurnCount > 0;
+}
+
 export function resolveTaskCenterHomeSurfaceState({
   agentEntry,
   draftSurfaceActive,
   shouldSuppressDraftContent,
   sessionSwitchPending,
+  hasInitialSessionRoute = false,
   hasConversationActivity,
   sessionId,
   embeddedHomeSessionIds,
@@ -232,11 +252,13 @@ export function resolveTaskCenterHomeSurfaceState({
   const shouldRenderEmbeddedHome = Boolean(
     agentEntry === "claw" &&
     !sessionSwitchPending &&
+    !hasInitialSessionRoute &&
     !hasConversationActivity &&
-    (draftSurfaceActive || hasEmbeddedHomeSession),
+    (draftSurfaceActive ||
+      hasEmbeddedHomeSession),
   );
   const shouldHideCurrentSessionContent =
-    sessionSwitchPending || shouldSuppressDraftContent;
+    sessionSwitchPending || (shouldSuppressDraftContent && !hasInitialSessionRoute);
 
   return {
     shouldRenderEmbeddedHome,

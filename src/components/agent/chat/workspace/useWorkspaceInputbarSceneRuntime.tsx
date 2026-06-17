@@ -485,6 +485,7 @@ interface UseWorkspaceInputbarSceneRuntimeParams {
   handleSend: WorkspaceHandleSend;
   isPreparingSend: boolean;
   isSending: boolean;
+  isSessionRestoring?: boolean;
   providerType: InputbarParams["providerType"];
   setProviderType: InputbarParams["setProviderType"];
   model: InputbarParams["model"];
@@ -597,6 +598,7 @@ export function useWorkspaceInputbarSceneRuntime({
   handleSend,
   isPreparingSend,
   isSending,
+  isSessionRestoring = false,
   providerType,
   setProviderType,
   model,
@@ -798,7 +800,10 @@ export function useWorkspaceInputbarSceneRuntime({
         setAccessMode,
         activeTheme,
         onManageProviders: navigationActions.handleManageProviders,
-        disabled: !projectId || isPreparingSend,
+        disabled:
+          isSessionRestoring ||
+          isPreparingSend ||
+          (contextVariant !== "task-center" && !projectId && !sessionId),
         onTaskFileClick: handleTaskFileClick,
         characters,
         skills,

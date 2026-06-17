@@ -350,6 +350,176 @@ describe("agentChatHistory", () => {
     ).toEqual(["tool_use", "text"]);
   });
 
+  it("Codex 导入的 detail.items 应按 turn 合入已恢复助手消息", () => {
+    const detail: AsterSessionDetail = {
+      id: "session-codex-import-timeline",
+      thread_id: "thread-codex-import-timeline",
+      created_at: 1,
+      updated_at: 2,
+      messages: [
+        {
+          id: "turn-codex:user",
+          role: "user",
+          timestamp: 1_781_000_001,
+          content: [{ type: "text", text: "run it" }] as never,
+        },
+        {
+          id: "turn-codex:assistant",
+          role: "assistant",
+          timestamp: 1_781_000_004,
+          runtimeTurnId: "turn-codex",
+          content: [{ type: "text", text: "done" }] as never,
+        } as never,
+      ],
+      turns: [
+        {
+          id: "turn-codex",
+          thread_id: "thread-codex-import-timeline",
+          prompt_text: "run it",
+          status: "completed",
+          started_at: "2026-06-16T00:00:01.000Z",
+          completed_at: "2026-06-16T00:00:04.000Z",
+          created_at: "2026-06-16T00:00:01.000Z",
+          updated_at: "2026-06-16T00:00:04.000Z",
+        },
+      ],
+      items: [
+        {
+          id: "reasoning-codex",
+          thread_id: "thread-codex-import-timeline",
+          turn_id: "turn-codex",
+          sequence: 1,
+          type: "reasoning",
+          status: "completed",
+          text: "I need to run the tests first.",
+          started_at: "2026-06-16T00:00:01.150Z",
+          completed_at: "2026-06-16T00:00:01.150Z",
+          updated_at: "2026-06-16T00:00:01.150Z",
+        } as never,
+        {
+          id: "command-codex",
+          thread_id: "thread-codex-import-timeline",
+          turn_id: "turn-codex",
+          sequence: 2,
+          type: "command_execution",
+          status: "completed",
+          command: "npm test",
+          cwd: "/workspace/app",
+          aggregated_output: "Exit code: 0\nOutput:\nok",
+          exit_code: 0,
+          started_at: "2026-06-16T00:00:02.000Z",
+          completed_at: "2026-06-16T00:00:03.000Z",
+          updated_at: "2026-06-16T00:00:03.000Z",
+        } as never,
+        {
+          id: "assistant-codex",
+          thread_id: "thread-codex-import-timeline",
+          turn_id: "turn-codex",
+          sequence: 6,
+          type: "agent_message",
+          status: "completed",
+          text: "done",
+          started_at: "2026-06-16T00:00:04.000Z",
+          completed_at: "2026-06-16T00:00:04.000Z",
+          updated_at: "2026-06-16T00:00:04.000Z",
+        } as never,
+        {
+          id: "patch-codex",
+          thread_id: "thread-codex-import-timeline",
+          turn_id: "turn-codex",
+          sequence: 3,
+          type: "patch",
+          status: "completed",
+          text: "Patch changed /workspace/app/src/lib.rs",
+          paths: ["/workspace/app/src/lib.rs"],
+          summary: ["/workspace/app/src/lib.rs"],
+          success: true,
+          stdout: "Success. Updated files",
+          started_at: "2026-06-16T00:00:03.100Z",
+          completed_at: "2026-06-16T00:00:03.100Z",
+          updated_at: "2026-06-16T00:00:03.100Z",
+        } as never,
+        {
+          id: "search-codex",
+          thread_id: "thread-codex-import-timeline",
+          turn_id: "turn-codex",
+          sequence: 4,
+          type: "web_search",
+          status: "completed",
+          query: "npm test failure",
+          action: "search_query",
+          output: "search result summary",
+          started_at: "2026-06-16T00:00:03.200Z",
+          completed_at: "2026-06-16T00:00:03.300Z",
+          updated_at: "2026-06-16T00:00:03.300Z",
+        } as never,
+        {
+          id: "approval-codex",
+          thread_id: "thread-codex-import-timeline",
+          turn_id: "turn-codex",
+          sequence: 5,
+          type: "approval_request",
+          status: "completed",
+          request_id: "approval-codex",
+          action_type: "tool_confirmation",
+          tool_name: "exec_command",
+          prompt: "Approve Codex command: npm test",
+          response: { decision: "imported_read_only" },
+          started_at: "2026-06-16T00:00:03.400Z",
+          completed_at: "2026-06-16T00:00:03.500Z",
+          updated_at: "2026-06-16T00:00:03.500Z",
+        } as never,
+      ],
+    };
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "session-codex-import-timeline",
+    );
+
+    expect(messages).toHaveLength(2);
+    expect(messages[1]).toMatchObject({
+      role: "assistant",
+      content: "done",
+      runtimeTurnId: "turn-codex",
+      toolCalls: [
+        {
+          id: "command-codex",
+          name: "exec_command",
+          status: "completed",
+          result: {
+            success: true,
+            output: "Exit code: 0\nOutput:\nok",
+          },
+        },
+        {
+          id: "patch-codex",
+          name: "apply_patch",
+          status: "completed",
+        },
+        {
+          id: "search-codex",
+          name: "web_search",
+          status: "completed",
+        },
+      ],
+      actionRequests: [
+        {
+          requestId: "approval-codex",
+          status: "submitted",
+        },
+      ],
+    });
+    expect(messages[1]?.contentParts?.map((part) => part.type)).toEqual([
+      "thinking",
+      "tool_use",
+      "tool_use",
+      "tool_use",
+      "action_required",
+      "text",
+    ]);
+  });
+
   it("App Server thread_read.tool_calls 与 artifact summary 同时存在时仍应保留工具过程", () => {
     const detail: AsterSessionDetail = {
       id: "session-app-server-tool-artifact",

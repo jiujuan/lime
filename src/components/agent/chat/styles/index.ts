@@ -67,7 +67,8 @@ export const MessageListContainer = styled(ScrollArea)<{
   flex: 1;
   min-height: 0;
   height: 100%;
-  padding: 6px 0 16px;
+  padding: ${({ $taskCenterSurface }) =>
+    $taskCenterSurface ? "6px 0 16px" : "22px 0 16px"};
   overscroll-behavior: contain;
   background: ${({ $taskCenterSurface }) =>
     $taskCenterSurface

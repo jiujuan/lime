@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "unsupportedItems": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "willAppendToExistingSession": {
+      "type": "boolean"
+    },
+    "willCreateSession": {
+      "type": "boolean"
+    },
+    "willImportAttachments": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "willImportMessages": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "willImportTimelineItems": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "willImportTurns": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "unsupportedItems",
+    "willAppendToExistingSession",
+    "willCreateSession",
+    "willImportAttachments",
+    "willImportMessages",
+    "willImportTimelineItems",
+    "willImportTurns"
+  ],
+  "title": "ConversationImportPreviewDryRun",
+  "type": "object"
+}

@@ -142,10 +142,24 @@ describe("InputbarCore", () => {
     ).toBeTruthy();
   });
 
+  it("应在 textarea 上暴露当前会话标识，便于发送链路回归定位", async () => {
+    const container = await renderInputbarCore({
+      sessionId: "session-inputbar-1",
+    });
+    const textarea = container.querySelector(
+      "textarea",
+    ) as HTMLTextAreaElement | null;
+
+    expect(textarea?.getAttribute("data-session-id")).toBe(
+      "session-inputbar-1",
+    );
+  });
+
   it("左侧加号应打开 Codex 风格设置浮层并触发工具动作", async () => {
     const onAddFiles = vi.fn();
     const onToggleTask = vi.fn();
     const onToggleObjective = vi.fn();
+    const onToggleSubagent = vi.fn();
     const container = await renderInputbarCore({
       text: "继续处理",
       plusMenu: {
@@ -160,11 +174,14 @@ describe("InputbarCore", () => {
           unavailable: "当前会话暂不可用",
         },
         taskEnabled: true,
+        subagentEnabled: false,
         knowledgeActive: true,
+        objectiveActive: true,
         skillsActive: true,
         onAddFiles,
         onToggleTask,
         onToggleObjective,
+        onToggleSubagent,
         knowledgePanel: <div>资料面板</div>,
         skillsPanel: <div>技能面板</div>,
       },
@@ -186,12 +203,35 @@ describe("InputbarCore", () => {
     expect(menu).toBeTruthy();
     expect(menu?.textContent).toContain("添加照片和文件");
     expect(menu?.textContent).toContain("计划模式");
+    expect(menu?.textContent).toContain("子代理");
     expect(menu?.textContent).toContain("追求目标");
     expect(menu?.textContent).toContain("技能");
 
+    const planModeRow = document.body.querySelector(
+      '[data-testid="inputbar-plus-plan-mode"]',
+    );
+    const subagentModeRow = document.body.querySelector(
+      '[data-testid="inputbar-plus-subagent-mode"]',
+    );
+    const objectiveRow = document.body.querySelector(
+      '[data-testid="inputbar-plus-objective"]',
+    );
+    expect(planModeRow?.getAttribute("role")).toBe("menuitemcheckbox");
+    expect(planModeRow?.getAttribute("aria-checked")).toBe("true");
+    expect(
+      planModeRow?.querySelector('[data-state="checked"]'),
+    ).toBeTruthy();
+    expect(subagentModeRow?.getAttribute("role")).toBe("menuitemcheckbox");
+    expect(subagentModeRow?.getAttribute("aria-checked")).toBe("false");
+    expect(
+      subagentModeRow?.querySelector('[data-state="unchecked"]'),
+    ).toBeTruthy();
+    expect(objectiveRow?.getAttribute("role")).toBe("menuitemcheckbox");
+    expect(objectiveRow?.getAttribute("aria-checked")).toBe("true");
+
     await act(async () => {
-      document.body
-        .querySelector('[data-testid="inputbar-plus-plan-mode"]')
+      planModeRow
+        ?.querySelector('[data-state="checked"]')
         ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await Promise.resolve();
     });
@@ -199,9 +239,16 @@ describe("InputbarCore", () => {
     expect(onToggleTask).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      document.body
-        .querySelector('[data-testid="inputbar-plus-objective"]')
+      subagentModeRow
+        ?.querySelector('[data-state="unchecked"]')
         ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(onToggleSubagent).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      objectiveRow?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await Promise.resolve();
     });
 

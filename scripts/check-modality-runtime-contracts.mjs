@@ -58,7 +58,7 @@ const PERMISSIONS = new Set([
   "media_upload",
   "service_api_call",
   "local_cli",
-  "ask_user_question",
+  "request_user_input",
 ]);
 const ARTIFACT_KINDS = new Set([
   "image_task",

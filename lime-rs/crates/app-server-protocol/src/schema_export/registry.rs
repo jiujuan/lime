@@ -558,10 +558,28 @@ pub(super) fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<ConversationImportSourceStatus>("ConversationImportSourceStatus"),
         typed_schema::<ConversationImportThreadStatus>("ConversationImportThreadStatus"),
         typed_schema::<ConversationImportSourceScanParams>("ConversationImportSourceScanParams"),
+        typed_schema::<ConversationImportThreadPreviewParams>(
+            "ConversationImportThreadPreviewParams",
+        ),
+        typed_schema::<ConversationImportThreadCommitParams>(
+            "ConversationImportThreadCommitParams",
+        ),
         typed_schema::<ConversationImportSourceSummary>("ConversationImportSourceSummary"),
         typed_schema::<ImportedThreadSummary>("ImportedThreadSummary"),
         typed_schema::<ConversationImportSourceScanResponse>(
             "ConversationImportSourceScanResponse",
+        ),
+        typed_schema::<ConversationImportSourceProvenance>("ConversationImportSourceProvenance"),
+        typed_schema::<ConversationImportFidelitySummary>("ConversationImportFidelitySummary"),
+        typed_schema::<ConversationImportPreviewMessage>("ConversationImportPreviewMessage"),
+        typed_schema::<ConversationImportPreviewEvent>("ConversationImportPreviewEvent"),
+        typed_schema::<ConversationImportPreviewDryRun>("ConversationImportPreviewDryRun"),
+        typed_schema::<ConversationImportPreviewSummary>("ConversationImportPreviewSummary"),
+        typed_schema::<ConversationImportThreadPreviewResponse>(
+            "ConversationImportThreadPreviewResponse",
+        ),
+        typed_schema::<ConversationImportThreadCommitResponse>(
+            "ConversationImportThreadCommitResponse",
         ),
         typed_schema::<AgentSessionStartParams>("AgentSessionStartParams"),
         typed_schema::<AgentSessionStartResponse>("AgentSessionStartResponse"),

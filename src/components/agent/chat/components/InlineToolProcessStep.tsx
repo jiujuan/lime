@@ -353,6 +353,35 @@ function summarizeSearchResultPreview(resultCount: number): string | null {
   return `找到 ${resultCount} 条搜索结果`;
 }
 
+function summarizeDiagnosticResultPreview(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const parsed = parseStructuredToolResult(trimmed);
+  const record = asRecord(parsed);
+  const webSearchMetadata = asRecord(record?.metadata)?.web_search;
+  const webSearchRecord = asRecord(webSearchMetadata);
+  const attempts = Array.isArray(webSearchRecord?.attempts)
+    ? webSearchRecord.attempts
+    : [];
+  const firstAttempt = asRecord(attempts[0]);
+  const firstAttemptError = readString(firstAttempt, ["error", "message"]);
+
+  if (firstAttemptError) {
+    return `搜索诊断：${summarizeResultText(firstAttemptError)}`;
+  }
+
+  const message =
+    readString(record, ["error", "message", "detail", "output"]) ||
+    extractStructuredToolDetailText(parsed);
+
+  return message
+    ? `搜索诊断：${summarizeResultText(message)}`
+    : "搜索诊断已收起";
+}
+
 function normalizeSummaryLine(
   value: string | null,
   headline: string,
@@ -515,13 +544,12 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     toolCall.name,
     toolCall.status,
   ]);
-  const shouldHideRawDiagnosticDetail = useMemo(
+  const isRawDiagnosticDetail = useMemo(
     () =>
-      toolCall.status !== "failed" &&
       processNarrative.postSource === "error" &&
       Boolean(rawResultText) &&
       isLikelyWebRetrievalDiagnosticNoise(rawResultText),
-    [processNarrative.postSource, rawResultText, toolCall.status],
+    [processNarrative.postSource, rawResultText],
   );
   const resultDetailMarkdown = useMemo(
     () => sanitizeToolResultDetailMarkdown(resultText),
@@ -563,8 +591,17 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     if (searchResultItems.length > 0) {
       return summarizeSearchResultPreview(searchResultItems.length);
     }
+    if (isRawDiagnosticDetail) {
+      return summarizeDiagnosticResultPreview(rawResultText);
+    }
     return resultPreview;
-  }, [resultPreview, searchResultItems.length, toolSearchSummary]);
+  }, [
+    isRawDiagnosticDetail,
+    rawResultText,
+    resultPreview,
+    searchResultItems.length,
+    toolSearchSummary,
+  ]);
   const savedSiteContentTarget = useMemo(
     () => resolveSiteSavedContentTargetFromMetadata(toolCall.result?.metadata),
     [toolCall.result?.metadata],
@@ -655,7 +692,7 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     toolCall.status,
   ]);
   const hasDetails =
-    (Boolean(resultText) && !shouldHideRawDiagnosticDetail) ||
+    Boolean(resultText) ||
     resultImages.length > 0 ||
     searchResultItems.length > 0 ||
     Boolean(toolSearchSummary) ||
@@ -1008,8 +1045,7 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
 
               {!toolSearchSummary &&
               searchResultItems.length === 0 &&
-              resultText &&
-              !shouldHideRawDiagnosticDetail ? (
+              resultText ? (
                 <div className="text-sm leading-6 text-slate-700">
                   <MarkdownRenderer content={resultDetailMarkdown} />
                 </div>

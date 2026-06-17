@@ -137,20 +137,29 @@ export function useTaskCenterDraftMaterializationRuntime({
     ],
   );
 
-  const openTaskCenterDraftTab = useCallback(() => {
+  const openTaskCenterDraftTab = useCallback((options?: {
+    preservePendingSendRequest?: boolean;
+  }) => {
     const draftTab = buildTaskCenterDraftTab({
       id: createTaskCenterDraftTabId(),
     });
 
     taskCenterDraftSurfaceActiveRef.current = true;
+    activeTaskCenterDraftTabIdRef.current = draftTab.id;
+    taskCenterDraftTabsRef.current = upsertTaskCenterDraftTab(
+      taskCenterDraftTabsRef.current,
+      draftTab,
+    );
     resetLocalImageWorkbenchSessionScope();
     clearMessages({ showToast: false });
     startTransition(() => {
       setTaskCenterTransitionTopicId(null);
       setTaskCenterDetachedTopicId(null);
       setActiveTaskCenterDraftTabId(draftTab.id);
-      setTaskCenterDraftSendRequest(null);
-      setHomePendingPreviewRequest(null);
+      if (options?.preservePendingSendRequest !== true) {
+        setTaskCenterDraftSendRequest(null);
+        setHomePendingPreviewRequest(null);
+      }
       setTaskCenterDraftTabs((current) =>
         upsertTaskCenterDraftTab(current, draftTab),
       );

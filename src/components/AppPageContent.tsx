@@ -159,6 +159,7 @@ function serializeAgentChatPageInstanceKey(params: AgentPageParams): string {
       : "workspace-input",
     params.initialPendingServiceSkillLaunch?.skillId || "",
     params.initialPendingServiceSkillLaunch?.requestKey ?? 0,
+    params.initialSessionId || "",
     serializeInitialInputCapabilityKey(params),
     serializeInitialKnowledgePackSelectionKey(params),
     params.initialProjectFileOpenTarget?.relativePath || "",

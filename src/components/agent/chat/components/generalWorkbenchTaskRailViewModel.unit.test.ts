@@ -40,6 +40,32 @@ const t = ((key: string, values?: Record<string, unknown>) => {
     "generalWorkbench.taskRail.context.access.current": "按需确认",
     "generalWorkbench.taskRail.context.access.fullAccess": "完全访问",
     "generalWorkbench.taskRail.context.access.readOnly": "只读",
+    "generalWorkbench.taskRail.context.imported": "导入",
+    "generalWorkbench.taskRail.context.importedDetail.approvals":
+      "确认 {{count}}",
+    "generalWorkbench.taskRail.context.importedDetail.commands":
+      "命令 {{count}}",
+    "generalWorkbench.taskRail.context.importedDetail.messages":
+      "消息 {{count}}",
+    "generalWorkbench.taskRail.context.importedDetail.patches":
+      "补丁 {{count}}",
+    "generalWorkbench.taskRail.context.importedDetail.reasoning":
+      "思考 {{count}}",
+    "generalWorkbench.taskRail.context.importedDetail.tools":
+      "工具 {{count}}",
+    "generalWorkbench.taskRail.context.importedDetail.webSearch":
+      "搜索 {{count}}",
+    "generalWorkbench.taskRail.context.importedStatus.partial": "部分保留",
+    "generalWorkbench.taskRail.context.importedStatus.partialTitle":
+      "有 {{unsupported}} 项未完整映射，{{budgetDropped}} 项因预算裁剪",
+    "generalWorkbench.taskRail.context.importedStatus.restored": "已还原",
+    "generalWorkbench.taskRail.context.importedStatus.restoredTitle":
+      "导入细节已进入当前会话轨迹",
+    "generalWorkbench.taskRail.context.importedThreadTitle":
+      "源线程 {{thread}}",
+    "generalWorkbench.taskRail.context.importedTitle": "来自 {{source}}",
+    "generalWorkbench.taskRail.context.importedValue": "{{source}} 导入",
+    "generalWorkbench.taskRail.context.importedValueFallback": "已导入",
     "generalWorkbench.taskRail.context.model": "模型",
     "generalWorkbench.taskRail.context.objective": "目标",
     "generalWorkbench.taskRail.context.permission": "权限",
@@ -991,6 +1017,47 @@ describe("buildGeneralWorkbenchTaskRailProjection", () => {
     expect(projection.activityItems).toEqual([]);
   });
 
+  it("workflowSteps 为空时应从最新 proposed_plan 恢复结构化计划", () => {
+    const projection = buildGeneralWorkbenchTaskRailProjection({
+      workflowSteps: [],
+      completedSteps: 0,
+      progressPercent: 0,
+      messages: [
+        assistantMessage({
+          id: "assistant-plan",
+          content:
+            "先说明\n<proposed_plan>\n- 确认计划模式请求进入 App Server\n- 输出 Codex 风格 proposed_plan\n- 验证右侧计划轨显示\n</proposed_plan>\n计划已生成。",
+          toolCalls: [],
+          artifacts: [],
+        }),
+      ],
+      groupedActivityLogs: [],
+      groupedCreationTaskEvents: [],
+      t,
+    });
+
+    expect(projection.planItems).toEqual([
+      {
+        id: "message-proposed-plan:assistant-plan:0:确认计划模式请求进入 App Server",
+        title: "确认计划模式请求进入 App Server",
+        status: "running",
+        meta: "步骤 1",
+      },
+      {
+        id: "message-proposed-plan:assistant-plan:1:输出 Codex 风格 proposed_plan",
+        title: "输出 Codex 风格 proposed_plan",
+        status: "pending",
+        meta: "步骤 2",
+      },
+      {
+        id: "message-proposed-plan:assistant-plan:2:验证右侧计划轨显示",
+        title: "验证右侧计划轨显示",
+        status: "pending",
+        meta: "步骤 3",
+      },
+    ]);
+  });
+
   it("历史 thread item 应从 update_plan metadata 恢复结构化计划且不重复展示工具活动", () => {
     const projection = buildGeneralWorkbenchTaskRailProjection({
       workflowSteps: [],
@@ -1317,6 +1384,159 @@ describe("buildGeneralWorkbenchTaskRailProjection", () => {
             title: "已有 2 个来源，缺少证据引用",
           },
         },
+      ]),
+    );
+  });
+
+  it("应从 Codex 导入 thread item metadata 恢复来源和还原覆盖摘要", () => {
+    const sourceProvenance = {
+      sourceClient: "codex",
+      sourceThreadId: "thread-codex-20260617abcdef",
+      sourcePath:
+        "/Users/coso/.codex/sessions/2026/06/17/rollout-thread-codex-20260617abcdef.jsonl",
+      sourceEventType: "response_item",
+      payloadType: "function_call",
+      callId: "call-shell",
+    };
+    const codexImportFidelity = {
+      messages: 6,
+      reasoning: 2,
+      tools: 4,
+      commands: 1,
+      patches: 1,
+      approvals: 1,
+      webSearch: 1,
+      unsupported: 0,
+      budgetDropped: 0,
+    };
+    const threadItems: AgentThreadItem[] = [
+      {
+        id: "codex-command",
+        type: "command_execution",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        sequence: 1,
+        status: "completed",
+        command: "npm test",
+        cwd: "/workspace/imported-codex",
+        aggregated_output: "ok",
+        exit_code: 0,
+        metadata: {
+          source_client: "codex",
+          source_provenance: sourceProvenance,
+          codexImportFidelity,
+        },
+        started_at: "2026-06-17T10:00:00.000Z",
+        completed_at: "2026-06-17T10:00:01.000Z",
+        updated_at: "2026-06-17T10:00:01.000Z",
+      },
+      {
+        id: "codex-patch",
+        type: "patch",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        sequence: 2,
+        status: "completed",
+        text: "Patch changed src/App.tsx",
+        paths: ["src/App.tsx"],
+        success: true,
+        metadata: {
+          source_client: "codex",
+          source_provenance: {
+            ...sourceProvenance,
+            payloadType: "patch_apply_end",
+            callId: "call-patch",
+          },
+        },
+        started_at: "2026-06-17T10:00:02.000Z",
+        completed_at: "2026-06-17T10:00:03.000Z",
+        updated_at: "2026-06-17T10:00:03.000Z",
+      },
+      {
+        id: "codex-search",
+        type: "web_search",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        sequence: 3,
+        status: "completed",
+        query: "Codex App thread model",
+        output: "found sources",
+        metadata: {
+          source_client: "codex",
+          source_provenance: {
+            ...sourceProvenance,
+            payloadType: "web_search",
+            callId: "call-search",
+          },
+        },
+        started_at: "2026-06-17T10:00:04.000Z",
+        completed_at: "2026-06-17T10:00:05.000Z",
+        updated_at: "2026-06-17T10:00:05.000Z",
+      },
+      {
+        id: "codex-approval",
+        type: "approval_request",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        sequence: 4,
+        status: "completed",
+        request_id: "approval-shell",
+        action_type: "tool_confirmation",
+        prompt: "Allow npm test?",
+        tool_name: "shell",
+        response: { decision: "approved", imported_read_only: true },
+        metadata: {
+          source_client: "codex",
+          source_provenance: {
+            ...sourceProvenance,
+            payloadType: "exec_approval_request",
+            callId: "approval-shell",
+          },
+        },
+        started_at: "2026-06-17T10:00:06.000Z",
+        completed_at: "2026-06-17T10:00:07.000Z",
+        updated_at: "2026-06-17T10:00:07.000Z",
+      },
+    ];
+
+    const projection = buildGeneralWorkbenchTaskRailProjection({
+      workflowSteps: [],
+      completedSteps: 0,
+      progressPercent: 0,
+      messages: [],
+      groupedActivityLogs: [],
+      groupedCreationTaskEvents: [],
+      threadItems,
+      t,
+    });
+
+    expect(projection.contextItems).toEqual(
+      expect.arrayContaining([
+        {
+          id: "imported-source",
+          label: "导入",
+          value: "Codex 导入",
+          title:
+            "来自 Codex · 源线程 thread-codex-20260617abcdef · 消息 6 / 思考 2 / 命令 1 / 工具 4",
+          detailLabels: ["消息 6", "思考 2", "命令 1"],
+          detailOverflowLabel: "另有 4 项",
+          detailStatus: {
+            label: "已还原",
+            tone: "success",
+            title: "导入细节已进入当前会话轨迹",
+          },
+        },
+        expect.objectContaining({
+          id: "sources",
+          label: "来源",
+          value: "2 项",
+          title:
+            "来源：rollout-thread-codex-20260617abcdef.jsonl / Codex App thread model",
+          detailLabels: [
+            "rollout-thread-codex-20260617abcdef.jsonl",
+            "Codex App thread model",
+          ],
+        }),
       ]),
     );
   });

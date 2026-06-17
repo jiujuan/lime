@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { AgentThreadItem, Message } from "../types";
 import {
   createInlineCoverageMatcher,
+  hasPersistedReasoningTimelineItem,
   mergeStreamingOverlayContentParts,
   resolveInlineProcessCoverage,
+  shouldKeepInlineProcessForActiveAssistant,
 } from "./messageListInlineProcess";
 
 describe("messageListInlineProcess", () => {
@@ -154,5 +156,50 @@ describe("messageListInlineProcess", () => {
         query: "lime",
       } satisfies AgentThreadItem),
     ).toBe(true);
+  });
+
+  it("已有持久化 reasoning 时不应继续保留 message thinking 兜底", () => {
+    const message = {
+      id: "assistant-1",
+      role: "assistant",
+      content: "最终回答",
+      timestamp: new Date("2026-06-17T08:00:00.000Z"),
+      thinkingContent: "这段只应作为未持久化时的临时兜底。",
+      contentParts: [
+        {
+          type: "thinking",
+          text: "这段只应作为未持久化时的临时兜底。",
+        },
+        { type: "text", text: "最终回答" },
+      ],
+    } satisfies Message;
+
+    const timelineItems: AgentThreadItem[] = [
+      {
+        id: "reasoning-1",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        sequence: 1,
+        status: "completed",
+        started_at: "2026-06-17T08:00:00.000Z",
+        completed_at: "2026-06-17T08:00:01.000Z",
+        updated_at: "2026-06-17T08:00:01.000Z",
+        type: "reasoning",
+        text: "这段由 timeline 承载。",
+      },
+    ];
+
+    expect(hasPersistedReasoningTimelineItem(timelineItems)).toBe(true);
+    expect(
+      shouldKeepInlineProcessForActiveAssistant(
+        message,
+        true,
+        true,
+        true,
+        true,
+        "最终回答",
+        false,
+      ),
+    ).toBe(false);
   });
 });

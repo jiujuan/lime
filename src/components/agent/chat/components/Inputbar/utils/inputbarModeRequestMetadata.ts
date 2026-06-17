@@ -3,6 +3,7 @@ import { bindThreadGoalMetadataToSession } from "../../../utils/harnessRequestMe
 
 interface InputbarModeState {
   goalEnabled?: boolean;
+  objectiveText?: string | null;
   planEnabled?: boolean;
   source?: string;
   subagentEnabled?: boolean;
@@ -11,6 +12,24 @@ interface InputbarModeState {
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function readStringField(
+  record: Record<string, unknown> | undefined,
+  keys: string[],
+): string | null {
+  if (!record) {
+    return null;
+  }
+
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return null;
 }
 
 function mergeHarness(base: Record<string, unknown> | undefined): {
@@ -37,11 +56,13 @@ function buildThreadGoalMetadata(
   existing: Record<string, unknown> | undefined,
   source: string,
   threadId?: string | null,
+  objectiveText?: string | null,
 ): Record<string, unknown> {
   const existingSet = isPlainRecord(existing?.set)
     ? (existing.set as Record<string, unknown>)
     : {};
   const normalizedThreadId = threadId?.trim();
+  const normalizedObjectiveText = objectiveText?.trim();
 
   return {
     ...(existing || {}),
@@ -51,9 +72,11 @@ function buildThreadGoalMetadata(
     set: {
       ...existingSet,
       ...(normalizedThreadId ? { threadId: normalizedThreadId } : {}),
-      objective: Object.prototype.hasOwnProperty.call(existingSet, "objective")
-        ? existingSet.objective
-        : null,
+      objective:
+        normalizedObjectiveText ||
+        (Object.prototype.hasOwnProperty.call(existingSet, "objective")
+          ? existingSet.objective
+          : null),
       status: "active",
       tokenBudget: Object.prototype.hasOwnProperty.call(
         existingSet,
@@ -93,6 +116,7 @@ export function buildInputbarModeRequestMetadata(
   }
 
   if (goalEnabled) {
+    const objectiveText = state.objectiveText?.trim();
     preferences.objective = true;
     preferences.goal = true;
     harness.goal_mode_enabled = true;
@@ -102,6 +126,7 @@ export function buildInputbarModeRequestMetadata(
         : undefined,
       source,
       threadId,
+      objectiveText,
     );
     harness.goal = buildThreadGoalMetadata(
       isPlainRecord(harness.goal)
@@ -109,7 +134,17 @@ export function buildInputbarModeRequestMetadata(
         : undefined,
       source,
       threadId,
+      objectiveText,
     );
+    if (objectiveText) {
+      harness.managed_objective = {
+        ...(isPlainRecord(harness.managed_objective)
+          ? (harness.managed_objective as Record<string, unknown>)
+          : {}),
+        objective_text: objectiveText,
+        source,
+      };
+    }
   }
 
   root.harness = {
@@ -125,6 +160,25 @@ export function bindInputbarThreadGoalMetadata(
   threadId?: string | null,
 ): Record<string, unknown> | undefined {
   return bindThreadGoalMetadataToSession(base, threadId);
+}
+
+export function extractInputbarManagedObjectiveText(
+  requestMetadata?: Record<string, unknown>,
+): string | null {
+  const harness = isPlainRecord(requestMetadata?.harness)
+    ? requestMetadata.harness
+    : undefined;
+  const managedObjective = isPlainRecord(harness?.managed_objective)
+    ? harness.managed_objective
+    : isPlainRecord(requestMetadata?.managed_objective)
+      ? requestMetadata.managed_objective
+      : undefined;
+
+  return readStringField(managedObjective, [
+    "objective_text",
+    "objectiveText",
+    "objective",
+  ]);
 }
 
 export function buildInputbarToolPreferencesOverride(

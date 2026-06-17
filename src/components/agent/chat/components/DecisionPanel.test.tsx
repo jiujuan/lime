@@ -440,6 +440,42 @@ describe("DecisionPanel ask_user", () => {
     expect(container.textContent).not.toContain("取消");
   });
 
+  it("Codex 导入的已处理权限请求应显示友好摘要而不是原始命令和 JSON", () => {
+    const request: ActionRequired = {
+      requestId: "approval-codex-imported",
+      actionType: "tool_confirmation",
+      toolName: "exec_command",
+      prompt: "Approve Codex command: npm test",
+      status: "submitted",
+      submittedUserData: {
+        decision: "imported_read_only",
+        imported_read_only: true,
+        source: "codex",
+      },
+      arguments: {
+        command: "npm test",
+        cwd: "/workspace/app",
+      },
+    };
+    const { container } = renderDecisionPanel(request);
+
+    expect(container.textContent).toContain("导入的权限记录");
+    expect(container.textContent).toContain("处理结果");
+    expect(container.textContent).toContain("已导入，只读记录");
+    expect(container.textContent).toContain("记录说明");
+    expect(container.textContent).toContain("从 Codex 导入的历史审批记录");
+    expect(container.textContent).toContain("只读历史记录，不会重新执行");
+    expect(container.textContent).not.toContain("Approve Codex command");
+    expect(container.textContent).not.toContain("影响范围");
+    expect(container.textContent).not.toContain("本次授权");
+    expect(container.textContent).not.toContain("/workspace/app");
+    expect(container.textContent).not.toContain("npm test");
+    expect(container.textContent).not.toContain("imported_read_only");
+    expect(container.textContent).not.toContain('"decision"');
+    expect(container.textContent).not.toContain("你的回答");
+    expect(container.textContent).not.toContain("等待助手继续执行");
+  });
+
   it("显式提交答案等待回调完成时，应展示提交中并禁用交互", async () => {
     const request = createAskUserRequest("req-ask-user-loading");
     let resolveSubmit: (() => void) | null = null;

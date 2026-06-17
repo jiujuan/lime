@@ -39,6 +39,8 @@ interface UseTaskCenterDraftSendDispatchRuntimeParams {
     SetStateAction<TaskCenterDraftSendRequest | null>
   >;
   messagesLength: number;
+  displayMessagesLength?: number;
+  currentSessionId?: string | null;
   materializedSessionIdsRef: MutableRefObject<Map<string, string>>;
   materializeDraftTab: (
     draftTabId: string,
@@ -49,6 +51,7 @@ interface UseTaskCenterDraftSendDispatchRuntimeParams {
     newSessionId: string,
     options?: { preserveInput?: boolean },
   ) => void;
+  onNonMaterializedSessionReady?: (sessionId: string) => void;
   sendRef: MutableRefObject<WorkspaceHandleSend>;
   workspaceId?: string | null;
 }
@@ -119,14 +122,17 @@ export function useTaskCenterDraftSendDispatchRuntime({
   setTaskCenterDraftSendRequest,
   setHomePendingPreviewRequest,
   messagesLength,
+  displayMessagesLength = messagesLength,
+  currentSessionId,
   materializedSessionIdsRef,
   materializeDraftTab,
   commitMaterializedDraftTab,
+  onNonMaterializedSessionReady,
   sendRef,
   workspaceId,
 }: UseTaskCenterDraftSendDispatchRuntimeParams): void {
   useEffect(() => {
-    if (messagesLength === 0) {
+    if (messagesLength === 0 && displayMessagesLength === 0) {
       return;
     }
 
@@ -134,11 +140,25 @@ export function useTaskCenterDraftSendDispatchRuntime({
       if (!current || current.materializeDraft) {
         return current;
       }
+      const readySessionId =
+        currentSessionId?.trim() ||
+        (current.draftTabId.startsWith("draft-send-")
+          ? ""
+          : current.draftTabId.trim());
+      if (!readySessionId && current.draftTabId.startsWith("draft-send-")) {
+        return current;
+      }
+      if (readySessionId) {
+        onNonMaterializedSessionReady?.(readySessionId);
+      }
       return null;
     });
     setHomePendingPreviewRequest(null);
   }, [
+    displayMessagesLength,
+    currentSessionId,
     messagesLength,
+    onNonMaterializedSessionReady,
     setHomePendingPreviewRequest,
     setTaskCenterDraftSendRequest,
   ]);

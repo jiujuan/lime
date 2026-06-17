@@ -7,6 +7,7 @@ import type {
   AutoContinueRequestPayload,
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
+import { setAgentRuntimeObjective } from "@/lib/api/agentRuntime";
 import type {
   AssistantDraftState,
   SendMessageObserver,
@@ -22,6 +23,7 @@ import { buildAgentStreamSubmitOp } from "./agentStreamSubmitOpController";
 import { resolveAgentStreamSubmitContext } from "./agentStreamSubmitContext";
 import { registerAgentStreamTurnEventBinding } from "./agentStreamTurnEventBinding";
 import { extractAgentUiPerformanceTraceMetadata } from "./agentStreamPerformanceMetrics";
+import { extractInputbarManagedObjectiveText } from "../components/Inputbar/utils/inputbarModeRequestMetadata";
 
 type MessageParts = NonNullable<Message["contentParts"]>;
 
@@ -209,6 +211,8 @@ export async function executeAgentStreamSubmit(
       ? assistantDraft.content?.trim() || null
       : null;
   const assistantFallbackContent = assistantDraft?.fallbackContent?.trim() || null;
+  const managedObjectiveText =
+    extractInputbarManagedObjectiveText(requestMetadata);
   const eventBindingWorkspaceId = resolvedWorkspaceId ?? "";
 
   const unlisten = await registerAgentStreamTurnEventBinding({
@@ -272,8 +276,20 @@ export async function executeAgentStreamSubmit(
     eventName,
     expectingQueue,
     requestState,
-    submit: () =>
-      runtime.submitOp(
+    submit: async () => {
+      if (managedObjectiveText) {
+        try {
+          await setAgentRuntimeObjective({
+            sessionId: resolvedActiveSessionId,
+            workspaceId: resolvedWorkspaceId,
+            objectiveText: managedObjectiveText,
+            successCriteria: [],
+          });
+        } catch (error) {
+          console.warn("[AgentStream] 写入追求目标失败，继续发送消息:", error);
+        }
+      }
+      await runtime.submitOp(
         buildAgentStreamSubmitOp({
           content,
           images,
@@ -299,6 +315,7 @@ export async function executeAgentStreamSubmit(
           thinking,
           autoContinue,
         }),
-      ),
+      );
+    },
   });
 }

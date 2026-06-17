@@ -1,8 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { safeInvoke } from "@/lib/dev-bridge";
 import {
+  commitConversationImportThread,
+  previewConversationImportThread,
   scanConversationImportSource,
   type ConversationImportSourceScanResponse,
+  type ConversationImportThreadCommitResponse,
+  type ConversationImportThreadPreviewResponse,
 } from "./conversationImport";
 
 const appServerRequestMock = vi.hoisted(() => vi.fn());
@@ -41,8 +45,147 @@ function appServerScanResponse(): ConversationImportSourceScanResponse {
         archived: false,
         sourcePath: "/Users/example/.codex/sessions/thread-1.jsonl",
         importStatus: "not_imported",
+        metadata: {
+          model: "gpt-5.5",
+          reasoningEffort: "xhigh",
+          cliVersion: "0.139.0",
+        },
       },
     ],
+  };
+}
+
+function appServerPreviewResponse(): ConversationImportThreadPreviewResponse {
+  const scan = appServerScanResponse();
+  return {
+    source: scan.source,
+    thread: scan.threads[0],
+    summary: {
+      lineCount: 4,
+      messageCount: 2,
+      rolloutEventItems: 1,
+      unsupportedCount: 1,
+      dryRun: {
+        willCreateSession: true,
+        willAppendToExistingSession: false,
+        willImportMessages: 2,
+        willImportTurns: 1,
+        willImportTimelineItems: 3,
+        willImportAttachments: 1,
+        unsupportedItems: 1,
+      },
+      fidelity: {
+        messages: 2,
+        reasoning: 0,
+        tools: 1,
+        commands: 1,
+        patches: 0,
+        approvals: 0,
+        mcp: 0,
+        webSearch: 0,
+        attachments: 1,
+        unsupported: 1,
+        provenanceOnly: 1,
+        budgetDropped: 0,
+      },
+      truncated: false,
+      warnings: ["Some Codex rollout items are counted but not shown in preview."],
+    },
+    messages: [
+      {
+        role: "user",
+        text: "hello",
+        attachments: [
+          {
+            kind: "image",
+            uri: "data:image/png;base64,abc",
+            metadata: {
+              mediaType: "image/png",
+              sourceType: "response_item",
+            },
+          },
+        ],
+        truncated: false,
+        omittedBytes: 0,
+        timestamp: "2026-06-16T00:00:00.000Z",
+        sourceType: "response_item",
+        provenance: {
+          sourceClient: "codex",
+          sourceThreadId: "thread-1",
+          sourcePath: "/Users/example/.codex/sessions/thread-1.jsonl",
+          sourceEventType: "response_item",
+          sourceEventSeq: 2,
+          sourcePayloadType: "message",
+          sourceRole: "user",
+        },
+      },
+      {
+        role: "assistant",
+        text: "world",
+        attachments: [],
+        truncated: false,
+        omittedBytes: 0,
+        timestamp: "2026-06-16T00:00:01.000Z",
+        sourceType: "response_item",
+        provenance: {
+          sourceClient: "codex",
+          sourceThreadId: "thread-1",
+          sourcePath: "/Users/example/.codex/sessions/thread-1.jsonl",
+          sourceEventType: "response_item",
+          sourceEventSeq: 3,
+          sourcePayloadType: "message",
+          sourceRole: "assistant",
+        },
+      },
+    ],
+    events: [
+      {
+        kind: "user_message",
+        timestamp: "2026-06-16T00:00:00.000Z",
+        label: "hello",
+        provenance: {
+          sourceClient: "codex",
+          sourceThreadId: "thread-1",
+          sourceEventType: "event_msg",
+          sourceEventSeq: 1,
+          sourcePayloadType: "user_message",
+        },
+      },
+    ],
+  };
+}
+
+function appServerCommitResponse(): ConversationImportThreadCommitResponse {
+  const preview = appServerPreviewResponse();
+  return {
+    session: {
+      sessionId: "sess-imported",
+      threadId: "thread-imported",
+      appId: "content-studio",
+      workspaceId: "workspace-1",
+      businessObjectRef: {
+        kind: "conversation.import",
+        id: "thread-1",
+        title: "Fix runtime",
+        uri: "/Users/example/.codex/sessions/thread-1.jsonl",
+        metadata: {
+          sourceClient: "codex",
+          sourceThreadId: "thread-1",
+        },
+      },
+      status: "completed",
+      createdAt: "2026-06-16T00:00:00.000Z",
+      updatedAt: "2026-06-16T00:00:01.000Z",
+    },
+    thread: {
+      ...preview.thread,
+      importStatus: "imported",
+    },
+    summary: preview.summary,
+    importedMessages: 2,
+    importedTurns: 1,
+    canContinue: true,
+    warnings: ["Imported Codex user/assistant messages."],
   };
 }
 
@@ -91,6 +234,121 @@ describe("conversationImport API", () => {
 
     await expect(scanConversationImportSource()).rejects.toThrow(
       "conversationImport/source/scan returned an invalid source scan shape",
+    );
+    expect(safeInvoke).not.toHaveBeenCalled();
+  });
+
+  it("应通过 App Server current 主链读取 Codex 线程预览，供导入确认弹窗使用", async () => {
+    const result = appServerPreviewResponse();
+    appServerRequestMock.mockResolvedValueOnce({ result });
+
+    await expect(
+      previewConversationImportThread({
+        sourceClient: "codex",
+        sourceRoot: "/Users/example/.codex",
+        sourceThreadId: "thread-1",
+        limit: 10,
+      }),
+    ).resolves.toEqual(result);
+
+    expect(appServerRequestMock).toHaveBeenCalledWith(
+      "conversationImport/thread/preview",
+      {
+        sourceClient: "codex",
+        sourceRoot: "/Users/example/.codex",
+        sourceThreadId: "thread-1",
+        limit: 10,
+      },
+    );
+    expect(safeInvoke).not.toHaveBeenCalled();
+  });
+
+  it("线程预览响应形状异常时应 fail closed", async () => {
+    appServerRequestMock.mockResolvedValueOnce({
+      result: {
+        source: appServerScanResponse().source,
+        thread: appServerScanResponse().threads[0],
+        summary: { messageCount: 2 },
+        messages: [{}],
+        events: [],
+      },
+    });
+
+    await expect(
+      previewConversationImportThread({ sourceThreadId: "thread-1" }),
+    ).rejects.toThrow(
+      "conversationImport/thread/preview returned an invalid thread preview shape",
+    );
+    expect(safeInvoke).not.toHaveBeenCalled();
+  });
+
+  it("线程预览缺少 dry-run impact summary 时应 fail closed", async () => {
+    const result = appServerPreviewResponse();
+    appServerRequestMock.mockResolvedValueOnce({
+      result: {
+        ...result,
+        summary: {
+          ...result.summary,
+          dryRun: undefined,
+        },
+      },
+    });
+
+    await expect(
+      previewConversationImportThread({ sourceThreadId: "thread-1" }),
+    ).rejects.toThrow(
+      "conversationImport/thread/preview returned an invalid thread preview shape",
+    );
+    expect(safeInvoke).not.toHaveBeenCalled();
+  });
+
+  it("应通过 App Server current 主链在用户确认后提交导入", async () => {
+    const result = appServerCommitResponse();
+    appServerRequestMock.mockResolvedValueOnce({ result });
+
+    await expect(
+      commitConversationImportThread({
+        sourceClient: "codex",
+        sourceRoot: "/Users/example/.codex",
+        sourceThreadId: "thread-1",
+        workspaceId: "workspace-1",
+        confirmed: true,
+      }),
+    ).resolves.toEqual(result);
+
+    expect(appServerRequestMock).toHaveBeenCalledWith(
+      "conversationImport/thread/commit",
+      {
+        sourceClient: "codex",
+        sourceRoot: "/Users/example/.codex",
+        sourceThreadId: "thread-1",
+        workspaceId: "workspace-1",
+        confirmed: true,
+      },
+    );
+    expect(safeInvoke).not.toHaveBeenCalled();
+  });
+
+  it("线程导入响应形状异常时应 fail closed", async () => {
+    appServerRequestMock.mockResolvedValueOnce({
+      result: {
+        session: {},
+        thread: appServerScanResponse().threads[0],
+        summary: appServerPreviewResponse().summary,
+        importedMessages: 2,
+        importedTurns: 1,
+        canContinue: true,
+        warnings: [],
+      },
+    });
+
+    await expect(
+      commitConversationImportThread({
+        sourceThreadId: "thread-1",
+        confirmed: true,
+      }),
+    ).rejects.toThrow(
+      "conversationImport/thread/commit returned an invalid thread commit shape",
     );
     expect(safeInvoke).not.toHaveBeenCalled();
   });

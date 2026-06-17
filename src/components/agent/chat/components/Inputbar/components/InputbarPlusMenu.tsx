@@ -55,15 +55,18 @@ function InputbarPlusSwitch({ checked }: { checked?: boolean }) {
   return (
     <span
       aria-hidden
+      data-state={checked ? "checked" : "unchecked"}
       className={cn(
-        "relative inline-flex h-[18px] w-[30px] flex-shrink-0 items-center rounded-full transition-colors",
-        checked ? "bg-sky-500" : "bg-slate-200",
+        "relative inline-flex h-[18px] w-[32px] flex-shrink-0 items-center rounded-full border transition-colors",
+        checked
+          ? "border-slate-900 bg-slate-900"
+          : "border-slate-200 bg-slate-100",
       )}
     >
       <span
         className={cn(
           "inline-block h-[14px] w-[14px] rounded-full bg-white shadow-sm transition-transform",
-          checked ? "translate-x-[14px]" : "translate-x-0.5",
+          checked ? "translate-x-[15px]" : "translate-x-0.5",
         )}
       />
     </span>
@@ -74,10 +77,12 @@ const InputbarPlusRow = React.forwardRef<
   HTMLButtonElement,
   {
   active?: boolean;
+  checked?: boolean;
   disabled?: boolean;
   icon: React.ReactNode;
   label: string;
   onClick?: () => void;
+  role?: "menuitem" | "menuitemcheckbox";
   showArrow?: boolean;
   testId: string;
   title?: string;
@@ -86,10 +91,12 @@ const InputbarPlusRow = React.forwardRef<
 >(function InputbarPlusRow(
   {
     active,
+    checked,
     disabled,
     icon,
     label,
     onClick,
+    role = "menuitem",
     showArrow,
     testId,
     title,
@@ -101,11 +108,13 @@ const InputbarPlusRow = React.forwardRef<
     <button
       ref={ref}
       type="button"
-      role="menuitem"
+      role={role}
+      aria-checked={role === "menuitemcheckbox" ? Boolean(checked) : undefined}
       className={cn(
         "flex h-8 w-full min-w-0 items-center gap-2 px-2 text-left text-[13px] leading-none transition-colors",
         "rounded-md text-slate-700 hover:bg-slate-50 hover:text-slate-950 focus-visible:bg-slate-50 focus-visible:outline-none",
         active && "bg-slate-50 text-slate-950",
+        checked && "bg-slate-50 text-slate-950",
         disabled && "cursor-default text-slate-300 hover:bg-transparent hover:text-slate-300",
       )}
       data-testid={testId}
@@ -257,16 +266,22 @@ export function InputbarPlusMenu({
           })}
           <div className="my-1 border-t border-slate-100" />
           <InputbarPlusRow
+            active={config.taskEnabled}
+            checked={config.taskEnabled}
             icon={<ListChecks className="h-4 w-4" />}
             label={config.labels.planMode}
+            role="menuitemcheckbox"
             testId="inputbar-plus-plan-mode"
             trailing={<InputbarPlusSwitch checked={config.taskEnabled} />}
             onClick={config.onToggleTask}
           />
           {config.onToggleSubagent ? (
             <InputbarPlusRow
+              active={config.subagentEnabled}
+              checked={config.subagentEnabled}
               icon={<Bot className="h-4 w-4" />}
               label={config.labels.subagent}
+              role="menuitemcheckbox"
               testId="inputbar-plus-subagent-mode"
               trailing={
                 <InputbarPlusSwitch checked={config.subagentEnabled} />
@@ -276,8 +291,10 @@ export function InputbarPlusMenu({
           ) : null}
           <InputbarPlusRow
             active={Boolean(config.objectiveActive)}
+            checked={Boolean(config.objectiveActive)}
             icon={<Target className="h-4 w-4" />}
             label={config.labels.objective}
+            role="menuitemcheckbox"
             testId="inputbar-plus-objective"
             trailing={<InputbarPlusSwitch checked={config.objectiveActive} />}
             onClick={config.onToggleObjective}

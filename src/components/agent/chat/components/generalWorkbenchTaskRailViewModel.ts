@@ -34,6 +34,7 @@ import {
   translateTaskRailText,
 } from "./generalWorkbenchTaskRailText";
 import {
+  buildProposedPlanItemsFromMessages,
   buildUpdatePlanItemsFromMessageToolCalls,
   buildUpdatePlanItemsFromThreadItems,
   isUpdatePlanToolName,
@@ -327,6 +328,11 @@ function buildRecoveredPlanItems({
   const workflowPlanItems = buildPlanItems(workflowSteps, t);
   if (workflowPlanItems.length > 0) {
     return workflowPlanItems;
+  }
+
+  const proposedPlanItems = buildProposedPlanItemsFromMessages(messages, t);
+  if (proposedPlanItems.length > 0) {
+    return proposedPlanItems;
   }
 
   const messageUpdatePlanItems = [...messages]

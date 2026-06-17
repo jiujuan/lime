@@ -38,21 +38,39 @@ export function hasCachedSidebarSessionEntry(
   return sessions.some((session) => session.id === normalizedSessionId);
 }
 
+function compareSidebarSessionTimeDesc(left?: number, right?: number): number {
+  const leftValue = Number.isFinite(left) ? left : 0;
+  const rightValue = Number.isFinite(right) ? right : 0;
+  return rightValue - leftValue;
+}
+
+function compareSidebarSessionIdAsc(left?: string, right?: string): number {
+  return String(left || "").localeCompare(String(right || ""));
+}
+
 export function sortSidebarSessions(
   sessions: AsterSessionInfo[],
 ): AsterSessionInfo[] {
   return sessions
     .filter((session) => !isAuxiliaryAgentSessionId(session.id))
     .sort((left, right) => {
-      if (left.updated_at !== right.updated_at) {
-        return right.updated_at - left.updated_at;
+      const updatedAtComparison = compareSidebarSessionTimeDesc(
+        left.updated_at,
+        right.updated_at,
+      );
+      if (updatedAtComparison !== 0) {
+        return updatedAtComparison;
       }
 
-      if (left.created_at !== right.created_at) {
-        return right.created_at - left.created_at;
+      const createdAtComparison = compareSidebarSessionTimeDesc(
+        left.created_at,
+        right.created_at,
+      );
+      if (createdAtComparison !== 0) {
+        return createdAtComparison;
       }
 
-      return left.id.localeCompare(right.id);
+      return compareSidebarSessionIdAsc(left.id, right.id);
     });
 }
 

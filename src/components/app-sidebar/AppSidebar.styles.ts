@@ -519,8 +519,9 @@ export const SidebarSearchMoreButton = styled.button`
 `;
 
 export const MenuScroll = styled.div`
-  flex: 1;
+  flex: 0 1 auto;
   min-height: 0;
+  max-height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 2px;
@@ -546,7 +547,10 @@ export const MainNavList = styled.div`
   margin-bottom: 12px;
 `;
 
-export const NavButton = styled.button<{ $active?: boolean; $collapsed?: boolean }>`
+export const NavButton = styled.button<{
+  $active?: boolean;
+  $collapsed?: boolean;
+}>`
   display: flex;
   align-items: center;
   gap: ${({ $collapsed }) => ($collapsed ? "0" : "10px")};
@@ -1704,7 +1708,10 @@ export const AccountMenuItemGroup = styled.div`
   position: relative;
 `;
 
-export const AccountMenuItem = styled.button<{ $danger?: boolean; $active?: boolean }>`
+export const AccountMenuItem = styled.button<{
+  $danger?: boolean;
+  $active?: boolean;
+}>`
   width: 100%;
   min-height: 40px;
   border: none;

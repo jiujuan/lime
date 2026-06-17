@@ -790,6 +790,28 @@ function summarizeSubmittedValue(value: unknown): string | undefined {
   return undefined;
 }
 
+function readSubmittedRecord(
+  request: ActionRequired,
+): Record<string, unknown> | undefined {
+  const userData = request.submittedUserData;
+  if (userData && typeof userData === "object" && !Array.isArray(userData)) {
+    return userData as Record<string, unknown>;
+  }
+
+  if (typeof request.submittedResponse === "string") {
+    try {
+      const parsed = JSON.parse(request.submittedResponse);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      return undefined;
+    }
+  }
+
+  return undefined;
+}
+
 function resolveSubmittedAnswerText(
   request: ActionRequired,
 ): string | undefined {
@@ -846,6 +868,15 @@ function resolveSubmittedAnswerText(
   return undefined;
 }
 
+function readSubmittedDecision(request: ActionRequired): string | undefined {
+  const record = readSubmittedRecord(request);
+  const decision = summarizeSubmittedValue(record?.decision);
+  if (decision) {
+    return decision;
+  }
+  return resolveSubmittedAnswerText(request);
+}
+
 function isDeniedSubmittedAnswer(value: string | undefined): boolean {
   const normalized = value?.trim().toLowerCase();
   if (!normalized) {
@@ -861,6 +892,24 @@ function isDeniedSubmittedAnswer(value: string | undefined): boolean {
     normalized.includes("decline") ||
     normalized.includes("declined")
   );
+}
+
+function isReadOnlyImportedDecision(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  return normalized === "imported_read_only";
+}
+
+function resolveSubmittedPermissionDecisionLabel(
+  decision: string | undefined,
+  translate: ReturnType<typeof useTranslation>["t"],
+): string {
+  if (isDeniedSubmittedAnswer(decision)) {
+    return translate("agentChat.decisionPanel.permission.result.denied");
+  }
+  if (isReadOnlyImportedDecision(decision)) {
+    return translate("agentChat.decisionPanel.permission.result.importedReadOnly");
+  }
+  return translate("agentChat.decisionPanel.permission.result.allowed");
 }
 
 export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
@@ -901,6 +950,10 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
   const isQueued = request.status === "queued";
   const isSubmitting = submissionState !== null;
   const submittedAnswer = resolveSubmittedAnswerText(request);
+  const submittedDecision = readSubmittedDecision(request);
+  const isToolConfirmation = request.actionType === "tool_confirmation";
+  const isImportedReadOnlyToolConfirmation =
+    isToolConfirmation && isReadOnlyImportedDecision(submittedDecision);
   const isRuntimeActionConfirmation = isRuntimeActionConfirmationRequestId(
     request.requestId,
   );
@@ -1100,11 +1153,15 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
       ? t("agentChat.decisionPanel.queuedTitle")
       : isRuntimeActionConfirmation
         ? t("agentChat.decisionPanel.runtimePermission.submittedTitle")
+        : isImportedReadOnlyToolConfirmation
+        ? t("agentChat.decisionPanel.permission.importedReadOnlyTitle")
         : request.actionType === "tool_confirmation"
         ? t("agentChat.decisionPanel.permissionHandledTitle")
         : t("agentChat.decisionPanel.submittedTitle");
     const submittedClassName = isQueued
       ? "border-sky-200 bg-sky-50/50 dark:border-sky-800 dark:bg-sky-950/20"
+      : isImportedReadOnlyToolConfirmation
+        ? "border-slate-200 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-950/20"
       : request.actionType === "tool_confirmation"
         ? "border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20"
         : request.actionType === "elicitation"
@@ -1120,13 +1177,13 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          {request.prompt && (
+          {request.prompt && !isToolConfirmation && (
             <p className="text-sm text-foreground whitespace-pre-wrap">
               {request.prompt}
             </p>
           )}
 
-          {request.questions && request.questions.length > 0 && (
+          {request.questions && request.questions.length > 0 && !isToolConfirmation && (
             <div className="space-y-1">
               {request.questions.map((question, index) => (
                 <p key={index} className="text-sm text-foreground">
@@ -1136,7 +1193,70 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
             </div>
           )}
 
-          {submittedAnswer && (
+          {isImportedReadOnlyToolConfirmation ? (
+            <div className="space-y-2 rounded-md border bg-background/80 px-3 py-2 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-muted-foreground">
+                  {t("agentChat.decisionPanel.permission.resultLabel")}
+                </span>
+                <span className="font-medium text-foreground">
+                  {resolveSubmittedPermissionDecisionLabel(submittedDecision, t)}
+                </span>
+              </div>
+              <div className="rounded-lg border border-border bg-background px-3 py-2">
+                <div className="text-xs font-medium text-muted-foreground">
+                  {t(
+                    "agentChat.decisionPanel.permission.importedReadOnlyRecordLabel",
+                  )}
+                </div>
+                <div className="mt-1 text-xs text-foreground">
+                  {t(
+                    "agentChat.decisionPanel.permission.importedReadOnlyRecordValue",
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : isToolConfirmation ? (
+            <div className="space-y-2 rounded-md border bg-background/80 px-3 py-2 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-muted-foreground">
+                  {t("agentChat.decisionPanel.permission.resultLabel")}
+                </span>
+                <span className="font-medium text-foreground">
+                  {resolveSubmittedPermissionDecisionLabel(submittedDecision, t)}
+                </span>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="rounded-lg border border-border bg-background px-3 py-2">
+                  <div className="text-xs font-medium text-muted-foreground">
+                    {t("agentChat.decisionPanel.permission.scope.label")}
+                  </div>
+                  <div className="mt-1 text-xs text-foreground">
+                    <span className="font-medium">
+                      {t(
+                        `agentChat.decisionPanel.permission.scope.${toolConfirmationImpactSummary.scopeKind}`,
+                      )}
+                    </span>
+                    <span className="ml-1 break-words font-mono">
+                      {toolConfirmationImpactSummary.scopeValue ||
+                        t("agentChat.decisionPanel.permission.scope.unknown")}
+                    </span>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border bg-background px-3 py-2">
+                  <div className="text-xs font-medium text-muted-foreground">
+                    {t("agentChat.decisionPanel.permission.authorization.label")}
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-foreground">
+                    {toolConfirmationImpactSummary.authorizationText ??
+                      t(
+                        "agentChat.decisionPanel.permission.authorization.oneTime",
+                      )}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : submittedAnswer ? (
             <div className="rounded-md border bg-background/80 px-3 py-2 text-sm">
               <span className="text-muted-foreground">
                 {t("agentChat.decisionPanel.submittedAnswerLabel")}
@@ -1145,18 +1265,22 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
                 {submittedAnswer}
               </span>
             </div>
-          )}
+          ) : null}
 
           <p className="text-xs text-muted-foreground">
             {isQueued
               ? t("agentChat.decisionPanel.queuedDescription")
               : isRuntimeActionConfirmation
-                ? isDeniedSubmittedAnswer(submittedAnswer)
+                ? isDeniedSubmittedAnswer(submittedDecision)
                   ? t(
                       "agentChat.decisionPanel.runtimePermission.deniedDescription",
                     )
                   : t(
                       "agentChat.decisionPanel.runtimePermission.submittedDescription",
+                    )
+                : isImportedReadOnlyToolConfirmation
+                  ? t(
+                      "agentChat.decisionPanel.permission.importedReadOnlyDescription",
                     )
                 : t("agentChat.decisionPanel.submittedDescription")}
           </p>

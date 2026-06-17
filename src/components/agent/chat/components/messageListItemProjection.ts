@@ -40,6 +40,7 @@ import {
   mergeStreamingOverlayContentParts,
   resolveInlineProcessCoverage,
   resolveInlineThinkingContent,
+  hasPersistedReasoningTimelineItem,
   shouldKeepInlineProcessForActiveAssistant,
   shouldRenderConversationTimelineItem,
   shouldSuppressPreAnswerThinkingTimeline,
@@ -350,6 +351,10 @@ function buildTimelineToolContentPart(
 
   if (item.type === "command_execution") {
     const status = resolveTimelineToolStatus(item.status);
+    const metadata =
+      item.metadata && typeof item.metadata === "object" && !Array.isArray(item.metadata)
+        ? (item.metadata as Record<string, unknown>)
+        : undefined;
     return {
       type: "tool_use",
       toolCall: {
@@ -371,8 +376,8 @@ function buildTimelineToolContentPart(
                 error: item.error || undefined,
                 metadata:
                   item.exit_code === undefined
-                    ? undefined
-                    : { exit_code: item.exit_code },
+                    ? metadata
+                    : { ...metadata, exit_code: item.exit_code },
               },
       },
     };
@@ -380,6 +385,10 @@ function buildTimelineToolContentPart(
 
   if (item.type === "web_search") {
     const status = resolveTimelineToolStatus(item.status);
+    const metadata =
+      item.metadata && typeof item.metadata === "object" && !Array.isArray(item.metadata)
+        ? (item.metadata as Record<string, unknown>)
+        : undefined;
     return {
       type: "tool_use",
       toolCall: {
@@ -398,6 +407,7 @@ function buildTimelineToolContentPart(
             : {
                 success: status !== "failed",
                 output: item.output || "",
+                metadata,
               },
       },
     };
@@ -447,6 +457,7 @@ function buildTimelineInlineContentParts(params: {
     (item) =>
       item.type === "tool_call" ||
       item.type === "command_execution" ||
+      item.type === "patch" ||
       item.type === "web_search",
   ).length;
   const actionLikeCount = items.filter(
@@ -621,6 +632,8 @@ export function resolveMessageListItemProjection({
         ? group.timeline
         : null;
   const hasProcessTimelineItems = hasTimelineProcessItems(timeline?.items);
+  const hasPersistedReasoningTimeline =
+    hasPersistedReasoningTimelineItem(timeline?.items);
   const timelineInlineContentParts =
     message.role === "assistant"
       ? buildTimelineInlineContentParts({
@@ -639,6 +652,7 @@ export function resolveMessageListItemProjection({
         message,
         isConversationTailAssistant,
         hasProcessTimelineItems,
+        hasPersistedReasoningTimeline,
         Boolean(timeline),
         displayContent,
         isSending,

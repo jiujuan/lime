@@ -926,6 +926,66 @@ describe("messageListItemProjection", () => {
     ).toHaveLength(3);
   });
 
+  it("Codex 导入命令应保留 imported 元数据供渲染层默认展开", () => {
+    const message: Message = {
+      id: "assistant-codex-import-command",
+      role: "assistant",
+      content: "已完成修复。",
+      timestamp: new Date("2026-06-02T10:02:00.000Z"),
+    };
+
+    const projection = buildProjection(message, [
+      {
+        id: "command-codex-import",
+        type: "command_execution",
+        turn_id: "turn-legacy-unphased-final",
+        sequence: 1,
+        command: "npm test",
+        cwd: "/workspace/imported-codex",
+        aggregated_output: "Exit code: 0\nOutput:\nok",
+        exit_code: 0,
+        metadata: {
+          imported: true,
+          source_client: "codex",
+        },
+        status: "completed",
+        started_at: "2026-06-02T10:01:02.000Z",
+        completed_at: "2026-06-02T10:01:03.000Z",
+        updated_at: "2026-06-02T10:01:03.000Z",
+      },
+      {
+        id: "assistant-codex-import-final",
+        type: "agent_message",
+        turn_id: "turn-legacy-unphased-final",
+        sequence: 2,
+        phase: "final_answer",
+        text: "已完成修复。",
+        status: "completed",
+        started_at: "2026-06-02T10:01:58.000Z",
+        completed_at: "2026-06-02T10:02:00.000Z",
+        updated_at: "2026-06-02T10:02:00.000Z",
+      },
+    ] as never);
+
+    expect(projection.rendererContentParts?.[0]).toMatchObject({
+      type: "tool_use",
+      toolCall: {
+        name: "Bash",
+        arguments: JSON.stringify({
+          command: "npm test",
+          cwd: "/workspace/imported-codex",
+        }),
+        result: {
+          metadata: {
+            imported: true,
+            source_client: "codex",
+            exit_code: 0,
+          },
+        },
+      },
+    });
+  });
+
   it("历史未知动态 MCP 工具应保持工具族顺序并进入渲染内容", () => {
     const message: Message = {
       id: "assistant-dynamic-mcp-history",

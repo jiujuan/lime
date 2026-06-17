@@ -238,7 +238,6 @@ import {
 import { FileManagerSidebar } from "./components/FileManager/FileManagerSidebar";
 import {
   subscribeTaskCenterDraftTaskRequests,
-  subscribeTaskCenterTaskOpenRequests,
 } from "./taskCenterDraftTaskEvents";
 import type { GeneralWorkbenchFollowUpActionPayload } from "./components/generalWorkbenchSidebarContract";
 import { RuntimeReviewDecisionDialog } from "./components/RuntimeReviewDecisionDialog";
@@ -368,6 +367,7 @@ import {
   areStringArraysEqual,
   createLocalImageWorkbenchSessionKey,
   createTaskCenterDraftSendRequestId,
+  isTaskCenterDraftSendPendingForLayout,
   isTaskCenterDraftTabId,
   isTransientWorkspaceBridgeError,
   isUsableKnowledgeSourceText,
@@ -4146,6 +4146,7 @@ export function AgentChatWorkspace({
     agentEntry,
     showChatPanel,
     contentId,
+    initialSessionId,
     displayMessageCount: displayMessages.length,
     isHomePendingPreviewActive,
     shouldSuppressTaskCenterDraftContent,
@@ -4457,6 +4458,24 @@ export function AgentChatWorkspace({
           ? normalizeProjectId(externalProjectId)
           : normalizeProjectId(requestedProjectId);
       const normalizedExternalProjectId = normalizeProjectId(externalProjectId);
+      if (
+        normalizedInitialSessionId &&
+        requestedProjectId !== undefined &&
+        normalizedRequestedProjectId !== normalizedExternalProjectId
+      ) {
+        logAgentDebug(
+          "AgentChatPage",
+          "taskCenter.draftRequestIgnoredForRouteSession",
+          {
+            agentEntry,
+            initialSessionId: normalizedInitialSessionId,
+            requestedProjectId: requestedProjectId ?? null,
+            externalProjectId: normalizedExternalProjectId,
+          },
+        );
+        return;
+      }
+
       if (normalizedRequestedProjectId !== normalizedExternalProjectId) {
         _onNavigate?.(
           "agent",
@@ -4480,6 +4499,7 @@ export function AgentChatWorkspace({
       agentEntry,
       applyProjectSelection,
       externalProjectId,
+      normalizedInitialSessionId,
       openTaskCenterDraftTab,
       resetProjectSelection,
     ],
@@ -4493,38 +4513,6 @@ export function AgentChatWorkspace({
       handleOpenTaskCenterNewTaskPage(detail.projectId);
     });
   }, [agentEntry, handleOpenTaskCenterNewTaskPage]);
-  useEffect(() => {
-    if (agentEntry !== "claw" && agentEntry !== "new-task") {
-      return;
-    }
-
-    return subscribeTaskCenterTaskOpenRequests(
-      ({ sessionId: requestedSessionId, workspaceId }) => {
-        const requestedWorkspaceId = normalizeProjectId(workspaceId);
-        if (
-          requestedWorkspaceId &&
-          requestedWorkspaceId !== normalizeProjectId(taskCenterWorkspaceId)
-        ) {
-          setTaskCenterTransitionTopicId(requestedSessionId);
-          setTaskCenterDetachedTopicId(null);
-          setActiveTaskCenterDraftTabId(null);
-          markTaskCenterLocalSessionOverride(requestedSessionId);
-          upsertTaskCenterOpenTab(requestedSessionId, requestedWorkspaceId);
-          deferTopicSwitch(requestedSessionId, requestedWorkspaceId);
-          return;
-        }
-
-        void handleOpenTaskTopic(requestedSessionId);
-      },
-    );
-  }, [
-    agentEntry,
-    deferTopicSwitch,
-    handleOpenTaskTopic,
-    markTaskCenterLocalSessionOverride,
-    taskCenterWorkspaceId,
-    upsertTaskCenterOpenTab,
-  ]);
   const taskCenterPreviewTopicId = useMemo(
     () =>
       resolveTaskCenterPreviewTopicId({
@@ -4556,11 +4544,19 @@ export function AgentChatWorkspace({
     draftSurfaceActive: isTaskCenterDraftSurfaceActive,
     shouldSuppressDraftContent: shouldSuppressTaskCenterDraftContent,
     sessionSwitchPending: taskCenterSessionSwitchPending,
+    hasInitialSessionRoute: Boolean(normalizedInitialSessionId),
     hasConversationActivity: hasHomeConversationActivity,
     sessionId,
     embeddedHomeSessionIds: taskCenterEmbeddedHomeSessionIds,
     isAutoRestoringSession,
     isSessionHydrating,
+  });
+  const isTaskCenterDraftSendPending = isTaskCenterDraftSendPendingForLayout({
+    hasDraftSendRequest: Boolean(taskCenterDraftSendRequest),
+    hasDisplayMessages:
+      displayMessages.length > 0 || effectiveThreadItems.length > 0,
+    isSending,
+    queuedTurnCount: queuedTurns.length,
   });
   const shouldRenderTaskCenterEmbeddedHome =
     taskCenterHomeSurfaceState.shouldRenderEmbeddedHome;
@@ -5945,8 +5941,11 @@ export function AgentChatWorkspace({
     const shouldRenderTaskCenterHomeSurface =
       shouldRenderTaskCenterEmbeddedHome ||
       shouldSuppressTaskCenterDraftContent;
+    const isInitialSessionActive =
+      Boolean(normalizedInitialSessionId) &&
+      normalizedInitialSessionId === sessionId;
     const hasConversationSessionForLayout =
-      Boolean(sessionId) &&
+      (Boolean(sessionId) || isInitialSessionActive) &&
       !shouldRenderTaskCenterHomeSurface &&
       !(
         agentEntry === "new-task" &&
@@ -5967,8 +5966,7 @@ export function AgentChatWorkspace({
           hasCanvasContent: hasCanvasWorkbenchContent,
           isThemeWorkbench,
           hasUnconsumedInitialDispatch,
-          isPreparingSend:
-            isPreparingSend || Boolean(taskCenterDraftSendRequest),
+          isPreparingSend: isPreparingSend || isTaskCenterDraftSendPending,
           isSending,
           queuedTurnCount: queuedTurns.length,
         });
@@ -6035,12 +6033,12 @@ export function AgentChatWorkspace({
     hideTopBar,
     isBootstrapDispatchPending,
     isPreparingSend,
+    isTaskCenterDraftSendPending,
     isSending,
     isThemeWorkbench,
     layoutMode,
     normalizedInitialSessionId,
     sessionId,
-    taskCenterDraftSendRequest,
     queuedTurns.length,
     shouldRenderTaskCenterEmbeddedHome,
     shouldSuppressTaskCenterDraftContent,
@@ -6465,6 +6463,10 @@ export function AgentChatWorkspace({
     handleSend,
     isPreparingSend,
     isSending,
+    isSessionRestoring:
+      isAutoRestoringSession ||
+      isSessionHydrating ||
+      taskCenterHomeSurfaceState.isRestoringSession,
     providerType,
     setProviderType,
     model,
@@ -6666,8 +6668,9 @@ export function AgentChatWorkspace({
       setInput("");
       const activeDraftTabId =
         activeTaskCenterDraftTabIdRef.current ||
-        (agentEntry === "claw" && shouldRenderTaskCenterEmbeddedHome
-          ? openTaskCenterDraftTab()
+        ((agentEntry === "claw" || agentEntry === "new-task") &&
+        !hasDisplayMessages
+          ? openTaskCenterDraftTab({ preservePendingSendRequest: true })
           : null);
       if (
         (agentEntry === "claw" || agentEntry === "new-task") &&
@@ -6789,15 +6792,32 @@ export function AgentChatWorkspace({
       turns.length,
     ],
   );
+  const handleNonMaterializedTaskCenterSessionReady = useCallback(
+    (readySessionId: string) => {
+      taskCenterDraftSurfaceActiveRef.current = false;
+      setTaskCenterTransitionTopicId(null);
+      setTaskCenterDetachedTopicId(null);
+      upsertTaskCenterOpenTab(readySessionId, taskCenterWorkspaceId);
+      markTaskCenterLocalSessionOverride(readySessionId);
+    },
+    [
+      markTaskCenterLocalSessionOverride,
+      taskCenterWorkspaceId,
+      upsertTaskCenterOpenTab,
+    ],
+  );
 
   useTaskCenterDraftSendDispatchRuntime({
     taskCenterDraftSendRequest,
     setTaskCenterDraftSendRequest,
     setHomePendingPreviewRequest,
     messagesLength: messages.length,
+    displayMessagesLength: displayMessages.length,
+    currentSessionId: sessionId,
     materializedSessionIdsRef: taskCenterDraftMaterializedSessionIdsRef,
     materializeDraftTab: materializeTaskCenterDraftTab,
     commitMaterializedDraftTab: commitMaterializedTaskCenterDraftTab,
+    onNonMaterializedSessionReady: handleNonMaterializedTaskCenterSessionReady,
     sendRef: handleSendRef,
     workspaceId: taskCenterWorkspaceId,
   });
@@ -6827,11 +6847,12 @@ export function AgentChatWorkspace({
   const sceneQueuedTurns = shouldHideCurrentSessionContent ? [] : queuedTurns;
   const sceneIsPreparingSend = shouldHideCurrentSessionContent
     ? false
-    : isPreparingSend || Boolean(taskCenterDraftSendRequest);
+    : isPreparingSend || isTaskCenterDraftSendPending;
   const sceneIsSending = shouldHideCurrentSessionContent ? false : isSending;
   const sceneSessionId = taskCenterHomeSurfaceState.sceneSessionId;
   const sceneMessageListEmptyStateVariant =
     agentEntry === "claw" &&
+    !(agentEntry === "claw" && normalizedInitialSessionId) &&
     !shouldRenderTaskCenterEmbeddedHome &&
     !shouldSuppressTaskCenterDraftContent
       ? "task-center"

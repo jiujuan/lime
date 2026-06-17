@@ -119,6 +119,18 @@ describe("agentChatWorkspaceShellViewModel", () => {
     });
   });
 
+  it("claw 历史会话入口应打开聊天面板", () => {
+    expect(
+      resolve({
+        agentEntry: "claw",
+        initialSessionId: "session-from-sidebar",
+      }),
+    ).toMatchObject({
+      effectiveShowChatPanel: true,
+      shouldRestoreImageTasksFromWorkspace: true,
+    });
+  });
+
   it("已有 contentId 的 new-task 首页仍可恢复工作区图片任务", () => {
     expect(
       resolve({

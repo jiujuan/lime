@@ -239,6 +239,43 @@ describe("threadTimelineView", () => {
     expect(items.map((item) => item.id)).toEqual(["item-1", "item-2"]);
   });
 
+  it("同一 turn 内应优先按 sequence 排序而不是按时间戳猜顺序", () => {
+    const laterTimestampFirstSequenceItem: AgentThreadItem = {
+      id: "item-seq-1",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+      sequence: 1,
+      status: "completed",
+      started_at: "2026-03-13T10:00:10Z",
+      completed_at: "2026-03-13T10:00:11Z",
+      updated_at: "2026-03-13T10:00:11Z",
+      type: "reasoning",
+      text: "先分析问题",
+    };
+    const earlierTimestampSecondSequenceItem: AgentThreadItem = {
+      id: "item-seq-2",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+      sequence: 2,
+      status: "completed",
+      started_at: "2026-03-13T10:00:01Z",
+      completed_at: "2026-03-13T10:00:02Z",
+      updated_at: "2026-03-13T10:00:02Z",
+      type: "tool_call",
+      tool_name: "web_search",
+      arguments: { query: "Lime streaming output order" },
+      output: "ok",
+      success: true,
+    };
+
+    const items = mergeThreadItems([
+      earlierTimestampSecondSequenceItem,
+      laterTimestampFirstSequenceItem,
+    ]);
+
+    expect(items.map((item) => item.id)).toEqual(["item-seq-1", "item-seq-2"]);
+  });
+
   it("应忽略仅用于内部恢复成功的 warning 项", () => {
     const repairedWarning: AgentThreadItem = {
       id: "warning-artifact-repaired",

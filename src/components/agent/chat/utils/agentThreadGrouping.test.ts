@@ -203,6 +203,73 @@ describe("agentThreadGrouping", () => {
     ]);
   });
 
+  it("reasoning 与工具混排时不应被工具批量摘要覆盖", () => {
+    const items: AgentThreadItem[] = [
+      {
+        ...createBaseItem("reasoning-1", 1),
+        type: "reasoning",
+        text: "先确认用户要的是今天国际新闻。",
+      },
+      {
+        ...createBaseItem("search-1", 2),
+        type: "web_search",
+        action: "web_search",
+        query: "today world news Reuters",
+      },
+      {
+        ...createBaseItem("reasoning-2", 3),
+        type: "reasoning",
+        text: "再按地区和影响力筛选来源。",
+      },
+      {
+        ...createBaseItem("browser-1", 4),
+        type: "tool_call",
+        tool_name: "browser_navigate",
+        arguments: { url: "https://apnews.com/hub/world-news" },
+      },
+    ];
+
+    const model = buildAgentThreadDisplayModel(items);
+
+    expect(model.orderedBlocks).toHaveLength(1);
+    expect(model.orderedBlocks[0]?.title).toBe("执行过程");
+    expect(model.orderedBlocks[0]?.previewLines).toEqual([
+      "先确认用户要的是今天国际新闻。",
+      "搜了 today world news Reuters",
+      "再按地区和影响力筛选来源。",
+    ]);
+  });
+
+  it("同一 turn 内过程预览应按 sequence 排序而不是按完成时间排序", () => {
+    const items: AgentThreadItem[] = [
+      {
+        ...createBaseItem("search-2", 2),
+        started_at: at(1),
+        completed_at: at(1),
+        updated_at: at(1),
+        type: "web_search",
+        action: "web_search",
+        query: "第二步资料",
+      },
+      {
+        ...createBaseItem("browser-1", 1),
+        started_at: at(10),
+        completed_at: at(10),
+        updated_at: at(10),
+        type: "tool_call",
+        tool_name: "browser_navigate",
+        arguments: { url: "https://example.com/first" },
+      },
+    ];
+
+    const model = buildAgentThreadDisplayModel(items);
+
+    expect(model.orderedBlocks[0]?.previewLines).toEqual([
+      "打开了 https://example.com/first",
+      "搜了 第二步资料",
+    ]);
+  });
+
   it("reasoning 预览应压平碎片化过程文本", () => {
     const items: AgentThreadItem[] = [
       {

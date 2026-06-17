@@ -1195,6 +1195,102 @@ describe("agentRuntime threadClient", () => {
     unlisten();
   });
 
+  it("App Server submit 返回乱序 notification 时应按 sequence 投递", async () => {
+    const appServerClient = appServerClientMock();
+    vi.mocked(appServerClient.startTurn).mockResolvedValueOnce({
+      id: 1,
+      result: {
+        turn: {
+          turnId: "turn-ordered",
+          sessionId: "session-1",
+          threadId: "thread-1",
+          status: "accepted",
+        },
+      },
+      response: {
+        id: 1,
+        result: {
+          turn: {
+            turnId: "turn-ordered",
+            sessionId: "session-1",
+            threadId: "thread-1",
+            status: "accepted",
+          },
+        },
+      },
+      messages: [],
+      notifications: [
+        {
+          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+          params: {
+            event: {
+              eventId: "evt-ordered-2",
+              sequence: 2,
+              sessionId: "session-1",
+              threadId: "thread-1",
+              turnId: "turn-ordered",
+              type: "message.delta",
+              timestamp: "2026-06-06T00:00:02.000Z",
+              payload: { text: "第二段" },
+            },
+          },
+        },
+        {
+          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+          params: {
+            event: {
+              eventId: "evt-ordered-1",
+              sequence: 1,
+              sessionId: "session-1",
+              threadId: "thread-1",
+              turnId: "turn-ordered",
+              type: "message.delta",
+              timestamp: "2026-06-06T00:00:01.000Z",
+              payload: { text: "第一段" },
+            },
+          },
+        },
+        {
+          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+          params: {
+            event: {
+              eventId: "evt-ordered-3",
+              sequence: 3,
+              sessionId: "session-1",
+              threadId: "thread-1",
+              turnId: "turn-ordered",
+              type: "turn.completed",
+              timestamp: "2026-06-06T00:00:03.000Z",
+              payload: {},
+            },
+          },
+        },
+      ],
+    });
+    const client = createThreadClient({
+      appServerClient,
+      invokeCommand: vi.fn() as unknown as AgentRuntimeCommandInvoke,
+      isAppServerTurnLifecycleAvailable: () => true,
+    });
+
+    const listener = vi.fn();
+    const unlisten = await listenAgentRuntimeEvent(
+      "aster_stream_ordered",
+      listener,
+    );
+
+    await client.submitAgentRuntimeTurn({
+      message: "生成草稿",
+      session_id: "session-1",
+      event_name: "aster_stream_ordered",
+    });
+
+    expect(listener.mock.calls.map(([event]) => event.payload.event_id)).toEqual(
+      ["evt-ordered-1", "evt-ordered-2", "evt-ordered-3"],
+    );
+    unlisten();
+  });
+
   it("App Server submit 返回未配对 tool.result 时不应投递到前端 stream event", async () => {
     const appServerClient = appServerClientMock();
     vi.mocked(appServerClient.startTurn).mockResolvedValueOnce({
@@ -1532,7 +1628,112 @@ describe("agentRuntime threadClient", () => {
       });
     });
 
-    expect(appServerClient.drainEvents).toHaveBeenCalledWith(50);
+    expect(appServerClient.drainEvents).toHaveBeenCalledWith(1);
+    unlisten();
+  });
+
+  it("App Server drain 返回乱序事件时应按 sequence 投递", async () => {
+    const appServerClient = appServerClientMock();
+    vi.mocked(appServerClient.startTurn).mockResolvedValueOnce({
+      id: 1,
+      result: {
+        turn: {
+          turnId: "turn-drain-ordered",
+          sessionId: "session-1",
+          threadId: "thread-1",
+          status: "accepted",
+        },
+      },
+      response: {
+        id: 1,
+        result: {
+          turn: {
+            turnId: "turn-drain-ordered",
+            sessionId: "session-1",
+            threadId: "thread-1",
+            status: "accepted",
+          },
+        },
+      },
+      messages: [],
+      notifications: [],
+    });
+    vi.mocked(appServerClient.drainEvents).mockResolvedValueOnce([
+      {
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: "evt-drain-ordered-2",
+            sequence: 2,
+            sessionId: "session-1",
+            threadId: "thread-1",
+            turnId: "turn-drain-ordered",
+            type: "message.delta",
+            timestamp: "2026-06-06T00:00:02.000Z",
+            payload: { text: "第二段" },
+          },
+        },
+      },
+      {
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: "evt-drain-ordered-1",
+            sequence: 1,
+            sessionId: "session-1",
+            threadId: "thread-1",
+            turnId: "turn-drain-ordered",
+            type: "message.delta",
+            timestamp: "2026-06-06T00:00:01.000Z",
+            payload: { text: "第一段" },
+          },
+        },
+      },
+      {
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: "evt-drain-ordered-3",
+            sequence: 3,
+            sessionId: "session-1",
+            threadId: "thread-1",
+            turnId: "turn-drain-ordered",
+            type: "turn.completed",
+            timestamp: "2026-06-06T00:00:03.000Z",
+            payload: {},
+          },
+        },
+      },
+    ]);
+    const client = createThreadClient({
+      appServerClient,
+      invokeCommand: vi.fn() as unknown as AgentRuntimeCommandInvoke,
+      isAppServerTurnLifecycleAvailable: () => true,
+      enableAppServerEventDrain: true,
+    });
+
+    const listener = vi.fn();
+    const unlisten = await listenAgentRuntimeEvent(
+      "aster_stream_drain_ordered",
+      listener,
+    );
+
+    await client.submitAgentRuntimeTurn({
+      message: "生成草稿",
+      session_id: "session-1",
+      turn_id: "turn-drain-ordered",
+      event_name: "aster_stream_drain_ordered",
+    });
+
+    await vi.waitFor(() => {
+      expect(
+        listener.mock.calls.map(([event]) => event.payload.event_id),
+      ).toEqual([
+        "evt-drain-ordered-1",
+        "evt-drain-ordered-2",
+        "evt-drain-ordered-3",
+      ]);
+    });
     unlisten();
   });
 
@@ -1587,7 +1788,7 @@ describe("agentRuntime threadClient", () => {
     });
 
     await vi.waitFor(() => {
-      expect(appServerClient.drainEvents).toHaveBeenCalledWith(50);
+      expect(appServerClient.drainEvents).toHaveBeenCalledWith(1);
       expect(listener).toHaveBeenCalledWith({
         payload: expect.objectContaining({
           type: "text_delta",
@@ -1664,6 +1865,143 @@ describe("agentRuntime threadClient", () => {
     ).toHaveLength(1);
 
     unlisten();
+  });
+
+  it("App Server drain 应在首事件前快速轮询，投递首事件后恢复常规间隔", async () => {
+    vi.useFakeTimers();
+    try {
+      const appServerClient = appServerClientMock();
+      let resolveStartTurn:
+        | ((
+            value: Awaited<ReturnType<AgentRuntimeAppServerClient["startTurn"]>>,
+          ) => void)
+        | undefined;
+      vi.mocked(appServerClient.startTurn).mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveStartTurn = resolve;
+        }),
+      );
+      vi.mocked(appServerClient.drainEvents)
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          {
+            method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+            params: {
+              event: {
+                eventId: "evt-fast-first-delta",
+                sequence: 1,
+                sessionId: "session-1",
+                threadId: "thread-1",
+                turnId: "turn-fast-first",
+                type: "message.delta",
+                timestamp: "2026-06-06T00:00:00.000Z",
+                payload: {
+                  text: "首字",
+                },
+              },
+            },
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+            params: {
+              event: {
+                eventId: "evt-fast-first-completed",
+                sequence: 2,
+                sessionId: "session-1",
+                threadId: "thread-1",
+                turnId: "turn-fast-first",
+                type: "turn.completed",
+                timestamp: "2026-06-06T00:00:01.000Z",
+                payload: {},
+              },
+            },
+          },
+        ]);
+      const client = createThreadClient({
+        appServerClient,
+        invokeCommand: vi.fn() as unknown as AgentRuntimeCommandInvoke,
+        isAppServerTurnLifecycleAvailable: () => true,
+        enableAppServerEventDrain: true,
+      });
+
+      const listener = vi.fn();
+      const unlisten = await listenAgentRuntimeEvent(
+        "aster_stream_fast_first",
+        listener,
+      );
+      const submitPromise = client.submitAgentRuntimeTurn({
+        message: "生成草稿",
+        session_id: "session-1",
+        turn_id: "turn-fast-first",
+        event_name: "aster_stream_fast_first",
+      });
+
+      await Promise.resolve();
+      expect(appServerClient.drainEvents).toHaveBeenCalledTimes(1);
+      expect(appServerClient.drainEvents).toHaveBeenLastCalledWith(1);
+
+      await vi.advanceTimersByTimeAsync(23);
+      expect(appServerClient.drainEvents).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(appServerClient.drainEvents).toHaveBeenCalledTimes(2);
+      expect(appServerClient.drainEvents).toHaveBeenLastCalledWith(1);
+      expect(listener).toHaveBeenCalledWith({
+        payload: expect.objectContaining({
+          type: "text_delta",
+          text: "首字",
+          event_id: "evt-fast-first-delta",
+          session_id: "session-1",
+          turn_id: "turn-fast-first",
+        }),
+      });
+
+      await vi.advanceTimersByTimeAsync(249);
+      expect(appServerClient.drainEvents).toHaveBeenCalledTimes(2);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(appServerClient.drainEvents).toHaveBeenCalledTimes(3);
+      expect(appServerClient.drainEvents).toHaveBeenLastCalledWith(50);
+      expect(listener).toHaveBeenCalledWith({
+        payload: expect.objectContaining({
+          type: "turn_completed",
+          event_id: "evt-fast-first-completed",
+          session_id: "session-1",
+          turn_id: "turn-fast-first",
+        }),
+      });
+
+      resolveStartTurn?.({
+        id: 1,
+        result: {
+          turn: {
+            turnId: "turn-fast-first",
+            sessionId: "session-1",
+            threadId: "thread-1",
+            status: "accepted",
+          },
+        },
+        response: {
+          id: 1,
+          result: {
+            turn: {
+              turnId: "turn-fast-first",
+              sessionId: "session-1",
+              threadId: "thread-1",
+              status: "accepted",
+            },
+          },
+        },
+        messages: [],
+        notifications: [],
+      });
+      await submitPromise;
+      unlisten();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("App Server drain 收到 turn.completed 后应关闭路由，后续事件不应再投递", async () => {
@@ -3053,20 +3391,25 @@ describe("agentRuntime threadClient", () => {
     });
 
     expect(commandOutputPayload).toMatchObject({
-      type: "tool_output_delta",
-      tool_id: "command-1",
-      delta: "1 test passed",
-      output_kind: "stdout",
-      metadata: {
-        eventClass: "command.output",
-        outputRef: "output://npm-test",
-        refIds: ["output://npm-test", "log://npm-test"],
+      type: "item_updated",
+      item: {
+        id: "command-1",
+        type: "command_execution",
+        status: "in_progress",
+        aggregated_output: "1 test passed",
+        metadata: {
+          eventClass: "command.output",
+          outputRef: "output://npm-test",
+          refIds: ["output://npm-test", "log://npm-test"],
+        },
       },
     });
     expect(parseAgentEvent(commandOutputPayload)).toMatchObject({
-      type: "tool_output_delta",
-      tool_id: "command-1",
-      delta: "1 test passed",
+      type: "item_updated",
+      item: {
+        type: "command_execution",
+        aggregated_output: "1 test passed",
+      },
     });
 
     const commandExitedPayload = projectAppServerAgentEventPayload({
@@ -3107,6 +3450,150 @@ describe("agentRuntime threadClient", () => {
         type: "command_execution",
         status: "completed",
       },
+    });
+
+    const patchAppliedPayload = projectAppServerAgentEventPayload({
+      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "evt-patch-applied",
+          sequence: 17,
+          sessionId: "session-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          type: "patch.applied",
+          timestamp: "2026-06-06T00:00:14.000Z",
+          payload: {
+            patchId: "patch-1",
+            changes: {
+              "src/App.tsx": {
+                kind: "update",
+              },
+            },
+            stdout: "Done",
+            success: true,
+            autoApproved: false,
+          },
+        },
+      },
+    });
+
+    expect(patchAppliedPayload).toMatchObject({
+      type: "item_completed",
+      item: {
+        id: "patch-1",
+        type: "patch",
+        status: "completed",
+        paths: ["src/App.tsx"],
+        success: true,
+        stdout: "Done",
+        metadata: {
+          eventClass: "patch.applied",
+          autoApproved: false,
+        },
+      },
+    });
+    expect(parseAgentEvent(patchAppliedPayload)).toMatchObject({
+      type: "item_completed",
+      item: {
+        type: "patch",
+        paths: ["src/App.tsx"],
+      },
+    });
+
+    const actionRequiredPayload = projectAppServerAgentEventPayload({
+      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "evt-action-required",
+          sequence: 18,
+          sessionId: "session-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          type: "action.required",
+          timestamp: "2026-06-06T00:00:15.000Z",
+          payload: {
+            requestId: "approval-1",
+            actionType: "tool_confirmation",
+            toolName: "exec_command",
+            arguments: {
+              command: "npm test",
+            },
+            prompt: "允许执行测试？",
+            scope: {
+              sessionId: "session-1",
+              threadId: "thread-1",
+              turnId: "turn-1",
+            },
+          },
+        },
+      },
+    });
+
+    expect(actionRequiredPayload).toMatchObject({
+      type: "action_required",
+      request_id: "approval-1",
+      action_type: "tool_confirmation",
+      tool_name: "exec_command",
+      arguments: {
+        command: "npm test",
+      },
+      prompt: "允许执行测试？",
+      scope: {
+        session_id: "session-1",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+      },
+    });
+    expect(parseAgentEvent(actionRequiredPayload)).toMatchObject({
+      type: "action_required",
+      request_id: "approval-1",
+      tool_name: "exec_command",
+      arguments: {
+        command: "npm test",
+      },
+    });
+
+    const actionResolvedPayload = projectAppServerAgentEventPayload({
+      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "evt-action-resolved",
+          sequence: 19,
+          sessionId: "session-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          type: "action.resolved",
+          timestamp: "2026-06-06T00:00:16.000Z",
+          payload: {
+            requestId: "approval-1",
+            actionType: "tool_confirmation",
+            approved: true,
+            feedback: "继续",
+            permissionMode: "allow",
+          },
+        },
+      },
+    });
+
+    expect(actionResolvedPayload).toMatchObject({
+      type: "action_resolved",
+      request_id: "approval-1",
+      action_type: "tool_confirmation",
+      approved: true,
+      feedback: "继续",
+      permission_mode: "allow",
+      data: {
+        approved: true,
+        feedback: "继续",
+        permission_mode: "allow",
+      },
+    });
+    expect(parseAgentEvent(actionResolvedPayload)).toMatchObject({
+      type: "action_resolved",
+      request_id: "approval-1",
+      approved: true,
+      feedback: "继续",
     });
   });
 });

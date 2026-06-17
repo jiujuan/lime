@@ -20,6 +20,8 @@ use std::path::{Path, PathBuf};
 use super::session_list_scope::SessionListScope;
 use super::session_title;
 
+const IMPORTED_CONVERSATION_KIND: &str = "conversation.import";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectionStore {
     path: PathBuf,
@@ -132,6 +134,51 @@ impl ProjectionStore {
             item_count,
             last_event_sequence: session_row.last_event_sequence,
         }))
+    }
+
+    pub(in crate::runtime) fn find_session_by_import_source(
+        &self,
+        source_kind: &str,
+        source_client: &str,
+        source_thread_id: &str,
+    ) -> Result<Option<AgentSession>, String> {
+        let normalized_kind = source_kind.trim();
+        let normalized_client = source_client.trim();
+        let normalized_thread_id = source_thread_id.trim();
+        if normalized_kind.is_empty()
+            || normalized_client.is_empty()
+            || normalized_thread_id.is_empty()
+        {
+            return Ok(None);
+        }
+
+        let conn = Connection::open(&self.path)
+            .map_err(|error| format!("无法打开 Projection DB {}: {error}", self.path.display()))?;
+        let rows =
+            query_projected_import_session_rows(&conn, normalized_client, normalized_thread_id)?;
+        let matched = rows
+            .into_iter()
+            .filter_map(|row| {
+                projected_import_reference_from_metadata(
+                    &row,
+                    normalized_kind,
+                    normalized_client,
+                    normalized_thread_id,
+                )
+                .map(|reference| (row, reference))
+            })
+            .max_by(|(left, _), (right, _)| {
+                left.updated_at
+                    .cmp(&right.updated_at)
+                    .then_with(|| left.session_id.cmp(&right.session_id))
+            });
+        let Some((row, business_object_ref)) = matched else {
+            return Ok(None);
+        };
+        Ok(Some(projected_import_session_to_protocol(
+            row,
+            business_object_ref,
+        )))
     }
 
     pub fn read_watermark(&self, session_id: &str) -> Result<Option<ProjectionWatermark>, String> {
@@ -337,6 +384,46 @@ fn query_projected_session(
     .map_err(|error| format!("无法读取 projected_sessions: {error}"))
 }
 
+fn query_projected_import_session_rows(
+    conn: &Connection,
+    source_client: &str,
+    source_thread_id: &str,
+) -> Result<Vec<ProjectedSessionRow>, String> {
+    let source_client_json = serde_json::to_string(source_client)
+        .map_err(|error| format!("无法序列化 import sourceClient 查询: {error}"))?;
+    let source_thread_id_json = serde_json::to_string(source_thread_id)
+        .map_err(|error| format!("无法序列化 import sourceThreadId 查询: {error}"))?;
+    let source_client_camel = format!("\"sourceClient\":{source_client_json}");
+    let source_client_snake = format!("\"source_client\":{source_client_json}");
+    let source_thread_camel = format!("\"sourceThreadId\":{source_thread_id_json}");
+    let source_thread_snake = format!("\"source_thread_id\":{source_thread_id_json}");
+    let mut stmt = conn
+        .prepare(
+            "SELECT session_id, thread_id, status, created_at, updated_at,
+                    archived_at, title, model, workspace_id, working_dir,
+                    execution_strategy, metadata_json, last_event_sequence
+             FROM projected_sessions
+             WHERE metadata_json IS NOT NULL
+               AND (instr(metadata_json, ?1) > 0 OR instr(metadata_json, ?2) > 0)
+               AND (instr(metadata_json, ?3) > 0 OR instr(metadata_json, ?4) > 0)
+             ORDER BY updated_at DESC, session_id DESC",
+        )
+        .map_err(|error| format!("无法准备 projected_sessions import 查询: {error}"))?;
+    let rows = stmt
+        .query_map(
+            params![
+                source_client_camel,
+                source_client_snake,
+                source_thread_camel,
+                source_thread_snake
+            ],
+            projected_session_row,
+        )
+        .map_err(|error| format!("无法查询 projected_sessions import 状态: {error}"))?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("无法读取 projected_sessions import 状态: {error}"))
+}
+
 fn projected_session_row(row: &rusqlite::Row<'_>) -> Result<ProjectedSessionRow, rusqlite::Error> {
     Ok(ProjectedSessionRow {
         session_id: row.get(0)?,
@@ -365,24 +452,30 @@ fn query_projected_session_overviews(
     let limit = limit.unwrap_or(1_000);
     let cwd_filters = scope.cwd_filters();
     let workspace_id_filters = scope.workspace_id_filters();
-    let cwd_filter_sql = if cwd_filters.is_empty() {
-        String::new()
+    let cwd_filter_clause = if cwd_filters.is_empty() {
+        None
     } else {
         let placeholders = (0..cwd_filters.len())
             .map(|index| format!("?{}", index + 4))
             .collect::<Vec<_>>()
             .join(", ");
-        format!(" AND working_dir IN ({placeholders})")
+        Some(format!("working_dir IN ({placeholders})"))
     };
-    let workspace_id_filter_sql = if workspace_id_filters.is_empty() {
-        String::new()
+    let workspace_id_filter_clause = if workspace_id_filters.is_empty() {
+        None
     } else {
         let offset = 4 + cwd_filters.len();
         let placeholders = (0..workspace_id_filters.len())
             .map(|index| format!("?{}", offset + index))
             .collect::<Vec<_>>()
             .join(", ");
-        format!(" AND workspace_id IN ({placeholders})")
+        Some(format!("workspace_id IN ({placeholders})"))
+    };
+    let scope_filter_sql = match (cwd_filter_clause, workspace_id_filter_clause) {
+        (Some(cwd), Some(workspace_id)) => format!(" AND (({cwd}) OR ({workspace_id}))"),
+        (Some(cwd), None) => format!(" AND {cwd}"),
+        (None, Some(workspace_id)) => format!(" AND {workspace_id}"),
+        (None, None) => String::new(),
     };
     let sql = format!(
         "SELECT session_id, thread_id, status, created_at, updated_at,
@@ -393,8 +486,7 @@ fn query_projected_session_overviews(
                 (?1 = 1 AND archived_at IS NOT NULL)
                 OR (?1 = 0 AND (?2 = 1 OR archived_at IS NULL))
             )
-           {cwd_filter_sql}
-           {workspace_id_filter_sql}
+           {scope_filter_sql}
          ORDER BY updated_at DESC, session_id DESC
          LIMIT ?3"
     );
@@ -645,24 +737,101 @@ fn projected_session_to_protocol(
         row.execution_strategy.clone().into(),
     );
     let metadata = Value::Object(metadata);
+    let business_object_ref =
+        projected_import_reference_from_metadata_value(row, IMPORTED_CONVERSATION_KIND, &metadata)
+            .unwrap_or_else(|| BusinessObjectRef {
+                kind: "agent_session_projection".to_string(),
+                id: row.session_id.clone(),
+                title,
+                uri: None,
+                metadata: Some(metadata),
+            });
     AgentSession {
         session_id: row.session_id.clone(),
         thread_id: row.thread_id.clone(),
         app_id: "agent-runtime".to_string(),
         workspace_id: row.workspace_id.clone(),
-        business_object_ref: Some(BusinessObjectRef {
-            kind: "agent_session_projection".to_string(),
-            id: row.session_id.clone(),
-            title,
-            uri: None,
-            metadata: Some(metadata),
-        }),
+        business_object_ref: Some(business_object_ref),
         status: agent_session_status_from_projection(row.status.as_str()),
         created_at: row
             .created_at
             .clone()
             .unwrap_or_else(|| row.updated_at.clone()),
         updated_at: row.updated_at.clone(),
+    }
+}
+
+fn projected_import_reference_from_metadata(
+    row: &ProjectedSessionRow,
+    source_kind: &str,
+    source_client: &str,
+    source_thread_id: &str,
+) -> Option<BusinessObjectRef> {
+    let metadata = row
+        .metadata_json
+        .as_deref()
+        .and_then(|value| serde_json::from_str::<Value>(value).ok())?;
+    let reference = projected_import_reference_from_metadata_value(row, source_kind, &metadata)?;
+    let source_client_value = metadata
+        .get("sourceClient")
+        .or_else(|| metadata.get("source_client"))
+        .and_then(Value::as_str)
+        .map(str::trim)?;
+    let source_thread_id_value = metadata
+        .get("sourceThreadId")
+        .or_else(|| metadata.get("source_thread_id"))
+        .and_then(Value::as_str)
+        .map(str::trim)?;
+    if source_client_value != source_client || source_thread_id_value != source_thread_id {
+        return None;
+    }
+    Some(reference)
+}
+
+fn projected_import_reference_from_metadata_value(
+    row: &ProjectedSessionRow,
+    source_kind: &str,
+    metadata: &Value,
+) -> Option<BusinessObjectRef> {
+    let source_thread_id = metadata
+        .get("sourceThreadId")
+        .or_else(|| metadata.get("source_thread_id"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?;
+    metadata
+        .get("sourceClient")
+        .or_else(|| metadata.get("source_client"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?;
+
+    Some(BusinessObjectRef {
+        kind: source_kind.to_string(),
+        id: source_thread_id.to_string(),
+        title: row.title.clone(),
+        uri: metadata
+            .get("sourcePath")
+            .or_else(|| metadata.get("source_path"))
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        metadata: Some(metadata.clone()),
+    })
+}
+
+fn projected_import_session_to_protocol(
+    row: ProjectedSessionRow,
+    business_object_ref: BusinessObjectRef,
+) -> AgentSession {
+    AgentSession {
+        session_id: row.session_id,
+        thread_id: row.thread_id,
+        app_id: "agent-runtime".to_string(),
+        workspace_id: row.workspace_id,
+        business_object_ref: Some(business_object_ref),
+        status: agent_session_status_from_projection(row.status.as_str()),
+        created_at: row.created_at.unwrap_or_else(|| row.updated_at.clone()),
+        updated_at: row.updated_at,
     }
 }
 

@@ -99,12 +99,19 @@ export function hasTimelineProcessItems(items?: AgentThreadItem[]): boolean {
         item.type === "reasoning" ||
         item.type === "tool_call" ||
         item.type === "command_execution" ||
+        item.type === "patch" ||
         item.type === "web_search" ||
         item.type === "approval_request" ||
         item.type === "request_user_input" ||
         item.type === "context_compaction",
     ),
   );
+}
+
+export function hasPersistedReasoningTimelineItem(
+  items?: AgentThreadItem[],
+): boolean {
+  return Boolean(items?.some((item) => item.type === "reasoning"));
 }
 
 function hasInlineThinkingContent(message: Message): boolean {
@@ -178,6 +185,7 @@ export function shouldKeepInlineProcessForActiveAssistant(
   message: Message,
   isConversationTailAssistant: boolean,
   hasProcessTimelineItems: boolean,
+  hasPersistedReasoningTimeline: boolean,
   hasTurnContext: boolean,
   displayContent: string,
   isSending: boolean,
@@ -207,6 +215,7 @@ export function shouldKeepInlineProcessForActiveAssistant(
   if (
     hasTurnContext &&
     !hasProcessTimelineItems &&
+    !hasPersistedReasoningTimeline &&
     hasInlineThinkingContent(message)
   ) {
     return true;
@@ -360,6 +369,11 @@ export function createInlineCoverageMatcher(coverage: InlineProcessCoverage) {
         return consumeInlineCoverageCount(
           remainingToolNameCounts,
           normalizeInlineCoverageKey("command_execution"),
+        );
+      case "patch":
+        return consumeInlineCoverageCount(
+          remainingToolNameCounts,
+          normalizeInlineCoverageKey("patch"),
         );
       case "web_search":
         return consumeInlineCoverageCount(

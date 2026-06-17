@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  extractLatestProposedPlanItems,
+  parseProposedPlanItems,
   splitProposedPlanSegments,
   stripProposedPlanBlocks,
 } from "./proposedPlan";
@@ -41,5 +43,25 @@ describe("proposedPlan", () => {
         "before\n<proposed_plan>\n- step\n</proposed_plan>\nafter",
       ),
     ).toBe("before\nafter");
+  });
+
+  it("应把 proposed_plan markdown 拆成结构化计划项", () => {
+    expect(parseProposedPlanItems("- 调研现状\n- 接入前端\n- 跑通 E2E")).toEqual([
+      { text: "调研现状", status: "in_progress" },
+      { text: "接入前端", status: "pending" },
+      { text: "跑通 E2E", status: "pending" },
+    ]);
+  });
+
+  it("应兼容历史 fixture 中的字面换行", () => {
+    expect(
+      extractLatestProposedPlanItems(
+        "说明\n<proposed_plan>确认计划模式请求进入 App Server\\n- 输出 Codex 风格 proposed_plan\\n- 验证右侧计划轨显示</proposed_plan>",
+      ),
+    ).toEqual([
+      { text: "确认计划模式请求进入 App Server", status: "in_progress" },
+      { text: "输出 Codex 风格 proposed_plan", status: "pending" },
+      { text: "验证右侧计划轨显示", status: "pending" },
+    ]);
   });
 });

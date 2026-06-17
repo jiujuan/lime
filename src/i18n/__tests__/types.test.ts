@@ -206,6 +206,24 @@ function assertI18nKeyTypes() {
   i18n.t("agentChat.decisionPanel.runtimePermission.deniedDescription", {
     ns: "agent",
   });
+  i18n.t("agentChat.decisionPanel.permission.resultLabel", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.permission.result.allowed", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.permission.result.denied", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.permission.result.importedReadOnly", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.decisionPanel.permission.importedReadOnlyTitle", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.decisionPanel.permission.importedReadOnlyRecordLabel", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.decisionPanel.permission.importedReadOnlyRecordValue", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.decisionPanel.permission.importedReadOnlyDescription", {
+    ns: "agent",
+  });
   i18n.t("agentChat.messageList.history.windowSummaryRestored", {
     ns: "agent",
     loaded: "40",

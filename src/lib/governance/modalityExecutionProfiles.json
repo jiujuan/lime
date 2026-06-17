@@ -15,7 +15,7 @@
       "permission_profile_keys": [
         "write_artifacts",
         "media_upload",
-        "ask_user_question"
+        "request_user_input"
       ],
       "executor_adapter_keys": [
         "skill:image_generate"
@@ -71,7 +71,7 @@
       "permission_profile_keys": [
         "browser_control",
         "web_search",
-        "ask_user_question"
+        "request_user_input"
       ],
       "executor_adapter_keys": [
         "browser:browser_assist"
@@ -127,7 +127,7 @@
       "permission_profile_keys": [
         "read_files",
         "write_artifacts",
-        "ask_user_question"
+        "request_user_input"
       ],
       "executor_adapter_keys": [
         "skill:pdf_read"
@@ -181,7 +181,7 @@
         "write_artifacts",
         "media_upload",
         "service_api_call",
-        "ask_user_question"
+        "request_user_input"
       ],
       "executor_adapter_keys": [
         "service_skill:voice_runtime"
@@ -239,7 +239,7 @@
         "write_artifacts",
         "media_upload",
         "service_api_call",
-        "ask_user_question"
+        "request_user_input"
       ],
       "executor_adapter_keys": [
         "skill:transcription_generate"
@@ -296,7 +296,7 @@
       "permission_profile_keys": [
         "web_search",
         "write_artifacts",
-        "ask_user_question"
+        "request_user_input"
       ],
       "executor_adapter_keys": [
         "skill:research"
@@ -353,7 +353,7 @@
       "permission_profile_keys": [
         "read_files",
         "write_artifacts",
-        "ask_user_question"
+        "request_user_input"
       ],
       "executor_adapter_keys": [
         "skill:text_transform"
@@ -416,7 +416,7 @@
       "permission_requirements": [
         "write_artifacts",
         "media_upload",
-        "ask_user_question"
+        "request_user_input"
       ],
       "credential_requirements": [
         "provider_offer",
@@ -452,7 +452,7 @@
       "permission_requirements": [
         "browser_control",
         "web_search",
-        "ask_user_question"
+        "request_user_input"
       ],
       "credential_requirements": [],
       "failure_mapping": [
@@ -487,7 +487,7 @@
       "permission_requirements": [
         "read_files",
         "write_artifacts",
-        "ask_user_question"
+        "request_user_input"
       ],
       "credential_requirements": [],
       "failure_mapping": [
@@ -523,7 +523,7 @@
         "write_artifacts",
         "media_upload",
         "service_api_call",
-        "ask_user_question"
+        "request_user_input"
       ],
       "credential_requirements": [
         "provider_offer"
@@ -559,7 +559,7 @@
         "write_artifacts",
         "media_upload",
         "service_api_call",
-        "ask_user_question"
+        "request_user_input"
       ],
       "credential_requirements": [
         "provider_offer",
@@ -597,7 +597,7 @@
       "permission_requirements": [
         "web_search",
         "write_artifacts",
-        "ask_user_question"
+        "request_user_input"
       ],
       "credential_requirements": [
         "gateway_policy",
@@ -635,7 +635,7 @@
       "permission_requirements": [
         "read_files",
         "write_artifacts",
-        "ask_user_question"
+        "request_user_input"
       ],
       "credential_requirements": [
         "model_catalog"

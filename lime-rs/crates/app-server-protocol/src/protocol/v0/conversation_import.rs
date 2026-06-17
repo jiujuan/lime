@@ -1,5 +1,8 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use super::{AgentAttachment, AgentSession};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -54,6 +57,40 @@ pub struct ConversationImportSourceScanParams {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct ConversationImportThreadPreviewParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_client: Option<ConversationImportSourceClient>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_root: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_thread_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationImportThreadCommitParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_client: Option<ConversationImportSourceClient>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_root: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_thread_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app_id: Option<String>,
+    #[serde(default)]
+    pub confirmed: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct ConversationImportSourceSummary {
     pub source_client: ConversationImportSourceClient,
     pub status: ConversationImportSourceStatus,
@@ -70,7 +107,7 @@ pub struct ConversationImportSourceSummary {
     pub message: Option<String>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ImportedThreadSummary {
     pub source_client: ConversationImportSourceClient,
@@ -92,9 +129,11 @@ pub struct ImportedThreadSummary {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_path: Option<String>,
     pub import_status: ConversationImportThreadStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<Value>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ConversationImportSourceScanResponse {
     pub source: ConversationImportSourceSummary,
@@ -102,4 +141,126 @@ pub struct ConversationImportSourceScanResponse {
     pub threads: Vec<ImportedThreadSummary>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_cursor: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationImportSourceProvenance {
+    pub source_client: ConversationImportSourceClient,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_thread_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_event_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_event_seq: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_payload_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_call_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_role: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_channel: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationImportFidelitySummary {
+    pub messages: usize,
+    pub reasoning: usize,
+    pub tools: usize,
+    pub commands: usize,
+    pub patches: usize,
+    pub approvals: usize,
+    pub mcp: usize,
+    pub web_search: usize,
+    pub attachments: usize,
+    pub unsupported: usize,
+    pub provenance_only: usize,
+    pub budget_dropped: usize,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationImportPreviewMessage {
+    pub role: String,
+    pub text: String,
+    #[serde(default)]
+    pub attachments: Vec<AgentAttachment>,
+    #[serde(default)]
+    pub truncated: bool,
+    #[serde(default)]
+    pub omitted_bytes: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timestamp: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<ConversationImportSourceProvenance>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationImportPreviewEvent {
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timestamp: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<ConversationImportSourceProvenance>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationImportPreviewDryRun {
+    pub will_create_session: bool,
+    pub will_append_to_existing_session: bool,
+    pub will_import_messages: usize,
+    pub will_import_turns: usize,
+    pub will_import_timeline_items: usize,
+    pub will_import_attachments: usize,
+    pub unsupported_items: usize,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationImportPreviewSummary {
+    pub line_count: usize,
+    pub message_count: usize,
+    pub rollout_event_items: usize,
+    pub unsupported_count: usize,
+    pub dry_run: ConversationImportPreviewDryRun,
+    #[serde(default)]
+    pub fidelity: ConversationImportFidelitySummary,
+    pub truncated: bool,
+    #[serde(default)]
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationImportThreadPreviewResponse {
+    pub source: ConversationImportSourceSummary,
+    pub thread: ImportedThreadSummary,
+    pub summary: ConversationImportPreviewSummary,
+    #[serde(default)]
+    pub messages: Vec<ConversationImportPreviewMessage>,
+    #[serde(default)]
+    pub events: Vec<ConversationImportPreviewEvent>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationImportThreadCommitResponse {
+    pub session: AgentSession,
+    pub thread: ImportedThreadSummary,
+    pub summary: ConversationImportPreviewSummary,
+    pub imported_messages: usize,
+    pub imported_turns: usize,
+    pub can_continue: bool,
+    #[serde(default)]
+    pub warnings: Vec<String>,
 }

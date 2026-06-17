@@ -16,6 +16,7 @@ import type { ActionRequired, Message } from "../types";
 import { appendTextToParts } from "./agentChatHistory";
 import { updateMessageArtifactsStatus } from "../utils/messageArtifacts";
 import {
+  markThreadActionItemSubmitted,
   removeThreadItemState,
   removeThreadTurnState,
   upsertThreadItemState,
@@ -96,6 +97,7 @@ import {
   buildAgentStreamTurnStartedPendingItemUpdate,
   shouldDeferAgentStreamThreadItemUpdate,
 } from "./agentStreamThreadItemController";
+import { projectAgentStreamTimelineItem } from "./agentStreamTimelineItemProjector";
 import { buildAgentStreamToolEndPreApplyPlan } from "./agentStreamToolEventController";
 import {
   buildAgentStreamActionRequiredPreApplyPlan,
@@ -117,6 +119,12 @@ import { isRuntimePermissionConfirmationWaitMessage } from "../utils/runtimeActi
 import { buildAgentUiProjectionEvents } from "../projection/agentUiEventProjection";
 import { recordAgentUiProjectionEvents } from "../projection/conversationProjectionStore";
 import { isRetainedSkillProcessMessage } from "../utils/skillInlineProcessRetention";
+import {
+  applyAcknowledgedActionRequests,
+  removeActionsByRequestIds,
+  shouldPersistSubmittedActionForType,
+} from "./agentChatActionState";
+import { normalizeActionType } from "./agentChatCoreUtils";
 
 function extractVisibleTextFromAgentMessage(
   message: AgentEvent extends never
@@ -172,6 +180,169 @@ interface StreamRequestState {
   hiddenThinkingPartsCleared?: boolean;
   performanceTrace?: AgentUiPerformanceTraceMetadata | null;
   agentUiEventSequence?: number;
+  currentTurnId?: string | null;
+  streamedReasoningItemId?: string | null;
+  streamedReasoningText?: string;
+  streamedReasoningStartedAt?: string | null;
+  streamedReasoningSequence?: number | null;
+  streamedReasoningSegmentCounter?: number;
+}
+
+function appendTextWithOverlapFallback(base: string, delta: string): string {
+  if (!base) {
+    return delta;
+  }
+  if (!delta) {
+    return base;
+  }
+  if (delta.startsWith(base)) {
+    return delta;
+  }
+  if (base.endsWith(delta)) {
+    return base;
+  }
+
+  const maxOverlap = Math.min(base.length, delta.length);
+  for (let overlap = maxOverlap; overlap > 0; overlap -= 1) {
+    if (base.endsWith(delta.slice(0, overlap))) {
+      return `${base}${delta.slice(overlap)}`;
+    }
+  }
+
+  return `${base}${delta}`;
+}
+
+function resolveStreamedReasoningTurnId(
+  requestState: StreamRequestState,
+): string | null {
+  return (
+    requestState.currentTurnId?.trim() ||
+    requestState.queuedTurnId?.trim() ||
+    null
+  );
+}
+
+function buildStreamedReasoningItem(params: {
+  activeSessionId: string;
+  now: string;
+  requestState: StreamRequestState;
+  sequence?: number | null;
+}): AgentThreadItem | null {
+  const turnId = resolveStreamedReasoningTurnId(params.requestState);
+  const text = params.requestState.streamedReasoningText?.trim();
+  if (!turnId || !text) {
+    return null;
+  }
+
+  let itemId = params.requestState.streamedReasoningItemId;
+  if (!itemId) {
+    const sequence =
+      typeof params.sequence === "number" && Number.isFinite(params.sequence)
+        ? params.sequence
+        : null;
+    if (sequence !== null) {
+      itemId = `streamed-reasoning:${turnId}:${sequence}`;
+    } else {
+      const nextCounter =
+        (params.requestState.streamedReasoningSegmentCounter ?? 0) + 1;
+      params.requestState.streamedReasoningSegmentCounter = nextCounter;
+      itemId = `streamed-reasoning:${turnId}:local-${nextCounter}`;
+    }
+    params.requestState.streamedReasoningItemId = itemId;
+    params.requestState.streamedReasoningSequence = sequence;
+  }
+  const startedAt =
+    params.requestState.streamedReasoningStartedAt || params.now;
+  params.requestState.streamedReasoningStartedAt = startedAt;
+  const itemSequence =
+    typeof params.requestState.streamedReasoningSequence === "number"
+      ? params.requestState.streamedReasoningSequence
+      : 0;
+
+  return {
+    id: itemId,
+    thread_id: params.activeSessionId,
+    turn_id: turnId,
+    sequence: itemSequence,
+    status: "in_progress",
+    started_at: startedAt,
+    updated_at: params.now,
+    type: "reasoning",
+    text,
+  };
+}
+
+function isStreamedReasoningTimelineItem(
+  item: AgentThreadItem,
+  turnId?: string | null,
+): boolean {
+  return (
+    item.type === "reasoning" &&
+    item.id.startsWith("streamed-reasoning:") &&
+    (!turnId || item.turn_id === turnId)
+  );
+}
+
+function removeStreamedReasoningTimelineItems(
+  items: AgentThreadItem[],
+  turnId?: string | null,
+): AgentThreadItem[] {
+  const nextItems = items.filter(
+    (item) => !isStreamedReasoningTimelineItem(item, turnId),
+  );
+  return nextItems.length === items.length ? items : nextItems;
+}
+
+function resetStreamedReasoningSegment(requestState: StreamRequestState): void {
+  requestState.streamedReasoningItemId = null;
+  requestState.streamedReasoningText = "";
+  requestState.streamedReasoningStartedAt = null;
+  requestState.streamedReasoningSequence = null;
+}
+
+function sequenceFromAgentEvent(event: AgentEvent): number | null {
+  return typeof event.sequence === "number" && Number.isFinite(event.sequence)
+    ? event.sequence
+    : null;
+}
+
+function hasOwnRecordKeys(value: unknown): value is Record<string, unknown> {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      Object.keys(value as Record<string, unknown>).length > 0,
+  );
+}
+
+function resolveActionResolvedUserData(
+  event: Extract<AgentEvent, { type: "action_resolved" }>,
+): unknown {
+  if (hasOwnRecordKeys(event.data)) {
+    return event.data;
+  }
+  if (event.feedback?.trim()) {
+    return event.feedback.trim();
+  }
+  if (typeof event.approved === "boolean") {
+    return { approved: event.approved };
+  }
+  return undefined;
+}
+
+function stringifySubmittedActionResponse(value: unknown): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value === "string") {
+    const text = value.trim();
+    return text || undefined;
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 }
 
 function resolveVisibleTextDeltaAfterSnapshotPrefill(params: {
@@ -896,6 +1067,62 @@ export function handleTurnStreamEvent({
     );
   };
 
+  const completeCurrentStreamedReasoningSegment = (
+    completedAt = new Date().toISOString(),
+  ) => {
+    if (!requestState.streamedReasoningItemId) {
+      return;
+    }
+    const itemId = requestState.streamedReasoningItemId;
+    setThreadItems((prev) =>
+      prev.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              status: "completed",
+              completed_at: item.completed_at || completedAt,
+              updated_at: completedAt,
+            }
+          : item,
+      ),
+    );
+    resetStreamedReasoningSegment(requestState);
+  };
+
+  const upsertProjectedTimelineItem = (event: AgentEvent) => {
+    completeCurrentStreamedReasoningSegment(
+      typeof event.timestamp === "string" ? event.timestamp : undefined,
+    );
+    setThreadItems((prev) => {
+      const existingId =
+        event.type === "tool_start" ||
+        event.type === "tool_input_delta" ||
+        event.type === "tool_progress" ||
+        event.type === "tool_output_delta" ||
+        event.type === "tool_end"
+          ? event.tool_id
+          : event.type === "action_required" || event.type === "action_resolved"
+            ? event.request_id
+            : "";
+      const projectedItem = projectAgentStreamTimelineItem(
+        event,
+        {
+          activeSessionId,
+          fallbackTurnId: requestState.currentTurnId || requestState.queuedTurnId,
+          now: new Date().toISOString(),
+        },
+        prev.find((item) => item.id === existingId),
+      );
+      if (!projectedItem) {
+        return prev;
+      }
+      return upsertThreadItemState(
+        removeThreadItemState(prev, pendingItemKey),
+        projectedItem,
+      );
+    });
+  };
+
   switch (data.type) {
     case "message":
       // 后端会先发送完整 message 快照，再发送细粒度 delta；这里仅确认流已进入已知事件路径，避免误报未知事件。
@@ -979,6 +1206,7 @@ export function handleTurnStreamEvent({
     case "turn_started":
       clearQueuedDraftCleanupTimer();
       activateStream();
+      requestState.currentTurnId = data.turn.id;
       bindAssistantMessageToRuntimeTurn(
         setMessages,
         assistantMsgId,
@@ -1013,6 +1241,10 @@ export function handleTurnStreamEvent({
     case "item_started":
     case "item_completed":
       activateStream();
+      requestState.currentTurnId = data.item.turn_id;
+      if (data.item.type === "reasoning") {
+        resetStreamedReasoningSegment(requestState);
+      }
       bindAssistantMessageToRuntimeTurn(
         setMessages,
         assistantMsgId,
@@ -1020,7 +1252,12 @@ export function handleTurnStreamEvent({
       );
       setThreadItems((prev) =>
         upsertThreadItemState(
-          removeThreadItemState(prev, pendingItemKey),
+          data.item.type === "reasoning"
+            ? removeStreamedReasoningTimelineItems(
+                removeThreadItemState(prev, pendingItemKey),
+                data.item.turn_id,
+              )
+            : removeThreadItemState(prev, pendingItemKey),
           data.item,
         ),
       );
@@ -1028,6 +1265,10 @@ export function handleTurnStreamEvent({
 
     case "item_updated":
       activateStream();
+      requestState.currentTurnId = data.item.turn_id;
+      if (data.item.type === "reasoning") {
+        resetStreamedReasoningSegment(requestState);
+      }
       bindAssistantMessageToRuntimeTurn(
         setMessages,
         assistantMsgId,
@@ -1038,7 +1279,12 @@ export function handleTurnStreamEvent({
       }
       setThreadItems((prev) =>
         upsertThreadItemState(
-          removeThreadItemState(prev, pendingItemKey),
+          data.item.type === "reasoning"
+            ? removeStreamedReasoningTimelineItems(
+                removeThreadItemState(prev, pendingItemKey),
+                data.item.turn_id,
+              )
+            : removeThreadItemState(prev, pendingItemKey),
           data.item,
         ),
       );
@@ -1047,6 +1293,7 @@ export function handleTurnStreamEvent({
     case "turn_completed": {
       clearQueuedDraftCleanupTimer();
       flushPendingTextRender();
+      requestState.currentTurnId = data.turn.id;
       bindAssistantMessageToRuntimeTurn(
         setMessages,
         assistantMsgId,
@@ -1061,6 +1308,22 @@ export function handleTurnStreamEvent({
         ),
       );
       setCurrentTurnId(data.turn.id);
+      {
+        const completedAt = data.turn.completed_at || new Date().toISOString();
+        setThreadItems((prev) =>
+          prev.map((item) =>
+            isStreamedReasoningTimelineItem(item, data.turn.id)
+              ? {
+                  ...item,
+                  status: "completed",
+                  completed_at: item.completed_at || completedAt,
+                  updated_at: completedAt,
+                }
+              : item,
+          ),
+        );
+        resetStreamedReasoningSegment(requestState);
+      }
       if (data.text?.trim() && !shouldPreserveAssistantContent) {
         requestState.accumulatedContent = data.text;
         requestState.renderedContent = data.text;
@@ -1283,6 +1546,27 @@ export function handleTurnStreamEvent({
             };
           }),
         );
+        if (thinkingPlan.shouldApplyThinkingDelta) {
+          requestState.streamedReasoningText = appendTextWithOverlapFallback(
+            requestState.streamedReasoningText || "",
+            data.text,
+          );
+          const nowIso = new Date().toISOString();
+          const streamedReasoningItem = buildStreamedReasoningItem({
+            activeSessionId,
+            now: nowIso,
+            requestState,
+            sequence: sequenceFromAgentEvent(data),
+          });
+          if (streamedReasoningItem) {
+            setThreadItems((prev) =>
+              upsertThreadItemState(
+                removeThreadItemState(prev, pendingItemKey),
+                streamedReasoningItem,
+              ),
+            );
+          }
+        }
       }
       break;
 
@@ -1380,6 +1664,7 @@ export function handleTurnStreamEvent({
       commitRenderedTextBeforeProcessPart();
       upsertFallbackTextOverlayIfSilent("tool_start_fallback");
       playToolcallSound();
+      upsertProjectedTimelineItem(data);
       handleToolStartEvent({
         data,
         setPendingActions,
@@ -1397,6 +1682,7 @@ export function handleTurnStreamEvent({
     case "tool_progress":
       activateStream();
       clearOptimisticItem();
+      upsertProjectedTimelineItem(data);
       handleToolProgressEvent({
         data,
         toolLogIdByToolId,
@@ -1409,6 +1695,7 @@ export function handleTurnStreamEvent({
       activateStream();
       clearOptimisticItem();
       commitRenderedTextBeforeProcessPart();
+      upsertProjectedTimelineItem(data);
       handleToolInputDeltaEvent({
         data,
         toolLogIdByToolId,
@@ -1424,6 +1711,7 @@ export function handleTurnStreamEvent({
     case "tool_output_delta":
       activateStream();
       clearOptimisticItem();
+      upsertProjectedTimelineItem(data);
       handleToolOutputDeltaEvent({
         data,
         toolLogIdByToolId,
@@ -1456,6 +1744,7 @@ export function handleTurnStreamEvent({
         resolvedWorkspaceId,
         setMessages,
       });
+      upsertProjectedTimelineItem(data);
       break;
 
     case "artifact_snapshot":
@@ -1499,6 +1788,7 @@ export function handleTurnStreamEvent({
         assistantMsgId,
         data.scope?.turn_id,
       );
+      upsertProjectedTimelineItem(data);
       handleActionRequiredEvent({
         data,
         eventName,
@@ -1511,6 +1801,47 @@ export function handleTurnStreamEvent({
         resolvedWorkspaceId,
         setMessages,
       });
+      break;
+
+    case "action_resolved":
+      activateStream();
+      bindAssistantMessageToRuntimeTurn(
+        setMessages,
+        assistantMsgId,
+        data.scope?.turn_id,
+      );
+      upsertProjectedTimelineItem(data);
+      {
+        const actionType = normalizeActionType(data.action_type);
+        if (actionType) {
+          const requestIds = new Set([data.request_id]);
+          const submittedUserData = resolveActionResolvedUserData(data);
+          const submittedResponse =
+            stringifySubmittedActionResponse(submittedUserData) ||
+            stringifySubmittedActionResponse(data.feedback);
+          setPendingActions((prev) =>
+            removeActionsByRequestIds(prev, requestIds),
+          );
+          setMessages((prev) =>
+            applyAcknowledgedActionRequests({
+              messages: prev,
+              requestIds,
+              shouldPersistSubmittedAction:
+                shouldPersistSubmittedActionForType(actionType),
+              submittedResponse,
+              submittedUserData,
+            }),
+          );
+          setThreadItems((prev) =>
+            markThreadActionItemSubmitted(
+              prev,
+              requestIds,
+              submittedResponse,
+              submittedUserData,
+            ),
+          );
+        }
+      }
       break;
 
     case "context_trace":

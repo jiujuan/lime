@@ -76,6 +76,8 @@ import {
   METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE,
   METHOD_CONNECT_RELAY_API_KEY_SAVE,
   METHOD_CONVERSATION_IMPORT_SOURCE_SCAN,
+  METHOD_CONVERSATION_IMPORT_THREAD_COMMIT,
+  METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW,
   METHOD_EVIDENCE_EXPORT,
   METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT,
   METHOD_EXECUTION_PROCESS_INTERRUPT,
@@ -396,6 +398,10 @@ import {
   type ConnectRelayApiKeySaveResponse,
   type ConversationImportSourceScanParams,
   type ConversationImportSourceScanResponse,
+  type ConversationImportThreadCommitParams,
+  type ConversationImportThreadCommitResponse,
+  type ConversationImportThreadPreviewParams,
+  type ConversationImportThreadPreviewResponse,
   type ExecutionProcessDrainOutputParams,
   type ExecutionProcessDrainOutputResponse,
   type ExecutionProcessEmptyResponse,
@@ -2108,6 +2114,18 @@ export class AppServerClient {
     params: ConversationImportSourceScanParams = {},
   ): JsonRpcRequest {
     return this.request(METHOD_CONVERSATION_IMPORT_SOURCE_SCAN, params);
+  }
+
+  previewConversationImportThread(
+    params: ConversationImportThreadPreviewParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW, params);
+  }
+
+  commitConversationImportThread(
+    params: ConversationImportThreadCommitParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_CONVERSATION_IMPORT_THREAD_COMMIT, params);
   }
 
   startTurn(params: AgentSessionTurnStartParams): JsonRpcRequest {
@@ -4699,6 +4717,28 @@ export class AppServerConnection {
     return await this.request<ConversationImportSourceScanResponse>(
       this.client.scanConversationImportSource(params),
       METHOD_CONVERSATION_IMPORT_SOURCE_SCAN,
+      options,
+    );
+  }
+
+  async previewConversationImportThread(
+    params: ConversationImportThreadPreviewParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ConversationImportThreadPreviewResponse>> {
+    return await this.request<ConversationImportThreadPreviewResponse>(
+      this.client.previewConversationImportThread(params),
+      METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW,
+      options,
+    );
+  }
+
+  async commitConversationImportThread(
+    params: ConversationImportThreadCommitParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ConversationImportThreadCommitResponse>> {
+    return await this.request<ConversationImportThreadCommitResponse>(
+      this.client.commitConversationImportThread(params),
+      METHOD_CONVERSATION_IMPORT_THREAD_COMMIT,
       options,
     );
   }

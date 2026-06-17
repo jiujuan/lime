@@ -2448,7 +2448,7 @@ mod tests {
                                 },
                                 "permission_state": {
                                     "status": "requires_confirmation",
-                                    "requiredProfileKeys": ["read_files", "write_artifacts", "ask_user_question"],
+                                    "requiredProfileKeys": ["read_files", "write_artifacts", "request_user_input"],
                                     "askProfileKeys": ["read_files", "write_artifacts"],
                                     "blockingProfileKeys": [],
                                     "decisionSource": "execution_profile_registry",
@@ -2508,7 +2508,7 @@ mod tests {
             vec![
                 "read_files".to_string(),
                 "write_artifacts".to_string(),
-                "ask_user_question".to_string()
+                "request_user_input".to_string()
             ]
         );
         assert_eq!(

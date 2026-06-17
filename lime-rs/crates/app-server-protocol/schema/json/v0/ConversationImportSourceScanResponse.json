@@ -94,6 +94,7 @@
         "importStatus": {
           "$ref": "#/$defs/ConversationImportThreadStatus"
         },
+        "metadata": true,
         "modelProvider": {
           "type": [
             "null",

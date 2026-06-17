@@ -97,6 +97,7 @@
   "agentChat.agentUiProjection.sourceType.evidence_projection": "证据记录",
   "agentChat.agentUiProjection.sourceType.item_completed": "历史正文",
   "agentChat.agentUiProjection.sourceType.performance_metric": "性能指标",
+  "agentChat.agentUiProjection.sourceType.patch": "文件变更",
   "agentChat.agentUiProjection.sourceType.queue_added": "队列更新",
   "agentChat.agentUiProjection.sourceType.remote_task_projection": "远端任务",
   "agentChat.agentUiProjection.sourceType.runtime_status": "运行状态",

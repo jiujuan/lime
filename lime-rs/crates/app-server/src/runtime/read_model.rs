@@ -9,6 +9,7 @@ use super::status::agent_turn_is_active;
 use super::status::agent_turn_status_label;
 use super::string_array_field;
 use super::string_field;
+use super::thread_item_projection;
 use super::timestamp_seconds;
 use super::turn_input_events;
 use super::StoredSession;
@@ -25,7 +26,10 @@ use serde_json::json;
 pub(super) fn runtime_session_read_detail(stored: &StoredSession) -> serde_json::Value {
     let thread_read = runtime_thread_read_from_stored_session(stored);
     let messages = runtime_session_messages(stored);
-    let mut items = file_checkpoint_projection::file_artifact_items_from_events(&stored.events);
+    let mut items = thread_item_projection::thread_items_from_events(stored);
+    items.extend(file_checkpoint_projection::file_artifact_items_from_events(
+        &stored.events,
+    ));
     items.extend(runtime_error_items_from_events(stored));
     let messages_count = messages.len();
     json!({
@@ -120,19 +124,29 @@ fn runtime_user_message_from_turn(
     input: &AgentInput,
 ) -> Option<serde_json::Value> {
     let text = input.text.trim();
-    if text.is_empty() {
+    if text.is_empty() && input.attachments.is_empty() {
         return None;
+    }
+    let mut content = Vec::new();
+    if !text.is_empty() {
+        content.push(json!({
+            "type": "text",
+            "text": text,
+        }));
+    }
+    for attachment in &input.attachments {
+        content.push(json!({
+            "type": attachment.kind,
+            "uri": attachment.uri,
+            "metadata": attachment.metadata,
+        }));
     }
 
     Some(json!({
         "id": format!("{}:user", turn.turn_id),
         "role": "user",
-        "content": [
-            {
-                "type": "text",
-                "text": text,
-            }
-        ],
+        "content": content,
+        "attachments": input.attachments,
         "timestamp": timestamp_seconds(turn.started_at.as_deref()),
     }))
 }
@@ -170,6 +184,8 @@ fn runtime_assistant_message_from_events(
     Some(json!({
         "id": format!("{}:assistant", turn.turn_id),
         "role": "assistant",
+        "runtimeTurnId": turn.turn_id,
+        "runtime_turn_id": turn.turn_id,
         "content": [
             {
                 "type": "text",
@@ -680,6 +696,20 @@ fn session_execution_runtime(session: &AgentSession) -> serde_json::Value {
         "provider_selector": metadata_string_alias(metadata, &["providerSelector", "provider_selector"]),
         "provider_name": metadata_string_alias(metadata, &["providerName", "provider_name"]),
         "model_name": metadata_string_alias(metadata, &["modelName", "model_name", "model"]),
+        "cwd": metadata_string_alias(metadata, &["cwd", "workingDir", "working_dir"]),
+        "working_dir": metadata_string_alias(metadata, &["workingDir", "working_dir", "cwd"]),
+        "reasoning_effort": metadata_string_alias(metadata, &["reasoningEffort", "reasoning_effort"]),
+        "approval_policy": metadata_string_alias(metadata, &["approvalPolicy", "approval_policy"]),
+        "approvals_reviewer": metadata_string_alias(metadata, &["approvalsReviewer", "approvals_reviewer"]),
+        "sandbox_policy": metadata_value_alias(metadata, &["sandboxPolicy", "sandbox_policy"]),
+        "service_tier": metadata_string_alias(metadata, &["serviceTier", "service_tier"]),
+        "thread_source": metadata_string_alias(metadata, &["threadSource", "thread_source"]),
+        "memory_mode": metadata_string_alias(metadata, &["memoryMode", "memory_mode"]),
+        "agent_path": metadata_string_alias(metadata, &["agentPath", "agent_path"]),
+        "source_client": metadata_string_alias(metadata, &["sourceClient", "source_client"]),
+        "source_thread_id": metadata_string_alias(metadata, &["sourceThreadId", "source_thread_id"]),
+        "imported_thread_settings": metadata_value_alias(metadata, &["importedThreadSettings", "imported_thread_settings"]),
+        "imported_continuation": metadata_value_alias(metadata, &["importedContinuation", "imported_continuation"]),
         "execution_strategy": session_execution_strategy(session),
         "recent_access_mode": metadata_string_alias(metadata, &["recentAccessMode", "recent_access_mode"]),
         "recent_preferences": metadata_value_alias(metadata, &["recentPreferences", "recent_preferences"]),
@@ -710,9 +740,15 @@ fn compact_json_nulls(value: serde_json::Value) -> serde_json::Value {
     match value {
         serde_json::Value::Object(map) => serde_json::Value::Object(
             map.into_iter()
-                .filter_map(|(key, value)| (!value.is_null()).then_some((key, value)))
+                .filter_map(|(key, value)| {
+                    let value = compact_json_nulls(value);
+                    (!value.is_null()).then_some((key, value))
+                })
                 .collect(),
         ),
+        serde_json::Value::Array(values) => {
+            serde_json::Value::Array(values.into_iter().map(compact_json_nulls).collect())
+        }
         value => value,
     }
 }

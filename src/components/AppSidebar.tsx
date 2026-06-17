@@ -28,10 +28,7 @@ import {
   buildClawAgentParams,
   buildHomeAgentParams,
 } from "@/lib/workspace/navigation";
-import {
-  notifyTaskCenterTaskOpen,
-  requestTaskCenterDraftTask,
-} from "@/components/agent/chat/taskCenterDraftTaskEvents";
+import { requestTaskCenterDraftTask } from "@/components/agent/chat/taskCenterDraftTaskEvents";
 import {
   deleteAgentRuntimeSession,
   updateAgentRuntimeSession,
@@ -54,6 +51,7 @@ import { LIME_BRAND_LOGO_SRC, LIME_BRAND_NAME } from "@/lib/branding";
 import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
 import { AppSidebarAccountMenu } from "@/components/app-sidebar/AppSidebarAccountMenu";
 import { AppSidebarConversationShelf } from "@/components/app-sidebar/AppSidebarConversationShelf";
+import { AppSidebarConversationImportDialog } from "@/components/app-sidebar/AppSidebarConversationImportDialog";
 import { AppSidebarInviteDialog } from "@/components/app-sidebar/AppSidebarInviteDialog";
 import { AppSidebarSearchDialog } from "@/components/app-sidebar/AppSidebarSearchDialog";
 import { AppUpdateEntry } from "@/components/app-sidebar/AppUpdateEntry";
@@ -149,6 +147,7 @@ import {
   toLegacyPatchLanguage,
   type LocalePreference,
 } from "@/i18n/locales";
+import type { ConversationImportThreadCommitResponse } from "@/lib/api/conversationImport";
 
 interface AppSidebarProps {
   currentPage: Page;
@@ -170,6 +169,16 @@ function resolveProjectIdForSession(
   session: AsterSessionInfo,
   projects: SidebarOpenedProjectSummary[],
 ): string | null {
+  const sessionWorkspaceId = session.workspace_id?.trim() || null;
+  if (sessionWorkspaceId) {
+    const matchedProject = projects.find(
+      (project) => project.id === sessionWorkspaceId,
+    );
+    if (matchedProject) {
+      return matchedProject.id;
+    }
+  }
+
   const sessionCwd = normalizeSidebarPath(session.working_dir);
   if (!sessionCwd) {
     return null;
@@ -276,32 +285,60 @@ export function AppSidebar({
   const activeAgentProjectId = isAgentWorkspace
     ? activeAgentPageParams?.projectId?.trim() || null
     : null;
+  const conversationScopeProjectId =
+    activeAgentProjectId || (isAgentWorkspace ? rememberedProjectId : null);
   const currentProjectId = activeAgentProjectId;
   const projectScopedNavigationProjectId =
     activeAgentProjectId || rememberedProjectId;
   const openedProjects = useOpenedProjectSummaries(
-    activeAgentProjectId
+    conversationScopeProjectId
       ? {
-          id: activeAgentProjectId,
+          id: conversationScopeProjectId,
           name: "",
         }
       : null,
   );
-  const conversationProjects = useMemo(() => {
-    if (!activeAgentProjectId) {
+  const conversationScopeProjects = useMemo(() => {
+    if (!conversationScopeProjectId) {
       return openedProjects;
     }
-    return openedProjects.filter(
-      (project) => project.id === activeAgentProjectId,
+    const scopedProjects = openedProjects.filter(
+      (project) => project.id === conversationScopeProjectId,
     );
-  }, [activeAgentProjectId, openedProjects]);
+    if (scopedProjects.length > 0) {
+      return scopedProjects;
+    }
+    return [
+      {
+        id: conversationScopeProjectId,
+        name: conversationScopeProjectId,
+        rootPath: null,
+        isFavorite: false,
+      },
+    ];
+  }, [conversationScopeProjectId, openedProjects]);
+  const conversationDisplayProjects = useMemo(() => {
+    if (!conversationScopeProjectId) {
+      return openedProjects;
+    }
+    const hasActiveProject = openedProjects.some(
+      (project) => project.id === conversationScopeProjectId,
+    );
+    return hasActiveProject
+      ? openedProjects
+      : [...openedProjects, conversationScopeProjects[0]].filter(
+          (project): project is SidebarOpenedProjectSummary => Boolean(project),
+        );
+  }, [conversationScopeProjectId, conversationScopeProjects, openedProjects]);
   const conversationProjectCwds = useMemo(
     () =>
-      conversationProjects
+      conversationScopeProjects
         .map((project) => project.rootPath?.trim())
         .filter((rootPath): rootPath is string => Boolean(rootPath)),
-    [conversationProjects],
+    [conversationScopeProjects],
   );
+  const requireConversationProjectCwd =
+    Boolean(activeAgentProjectId) && conversationProjectCwds.length > 0;
   const currentSessionId =
     activeAgentPageParams?.initialSessionId?.trim() || null;
   const [collapsed, setCollapsed] = useState<boolean>(() => {
@@ -388,6 +425,9 @@ export function AppSidebar({
   const [inviteReloadKey, setInviteReloadKey] = useState(0);
   const [sidebarSearchOpen, setSidebarSearchOpen] = useState(false);
   const [sidebarSearchQuery, setSidebarSearchQuery] = useState("");
+  const [conversationImportProject, setConversationImportProject] =
+    useState<SidebarOpenedProjectSummary | null>(null);
+  const [conversationImportOpen, setConversationImportOpen] = useState(false);
 
   const [enabledNavItems, setEnabledNavItems] = useState<string[]>(
     DEFAULT_ENABLED_SIDEBAR_NAV_ITEM_IDS,
@@ -774,8 +814,9 @@ export function AppSidebar({
     visibleRecentSidebarSessions,
   } = useAppSidebarSessions({
     currentSessionId,
+    activeProjectIds: conversationScopeProjects.map((project) => project.id),
     openedProjectCwds: conversationProjectCwds,
-    requireOpenedProjectCwd: Boolean(activeAgentProjectId),
+    requireOpenedProjectCwd: requireConversationProjectCwd,
     shouldShowConversationList,
     sidebarSearchOpen,
     sidebarSearchQuery,
@@ -949,19 +990,8 @@ export function AppSidebar({
 
       const sessionProjectId = resolveProjectIdForSession(
         session,
-        conversationProjects,
+        conversationDisplayProjects,
       );
-      if (
-        isAgentWorkspace &&
-        notifyTaskCenterTaskOpen({
-          sessionId: session.id,
-          workspaceId: sessionProjectId ?? null,
-          source: "sidebar",
-        })
-      ) {
-        return;
-      }
-
       const targetParams = buildClawAgentParams({
         ...(sessionProjectId ? { projectId: sessionProjectId } : {}),
         initialSessionId: session.id,
@@ -985,7 +1015,7 @@ export function AppSidebar({
       requestedNavigationTargetRef.current = target;
       onNavigate(target.page, target.rawParams);
     },
-    [conversationProjects, deferConversationNavigation, isAgentWorkspace, onNavigate],
+    [conversationDisplayProjects, deferConversationNavigation, onNavigate],
   );
 
   const handleNavigateToNewTask = useCallback(
@@ -1037,6 +1067,46 @@ export function AppSidebar({
     handleNavigateToNewTask(null);
   }, [handleNavigateToNewTask]);
 
+  const handleOpenConversationImport = useCallback(
+    (project?: SidebarOpenedProjectSummary) => {
+      setConversationImportProject(project ?? null);
+      setConversationImportOpen(true);
+    },
+    [],
+  );
+
+  const handleConversationImported = useCallback(
+    (response: ConversationImportThreadCommitResponse) => {
+      setConversationImportOpen(false);
+      setConversationImportProject(null);
+      toast.success(
+        t(
+          "navigation.sidebar.importDialog.toast.success",
+          "已导入 {{count}} 条 Codex 消息",
+          {
+            count: response.importedMessages,
+          },
+        ),
+      );
+      void refreshSidebarSessions();
+
+      const targetParams = buildClawAgentParams({
+        ...(response.session.workspaceId
+          ? { projectId: response.session.workspaceId }
+          : {}),
+        initialSessionId: response.session.sessionId,
+      });
+      const target = {
+        page: "agent" as Page,
+        rawParams: targetParams,
+        paramsKey: serializeNavigationParams(targetParams),
+      } satisfies SidebarNavigationTarget;
+      requestedNavigationTargetRef.current = target;
+      onNavigate(target.page, target.rawParams);
+    },
+    [i18n.language, onNavigate, refreshSidebarSessions, t],
+  );
+
   const projectActions = useAppSidebarProjectActions({
     currentProjectId: projectScopedNavigationProjectId,
     onNavigate,
@@ -1056,14 +1126,15 @@ export function AppSidebar({
         source: "sidebar_search",
         cwd: session.working_dir ?? null,
         projectId:
-          resolveProjectIdForSession(session, conversationProjects) ?? null,
+          resolveProjectIdForSession(session, conversationDisplayProjects) ??
+          null,
       });
       handleNavigateToConversation(session);
     },
     [
       closeSidebarSearchDialog,
       handleNavigateToConversation,
-      conversationProjects,
+      conversationDisplayProjects,
     ],
   );
 
@@ -1622,12 +1693,7 @@ export function AppSidebar({
             {maybeWrapWithTooltip(
               <UserButton
                 $collapsed={collapsed}
-                onClick={() =>
-                  onNavigate(
-                    "agent",
-                    buildHomeAgentParams(),
-                  )
-                }
+                onClick={() => onNavigate("agent", buildHomeAgentParams())}
                 aria-label={homeAriaLabel}
                 title={homeAriaLabel}
               >
@@ -1688,14 +1754,14 @@ export function AppSidebar({
           )}
         </HeaderArea>
 
-        <MenuScroll>
+        <MenuScroll data-testid="app-sidebar-menu-scroll">
           <MainNavList data-testid="app-sidebar-main-nav">
             {filteredMainNavItems.map((item) => renderNavItem(item))}
           </MainNavList>
 
           {shouldShowConversationList ? (
             <AppSidebarConversationShelf
-              openedProjects={conversationProjects}
+              openedProjects={conversationDisplayProjects}
               recentSessions={visibleRecentSidebarSessions}
               currentSessionId={currentSessionId}
               recentLoading={shouldShowSessionLoadingState}
@@ -1708,6 +1774,7 @@ export function AppSidebar({
                 }
                 handleNavigateToStandaloneConversation();
               }}
+              onImportConversation={handleOpenConversationImport}
               onNavigateToConversation={handleNavigateToConversation}
               onRenameConversation={handleRenameConversation}
               onDeleteConversation={handleDeleteConversation}
@@ -1924,6 +1991,17 @@ export function AppSidebar({
         onCopyText={(value, successMessage) =>
           void handleCopyInviteText(value, successMessage)
         }
+      />
+      <AppSidebarConversationImportDialog
+        isOpen={conversationImportOpen}
+        workspaceId={conversationImportProject?.id ?? null}
+        projectPath={conversationImportProject?.rootPath ?? null}
+        projectName={conversationImportProject?.name ?? null}
+        onClose={() => {
+          setConversationImportOpen(false);
+          setConversationImportProject(null);
+        }}
+        onImported={handleConversationImported}
       />
     </TooltipProvider>
   );

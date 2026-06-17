@@ -27,6 +27,7 @@ import {
 
 interface UseAppSidebarSessionsParams {
   currentSessionId: string | null;
+  activeProjectIds?: string[];
   openedProjectCwds?: string[];
   requireOpenedProjectCwd?: boolean;
   shouldShowConversationList: boolean;
@@ -47,29 +48,47 @@ function mergeSidebarSessions(
   return sortSidebarSessions([...sessionsById.values()]);
 }
 
+function normalizeSessionProjectValue(value?: string | null): string | null {
+  const normalized = value?.trim();
+  return normalized ? normalized : null;
+}
+
 function buildSidebarSessionLoadRequests(params: {
   limit: number;
+  projectIds: string[];
   projectCwds: string[];
 }): Array<Promise<AsterSessionInfo[]>> {
-  const { limit, projectCwds } = params;
-  if (projectCwds.length === 0) {
-    return [
-      listAgentRuntimeSessions({
-        limit,
-      }),
-    ];
-  }
-
-  return projectCwds.map((cwd) =>
+  const { limit, projectIds, projectCwds } = params;
+  const requests: Array<Promise<AsterSessionInfo[]>> = [
     listAgentRuntimeSessions({
       limit,
-      cwd,
     }),
-  );
+  ];
+
+  for (const projectId of projectIds) {
+    requests.push(
+      listAgentRuntimeSessions({
+        limit,
+        workspaceId: projectId,
+      }),
+    );
+  }
+
+  for (const cwd of projectCwds) {
+    requests.push(
+      listAgentRuntimeSessions({
+        limit,
+        cwd,
+      }),
+    );
+  }
+
+  return requests;
 }
 
 export function useAppSidebarSessions({
   currentSessionId,
+  activeProjectIds = [],
   openedProjectCwds = [],
   requireOpenedProjectCwd = false,
   shouldShowConversationList,
@@ -115,6 +134,23 @@ export function useAppSidebarSessions({
       })
       .join("\n");
   }, [openedProjectCwds]);
+  const activeProjectIdsKey = useMemo(() => {
+    const seen = new Set<string>();
+    return activeProjectIds
+      .map((projectId) => projectId.trim())
+      .filter((projectId) => {
+        if (!projectId || seen.has(projectId)) {
+          return false;
+        }
+        seen.add(projectId);
+        return true;
+      })
+      .join("\n");
+  }, [activeProjectIds]);
+  const normalizedActiveProjectIds = useMemo(
+    () => (activeProjectIdsKey ? activeProjectIdsKey.split("\n") : []),
+    [activeProjectIdsKey],
+  );
   const normalizedOpenedProjectCwds = useMemo(
     () => (openedProjectCwdsKey ? openedProjectCwdsKey.split("\n") : []),
     [openedProjectCwdsKey],
@@ -143,7 +179,7 @@ export function useAppSidebarSessions({
 
   useEffect(() => {
     setRecentSessionsVisibleCount(SIDEBAR_RECENT_SESSION_PAGE_SIZE);
-  }, [openedProjectCwdsKey]);
+  }, [activeProjectIdsKey, openedProjectCwdsKey]);
 
   const recentSessionRequestLimit = useMemo(() => {
     return buildSidebarSessionRequestLimit(
@@ -203,12 +239,14 @@ export function useAppSidebarSessions({
     const startedAt = Date.now();
     logAgentDebug("AppSidebar", "recentConversations.load.start", {
       limit: recentSessionRequestLimit,
+      projectIds: normalizedActiveProjectIds,
       projectCwds: normalizedOpenedProjectCwds,
     });
     try {
       const sessionGroups = await Promise.all(
         buildSidebarSessionLoadRequests({
           limit: recentSessionRequestLimit,
+          projectIds: normalizedActiveProjectIds,
           projectCwds: normalizedOpenedProjectCwds,
         }),
       );
@@ -229,6 +267,7 @@ export function useAppSidebarSessions({
         sortDurationMs,
         totalDurationMs: Date.now() - startedAt,
         visibleCount: recentSessionsVisibleCount,
+        projectIds: normalizedActiveProjectIds,
         projectCwds: normalizedOpenedProjectCwds,
       };
       recordAgentUiPerformanceMetric(
@@ -240,7 +279,7 @@ export function useAppSidebarSessions({
         "recentConversations.load.success",
         metricContext,
         {
-          dedupeKey: `appSidebar.recentConversations.load.success:${openedProjectCwdsKey}:${recentSessionRequestLimit}`,
+          dedupeKey: `appSidebar.recentConversations.load.success:${activeProjectIdsKey}:${openedProjectCwdsKey}:${recentSessionRequestLimit}`,
           throttleMs: 1000,
         },
       );
@@ -255,6 +294,7 @@ export function useAppSidebarSessions({
           durationMs: Date.now() - startedAt,
           error,
           limit: recentSessionRequestLimit,
+          projectIds: normalizedActiveProjectIds,
           projectCwds: normalizedOpenedProjectCwds,
         },
         { level: "warn" },
@@ -270,7 +310,9 @@ export function useAppSidebarSessions({
       }
     }
   }, [
+    normalizedActiveProjectIds,
     normalizedOpenedProjectCwds,
+    activeProjectIdsKey,
     openedProjectCwdsKey,
     recentSessionRequestLimit,
     recentSessionsVisibleCount,
@@ -329,6 +371,7 @@ export function useAppSidebarSessions({
     hasCachedCurrentSessionSidebarEntry,
     isClawTaskCenter,
     isNewTaskHome,
+    activeProjectIdsKey,
     openedProjectCwdsKey,
     shouldLoadSidebarConversations,
   ]);
@@ -402,8 +445,35 @@ export function useAppSidebarSessions({
   ]);
 
   const recentSidebarSessions = useMemo(() => {
-    return sidebarSessions.filter((session) => !session.archived_at);
-  }, [sidebarSessions]);
+    const activeProjectIdSet = new Set(normalizedActiveProjectIds);
+    const projectCwdSet = new Set(normalizedOpenedProjectCwds);
+    return sidebarSessions.filter((session) => {
+      if (session.archived_at) {
+        return false;
+      }
+      if (!requireOpenedProjectCwd) {
+        return true;
+      }
+
+      const workspaceId = normalizeSessionProjectValue(session.workspace_id);
+      const workingDir = normalizeSessionProjectValue(
+        session.working_dir,
+      )?.replace(/[\\/]+$/u, "");
+      if (!workspaceId && !workingDir) {
+        return true;
+      }
+      if (workspaceId && activeProjectIdSet.has(workspaceId)) {
+        return true;
+      }
+
+      return Boolean(workingDir && projectCwdSet.has(workingDir));
+    });
+  }, [
+    normalizedActiveProjectIds,
+    normalizedOpenedProjectCwds,
+    requireOpenedProjectCwd,
+    sidebarSessions,
+  ]);
   const visibleRecentSidebarSessions = useMemo(
     () =>
       buildVisibleSidebarSessions({

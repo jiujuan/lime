@@ -1,0 +1,105 @@
+{
+  "$defs": {
+    "ConversationImportSourceClient": {
+      "enum": [
+        "claude_code",
+        "codex"
+      ],
+      "type": "string"
+    },
+    "ConversationImportSourceProvenance": {
+      "properties": {
+        "sourceCallId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sourceChannel": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sourceClient": {
+          "$ref": "#/$defs/ConversationImportSourceClient"
+        },
+        "sourceEventSeq": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "sourceEventType": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sourcePath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sourcePayloadType": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sourceRole": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sourceThreadId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "sourceClient"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "kind": {
+      "type": "string"
+    },
+    "label": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "provenance": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ConversationImportSourceProvenance"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "timestamp": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "kind"
+  ],
+  "title": "ConversationImportPreviewEvent",
+  "type": "object"
+}

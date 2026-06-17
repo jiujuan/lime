@@ -266,4 +266,25 @@ describe("EmptyStateComposerPanel", () => {
     });
     expect(onObjectiveEnabledChange).toHaveBeenCalledWith(false);
   });
+
+  it("首页开启 Goal 且已有会话时应显示追求目标编辑面板", () => {
+    const container = renderPanel({
+      objectiveEnabled: true,
+      projectId: "home-project",
+      sessionId: "home-session-goal",
+      isLoading: true,
+    });
+
+    const objectivePanel = container.querySelector(
+      '[data-testid="empty-state-objective-inline-panel"]',
+    );
+    expect(objectivePanel).toBeTruthy();
+    expect(objectivePanel?.getAttribute("data-session-id")).toBe(
+      "home-session-goal",
+    );
+    expect(objectivePanel?.getAttribute("data-workspace-id")).toBe(
+      "home-project",
+    );
+    expect(objectivePanel?.getAttribute("data-runtime-busy")).toBe("true");
+  });
 });

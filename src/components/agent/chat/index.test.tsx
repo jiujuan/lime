@@ -185,22 +185,22 @@ describe("AgentChatPage 任务中心顶部工具区", () => {
     expect(container.querySelector('[data-testid="message-list"]')).toBeNull();
   });
 
-  it("项目会话收到无项目对话事件时应跳到无项目新建页", async () => {
+  it("历史会话 route 收到无项目新建任务事件时不应跳到无项目新建页", async () => {
     const onNavigate = vi.fn();
     vi.mocked(buildHomeAgentParams).mockClear();
-    installMockAgentChatUnifiedState(
-      createMockAgentChatUnifiedState({
-        sessionId: "topic-project",
-        topics: [
-          {
-            id: "topic-project",
-            title: "项目会话",
-            updatedAt: new Date(FIXED_TOPIC_UPDATED_AT),
-            workspaceId: "workspace-test",
-          },
-        ],
-      }),
-    );
+    const state: Record<string, unknown> = createMockAgentChatUnifiedState({
+      sessionId: "topic-project",
+      topics: [
+        {
+          id: "topic-project",
+          title: "项目会话",
+          updatedAt: new Date(FIXED_TOPIC_UPDATED_AT),
+          workspaceId: "workspace-test",
+        },
+      ],
+    });
+    state.clearMessages = vi.fn();
+    installMockAgentChatUnifiedState(state);
 
     mountPage({
       agentEntry: "claw",
@@ -215,15 +215,9 @@ describe("AgentChatPage 任务中心顶部工具区", () => {
     ).toBe(true);
     await flushEffects();
 
-    expect(buildHomeAgentParams).toHaveBeenCalledWith({
-      projectId: undefined,
-    });
-    expect(onNavigate).toHaveBeenCalledWith(
-      "agent",
-      expect.not.objectContaining({
-        projectId: expect.any(String),
-      }),
-    );
+    expect(buildHomeAgentParams).not.toHaveBeenCalled();
+    expect(onNavigate).not.toHaveBeenCalled();
+    expect(state.clearMessages).not.toHaveBeenCalled();
   });
 
   it("项目会话收到顶部新建任务事件时应保留当前项目上下文", async () => {

@@ -280,6 +280,8 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
     method!(METHOD_CONNECT_RELAY_API_KEY_SAVE, Request),
     method!(METHOD_CONNECT_CALLBACK_SEND, Request),
     method!(METHOD_CONVERSATION_IMPORT_SOURCE_SCAN, Request),
+    method!(METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW, Request),
+    method!(METHOD_CONVERSATION_IMPORT_THREAD_COMMIT, Request),
     method!(METHOD_AGENT_SESSION_START, Request),
     method!(METHOD_AGENT_SESSION_READ, Request),
     method!(METHOD_AGENT_SESSION_TURN_START, Request),

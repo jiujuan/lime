@@ -184,6 +184,9 @@ function resolveItemTimestamp(item: AgentThreadItem): string {
 }
 
 function compareItems(left: AgentThreadItem, right: AgentThreadItem): number {
+  if (left.turn_id === right.turn_id && left.sequence !== right.sequence) {
+    return left.sequence - right.sequence;
+  }
   const leftTimestamp = resolveItemTimestamp(left);
   const rightTimestamp = resolveItemTimestamp(right);
   if (leftTimestamp !== rightTimestamp) {
@@ -210,6 +213,10 @@ function mergeStatuses(
 function resolvePathFromItem(item: AgentThreadItem): string | null {
   if (item.type === "file_artifact") {
     return item.path;
+  }
+
+  if (item.type === "patch") {
+    return item.paths?.[0] || item.summary?.[0] || null;
   }
 
   if (item.type !== "tool_call") {
@@ -303,7 +310,7 @@ function isSearchItem(item: AgentThreadItem): boolean {
 }
 
 function isFileItem(item: AgentThreadItem): boolean {
-  if (item.type === "file_artifact") {
+  if (item.type === "file_artifact" || item.type === "patch") {
     return true;
   }
 
@@ -479,6 +486,14 @@ function summarizeFileItem(item: AgentThreadItem): string | null {
       "查看了 ",
       "处理了 ",
     ]);
+  }
+
+  if (item.type === "patch") {
+    return prefixAction(
+      fileLabel || item.paths?.[0] || item.summary?.[0] || item.text,
+      item.status === "failed" ? "补丁失败 " : "修改了 ",
+      ["修改了 ", "改了 ", "补丁失败 "],
+    );
   }
 
   if (item.type === "tool_call") {
@@ -865,26 +880,8 @@ function buildPreviewLines(
   items: AgentThreadItem[],
 ): string[] {
   const lines: string[] = [];
-  const shouldPreferToolPreview =
-    kind === "process" &&
-    items.some(
-      (item) =>
-        item.type === "tool_call" ||
-        item.type === "command_execution" ||
-        item.type === "web_search",
-    ) &&
-    items.some(
-      (item) => item.type === "reasoning" || item.type === "context_compaction",
-    );
 
   for (const item of items) {
-    if (
-      shouldPreferToolPreview &&
-      (item.type === "reasoning" || item.type === "context_compaction")
-    ) {
-      continue;
-    }
-
     const summary = summarizeBlockPreviewLine(kind, item);
     if (!summary || lines.includes(summary)) {
       continue;
@@ -953,8 +950,15 @@ export function buildAgentThreadDisplayModel(
     }
 
     const status = mergeStatuses(current.items.map((entry) => entry.status));
+    const hasReasoningProcessItem = current.items.some(
+      (entry) =>
+        entry.type === "plan" ||
+        entry.type === "reasoning" ||
+        entry.type === "turn_summary" ||
+        entry.type === "context_compaction",
+    );
     const processBatchSummary =
-      current.kind === "process"
+      current.kind === "process" && !hasReasoningProcessItem
         ? summarizeThreadProcessBatch(current.items)
         : null;
     const startedAt =

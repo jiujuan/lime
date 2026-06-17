@@ -329,6 +329,7 @@ export function useInputbarController({
     activeCapability,
     knowledgePackSelection,
     activeTools,
+    projectId,
     sessionId,
     onSend,
     clearPendingImages,

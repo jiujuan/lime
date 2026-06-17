@@ -143,6 +143,38 @@ describe("useWorkspaceTopicSwitch", () => {
     expect(originalSwitchTopic).not.toHaveBeenCalled();
   });
 
+  it("允许 detached session 时没有项目也应直接切换 standalone 会话", async () => {
+    const originalSwitchTopic = vi.fn(async () => undefined);
+    const onBeforeTopicSwitch = vi.fn();
+    const props = createBaseProps({
+      projectId: undefined,
+      originalSwitchTopic,
+      onBeforeTopicSwitch,
+      loadTopicBoundProjectId: vi.fn(() => null),
+    });
+    const mounted = renderHook(props);
+
+    let result: Awaited<ReturnType<HookValue["switchTopic"]>> | undefined;
+    await act(async () => {
+      result = await mounted
+        .getValue()
+        .switchTopic("standalone-imported-session", {
+          allowDetachedSession: true,
+        });
+    });
+
+    expect(result).toBe("success");
+    expect(projectApiMock.getProject).not.toHaveBeenCalled();
+    expect(toastMock.error).not.toHaveBeenCalled();
+    expect(onBeforeTopicSwitch).toHaveBeenCalledWith(
+      "standalone-imported-session",
+    );
+    expect(originalSwitchTopic).toHaveBeenCalledWith(
+      "standalone-imported-session",
+      expect.objectContaining({ allowDetachedSession: true }),
+    );
+  });
+
   it("当前项目已知但话题未绑定时应直接切换，不再等待项目解析", async () => {
     const originalSwitchTopic = vi.fn(async () => undefined);
     const onBeforeTopicSwitch = vi.fn();

@@ -86,16 +86,18 @@ export function buildTimelineBlockRenderPlan(params: {
       : null;
   const shouldRenderActiveSingleThinkingInline =
     Boolean(singleThinkingItem) && block.status === "in_progress";
+  const shouldRenderCompletedSingleReasoningInline =
+    Boolean(singleThinkingItem) && singleThinkingItem?.type === "reasoning";
   const shouldSummarizeSingleThinkingInline =
     Boolean(singleThinkingItem) &&
-    (singleThinkingItem?.type === "reasoning" ||
-      singleThinkingItem?.type === "turn_summary") &&
+    singleThinkingItem?.type === "turn_summary" &&
     !shouldRenderActiveSingleThinkingInline &&
     !hasStructuredThinkingInlinePreview(singleThinkingItem);
   const shouldRenderSingleItemInline =
     block.items.length === 1 &&
     !shouldSummarizeSingleThinkingInline &&
     (!deferCompletedSingleDetails ||
+      shouldRenderCompletedSingleReasoningInline ||
       preferInlineDetails ||
       block.status !== "completed" ||
       hasFocusedItem);

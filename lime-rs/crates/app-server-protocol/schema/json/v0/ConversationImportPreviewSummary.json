@@ -1,0 +1,191 @@
+{
+  "$defs": {
+    "ConversationImportFidelitySummary": {
+      "properties": {
+        "approvals": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "attachments": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "budgetDropped": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "commands": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "mcp": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "messages": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "patches": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "provenanceOnly": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reasoning": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tools": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "unsupported": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "webSearch": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "approvals",
+        "attachments",
+        "budgetDropped",
+        "commands",
+        "mcp",
+        "messages",
+        "patches",
+        "provenanceOnly",
+        "reasoning",
+        "tools",
+        "unsupported",
+        "webSearch"
+      ],
+      "type": "object"
+    },
+    "ConversationImportPreviewDryRun": {
+      "properties": {
+        "unsupportedItems": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "willAppendToExistingSession": {
+          "type": "boolean"
+        },
+        "willCreateSession": {
+          "type": "boolean"
+        },
+        "willImportAttachments": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "willImportMessages": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "willImportTimelineItems": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "willImportTurns": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "unsupportedItems",
+        "willAppendToExistingSession",
+        "willCreateSession",
+        "willImportAttachments",
+        "willImportMessages",
+        "willImportTimelineItems",
+        "willImportTurns"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "dryRun": {
+      "$ref": "#/$defs/ConversationImportPreviewDryRun"
+    },
+    "fidelity": {
+      "$ref": "#/$defs/ConversationImportFidelitySummary",
+      "default": {
+        "approvals": 0,
+        "attachments": 0,
+        "budgetDropped": 0,
+        "commands": 0,
+        "mcp": 0,
+        "messages": 0,
+        "patches": 0,
+        "provenanceOnly": 0,
+        "reasoning": 0,
+        "tools": 0,
+        "unsupported": 0,
+        "webSearch": 0
+      }
+    },
+    "lineCount": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "messageCount": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "rolloutEventItems": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "truncated": {
+      "type": "boolean"
+    },
+    "unsupportedCount": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "warnings": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "dryRun",
+    "lineCount",
+    "messageCount",
+    "rolloutEventItems",
+    "truncated",
+    "unsupportedCount"
+  ],
+  "title": "ConversationImportPreviewSummary",
+  "type": "object"
+}

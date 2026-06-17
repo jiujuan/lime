@@ -11,7 +11,7 @@ import { useTranslation } from "react-i18next";
 import {
   Archive,
   ChevronRight,
-  Clock3,
+  FileInput,
   FolderOpen,
   FolderPlus,
   MoreHorizontal,
@@ -26,6 +26,7 @@ import {
   resolveSidebarSessionTitle,
 } from "@/components/app-sidebar/sidebarSessionFormatting";
 import { AppSidebarConversationRow } from "@/components/app-sidebar/AppSidebarConversationRow";
+import { AppSidebarConversationEmptyState } from "@/components/app-sidebar/AppSidebarConversationEmptyState";
 import {
   buildSidebarConversationGroups,
   type SidebarOpenedProjectSummary,
@@ -40,6 +41,7 @@ interface AppSidebarConversationShelfProps {
   hasMoreRecent: boolean;
   actionSessionId: string | null;
   onCreateConversation: (project?: SidebarOpenedProjectSummary) => void;
+  onImportConversation?: (project?: SidebarOpenedProjectSummary) => void;
   onNavigateToConversation: (session: AsterSessionInfo) => void;
   onRenameConversation?: (session: AsterSessionInfo) => void;
   onDeleteConversation?: (session: AsterSessionInfo) => void;
@@ -102,15 +104,23 @@ function resolveProjectDisplayName(project: SidebarOpenedProjectSummary) {
   return project.name.trim() || project.id;
 }
 
+function compareSessionTimeDesc(left?: number, right?: number): number {
+  const leftValue = Number.isFinite(left) ? left : 0;
+  const rightValue = Number.isFinite(right) ? right : 0;
+  return rightValue - leftValue;
+}
+
 function sortSessionsForShelf(sessions: AsterSessionInfo[]) {
   return [...sessions].sort((left, right) => {
-    const valueDiff = right.updated_at - left.updated_at;
-    if (valueDiff !== 0) {
-      return valueDiff;
-    }
-    return (
-      right.updated_at - left.updated_at || left.id.localeCompare(right.id)
+    const updatedAtComparison = compareSessionTimeDesc(
+      left.updated_at,
+      right.updated_at,
     );
+    if (updatedAtComparison !== 0) {
+      return updatedAtComparison;
+    }
+
+    return String(left.id || "").localeCompare(String(right.id || ""));
   });
 }
 
@@ -401,34 +411,6 @@ const ConversationMenuItem = styled.button<{ $danger?: boolean }>`
   }
 `;
 
-const ConversationEmptyState = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  flex: 1;
-  min-height: 42px;
-  border-radius: 12px;
-  padding: 10px;
-  color: var(--sidebar-muted);
-  font-size: 12px;
-  background: color-mix(
-    in srgb,
-    var(--sidebar-search-bg, #ffffff) 78%,
-    transparent
-  );
-  text-align: center;
-`;
-
-function renderEmptyState(text: string) {
-  return (
-    <ConversationEmptyState>
-      <Clock3 size={14} />
-      {text}
-    </ConversationEmptyState>
-  );
-}
-
 export function AppSidebarConversationShelf({
   openedProjects = [],
   recentSessions,
@@ -437,6 +419,7 @@ export function AppSidebarConversationShelf({
   hasMoreRecent,
   actionSessionId,
   onCreateConversation,
+  onImportConversation,
   onNavigateToConversation,
   onRenameConversation,
   onDeleteConversation,
@@ -611,6 +594,14 @@ export function AppSidebarConversationShelf({
   const newProjectConversationLabel = t(
     "navigation.sidebar.conversations.newProjectConversation",
     "在此项目新建对话",
+  );
+  const importConversationLabel = t(
+    "navigation.sidebar.conversations.importConversation",
+    "导入 Codex 对话",
+  );
+  const importProjectConversationLabel = t(
+    "navigation.sidebar.conversations.importProjectConversation",
+    "导入 Codex 对话到此项目",
   );
   const loadingRecentLabel = t(
     "navigation.sidebar.conversations.loadingRecent",
@@ -898,6 +889,23 @@ export function AppSidebarConversationShelf({
             >
               <MessageSquarePlus />
             </ProjectMenuButton>
+            {onImportConversation ? (
+              <ProjectMenuButton
+                type="button"
+                aria-label={t(
+                  "navigation.sidebar.conversations.importProjectConversationFor",
+                  {
+                    title: projectName,
+                    defaultValue: "导入 Codex 对话到 {{title}}",
+                  },
+                )}
+                title={importProjectConversationLabel}
+                data-testid="app-sidebar-project-import-conversation"
+                onClick={() => onImportConversation(section.project)}
+              >
+                <FileInput />
+              </ProjectMenuButton>
+            ) : null}
             <ProjectMenuButton
               type="button"
               aria-label={t(
@@ -935,7 +943,7 @@ export function AppSidebarConversationShelf({
       </ConversationSectionHeader>
       <ConversationList data-testid="app-sidebar-project-conversations">
         {recentLoading
-          ? renderEmptyState(loadingRecentLabel)
+          ? <AppSidebarConversationEmptyState text={loadingRecentLabel} />
           : renderProjectGroups()}
       </ConversationList>
     </ConversationSection>
@@ -948,6 +956,17 @@ export function AppSidebarConversationShelf({
           {standaloneTitleLabel}
         </ConversationSectionTitle>
         <ConversationSectionActions>
+          {onImportConversation ? (
+            <ConversationActionButton
+              type="button"
+              onClick={() => onImportConversation()}
+              aria-label={importConversationLabel}
+              title={importConversationLabel}
+              data-testid="app-sidebar-import-conversation-button"
+            >
+              <FileInput />
+            </ConversationActionButton>
+          ) : null}
           <ConversationActionButton
             type="button"
             onClick={() => onCreateConversation()}
@@ -961,12 +980,12 @@ export function AppSidebarConversationShelf({
       </ConversationSectionHeader>
       <ConversationList data-testid="app-sidebar-recent-conversations">
         {recentLoading
-          ? renderEmptyState(loadingRecentLabel)
+          ? <AppSidebarConversationEmptyState text={loadingRecentLabel} />
           : sortedConversationGroups.standaloneSessions.length > 0
             ? sortedConversationGroups.standaloneSessions.map((session) =>
                 renderConversationRow(session),
               )
-            : renderEmptyState(emptyStandaloneLabel)}
+            : <AppSidebarConversationEmptyState text={emptyStandaloneLabel} />}
         {hasMoreRecent ? (
           <ConversationListMoreButton type="button" onClick={onShowMoreRecent}>
             {moreRecentLabel}

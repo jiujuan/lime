@@ -95,6 +95,10 @@ const mockListUnifiedMemories = vi.hoisted(() =>
   vi.fn<() => Promise<UnifiedMemory[]>>(async () => []),
 );
 
+const mockGetAgentRuntimeObjective = vi.hoisted(() =>
+  vi.fn(async () => null),
+);
+
 const mockCharacterMention = vi.fn<
   (props: {
     characters?: Character[];
@@ -131,6 +135,14 @@ vi.mock("@/lib/api/channelsRuntime", () => ({
 vi.mock("@/lib/api/unifiedMemory", () => ({
   listUnifiedMemories: mockListUnifiedMemories,
 }));
+
+vi.mock("@/lib/api/agentRuntime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api/agentRuntime")>();
+  return {
+    ...actual,
+    getAgentRuntimeObjective: mockGetAgentRuntimeObjective,
+  };
+});
 
 vi.mock("@/lib/api/skillCatalog", async (importOriginal) => {
   const actual =
@@ -172,6 +184,21 @@ vi.mock("@/lib/api/projectGit", () => ({
 
 vi.mock("./ChatModelSelector", () => ({
   ChatModelSelector: () => <div data-testid="chat-model-selector" />,
+}));
+
+vi.mock("./Inputbar/components/InputbarObjectiveInlinePanel", () => ({
+  InputbarObjectiveInlinePanel: (props: {
+    sessionId: string;
+    workspaceId?: string | null;
+    runtimeBusy?: boolean;
+  }) => (
+    <div
+      data-testid="empty-state-objective-inline-panel"
+      data-session-id={props.sessionId}
+      data-workspace-id={props.workspaceId ?? ""}
+      data-runtime-busy={String(Boolean(props.runtimeBusy))}
+    />
+  ),
 }));
 
 vi.mock("../utils/contextualRecommendations", () => ({
@@ -3401,11 +3428,15 @@ describe("EmptyState", () => {
               status: "active",
               set: expect.objectContaining({
                 threadId: "thread-empty-state-plan-goal",
-                objective: null,
+                objective: "请先规划再持续推进这个任务",
                 status: "active",
                 tokenBudget: null,
               }),
             }),
+            managed_objective: {
+              objective_text: "请先规划再持续推进这个任务",
+              source: "empty_state",
+            },
           }),
         }),
         toolPreferencesOverride: {

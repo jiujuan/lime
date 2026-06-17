@@ -13,6 +13,7 @@ import { BuiltinCommandBadge } from "./Inputbar/components/BuiltinCommandBadge";
 import { InputbarAccessModeSelect } from "./Inputbar/components/InputbarAccessModeSelect";
 import { InputbarCore } from "./Inputbar/components/InputbarCore";
 import { InputbarModeStatusChip } from "./Inputbar/components/InputbarModeStatusChip";
+import { InputbarObjectiveInlinePanel } from "./Inputbar/components/InputbarObjectiveInlinePanel";
 import {
   InputbarProjectContextBar,
   type InputbarOpenedProject,
@@ -399,14 +400,25 @@ export function EmptyStateComposerPanel({
   };
 
   const effectiveGuideHelpLabel = guideHelpLabel ?? copy.guideHelpDefaultLabel;
+  const objectiveInlinePanel =
+    objectiveEnabled && sessionId ? (
+      <InputbarObjectiveInlinePanel
+        sessionId={sessionId}
+        workspaceId={projectId}
+        runtimeBusy={isLoading}
+      />
+    ) : null;
   const topExtra =
     guideHelpActive ||
     activeBuiltinCommand ||
     activeRuntimeScene ||
     activeCuratedTask ||
     activeSkill ||
-    creationReplaySurface ? (
+    creationReplaySurface ||
+    objectiveInlinePanel ? (
       <>
+        {objectiveInlinePanel}
+
         {guideHelpActive ? (
           <GuideHelpBadge
             label={effectiveGuideHelpLabel}
@@ -607,7 +619,7 @@ export function EmptyStateComposerPanel({
   const projectContextBar = (
     <div
       data-testid="inputbar-context-bar-slot"
-      className="-mt-px flex min-h-11 w-full items-center rounded-b-[26px] border border-t-0 border-emerald-200/35 bg-gradient-to-b from-emerald-50/20 via-white/55 to-white/65 px-5 py-2 shadow-[0_14px_36px_-42px_rgba(15,23,42,0.28)]"
+      className="-mt-px flex min-h-11 w-full items-center rounded-b-[34px] border border-t-0 border-[color:var(--lime-composer-border,rgba(110,231,183,0.84))] bg-gradient-to-b from-white/35 via-white/50 to-white/60 px-5 py-2 shadow-none"
     >
       <InputbarProjectContextBar
         projectId={projectId}

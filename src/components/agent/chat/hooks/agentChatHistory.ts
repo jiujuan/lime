@@ -52,6 +52,10 @@ import {
   buildFailedAgentMessageContent,
   buildFailedAgentRuntimeStatus,
 } from "../utils/agentRuntimeStatus";
+import {
+  toActionRequired,
+  toToolCallState,
+} from "../components/timeline-utils/itemConverters";
 
 export const normalizeHistoryPartType = (value: unknown): string => {
   if (typeof value !== "string") return "";
@@ -854,41 +858,29 @@ function hydrateSessionDetailMessagesFromThreadItems(
       continue;
     }
 
-    if (item.type === "tool_call") {
+    if (
+      item.type === "tool_call" ||
+      item.type === "command_execution" ||
+      item.type === "patch" ||
+      item.type === "web_search"
+    ) {
       const draft = ensureAssistantDraft(item);
-      const status =
-        item.status === "failed"
-          ? ("failed" as const)
-          : item.status === "completed"
-            ? ("completed" as const)
-            : ("running" as const);
-      const toolArguments = stringifyToolArguments(item.arguments);
+      const toolCall = toToolCallState(item);
+      if (!toolCall) {
+        continue;
+      }
+      const toolArguments = toolCall.arguments;
       const normalizedResult =
-        status === "running"
-          ? undefined
-          : {
-              success: item.success !== false && status !== "failed",
-              output: item.output || "",
-              error: item.error || undefined,
-              images: undefined,
+        toolCall.result && typeof toolCall.result === "object"
+          ? {
+              ...toolCall.result,
               metadata: normalizeToolResultMetadata(
-                item.metadata,
-                item.output || "",
-                item.error || "",
+                toolCall.result.metadata,
+                toolCall.result.output || "",
+                toolCall.result.error || "",
               ),
-            };
-      const toolCall = {
-        id: item.id,
-        name: item.tool_name,
-        arguments: toolArguments,
-        status,
-        startTime: parseHistoryTimestamp(item.started_at),
-        endTime:
-          status === "running"
-            ? undefined
-            : parseHistoryTimestamp(item.completed_at || item.updated_at),
-        result: normalizedResult,
-      };
+            }
+          : toolCall.result;
       draft.toolCalls = mergeByKey(
         draft.toolCalls,
         [toolCall],
@@ -907,7 +899,7 @@ function hydrateSessionDetailMessagesFromThreadItems(
       const imageWorkbenchPreviewFromTool = buildImageTaskPreviewFromToolResult(
         {
           toolId: item.id,
-          toolName: item.tool_name,
+          toolName: toolCall.name,
           toolArguments,
           toolResult: normalizedResultRecord,
           fallbackPrompt: draft.content,
@@ -923,7 +915,7 @@ function hydrateSessionDetailMessagesFromThreadItems(
             draft.taskPreview,
             buildTaskPreviewFromToolResult({
               toolId: item.id,
-              toolName: item.tool_name,
+              toolName: toolCall.name,
               toolArguments,
               toolResult: normalizedResultRecord,
               fallbackPrompt: draft.content,
@@ -936,12 +928,33 @@ function hydrateSessionDetailMessagesFromThreadItems(
         | Record<string, unknown>
         | undefined;
       if (
-        item.tool_name === "Skill" ||
+        toolCall.name === "Skill" ||
         metadata?.tool_family === "skill" ||
         metadata?.skill_source === "SKILL.md"
       ) {
         draft.inlineProcessRetention = SKILL_INLINE_PROCESS_RETENTION;
       }
+      continue;
+    }
+
+    if (item.type === "approval_request" || item.type === "request_user_input") {
+      const actionRequired = toActionRequired(item);
+      if (!actionRequired) {
+        continue;
+      }
+      const draft = ensureAssistantDraft(item);
+      draft.actionRequests = mergeByKey(
+        draft.actionRequests,
+        [actionRequired],
+        (action) => action.requestId,
+      );
+      draft.contentParts = mergeHydratedToolStateContentParts(
+        draft.contentParts || [],
+        [{ type: "action_required", actionRequired }],
+      );
+      draft.timestamp = parseHistoryTimestamp(
+        item.completed_at || item.updated_at || item.started_at,
+      );
     }
   }
   flushAssistantDraft();

@@ -200,12 +200,14 @@ function renderHookNode(props: HookProps): HTMLDivElement {
 }
 
 function getLatestInputbarProps(): {
+  disabled?: boolean;
   toolStates?: Record<string, boolean>;
   onToolStatesChange?: (states: Record<string, boolean>) => void;
 } {
   const latestCall = mockInputbarRender.mock.calls.at(-1);
   expect(latestCall).toBeTruthy();
   return latestCall?.[0] as {
+    disabled?: boolean;
     toolStates?: Record<string, boolean>;
     onToolStatesChange?: (states: Record<string, boolean>) => void;
   };
@@ -340,5 +342,56 @@ describe("useWorkspaceInputbarSceneRuntime", () => {
 
     expect(setChatToolPreferences).not.toHaveBeenCalled();
     expect(onObjectiveEnabledChange).toHaveBeenCalledWith(true);
+  });
+
+  it("任务中心 detached 会话没有 projectId 时仍应允许继续输入", () => {
+    renderHookNode(
+      createDefaultProps({
+        contextVariant: "task-center",
+        projectId: null,
+        isPreparingSend: false,
+      }),
+    );
+
+    expect(getLatestInputbarProps().disabled).toBe(false);
+  });
+
+  it("会话恢复中应禁用任务中心输入，避免消息落到新会话", () => {
+    renderHookNode(
+      createDefaultProps({
+        contextVariant: "task-center",
+        projectId: null,
+        isPreparingSend: false,
+        isSessionRestoring: true,
+      }),
+    );
+
+    expect(getLatestInputbarProps().disabled).toBe(true);
+  });
+
+  it("普通会话没有 projectId 但已有 sessionId 时仍应允许继续输入", () => {
+    renderHookNode(
+      createDefaultProps({
+        contextVariant: "default",
+        projectId: null,
+        sessionId: "session-detached",
+        isPreparingSend: false,
+      }),
+    );
+
+    expect(getLatestInputbarProps().disabled).toBe(false);
+  });
+
+  it("普通工作区没有 projectId 且没有 sessionId 时仍应禁用输入", () => {
+    renderHookNode(
+      createDefaultProps({
+        contextVariant: "default",
+        projectId: null,
+        sessionId: null,
+        isPreparingSend: false,
+      }),
+    );
+
+    expect(getLatestInputbarProps().disabled).toBe(true);
   });
 });

@@ -156,6 +156,61 @@ describe("toolBatchGrouping", () => {
     );
   });
 
+  it("全部 WebSearch 失败时仍应聚合为轻量网页搜索轨迹", () => {
+    const diagnosticOutput = JSON.stringify({
+      metadata: {
+        web_search: {
+          attempts: [
+            {
+              error: "缺少环境变量 TAVILY_API_KEY",
+            },
+          ],
+        },
+      },
+    });
+    const summary = summarizeStreamingToolBatch([
+      {
+        ...createToolCall("web_search", {
+          query: "today world news Reuters",
+        }),
+        status: "failed",
+        result: {
+          success: false,
+          output: diagnosticOutput,
+          error: diagnosticOutput,
+        },
+      },
+      {
+        ...createToolCall("mcp__system__web_search", {
+          query: "AP world news June 2026",
+        }),
+        status: "failed",
+        result: {
+          success: false,
+          output: diagnosticOutput,
+          error: diagnosticOutput,
+        },
+      },
+    ]);
+
+    expect(summary).toEqual(
+      expect.objectContaining({
+        kind: "web_search",
+        title: "已搜索网页 2 次",
+        countLabel: "2 次",
+        rawDetailLabel: "展开查看搜索来源",
+      }),
+    );
+    expect(summary?.supportingLines).toEqual(
+      expect.arrayContaining([
+        "today world news Reuters",
+        "AP world news June 2026",
+      ]),
+    );
+    expect(summary?.supportingLines.join("\n")).not.toContain("TAVILY_API_KEY");
+    expect(summary?.supportingLines.join("\n")).not.toContain("metadata");
+  });
+
   it("应从 WebSearch 结果中提取来源行而不暴露原始输出", () => {
     const summary = summarizeStreamingToolBatch([
       {

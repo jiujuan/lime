@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Artifact } from "@/lib/artifact/types";
 import {
+  isTaskCenterDraftSendPendingForLayout,
   resolveDefaultSelectedArtifact,
   resolveRuntimeWorkspaceId,
   resolveTaskCenterHomeSurfaceState,
@@ -62,6 +63,77 @@ describe("resolveTaskCenterHomeSurfaceState", () => {
     expect(state.shouldRenderEmbeddedHome).toBe(false);
     expect(state.shouldHideCurrentSessionContent).toBe(false);
     expect(state.sceneSessionId).toBe("new-session");
+  });
+
+  it("从侧栏打开历史空会话时不应被任务中心首页覆盖", () => {
+    const state = resolveTaskCenterHomeSurfaceState({
+      agentEntry: "claw",
+      draftSurfaceActive: false,
+      shouldSuppressDraftContent: false,
+      sessionSwitchPending: false,
+      hasInitialSessionRoute: true,
+      hasConversationActivity: false,
+      sessionId: "session-from-sidebar",
+      embeddedHomeSessionIds: new Set(["session-from-sidebar"]),
+      isAutoRestoringSession: false,
+      isSessionHydrating: false,
+    });
+
+    expect(state.shouldRenderEmbeddedHome).toBe(false);
+    expect(state.shouldHideCurrentSessionContent).toBe(false);
+    expect(state.sceneSessionId).toBe("session-from-sidebar");
+  });
+
+  it("路由携带 standalone initialSessionId 时不应被首页草稿 surface 覆盖", () => {
+    const state = resolveTaskCenterHomeSurfaceState({
+      agentEntry: "claw",
+      draftSurfaceActive: true,
+      shouldSuppressDraftContent: true,
+      sessionSwitchPending: false,
+      hasInitialSessionRoute: true,
+      hasConversationActivity: false,
+      sessionId: null,
+      embeddedHomeSessionIds: new Set(),
+      isAutoRestoringSession: false,
+      isSessionHydrating: true,
+    });
+
+    expect(state.shouldRenderEmbeddedHome).toBe(false);
+    expect(state.shouldHideCurrentSessionContent).toBe(false);
+    expect(state.isRestoringSession).toBe(false);
+    expect(state.sceneSessionId).toBeNull();
+  });
+});
+
+describe("isTaskCenterDraftSendPendingForLayout", () => {
+  it("已有真实消息且没有发送/队列时应收起首页首发 pending 态", () => {
+    expect(
+      isTaskCenterDraftSendPendingForLayout({
+        hasDraftSendRequest: true,
+        hasDisplayMessages: true,
+        isSending: false,
+        queuedTurnCount: 0,
+      }),
+    ).toBe(false);
+  });
+
+  it("仍在发送或还没有真实消息时应保持 pending 态", () => {
+    expect(
+      isTaskCenterDraftSendPendingForLayout({
+        hasDraftSendRequest: true,
+        hasDisplayMessages: false,
+        isSending: false,
+        queuedTurnCount: 0,
+      }),
+    ).toBe(true);
+    expect(
+      isTaskCenterDraftSendPendingForLayout({
+        hasDraftSendRequest: true,
+        hasDisplayMessages: true,
+        isSending: true,
+        queuedTurnCount: 0,
+      }),
+    ).toBe(true);
   });
 });
 

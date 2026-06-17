@@ -310,7 +310,6 @@ impl RuntimeCore {
         let cwd_filters = normalize_cwd_values(root_path);
         if !cwd_filters.is_empty() {
             params.cwd = Some(AgentSessionCwdFilter::Many(cwd_filters));
-            params.workspace_id = None;
         }
         Ok(params)
     }

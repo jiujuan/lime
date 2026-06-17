@@ -62,7 +62,7 @@ describe("sidebarConversationGroups", () => {
     );
   });
 
-  it("只用 working_dir 匹配项目 rootPath，不再用 workspace_id 推断归属", () => {
+  it("优先支持 workspace_id 匹配 current 项目，兼容 working_dir rootPath", () => {
     const groups = buildSidebarConversationGroups({
       openedProjects,
       sessions: [
@@ -76,6 +76,7 @@ describe("sidebarConversationGroups", () => {
     });
 
     expect(groups.projectSections[1].sessions.map((item) => item.id)).toEqual([
+      "workspace-project",
       "cwd-project",
     ]);
     expect(groups.standaloneSessions.map((item) => item.id)).toEqual([]);

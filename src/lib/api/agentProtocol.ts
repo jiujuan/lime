@@ -162,6 +162,7 @@ interface AgentThreadItemBase {
   started_at: string;
   completed_at?: string;
   updated_at: string;
+  metadata?: unknown;
 }
 
 export interface AgentThreadUserMessageItem extends AgentThreadItemBase {
@@ -203,6 +204,17 @@ export interface AgentThreadCommandExecutionItem extends AgentThreadItemBase {
   aggregated_output?: string;
   exit_code?: number;
   error?: string;
+}
+
+export interface AgentThreadPatchItem extends AgentThreadItemBase {
+  type: "patch";
+  text: string;
+  summary?: string[];
+  paths?: string[];
+  success?: boolean;
+  stdout?: string;
+  stderr?: string;
+  metadata?: unknown;
 }
 
 export interface AgentThreadWebSearchItem extends AgentThreadItemBase {
@@ -280,6 +292,7 @@ export type AgentThreadItem =
   | AgentThreadReasoningItem
   | AgentThreadToolCallItem
   | AgentThreadCommandExecutionItem
+  | AgentThreadPatchItem
   | AgentThreadWebSearchItem
   | AgentThreadApprovalRequestItem
   | AgentThreadRequestUserInputItem
@@ -756,7 +769,16 @@ export interface AgentEventError {
   message: string;
 }
 
-export type AgentEvent =
+export interface AgentEventEnvelope {
+  event_id?: string;
+  sequence?: number;
+  session_id?: string;
+  thread_id?: string;
+  turn_id?: string;
+  timestamp?: string;
+}
+
+export type AgentEvent = (
   | AgentEventThreadStarted
   | AgentEventTurnStarted
   | AgentEventItemStarted
@@ -800,7 +822,9 @@ export type AgentEvent =
   | AgentEventSubagentStatusChanged
   | AgentEventMessage
   | AgentEventWarning
-  | AgentEventError;
+  | AgentEventError
+) &
+  AgentEventEnvelope;
 
 export interface AgentUserPreferences {
   providerConfig?: AsterProviderConfig;
@@ -971,6 +995,45 @@ function normalizeToolExecutionResult(
   };
 }
 
+function withAgentEventEnvelope<TEvent extends AgentEvent>(
+  source: Record<string, unknown>,
+  event: TEvent,
+): TEvent {
+  return {
+    ...event,
+    event_id:
+      typeof source.event_id === "string"
+        ? source.event_id
+        : typeof source.eventId === "string"
+          ? source.eventId
+          : event.event_id,
+    sequence:
+      typeof source.sequence === "number" && Number.isFinite(source.sequence)
+        ? source.sequence
+        : event.sequence,
+    session_id:
+      typeof source.session_id === "string"
+        ? source.session_id
+        : typeof source.sessionId === "string"
+          ? source.sessionId
+          : event.session_id,
+    thread_id:
+      typeof source.thread_id === "string"
+        ? source.thread_id
+        : typeof source.threadId === "string"
+          ? source.threadId
+          : event.thread_id,
+    turn_id:
+      typeof source.turn_id === "string"
+        ? source.turn_id
+        : typeof source.turnId === "string"
+          ? source.turnId
+          : event.turn_id,
+    timestamp:
+      typeof source.timestamp === "string" ? source.timestamp : event.timestamp,
+  };
+}
+
 export function parseAgentEvent(data: unknown): AgentEvent | null {
   if (!data || typeof data !== "object") {
     return null;
@@ -979,7 +1042,8 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
   const event = data as Record<string, unknown>;
   const type = event.type as string;
 
-  switch (type) {
+  const parsedEvent: AgentEvent | null = (() => {
+    switch (type) {
     case "thread_started":
       return {
         type: "thread_started",
@@ -1618,7 +1682,10 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
       };
     default:
       return null;
-  }
+    }
+  })();
+
+  return parsedEvent ? withAgentEventEnvelope(event, parsedEvent) : null;
 }
 
 export function createSubmitTurnRequestFromAgentOp(

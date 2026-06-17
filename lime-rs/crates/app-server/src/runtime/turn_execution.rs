@@ -143,13 +143,21 @@ impl RuntimeCore {
 
     pub(in crate::runtime) async fn start_turn_inner(
         &self,
-        params: AgentSessionTurnStartParams,
+        mut params: AgentSessionTurnStartParams,
         host: RuntimeHostContext,
         event_callback: Option<&mut RuntimeEventCallback<'_>>,
         enable_auto_continuation: bool,
     ) -> Result<RuntimeCoreOutput<AgentSessionTurnStartResponse>, RuntimeCoreError> {
         self.ensure_current_session_hydrated(&params.session_id)
             .await?;
+
+        if let Some(defaults) = self.imported_session_runtime_options(&params.session_id)? {
+            params.runtime_options =
+                Some(super::imported_session_runtime::merge_with_request_options(
+                    defaults,
+                    params.runtime_options.take(),
+                ));
+        }
 
         if let Some(capability_id) = params
             .runtime_options

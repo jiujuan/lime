@@ -158,6 +158,54 @@ async fn list_agent_sessions_filters_projection_by_cwd() {
 }
 
 #[tokio::test]
+async fn list_agent_sessions_filters_projection_by_workspace_or_workspace_root() {
+    let harness = projection_test_core();
+    seed_projected_session_with_working_dir(
+        &harness.core,
+        "sess_projection_workspace_only",
+        "thread_projection_workspace_only",
+        "",
+    )
+    .await;
+    seed_projected_session_with_working_dir(
+        &harness.core,
+        "sess_projection_cwd_only",
+        "thread_projection_cwd_only",
+        "/tmp/projection-root",
+    )
+    .await;
+
+    let app_data_source = Arc::new(
+        TestSessionDataSource::new(empty_agent_session_read_response("legacy_unexpected"))
+            .with_workspace(json!({
+                "id": "workspace-current",
+                "rootPath": "/tmp/projection-root",
+            })),
+    );
+    let restarted_core = RuntimeCore::default()
+        .with_event_log_writer(harness.event_log_writer)
+        .with_projection_store(harness.projection_store)
+        .with_app_data_source(app_data_source);
+
+    let listed = restarted_core
+        .list_agent_sessions(AgentSessionListParams {
+            workspace_id: Some("workspace-current".to_string()),
+            limit: Some(20),
+            ..AgentSessionListParams::default()
+        })
+        .await
+        .expect("list sessions");
+    let ids = listed
+        .sessions
+        .iter()
+        .map(|session| session.session_id.as_str())
+        .collect::<Vec<_>>();
+
+    assert!(ids.contains(&"sess_projection_workspace_only"));
+    assert!(ids.contains(&"sess_projection_cwd_only"));
+}
+
+#[tokio::test]
 async fn update_agent_session_writes_projection_overview() {
     let harness = projection_test_core();
     seed_projected_session(

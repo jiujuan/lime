@@ -439,11 +439,7 @@ function buildWebSearchDescriptor(
     mutationCount === 0 &&
     otherCount === 0 &&
     significantCount === webSearchCount + accumulator.webFetchCount;
-  if (
-    webSearchCount < 1 ||
-    accumulator.webSearchFailedCount >= webSearchCount ||
-    !hasOnlyWebSearchCompanions
-  ) {
+  if (webSearchCount < 1 || !hasOnlyWebSearchCompanions) {
     return null;
   }
 

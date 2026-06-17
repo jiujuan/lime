@@ -5,7 +5,6 @@ import type { SidebarOpenedProjectSummary } from "@/components/app-sidebar/sideb
 import {
   AppSidebar,
   TASK_CENTER_CREATE_DRAFT_TASK_EVENT,
-  TASK_CENTER_OPEN_TASK_EVENT,
   act,
   cleanupAppSidebarTest,
   clickConversationMenuItem,
@@ -14,10 +13,13 @@ import {
   mockDeleteProject,
   mockEnsureProjectWorkspace,
   mockCreateProjectGitWorktree,
+  mockCommitConversationImportThread,
   mockGetProject,
   mockListAgentRuntimeSessions,
+  mockPreviewConversationImportThread,
   mockRevealPathInFinder,
   mockRecordAgentUiPerformanceMetric,
+  mockScanConversationImportSource,
   mockScheduleMinimumDelayIdleTask,
   mockToastSuccess,
   mockUpdateProject,
@@ -147,24 +149,6 @@ describe("AppSidebar conversations", () => {
     };
   }
 
-  function captureTaskCenterOpenTaskRequests() {
-    const receivedDetails: unknown[] = [];
-    const listener = (event: Event) => {
-      receivedDetails.push(
-        event instanceof CustomEvent ? event.detail : undefined,
-      );
-      event.preventDefault();
-    };
-    window.addEventListener(TASK_CENTER_OPEN_TASK_EVENT, listener);
-
-    return {
-      receivedDetails,
-      dispose: () => {
-        window.removeEventListener(TASK_CENTER_OPEN_TASK_EVENT, listener);
-      },
-    };
-  }
-
   it("任务中心内悬停已有会话不应再触发旧会话预取", async () => {
     vi.useFakeTimers();
     mockListAgentRuntimeSessions.mockResolvedValue([
@@ -270,8 +254,7 @@ describe("AppSidebar conversations", () => {
     }
   });
 
-  it("任务中心内点击项目会话应交给本地打开事件，不跳到最近对话壳", async () => {
-    const taskCenterRequests = captureTaskCenterOpenTaskRequests();
+  it("任务中心内点击项目会话应通过 current 页面导航打开历史会话", async () => {
     mockListAgentRuntimeSessions.mockResolvedValue([
       {
         id: "session-click",
@@ -285,37 +268,211 @@ describe("AppSidebar conversations", () => {
       },
     ]);
 
-    try {
-      const onNavigate = vi.fn();
-      const container = mountSidebarContainer({
-        currentPage: "agent",
-        currentPageParams: {
-          agentEntry: "claw",
-          projectId: "project-1",
-          initialSessionId: "session-current",
-        } as AgentPageParams,
-        onNavigate,
-      });
-      await flushEffects(2);
+    const onNavigate = vi.fn();
+    const container = mountSidebarContainer({
+      currentPage: "agent",
+      currentPageParams: {
+        agentEntry: "claw",
+        projectId: "project-1",
+        initialSessionId: "session-current",
+      } as AgentPageParams,
+      onNavigate,
+    });
+    await flushEffects(2);
 
-      await act(async () => {
-        container
-          .querySelector<HTMLButtonElement>('button[title="立即打开历史会话"]')
-          ?.click();
-        await Promise.resolve();
-      });
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('button[title="立即打开历史会话"]')
+        ?.click();
+      await Promise.resolve();
+    });
 
-      expect(taskCenterRequests.receivedDetails).toEqual([
-        {
-          sessionId: "session-click",
-          workspaceId: "project-1",
-          source: "sidebar",
-        },
-      ]);
-      expect(onNavigate).not.toHaveBeenCalled();
-    } finally {
-      taskCenterRequests.dispose();
-    }
+    expect(onNavigate).toHaveBeenCalledWith(
+      "agent",
+      expect.objectContaining({
+        agentEntry: "claw",
+        projectId: "project-1",
+        initialSessionId: "session-click",
+      }),
+    );
+  });
+
+  it("仅带 workspace_id 的项目会话也应显示在项目分组并通过 current 导航打开", async () => {
+    mockListAgentRuntimeSessions.mockResolvedValue([
+      {
+        id: "session-workspace-only",
+        name: "工作区会话",
+        created_at: 1713000000,
+        updated_at: 1713000600,
+        archived_at: null,
+        workspace_id: "project-1",
+        messages_count: 3,
+      },
+    ]);
+
+    const onNavigate = vi.fn();
+    const container = mountSidebarContainer({
+      currentPage: "agent",
+      currentPageParams: {
+        agentEntry: "claw",
+        projectId: "project-1",
+        initialSessionId: "session-current",
+      } as AgentPageParams,
+      onNavigate,
+    });
+    await flushEffects(2);
+
+    const projectSection = container.querySelector(
+      '[data-testid="app-sidebar-project-conversations"]',
+    );
+    const standaloneSection = container.querySelector(
+      '[data-testid="app-sidebar-recent-conversations"]',
+    );
+    expect(projectSection?.textContent).toContain("工作区会话");
+    expect(standaloneSection?.textContent).not.toContain("工作区会话");
+    const openButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(
+        '[data-testid="app-sidebar-conversation-open"]',
+      ),
+    ).find((button) => button.getAttribute("title") === "工作区会话");
+    expect(openButton).not.toBeNull();
+
+    await act(async () => {
+      openButton?.click();
+      await Promise.resolve();
+    });
+
+    expect(onNavigate).toHaveBeenCalledWith(
+      "agent",
+      expect.objectContaining({
+        agentEntry: "claw",
+        projectId: "project-1",
+        initialSessionId: "session-workspace-only",
+      }),
+    );
+  });
+
+  it("导入 Codex 对话应先预览，取消时不提交 commit", async () => {
+    const container = mountSidebarContainer({
+      currentPage: "agent",
+      currentPageParams: {
+        agentEntry: "claw",
+        projectId: "project-1",
+      } as AgentPageParams,
+    });
+    await flushEffects(3);
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="app-sidebar-import-conversation-button"]',
+        )
+        ?.click();
+      await Promise.resolve();
+    });
+    await flushEffects(4);
+
+    expect(mockScanConversationImportSource).toHaveBeenCalledWith({
+      sourceClient: "codex",
+      sourceRoot: undefined,
+      projectPath: undefined,
+      includeArchived: false,
+      limit: 40,
+    });
+    expect(mockPreviewConversationImportThread).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceClient: "codex",
+        sourceThreadId: "codex-thread-1",
+        limit: 12,
+      }),
+    );
+    expect(document.body.textContent).toContain("导入 Codex 对话");
+    expect(document.body.textContent).toContain("请帮我修复运行时问题");
+    expect(document.body.textContent).toContain("回合");
+    expect(document.body.textContent).toContain("时间线");
+    expect(document.body.textContent).toContain("Codex 细节还原");
+    expect(document.body.textContent).toContain("工具");
+    expect(document.body.textContent).toContain("命令");
+    expect(document.body.textContent).toContain("附件 1");
+
+    await act(async () => {
+      Array.from(document.body.querySelectorAll<HTMLButtonElement>("button"))
+        .find((button) => button.textContent?.trim() === "取消")
+        ?.click();
+      await Promise.resolve();
+    });
+    await flushEffects(2);
+
+    expect(mockCommitConversationImportThread).not.toHaveBeenCalled();
+    expect(
+      document.body.querySelector(
+        '[data-testid="app-sidebar-conversation-import-dialog"]',
+      ),
+    ).toBeNull();
+  });
+
+  it("项目范围导入 Codex 对话确认后应带 confirmed=true 并打开导入会话", async () => {
+    mockGetProject.mockResolvedValue({
+      id: "project-1",
+      name: "示例项目",
+      rootPath: "/repo/project-1",
+      isFavorite: false,
+    });
+
+    const onNavigate = vi.fn();
+    const container = mountSidebarContainer({
+      currentPage: "agent",
+      currentPageParams: {
+        agentEntry: "claw",
+        projectId: "project-1",
+      } as AgentPageParams,
+      onNavigate,
+    });
+    await flushEffects(4);
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="app-sidebar-project-import-conversation"]',
+        )
+        ?.click();
+      await Promise.resolve();
+    });
+    await flushEffects(4);
+
+    await act(async () => {
+      document.body
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="app-sidebar-conversation-import-confirm"]',
+        )
+        ?.click();
+      await Promise.resolve();
+    });
+    await flushEffects(4);
+
+    expect(mockScanConversationImportSource).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceClient: "codex",
+        projectPath: "/repo/project-1",
+      }),
+    );
+    expect(mockCommitConversationImportThread).toHaveBeenCalledWith({
+      sourceClient: "codex",
+      sourceRoot: "/Users/example/.codex",
+      sourceThreadId: "codex-thread-1",
+      sourcePath: "/Users/example/.codex/sessions/codex-thread-1.jsonl",
+      workspaceId: "project-1",
+      confirmed: true,
+    });
+    expect(mockToastSuccess).toHaveBeenCalledWith("已导入 2 条 Codex 消息");
+    expect(onNavigate).toHaveBeenCalledWith(
+      "agent",
+      expect.objectContaining({
+        agentEntry: "claw",
+        projectId: "project-1",
+        initialSessionId: "session-imported",
+      }),
+    );
   });
 
   it("从项目会话切到无项目对话时不应继承当前项目 ID", async () => {
@@ -731,6 +888,150 @@ describe("AppSidebar conversations", () => {
     });
   });
 
+  it("新任务首页有记忆项目时应按 workspaceId 加载当前项目会话", async () => {
+    localStorage.setItem("agent_last_project_id", JSON.stringify("project-1"));
+    mockListAgentRuntimeSessions.mockImplementation(
+      async (options?: {
+        limit?: number;
+        workspaceId?: string;
+        cwd?: string | string[];
+      }) =>
+        options?.workspaceId === "project-1"
+          ? [
+              {
+                id: "session-workspace-memory",
+                name: "记忆项目会话",
+                created_at: 1714000000,
+                updated_at: 1714000600,
+                archived_at: null,
+                workspace_id: "project-1",
+              },
+            ]
+          : [],
+    );
+
+    const onNavigate = vi.fn();
+    const container = mountSidebarContainer({
+      currentPage: "agent",
+      currentPageParams: {
+        agentEntry: "new-task",
+      } as AgentPageParams,
+      onNavigate,
+    });
+    await flushEffects(4);
+
+    const projectSection = container.querySelector(
+      '[data-testid="app-sidebar-project-conversations"]',
+    );
+    expect(projectSection?.textContent).toContain("记忆项目会话");
+    expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
+      limit: 11,
+      workspaceId: "project-1",
+    });
+
+    const openButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(
+        '[data-testid="app-sidebar-conversation-open"]',
+      ),
+    ).find((button) => button.getAttribute("title") === "记忆项目会话");
+    expect(openButton).not.toBeNull();
+
+    await act(async () => {
+      openButton?.click();
+      await Promise.resolve();
+    });
+
+    expect(onNavigate).toHaveBeenCalledWith(
+      "agent",
+      expect.objectContaining({
+        agentEntry: "claw",
+        projectId: "project-1",
+        initialSessionId: "session-workspace-memory",
+      }),
+    );
+  });
+
+  it("当前项目路径尚未解析时应先加载全局对话，避免首屏空列表", async () => {
+    let resolveProject:
+      | ((value: {
+          id: string;
+          name: string;
+          rootPath: string;
+          isFavorite: boolean;
+        }) => void)
+      | null = null;
+    mockGetProject.mockReturnValue(
+      new Promise((resolve) => {
+        resolveProject = resolve;
+      }),
+    );
+    mockListAgentRuntimeSessions.mockImplementation(
+      async (options?: { limit?: number; cwd?: string | string[] }) =>
+        options?.cwd === "/repo/project-1"
+          ? [
+              {
+                id: "session-project",
+                name: "项目路径会话",
+                created_at: 1714000000,
+                updated_at: 1714000600,
+                archived_at: null,
+                workspace_id: "project-1",
+                working_dir: "/repo/project-1",
+              },
+            ]
+          : [
+              {
+                id: "session-fixture",
+                name: "fixture 会话",
+                created_at: 1714000000,
+                updated_at: 1714000600,
+                archived_at: null,
+                workspace_id: "project-1",
+                working_dir: "/repo/project-1",
+              },
+            ],
+    );
+
+    const container = mountSidebarContainer({
+      currentPage: "agent",
+      currentPageParams: {
+        agentEntry: "claw",
+        projectId: "project-1",
+      } as AgentPageParams,
+    });
+    await flushEffects(2);
+
+    expect(container.textContent).toContain("fixture 会话");
+    const projectSection = container.querySelector(
+      '[data-testid="app-sidebar-project-conversations"]',
+    );
+    expect(projectSection?.textContent).toContain("fixture 会话");
+    expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
+      limit: 11,
+    });
+    expect(mockListAgentRuntimeSessions).not.toHaveBeenCalledWith({
+      limit: 11,
+      cwd: "/repo/project-1",
+    });
+
+    await act(async () => {
+      resolveProject?.({
+        id: "project-1",
+        name: "示例项目",
+        rootPath: "/repo/project-1",
+        isFavorite: false,
+      });
+      await Promise.resolve();
+    });
+    await flushEffects(3);
+
+    expect(container.textContent).toContain("项目路径会话");
+    expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
+      limit: 11,
+      cwd: "/repo/project-1",
+    });
+  });
+
   it("新任务首页空侧栏应短 idle 加载最近对话", async () => {
     const scheduledTasks: Array<{
       task: () => void;
@@ -933,7 +1234,9 @@ describe("AppSidebar conversations", () => {
 
     expect(mounted.container.textContent).toContain("最近会话");
     expect(mounted.container.textContent).not.toContain("正在加载对话");
-    expect(mockListAgentRuntimeSessions).toHaveBeenCalledTimes(1);
+    expect(mockListAgentRuntimeSessions).toHaveBeenNthCalledWith(1, {
+      limit: 11,
+    });
     expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
       limit: 11,
       cwd: "/repo/project-1",
@@ -956,10 +1259,19 @@ describe("AppSidebar conversations", () => {
     });
     await flushEffects(2);
 
-    expect(mounted.container.textContent).not.toContain("最近会话");
+    const projectGroups = [
+      ...mounted.container.querySelectorAll<HTMLElement>(
+        '[data-testid="app-sidebar-project-conversation-group"]',
+      ),
+    ];
+    expect(projectGroups.map((group) => group.textContent)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("project-1"),
+        expect.stringContaining("project-2"),
+      ]),
+    );
     expect(mounted.container.textContent).toContain("暂无聊天");
     expect(mounted.container.textContent).not.toContain("正在加载对话");
-    expect(mockListAgentRuntimeSessions).toHaveBeenCalledTimes(2);
     expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
       limit: 11,
       cwd: "/repo/project-2",
@@ -990,7 +1302,15 @@ describe("AppSidebar conversations", () => {
     });
     await flushEffects(2);
 
-    expect(mockListAgentRuntimeSessions).toHaveBeenCalledTimes(1);
+    expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
+      limit: 11,
+    });
+    expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
+      limit: 11,
+      cwd: "/repo/project-1",
+    });
+    const callsBeforeNavigation =
+      mockListAgentRuntimeSessions.mock.calls.length;
 
     mockScheduleMinimumDelayIdleTask.mockImplementation((task: () => void) => {
       scheduledTasks.push(task);
@@ -1014,7 +1334,9 @@ describe("AppSidebar conversations", () => {
     });
     await flushEffects(2);
 
-    expect(mockListAgentRuntimeSessions).toHaveBeenCalledTimes(1);
+    expect(mockListAgentRuntimeSessions).toHaveBeenCalledTimes(
+      callsBeforeNavigation,
+    );
     expect(scheduledTasks).toHaveLength(1);
 
     await act(async () => {
@@ -1022,7 +1344,9 @@ describe("AppSidebar conversations", () => {
       await Promise.resolve();
     });
 
-    expect(mockListAgentRuntimeSessions).toHaveBeenCalledTimes(2);
+    expect(mockListAgentRuntimeSessions.mock.calls.length).toBeGreaterThan(
+      callsBeforeNavigation,
+    );
     expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
       limit: 11,
       cwd: "/repo/project-1",
@@ -1134,9 +1458,14 @@ describe("AppSidebar conversations", () => {
     expect(shelf?.textContent).toContain("项目");
     expect(shelf?.textContent).toContain("对话");
     expect(projectSection?.textContent).toContain("项目内会话");
-    expect(conversationSection?.textContent).not.toContain("独立会话");
-    expect(mockListAgentRuntimeSessions).not.toHaveBeenCalledWith({
+    expect(projectSection?.textContent).not.toContain("独立会话");
+    expect(conversationSection?.textContent).toContain("独立会话");
+    expect(mockListAgentRuntimeSessions).toHaveBeenNthCalledWith(1, {
       limit: 11,
+    });
+    expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
+      limit: 11,
+      workspaceId: "project-1",
     });
     expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
       limit: 11,
@@ -1144,6 +1473,63 @@ describe("AppSidebar conversations", () => {
     });
     expect(projectMenuButton).not.toBeNull();
     expect(newConversationButton).not.toBeNull();
+  });
+
+  it("项目会话只有 workspaceId 时也应展示并可从侧栏打开", async () => {
+    mockListAgentRuntimeSessions.mockImplementation(
+      async (options?: {
+        limit?: number;
+        cwd?: string | string[];
+        workspaceId?: string;
+      }) =>
+        options?.workspaceId === "project-1"
+          ? [
+              {
+                id: "session-workspace-only",
+                name: "仅工作区会话",
+                created_at: 1714000000,
+                updated_at: 1714000600,
+                archived_at: null,
+                workspace_id: "project-1",
+                working_dir: null,
+              },
+            ]
+          : [],
+    );
+
+    const onNavigate = vi.fn();
+    const container = mountSidebarContainer({
+      currentPage: "agent",
+      currentPageParams: {
+        agentEntry: "claw",
+        projectId: "project-1",
+      } as AgentPageParams,
+      onNavigate,
+    });
+    await flushEffects(2);
+
+    const button = container.querySelector<HTMLButtonElement>(
+      'button[title="仅工作区会话"]',
+    );
+    expect(button).not.toBeNull();
+    expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
+      limit: 11,
+      workspaceId: "project-1",
+    });
+
+    await act(async () => {
+      button?.click();
+      await Promise.resolve();
+    });
+
+    expect(onNavigate).toHaveBeenCalledWith(
+      "agent",
+      expect.objectContaining({
+        agentEntry: "claw",
+        projectId: "project-1",
+        initialSessionId: "session-workspace-only",
+      }),
+    );
   });
 
   it("项目上下文里的顶部新建任务应显式创建项目内对话", async () => {
@@ -1330,8 +1716,8 @@ describe("AppSidebar conversations", () => {
       ),
     ).toBeNull();
 
-    expect(container.textContent).not.toContain("独立会话");
-    expect(await openConversationMenu("独立会话")).toBeNull();
+    expect(container.textContent).toContain("独立会话");
+    expect(await openConversationMenu("独立会话")).not.toBeNull();
     expect(
       document.body.querySelector(
         '[data-testid="app-sidebar-conversation-menu-multiselect"]',

@@ -766,7 +766,7 @@ describe("agentProtocol", () => {
           permissionProfileKeys: [
             "browser_control",
             "web_search",
-            "ask_user_question",
+            "request_user_input",
           ],
           userLockPolicy: "honor_explicit_model_lock_with_capability_check",
         },
@@ -790,7 +790,7 @@ describe("agentProtocol", () => {
         permissionProfileKeys: [
           "browser_control",
           "web_search",
-          "ask_user_question",
+          "request_user_input",
         ],
         userLockPolicy: "honor_explicit_model_lock_with_capability_check",
       },

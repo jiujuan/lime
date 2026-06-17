@@ -15,6 +15,7 @@ import { InputbarModelExtra } from "./InputbarModelExtra";
 import { InputbarVisionCapabilityNotice } from "./InputbarVisionCapabilityNotice";
 import { InputbarAccessModeSelect } from "./InputbarAccessModeSelect";
 import { InputbarModeStatusChip } from "./InputbarModeStatusChip";
+import { InputbarObjectiveInlinePanel } from "./InputbarObjectiveInlinePanel";
 import { isGeneralResearchTheme } from "../../../utils/generalAgentPrompt";
 import {
   buildSkillSelectionBindings,
@@ -205,10 +206,22 @@ export const InputbarComposerSection: React.FC<
         onManageKnowledgePacks={onManageKnowledgePacks}
       />
     ) : null;
+  const objectiveInlinePanel =
+    activeTools["objective_mode"] && sessionId ? (
+      <InputbarObjectiveInlinePanel
+        sessionId={sessionId}
+        workspaceId={projectId}
+        runtimeBusy={inputAdapter.state.isSending}
+      />
+    ) : null;
   const resolvedTopExtra =
-    activeKnowledgeStatusControl || topExtra || shouldShowVisionNotice ? (
+    activeKnowledgeStatusControl ||
+    objectiveInlinePanel ||
+    topExtra ||
+    shouldShowVisionNotice ? (
       <>
         {activeKnowledgeStatusControl}
+        {objectiveInlinePanel}
         {topExtra}
         {shouldShowVisionNotice && resolvedProviderType && resolvedModel ? (
           <InputbarVisionCapabilityNotice
@@ -397,6 +410,7 @@ export const InputbarComposerSection: React.FC<
         onStop={inputAdapter.actions.stop}
         isLoading={inputAdapter.state.isSending}
         disabled={inputAdapter.state.disabled}
+        sessionId={sessionId}
         onToolClick={handleToolAction}
         activeTools={activeTools}
         pendingImages={currentPendingImages}

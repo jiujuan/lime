@@ -283,6 +283,23 @@ describe("toolDisplayInfo", () => {
     ).toBe("已发起");
   });
 
+  it("Codex 导入的 exec_command 应展示真实命令而不是只显示工具名", () => {
+    const subject = resolveToolPrimarySubject(
+      "exec_command",
+      { command: "npm test", cwd: "/workspace/imported-codex" },
+      null,
+    );
+
+    expect(subject).toBe("npm test");
+    expect(
+      buildToolHeadline({
+        toolDisplay: getToolDisplayInfo("exec_command", "completed"),
+        toolName: "exec_command",
+        subject,
+      }),
+    ).toContain("npm test");
+  });
+
   it("应为外部信息与结构化数据工具提取主体对象", () => {
     expect(
       resolveToolPrimarySubject(

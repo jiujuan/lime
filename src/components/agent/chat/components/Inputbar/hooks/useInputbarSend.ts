@@ -13,6 +13,7 @@ import {
   buildInputbarModeRequestMetadata,
   buildInputbarToolPreferencesOverride,
 } from "../utils/inputbarModeRequestMetadata";
+import { setAgentRuntimeObjective } from "@/lib/api/agentRuntime";
 
 interface UseInputbarSendParams {
   input: string;
@@ -21,6 +22,7 @@ interface UseInputbarSendParams {
   activeCapability: InputCapabilitySelection | null;
   knowledgePackSelection?: InputbarKnowledgePackSelection | null;
   activeTools?: Record<string, boolean>;
+  projectId?: string | null;
   sessionId?: string | null;
   onSend: InputbarSendHandler;
   clearPendingImages: () => void;
@@ -35,6 +37,7 @@ export function useInputbarSend({
   activeCapability,
   knowledgePackSelection,
   activeTools = {},
+  projectId,
   sessionId,
   onSend,
   clearPendingImages,
@@ -74,6 +77,7 @@ export function useInputbarSend({
         : baseRequestMetadata;
     const inputbarModeState = {
       goalEnabled: Boolean(activeTools["objective_mode"]),
+      objectiveText: input,
       planEnabled: Boolean(activeTools["task_mode"]),
       source: "inputbar",
       subagentEnabled: Boolean(activeTools["subagent_mode"]),
@@ -112,6 +116,18 @@ export function useInputbarSend({
         : undefined;
 
     try {
+      if (
+        inputbarModeState.goalEnabled &&
+        sessionId?.trim() &&
+        input.trim()
+      ) {
+        await setAgentRuntimeObjective({
+          sessionId: sessionId.trim(),
+          workspaceId: projectId ?? undefined,
+          objectiveText: input.trim(),
+          successCriteria: [],
+        });
+      }
       const result = await onSend({
         images: pendingImages.length > 0 ? pendingImages : undefined,
         textOverride,
@@ -142,6 +158,7 @@ export function useInputbarSend({
     clearPathReferences,
     input,
     knowledgePackSelection,
+    projectId,
     sessionId,
     onSend,
     pendingImages,

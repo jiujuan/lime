@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AgentEvent } from "@/lib/api/agentProtocol";
+import type { AgentEvent, AgentThreadItem } from "@/lib/api/agentProtocol";
 import type { Message } from "../types";
 import {
   clearAgentUiProjectionEvents,
@@ -1769,6 +1769,397 @@ describe("agentStreamRuntimeHandler", () => {
         status: "in_progress",
       }),
     ]);
+  });
+
+  it("thinking_delta 应同步生成当前 turn 的临时 reasoning 时间线项", () => {
+    let threadItems: AgentThreadItem[] = [];
+    const setThreadItems = vi.fn(
+      (
+        value:
+          | AgentThreadItem[]
+          | ((prev: AgentThreadItem[]) => AgentThreadItem[]),
+      ) => {
+        threadItems =
+          typeof value === "function" ? value(threadItems) : value;
+      },
+    );
+
+    const requestState = {
+      accumulatedContent: "",
+      queuedTurnId: "turn-1",
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+    };
+    const baseOptions = {
+      requestState,
+      callbacks: {
+        activateStream: () => {},
+        isStreamActivated: () => true,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener: () => {},
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch: () => true,
+        upsertQueuedTurn: () => {},
+        removeQueuedTurnState: () => {},
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+        appendThinkingToParts: (
+          parts: NonNullable<Message["contentParts"]>,
+          textDelta: string,
+        ) => [...parts, { type: "thinking" as const, text: textDelta }],
+      },
+      eventName: "agent-runtime-thinking-timeline-test",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-1",
+      activeSessionId: "session-1",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react" as const,
+      surfaceThinkingDeltas: true,
+      content: "继续",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      setMessages: vi.fn() as never,
+      setPendingActions: vi.fn() as never,
+      setThreadItems: setThreadItems as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: vi.fn() as never,
+    };
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: { type: "thinking_delta", text: "先分析。" } as AgentEvent,
+    });
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: { type: "thinking_delta", text: "再查证。" } as AgentEvent,
+    });
+
+    expect(threadItems).toEqual([
+      expect.objectContaining({
+        id: "streamed-reasoning:turn-1:local-1",
+        thread_id: "session-1",
+        turn_id: "turn-1",
+        sequence: 0,
+        type: "reasoning",
+        status: "in_progress",
+        text: "先分析。再查证。",
+      }),
+    ]);
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "item_updated",
+        item: {
+          id: "reasoning-actual-1",
+          thread_id: "session-1",
+          turn_id: "turn-1",
+          sequence: 3,
+          type: "reasoning",
+          text: "后端正式 reasoning。",
+          status: "in_progress",
+          started_at: "2026-06-17T08:00:00.000Z",
+          updated_at: "2026-06-17T08:00:01.000Z",
+        },
+      } as AgentEvent,
+    });
+
+    expect(threadItems).toEqual([
+      expect.objectContaining({
+        id: "reasoning-actual-1",
+        type: "reasoning",
+        text: "后端正式 reasoning。",
+      }),
+    ]);
+  });
+
+  it("thinking 与工具交错时应按事件 sequence 分段展示", () => {
+    let threadItems: AgentThreadItem[] = [];
+    const setThreadItems = vi.fn(
+      (
+        value:
+          | AgentThreadItem[]
+          | ((prev: AgentThreadItem[]) => AgentThreadItem[]),
+      ) => {
+        threadItems =
+          typeof value === "function" ? value(threadItems) : value;
+      },
+    );
+    const requestState = {
+      accumulatedContent: "",
+      queuedTurnId: "turn-ordered",
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+    };
+    const baseOptions = {
+      requestState,
+      callbacks: {
+        activateStream: () => {},
+        isStreamActivated: () => true,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener: () => {},
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch: () => true,
+        upsertQueuedTurn: () => {},
+        removeQueuedTurnState: () => {},
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+        appendThinkingToParts: (
+          parts: NonNullable<Message["contentParts"]>,
+          textDelta: string,
+        ) => [...parts, { type: "thinking" as const, text: textDelta }],
+      },
+      eventName: "agent-runtime-thinking-ordered-test",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-1",
+      activeSessionId: "session-1",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react" as const,
+      surfaceThinkingDeltas: true,
+      content: "继续",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      setMessages: vi.fn() as never,
+      setPendingActions: vi.fn() as never,
+      setThreadItems: setThreadItems as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: vi.fn() as never,
+    };
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "thinking_delta",
+        text: "先确认目标。",
+        sequence: 1,
+        timestamp: "2026-06-17T08:00:01.000Z",
+      } as AgentEvent,
+    });
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "tool_start",
+        tool_id: "tool-1",
+        tool_name: "web_search",
+        arguments: JSON.stringify({ query: "资料" }),
+        sequence: 2,
+        timestamp: "2026-06-17T08:00:02.000Z",
+      } as AgentEvent,
+    });
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "thinking_delta",
+        text: "再整理结论。",
+        sequence: 3,
+        timestamp: "2026-06-17T08:00:03.000Z",
+      } as AgentEvent,
+    });
+
+    expect(threadItems.map((item) => item.id)).toEqual([
+      "streamed-reasoning:turn-ordered:1",
+      "tool-1",
+      "streamed-reasoning:turn-ordered:3",
+    ]);
+    expect(threadItems).toEqual([
+      expect.objectContaining({
+        id: "streamed-reasoning:turn-ordered:1",
+        sequence: 1,
+        status: "completed",
+        text: "先确认目标。",
+      }),
+      expect.objectContaining({
+        id: "tool-1",
+        sequence: 2,
+        type: "tool_call",
+      }),
+      expect.objectContaining({
+        id: "streamed-reasoning:turn-ordered:3",
+        sequence: 3,
+        status: "in_progress",
+        text: "再整理结论。",
+      }),
+    ]);
+  });
+
+  it("action_resolved 应同步收起 pending action 并回显已提交输入", () => {
+    let messages: Message[] = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-06-17T08:00:00.000Z"),
+        actionRequests: [
+          {
+            requestId: "ask-1",
+            actionType: "ask_user",
+            prompt: "请选择方向",
+            status: "pending",
+          },
+        ],
+        contentParts: [
+          {
+            type: "action_required",
+            actionRequired: {
+              requestId: "ask-1",
+              actionType: "ask_user",
+              prompt: "请选择方向",
+              status: "pending",
+            },
+          },
+        ],
+      },
+    ];
+    let pendingActions = [
+      {
+        requestId: "ask-1",
+        actionType: "ask_user" as const,
+        prompt: "请选择方向",
+        status: "pending" as const,
+      },
+    ];
+    let threadItems: AgentThreadItem[] = [
+      {
+        id: "ask-1",
+        thread_id: "session-1",
+        turn_id: "turn-1",
+        sequence: 4,
+        type: "request_user_input",
+        request_id: "ask-1",
+        action_type: "ask_user",
+        prompt: "请选择方向",
+        status: "in_progress",
+        started_at: "2026-06-17T08:00:04.000Z",
+        updated_at: "2026-06-17T08:00:04.000Z",
+      },
+    ];
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const setPendingActions = vi.fn(
+      (
+        value:
+          | typeof pendingActions
+          | ((prev: typeof pendingActions) => typeof pendingActions),
+      ) => {
+        pendingActions =
+          typeof value === "function" ? value(pendingActions) : value;
+      },
+    );
+    const setThreadItems = vi.fn(
+      (
+        value:
+          | AgentThreadItem[]
+          | ((prev: AgentThreadItem[]) => AgentThreadItem[]),
+      ) => {
+        threadItems =
+          typeof value === "function" ? value(threadItems) : value;
+      },
+    );
+
+    handleTurnStreamEvent({
+      data: {
+        type: "action_resolved",
+        request_id: "ask-1",
+        action_type: "ask_user",
+        data: { answer: "极简" },
+        scope: {
+          session_id: "session-1",
+          thread_id: "thread-1",
+          turn_id: "turn-1",
+        },
+        sequence: 5,
+        timestamp: "2026-06-17T08:00:05.000Z",
+      } as AgentEvent,
+      requestState: {
+        accumulatedContent: "",
+        queuedTurnId: "turn-1",
+        requestLogId: null,
+        requestStartedAt: 0,
+        requestFinished: false,
+      },
+      callbacks: {
+        activateStream: () => {},
+        isStreamActivated: () => true,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener: () => {},
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch: () => true,
+        upsertQueuedTurn: () => {},
+        removeQueuedTurnState: () => {},
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+        appendThinkingToParts: (parts) => parts,
+      },
+      eventName: "agent-runtime-action-resolved-test",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-1",
+      activeSessionId: "session-1",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react",
+      content: "继续",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      setMessages: setMessages as never,
+      setPendingActions: setPendingActions as never,
+      setThreadItems: setThreadItems as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: vi.fn() as never,
+    });
+
+    expect(pendingActions).toEqual([]);
+    expect(messages[0]?.actionRequests?.[0]).toMatchObject({
+      requestId: "ask-1",
+      status: "submitted",
+      submittedResponse: '{"answer":"极简"}',
+      submittedUserData: { answer: "极简" },
+    });
+    expect(
+      messages[0]?.contentParts?.find(
+        (part) => part.type === "action_required",
+      ),
+    ).toMatchObject({
+      type: "action_required",
+      actionRequired: {
+        requestId: "ask-1",
+        status: "submitted",
+        submittedResponse: '{"answer":"极简"}',
+      },
+    });
+    expect(threadItems[0]).toMatchObject({
+      id: "ask-1",
+      type: "request_user_input",
+      status: "completed",
+      response: { answer: "极简" },
+    });
   });
 
   it("收到 turn_completed 时应剥离 assistant 正文中的工具协议残留", () => {

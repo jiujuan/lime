@@ -1,0 +1,60 @@
+{
+  "$defs": {
+    "ConversationImportSourceClient": {
+      "enum": [
+        "claude_code",
+        "codex"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "appId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "confirmed": {
+      "default": false,
+      "type": "boolean"
+    },
+    "sourceClient": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ConversationImportSourceClient"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "sourcePath": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "sourceRoot": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "sourceThreadId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "workspaceId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "title": "ConversationImportThreadCommitParams",
+  "type": "object"
+}

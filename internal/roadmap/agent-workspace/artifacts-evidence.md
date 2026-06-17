@@ -14,6 +14,8 @@
 | Review lane | 机器/人工 review verdict 与 evidence 绑定 |
 | Source refs | 研究/搜索/浏览引用真实来源，不用 prose 伪造 |
 
+对导入会话，Evidence Pack 还必须保留 source provenance 和 fidelity summary：session metadata / business object 中包含 `codexImportFidelity`，message / runtime event 层包含 `sourceProvenance`，至少能追溯 source client、thread id、source path、rollout line seq、event type、payload type 和 call id。Replay / review 只能消费 Lime current read model 与 evidence/export 输出，不允许为了补细节再直接读取 Codex 原始 rollout 作为第二套 trace store。
+
 ## 2. 当前证据
 
 | 证据 | 判断 |
@@ -44,6 +46,7 @@
 | `artifact-diff` | 修改已有 artifact | version / diff 可见 |
 | `evidence-export` | 导出一次工具任务 evidence | evidence refs、文件存在、schema 通过 |
 | `replay-basic` | 用 transcript 重放 | UI summary 和原运行一致 |
+| `imported-codex-evidence` | 导入一条含 tool / command / patch / approval 的 Codex 会话后导出 evidence | evidence pack 中有 `codexImportFidelity`，message / runtime event 下钻有 item `sourceProvenance`，unsupported / budgetDropped 不丢失摘要 |
 
 ## 5. 失败模式
 

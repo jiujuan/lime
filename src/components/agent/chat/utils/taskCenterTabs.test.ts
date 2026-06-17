@@ -148,6 +148,28 @@ describe("taskCenterTabs", () => {
     });
   });
 
+  it("standalone 会话应使用 legacy bucket 保存任务标签", () => {
+    const currentMap = {
+      "__legacy__": ["topic-standalone-a"],
+      "workspace-a": ["topic-project"],
+    };
+
+    expect(resolveTaskCenterTabIdsForWorkspace(currentMap, null)).toEqual([
+      "topic-standalone-a",
+    ]);
+
+    expect(
+      updateTaskCenterTabIdsForWorkspace(
+        currentMap,
+        null,
+        (currentIds) => ["topic-standalone-b", ...currentIds],
+      ),
+    ).toEqual({
+      "__legacy__": ["topic-standalone-b", "topic-standalone-a"],
+      "workspace-a": ["topic-project"],
+    });
+  });
+
   it("导航栏打开单个任务时，应覆盖当前 workspace 的旧多标签状态", () => {
     const currentMap = {
       "workspace-a": ["topic-a", "topic-b", "topic-c"],
@@ -192,6 +214,24 @@ describe("taskCenterTabs", () => {
         normalizedInitialSessionId: "topic-selected",
       }),
     ).toBe(currentMap);
+  });
+
+  it("初始化任务中心时 standalone 路由会话应进入 legacy 标签桶", () => {
+    const currentMap = {
+      "workspace-a": ["topic-a"],
+    };
+
+    expect(
+      initializeTaskCenterOpenTabMap({
+        initialTabMap: currentMap,
+        agentEntry: "claw",
+        workspaceId: null,
+        normalizedInitialSessionId: "topic-imported",
+      }),
+    ).toEqual({
+      "__legacy__": ["topic-imported"],
+      "workspace-a": ["topic-a"],
+    });
   });
 
   it("路由同步应区分外部直达覆盖与任务中心本地切换追平", () => {
@@ -253,6 +293,39 @@ describe("taskCenterTabs", () => {
     ).toEqual({
       "workspace-a": ["topic-selected", "topic-current", "topic-old"],
       "workspace-b": ["topic-other"],
+    });
+  });
+
+  it("standalone 路由同步应覆盖 legacy 标签桶", () => {
+    const currentMap = {
+      "__legacy__": ["topic-old"],
+      "workspace-a": ["topic-project"],
+    };
+
+    expect(
+      resolveTaskCenterRouteTabSyncIntent({
+        agentEntry: "claw",
+        workspaceId: null,
+        normalizedInitialSessionId: "topic-imported",
+        lastSyncedInitialSessionId: null,
+        shouldRespectLocalSession: false,
+      }),
+    ).toMatchObject({
+      shouldSync: true,
+      routeChanged: true,
+      shouldClearActiveDraft: true,
+    });
+
+    expect(
+      applyTaskCenterRouteTabSyncToMap({
+        currentMap,
+        workspaceId: null,
+        normalizedInitialSessionId: "topic-imported",
+        shouldRespectLocalSession: false,
+      }),
+    ).toEqual({
+      "__legacy__": ["topic-imported"],
+      "workspace-a": ["topic-project"],
     });
   });
 
@@ -653,6 +726,22 @@ describe("taskCenterTabs", () => {
     ).toEqual({
       action: "skip",
       reason: "initial-dispatch-pending",
+    });
+  });
+
+  it("路由 initial session 尚未切换完成时，应跳过旧任务标签 fallback 恢复", () => {
+    expect(
+      resolveTaskCenterFallbackRestorePlan(
+        createFallbackRestoreParams({
+          normalizedInitialSessionId: "topic-imported",
+          sessionId: "topic-old-home",
+          openTabIds: ["topic-old"],
+          topics: [createTopic("topic-old")],
+        }),
+      ),
+    ).toEqual({
+      action: "skip",
+      reason: "initial-session-pending",
     });
   });
 

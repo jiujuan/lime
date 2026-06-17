@@ -2008,7 +2008,6 @@ function buildOpenSubmittedCodeSessionScript() {
     }
 
     const clickedKey = "__limeCodeRuntimeSmokeRecentSessionClicked";
-    const dispatchedKey = "__limeCodeRuntimeSmokeTaskOpenDispatched";
     const recentButton =
       document.querySelector('[data-testid="entry-recent-session-resume"]') ||
       Array.from(document.querySelectorAll("button")).find((button) => {
@@ -2040,31 +2039,9 @@ function buildOpenSubmittedCodeSessionScript() {
       };
     }
 
-    if (!window[dispatchedKey]) {
-      window[dispatchedKey] = true;
-      window.dispatchEvent(
-        new CustomEvent("lime:task-center:open-task", {
-          cancelable: true,
-          detail: {
-            sessionId: targetSessionId,
-            workspaceId: targetWorkspaceId,
-            source: "conversation_shelf",
-          },
-        }),
-      );
-      return {
-        ok: false,
-        clicked: false,
-        dispatched: true,
-        reason: "dispatched-task-center-open-task",
-        url: window.location.href,
-      };
-    }
-
     return {
       ok: false,
       clicked: false,
-      dispatched: false,
       reason: recentButton
         ? "recent-session-already-clicked-or-disabled"
         : "recent-session-entry-missing",

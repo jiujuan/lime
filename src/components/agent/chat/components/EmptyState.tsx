@@ -477,6 +477,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         : baseRequestMetadata;
     const inputbarModeState = {
       goalEnabled: modeState?.goalEnabled ?? objectiveEnabled,
+      objectiveText: inputOverride,
       planEnabled: modeState?.planEnabled ?? taskEnabled,
       source: "empty_state",
       subagentEnabled: modeState?.subagentEnabled ?? subagentEnabled,

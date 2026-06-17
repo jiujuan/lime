@@ -36,6 +36,9 @@ export function compareThreadItems(
   left: AgentThreadItem,
   right: AgentThreadItem,
 ): number {
+  if (left.turn_id === right.turn_id && left.sequence !== right.sequence) {
+    return left.sequence - right.sequence;
+  }
   if (left.started_at !== right.started_at) {
     return compareStableString(left.started_at, right.started_at);
   }

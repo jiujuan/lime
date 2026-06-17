@@ -93,6 +93,7 @@ const AGENT_UI_SOURCE_TYPE_LABELS: Record<string, string> = {
   evidence_projection: "证据记录",
   item_completed: "历史正文",
   performance_metric: "性能指标",
+  patch: "代码变更",
   queue_added: "队列更新",
   remote_task_projection: "远端任务",
   runtime_status: "运行状态",

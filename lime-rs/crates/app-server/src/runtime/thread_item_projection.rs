@@ -1,0 +1,802 @@
+use super::raw_string_field;
+use super::string_array_field;
+use super::string_field;
+use super::StoredSession;
+use app_server_protocol::AgentEvent;
+use serde_json::{json, Map, Value};
+use std::collections::HashMap;
+
+pub(super) fn thread_items_from_events(stored: &StoredSession) -> Vec<Value> {
+    let mut items = Vec::new();
+    let mut last_text_item_by_turn = std::collections::HashMap::<String, usize>::new();
+    let mut tool_items = HashMap::<String, Value>::new();
+    let mut command_items = HashMap::<String, Value>::new();
+    let mut patch_items = HashMap::<String, Value>::new();
+    let mut approval_items = HashMap::<String, Value>::new();
+
+    for event in &stored.events {
+        match event.event_type.as_str() {
+            "message.delta" => {
+                if let Some(item) = agent_message_item(stored, event) {
+                    if let Some(turn_id) = event.turn_id.as_deref() {
+                        if let Some(existing_index) = last_text_item_by_turn.get(turn_id).copied() {
+                            merge_agent_message_item(&mut items[existing_index], &item);
+                            continue;
+                        }
+                        last_text_item_by_turn.insert(turn_id.to_string(), items.len());
+                    }
+                    items.push(item);
+                }
+            }
+            "reasoning.delta" | "reasoning.summary" | "reasoning.completed" => {
+                if let Some(item) = reasoning_item(stored, event) {
+                    items.push(item);
+                }
+            }
+            "tool.started" | "tool.result" | "tool.failed" => {
+                upsert_tool_item(stored, event, &mut tool_items);
+            }
+            "command.started" | "command.output" | "command.exited" => {
+                upsert_command_item(stored, event, &mut command_items);
+            }
+            "patch.started" | "patch.applied" | "patch.failed" => {
+                upsert_patch_item(stored, event, &mut patch_items);
+            }
+            "action.required" | "action.resolved" | "action.cancelled" | "action.canceled"
+            | "action.expired" => {
+                upsert_approval_item(stored, event, &mut approval_items);
+            }
+            _ => {}
+        }
+    }
+
+    items.extend(command_items.into_values());
+    items.extend(
+        tool_items
+            .into_values()
+            .filter(|item| !item_tool_name(item).is_some_and(|name| is_command_tool_name(&name))),
+    );
+    items.extend(patch_items.into_values());
+    items.extend(approval_items.into_values());
+    sort_thread_items(&mut items);
+    items
+}
+
+fn sort_thread_items(items: &mut [Value]) {
+    items.sort_by(|left, right| {
+        let left_sequence = left
+            .get("sequence")
+            .and_then(Value::as_u64)
+            .unwrap_or(u64::MAX);
+        let right_sequence = right
+            .get("sequence")
+            .and_then(Value::as_u64)
+            .unwrap_or(u64::MAX);
+        left_sequence
+            .cmp(&right_sequence)
+            .then_with(|| item_timestamp(left).cmp(&item_timestamp(right)))
+            .then_with(|| item_id(left).cmp(&item_id(right)))
+    });
+}
+
+fn item_timestamp(item: &Value) -> String {
+    string_field(
+        item,
+        &["started_at", "updated_at", "completed_at", "created_at"],
+    )
+    .unwrap_or_default()
+}
+
+fn item_id(item: &Value) -> String {
+    string_field(item, &["id"]).unwrap_or_default()
+}
+
+fn item_tool_name(item: &Value) -> Option<String> {
+    string_field(item, &["tool_name", "name"])
+}
+
+fn upsert_tool_item(
+    stored: &StoredSession,
+    event: &AgentEvent,
+    items: &mut HashMap<String, Value>,
+) {
+    let Some(tool_call_id) = tool_call_id(&event.payload).or_else(|| Some(event.event_id.clone()))
+    else {
+        return;
+    };
+    let tool_name = string_field(&event.payload, &["toolName", "tool_name", "name"]);
+    let item_type = if tool_name.as_deref().is_some_and(is_web_search_tool_name) {
+        "web_search"
+    } else {
+        "tool_call"
+    };
+    let status = match event.event_type.as_str() {
+        "tool.started" => "in_progress",
+        "tool.failed" => "failed",
+        _ => "completed",
+    };
+    let entry = items
+        .entry(tool_call_id.clone())
+        .or_insert_with(|| lifecycle_base_item(stored, event, &tool_call_id, item_type, status));
+    let Some(object) = entry.as_object_mut() else {
+        return;
+    };
+
+    update_lifecycle_item(object, event, status);
+    if let Some(tool_name) = tool_name {
+        object.insert("tool_name".to_string(), json!(tool_name));
+    }
+    merge_optional_field(object, "arguments", event.payload.get("arguments").cloned());
+    merge_optional_field(
+        object,
+        "output",
+        tool_output(&event.payload).map(Value::String),
+    );
+    merge_optional_field(
+        object,
+        "success",
+        event
+            .payload
+            .get("success")
+            .and_then(Value::as_bool)
+            .map(Value::Bool),
+    );
+    merge_optional_field(
+        object,
+        "error",
+        raw_string_field(&event.payload, &["error", "message", "reason"]).map(Value::String),
+    );
+    if item_type == "web_search" {
+        merge_optional_field(
+            object,
+            "query",
+            web_search_query(&event.payload).map(Value::String),
+        );
+        merge_optional_field(
+            object,
+            "action",
+            web_search_action(&event.payload).map(Value::String),
+        );
+    }
+    merge_lifecycle_metadata(object, event);
+}
+
+fn upsert_command_item(
+    stored: &StoredSession,
+    event: &AgentEvent,
+    items: &mut HashMap<String, Value>,
+) {
+    let Some(command_id) = command_id(&event.payload).or_else(|| Some(event.event_id.clone()))
+    else {
+        return;
+    };
+    let status = match event.event_type.as_str() {
+        "command.started" => "in_progress",
+        "command.exited" => command_exit_item_status(&event.payload),
+        _ => "in_progress",
+    };
+    let entry = items.entry(command_id.clone()).or_insert_with(|| {
+        lifecycle_base_item(stored, event, &command_id, "command_execution", status)
+    });
+    let Some(object) = entry.as_object_mut() else {
+        return;
+    };
+
+    update_lifecycle_item(object, event, status);
+    merge_optional_field(
+        object,
+        "command",
+        command_string(&event.payload)
+            .or_else(|| {
+                object
+                    .get("command")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            })
+            .or_else(|| Some(command_id.clone()))
+            .map(Value::String),
+    );
+    merge_optional_field(
+        object,
+        "cwd",
+        string_field(&event.payload, &["cwd", "workingDirectory", "working_dir"])
+            .map(Value::String),
+    );
+    merge_optional_field(
+        object,
+        "aggregated_output",
+        raw_string_field(
+            &event.payload,
+            &["outputPreview", "output_preview", "output", "summary"],
+        )
+        .map(Value::String),
+    );
+    merge_optional_field(
+        object,
+        "exit_code",
+        event
+            .payload
+            .get("exitCode")
+            .or_else(|| event.payload.get("exit_code"))
+            .and_then(Value::as_i64)
+            .map(|value| json!(value)),
+    );
+    merge_optional_field(
+        object,
+        "error",
+        raw_string_field(&event.payload, &["error", "message", "reason"]).map(Value::String),
+    );
+    merge_lifecycle_metadata(object, event);
+}
+
+fn upsert_patch_item(
+    stored: &StoredSession,
+    event: &AgentEvent,
+    items: &mut HashMap<String, Value>,
+) {
+    let Some(patch_id) = patch_id(&event.payload).or_else(|| Some(event.event_id.clone())) else {
+        return;
+    };
+    let status = match event.event_type.as_str() {
+        "patch.failed" => "failed",
+        "patch.started" => "in_progress",
+        _ => "completed",
+    };
+    let entry = items
+        .entry(patch_id.clone())
+        .or_insert_with(|| lifecycle_base_item(stored, event, &patch_id, "patch", status));
+    let Some(object) = entry.as_object_mut() else {
+        return;
+    };
+
+    update_lifecycle_item(object, event, status);
+    let paths = string_array_field(&event.payload, &["paths", "changedFiles", "changed_files"]);
+    if !paths.is_empty() {
+        object.insert("summary".to_string(), json!(paths));
+        object.insert("paths".to_string(), json!(paths));
+        object.insert(
+            "text".to_string(),
+            json!(format!("Patch changed {}", paths.join(", "))),
+        );
+    } else if !object.contains_key("text") {
+        object.insert(
+            "text".to_string(),
+            json!(
+                raw_string_field(&event.payload, &["stdout", "stderr", "message"])
+                    .unwrap_or_else(|| "Patch applied".to_string())
+            ),
+        );
+    }
+    merge_optional_field(
+        object,
+        "success",
+        event
+            .payload
+            .get("success")
+            .and_then(Value::as_bool)
+            .map(Value::Bool),
+    );
+    merge_optional_field(
+        object,
+        "stdout",
+        raw_string_field(&event.payload, &["stdout"]).map(Value::String),
+    );
+    merge_optional_field(
+        object,
+        "stderr",
+        raw_string_field(&event.payload, &["stderr"]).map(Value::String),
+    );
+    merge_lifecycle_metadata(object, event);
+}
+
+fn upsert_approval_item(
+    stored: &StoredSession,
+    event: &AgentEvent,
+    items: &mut HashMap<String, Value>,
+) {
+    let Some(request_id) = action_id(&event.payload).or_else(|| Some(event.event_id.clone()))
+    else {
+        return;
+    };
+    let status = match event.event_type.as_str() {
+        "action.required" => "in_progress",
+        "action.cancelled" | "action.canceled" | "action.expired" => "failed",
+        _ => "completed",
+    };
+    let entry = items.entry(request_id.clone()).or_insert_with(|| {
+        lifecycle_base_item(stored, event, &request_id, "approval_request", status)
+    });
+    let Some(object) = entry.as_object_mut() else {
+        return;
+    };
+
+    update_lifecycle_item(object, event, status);
+    object.insert("request_id".to_string(), json!(request_id));
+    merge_optional_field(
+        object,
+        "action_type",
+        string_field(&event.payload, &["actionType", "action_type"])
+            .or_else(|| Some("tool_confirmation".to_string()))
+            .map(Value::String),
+    );
+    merge_optional_field(
+        object,
+        "prompt",
+        raw_string_field(&event.payload, &["prompt", "message", "reason"]).map(Value::String),
+    );
+    merge_optional_field(
+        object,
+        "tool_name",
+        string_field(&event.payload, &["toolName", "tool_name", "name"]).map(Value::String),
+    );
+    merge_optional_field(
+        object,
+        "arguments",
+        event
+            .payload
+            .get("arguments")
+            .cloned()
+            .or_else(|| event.payload.get("data").cloned()),
+    );
+    if event.event_type != "action.required" {
+        object.insert(
+            "response".to_string(),
+            compact_json(json!({
+                "decision": string_field(&event.payload, &["decision", "status"])
+                    .unwrap_or_else(|| if status == "completed" { "approved" } else { "failed" }.to_string()),
+                "source": string_field(&event.payload, &["sourceClient", "source_client"])
+                    .unwrap_or_else(|| "runtime".to_string()),
+                "imported_read_only": event.payload.get("importedReadOnly")
+                    .and_then(Value::as_bool),
+            })),
+        );
+    }
+    merge_lifecycle_metadata(object, event);
+}
+
+fn lifecycle_base_item(
+    stored: &StoredSession,
+    event: &AgentEvent,
+    id: &str,
+    item_type: &str,
+    status: &str,
+) -> Value {
+    let mut object = serde_json::Map::new();
+    object.insert("id".to_string(), Value::String(id.to_string()));
+    object.insert(
+        "thread_id".to_string(),
+        Value::String(
+            event
+                .thread_id
+                .clone()
+                .unwrap_or_else(|| stored.session.thread_id.clone()),
+        ),
+    );
+    object.insert(
+        "turn_id".to_string(),
+        Value::String(event.turn_id.clone().unwrap_or_default()),
+    );
+    object.insert("sequence".to_string(), json!(event.sequence));
+    object.insert("type".to_string(), Value::String(item_type.to_string()));
+    object.insert("status".to_string(), Value::String(status.to_string()));
+    object.insert(
+        "started_at".to_string(),
+        Value::String(event.timestamp.clone()),
+    );
+    object.insert(
+        "updated_at".to_string(),
+        Value::String(event.timestamp.clone()),
+    );
+    if status != "in_progress" {
+        object.insert(
+            "completed_at".to_string(),
+            Value::String(event.timestamp.clone()),
+        );
+    }
+    Value::Object(object)
+}
+
+fn update_lifecycle_item(object: &mut Map<String, Value>, event: &AgentEvent, status: &str) {
+    object.insert("status".to_string(), json!(status));
+    object.insert("updated_at".to_string(), json!(event.timestamp));
+    object
+        .entry("turn_id".to_string())
+        .or_insert_with(|| json!(event.turn_id));
+    if status != "in_progress" {
+        object.insert("completed_at".to_string(), json!(event.timestamp));
+    }
+    if let Some(existing_sequence) = object.get("sequence").and_then(Value::as_u64) {
+        if event.sequence < existing_sequence {
+            object.insert("sequence".to_string(), json!(event.sequence));
+        }
+    }
+}
+
+fn merge_optional_field(object: &mut Map<String, Value>, key: &str, value: Option<Value>) {
+    let Some(value) = value else {
+        return;
+    };
+    if value.is_null() {
+        return;
+    }
+    if matches!(&value, Value::Array(items) if items.is_empty()) {
+        return;
+    }
+    if value.as_str().is_some_and(str::is_empty) {
+        return;
+    }
+    object.insert(key.to_string(), value);
+}
+
+fn merge_lifecycle_metadata(object: &mut Map<String, Value>, event: &AgentEvent) {
+    let metadata = object
+        .entry("metadata".to_string())
+        .or_insert_with(|| Value::Object(Map::new()));
+    let Some(metadata) = metadata.as_object_mut() else {
+        return;
+    };
+    merge_metadata_array(
+        metadata,
+        "source_event_ids",
+        Value::String(event.event_id.clone()),
+    );
+    merge_metadata_array(
+        metadata,
+        "source_event_types",
+        Value::String(event.event_type.clone()),
+    );
+    metadata.insert("source_event_id".to_string(), json!(event.event_id));
+    metadata.insert("source_event_type".to_string(), json!(event.event_type));
+    if let Some(value) = event.payload.get("sourceClient").cloned() {
+        metadata.insert("source_client".to_string(), value);
+    }
+    if let Some(value) = event.payload.get("sourceProvenance").cloned() {
+        metadata.insert("source_provenance".to_string(), value);
+    }
+    if let Some(value) = event.payload.get("imported").cloned() {
+        metadata.insert("imported".to_string(), value);
+    }
+    if let Some(value) = event.payload.get("importedSynthetic").cloned() {
+        metadata.insert("imported_synthetic".to_string(), value);
+    }
+}
+
+fn merge_metadata_array(metadata: &mut Map<String, Value>, key: &str, value: Value) {
+    let entry = metadata
+        .entry(key.to_string())
+        .or_insert_with(|| Value::Array(Vec::new()));
+    let Some(values) = entry.as_array_mut() else {
+        return;
+    };
+    if !values.iter().any(|existing| existing == &value) {
+        values.push(value);
+    }
+}
+
+fn tool_call_id(payload: &Value) -> Option<String> {
+    string_field(
+        payload,
+        &["toolCallId", "tool_call_id", "toolId", "tool_id", "id"],
+    )
+}
+
+fn command_id(payload: &Value) -> Option<String> {
+    string_field(
+        payload,
+        &[
+            "commandId",
+            "command_id",
+            "toolCallId",
+            "tool_call_id",
+            "id",
+        ],
+    )
+}
+
+fn patch_id(payload: &Value) -> Option<String> {
+    string_field(
+        payload,
+        &["patchId", "patch_id", "toolCallId", "tool_call_id", "id"],
+    )
+}
+
+fn action_id(payload: &Value) -> Option<String> {
+    string_field(
+        payload,
+        &["requestId", "request_id", "actionId", "action_id", "id"],
+    )
+}
+
+fn command_string(payload: &Value) -> Option<String> {
+    raw_string_field(
+        payload,
+        &[
+            "canonicalCommand",
+            "canonical_command",
+            "command",
+            "commandSummary",
+            "command_summary",
+        ],
+    )
+    .or_else(|| {
+        let argv = string_array_field(payload, &["commandArgv", "command_argv"]);
+        (!argv.is_empty()).then(|| argv.join(" "))
+    })
+}
+
+fn agent_message_item(stored: &StoredSession, event: &AgentEvent) -> Option<Value> {
+    let text = raw_string_field(
+        &event.payload,
+        &[
+            "text",
+            "delta",
+            "content",
+            "message",
+            "outputText",
+            "output_text",
+        ],
+    )?;
+    let text = text.trim();
+    if text.is_empty() {
+        return None;
+    }
+    Some(base_item(
+        stored,
+        event,
+        "agent_message",
+        "completed",
+        json!({
+            "text": text,
+            "phase": "final",
+            "metadata": event_metadata(event),
+        }),
+    ))
+}
+
+fn merge_agent_message_item(existing: &mut Value, next: &Value) {
+    let Some(existing_object) = existing.as_object_mut() else {
+        return;
+    };
+    let Some(next_text) = next.get("text").and_then(Value::as_str) else {
+        return;
+    };
+    if let Some(existing_text) = existing_object.get_mut("text") {
+        let merged = format!(
+            "{}{}",
+            existing_text.as_str().unwrap_or_default(),
+            next_text
+        );
+        *existing_text = Value::String(merged);
+    }
+    if let Some(updated_at) = next.get("updated_at").cloned() {
+        existing_object.insert("updated_at".to_string(), updated_at);
+    }
+    if let Some(completed_at) = next.get("completed_at").cloned() {
+        existing_object.insert("completed_at".to_string(), completed_at);
+    }
+}
+
+fn reasoning_item(stored: &StoredSession, event: &AgentEvent) -> Option<Value> {
+    let text = raw_string_field(
+        &event.payload,
+        &[
+            "text",
+            "delta",
+            "summary",
+            "content",
+            "message",
+            "outputText",
+            "output_text",
+        ],
+    )?;
+    let text = text.trim();
+    if text.is_empty() {
+        return None;
+    }
+    let status = if event.event_type == "reasoning.completed" {
+        "completed"
+    } else {
+        "in_progress"
+    };
+    Some(base_item(
+        stored,
+        event,
+        "reasoning",
+        status,
+        json!({
+            "text": text,
+            "summary": summary_list(&event.payload),
+            "metadata": event_metadata(event),
+        }),
+    ))
+}
+
+fn base_item(
+    stored: &StoredSession,
+    event: &AgentEvent,
+    item_type: &str,
+    status: &str,
+    fields: Value,
+) -> Value {
+    let mut object = serde_json::Map::new();
+    object.insert(
+        "id".to_string(),
+        Value::String(format!("{}:{}", event.event_type, event.event_id)),
+    );
+    object.insert(
+        "thread_id".to_string(),
+        Value::String(
+            event
+                .thread_id
+                .clone()
+                .unwrap_or_else(|| stored.session.thread_id.clone()),
+        ),
+    );
+    object.insert(
+        "turn_id".to_string(),
+        Value::String(event.turn_id.clone().unwrap_or_default()),
+    );
+    object.insert("sequence".to_string(), json!(event.sequence));
+    object.insert("type".to_string(), Value::String(item_type.to_string()));
+    object.insert("status".to_string(), Value::String(status.to_string()));
+    object.insert(
+        "started_at".to_string(),
+        Value::String(event.timestamp.clone()),
+    );
+    object.insert(
+        "updated_at".to_string(),
+        Value::String(event.timestamp.clone()),
+    );
+    if status != "in_progress" {
+        object.insert(
+            "completed_at".to_string(),
+            Value::String(event.timestamp.clone()),
+        );
+    }
+    merge_object_fields(&mut object, fields);
+    Value::Object(object)
+}
+
+fn merge_object_fields(target: &mut serde_json::Map<String, Value>, fields: Value) {
+    let Value::Object(fields) = fields else {
+        return;
+    };
+    for (key, value) in fields {
+        if value.is_null() {
+            continue;
+        }
+        if matches!(&value, Value::Array(items) if items.is_empty()) {
+            continue;
+        }
+        target.insert(key, value);
+    }
+}
+
+fn compact_json(value: Value) -> Value {
+    match value {
+        Value::Object(map) => Value::Object(
+            map.into_iter()
+                .filter_map(|(key, value)| {
+                    if value.is_null() {
+                        return None;
+                    }
+                    if matches!(&value, Value::Array(items) if items.is_empty()) {
+                        return None;
+                    }
+                    Some((key, compact_json(value)))
+                })
+                .collect(),
+        ),
+        Value::Array(items) => Value::Array(items.into_iter().map(compact_json).collect()),
+        value => value,
+    }
+}
+
+fn event_metadata(event: &AgentEvent) -> Value {
+    let mut metadata = serde_json::Map::new();
+    metadata.insert("source_event_id".to_string(), json!(event.event_id));
+    metadata.insert("source_event_type".to_string(), json!(event.event_type));
+    if let Some(value) = event.payload.get("sourceClient").cloned() {
+        metadata.insert("source_client".to_string(), value);
+    }
+    if let Some(value) = event.payload.get("sourceProvenance").cloned() {
+        metadata.insert("source_provenance".to_string(), value);
+    }
+    if let Some(value) = event.payload.get("imported").cloned() {
+        metadata.insert("imported".to_string(), value);
+    }
+    if let Some(value) = event.payload.get("importedSynthetic").cloned() {
+        metadata.insert("imported_synthetic".to_string(), value);
+    }
+    Value::Object(metadata)
+}
+
+fn command_exit_item_status(payload: &Value) -> &'static str {
+    let exit_code = payload
+        .get("exitCode")
+        .or_else(|| payload.get("exit_code"))
+        .and_then(Value::as_i64);
+    match exit_code {
+        Some(0) | None => "completed",
+        Some(_) => "failed",
+    }
+}
+
+fn is_command_tool_name(value: &str) -> bool {
+    matches!(
+        value.trim(),
+        "exec_command" | "command_execution" | "Bash" | "bash"
+    )
+}
+
+fn is_web_search_tool_name(value: &str) -> bool {
+    matches!(
+        value.trim(),
+        "web_search" | "webSearch" | "search_query" | "WebSearch"
+    )
+}
+
+fn tool_output(payload: &Value) -> Option<String> {
+    raw_string_field(
+        payload,
+        &[
+            "outputPreview",
+            "output_preview",
+            "output",
+            "text",
+            "content",
+        ],
+    )
+    .or_else(|| {
+        payload
+            .get("result")
+            .filter(|value| !value.is_null())
+            .map(Value::to_string)
+    })
+}
+
+fn web_search_query(payload: &Value) -> Option<String> {
+    payload
+        .get("arguments")
+        .and_then(|value| {
+            raw_string_field(value, &["query", "q"]).or_else(|| {
+                value
+                    .get("search_query")
+                    .and_then(Value::as_array)
+                    .and_then(|queries| queries.first())
+                    .and_then(|query| raw_string_field(query, &["q", "query"]))
+            })
+        })
+        .or_else(|| raw_string_field(payload, &["query", "q"]))
+}
+
+fn web_search_action(payload: &Value) -> Option<String> {
+    let value = payload
+        .get("result")
+        .or_else(|| payload.get("action"))
+        .filter(|value| !value.is_null());
+    if let Some(value) = value {
+        return value
+            .as_str()
+            .map(str::to_string)
+            .or_else(|| Some(value.to_string()));
+    }
+    raw_string_field(payload, &["action", "sourceEventType", "source_event_type"])
+}
+
+fn summary_list(payload: &Value) -> Vec<String> {
+    let mut values = Vec::new();
+    if let Some(summary) = raw_string_field(payload, &["summary"]) {
+        values.push(summary);
+    }
+    for value in payload
+        .get("summary")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+    {
+        values.push(value.to_string());
+    }
+    values
+}
