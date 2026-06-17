@@ -5,7 +5,7 @@
   "workspaces": [
     "packages/*"
   ],
-  "version": "1.70.0",
+  "version": "1.71.0",
   "description": "AI content workspace for Chinese creators: desktop writing, research, prompt management, knowledge base, and multi-model workflows.",
   "keywords": [
     "ai",
@@ -187,6 +187,7 @@
     "smoke:app-server-stdio": "npm --prefix \"packages/app-server-client\" run build && node scripts/app-server/stdio-smoke.mjs",
     "smoke:app-server-sidecar-lifecycle": "npm --prefix \"packages/app-server-client\" run build && node scripts/app-server/sidecar-lifecycle-smoke.mjs",
     "smoke:app-server-external-backend": "npm --prefix \"packages/app-server-client\" run build && node scripts/app-server/external-backend-smoke.mjs",
+    "smoke:codex-import-content-studio": "npm --prefix \"packages/app-server-client\" run build && node scripts/app-server/codex-import-content-studio-smoke.mjs",
     "smoke:app-server-packaged-external-backend-failure": "npm --prefix \"packages/app-server-client\" run build && node scripts/app-server/packaged-external-backend-failure-smoke.mjs",
     "smoke:mcp-current": "node scripts/mcp/current-smoke.mjs",
     "smoke:site-adapters": "node scripts/site-adapter-catalog-smoke.mjs",
@@ -194,6 +195,8 @@
     "smoke:agent-runtime-tool-surface-page": "node scripts/agent-runtime/tool-surface-page-smoke.mjs",
     "smoke:agent-runtime-current-fixture": "node scripts/agent-runtime/current-fixture-regression-smoke.mjs",
     "smoke:agent-session-history-electron-fixture": "node scripts/electron/session-history-fixture-smoke.mjs",
+    "smoke:codex-import-continuation-electron-fixture": "node scripts/electron/codex-import-continuation-fixture-smoke.mjs",
+    "smoke:codex-import-click-through-electron-fixture": "node scripts/electron/codex-import-click-through-fixture-smoke.mjs",
     "smoke:settings-provider-migration-electron-fixture": "node scripts/electron/settings-provider-migration-fixture-smoke.mjs",
     "smoke:code-artifact-workbench-electron-fixture": "node scripts/electron/code-artifact-workbench-fixture-smoke.mjs",
     "smoke:claw-chat-current-fixture": "node scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",

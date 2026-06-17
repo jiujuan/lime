@@ -61,6 +61,10 @@ describe("code artifact workbench Electron fixture smoke guard", () => {
     expect(content).toContain("hasToolTimelineProjection");
     expect(content).toContain("toolTimelineProjectionPersisted");
     expect(content).toContain("codingProjectionPersisted");
+    expect(content).toContain("expandTimelineProcessGroups");
+    expect(content).toContain('logStage("expand-timeline-process-groups")');
+    expect(content).toContain("timelineProcessEvidence");
+    expect(content).toContain('[data-testid="streaming-process-group"]');
     expect(content).toContain("hasGuiToolTimelineEvidence");
     expect(content).toContain("collectCodingWorkbenchGuiEvidence");
     expect(content).toContain("codingWorkbenchGuiEvidence");
@@ -74,6 +78,10 @@ describe("code artifact workbench Electron fixture smoke guard", () => {
     expect(content).toContain("coding_workbench_recovery");
     expect(content).toContain("codingRecoveryGuiSubmitted");
     expect(content).toContain("codingRecoveryReachedBackend");
+    expect(content).toContain("assertNoRendererErrors");
+    expect(content).toContain("Electron renderer console error");
+    expect(content).toContain("Electron renderer page error");
+    expect(content).toContain("assertNoRendererErrors(consoleErrors, pageErrors)");
     expect(content).toContain("codingChangesEvidencePresent");
     expect(content).toContain("codingOutputsEvidencePresent");
     expect(content).toContain("codingLogsEvidencePresent");
@@ -108,9 +116,8 @@ describe("code artifact workbench Electron fixture smoke guard", () => {
     expect(content).toContain('type: "turn.final_done"');
     expect(content).toContain("Hello Lime Workbench");
     expect(content).toContain("CODE_ARTIFACT_WORKBENCH_DONE");
-    expect(content).toContain("openFixtureSessionViaTaskCenterEvent");
-    expect(content).toContain('"lime:task-center:open-task"');
-    expect(content).toContain('source: "conversation_shelf"');
+    expect(content).toContain("waitForFixtureSessionOpenedFromSidebar");
+    expect(content).not.toContain('"lime:task-center:open-task"');
     expect(content).toContain("openWorkbench");
     expect(content).toContain("hasUserPrompt");
     expect(content).toContain("hasTaskCenterShell");
@@ -124,6 +131,23 @@ describe("code artifact workbench Electron fixture smoke guard", () => {
     expect(content).toContain("canvas-workbench-shell");
     expect(content).toContain("canvas-workbench-layout");
     expect(content).toContain("canvas-workbench-panel-");
+    expect(content).toContain("visibleWorkbenchRoot");
+    expect(content).toContain(
+      'root.querySelectorAll(`[data-canvas-tab-key="${key}"]`)',
+    );
+    expect(content).toContain(
+      "root.querySelectorAll('[data-canvas-tab-key=\"outputs\"]')",
+    );
+    expect(content).toContain(
+      "root.querySelectorAll('[data-testid=\"canvas-workbench-panel-outputs\"]')",
+    );
+    expect(content).not.toContain(
+      'document.querySelectorAll(`[data-canvas-tab-key="${key}"]`)',
+    );
+    expect(content).not.toContain(
+      'document.querySelectorAll(\'[data-canvas-tab-key="outputs"]\')',
+    );
+    expect(content).not.toContain("const sourceText =");
     expect(content).toContain('window.dispatchEvent(new Event("focus"))');
   });
 

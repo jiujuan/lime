@@ -652,6 +652,22 @@ describe("http-client", () => {
         },
       }),
     ).toBe(30000);
+    expect(
+      resolveBridgeRequestTimeoutMs("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
+              id: "commit-codex-import",
+              method: "conversationImport/thread/commit",
+              params: {
+                sourceClient: "codex",
+                sourceThreadId: "codex-thread-1",
+              },
+            }),
+          ],
+        },
+      }),
+    ).toBe(30000);
     expect(resolveBridgeRequestTimeoutMs("agent_app_start_ui_runtime")).toBe(
       150000,
     );
@@ -745,6 +761,19 @@ describe("http-client", () => {
               id: "session-files",
               method: "sessionFile/list",
               params: { sessionId: "session-1" },
+            }),
+          ],
+        },
+      }),
+    ).toBe(30000);
+    expect(
+      resolveBridgeRequestTimeoutMs("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
+              id: "project-git-status",
+              method: "projectGit/status",
+              params: { rootPath: "/workspace" },
             }),
           ],
         },

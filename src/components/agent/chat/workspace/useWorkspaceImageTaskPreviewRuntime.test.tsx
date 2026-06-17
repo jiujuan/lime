@@ -355,7 +355,7 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
                 type: "code",
                 title: "greeting.ts",
                 content:
-                  "export function greeting() returns Hello Lime Workbench.",
+                  "export function greeting() { return 'Hello Lime Workbench'; }",
                 status: "complete",
                 createdAt: 1780817237000,
                 updatedAt: 1780817237000,

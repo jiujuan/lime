@@ -436,6 +436,19 @@ describe("commandPolicy", () => {
         request: {
           lines: [
             JSON.stringify({
+              id: "project-git-status",
+              method: "projectGit/status",
+              params: { rootPath: "/workspace" },
+            }),
+          ],
+        },
+      }),
+    ).toBe("app-server-read");
+    expect(
+      resolveDevBridgeCommandTimeoutProfile("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
               id: "session-update",
               method: "agentSession/update",
               params: { sessionId: "session-1" },

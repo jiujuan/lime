@@ -1,39 +1,38 @@
-## Lime v1.70.0
+## Lime v1.71.0
 
 <sub>The Simplified Chinese release notes are the primary version. This English page is a companion for international readers.</sub>
 
 ### New Features
-- Agent session listing now supports working-directory filters across the App Server protocol, schema, Rust runtime, Projection DB, and frontend sidebar so recent conversations can be scoped to the current project root.
-- Projection Store now owns session updates, bulk archive, inferred titles, and metadata persistence, further consolidating history lists, archive state, and title rendering on the current App Server read model.
-- Coding Workbench gained richer Task Center run controls, task rails, file-change cards, and projection adapters so general and coding workbenches share a more stable task context.
-- App Server / Agent Runtime event projection now maps tool args, tool input/output deltas, tool progress, file reads, and command lifecycle events for more detailed frontend tool timelines and command output rendering.
+- Added the Codex conversation import path: the sidebar can scan Codex sessions, preview rollout content, require user confirmation, import into a Lime session, and preserve source provenance.
+- Added `conversationImport/thread/preview` and `conversationImport/thread/commit` App Server JSON-RPC methods with dry-run impact counts for messages, turns, attachments, and timeline items.
+- Codex import now supports current `state_*.sqlite` metadata, archived sessions, stale rollout path repair, `.jsonl.zst` rollout files, and Codex image attachment mapping.
+- Imported sessions enter the current `agentSession/read` / `evidence/export` chain and can continue with a new turn in the same Lime session.
 
 ### Fixes
-- Fixed sidebar conversation navigation so sessions resolve their project from `working_dir`, reducing cross-project recent-conversation jumps.
-- Fixed empty session titles by deriving a display title from the first user message for historical and projected sessions.
-- Fixed App Server host process startup and readiness boundaries while removing retired current timeline / legacy message backfill product fallbacks.
-- Fixed agent session list / update / archive consistency on the projection-first path; missing projections now surface as missing sessions instead of falling back to retired product paths.
+- Fixed duplicate Codex import commits creating duplicate Lime sessions; the same source thread now reuses the existing imported session within the same RuntimeCore process.
+- Fixed imported sessions showing only text while losing tool, command, patch, approval, and web-search detail in the conversation page.
+- Fixed imported-session continuation losing source cwd, model, reasoning, approval, sandbox, memory, and related runtime context.
+- Fixed project-scoped sidebar conversation ownership and import entry behavior when the active workspace is restored from remembered project state.
 
 ### Improvements and Refactors
-- Product DB cleanup advanced by removing retired runtime table creation for `agent_messages`, old thread item/outcome/incident tables, and A2UI forms, with a drop path that prevents these tables from remaining product truth.
-- App Server runtime removed the `current_timeline` and legacy message backfill bridges; session list, hydrate, and archive now converge on event log, Projection DB, and RuntimeCore current ownership.
-- App Sidebar removed in-sidebar language / appearance popover leftovers and tightened the ownership of account, settings, update, and conversation-list areas.
-- Agent Chat / Workbench components continued moving state machines, projection helpers, and runtime logic into focused ViewModels and hooks.
-- Coding and DB roadmaps were updated to the 2026-06-15 state with S3 legacy migration state machine details, S4/S5 execution slices, and current-owner boundaries.
+- Split the conversation import runtime into focused Codex parser, path repair, media, dry-run, commit-event, and import-status modules to keep the central runtime boundary small.
+- Added RuntimeCore imported-session timeline projection so imported runtime events become GUI-readable `detail.items`.
+- Moved the sidebar import flow into a dedicated dialog and empty-state component while keeping the sidebar itself as thin wiring.
+- Kept conversation import protocol, schemas, npm client, frontend API shape guards, and governance scripts aligned on the current App Server source of truth.
 
 ### Tests and Quality
-- Expanded App Server protocol schema, app-server-client, session-list cwd filter, projection update/archive, session-title, and thread-client event projection coverage.
-- Expanded Electron session history fixture, code artifact workbench fixture, claw chat current fixture, and App Server contract guards for the new projection-first session path.
-- Expanded App Sidebar, Agent Chat, Task Center, Canvas Workbench, MessageList, Inputbar, and five-locale i18n regressions.
-- Expanded Rust coverage for agent tool orchestration, session store, runtime backend coding events, Projection DB, legacy boundaries, and Product DB schema cleanup.
-- Updated the root app, Rust workspace, CLI npm package, App Server client package, Agent Runtime client dependency, pnpm lock, and Cargo lock to `1.70.0`.
+- Added a real Codex content-studio dogfood smoke covering unconfirmed commit rejection, preview / confirmed commit, duplicate import reuse, dry-run summary, attachments, and provenance.
+- Added an Electron continuation fixture that reads the imported session through the real preload bridge, verifies imported timeline details, and continues in the same session.
+- Added an Electron click-through fixture that starts from the sidebar import dialog, confirms import, opens the session page, verifies imported details, and sends a follow-up through the real input box.
+- Expanded Rust conversation import, evidence export, runtime item projection, App Server protocol schema, app-server-client, sidebar, and Agent Chat history hydration coverage.
+- Updated the root app, Rust workspace, CLI npm package, App Server client package, Agent Runtime client dependency, pnpm lock, and Cargo lock to `1.71.0`.
 
 ### Documentation
-- Updated database slimming PRD, execution plan, and tech-debt tracker with `agent_messages`, legacy DAO, current timeline exit strategy, migration state machine, and future drop conditions.
-- Updated the Coding Workbench roadmap and implementation plan with execution process policy follow-up, Agent Workspace workbench decomposition, and Task Center projection progress.
-- Added Agent Workspace roadmap material and package boundary notes for Agent capability catalog / workbench adapter ownership.
+- Added the Codex conversation import PRD covering Codex-first scope, Claude Code importer extension points, canonical import bundles, dry-run behavior, fidelity summary, and provenance rules.
+- Added the Codex conversation import implementation tracker from scan / preview through commit / evidence / continuation / click-through GUI fixture closure.
+- Updated Agent Workspace roadmap notes for future artifact evidence and run observability use of imported timeline and provenance.
 
 ### Other
-- This release continues to consolidate session history, workbench projections, coding tasks, tool timelines, and database governance around App Server JSON-RPC, RuntimeCore, Projection DB, Electron Desktop Host, current npm clients, checked-in schemas, and machine-readable guards.
+- This release continues moving external Agent-client history assets into Lime `SessionDetail`, Agent Runtime events, Evidence Export, and Electron Desktop Host current paths. Codex source directories remain read-only, with no renderer-side local scanning or second transcript store.
 
-**Full changes**: `v1.69.0` -> `v1.70.0`
+**Full changes**: `v1.70.0` -> `v1.71.0`

@@ -189,6 +189,15 @@ const APP_SERVER_CURRENT_METHODS = new Set([
   "voiceInstruction/delete",
   "voiceModel/default/set",
   "voiceModel/testTranscribeFile",
+  "conversationImport/source/scan",
+  "conversationImport/thread/preview",
+  "conversationImport/thread/commit",
+  "projectGit/status",
+  "projectGit/diff",
+  "projectGit/commits/list",
+  "projectGit/branch/checkout",
+  "projectGit/branch/create",
+  "projectGit/worktree/create",
 ]);
 const APP_SERVER_STARTUP_TRUTH_METHODS = new Set([
   "workspace/default/read",

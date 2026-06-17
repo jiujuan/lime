@@ -377,7 +377,7 @@ importers:
         specifier: 0.1.0
         version: link:../agent-ui-contracts
       '@limecloud/app-server-client':
-        specifier: 1.70.0
+        specifier: 1.71.0
         version: link:../app-server-client
 
   packages/agent-runtime-projection:

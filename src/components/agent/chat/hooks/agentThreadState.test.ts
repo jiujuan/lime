@@ -70,6 +70,39 @@ describe("agentThreadState", () => {
     });
   });
 
+  it("缺失 started_at 的 turn 进入实时状态时不应打断排序", () => {
+    const turns = [createTurn({ id: "turn-with-time" })];
+    const nextTurns = upsertThreadTurnState(
+      turns,
+      createTurn({
+        id: "turn-without-time",
+        started_at: undefined as unknown as string,
+      }),
+    );
+
+    expect(nextTurns.map((turn) => turn.id)).toEqual([
+      "turn-without-time",
+      "turn-with-time",
+    ]);
+  });
+
+  it("缺失 started_at 的 item 进入实时状态时不应打断排序", () => {
+    const items = [createItem({ id: "item-with-time", sequence: 2 })];
+    const nextItems = upsertThreadItemState(
+      items,
+      createItem({
+        id: "item-without-time",
+        sequence: 1,
+        started_at: undefined as unknown as string,
+      }),
+    );
+
+    expect(nextItems.map((item) => item.id)).toEqual([
+      "item-without-time",
+      "item-with-time",
+    ]);
+  });
+
   it("删除不存在的 pending turn/item 时应复用原数组", () => {
     const turns = [createTurn()];
     const items = [createItem()];

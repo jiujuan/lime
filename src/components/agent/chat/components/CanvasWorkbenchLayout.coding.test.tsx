@@ -1382,7 +1382,7 @@ describe("CanvasWorkbenchLayout coding mode", () => {
         createTaskFile(
           "task-current",
           ".lime/qc/code-artifact-workbench-electron-fixture/src/greeting.ts",
-          "export function greeting() returns Hello Lime Workbench.",
+          "export function greeting() { return 'Hello Lime Workbench'; }",
           30,
         ),
       ],
@@ -1392,7 +1392,7 @@ describe("CanvasWorkbenchLayout coding mode", () => {
       defaultPreview: {
         selectionKey: "task:task-current",
         title: "greeting.ts",
-        content: "export function greeting() returns Hello Lime Workbench.",
+        content: "export function greeting() { return 'Hello Lime Workbench'; }",
         filePath:
           ".lime/qc/code-artifact-workbench-electron-fixture/src/greeting.ts",
         absolutePath:
@@ -1420,10 +1420,11 @@ describe("CanvasWorkbenchLayout coding mode", () => {
             source: "runtime",
             status: "completed",
             changeKind: "modified",
-            preview: "export function greeting() returns Hello Lime Workbench.",
+            preview:
+              "export function greeting() { return 'Hello Lime Workbench'; }",
             previousContent: null,
             currentContent:
-              "export function greeting() returns Hello Lime Workbench.",
+              "export function greeting() { return 'Hello Lime Workbench'; }",
             checkpointPath: "snapshot",
             checkpointLabel: "snapshot",
           },
@@ -1456,7 +1457,7 @@ describe("CanvasWorkbenchLayout coding mode", () => {
       "export const codingWorkbenchSmoke = true;",
     );
     expect(changesPanel?.textContent).not.toContain(
-      "export function greeting() returns Hello Lime Workbench.",
+      "export function greeting() { return 'Hello Lime Workbench'; }",
     );
   });
 
