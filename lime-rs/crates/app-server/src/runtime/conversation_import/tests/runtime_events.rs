@@ -320,6 +320,116 @@ async fn commit_preserves_high_volume_codex_tool_events_with_bounded_default_pro
         .all(|event| event.event_type == "command.started"));
 }
 
+#[tokio::test]
+async fn commit_applies_import_runtime_projection_budget_per_thread() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let rollout_path = temp
+        .path()
+        .join("rollout-runtime-event-thread-budget.jsonl");
+    let mut lines = vec![
+        session_meta("thread-runtime-event-thread-budget"),
+        event_user_message("first big run"),
+    ];
+    for index in 0..60 {
+        let call_id = format!("call_exec_first_{index}");
+        lines.push(response_function_call(
+            &call_id,
+            "exec_command",
+            serde_json::json!({"cmd": format!("echo first {index}")}),
+        ));
+        lines.push(response_function_call_output(
+            &call_id,
+            "Exit code: 0\nWall time: 0 seconds\nOutput:\nok",
+        ));
+    }
+    lines.push(event_agent_message("first done"));
+    lines.push(event_user_message("second big run"));
+    for index in 0..60 {
+        let call_id = format!("call_exec_second_{index}");
+        lines.push(response_function_call(
+            &call_id,
+            "exec_command",
+            serde_json::json!({"cmd": format!("echo second {index}")}),
+        ));
+        lines.push(response_function_call_output(
+            &call_id,
+            "Exit code: 0\nWall time: 0 seconds\nOutput:\nok",
+        ));
+    }
+    lines.push(event_agent_message("second done"));
+    fs::write(&rollout_path, lines.join("\n")).expect("write rollout");
+    let sidecar_root = tempfile::tempdir().expect("sidecar root");
+    let sidecar_store = Arc::new(SidecarStore::new(sidecar_root.path()).expect("sidecar store"));
+    let core = RuntimeCore::default().with_sidecar_store(sidecar_store.clone());
+
+    let response = commit::commit_conversation_import_thread(
+        &core,
+        ConversationImportThreadCommitParams {
+            source_root: Some(temp.path().to_string_lossy().into_owned()),
+            source_path: Some(rollout_path.to_string_lossy().into_owned()),
+            confirmed: true,
+            ..Default::default()
+        },
+    )
+    .expect("commit");
+
+    assert_eq!(response.imported_turns, 2);
+    assert_eq!(response.summary.fidelity.commands, 120);
+    let projection = response
+        .session
+        .business_object_ref
+        .as_ref()
+        .and_then(|reference| reference.metadata.as_ref())
+        .and_then(|metadata| metadata.get("importedRuntimeProjection"))
+        .expect("imported runtime projection metadata");
+    // 每个 exec_command 会规范化为 tool start/result + command start/output/exited。
+    assert_eq!(projection["sourceRuntimeEvents"], 604);
+    assert_eq!(projection["materializedCommandToolCalls"], 80);
+    assert_eq!(projection["skippedCommandToolCalls"], 40);
+
+    let session_id = response.session.session_id.clone();
+    let read = core
+        .read_session(AgentSessionReadParams {
+            session_id: session_id.clone(),
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .expect("read imported session");
+    let detail = read.detail.expect("detail");
+    let thread_read = &detail["thread_read"];
+    assert_eq!(
+        thread_read["commands"].as_array().expect("commands").len(),
+        80
+    );
+    assert!(thread_read["commands"]
+        .as_array()
+        .expect("commands")
+        .iter()
+        .any(|command| command["command_id"] == "call_exec_second_19"));
+    assert!(!thread_read["commands"]
+        .as_array()
+        .expect("commands")
+        .iter()
+        .any(|command| command["command_id"] == "call_exec_second_20"));
+
+    let second_turn_page = core
+        .read_conversation_import_runtime_events(ConversationImportThreadRuntimeEventsReadParams {
+            session_id,
+            offset: Some(0),
+            limit: Some(200),
+            turn_index: Some(1),
+            event_type: Some("command.started".to_string()),
+        })
+        .await
+        .expect("read second turn full imported event detail");
+    assert_eq!(second_turn_page.total_events, 60);
+    assert!(second_turn_page
+        .events
+        .iter()
+        .any(|event| event.payload["commandId"] == "call_exec_second_59"));
+}
+
 #[test]
 fn commit_preserves_imported_assistant_message_order_between_runtime_events() {
     let temp = tempfile::tempdir().expect("tempdir");
@@ -552,7 +662,7 @@ fn commit_preserves_imported_completed_plan_item() {
         .expect("plan item");
 
     assert_eq!(plan["status"], "completed");
-    assert_eq!(plan["text"], "# Final plan\n- first\n- second\n");
+    assert_eq!(plan["text"], "# Final plan\n- first\n- second");
     assert_eq!(plan["metadata"]["source_client"], "codex");
     assert_eq!(plan["metadata"]["source_item_id"], "item-plan-1");
     assert_eq!(

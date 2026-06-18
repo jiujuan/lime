@@ -144,9 +144,7 @@ pub struct ProviderConfig {
 
 impl ProviderContinuationCapable for ProviderConfig {
     fn provider_continuation_capability(&self) -> ProviderContinuationCapability {
-        resolve_provider_continuation_capability(
-            self.protocol,
-        )
+        resolve_provider_continuation_capability(self.protocol)
     }
 
     fn provider_continuation_state(&self) -> ProviderContinuationState {

@@ -1054,6 +1054,14 @@ export interface ConversationImportPreviewSummary {
   warnings?: string[];
 }
 
+export interface ConversationImportRuntimeEventDetail {
+  eventIndex: number;
+  eventType: string;
+  payload: unknown;
+  sourceEventIndex: number;
+  turnIndex: number;
+}
+
 export type ConversationImportSourceClient = "claude_code" | "codex";
 
 export interface ConversationImportSourceProvenance {
@@ -1136,6 +1144,27 @@ export interface ConversationImportThreadPreviewResponse {
   source: ConversationImportSourceSummary;
   summary: ConversationImportPreviewSummary;
   thread: ImportedThreadSummary;
+}
+
+export interface ConversationImportThreadRuntimeEventsReadParams {
+  eventType?: null | string;
+  limit?: number | null;
+  offset?: number | null;
+  sessionId: string;
+  turnIndex?: number | null;
+}
+
+export interface ConversationImportThreadRuntimeEventsReadResponse {
+  events?: ConversationImportRuntimeEventDetail[];
+  limit: number;
+  materializedRuntimeEvents: number;
+  nextOffset?: number | null;
+  offset: number;
+  projection?: unknown;
+  sessionId: string;
+  sidecarRuntimeEvents: number;
+  sourceRuntimeEvents: number;
+  totalEvents: number;
 }
 
 export type ConversationImportThreadStatus =
@@ -2700,7 +2729,6 @@ export interface ResolvedModelRoute {
 }
 
 export interface RouteDefaults {
-  forceResponsesApi?: boolean | null;
   promptCacheMode?: null | string;
   reasoningEffort?: null | string;
   toolshim?: boolean | null;
@@ -3637,34 +3665,5 @@ export interface jsonRpcResponse {
 }
 
 export type requestId = number | string;
-
-export interface ConversationImportRuntimeEventDetail {
-  eventIndex: number;
-  eventType: string;
-  payload: unknown;
-  sourceEventIndex: number;
-  turnIndex: number;
-}
-
-export interface ConversationImportThreadRuntimeEventsReadParams {
-  eventType?: null | string;
-  limit?: number;
-  offset?: number;
-  sessionId: string;
-  turnIndex?: number;
-}
-
-export interface ConversationImportThreadRuntimeEventsReadResponse {
-  events?: ConversationImportRuntimeEventDetail[];
-  limit: number;
-  materializedRuntimeEvents: number;
-  nextOffset?: number | null;
-  offset: number;
-  projection?: unknown;
-  sessionId: string;
-  sidecarRuntimeEvents: number;
-  sourceRuntimeEvents: number;
-  totalEvents: number;
-}
 
 export type AgentSessionCwdFilter = string | string[];

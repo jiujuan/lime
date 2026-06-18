@@ -101,8 +101,10 @@ describe("ImportedRuntimeEventDetailPanel", () => {
           eventIndex: 2,
           eventType: "context_compaction.completed",
           payload: {
+            sourceEventType: "context_compacted",
             stage: "completed",
             detail: "Context compacted before continuing.",
+            sourcePath: "/Users/example/.codex/sessions/thread.jsonl",
           },
         },
         {
@@ -111,8 +113,11 @@ describe("ImportedRuntimeEventDetailPanel", () => {
           eventIndex: 3,
           eventType: "subagent.activity",
           payload: {
+            sourceEventType: "sub_agent_activity",
             status: "completed",
+            title: "agents/reviewer.md",
             summary: "Subagent finished imported review.",
+            sessionId: "subagent-thread-1",
           },
         },
       ],
@@ -149,10 +154,90 @@ describe("ImportedRuntimeEventDetailPanel", () => {
         container.querySelector('[data-testid="imported-runtime-detail-event"]'),
       ).not.toBeNull();
     });
-    expect(container.textContent).toContain("已默认展示 80 / 2 条");
+    expect(container.textContent).toContain("已默认展示 80 / 120 条");
+    expect(container.textContent).toContain("上下文压缩");
+    expect(container.textContent).toContain("子任务活动");
+    expect(container.textContent).toContain("已完成");
+    expect(container.textContent).toContain("阶段");
+    expect(container.textContent).toContain("agents/reviewer.md");
     expect(container.textContent).toContain("context compaction completed");
     expect(container.textContent).toContain("subagent activity");
     expect(container.textContent).toContain("Context compacted before continuing.");
     expect(container.textContent).toContain("Subagent finished imported review.");
+    expect(container.textContent).not.toContain(".codex");
+    expect(container.textContent).not.toContain("subagent-thread-1");
+  });
+
+  it("接口返回乱序时仍按来源事件序展示完整记录", async () => {
+    mockReadConversationImportRuntimeEvents.mockResolvedValue({
+      sessionId: "session-imported",
+      offset: 0,
+      limit: 50,
+      totalEvents: 3,
+      nextOffset: undefined,
+      sourceRuntimeEvents: 3,
+      materializedRuntimeEvents: 3,
+      sidecarRuntimeEvents: 0,
+      projection: {},
+      events: [
+        {
+          sourceEventIndex: 12,
+          turnIndex: 0,
+          eventIndex: 3,
+          eventType: "message.delta",
+          payload: {
+            sourceEventType: "exited_review_mode",
+            text: "最后一句。",
+          },
+        },
+        {
+          sourceEventIndex: 10,
+          turnIndex: 0,
+          eventIndex: 1,
+          eventType: "reasoning.completed",
+          payload: {
+            sourceEventType: "reasoning",
+            text: "最先一句。",
+          },
+        },
+        {
+          sourceEventIndex: 11,
+          turnIndex: 0,
+          eventIndex: 2,
+          eventType: "command.started",
+          payload: {
+            sourceEventType: "function_call",
+            command: "npm test",
+          },
+        },
+      ],
+    });
+
+    const container = renderPanel({
+      enabled: true,
+      sessionId: "session-imported",
+      t: createTranslateStub(),
+    });
+    const toggle = container.querySelector(
+      '[data-testid="imported-runtime-detail-toggle"]',
+    ) as HTMLButtonElement | null;
+
+    await act(async () => {
+      toggle?.click();
+      await Promise.resolve();
+    });
+
+    await vi.waitFor(() => {
+      expect(
+        container.querySelectorAll('[data-testid="imported-runtime-detail-event"]'),
+      ).toHaveLength(3);
+    });
+
+    const cards = Array.from(
+      container.querySelectorAll('[data-testid="imported-runtime-detail-event"]'),
+    ).map((card) => card.textContent || "");
+    expect(cards[0]).toContain("最先一句。");
+    expect(cards[1]).toContain("npm test");
+    expect(cards[2]).toContain("最后一句。");
   });
 });

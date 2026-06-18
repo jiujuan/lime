@@ -310,8 +310,6 @@ pub struct RouteDefaults {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prompt_cache_mode: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub force_responses_api: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub toolshim: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub toolshim_model: Option<String>,

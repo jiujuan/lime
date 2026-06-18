@@ -81,6 +81,61 @@ describe("previewArtifact", () => {
     });
   });
 
+  it("应把无文本抽取的 PDF / Excel / PPT 文档投影为系统打开 preview artifact", () => {
+    const examples = [
+      {
+        filePath: "/tmp/research.pdf",
+        mimeType: "application/pdf",
+        filename: "research.pdf",
+      },
+      {
+        filePath: "/tmp/budget.xlsx",
+        mimeType:
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename: "budget.xlsx",
+      },
+      {
+        filePath: "/tmp/deck.pptx",
+        mimeType:
+          "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        filename: "deck.pptx",
+      },
+    ];
+
+    for (const example of examples) {
+      const projection = createPreviewArtifactFromFile({
+        filePath: example.filePath,
+        isBinary: true,
+        mimeType: example.mimeType,
+        now: 100,
+      });
+
+      expect(projection).toMatchObject({
+        contentKind: "document",
+        renderMode: "system_open",
+        artifactType: "document",
+        artifact: {
+          title: example.filename,
+          content: expect.stringContaining("暂不支持在工作台内嵌预览"),
+          meta: expect.objectContaining({
+            previewArtifact: true,
+            isSourceBacked: true,
+            source: "file",
+            sourceRef: example.filePath,
+            contentKind: "document",
+            renderMode: "system_open",
+            mimeType: example.mimeType,
+            capabilities: expect.objectContaining({
+              preview: false,
+              systemOpen: true,
+              reveal: true,
+            }),
+          }),
+        },
+      });
+    }
+  });
+
   it("应把本地图片投影为可渲染文件 URL", () => {
     const projection = createPreviewArtifactFromFile({
       filePath: "/tmp/lime/images/hero.png",
@@ -128,6 +183,88 @@ describe("previewArtifact", () => {
           previewUrl: "data:image/png;base64,aW1hZ2U=",
         }),
       },
+    });
+  });
+
+  it("应把本地音视频投影为媒体 preview artifact", () => {
+    const audio = createPreviewArtifactFromFile({
+      filePath: "/tmp/audio/interview.wav",
+      isBinary: true,
+      mimeType: "audio/wav",
+      now: 100,
+    });
+    const video = createPreviewArtifactFromFile({
+      filePath: "/tmp/video/demo.mp4",
+      isBinary: true,
+      mimeType: "video/mp4",
+      now: 100,
+    });
+
+    expect(audio).toMatchObject({
+      contentKind: "audio",
+      renderMode: "media",
+      artifact: {
+        content: "asset:///tmp/audio/interview.wav",
+        meta: expect.objectContaining({
+          contentKind: "audio",
+          renderMode: "media",
+          previewUrl: "asset:///tmp/audio/interview.wav",
+        }),
+      },
+    });
+    expect(video).toMatchObject({
+      contentKind: "video",
+      renderMode: "media",
+      artifact: {
+        content: "asset:///tmp/video/demo.mp4",
+        meta: expect.objectContaining({
+          contentKind: "video",
+          renderMode: "media",
+          previewUrl: "asset:///tmp/video/demo.mp4",
+        }),
+      },
+    });
+  });
+
+  it("应支持 URL 与数据库记录作为 source-backed preview artifact", () => {
+    const urlPreview = createPreviewArtifact({
+      source: "url",
+      sourceRef: "https://example.com/report",
+      title: "在线报告",
+      content: "# 在线报告",
+      path: "https://example.com/report",
+      now: 100,
+    });
+    const recordPreview = createPreviewArtifact({
+      source: "database_record",
+      sourceRef: "material:123",
+      title: "素材记录",
+      content: "素材摘要",
+      path: "material:123",
+      now: 100,
+    });
+
+    expect(urlPreview.artifact).toMatchObject({
+      id: expect.stringMatching(/^preview-url-/),
+      title: "在线报告",
+      meta: expect.objectContaining({
+        previewArtifact: true,
+        isSourceBacked: true,
+        source: "url",
+        sourceRef: "https://example.com/report",
+        renderMode: "canvas",
+      }),
+    });
+    expect(recordPreview.artifact).toMatchObject({
+      id: expect.stringMatching(/^preview-database_record-/),
+      title: "素材记录",
+      meta: expect.objectContaining({
+        previewArtifact: true,
+        isSourceBacked: true,
+        source: "database_record",
+        sourceRef: "material:123",
+        renderMode: "canvas",
+      }),
     });
   });
 

@@ -61,6 +61,11 @@ describe("local history import real sample visual audit smoke guard", () => {
 
     expect(content).toContain("openSessionFromSidebar");
     expect(content).toContain("inspectImportedConversationVisualState");
+    expect(content).toContain("inspectImportedRuntimeDetailDrilldown");
+    expect(content).toContain('[data-testid="imported-runtime-detail-toggle"]');
+    expect(content).toContain('[data-testid="imported-runtime-detail-event"]');
+    expect(content).toContain("data-event-kind");
+    expect(content).toContain("runtimeDetailDrilldown");
     expect(content).toContain('const SCROLL_POSITIONS = ["top", "middle", "bottom"]');
     expect(content).toContain('{ label: "desktop", width: 1440, height: 1000 }');
     expect(content).toContain('{ label: "compact", width: 1100, height: 820 }');

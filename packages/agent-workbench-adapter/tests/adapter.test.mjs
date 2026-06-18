@@ -121,6 +121,7 @@ test("summarizes runtime facts from projection-like read model", () => {
 
 test("detects visible workbench runtime facts without React state", () => {
   assert.equal(hasAgentWorkbenchRuntimeFacts({ events: [] }), false);
+  assert.equal(hasAgentWorkbenchRuntimeFacts({ sourceCount: 2 }), false);
   assert.equal(hasAgentWorkbenchRuntimeFacts({
     visibleEvents: [
       { surface: "tool", status: "completed", source: { eventClass: "tool.result" } },
@@ -134,6 +135,19 @@ test("detects visible workbench runtime facts without React state", () => {
   assert.equal(hasAgentWorkbenchRuntimeFacts({
     visibleEvents: [
       { surface: "human-action", source: { eventClass: "action.required" } },
+    ],
+  }), true);
+  assert.equal(hasAgentWorkbenchRuntimeFacts({
+    events: [
+      { surface: "artifact", source: { eventClass: "artifact.changed" } },
+    ],
+  }), true);
+  assert.equal(hasAgentWorkbenchRuntimeFacts({
+    taskRefs: ["task-1"],
+  }), false);
+  assert.equal(hasAgentWorkbenchRuntimeFacts({
+    events: [
+      { source: { eventClass: "subagent.started" } },
     ],
   }), true);
 });
@@ -180,6 +194,27 @@ test("projects workbench task facts without React state", () => {
     ["human-action", "active", 1],
     ["evidence", "done", 1],
   ]);
+});
+
+test("projects source-only workbench task without opening runtime panel", () => {
+  const view = projectAgentWorkbenchTaskView({
+    session: {
+      title: "普通寒暄",
+      status: "waiting-user",
+      inputSourceIds: ["source-1"],
+    },
+    readModel: {
+      sourceCount: 1,
+      events: [
+        { surface: "runtime-status", source: { eventClass: "model.delta" } },
+        { surface: "runtime-status", source: { eventClass: "snapshot.updated" } },
+      ],
+    },
+  });
+
+  assert.equal(view.hasRuntimeFacts, true);
+  assert.equal(view.sourceCount, 2);
+  assert.equal(view.shouldShowRuntimePanel, false);
 });
 
 test("projects empty workbench task as idle task surface", () => {

@@ -648,7 +648,7 @@ describe("TaskCenterUtilityToolbar", () => {
     const panel = document.body.querySelector(
       '[data-testid="imported-runtime-detail-panel"]',
     );
-    expect(panel?.textContent).toContain("已默认展示 80 / 2 条");
+    expect(panel?.textContent).toContain("已默认展示 80 / 120 条");
     expect(panel?.textContent).toContain("完整记录保留 40 条");
     expect(panel?.textContent).toContain("command execution");
     expect(panel?.textContent).toContain("轮次 2 · 事件 3");

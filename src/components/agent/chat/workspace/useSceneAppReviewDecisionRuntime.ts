@@ -29,7 +29,7 @@ import type { SceneAppExecutionSummaryRuntimeState } from "./useSceneAppExecutio
 type SceneAppQuickReviewActionKey =
   (typeof SCENEAPP_QUICK_REVIEW_ACTIONS)[number]["key"];
 
-interface UseSceneAppReviewDecisionRuntimeParams {
+export interface UseSceneAppReviewDecisionRuntimeParams {
   projectId?: string | null;
   sessionId?: string | null;
   sceneAppExecutionSummaryState?: SceneAppExecutionSummaryRuntimeState;

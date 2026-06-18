@@ -311,12 +311,6 @@ fn route_defaults(
     RouteDefaults {
         reasoning_effort: selection.reasoning_effort.map(ToString::to_string),
         prompt_cache_mode: provider.and_then(|provider| provider.prompt_cache_mode.clone()),
-        force_responses_api: direct_config.map(|config| {
-            matches!(
-                config.protocol,
-                Some(ProtocolKind::OpenaiResponses | ProtocolKind::CodexResponses)
-            )
-        }),
         toolshim: direct_config.map(|config| config.toolshim),
         toolshim_model: direct_config
             .and_then(|config| config.toolshim_model)

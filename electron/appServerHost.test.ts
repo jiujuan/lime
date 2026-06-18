@@ -522,4 +522,29 @@ describe("ElectronAppServerHost", () => {
     expect(requestCalls[0]?.[1]).toBe("agentAppUiRuntime/start");
     expect(requestCalls[0]?.[2]).toMatchObject({ timeoutMs: 60000 });
   });
+
+  it("current conversation import commit 应覆盖大样本导入等待窗口", async () => {
+    const { ElectronAppServerHost } = await import("./appServerHost");
+    const host = new ElectronAppServerHost();
+
+    await host.handleJsonLines({
+      lines: [
+        encodeMessage({
+          id: "conversation-import-commit",
+          method: "conversationImport/thread/commit",
+          params: {
+            sourceClient: "codex",
+            sourceThreadId: "thread-1",
+            confirmed: true,
+          },
+        }),
+      ],
+    });
+
+    const requestCalls = fakeConnection.request.mock.calls as unknown as Array<
+      [JsonRpcRequest, string, { timeoutMs?: number }]
+    >;
+    expect(requestCalls[0]?.[1]).toBe("conversationImport/thread/commit");
+    expect(requestCalls[0]?.[2]).toMatchObject({ timeoutMs: 180000 });
+  });
 });

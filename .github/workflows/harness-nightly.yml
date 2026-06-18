@@ -33,7 +33,7 @@ jobs:
 
       - name: Generate harness eval artifacts
         run: |
-          node scripts/harness-eval-history-record.mjs \
+          node scripts/harness/eval-history-record.mjs \
             --history-dir "./artifacts/history" \
             --retain 30 \
             --summary-json "./artifacts/harness-eval-summary.json" \

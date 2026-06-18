@@ -547,12 +547,6 @@
     },
     "RouteDefaults": {
       "properties": {
-        "forceResponsesApi": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
         "promptCacheMode": {
           "type": [
             "null",

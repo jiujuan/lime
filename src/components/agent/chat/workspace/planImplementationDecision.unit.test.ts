@@ -145,6 +145,25 @@ describe("planImplementationDecision", () => {
     );
   });
 
+  it("只有计划摘要文本时不应生成实施确认", () => {
+    const decision = selectProposedPlanImplementationDecision({
+      messages: [
+        createAssistantMessage(
+          "assistant-1",
+          "失败agentSession/turn/start failed: App Server runtime backend requires provider/model selection.",
+        ),
+      ],
+      planState: {
+        phase: "ready",
+        items: [],
+        summaryText:
+          "失败agentSession/turn/start failed: App Server runtime backend requires provider/model selection.",
+      },
+    });
+
+    expect(decision).toBeNull();
+  });
+
   it("已忽略或已提交的本地计划确认不应再次出现", () => {
     const planText = "- 修复抽屉\n- 跑 GUI fixture";
     const requestId = buildPlanImplementationRequestId(

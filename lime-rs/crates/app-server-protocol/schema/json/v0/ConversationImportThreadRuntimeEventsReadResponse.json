@@ -52,12 +52,12 @@
       "type": "integer"
     },
     "nextOffset": {
+      "format": "uint",
+      "minimum": 0,
       "type": [
         "integer",
         "null"
-      ],
-      "format": "uint",
-      "minimum": 0
+      ]
     },
     "offset": {
       "format": "uint",

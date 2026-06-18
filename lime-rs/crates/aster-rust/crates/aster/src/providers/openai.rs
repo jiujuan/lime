@@ -689,6 +689,7 @@ mod tests {
     use std::collections::HashMap;
 
     #[test]
+    #[serial_test::serial]
     fn test_uses_responses_api_requires_route_adapter_flag() {
         std::env::remove_var("OPENAI_FORCE_RESPONSES_API");
 
@@ -698,6 +699,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_uses_responses_api_when_force_flag_enabled() {
         std::env::set_var("OPENAI_FORCE_RESPONSES_API", "1");
         assert!(OpenAiProvider::uses_responses_api("gpt-4o"));

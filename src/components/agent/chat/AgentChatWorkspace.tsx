@@ -77,12 +77,6 @@ import {
   getMediaTaskArtifact,
 } from "@/lib/api/mediaTasks";
 import {
-  exportAgentRuntimeReviewDecisionTemplate,
-  saveAgentRuntimeReviewDecision,
-  type AgentRuntimeReviewDecisionTemplate,
-  type AgentRuntimeSaveReviewDecisionRequest,
-} from "@/lib/api/agentRuntime";
-import {
   getProjectMemory,
   type ProjectMemory,
   type Character,
@@ -134,7 +128,6 @@ import {
   buildGeneralAgentSystemPrompt,
   resolveAgentChatMode,
 } from "./utils/generalAgentPrompt";
-import { loadPersisted, savePersisted } from "./hooks/agentChatStorage";
 import {
   closeProjectOpened,
   loadPersistedProjectId,
@@ -176,6 +169,7 @@ import { useWorkspaceWriteFileAction } from "./workspace/useWorkspaceWriteFileAc
 import { useWorkspaceArtifactPreviewActions } from "./workspace/useWorkspaceArtifactPreviewActions";
 import { useWorkspaceCanvasLayoutRuntime } from "./workspace/useWorkspaceCanvasLayoutRuntime";
 import { useSessionRecentMetadataSyncRuntime } from "./workspace/useSessionRecentMetadataSyncRuntime";
+import { useTaskCenterTabSessionRuntime } from "./workspace/useTaskCenterTabSessionRuntime";
 import {
   useTaskCenterDraftSendDispatchRuntime,
   useTaskCenterHomePendingPreviewRuntime,
@@ -197,6 +191,7 @@ import {
   useWorkspaceImageWorkbenchActionRuntime,
   type SubmitImageWorkbenchAgentCommandParams,
 } from "./workspace/useWorkspaceImageWorkbenchActionRuntime";
+import { useWorkspaceImageWorkbenchSessionRuntime } from "./workspace/useWorkspaceImageWorkbenchSessionRuntime";
 import { useWorkspaceImageWorkbenchEventRuntime } from "./workspace/useWorkspaceImageWorkbenchEventRuntime";
 import { buildImageSkillLaunchRequestMetadata } from "./workspace/imageSkillLaunch";
 import { useWorkspaceImageTaskPreviewRuntime } from "./workspace/useWorkspaceImageTaskPreviewRuntime";
@@ -232,6 +227,7 @@ import { useWorkspaceGeneralWorkbenchDocumentPersistenceRuntime } from "./worksp
 import { useWorkspaceServiceSkillEntryActions } from "./workspace/useWorkspaceServiceSkillEntryActions";
 import { useWorkspaceArtifactViewModeControl } from "./workspace/useWorkspaceArtifactViewModeControl";
 import { useWorkspaceInitialSessionNavigation } from "./workspace/useWorkspaceInitialSessionNavigation";
+import { useSceneAppReviewDecisionRuntime } from "./workspace/useSceneAppReviewDecisionRuntime";
 import { buildHomeAgentParams } from "@/lib/workspace/navigation";
 import { WorkspaceGeneralWorkbenchSidebar } from "./workspace/WorkspaceGeneralWorkbenchSidebar";
 import { GeneralWorkbenchHarnessDialogSection } from "./workspace/WorkspaceHarnessDialogs";
@@ -270,36 +266,11 @@ import { createUnifiedMemory } from "@/lib/api/unifiedMemory";
 import { getDefaultGuidePromptByTheme } from "./utils/defaultGuidePrompt";
 import { shouldShowChatLayout } from "./utils/chatLayoutVisibility";
 import {
-  applyTaskCenterRouteTabSyncToMap,
-  initializeTaskCenterOpenTabMap,
   isTaskCenterTopicSwitchPending,
-  MAX_TASK_CENTER_OPEN_TABS,
-  normalizeTaskCenterWorkspaceTabMap,
-  reconcileTaskCenterTabIds,
-  replaceTaskCenterTabIdsForWorkspace,
   resolveInitialTaskSessionSwitchOptions,
   resolveTaskCenterFallbackRestorePlan,
-  resolveTaskCenterReconcileCurrentTopicId,
   resolveTaskCenterPreviewTopicId,
-  resolveTaskCenterRouteTabSyncIntent,
-  resolveTaskCenterTabIdsForWorkspace,
-  shouldRespectTaskCenterLocalSessionOverride,
-  shouldWaitForTaskCenterInitialSessionTopic,
-  TASK_CENTER_OPEN_TAB_IDS_STORAGE_KEY,
-  type TaskCenterLocalSessionOverride,
-  type TaskCenterWorkspaceTabMap,
-  updateTaskCenterTabIdsForWorkspace,
 } from "./utils/taskCenterTabs";
-import {
-  createInitialSessionImageWorkbenchState,
-  type SessionImageWorkbenchState,
-} from "./workspace/imageWorkbenchHelpers";
-import {
-  buildSessionImageWorkbenchStateFromMessages,
-  isSessionImageWorkbenchStateMeaningful,
-  loadSessionImageWorkbenchCachedState,
-  saveSessionImageWorkbenchCachedState,
-} from "./workspace/imageWorkbenchStateCache";
 import { resolveImageWorkbenchStateForPreviewSelection } from "./workspace/imageWorkbenchPreviewSelection";
 import { buildImageWorkbenchPreviewResourceManagerInput } from "./workspace/imageWorkbenchResourceManager";
 import { openResourceManager } from "@/features/resource-manager";
@@ -336,23 +307,12 @@ import {
 } from "./utils/inputCapabilityBootstrap";
 import { buildMessageInspirationDraft } from "./utils/messageInspirationDraft";
 import { buildKnowledgeSavePageParams } from "./workspace/knowledge/knowledgeSaveNavigation";
-import {
-  listCuratedTaskRecommendationSignals,
-  recordCuratedTaskRecommendationSignalFromMemory,
-  recordCuratedTaskRecommendationSignalFromReviewDecision,
-  subscribeCuratedTaskRecommendationSignalsChanged,
-} from "./utils/curatedTaskRecommendationSignals";
+import { recordCuratedTaskRecommendationSignalFromMemory } from "./utils/curatedTaskRecommendationSignals";
 import {
   buildSceneAppExecutionCuratedTaskFollowUpAction,
   buildCuratedTaskReferenceEntryFromSceneAppExecution,
   buildSceneAppExecutionReviewFollowUpAction,
 } from "./utils/sceneAppCuratedTaskReference";
-import {
-  buildSceneAppExecutionInspirationLibraryPageParams,
-  hasSavedSceneAppExecutionAsInspiration,
-  saveSceneAppExecutionAsInspiration,
-} from "./utils/saveSceneAppExecutionAsInspiration";
-import { buildSkillsPageParamsFromSceneAppExecution } from "./utils/sceneAppSkillScaffoldDraft";
 import { buildSkillsPageParamsFromMessage } from "./utils/skillScaffoldDraft";
 import { resolveAgentChatWorkspaceShellViewModel } from "./agentChatWorkspaceShellViewModel";
 import { AutomationJobDialog } from "@/components/settings-v2/system/automation/AutomationJobDialog";
@@ -365,7 +325,6 @@ import {
   SESSION_ENTRY_AUXILIARY_DEFERRED_LOAD_MS,
   SESSION_ENTRY_RUNTIME_WARMUP_DEFERRED_LOAD_MS,
   areStringArraysEqual,
-  createLocalImageWorkbenchSessionKey,
   createTaskCenterDraftSendRequestId,
   isTaskCenterDraftSendPendingForLayout,
   isTaskCenterDraftTabId,
@@ -384,8 +343,6 @@ import {
   type TaskCenterDraftTab,
 } from "./workspace/agentChatWorkspaceHelpers";
 import {
-  buildSceneAppQuickReviewDecisionRequest,
-  formatSceneAppErrorMessage,
   SCENEAPP_QUICK_REVIEW_ACTIONS,
 } from "@/lib/agent/legacySceneAppExecutionSummary";
 
@@ -831,9 +788,6 @@ export function AgentChatWorkspace({
   // General 主题专用画布状态
   const [generalCanvasState, setGeneralCanvasState] =
     useState<GeneralCanvasState>(DEFAULT_CANVAS_STATE);
-  const [imageWorkbenchBySessionId, setImageWorkbenchBySessionId] = useState<
-    Record<string, SessionImageWorkbenchState>
-  >({});
 
   // 任务文件状态
   const [taskFiles, setTaskFiles] = useState<TaskFile[]>([]);
@@ -2048,196 +2002,17 @@ export function AgentChatWorkspace({
   const clearRuntimeTeamState = useCallback(() => {
     clearPreparedRuntimeTeamState();
   }, [clearPreparedRuntimeTeamState]);
-  const localImageWorkbenchSessionKeyRef = useRef(
-    createLocalImageWorkbenchSessionKey(),
-  );
-  const [localImageWorkbenchSessionKey, setLocalImageWorkbenchSessionKey] =
-    useState(() => localImageWorkbenchSessionKeyRef.current);
-  const resetLocalImageWorkbenchSessionScope = useCallback(() => {
-    const previousLocalSessionKey = localImageWorkbenchSessionKeyRef.current;
-    const nextLocalSessionKey = createLocalImageWorkbenchSessionKey();
-    localImageWorkbenchSessionKeyRef.current = nextLocalSessionKey;
-    setLocalImageWorkbenchSessionKey(nextLocalSessionKey);
-    setImageWorkbenchBySessionId((previous) => {
-      if (!previous[previousLocalSessionKey]) {
-        return previous;
-      }
-      const next = { ...previous };
-      delete next[previousLocalSessionKey];
-      return next;
-    });
-  }, []);
-  const imageWorkbenchSessionKey = useMemo(
-    () => sessionId?.trim() || localImageWorkbenchSessionKey,
-    [localImageWorkbenchSessionKey, sessionId],
-  );
-  const cachedImageWorkbenchState = useMemo(() => {
-    const normalizedProjectId = normalizeProjectId(projectId);
-    const normalizedSessionId = sessionId?.trim();
-    if (!normalizedProjectId || !normalizedSessionId) {
-      return null;
-    }
-
-    return loadSessionImageWorkbenchCachedState(
-      normalizedProjectId,
-      normalizedSessionId,
-      { contentId, refreshAccess: false },
-    );
-  }, [contentId, projectId, sessionId]);
-  const currentImageWorkbenchState = useMemo(
-    () =>
-      imageWorkbenchBySessionId[imageWorkbenchSessionKey] ||
-      cachedImageWorkbenchState?.state ||
-      createInitialSessionImageWorkbenchState(),
-    [
-      cachedImageWorkbenchState,
-      imageWorkbenchBySessionId,
-      imageWorkbenchSessionKey,
-    ],
-  );
-  const imageWorkbenchStateForCache = useMemo(() => {
-    if (isSessionImageWorkbenchStateMeaningful(currentImageWorkbenchState)) {
-      return currentImageWorkbenchState;
-    }
-
-    return buildSessionImageWorkbenchStateFromMessages(messages);
-  }, [currentImageWorkbenchState, messages]);
-  const updateCurrentImageWorkbenchState = useCallback(
-    (
-      updater: (
-        current: SessionImageWorkbenchState,
-      ) => SessionImageWorkbenchState,
-    ) => {
-      setImageWorkbenchBySessionId((previous) => {
-        const current =
-          previous[imageWorkbenchSessionKey] ||
-          createInitialSessionImageWorkbenchState();
-        return {
-          ...previous,
-          [imageWorkbenchSessionKey]: updater(current),
-        };
-      });
-    },
-    [imageWorkbenchSessionKey],
-  );
-  const updateImageWorkbenchStateForSession = useCallback(
-    (
-      sessionKey: string,
-      updater: (
-        current: SessionImageWorkbenchState,
-      ) => SessionImageWorkbenchState,
-      options?: {
-        fallbackState?: SessionImageWorkbenchState;
-        removeSessionKeys?: string[];
-      },
-    ) => {
-      const normalizedSessionKey = sessionKey.trim();
-      if (!normalizedSessionKey) {
-        return;
-      }
-
-      setImageWorkbenchBySessionId((previous) => {
-        const current =
-          previous[normalizedSessionKey] ||
-          options?.fallbackState ||
-          createInitialSessionImageWorkbenchState();
-        const nextState = {
-          ...previous,
-          [normalizedSessionKey]: updater(current),
-        };
-
-        options?.removeSessionKeys?.forEach((candidateKey) => {
-          const normalizedCandidateKey = candidateKey.trim();
-          if (
-            !normalizedCandidateKey ||
-            normalizedCandidateKey === normalizedSessionKey
-          ) {
-            return;
-          }
-          delete nextState[normalizedCandidateKey];
-        });
-
-        return nextState;
-      });
-    },
-    [],
-  );
-  useEffect(() => {
-    const normalizedSessionId = sessionId?.trim();
-    const localSessionKey = localImageWorkbenchSessionKey;
-    if (!normalizedSessionId || normalizedSessionId === localSessionKey) {
-      return;
-    }
-
-    const localState = imageWorkbenchBySessionId[localSessionKey];
-    if (!localState) {
-      return;
-    }
-
-    updateImageWorkbenchStateForSession(
-      normalizedSessionId,
-      (current) => current,
-      {
-        fallbackState: localState,
-        removeSessionKeys: [localSessionKey],
-      },
-    );
-  }, [
-    imageWorkbenchBySessionId,
-    localImageWorkbenchSessionKey,
+  const {
+    currentImageWorkbenchState,
+    imageWorkbenchSessionKey,
+    resetLocalImageWorkbenchSessionScope,
+    updateCurrentImageWorkbenchState,
+  } = useWorkspaceImageWorkbenchSessionRuntime({
+    contentId,
+    messages,
+    projectId,
     sessionId,
-    updateImageWorkbenchStateForSession,
-  ]);
-  useEffect(() => {
-    const normalizedProjectId = normalizeProjectId(projectId);
-    const normalizedSessionId = sessionId?.trim();
-    if (!normalizedProjectId || !normalizedSessionId) {
-      return;
-    }
-
-    if (!cachedImageWorkbenchState) {
-      return;
-    }
-
-    setImageWorkbenchBySessionId((previous) => {
-      if (
-        isSessionImageWorkbenchStateMeaningful(previous[normalizedSessionId])
-      ) {
-        return previous;
-      }
-
-      return {
-        ...previous,
-        [normalizedSessionId]: cachedImageWorkbenchState.state,
-      };
-    });
-  }, [cachedImageWorkbenchState, projectId, sessionId]);
-  useEffect(() => {
-    const normalizedProjectId = normalizeProjectId(projectId);
-    const normalizedSessionId = sessionId?.trim();
-    if (
-      !normalizedProjectId ||
-      !normalizedSessionId ||
-      !isSessionImageWorkbenchStateMeaningful(imageWorkbenchStateForCache)
-    ) {
-      return;
-    }
-
-    return scheduleMinimumDelayIdleTask(
-      () => {
-        saveSessionImageWorkbenchCachedState(
-          normalizedProjectId,
-          normalizedSessionId,
-          imageWorkbenchStateForCache,
-          { contentId },
-        );
-      },
-      {
-        minimumDelayMs: 400,
-        idleTimeoutMs: 2_000,
-      },
-    );
-  }, [contentId, imageWorkbenchStateForCache, projectId, sessionId]);
+  });
   const teamSessionRuntime = useWorkspaceTeamSessionRuntime({
     sessionId,
     topics,
@@ -3412,31 +3187,7 @@ export function AgentChatWorkspace({
     resolveInitialSessionSwitch,
     switchTopic,
   });
-  const [taskCenterOpenTabMap, setTaskCenterOpenTabMap] =
-    useState<TaskCenterWorkspaceTabMap>(() => {
-      const initialTabMap = normalizeTaskCenterWorkspaceTabMap(
-        loadPersisted<unknown>(TASK_CENTER_OPEN_TAB_IDS_STORAGE_KEY, []),
-        {
-          workspaceId: taskCenterWorkspaceId,
-        },
-      );
-
-      return initializeTaskCenterOpenTabMap({
-        initialTabMap,
-        agentEntry,
-        workspaceId: taskCenterWorkspaceId,
-        normalizedInitialSessionId,
-      });
-    });
-  const [taskCenterDetachedTopicId, setTaskCenterDetachedTopicId] = useState<
-    string | null
-  >(null);
-  const [taskCenterTransitionTopicId, setTaskCenterTransitionTopicId] =
-    useState<string | null>(null);
-  const [
-    taskCenterEmbeddedHomeSessionIds,
-    setTaskCenterEmbeddedHomeSessionIds,
-  ] = useState<Set<string>>(() => new Set());
+  const taskCenterDraftSurfaceActiveRef = useRef(false);
   const [taskCenterDraftTabs, setTaskCenterDraftTabs] = useState<
     TaskCenterDraftTab[]
   >([]);
@@ -3447,212 +3198,37 @@ export function AgentChatWorkspace({
     useState<TaskCenterDraftSendRequest | null>(null);
   const [homePendingPreviewRequest, setHomePendingPreviewRequest] =
     useState<TaskCenterDraftSendRequest | null>(null);
-  const taskCenterDraftSurfaceActiveRef = useRef(false);
-  const [taskCenterLocalSessionOverride, setTaskCenterLocalSessionOverride] =
-    useState<TaskCenterLocalSessionOverride | null>(null);
-  const shouldRespectTaskCenterLocalSession =
-    shouldRespectTaskCenterLocalSessionOverride({
-      localSessionOverride: taskCenterLocalSessionOverride,
-      normalizedInitialSessionId,
-      sessionId,
-    });
-  const taskCenterOpenTabIds = useMemo(
-    () =>
-      resolveTaskCenterTabIdsForWorkspace(
-        taskCenterOpenTabMap,
-        taskCenterWorkspaceId,
-      ),
-    [taskCenterOpenTabMap, taskCenterWorkspaceId],
-  );
-  const taskCenterOpenTabIdsRef = useRef(taskCenterOpenTabIds);
-  const taskCenterFallbackRestoreRef = useRef<{
-    topicId: string;
-    startedAt: number;
-  } | null>(null);
-  const taskCenterRouteTabSyncRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    taskCenterOpenTabIdsRef.current = taskCenterOpenTabIds;
-  }, [taskCenterOpenTabIds]);
-
-  const isTaskCenterEntry = agentEntry === "claw" || agentEntry === "new-task";
-
-  useEffect(() => {
-    if (!isTaskCenterEntry) {
-      taskCenterDraftSurfaceActiveRef.current = false;
-      setTaskCenterTransitionTopicId(null);
-      return;
-    }
-
-    if (
-      taskCenterTransitionTopicId &&
-      taskCenterTransitionTopicId === sessionId
-    ) {
-      setTaskCenterTransitionTopicId(null);
-    }
-  }, [isTaskCenterEntry, sessionId, taskCenterTransitionTopicId]);
-
-  useEffect(() => {
-    if (!isTaskCenterEntry) {
-      setTaskCenterDetachedTopicId(null);
-      setTaskCenterEmbeddedHomeSessionIds((current) =>
-        current.size > 0 ? new Set<string>() : current,
-      );
-      setTaskCenterDraftTabs((current) => (current.length > 0 ? [] : current));
-      setActiveTaskCenterDraftTabId(null);
-      taskCenterDraftSurfaceActiveRef.current = false;
-      if (agentEntry !== "new-task") {
-        setTaskCenterDraftSendRequest(null);
-        setHomePendingPreviewRequest(null);
-        setTaskCenterLocalSessionOverride(null);
-      }
-      return;
-    }
-
-    if (agentEntry !== "claw") {
-      return;
-    }
-
-    if (!sessionId || sessionId !== normalizedInitialSessionId) {
-      return;
-    }
-
-    const hasTopicMatch = topicById.has(sessionId);
-    if (hasTopicMatch) {
-      setTaskCenterDetachedTopicId((current) =>
-        current === sessionId ? null : current,
-      );
-      return;
-    }
-
-    setTaskCenterDetachedTopicId((current) =>
-      current === sessionId ? current : sessionId,
-    );
-  }, [
-    agentEntry,
+  const {
+    clearTaskCenterEmbeddedHomeSession,
     isTaskCenterEntry,
-    normalizedInitialSessionId,
-    sessionId,
-    topicById,
-  ]);
-
-  useEffect(() => {
-    const syncIntent = resolveTaskCenterRouteTabSyncIntent({
-      agentEntry,
-      workspaceId: taskCenterWorkspaceId,
-      normalizedInitialSessionId,
-      lastSyncedInitialSessionId: taskCenterRouteTabSyncRef.current,
-      shouldRespectLocalSession: shouldRespectTaskCenterLocalSession,
-    });
-    if (!syncIntent.shouldSync) {
-      return;
-    }
-
-    taskCenterRouteTabSyncRef.current = syncIntent.nextRouteSyncSessionId;
-    if (syncIntent.shouldClearActiveDraft) {
-      setActiveTaskCenterDraftTabId(null);
-    }
-    if (syncIntent.shouldClearTransitionAndDetached) {
-      setTaskCenterTransitionTopicId(null);
-      setTaskCenterDetachedTopicId(null);
-    }
-    setTaskCenterOpenTabMap((currentMap) =>
-      applyTaskCenterRouteTabSyncToMap({
-        currentMap,
-        workspaceId: taskCenterWorkspaceId,
-        normalizedInitialSessionId,
-        shouldRespectLocalSession: shouldRespectTaskCenterLocalSession,
-      }),
-    );
-  }, [
-    agentEntry,
-    normalizedInitialSessionId,
-    shouldRespectTaskCenterLocalSession,
-    taskCenterWorkspaceId,
-  ]);
-
-  useEffect(() => {
-    if (
-      agentEntry !== "claw" ||
-      !taskCenterWorkspaceId ||
-      !normalizedInitialSessionId ||
-      normalizedInitialSessionId === sessionId ||
-      shouldRespectTaskCenterLocalSession
-    ) {
-      return;
-    }
-
-    setTaskCenterTransitionTopicId((current) =>
-      current === normalizedInitialSessionId
-        ? current
-        : normalizedInitialSessionId,
-    );
-    setTaskCenterDetachedTopicId(null);
-  }, [
-    agentEntry,
-    normalizedInitialSessionId,
-    sessionId,
-    shouldRespectTaskCenterLocalSession,
-    taskCenterWorkspaceId,
-  ]);
-
-  useEffect(() => {
-    if (agentEntry !== "claw" || !taskCenterWorkspaceId) {
-      return;
-    }
-
-    const hasInitialSessionTopic = normalizedInitialSessionId
-      ? topicById.has(normalizedInitialSessionId)
-      : false;
-    if (
-      shouldWaitForTaskCenterInitialSessionTopic({
-        normalizedInitialSessionId,
-        hasInitialSessionTopic,
-      })
-    ) {
-      return;
-    }
-
-    setTaskCenterOpenTabMap((currentMap) => {
-      const nextIds = reconcileTaskCenterTabIds({
-        existingIds: resolveTaskCenterTabIdsForWorkspace(
-          currentMap,
-          taskCenterWorkspaceId,
-        ),
-        topics,
-        currentTopicId: resolveTaskCenterReconcileCurrentTopicId({
-          normalizedInitialSessionId,
-          sessionId,
-          shouldRespectLocalSession: shouldRespectTaskCenterLocalSession,
-          localSessionOverride: taskCenterLocalSessionOverride,
-          detachedTopicId: taskCenterDetachedTopicId,
-        }),
-      });
-      return updateTaskCenterTabIdsForWorkspace(
-        currentMap,
-        taskCenterWorkspaceId,
-        nextIds,
-      );
-    });
-  }, [
-    agentEntry,
-    sessionId,
-    normalizedInitialSessionId,
-    shouldRespectTaskCenterLocalSession,
-    taskCenterLocalSessionOverride,
+    markTaskCenterEmbeddedHomeSession,
+    markTaskCenterLocalSessionOverride,
+    replaceTaskCenterOpenTabs,
+    setTaskCenterDetachedTopicId,
+    setTaskCenterLocalSessionOverride,
+    setTaskCenterOpenTabMap,
+    setTaskCenterTransitionTopicId,
     taskCenterDetachedTopicId,
+    taskCenterEmbeddedHomeSessionIds,
+    taskCenterFallbackRestoreRef,
+    taskCenterLocalSessionOverride,
+    taskCenterOpenTabIds,
+    taskCenterOpenTabIdsRef,
+    taskCenterTransitionTopicId,
+    upsertTaskCenterOpenTab,
+  } = useTaskCenterTabSessionRuntime({
+    agentEntry,
+    normalizedInitialSessionId,
+    sessionId,
+    taskCenterDraftSurfaceActiveRef,
     taskCenterWorkspaceId,
     topicById,
     topics,
-  ]);
-
-  useEffect(() => {
-    if (agentEntry !== "claw" && agentEntry !== "new-task") {
-      return;
-    }
-
-    savePersisted(TASK_CENTER_OPEN_TAB_IDS_STORAGE_KEY, taskCenterOpenTabMap);
-  }, [agentEntry, taskCenterOpenTabMap]);
+    setActiveTaskCenterDraftTabId,
+    setHomePendingPreviewRequest,
+    setTaskCenterDraftSendRequest,
+    setTaskCenterDraftTabs,
+  });
 
   useTrayModelShortcuts({
     providerType,
@@ -4127,82 +3703,6 @@ export function AgentChatWorkspace({
     upsertGeneralArtifact(settledLiveArtifact);
   }, [activeTheme, liveArtifact, settledLiveArtifact, upsertGeneralArtifact]);
 
-  const upsertTaskCenterOpenTab = useCallback(
-    (topicId: string, workspaceIdOverride?: string | null) => {
-      const targetWorkspaceId =
-        normalizeProjectId(workspaceIdOverride) ?? taskCenterWorkspaceId;
-      if (!targetWorkspaceId) {
-        return;
-      }
-
-      setTaskCenterOpenTabMap((currentMap) =>
-        updateTaskCenterTabIdsForWorkspace(
-          currentMap,
-          targetWorkspaceId,
-          (currentIds) =>
-            [topicId, ...currentIds.filter((item) => item !== topicId)].slice(
-              0,
-              MAX_TASK_CENTER_OPEN_TABS,
-            ),
-        ),
-      );
-    },
-    [taskCenterWorkspaceId],
-  );
-
-  const replaceTaskCenterOpenTabs = useCallback(
-    (topicId: string, workspaceIdOverride?: string | null) => {
-      const targetWorkspaceId =
-        normalizeProjectId(workspaceIdOverride) ?? taskCenterWorkspaceId;
-      if (!targetWorkspaceId) {
-        return;
-      }
-
-      setTaskCenterOpenTabMap((currentMap) =>
-        replaceTaskCenterTabIdsForWorkspace(
-          currentMap,
-          targetWorkspaceId,
-          topicId,
-        ),
-      );
-    },
-    [taskCenterWorkspaceId],
-  );
-
-  const markTaskCenterEmbeddedHomeSession = useCallback((topicId: string) => {
-    setTaskCenterEmbeddedHomeSessionIds((current) => {
-      if (current.has(topicId)) {
-        return current;
-      }
-
-      const next = new Set(current);
-      next.add(topicId);
-      return next;
-    });
-  }, []);
-
-  const markTaskCenterLocalSessionOverride = useCallback(
-    (topicId: string) => {
-      setTaskCenterLocalSessionOverride({
-        sessionId: topicId,
-        routeSessionId: normalizedInitialSessionId,
-      });
-    },
-    [normalizedInitialSessionId],
-  );
-
-  const clearTaskCenterEmbeddedHomeSession = useCallback((topicId: string) => {
-    setTaskCenterEmbeddedHomeSessionIds((current) => {
-      if (!current.has(topicId)) {
-        return current;
-      }
-
-      const next = new Set(current);
-      next.delete(topicId);
-      return next;
-    });
-  }, []);
-
   const {
     activeTaskCenterDraftTabIdRef,
     commitMaterializedTaskCenterDraftTab,
@@ -4594,6 +4094,7 @@ export function AgentChatWorkspace({
     sessionId,
     shouldHideDetachedTaskCenterTabs,
     taskCenterDetachedTopicId,
+    taskCenterFallbackRestoreRef,
     taskCenterOpenTabIds,
     taskCenterTransitionTopicId,
     taskCenterVisibleTabIds,
@@ -5189,8 +4690,6 @@ export function AgentChatWorkspace({
     sessionId,
     isSending,
   });
-  const requestRefreshSceneAppExecutionSummary =
-    sceneAppExecutionSummaryState?.requestRefresh;
   const sceneAppExecutionReferenceEntry = useMemo(
     () =>
       buildCuratedTaskReferenceEntryFromSceneAppExecution({
@@ -5257,162 +4756,12 @@ export function AgentChatWorkspace({
       }),
     [artifacts, sessionFiles, taskFiles],
   );
-  const [
-    sceneAppReviewDecisionDialogOpen,
-    setSceneAppReviewDecisionDialogOpen,
-  ] = useState(false);
-  const [sceneAppReviewDecisionTemplate, setSceneAppReviewDecisionTemplate] =
-    useState<AgentRuntimeReviewDecisionTemplate | null>(null);
-  const [sceneAppReviewDecisionLoading, setSceneAppReviewDecisionLoading] =
-    useState(false);
-  const [sceneAppReviewDecisionSaving, setSceneAppReviewDecisionSaving] =
-    useState(false);
-  const sceneAppReviewTargetRunSummary =
-    sceneAppExecutionSummaryState?.reviewTargetRunSummary ?? null;
-  const sceneAppReviewTargetSessionId =
-    sceneAppReviewTargetRunSummary?.sessionId?.trim() || "";
-  const canOpenSceneAppExecutionHumanReview =
-    sceneAppReviewTargetSessionId.length > 0 &&
-    Boolean(
-      sceneAppReviewTargetRunSummary &&
-      ["success", "error", "canceled", "timeout"].includes(
-        sceneAppReviewTargetRunSummary.status,
-      ),
-    );
-  const sceneAppExecutionFailureSignal =
-    sceneAppExecutionSummaryState?.summary?.runtimeBackflow
-      ?.topFailureSignalLabel;
-  const resolveSceneAppExecutionReviewDecisionTemplate =
-    useCallback(async () => {
-      if (!sceneAppReviewTargetSessionId) {
-        return null;
-      }
-
-      if (
-        sceneAppReviewDecisionTemplate?.session_id ===
-        sceneAppReviewTargetSessionId
-      ) {
-        return sceneAppReviewDecisionTemplate;
-      }
-
-      setSceneAppReviewDecisionLoading(true);
-      try {
-        const template = await exportAgentRuntimeReviewDecisionTemplate(
-          sceneAppReviewTargetSessionId,
-        );
-        setSceneAppReviewDecisionTemplate(template);
-        return template;
-      } catch (error) {
-        toast.error(formatSceneAppErrorMessage(error));
-        return null;
-      } finally {
-        setSceneAppReviewDecisionLoading(false);
-      }
-    }, [sceneAppReviewDecisionTemplate, sceneAppReviewTargetSessionId]);
-  const persistSceneAppExecutionHumanReview = useCallback(
-    async (
-      request: AgentRuntimeSaveReviewDecisionRequest,
-      options?: {
-        closeDialog?: boolean;
-        successMessage?: string;
-      },
-    ) => {
-      setSceneAppReviewDecisionSaving(true);
-      try {
-        const template = await saveAgentRuntimeReviewDecision(request);
-        setSceneAppReviewDecisionTemplate(template);
-        recordCuratedTaskRecommendationSignalFromReviewDecision(request, {
-          projectId,
-          sessionId,
-          sceneTitle: sceneAppExecutionSummaryState?.summary?.title,
-        });
-        requestRefreshSceneAppExecutionSummary?.();
-        if (options?.closeDialog !== false) {
-          setSceneAppReviewDecisionDialogOpen(false);
-        }
-        toast.success(options?.successMessage ?? "已保存人工复核结果");
-      } catch (error) {
-        toast.error(formatSceneAppErrorMessage(error));
-      } finally {
-        setSceneAppReviewDecisionSaving(false);
-      }
-    },
-    [
-      projectId,
-      requestRefreshSceneAppExecutionSummary,
-      sceneAppExecutionSummaryState?.summary?.title,
-      sessionId,
-    ],
-  );
-  const handleOpenSceneAppExecutionHumanReview = useCallback(() => {
-    if (!sceneAppReviewTargetSessionId) {
-      toast.error("当前运行还没有关联会话，暂时无法填写人工复核。");
-      return;
-    }
-
-    void (async () => {
-      const template = await resolveSceneAppExecutionReviewDecisionTemplate();
-      if (template) {
-        setSceneAppReviewDecisionDialogOpen(true);
-      }
-    })();
-  }, [
-    resolveSceneAppExecutionReviewDecisionTemplate,
-    sceneAppReviewTargetSessionId,
-  ]);
-  const handleSaveSceneAppExecutionHumanReview = useCallback(
-    async (request: AgentRuntimeSaveReviewDecisionRequest) => {
-      await persistSceneAppExecutionHumanReview(request);
-    },
-    [persistSceneAppExecutionHumanReview],
-  );
-  const handleApplySceneAppExecutionQuickReview = useCallback(
-    (actionKey: (typeof SCENEAPP_QUICK_REVIEW_ACTIONS)[number]["key"]) => {
-      if (
-        !canOpenSceneAppExecutionHumanReview ||
-        !sceneAppReviewTargetSessionId
-      ) {
-        toast.error("当前运行还没有关联会话，暂时无法记录轻量反馈。");
-        return;
-      }
-
-      const action = SCENEAPP_QUICK_REVIEW_ACTIONS.find(
-        (item) => item.key === actionKey,
-      );
-      if (!action) {
-        return;
-      }
-
-      void (async () => {
-        const template = await resolveSceneAppExecutionReviewDecisionTemplate();
-        if (!template) {
-          return;
-        }
-
-        await persistSceneAppExecutionHumanReview(
-          buildSceneAppQuickReviewDecisionRequest({
-            template,
-            action,
-            sceneTitle: sceneAppExecutionSummaryState?.summary?.title,
-            failureSignal: sceneAppExecutionFailureSignal,
-            sourceLabel: "生成",
-          }),
-          {
-            closeDialog: false,
-            successMessage: `已记录「${action.label}」判断`,
-          },
-        );
-      })();
-    },
-    [
-      canOpenSceneAppExecutionHumanReview,
-      persistSceneAppExecutionHumanReview,
-      resolveSceneAppExecutionReviewDecisionTemplate,
-      sceneAppExecutionFailureSignal,
-      sceneAppExecutionSummaryState?.summary?.title,
-      sceneAppReviewTargetSessionId,
-    ],
-  );
+  const sceneAppReviewDecisionRuntime = useSceneAppReviewDecisionRuntime({
+    projectId,
+    sessionId,
+    sceneAppExecutionSummaryState,
+    onNavigate: _onNavigate,
+  });
   const handleOpenSceneAppExecutionDetail = useCallback(() => {
     if (!_onNavigate) {
       return;
@@ -5491,133 +4840,51 @@ export function AgentChatWorkspace({
       taskFiles,
     ],
   );
-  const handleSaveSceneAppExecutionAsSkill = useCallback(() => {
-    if (!_onNavigate) {
-      toast.error("当前入口暂不支持直接跳转到 Skill 页面");
-      return;
-    }
-
-    const latestReviewSignal =
-      listCuratedTaskRecommendationSignals({
-        projectId,
-        sessionId,
-      })
-        .filter((signal) => signal.source === "review_feedback")
-        .sort((left, right) => right.createdAt - left.createdAt)[0] ?? null;
-
-    const nextPageParams = buildSkillsPageParamsFromSceneAppExecution(
-      sceneAppExecutionSummaryState?.summary,
-      {
-        projectId,
-        reviewSignal: latestReviewSignal,
-      },
-    );
-    if (!nextPageParams?.initialScaffoldDraft) {
-      toast.error("当前这轮结果还不足以沉淀为做法");
-      return;
-    }
-
-    _onNavigate("skills", nextPageParams);
-    toast.success("已带着这轮结果去整理做法");
-  }, [
-    _onNavigate,
-    projectId,
-    sceneAppExecutionSummaryState?.summary,
-    sessionId,
-  ]);
-  const [
-    curatedTaskRecommendationSignalsVersion,
-    setCuratedTaskRecommendationSignalsVersion,
-  ] = useState(0);
-  useEffect(() => {
-    return subscribeCuratedTaskRecommendationSignalsChanged(() => {
-      setCuratedTaskRecommendationSignalsVersion((previous) => previous + 1);
-    });
-  }, []);
-  const handleSaveSceneAppExecutionAsInspiration = useCallback(() => {
-    void saveSceneAppExecutionAsInspiration({
-      summary: sceneAppExecutionSummaryState?.summary,
-      projectId,
-      sessionId,
-    });
-  }, [projectId, sceneAppExecutionSummaryState?.summary, sessionId]);
-  const handleOpenInspirationLibrary = useCallback(() => {
-    if (!_onNavigate) {
-      toast.error("当前入口暂不支持直接打开灵感库");
-      return;
-    }
-
-    _onNavigate(
-      "memory",
-      buildSceneAppExecutionInspirationLibraryPageParams({
-        summary: sceneAppExecutionSummaryState?.summary,
-      }),
-    );
-  }, [_onNavigate, sceneAppExecutionSummaryState?.summary]);
-  const sceneAppExecutionSavedAsInspiration = useMemo(() => {
-    void curatedTaskRecommendationSignalsVersion;
-    return hasSavedSceneAppExecutionAsInspiration({
-      summary: sceneAppExecutionSummaryState?.summary,
-      projectId,
-      sessionId,
-    });
-  }, [
-    curatedTaskRecommendationSignalsVersion,
-    projectId,
-    sceneAppExecutionSummaryState?.summary,
-    sessionId,
-  ]);
-  const latestReviewFeedbackSignal =
-    listCuratedTaskRecommendationSignals({
-      projectId,
-      sessionId,
-    })
-      .filter((signal) => signal.source === "review_feedback")
-      .sort((left, right) => right.createdAt - left.createdAt)[0] ?? null;
   const sceneAppExecutionSummaryCard = useMemo(
     () =>
       sceneAppExecutionSummaryState?.summary ? (
         <SceneAppExecutionSummaryCard
           summary={sceneAppExecutionSummaryState.summary}
-          latestReviewFeedbackSignal={latestReviewFeedbackSignal}
+          latestReviewFeedbackSignal={
+            sceneAppReviewDecisionRuntime.latestReviewFeedbackSignal
+          }
           onContinueReviewFeedback={handleContinueSceneAppReviewFeedback}
           onReviewCurrentProject={handleReviewCurrentSceneAppExecution}
-          savedAsInspiration={sceneAppExecutionSavedAsInspiration}
-          onSaveAsInspiration={handleSaveSceneAppExecutionAsInspiration}
-          onOpenInspirationLibrary={handleOpenInspirationLibrary}
-          onSaveAsSkill={handleSaveSceneAppExecutionAsSkill}
+          savedAsInspiration={sceneAppReviewDecisionRuntime.savedAsInspiration}
+          onSaveAsInspiration={
+            sceneAppReviewDecisionRuntime.handleSaveAsInspiration
+          }
+          onOpenInspirationLibrary={
+            sceneAppReviewDecisionRuntime.handleOpenInspirationLibrary
+          }
+          onSaveAsSkill={sceneAppReviewDecisionRuntime.handleSaveAsSkill}
           onOpenSceneAppDetail={handleOpenSceneAppExecutionDetail}
           onOpenSceneAppGovernance={handleOpenSceneAppExecutionGovernance}
-          humanReviewAvailable={canOpenSceneAppExecutionHumanReview}
-          humanReviewLoading={sceneAppReviewDecisionLoading}
+          humanReviewAvailable={sceneAppReviewDecisionRuntime.humanReviewAvailable}
+          humanReviewLoading={sceneAppReviewDecisionRuntime.loading}
           quickReviewActions={SCENEAPP_QUICK_REVIEW_ACTIONS}
           quickReviewPending={
-            sceneAppReviewDecisionLoading || sceneAppReviewDecisionSaving
+            sceneAppReviewDecisionRuntime.quickReviewPending
           }
-          onOpenHumanReview={handleOpenSceneAppExecutionHumanReview}
-          onApplyQuickReview={handleApplySceneAppExecutionQuickReview}
+          onOpenHumanReview={
+            sceneAppReviewDecisionRuntime.handleOpenHumanReview
+          }
+          onApplyQuickReview={
+            sceneAppReviewDecisionRuntime.handleApplyQuickReview
+          }
           contentPostEntries={sceneAppExecutionContentPostEntries}
           onContentPostAction={handleOpenSceneAppExecutionContentPost}
         />
       ) : null,
     [
-      canOpenSceneAppExecutionHumanReview,
-      handleApplySceneAppExecutionQuickReview,
       handleContinueSceneAppReviewFeedback,
       handleOpenSceneAppExecutionContentPost,
       handleOpenSceneAppExecutionDetail,
-      handleOpenSceneAppExecutionHumanReview,
       handleOpenSceneAppExecutionGovernance,
-      handleOpenInspirationLibrary,
       handleReviewCurrentSceneAppExecution,
-      handleSaveSceneAppExecutionAsInspiration,
-      handleSaveSceneAppExecutionAsSkill,
-      latestReviewFeedbackSignal,
-      sceneAppExecutionSavedAsInspiration,
-      sceneAppReviewDecisionLoading,
-      sceneAppReviewDecisionSaving,
       sceneAppExecutionContentPostEntries,
       sceneAppExecutionSummaryState,
+      sceneAppReviewDecisionRuntime,
     ],
   );
   const handleJumpToTimelineItem = useCallback(
@@ -6860,6 +6127,8 @@ export function AgentChatWorkspace({
     },
     [
       markTaskCenterLocalSessionOverride,
+      setTaskCenterDetachedTopicId,
+      setTaskCenterTransitionTopicId,
       taskCenterWorkspaceId,
       upsertTaskCenterOpenTab,
     ],
@@ -7161,11 +6430,11 @@ export function AgentChatWorkspace({
         }
       />
       <RuntimeReviewDecisionDialog
-        open={sceneAppReviewDecisionDialogOpen}
-        template={sceneAppReviewDecisionTemplate}
-        saving={sceneAppReviewDecisionSaving}
-        onOpenChange={setSceneAppReviewDecisionDialogOpen}
-        onSave={handleSaveSceneAppExecutionHumanReview}
+        open={sceneAppReviewDecisionRuntime.dialogOpen}
+        template={sceneAppReviewDecisionRuntime.template}
+        saving={sceneAppReviewDecisionRuntime.saving}
+        onOpenChange={sceneAppReviewDecisionRuntime.setDialogOpen}
+        onSave={sceneAppReviewDecisionRuntime.handleSaveHumanReview}
       />
     </>
   );

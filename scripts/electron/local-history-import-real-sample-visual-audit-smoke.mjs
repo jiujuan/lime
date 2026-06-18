@@ -397,6 +397,102 @@ function assertVisualAudits(audits, readSummary) {
   }
 }
 
+async function inspectImportedRuntimeDetailDrilldown(page, options, forbiddenTokens) {
+  const opened = await page.evaluate(() => {
+    const toggle = document.querySelector(
+      '[data-testid="imported-runtime-detail-toggle"]',
+    );
+    if (!(toggle instanceof HTMLElement)) {
+      return { clicked: false, reason: "missing-toggle" };
+    }
+    toggle.click();
+    return { clicked: true };
+  });
+  assert(
+    opened?.clicked,
+    `真实样本 GUI 未提供完整记录下钻入口: ${JSON.stringify(sanitizeJson(opened))}`,
+  );
+
+  const startedAt = Date.now();
+  let snapshot = null;
+  while (Date.now() - startedAt < options.previewTimeoutMs) {
+    snapshot = await page.evaluate((tokens) => {
+      const panel = document.querySelector(
+        '[data-testid="imported-runtime-detail-panel"]',
+      );
+      const body = document.querySelector(
+        '[data-testid="imported-runtime-detail-body"]',
+      );
+      const events = Array.from(
+        document.querySelectorAll('[data-testid="imported-runtime-detail-event"]'),
+      );
+      const payloads = Array.from(
+        document.querySelectorAll(
+          '[data-testid="imported-runtime-detail-event-payload"]',
+        ),
+      );
+      const text = panel instanceof HTMLElement ? panel.innerText || "" : "";
+      return {
+        panelVisible: panel instanceof HTMLElement,
+        bodyVisible: body instanceof HTMLElement,
+        eventCount: events.length,
+        eventKinds: events
+          .map((event) => event.getAttribute("data-event-kind"))
+          .filter(Boolean),
+        hasFacts: Boolean(
+          document.querySelector(
+            '[data-testid="imported-runtime-detail-event-facts"]',
+          ),
+        ),
+        hasPayloadPreview: payloads.length > 0,
+        hasSemanticTitle:
+          text.includes("命令") ||
+          text.includes("工具") ||
+          text.includes("搜索") ||
+          text.includes("思考") ||
+          text.includes("补丁") ||
+          text.includes("权限"),
+        hasSourceSummary: text.includes("已默认展示") || text.includes("shown by default"),
+        leakedTokens: tokens.filter((token) => token && text.includes(token)),
+        rawFieldLeaks: [
+          "sourceThreadId",
+          "sourcePath",
+          "threadId",
+          "sessionId",
+          "rollout_path",
+        ].filter((token) => text.includes(token)),
+      };
+    }, forbiddenTokens);
+    if (
+      snapshot?.panelVisible &&
+      snapshot.bodyVisible &&
+      snapshot.eventCount > 0 &&
+      snapshot.hasPayloadPreview
+    ) {
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+
+  assert(snapshot?.panelVisible, "完整记录下钻面板不可见");
+  assert(snapshot?.bodyVisible, "完整记录下钻内容不可见");
+  assert(snapshot?.eventCount > 0, "完整记录下钻没有渲染事件卡片");
+  assert(snapshot?.eventKinds.length > 0, "完整记录事件卡片缺少语义 kind");
+  assert(snapshot?.hasFacts, "完整记录事件卡片缺少事实摘要");
+  assert(snapshot?.hasPayloadPreview, "完整记录事件卡片缺少原始负载预览");
+  assert(snapshot?.hasSemanticTitle, "完整记录事件卡片缺少可读语义标题");
+  assert(snapshot?.hasSourceSummary, "完整记录下钻缺少来源规模摘要");
+  assert(
+    snapshot.leakedTokens.length === 0,
+    `完整记录下钻暴露了 source 内部字段: ${snapshot.leakedTokens.join(", ")}`,
+  );
+  assert(
+    snapshot.rawFieldLeaks.length === 0,
+    `完整记录下钻暴露了 raw 字段名: ${snapshot.rawFieldLeaks.join(", ")}`,
+  );
+  return sanitizeJson(snapshot);
+}
+
 async function run() {
   const options = parseArgs(process.argv.slice(2));
   assert(fs.existsSync(options.projectPath), `项目路径不存在: ${options.projectPath}`);
@@ -449,6 +545,7 @@ async function run() {
   let readModel = null;
   let openSnapshot = null;
   let visualAudits = [];
+  let runtimeDetailDrilldown = null;
 
   try {
     console.log(`${LOG_PREFIX} stage=launch-electron`);
@@ -537,6 +634,11 @@ async function run() {
       sourceThreadId: selected.thread.sourceThreadId,
       sourcePath: selected.thread.sourcePath,
     });
+    runtimeDetailDrilldown = await inspectImportedRuntimeDetailDrilldown(
+      page,
+      options,
+      forbiddenTokens,
+    );
     for (const viewport of VIEWPORTS) {
       for (const position of SCROLL_POSITIONS) {
         const screenshotPath = path.join(
@@ -574,6 +676,7 @@ async function run() {
         commit: summarizeCommitResult(commit),
         readModelSummary: readModel.summary,
         openSnapshot: sanitizeOpenSnapshot(openSnapshot),
+        runtimeDetailDrilldown,
         visualAudits,
       }),
     );
@@ -596,6 +699,7 @@ async function run() {
         scroll: audit.scroll,
       })),
     );
+    summary.runtimeDetailDrilldown = runtimeDetailDrilldown;
     summary.consoleErrors = consoleErrors;
     summary.ok = true;
     summary.completedAt = new Date().toISOString();
@@ -614,6 +718,7 @@ async function run() {
         commit: summarizeCommitResult(commit),
         readModelSummary: readModel?.summary || null,
         openSnapshot: sanitizeOpenSnapshot(openSnapshot),
+        runtimeDetailDrilldown,
         visualAudits,
         error: summary.error,
       }),

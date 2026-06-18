@@ -260,11 +260,11 @@
     },
     {
       "kind": "request",
-      "method": "conversationImport/thread/runtimeEvents/read"
+      "method": "conversationImport/thread/preview"
     },
     {
       "kind": "request",
-      "method": "conversationImport/thread/preview"
+      "method": "conversationImport/thread/runtimeEvents/read"
     },
     {
       "kind": "request",

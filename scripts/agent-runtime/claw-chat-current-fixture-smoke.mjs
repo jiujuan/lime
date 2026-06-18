@@ -1796,8 +1796,7 @@ async function waitForGuiPlanCompleted(page, options) {
       snapshot.planDecisionHasTitle &&
       snapshot.planDecisionHasAcceptOption &&
       snapshot.planDecisionHasAdjustInput &&
-      snapshot.textareaVisible &&
-      snapshot.textareaDisabled === false &&
+      snapshot.textareaVisible === false &&
       snapshot.stopButtonVisible === false
     ) {
       return sanitizeJson(snapshot);
@@ -2888,6 +2887,10 @@ async function run() {
     const latestTurnStart = backendLedger
       .filter((entry) => entry.kind === "turnStart")
       .at(-1);
+    const planImplementationTurnStart = backendLedger.find(
+      (entry) =>
+        entry.kind === "turnStart" && entry.inputText === "Implement the plan.",
+    );
     const newsTurnStart = backendLedger.find(
       (entry) => entry.kind === "turnStart" && entry.inputText === NEWS_PROMPT,
     );
@@ -2998,8 +3001,8 @@ async function run() {
           ? summary.guiContinueCompleted?.textareaVisible === true &&
             summary.guiContinueCompleted?.textareaDisabled === false
           : isPlanScenario
-            ? summary.guiPlanCompleted?.textareaVisible === true &&
-              summary.guiPlanCompleted?.textareaDisabled === false
+            ? summary.guiPlanCompleted?.planDecisionVisible === true &&
+              summary.guiPlanCompleted?.textareaVisible === false
             : isGoalScenario
               ? summary.guiGoalCompleted?.textareaVisible === true &&
                 summary.guiGoalCompleted?.textareaDisabled === false
@@ -3054,6 +3057,7 @@ async function run() {
             summary.guiPlanCompleted?.planDecisionHasTitle === true &&
             summary.guiPlanCompleted?.planDecisionHasAcceptOption === true &&
             summary.guiPlanCompleted?.planDecisionHasAdjustInput === true,
+          guiPlanDidNotAutoImplement: !planImplementationTurnStart,
           readModelPlanCompleted:
             summary.readModelPlanCompleted?.includesPrompt === true &&
             summary.readModelPlanCompleted?.includesProposedPlanBlock === true &&

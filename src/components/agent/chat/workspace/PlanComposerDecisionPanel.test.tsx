@@ -61,6 +61,7 @@ function clickButton(container: HTMLElement, label: string) {
   );
   expect(button).toBeTruthy();
   act(() => {
+    button?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
     button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
 }
@@ -118,7 +119,7 @@ describe("PlanComposerDecisionPanel", () => {
     expect(container.textContent).toContain("Continue the current plan.");
     expect(container.textContent).not.toContain("Revise");
     expect(getAdjustmentInput(container)?.getAttribute("placeholder")).toBe(
-      "否，请告知 Codex 如何调整",
+      "否，请告诉我如何调整",
     );
   });
 
@@ -141,7 +142,7 @@ describe("PlanComposerDecisionPanel", () => {
     const { container, onSubmit } = renderPanel();
     const input = getAdjustmentInput(container);
     expect(input?.getAttribute("placeholder")).toBe(
-      "否，请告知 Codex 如何调整",
+      "否，请告诉我如何调整",
     );
 
     changeInputValue(input!, "先补一条 E2E 验证");
@@ -210,7 +211,7 @@ describe("PlanComposerDecisionPanel", () => {
     expect(container.textContent).toContain("是，实施此计划");
     expect(optionButtons).toEqual(["1是，实施此计划"]);
     expect(getAdjustmentInput(container)?.getAttribute("placeholder")).toBe(
-      "否，请告知 Codex 如何调整",
+      "否，请告诉我如何调整",
     );
   });
 });

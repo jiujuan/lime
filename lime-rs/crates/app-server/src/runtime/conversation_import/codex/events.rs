@@ -457,12 +457,19 @@ fn image_generation_started_event(payload: &Value) -> ImportedRuntimeEvent {
 
 fn image_generation_finished_event(payload: &Value) -> ImportedRuntimeEvent {
     let status = string_field(payload, &["status"]).unwrap_or_else(|| "completed".to_string());
-    let success = !matches!(status.as_str(), "failed" | "error" | "cancelled" | "canceled");
+    let success = !matches!(
+        status.as_str(),
+        "failed" | "error" | "cancelled" | "canceled"
+    );
     let output = string_field(payload, &["result"])
         .or_else(|| string_field(payload, &["saved_path", "savedPath"]))
         .or_else(|| string_field(payload, &["revised_prompt", "revisedPrompt"]));
     ImportedRuntimeEvent::new(
-        if success { "tool.result" } else { "tool.failed" },
+        if success {
+            "tool.result"
+        } else {
+            "tool.failed"
+        },
         compact_json(json!({
             "toolCallId": call_id(payload),
             "toolName": "image_generation",
@@ -871,7 +878,12 @@ fn collab_agent_failed(payload: &Value) -> bool {
     let status = payload.get("status");
     status
         .and_then(Value::as_str)
-        .map(|value| matches!(value.trim(), "failed" | "errored" | "not_found" | "notFound"))
+        .map(|value| {
+            matches!(
+                value.trim(),
+                "failed" | "errored" | "not_found" | "notFound"
+            )
+        })
         .unwrap_or(false)
         || status
             .and_then(Value::as_object)

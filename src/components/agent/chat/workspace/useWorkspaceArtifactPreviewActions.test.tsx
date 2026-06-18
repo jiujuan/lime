@@ -888,6 +888,78 @@ describe("useWorkspaceArtifactPreviewActions", () => {
     expect(setGeneralCanvasState).toHaveBeenCalledWith(expect.any(Function));
   });
 
+  it("通用模式打开无文本抽取的 PDF 路径时应投影为 system_open artifact", async () => {
+    const pdfPath = "/Users/coso/Documents/other/汇报材料.pdf";
+    const readFilePreviewSpy = vi.spyOn(fileBrowserModule, "readFilePreview").mockResolvedValue({
+      path: pdfPath,
+      content: null,
+      isBinary: true,
+      size: 55007,
+      error: null,
+    });
+    const setGeneralCanvasState = vi.fn();
+    const setSelectedArtifactId = vi.fn();
+    const setArtifactViewMode = vi.fn();
+    const setLayoutMode = vi.fn();
+    const suppressBrowserAssistCanvasAutoOpen = vi.fn();
+    const upsertGeneralArtifact = vi.fn();
+    const onRequestCanvasPreviewOpen = vi.fn();
+    const { render, getValue } = renderHook({
+      upsertGeneralArtifact,
+      setGeneralCanvasState,
+      setSelectedArtifactId,
+      setArtifactViewMode,
+      setLayoutMode,
+      suppressBrowserAssistCanvasAutoOpen,
+      onRequestCanvasPreviewOpen,
+    });
+
+    await render();
+
+    await act(async () => {
+      getValue().handleFileClick(pdfPath, "");
+      await flushAsyncWork();
+    });
+
+    expect(readFilePreviewSpy).toHaveBeenCalledWith(pdfPath, 64 * 1024);
+    expect(upsertGeneralArtifact).toHaveBeenCalledTimes(1);
+    const artifact = upsertGeneralArtifact.mock.calls[0]?.[0] as Artifact;
+    expect(artifact).toEqual(
+      expect.objectContaining({
+        type: "document",
+        title: "汇报材料.pdf",
+        content: "该文档暂不支持在工作台内嵌预览。\n\n/Users/coso/Documents/other/汇报材料.pdf",
+        meta: expect.objectContaining({
+          previewArtifact: true,
+          isSourceBacked: true,
+          source: "file",
+          sourceRef: pdfPath,
+          sourcePath: pdfPath,
+          filePath: pdfPath,
+          filename: "汇报材料.pdf",
+          fileKind: "pdf",
+          contentKind: "document",
+          renderMode: "system_open",
+          lifecycle: "transient",
+          capabilities: expect.objectContaining({
+            preview: false,
+            systemOpen: true,
+          }),
+        }),
+      }),
+    );
+    expect(setSelectedArtifactId).toHaveBeenCalledWith(artifact.id);
+    expect(onRequestCanvasPreviewOpen).toHaveBeenCalledWith({
+      filePath: pdfPath,
+      selectionKey: `artifact:${artifact.id}`,
+    });
+    expect(setArtifactViewMode).toHaveBeenCalledWith("preview", {
+      artifactId: artifact.id,
+    });
+    expect(setLayoutMode).toHaveBeenCalledWith("chat-canvas");
+    expect(setGeneralCanvasState).toHaveBeenCalledWith(expect.any(Function));
+  });
+
   it("点击占位任务文件时应按需读取会话内容并更新主题工作台画布", async () => {
     const readSessionFile = vi.fn(async () => "# 主题工作台内容");
     const setTaskFiles = vi.fn();

@@ -411,13 +411,24 @@ mod tests {
             .expect("process should start");
         assert_eq!(response.snapshot.status, ExecutionProcessStatus::Running);
 
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        let output = server
-            .drain_output(ExecutionProcessDrainOutputParams {
-                process_id: Some("process-test".to_string()),
-                limit: None,
-            })
-            .expect("output should drain");
+        let mut output = ExecutionProcessDrainOutputResponse { deltas: Vec::new() };
+        for _ in 0..20 {
+            let next = server
+                .drain_output(ExecutionProcessDrainOutputParams {
+                    process_id: Some("process-test".to_string()),
+                    limit: None,
+                })
+                .expect("output should drain");
+            output.deltas.extend(next.deltas);
+            if output
+                .deltas
+                .iter()
+                .any(|delta| delta.delta.contains("hello"))
+            {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        }
         assert!(output
             .deltas
             .iter()

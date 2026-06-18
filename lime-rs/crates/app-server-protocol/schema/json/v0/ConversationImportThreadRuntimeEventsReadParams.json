@@ -10,12 +10,18 @@
     "limit": {
       "format": "uint",
       "minimum": 0,
-      "type": "integer"
+      "type": [
+        "integer",
+        "null"
+      ]
     },
     "offset": {
       "format": "uint",
       "minimum": 0,
-      "type": "integer"
+      "type": [
+        "integer",
+        "null"
+      ]
     },
     "sessionId": {
       "type": "string"
@@ -23,7 +29,10 @@
     "turnIndex": {
       "format": "uint",
       "minimum": 0,
-      "type": "integer"
+      "type": [
+        "integer",
+        "null"
+      ]
     }
   },
   "required": [

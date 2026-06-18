@@ -532,6 +532,33 @@ export function summarizeAgentRuntimeFacts(readModel: AgentRuntimeReadModelLike,
   };
 }
 
+function runtimePanelEventClass(event: AgentRuntimeFactLike): string {
+  return event.eventClass ?? event.source?.eventClass ?? "";
+}
+
+function isRuntimePanelEvent(event: AgentRuntimeFactLike): boolean {
+  const eventClass = runtimePanelEventClass(event);
+  return event.surface === "tool" ||
+    event.surface === "human-action" ||
+    event.surface === "permission" ||
+    event.surface === "artifact" ||
+    event.surface === "evidence" ||
+    event.surface === "subagent" ||
+    event.surface === "handoff" ||
+    event.status === "failed" ||
+    event.status === "blocked" ||
+    eventClass.startsWith("tool.") ||
+    eventClass.startsWith("action.") ||
+    eventClass.startsWith("permission.") ||
+    eventClass.startsWith("artifact.") ||
+    eventClass.startsWith("evidence.") ||
+    eventClass.startsWith("task.") ||
+    eventClass.startsWith("subagent.") ||
+    eventClass.startsWith("handoff.") ||
+    eventClass.startsWith("review.") ||
+    eventClass.startsWith("runtime.error");
+}
+
 export function agentWorkbenchSessionStatusLabel(status?: string): string {
   if (status === "waiting-user") return "待补充";
   if (status === "draft-created") return "已出草稿";
@@ -549,20 +576,17 @@ export function hasAgentWorkbenchRuntimeFacts(
   readModel: AgentRuntimeReadModelLike,
   summary: AgentRuntimeFactSummary = summarizeAgentRuntimeFacts(readModel),
 ): boolean {
-  if (summary.sourceCount || summary.toolCount || summary.pendingActionCount || summary.artifactCount) {
+  if (
+    summary.toolCount ||
+    summary.pendingActionCount ||
+    summary.artifactCount ||
+    summary.evidenceCount
+  ) {
     return true;
   }
 
   const events = readModel.visibleEvents ?? readModel.events ?? [];
-  return events.some((event) => {
-    const eventClass = event.eventClass ?? event.source?.eventClass ?? "";
-    return event.surface === "tool" ||
-      event.surface === "human-action" ||
-      event.status === "failed" ||
-      event.status === "blocked" ||
-      eventClass.startsWith("tool.") ||
-      eventClass.startsWith("action.");
-  });
+  return events.some(isRuntimePanelEvent);
 }
 
 export function projectAgentWorkbenchTaskView(
@@ -594,7 +618,7 @@ export function projectAgentWorkbenchTaskView(
     evidenceCount,
     taskCount: runtimeSummary.taskCount,
     hasRuntimeFacts,
-    shouldShowRuntimePanel: hasRuntimeFacts,
+    shouldShowRuntimePanel: hasAgentWorkbenchRuntimeFacts(readModel, runtimeSummary),
     checkpoints: [
       {
         id: "input",

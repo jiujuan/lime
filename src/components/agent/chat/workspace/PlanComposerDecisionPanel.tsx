@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import { useTranslation } from "react-i18next";
 import {
   ArrowDown,
@@ -19,6 +25,8 @@ interface PlanComposerDecisionPanelProps {
 interface SubmissionState {
   kind: "submit" | "ignore";
 }
+
+const USER_ACTIVATION_WINDOW_MS = 5_000;
 
 function isPromiseLike(value: unknown): value is Promise<unknown> {
   return (
@@ -125,6 +133,7 @@ export function PlanComposerDecisionPanel({
   const [submissionState, setSubmissionState] = useState<SubmissionState | null>(
     null,
   );
+  const latestUserActivationAtRef = useRef(0);
   const isSubmitting = submissionState !== null;
   const canSubmit = selectedLabel.trim().length > 0 || adjustment.trim().length > 0;
 
@@ -132,7 +141,25 @@ export function PlanComposerDecisionPanel({
     setSelectedLabel(options[0]?.label ?? "");
     setAdjustment("");
     setSubmissionState(null);
+    latestUserActivationAtRef.current = 0;
   }, [options, request.requestId]);
+
+  const rememberUserActivation = () => {
+    latestUserActivationAtRef.current = Date.now();
+  };
+
+  const isExplicitUserActivation = (
+    event: ReactMouseEvent<HTMLButtonElement>,
+  ) => {
+    if (event.nativeEvent.isTrusted) {
+      return true;
+    }
+    const activatedAt = latestUserActivationAtRef.current;
+    return (
+      activatedAt > 0 &&
+      Date.now() - activatedAt <= USER_ACTIVATION_WINDOW_MS
+    );
+  };
 
   const submitResponse = (
     response: ConfirmResponse,
@@ -163,14 +190,20 @@ export function PlanComposerDecisionPanel({
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    if (!isExplicitUserActivation(event)) {
+      return;
+    }
     submitResponse(
       buildSubmitPayload({ request, selectedLabel, adjustment }),
       { kind: "submit" },
     );
   };
 
-  const handleIgnore = () => {
+  const handleIgnore = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    if (!isExplicitUserActivation(event)) {
+      return;
+    }
     onDismiss?.(request.requestId);
     submitResponse(
       {
@@ -190,6 +223,12 @@ export function PlanComposerDecisionPanel({
       data-testid="plan-composer-decision-panel"
       data-layout="composer-drawer"
       data-request-id={request.requestId}
+      onKeyDownCapture={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          rememberUserActivation();
+        }
+      }}
+      onPointerDownCapture={rememberUserActivation}
     >
       <div className="px-1 pb-2 text-sm font-semibold leading-5 text-slate-950">
         {question}

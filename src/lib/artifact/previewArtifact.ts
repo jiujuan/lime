@@ -78,7 +78,17 @@ const IMAGE_EXTENSIONS = new Set([
 ]);
 const AUDIO_EXTENSIONS = new Set(["mp3", "wav", "m4a", "aac", "ogg", "flac"]);
 const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "webm", "mkv", "avi"]);
-const DOCUMENT_EXTENSIONS = new Set(["docx", "doc", "pdf", "rtf", "odt"]);
+const DOCUMENT_EXTENSIONS = new Set([
+  "docx",
+  "doc",
+  "pdf",
+  "rtf",
+  "odt",
+  "xls",
+  "xlsx",
+  "ppt",
+  "pptx",
+]);
 const CODE_LANGUAGE_BY_EXTENSION: Record<string, string> = {
   c: "c",
   cc: "cpp",
@@ -208,6 +218,9 @@ function resolveArtifactType(
 
 function resolveRenderMode(
   contentKind: PreviewArtifactContentKind,
+  input: {
+    content: string;
+  },
 ): PreviewArtifactRenderMode {
   switch (contentKind) {
     case "html":
@@ -217,7 +230,7 @@ function resolveRenderMode(
     case "video":
       return "media";
     case "document":
-      return "document_text";
+      return input.content.trim() ? "document_text" : "system_open";
     case "binary":
       return "system_open";
     case "unsupported":
@@ -230,6 +243,7 @@ function resolveRenderMode(
 function resolvePreviewContent(input: {
   content: string;
   contentKind: PreviewArtifactContentKind;
+  renderMode: PreviewArtifactRenderMode;
   previewUrl?: string | null;
   path: string;
   error?: string | null;
@@ -242,6 +256,9 @@ function resolvePreviewContent(input: {
   }
   if (input.contentKind === "binary") {
     return `该文件暂不支持在工作台内嵌预览。\n\n${input.path}`;
+  }
+  if (input.contentKind === "document" && input.renderMode === "system_open") {
+    return `该文档暂不支持在工作台内嵌预览。\n\n${input.path}`;
   }
   if (
     input.contentKind === "image" ||
@@ -280,7 +297,9 @@ export function createPreviewArtifact(
     mimeType: input.mimeType,
     error: input.error,
   });
-  const renderMode = resolveRenderMode(contentKind);
+  const renderMode = resolveRenderMode(contentKind, {
+    content,
+  });
   const artifactType = resolveArtifactType(contentKind);
   const filename = extractFilename(path);
   const now = input.now ?? Date.now();
@@ -290,7 +309,7 @@ export function createPreviewArtifact(
       : undefined;
   const capabilities: PreviewArtifactCapabilities = {
     ...DEFAULT_CAPABILITIES,
-    preview: contentKind !== "binary" && contentKind !== "unsupported",
+    preview: renderMode !== "system_open" && renderMode !== "unsupported",
     externalWindow: contentKind === "html",
     edit:
       contentKind === "markdown" ||
@@ -303,6 +322,7 @@ export function createPreviewArtifact(
   const previewContent = resolvePreviewContent({
     content,
     contentKind,
+    renderMode,
     previewUrl,
     path,
     error: input.error,

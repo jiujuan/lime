@@ -148,10 +148,11 @@ function collectPlanStateCandidates(
   const itemLines = planState.items
     .map((item) => normalizePlanText(item.content))
     .filter((content) => content.length > 0);
-  const planText =
-    itemLines.length > 0
-      ? itemLines.map((content) => `- ${content}`).join("\n")
-      : normalizePlanText(planState.summaryText);
+  if (itemLines.length === 0) {
+    return [];
+  }
+
+  const planText = itemLines.map((content) => `- ${content}`).join("\n");
   if (!planText) {
     return [];
   }

@@ -8,7 +8,10 @@ import {
 import { cn } from "@/lib/utils";
 import {
   buildImportedRuntimeEventDisplay,
+  type ImportedRuntimeEventDisplay,
+  type ImportedRuntimeEventLocalizedText,
   type ImportedRuntimeEventPayloadSummary,
+  type ImportedRuntimeEventStatusDisplay,
 } from "./importedRuntimeEventDetailViewModel";
 import {
   createFallbackWorkflowTranslate,
@@ -37,6 +40,32 @@ function taskRailText(
 
 function extractErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function localizedRuntimeText(
+  t: TaskRailTranslate | undefined,
+  text: ImportedRuntimeEventLocalizedText,
+): string {
+  return taskRailText(t, text.key, text.defaultValue);
+}
+
+function statusText(
+  t: TaskRailTranslate | undefined,
+  status: ImportedRuntimeEventStatusDisplay,
+): string {
+  return taskRailText(t, status.key, status.defaultValue);
+}
+
+function statusClassName(status: ImportedRuntimeEventStatusDisplay) {
+  return cn(
+    "shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-medium leading-4",
+    status.tone === "running" && "border-sky-200 bg-sky-50 text-sky-700",
+    status.tone === "completed" &&
+      "border-emerald-200 bg-emerald-50 text-emerald-700",
+    status.tone === "failed" && "border-rose-200 bg-rose-50 text-rose-700",
+    status.tone === "muted" &&
+      "border-[color:var(--lime-surface-border)] bg-white text-[color:var(--lime-text-muted)]",
+  );
 }
 
 function payloadSummaryText(
@@ -108,7 +137,110 @@ function mergeEvents(
       merged.push(event);
     }
   }
+  merged.sort((left, right) =>
+    left.sourceEventIndex !== right.sourceEventIndex
+      ? left.sourceEventIndex - right.sourceEventIndex
+      : left.turnIndex !== right.turnIndex
+        ? left.turnIndex - right.turnIndex
+        : left.eventIndex !== right.eventIndex
+          ? left.eventIndex - right.eventIndex
+          : left.eventType.localeCompare(right.eventType),
+  );
   return merged;
+}
+
+function ImportedRuntimeEventCard({
+  event,
+  t,
+}: {
+  event: ImportedRuntimeEventDisplay;
+  t?: TaskRailTranslate;
+}) {
+  return (
+    <div
+      className="rounded-xl border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-2.5 py-2"
+      data-testid="imported-runtime-detail-event"
+      data-event-kind={event.kind}
+    >
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="min-w-0 truncate text-[11px] font-semibold text-[color:var(--lime-text-strong)]">
+              {localizedRuntimeText(t, event.title)}
+            </span>
+            <span className="shrink-0 rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] leading-4 text-[color:var(--lime-text-muted)]">
+              {event.eventTypeLabel}
+            </span>
+          </div>
+          {event.description ? (
+            <div
+              className="mt-1 line-clamp-2 text-[10px] leading-4 text-[color:var(--lime-text-muted)]"
+              title={event.description}
+            >
+              {event.description}
+            </div>
+          ) : null}
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          {event.status ? (
+            <span className={statusClassName(event.status)}>
+              {statusText(t, event.status)}
+            </span>
+          ) : null}
+          <span className="text-[10px] text-[color:var(--lime-text-muted)]">
+            {taskRailText(
+              t,
+              "generalWorkbench.taskRail.importedRuntime.eventMeta",
+              "轮次 {{turn}} · 事件 {{event}}",
+              {
+                turn: event.turnNumber,
+                event: event.eventNumber,
+              },
+            )}
+          </span>
+        </div>
+      </div>
+
+      {event.facts.length > 0 ? (
+        <div
+          className="mt-1.5 flex flex-wrap gap-1"
+          data-testid="imported-runtime-detail-event-facts"
+        >
+          {event.facts.map((fact) => (
+            <span
+              key={`${fact.id}:${fact.value}`}
+              className="max-w-full rounded-md border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-muted)] px-1.5 py-0.5 text-[10px] leading-4 text-[color:var(--lime-text-muted)]"
+              title={`${localizedRuntimeText(t, fact.label)}：${fact.value}`}
+            >
+              <span className="text-[color:var(--lime-text-faint)]">
+                {localizedRuntimeText(t, fact.label)}
+              </span>
+              <span className="mx-1 text-[color:var(--lime-text-faint)]">
+                ·
+              </span>
+              <span className="break-all">{fact.value}</span>
+            </span>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="mt-1.5 text-[10px] text-[color:var(--lime-text-muted)]">
+        {payloadSummaryText(t, event.payloadSummary)}
+        {" · #"}
+        {event.sourceEventNumber}
+      </div>
+      <pre
+        className={cn(
+          "mt-1 max-h-28 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-slate-950/5 px-2 py-1.5 text-[10px] leading-4 text-[color:var(--lime-text-muted)]",
+          event.payloadPreviewTruncated &&
+            "border border-amber-200 bg-amber-50 text-amber-800",
+        )}
+        data-testid="imported-runtime-detail-event-payload"
+      >
+        {event.payloadPreview}
+      </pre>
+    </div>
+  );
 }
 
 export function ImportedRuntimeEventDetailPanel({
@@ -178,7 +310,7 @@ export function ImportedRuntimeEventDetailPanel({
     return null;
   }
 
-  const totalEvents = summary?.totalEvents ?? 0;
+  const sourceRuntimeEvents = summary?.sourceRuntimeEvents ?? summary?.totalEvents ?? 0;
   const materializedEvents = summary?.materializedRuntimeEvents ?? 0;
   const sidecarEvents = summary?.sidecarRuntimeEvents ?? 0;
   const nextOffset = summary?.nextOffset ?? null;
@@ -222,7 +354,7 @@ export function ImportedRuntimeEventDetailPanel({
                   "已默认展示 {{materialized}} / {{total}} 条，完整记录保留 {{sidecar}} 条",
                   {
                     materialized: materializedEvents,
-                    total: totalEvents,
+                    total: sourceRuntimeEvents,
                     sidecar: sidecarEvents,
                   },
                 )
@@ -256,43 +388,7 @@ export function ImportedRuntimeEventDetailPanel({
               data-testid="imported-runtime-detail-events"
             >
               {visibleEvents.map((event) => (
-                <div
-                  key={event.id}
-                  className="rounded-xl border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-2.5 py-2"
-                  data-testid="imported-runtime-detail-event"
-                >
-                  <div className="flex min-w-0 items-center justify-between gap-2">
-                    <span className="min-w-0 truncate text-[11px] font-semibold text-[color:var(--lime-text-strong)]">
-                      {event.eventTypeLabel}
-                    </span>
-                    <span className="shrink-0 text-[10px] text-[color:var(--lime-text-muted)]">
-                      {taskRailText(
-                        t,
-                        "generalWorkbench.taskRail.importedRuntime.eventMeta",
-                        "轮次 {{turn}} · 事件 {{event}}",
-                        {
-                          turn: event.turnNumber,
-                          event: event.eventNumber,
-                        },
-                      )}
-                    </span>
-                  </div>
-                  <div className="mt-1 text-[10px] text-[color:var(--lime-text-muted)]">
-                    {payloadSummaryText(t, event.payloadSummary)}
-                    {" · #"}
-                    {event.sourceEventNumber}
-                  </div>
-                  <pre
-                    className={cn(
-                      "mt-1 max-h-28 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-slate-950/5 px-2 py-1.5 text-[10px] leading-4 text-[color:var(--lime-text-muted)]",
-                      event.payloadPreviewTruncated &&
-                        "border border-amber-200 bg-amber-50 text-amber-800",
-                    )}
-                    data-testid="imported-runtime-detail-event-payload"
-                  >
-                    {event.payloadPreview}
-                  </pre>
-                </div>
+                <ImportedRuntimeEventCard key={event.id} event={event} t={t} />
               ))}
             </div>
           ) : null}

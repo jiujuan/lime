@@ -53,7 +53,7 @@
 
 - [x] 定义 `LlmRequest` / `LlmInputPart` / `LlmOutputPart` / `LlmEvent`。
 - [x] 增加 OpenAI Chat、OpenAI Responses、Anthropic Messages、Gemini、Ollama 的 protocol mapper 边界。
-- [ ] Aster adapter 降级为 compat backend adapter，只做合同转换和事件投影。
+- [x] Aster adapter 降级为 compat backend adapter，只做合同转换和事件投影。
 
 ### Phase 4：媒体任务复用
 
@@ -112,6 +112,8 @@
 - 协议 mapper 已拆成 `mapper/mod.rs`、`common.rs`、`openai_responses.rs`、`openai_chat.rs`、`anthropic_messages.rs`、`gemini.rs`、`ollama_chat.rs`，避免继续形成单文件巨型 mapper。
 - OpenAI Responses mapper 修正工具声明为顶层 `type=function`，并保持 tool call 写入顶层 `function_call`、tool result 写入 `function_call_output`；OpenAI Chat、Anthropic、Gemini、Ollama 分别保持各自 provider-native body shape。
 - `OpenaiImages`、`Fal`、`BedrockConverse`、`Unknown` 当前不进入 canonical LLM mapper，直接返回 `UnsupportedProtocol`，避免把媒体协议伪装成聊天协议。
+- Aster adapter 已收口到 route protocol：`AsterProviderConfig` 通过 `ResolvedModelRoute.protocol` 选择 `ChatCompletions` / `Responses`，continuation capability 也只看 route protocol，不再按 provider/model 字符串猜测。
+- `OPENAI_FORCE_RESPONSES_API` 只保留为 Aster OpenAI provider 内部 compat env flag，不再作为 runtime 路由事实源；相关 env-mutating 测试已改为串行执行，避免并发污染。
 - 清理外部参考项目名残留：代码注释改成中性“多协议模型运行时”表述；Provider 图标 surface 和本地 provider 识别里的旧 provider id 按 `dead` 清掉；删除已无引用的旧 provider 图标资源文件。
 - 本轮没有数据库 schema、Provider 存储或 task artifact 结构变更；旧数据无需迁移脚本。后续如果把 `TaskExecutionContract` typed 化或把 route/event 写入持久化 schema，再补启动期迁移或 scripts 迁移入口。
 - 验证结果：`CARGO_TARGET_DIR="/tmp/lime-model-route-target" cargo test --manifest-path "lime-rs/Cargo.toml" -p runtime-core -- --nocapture` 通过；外部参考项目名的内容扫描和文件名扫描均无结果。

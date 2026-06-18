@@ -377,7 +377,10 @@ fn is_first_party_anthropic_base_url(base_url: &str) -> bool {
 }
 
 fn should_disable_provider_default_fast_model(config: &AsterProviderConfig) -> bool {
-    if config.protocol.is_some_and(AsterProviderProtocol::uses_responses_api) {
+    if config
+        .protocol
+        .is_some_and(AsterProviderProtocol::uses_responses_api)
+    {
         return false;
     }
 
@@ -588,7 +591,10 @@ fn set_provider_env_vars(config: &AsterProviderConfig) {
     }
 
     if config.provider_name == "openai" {
-        if config.protocol.is_some_and(AsterProviderProtocol::uses_responses_api) {
+        if config
+            .protocol
+            .is_some_and(AsterProviderProtocol::uses_responses_api)
+        {
             std::env::set_var("OPENAI_FORCE_RESPONSES_API", "1");
         } else {
             std::env::remove_var("OPENAI_FORCE_RESPONSES_API");

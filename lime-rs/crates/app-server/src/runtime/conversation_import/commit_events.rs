@@ -47,28 +47,50 @@ impl ImportedRuntimeEventProjectionSummary {
 }
 
 pub(super) fn materialize_imported_runtime_events_for_default_projection(
-    events: Vec<ImportedRuntimeEvent>,
+    events: &[ImportedRuntimeEvent],
+    selector: &mut ImportedRuntimeEventProjectionSelector,
 ) -> (
     Vec<ImportedRuntimeEvent>,
     ImportedRuntimeEventProjectionSummary,
 ) {
-    let mut selector = ImportedRuntimeEventProjectionSelector::new(
-        DEFAULT_MATERIALIZED_COMMAND_TOOL_CALLS_PER_THREAD,
-        DEFAULT_MATERIALIZED_OTHER_TOOL_CALLS_PER_THREAD,
-    );
+    let before = selector.counts();
     let source_runtime_events = events.len();
     let events = events
-        .into_iter()
+        .iter()
         .filter(|event| selector.should_materialize(event))
+        .cloned()
         .collect::<Vec<_>>();
-    let mut summary = selector.finish();
+    let after = selector.counts();
+    let mut summary = ImportedRuntimeEventProjectionSummary::default();
+    summary.command_tool_call_limit = selector.command_tool_call_limit;
+    summary.other_tool_call_limit = selector.other_tool_call_limit;
+    summary.materialized_command_tool_calls = after
+        .materialized_command_tool_calls
+        .saturating_sub(before.materialized_command_tool_calls);
+    summary.materialized_other_tool_calls = after
+        .materialized_other_tool_calls
+        .saturating_sub(before.materialized_other_tool_calls);
+    summary.skipped_command_tool_calls = after
+        .skipped_command_tool_calls
+        .saturating_sub(before.skipped_command_tool_calls);
+    summary.skipped_other_tool_calls = after
+        .skipped_other_tool_calls
+        .saturating_sub(before.skipped_other_tool_calls);
     summary.source_runtime_events = source_runtime_events;
     summary.materialized_runtime_events = events.len();
     summary.sidecar_runtime_events = source_runtime_events.saturating_sub(events.len());
     (events, summary)
 }
 
-struct ImportedRuntimeEventProjectionSelector {
+#[derive(Debug, Clone, Copy, Default)]
+struct ImportedRuntimeEventProjectionSelectorCounts {
+    materialized_command_tool_calls: usize,
+    materialized_other_tool_calls: usize,
+    skipped_command_tool_calls: usize,
+    skipped_other_tool_calls: usize,
+}
+
+pub(super) struct ImportedRuntimeEventProjectionSelector {
     command_tool_call_limit: usize,
     other_tool_call_limit: usize,
     materialized_command_tool_calls: usize,
@@ -82,7 +104,7 @@ struct ImportedRuntimeEventProjectionSelector {
 }
 
 impl ImportedRuntimeEventProjectionSelector {
-    fn new(command_tool_call_limit: usize, other_tool_call_limit: usize) -> Self {
+    pub(super) fn new(command_tool_call_limit: usize, other_tool_call_limit: usize) -> Self {
         Self {
             command_tool_call_limit,
             other_tool_call_limit,
@@ -94,6 +116,15 @@ impl ImportedRuntimeEventProjectionSelector {
             skipped_tool_call_ids: BTreeSet::new(),
             materialized_patch_ids: BTreeSet::new(),
             materialized_action_ids: BTreeSet::new(),
+        }
+    }
+
+    fn counts(&self) -> ImportedRuntimeEventProjectionSelectorCounts {
+        ImportedRuntimeEventProjectionSelectorCounts {
+            materialized_command_tool_calls: self.materialized_command_tool_calls,
+            materialized_other_tool_calls: self.materialized_other_tool_calls,
+            skipped_command_tool_calls: self.skipped_command_tool_calls,
+            skipped_other_tool_calls: self.skipped_other_tool_calls,
         }
     }
 
@@ -186,20 +217,6 @@ impl ImportedRuntimeEventProjectionSelector {
         }
         self.materialized_action_ids.insert(action_id);
         true
-    }
-
-    fn finish(self) -> ImportedRuntimeEventProjectionSummary {
-        ImportedRuntimeEventProjectionSummary {
-            source_runtime_events: 0,
-            materialized_runtime_events: 0,
-            sidecar_runtime_events: 0,
-            materialized_command_tool_calls: self.materialized_command_tool_calls,
-            materialized_other_tool_calls: self.materialized_other_tool_calls,
-            skipped_command_tool_calls: self.skipped_command_tool_calls,
-            skipped_other_tool_calls: self.skipped_other_tool_calls,
-            command_tool_call_limit: self.command_tool_call_limit,
-            other_tool_call_limit: self.other_tool_call_limit,
-        }
     }
 }
 
@@ -328,6 +345,15 @@ impl ImportedRuntimeEventNormalizer {
 
     pub(super) fn has_terminal_event(&self) -> bool {
         self.has_terminal_event
+    }
+}
+
+impl Default for ImportedRuntimeEventProjectionSelector {
+    fn default() -> Self {
+        Self::new(
+            DEFAULT_MATERIALIZED_COMMAND_TOOL_CALLS_PER_THREAD,
+            DEFAULT_MATERIALIZED_OTHER_TOOL_CALLS_PER_THREAD,
+        )
     }
 }
 

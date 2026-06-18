@@ -485,10 +485,7 @@ export function useWorkspaceArtifactPreviewActions({
             openFilePreviewArtifact({
               fileName,
               content: nextContent,
-              sourcePath:
-                !preview.error && !preview.isBinary
-                  ? preview.path || fileName
-                  : fileName,
+              sourcePath: !preview.error ? preview.path || fileName : fileName,
               isBinary: preview.isBinary,
               size: preview.size,
               error: preview.error,

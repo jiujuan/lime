@@ -394,9 +394,9 @@ fn upsert_context_compaction_item(
         "context.compaction.started" => "in_progress",
         _ => "completed",
     };
-    let entry = items.entry(id.clone()).or_insert_with(|| {
-        lifecycle_base_item(stored, event, &id, "context_compaction", status)
-    });
+    let entry = items
+        .entry(id.clone())
+        .or_insert_with(|| lifecycle_base_item(stored, event, &id, "context_compaction", status));
     let Some(object) = entry.as_object_mut() else {
         return;
     };
@@ -459,8 +459,7 @@ fn upsert_subagent_activity_item(
     merge_optional_field(
         object,
         "title",
-        raw_string_field(&event.payload, &["title", "agentPath", "agent_path"])
-            .map(Value::String),
+        raw_string_field(&event.payload, &["title", "agentPath", "agent_path"]).map(Value::String),
     );
     merge_optional_field(
         object,
@@ -480,8 +479,16 @@ fn upsert_subagent_activity_item(
     merge_optional_field(
         object,
         "session_id",
-        string_field(&event.payload, &["sessionId", "session_id", "agentThreadId", "agent_thread_id"])
-            .map(Value::String),
+        string_field(
+            &event.payload,
+            &[
+                "sessionId",
+                "session_id",
+                "agentThreadId",
+                "agent_thread_id",
+            ],
+        )
+        .map(Value::String),
     );
     merge_lifecycle_metadata(object, event);
 }

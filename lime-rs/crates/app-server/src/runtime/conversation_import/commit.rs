@@ -2,7 +2,7 @@ use super::codex::{self, events::ImportedRuntimeEvent, ImportedTimelineItem};
 use super::commit_events::{
     enrich_imported_runtime_event_payload,
     materialize_imported_runtime_events_for_default_projection, ImportedRuntimeEventNormalizer,
-    ImportedRuntimeEventProjectionSummary,
+    ImportedRuntimeEventProjectionSelector, ImportedRuntimeEventProjectionSummary,
 };
 use super::import_status;
 use super::provenance::{self, ImportProvenance};
@@ -120,7 +120,8 @@ fn commit_codex_thread(
         })?
         .session;
 
-    let prepared_turns = prepare_imported_turns(turns);
+    let mut projection_selector = ImportedRuntimeEventProjectionSelector::default();
+    let prepared_turns = prepare_imported_turns(turns, &mut projection_selector);
     let projection_summary = summarize_prepared_turns(&prepared_turns);
     let sidecar_ref =
         persist_imported_runtime_event_sidecar(core, &session.session_id, &prepared_turns)?;
@@ -441,7 +442,10 @@ fn append_imported_turns(
     Ok(imported)
 }
 
-fn prepare_imported_turns(turns: Vec<ImportedTurn>) -> Vec<PreparedImportedTurn> {
+fn prepare_imported_turns(
+    turns: Vec<ImportedTurn>,
+    projection_selector: &mut ImportedRuntimeEventProjectionSelector,
+) -> Vec<PreparedImportedTurn> {
     turns
         .into_iter()
         .map(|turn| {
@@ -457,7 +461,10 @@ fn prepare_imported_turns(turns: Vec<ImportedTurn>) -> Vec<PreparedImportedTurn>
                 ));
             }
             let (materialized_events, projection_summary) =
-                materialize_imported_runtime_events_for_default_projection(source_events.clone());
+                materialize_imported_runtime_events_for_default_projection(
+                    &source_events,
+                    projection_selector,
+                );
             PreparedImportedTurn {
                 user_text: turn.user_text,
                 user_attachments: turn.user_attachments,
