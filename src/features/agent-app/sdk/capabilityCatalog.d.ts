@@ -230,7 +230,7 @@ export declare const LIME_CAPABILITY_DEFINITIONS: readonly [{
     readonly methods: readonly ["query", "write", "compact", "getStatus"];
     readonly summary: "工作记忆、长期记忆、团队记忆和上下文压缩。";
     readonly appResponsibility: "声明业务记忆意图和可写范围。";
-    readonly limeResponsibility: "复用 memory_runtime / unified_memory 主链并处理压缩。";
+    readonly limeResponsibility: "复用 memory store / MemoryBackend / memory tools 主链并处理压缩。";
     readonly profile: {
         readonly adapter: "adapter";
     };

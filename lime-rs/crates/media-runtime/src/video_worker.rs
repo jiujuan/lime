@@ -2,12 +2,15 @@ use std::path::Path;
 use std::time::Duration;
 
 use chrono::Utc;
+use runtime_core::{
+    build_fal_video_generation_body, LlmMessage, LlmRequest, LlmRole, ProtocolMappingError,
+};
 use serde_json::{json, Map, Value};
 
 use super::model_route;
 use super::{
-    load_task_output, patch_task_artifact, read_payload_string, MediaRuntimeError, MediaTaskOutput,
-    TaskArtifactPatch, TaskErrorRecord, TaskProgress,
+    llm_events, load_task_output, patch_task_artifact, read_payload_string, MediaRuntimeError,
+    MediaTaskOutput, TaskArtifactPatch, TaskErrorRecord, TaskProgress,
 };
 
 pub const VIDEO_TASK_RUNNER_WORKER_ID: &str = "media-video-api-worker";
@@ -110,6 +113,9 @@ where
         task_id,
         TaskArtifactPatch {
             status: Some("running".to_string()),
+            payload_patch: Some(llm_events::video_running_payload_patch(
+                &routed_output.record.payload,
+            )),
             progress: Some(build_video_task_progress(
                 "running",
                 "视频生成中，结果会自动回填到对话与工作台。".to_string(),
@@ -164,6 +170,10 @@ where
         task_id,
         TaskArtifactPatch {
             status: Some("succeeded".to_string()),
+            payload_patch: Some(llm_events::video_completed_payload_patch(
+                &latest.record.payload,
+                video.get("url").and_then(Value::as_str),
+            )),
             result: Some(Some(build_video_task_result_value(
                 &prepared_input,
                 video,
@@ -217,6 +227,10 @@ where
         task_id,
         TaskArtifactPatch {
             status: Some("failed".to_string()),
+            payload_patch: Some(llm_events::video_failed_payload_patch(
+                &current.record.payload,
+                &error,
+            )),
             last_error: Some(Some(error.clone())),
             progress: Some(build_video_task_progress(
                 "failed",
@@ -312,7 +326,7 @@ async fn request_video_generation_for_executor(
         .json(&build_video_generation_request_body(
             prepared_input,
             task_id,
-        ));
+        )?);
     if let Some(provider_id) = prepared_input.provider_id.as_deref() {
         request = request.header("X-Provider-Id", provider_id);
     }
@@ -362,45 +376,78 @@ async fn request_video_generation_for_executor(
 fn build_video_generation_request_body(
     prepared_input: &PreparedVideoTaskInput,
     task_id: &str,
-) -> Value {
-    let mut body = Map::new();
-    body.insert("prompt".to_string(), json!(prepared_input.prompt));
-    body.insert("user".to_string(), json!(task_id));
-    insert_optional_string(
-        &mut body,
+) -> Result<Value, TaskErrorRecord> {
+    let request = video_generation_llm_request(prepared_input, task_id);
+    build_fal_video_generation_body(prepared_input.model.as_deref().unwrap_or(""), &request)
+        .map_err(|error| video_request_mapping_error(error))
+}
+
+fn video_generation_llm_request(
+    prepared_input: &PreparedVideoTaskInput,
+    task_id: &str,
+) -> LlmRequest {
+    let mut metadata = std::collections::BTreeMap::new();
+    insert_string_metadata(
+        &mut metadata,
         "provider_id",
         prepared_input.provider_id.as_deref(),
     );
-    insert_optional_string(&mut body, "model", prepared_input.model.as_deref());
-    insert_optional_string(
-        &mut body,
+    insert_string_metadata(
+        &mut metadata,
         "aspect_ratio",
         prepared_input.aspect_ratio.as_deref(),
     );
-    insert_optional_string(
-        &mut body,
+    insert_string_metadata(
+        &mut metadata,
         "resolution",
         prepared_input.resolution.as_deref(),
     );
-    insert_optional_string(&mut body, "image_url", prepared_input.image_url.as_deref());
-    insert_optional_string(
-        &mut body,
+    insert_string_metadata(
+        &mut metadata,
+        "image_url",
+        prepared_input.image_url.as_deref(),
+    );
+    insert_string_metadata(
+        &mut metadata,
         "end_image_url",
         prepared_input.end_image_url.as_deref(),
     );
+    insert_string_metadata(&mut metadata, "user", Some(task_id));
     if let Some(duration) = prepared_input.duration {
-        body.insert("duration".to_string(), json!(duration));
+        metadata.insert("duration".to_string(), json!(duration));
     }
     if let Some(seed) = prepared_input.seed.as_ref() {
-        body.insert("seed".to_string(), seed.clone());
+        metadata.insert("seed".to_string(), seed.clone());
     }
     if let Some(generate_audio) = prepared_input.generate_audio {
-        body.insert("generate_audio".to_string(), json!(generate_audio));
+        metadata.insert("generate_audio".to_string(), json!(generate_audio));
     }
     if let Some(camera_fixed) = prepared_input.camera_fixed {
-        body.insert("camera_fixed".to_string(), json!(camera_fixed));
+        metadata.insert("camera_fixed".to_string(), json!(camera_fixed));
     }
-    Value::Object(body)
+
+    LlmRequest {
+        instructions: None,
+        messages: vec![LlmMessage::text(
+            LlmRole::User,
+            prepared_input.prompt.clone(),
+        )],
+        tools: Vec::new(),
+        temperature: None,
+        max_output_tokens: None,
+        stream: false,
+        reasoning_effort: None,
+        metadata,
+    }
+}
+
+fn video_request_mapping_error(error: ProtocolMappingError) -> TaskErrorRecord {
+    build_video_task_error(
+        "video_request_mapping_failed",
+        format!("构建视频生成请求失败: {error}"),
+        false,
+        "request",
+    )
 }
 
 fn extract_generated_video(response_body: &Value) -> Option<Value> {
@@ -494,7 +541,11 @@ fn build_video_task_provider_error(
     }
 }
 
-fn insert_optional_string(map: &mut Map<String, Value>, key: &str, value: Option<&str>) {
+fn insert_string_metadata(
+    map: &mut std::collections::BTreeMap<String, Value>,
+    key: &str,
+    value: Option<&str>,
+) {
     if let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) {
         map.insert(key.to_string(), json!(value));
     }
@@ -694,6 +745,38 @@ mod tests {
         assert_eq!(
             captured_updates.lock().expect("lock updates").as_slice(),
             ["queued", "running", "succeeded"]
+        );
+        assert_eq!(
+            result
+                .record
+                .payload
+                .pointer("/llm_events/1/type")
+                .and_then(Value::as_str),
+            Some("turn.completed")
+        );
+        assert_eq!(
+            result
+                .record
+                .payload
+                .pointer("/provider_diagnostics/taskFamily")
+                .and_then(Value::as_str),
+            Some("video_generation")
+        );
+        assert_eq!(
+            result
+                .record
+                .payload
+                .pointer("/provider_diagnostics/modelId")
+                .and_then(Value::as_str),
+            None
+        );
+        assert_eq!(
+            result
+                .record
+                .payload
+                .pointer("/provider_diagnostics/transport")
+                .and_then(Value::as_str),
+            Some("local_lime_service")
         );
 
         server.abort();

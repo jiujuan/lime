@@ -871,7 +871,7 @@ describe("generalWorkbenchWorkflowPanelViewModel", () => {
   it("应选择最新 review feedback 并构造建议下一步投影", () => {
     const latestSignal = selectLatestReviewFeedbackSignal([
       {
-        source: "saved_inspiration",
+        source: "memory_reference",
         category: "experience",
         title: "灵感记录",
         summary: "不是 review feedback。",

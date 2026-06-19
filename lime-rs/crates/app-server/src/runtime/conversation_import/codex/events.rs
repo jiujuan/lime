@@ -66,6 +66,7 @@ pub(super) fn event_msg_runtime_events(
         Some("item_completed") => item_completed_event(payload).into_iter().collect(),
         Some("hook_prompt") => hook_prompt_event(payload).into_iter().collect(),
         Some("context_compacted") => vec![context_compaction_event(payload)],
+        Some("turn_complete") | Some("task_complete") => vec![turn_complete_event(payload)],
         Some("entered_review_mode") => entered_review_mode_event(payload).into_iter().collect(),
         Some("exited_review_mode") => exited_review_mode_event(payload).into_iter().collect(),
         Some("sub_agent_activity") | Some("subagent_activity") => {
@@ -104,6 +105,20 @@ pub(super) fn event_msg_runtime_events(
     };
     apply_provenance_to_runtime_events(&mut events, provenance);
     events
+}
+
+fn turn_complete_event(payload: &Value) -> ImportedRuntimeEvent {
+    ImportedRuntimeEvent::new(
+        "turn.completed",
+        compact_json(json!({
+            "turnId": string_field(payload, &["turn_id", "turnId"]),
+            "completedAt": string_field(payload, &["completed_at", "completedAt"]),
+            "durationMs": number_field(payload, &["duration_ms", "durationMs"]),
+            "lastAgentMessage": string_field(payload, &["last_agent_message", "lastAgentMessage"]),
+            "sourceClient": "codex",
+            "sourceEventType": payload.get("type").and_then(Value::as_str),
+        })),
+    )
 }
 
 pub(super) fn source_provenance_value(
@@ -1035,6 +1050,13 @@ fn string_field(payload: &Value, keys: &[&str]) -> Option<String> {
         .find_map(|key| payload.get(*key).and_then(Value::as_str))
         .map(str::to_string)
         .filter(|value| !value.trim().is_empty())
+}
+
+fn number_field(payload: &Value, keys: &[&str]) -> Option<Value> {
+    keys.iter()
+        .find_map(|key| payload.get(*key))
+        .filter(|value| value.is_number())
+        .cloned()
 }
 
 fn insert_string(map: &mut Map<String, Value>, key: &str, value: Option<String>) {

@@ -3,7 +3,7 @@ import type {
   ExperimentalFeatures,
   ToolCallingConfig,
 } from "./experimentalFeatureTypes";
-import type { MemoryConfig } from "./memoryRuntimeTypes";
+import type { MemoryConfig } from "./memoryConfigTypes";
 
 export type { ToolCallingConfig } from "./experimentalFeatureTypes";
 

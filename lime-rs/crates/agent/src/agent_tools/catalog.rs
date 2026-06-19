@@ -26,6 +26,10 @@ pub const LIME_SITE_RUN_TOOL_NAME: &str = "lime_site_run";
 pub const BROWSER_RUNTIME_TOOL_PREFIX: &str = "mcp__lime-browser__";
 pub const VIEW_IMAGE_TOOL_NAME: &str = "view_image";
 pub const APPLY_PATCH_TOOL_NAME: &str = "apply_patch";
+pub const MEMORY_LIST_TOOL_NAME: &str = "memory_list";
+pub const MEMORY_READ_TOOL_NAME: &str = "memory_read";
+pub const MEMORY_SEARCH_TOOL_NAME: &str = "memory_search";
+pub const MEMORY_ADD_NOTE_TOOL_NAME: &str = "memory_add_note";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -47,6 +51,7 @@ pub enum ToolCapability {
     ContentCreation,
     BrowserRuntime,
     WorkspaceIo,
+    Memory,
     Execution,
     Vision,
 }
@@ -144,6 +149,7 @@ const BROWSER_CAP: &[ToolCapability] = &[ToolCapability::BrowserRuntime];
 const SITE_CAP: &[ToolCapability] = &[ToolCapability::BrowserRuntime, ToolCapability::WebSearch];
 const SESSION_CAP: &[ToolCapability] = &[ToolCapability::SessionControl];
 const WORKSPACE_IO_CAP: &[ToolCapability] = &[ToolCapability::WorkspaceIo];
+const MEMORY_CAP: &[ToolCapability] = &[ToolCapability::Memory];
 const EXECUTION_CAP: &[ToolCapability] = &[ToolCapability::Execution];
 
 static NATIVE_TOOL_CATALOG: &[ToolCatalogEntry] = &[
@@ -490,6 +496,42 @@ static NATIVE_TOOL_CATALOG: &[ToolCatalogEntry] = &[
         workspace_default_allow: true,
     },
     ToolCatalogEntry {
+        name: MEMORY_LIST_TOOL_NAME,
+        profiles: CORE_PROFILES,
+        capabilities: MEMORY_CAP,
+        lifecycle: ToolLifecycle::Current,
+        source: ToolSourceKind::LimeInjected,
+        permission_plane: ToolPermissionPlane::SessionAllowlist,
+        workspace_default_allow: true,
+    },
+    ToolCatalogEntry {
+        name: MEMORY_READ_TOOL_NAME,
+        profiles: CORE_PROFILES,
+        capabilities: MEMORY_CAP,
+        lifecycle: ToolLifecycle::Current,
+        source: ToolSourceKind::LimeInjected,
+        permission_plane: ToolPermissionPlane::SessionAllowlist,
+        workspace_default_allow: true,
+    },
+    ToolCatalogEntry {
+        name: MEMORY_SEARCH_TOOL_NAME,
+        profiles: CORE_PROFILES,
+        capabilities: MEMORY_CAP,
+        lifecycle: ToolLifecycle::Current,
+        source: ToolSourceKind::LimeInjected,
+        permission_plane: ToolPermissionPlane::SessionAllowlist,
+        workspace_default_allow: true,
+    },
+    ToolCatalogEntry {
+        name: MEMORY_ADD_NOTE_TOOL_NAME,
+        profiles: CORE_PROFILES,
+        capabilities: MEMORY_CAP,
+        lifecycle: ToolLifecycle::Current,
+        source: ToolSourceKind::LimeInjected,
+        permission_plane: ToolPermissionPlane::SessionAllowlist,
+        workspace_default_allow: true,
+    },
+    ToolCatalogEntry {
         name: "Agent",
         profiles: CORE_PROFILES,
         capabilities: DELEGATION_CAP,
@@ -727,6 +769,10 @@ fn normalize_tool_catalog_alias(tool_name: &str) -> &str {
         "lsptool" => "LSP",
         "listmcpresourcestool" => "ListMcpResourcesTool",
         "readmcpresourcetool" => "ReadMcpResourceTool",
+        "memorylist" | "memorylisttool" => MEMORY_LIST_TOOL_NAME,
+        "memoryread" | "memoryreadtool" => MEMORY_READ_TOOL_NAME,
+        "memorysearch" | "memorysearchtool" => MEMORY_SEARCH_TOOL_NAME,
+        "memoryaddnote" | "memoryaddnotetool" => MEMORY_ADD_NOTE_TOOL_NAME,
         "notebookedittool" => "NotebookEdit",
         "powershelltool" => "PowerShell",
         "remotetriggertool" => "RemoteTrigger",
@@ -978,6 +1024,10 @@ mod tests {
         assert!(names.contains(&"TeamDelete"));
         assert!(names.contains(&"Workflow"));
         assert!(names.contains(&"WebSearch"));
+        assert!(names.contains(&MEMORY_LIST_TOOL_NAME));
+        assert!(names.contains(&MEMORY_READ_TOOL_NAME));
+        assert!(names.contains(&MEMORY_SEARCH_TOOL_NAME));
+        assert!(names.contains(&MEMORY_ADD_NOTE_TOOL_NAME));
         assert!(!names.contains(&"Read"));
         assert!(!names.contains(&VIEW_IMAGE_TOOL_NAME));
         assert!(!names.contains(&"Bash"));
@@ -1058,6 +1108,14 @@ mod tests {
             ("mcp__system__grep", "Grep"),
             ("LSPTool", "LSP"),
             ("ListMcpResourcesTool", "ListMcpResourcesTool"),
+            ("MemoryListTool", MEMORY_LIST_TOOL_NAME),
+            ("memory_list", MEMORY_LIST_TOOL_NAME),
+            ("MemoryReadTool", MEMORY_READ_TOOL_NAME),
+            ("memory_read", MEMORY_READ_TOOL_NAME),
+            ("MemorySearchTool", MEMORY_SEARCH_TOOL_NAME),
+            ("memory_search", MEMORY_SEARCH_TOOL_NAME),
+            ("MemoryAddNoteTool", MEMORY_ADD_NOTE_TOOL_NAME),
+            ("memory_add_note", MEMORY_ADD_NOTE_TOOL_NAME),
             ("NotebookEditTool", "NotebookEdit"),
             ("PowerShellTool", "PowerShell"),
             ("ReadMcpResourceTool", "ReadMcpResourceTool"),
@@ -1134,12 +1192,12 @@ mod tests {
             .iter()
             .filter(|entry| entry.profiles.contains(&ToolSurfaceProfile::BrowserAssist))
             .count();
-        assert_eq!(core.len(), 42);
+        assert_eq!(core.len(), 47);
         assert_eq!(
             core.iter()
                 .filter(|entry| entry.lifecycle == ToolLifecycle::Current)
                 .count(),
-            42
+            47
         );
         assert!(core.iter().any(|entry| entry.name == VIEW_IMAGE_TOOL_NAME));
         let apply_patch = core

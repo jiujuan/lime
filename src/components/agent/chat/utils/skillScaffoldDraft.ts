@@ -224,7 +224,7 @@ function applyCreationReplayToDraft(
       memoryTitle || memorySummary
         ? buildStructuredItems(
             memoryTitle
-              ? `沉淀自一次继续复用“${memoryTitle}”灵感后的成功结果。`
+              ? `沉淀自一次继续复用“${memoryTitle}”记忆参考后的成功结果。`
               : null,
             memorySummary,
           ).join(" ")
@@ -232,15 +232,15 @@ function applyCreationReplayToDraft(
     whenToUse: mergeStructuredItems(
       buildStructuredItems(
         memoryTitle
-          ? `适合继续围绕灵感库中的“${memoryTitle}”这条${categoryLabel}线索扩展成完整工作流。`
-          : `适合继续把灵感库里的${categoryLabel}线索扩展成稳定可复用的结果。`,
+          ? `适合继续围绕记忆参考中的“${memoryTitle}”这条${categoryLabel}线索扩展成完整工作流。`
+          : `适合继续把记忆参考里的${categoryLabel}线索扩展成稳定可复用的结果。`,
       ),
       draft.whenToUse,
     ),
     inputs: mergeStructuredItems(
       buildStructuredItems(
-        memoryTitle ? `参考灵感：${memoryTitle}` : null,
-        memorySummary ? `灵感摘要：${memorySummary}` : null,
+        memoryTitle ? `参考记忆：${memoryTitle}` : null,
+        memorySummary ? `记忆摘要：${memorySummary}` : null,
         memoryTags ? `参考标签：${memoryTags}` : null,
       ),
       draft.inputs,

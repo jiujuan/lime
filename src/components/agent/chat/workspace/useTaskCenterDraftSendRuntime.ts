@@ -131,6 +131,11 @@ export function useTaskCenterDraftSendDispatchRuntime({
   sendRef,
   workspaceId,
 }: UseTaskCenterDraftSendDispatchRuntimeParams): void {
+  const messageCountsRef = useRef({ displayMessagesLength, messagesLength });
+  useEffect(() => {
+    messageCountsRef.current = { displayMessagesLength, messagesLength };
+  }, [displayMessagesLength, messagesLength]);
+
   useEffect(() => {
     if (messagesLength === 0 && displayMessagesLength === 0) {
       return;
@@ -266,7 +271,13 @@ export function useTaskCenterDraftSendDispatchRuntime({
               source: request.source,
               workspaceId: workspaceId ?? null,
             });
-            clearRequest({ keepHomePreview: !request.materializeDraft });
+            const latestCounts = messageCountsRef.current;
+            clearRequest({
+              keepHomePreview:
+                !request.materializeDraft &&
+                latestCounts.messagesLength === 0 &&
+                latestCounts.displayMessagesLength === 0,
+            });
           },
           (error) => {
             if (request.materializeDraft && materializedSessionId) {
@@ -310,6 +321,7 @@ export function useTaskCenterDraftSendDispatchRuntime({
     commitMaterializedDraftTab,
     materializeDraftTab,
     materializedSessionIdsRef,
+    messageCountsRef,
     sendRef,
     setHomePendingPreviewRequest,
     setTaskCenterDraftSendRequest,

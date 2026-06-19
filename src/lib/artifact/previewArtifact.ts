@@ -163,6 +163,7 @@ function hashPreviewArtifactId(input: string): string {
 }
 
 function resolveContentKind(input: {
+  source: PreviewArtifactSource;
   path: string;
   content: string;
   isBinary: boolean;
@@ -171,6 +172,9 @@ function resolveContentKind(input: {
 }): PreviewArtifactContentKind {
   if (input.error) {
     return "unsupported";
+  }
+  if (input.source === "app") {
+    return "app_shell";
   }
   const mimeType = input.mimeType?.toLowerCase() || "";
   const extension = extractExtension(input.path);
@@ -219,9 +223,14 @@ function resolveArtifactType(
 function resolveRenderMode(
   contentKind: PreviewArtifactContentKind,
   input: {
+    source: PreviewArtifactSource;
     content: string;
   },
 ): PreviewArtifactRenderMode {
+  if (input.source === "url" || input.source === "database_record") {
+    return "inline";
+  }
+
   switch (contentKind) {
     case "html":
       return "external_window";
@@ -235,6 +244,8 @@ function resolveRenderMode(
       return "system_open";
     case "unsupported":
       return "unsupported";
+    case "app_shell":
+      return "inline";
     default:
       return "canvas";
   }
@@ -291,6 +302,7 @@ export function createPreviewArtifact(
   const path = input.path?.trim() || sourceRef;
   const content = input.content ?? "";
   const contentKind = resolveContentKind({
+    source: input.source,
     path,
     content,
     isBinary: Boolean(input.isBinary),
@@ -298,6 +310,7 @@ export function createPreviewArtifact(
     error: input.error,
   });
   const renderMode = resolveRenderMode(contentKind, {
+    source: input.source,
     content,
   });
   const artifactType = resolveArtifactType(contentKind);
@@ -312,11 +325,18 @@ export function createPreviewArtifact(
     preview: renderMode !== "system_open" && renderMode !== "unsupported",
     externalWindow: contentKind === "html",
     edit:
-      contentKind === "markdown" ||
-      contentKind === "text" ||
-      contentKind === "code" ||
-      contentKind === "html",
+      input.source !== "url" &&
+      input.source !== "database_record" &&
+      input.source !== "app" &&
+      (contentKind === "markdown" ||
+        contentKind === "text" ||
+        contentKind === "code" ||
+        contentKind === "html"),
   };
+  if (input.source === "database_record" || input.source === "app") {
+    capabilities.systemOpen = false;
+    capabilities.reveal = false;
+  }
   const previewUrl =
     input.previewUrl?.trim() || resolvePreviewUrl(contentKind, path);
   const previewContent = resolvePreviewContent({

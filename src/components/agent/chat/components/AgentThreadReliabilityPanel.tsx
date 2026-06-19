@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   AlertTriangle,
@@ -16,12 +16,6 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { prefetchContextMemoryForTurn } from "@/lib/api/memoryRuntime";
-import {
-  buildTeamMemoryShadowRequestMetadata,
-  type TeamMemorySnapshot,
-} from "@/lib/teamMemorySync";
-import { recordRuntimeMemoryPrefetchHistory } from "@/lib/runtimeMemoryPrefetchHistory";
 import { cn } from "@/lib/utils";
 import type {
   AgentRuntimeThreadReadModel,
@@ -40,11 +34,8 @@ import {
   buildReliabilityDiagnosticText,
   buildReliabilityRawPayload,
   formatDiagnosticDateTime,
-  resolveMemoryPrefetchComparison,
   truncateDiagnosticText,
   type AgentThreadReliabilityDiagnosticContext,
-  type RuntimeMemoryPrefetchComparisonState,
-  type RuntimeMemoryPrefetchState,
 } from "../utils/threadReliabilityDiagnosticText";
 import {
   formatAgentUiProjectionEventDetail,
@@ -55,17 +46,13 @@ import {
 import { useAgentUiProjectionSummary } from "../projection/useConversationProjectionStore";
 import { AgentIncidentPanel } from "./AgentIncidentPanel";
 import { AgentThreadFileCheckpointDialog } from "./AgentThreadFileCheckpointDialog";
-import { AgentThreadMemoryPrefetchBaselineCard } from "./AgentThreadMemoryPrefetchBaselineCard";
-import { AgentThreadMemoryPrefetchPreview } from "./AgentThreadMemoryPrefetchPreview";
 import { AgentThreadOutcomeSummary } from "./AgentThreadOutcomeSummary";
 import { AgentThreadRoutingEvidenceCard } from "./AgentThreadRoutingEvidenceCard";
 import { AgentThreadPolicyEvidenceCard } from "./AgentThreadPolicyEvidenceCard";
 import {
-  resolveLatestTurnPrompt,
   resolveRuntimeDecisionReason,
   resolveRuntimeFallbackChain,
   resolveStatShellClassName,
-  resolveTeamMemoryShadowKey,
   resolveToneClassName,
   serializeReliabilityClipboardPayload,
 } from "./AgentThreadReliabilityPanelViewModel";
@@ -88,7 +75,6 @@ interface AgentThreadReliabilityPanelProps {
   onReplayPendingRequest?: (requestId: string) => boolean | Promise<boolean>;
   onLocatePendingRequest?: (requestId: string) => void;
   onPromoteQueuedTurn?: (queuedTurnId: string) => boolean | Promise<boolean>;
-  onOpenMemoryWorkbench?: () => void;
   onManageProviders?: (context?: ProviderSettingsFocusContext) => void;
   onOpenExecutionPolicySettings?: (
     context?: ExecutionPolicyFocusContext,
@@ -96,7 +82,6 @@ interface AgentThreadReliabilityPanelProps {
   className?: string;
   harnessState?: HarnessSessionState | null;
   messages?: Message[];
-  teamMemorySnapshot?: TeamMemorySnapshot | null;
   diagnosticRuntimeContext?: AgentThreadReliabilityDiagnosticContext | null;
 }
 
@@ -121,13 +106,11 @@ export const AgentThreadReliabilityPanel: React.FC<
   onReplayPendingRequest,
   onLocatePendingRequest,
   onPromoteQueuedTurn,
-  onOpenMemoryWorkbench,
   onManageProviders,
   onOpenExecutionPolicySettings,
   className,
   harnessState = null,
   messages = [],
-  teamMemorySnapshot = null,
   diagnosticRuntimeContext = null,
 }) => {
   const { t, i18n } = useTranslation("agent");
@@ -303,18 +286,6 @@ export const AgentThreadReliabilityPanel: React.FC<
   const [isPromotingQueuedTurn, setIsPromotingQueuedTurn] = useState(false);
   const [fileCheckpointDialogOpen, setFileCheckpointDialogOpen] =
     useState(false);
-  const [memoryPrefetchState, setMemoryPrefetchState] =
-    useState<RuntimeMemoryPrefetchState>({
-      status: "idle",
-      result: null,
-      error: null,
-    });
-  const [memoryPrefetchComparison, setMemoryPrefetchComparison] =
-    useState<RuntimeMemoryPrefetchComparisonState>({
-      baselineEntry: null,
-      diff: null,
-      assessment: null,
-    });
   const view = useMemo(
     () =>
       buildThreadReliabilityView({
@@ -381,18 +352,6 @@ export const AgentThreadReliabilityPanel: React.FC<
     latestFileCheckpoint?.preview_text,
     180,
   );
-  const latestTurnPrompt = useMemo(
-    () => resolveLatestTurnPrompt(turns, currentTurnId),
-    [currentTurnId, turns],
-  );
-  const teamMemoryShadowMetadata = useMemo(
-    () => buildTeamMemoryShadowRequestMetadata(teamMemorySnapshot),
-    [teamMemorySnapshot],
-  );
-  const teamMemoryShadowKey = useMemo(
-    () => resolveTeamMemoryShadowKey(teamMemoryShadowMetadata),
-    [teamMemoryShadowMetadata],
-  );
   const diagnosticSessionId = diagnosticRuntimeContext?.sessionId?.trim() || "";
   const diagnosticWorkingDir =
     diagnosticRuntimeContext?.workingDir?.trim() || "";
@@ -400,98 +359,6 @@ export const AgentThreadReliabilityPanel: React.FC<
     diagnosticSessionId ? { sessionId: diagnosticSessionId } : null,
     { enabled: Boolean(diagnosticSessionId) },
   );
-
-  useEffect(() => {
-    if (!diagnosticSessionId) {
-      setMemoryPrefetchState({ status: "idle", result: null, error: null });
-      setMemoryPrefetchComparison({
-        baselineEntry: null,
-        diff: null,
-        assessment: null,
-      });
-      return;
-    }
-    if (!diagnosticWorkingDir) {
-      setMemoryPrefetchState({
-        status: "error",
-        result: null,
-        error: text("memoryPrefetch.noWorkspace"),
-      });
-      setMemoryPrefetchComparison({
-        baselineEntry: null,
-        diff: null,
-        assessment: null,
-      });
-      return;
-    }
-
-    let cancelled = false;
-    setMemoryPrefetchState({
-      status: "loading",
-      result: null,
-      error: null,
-    });
-
-    void prefetchContextMemoryForTurn({
-      session_id: diagnosticSessionId,
-      working_dir: diagnosticWorkingDir,
-      user_message: latestTurnPrompt,
-      request_metadata: teamMemoryShadowMetadata
-        ? {
-            team_memory_shadow: teamMemoryShadowMetadata,
-          }
-        : undefined,
-    })
-      .then((result) => {
-        if (cancelled) {
-          return;
-        }
-        const historyEntries = recordRuntimeMemoryPrefetchHistory({
-          sessionId: diagnosticSessionId,
-          workingDir: diagnosticWorkingDir,
-          userMessage: latestTurnPrompt || null,
-          source: "thread_reliability",
-          result,
-        });
-        setMemoryPrefetchComparison(
-          resolveMemoryPrefetchComparison(historyEntries, diagnosticWorkingDir),
-        );
-        setMemoryPrefetchState({
-          status: "ready",
-          result,
-          error: null,
-        });
-      })
-      .catch((error) => {
-        if (cancelled) {
-          return;
-        }
-        setMemoryPrefetchState({
-          status: "error",
-          result: null,
-          error:
-            error instanceof Error
-              ? error.message
-              : text("memoryPrefetch.failed"),
-        });
-        setMemoryPrefetchComparison({
-          baselineEntry: null,
-          diff: null,
-          assessment: null,
-        });
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    diagnosticSessionId,
-    diagnosticWorkingDir,
-    latestTurnPrompt,
-    text,
-    teamMemoryShadowKey,
-    teamMemoryShadowMetadata,
-  ]);
 
   if (!view.shouldRender) {
     return null;
@@ -575,8 +442,6 @@ export const AgentThreadReliabilityPanel: React.FC<
           threadItems,
           messages,
           harnessState,
-          memoryPrefetchState,
-          memoryPrefetchComparison,
           diagnosticRuntimeContext,
           agentUiProjectionSummary,
           routingEvidenceLineText: routingEvidenceText,
@@ -611,8 +476,6 @@ export const AgentThreadReliabilityPanel: React.FC<
             view,
             harnessState,
             messages,
-            memoryPrefetchState,
-            memoryPrefetchComparison,
             diagnosticRuntimeContext,
             agentUiProjectionSummary,
           }),
@@ -1098,35 +961,6 @@ export const AgentThreadReliabilityPanel: React.FC<
             ))}
           </div>
         </div>
-      ) : null}
-
-      {diagnosticSessionId ? (
-        <AgentThreadMemoryPrefetchPreview
-          status={memoryPrefetchState.status}
-          result={memoryPrefetchState.result}
-          error={memoryPrefetchState.error}
-          actions={
-            onOpenMemoryWorkbench ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={onOpenMemoryWorkbench}
-                className="h-8 rounded-full border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50"
-              >
-                {text("memoryPrefetch.openWorkbench")}
-              </Button>
-            ) : undefined
-          }
-        />
-      ) : null}
-
-      {memoryPrefetchState.status === "ready" &&
-      memoryPrefetchComparison.baselineEntry &&
-      memoryPrefetchComparison.diff ? (
-        <AgentThreadMemoryPrefetchBaselineCard
-          comparison={memoryPrefetchComparison}
-        />
       ) : null}
 
       {latestCompactionBoundary ? (

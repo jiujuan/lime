@@ -56,6 +56,38 @@ pub(super) fn find_rollout_path_by_thread_id(
     find_rollout_path_in_subdir(source_root, subdir, thread_id)
 }
 
+pub(super) fn count_rollout_files(source_root: &Path) -> usize {
+    count_rollout_files_in_subdir(source_root, SESSIONS_SUBDIR)
+        + count_rollout_files_in_subdir(source_root, ARCHIVED_SESSIONS_SUBDIR)
+}
+
+fn count_rollout_files_in_subdir(source_root: &Path, subdir: &str) -> usize {
+    let root = source_root.join(subdir);
+    if !root.is_dir() {
+        return 0;
+    }
+
+    let mut count = 0;
+    let mut stack = vec![root];
+    while let Some(dir) = stack.pop() {
+        let Ok(read_dir) = fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in read_dir.filter_map(Result::ok) {
+            let path = entry.path();
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            if file_type.is_dir() {
+                stack.push(path);
+            } else if file_type.is_file() && plain_rollout_file_name(&path).is_some() {
+                count += 1;
+            }
+        }
+    }
+    count
+}
+
 fn find_rollout_path_in_subdir(
     source_root: &Path,
     subdir: &str,

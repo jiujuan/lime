@@ -27,8 +27,8 @@ use urlencoding::encode;
 
 /// 响应体大小限制 (10MB)
 const MAX_RESPONSE_SIZE: usize = 10 * 1024 * 1024;
-const DEFAULT_WEB_FETCH_MAX_CHARS: usize = 100_000;
-const DEFAULT_DYNAMIC_FILTER_MAX_CHARS: usize = 20_000;
+const DEFAULT_WEB_FETCH_MAX_CHARS: usize = 20_000;
+const DEFAULT_DYNAMIC_FILTER_MAX_CHARS: usize = 12_000;
 const DEFAULT_DYNAMIC_FILTER_MAX_CHUNKS: usize = 8;
 const MAX_WEB_FETCH_REDIRECTS: usize = 10;
 
@@ -945,20 +945,20 @@ impl WebFetchTool {
 
     /// HTML 转 Markdown
     fn html_to_markdown(&self, html: &str) -> String {
-        let _document = Html::parse_document(html);
-
-        // 移除 script 和 style 标签
-        let mut cleaned_html = html.to_string();
-
-        // 简单的标签清理
-        cleaned_html = cleaned_html
-            .replace("<script", "<removed-script")
-            .replace("</script>", "</removed-script>")
-            .replace("<style", "<removed-style")
-            .replace("</style>", "</removed-style>");
-
-        // 基本的 HTML 到文本转换
+        let cleaned_html = self.remove_non_content_html_blocks(html);
         self.html_to_text(&cleaned_html)
+    }
+
+    fn remove_non_content_html_blocks(&self, html: &str) -> String {
+        let block_re = regex::Regex::new(
+            r"(?is)<(?:script|style|noscript|iframe|object|embed|svg|head|template)\b[^>]*>.*?</(?:script|style|noscript|iframe|object|embed|svg|head|template)>",
+        )
+        .unwrap();
+        let standalone_re = regex::Regex::new(r"(?is)<(?:meta|link|base)\b[^>]*(?:/?>)").unwrap();
+        let without_blocks = block_re.replace_all(html, " ");
+        standalone_re
+            .replace_all(without_blocks.as_ref(), " ")
+            .into_owned()
     }
 
     /// HTML 转纯文本（简化版）
@@ -1095,15 +1095,11 @@ impl WebFetchTool {
             .filter(|s| !s.is_empty())
             .unwrap_or(&input.prompt);
 
-        if input.dynamic_filter || input.focus_query.is_some() {
-            let max_chunks = input
-                .max_chunks
-                .unwrap_or(DEFAULT_DYNAMIC_FILTER_MAX_CHUNKS);
-            if let Some(filtered) =
-                self.dynamic_filter_content(content, query, max_chars, max_chunks)
-            {
-                return (filtered, true);
-            }
+        let max_chunks = input
+            .max_chunks
+            .unwrap_or(DEFAULT_DYNAMIC_FILTER_MAX_CHUNKS);
+        if let Some(filtered) = self.dynamic_filter_content(content, query, max_chars, max_chunks) {
+            return (filtered, true);
         }
 
         (self.truncate_chars(content, max_chars), false)
@@ -1248,7 +1244,7 @@ impl Tool for WebFetchTool {
                 "max_chars": {
                     "type": "integer",
                     "minimum": 500,
-                    "description": "可选。输出最大字符数（默认普通模式 100000，动态过滤模式 20000）"
+                    "description": "可选。输出最大字符数（默认 20000；动态过滤会优先返回相关片段）"
                 },
                 "max_chunks": {
                     "type": "integer",
@@ -2627,12 +2623,12 @@ mod tests {
     }
 
     #[test]
-    fn test_dynamic_filter_disabled_keeps_original_mode() {
+    fn test_web_fetch_default_mode_prefers_relevant_chunks() {
         let tool = WebFetchTool::new();
-        let content = "Paragraph A.\n\nParagraph B with random text.";
+        let content = "Football match report and scores.\n\nRust ownership and borrow checker explanation.\n\nTravel tips and hotel recommendations.";
         let input = WebFetchInput {
             url: "https://example.com".to_string(),
-            prompt: "简单总结".to_string(),
+            prompt: "总结 Rust 所有权".to_string(),
             focus_query: None,
             dynamic_filter: false,
             max_chars: Some(3000),
@@ -2640,9 +2636,29 @@ mod tests {
         };
 
         let (result, used_dynamic_filter) = tool.prepare_response_content(content, &input);
-        assert!(!used_dynamic_filter);
-        assert!(result.contains("Paragraph A."));
-        assert!(result.contains("Paragraph B with random text."));
+        assert!(used_dynamic_filter);
+        assert!(result.contains("Rust ownership"));
+        assert!(!result.contains("Football match report"));
+    }
+
+    #[test]
+    fn test_web_fetch_html_text_removes_scripts_and_styles() {
+        let tool = WebFetchTool::new();
+        let html = r#"
+            <html>
+              <head>
+                <style>.Modal-modalBackground{background:#000}</style>
+                <script>alert('x')</script>
+                <meta name="description" content="noise">
+              </head>
+              <body>Hello <b>world</b></body>
+            </html>
+        "#;
+
+        let text = tool.html_to_markdown(html);
+        assert_eq!(text, "Hello world");
+        assert!(!text.contains("Modal-modalBackground"));
+        assert!(!text.contains("alert"));
     }
 
     #[tokio::test]

@@ -103,6 +103,40 @@ describe("messageListInlineProcess", () => {
     ]);
   });
 
+  it("工具仍在运行时流式 overlay 应留在过程层，不提前追加最终正文", () => {
+    const parts = [
+      {
+        type: "tool_use",
+        toolCall: {
+          id: "tool-search",
+          name: "web_search",
+          status: "running",
+        },
+      },
+    ] as unknown as Message["contentParts"];
+
+    expect(
+      mergeStreamingOverlayContentParts(
+        parts,
+        "我正在核对搜索结果，稍后整理结论。",
+        { holdOverlayAsProcessWhileRunning: true },
+      ),
+    ).toEqual([
+      {
+        type: "tool_use",
+        toolCall: {
+          id: "tool-search",
+          name: "web_search",
+          status: "running",
+        },
+      },
+      {
+        type: "thinking",
+        text: "我正在核对搜索结果，稍后整理结论。",
+      },
+    ]);
+  });
+
   it("内联命令与搜索工具应覆盖对应 timeline 项，避免外置重复展示", () => {
     const coverage = resolveInlineProcessCoverage({
       contentParts: [
@@ -154,6 +188,34 @@ describe("messageListInlineProcess", () => {
         type: "web_search",
         action: "web_search",
         query: "lime",
+      } satisfies AgentThreadItem),
+    ).toBe(true);
+  });
+
+  it("内联 proposed_plan 应覆盖 plan timeline 项，避免计划内容重复外置展示", () => {
+    const coverage = resolveInlineProcessCoverage({
+      contentParts: [
+        {
+          type: "text",
+          text: "<proposed_plan>\n- 核对计划\n- 复测 E2E\n</proposed_plan>",
+        },
+      ] as unknown as Message["contentParts"],
+    });
+    const isCovered = createInlineCoverageMatcher(coverage);
+
+    expect(coverage.plan).toBe(true);
+    expect(
+      isCovered({
+        id: "timeline-plan-1",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        sequence: 1,
+        status: "completed",
+        started_at: "2026-05-30T09:10:00.000Z",
+        completed_at: "2026-05-30T09:10:01.000Z",
+        updated_at: "2026-05-30T09:10:01.000Z",
+        type: "plan",
+        text: "- 核对计划\n- 复测 E2E",
       } satisfies AgentThreadItem),
     ).toBe(true);
   });

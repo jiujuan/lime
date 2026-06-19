@@ -1102,8 +1102,11 @@ export interface ConversationImportSourceSummary {
   indexedAt?: null | string;
   message?: null | string;
   readable: boolean;
+  rolloutFileCount?: number;
   sourceClient: ConversationImportSourceClient;
+  sourceHomeExists?: boolean;
   sourceRoot?: null | string;
+  stateDbReadable?: boolean;
   statePath?: null | string;
   status: ConversationImportSourceStatus;
   threadCount?: number;
@@ -2120,6 +2123,131 @@ export interface MediaTaskArtifactVideoCreateParams {
   turnId?: null | string;
 }
 
+export interface MemoryStoreAddNoteParams {
+  content: string;
+  scope?: MemoryStoreScope;
+  slug?: null | string;
+  title?: null | string;
+  workspaceRoot?: null | string;
+}
+
+export interface MemoryStoreAddNoteResponse {
+  citation: MemoryStoreCitation;
+  path: string;
+}
+
+export interface MemoryStoreCitation {
+  endLineNumber: number;
+  path: string;
+  startLineNumber: number;
+}
+
+export interface MemoryStoreEntry {
+  entryType: string;
+  modifiedAt: number;
+  path: string;
+  size: number;
+}
+
+export interface MemoryStoreHealthResponse {
+  fileCount: number;
+  initialized: boolean;
+  memoryBytes: number;
+  memoryExists: boolean;
+  notesCount: number;
+  rootPath: string;
+  rootScope: MemoryStoreScope;
+  summaryBytes: number;
+  summaryExists: boolean;
+  totalBytes: number;
+}
+
+export interface MemoryStoreListParams {
+  cursor?: null | string;
+  maxResults?: number | null;
+  path?: null | string;
+  scope?: MemoryStoreScope;
+  workspaceRoot?: null | string;
+}
+
+export interface MemoryStoreListResponse {
+  entries?: MemoryStoreEntry[];
+  nextCursor?: null | string;
+  path: string;
+  rootScope: MemoryStoreScope;
+  truncated: boolean;
+}
+
+export interface MemoryStoreReadParams {
+  lineOffset?: number | null;
+  maxLines?: number | null;
+  maxTokens?: number | null;
+  path: string;
+  scope?: MemoryStoreScope;
+  workspaceRoot?: null | string;
+}
+
+export interface MemoryStoreReadResponse {
+  citation: MemoryStoreCitation;
+  content: string;
+  path: string;
+  startLineNumber: number;
+  truncated: boolean;
+}
+
+export interface MemoryStoreResetParams {
+  scope?: MemoryStoreScope;
+  workspaceRoot?: null | string;
+}
+
+export interface MemoryStoreResetResponse {
+  preservedSoul: boolean;
+  removedDirectories: number;
+  removedFiles: number;
+  rootPath: string;
+  rootScope: MemoryStoreScope;
+}
+
+export interface MemoryStoreRootParams {
+  scope?: MemoryStoreScope;
+  workspaceRoot?: null | string;
+}
+
+export type MemoryStoreScope = "global" | "workspace";
+
+export interface MemoryStoreSearchHit {
+  citation: MemoryStoreCitation;
+  content: string;
+  contentStartLineNumber: number;
+  matchLineNumber: number;
+  matchedQueries: string[];
+  path: string;
+}
+
+export type MemoryStoreSearchMatchMode =
+  | "allOnSameLine"
+  | "allWithinLines"
+  | "any";
+
+export interface MemoryStoreSearchParams {
+  caseSensitive?: boolean;
+  contextLines?: number;
+  cursor?: null | string;
+  matchMode?: MemoryStoreSearchMatchMode;
+  maxResults?: number | null;
+  normalized?: boolean;
+  queries?: string[];
+  scope?: MemoryStoreScope;
+  withinLines?: number | null;
+  workspaceRoot?: null | string;
+}
+
+export interface MemoryStoreSearchResponse {
+  hits?: MemoryStoreSearchHit[];
+  nextCursor?: null | string;
+  truncated: boolean;
+}
+
 export interface ModelCapabilitiesInfo {
   functionCalling: boolean;
   jsonMode: boolean;
@@ -3125,163 +3253,6 @@ export interface SupportBundleExportResponse {
 }
 
 export type TransportKind = "http" | "local_process" | "sidecar";
-
-export interface UnifiedMemory {
-  archived: boolean;
-  category: UnifiedMemoryCategory;
-  content: string;
-  created_at: number;
-  id: string;
-  memory_type: UnifiedMemoryType;
-  metadata: UnifiedMemoryMetadata;
-  session_id: string;
-  summary: string;
-  tags?: string[];
-  title: string;
-  updated_at: number;
-}
-
-export interface UnifiedMemoryAnalysisResponse {
-  analyzed_messages: number;
-  analyzed_sessions: number;
-  deduplicated_entries: number;
-  generated_entries: number;
-}
-
-export interface UnifiedMemoryAnalyzeParams {
-  from_timestamp?: number | null;
-  to_timestamp?: number | null;
-}
-
-export type UnifiedMemoryCategory =
-  | "activity"
-  | "context"
-  | "experience"
-  | "identity"
-  | "preference";
-
-export interface UnifiedMemoryCategoryCount {
-  category: UnifiedMemoryCategory;
-  count: number;
-}
-
-export interface UnifiedMemoryCreateParams {
-  request: UnifiedMemoryCreateRequest;
-}
-
-export interface UnifiedMemoryCreateRequest {
-  category?: UnifiedMemoryCategory | null;
-  confidence?: null | number;
-  content: string;
-  importance?: number | null;
-  session_id: string;
-  summary: string;
-  tags?: string[] | null;
-  title: string;
-}
-
-export interface UnifiedMemoryDeleteParams {
-  id: string;
-}
-
-export interface UnifiedMemoryDeleteResponse {
-  deleted: boolean;
-}
-
-export interface UnifiedMemoryGetParams {
-  id: string;
-}
-
-export interface UnifiedMemoryGetResponse {
-  memory?: UnifiedMemory | null;
-}
-
-export interface UnifiedMemoryHybridSearchOptions {
-  category?: UnifiedMemoryCategory | null;
-  keyword_weight?: null | number;
-  limit?: number | null;
-  min_similarity?: null | number;
-  query: string;
-  semantic_weight: number;
-}
-
-export interface UnifiedMemoryHybridSearchParams {
-  options: UnifiedMemoryHybridSearchOptions;
-}
-
-export interface UnifiedMemoryListFilters {
-  archived?: boolean | null;
-  category?: UnifiedMemoryCategory | null;
-  limit?: number | null;
-  memory_type?: UnifiedMemoryType | null;
-  offset?: number | null;
-  order?: null | string;
-  session_id?: null | string;
-  sort_by?: null | string;
-}
-
-export interface UnifiedMemoryListParams {
-  filters?: UnifiedMemoryListFilters | null;
-}
-
-export interface UnifiedMemoryListResponse {
-  memories?: UnifiedMemory[];
-}
-
-export interface UnifiedMemoryMetadata {
-  access_count: number;
-  confidence: number;
-  embedding?: number[] | null;
-  importance: number;
-  last_accessed_at?: number | null;
-  source: UnifiedMemorySource;
-}
-
-export interface UnifiedMemorySearchParams {
-  category?: UnifiedMemoryCategory | null;
-  limit?: number | null;
-  query: string;
-}
-
-export interface UnifiedMemorySemanticSearchOptions {
-  category?: UnifiedMemoryCategory | null;
-  limit?: number | null;
-  min_similarity?: null | number;
-  query: string;
-}
-
-export interface UnifiedMemorySemanticSearchParams {
-  options: UnifiedMemorySemanticSearchOptions;
-}
-
-export type UnifiedMemorySource = "auto_extracted" | "imported" | "manual";
-
-export interface UnifiedMemoryStatsResponse {
-  categories?: UnifiedMemoryCategoryCount[];
-  memory_count: number;
-  storage_used: number;
-  total_entries: number;
-}
-
-export type UnifiedMemoryType = "conversation" | "project";
-
-export interface UnifiedMemoryUpdateParams {
-  id: string;
-  request: UnifiedMemoryUpdateRequest;
-}
-
-export interface UnifiedMemoryUpdateRequest {
-  confidence?: null | number;
-  content?: null | string;
-  importance?: number | null;
-  summary?: null | string;
-  tags?: string[] | null;
-  title?: null | string;
-}
-
-export interface UnifiedMemoryWriteResponse {
-  memory: UnifiedMemory;
-}
 
 export interface UsageStatsDailyTrendsListResponse {
   trends?: UsageStatsDailyUsage[];

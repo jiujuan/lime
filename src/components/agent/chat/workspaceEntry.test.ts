@@ -176,7 +176,7 @@ describe("workspaceEntry", () => {
               {
                 key: "ref-1",
                 label: "品牌 KV",
-                sourceLabel: "灵感库",
+                sourceLabel: "记忆参考",
                 contentTypeLabel: "图片",
                 selected: true,
               },

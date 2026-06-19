@@ -1,0 +1,81 @@
+{
+  "$defs": {
+    "MemoryStoreScope": {
+      "enum": [
+        "global",
+        "workspace"
+      ],
+      "type": "string"
+    },
+    "MemoryStoreSearchMatchMode": {
+      "enum": [
+        "allOnSameLine",
+        "allWithinLines",
+        "any"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "caseSensitive": {
+      "default": false,
+      "type": "boolean"
+    },
+    "contextLines": {
+      "default": 0,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "cursor": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "matchMode": {
+      "$ref": "#/$defs/MemoryStoreSearchMatchMode",
+      "default": "any"
+    },
+    "maxResults": {
+      "format": "uint",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "normalized": {
+      "default": false,
+      "type": "boolean"
+    },
+    "queries": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "scope": {
+      "$ref": "#/$defs/MemoryStoreScope",
+      "default": "global"
+    },
+    "withinLines": {
+      "format": "uint",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "workspaceRoot": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "title": "MemoryStoreSearchParams",
+  "type": "object"
+}

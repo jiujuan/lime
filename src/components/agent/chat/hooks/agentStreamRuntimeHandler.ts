@@ -300,6 +300,211 @@ function resetStreamedReasoningSegment(requestState: StreamRequestState): void {
   requestState.streamedReasoningSequence = null;
 }
 
+function resolveToolLegacyEventTurnId(
+  event: Extract<
+    AgentEvent,
+    {
+      type:
+        | "tool_start"
+        | "tool_input_delta"
+        | "tool_progress"
+        | "tool_output_delta"
+        | "tool_end";
+    }
+  >,
+  fallbackTurnId: string | null | undefined,
+): string {
+  return event.turn_id?.trim() || fallbackTurnId?.trim() || "";
+}
+
+function findThreadItemForLegacyToolEvent(params: {
+  event: Extract<
+    AgentEvent,
+    {
+      type:
+        | "tool_start"
+        | "tool_input_delta"
+        | "tool_progress"
+        | "tool_output_delta"
+        | "tool_end";
+    }
+  >;
+  fallbackTurnId: string | null | undefined;
+  items: readonly AgentThreadItem[];
+}): AgentThreadItem | undefined {
+  const turnId = resolveToolLegacyEventTurnId(
+    params.event,
+    params.fallbackTurnId,
+  );
+  return params.items.find((item) => {
+    if (item.type !== "tool_call" || item.id !== params.event.tool_id) {
+      return false;
+    }
+    if (!turnId) {
+      return true;
+    }
+    return item.turn_id === turnId;
+  });
+}
+
+function isItemLifecycleToolItem(item: AgentThreadItem | undefined): boolean {
+  if (!item || item.type !== "tool_call") {
+    return false;
+  }
+  const metadata =
+    item.metadata && typeof item.metadata === "object"
+      ? (item.metadata as Record<string, unknown>)
+      : null;
+  return metadata?.source !== "legacy_tool_event";
+}
+
+function shouldLetLegacyToolEventUpdateMessageLayer(params: {
+  event: Extract<
+    AgentEvent,
+    {
+      type:
+        | "tool_start"
+        | "tool_input_delta"
+        | "tool_progress"
+        | "tool_output_delta"
+        | "tool_end";
+    }
+  >;
+  fallbackTurnId: string | null | undefined;
+  items: readonly AgentThreadItem[];
+}): boolean {
+  const item = findThreadItemForLegacyToolEvent({
+    event: params.event,
+    fallbackTurnId: params.fallbackTurnId,
+    items: params.items,
+  });
+  if (!isItemLifecycleToolItem(item)) {
+    return true;
+  }
+  return false;
+}
+
+function stringifyThreadItemToolArguments(value: unknown): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+type MessageToolCallState = NonNullable<Message["toolCalls"]>[number];
+type MessageToolCallResult = NonNullable<MessageToolCallState["result"]>;
+
+function toolExecutionResultFromThreadItem(
+  item: Extract<AgentThreadItem, { type: "tool_call" }>,
+): MessageToolCallResult | undefined {
+  if (item.status === "in_progress") {
+    return undefined;
+  }
+  return {
+    success: item.success ?? item.status === "completed",
+    output: item.output || "",
+    error: item.error,
+    metadata:
+      item.metadata && typeof item.metadata === "object"
+        ? (item.metadata as Record<string, unknown>)
+        : undefined,
+  };
+}
+
+function toolCallStateFromThreadItem(
+  item: Extract<AgentThreadItem, { type: "tool_call" }>,
+): MessageToolCallState {
+  return {
+    id: item.id,
+    name: item.tool_name || item.id,
+    arguments: stringifyThreadItemToolArguments(item.arguments),
+    status:
+      item.status === "failed"
+        ? "failed"
+        : item.status === "completed"
+          ? "completed"
+          : "running",
+    result: toolExecutionResultFromThreadItem(item),
+    metadata:
+      item.metadata && typeof item.metadata === "object"
+        ? (item.metadata as Record<string, unknown>)
+        : undefined,
+    startTime: item.started_at ? new Date(item.started_at) : new Date(),
+    endTime: item.completed_at ? new Date(item.completed_at) : undefined,
+  };
+}
+
+function mergeToolCallStateFromItem(
+  existing: MessageToolCallState | undefined,
+  item: Extract<AgentThreadItem, { type: "tool_call" }>,
+): MessageToolCallState {
+  const fromItem = toolCallStateFromThreadItem(item);
+  return {
+    ...existing,
+    ...fromItem,
+    arguments: fromItem.arguments ?? existing?.arguments,
+    result: fromItem.result ?? existing?.result,
+    progress: item.status === "in_progress" ? existing?.progress : undefined,
+    logs: existing?.logs,
+  };
+}
+
+function syncExistingMessageToolCallFromThreadItem(params: {
+  assistantMsgId: string;
+  item: AgentThreadItem;
+  setMessages: Dispatch<SetStateAction<Message[]>>;
+}): void {
+  if (params.item.type !== "tool_call") {
+    return;
+  }
+  params.setMessages((prev) =>
+    prev.map((message) => {
+      if (message.id !== params.assistantMsgId) {
+        return message;
+      }
+      const hasExistingToolCall = Boolean(
+        message.toolCalls?.some((toolCall) => toolCall.id === params.item.id),
+      );
+      const hasExistingToolUsePart = Boolean(
+        message.contentParts?.some(
+          (part) =>
+            part.type === "tool_use" && part.toolCall.id === params.item.id,
+        ),
+      );
+      if (!hasExistingToolCall && !hasExistingToolUsePart) {
+        return message;
+      }
+
+      const updateToolCall = (
+        toolCall: MessageToolCallState,
+      ): MessageToolCallState =>
+        toolCall.id === params.item.id && params.item.type === "tool_call"
+          ? mergeToolCallStateFromItem(toolCall, params.item)
+          : toolCall;
+
+      return {
+        ...message,
+        toolCalls: message.toolCalls?.map(updateToolCall),
+        contentParts: message.contentParts?.map((part) =>
+          part.type === "tool_use" && part.toolCall.id === params.item.id
+            ? {
+                ...part,
+                toolCall: updateToolCall(part.toolCall),
+              }
+            : part,
+        ),
+      };
+    }),
+  );
+}
+
 function sequenceFromAgentEvent(event: AgentEvent): number | null {
   return typeof event.sequence === "number" && Number.isFinite(event.sequence)
     ? event.sequence
@@ -309,9 +514,9 @@ function sequenceFromAgentEvent(event: AgentEvent): number | null {
 function hasOwnRecordKeys(value: unknown): value is Record<string, unknown> {
   return Boolean(
     value &&
-      typeof value === "object" &&
-      !Array.isArray(value) &&
-      Object.keys(value as Record<string, unknown>).length > 0,
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.keys(value as Record<string, unknown>).length > 0,
   );
 }
 
@@ -429,6 +634,7 @@ interface HandleTurnStreamEventOptions {
   ) => void;
   setMessages: Dispatch<SetStateAction<Message[]>>;
   setPendingActions: Dispatch<SetStateAction<ActionRequired[]>>;
+  getThreadItems?: () => readonly AgentThreadItem[];
   setThreadItems: Dispatch<SetStateAction<AgentThreadItem[]>>;
   setThreadTurns: Dispatch<SetStateAction<AgentThreadTurn[]>>;
   setCurrentTurnId: Dispatch<SetStateAction<string | null>>;
@@ -522,6 +728,7 @@ export function handleTurnStreamEvent({
   onWriteFile,
   setMessages,
   setPendingActions,
+  getThreadItems,
   setThreadItems,
   setThreadTurns,
   setCurrentTurnId,
@@ -1094,6 +1301,8 @@ export function handleTurnStreamEvent({
       typeof event.timestamp === "string" ? event.timestamp : undefined,
     );
     setThreadItems((prev) => {
+      const fallbackTurnId =
+        requestState.currentTurnId || requestState.queuedTurnId;
       const existingId =
         event.type === "tool_start" ||
         event.type === "tool_input_delta" ||
@@ -1104,14 +1313,30 @@ export function handleTurnStreamEvent({
           : event.type === "action_required" || event.type === "action_resolved"
             ? event.request_id
             : "";
+      const existingTurnId =
+        event.type === "tool_start" ||
+        event.type === "tool_input_delta" ||
+        event.type === "tool_progress" ||
+        event.type === "tool_output_delta" ||
+        event.type === "tool_end"
+          ? event.turn_id?.trim() || fallbackTurnId || ""
+          : "";
       const projectedItem = projectAgentStreamTimelineItem(
         event,
         {
           activeSessionId,
-          fallbackTurnId: requestState.currentTurnId || requestState.queuedTurnId,
+          fallbackTurnId,
           now: new Date().toISOString(),
         },
-        prev.find((item) => item.id === existingId),
+        prev.find((item) => {
+          if (item.id !== existingId) {
+            return false;
+          }
+          if (!existingTurnId) {
+            return true;
+          }
+          return item.turn_id === existingTurnId;
+        }),
       );
       if (!projectedItem) {
         return prev;
@@ -1122,6 +1347,25 @@ export function handleTurnStreamEvent({
       );
     });
   };
+
+  const shouldUpdateLegacyToolMessageLayer = (
+    event: Extract<
+      AgentEvent,
+      {
+        type:
+          | "tool_start"
+          | "tool_input_delta"
+          | "tool_progress"
+          | "tool_output_delta"
+          | "tool_end";
+      }
+    >,
+  ): boolean =>
+    shouldLetLegacyToolEventUpdateMessageLayer({
+      event,
+      fallbackTurnId: requestState.currentTurnId || requestState.queuedTurnId,
+      items: getThreadItems?.() ?? [],
+    });
 
   switch (data.type) {
     case "message":
@@ -1261,6 +1505,11 @@ export function handleTurnStreamEvent({
           data.item,
         ),
       );
+      syncExistingMessageToolCallFromThreadItem({
+        assistantMsgId,
+        item: data.item,
+        setMessages,
+      });
       break;
 
     case "item_updated":
@@ -1288,6 +1537,11 @@ export function handleTurnStreamEvent({
           data.item,
         ),
       );
+      syncExistingMessageToolCallFromThreadItem({
+        assistantMsgId,
+        item: data.item,
+        setMessages,
+      });
       break;
 
     case "turn_completed": {
@@ -1396,7 +1650,7 @@ export function handleTurnStreamEvent({
       setCurrentTurnId(data.turn.id);
       finalizeMissingFinalReplyFailure(
         buildAgentStreamMissingFinalReplyFailurePlan({
-        errorMessage: data.turn.error_message || "当前处理失败",
+          errorMessage: data.turn.error_message || "当前处理失败",
           queuedTurnId: requestState.queuedTurnId,
         }),
       );
@@ -1671,60 +1925,88 @@ export function handleTurnStreamEvent({
       commitRenderedTextBeforeProcessPart();
       upsertFallbackTextOverlayIfSilent("tool_start_fallback");
       playToolcallSound();
-      upsertProjectedTimelineItem(data);
-      handleToolStartEvent({
-        data,
-        setPendingActions,
-        onWriteFile,
-        toolLogIdByToolId,
-        toolStartedAtByToolId,
-        toolNameByToolId,
-        assistantMsgId,
-        activeSessionId,
-        resolvedWorkspaceId,
-        setMessages,
-      });
+      {
+        const shouldUpdateMessageLayer =
+          shouldUpdateLegacyToolMessageLayer(data);
+        upsertProjectedTimelineItem(data);
+        if (!shouldUpdateMessageLayer) {
+          break;
+        }
+        handleToolStartEvent({
+          data,
+          setPendingActions,
+          onWriteFile,
+          toolLogIdByToolId,
+          toolStartedAtByToolId,
+          toolNameByToolId,
+          assistantMsgId,
+          activeSessionId,
+          resolvedWorkspaceId,
+          setMessages,
+        });
+      }
       break;
 
     case "tool_progress":
       activateStream();
       clearOptimisticItem();
-      upsertProjectedTimelineItem(data);
-      handleToolProgressEvent({
-        data,
-        toolLogIdByToolId,
-        assistantMsgId,
-        setMessages,
-      });
+      {
+        const shouldUpdateMessageLayer =
+          shouldUpdateLegacyToolMessageLayer(data);
+        upsertProjectedTimelineItem(data);
+        if (!shouldUpdateMessageLayer) {
+          break;
+        }
+        handleToolProgressEvent({
+          data,
+          toolLogIdByToolId,
+          assistantMsgId,
+          setMessages,
+        });
+      }
       break;
 
     case "tool_input_delta":
       activateStream();
       clearOptimisticItem();
       commitRenderedTextBeforeProcessPart();
-      upsertProjectedTimelineItem(data);
-      handleToolInputDeltaEvent({
-        data,
-        toolLogIdByToolId,
-        toolStartedAtByToolId,
-        toolNameByToolId,
-        assistantMsgId,
-        activeSessionId,
-        resolvedWorkspaceId,
-        setMessages,
-      });
+      {
+        const shouldUpdateMessageLayer =
+          shouldUpdateLegacyToolMessageLayer(data);
+        upsertProjectedTimelineItem(data);
+        if (!shouldUpdateMessageLayer) {
+          break;
+        }
+        handleToolInputDeltaEvent({
+          data,
+          toolLogIdByToolId,
+          toolStartedAtByToolId,
+          toolNameByToolId,
+          assistantMsgId,
+          activeSessionId,
+          resolvedWorkspaceId,
+          setMessages,
+        });
+      }
       break;
 
     case "tool_output_delta":
       activateStream();
       clearOptimisticItem();
-      upsertProjectedTimelineItem(data);
-      handleToolOutputDeltaEvent({
-        data,
-        toolLogIdByToolId,
-        assistantMsgId,
-        setMessages,
-      });
+      {
+        const shouldUpdateMessageLayer =
+          shouldUpdateLegacyToolMessageLayer(data);
+        upsertProjectedTimelineItem(data);
+        if (!shouldUpdateMessageLayer) {
+          break;
+        }
+        handleToolOutputDeltaEvent({
+          data,
+          toolLogIdByToolId,
+          assistantMsgId,
+          setMessages,
+        });
+      }
       break;
 
     case "tool_end":
@@ -1740,18 +2022,25 @@ export function handleTurnStreamEvent({
           requestState.hasMeaningfulCompletionSignal = true;
         }
       }
-      handleToolEndEvent({
-        data,
-        onWriteFile,
-        toolLogIdByToolId,
-        toolStartedAtByToolId,
-        toolNameByToolId,
-        assistantMsgId,
-        activeSessionId,
-        resolvedWorkspaceId,
-        setMessages,
-      });
-      upsertProjectedTimelineItem(data);
+      {
+        const shouldUpdateMessageLayer =
+          shouldUpdateLegacyToolMessageLayer(data);
+        upsertProjectedTimelineItem(data);
+        if (!shouldUpdateMessageLayer) {
+          break;
+        }
+        handleToolEndEvent({
+          data,
+          onWriteFile,
+          toolLogIdByToolId,
+          toolStartedAtByToolId,
+          toolNameByToolId,
+          assistantMsgId,
+          activeSessionId,
+          resolvedWorkspaceId,
+          setMessages,
+        });
+      }
       break;
 
     case "artifact_snapshot":

@@ -2,6 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 const PRODUCT_DB_FILE_NAME: &str = "lime.db";
+const MEMORY_DIR_NAME: &str = "memories";
 const RUNTIME_DIR_NAME: &str = "runtime";
 const EVENT_LOG_DIR_NAME: &str = "events";
 const SIDECAR_DIR_NAME: &str = "sidecar";
@@ -11,6 +12,7 @@ const TELEMETRY_DB_FILE_NAME: &str = "telemetry_1.sqlite";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StorageRoots {
     pub data_root: PathBuf,
+    pub memory_root: PathBuf,
     pub product_db_path: PathBuf,
     pub runtime_root: PathBuf,
     pub event_log_root: PathBuf,
@@ -46,6 +48,7 @@ impl StorageRoots {
 
         Ok(Self {
             product_db_path: data_root.join(PRODUCT_DB_FILE_NAME),
+            memory_root: data_root.join(MEMORY_DIR_NAME),
             projection_db_path: runtime_root.join(PROJECTION_DB_FILE_NAME),
             telemetry_db_path: runtime_root.join(TELEMETRY_DB_FILE_NAME),
             data_root,
@@ -66,6 +69,7 @@ mod tests {
         let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
 
         assert_eq!(roots.product_db_path, roots.data_root.join("lime.db"));
+        assert_eq!(roots.memory_root, roots.data_root.join("memories"));
         assert_eq!(roots.runtime_root, roots.data_root.join("runtime"));
         assert_eq!(roots.event_log_root, roots.runtime_root.join("events"));
         assert_eq!(roots.sidecar_root, roots.runtime_root.join("sidecar"));

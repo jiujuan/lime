@@ -3964,7 +3964,19 @@ impl Agent {
                     }
                 };
 
-                while let Some(event) = reply_stream.next().await {
+                loop {
+                    let next_event = match cancel_token.as_ref() {
+                        Some(token) => {
+                            tokio::select! {
+                                _ = token.cancelled() => None,
+                                event = reply_stream.next() => event,
+                            }
+                        }
+                        None => reply_stream.next().await,
+                    };
+                    let Some(event) = next_event else {
+                        break;
+                    };
                     match event {
                         Ok(event) => {
                             for runtime_event in item_runtime_projector.project_agent_event(&event) {

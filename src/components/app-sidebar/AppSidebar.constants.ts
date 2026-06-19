@@ -21,7 +21,6 @@ export const SIDEBAR_NAV_LABEL_KEYS: Record<string, string> = {
   experts: "navigation.sidebar.items.experts",
   "home-general": "navigation.sidebar.items.homeGeneral",
   knowledge: "navigation.sidebar.items.knowledge",
-  memory: "navigation.sidebar.items.memory",
   settings: "navigation.sidebar.items.settings",
   skills: "navigation.sidebar.items.skills",
 };

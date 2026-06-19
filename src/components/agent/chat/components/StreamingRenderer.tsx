@@ -7,15 +7,23 @@
 
 import React, { memo, useMemo, useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { cn } from "@/lib/utils";
-import { ChevronDown, ExternalLink, FileText, Loader2 } from "lucide-react";
+import { ExternalLink, FileText, Loader2 } from "lucide-react";
 import { useDebouncedValue } from "@/lib/artifact/hooks/useDebouncedValue";
 import { MarkdownRenderer, type MarkdownRenderMode } from "./MarkdownRenderer";
 import { A2UITaskCard, A2UITaskLoadingCard } from "./A2UITaskCard";
 import { ActionRequestA2UIPreviewCard } from "./ActionRequestA2UIPreviewCard";
 import { InlineToolProcessStep } from "./InlineToolProcessStep";
+import {
+  GroupedProcessShell,
+  StreamingProcessGroup,
+} from "./StreamingProcessGroup";
+import {
+  isImportedProcessMetadata,
+  isImportedToolCall,
+  shouldAutoExpandProcessEntries,
+  type StreamingProcessEntry,
+} from "./StreamingProcessGroupModel";
 import { ThinkingBlock } from "./ThinkingBlock";
-import { resolveThinkingDisplayParts } from "./thinkingBlockDisplay";
 import { DecisionPanel } from "./DecisionPanel";
 import { AgentPlanBlock } from "./AgentPlanBlock";
 import { RuntimePeerMessageCards } from "./RuntimePeerMessageCards";
@@ -49,20 +57,11 @@ import {
   sanitizeMessageTextForDisplay,
 } from "../utils/messageDisplaySanitizer";
 import { isPureRuntimePeerMessageText } from "../utils/runtimePeerMessageDisplay";
-import {
-  summarizeStreamingToolBatch,
-  type ToolBatchSummaryDescriptor,
-} from "../utils/toolBatchGrouping";
-import {
-  buildToolGroupHeadline,
-  getToolDisplayInfo,
-} from "../utils/toolDisplayInfo";
-import { resolveToolProcessNarrative } from "../utils/toolProcessSummary";
+import type { SearchResultPreviewItem } from "../utils/searchResultPreview";
 import {
   FileChangesUndoError,
   restoreFileChangesFromCheckpoints,
 } from "../utils/fileChangesUndo";
-
 const STRUCTURED_CONTENT_HINT_RE = /<a2ui|```\s*a2ui|<write_file|<document/i;
 const STRUCTURED_PARSE_CACHE_LIMIT = 64;
 const STREAMING_STRUCTURED_PARSE_DEBOUNCE_MS = 48;
@@ -615,364 +614,6 @@ const parseThinkingContent = (text: string): ParsedContent => {
   };
 };
 
-type StreamingProcessEntry =
-  | {
-      kind: "thinking";
-      id: string;
-      text: string;
-      defaultExpanded?: boolean;
-      preserveSourceText?: boolean;
-      metadata?: Record<string, unknown>;
-    }
-  | {
-      kind: "tool";
-      id: string;
-      toolCall: ToolCallState;
-    }
-  | {
-      kind: "action";
-      id: string;
-      actionRequired: ActionRequired;
-    };
-
-function buildStreamingProcessSummary(
-  entries: StreamingProcessEntry[],
-  formatImportedSourceCommandRecord: (count?: number) => string,
-): {
-  summaryText: string;
-  descriptor: ToolBatchSummaryDescriptor | null;
-  metaText: string | null;
-} {
-  const toolEntries = entries.filter(
-    (entry): entry is Extract<StreamingProcessEntry, { kind: "tool" }> =>
-      entry.kind === "tool",
-  );
-  const thinkingCount = entries.filter(
-    (entry) => entry.kind === "thinking",
-  ).length;
-  const importedToolCount = toolEntries.filter((entry) =>
-    isImportedToolCall(entry.toolCall),
-  ).length;
-  const hasImportedThinking =
-    entries.some(
-      (entry) =>
-        entry.kind === "thinking" && isImportedProcessMetadata(entry.metadata),
-    ) ||
-    (importedToolCount > 0 && thinkingCount > 0);
-  const batchDescriptor =
-    toolEntries.length > 1 && importedToolCount === 0
-      ? summarizeStreamingToolBatch(toolEntries.map((entry) => entry.toolCall))
-      : null;
-  if (batchDescriptor) {
-    return {
-      summaryText: batchDescriptor.title,
-      descriptor: batchDescriptor,
-      metaText: null,
-    };
-  }
-
-  const toolCount = toolEntries.length;
-  if (toolCount > 0) {
-    if (importedToolCount > 0) {
-      return {
-        summaryText: formatImportedSourceCommandRecord(importedToolCount),
-        descriptor: null,
-        metaText:
-          [
-            hasImportedThinking ? "已完成思考" : null,
-            toolCount > 1 ? `导入过程 ${toolCount} 个步骤` : null,
-          ]
-            .filter(Boolean)
-            .join("，") || null,
-      };
-    }
-
-    const toolCalls = toolEntries.map((entry) => entry.toolCall);
-    const families = new Set(
-      toolCalls.map(
-        (toolCall) => getToolDisplayInfo(toolCall.name, toolCall.status).family,
-      ),
-    );
-    if (families.size === 1) {
-      return {
-        summaryText: buildToolGroupHeadline(
-          toolCalls,
-          formatImportedSourceCommandRecord,
-        ),
-        descriptor: null,
-        metaText: null,
-      };
-    }
-
-    const failed = toolCalls.some((toolCall) => toolCall.status === "failed");
-    const running = toolCalls.some((toolCall) => toolCall.status === "running");
-    return {
-      summaryText: failed
-        ? `失败 ${toolCount} 个步骤`
-        : running
-          ? `进行中 ${toolCount} 个步骤`
-          : `已完成 ${toolCount} 个步骤`,
-      descriptor: null,
-      metaText: null,
-    };
-  }
-
-  const messageCount = entries.length - toolCount;
-  const primarySummary = (() => {
-    for (const entry of entries) {
-      if (entry.kind === "thinking") {
-        const preview = resolveThinkingDisplayParts(
-          entry.text,
-          entry.defaultExpanded === true,
-        ).preview;
-        if (preview) {
-          return preview;
-        }
-        continue;
-      }
-
-      if (entry.kind === "tool") {
-        const narrative = resolveToolProcessNarrative(entry.toolCall);
-        if (narrative.preSummary || narrative.summary) {
-          return narrative.preSummary || narrative.summary;
-        }
-        continue;
-      }
-
-      const prompt = entry.actionRequired.prompt?.trim();
-      if (prompt) {
-        return prompt.length <= 72
-          ? prompt
-          : `${prompt.slice(0, 71).trimEnd()}…`;
-      }
-    }
-
-    return null;
-  })();
-
-  if (!primarySummary) {
-    const summaryParts: string[] = [];
-    if (thinkingCount > 0) {
-      summaryParts.push("思考中");
-    }
-    if (toolCount > 0) {
-      summaryParts.push(`${toolCount} 个工具调用`);
-    }
-    if (messageCount > thinkingCount) {
-      summaryParts.push(`${messageCount} 条过程消息`);
-    }
-    return {
-      summaryText: summaryParts.join("，"),
-      descriptor: null,
-      metaText: null,
-    };
-  }
-
-  if (toolCount === 0) {
-    if (thinkingCount > 0) {
-      const firstThinking = entries.find((entry) => entry.kind === "thinking");
-      const thinkingDisplay =
-        firstThinking?.kind === "thinking"
-          ? resolveThinkingDisplayParts(
-              firstThinking.text,
-              firstThinking.defaultExpanded === true,
-            )
-          : null;
-      const summaryText =
-        hasImportedThinking && thinkingDisplay?.preview
-          ? thinkingDisplay.preview
-          : thinkingDisplay?.statusLabel || "已完成思考";
-      return {
-        summaryText,
-        descriptor: null,
-        metaText: thinkingCount > 1 ? `${thinkingCount} 条思路` : null,
-      };
-    }
-
-    return {
-      summaryText: primarySummary,
-      descriptor: null,
-      metaText: thinkingCount > 1 ? `${thinkingCount} 条思路` : null,
-    };
-  }
-
-  return {
-    summaryText: primarySummary,
-    descriptor: null,
-    metaText:
-      entries.length > 1
-        ? [
-            thinkingCount > 0 ? `${thinkingCount} 条思路` : null,
-            `${toolCount} 个工具调用`,
-          ]
-            .filter(Boolean)
-            .join("，")
-        : null,
-  };
-}
-
-function shouldAutoExpandProcessEntries(
-  entries: StreamingProcessEntry[],
-  isMessageStreaming: boolean,
-): boolean {
-  if (
-    entries.some(
-      (entry) =>
-        entry.kind === "thinking" && isImportedProcessMetadata(entry.metadata),
-    )
-  ) {
-    return true;
-  }
-
-  if (
-    entries.some(
-      (entry) => entry.kind === "tool" && isImportedToolCall(entry.toolCall),
-    )
-  ) {
-    return true;
-  }
-
-  if (!isMessageStreaming) {
-    return false;
-  }
-
-  const hasTool = entries.some((entry) => entry.kind === "tool");
-  if (hasTool) {
-    return false;
-  }
-
-  const hasPendingAction = entries.some(
-    (entry) =>
-      entry.kind === "action" && entry.actionRequired.status !== "submitted",
-  );
-  if (hasPendingAction) {
-    return true;
-  }
-
-  return entries.every((entry) => entry.kind === "thinking");
-}
-
-function isImportedToolCall(toolCall: ToolCallState): boolean {
-  const possibleToolMetadata = (toolCall as { metadata?: unknown }).metadata;
-  return (
-    isImportedProcessMetadata(toolCall.result?.metadata) ||
-    isImportedProcessMetadata(possibleToolMetadata)
-  );
-}
-
-function isImportedProcessMetadata(metadata: unknown): boolean {
-  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
-    return false;
-  }
-  const record = metadata as Record<string, unknown>;
-  return (
-    record.imported === true ||
-    record.imported_synthetic === true ||
-    record.importedSynthetic === true ||
-    record.source_client === "codex" ||
-    record.sourceClient === "codex"
-  );
-}
-
-const GroupedProcessShell: React.FC<{
-  groupMarker: string;
-  children: React.ReactNode;
-}> = ({ groupMarker, children }) => (
-  <div className="flex items-start gap-2 py-1.5">
-    <span className="pt-0.5 text-xs text-slate-300">{groupMarker}</span>
-    <div className="min-w-0 flex-1">{children}</div>
-  </div>
-);
-
-const StreamingProcessGroup: React.FC<{
-  entries: StreamingProcessEntry[];
-  defaultExpanded?: boolean;
-  renderEntry: (
-    entry: StreamingProcessEntry,
-    grouped: boolean,
-    groupMarker: string,
-  ) => React.ReactNode;
-}> = ({ entries, defaultExpanded = false, renderEntry }) => {
-  const { t } = useTranslation("agent");
-  const [expanded, setExpanded] = React.useState(defaultExpanded);
-  const previousDefaultExpandedRef = React.useRef(defaultExpanded);
-  const { summaryText, descriptor, metaText } = useMemo(
-    () =>
-      buildStreamingProcessSummary(entries, (count?: number) =>
-        t("agentChat.toolCall.importedCommandRecord.groupTitle", { count }),
-      ),
-    [entries, t],
-  );
-
-  React.useEffect(() => {
-    if (previousDefaultExpandedRef.current !== defaultExpanded) {
-      previousDefaultExpandedRef.current = defaultExpanded;
-      setExpanded(defaultExpanded);
-    }
-  }, [defaultExpanded]);
-
-  return (
-    <div
-      className="py-0.5"
-      data-testid="streaming-process-group"
-      data-visual-tone="neutral"
-    >
-      <button
-        type="button"
-        className="flex w-full items-start gap-2 rounded-lg py-1.5 text-left transition-colors hover:bg-slate-50/70"
-        onClick={() => setExpanded((current) => !current)}
-        aria-expanded={expanded}
-      >
-        <ChevronDown
-          className={cn(
-            "mt-1 h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-200",
-            expanded && "rotate-180",
-          )}
-        />
-        <span className="min-w-0 flex-1 text-[13px] font-normal leading-6 text-slate-600">
-          <span className="block break-words">{summaryText}</span>
-          {metaText ? (
-            <span className="mt-0.5 block text-xs font-normal leading-5 text-slate-500">
-              {metaText}
-            </span>
-          ) : null}
-          {descriptor?.supportingLines?.length ? (
-            <span className="mt-0.5 block space-y-0.5">
-              {descriptor.supportingLines.slice(0, 5).map((line) => (
-                <span
-                  key={line}
-                  className="block text-xs font-normal leading-5 text-slate-500"
-                >
-                  {line}
-                </span>
-              ))}
-            </span>
-          ) : null}
-        </span>
-      </button>
-      {expanded ? (
-        <div className="ml-2">
-          {descriptor?.kind === "web_search" &&
-          descriptor.supportingLines.length > 0
-            ? descriptor.supportingLines.slice(0, 10).map((line, index) => (
-                <GroupedProcessShell
-                  key={`web-search-source-${index}-${line}`}
-                  groupMarker={index === 0 ? "└" : "·"}
-                >
-                  <div className="text-xs leading-5 text-slate-500">{line}</div>
-                </GroupedProcessShell>
-              ))
-            : entries.map((entry, index) => (
-                <React.Fragment key={entry.id}>
-                  {renderEntry(entry, true, index === 0 ? "└" : "·")}
-                </React.Fragment>
-              ))}
-        </div>
-      ) : null}
-    </div>
-  );
-};
-
 // ============ 主组件 ============
 
 interface StreamingRendererProps {
@@ -1017,6 +658,7 @@ interface StreamingRendererProps {
   /** 当前会话 ID；存在时文件变更摘要可用 runtime file checkpoint 执行撤销。 */
   fileChangesUndoSessionId?: string | null;
   onOpenSavedSiteContent?: (target: SiteSavedContentTarget) => void;
+  onOpenUrlPreview?: (item: SearchResultPreviewItem) => void;
   /** 权限确认响应回调 */
   onPermissionResponse?: (response: ConfirmResponse) => void;
   /** 是否折叠代码块（当画布打开时） */
@@ -1070,6 +712,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
     onFileClick,
     fileChangesUndoSessionId,
     onOpenSavedSiteContent,
+    onOpenUrlPreview,
     onPermissionResponse,
     collapseCodeBlocks,
     shouldCollapseCodeBlock,
@@ -1411,7 +1054,12 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
     );
 
     const renderProcessEntry = React.useCallback(
-      (entry: StreamingProcessEntry, grouped: boolean, groupMarker: string) => {
+      (
+        entry: StreamingProcessEntry,
+        grouped: boolean,
+        groupMarker: string,
+        processEntries: StreamingProcessEntry[],
+      ) => {
         if (entry.kind === "thinking") {
           const preserveThinkingSourceText =
             entry.preserveSourceText ||
@@ -1431,6 +1079,14 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
         }
 
         if (entry.kind === "tool") {
+          const siblingToolCalls = processEntries
+            .filter(
+              (candidate): candidate is Extract<
+                StreamingProcessEntry,
+                { kind: "tool" }
+              > => candidate.kind === "tool",
+            )
+            .map((candidate) => candidate.toolCall);
           return (
             <InlineToolProcessStep
               key={entry.id}
@@ -1438,6 +1094,8 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
               isMessageStreaming={isStreaming}
               onFileClick={onFileClick}
               onOpenSavedSiteContent={onOpenSavedSiteContent}
+              onOpenUrlPreview={onOpenUrlPreview}
+              urlPreviewToolCalls={siblingToolCalls}
               grouped={grouped}
               groupMarker={groupMarker}
             />
@@ -1463,6 +1121,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
         isStreaming,
         onFileClick,
         onOpenSavedSiteContent,
+        onOpenUrlPreview,
         renderActionRequestNode,
       ],
     );
@@ -1506,6 +1165,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
                 processEntries,
                 isStreaming,
               )}
+              onOpenUrlPreview={onOpenUrlPreview}
               renderEntry={renderProcessEntry}
             />
           );
@@ -1513,11 +1173,11 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
 
         return processEntries.map((entry) => (
           <React.Fragment key={entry.id}>
-            {renderProcessEntry(entry, false, "•")}
+            {renderProcessEntry(entry, false, "•", processEntries)}
           </React.Fragment>
         ));
       },
-      [isStreaming, renderProcessEntry],
+      [isStreaming, onOpenUrlPreview, renderProcessEntry],
     );
 
     const renderParsedResultParts = React.useCallback(

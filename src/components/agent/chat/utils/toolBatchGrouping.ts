@@ -35,6 +35,12 @@ type ToolOperationKind =
   | "absorbed"
   | "other";
 
+type ToolLikeStatus =
+  | ToolCallState["status"]
+  | AgentThreadItem["status"]
+  | null
+  | undefined;
+
 interface ToolBatchAccumulator {
   readCount: number;
   searchCount: number;
@@ -61,7 +67,7 @@ interface ToolLikeDescriptor {
   command?: string | null;
   query?: string | null;
   output?: string | null;
-  status?: ToolCallState["status"] | AgentThreadItem["status"] | null;
+  status?: ToolLikeStatus;
 }
 
 type ThreadProcessBatchItem = Extract<
@@ -420,6 +426,7 @@ function accumulateBatch(entries: ToolLikeDescriptor[]): ToolBatchAccumulator {
 
 function buildWebSearchDescriptor(
   accumulator: ToolBatchAccumulator,
+  entries: ToolLikeDescriptor[],
 ): ToolBatchSummaryDescriptor | null {
   const {
     readCount,
@@ -443,6 +450,15 @@ function buildWebSearchDescriptor(
     return null;
   }
 
+  const webFetchCount = accumulator.webFetchCount;
+  const hasRunningWebRetrieval = entries.some((entry) => {
+    const operationKind = resolveToolOperationKind(entry);
+    return (
+      (operationKind === "web_search" || operationKind === "web_fetch") &&
+      (entry.status === "running" || entry.status === "in_progress")
+    );
+  });
+
   const supportingLines =
     accumulator.webSearchHints.length > 0 ||
     accumulator.webFetchHints.length > 0
@@ -450,7 +466,11 @@ function buildWebSearchDescriptor(
           0,
           7,
         )
-      : [`搜索网页 ${webSearchCount} 次`];
+      : [
+          webFetchCount > 0
+            ? `搜索网页 ${webSearchCount} 次，读取网页 ${webFetchCount} 次`
+            : `搜索网页 ${webSearchCount} 次`,
+        ];
   if (
     accumulator.latestWebSearchHint &&
     !supportingLines.some((line) =>
@@ -462,10 +482,22 @@ function buildWebSearchDescriptor(
 
   return {
     kind: "web_search",
-    title: `已搜索网页 ${webSearchCount} 次`,
+    title:
+      webFetchCount > 0
+        ? `${hasRunningWebRetrieval ? "正在搜索网页" : "已搜索网页"} ${webSearchCount} 次，读取网页 ${webFetchCount} 次`
+        : `${hasRunningWebRetrieval ? "正在搜索网页" : "已搜索网页"} ${webSearchCount} 次`,
     supportingLines,
-    countLabel: `${webSearchCount} 次`,
-    rawDetailLabel: "展开查看搜索来源",
+    countLabel:
+      webFetchCount > 0
+        ? `搜 ${webSearchCount} / 读 ${webFetchCount}`
+        : `${webSearchCount} 次`,
+    rawDetailLabel: hasRunningWebRetrieval
+      ? webFetchCount > 0
+        ? "展开查看搜索与读取进度"
+        : "展开查看搜索进度"
+      : webFetchCount > 0
+        ? "展开查看搜索与读取来源"
+        : "展开查看搜索来源",
   };
 }
 
@@ -580,7 +612,7 @@ function buildDescriptorFromEntries(
 
   const accumulator = accumulateBatch(entries);
   return (
-    buildWebSearchDescriptor(accumulator) ||
+    buildWebSearchDescriptor(accumulator, entries) ||
     buildExplorationDescriptor(accumulator) ||
     buildBrowserDescriptor(accumulator)
   );

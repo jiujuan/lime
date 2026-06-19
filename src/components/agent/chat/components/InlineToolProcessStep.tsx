@@ -13,6 +13,7 @@ import {
 } from "../hooks/agentChatToolResult";
 import type { AgentToolCallState as ToolCallState } from "@/lib/api/agentProtocol";
 import type { SiteSavedContentTarget } from "../types";
+import type { SearchResultPreviewItem } from "../utils/searchResultPreview";
 import {
   buildToolHeadline,
   getToolDisplayInfo,
@@ -25,9 +26,9 @@ import {
   isUnifiedWebSearchToolName,
   resolveSearchResultPreviewItemsFromText,
 } from "../utils/searchResultPreview";
+import { attachUrlPreviewSnapshotsToSearchResults } from "../utils/urlPreviewSnapshot";
 import {
   normalizeSiteToolResultSummary,
-  resolveSiteProjectTargetLabel,
   resolveSiteSavedContentTargetDisplayName,
   resolveSiteSavedContentTargetRelativePath,
   resolveSiteSavedContentTargetFromMetadata,
@@ -36,16 +37,24 @@ import {
   normalizeToolSearchResultSummary,
   resolveUserFacingToolSearchItemLabel,
 } from "../utils/toolSearchResultSummary";
+import { resolveTaskBoardResultDetailText } from "../utils/taskBoardToolResultDetail";
 import {
   resolveToolErrorDetailText,
   resolveToolProcessNarrative,
   isLikelyWebRetrievalDiagnosticNoise,
 } from "../utils/toolProcessSummary";
 import {
+  extractStructuredToolDetailText,
+  normalizeToolResultDetailText,
+  parseStructuredToolResult,
+  sanitizeToolResultDetailMarkdown,
+} from "../utils/toolResultDetailText";
+import {
   isLimeTaskProtocolFailure,
   resolveLimeTaskProtocolFailureDisplayText,
 } from "../utils/limeTaskProtocolNoise";
 import { resolveImportedSourceToolPresentation } from "./ToolCallDisplayViewModel";
+import { resolveRequiredAgentChatCopy } from "../utils/agentChatCopy";
 
 interface InlineToolProcessStepProps {
   toolCall: ToolCallState;
@@ -54,6 +63,8 @@ interface InlineToolProcessStepProps {
   isMessageStreaming?: boolean;
   onFileClick?: (fileName: string, content: string) => void;
   onOpenSavedSiteContent?: (target: SiteSavedContentTarget) => void;
+  onOpenUrlPreview?: (item: SearchResultPreviewItem) => void;
+  urlPreviewToolCalls?: ToolCallState[];
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -124,206 +135,27 @@ function summarizeResultText(value: string): string | null {
 }
 
 const LARGE_RESULT_AUTO_COLLAPSE_CHARS = 1200;
-const STRUCTURED_DETAIL_TEXT_KEYS = [
-  "markdown",
-  "markdownContent",
-  "markdown_content",
-  "contentMarkdown",
-  "content_markdown",
-  "bodyMarkdown",
-  "body_markdown",
-  "content",
-  "text",
-  "body",
-  "summary",
-  "description",
-  "output",
-] as const;
-const STRUCTURED_DETAIL_OBJECT_KEYS = [
-  "result",
-  "data",
-  "page",
-  "article",
-  "document",
-  "content",
-] as const;
-const TASK_BOARD_TOOL_NAMES = new Set([
-  "taskcreate",
-  "tasklist",
-  "taskget",
-  "taskupdate",
-]);
 
-function sanitizeToolResultDetailMarkdown(value: string): string {
-  return value.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-function parseStructuredToolResult(value: string): unknown {
-  const trimmed = value.trim();
-  if (!trimmed || (!trimmed.startsWith("{") && !trimmed.startsWith("["))) {
-    return null;
+function resolveSiteProjectTargetCopy(params: {
+  source?: string;
+  projectId?: string;
+}): string {
+  if (params.source === "context_project") {
+    return resolveRequiredAgentChatCopy(
+      "toolCall.siteResult.target.currentProject",
+    );
   }
-
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    return null;
+  if (params.source === "explicit_project") {
+    return resolveRequiredAgentChatCopy(
+      "toolCall.siteResult.target.selectedProject",
+    );
   }
-}
-
-function readArray(
-  record: Record<string, unknown> | null,
-  keys: string[],
-): unknown[] | null {
-  if (!record) {
-    return null;
+  if (params.projectId?.trim()) {
+    return resolveRequiredAgentChatCopy("toolCall.siteResult.target.project", {
+      projectId: params.projectId.trim(),
+    });
   }
-  for (const key of keys) {
-    const value = record[key];
-    if (Array.isArray(value)) {
-      return value;
-    }
-  }
-  return null;
-}
-
-function taskRecordFrom(value: unknown): Record<string, unknown> | null {
-  return asRecord(value);
-}
-
-function readTaskSubject(
-  record: Record<string, unknown> | null,
-): string | null {
-  return readString(record, ["subject", "content", "title", "description"]);
-}
-
-function readTaskStatus(record: Record<string, unknown> | null): string | null {
-  return readString(record, ["status", "state"]);
-}
-
-function readTaskId(record: Record<string, unknown> | null): string | null {
-  return readString(record, ["id", "taskId", "task_id"]);
-}
-
-function formatTaskLine(record: Record<string, unknown>): string | null {
-  const id = readTaskId(record);
-  const subject = readTaskSubject(record);
-  const status = readTaskStatus(record);
-  const label = [id ? `#${id}` : null, subject].filter(Boolean).join(" ");
-  const main = label || status;
-  if (!main) {
-    return null;
-  }
-  return status && label ? `${main} · ${status}` : main;
-}
-
-function resolveTaskBoardResultDetailText(params: {
-  toolName: string;
-  outputText: string;
-  metadata: Record<string, unknown> | null;
-  fallbackSummary: string | null;
-}): string | null {
-  const normalizedName = normalizeToolNameKey(params.toolName);
-  if (!TASK_BOARD_TOOL_NAMES.has(normalizedName)) {
-    return null;
-  }
-
-  const parsedOutput = parseStructuredToolResult(params.outputText);
-  const outputRecord = asRecord(parsedOutput);
-  const metadata = params.metadata;
-  const task =
-    taskRecordFrom(metadata?.task) || taskRecordFrom(outputRecord?.task);
-  const tasks =
-    readArray(metadata, ["tasks", "task_list"]) ||
-    readArray(outputRecord, ["tasks", "task_list"]);
-  const lines: string[] = [];
-
-  if (task) {
-    const taskLine = formatTaskLine(task);
-    if (taskLine) {
-      lines.push(taskLine);
-    }
-  }
-
-  if (!task && normalizedName === "taskget") {
-    lines.push("未找到任务");
-  }
-
-  if (tasks) {
-    const taskLines = tasks
-      .map((item) => taskRecordFrom(item))
-      .filter((item): item is Record<string, unknown> => Boolean(item))
-      .map(formatTaskLine)
-      .filter((item): item is string => Boolean(item));
-    if (taskLines.length > 0) {
-      lines.push(...taskLines.slice(0, 5));
-      if (taskLines.length > 5) {
-        lines.push(`还有 ${taskLines.length - 5} 个任务`);
-      }
-    } else if (normalizedName === "tasklist") {
-      lines.push("任务列表为空");
-    }
-  }
-
-  const summary = params.fallbackSummary?.trim();
-  if (summary && !lines.includes(summary)) {
-    lines.unshift(summary);
-  }
-
-  return lines.length > 0 ? lines.join("\n") : summary || null;
-}
-
-function extractStructuredToolDetailText(
-  value: unknown,
-  visited = new Set<unknown>(),
-): string | null {
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    return trimmed || null;
-  }
-  if (!value || typeof value !== "object") {
-    return null;
-  }
-  if (visited.has(value)) {
-    return null;
-  }
-  visited.add(value);
-
-  if (Array.isArray(value)) {
-    const parts = value
-      .map((item) => extractStructuredToolDetailText(item, visited))
-      .filter((item): item is string => Boolean(item));
-    return parts.length > 0 ? parts.slice(0, 3).join("\n\n") : null;
-  }
-
-  const record = value as Record<string, unknown>;
-  for (const key of STRUCTURED_DETAIL_TEXT_KEYS) {
-    const candidate = record[key];
-    if (typeof candidate === "string" && candidate.trim()) {
-      return candidate.trim();
-    }
-  }
-
-  for (const key of STRUCTURED_DETAIL_OBJECT_KEYS) {
-    const nested = record[key];
-    if (nested && typeof nested === "object") {
-      const candidate = extractStructuredToolDetailText(nested, visited);
-      if (candidate) {
-        return candidate;
-      }
-    }
-  }
-
-  return null;
-}
-
-function normalizeToolResultDetailText(value: string): string {
-  const parsed = parseStructuredToolResult(value);
-  if (!parsed) {
-    return value;
-  }
-
-  return extractStructuredToolDetailText(parsed) || value;
+  return resolveRequiredAgentChatCopy("toolCall.siteResult.target.generic");
 }
 
 function summarizeToolSearchPreview(
@@ -337,13 +169,22 @@ function summarizeToolSearchPreview(
     .slice(0, 2)
     .map((item) => resolveUserFacingToolSearchItemLabel(item.name))
     .filter(Boolean);
-  const prefix = `找到工具 ${value.count} 个`;
+  const prefix = resolveRequiredAgentChatCopy(
+    "toolCall.inline.toolSearchPreview.count",
+    { count: value.count },
+  );
 
   if (toolNames.length === 0) {
     return prefix;
   }
 
-  return `${prefix} · ${toolNames.join(" · ")}`;
+  return resolveRequiredAgentChatCopy(
+    "toolCall.inline.toolSearchPreview.withTools",
+    {
+      countLabel: prefix,
+      tools: toolNames.join(" · "),
+    },
+  );
 }
 
 function summarizeSearchResultPreview(resultCount: number): string | null {
@@ -351,7 +192,10 @@ function summarizeSearchResultPreview(resultCount: number): string | null {
     return null;
   }
 
-  return `找到 ${resultCount} 条搜索结果`;
+  return resolveRequiredAgentChatCopy(
+    "toolCall.inline.searchResultPreview.count",
+    { count: resultCount },
+  );
 }
 
 function summarizeDiagnosticResultPreview(value: string): string | null {
@@ -371,7 +215,10 @@ function summarizeDiagnosticResultPreview(value: string): string | null {
   const firstAttemptError = readString(firstAttempt, ["error", "message"]);
 
   if (firstAttemptError) {
-    return `搜索诊断：${summarizeResultText(firstAttemptError)}`;
+    return resolveRequiredAgentChatCopy(
+      "toolCall.inline.searchDiagnostic.withMessage",
+      { message: summarizeResultText(firstAttemptError) },
+    );
   }
 
   const message =
@@ -379,8 +226,11 @@ function summarizeDiagnosticResultPreview(value: string): string | null {
     extractStructuredToolDetailText(parsed);
 
   return message
-    ? `搜索诊断：${summarizeResultText(message)}`
-    : "搜索诊断已收起";
+    ? resolveRequiredAgentChatCopy(
+        "toolCall.inline.searchDiagnostic.withMessage",
+        { message: summarizeResultText(message) },
+      )
+    : resolveRequiredAgentChatCopy("toolCall.inline.searchDiagnostic.collapsed");
 }
 
 function normalizeSummaryLine(
@@ -409,33 +259,52 @@ function buildSiteNoticeLines(toolCall: ToolCallState): string[] {
   const lines: string[] = [];
   const savedProjectId =
     summary.savedProjectId || summary.savedContent?.projectId || "";
-  const savedProjectTarget = resolveSiteProjectTargetLabel({
+  const savedProjectTarget = resolveSiteProjectTargetCopy({
     source: summary.savedBy,
     projectId: savedProjectId || undefined,
   });
 
   if (summary.savedContent?.title) {
-    lines.push(`已保存到${savedProjectTarget}：${summary.savedContent.title}`);
+    lines.push(
+      resolveRequiredAgentChatCopy("toolCall.siteResult.saved", {
+        target: savedProjectTarget,
+        title: summary.savedContent.title,
+      }),
+    );
   }
 
   if (summary.savedContent?.markdownRelativePath) {
-    lines.push("已导出 Markdown 文稿");
+    lines.push(
+      resolveRequiredAgentChatCopy("toolCall.siteResult.markdownExported"),
+    );
   }
 
   if (typeof summary.savedContent?.imageCount === "number") {
-    lines.push(`附带图片 ${summary.savedContent.imageCount} 张`);
+    lines.push(
+      resolveRequiredAgentChatCopy("toolCall.siteResult.images", {
+        count: summary.savedContent.imageCount,
+      }),
+    );
   }
 
   if (summary.saveSkippedProjectId) {
-    const skippedProjectTarget = resolveSiteProjectTargetLabel({
+    const skippedProjectTarget = resolveSiteProjectTargetCopy({
       source: summary.saveSkippedBy,
       projectId: summary.saveSkippedProjectId,
     });
-    lines.push(`未保存到${skippedProjectTarget}`);
+    lines.push(
+      resolveRequiredAgentChatCopy("toolCall.siteResult.saveSkipped", {
+        target: skippedProjectTarget,
+      }),
+    );
   }
 
   if (summary.saveErrorMessage) {
-    lines.push(`自动保存失败：${summary.saveErrorMessage}`);
+    lines.push(
+      resolveRequiredAgentChatCopy("toolCall.siteResult.saveError", {
+        message: summary.saveErrorMessage,
+      }),
+    );
   }
 
   return lines;
@@ -448,6 +317,8 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
   isMessageStreaming = false,
   onFileClick,
   onOpenSavedSiteContent,
+  onOpenUrlPreview,
+  urlPreviewToolCalls,
 }) => {
   const { t } = useTranslation("agent");
   const [expanded, setExpanded] = useState(false);
@@ -549,6 +420,20 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
             processNarrative.postSummary ||
             processNarrative.summary ||
             processNarrative.preSummary,
+          copy: {
+            taskNotFound: () =>
+              t("agentChat.toolCall.taskBoard.notFound", "Task not found"),
+            moreTasks: (count) =>
+              t("agentChat.toolCall.taskBoard.moreTasks", {
+                count,
+                defaultValue: "{{count}} more tasks",
+              }),
+            emptyTaskList: () =>
+              t(
+                "agentChat.toolCall.taskBoard.emptyTaskList",
+                "Task list is empty",
+              ),
+          },
         }) || normalizeToolResultDetailText(rawResultText)
       );
     }
@@ -605,8 +490,12 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
       return [];
     }
 
-    return resolveSearchResultPreviewItemsFromText(rawResultText);
-  }, [rawResultText, toolCall.name]);
+    const items = resolveSearchResultPreviewItemsFromText(rawResultText);
+    return attachUrlPreviewSnapshotsToSearchResults({
+      items,
+      toolCalls: urlPreviewToolCalls,
+    });
+  }, [rawResultText, toolCall.name, urlPreviewToolCalls]);
   const structuredResultPreview = useMemo(() => {
     if (toolSearchSummary) {
       return summarizeToolSearchPreview(toolSearchSummary);
@@ -687,11 +576,15 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
   const processSummary = useMemo(() => {
     const streamingOutputSummary =
       toolCall.status === "running" && structuredResultPreview
-        ? `实时输出：${structuredResultPreview}`
+        ? t("agentChat.toolCall.inline.streamingOutput", {
+            value: structuredResultPreview,
+          })
         : null;
     const progressSummary =
       toolCall.status === "running" && toolCall.progress?.message
-        ? `进度：${toolCall.progress.message}`
+        ? t("agentChat.toolCall.inline.progress", {
+            message: toolCall.progress.message,
+          })
         : null;
     const preferredSummary = importedSourcePresentation
       ? t("agentChat.toolCall.importedCommandRecord.description")
@@ -733,6 +626,16 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
       console.error("打开外部链接失败:", error);
     }
   }, []);
+  const handleOpenSearchResult = useCallback(
+    (item: SearchResultPreviewItem) => {
+      if (onOpenUrlPreview) {
+        onOpenUrlPreview(item);
+        return;
+      }
+      void handleOpenExternalUrl(item.url);
+    },
+    [handleOpenExternalUrl, onOpenUrlPreview],
+  );
 
   useEffect(() => {
     if (toolCall.status === "running" || siteNoticeLines.length > 0) {
@@ -807,8 +710,10 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
   ]);
 
   const detailBadges = [
-    isPreload ? "系统预执行" : null,
-    skillTitle && skillTitle !== subject ? `技能：${skillTitle}` : null,
+    isPreload ? t("agentChat.toolCall.inline.badge.preload") : null,
+    skillTitle && skillTitle !== subject
+      ? t("agentChat.toolCall.inline.badge.skill", { title: skillTitle })
+      : null,
     toolCall.status === "running" || toolCall.status === "failed"
       ? toolDisplay.action
       : null,
@@ -927,7 +832,16 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
                 <button
                   type="button"
                   className="rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                  title={expanded ? "收起过程详情" : "展开过程详情"}
+                  title={
+                    expanded
+                      ? t("agentChat.toolCall.inline.collapseDetails")
+                      : t("agentChat.toolCall.inline.expandDetails")
+                  }
+                  aria-label={
+                    expanded
+                      ? t("agentChat.toolCall.inline.collapseDetails")
+                      : t("agentChat.toolCall.inline.expandDetails")
+                  }
                   onClick={() => setExpanded((current) => !current)}
                 >
                   <ChevronDown
@@ -1040,8 +954,8 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
                       <span className="block text-xs font-medium leading-5 text-emerald-900">
                         {savedSiteContentTarget.preferredTarget ===
                         "project_file"
-                          ? "在下方预览导出 Markdown"
-                          : "打开已保存内容"}
+                          ? t("agentChat.toolCall.siteResult.openMarkdownPreview")
+                          : t("agentChat.toolCall.siteResult.openSavedContent")}
                       </span>
                       {savedSiteContentDisplayName ? (
                         <span className="block truncate text-[11px] leading-5 text-emerald-700/80">
@@ -1064,7 +978,7 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
               {!toolSearchSummary && searchResultItems.length > 0 ? (
                 <SearchResultPreviewList
                   items={searchResultItems}
-                  onOpenUrl={handleOpenExternalUrl}
+                  onOpenItem={handleOpenSearchResult}
                   popoverSide="bottom"
                   popoverAlign="start"
                   className="max-w-2xl"

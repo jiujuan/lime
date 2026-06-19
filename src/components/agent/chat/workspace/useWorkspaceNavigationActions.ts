@@ -5,7 +5,6 @@ import { updateProject as updateProjectById } from "@/lib/api/project";
 import { notifyProjectRuntimeAgentsGuide } from "@/components/workspace/services/runtimeAgentsGuideService";
 import type {
   ExecutionPolicyFocusContext,
-  MemoryPageParams,
   Page,
   PageParams,
   ProviderSettingsFocusContext,
@@ -139,15 +138,10 @@ export function useWorkspaceNavigationActions({
   }, [onNavigate]);
 
   const handleOpenRuntimeMemoryWorkbench = useCallback(
-    (params?: OpenRuntimeMemoryWorkbenchParams) => {
-      const { sessionId, workingDir, userMessage } = params || {};
-      const nextParams: MemoryPageParams = {
-        section: "home",
-        runtimeSessionId: sessionId?.trim() || undefined,
-        runtimeWorkingDir: workingDir?.trim() || undefined,
-        runtimeUserMessage: userMessage?.trim() || undefined,
-      };
-      onNavigate?.("memory", nextParams);
+    (_params?: OpenRuntimeMemoryWorkbenchParams) => {
+      onNavigate?.("settings", {
+        tab: SettingsTabs.Memory,
+      });
     },
     [onNavigate],
   );

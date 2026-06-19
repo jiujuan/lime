@@ -100,6 +100,7 @@ interface UseAgentStreamOptions {
     sessionId: string,
     requestStartedAt: number,
     promptText: string,
+    options?: { requireTerminal?: boolean; turnId?: string | null },
   ) => Promise<boolean>;
   sessionIdRef: MutableRefObject<string | null>;
   executionStrategy: AsterExecutionStrategy;
@@ -125,6 +126,7 @@ interface UseAgentStreamOptions {
     SetStateAction<WorkspacePathMissingState | null>
   >;
   setMessages: Dispatch<SetStateAction<Message[]>>;
+  getThreadItems?: () => readonly AgentThreadItem[];
   setThreadItems: Dispatch<SetStateAction<AgentThreadItem[]>>;
   setThreadTurns: Dispatch<SetStateAction<AgentThreadTurn[]>>;
   setCurrentTurnId: Dispatch<SetStateAction<string | null>>;
@@ -162,6 +164,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
     getWorkspaceIdForSubmit,
     setWorkspacePathMissing,
     setMessages,
+    getThreadItems,
     setThreadItems,
     setThreadTurns,
     setCurrentTurnId,
@@ -220,6 +223,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
         setActiveStream,
         clearActiveStreamIfMatch,
         setMessages,
+        getThreadItems,
         setThreadItems,
         setThreadTurns,
         setCurrentTurnId,
@@ -244,6 +248,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
       getSyncedSessionModelPreference,
       getSyncedSessionExecutionStrategy,
       getSyncedSessionRecentPreferences,
+      getThreadItems,
       listenerMapRef,
       modelRef,
       onWriteFile,

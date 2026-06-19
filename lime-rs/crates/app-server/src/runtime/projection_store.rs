@@ -68,15 +68,24 @@ impl ProjectionStore {
     }
 
     pub fn apply_event(&self, event: &AgentEvent) -> Result<(), String> {
+        self.apply_events(std::slice::from_ref(event)).map(|_| ())
+    }
+
+    pub fn apply_events(&self, events: &[AgentEvent]) -> Result<usize, String> {
+        if events.is_empty() {
+            return Ok(0);
+        }
         let mut conn = Connection::open(&self.path)
             .map_err(|error| format!("无法打开 Projection DB {}: {error}", self.path.display()))?;
         let tx = conn
             .transaction()
             .map_err(|error| format!("无法开始 Projection DB 事务: {error}"))?;
-        apply_event_in_tx(&tx, event)?;
+        for event in events {
+            apply_event_in_tx(&tx, event)?;
+        }
         tx.commit()
             .map_err(|error| format!("无法提交 Projection DB 事务: {error}"))?;
-        Ok(())
+        Ok(events.len())
     }
 
     pub fn clear_session(&self, session_id: &str) -> Result<(), String> {
@@ -736,6 +745,10 @@ fn projected_session_to_protocol(
         "executionStrategy".to_string(),
         row.execution_strategy.clone().into(),
     );
+    if let Some(archived_at) = row.archived_at.clone() {
+        metadata.insert("archivedAt".to_string(), archived_at.clone().into());
+        metadata.insert("archived_at".to_string(), archived_at.into());
+    }
     let metadata = Value::Object(metadata);
     let business_object_ref =
         projected_import_reference_from_metadata_value(row, IMPORTED_CONVERSATION_KIND, &metadata)
@@ -1258,6 +1271,37 @@ mod tests {
         assert_eq!(session.thread_id, "thread_1");
         assert_eq!(session.status, "running");
         assert_eq!(session.last_event_sequence, 1);
+    }
+
+    #[test]
+    fn apply_events_updates_projection_in_one_batch() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let projection = ProjectionStore::initialize(temp.path().join("projection_1.sqlite"))
+            .expect("projection store");
+        let accepted = event(1, "turn.accepted", "sess_1", "thread_1", Some("turn_1"));
+        let message = event(2, "message.completed", "sess_1", "thread_1", Some("turn_1"));
+        let completed = event(3, "turn.completed", "sess_1", "thread_1", Some("turn_1"));
+
+        let count = projection
+            .apply_events(&[accepted, message, completed])
+            .expect("apply events");
+
+        assert_eq!(count, 3);
+        let session = projection
+            .read_session_projection("sess_1")
+            .expect("read projection")
+            .expect("session");
+        assert_eq!(session.session.session_id, "sess_1");
+        assert_eq!(session.session.status, AgentSessionStatus::Completed);
+        assert_eq!(session.turns.len(), 1);
+        assert_eq!(session.turns[0].status, AgentTurnStatus::Completed);
+        assert_eq!(session.item_count, 3);
+        assert_eq!(session.last_event_sequence, 3);
+        let watermark = projection
+            .read_watermark("sess_1")
+            .expect("read watermark")
+            .expect("watermark");
+        assert_eq!(watermark.last_sequence, 3);
     }
 
     #[test]

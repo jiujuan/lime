@@ -67,7 +67,41 @@ export interface AgentThreadDisplayModel {
   summaryChips: AgentThreadSummaryChip[];
 }
 
+export type AgentThreadGroupingTranslate = (
+  key: string,
+  options?: Record<string, unknown>,
+) => unknown;
+
+export interface AgentThreadDisplayModelOptions {
+  t?: AgentThreadGroupingTranslate;
+}
+
 const STRUCTURED_CONTENT_HINT_RE = /<a2ui|```\s*a2ui/i;
+
+function interpolateFallbackText(
+  value: string,
+  options?: Record<string, unknown>,
+): string {
+  if (!options) {
+    return value;
+  }
+  return value.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_, name: string) => {
+    const option = options[name.trim()];
+    return option === undefined || option === null ? "" : String(option);
+  });
+}
+
+function translateGroupingText(
+  t: AgentThreadGroupingTranslate | undefined,
+  key: string,
+  defaultValue: string,
+  options?: Record<string, unknown>,
+): string {
+  if (!t) {
+    return interpolateFallbackText(defaultValue, options);
+  }
+  return String(t(key, { defaultValue, ...options }));
+}
 
 function normalizeToolName(value: string | undefined): string {
   return (value || "")
@@ -901,7 +935,10 @@ function buildPreviewLines(
   return lines;
 }
 
-function summarizeImportedSourceProcessBatch(items: AgentThreadItem[]): {
+function summarizeImportedSourceProcessBatch(
+  items: AgentThreadItem[],
+  t?: AgentThreadGroupingTranslate,
+): {
   title: string;
   supportingLines: string[];
   countLabel: string;
@@ -931,20 +968,67 @@ function summarizeImportedSourceProcessBatch(items: AgentThreadItem[]): {
   ).length;
 
   const supportingLines = [
-    reasoningCount > 0 ? `已完成思考 ${reasoningCount} 条` : null,
-    commandCount > 0 ? `命令记录 ${commandCount} 条` : null,
-    searchCount > 0 ? `搜索记录 ${searchCount} 条` : null,
-    patchCount > 0 ? `文件变更 ${patchCount} 条` : null,
+    reasoningCount > 0
+      ? translateGroupingText(
+          t,
+          "generalWorkbench.taskRail.importedProcess.reasoning",
+          "{{count}} reasoning records completed",
+          { count: reasoningCount },
+        )
+      : null,
+    commandCount > 0
+      ? translateGroupingText(
+          t,
+          "generalWorkbench.taskRail.importedProcess.commands",
+          "{{count}} command records",
+          { count: commandCount },
+        )
+      : null,
+    searchCount > 0
+      ? translateGroupingText(
+          t,
+          "generalWorkbench.taskRail.importedProcess.searches",
+          "{{count}} search records",
+          { count: searchCount },
+        )
+      : null,
+    patchCount > 0
+      ? translateGroupingText(
+          t,
+          "generalWorkbench.taskRail.importedProcess.patches",
+          "{{count}} file changes",
+          { count: patchCount },
+        )
+      : null,
   ].filter((line): line is string => Boolean(line));
 
   return {
-    title: "导入的命令记录",
+    title: translateGroupingText(
+      t,
+      "generalWorkbench.taskRail.importedProcess.title",
+      "Imported command record",
+    ),
     supportingLines:
       supportingLines.length > 0
         ? supportingLines
-        : ["从本地历史导入的执行记录"],
-    countLabel: `${items.length} 步`,
-    rawDetailLabel: "展开查看导入过程",
+        : [
+            translateGroupingText(
+              t,
+              "generalWorkbench.taskRail.importedProcess.empty",
+              "Execution records imported from local history",
+            ),
+          ],
+    countLabel: translateGroupingText(
+      t,
+      "generalWorkbench.taskRail.importedProcess.count",
+      "{{count}} steps",
+      { count: items.length },
+    ),
+    rawDetailLabel: translateGroupingText(
+      t,
+      "generalWorkbench.taskRail.importedProcess.open",
+      "Expand imported process",
+    ),
   };
 }
 
@@ -985,6 +1069,7 @@ function buildSummaryText(items: AgentThreadItem[]): string | null {
 
 export function buildAgentThreadDisplayModel(
   items: AgentThreadItem[],
+  options: AgentThreadDisplayModelOptions = {},
 ): AgentThreadDisplayModel {
   const sortedItems = [...items].sort(compareItems);
   const thinkingItems = sortedItems.filter(
@@ -1016,7 +1101,7 @@ export function buildAgentThreadDisplayModel(
     );
     const importedProcessSummary =
       current.kind === "process"
-        ? summarizeImportedSourceProcessBatch(current.items)
+        ? summarizeImportedSourceProcessBatch(current.items, options.t)
         : null;
     const processBatchSummary =
       current.kind === "process" &&

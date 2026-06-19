@@ -15,6 +15,7 @@ thiserror.workspace = true
 image = { version = "0.25.9", default-features = false, features = ["png"] }
 reqwest.workspace = true
 tokio.workspace = true
+runtime-core.workspace = true
 
 [dev-dependencies]
 axum.workspace = true

@@ -12,12 +12,12 @@ mod knowledge;
 mod log;
 mod mcp;
 mod media;
+mod memory_store;
 mod model;
 mod project;
 mod project_git;
 mod project_shell;
 mod skill;
-mod unified;
 mod voice;
 mod wechat;
 mod workspace;
@@ -199,6 +199,12 @@ use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_GET;
 use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE;
 use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_LIST;
 use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE;
+use app_server_protocol::METHOD_MEMORY_STORE_ADD_NOTE;
+use app_server_protocol::METHOD_MEMORY_STORE_HEALTH;
+use app_server_protocol::METHOD_MEMORY_STORE_LIST;
+use app_server_protocol::METHOD_MEMORY_STORE_READ;
+use app_server_protocol::METHOD_MEMORY_STORE_RESET;
+use app_server_protocol::METHOD_MEMORY_STORE_SEARCH;
 use app_server_protocol::METHOD_MODEL_LIST;
 use app_server_protocol::METHOD_MODEL_PREFERENCES_LIST;
 use app_server_protocol::METHOD_MODEL_PROVIDER_ALIAS_LIST;
@@ -274,16 +280,6 @@ use app_server_protocol::METHOD_SKILL_REPOSITORY_DELETE;
 use app_server_protocol::METHOD_SKILL_REPOSITORY_LIST;
 use app_server_protocol::METHOD_SKILL_REPOSITORY_SAVE;
 use app_server_protocol::METHOD_TELEGRAM_CHANNEL_PROBE;
-use app_server_protocol::METHOD_UNIFIED_MEMORY_ANALYZE;
-use app_server_protocol::METHOD_UNIFIED_MEMORY_CREATE;
-use app_server_protocol::METHOD_UNIFIED_MEMORY_DELETE;
-use app_server_protocol::METHOD_UNIFIED_MEMORY_GET;
-use app_server_protocol::METHOD_UNIFIED_MEMORY_HYBRID_SEARCH;
-use app_server_protocol::METHOD_UNIFIED_MEMORY_LIST;
-use app_server_protocol::METHOD_UNIFIED_MEMORY_SEARCH;
-use app_server_protocol::METHOD_UNIFIED_MEMORY_SEMANTIC_SEARCH;
-use app_server_protocol::METHOD_UNIFIED_MEMORY_STATS;
-use app_server_protocol::METHOD_UNIFIED_MEMORY_UPDATE;
 use app_server_protocol::METHOD_USAGE_STATS_DAILY_TRENDS_LIST;
 use app_server_protocol::METHOD_USAGE_STATS_MODEL_RANKING_LIST;
 use app_server_protocol::METHOD_USAGE_STATS_READ;
@@ -830,21 +826,12 @@ impl RequestProcessor {
             METHOD_MCP_RESOURCE_LIST => self.handle_mcp_resource_list_impl().await,
             METHOD_MCP_RESOURCE_READ => self.handle_mcp_resource_read_impl(params).await,
             METHOD_PROJECT_MEMORY_READ => self.handle_project_memory_read_impl(params).await,
-            METHOD_UNIFIED_MEMORY_LIST => self.handle_unified_memory_list_impl(params).await,
-            METHOD_UNIFIED_MEMORY_GET => self.handle_unified_memory_get_impl(params).await,
-            METHOD_UNIFIED_MEMORY_CREATE => self.handle_unified_memory_create_impl(params).await,
-            METHOD_UNIFIED_MEMORY_UPDATE => self.handle_unified_memory_update_impl(params).await,
-            METHOD_UNIFIED_MEMORY_DELETE => self.handle_unified_memory_delete_impl(params).await,
-            METHOD_UNIFIED_MEMORY_SEARCH => self.handle_unified_memory_search_impl(params).await,
-            METHOD_UNIFIED_MEMORY_STATS => self.handle_unified_memory_stats_impl().await,
-            METHOD_UNIFIED_MEMORY_ANALYZE => self.handle_unified_memory_analyze_impl(params).await,
-            METHOD_UNIFIED_MEMORY_SEMANTIC_SEARCH => {
-                self.handle_unified_memory_semantic_search_impl(params)
-                    .await
-            }
-            METHOD_UNIFIED_MEMORY_HYBRID_SEARCH => {
-                self.handle_unified_memory_hybrid_search_impl(params).await
-            }
+            METHOD_MEMORY_STORE_LIST => self.handle_memory_store_list_impl(params).await,
+            METHOD_MEMORY_STORE_READ => self.handle_memory_store_read_impl(params).await,
+            METHOD_MEMORY_STORE_SEARCH => self.handle_memory_store_search_impl(params).await,
+            METHOD_MEMORY_STORE_ADD_NOTE => self.handle_memory_store_add_note_impl(params).await,
+            METHOD_MEMORY_STORE_HEALTH => self.handle_memory_store_health_impl(params).await,
+            METHOD_MEMORY_STORE_RESET => self.handle_memory_store_reset_impl(params).await,
             METHOD_LOG_LIST => self.handle_log_list_impl().await,
             METHOD_LOG_PERSISTED_TAIL => self.handle_log_persisted_tail_impl(params).await,
             METHOD_LOG_CLEAR => self.handle_log_clear_impl().await,
@@ -1602,28 +1589,41 @@ mod tests {
             other => panic!("expected response, got {other:?}"),
         }
 
-        tokio::time::sleep(Duration::from_millis(100)).await;
-        let drained = processor
-            .handle_request(JsonRpcRequest::new(
-                RequestId::Integer(11),
-                METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT,
-                Some(json!({
-                    "processId": "jsonrpc-process-test",
-                })),
-            ))
-            .await
-            .expect("execution process output response");
-        match &drained[0] {
-            JsonRpcMessage::Response(response) => {
-                let deltas = response.result["deltas"]
-                    .as_array()
-                    .expect("deltas should be an array");
-                assert!(deltas
-                    .iter()
-                    .any(|delta| delta["delta"].as_str() == Some("jsonrpc-process")));
+        let mut drained_deltas = Vec::new();
+        for attempt in 0..20 {
+            let drained = processor
+                .handle_request(JsonRpcRequest::new(
+                    RequestId::Integer(11 + attempt),
+                    METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT,
+                    Some(json!({
+                        "processId": "jsonrpc-process-test",
+                    })),
+                ))
+                .await
+                .expect("execution process output response");
+            match &drained[0] {
+                JsonRpcMessage::Response(response) => {
+                    let deltas = response.result["deltas"]
+                        .as_array()
+                        .expect("deltas should be an array");
+                    drained_deltas.extend(deltas.iter().cloned());
+                    if drained_deltas.iter().any(|delta| {
+                        delta["delta"]
+                            .as_str()
+                            .is_some_and(|value| value.contains("jsonrpc-process"))
+                    }) {
+                        break;
+                    }
+                }
+                other => panic!("expected response, got {other:?}"),
             }
-            other => panic!("expected response, got {other:?}"),
+            tokio::time::sleep(Duration::from_millis(25)).await;
         }
+        assert!(drained_deltas.iter().any(|delta| {
+            delta["delta"]
+                .as_str()
+                .is_some_and(|value| value.contains("jsonrpc-process"))
+        }));
 
         let status = processor
             .handle_request(JsonRpcRequest::new(

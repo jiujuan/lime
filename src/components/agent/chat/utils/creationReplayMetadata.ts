@@ -1,11 +1,11 @@
-import type { MemoryCategory } from "@/lib/api/unifiedMemory";
+import type { MemoryCategory } from "@/lib/memory/memoryReferenceTypes";
 import type { SkillScaffoldTarget } from "@/lib/api/skills";
 import type { SkillScaffoldDraft } from "@/types/page";
 
 const CREATION_REPLAY_VERSION = 1;
 const DEFAULT_MAX_ITEMS = 6;
 
-type CreationReplaySourcePage = "skills" | "memory";
+type CreationReplaySourcePage = "skills" | "memory_store";
 
 interface CreationReplaySource extends Record<string, unknown> {
   page: CreationReplaySourcePage;
@@ -216,7 +216,7 @@ export function buildMemoryEntryCreationReplayRequestMetadata(
     version: CREATION_REPLAY_VERSION,
     kind: "memory_entry",
     source: compactRecord({
-      page: "memory",
+      page: "memory_store",
       project_id: normalizeOptionalText(entry.projectId, 80),
       entry_id: normalizeOptionalText(entry.id, 80),
     } satisfies CreationReplaySource) as CreationReplaySource,
@@ -277,7 +277,7 @@ export function extractCreationReplayMetadata(
   const category = readText(data, "category");
   if (
     kind === "memory_entry" &&
-    page === "memory" &&
+    page === "memory_store" &&
     data &&
     isMemoryCategory(category)
   ) {

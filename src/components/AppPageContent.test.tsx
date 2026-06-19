@@ -18,9 +18,6 @@ const agentChatLifecycle = vi.hoisted(() => ({ mounts: 0, unmounts: 0 }));
 const latestSkillsWorkspaceProps = vi.hoisted(() => ({
   value: null as Record<string, unknown> | null,
 }));
-const latestMemoryPageProps = vi.hoisted(() => ({
-  value: null as Record<string, unknown> | null,
-}));
 const latestKnowledgePageProps = vi.hoisted(() => ({
   value: null as Record<string, unknown> | null,
 }));
@@ -71,13 +68,6 @@ vi.mock("./skills", () => ({
   SkillsWorkspacePage: (props: Record<string, unknown>) => {
     latestSkillsWorkspaceProps.value = props;
     return <div data-testid="skills-workspace-page" />;
-  },
-}));
-
-vi.mock("./memory", () => ({
-  MemoryPage: (props: Record<string, unknown>) => {
-    latestMemoryPageProps.value = props;
-    return <div data-testid="memory-page" />;
   },
 }));
 
@@ -205,7 +195,6 @@ describe("AppPageContent", () => {
     agentChatLifecycle.mounts = 0;
     agentChatLifecycle.unmounts = 0;
     latestSkillsWorkspaceProps.value = null;
-    latestMemoryPageProps.value = null;
     latestKnowledgePageProps.value = null;
     latestExpertPlazaProps.value = null;
     latestSettingsPageProps.value = null;
@@ -674,7 +663,7 @@ describe("AppPageContent", () => {
           {
             key: "ref-1",
             label: "品牌 KV",
-            sourceLabel: "灵感库",
+            sourceLabel: "记忆参考",
             contentTypeLabel: "图片",
             selected: true,
           },
@@ -825,23 +814,16 @@ describe("AppPageContent", () => {
     });
   });
 
-  it("memory 页面应把记忆页挂进可滚动容器", async () => {
-    const { container } = renderContent("memory", {
+  it("旧 memory 页面不再是可导航主页面", async () => {
+    const { container } = renderContent("memory" as unknown as Page, {
       section: "home",
     });
     await flushEffects();
 
     const memoryPage = container.querySelector('[data-testid="memory-page"]');
 
-    expect(memoryPage).not.toBeNull();
-    expect(latestMemoryPageProps.value).toMatchObject({
-      pageParams: {
-        section: "home",
-      },
-    });
-    expect(memoryPage?.parentElement?.className).toContain("overflow-auto");
-    expect(memoryPage?.parentElement?.className).toContain("min-h-0");
-    expect(memoryPage?.parentElement?.className).toContain("flex-1");
+    expect(memoryPage).toBeNull();
+    expect(container.textContent ?? "").not.toContain("灵感库");
   });
 
   it("knowledge 页面应把工作区参数透传给 KnowledgePage", async () => {

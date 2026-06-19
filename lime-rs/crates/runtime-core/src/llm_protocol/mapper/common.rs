@@ -205,3 +205,50 @@ pub(crate) fn join_text_parts(
     }
     Ok(texts.join("\n"))
 }
+
+pub(crate) fn text_only_generation_prompt(
+    request: &LlmRequest,
+    protocol: ProtocolKind,
+) -> Result<String, ProtocolMappingError> {
+    if !request.tools.is_empty() {
+        return Err(unsupported(protocol, "tools"));
+    }
+
+    let mut sections = Vec::new();
+    if let Some(instructions) = non_empty(request.instructions.as_deref()) {
+        sections.push(instructions.to_string());
+    }
+
+    for message in &request.messages {
+        for part in &message.parts {
+            match part {
+                super::super::types::LlmInputPart::Text { text } => {
+                    if let Some(text) = non_empty(Some(text)) {
+                        sections.push(text.to_string());
+                    }
+                }
+                super::super::types::LlmInputPart::Image { .. } => {
+                    return Err(unsupported(protocol, "image"));
+                }
+                super::super::types::LlmInputPart::Audio { .. } => {
+                    return Err(unsupported(protocol, "audio"));
+                }
+                super::super::types::LlmInputPart::File { .. } => {
+                    return Err(unsupported(protocol, "file"));
+                }
+                super::super::types::LlmInputPart::ToolCall { .. } => {
+                    return Err(unsupported(protocol, "tool_call"));
+                }
+                super::super::types::LlmInputPart::ToolResult { .. } => {
+                    return Err(unsupported(protocol, "tool_result"));
+                }
+            }
+        }
+    }
+
+    if sections.is_empty() {
+        Err(ProtocolMappingError::EmptyInput)
+    } else {
+        Ok(sections.join("\n\n"))
+    }
+}

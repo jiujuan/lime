@@ -45,6 +45,7 @@ import { recordAgentStreamPerformanceMetric } from "./agentStreamPerformanceMetr
 type MessageParts = NonNullable<Message["contentParts"]>;
 const STREAM_FIRST_EVENT_TIMEOUT_MS = 12_000;
 const STREAM_INACTIVITY_TIMEOUT_MS = 120_000; // 2 分钟，兼容推理模型长时间思考
+const STREAM_DEFERRED_RECOVERY_POLL_MS = 5_000;
 
 interface StreamObserver {
   onTextDelta?: (delta: string, accumulated: string) => void;
@@ -60,6 +61,7 @@ interface RegisterAgentStreamTurnEventBindingOptions {
     sessionId: string,
     requestStartedAt: number,
     promptText: string,
+    options?: { requireTerminal?: boolean; turnId?: string | null },
   ) => Promise<boolean>;
   skipUserMessage: boolean;
   effectiveProviderType: string;
@@ -114,6 +116,7 @@ interface RegisterAgentStreamTurnEventBindingOptions {
   ) => MessageParts;
   setMessages: Dispatch<SetStateAction<Message[]>>;
   setPendingActions: Dispatch<SetStateAction<ActionRequired[]>>;
+  getThreadItems?: () => readonly AgentThreadItem[];
   setThreadItems: Dispatch<SetStateAction<AgentThreadItem[]>>;
   setThreadTurns: Dispatch<SetStateAction<AgentThreadTurn[]>>;
   setCurrentTurnId: Dispatch<SetStateAction<string | null>>;
@@ -161,6 +164,7 @@ export async function registerAgentStreamTurnEventBinding(
     appendThinkingToParts,
     setMessages,
     setPendingActions,
+    getThreadItems,
     setThreadItems,
     setThreadTurns,
     setCurrentTurnId,
@@ -188,6 +192,7 @@ export async function registerAgentStreamTurnEventBinding(
   let lastRuntimeEventType: string | null = null;
   const warnedUnknownEventTypes = new Set<string>();
   const surfaceThinkingDeltas = thinking === true;
+  let terminalRecoveryPollStarted = false;
   const markFirstEventReceived = (params: {
     eventReceivedAt: number;
     eventType: string;
@@ -223,6 +228,45 @@ export async function registerAgentStreamTurnEventBinding(
       inactivityWatchdogId = null;
     }
   };
+  let deferredRecoveryPollId: ReturnType<typeof setTimeout> | null = null;
+  const clearDeferredRecoveryPoll = () => {
+    if (deferredRecoveryPollId) {
+      clearTimeout(deferredRecoveryPollId);
+      deferredRecoveryPollId = null;
+    }
+  };
+  function scheduleDeferredRecoveryPoll() {
+    clearDeferredRecoveryPoll();
+    if (requestState.requestFinished) {
+      return;
+    }
+    deferredRecoveryPollId = globalThis.setTimeout(() => {
+      deferredRecoveryPollId = null;
+      if (requestState.requestFinished) {
+        return;
+      }
+      void (async () => {
+        const recovered = await tryRecoverSilentTurn({
+          requireTerminal: terminalRecoveryPollStarted,
+        });
+        if (recovered) {
+          console.warn(
+            buildAgentStreamFirstEventSilentRecoveryWarning({ eventName }),
+          );
+          finalizeSilentTurnRecovery();
+          return;
+        }
+        scheduleDeferredRecoveryPoll();
+      })();
+    }, STREAM_DEFERRED_RECOVERY_POLL_MS);
+  }
+  const startTerminalRecoveryPoll = () => {
+    if (terminalRecoveryPollStarted || requestState.requestFinished) {
+      return;
+    }
+    terminalRecoveryPollStarted = true;
+    scheduleDeferredRecoveryPoll();
+  };
   function deferFirstEventTimeoutAfterSubmission() {
     if (
       !shouldDeferAgentStreamFirstEventTimeout({
@@ -251,6 +295,7 @@ export async function registerAgentStreamTurnEventBinding(
     );
     callbacks.activateStream(activeSessionId, effectiveWaitingRuntimeStatus);
     scheduleInactivityWatchdog();
+    startTerminalRecoveryPoll();
     return true;
   }
 
@@ -305,6 +350,7 @@ export async function registerAgentStreamTurnEventBinding(
   const disposeListenerWithWatchdogs = () => {
     clearFirstEventWatchdog();
     clearInactivityWatchdog();
+    clearDeferredRecoveryPoll();
     callbacks.disposeListener();
   };
   const finalizeSilentTurnRecovery = () => {
@@ -313,7 +359,9 @@ export async function registerAgentStreamTurnEventBinding(
     disposeListenerWithWatchdogs();
     setIsSending(false);
   };
-  const tryRecoverSilentTurn = async () => {
+  const tryRecoverSilentTurn = async (recoveryOptions?: {
+    requireTerminal?: boolean;
+  }) => {
     if (!attemptSilentTurnRecovery) {
       return false;
     }
@@ -321,8 +369,13 @@ export async function registerAgentStreamTurnEventBinding(
       activeSessionId,
       requestState.requestStartedAt,
       content,
+      {
+        requireTerminal: recoveryOptions?.requireTerminal === true,
+        turnId: requestState.currentTurnId ?? null,
+      },
     );
   };
+  requestState.startTerminalRecoveryPoll = startTerminalRecoveryPoll;
   const dispatchSyntheticEvent = (data: AgentEvent) => {
     handleTurnStreamEvent({
       data,
@@ -367,6 +420,7 @@ export async function registerAgentStreamTurnEventBinding(
       onWriteFile,
       setMessages,
       setPendingActions,
+      getThreadItems,
       setThreadItems,
       setThreadTurns,
       setCurrentTurnId,
@@ -413,7 +467,9 @@ export async function registerAgentStreamTurnEventBinding(
         { level: "warn" },
       );
       void (async () => {
-        const recovered = await tryRecoverSilentTurn();
+        const recovered = await tryRecoverSilentTurn({
+          requireTerminal: true,
+        });
         const timeoutAction = resolveAgentStreamInactivityTimeoutAction({
           recovered,
           shouldIgnore: shouldIgnoreAgentStreamInactivityResult({
@@ -470,6 +526,9 @@ export async function registerAgentStreamTurnEventBinding(
         event.payload,
       );
       if (!data) {
+        if (!terminalRecoveryPollStarted) {
+          clearDeferredRecoveryPoll();
+        }
         const unknownEventPlan = resolveAgentStreamUnknownEventPlan({
           eventName,
           eventType,
@@ -511,6 +570,9 @@ export async function registerAgentStreamTurnEventBinding(
           eventType: data.type,
           recognized: true,
         });
+      }
+      if (!terminalRecoveryPollStarted) {
+        clearDeferredRecoveryPoll();
       }
       lastEventReceivedAt = eventReceivedAt;
       lastRuntimeEventType = data.type;
@@ -558,6 +620,7 @@ export async function registerAgentStreamTurnEventBinding(
         onWriteFile,
         setMessages,
         setPendingActions,
+        getThreadItems,
         setThreadItems,
         setThreadTurns,
         setCurrentTurnId,
@@ -586,6 +649,7 @@ export async function registerAgentStreamTurnEventBinding(
   return () => {
     clearFirstEventWatchdog();
     clearInactivityWatchdog();
+    clearDeferredRecoveryPoll();
     if (requestState.queuedDraftCleanupTimerId) {
       clearTimeout(requestState.queuedDraftCleanupTimerId);
       requestState.queuedDraftCleanupTimerId = null;

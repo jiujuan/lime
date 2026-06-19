@@ -79,12 +79,18 @@ fn parse_args() -> anyhow::Result<CliConfig> {
 async fn build_app_server(config: &CliConfig) -> anyhow::Result<AppServer> {
     let initialized = initialize_database(config)?;
     let db = initialized.db;
+    let data_root = initialized
+        .storage_roots
+        .as_ref()
+        .map(|storage_roots| storage_roots.data_root.clone());
     let app_data_source: Arc<dyn AppDataSource> = Arc::new(
-        LocalAppDataSource::initialize_with_db(db.clone())
-            .await
-            .map_err(|error| {
-                anyhow::anyhow!("failed to initialize local app data source: {error}")
-            })?,
+        match data_root {
+            Some(data_root) => {
+                LocalAppDataSource::initialize_with_db_and_data_root(db.clone(), data_root).await
+            }
+            None => LocalAppDataSource::initialize_with_db(db.clone()).await,
+        }
+        .map_err(|error| anyhow::anyhow!("failed to initialize local app data source: {error}"))?,
     );
     let capability_source = config
         .app_policy_path

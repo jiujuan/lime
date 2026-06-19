@@ -85,11 +85,11 @@ describe("messageListItemProjection timeline", () => {
 
     const parts = projection.rendererContentParts || [];
     expect(parts.map((part) => part.type)).toEqual([
-      "text",
+      "thinking",
       "tool_use",
       "text",
     ]);
-    expect(parts[0]?.type === "text" ? parts[0].text : "").toBe(
+    expect(parts[0]?.type === "thinking" ? parts[0].text : "").toBe(
       "我来帮你分析这个项目的改进空间。先让我了解一下项目结构和关键文件。",
     );
     expect(parts[1]?.type === "tool_use" ? parts[1].toolCall.id : "").toBe(

@@ -1,13 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { TFunction } from "i18next";
 import {
   AlertCircle,
   Brain,
   CheckCircle2,
   ChevronDown,
-  Database,
   FileText,
-  RefreshCw,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Switch } from "@/components/ui/switch";
@@ -22,11 +20,7 @@ import type {
   MemoryResolveConfig,
   MemorySoulConfig,
   MemorySourcesConfig,
-} from "@/lib/api/memoryRuntime";
-import {
-  getUnifiedMemoryStats,
-  type UnifiedMemoryStatsResponse,
-} from "@/lib/api/unifiedMemory";
+} from "@/lib/api/memoryConfigTypes";
 import {
   buildSoulMarkdown,
   hasSoulContent,
@@ -35,6 +29,7 @@ import {
   type SoulImportResult,
   type SoulImportWarningCode,
 } from "@/lib/soul/soulConfig";
+import { MemoryStoreStatusPanel } from "./MemoryStoreStatusPanel";
 
 type EmbeddingProviderChoice =
   | "auto"
@@ -283,13 +278,6 @@ function buildEmbeddingConfig(
   };
 }
 
-function formatCount(value?: number | null): string {
-  if (typeof value !== "number" || Number.isNaN(value)) {
-    return "--";
-  }
-  return new Intl.NumberFormat().format(value);
-}
-
 function buildSoulDraftPatch(
   current: MemorySoulConfig | undefined,
   patch: Partial<MemorySoulConfig>,
@@ -344,27 +332,13 @@ export function MemorySettings() {
   const [snapshot, setSnapshot] = useState<MemoryConfig>(() =>
     normalizeMemoryConfig(),
   );
-  const [stats, setStats] = useState<UnifiedMemoryStatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [statsLoading, setStatsLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [soulImportText, setSoulImportText] = useState("");
   const [soulImportPreview, setSoulImportPreview] =
     useState<SoulImportResult | null>(null);
   const [activeTab, setActiveTab] = useState<MemorySettingsTab>("memory");
-
-  const loadStats = useCallback(async () => {
-    setStatsLoading(true);
-    try {
-      setStats(await getUnifiedMemoryStats());
-    } catch (error) {
-      console.error("加载记忆统计失败:", error);
-      setStats(null);
-    } finally {
-      setStatsLoading(false);
-    }
-  }, []);
 
   useEffect(() => {
     let disposed = false;
@@ -390,12 +364,10 @@ export function MemorySettings() {
     }
 
     void load();
-    void loadStats();
-
     return () => {
       disposed = true;
     };
-  }, [loadStats]);
+  }, []);
 
   const dirty = useMemo(
     () => JSON.stringify(draft) !== JSON.stringify(snapshot),
@@ -408,8 +380,9 @@ export function MemorySettings() {
   const embeddingConfig = normalizeEmbedding(draft.embedding);
   const vectorSearchEnabled =
     draft.enabled && embeddingConfig.provider !== "disabled";
-  const indexedCount = stats?.total_entries ?? stats?.memory_count ?? null;
-  const cachedEmbeddingCount = vectorSearchEnabled ? indexedCount : 0;
+  const memoryStatusDescriptionKey = vectorSearchEnabled
+    ? "settings.memory.embedding.status.configuredDescription"
+    : "settings.memory.embedding.status.fullTextDescription";
   const soul = normalizeSoulConfig(draft.soul);
   const soulExportMarkdown = buildSoulMarkdown(soul);
   const soulEnabledWithContent = soul.enabled && hasSoulContent(soul);
@@ -578,7 +551,6 @@ export function MemorySettings() {
       setDraft(updatedConfig.memory ?? normalizeMemoryConfig());
       setMessage(memoryT(t, "settings.memory.message.saved"));
       window.setTimeout(() => setMessage(null), 2500);
-      await loadStats();
     } catch (error) {
       console.error("保存记忆设置失败:", error);
       setMessage(memoryT(t, "settings.memory.message.saveFailed"));
@@ -941,70 +913,11 @@ export function MemorySettings() {
       ) : null}
 
       {activeTab === "memory" ? (
-        <section className="rounded-md border border-slate-200/90 bg-white p-5 shadow-sm shadow-slate-950/5">
-          <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-emerald-200 bg-emerald-50 text-emerald-700">
-              <Database className="h-5 w-5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-slate-950">
-                {memoryT(t, "settings.memory.everyday.title")}
-              </p>
-              <p className="mt-1 text-sm leading-6 text-slate-500">
-                {memoryT(t, "settings.memory.everyday.description")}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
-              <p className="text-xs font-medium text-slate-500">
-                {memoryT(t, "settings.memory.embedding.status.vectorSearch")}
-              </p>
-              <p
-                className={cn(
-                  "mt-2 text-base font-semibold",
-                  vectorSearchEnabled ? "text-emerald-700" : "text-slate-500",
-                )}
-              >
-                {vectorSearchEnabled
-                  ? memoryT(t, "settings.memory.embedding.status.enabled")
-                  : memoryT(t, "settings.memory.embedding.status.disabled")}
-              </p>
-            </div>
-            <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-xs font-medium text-slate-500">
-                  {memoryT(t, "settings.memory.embedding.status.indexed")}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => loadStats()}
-                  disabled={statsLoading}
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-60"
-                  aria-label={memoryT(t, "settings.memory.action.refresh")}
-                >
-                  <RefreshCw
-                    className={cn(
-                      "h-3.5 w-3.5",
-                      statsLoading && "animate-spin",
-                    )}
-                  />
-                </button>
-              </div>
-              <p className="mt-2 text-base font-semibold text-slate-950">
-                {memoryT(t, "settings.memory.embedding.status.indexedValue", {
-                  count: formatCount(indexedCount),
-                })}
-              </p>
-              <p className="mt-1 text-xs text-slate-500">
-                {memoryT(t, "settings.memory.embedding.status.cachedValue", {
-                  count: formatCount(cachedEmbeddingCount),
-                })}
-              </p>
-            </div>
-          </div>
-        </section>
+        <MemoryStoreStatusPanel
+          vectorSearchEnabled={vectorSearchEnabled}
+          memoryStatusDescriptionKey={memoryStatusDescriptionKey}
+          setMessage={setMessage}
+        />
       ) : null}
 
       <div className="flex flex-col gap-3 rounded-md border border-slate-200/90 bg-white p-4 shadow-sm shadow-slate-950/5 sm:flex-row sm:items-center sm:justify-between">

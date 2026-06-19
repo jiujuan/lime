@@ -102,6 +102,7 @@ import type {
   SiteSavedContentTarget,
   WriteArtifactContext,
 } from "./types";
+import type { SearchResultPreviewItem } from "./utils/searchResultPreview";
 import {
   isSpecializedWorkbenchTheme,
   type LayoutMode,
@@ -254,6 +255,7 @@ import {
   isAbsoluteWorkspacePath,
   resolveAbsoluteWorkspacePath,
 } from "./workspace/workspacePath";
+import { buildGeneralCanvasStateFromWorkspaceFile } from "./workspace/workspaceFilePreview";
 import { doesWorkspaceFileCandidateMatch } from "./workspace/workspaceFilePathMatch";
 import {
   normalizeArtifactProtocolPath,
@@ -262,7 +264,6 @@ import {
 import { resolveSiteSavedContentTargetFromRunResult } from "./utils/siteToolResultSummary";
 import type { ArtifactDocumentV1 } from "@/lib/artifact-document";
 import type { ArtifactTimelineOpenTarget } from "./utils/artifactTimelineNavigation";
-import { createUnifiedMemory } from "@/lib/api/unifiedMemory";
 import { getDefaultGuidePromptByTheme } from "./utils/defaultGuidePrompt";
 import { shouldShowChatLayout } from "./utils/chatLayoutVisibility";
 import {
@@ -305,9 +306,7 @@ import {
   buildRuntimeInitialInputCapabilityFromFollowUpAction,
   resolveEffectiveInitialInputCapability,
 } from "./utils/inputCapabilityBootstrap";
-import { buildMessageInspirationDraft } from "./utils/messageInspirationDraft";
 import { buildKnowledgeSavePageParams } from "./workspace/knowledge/knowledgeSaveNavigation";
-import { recordCuratedTaskRecommendationSignalFromMemory } from "./utils/curatedTaskRecommendationSignals";
 import {
   buildSceneAppExecutionCuratedTaskFollowUpAction,
   buildCuratedTaskReferenceEntryFromSceneAppExecution,
@@ -340,11 +339,10 @@ import {
   resolveTaskPreviewArtifact,
   resolveVideoCanvasStatusFromPreview,
   shouldAutoRecoverWorkspacePathMissing,
+  shouldSuppressTaskCenterDraftContentForLayout,
   type TaskCenterDraftTab,
 } from "./workspace/agentChatWorkspaceHelpers";
-import {
-  SCENEAPP_QUICK_REVIEW_ACTIONS,
-} from "@/lib/agent/legacySceneAppExecutionSummary";
+import { SCENEAPP_QUICK_REVIEW_ACTIONS } from "@/lib/agent/legacySceneAppExecutionSummary";
 
 export type {
   AgentChatWorkspaceProps,
@@ -1065,6 +1063,11 @@ export function AgentChatWorkspace({
     initialAutoSendRequestMetadata,
     initialRequestMetadata,
   ]);
+  const initialAutoSendAllowsDetachedSession = useMemo(() => {
+    const metadata = asRecord(initialAutoSendRequestMetadata);
+    const harness = asRecord(metadata?.harness);
+    return Boolean(asRecord(metadata?.expert) || asRecord(harness?.expert));
+  }, [initialAutoSendRequestMetadata]);
   const initialPendingServiceSkillLaunchSignature = useMemo(() => {
     const skillId = initialPendingServiceSkillLaunch?.skillId?.trim();
     const skillKey = initialPendingServiceSkillLaunch?.skillKey?.trim();
@@ -3597,8 +3600,20 @@ export function AgentChatWorkspace({
       ? taskCenterDraftSendRequest.draftTabId === activeTaskCenterDraftTab.id
       : taskCenterDraftSurfaceActiveRef.current),
   );
+  const hasVisibleSessionActivityForDraftSurface =
+    !isTaskCenterDraftTabActive &&
+    (displayMessages.length > 0 ||
+      effectiveThreadItems.length > 0 ||
+      hasPendingA2UIForm ||
+      isPreparingSend ||
+      isSending ||
+      queuedTurns.length > 0);
   const shouldSuppressTaskCenterDraftContent =
-    isTaskCenterDraftSurfaceActive && !isTaskCenterDraftSendInFlight;
+    shouldSuppressTaskCenterDraftContentForLayout({
+      draftSurfaceActive: isTaskCenterDraftSurfaceActive,
+      draftSendInFlight: isTaskCenterDraftSendInFlight,
+      hasVisibleSessionActivity: hasVisibleSessionActivityForDraftSurface,
+    });
   const { homePendingPreviewMessages, isHomePendingPreviewActive } =
     useTaskCenterHomePendingPreviewRuntime({
       homePendingPreviewRequest,
@@ -3926,15 +3941,18 @@ export function AgentChatWorkspace({
       }),
     [sessionId, taskCenterTransitionTopicId],
   );
-  const hasHomeConversationActivity =
-    !shouldSuppressTaskCenterDraftContent &&
-    (hasDisplayMessages ||
+  const hasCurrentSessionActivity =
+    !isTaskCenterDraftTabActive &&
+    (displayMessages.length > 0 ||
+      effectiveThreadItems.length > 0 ||
       hasPendingA2UIForm ||
       isPreparingSend ||
       isSending ||
-      Boolean(taskCenterDraftSendRequest) ||
       isHomePendingPreviewActive ||
       queuedTurns.length > 0);
+  const hasHomeConversationActivity =
+    !shouldSuppressTaskCenterDraftContent &&
+    (hasCurrentSessionActivity || Boolean(taskCenterDraftSendRequest));
   const taskCenterHomeSurfaceState = resolveTaskCenterHomeSurfaceState({
     agentEntry,
     draftSurfaceActive: isTaskCenterDraftSurfaceActive,
@@ -3942,6 +3960,7 @@ export function AgentChatWorkspace({
     sessionSwitchPending: taskCenterSessionSwitchPending,
     hasInitialSessionRoute: Boolean(normalizedInitialSessionId),
     hasConversationActivity: hasHomeConversationActivity,
+    hasCurrentSessionActivity,
     sessionId,
     embeddedHomeSessionIds: taskCenterEmbeddedHomeSessionIds,
     isAutoRestoringSession,
@@ -4240,25 +4259,36 @@ export function AgentChatWorkspace({
           );
           return;
         }
-        if (preview.isBinary) {
-          toast.info(t("agentChat.filePreview.binaryUnsupported"));
-          return;
-        }
-
         const nextContent =
-          typeof preview.content === "string" ? preview.content : "";
+          !preview.isBinary && typeof preview.content === "string"
+            ? preview.content
+            : "";
         const nextFilePath = isAbsoluteWorkspacePath(normalizedFileName)
           ? preview.path || normalizedFileName
           : normalizedFileName;
         startTransition(() => {
+          if (activeTheme === "general") {
+            setGeneralCanvasState(
+              buildGeneralCanvasStateFromWorkspaceFile(
+                nextFilePath,
+                nextContent,
+                { sourcePath: preview.path || absolutePath },
+              ),
+            );
+            openCanvasForReason("user_open_file", setLayoutMode);
+            return;
+          }
+
           handleFileClick(nextFilePath, nextContent);
         });
       })();
     },
     [
+      activeTheme,
       handleFileClick,
       handleHarnessLoadFilePreview,
       project?.rootPath,
+      setLayoutMode,
       t,
       workbenchRequests,
     ],
@@ -4283,20 +4313,34 @@ export function AgentChatWorkspace({
         return false;
       }
 
-      if (preview.isBinary) {
-        toast.info("导出文件是二进制格式，暂不支持在工作台预览");
-        return false;
-      }
-
       const nextContent =
-        typeof preview.content === "string" ? preview.content : "";
+        !preview.isBinary && typeof preview.content === "string"
+          ? preview.content
+          : "";
       const nextFilePath = relativePath?.trim() || preview.path || absolutePath;
       startTransition(() => {
+        if (activeTheme === "general") {
+          setGeneralCanvasState(
+            buildGeneralCanvasStateFromWorkspaceFile(
+              nextFilePath,
+              nextContent,
+              { sourcePath: preview.path || absolutePath },
+            ),
+          );
+          openCanvasForReason("user_open_file", setLayoutMode);
+          return;
+        }
+
         handleWorkspaceFileClick(nextFilePath, nextContent);
       });
       return true;
     },
-    [handleHarnessLoadFilePreview, handleWorkspaceFileClick],
+    [
+      activeTheme,
+      handleHarnessLoadFilePreview,
+      handleWorkspaceFileClick,
+      setLayoutMode,
+    ],
   );
   const handleOpenSavedSiteContent = useCallback(
     async ({
@@ -4397,11 +4441,36 @@ export function AgentChatWorkspace({
         selectionKey: `artifact:${projection.artifact.id}`,
       });
     },
-    [
-      handleWorkspaceArtifactClick,
-      workbenchRequests,
-      upsertGeneralArtifact,
-    ],
+    [handleWorkspaceArtifactClick, workbenchRequests, upsertGeneralArtifact],
+  );
+  const handleOpenUrlPreview = useCallback(
+    (item: SearchResultPreviewItem) => {
+      const url = item.url.trim();
+      if (!url) {
+        return;
+      }
+      const snapshotContent = item.snapshotContent?.trim();
+      const projection = createPreviewArtifact({
+        source: "url",
+        sourceRef: url,
+        path: url,
+        title: item.snapshotTitle?.trim() || item.title?.trim() || url,
+        content: snapshotContent || item.snippet?.trim() || "",
+        meta: {
+          openedFrom: "search-result",
+          urlSnapshotSource: snapshotContent
+            ? item.snapshotSource || "web_fetch"
+            : "search_result",
+        },
+      });
+      upsertGeneralArtifact(projection.artifact);
+      handleWorkspaceArtifactClick(projection.artifact);
+      workbenchRequests.requestCanvasWorkbenchPreviewOpen({
+        filePath: null,
+        selectionKey: `artifact:${projection.artifact.id}`,
+      });
+    },
+    [handleWorkspaceArtifactClick, workbenchRequests, upsertGeneralArtifact],
   );
   const handleOpenMessagePreview = useCallback(
     (target: MessagePreviewTarget, message: Message) => {
@@ -4850,22 +4919,15 @@ export function AgentChatWorkspace({
           }
           onContinueReviewFeedback={handleContinueSceneAppReviewFeedback}
           onReviewCurrentProject={handleReviewCurrentSceneAppExecution}
-          savedAsInspiration={sceneAppReviewDecisionRuntime.savedAsInspiration}
-          onSaveAsInspiration={
-            sceneAppReviewDecisionRuntime.handleSaveAsInspiration
-          }
-          onOpenInspirationLibrary={
-            sceneAppReviewDecisionRuntime.handleOpenInspirationLibrary
-          }
           onSaveAsSkill={sceneAppReviewDecisionRuntime.handleSaveAsSkill}
           onOpenSceneAppDetail={handleOpenSceneAppExecutionDetail}
           onOpenSceneAppGovernance={handleOpenSceneAppExecutionGovernance}
-          humanReviewAvailable={sceneAppReviewDecisionRuntime.humanReviewAvailable}
+          humanReviewAvailable={
+            sceneAppReviewDecisionRuntime.humanReviewAvailable
+          }
           humanReviewLoading={sceneAppReviewDecisionRuntime.loading}
           quickReviewActions={SCENEAPP_QUICK_REVIEW_ACTIONS}
-          quickReviewPending={
-            sceneAppReviewDecisionRuntime.quickReviewPending
-          }
+          quickReviewPending={sceneAppReviewDecisionRuntime.quickReviewPending}
           onOpenHumanReview={
             sceneAppReviewDecisionRuntime.handleOpenHumanReview
           }
@@ -5057,7 +5119,7 @@ export function AgentChatWorkspace({
       return;
     }
 
-    if (!projectId) {
+    if (!projectId && !initialAutoSendAllowsDetachedSession) {
       return;
     }
 
@@ -5100,6 +5162,7 @@ export function AgentChatWorkspace({
     initialDispatchKey,
     initialUserImages,
     initialUserPrompt,
+    initialAutoSendAllowsDetachedSession,
     isSending,
     messages.length,
     onInitialUserPromptConsumed,
@@ -5431,50 +5494,51 @@ export function AgentChatWorkspace({
         (typeof userData?.answer === "string" ? userData.answer.trim() : "") ||
         (typeof response.response === "string" ? response.response.trim() : "");
       const acceptedLabel = t("agentChat.planComposerDecision.option.accept");
-      const sendResult = adjustment && adjustment !== acceptedLabel
-        ? await handleSendRef.current(
-          [],
-          undefined,
-          undefined,
-          adjustment,
-          "react",
-          undefined,
-          {
-            requestMetadata: {
-              harness: {
-                collaboration_mode: {
-                  mode: "plan",
-                  source: "plan_implementation_adjustment",
+      const sendResult =
+        adjustment && adjustment !== acceptedLabel
+          ? await handleSendRef.current(
+              [],
+              undefined,
+              undefined,
+              adjustment,
+              "react",
+              undefined,
+              {
+                requestMetadata: {
+                  harness: {
+                    collaboration_mode: {
+                      mode: "plan",
+                      source: "plan_implementation_adjustment",
+                    },
+                    preferences: {
+                      task: true,
+                      task_mode: true,
+                    },
+                    task_mode_enabled: true,
+                  },
                 },
-                preferences: {
+                skipSceneCommandRouting: true,
+                toolPreferencesOverride: {
+                  ...effectiveChatToolPreferences,
                   task: true,
-                  task_mode: true,
                 },
-                task_mode_enabled: true,
               },
-            },
-            skipSceneCommandRouting: true,
-            toolPreferencesOverride: {
-              ...effectiveChatToolPreferences,
-              task: true,
-            },
-          },
-        )
-        : await handleSendRef.current(
-            [],
-            undefined,
-            undefined,
-            "Implement the plan.",
-            "react",
-            undefined,
-            {
-              skipSceneCommandRouting: true,
-              toolPreferencesOverride: {
-                ...effectiveChatToolPreferences,
-                task: false,
+            )
+          : await handleSendRef.current(
+              [],
+              undefined,
+              undefined,
+              "Implement the plan.",
+              "react",
+              undefined,
+              {
+                skipSceneCommandRouting: true,
+                toolPreferencesOverride: {
+                  ...effectiveChatToolPreferences,
+                  task: false,
+                },
               },
-            },
-          );
+            );
 
       if (!sendResult) {
         return;
@@ -5711,55 +5775,6 @@ export function AgentChatWorkspace({
     },
     [_onNavigate, initialCreationReplay, projectId],
   );
-  const persistInspirationDraft = useCallback(
-    (
-      draft: {
-        request: Parameters<typeof createUnifiedMemory>[0];
-        categoryLabel: string;
-        title: string;
-      },
-      options?: {
-        successMessage?: string;
-      },
-    ) => {
-      void createUnifiedMemory(draft.request)
-        .then((memory) => {
-          recordCuratedTaskRecommendationSignalFromMemory(memory, {
-            projectId,
-            sessionId,
-          });
-          toast.success(options?.successMessage ?? "已保存到灵感库", {
-            description: `${draft.categoryLabel} · ${draft.title}`,
-          });
-        })
-        .catch((error) => {
-          console.error("保存到灵感库失败:", error);
-          toast.error("保存到灵感库失败，请稍后重试");
-        });
-    },
-    [projectId, sessionId],
-  );
-  const handleSaveMessageAsInspiration = useCallback(
-    (source: { messageId: string; content: string }) => {
-      const draft = buildMessageInspirationDraft(
-        {
-          ...source,
-          sessionId,
-        },
-        {
-          creationReplay: initialCreationReplay,
-        },
-      );
-
-      if (!draft) {
-        toast.error("这条结果暂时还不足以沉淀为灵感");
-        return;
-      }
-
-      persistInspirationDraft(draft);
-    },
-    [initialCreationReplay, persistInspirationDraft, sessionId],
-  );
 
   const inputbarScene = useWorkspaceInputbarSceneRuntime({
     contextVariant: agentEntry === "claw" ? "task-center" : "default",
@@ -5992,12 +6007,7 @@ export function AgentChatWorkspace({
       const sendOptions = payload.sendOptions;
       const normalizedText = text.trim();
       setInput("");
-      const activeDraftTabId =
-        activeTaskCenterDraftTabIdRef.current ||
-        ((agentEntry === "claw" || agentEntry === "new-task") &&
-        !hasDisplayMessages
-          ? openTaskCenterDraftTab({ preservePendingSendRequest: true })
-          : null);
+      const activeDraftTabId = activeTaskCenterDraftTabIdRef.current;
       if (
         (agentEntry === "claw" || agentEntry === "new-task") &&
         activeDraftTabId
@@ -6111,7 +6121,6 @@ export function AgentChatWorkspace({
       handleSend,
       hasDisplayMessages,
       input,
-      openTaskCenterDraftTab,
       sessionId,
       taskCenterWorkspaceId,
       turns.length,
@@ -6139,7 +6148,7 @@ export function AgentChatWorkspace({
     setTaskCenterDraftSendRequest,
     setHomePendingPreviewRequest,
     messagesLength: messages.length,
-    displayMessagesLength: displayMessages.length,
+    displayMessagesLength: messages.length,
     currentSessionId: sessionId,
     materializedSessionIdsRef: taskCenterDraftMaterializedSessionIdsRef,
     materializeDraftTab: materializeTaskCenterDraftTab,
@@ -6165,6 +6174,9 @@ export function AgentChatWorkspace({
     ? null
     : currentTurnId;
   const sceneThreadRead = shouldHideCurrentSessionContent ? null : threadRead;
+  const sceneExecutionRuntime = shouldHideCurrentSessionContent
+    ? null
+    : executionRuntime;
   const scenePendingActions = shouldHideCurrentSessionContent
     ? []
     : planComposerPendingActions;
@@ -6203,8 +6215,7 @@ export function AgentChatWorkspace({
     shellChromeRuntime,
     generalWorkbenchHarnessDialog,
     currentImageWorkbenchActive: currentImageWorkbenchState.active,
-    browserWorkbenchOpenRequest:
-      workbenchRequests.browserWorkbenchOpenRequest,
+    browserWorkbenchOpenRequest: workbenchRequests.browserWorkbenchOpenRequest,
     onBrowserWorkbenchOpenRequestHandled:
       workbenchRequests.handleBrowserWorkbenchOpenRequestHandled,
     canvasWorkbenchPreviewOpenRequest:
@@ -6329,6 +6340,7 @@ export function AgentChatWorkspace({
     todoItems,
     currentTurnId: sceneCurrentTurnId,
     threadRead: sceneThreadRead,
+    executionRuntime: sceneExecutionRuntime,
     pendingActions: scenePendingActions,
     submittedActionsInFlight: sceneSubmittedActionsInFlight,
     queuedTurns: sceneQueuedTurns,
@@ -6350,9 +6362,9 @@ export function AgentChatWorkspace({
     handleOpenArtifactFromTimeline,
     handleOpenSavedSiteContent,
     handleArtifactClick: handleWorkspaceArtifactClick,
+    handleOpenUrlPreview,
     handleOpenMessagePreview,
     handleSaveMessageAsSkill,
-    handleSaveMessageAsInspiration,
     handleSaveMessageAsKnowledge,
     handleOpenSubagentSession,
     handlePermissionResponse,
@@ -6373,23 +6385,22 @@ export function AgentChatWorkspace({
     timelineFocusRequestKey: workbenchRequests.timelineFocusRequestKey,
   });
 
-  const fileManagerNode =
-    fileManagerSidebar.fileManagerOpen ? (
-      <FileManagerSidebar
-        onClose={fileManagerSidebar.closeFileManagerSidebar}
-        onAddPathReferences={handleAddPathReferences}
-        onImportAsKnowledge={inputbarScene.onImportPathReferenceAsKnowledge}
-        onOpenFileInWorkspace={(entry) => {
-          void openProjectFilePreviewInCanvas({
-            absolutePath: entry.path,
-          });
-        }}
-        onInstallSkillPackage={
-          _onNavigate ? handleInstallSkillPackageFromFileManager : undefined
-        }
-        initialDirectory={project?.rootPath || null}
-      />
-    ) : null;
+  const fileManagerNode = fileManagerSidebar.fileManagerOpen ? (
+    <FileManagerSidebar
+      onClose={fileManagerSidebar.closeFileManagerSidebar}
+      onAddPathReferences={handleAddPathReferences}
+      onImportAsKnowledge={inputbarScene.onImportPathReferenceAsKnowledge}
+      onOpenFileInWorkspace={(entry) => {
+        void openProjectFilePreviewInCanvas({
+          absolutePath: entry.path,
+        });
+      }}
+      onInstallSkillPackage={
+        _onNavigate ? handleInstallSkillPackageFromFileManager : undefined
+      }
+      initialDirectory={project?.rootPath || null}
+    />
+  ) : null;
   const expertInfoPanelNode = (
     <ExpertInfoPanel
       requestMetadata={expertPanelRequestMetadata}

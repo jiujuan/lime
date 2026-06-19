@@ -1,7 +1,7 @@
 # Artifact 与 Preview 架构蓝图
 
 > 状态：current
-> 更新时间：2026-06-17
+> 更新时间：2026-06-18
 > 目标：把正式交付物、source-backed 预览、运行时事件和桌面壳能力放回各自边界，避免文件预览、artifact 工作台、独立窗口继续分叉。
 
 ## 总体分层
@@ -138,8 +138,12 @@ AG-UI 的启发是“事件/状态/展示扩展分离”：
 4. `upsertGeneralArtifact(...)` 更新当前工作台 artifact 集合。
 5. `openArtifactInWorkbench(...)` 统一选中、设置 view mode、打开右侧画布。
 6. 如果目标进入 `CanvasWorkbenchLayout`，必须同步发送 `previewOpenRequest.selectionKey`，例如 `artifact:<previewArtifact.id>`；只更新全局 `selectedArtifactId` 不能作为 workbench 已切换的证据。
-7. Workbench 根据 selection context 渲染：普通 Markdown/Code/HTML 保留文档预览模式；`renderMode=media/system_open/unsupported` 的 preview artifact 直接委托 `ArtifactRenderer`。
-8. 工具栏按 capabilities 决定“独立窗口 / 系统打开 / 定位 / 保存”。
+7. Workbench 根据 selection context 渲染：普通 Markdown/Code/HTML 保留文档预览模式；`renderMode=media/system_open/unsupported` 与 `source=url/database_record/app` 的 preview artifact 直接委托 `ArtifactRenderer`。
+8. `ArtifactRenderer` 对 `system_open / unsupported` 必须渲染明确的 preview fallback surface，展示文件名、来源路径、mime/error 等 metadata；不得继续落回空内容骨架、Markdown 文档渲染或 raw ZIP/OpenXML 文本。
+9. `ArtifactRenderer` 对 URL、数据库记录和应用入口必须渲染来源摘要面，展示 source ref、标题和导入时保留的摘要；不得把 URL / record id 当本地文件路径懒加载。
+10. 消息工具轨中的 WebSearch / URL 结果点击必须先调用 Workspace 的 `onOpenUrlPreview`，生成 `source=url` preview artifact，并以 `selectionKey=artifact:<id>` 打开右侧工作台；只有没有工作台回调的独立复用场景才允许 fallback 到系统浏览器。
+11. 若同一消息或同一过程组里已经存在 URL 匹配的成功 WebFetch，URL preview artifact 可以复用该工具结果的结构化正文作为快照内容；不得因此新增 renderer 侧真实网络抓取器或第二套 URL viewer。
+12. 工具栏按 capabilities 决定“独立窗口 / 系统打开 / 定位 / 保存”；fallback surface 和来源摘要面不重复实现打开动作。
 
 ## 渲染退化
 
@@ -151,9 +155,12 @@ AG-UI 的启发是“事件/状态/展示扩展分离”：
 | `image`       | `document`    | `media`                      | 读取 `meta.previewUrl`，由媒体 viewer 渲染 |
 | `audio`       | `document`    | `media`                      | 读取 `meta.previewUrl`，由媒体 viewer 渲染 |
 | `video`       | `document`    | `media`                      | 读取 `meta.previewUrl`，由媒体 viewer 渲染 |
-| `document`    | `document`    | `document_text`              | DOCX 等抽取文本                            |
+| `document`    | `document`    | `document_text`              | DOCX 等已抽取文本                          |
+| `document`    | `document`    | `system_open`                | PDF / Excel / PPT 等暂无文本抽取的二进制文档；右侧渲染 metadata 兜底面 |
 | `binary`      | `document`    | `system_open`                | 不内嵌，给系统打开/定位                    |
-| `unsupported` | `document`    | `unsupported`                | 明确展示不可预览原因                       |
+| `markdown/text` | `document`  | `inline`                     | URL / database_record 来源摘要；不按文件路径读取 |
+| `app_shell`   | `document`    | `inline`                     | Agent App shell entry 来源摘要；动作仍由应用工作台承接 |
+| `unsupported` | `document`    | `unsupported`                | 右侧渲染不可预览原因和来源 metadata          |
 
 ## 质量门槛
 

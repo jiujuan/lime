@@ -453,6 +453,19 @@ describe("commandPolicy", () => {
         request: {
           lines: [
             JSON.stringify({
+              id: "import-runtime-events",
+              method: "conversationImport/thread/runtimeEvents/read",
+              params: { sessionId: "session-imported", offset: 0, limit: 50 },
+            }),
+          ],
+        },
+      }),
+    ).toBe("app-server-read");
+    expect(
+      resolveDevBridgeCommandTimeoutProfile("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
               id: "session-update",
               method: "agentSession/update",
               params: { sessionId: "session-1" },

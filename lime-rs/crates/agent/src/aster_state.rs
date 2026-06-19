@@ -29,7 +29,7 @@ use aster::conversation::message::{
 use aster::permission::{Permission, PermissionConfirmation, PrincipalType};
 #[cfg(test)]
 use aster::skills::{global_registry, load_skills_from_directory, SkillSource};
-use aster::tools::{create_shared_history, EditTool, WriteTool};
+use aster::tools::{create_shared_history, EditTool, Tool, WriteTool};
 use chrono::Utc;
 use futures::StreamExt;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -512,6 +512,22 @@ impl AsterAgentState {
         self.agent.clone()
     }
 
+    /// 注册 App Server current runtime 注入的 native tool。
+    ///
+    /// Agent 初始化后才能调用；调用方负责保证 tool 背后的事实源属于 current 主链。
+    pub async fn register_native_tool(&self, tool: Box<dyn Tool>) -> Result<(), String> {
+        let tool_name = tool.name().to_string();
+        let registry_arc = {
+            let agent_guard = self.agent.read().await;
+            let agent = agent_guard.as_ref().ok_or("Agent not initialized")?;
+            agent.tool_registry().clone()
+        };
+        let mut registry = registry_arc.write().await;
+        registry.register(tool);
+        tracing::info!("[AsterAgent] Native tool registered: {}", tool_name);
+        Ok(())
+    }
+
     /// 创建新的取消令牌
     pub async fn create_cancel_token(&self, session_id: &str) -> CancellationToken {
         let should_cancel_immediately = {
@@ -854,7 +870,7 @@ mod tests {
     }
 
     #[test]
-    fn test_provider_config_detects_previous_response_id_capability_for_codex_responses() {
+    fn test_provider_config_treats_chat_completions_as_history_replay_only() {
         let config = ProviderConfig {
             provider_name: "openai".to_string(),
             provider_selector: Some("openai".to_string()),
@@ -870,7 +886,7 @@ mod tests {
 
         assert_eq!(
             config.provider_continuation_capability(),
-            ProviderContinuationCapability::PreviousResponseId
+            ProviderContinuationCapability::HistoryReplayOnly
         );
         assert_eq!(
             config.provider_continuation_state(),

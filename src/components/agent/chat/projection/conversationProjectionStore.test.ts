@@ -199,6 +199,152 @@ describe("conversationProjectionStore", () => {
     ).toBe(evidenceEvent);
   });
 
+  it("同一 turn/tool 已有 item lifecycle 时应丢弃 legacy tool_start/tool_end 主事件", () => {
+    const store = createConversationProjectionStore();
+    const itemStarted = {
+      type: "tool.progress",
+      sourceType: "item_started",
+      sequence: 1,
+      sessionId: "session-a",
+      threadId: "thread-a",
+      turnId: "turn-a",
+      toolCallId: "tool-a",
+      owner: "tool",
+      scope: "tool_call",
+      phase: "acting",
+      surface: "tool_ui",
+      persistence: "archive",
+    } as const;
+    const itemCompleted = {
+      ...itemStarted,
+      type: "tool.result",
+      sourceType: "item_completed",
+      sequence: 4,
+      phase: "completed",
+    } as const;
+    const legacyStarted = {
+      ...itemStarted,
+      type: "tool.started",
+      sourceType: "tool_start",
+      sequence: 2,
+      persistence: "ephemeral_live",
+    } as const;
+    const legacyResult = {
+      ...itemStarted,
+      type: "tool.result",
+      sourceType: "tool_end",
+      sequence: 5,
+      phase: "completed",
+      persistence: "archive",
+    } as const;
+    const legacyOutputDelta = {
+      ...itemStarted,
+      type: "tool.output.delta",
+      sourceType: "tool_output_delta",
+      sequence: 3,
+      persistence: "ephemeral_live",
+    } as const;
+
+    expect(
+      store.recordAgentUiProjectionEvents([
+        itemStarted,
+        legacyStarted,
+        legacyOutputDelta,
+        itemCompleted,
+        legacyResult,
+      ]),
+    ).toEqual([itemStarted, legacyOutputDelta, itemCompleted]);
+
+    expect(selectAgentUiProjectionEvents(store.getSnapshot())).toEqual([
+      itemStarted,
+      legacyOutputDelta,
+      itemCompleted,
+    ]);
+    expect(
+      selectLatestAgentUiProjectionEventForToolCall(
+        store.getSnapshot(),
+        "tool-a",
+      ),
+    ).toBe(itemCompleted);
+  });
+
+  it("legacy tool event 先到后收到 item lifecycle 时应回收旧主事件", () => {
+    const store = createConversationProjectionStore();
+    const legacyStarted = {
+      type: "tool.started",
+      sourceType: "tool_start",
+      sequence: 1,
+      sessionId: "session-a",
+      threadId: "thread-a",
+      turnId: "turn-a",
+      toolCallId: "tool-a",
+      owner: "tool",
+      scope: "tool_call",
+      phase: "acting",
+      surface: "tool_ui",
+      persistence: "ephemeral_live",
+    } as const;
+    const itemCompleted = {
+      ...legacyStarted,
+      type: "tool.result",
+      sourceType: "item_completed",
+      sequence: 2,
+      phase: "completed",
+      persistence: "archive",
+    } as const;
+
+    store.recordAgentUiProjectionEvents([legacyStarted]);
+    expect(selectAgentUiProjectionEvents(store.getSnapshot())).toEqual([
+      legacyStarted,
+    ]);
+
+    expect(store.recordAgentUiProjectionEvents([itemCompleted])).toEqual([
+      itemCompleted,
+    ]);
+    expect(selectAgentUiProjectionEvents(store.getSnapshot())).toEqual([
+      itemCompleted,
+    ]);
+  });
+
+  it("不同 turn 的同名 toolCallId 不应被 item lifecycle 去重误删", () => {
+    const store = createConversationProjectionStore();
+    const itemCompleted = {
+      type: "tool.result",
+      sourceType: "item_completed",
+      sequence: 1,
+      sessionId: "session-a",
+      threadId: "thread-a",
+      turnId: "turn-a",
+      toolCallId: "tool-a",
+      owner: "tool",
+      scope: "tool_call",
+      phase: "completed",
+      surface: "tool_ui",
+      persistence: "archive",
+    } as const;
+    const nextTurnLegacyStarted = {
+      ...itemCompleted,
+      type: "tool.started",
+      sourceType: "tool_start",
+      sequence: 2,
+      turnId: "turn-b",
+      phase: "acting",
+      persistence: "ephemeral_live",
+    } as const;
+
+    expect(
+      store.recordAgentUiProjectionEvents([
+        itemCompleted,
+        nextTurnLegacyStarted,
+      ]),
+    ).toEqual([itemCompleted, nextTurnLegacyStarted]);
+
+    expect(selectAgentUiProjectionEvents(store.getSnapshot())).toEqual([
+      itemCompleted,
+      nextTurnLegacyStarted,
+    ]);
+  });
+
   it("应支持清空全局 Agent UI projection events", () => {
     const store = createConversationProjectionStore();
     store.recordAgentUiProjectionEvents([

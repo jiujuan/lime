@@ -7,6 +7,9 @@ import { extractInputbarManagedObjectiveText } from "../components/Inputbar/util
 import type { TaskCenterDraftSendRequest } from "../homePendingPreview";
 import { useTaskCenterDraftSendDispatchRuntime } from "./useTaskCenterDraftSendRuntime";
 
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean })
+  .IS_REACT_ACT_ENVIRONMENT = true;
+
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
 function createDraftSendRequest(
@@ -151,6 +154,36 @@ describe("useTaskCenterDraftSendDispatchRuntime", () => {
     expect(latest?.taskCenterDraftSendRequest).toBeNull();
     expect(latest?.homePendingPreviewRequest).toBeNull();
     expect(onNonMaterializedSessionReady).toHaveBeenCalledWith("sess_ready");
+  });
+
+  it("真实会话已有消息时应清理 draft surface 请求", async () => {
+    const onNonMaterializedSessionReady = vi.fn();
+    const snapshots: Array<{
+      taskCenterDraftSendRequest: TaskCenterDraftSendRequest | null;
+      homePendingPreviewRequest: TaskCenterDraftSendRequest | null;
+    }> = [];
+
+    await act(async () => {
+      mountDraftSendRuntime({
+        displayMessagesLength: 0,
+        messagesLength: 1,
+        request: createDraftSendRequest({
+          draftTabId: "sess_real_message",
+        }),
+        onNonMaterializedSessionReady,
+        onSnapshot: (snapshot) => {
+          snapshots.push(snapshot);
+        },
+      });
+      await Promise.resolve();
+    });
+
+    const latest = snapshots.at(-1);
+    expect(latest?.taskCenterDraftSendRequest).toBeNull();
+    expect(latest?.homePendingPreviewRequest).toBeNull();
+    expect(onNonMaterializedSessionReady).toHaveBeenCalledWith(
+      "sess_real_message",
+    );
   });
 
   it("临时 draft-send id 没有真实 session 时应等待后续真实 session", async () => {

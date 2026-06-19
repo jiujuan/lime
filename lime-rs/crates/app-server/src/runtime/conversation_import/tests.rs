@@ -13,6 +13,7 @@ use crate::runtime::{
 
 mod dry_run;
 mod evidence;
+mod health;
 mod idempotency;
 mod path_resolution;
 mod runtime_events;
@@ -87,6 +88,9 @@ CREATE TABLE threads (
         ConversationImportSourceStatus::Ready
     );
     assert_eq!(response.source.thread_count, 2);
+    assert!(response.source.source_home_exists);
+    assert!(response.source.state_db_readable);
+    assert_eq!(response.source.rollout_file_count, 3);
     assert_eq!(response.threads.len(), 1);
     assert_eq!(response.threads[0].source_thread_id, "thread-c");
     assert_eq!(response.next_cursor.as_deref(), Some("1"));
@@ -623,6 +627,94 @@ fn previews_codex_event_messages_as_primary_codex_history() {
 }
 
 #[test]
+fn previews_codex_rollout_hides_contextual_response_items() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let rollout_path = temp.path().join("rollout-thread-contextual.jsonl");
+    fs::write(
+        &rollout_path,
+        [
+            serde_json::json!({
+                "timestamp": "2026-06-16T00:00:00.000Z",
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{
+                        "type": "input_text",
+                        "text": "# AGENTS.md instructions for /workspace\n\n<INSTRUCTIONS>\n- internal rule\n</INSTRUCTIONS>"
+                    }]
+                }
+            })
+            .to_string(),
+            serde_json::json!({
+                "timestamp": "2026-06-16T00:00:01.000Z",
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "developer",
+                    "content": [{"type": "input_text", "text": "<skills_instructions>\n## Skills\n</skills_instructions>"}]
+                }
+            })
+            .to_string(),
+            serde_json::json!({
+                "timestamp": "2026-06-16T00:00:02.000Z",
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "<environment_context>\n<cwd>/workspace</cwd>\n</environment_context>"}]
+                }
+            })
+            .to_string(),
+            serde_json::json!({
+                "timestamp": "2026-06-16T00:00:03.000Z",
+                "type": "event_msg",
+                "payload": {
+                    "type": "user_message",
+                    "message": "## My request for Codex: actual request"
+                }
+            })
+            .to_string(),
+            serde_json::json!({
+                "timestamp": "2026-06-16T00:00:04.000Z",
+                "type": "event_msg",
+                "payload": {
+                    "type": "agent_message",
+                    "message": "actual reply"
+                }
+            })
+            .to_string(),
+        ]
+        .join("\n"),
+    )
+    .expect("write rollout");
+
+    let response = codex::preview_thread(ConversationImportThreadPreviewParams {
+        source_root: Some(temp.path().to_string_lossy().into_owned()),
+        source_path: Some(rollout_path.to_string_lossy().into_owned()),
+        limit: Some(10),
+        ..Default::default()
+    })
+    .expect("preview");
+
+    assert_eq!(response.summary.message_count, 2);
+    assert_eq!(response.messages.len(), 2);
+    assert_eq!(response.messages[0].role, "user");
+    assert_eq!(response.messages[0].text, "actual request");
+    assert_eq!(response.messages[1].role, "assistant");
+    assert_eq!(response.messages[1].text, "actual reply");
+    let rendered = response
+        .messages
+        .iter()
+        .map(|message| message.text.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(!rendered.contains("AGENTS.md instructions"));
+    assert!(!rendered.contains("skills_instructions"));
+    assert!(!rendered.contains("environment_context"));
+}
+
+#[test]
 fn committing_codex_rollout_requires_confirmation() {
     let temp = tempfile::tempdir().expect("tempdir");
     let rollout_path = temp.path().join("rollout-thread-denied.jsonl");
@@ -659,6 +751,110 @@ fn committing_codex_rollout_requires_confirmation() {
         .expect("runtime core state mutex poisoned")
         .sessions
         .is_empty());
+}
+
+#[test]
+fn committing_codex_rollout_does_not_import_contextual_items_as_messages() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let rollout_path = temp.path().join("rollout-thread-contextual-import.jsonl");
+    fs::write(
+        &rollout_path,
+        [
+            serde_json::json!({
+                "timestamp": "2026-06-16T00:00:00.000Z",
+                "type": "session_meta",
+                "payload": {
+                    "id": "thread-contextual-import",
+                    "timestamp": "2026-06-16T00:00:00.000Z",
+                    "cwd": "/workspace/lime",
+                    "source": "cli",
+                    "model_provider": "openai"
+                }
+            })
+            .to_string(),
+            serde_json::json!({
+                "timestamp": "2026-06-16T00:00:01.000Z",
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{
+                        "type": "input_text",
+                        "text": "# AGENTS.md instructions for /workspace\n\n<INSTRUCTIONS>\n- internal rule\n</INSTRUCTIONS>"
+                    }]
+                }
+            })
+            .to_string(),
+            serde_json::json!({
+                "timestamp": "2026-06-16T00:00:02.000Z",
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "<skill>\n<name>demo</name>\n</skill>"}]
+                }
+            })
+            .to_string(),
+            serde_json::json!({
+                "timestamp": "2026-06-16T00:00:03.000Z",
+                "type": "event_msg",
+                "payload": {
+                    "type": "user_message",
+                    "message": "## My request for Codex: actual request"
+                }
+            })
+            .to_string(),
+            serde_json::json!({
+                "timestamp": "2026-06-16T00:00:04.000Z",
+                "type": "event_msg",
+                "payload": {
+                    "type": "agent_message",
+                    "message": "actual reply"
+                }
+            })
+            .to_string(),
+        ]
+        .join("\n"),
+    )
+    .expect("write rollout");
+    let core = RuntimeCore::default();
+
+    let response = commit::commit_conversation_import_thread(
+        &core,
+        ConversationImportThreadCommitParams {
+            source_root: Some(temp.path().to_string_lossy().into_owned()),
+            source_path: Some(rollout_path.to_string_lossy().into_owned()),
+            confirmed: true,
+            ..Default::default()
+        },
+    )
+    .expect("commit");
+
+    assert_eq!(response.imported_messages, 2);
+    assert_eq!(response.imported_turns, 1);
+
+    let read = core
+        .read_session(AgentSessionReadParams {
+            session_id: response.session.session_id,
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .expect("read imported session");
+    let detail = read.detail.expect("detail");
+    let messages = detail
+        .get("messages")
+        .and_then(serde_json::Value::as_array)
+        .expect("messages");
+    assert_eq!(messages.len(), 2);
+    assert_eq!(messages[0]["role"], "user");
+    assert_eq!(messages[0]["content"][0]["text"], "actual request");
+    assert_eq!(messages[1]["role"], "assistant");
+    assert_eq!(messages[1]["content"][0]["text"], "actual reply");
+
+    let rendered = serde_json::to_string(messages).expect("messages json");
+    assert!(!rendered.contains("AGENTS.md instructions"));
+    assert!(!rendered.contains("<skill>"));
 }
 
 #[test]
@@ -931,7 +1127,7 @@ fn write_named_rollout(
     thread_id: &str,
     user_message: &str,
 ) -> std::path::PathBuf {
-    let path = root.join(format!("rollout-{thread_id}.jsonl"));
+    let path = codex_rollout_path(root, "sessions", "2026/06/15", thread_id);
     fs::write(
         &path,
         codex_session_meta_line(thread_id, "/workspace/fixture", user_message),

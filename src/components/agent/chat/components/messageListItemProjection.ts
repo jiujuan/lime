@@ -25,6 +25,8 @@ import {
 } from "./messageListUserContentState";
 import { resolveKnowledgeSourceFromArtifacts } from "./messageListKnowledgeSource";
 import { buildTimelineInlineContentParts } from "./messageListTimelineContentParts";
+import { isUnifiedWebSearchToolName } from "../utils/searchResultPreview";
+import { isUnifiedWebFetchToolName } from "../utils/toolNameFamily";
 import {
   resolveImageWorkbenchMessageDisplayState,
   resolveImageWorkbenchProcessDisplayState,
@@ -47,6 +49,10 @@ import {
 import { shouldRenderAssistantRuntimeStatusPill } from "./messageAssistantMetaFooterState";
 import { resolveAgentRuntimeErrorPresentation } from "../utils/agentRuntimeErrorPresentation";
 import { hasImportedSourceProcessItem } from "../utils/importedSourceProcess";
+import {
+  isAgentMessageCommentaryPhase,
+  shouldUseAgentMessageAsFinalText,
+} from "../utils/agentMessagePhase";
 import {
   MESSAGE_LIST_COMPACT_HISTORICAL_ASSISTANT_PREVIEW_CHARS,
   MESSAGE_LIST_COMPACT_HISTORICAL_ASSISTANT_THRESHOLD,
@@ -255,6 +261,215 @@ function resolveProcessSeparatedContentParts(
   return filtered.length > 0 ? filtered : undefined;
 }
 
+function hasInlineToolUseContentPart(parts?: Message["contentParts"]): boolean {
+  return Boolean(parts?.some((part) => part.type === "tool_use"));
+}
+
+function hasRunningWebRetrievalContentPart(
+  parts?: Message["contentParts"],
+): boolean {
+  return Boolean(
+    parts?.some((part) => {
+      return (
+        part.type === "tool_use" &&
+        part.toolCall.status === "running" &&
+        (isUnifiedWebSearchToolName(part.toolCall.name) ||
+          isUnifiedWebFetchToolName(part.toolCall.name))
+      );
+    }),
+  );
+}
+
+function isRunningThreadItemStatus(status?: string | null): boolean {
+  return status === "in_progress" || status === "running";
+}
+
+function isActiveThreadTurnStatus(status?: string | null): boolean {
+  return status === "running" || status === "queued" || status === "in_progress";
+}
+
+function isWebRetrievalThreadItem(item: AgentThreadItem): boolean {
+  return (
+    item.type === "web_search" ||
+    (item.type === "tool_call" &&
+      (isUnifiedWebSearchToolName(item.tool_name) ||
+        isUnifiedWebFetchToolName(item.tool_name)))
+  );
+}
+
+function hasRunningWebRetrievalTimelineItem(
+  items?: AgentThreadItem[],
+): boolean {
+  return Boolean(
+    items?.some(
+      (item) =>
+        isRunningThreadItemStatus(item.status) &&
+        isWebRetrievalThreadItem(item),
+    ),
+  );
+}
+
+function normalizeInactiveRunningWebRetrievalContentParts(
+  parts: Message["contentParts"] | undefined,
+  shouldNormalize: boolean,
+): Message["contentParts"] | undefined {
+  if (!shouldNormalize || !parts?.length) {
+    return parts;
+  }
+
+  let changed = false;
+  const nextParts = parts.map((part) => {
+    if (
+      part.type !== "tool_use" ||
+      part.toolCall.status !== "running" ||
+      (!isUnifiedWebSearchToolName(part.toolCall.name) &&
+        !isUnifiedWebFetchToolName(part.toolCall.name))
+    ) {
+      return part;
+    }
+
+    changed = true;
+    return {
+      ...part,
+      toolCall: {
+        ...part.toolCall,
+        status: "completed" as const,
+      },
+    };
+  });
+
+  return changed ? nextParts : parts;
+}
+
+function normalizeInactiveRunningWebRetrievalTimelineItems(
+  items: AgentThreadItem[] | undefined,
+  shouldNormalize: boolean,
+): AgentThreadItem[] | undefined {
+  if (!shouldNormalize || !items?.length) {
+    return items;
+  }
+
+  let changed = false;
+  const nextItems = items.map((item) => {
+    if (
+      !isRunningThreadItemStatus(item.status) ||
+      !isWebRetrievalThreadItem(item)
+    ) {
+      return item;
+    }
+
+    changed = true;
+    return {
+      ...item,
+      status: "completed" as const,
+      completed_at: item.completed_at || item.updated_at || item.started_at,
+    } as AgentThreadItem;
+  });
+
+  return changed ? nextItems : items;
+}
+
+function holdTextContentPartsAsProcessWhileRunning(
+  parts?: Message["contentParts"],
+  shouldHold?: boolean,
+): Message["contentParts"] | undefined {
+  if (!shouldHold || !parts?.length) {
+    return parts;
+  }
+
+  let changed = false;
+  const nextParts: NonNullable<Message["contentParts"]> = [];
+  for (const part of parts) {
+    if (part.type !== "text") {
+      nextParts.push(part);
+      continue;
+    }
+
+    changed = true;
+    const normalized = part.text.trim();
+    if (!normalized) {
+      continue;
+    }
+
+    const lastPart = nextParts[nextParts.length - 1];
+    if (lastPart?.type === "thinking") {
+      nextParts[nextParts.length - 1] = {
+        ...lastPart,
+        text: `${lastPart.text}\n\n${normalized}`,
+      };
+      continue;
+    }
+
+    nextParts.push({ type: "thinking", text: normalized });
+  }
+
+  return changed ? nextParts : parts;
+}
+
+function hideFinalAnswerContentPartsWhileRunning(
+  parts?: Message["contentParts"],
+  shouldHide?: boolean,
+): Message["contentParts"] | undefined {
+  if (!shouldHide || !parts?.length) {
+    return parts;
+  }
+
+  let changed = false;
+  const nextParts = parts.filter((part) => {
+    if (part.type !== "text") {
+      return true;
+    }
+    changed = true;
+    return false;
+  });
+
+  return changed ? nextParts : parts;
+}
+
+function hasFinalAnswerTextAfterRunningWebRetrieval(
+  items?: AgentThreadItem[],
+): boolean {
+  if (!items?.length) {
+    return false;
+  }
+
+  const orderedItems = [...items].sort((left, right) => {
+    const leftSequence = Number.isFinite(left.sequence)
+      ? Number(left.sequence)
+      : Number.MAX_SAFE_INTEGER;
+    const rightSequence = Number.isFinite(right.sequence)
+      ? Number(right.sequence)
+      : Number.MAX_SAFE_INTEGER;
+    if (leftSequence !== rightSequence) {
+      return leftSequence - rightSequence;
+    }
+    return left.id.localeCompare(right.id);
+  });
+
+  let sawRunningWebRetrieval = false;
+  for (const item of orderedItems) {
+    if (
+      isWebRetrievalThreadItem(item) &&
+      isRunningThreadItemStatus(item.status)
+    ) {
+      sawRunningWebRetrieval = true;
+      continue;
+    }
+
+    if (
+      sawRunningWebRetrieval &&
+      item.type === "agent_message" &&
+      !isAgentMessageCommentaryPhase(item.phase) &&
+      shouldUseAgentMessageAsFinalText(item.phase) &&
+      item.text.trim().length > 0
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function ensureInlineThinkingContentPart(params: {
   parts?: Message["contentParts"];
   thinkingContent?: string;
@@ -266,10 +481,23 @@ function ensureInlineThinkingContentPart(params: {
   }
 
   const parts = params.parts || [];
-  const hasThinkingPart = parts.some(
+  const thinkingPartIndex = parts.findIndex(
     (part) => part.type === "thinking" && part.text.trim().length > 0,
   );
-  if (hasThinkingPart) {
+  if (thinkingPartIndex >= 0) {
+    const existingPart = parts[thinkingPartIndex];
+    if (
+      existingPart?.type === "thinking" &&
+      normalizedThinking.startsWith(existingPart.text.trim()) &&
+      normalizedThinking.length > existingPart.text.trim().length
+    ) {
+      const nextParts = [...parts];
+      nextParts[thinkingPartIndex] = {
+        ...existingPart,
+        text: normalizedThinking,
+      };
+      return nextParts;
+    }
     return params.parts;
   }
 
@@ -362,7 +590,7 @@ export function resolveMessageListItemProjection({
       shouldSuppressImageProcessFlow,
     });
   const {
-    displayContentParts,
+    displayContentParts: rawDisplayContentParts,
     shouldFoldSuppressedProcessFlow,
     shouldSuppressRendererProcessFlow,
   } = imageWorkbenchProcessDisplayState;
@@ -374,15 +602,58 @@ export function resolveMessageListItemProjection({
       : isConversationTailAssistant
         ? group.timeline
         : null;
-  const hasProcessTimelineItems = hasTimelineProcessItems(timeline?.items);
+  const rawTimelineItems = timeline?.items;
+  const hasProcessTimelineItems = hasTimelineProcessItems(rawTimelineItems);
   const hasPersistedReasoningTimeline =
-    hasPersistedReasoningTimelineItem(timeline?.items);
+    hasPersistedReasoningTimelineItem(rawTimelineItems);
+  const hasRunningTimelineProcess =
+    timeline !== null && hasRunningWebRetrievalTimelineItem(rawTimelineItems);
+  const hasRunningWebRetrievalPart =
+    hasRunningWebRetrievalContentPart(rawDisplayContentParts);
+  const hasActiveTimelineTurn =
+    timeline !== null && isActiveThreadTurnStatus(timeline.turn.status);
+  const hasFinalAnswerAfterRunningWebRetrieval =
+    hasFinalAnswerTextAfterRunningWebRetrieval(rawTimelineItems);
+  const isActiveAssistantOutput =
+    message.isThinking ||
+    isSending ||
+    Boolean(streamingTextOverlay?.content?.trim()) ||
+    hasActiveTimelineTurn;
+  const shouldHoldRunningWebRetrieval =
+    (hasRunningTimelineProcess || hasRunningWebRetrievalPart) &&
+    isActiveAssistantOutput;
+  const shouldNormalizeInactiveRunningWebRetrieval =
+    message.role === "assistant" && !shouldHoldRunningWebRetrieval;
+  const displayContentParts = normalizeInactiveRunningWebRetrievalContentParts(
+    rawDisplayContentParts,
+    shouldNormalizeInactiveRunningWebRetrieval,
+  );
+  const timelineItemsForDisplay =
+    normalizeInactiveRunningWebRetrievalTimelineItems(
+      rawTimelineItems,
+      shouldNormalizeInactiveRunningWebRetrieval,
+    );
+  const shouldHoldStreamingOverlayAsProcess =
+    Boolean(streamingTextOverlay?.content?.trim()) &&
+    shouldHoldRunningWebRetrieval;
+  const shouldHideAssistantTextWhileRunning =
+    shouldHoldRunningWebRetrieval &&
+    (hasFinalAnswerAfterRunningWebRetrieval ||
+      Boolean(streamingTextOverlay?.content?.trim()) ||
+      Boolean(displayContent.trim()) ||
+      !message.thinkingContent?.trim());
+  const shouldHoldAssistantTextAsProcess =
+    shouldHoldRunningWebRetrieval && !shouldHideAssistantTextWhileRunning;
   const timelineInlineContentParts =
     message.role === "assistant"
       ? buildTimelineInlineContentParts({
-          displayContent,
+          displayContent: shouldHoldStreamingOverlayAsProcess
+            ? ""
+            : shouldHideAssistantTextWhileRunning
+              ? ""
+              : displayContent,
           existingContentParts: displayContentParts,
-          items: timeline?.items,
+          items: timelineItemsForDisplay,
         })
       : undefined;
   const includeInlineProcessFlow =
@@ -404,23 +675,38 @@ export function resolveMessageListItemProjection({
       // 让思考、工具、确认与文件改动按时间序穿插显示。
       hasInlineProcessContentParts(message, {
         displayContent,
-        timelineItems: timeline?.items,
+        timelineItems: timelineItemsForDisplay,
       }));
   const conversationContentParts =
     message.role === "assistant"
       ? ensureInlineThinkingContentPart({
-          parts: mergeStreamingOverlayContentParts(
-            timelineInlineContentParts ||
-              filterConversationDisplayContentParts(displayContentParts, {
-                includeProcessFlow: includeInlineProcessFlow,
-                preserveToolUseParts: !hasProcessTimelineItems,
-              }),
-            streamingTextOverlay?.content || null,
+          parts: hideFinalAnswerContentPartsWhileRunning(
+            holdTextContentPartsAsProcessWhileRunning(
+              mergeStreamingOverlayContentParts(
+                timelineInlineContentParts ||
+                  filterConversationDisplayContentParts(displayContentParts, {
+                    includeProcessFlow: includeInlineProcessFlow,
+                    preserveToolUseParts: !hasProcessTimelineItems,
+                  }),
+                shouldHideAssistantTextWhileRunning
+                  ? null
+                  : streamingTextOverlay?.content || null,
+                {
+                  holdOverlayAsProcessWhileRunning:
+                    shouldHoldStreamingOverlayAsProcess,
+                },
+              ),
+              shouldHoldAssistantTextAsProcess,
+            ),
+            shouldHideAssistantTextWhileRunning,
           ),
           thinkingContent: message.thinkingContent,
           shouldEnsure:
             includeInlineProcessFlow &&
-            Boolean(streamingTextOverlay?.content?.trim()),
+            Boolean(message.thinkingContent?.trim()) &&
+            (Boolean(streamingTextOverlay?.content?.trim()) ||
+              hasActiveTimelineTurn ||
+              !hasPersistedReasoningTimeline),
         })
       : displayContentParts;
   const conversationThinkingContent =
@@ -429,8 +715,12 @@ export function resolveMessageListItemProjection({
       : undefined;
   const imageWorkbenchThinkingContent =
     imageWorkbenchDisplayState.thinkingContent;
+  const shouldAllowLegacyToolCallsProcess =
+    message.role === "assistant" &&
+    includeInlineProcessFlow &&
+    !hasProcessTimelineItems;
   const conversationToolCalls =
-    message.role === "assistant" && includeInlineProcessFlow
+    shouldAllowLegacyToolCallsProcess
       ? message.toolCalls
       : undefined;
   const inlineProcessCoverage = resolveInlineProcessCoverage({
@@ -441,14 +731,18 @@ export function resolveMessageListItemProjection({
   });
   const shouldLetInlineProcessOwnActiveTurn =
     timeline !== null &&
-    timeline.turn.status !== "completed" &&
+    hasActiveTimelineTurn &&
     includeInlineProcessFlow &&
     inlineProcessCoverage.hasInlineProcessEntries;
   const timelineConversationItems = timeline
-    ? timeline.items.filter((item) =>
-        shouldRenderConversationTimelineItem(item, timeline.items, {
-          hasInlineRuntimeStatus: Boolean(message.runtimeStatus),
-        }),
+    ? (timelineItemsForDisplay || []).filter((item) =>
+        shouldRenderConversationTimelineItem(
+          item,
+          timelineItemsForDisplay || [],
+          {
+            hasInlineRuntimeStatus: Boolean(message.runtimeStatus),
+          },
+        ),
       )
     : [];
   const timelineConversationItemIds =
@@ -459,7 +753,7 @@ export function resolveMessageListItemProjection({
     inlineProcessCoverage,
   );
   const primaryTimelineItems = timeline
-    ? timeline.items.filter((item) => {
+    ? (timelineItemsForDisplay || []).filter((item) => {
         if (shouldLetInlineProcessOwnActiveTurn) {
           return false;
         }
@@ -596,7 +890,10 @@ export function resolveMessageListItemProjection({
     ? resolveProcessSeparatedContentParts(conversationContentParts)
     : conversationContentParts;
   const rawActionContent = resolveAssistantActionContent({
-    displayContent,
+    displayContent:
+      shouldHoldAssistantTextAsProcess || shouldHideAssistantTextWhileRunning
+        ? ""
+        : displayContent,
     conversationContentParts,
     useProcessSeparatedFinalText: usesProcessSeparatedFinalText,
   });
@@ -674,7 +971,10 @@ export function resolveMessageListItemProjection({
       ? rendererContent
       : usesProcessSeparatedFinalText
         ? actionContent
-        : actionContent || visibleRawDisplayContent;
+        : actionContent ||
+          (shouldHoldAssistantTextAsProcess || shouldHideAssistantTextWhileRunning
+            ? ""
+            : visibleRawDisplayContent);
   const rendererContentParts =
     shouldSuppressDuplicatedFailureText ||
     shouldCollapseLongHistoricalMessage ||
@@ -684,9 +984,11 @@ export function resolveMessageListItemProjection({
   const rendererThinkingContent = shouldCollapseLongHistoricalMessage
     ? undefined
     : conversationThinkingContent;
-  const rendererToolCalls = shouldCollapseLongHistoricalMessage
-    ? undefined
-    : conversationToolCalls;
+  const rendererToolCalls =
+    shouldCollapseLongHistoricalMessage ||
+    hasInlineToolUseContentPart(rendererConversationContentParts)
+      ? undefined
+      : conversationToolCalls;
   const rendererActionRequests =
     shouldCollapseLongHistoricalMessage || shouldSuppressRendererProcessFlow
       ? undefined
@@ -699,13 +1001,6 @@ export function resolveMessageListItemProjection({
   const canQuoteMessage = Boolean(actionContent);
   const canCopyMessage = Boolean(actionContent);
   const canSaveMessageAsSkill = Boolean(
-    message.role === "assistant" &&
-    !message.imageWorkbenchPreview &&
-    !message.isThinking &&
-    actionContent &&
-    actionContent.length >= 24,
-  );
-  const canSaveMessageAsInspiration = Boolean(
     message.role === "assistant" &&
     !message.imageWorkbenchPreview &&
     !message.isThinking &&
@@ -853,7 +1148,6 @@ export function resolveMessageListItemProjection({
     arePrimaryTimelineDetailsDeferred,
     canCopyMessage,
     canQuoteMessage,
-    canSaveMessageAsInspiration,
     canSaveMessageAsKnowledge,
     canSaveMessageAsSkill,
     displayContent,

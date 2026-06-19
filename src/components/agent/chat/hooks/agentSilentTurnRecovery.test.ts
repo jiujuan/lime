@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
-import { hasRecoverableSilentTurnActivity } from "./agentSilentTurnRecovery";
+import {
+  hasRecoverableSilentTurnActivity,
+  hasRecoverableTerminalTurnActivity,
+} from "./agentSilentTurnRecovery";
 
 function createDetail(
   overrides: Partial<AsterSessionDetail> = {},
@@ -158,5 +161,65 @@ describe("agentSilentTurnRecovery", () => {
         "@配图 三国人物群像",
       ),
     ).toBe(false);
+  });
+
+  it("终态恢复不应把 running turn 当作可释放发送态", () => {
+    const requestStartedAt = Date.parse("2026-04-23T10:00:12.000Z");
+    const detail = createDetail({
+      turns: [
+        {
+          id: "turn-running",
+          thread_id: "thread-1",
+          prompt_text: "联网搜索并总结最新信息",
+          status: "running",
+          started_at: "2026-04-23T10:00:10.000Z",
+          created_at: "2026-04-23T10:00:10.000Z",
+          updated_at: "2026-04-23T10:00:13.000Z",
+        },
+      ],
+    });
+
+    expect(
+      hasRecoverableTerminalTurnActivity(
+        detail,
+        requestStartedAt,
+        "联网搜索并总结最新信息",
+        "turn-running",
+      ),
+    ).toBe(false);
+    expect(
+      hasRecoverableSilentTurnActivity(
+        detail,
+        requestStartedAt,
+        "联网搜索并总结最新信息",
+      ),
+    ).toBe(true);
+  });
+
+  it("终态恢复应按 turn id 识别近期 completed turn", () => {
+    const requestStartedAt = Date.parse("2026-04-23T10:00:12.000Z");
+    const detail = createDetail({
+      turns: [
+        {
+          id: "turn-completed",
+          thread_id: "thread-1",
+          prompt_text: "联网搜索并总结最新信息",
+          status: "completed",
+          started_at: "2026-04-23T10:00:10.000Z",
+          completed_at: "2026-04-23T10:00:14.000Z",
+          created_at: "2026-04-23T10:00:10.000Z",
+          updated_at: "2026-04-23T10:00:14.000Z",
+        },
+      ],
+    });
+
+    expect(
+      hasRecoverableTerminalTurnActivity(
+        detail,
+        requestStartedAt,
+        "不同 prompt",
+        "turn-completed",
+      ),
+    ).toBe(true);
   });
 });

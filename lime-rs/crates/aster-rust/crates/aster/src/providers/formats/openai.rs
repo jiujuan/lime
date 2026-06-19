@@ -4,7 +4,7 @@ use crate::providers::base::{ProviderUsage, Usage};
 use crate::providers::formats::tool_description_with_examples;
 use crate::providers::utils::{
     convert_image, detect_image_path, load_image_file, parse_tool_arguments_json_object,
-    safely_parse_json, sanitize_function_name, ImageFormat,
+    sanitize_function_name, ImageFormat,
 };
 use anyhow::{anyhow, Error};
 use async_stream::try_stream;
@@ -219,6 +219,47 @@ fn tool_call_arguments_from_value(tool_call: &Value) -> String {
         .and_then(json_value_as_tool_arguments)
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| "{}".to_string())
+}
+
+fn openai_compatible_tool_call_id(index: i32, id: Option<&str>) -> String {
+    trim_non_empty(id).unwrap_or_else(|| format!("openai_tool_call_{index}"))
+}
+
+fn parse_openai_compatible_tool_arguments(raw_arguments: &str) -> anyhow::Result<Value> {
+    parse_tool_arguments_json_object(raw_arguments)
+}
+
+fn merge_streaming_tool_call_delta(
+    tool_call_data: &mut std::collections::HashMap<i32, StreamingToolCallAccumulator>,
+    tool_call: &DeltaToolCall,
+    fallback_index: usize,
+) -> Option<Message> {
+    let index = tool_call.index.unwrap_or(fallback_index as i32);
+    let entry = tool_call_data.entry(index).or_default();
+    if entry.id.is_none() {
+        entry.id = Some(openai_compatible_tool_call_id(
+            index,
+            tool_call.id.as_deref(),
+        ));
+    }
+    if let Some(name) = tool_call.tool_name() {
+        entry.name = Some(name.clone());
+    }
+    let arguments_delta = tool_call.arguments_delta()?;
+    if arguments_delta.is_empty() {
+        return None;
+    }
+    entry.arguments.push_str(&arguments_delta);
+    Some(tool_input_delta_message(
+        entry
+            .id
+            .clone()
+            .unwrap_or_else(|| openai_compatible_tool_call_id(index, None)),
+        entry.name.clone(),
+        arguments_delta,
+        entry.arguments.clone(),
+        "openai_compatible",
+    ))
 }
 
 impl DeltaToolCall {
@@ -541,8 +582,14 @@ pub fn response_to_message(response: &Value) -> anyhow::Result<Message> {
 
     if let Some(tool_calls) = original.get("tool_calls") {
         if let Some(tool_calls_array) = tool_calls.as_array() {
-            for tool_call in tool_calls_array {
-                let id = tool_call["id"].as_str().unwrap_or_default().to_string();
+            for (fallback_index, tool_call) in tool_calls_array.iter().enumerate() {
+                let id = openai_compatible_tool_call_id(
+                    tool_call
+                        .get("index")
+                        .and_then(Value::as_i64)
+                        .unwrap_or(fallback_index as i64) as i32,
+                    tool_call.get("id").and_then(Value::as_str),
+                );
                 let function_name = tool_call_name_from_value(tool_call).unwrap_or_default();
                 let arguments_str = tool_call_arguments_from_value(tool_call);
 
@@ -557,7 +604,7 @@ pub fn response_to_message(response: &Value) -> anyhow::Result<Message> {
                     };
                     content.push(MessageContent::tool_request(id, Err(error)));
                 } else {
-                    match safely_parse_json(&arguments_str) {
+                    match parse_openai_compatible_tool_arguments(&arguments_str) {
                         Ok(params) => {
                             content.push(MessageContent::tool_request(
                                 id,
@@ -764,103 +811,56 @@ where
                 let mut final_usage = usage;
 
                 if let Some(tool_calls) = &choice.delta.tool_calls {
-                    for tool_call in tool_calls {
-                        if let Some(index) = tool_call.index {
-                            let entry = tool_call_data.entry(index).or_default();
-                            if let Some(id) = &tool_call.id {
-                                entry.id = Some(id.clone());
-                            }
-                            if let Some(name) = tool_call.tool_name() {
-                                entry.name = Some(name.clone());
-                            }
-                            if let Some(arguments_delta) = tool_call.arguments_delta() {
-                                if arguments_delta.is_empty() {
-                                    continue;
-                                }
-                                entry.arguments.push_str(&arguments_delta);
-                                if let Some(id) = entry.id.clone() {
-                                    yield (
-                                        Some(tool_input_delta_message(
-                                            id,
-                                            entry.name.clone(),
-                                            arguments_delta,
-                                            entry.arguments.clone(),
-                                            "openai_compatible",
-                                        )),
-                                        None,
-                                    );
-                                }
-                            }
+                    for (fallback_index, tool_call) in tool_calls.iter().enumerate() {
+                        if let Some(delta_message) = merge_streaming_tool_call_delta(
+                            &mut tool_call_data,
+                            tool_call,
+                            fallback_index,
+                        ) {
+                            yield (Some(delta_message), None);
                         }
                     }
                 }
 
-                // Check if this chunk already has finish_reason "tool_calls"
-                let is_complete = choice.finish_reason == Some("tool_calls".to_string());
+                while let Some(response_chunk) = stream.next().await {
+                    if response_chunk.as_ref().is_ok_and(|s| s == "data: [DONE]") {
+                        break;
+                    }
+                    let response_str = response_chunk?;
+                    let Some(line) = strip_data_prefix(&response_str) else {
+                        continue;
+                    };
+                    if line.is_empty() {
+                        continue;
+                    }
 
-                if !is_complete {
-                    let mut done = false;
-                    while !done {
-                        if let Some(response_chunk) = stream.next().await {
-                            if response_chunk.as_ref().is_ok_and(|s| s == "data: [DONE]") {
-                                break 'outer;
+                    let tool_chunk: StreamingChunk = serde_json::from_str(line)
+                        .map_err(|e| anyhow!("Failed to parse streaming chunk: {}: {:?}", e, &line))?;
+
+                    let tool_usage = streaming_chunk_usage(&tool_chunk);
+                    if tool_usage.is_some() {
+                        final_usage = tool_usage;
+                    }
+
+                    let Some(tool_choice) = tool_chunk.choices.first() else {
+                        continue;
+                    };
+
+                    if let Some(delta_tool_calls) = &tool_choice.delta.tool_calls {
+                        for (fallback_index, delta_call) in delta_tool_calls.iter().enumerate() {
+                            if let Some(delta_message) = merge_streaming_tool_call_delta(
+                                &mut tool_call_data,
+                                delta_call,
+                                fallback_index,
+                            ) {
+                                yield (Some(delta_message), None);
                             }
-                            let response_str = response_chunk?;
-                            if let Some(line) = strip_data_prefix(&response_str) {
-                                if line.is_empty() {
-                                    continue;
-                                }
-
-                                let tool_chunk: StreamingChunk = serde_json::from_str(line)
-                                    .map_err(|e| anyhow!("Failed to parse streaming chunk: {}: {:?}", e, &line))?;
-
-                                let tool_usage = streaming_chunk_usage(&tool_chunk);
-                                if tool_usage.is_some() {
-                                    final_usage = tool_usage;
-                                }
-
-                                let Some(tool_choice) = tool_chunk.choices.first() else {
-                                    continue;
-                                };
-
-                                if let Some(delta_tool_calls) = &tool_choice.delta.tool_calls {
-                                    for delta_call in delta_tool_calls {
-                                        if let Some(index) = delta_call.index {
-                                            let entry = tool_call_data.entry(index).or_default();
-                                            if let Some(id) = &delta_call.id {
-                                                entry.id = Some(id.clone());
-                                            }
-                                            if let Some(name) = delta_call.tool_name() {
-                                                entry.name = Some(name.clone());
-                                            }
-                                            if let Some(arguments_delta) = delta_call.arguments_delta() {
-                                                if arguments_delta.is_empty() {
-                                                    continue;
-                                                }
-                                                entry.arguments.push_str(&arguments_delta);
-                                                if let Some(id) = entry.id.clone() {
-                                                    yield (
-                                                        Some(tool_input_delta_message(
-                                                            id,
-                                                            entry.name.clone(),
-                                                            arguments_delta,
-                                                            entry.arguments.clone(),
-                                                            "openai_compatible",
-                                                        )),
-                                                        None,
-                                                    );
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                if tool_choice.finish_reason.is_some() {
-                                    done = true;
-                                }
-                            }
-                        } else {
-                            break;
                         }
+                        continue;
+                    }
+
+                    if tool_choice.finish_reason.is_some() {
+                        break;
                     }
                 }
 
@@ -870,17 +870,15 @@ where
 
                 for index in sorted_indices {
                     if let Some(tool_call) = tool_call_data.get(&index) {
-                        let (Some(id), Some(function_name)) =
-                            (tool_call.id.as_ref(), tool_call.name.as_ref())
-                        else {
+                        let Some(function_name) = tool_call.name.as_ref() else {
                             continue;
                         };
+                        let id = tool_call
+                            .id
+                            .clone()
+                            .unwrap_or_else(|| openai_compatible_tool_call_id(index, None));
                         let arguments = &tool_call.arguments;
-                        let parsed = if arguments.is_empty() {
-                            Ok(json!({}))
-                        } else {
-                            parse_tool_arguments_json_object(arguments)
-                        };
+                        let parsed = parse_openai_compatible_tool_arguments(arguments);
 
                         let content = match parsed {
                             Ok(params) => {
@@ -893,8 +891,8 @@ where
                                 let error = ErrorData {
                                     code: ErrorCode::INVALID_PARAMS,
                                     message: Cow::from(format!(
-                                        "Could not interpret tool use parameters for id {}: {}",
-                                        id, e
+                                        "Could not interpret tool use parameters for id {}: {}. Raw arguments: '{}'",
+                                        id, e, arguments
                                     )),
                                     data: None,
                                 };
@@ -1671,6 +1669,196 @@ mod tests {
         } else {
             panic!("Expected ToolRequest content");
         }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_response_to_message_empty_argument_with_whitespace_falls_back_to_empty_object(
+    ) -> anyhow::Result<()> {
+        let mut response: Value = serde_json::from_str(OPENAI_TOOL_USE_RESPONSE)?;
+        response["choices"][0]["message"]["tool_calls"][0]["function"]["arguments"] =
+            serde_json::Value::String("   ".to_string());
+
+        let message = response_to_message(&response)?;
+
+        let MessageContent::ToolRequest(request) = &message.content[0] else {
+            panic!("expected tool request");
+        };
+        let tool_call = request.tool_call.as_ref().unwrap();
+        assert_eq!(tool_call.name, "example_fn");
+        assert_eq!(tool_call.arguments, Some(object!({})));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_streaming_tool_call_without_id_uses_stable_generated_id() -> anyhow::Result<()> {
+        let response_lines = [
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"role":"assistant","tool_calls":[{"index":0,"type":"function","function":{"name":"WebSearch","arguments":""}}]},"index":0,"finish_reason":null}],"id":"chatcmpl-1"}"#,
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"query\":\"新闻\"}"}}]},"index":0,"finish_reason":"tool_calls"}],"id":"chatcmpl-1"}"#,
+            "data: [DONE]",
+        ];
+
+        let response_stream =
+            tokio_stream::iter(response_lines.into_iter().map(|line| Ok(line.to_string())));
+        let messages = response_to_streaming_message(response_stream);
+        pin!(messages);
+
+        let mut request_id = None;
+        let mut request_name = None;
+        let mut request_query = None;
+
+        while let Some(Ok((message, _usage))) = messages.next().await {
+            let Some(message) = message else {
+                continue;
+            };
+            for content in message.content {
+                if let MessageContent::ToolRequest(request) = content {
+                    request_id = Some(request.id);
+                    let call = request.tool_call.expect("tool call should parse");
+                    request_name = Some(call.name.to_string());
+                    request_query = call.arguments.and_then(|args| args.get("query").cloned());
+                }
+            }
+        }
+
+        assert_eq!(request_id.as_deref(), Some("openai_tool_call_0"));
+        assert_eq!(request_name.as_deref(), Some("WebSearch"));
+        assert_eq!(request_query, Some(json!("新闻")));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_streaming_tool_call_empty_later_id_uses_stable_generated_id() -> anyhow::Result<()>
+    {
+        let response_lines = [
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"role":"assistant","tool_calls":[{"index":0,"type":"function","function":{"name":"WebSearch","arguments":""}}]},"index":0,"finish_reason":null}],"id":"chatcmpl-1"}"#,
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"tool_calls":[{"index":0,"id":"","function":{"arguments":"{\"query\":\"新闻\"}"}}]},"index":0,"finish_reason":"tool_calls"}],"id":"chatcmpl-1"}"#,
+            "data: [DONE]",
+        ];
+
+        let response_stream =
+            tokio_stream::iter(response_lines.into_iter().map(|line| Ok(line.to_string())));
+        let messages = response_to_streaming_message(response_stream);
+        pin!(messages);
+
+        let mut request_id = None;
+
+        while let Some(Ok((message, _usage))) = messages.next().await {
+            let Some(message) = message else {
+                continue;
+            };
+            for content in message.content {
+                if let MessageContent::ToolRequest(request) = content {
+                    request_id = Some(request.id);
+                    request.tool_call.expect("tool call should parse");
+                }
+            }
+        }
+
+        assert_eq!(request_id.as_deref(), Some("openai_tool_call_0"));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_streaming_tool_call_early_finish_waits_for_late_argument_deltas(
+    ) -> anyhow::Result<()> {
+        let response_lines = [
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"","type":"function","function":{"name":"WebSearch","arguments":"{"}}]},"index":0,"finish_reason":"tool_calls"}],"id":"chatcmpl-1"}"#,
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"query\":\"AI 行业 新闻 2026年6月18日\""}}]},"index":0,"finish_reason":null}],"id":"chatcmpl-1"}"#,
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"tool_calls":[{"index":0,"id":"","function":{"arguments":"}"}}]},"index":0,"finish_reason":null}],"id":"chatcmpl-1"}"#,
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"content":""},"index":0,"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":10,"completion_tokens":3,"total_tokens":13},"id":"chatcmpl-1"}"#,
+            "data: [DONE]",
+        ];
+
+        let response_stream =
+            tokio_stream::iter(response_lines.into_iter().map(|line| Ok(line.to_string())));
+        let messages = response_to_streaming_message(response_stream);
+        pin!(messages);
+
+        let mut delta_ids = Vec::new();
+        let mut last_accumulated_arguments = None;
+        let mut request_id = None;
+        let mut request_name = None;
+        let mut request_query = None;
+
+        while let Some(Ok((message, _usage))) = messages.next().await {
+            let Some(message) = message else {
+                continue;
+            };
+            for content in message.content {
+                match content {
+                    MessageContent::ToolInputDelta(delta) => {
+                        delta_ids.push(delta.id);
+                        last_accumulated_arguments = delta.accumulated_arguments;
+                    }
+                    MessageContent::ToolRequest(request) => {
+                        request_id = Some(request.id);
+                        let call = request.tool_call.expect("tool call should parse");
+                        request_name = Some(call.name.to_string());
+                        request_query = call.arguments.and_then(|args| args.get("query").cloned());
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        assert_eq!(
+            delta_ids,
+            vec![
+                "openai_tool_call_0".to_string(),
+                "openai_tool_call_0".to_string(),
+                "openai_tool_call_0".to_string()
+            ]
+        );
+        assert_eq!(
+            last_accumulated_arguments.as_deref(),
+            Some(r#"{"query":"AI 行业 新闻 2026年6月18日"}"#)
+        );
+        assert_eq!(request_id.as_deref(), Some("openai_tool_call_0"));
+        assert_eq!(request_name.as_deref(), Some("WebSearch"));
+        assert_eq!(request_query, Some(json!("AI 行业 新闻 2026年6月18日")));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_streaming_tool_call_plain_text_arguments_stays_invalid() -> anyhow::Result<()> {
+        let response_lines = [
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"role":"assistant","tool_calls":[{"index":0,"type":"function","function":{"name":"WebSearch","arguments":""}}]},"index":0,"finish_reason":null}],"id":"chatcmpl-1"}"#,
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"新闻"}}]},"index":0,"finish_reason":"tool_calls"}],"id":"chatcmpl-1"}"#,
+            "data: [DONE]",
+        ];
+
+        let response_stream =
+            tokio_stream::iter(response_lines.into_iter().map(|line| Ok(line.to_string())));
+        let messages = response_to_streaming_message(response_stream);
+        pin!(messages);
+
+        let mut request_id = None;
+        let mut error_message = None;
+
+        while let Some(Ok((message, _usage))) = messages.next().await {
+            let Some(message) = message else {
+                continue;
+            };
+            for content in message.content {
+                if let MessageContent::ToolRequest(request) = content {
+                    request_id = Some(request.id);
+                    if let Err(error) = request.tool_call {
+                        error_message = Some(error.message.to_string());
+                    }
+                }
+            }
+        }
+
+        assert_eq!(request_id.as_deref(), Some("openai_tool_call_0"));
+        let error_message = error_message.expect("plain text arguments should fail");
+        assert!(error_message.contains("Could not interpret tool use parameters"));
+        assert!(error_message.contains("Raw arguments: '新闻'"));
 
         Ok(())
     }

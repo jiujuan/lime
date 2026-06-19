@@ -55,7 +55,6 @@ interface BuildHarnessStatusPanelSectionModelsInput {
   onManageProviders: HarnessStatusPanelProps["onManageProviders"];
   onOpenExecutionPolicySettings: HarnessStatusPanelProps["onOpenExecutionPolicySettings"];
   onOpenFileCheckpoints: HarnessStatusPanelProps["onOpenFileCheckpoints"];
-  onOpenMemoryWorkbench: HarnessStatusPanelProps["onOpenMemoryWorkbench"];
   onOpenSubagentSession: HarnessStatusPanelProps["onOpenSubagentSession"];
   onPromoteQueuedTurn: HarnessStatusPanelProps["onPromoteQueuedTurn"];
   onRefreshToolInventory: HarnessStatusPanelProps["onRefreshToolInventory"];
@@ -77,7 +76,6 @@ interface BuildHarnessStatusPanelSectionModelsInput {
     HarnessStatusPanelProps["submittedActionsInFlight"]
   >;
   t: TranslationFunction;
-  teamMemorySnapshot: HarnessStatusPanelProps["teamMemorySnapshot"];
   threadItems: NonNullable<HarnessStatusPanelProps["threadItems"]>;
   threadRead: HarnessStatusPanelProps["threadRead"];
   threadReliabilityView: ThreadReliabilityView;
@@ -113,7 +111,6 @@ export function buildHarnessStatusPanelSectionModels({
   onManageProviders,
   onOpenExecutionPolicySettings,
   onOpenFileCheckpoints,
-  onOpenMemoryWorkbench,
   onOpenSubagentSession,
   onPromoteQueuedTurn,
   onRefreshToolInventory,
@@ -133,7 +130,6 @@ export function buildHarnessStatusPanelSectionModels({
   submittedActionIds,
   submittedActionsInFlight,
   t,
-  teamMemorySnapshot,
   threadItems,
   threadRead,
   threadReliabilityView,
@@ -264,12 +260,10 @@ export function buildHarnessStatusPanelSectionModels({
         onResumeThread,
         onReplayPendingRequest,
         onPromoteQueuedTurn,
-        onOpenMemoryWorkbench,
         onManageProviders,
         onOpenExecutionPolicySettings,
         harnessState,
         messages,
-        teamMemorySnapshot,
         diagnosticRuntimeContext,
       },
     },

@@ -3640,7 +3640,7 @@ function dispatchMemory(
   if (request.method === "write" || request.method === "compact") {
     return {
       status: "not_available",
-      reason: "memory_runtime_mutation_not_exposed_to_agent_apps",
+      reason: "memory_store_mutation_not_exposed_to_agent_apps",
       source: "app_server_runtime_projection",
     };
   }

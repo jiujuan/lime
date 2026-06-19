@@ -735,6 +735,17 @@ describe("appServerSessionClient", () => {
             },
           ],
         },
+        executionRuntime: {
+          session_id: "session-snake",
+          source_client: "claude_code",
+          imported_thread_settings: {
+            cwd: "/tmp/imported-project",
+          },
+          imported_continuation: {
+            cwd: "/tmp/imported-project",
+          },
+          source: "session",
+        },
       },
     };
     vi.mocked(appServerClient.readSession).mockResolvedValueOnce({
@@ -776,6 +787,17 @@ describe("appServerSessionClient", () => {
           }),
         ],
       }),
+      execution_runtime: {
+        session_id: "session-snake",
+        source_client: "claude_code",
+        imported_thread_settings: {
+          cwd: "/tmp/imported-project",
+        },
+        imported_continuation: {
+          cwd: "/tmp/imported-project",
+        },
+        source: "session",
+      },
     });
   });
 

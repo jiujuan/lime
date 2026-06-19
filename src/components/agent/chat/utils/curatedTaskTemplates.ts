@@ -1793,7 +1793,7 @@ function scoreTemplateForRecommendationSignal(params: {
   const projectMatchBonus =
     projectId && signal.projectId && projectId === signal.projectId ? 4 : 0;
   const recentSignalBonus =
-    signal.source === "saved_inspiration" || signal.source === "review_feedback"
+    signal.source === "memory_reference" || signal.source === "review_feedback"
       ? Math.max(
           0,
           5 -

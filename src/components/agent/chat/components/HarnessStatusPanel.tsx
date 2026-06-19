@@ -75,11 +75,9 @@ export function HarnessStatusPanel({
   onReplayPendingRequest,
   onPromoteQueuedTurn,
   onObjectiveChanged,
-  onOpenMemoryWorkbench,
   onManageProviders,
   onOpenExecutionPolicySettings,
   messages = [],
-  teamMemorySnapshot = null,
   diagnosticRuntimeContext = null,
 }: HarnessStatusPanelProps) {
   const { t, i18n } = useTranslation("agent");
@@ -383,7 +381,6 @@ export function HarnessStatusPanel({
     onInterruptCurrentTurn,
     onObjectiveChanged,
     onOpenFileCheckpoints,
-    onOpenMemoryWorkbench,
     onManageProviders,
     onOpenExecutionPolicySettings,
     onOpenSubagentSession,
@@ -405,7 +402,6 @@ export function HarnessStatusPanel({
     submittedActionIds,
     submittedActionsInFlight,
     t,
-    teamMemorySnapshot,
     threadItems,
     threadRead,
     threadReliabilityView,

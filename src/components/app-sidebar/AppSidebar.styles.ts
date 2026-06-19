@@ -649,6 +649,14 @@ export const FooterUpdateActionSlot = styled.div<{ $collapsed?: boolean }>`
   display: ${({ $collapsed }) => ($collapsed ? "none" : "flex")};
   align-items: center;
   justify-content: center;
+  gap: 4px;
+`;
+
+export const FooterAppearanceActionSlot = styled.div`
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 `;
 
 export const ActionRow = styled.div<{ $collapsed?: boolean }>`

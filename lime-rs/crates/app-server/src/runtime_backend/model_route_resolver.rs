@@ -44,13 +44,13 @@ pub(super) async fn resolve_chat_model_route(
         requested_selection,
         direct_provider_config,
     )?;
-    let selection = routing_resolution.selection;
-    let model_routing = routing_resolution.routing;
-    let provider_readiness = routing_resolution.readiness;
+    let selection = &routing_resolution.selection;
+    let model_routing = &routing_resolution.routing;
+    let provider_readiness = &routing_resolution.readiness;
     let model_registry = model_registry_metadata::resolve_runtime_model_registry_metadata(
         db,
         api_key_provider_service,
-        &selection,
+        selection,
         direct_provider_config,
     )
     .await?;
@@ -60,60 +60,35 @@ pub(super) async fn resolve_chat_model_route(
         api_key_provider_service.get_provider(db, &selection.provider)?
     };
     let routing_payload = model_routing::routing_decision_payload(
-        &selection,
-        &model_routing,
-        &provider_readiness,
+        selection,
+        model_routing,
+        provider_readiness,
         &model_registry,
     );
     let model_task_request =
-        model_route_contract::chat_task_request_from_runtime(request, &selection, &routing_payload);
+        model_route_contract::chat_task_request_from_runtime(request, selection, &routing_payload);
     let resolved_route = model_route_contract::resolved_route_from_runtime(
         &model_task_request,
-        &selection,
+        selection,
         &routing_payload,
         provider_record.as_ref(),
         direct_provider_config,
     );
-    let decision_payload = model_route_contract::route_evidence_payload(
-        routing_payload,
+    let evidence = runtime_core::route_resolution_evidence_payloads(
+        requested_selection,
+        &routing_resolution,
+        model_registry.payload(),
         &model_task_request,
         &resolved_route,
     );
-    let fallback_payload = (requested_selection != &selection).then(|| {
-        model_route_contract::route_evidence_payload(
-            model_routing::routing_fallback_applied_payload(
-                requested_selection,
-                &selection,
-                &model_routing,
-                &provider_readiness,
-                &model_registry,
-                &routing_resolution.attempted,
-            ),
-            &model_task_request,
-            &resolved_route,
-        )
-    });
-    let not_possible_payload = resolved_route.failure.as_ref().map(|_| {
-        model_route_contract::route_evidence_payload(
-            model_routing::routing_not_possible_payload_with_attempts(
-                &selection,
-                &model_routing,
-                &provider_readiness,
-                &model_registry,
-                &routing_resolution.attempted,
-            ),
-            &model_task_request,
-            &resolved_route,
-        )
-    });
 
     Ok(ChatModelRouteResolution {
-        selection,
+        selection: selection.clone(),
         model_task_request,
         resolved_route,
-        decision_payload,
-        fallback_payload,
-        not_possible_payload,
+        decision_payload: evidence.decision_payload,
+        fallback_payload: evidence.fallback_payload,
+        not_possible_payload: evidence.not_possible_payload,
     })
 }
 

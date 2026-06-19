@@ -1,0 +1,549 @@
+use super::RuntimeCore;
+use app_server_protocol::{
+    AgentSessionTurnStartParams, MemoryStoreReadParams, MemoryStoreRootParams, MemoryStoreScope,
+    RuntimeOptions,
+};
+use lime_core::config::MemorySoulConfig;
+use serde_json::{json, Map, Value};
+use std::path::PathBuf;
+
+pub(crate) const MEMORY_PROMPT_CONTEXT_KEY: &str = "memory_store_prompt_context";
+pub(crate) const MEMORY_SOUL_PROMPT_CONTEXT_KEY: &str = "memory_soul_prompt_context";
+const SUMMARY_PATH: &str = "memory_summary.md";
+const SUMMARY_MAX_TOKENS: usize = 1_200;
+const PROMPT_CONTEXT_VERSION: &str = "memory_store_prompt_context.v1";
+const SOUL_CONTEXT_VERSION: &str = "memory_soul_prompt_context.v1";
+const SOUL_TEXT_MAX_CHARS: usize = 600;
+const SOUL_SHORT_TEXT_MAX_CHARS: usize = 160;
+const SOUL_LIST_ITEM_MAX_CHARS: usize = 120;
+const SOUL_LIST_MAX_ITEMS: usize = 8;
+
+impl RuntimeCore {
+    pub(in crate::runtime) async fn prepare_memory_prompt_context(
+        &self,
+        params: &mut AgentSessionTurnStartParams,
+    ) {
+        let Some(root) = memory_summary_root(params) else {
+            return;
+        };
+        let response = match self
+            .app_data_source
+            .read_memory_store(MemoryStoreReadParams {
+                root: root.clone(),
+                path: SUMMARY_PATH.to_string(),
+                line_offset: None,
+                max_lines: None,
+                max_tokens: Some(SUMMARY_MAX_TOKENS),
+            })
+            .await
+        {
+            Ok(response) => response,
+            Err(_) => return,
+        };
+        let summary = response.content.trim();
+        if summary.is_empty() {
+            return;
+        }
+        let context = json!({
+            "schema": PROMPT_CONTEXT_VERSION,
+            "scope": match root.scope {
+                MemoryStoreScope::Global => "global",
+                MemoryStoreScope::Workspace => "workspace",
+            },
+            "workspaceRoot": root.workspace_root,
+            "path": response.path,
+            "content": summary,
+            "truncated": response.truncated,
+            "citation": response.citation,
+        });
+        merge_runtime_options_metadata(params, MEMORY_PROMPT_CONTEXT_KEY, context);
+    }
+}
+
+pub(crate) fn append_memory_context_to_system_prompt(
+    system_prompt: Option<String>,
+    runtime_metadata: Option<&Value>,
+) -> Option<String> {
+    append_context_block(
+        system_prompt,
+        memory_prompt_context_from_metadata(runtime_metadata),
+    )
+}
+
+pub(crate) fn append_soul_context_to_system_prompt(
+    system_prompt: Option<String>,
+    config_metadata: Option<&Value>,
+) -> Option<String> {
+    append_context_block(
+        system_prompt,
+        soul_prompt_context_from_metadata(config_metadata),
+    )
+}
+
+pub(crate) fn memory_soul_prompt_context_from_config(
+    soul: Option<&MemorySoulConfig>,
+) -> Option<Value> {
+    let soul = soul?;
+    if !soul.enabled {
+        return None;
+    }
+
+    let name = normalize_text(soul.name.as_deref(), 80);
+    let summary = normalize_text(soul.summary.as_deref(), SOUL_TEXT_MAX_CHARS);
+    let tone = normalize_list(&soul.tone);
+    let communication_style = normalize_list(&soul.communication_style);
+    let explanation_depth =
+        normalize_text(soul.explanation_depth.as_deref(), SOUL_SHORT_TEXT_MAX_CHARS);
+    let challenge_style =
+        normalize_text(soul.challenge_style.as_deref(), SOUL_SHORT_TEXT_MAX_CHARS);
+    let avoid = normalize_list(&soul.avoid);
+
+    if name.is_none()
+        && summary.is_none()
+        && tone.is_empty()
+        && communication_style.is_empty()
+        && explanation_depth.is_none()
+        && challenge_style.is_none()
+        && avoid.is_empty()
+    {
+        return None;
+    }
+
+    let mut context = Map::new();
+    context.insert("schema".to_string(), json!(SOUL_CONTEXT_VERSION));
+    context.insert("source".to_string(), json!("memory.soul"));
+    context.insert("scope".to_string(), json!("interaction_only"));
+    context.insert(
+        "formalArtifactVoiceSource".to_string(),
+        json!("generation_brief_only"),
+    );
+    insert_optional_string(&mut context, "name", name);
+    insert_optional_string(&mut context, "summary", summary);
+    insert_non_empty_list(&mut context, "tone", tone);
+    insert_non_empty_list(&mut context, "communicationStyle", communication_style);
+    insert_optional_string(&mut context, "explanationDepth", explanation_depth);
+    insert_optional_string(&mut context, "challengeStyle", challenge_style);
+    insert_non_empty_list(&mut context, "avoid", avoid);
+
+    Some(Value::Object(context))
+}
+
+fn memory_prompt_context_from_metadata(metadata: Option<&Value>) -> Option<String> {
+    let value = metadata?.get(MEMORY_PROMPT_CONTEXT_KEY)?;
+    let content = value
+        .get("content")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|content| !content.is_empty())?;
+    let path = value
+        .get("path")
+        .and_then(Value::as_str)
+        .filter(|path| !path.trim().is_empty())
+        .unwrap_or(SUMMARY_PATH);
+    let scope = value
+        .get("scope")
+        .and_then(Value::as_str)
+        .filter(|scope| !scope.trim().is_empty())
+        .unwrap_or("global");
+    let citation = value.get("citation");
+    let start_line = citation
+        .and_then(|citation| citation.get("startLineNumber"))
+        .and_then(Value::as_u64)
+        .or_else(|| {
+            citation
+                .and_then(|citation| citation.get("start_line_number"))
+                .and_then(Value::as_u64)
+        })
+        .unwrap_or(1);
+    let end_line = citation
+        .and_then(|citation| citation.get("endLineNumber"))
+        .and_then(Value::as_u64)
+        .or_else(|| {
+            citation
+                .and_then(|citation| citation.get("end_line_number"))
+                .and_then(Value::as_u64)
+        })
+        .unwrap_or(start_line);
+    let truncated = value
+        .get("truncated")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let truncated_hint = if truncated {
+        "\n- 该摘要已被截断；如当前任务需要更多长期记忆，请优先使用 memory tools 进行 search/read，并保留 citation。"
+    } else {
+        ""
+    };
+
+    Some(format!(
+        "## Long-Term Memory Summary\n\
+         来源：memory store `{path}`，scope `{scope}`，lines {start_line}-{end_line}。\n\
+         这些内容是长期记忆摘要，不是用户本轮输入；只在与当前任务明显相关时使用。不要把摘要当成绝对事实；需要更多细节时使用 memory tools search/read，并在结果中保留 citation。{truncated_hint}\n\
+         \n\
+         ```memory-summary\n{content}\n```"
+    ))
+}
+
+fn soul_prompt_context_from_metadata(metadata: Option<&Value>) -> Option<String> {
+    let metadata = metadata?;
+    let value = metadata
+        .pointer("/memory/soul")
+        .or_else(|| metadata.get(MEMORY_SOUL_PROMPT_CONTEXT_KEY))?;
+    let source = value
+        .get("source")
+        .and_then(Value::as_str)
+        .unwrap_or("memory.soul");
+    if source != "memory.soul" {
+        return None;
+    }
+    let scope = value
+        .get("scope")
+        .and_then(Value::as_str)
+        .filter(|scope| !scope.trim().is_empty())
+        .unwrap_or("interaction_only");
+    let name = value.get("name").and_then(Value::as_str);
+    let summary = value.get("summary").and_then(Value::as_str);
+    let tone = string_array(value.get("tone"));
+    let communication_style = string_array(value.get("communicationStyle"));
+    let explanation_depth = value.get("explanationDepth").and_then(Value::as_str);
+    let challenge_style = value.get("challengeStyle").and_then(Value::as_str);
+    let avoid = string_array(value.get("avoid"));
+
+    if [name, summary, explanation_depth, challenge_style]
+        .into_iter()
+        .flatten()
+        .all(|item| item.trim().is_empty())
+        && tone.is_empty()
+        && communication_style.is_empty()
+        && avoid.is_empty()
+    {
+        return None;
+    }
+
+    let mut lines = vec![
+        "## Interaction Soul".to_string(),
+        format!("来源：saved app config `memory.soul`，scope `{scope}`。"),
+        "这些内容只影响对话方式和协作节奏，不是用户本轮输入，也不是长期事实。正式 artifact / 创作声线只能使用显式 generation brief；不要从这里推断或写入 artifact voice。".to_string(),
+    ];
+    if let Some(name) = non_empty_str(name) {
+        lines.push(format!("- Name: {name}"));
+    }
+    if let Some(summary) = non_empty_str(summary) {
+        lines.push(format!("- Summary: {summary}"));
+    }
+    if !tone.is_empty() {
+        lines.push(format!("- Tone: {}", tone.join(", ")));
+    }
+    if !communication_style.is_empty() {
+        lines.push("- Communication style:".to_string());
+        lines.extend(
+            communication_style
+                .into_iter()
+                .map(|item| format!("  - {item}")),
+        );
+    }
+    if let Some(explanation_depth) = non_empty_str(explanation_depth) {
+        lines.push(format!("- Explanation depth: {explanation_depth}"));
+    }
+    if let Some(challenge_style) = non_empty_str(challenge_style) {
+        lines.push(format!("- Challenge style: {challenge_style}"));
+    }
+    if !avoid.is_empty() {
+        lines.push("- Avoid:".to_string());
+        lines.extend(avoid.into_iter().map(|item| format!("  - {item}")));
+    }
+
+    Some(lines.join("\n"))
+}
+
+fn memory_summary_root(params: &AgentSessionTurnStartParams) -> Option<MemoryStoreRootParams> {
+    workspace_root_from_runtime_options(params.runtime_options.as_ref())
+        .map(|workspace_root| MemoryStoreRootParams {
+            scope: MemoryStoreScope::Workspace,
+            workspace_root: Some(workspace_root),
+        })
+        .or_else(|| {
+            Some(MemoryStoreRootParams {
+                scope: MemoryStoreScope::Global,
+                workspace_root: None,
+            })
+        })
+}
+
+fn workspace_root_from_runtime_options(runtime_options: Option<&RuntimeOptions>) -> Option<String> {
+    let options = runtime_options?;
+    let host_root = options
+        .host_options
+        .as_ref()
+        .and_then(|host_options| host_options.get("asterChatRequest"))
+        .and_then(workspace_root_from_aster_chat_request);
+    host_root
+        .or_else(|| metadata_workspace_root(options.metadata.as_ref()))
+        .and_then(|value| {
+            let path = PathBuf::from(&value);
+            path.is_absolute().then_some(value)
+        })
+}
+
+fn workspace_root_from_aster_chat_request(value: &Value) -> Option<String> {
+    let turn_config = value.get("turn_config").or_else(|| value.get("turnConfig"));
+    string_value_from_candidates(
+        turn_config
+            .into_iter()
+            .flat_map(|config| [config.get("workspace_root"), config.get("workspaceRoot")])
+            .chain([value.get("workspace_root"), value.get("workspaceRoot")]),
+    )
+}
+
+fn metadata_workspace_root(metadata: Option<&Value>) -> Option<String> {
+    let metadata = metadata?;
+    let pointers = [
+        "/workspaceRoot",
+        "/workspace_root",
+        "/projectRoot",
+        "/project_root",
+        "/harness/workspaceRoot",
+        "/harness/workspace_root",
+        "/harness/projectRoot",
+        "/harness/project_root",
+        "/turn_config/workspaceRoot",
+        "/turn_config/workspace_root",
+        "/turnConfig/workspaceRoot",
+        "/turnConfig/projectRoot",
+    ];
+    pointers
+        .iter()
+        .find_map(|pointer| metadata.pointer(pointer))
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+}
+
+fn string_value_from_candidates<'a>(
+    values: impl Iterator<Item = Option<&'a Value>>,
+) -> Option<String> {
+    values
+        .flatten()
+        .find_map(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+}
+
+fn merge_runtime_options_metadata(
+    params: &mut AgentSessionTurnStartParams,
+    key: &str,
+    value: Value,
+) {
+    let options = params
+        .runtime_options
+        .get_or_insert_with(RuntimeOptions::default);
+    let mut metadata = match options.metadata.take() {
+        Some(Value::Object(map)) => map,
+        Some(existing) => {
+            let mut map = Map::new();
+            map.insert("original".to_string(), existing);
+            map
+        }
+        None => Map::new(),
+    };
+    metadata.insert(key.to_string(), value);
+    options.metadata = Some(Value::Object(metadata));
+}
+
+fn append_context_block(system_prompt: Option<String>, context: Option<String>) -> Option<String> {
+    let Some(context) = context else {
+        return system_prompt;
+    };
+    let mut prompt = system_prompt.unwrap_or_default();
+    if !prompt.trim().is_empty() {
+        prompt.push_str("\n\n");
+    }
+    prompt.push_str(&context);
+    Some(prompt)
+}
+
+fn insert_optional_string(map: &mut Map<String, Value>, key: &str, value: Option<String>) {
+    if let Some(value) = value {
+        map.insert(key.to_string(), json!(value));
+    }
+}
+
+fn insert_non_empty_list(map: &mut Map<String, Value>, key: &str, values: Vec<String>) {
+    if !values.is_empty() {
+        map.insert(key.to_string(), json!(values));
+    }
+}
+
+fn normalize_text(value: Option<&str>, max_chars: usize) -> Option<String> {
+    let value = value?;
+    let normalized = value.split_whitespace().collect::<Vec<_>>().join(" ");
+    let normalized = normalized.trim();
+    if normalized.is_empty() {
+        return None;
+    }
+    Some(normalized.chars().take(max_chars).collect())
+}
+
+fn normalize_list(values: &[String]) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    let mut result = Vec::new();
+    for value in values {
+        let Some(normalized) = normalize_text(Some(value), SOUL_LIST_ITEM_MAX_CHARS) else {
+            continue;
+        };
+        if seen.insert(normalized.clone()) {
+            result.push(normalized);
+        }
+        if result.len() >= SOUL_LIST_MAX_ITEMS {
+            break;
+        }
+    }
+    result
+}
+
+fn string_array(value: Option<&Value>) -> Vec<String> {
+    value
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .filter_map(|value| normalize_text(Some(value), SOUL_LIST_ITEM_MAX_CHARS))
+        .collect()
+}
+
+fn non_empty_str(value: Option<&str>) -> Option<&str> {
+    value.map(str::trim).filter(|value| !value.is_empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn memory_prompt_context_ignores_empty_summary() {
+        let metadata = json!({
+            MEMORY_PROMPT_CONTEXT_KEY: {
+                "content": "   "
+            }
+        });
+
+        let prompt =
+            append_memory_context_to_system_prompt(Some("base".to_string()), Some(&metadata))
+                .expect("base prompt");
+
+        assert_eq!(prompt, "base");
+    }
+
+    #[test]
+    fn memory_prompt_context_appends_guarded_block() {
+        let metadata = json!({
+            MEMORY_PROMPT_CONTEXT_KEY: {
+                "scope": "workspace",
+                "path": "memory_summary.md",
+                "content": "Prefer short answers.",
+                "truncated": true,
+                "citation": {
+                    "startLineNumber": 1,
+                    "endLineNumber": 2
+                }
+            }
+        });
+
+        let prompt =
+            append_memory_context_to_system_prompt(Some("base".to_string()), Some(&metadata))
+                .expect("prompt");
+
+        assert!(prompt.starts_with("base\n\n## Long-Term Memory Summary"));
+        assert!(prompt.contains("不是用户本轮输入"));
+        assert!(prompt.contains("memory tools"));
+        assert!(prompt.contains("Prefer short answers."));
+        assert!(prompt.contains("已被截断"));
+    }
+
+    #[test]
+    fn memory_prompt_context_preserves_base_prompt_when_metadata_missing() {
+        let prompt = append_memory_context_to_system_prompt(Some("base".to_string()), None)
+            .expect("base prompt");
+
+        assert_eq!(prompt, "base");
+    }
+
+    #[test]
+    fn soul_prompt_context_ignores_disabled_config() {
+        let soul = MemorySoulConfig {
+            enabled: false,
+            summary: Some("Use direct language.".to_string()),
+            ..MemorySoulConfig::default()
+        };
+
+        assert!(memory_soul_prompt_context_from_config(Some(&soul)).is_none());
+    }
+
+    #[test]
+    fn soul_prompt_context_appends_guarded_interaction_block() {
+        let soul = MemorySoulConfig {
+            enabled: true,
+            name: Some("Direct reviewer".to_string()),
+            summary: Some("Call out weak assumptions.".to_string()),
+            tone: vec!["direct".to_string(), "direct".to_string()],
+            communication_style: vec!["Lead with the answer".to_string()],
+            explanation_depth: Some("Concise unless risk is high.".to_string()),
+            challenge_style: Some("Challenge vague premises.".to_string()),
+            avoid: vec!["Do not use vague encouragement.".to_string()],
+            ..MemorySoulConfig::default()
+        };
+        let context = memory_soul_prompt_context_from_config(Some(&soul)).expect("context");
+        let metadata = json!({
+            "memory": {
+                "soul": context
+            }
+        });
+
+        let prompt =
+            append_soul_context_to_system_prompt(Some("base".to_string()), Some(&metadata))
+                .expect("prompt");
+
+        assert!(prompt.starts_with("base\n\n## Interaction Soul"));
+        assert!(prompt.contains("saved app config `memory.soul`"));
+        assert!(prompt.contains("不是用户本轮输入"));
+        assert!(prompt.contains("generation brief"));
+        assert!(prompt.contains("Call out weak assumptions."));
+        assert!(!prompt.contains("SOUL.md"));
+    }
+
+    #[test]
+    fn workspace_root_prefers_host_options_absolute_root() {
+        let options = RuntimeOptions {
+            host_options: Some(json!({
+                "asterChatRequest": {
+                    "turn_config": {
+                        "workspaceRoot": "/repo"
+                    }
+                }
+            })),
+            metadata: Some(json!({
+                "workspaceRoot": "/metadata-repo"
+            })),
+            ..RuntimeOptions::default()
+        };
+
+        assert_eq!(
+            workspace_root_from_runtime_options(Some(&options)).as_deref(),
+            Some("/repo")
+        );
+    }
+
+    #[test]
+    fn workspace_root_rejects_relative_root() {
+        let options = RuntimeOptions {
+            metadata: Some(json!({
+                "workspaceRoot": "relative/path"
+            })),
+            ..RuntimeOptions::default()
+        };
+
+        assert!(workspace_root_from_runtime_options(Some(&options)).is_none());
+    }
+}

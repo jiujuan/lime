@@ -155,9 +155,13 @@ impl ImportedRuntimeEventProjectionSelector {
             return false;
         }
 
-        let is_command = string_payload(&event.payload, &["toolName", "tool_name", "name"])
-            .as_deref()
-            .is_some_and(is_command_tool_name);
+        let tool_name = string_payload(&event.payload, &["toolName", "tool_name", "name"]);
+        if tool_name.as_deref().is_some_and(is_web_search_tool_name) {
+            self.materialized_tool_call_ids.insert(tool_call_id);
+            return true;
+        }
+
+        let is_command = tool_name.as_deref().is_some_and(is_command_tool_name);
         if is_command {
             if self.materialized_command_tool_calls < self.command_tool_call_limit {
                 self.materialized_command_tool_calls += 1;
@@ -225,7 +229,8 @@ pub(super) struct ImportedRuntimeEventNormalizer {
     active_patches: BTreeSet<String>,
     active_actions: BTreeSet<String>,
     active_commands: BTreeSet<String>,
-    has_terminal_event: bool,
+    pending_terminal_event: Option<ImportedRuntimeEvent>,
+    saw_terminal_event: bool,
 }
 
 impl ImportedRuntimeEventNormalizer {
@@ -235,7 +240,8 @@ impl ImportedRuntimeEventNormalizer {
             active_patches: BTreeSet::new(),
             active_actions: BTreeSet::new(),
             active_commands: BTreeSet::new(),
-            has_terminal_event: false,
+            pending_terminal_event: None,
+            saw_terminal_event: false,
         }
     }
 
@@ -316,15 +322,13 @@ impl ImportedRuntimeEventNormalizer {
                 normalized.push(event);
             }
             "turn.completed" | "turn.failed" | "turn.canceled" => {
-                close_active_imported_lifecycles(
-                    &mut normalized,
-                    &mut self.active_actions,
-                    &mut self.active_commands,
-                    &mut self.active_patches,
-                    &mut self.active_tools,
-                );
-                normalized.push(event);
-                self.has_terminal_event = true;
+                self.saw_terminal_event = true;
+                if self.pending_terminal_event.is_none()
+                    || event.event_type == "turn.failed"
+                    || event.event_type == "turn.canceled"
+                {
+                    self.pending_terminal_event = Some(event);
+                }
             }
             _ => normalized.push(event),
         }
@@ -340,11 +344,14 @@ impl ImportedRuntimeEventNormalizer {
             &mut self.active_patches,
             &mut self.active_tools,
         );
+        if let Some(event) = self.pending_terminal_event.take() {
+            normalized.push(event);
+        }
         normalized
     }
 
     pub(super) fn has_terminal_event(&self) -> bool {
-        self.has_terminal_event
+        self.saw_terminal_event
     }
 }
 
@@ -557,6 +564,13 @@ fn command_payload_id(payload: &Value) -> Option<String> {
 
 fn is_command_tool_name(value: &str) -> bool {
     matches!(value, "exec_command" | "shell" | "bash")
+}
+
+fn is_web_search_tool_name(value: &str) -> bool {
+    matches!(
+        value.trim(),
+        "web_search" | "webSearch" | "search_query" | "WebSearch"
+    )
 }
 
 fn parse_exit_code(output: &str) -> Option<i64> {

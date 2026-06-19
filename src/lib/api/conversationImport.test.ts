@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { safeInvoke } from "@/lib/dev-bridge";
+import { CONVERSATION_IMPORT_SOURCE_CLIENTS } from "../../../packages/app-server-client/src/protocol";
 import {
   commitConversationImportThread,
   previewConversationImportThread,
@@ -31,6 +32,9 @@ function appServerScanResponse(): ConversationImportSourceScanResponse {
       sourceRoot: "/Users/example/.codex",
       readable: true,
       threadCount: 1,
+      sourceHomeExists: true,
+      stateDbReadable: true,
+      rolloutFileCount: 3,
       indexedAt: "2026-06-16T00:00:00.000Z",
       statePath: "/Users/example/.codex/state_5.sqlite",
     },
@@ -223,6 +227,13 @@ describe("conversationImport API", () => {
     appServerRequestMock.mockReset();
   });
 
+  it("导入来源协议枚举由 app-server-client 统一导出", () => {
+    expect([...CONVERSATION_IMPORT_SOURCE_CLIENTS].sort()).toEqual([
+      "claude_code",
+      "codex",
+    ]);
+  });
+
   it("应通过 App Server current 主链扫描 Codex 对话来源", async () => {
     const result = appServerScanResponse();
     appServerRequestMock.mockResolvedValueOnce({ result });
@@ -247,6 +258,42 @@ describe("conversationImport API", () => {
         query: "runtime",
         includeArchived: true,
         limit: 20,
+      },
+    );
+    expect(safeInvoke).not.toHaveBeenCalled();
+  });
+
+  it("扫描响应应接受 app-server protocol 声明的第二来源枚举", async () => {
+    const result = {
+      ...appServerScanResponse(),
+      source: {
+        ...appServerScanResponse().source,
+        sourceClient: "claude_code",
+        status: "unsupported",
+        readable: false,
+        threadCount: 0,
+        sourceHomeExists: false,
+        stateDbReadable: false,
+        rolloutFileCount: 0,
+        sourceRoot: undefined,
+        statePath: undefined,
+        message: "Importer is not available yet.",
+      },
+      threads: [],
+      nextCursor: undefined,
+    } satisfies ConversationImportSourceScanResponse;
+    appServerRequestMock.mockResolvedValueOnce({ result });
+
+    await expect(
+      scanConversationImportSource({
+        sourceClient: "claude_code",
+      }),
+    ).resolves.toEqual(result);
+
+    expect(appServerRequestMock).toHaveBeenCalledWith(
+      "conversationImport/source/scan",
+      {
+        sourceClient: "claude_code",
       },
     );
     expect(safeInvoke).not.toHaveBeenCalled();

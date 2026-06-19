@@ -1,13 +1,17 @@
-use std::sync::Arc;
-
 use app_server::AppServer;
+use app_server::EventLogWriter;
+use app_server::LocalAppDataSource;
 use app_server::MockBackend;
 use app_server::ProjectionStore;
 use app_server::RuntimeCore;
 use app_server::StorageRoots;
 use app_server_protocol::*;
+use lime_core::database::schema::create_tables;
+use rusqlite::Connection;
 use serde_json::json;
 use serde_json::Value;
+use std::fs;
+use std::sync::Arc;
 use tempfile::TempDir;
 
 const SESSION_ID: &str = "persisted-session";
@@ -17,27 +21,54 @@ const WORKSPACE_ID: &str = "workspace-current";
 
 struct ProjectionAppServer {
     _temp: TempDir,
+    roots: StorageRoots,
+    event_log_writer: Arc<EventLogWriter>,
     server: AppServer,
 }
 
-fn projection_app_server(sessions: &[(&str, &str, &str, &str)]) -> ProjectionAppServer {
+async fn projection_app_server(sessions: &[(&str, &str, &str, &str)]) -> ProjectionAppServer {
     let temp = TempDir::new().expect("create projection fixture temp dir");
     let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("storage roots");
+    let event_log_writer = Arc::new(EventLogWriter::new(&roots.event_log_root).expect("event log"));
     let projection_store =
         Arc::new(ProjectionStore::initialize(&roots.projection_db_path).expect("projection"));
     for (session_id, thread_id, title, updated_at) in sessions {
-        seed_projected_session(&projection_store, session_id, thread_id, title, updated_at);
+        seed_projected_session(
+            &projection_store,
+            &event_log_writer,
+            session_id,
+            thread_id,
+            title,
+            updated_at,
+        );
     }
-    let runtime =
-        RuntimeCore::with_backend(Arc::new(MockBackend)).with_projection_store(projection_store);
+    let app_data_source = Arc::new(local_app_data_source(&roots).await);
+    let runtime = RuntimeCore::with_backend(Arc::new(MockBackend))
+        .with_app_data_source(app_data_source)
+        .with_event_log_writer(event_log_writer.clone())
+        .with_projection_store(projection_store);
     ProjectionAppServer {
         _temp: temp,
+        roots,
+        event_log_writer,
         server: AppServer::with_runtime(runtime),
     }
 }
 
+async fn local_app_data_source(roots: &StorageRoots) -> LocalAppDataSource {
+    let conn = Connection::open_in_memory().expect("open in-memory product db");
+    create_tables(&conn).expect("create product schema");
+    LocalAppDataSource::initialize_with_db_and_data_root(
+        Arc::new(std::sync::Mutex::new(conn)),
+        roots.data_root.clone(),
+    )
+    .await
+    .expect("local app data source")
+}
+
 fn seed_projected_session(
     projection_store: &ProjectionStore,
+    event_log_writer: &EventLogWriter,
     session_id: &str,
     thread_id: &str,
     title: &str,
@@ -64,6 +95,7 @@ fn seed_projected_session(
     projection_store
         .apply_event(&event)
         .expect("seed projected session");
+    event_log_writer.append(&event).expect("seed event log");
 }
 
 #[tokio::test]
@@ -73,7 +105,8 @@ async fn persisted_session_archive_and_unarchive_use_current_jsonrpc() {
         THREAD_ID,
         "Persisted Session",
         "2026-06-07T00:00:00.000Z",
-    )]);
+    )])
+    .await;
     initialize_server(&app.server, 1, "session-archive-jsonrpc-test").await;
 
     let archive = request(
@@ -166,6 +199,98 @@ async fn persisted_session_archive_and_unarchive_use_current_jsonrpc() {
 }
 
 #[tokio::test]
+async fn memory_store_reset_does_not_delete_persisted_session_history() {
+    let app = projection_app_server(&[(
+        SESSION_ID,
+        THREAD_ID,
+        "Persisted Session",
+        "2026-06-07T00:00:00.000Z",
+    )])
+    .await;
+    initialize_server(&app.server, 1, "memory-reset-history-jsonrpc-test").await;
+
+    let note = request(
+        &app.server,
+        2,
+        METHOD_MEMORY_STORE_ADD_NOTE,
+        json!({
+            "scope": "global",
+            "title": "Reset isolation",
+            "slug": "reset-isolation",
+            "content": "This memory note should be removed by reset."
+        }),
+    )
+    .await;
+    let note_path = note
+        .pointer("/result/path")
+        .and_then(Value::as_str)
+        .expect("memory note path");
+    let memory_root = app.roots.memory_root.clone();
+    fs::write(
+        memory_root.join("memory_summary.md"),
+        "summary that should be cleared",
+    )
+    .expect("write summary");
+    let event_log_path = app
+        .event_log_writer
+        .read_session_events(SESSION_ID)
+        .expect("seeded event log")
+        .into_iter()
+        .next()
+        .expect("one event log record")
+        .path;
+
+    let reset = request(
+        &app.server,
+        3,
+        METHOD_MEMORY_STORE_RESET,
+        json!({
+            "scope": "global"
+        }),
+    )
+    .await;
+    assert_eq!(reset.pointer("/result/preservedSoul"), Some(&json!(true)));
+    assert!(!memory_root.join(note_path).exists());
+    assert_eq!(
+        fs::read_to_string(memory_root.join("memory_summary.md")).expect("reset summary"),
+        ""
+    );
+
+    let recent = request(
+        &app.server,
+        4,
+        METHOD_AGENT_SESSION_LIST,
+        json!({
+            "workspaceId": WORKSPACE_ID
+        }),
+    )
+    .await;
+    assert_eq!(session_ids(&recent), vec![SESSION_ID.to_string()]);
+
+    let read = request(
+        &app.server,
+        5,
+        METHOD_AGENT_SESSION_READ,
+        json!({
+            "sessionId": SESSION_ID
+        }),
+    )
+    .await;
+    assert_eq!(
+        read.pointer("/result/session/sessionId"),
+        Some(&json!(SESSION_ID)),
+    );
+    assert!(event_log_path.is_file());
+    assert_eq!(
+        app.event_log_writer
+            .read_session_events(SESSION_ID)
+            .expect("event log after reset")
+            .len(),
+        1
+    );
+}
+
+#[tokio::test]
 async fn persisted_session_archive_many_uses_current_jsonrpc() {
     let app = projection_app_server(&[
         (
@@ -180,7 +305,8 @@ async fn persisted_session_archive_many_uses_current_jsonrpc() {
             "Second Persisted Session",
             "2026-06-07T00:00:02.000Z",
         ),
-    ]);
+    ])
+    .await;
     initialize_server(&app.server, 1, "session-archive-many-jsonrpc-test").await;
 
     let archived = request(
@@ -248,7 +374,8 @@ async fn persisted_session_archive_many_ignores_empty_request() {
         THREAD_ID,
         "Persisted Session",
         "2026-06-07T00:00:00.000Z",
-    )]);
+    )])
+    .await;
     initialize_server(&app.server, 1, "session-archive-many-empty-test").await;
 
     let archived = request(

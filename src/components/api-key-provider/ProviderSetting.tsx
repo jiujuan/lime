@@ -120,12 +120,17 @@ type ImageModelCommandExecutorMode =
 // 辅助函数
 // ============================================================================
 
-function formatProviderHost(apiHost: string): string {
+function normalizeProviderHostValue(apiHost: unknown): string {
+  return typeof apiHost === "string" ? apiHost : "";
+}
+
+function formatProviderHost(apiHost: unknown): string {
+  const normalizedApiHost = normalizeProviderHostValue(apiHost);
   try {
-    const url = new URL(apiHost);
+    const url = new URL(normalizedApiHost);
     return `${url.host}${url.pathname === "/" ? "" : url.pathname}`;
   } catch {
-    return apiHost;
+    return normalizedApiHost;
   }
 }
 
@@ -417,7 +422,9 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
   const [apiKeyDirty, setApiKeyDirty] = useState(false);
   const [savingApiKey, setSavingApiKey] = useState(false);
   const [apiKeyStatus, setApiKeyStatus] = useState<InlineStatus | null>(null);
-  const [apiHostDraft, setApiHostDraft] = useState(provider.api_host);
+  const [apiHostDraft, setApiHostDraft] = useState(() =>
+    normalizeProviderHostValue(provider.api_host),
+  );
   const [apiHostDirty, setApiHostDirty] = useState(false);
   const [savingApiHost, setSavingApiHost] = useState(false);
   const [apiHostStatus, setApiHostStatus] = useState<InlineStatus | null>(null);
@@ -446,7 +453,7 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     setApiKeyDirty(false);
     setSavingApiKey(false);
     setApiKeyStatus(null);
-    setApiHostDraft(provider.api_host);
+    setApiHostDraft(normalizeProviderHostValue(provider.api_host));
     setApiHostDirty(false);
     setSavingApiHost(false);
     setApiHostStatus(null);
@@ -461,13 +468,18 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     });
   }, []);
 
-  const providerHostLabel = formatProviderHost(provider.api_host);
+  const normalizedProviderApiHost = normalizeProviderHostValue(
+    provider.api_host,
+  );
+  const providerHostLabel = formatProviderHost(normalizedProviderApiHost);
   const apiKeyMask = getFirstVisibleApiKey(provider);
   const hasApiKey = hasConfiguredApiKey(provider);
-  const effectiveApiHost = apiHostDirty ? apiHostDraft : provider.api_host;
+  const effectiveApiHost = apiHostDirty
+    ? apiHostDraft
+    : normalizedProviderApiHost;
   const trimmedApiHostDraft = apiHostDraft.trim();
   const hasPendingApiHost =
-    apiHostDirty && trimmedApiHostDraft !== provider.api_host.trim();
+    apiHostDirty && trimmedApiHostDraft !== normalizedProviderApiHost.trim();
   const accessHelp = getProviderAccessHelp({
     providerId: provider.id,
     providerName: provider.name,
@@ -555,7 +567,7 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     getProviderPromptCacheMode(
       provider.type,
       provider.prompt_cache_mode,
-      provider.api_host,
+      normalizedProviderApiHost,
     ) === "explicit_only";
   const canSaveApiKey =
     !loading &&
@@ -624,7 +636,7 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
 
   const persistDraftApiHost = useCallback(async () => {
     const nextApiHost = apiHostDraft.trim();
-    if (!apiHostDirty || nextApiHost === provider.api_host.trim()) {
+    if (!apiHostDirty || nextApiHost === normalizedProviderApiHost.trim()) {
       return;
     }
 
@@ -645,7 +657,14 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     await onUpdate(provider.id, { api_host: nextApiHost });
     setApiHostDraft(nextApiHost);
     setApiHostDirty(false);
-  }, [apiHostDirty, apiHostDraft, onUpdate, provider.api_host, provider.id, t]);
+  }, [
+    apiHostDirty,
+    apiHostDraft,
+    normalizedProviderApiHost,
+    onUpdate,
+    provider.id,
+    t,
+  ]);
 
   const handleSaveApiHost = useCallback(async () => {
     if (!apiHostDirty) {

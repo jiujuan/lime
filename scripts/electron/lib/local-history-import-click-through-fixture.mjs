@@ -17,12 +17,21 @@ export const IMPORTED_WORKSPACE_DIRNAME = "imported-local-history";
 export const IMPORTED_PREVIEW_MARKDOWN_FILE = "imported-preview.md";
 export const IMPORTED_PREVIEW_HTML_FILE = "imported-preview.html";
 export const IMPORTED_PREVIEW_DOCX_FILE = "imported-preview.docx";
+export const IMPORTED_PREVIEW_XLSX_FILE = "imported-preview.xlsx";
+export const IMPORTED_PREVIEW_PPTX_FILE = "imported-preview.pptx";
+export const IMPORTED_PREVIEW_PDF_FILE = "imported-preview.pdf";
 export const IMPORTED_PREVIEW_MARKDOWN_TEXT =
   "导入会话 Markdown 预览内容：文件打开链路进入 Artifact Workbench。";
 export const IMPORTED_PREVIEW_HTML_TEXT =
   "导入会话 HTML 预览内容：iframe 或独立窗口应可显示。";
 export const IMPORTED_PREVIEW_DOCX_TEXT =
   "导入会话 DOCX 预览内容：中文不能乱码，也不能显示 ZIP 噪音。";
+export const IMPORTED_PREVIEW_XLSX_TEXT =
+  "导入会话 XLSX 预览内容：表格文本应进入文档预览。";
+export const IMPORTED_PREVIEW_PPTX_TEXT =
+  "导入会话 PPTX 预览内容：幻灯片文本应进入文档预览。";
+export const IMPORTED_PREVIEW_PDF_TEXT =
+  "导入会话 PDF 预览内容：可解析文本流应进入文档预览。";
 export let IMPORTED_CWD = "";
 export const REQUIRED_BACKEND_METHODS = [
   "conversationImport/source/scan",
@@ -133,6 +142,35 @@ function writeImportedPreviewFiles(docsDir) {
     path.join(docsDir, IMPORTED_PREVIEW_DOCX_FILE),
     IMPORTED_PREVIEW_DOCX_TEXT,
   );
+  writeMinimalXlsx(
+    path.join(docsDir, IMPORTED_PREVIEW_XLSX_FILE),
+    IMPORTED_PREVIEW_XLSX_TEXT,
+  );
+  writeMinimalPptx(
+    path.join(docsDir, IMPORTED_PREVIEW_PPTX_FILE),
+    IMPORTED_PREVIEW_PPTX_TEXT,
+  );
+  writeMinimalPdf(
+    path.join(docsDir, IMPORTED_PREVIEW_PDF_FILE),
+    IMPORTED_PREVIEW_PDF_TEXT,
+  );
+}
+
+function writeMinimalPdf(filePath, text) {
+  fs.writeFileSync(
+    filePath,
+    `%PDF-1.4
+1 0 obj
+<< /Length ${Buffer.byteLength(`BT\n(${text}) Tj\nET`, "utf8")} >>
+stream
+BT
+(${text}) Tj
+ET
+endstream
+endobj
+%%EOF
+`,
+  );
 }
 
 function writeMinimalDocx(filePath, text) {
@@ -167,6 +205,52 @@ function writeMinimalDocx(filePath, text) {
     </w:p>
   </w:body>
 </w:document>
+`,
+    },
+  ]);
+}
+
+function writeMinimalXlsx(filePath, text) {
+  writeZipFile(filePath, [
+    {
+      name: "xl/sharedStrings.xml",
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <si><t>${escapeXmlText(text)}</t></si>
+</sst>
+`,
+    },
+    {
+      name: "xl/worksheets/sheet1.xml",
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetData>
+    <row r="1">
+      <c r="A1" t="s"><v>0</v></c>
+    </row>
+  </sheetData>
+</worksheet>
+`,
+    },
+  ]);
+}
+
+function writeMinimalPptx(filePath, text) {
+  writeZipFile(filePath, [
+    {
+      name: "ppt/slides/slide1.xml",
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <p:cSld>
+    <p:spTree>
+      <p:sp>
+        <p:txBody>
+          <a:p><a:r><a:t>${escapeXmlText(text)}</a:t></a:r></a:p>
+        </p:txBody>
+      </p:sp>
+    </p:spTree>
+  </p:cSld>
+</p:sld>
 `,
     },
   ]);
@@ -338,6 +422,9 @@ function writeSourceRolloutFixture(rolloutPath, importedCwd) {
   );
   const htmlPath = path.join(importedCwd, "docs", IMPORTED_PREVIEW_HTML_FILE);
   const docxPath = path.join(importedCwd, "docs", IMPORTED_PREVIEW_DOCX_FILE);
+  const xlsxPath = path.join(importedCwd, "docs", IMPORTED_PREVIEW_XLSX_FILE);
+  const pptxPath = path.join(importedCwd, "docs", IMPORTED_PREVIEW_PPTX_FILE);
+  const pdfPath = path.join(importedCwd, "docs", IMPORTED_PREVIEW_PDF_FILE);
   const lines = [
     {
       timestamp: "2026-06-16T00:00:00.000Z",
@@ -466,7 +553,67 @@ function writeSourceRolloutFixture(rolloutPath, importedCwd) {
       },
     },
     {
+      timestamp: "2026-06-16T00:00:05.700Z",
+      type: "response_item",
+      payload: {
+        type: "function_call",
+        id: "call_read_xlsx",
+        call_id: "call_read_xlsx",
+        name: "read_file",
+        arguments: JSON.stringify({ path: xlsxPath }),
+      },
+    },
+    {
+      timestamp: "2026-06-16T00:00:05.800Z",
+      type: "response_item",
+      payload: {
+        type: "function_call_output",
+        call_id: "call_read_xlsx",
+        output: IMPORTED_PREVIEW_XLSX_TEXT,
+      },
+    },
+    {
+      timestamp: "2026-06-16T00:00:05.900Z",
+      type: "response_item",
+      payload: {
+        type: "function_call",
+        id: "call_read_pptx",
+        call_id: "call_read_pptx",
+        name: "read_file",
+        arguments: JSON.stringify({ path: pptxPath }),
+      },
+    },
+    {
       timestamp: "2026-06-16T00:00:06.000Z",
+      type: "response_item",
+      payload: {
+        type: "function_call_output",
+        call_id: "call_read_pptx",
+        output: IMPORTED_PREVIEW_PPTX_TEXT,
+      },
+    },
+    {
+      timestamp: "2026-06-16T00:00:06.100Z",
+      type: "response_item",
+      payload: {
+        type: "function_call",
+        id: "call_read_pdf",
+        call_id: "call_read_pdf",
+        name: "read_file",
+        arguments: JSON.stringify({ path: pdfPath }),
+      },
+    },
+    {
+      timestamp: "2026-06-16T00:00:06.200Z",
+      type: "response_item",
+      payload: {
+        type: "function_call_output",
+        call_id: "call_read_pdf",
+        output: "",
+      },
+    },
+    {
+      timestamp: "2026-06-16T00:00:07.000Z",
       type: "response_item",
       payload: {
         type: "web_search_call",
@@ -477,7 +624,7 @@ function writeSourceRolloutFixture(rolloutPath, importedCwd) {
       },
     },
     {
-      timestamp: "2026-06-16T00:00:07.000Z",
+      timestamp: "2026-06-16T00:00:08.000Z",
       type: "event_msg",
       payload: {
         type: "web_search_end",
@@ -487,7 +634,7 @@ function writeSourceRolloutFixture(rolloutPath, importedCwd) {
       },
     },
     {
-      timestamp: "2026-06-16T00:00:08.000Z",
+      timestamp: "2026-06-16T00:00:09.000Z",
       type: "event_msg",
       payload: {
         type: "patch_apply_end",
@@ -499,7 +646,7 @@ function writeSourceRolloutFixture(rolloutPath, importedCwd) {
       },
     },
     {
-      timestamp: "2026-06-16T00:00:09.000Z",
+      timestamp: "2026-06-16T00:00:10.000Z",
       type: "event_msg",
       payload: {
         type: "agent_message",

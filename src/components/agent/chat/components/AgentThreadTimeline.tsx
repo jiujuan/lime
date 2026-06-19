@@ -1045,6 +1045,7 @@ export const AgentThreadTimeline: React.FC<AgentThreadTimelineProps> = ({
   deferCompletedSingleDetails = false,
   collapseInactiveDetails = false,
 }) => {
+  const { t } = useTranslation("agent");
   const pendingRuntimeConfirmationPrompt = useMemo(
     () => resolvePendingRuntimeConfirmationPrompt({ items, actionRequests }),
     [actionRequests, items],
@@ -1059,8 +1060,8 @@ export const AgentThreadTimeline: React.FC<AgentThreadTimelineProps> = ({
   );
 
   const displayModel = useMemo(
-    () => buildAgentThreadDisplayModel(visibleItems),
-    [visibleItems],
+    () => buildAgentThreadDisplayModel(visibleItems, { t }),
+    [t, visibleItems],
   );
   const activeBlockIndex = resolveActiveBlockIndex(displayModel.orderedBlocks);
   const focusBlockIndex = resolveFocusBlockIndex({

@@ -32,6 +32,13 @@ function hasEnabledApiKey(provider: ProviderWithKeysDisplay): boolean {
   return (provider.api_keys ?? []).some((apiKey) => apiKey.enabled);
 }
 
+function hasAnyApiKey(provider: ProviderWithKeysDisplay): boolean {
+  return (
+    (typeof provider.api_key_count === "number" && provider.api_key_count > 0) ||
+    (provider.api_keys ?? []).length > 0
+  );
+}
+
 function hasConfiguredModel(provider: ProviderWithKeysDisplay): boolean {
   return (provider.custom_models ?? []).some(
     (modelId) => modelId.trim().length > 0,
@@ -49,7 +56,7 @@ export function isSelectedProviderLoginRequired({
     provider &&
       exposeOemLoginPrompt &&
       isOemManagedHubProvider(provider) &&
-      provider.api_key_count === 0 &&
+      !hasAnyApiKey(provider) &&
       !hasEnabledApiKey(provider) &&
       !hasConfiguredModel(provider),
   );
@@ -80,7 +87,7 @@ export function planEnabledModelSelection({
   selectedProviderId,
   showAddModelFlow,
 }: {
-  enabledModelItems: Array<Pick<EnabledModelItem, "id">>;
+  enabledModelItems: Array<Pick<EnabledModelItem, "id" | "status">>;
   selectedProviderId: string | null;
   showAddModelFlow: boolean;
 }): ProviderSelectionPlan {
@@ -92,6 +99,13 @@ export function planEnabledModelSelection({
     return selectedProviderId
       ? { type: "select", providerId: null }
       : { type: "none" };
+  }
+
+  const loginRequiredItem = enabledModelItems.find(
+    (item) => item.status === "login_required",
+  );
+  if (loginRequiredItem && selectedProviderId !== loginRequiredItem.id) {
+    return { type: "select", providerId: loginRequiredItem.id };
   }
 
   if (

@@ -126,7 +126,7 @@ describe("resolveSceneGatePrefill", () => {
       version: 1,
       kind: "memory_entry",
       source: {
-        page: "memory",
+        page: "memory_store",
         project_id: "project-2",
         entry_id: "memory-x-article",
       },

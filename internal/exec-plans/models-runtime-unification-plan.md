@@ -1,7 +1,7 @@
 # 多模型多模态统一运行时实现计划
 
 > 状态：in progress
-> 更新时间：2026-06-17
+> 更新时间：2026-06-18
 > Owner：Runtime / Model Registry / App Server / Media Task 主链
 > 关联 PRD：`internal/roadmap/models/prd.md`
 
@@ -41,38 +41,42 @@
 - [x] 聊天 runtime 已基于 `ModelTaskRequest.requirements` 与注册表 `CapabilitySnapshot` 产出 `capability_gap`，并在 capability gap 时通过 `RouteFailure(category=capability_gap)` 阻断执行。
 - [x] 新增通用 `model_route_assembly`，把 provider / endpoint / auth / protocol / route defaults / capability snapshot / `RouteFailure` 组装从聊天模块抽出，聊天内部 `model_route_resolver` 只负责 ready candidate、registry metadata、provider record 和 evidence 编排。
 - [x] 媒体 task 创建链路在 provider record、enabled key、registry declared model 都明确时，复用 `model_route_assembly` 写入真实 `resolved_route` / `resolvedRoute`，并保留 capability gap fail-closed 语义。
-- [ ] 把 RouteResolver 从 App Server 内部模块提升为可复用 RuntimeCore resolver，并覆盖音频 / 转写 / embedding 等非 chat task 的 worker 执行；当前图片 / 视频 worker 已消费 `resolved_route` 的安全执行投影，并校验本地 broker `model_route_execution` 合同；音频当前只保留 `ModelTaskRequest` / capability evidence，不写可执行 `resolved_route`，直到 audio worker 或 RuntimeCore 级 provider protocol mapper 落地。
+- [ ] 把 RouteResolver 从 App Server 内部模块提升为可复用 RuntimeCore resolver，并覆盖音频 / 转写 / embedding 等非 chat task 的 worker 执行；当前 `ResolvedModelRoute` 组装、route evidence bundle、decision/fallback/not_possible evidence 生成已在 RuntimeCore，App Server 只保留 provider record / readiness / registry metadata 适配；图片 / 视频 worker 已消费 `resolved_route` 的安全执行投影，并校验本地 broker `model_route_execution` 合同；音频当前只保留 `ModelTaskRequest` / capability evidence，不写可执行 `resolved_route`，直到 audio worker 或 RuntimeCore 级 provider protocol mapper 落地。
 - [x] 媒体 task 创建链路在 registry 明确声明能力快照时写入 `route_failure` / `model_route_assessment`，并在 `capability_gap` 时标记任务为 blocked。
 - [x] 图片 / 视频 worker 消费 task payload 中的 `failure_code=capability_gap` 并 fail closed，不再请求 provider。
 - [x] 拆出 `media_task_payload.rs`，让媒体 payload / `ModelTaskRequest` 构建离开超过 `1000` 行的 `media_task.rs`。
 - [x] 图片 / 视频 worker 消费 `resolved_route` 的 provider / model / protocol 安全投影，并消费通用 `route_failure` fail closed；旧任务缺字段时仍按原 payload / runner config 执行。
 - [x] App Server 写入不含 secret 的 `model_route_execution` / `modelRouteExecution` 执行绑定，明确图片 / 视频任务只能通过本地 Lime 服务 broker 解析 Provider credential；media-runtime 对旧 route-only task artifact 做执行期幂等迁移，并对非本地 broker / 内嵌 secret 的执行绑定 fail closed。
-- [ ] 实现 RuntimeCore 级 provider protocol mapper；当前不会直接使用 artifact 中的 Provider endpoint，避免把本地 Lime 服务 API key 发往第三方 Provider。
+- [ ] 实现 RuntimeCore 级 provider protocol mapper；OpenAI Images API、Responses image-generation 与 Fal video-generation 的请求体 mapper 已进入 RuntimeCore，图片 / 视频 worker 已复用这些 body builder；endpoint 转换、SSE 结果解析、fallback 和本地 broker credential 仍在 media-runtime，当前仍不会直接使用 artifact 中的 Provider endpoint，避免把本地 Lime 服务 API key 发往第三方 Provider。
 
 ### Phase 3：Canonical LLM Runtime
 
 - [x] 定义 `LlmRequest` / `LlmInputPart` / `LlmOutputPart` / `LlmEvent`。
-- [x] 增加 OpenAI Chat、OpenAI Responses、Anthropic Messages、Gemini、Ollama 的 protocol mapper 边界。
+- [x] 增加 OpenAI Chat、OpenAI Responses、Anthropic Messages、Gemini、Ollama、OpenAI Images、Responses image-generation、Fal video-generation 的 protocol mapper 边界。
 - [x] Aster adapter 降级为 compat backend adapter，只做合同转换和事件投影。
 
 ### Phase 4：媒体任务复用
 
-- [ ] 图片、视频、音频、转写任务通过 RouteResolver 选择模型和协议。
-- [ ] media task artifact 持久化 `resolved_route`、`llm_events`、`provider_diagnostics`。
+- [x] 图片 / 视频任务通过 RouteResolver 选择模型和协议，并由 media-runtime worker 消费 `resolved_route` / `model_route_execution` 的本地 broker 执行绑定。
+- [ ] 音频 / 转写任务通过 RouteResolver 选择模型和协议；当前音频仍是 metadata-only task artifact + App Server complete 回写，没有独立 worker，转写 worker 也未接入 RuntimeCore mapper。
+- [x] 图片 / 视频 media task artifact 持久化 `resolved_route`、`llm_events`、`provider_diagnostics`，同时保留 snake/camel 双字段便于 current UI / evidence 消费。
+- [ ] 音频 / 转写 media task artifact 持久化 executable `resolved_route` / `llm_events` / `provider_diagnostics`；退出条件是 audio / transcription worker 或 RuntimeCore provider protocol mapper 能真实执行对应 provider wire。
 - [ ] 前端设置页、Agent Chat、媒体工作台统一消费 typed capabilities。
 
 ## 本轮当前刀
 
-本轮继续推进 Phase 3 的 canonical LLM runtime 收口：
+本轮快速完成 Phase 4 的图片 / 视频媒体任务复用闭环：
 
-1. 在 `runtime-core` 落地 canonical `LlmRequest` / `LlmInputPart` / `LlmOutputPart` / `LlmEvent`。
-2. 把 OpenAI Chat、OpenAI Responses、Anthropic Messages、Gemini、Ollama 的协议映射集中到 `llm_protocol/mapper/`。
-3. 只做纯协议映射，不在 mapper 里承接数据库、认证、transport 或 GUI 逻辑。
-4. App Server 仍保留 provider record、credential 和 readiness facade，避免把 runtime 协议与存储面再绑死。
-5. 旧命名残留按 dead surface 清理，不为历史字眼保留兼容壳。
-6. 通过定向 Rust 测试和全文扫描确认协议层与命名层已经收口。
+1. 在 `runtime-core` 保持 canonical `LlmRequest` / `LlmInputPart` / `LlmOutputPart` / `LlmEvent` 为模型协议唯一输入边界。
+2. 把 OpenAI Chat、OpenAI Responses、Anthropic Messages、Gemini、Ollama、OpenAI Images、Responses image-generation、Fal video-generation 的协议映射集中到 `llm_protocol/mapper/`。
+3. 图片 / 视频 worker 请求体构建复用 RuntimeCore body builder，不再在 `media-runtime` 维护第二套 Images API / Responses image-generation / Fal video-generation body shape。
+4. 图片 / 视频 worker 在 running / succeeded / failed 状态写入 RuntimeCore canonical LLM event 投影，并把 provider/model/protocol/transport/credential 诊断持久化到 task payload。
+5. 只做纯协议映射，不在 mapper 里承接数据库、认证、transport 或 GUI 逻辑。
+6. App Server 仍保留 provider record、credential 和 readiness facade，media-runtime 仍保留本地 broker endpoint、Authorization header、SSE 结果解析和 fallback 编排，避免把 runtime 协议与存储 / transport 面再绑死。
+7. 音频 / 转写不伪造可执行复用；继续停留在 metadata-only / typed request evidence，等待 worker 或 RuntimeCore provider protocol mapper 落地。
+8. 通过定向 Rust 测试和全文扫描确认协议层与媒体 evidence 已经收口。
 
-这样做的主线收益是：模型输入/输出、工具调用、图片/文件 parts 和 provider wire body 已经有统一协议边界；后续新增协议只需要补 mapper，不需要在 App Server、worker、前端三处重复补特判。
+这样做的主线收益是：模型输入/输出、工具调用、图片/文件 parts、provider wire body 和图片 / 视频媒体任务 evidence 已经有统一协议边界；图片与视频 worker 的 provider-specific body shape 和任务事件语义已开始从 `media-runtime` 下沉到 RuntimeCore，后续新增协议只需要补 mapper / event projector，不需要在 App Server、worker、前端三处重复补特判。
 
 ## 验证计划
 
@@ -114,9 +118,18 @@
 - `OpenaiImages`、`Fal`、`BedrockConverse`、`Unknown` 当前不进入 canonical LLM mapper，直接返回 `UnsupportedProtocol`，避免把媒体协议伪装成聊天协议。
 - Aster adapter 已收口到 route protocol：`AsterProviderConfig` 通过 `ResolvedModelRoute.protocol` 选择 `ChatCompletions` / `Responses`，continuation capability 也只看 route protocol，不再按 provider/model 字符串猜测。
 - `OPENAI_FORCE_RESPONSES_API` 只保留为 Aster OpenAI provider 内部 compat env flag，不再作为 runtime 路由事实源；相关 env-mutating 测试已改为串行执行，避免并发污染。
+- Phase 2/3 交界收口：`runtime-core::route_evidence_payload` 成为 `modelTaskRequest` / `resolvedRoute` / `routeFailure` evidence bundle 的唯一组装事实源；App Server `runtime_backend/model_route_contract.rs` 删除重复实现，`model_route_resolver.rs` 只调用 RuntimeCore API。
+- Phase 2/3 交界继续收口：RuntimeCore 新增 `route_resolution_evidence_payloads`，统一生成 chat resolver 的 decision / fallback / not_possible evidence payload；App Server `runtime_backend/model_route_resolver.rs` 不再自己拼 fallback / not_possible route evidence，只保留 DB、Provider readiness、registry metadata 与 direct provider config 适配。
+- Phase 3/4 交界继续收口：RuntimeCore 新增 OpenAI Images API 与 Responses image-generation body builder，`media-runtime` 图片 worker 的 Images API / Responses image-generation 请求体构建改为复用 RuntimeCore `LlmRequest` mapper；worker 内部删除重复的 Responses image-generation tool/model 归一化 helper，避免协议 body shape 在 RuntimeCore 与 media worker 双写。
+- Phase 3/4 交界继续收口：RuntimeCore 新增 Fal video-generation body builder，视频 worker 的本地 broker 请求体改为复用 RuntimeCore `LlmRequest` + 受控 metadata mapper；`media-runtime/src/video_worker.rs` 不再手写 Fal body shape，只保留 task payload 读取、local broker endpoint / Authorization header、route preflight、响应解析和状态编排。
+- 安全边界保持不变：图片 worker 仍只调用本地服务 broker endpoint，继续由 `model_route_execution` 校验 `local_lime_service`、`secretMaterialStatus=not_embedded` 与 route provider/model/protocol 一致；RuntimeCore mapper 不处理 API key、endpoint 改写、SSE 解析或 fallback。
+- 视频安全边界保持不变：视频 worker 仍只调用本地服务 broker endpoint，继续由 `model_route_execution` 校验 `local_lime_service`、`secretMaterialStatus=not_embedded` 与 route provider/model/protocol 一致；RuntimeCore 的 Fal mapper 只构建 body，不处理 API key、endpoint 改写或响应解析。
+- Phase 4 图片 / 视频媒体任务 evidence 收口：新增 RuntimeCore canonical `LlmEvent -> runtime event` 纯映射，`media-runtime` 在 image/video running、success、failed patch 中写入 `llm_events` / `llmEvents` 与 `provider_diagnostics` / `providerDiagnostics`；route-aware task 会记录 provider/model/protocol，旧 payload 没有 route 时不伪造 provider/model。
+- Phase 4 route 集成回归补强：`model_route_execution` image/video 集成测试同时断言最终 task payload 的 `turn.completed`、provider/model/protocol、`local_lime_service` transport 和 `not_embedded` credential，确保媒体复用不是只停留在请求体覆盖。
+- Phase 4 保守边界：音频 / 转写仍不声明可执行复用；当前没有独立 audio/transcription worker 能消费 `ResolvedModelRoute`，因此继续只保留 metadata-only / typed request evidence，后续接入 worker 后再写 executable route 与 runtime events。
 - 清理外部参考项目名残留：代码注释改成中性“多协议模型运行时”表述；Provider 图标 surface 和本地 provider 识别里的旧 provider id 按 `dead` 清掉；删除已无引用的旧 provider 图标资源文件。
 - 本轮没有数据库 schema、Provider 存储或 task artifact 结构变更；旧数据无需迁移脚本。后续如果把 `TaskExecutionContract` typed 化或把 route/event 写入持久化 schema，再补启动期迁移或 scripts 迁移入口。
-- 验证结果：`CARGO_TARGET_DIR="/tmp/lime-model-route-target" cargo test --manifest-path "lime-rs/Cargo.toml" -p runtime-core -- --nocapture` 通过；外部参考项目名的内容扫描和文件名扫描均无结果。
+- 验证结果：`CARGO_TARGET_DIR="/tmp/lime-model-route-target" cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server-protocol -- --nocapture`、`CARGO_TARGET_DIR="/tmp/lime-model-route-target" cargo test --manifest-path "lime-rs/Cargo.toml" -p runtime-core model_route -- --nocapture`、`CARGO_TARGET_DIR="/tmp/lime-aster-target" cargo test --manifest-path "lime-rs/crates/aster-rust/Cargo.toml" -p aster-core test_uses_responses_api -- --nocapture`、`CARGO_TARGET_DIR="/tmp/lime-model-route-target" cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server runtime_backend::model_route_resolver -- --nocapture`、`CARGO_TARGET_DIR="/tmp/lime-runtime-core-target" cargo test --manifest-path "lime-rs/Cargo.toml" -p runtime-core llm_protocol -- --nocapture`、`CARGO_TARGET_DIR="/tmp/lime-runtime-core-target" cargo test --manifest-path "lime-rs/Cargo.toml" -p runtime-core -- --nocapture`、`CARGO_TARGET_DIR="/tmp/lime-media-runtime-target" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-media-runtime execute_image_generation_task_should_support_responses_image_generation_executor -- --nocapture`、`CARGO_TARGET_DIR="/tmp/lime-media-runtime-target" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-media-runtime execute_image_generation_task_should_fallback_to_images_api_when_responses_route_missing -- --nocapture`、`CARGO_TARGET_DIR="/tmp/lime-media-runtime-target" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-media-runtime --test model_route_execution -- --nocapture`、`CARGO_TARGET_DIR="/tmp/lime-media-runtime-target" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-media-runtime -- --nocapture`、`CARGO_TARGET_DIR="/tmp/lime-media-runtime-target" cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-media-runtime`、`CARGO_TARGET_DIR="/tmp/lime-media-video-target" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-media-runtime execute_video_generation_task_should_advance_task_file_to_succeeded -- --nocapture`、`CARGO_TARGET_DIR="/tmp/lime-media-video-target" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-media-runtime --test model_route_execution -- --nocapture`、`CARGO_TARGET_DIR="/tmp/lime-media-video-check-target" cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-media-runtime`、`CARGO_TARGET_DIR="/tmp/lime-runtime-route-target" cargo test --manifest-path "lime-rs/Cargo.toml" -p runtime-core model_route -- --nocapture`、`CARGO_TARGET_DIR="/tmp/lime-app-route-target" cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server runtime_backend::model_route_resolver -- --nocapture`、`rustfmt --edition 2021 --check ...`、`npx prettier --check "internal/exec-plans/models-runtime-unification-plan.md" "internal/roadmap/models/prd.md" "packages/app-server-client/src/generated/protocol-types.ts"`、`git diff --check -- ...` 均通过；外部参考项目名的内容扫描和文件名扫描均无结果。`/tmp/lime-model-route-target` 曾因并发 Cargo 编译产生 dep-info / fingerprint 写入错误，已改用独立 target 目录重跑相关测试并通过。
 
 ### 2026-06-17
 

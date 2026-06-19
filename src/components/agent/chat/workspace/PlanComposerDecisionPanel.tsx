@@ -281,6 +281,7 @@ export function PlanComposerDecisionPanel({
           <PencilLine className="h-4 w-4 shrink-0 text-slate-400" />
           <input
             type="text"
+            data-testid="plan-composer-adjust-input"
             value={adjustment}
             disabled={isSubmitting}
             placeholder={t("agentChat.planComposerDecision.option.adjust")}

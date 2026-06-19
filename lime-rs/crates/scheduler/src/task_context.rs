@@ -285,7 +285,6 @@ impl AgentTaskRuntimeContext {
         let request_tool_policy = resolve_request_tool_policy_with_mode(
             bool_at(&task.params, WEB_SEARCH_POINTERS),
             search_mode_at(&task.params),
-            false,
         );
         let turn_context = build_turn_context(
             task,

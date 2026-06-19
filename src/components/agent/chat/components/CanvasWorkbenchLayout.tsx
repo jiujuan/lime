@@ -309,6 +309,7 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
   const [previewOnlyFilePath, setPreviewOnlyFilePath] = useState<string | null>(
     null,
   );
+  const handledPreviewOpenRequestKeyRef = useRef<string | number | null>(null);
   const hasAutoFocusedInitialDocumentTabRef = useRef(
     Boolean(documentSelectionKey),
   );
@@ -473,6 +474,9 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     if (!previewOpenRequest) {
       return;
     }
+    if (handledPreviewOpenRequestKeyRef.current === previewOpenRequest.requestKey) {
+      return;
+    }
     const selectionKey = previewOpenRequest.selectionKey?.trim();
     if (selectionKey) {
       if (documentContext?.selectionKey !== selectionKey) {
@@ -482,11 +486,13 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
       }
       setActiveTab(previewModeState.defaultMode);
       setPreviewOnlyFilePath(previewOpenRequest.filePath?.trim() || null);
+      handledPreviewOpenRequestKeyRef.current = previewOpenRequest.requestKey;
       onPreviewOpenRequestHandled?.(previewOpenRequest.requestKey);
       return;
     }
     setPreviewOnlyFilePath(previewOpenRequest.filePath?.trim() || null);
     setActiveTab(previewModeState.defaultMode);
+    handledPreviewOpenRequestKeyRef.current = previewOpenRequest.requestKey;
     onPreviewOpenRequestHandled?.(previewOpenRequest.requestKey);
   }, [
     onPreviewOpenRequestHandled,

@@ -121,10 +121,33 @@ mod tests {
     use crate::database::schema::create_tables;
     use rusqlite::Connection;
 
+    fn create_test_legacy_incident_table(conn: &Connection) -> Result<(), rusqlite::Error> {
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS agent_thread_incidents (
+                id TEXT PRIMARY KEY,
+                thread_id TEXT NOT NULL,
+                turn_id TEXT,
+                item_id TEXT,
+                incident_type TEXT NOT NULL,
+                severity TEXT NOT NULL,
+                status TEXT NOT NULL,
+                title TEXT NOT NULL,
+                details_json TEXT,
+                detected_at TEXT NOT NULL,
+                cleared_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )",
+            [],
+        )?;
+        Ok(())
+    }
+
     #[test]
     fn should_upsert_and_clear_active_incident() {
         let conn = Connection::open_in_memory().expect("创建内存数据库失败");
         create_tables(&conn).expect("创建表结构失败");
+        create_test_legacy_incident_table(&conn).expect("创建 legacy incident 测试表失败");
 
         let record = AgentThreadIncidentRecord {
             id: "incident-1".to_string(),

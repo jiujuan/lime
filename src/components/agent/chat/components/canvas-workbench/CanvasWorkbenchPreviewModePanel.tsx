@@ -10,6 +10,7 @@ import type {
   CanvasWorkbenchPreviewMode,
   CanvasWorkbenchPreviewModeState,
 } from "./CanvasWorkbenchPreviewModeViewModel";
+import { resolveCanvasWorkbenchHtmlPreviewFrameState } from "./CanvasWorkbenchPreviewModeViewModel";
 
 type CanvasWorkbenchTranslation = (
   key: string,
@@ -157,9 +158,12 @@ export const CanvasWorkbenchPreviewModePanel = memo(
       shouldRenderArtifactDirectly(artifactPreviewCandidate)
         ? artifactPreviewCandidate
         : null;
-    const htmlPreviewUrl =
+    const htmlPreviewFrame =
       mode === "html"
-        ? resolveLocalFilePreviewUrl(context.selectionPath)
+        ? resolveCanvasWorkbenchHtmlPreviewFrameState(
+            context,
+            resolveLocalFilePreviewUrl,
+          )
         : null;
     const codeLanguage =
       mode === "html" ? "html" : modeState.language || "text";
@@ -238,13 +242,9 @@ export const CanvasWorkbenchPreviewModePanel = memo(
           ) : mode === "html" ? (
             <iframe
               data-testid="canvas-workbench-html-preview"
-              src={htmlPreviewUrl || undefined}
-              srcDoc={htmlPreviewUrl ? undefined : context.content}
-              sandbox={
-                htmlPreviewUrl
-                  ? "allow-scripts allow-forms allow-popups allow-modals allow-same-origin"
-                  : "allow-scripts allow-forms allow-popups allow-modals"
-              }
+              src={htmlPreviewFrame?.src || undefined}
+              srcDoc={htmlPreviewFrame?.srcDoc}
+              sandbox={htmlPreviewFrame?.sandbox}
               className="h-full min-h-[420px] w-full border-0 bg-white"
               title={
                 context.title ||

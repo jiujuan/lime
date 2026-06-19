@@ -60,6 +60,17 @@ function compareItemOrder(
   return String(left.id || "").localeCompare(String(right.id || ""));
 }
 
+function threadItemMergeKey(item: AgentThreadItem): string {
+  if (
+    item.type === "tool_call" ||
+    item.type === "command_execution" ||
+    item.type === "web_search"
+  ) {
+    return `${item.turn_id || ""}:${item.id}`;
+  }
+  return item.id;
+}
+
 function isEmptyMergeValue(value: unknown): boolean {
   return (
     value === undefined ||
@@ -136,7 +147,10 @@ export function upsertThreadItemState(
   items: AgentThreadItem[],
   nextItem: AgentThreadItem,
 ): AgentThreadItem[] {
-  const existingIndex = items.findIndex((item) => item.id === nextItem.id);
+  const nextKey = threadItemMergeKey(nextItem);
+  const existingIndex = items.findIndex(
+    (item) => threadItemMergeKey(item) === nextKey,
+  );
   if (existingIndex < 0) {
     return [...items, nextItem].sort(compareItemOrder);
   }
@@ -148,7 +162,7 @@ export function upsertThreadItemState(
   }
 
   const nextItems = items.map((item) =>
-    item.id === nextItem.id ? mergedItem : item,
+    threadItemMergeKey(item) === nextKey ? mergedItem : item,
   );
   nextItems.sort(compareItemOrder);
   return nextItems;

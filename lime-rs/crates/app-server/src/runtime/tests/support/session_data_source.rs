@@ -3,6 +3,8 @@ use super::super::*;
 pub(in crate::runtime::tests) struct TestSessionDataSource {
     persisted: Option<AgentSessionReadResponse>,
     workspace: Option<serde_json::Value>,
+    memory_store_read_response: Mutex<Option<Result<MemoryStoreReadResponse, String>>>,
+    memory_store_read_requests: Mutex<Vec<MemoryStoreReadParams>>,
     objective: Mutex<Option<ManagedObjective>>,
     audit_updates: Mutex<Vec<ManagedObjectiveAuditUpdate>>,
     knowledge_compile_requests: Mutex<Vec<lime_knowledge::KnowledgeCompilePackRequest>>,
@@ -13,6 +15,8 @@ impl TestSessionDataSource {
         Self {
             persisted: Some(persisted),
             workspace: None,
+            memory_store_read_response: Mutex::new(None),
+            memory_store_read_requests: Mutex::new(Vec::new()),
             objective: Mutex::new(None),
             audit_updates: Mutex::new(Vec::new()),
             knowledge_compile_requests: Mutex::new(Vec::new()),
@@ -24,6 +28,17 @@ impl TestSessionDataSource {
             workspace: Some(workspace),
             ..self
         }
+    }
+
+    pub(in crate::runtime::tests) fn with_memory_store_read_response(
+        self,
+        response: Result<MemoryStoreReadResponse, String>,
+    ) -> Self {
+        *self
+            .memory_store_read_response
+            .lock()
+            .expect("test memory response mutex poisoned") = Some(response);
+        self
     }
 
     pub(in crate::runtime::tests) fn with_objective(self, objective: ManagedObjective) -> Self {
@@ -54,6 +69,15 @@ impl TestSessionDataSource {
         self.knowledge_compile_requests
             .lock()
             .expect("test knowledge compile requests mutex poisoned")
+            .clone()
+    }
+
+    pub(in crate::runtime::tests) fn memory_store_read_requests(
+        &self,
+    ) -> Vec<MemoryStoreReadParams> {
+        self.memory_store_read_requests
+            .lock()
+            .expect("test memory requests mutex poisoned")
             .clone()
     }
 }
@@ -201,7 +225,30 @@ impl AgentAppDataSource for TestSessionDataSource {}
 impl AutomationOverviewAppDataSource for TestSessionDataSource {}
 impl McpAppDataSource for TestSessionDataSource {}
 impl AutomationManagementAppDataSource for TestSessionDataSource {}
-impl MemoryAppDataSource for TestSessionDataSource {}
+#[async_trait]
+impl MemoryAppDataSource for TestSessionDataSource {
+    async fn read_memory_store(
+        &self,
+        params: MemoryStoreReadParams,
+    ) -> Result<MemoryStoreReadResponse, RuntimeCoreError> {
+        self.memory_store_read_requests
+            .lock()
+            .expect("test memory requests mutex poisoned")
+            .push(params);
+        let response = self
+            .memory_store_read_response
+            .lock()
+            .expect("test memory response mutex poisoned")
+            .clone();
+        match response {
+            Some(Ok(response)) => Ok(response),
+            Some(Err(message)) => Err(RuntimeCoreError::Backend(message)),
+            None => Err(RuntimeCoreError::Backend(
+                "memoryStore/read unavailable in test data source".to_string(),
+            )),
+        }
+    }
+}
 impl DiagnosticsAppDataSource for TestSessionDataSource {}
 impl UsageStatsAppDataSource for TestSessionDataSource {}
 impl ModelProviderAppDataSource for TestSessionDataSource {}

@@ -142,6 +142,7 @@ const mockStreamingRenderer = vi.fn(
     contentParts,
     thinkingContent,
     toolCalls,
+    onOpenUrlPreview,
     onOpenSavedSiteContent,
     suppressProcessFlow,
     showRuntimeStatusInline,
@@ -168,6 +169,7 @@ const mockStreamingRenderer = vi.fn(
     markdownRenderMode?: string;
     readOnlyA2UI?: boolean;
     readOnlyActionRequests?: boolean;
+    onOpenUrlPreview?: (target: unknown) => void;
     onOpenSavedSiteContent?: (target: {
       projectId: string;
       contentId: string;
@@ -179,6 +181,7 @@ const mockStreamingRenderer = vi.fn(
       data-content-parts={contentParts?.length ?? 0}
       data-tool-calls={toolCalls?.length ?? 0}
       data-has-thinking-content={thinkingContent ? "yes" : "no"}
+      data-has-open-url-preview={onOpenUrlPreview ? "yes" : "no"}
       data-has-open-saved-site-content={onOpenSavedSiteContent ? "yes" : "no"}
       data-suppress-process-flow={suppressProcessFlow ? "yes" : "no"}
       data-show-runtime-status-inline={showRuntimeStatusInline ? "yes" : "no"}
@@ -219,6 +222,15 @@ const mockAgentThreadTimeline = vi.fn(
       data-turn-id={turn?.id || ""}
     >
       执行轨迹{actionRequests?.length ? `:${actionRequests.length}` : ""}
+      {(items || [])
+        .filter((item) => item.type === "web_search" || item.type === "tool_call")
+        .map((item) => (
+          <span
+            key={item.id}
+            data-testid="timeline-process-item"
+            data-item-status={item.status}
+          />
+        ))}
       {(items || [])
         .filter((item) => item.type === "file_artifact")
         .map((item) => (
@@ -638,6 +650,70 @@ describe("MessageList", () => {
     }
   });
 
+  it("用户上拉阅读时流式追加不应强制滚回底部", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    mountedRoots.push({ container: host, root });
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    const originalRequestAnimationFrame = window.requestAnimationFrame;
+    const scrollIntoViewMock = vi.fn();
+    const messages: Message[] = [
+      {
+        id: "user-stream-scroll-away",
+        role: "user",
+        content: "继续输出",
+        timestamp: new Date("2026-04-25T10:00:00.000Z"),
+      },
+      {
+        id: "assistant-stream-scroll-away",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-04-25T10:00:01.000Z"),
+      },
+    ];
+
+    HTMLElement.prototype.scrollIntoView = scrollIntoViewMock;
+    window.requestAnimationFrame = ((callback: (timestamp: number) => void) => {
+      callback(0);
+      return 1;
+    }) as typeof window.requestAnimationFrame;
+
+    try {
+      act(() => {
+        root.render(<MessageList messages={messages} isSending />);
+      });
+
+      const scrollContainer = host.querySelector<HTMLElement>(
+        '[data-testid="message-list-scroll-container"]',
+      );
+      expect(scrollContainer).not.toBeNull();
+      setScrollMetrics(scrollContainer as HTMLElement, {
+        scrollTop: 780,
+        scrollHeight: 1200,
+        clientHeight: 400,
+      });
+      scrollIntoViewMock.mockClear();
+
+      act(() => {
+        scrollContainer?.dispatchEvent(
+          new WheelEvent("wheel", { bubbles: true, deltaY: -120 }),
+        );
+        upsertAgentStreamTextOverlay({
+          messageId: "assistant-stream-scroll-away",
+          eventName: "response.output_text.delta",
+          content: "新的流式内容到达，但用户正在上拉阅读",
+          updatedAt: 1,
+        });
+      });
+
+      expect(scrollIntoViewMock).not.toHaveBeenCalled();
+    } finally {
+      HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
+      window.requestAnimationFrame = originalRequestAnimationFrame;
+    }
+  });
+
   it("流式正文 overlay 应优先渲染并替代首 token 占位", () => {
     upsertAgentStreamTextOverlay({
       messageId: "assistant-overlay",
@@ -880,7 +956,7 @@ describe("MessageList", () => {
     );
     expect(
       container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
-    ).not.toBeNull();
+    ).toBeNull();
   });
 
   it("旧会话已分页窗口首帧应只挂载更小的尾部批次", () => {
@@ -2741,6 +2817,99 @@ describe("MessageList", () => {
     ).toBe("no");
   });
 
+  it("read model 已完成且有最终正文时不应显示残留正在输出", () => {
+    const now = new Date("2026-06-07T10:40:00.000Z");
+    const turn: AgentThreadTurn = {
+      id: "turn-live-web-completed",
+      thread_id: "thread-live-web-completed",
+      prompt_text: "该买哪种学习机，帮我找权威评测对比",
+      status: "completed",
+      started_at: "2026-06-07T10:40:00.000Z",
+      completed_at: "2026-06-07T10:45:00.000Z",
+      created_at: "2026-06-07T10:40:00.000Z",
+      updated_at: "2026-06-07T10:45:00.000Z",
+    };
+    const messages: Message[] = [
+      {
+        id: "msg-user-live-web-completed",
+        role: "user",
+        content: "该买哪种学习机，帮我找权威评测对比",
+        timestamp: now,
+      },
+      {
+        id: "msg-assistant-live-web-completed",
+        role: "assistant",
+        runtimeTurnId: turn.id,
+        content:
+          "综合权威评测与产品参数，科大讯飞适合重视英语口语和错题整理的家庭。",
+        contentParts: [
+          {
+            type: "text",
+            text: "综合权威评测与产品参数，科大讯飞适合重视英语口语和错题整理的家庭。",
+          },
+        ],
+        timestamp: new Date("2026-06-07T10:45:00.000Z"),
+        isThinking: true,
+        runtimeStatus: {
+          phase: "synthesizing",
+          title: "正在输出",
+          detail: "模型尾段状态尚未从本地流清除。",
+        },
+      },
+    ];
+
+    const container = render(messages, {
+      currentTurnId: null,
+      isSending: false,
+      turns: [turn],
+      threadItems: [
+        {
+          id: "web-search-completed",
+          type: "web_search",
+          turn_id: turn.id,
+          sequence: 1,
+          action: "search",
+          query: "学习机 权威评测 对比",
+          output: "搜索结果摘要",
+          status: "completed",
+          started_at: "2026-06-07T10:40:05.000Z",
+          completed_at: "2026-06-07T10:40:08.000Z",
+          updated_at: "2026-06-07T10:40:08.000Z",
+        } as never,
+        {
+          id: "assistant-final-completed",
+          type: "agent_message",
+          turn_id: turn.id,
+          sequence: 2,
+          phase: "final_answer",
+          text: "综合权威评测与产品参数，科大讯飞适合重视英语口语和错题整理的家庭。",
+          status: "completed",
+          started_at: "2026-06-07T10:44:58.000Z",
+          completed_at: "2026-06-07T10:45:00.000Z",
+          updated_at: "2026-06-07T10:45:00.000Z",
+        } as never,
+      ],
+      threadRead: {
+        thread_id: "thread-live-web-completed",
+        status: "completed",
+        active_turn_id: undefined,
+        pending_requests: [],
+      },
+    });
+
+    expect(container.textContent).toContain("科大讯飞适合重视英语口语");
+    expect(
+      container.querySelector(
+        '[data-testid="assistant-streaming-inline-indicator"]',
+      ),
+    ).toBeNull();
+    expect(
+      container
+        .querySelector('[data-testid="streaming-renderer"]')
+        ?.getAttribute("data-is-streaming"),
+    ).toBe("no");
+  });
+
   it("首个文本分片到来前，不应把运行态当作 assistant 回复渲染", () => {
     const now = new Date();
     const messages: Message[] = [
@@ -3215,6 +3384,148 @@ describe("MessageList", () => {
         }),
       ]),
     );
+  });
+
+  it("第二轮流式输出时，第一轮完整正文与工具过程不应被截断或覆盖", () => {
+    const firstTurnCompletedText = [
+      "第一轮已经完成。",
+      "这一轮包含完整的结果说明和一段较长的正文，用来模拟用户反馈里被截断的历史回复。",
+      "## 第一轮结论",
+      "",
+      "- 已完成分析",
+      "- 已保留工具过程",
+    ].join("\n");
+    const firstCompletedToolCall = {
+      id: "tool-web-search-first-turn",
+      name: "web_search",
+      arguments: '{"query":"first turn"}',
+      status: "completed" as const,
+      startTime: new Date("2026-04-15T09:00:01.000Z"),
+      endTime: new Date("2026-04-15T09:00:02.000Z"),
+      result: {
+        success: true,
+        output: "已搜索网页 3 次",
+      },
+    };
+    const messages: Message[] = [
+      {
+        id: "msg-user-first-turn-complete",
+        role: "user",
+        content: "先完成第一轮分析",
+        timestamp: new Date("2026-04-15T09:00:00.000Z"),
+      },
+      {
+        id: "msg-assistant-first-turn-complete",
+        role: "assistant",
+        content: firstTurnCompletedText,
+        timestamp: new Date("2026-04-15T09:00:03.000Z"),
+        toolCalls: [firstCompletedToolCall],
+        contentParts: [
+          {
+            type: "tool_use",
+            toolCall: firstCompletedToolCall,
+          },
+          {
+            type: "text",
+            text: firstTurnCompletedText,
+          },
+        ],
+      },
+      {
+        id: "msg-user-second-turn-running",
+        role: "user",
+        content: "继续第二轮",
+        timestamp: new Date("2026-04-15T09:00:10.000Z"),
+      },
+      {
+        id: "msg-assistant-second-turn-running",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-04-15T09:00:11.000Z"),
+        isThinking: true,
+        runtimeStatus: {
+          phase: "preparing",
+          title: "准备第二轮",
+          detail: "正在建立第二轮上下文。",
+          checkpoints: ["等待第二轮工具调用"],
+        },
+      },
+    ];
+
+    upsertAgentStreamTextOverlay({
+      messageId: "msg-assistant-second-turn-running",
+      eventName: "response.output_text.delta",
+      content: "第二轮正在继续输出。",
+      updatedAt: Date.parse("2026-04-15T09:00:12.000Z"),
+    });
+
+    render(messages, {
+      isSending: true,
+      currentTurnId: "turn-second-running",
+      turns: [
+        {
+          id: "turn-first-complete",
+          thread_id: "thread-1",
+          prompt_text: "先完成第一轮分析",
+          status: "completed",
+          started_at: "2026-04-15T09:00:00.000Z",
+          completed_at: "2026-04-15T09:00:05.000Z",
+          created_at: "2026-04-15T09:00:00.000Z",
+          updated_at: "2026-04-15T09:00:05.000Z",
+        },
+        {
+          id: "turn-second-running",
+          thread_id: "thread-1",
+          prompt_text: "继续第二轮",
+          status: "running",
+          started_at: "2026-04-15T09:00:10.000Z",
+          created_at: "2026-04-15T09:00:10.000Z",
+          updated_at: "2026-04-15T09:00:11.000Z",
+        },
+      ],
+      threadItems: [
+        {
+          id: "tool-first-turn",
+          thread_id: "thread-1",
+          turn_id: "turn-first-complete",
+          sequence: 1,
+          status: "completed",
+          started_at: "2026-04-15T09:00:01.000Z",
+          completed_at: "2026-04-15T09:00:02.000Z",
+          updated_at: "2026-04-15T09:00:02.000Z",
+          type: "tool_call",
+          tool_name: "web_search",
+          arguments: { query: "first turn" },
+          output: "已搜索网页 3 次",
+          success: true,
+        },
+      ],
+    });
+
+    const firstAssistantCall = mockStreamingRenderer.mock.calls.find(
+      ([props]) => props.content === firstTurnCompletedText,
+    )?.[0];
+    const secondAssistantCall = mockStreamingRenderer.mock.calls.find(
+      ([props]) => props.content === "第二轮正在继续输出。",
+    )?.[0];
+
+    expect(firstAssistantCall?.content).toContain("第一轮已经完成。");
+    expect(firstAssistantCall?.content).toContain("## 第一轮结论");
+    expect(firstAssistantCall?.isStreaming).toBe(false);
+    expect(firstAssistantCall?.contentParts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "tool_use",
+        }),
+        expect.objectContaining({
+          type: "text",
+          text: firstTurnCompletedText,
+        }),
+      ]),
+    );
+    expect(secondAssistantCall?.content).toBe("第二轮正在继续输出。");
+    expect(secondAssistantCall?.content).not.toContain("第一轮已经完成。");
+    expect(secondAssistantCall?.isStreaming).toBe(true);
   });
 
   it("图片任务消息卡应在聊天区渲染预览并支持展开图片画布", async () => {
@@ -4725,6 +5036,42 @@ describe("MessageList", () => {
     });
   });
 
+  it("assistant 消息应把 URL 预览入口透传给流式渲染器", () => {
+    const now = new Date();
+    const onOpenUrlPreview = vi.fn();
+    const messages: Message[] = [
+      {
+        id: "msg-assistant-url-preview",
+        role: "assistant",
+        content: "已完成搜索。",
+        timestamp: now,
+        toolCalls: [
+          {
+            id: "tool-search-inline",
+            name: "WebSearch",
+            arguments: JSON.stringify({ query: "AI Agent 最新热点" }),
+            status: "completed",
+            result: {
+              success: true,
+              output:
+                "Example result\nhttps://example.com/result\n搜索摘要。",
+            },
+          },
+        ],
+      },
+    ];
+
+    const container = render(messages, { onOpenUrlPreview });
+
+    expect(container.querySelector('[data-testid="streaming-renderer"]')).not
+      .toBeNull();
+    expect(mockStreamingRenderer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        onOpenUrlPreview,
+      }),
+    );
+  });
+
   it("当前活动 assistant A2UI 应继续在消息正文里内联渲染", () => {
     const now = new Date();
     const messages: Message[] = [
@@ -5375,7 +5722,7 @@ describe("MessageList", () => {
 
     expect(
       container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
-    ).not.toBeNull();
+    ).toBeNull();
     expect(
       container
         .querySelector('[data-testid="agent-thread-timeline:leading"]')
@@ -5672,7 +6019,7 @@ describe("MessageList", () => {
 
     expect(
       container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
-    ).not.toBeNull();
+    ).toBeNull();
     const leadingTimelineProps = mockAgentThreadTimeline.mock.calls.find(
       ([props]) => props?.placement === "leading",
     )?.[0] as { items?: AgentThreadItem[] } | undefined;
@@ -6546,12 +6893,6 @@ describe("MessageList", () => {
           { type: "thinking", text: "The search plan is forming." },
           expect.objectContaining({ type: "tool_use" }),
         ],
-        toolCalls: [
-          expect.objectContaining({
-            id: "tool-active-search-1",
-            status: "running",
-          }),
-        ],
       }),
     );
   });
@@ -6756,7 +7097,7 @@ describe("MessageList", () => {
     ).not.toBeNull();
   });
 
-  it("完成态 timeline 已有计划时应禁用正文计划块解析并保留内联思考顺序", () => {
+  it("完成态 timeline 已有计划时应内联计划块并保留本地思考顺序", () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -6809,18 +7150,26 @@ describe("MessageList", () => {
 
     expect(
       container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
-    ).not.toBeNull();
+    ).toBeNull();
     expect(
       container.querySelector('[data-testid="agent-thread-timeline:trailing"]'),
     ).toBeNull();
     expect(mockStreamingRenderer).toHaveBeenCalledWith(
       expect.objectContaining({
-        renderProposedPlanBlocks: false,
+        renderProposedPlanBlocks: true,
         thinkingContent: undefined,
         contentParts: [
           {
             type: "thinking",
             text: "先对照用户截图，再确认 thread item 是否有重复来源。",
+          },
+          {
+            type: "text",
+            text:
+              "<proposed_plan>\n" +
+              "1. 合并 assistant turn\n" +
+              "2. 收拢补充 timeline\n" +
+              "</proposed_plan>",
           },
           { type: "text", text: "已经整理完执行思路。" },
         ],
@@ -7491,11 +7840,24 @@ describe("MessageList", () => {
 
     expect(
       container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
-    ).not.toBeNull();
+    ).toBeNull();
     expect(
       container.querySelector('[data-testid="agent-thread-timeline:trailing"]'),
     ).toBeNull();
-    expect(mockAgentThreadTimeline).toHaveBeenCalledTimes(1);
+    expect(mockAgentThreadTimeline).not.toHaveBeenCalled();
+    expect(mockStreamingRenderer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contentParts: [
+          expect.objectContaining({
+            type: "tool_use",
+            toolCall: expect.objectContaining({
+              id: "tool-finished-1",
+            }),
+          }),
+          { type: "text", text: "已经打开 GitHub 并完成搜索。" },
+        ],
+      }),
+    );
   });
 
   it("应按回合分组展示同一轮用户与后续助手回复", () => {
@@ -7627,35 +7989,24 @@ describe("MessageList", () => {
     });
   });
 
-  it("助手结果应支持保存到灵感库", () => {
-    const onSaveMessageAsInspiration = vi.fn();
+  it("助手结果不应再暴露旧灵感库保存入口", () => {
     const now = new Date();
     const messages: Message[] = [
       {
         id: "msg-assistant-save-memory",
         role: "assistant",
         content:
-          "这是一段足够长的结果说明，用来验证助手消息上会出现保存到灵感库的入口。",
+          "这是一段足够长的结果说明，用来验证助手消息不会再出现旧灵感库保存入口。",
         timestamp: now,
       },
     ];
 
-    const container = render(messages, { onSaveMessageAsInspiration });
+    const container = render(messages);
     const saveButton = container.querySelector(
       'button[aria-label="Save to inspiration"]',
     );
 
-    expect(saveButton).not.toBeNull();
-
-    act(() => {
-      saveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    expect(onSaveMessageAsInspiration).toHaveBeenCalledWith({
-      messageId: "msg-assistant-save-memory",
-      content:
-        "这是一段足够长的结果说明，用来验证助手消息上会出现保存到灵感库的入口。",
-    });
+    expect(saveButton).toBeNull();
   });
 
   it("助手结果应支持保存到项目资料", () => {
@@ -7822,7 +8173,9 @@ describe("MessageList", () => {
     expect(
       container.querySelector('[data-testid="markdown-renderer"]'),
     ).toBeNull();
-    const image = container.querySelector('img[alt="attachment"]');
+    const image = container.querySelector(
+      '[data-testid="message-image-attachment-0"]',
+    );
     expect(image).toBeTruthy();
     expect(container.textContent).not.toContain("[Image #1]");
   });

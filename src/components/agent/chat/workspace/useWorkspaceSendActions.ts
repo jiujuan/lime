@@ -664,7 +664,7 @@ export function useWorkspaceSendActions({
         browserRequirementMatch.requirement !== "optional"
           ? false
           : undefined;
-      const effectiveSearchMode =
+      let effectiveSearchMode =
         browserRequirementMatch &&
         browserRequirementMatch.requirement !== "optional"
           ? "disabled"
@@ -1251,7 +1251,10 @@ export function useWorkspaceSendActions({
             sendOptions?.requestMetadata,
             requestContext,
           ),
+          explicitToolPreferences: true,
         };
+        effectiveWebSearch = true;
+        effectiveSearchMode = sendOptions.searchMode ?? "allowed";
         markCompletedMentionCommand(
           "research",
           resolveMentionCommandReplayText(

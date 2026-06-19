@@ -17,7 +17,6 @@ import type {
   AgentRuntimeFileCheckpointRestoreResult,
   AgentRuntimeThreadReadModel,
 } from "@/lib/api/agentRuntime";
-import type { TeamMemorySnapshot } from "@/lib/teamMemorySync";
 import type { HarnessSessionState } from "../utils/harnessState";
 import { conversationProjectionStore } from "../projection/conversationProjectionStore";
 import { changeLimeLocale } from "@/i18n/createI18n";
@@ -35,7 +34,6 @@ const hoistedMocks = vi.hoisted(() => ({
     success: vi.fn(),
     error: vi.fn(),
   },
-  mockPrefetchContextMemoryForTurn: vi.fn(),
 }));
 
 export const diffAgentRuntimeFileCheckpointMock =
@@ -47,8 +45,6 @@ export const listAgentRuntimeFileCheckpointsMock =
 export const restoreAgentRuntimeFileCheckpointMock =
   hoistedMocks.restoreAgentRuntimeFileCheckpointMock;
 export const mockToast = hoistedMocks.mockToast;
-export const mockPrefetchContextMemoryForTurn =
-  hoistedMocks.mockPrefetchContextMemoryForTurn;
 
 vi.mock("sonner", () => ({
   toast: hoistedMocks.mockToast,
@@ -70,10 +66,6 @@ vi.mock("@/lib/api/agentRuntime", async () => {
       hoistedMocks.restoreAgentRuntimeFileCheckpointMock,
   };
 });
-
-vi.mock("@/lib/api/memoryRuntime", () => ({
-  prefetchContextMemoryForTurn: hoistedMocks.mockPrefetchContextMemoryForTurn,
-}));
 
 interface MountedHarness {
   container: HTMLDivElement;
@@ -288,15 +280,6 @@ beforeEach(async () => {
     },
   });
   window.localStorage.clear();
-  mockPrefetchContextMemoryForTurn.mockResolvedValue({
-    session_id: "session-default",
-    rules_source_paths: [],
-    working_memory_excerpt: null,
-    durable_memories: [],
-    team_memory_entries: [],
-    latest_compaction: null,
-    prompt: null,
-  });
   listAgentRuntimeFileCheckpointsMock.mockResolvedValue(
     createFileCheckpointListResult(),
   );
@@ -343,14 +326,12 @@ export function renderPanel(props?: {
   onReplayPendingRequest?: (requestId: string) => boolean | Promise<boolean>;
   onLocatePendingRequest?: (requestId: string) => void;
   onPromoteQueuedTurn?: (queuedTurnId: string) => boolean | Promise<boolean>;
-  onOpenMemoryWorkbench?: () => void;
   onManageProviders?: (context?: ProviderSettingsFocusContext) => void;
   onOpenExecutionPolicySettings?: (
     context?: ExecutionPolicyFocusContext,
   ) => void;
   harnessState?: HarnessSessionState | null;
   messages?: Message[];
-  teamMemorySnapshot?: TeamMemorySnapshot | null;
   diagnosticRuntimeContext?: {
     sessionId?: string | null;
     workspaceId?: string | null;
@@ -381,12 +362,10 @@ export function renderPanel(props?: {
         onReplayPendingRequest={props?.onReplayPendingRequest}
         onLocatePendingRequest={props?.onLocatePendingRequest}
         onPromoteQueuedTurn={props?.onPromoteQueuedTurn}
-        onOpenMemoryWorkbench={props?.onOpenMemoryWorkbench}
         onManageProviders={props?.onManageProviders}
         onOpenExecutionPolicySettings={props?.onOpenExecutionPolicySettings}
         harnessState={props?.harnessState}
         messages={props?.messages}
-        teamMemorySnapshot={props?.teamMemorySnapshot}
         diagnosticRuntimeContext={props?.diagnosticRuntimeContext}
       />,
     );

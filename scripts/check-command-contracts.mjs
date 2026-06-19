@@ -867,8 +867,10 @@ function collectFrontendCommandUsage() {
   for (const root of sourceRoots) {
     const absoluteRoot = path.join(repoRoot, root);
     for (const relativePath of walkDirectory(absoluteRoot)) {
-      const absolutePath = path.join(repoRoot, relativePath);
-      const sourceCode = fs.readFileSync(absolutePath, "utf8");
+      const sourceCode = readSourceIfExists(relativePath);
+      if (sourceCode === null) {
+        continue;
+      }
       for (const command of extractCommandsFromSource(sourceCode)) {
         addUsage(commandUsage, command, relativePath);
       }
@@ -1065,6 +1067,21 @@ function readSource(relativePath) {
   return fs.readFileSync(path.join(repoRoot, relativePath), "utf8");
 }
 
+function readSourceIfExists(relativePath) {
+  const absolutePath = path.join(repoRoot, relativePath);
+  if (!fs.existsSync(absolutePath)) {
+    return null;
+  }
+  try {
+    return fs.readFileSync(absolutePath, "utf8");
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return null;
+    }
+    throw error;
+  }
+}
+
 function readExistingProductionSourceForGuard(relativePath) {
   const absolutePath = path.join(repoRoot, relativePath);
   if (!fs.existsSync(absolutePath)) {
@@ -1250,7 +1267,10 @@ function collectProductionMockOnlyUsageFailures() {
         continue;
       }
 
-      const sourceCode = readSource(relativePath);
+      const sourceCode = readSourceIfExists(relativePath);
+      if (sourceCode === null) {
+        continue;
+      }
       if (
         /from\s+["'`](?:@\/lib\/dev-bridge\/explicitMockFallback|\.{1,2}\/[^"'`]*explicitMockFallback|\.\/explicitMockFallback)["'`]/.test(
           sourceCode,
@@ -1485,13 +1505,29 @@ function collectProductionBridgeGuardFailures() {
     appServerHostSource,
     "function resolveAppServerRequestTimeoutMs",
   );
+  if (
+    !runtimeRequestTimeoutBody.includes(
+      "resolveDefaultAppServerRequestTimeoutMs(method)",
+    )
+  ) {
+    failures.push({
+      file: appServerHostPath,
+      message:
+        "Electron App Server host 的请求 timeout override 必须以默认 method timeout 为下限",
+      token: "resolveDefaultAppServerRequestTimeoutMs(method)",
+    });
+  }
+  const runtimeDefaultRequestTimeoutBody = extractNamedFunctionBody(
+    appServerHostSource,
+    "function resolveDefaultAppServerRequestTimeoutMs",
+  );
   for (const snippet of [
     "method !== APP_SERVER_TURN_START_METHOD",
     "process.env.APP_SERVER_BACKEND_TIMEOUT_MS",
     "APP_SERVER_BACKEND_TIMEOUT_GRACE_MS",
     "DEFAULT_APP_SERVER_REQUEST_TIMEOUT_MS",
   ]) {
-    if (!runtimeRequestTimeoutBody.includes(snippet)) {
+    if (!runtimeDefaultRequestTimeoutBody.includes(snippet)) {
       failures.push({
         file: appServerHostPath,
         message:
@@ -5743,7 +5779,7 @@ function main() {
   if (retiredUnifiedMemoryFacadeLeaks.size > 0) {
     hasError = true;
     printCommandGroup(
-      "Unified Memory 已迁到 App Server unifiedMemory/* current，旧 unified_memory_* 不能回到前端调用、DevBridge truth、mock priority、runtime catalog 或 deferred 白名单",
+      "旧 unified_memory_* 已被 memoryStore/* current 取代，不能回到前端调用、DevBridge truth、mock priority、runtime catalog 或 deferred 白名单",
       retiredUnifiedMemoryFacadeLeaks,
       frontendUsage,
     );

@@ -101,6 +101,12 @@ pub struct ConversationImportSourceSummary {
     pub readable: bool,
     #[serde(default)]
     pub thread_count: usize,
+    #[serde(default)]
+    pub source_home_exists: bool,
+    #[serde(default)]
+    pub state_db_readable: bool,
+    #[serde(default)]
+    pub rollout_file_count: usize,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub indexed_at: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

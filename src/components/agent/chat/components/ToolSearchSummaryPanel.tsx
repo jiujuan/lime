@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import {
   type ToolSearchResultSummary,
   resolveUserFacingToolSearchItemLabel,
@@ -17,18 +18,21 @@ function shouldShowUserFacingQuery(query: string | undefined): boolean {
   return !/^(?:select|tool|tools|name|tag):/i.test(normalized);
 }
 
-function resolveUserFacingToolSearchNote(note: string): string | null {
+function resolveUserFacingToolSearchNote(
+  note: string,
+  t: (key: string, values?: Record<string, unknown>) => string,
+): string | null {
   const trimmed = note.trim();
   if (!trimmed) {
     return null;
   }
 
   if (/未命中.*deferred/i.test(trimmed)) {
-    return "没有找到更多匹配工具";
+    return t("agentChat.toolCall.toolSearch.note.noMoreMatches");
   }
 
   if (/tools\[\*\]\.call_name|不要继续用\s*ToolSearch/i.test(trimmed)) {
-    return "已确认工具入口，接下来可直接执行对应工具";
+    return t("agentChat.toolCall.toolSearch.note.ready");
   }
 
   if (
@@ -46,20 +50,31 @@ export function ToolSearchSummaryPanel({
   summary,
   testId,
 }: ToolSearchSummaryPanelProps) {
+  const { t } = useTranslation("agent");
   const pendingServersText =
     summary.pendingMcpServers && summary.pendingMcpServers.length > 0
-      ? `以下 MCP 服务仍在连接中：${summary.pendingMcpServers.join("、")}`
+      ? t("agentChat.toolCall.toolSearch.pendingServers", {
+          servers: summary.pendingMcpServers.join(", "),
+        })
       : null;
   const userFacingNotes = summary.notes
-    .map((note) => resolveUserFacingToolSearchNote(note))
+    .map((note) => resolveUserFacingToolSearchNote(note, t))
     .filter((note): note is string => Boolean(note));
 
   return (
     <div className="space-y-2" data-testid={testId}>
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
-        <span>找到工具：{summary.count} 个</span>
+        <span>
+          {t("agentChat.toolCall.toolSearch.foundTools", {
+            count: summary.count,
+          })}
+        </span>
         {shouldShowUserFacingQuery(summary.query) ? (
-          <span className="break-all">查询：{summary.query}</span>
+          <span className="break-all">
+            {t("agentChat.toolCall.toolSearch.query", {
+              query: summary.query,
+            })}
+          </span>
         ) : null}
       </div>
 

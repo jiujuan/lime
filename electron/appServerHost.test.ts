@@ -10,8 +10,10 @@ const {
   fakeConnection,
   lifecycleConfigs,
   recordedRequests,
+  releaseDelayedStaleError,
   resetFakeConnection,
   setTurnStartRequestMode,
+  waitForDelayedStaleErrorReady,
   FakeAppServerSidecarLifecycle,
 } = vi.hoisted(() => {
   const recordedRequests: JsonRpcRequest[] = [];
@@ -21,13 +23,48 @@ const {
     productDbMigrationCleanup?: string;
   }> = [];
   const mirroredNotifications: JsonRpcMessage[] = [];
-  let turnStartRequestMode: "resolve" | "hang" | "throw-stale-once" = "resolve";
+  const delayedStaleErrorReadyResolvers: Array<() => void> = [];
+  let releaseDelayedStaleError: (() => void) | null = null;
+  let turnStartRequestMode:
+    | "resolve"
+    | "hang"
+    | "throw-stale-once"
+    | "throw-exited-before-next-message"
+    | "throw-exited-before-next-message-after-release" = "resolve";
+  function waitForDelayedStaleErrorRelease(): Promise<void> {
+    delayedStaleErrorReadyResolvers.splice(0).forEach((resolve) => resolve());
+    return new Promise((resolve) => {
+      releaseDelayedStaleError = resolve;
+    });
+  }
+  function waitForDelayedStaleErrorReady(): Promise<void> {
+    if (releaseDelayedStaleError) {
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      delayedStaleErrorReadyResolvers.push(resolve);
+    });
+  }
   const fakeConnection = {
     requestUntilFirstNotificationOrResponse: vi.fn(
       async (request: JsonRpcRequest) => {
         if (turnStartRequestMode === "throw-stale-once") {
           turnStartRequestMode = "resolve";
           throw new Error("app-server sidecar stdin is closed");
+        }
+        if (turnStartRequestMode === "throw-exited-before-next-message") {
+          throw new Error(
+            "app-server exited before next message: signal=SIGTERM",
+          );
+        }
+        if (
+          turnStartRequestMode ===
+          "throw-exited-before-next-message-after-release"
+        ) {
+          await waitForDelayedStaleErrorRelease();
+          throw new Error(
+            "app-server exited before next message: signal=SIGTERM",
+          );
         }
         recordedRequests.push(request);
         const notification = {
@@ -90,6 +127,20 @@ const {
         turnStartRequestMode = "resolve";
         throw new Error("app-server sidecar stdin is closed");
       }
+      if (turnStartRequestMode === "throw-exited-before-next-message") {
+        throw new Error(
+          "app-server exited before next message: signal=SIGTERM",
+        );
+      }
+      if (
+        turnStartRequestMode ===
+        "throw-exited-before-next-message-after-release"
+      ) {
+        await waitForDelayedStaleErrorRelease();
+        throw new Error(
+          "app-server exited before next message: signal=SIGTERM",
+        );
+      }
       recordedRequests.push(request);
       const notification = {
         method: "agentSession/event",
@@ -139,6 +190,24 @@ const {
   };
 
   class FakeAppServerSidecarLifecycle {
+    connected:
+      | {
+          initializeResponse: {
+            serverInfo: {
+              name: string;
+              version: string;
+              protocolVersion: string;
+            };
+            platform: {
+              family: string;
+              os: string;
+            };
+            capabilities: Record<string, unknown>;
+          };
+          connection: typeof fakeConnection;
+        }
+      | undefined;
+
     constructor(config: {
       binaryPath: string;
       dataDir?: string;
@@ -148,7 +217,7 @@ const {
     }
 
     async start() {
-      return {
+      this.connected = {
         initializeResponse: {
           serverInfo: {
             name: "app-server",
@@ -163,9 +232,11 @@ const {
         },
         connection: fakeConnection,
       };
+      return this.connected;
     }
 
     async stop() {
+      this.connected = undefined;
       return undefined;
     }
   }
@@ -178,15 +249,26 @@ const {
       recordedRequests.length = 0;
       lifecycleConfigs.length = 0;
       mirroredNotifications.length = 0;
+      delayedStaleErrorReadyResolvers.length = 0;
+      releaseDelayedStaleError = null;
       turnStartRequestMode = "resolve";
       fakeConnection.request.mockClear();
       fakeConnection.requestUntilFirstNotificationOrResponse.mockClear();
       fakeConnection.nextNotification.mockClear();
     },
     setTurnStartRequestMode: (
-      mode: "resolve" | "hang" | "throw-stale-once",
+      mode:
+        | "resolve"
+        | "hang"
+        | "throw-stale-once"
+        | "throw-exited-before-next-message"
+        | "throw-exited-before-next-message-after-release",
     ) => {
       turnStartRequestMode = mode;
+    },
+    waitForDelayedStaleErrorReady,
+    releaseDelayedStaleError: () => {
+      releaseDelayedStaleError?.();
     },
     FakeAppServerSidecarLifecycle,
   };
@@ -316,35 +398,69 @@ describe("ElectronAppServerHost", () => {
   it("发现 stale sidecar stdin 已关闭时应丢弃旧连接并重启后重试当前请求", async () => {
     const { ElectronAppServerHost } = await import("./appServerHost");
     const host = new ElectronAppServerHost();
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     setTurnStartRequestMode("throw-stale-once");
 
-    const result = await host.handleJsonLines({
+    try {
+      const result = await host.handleJsonLines({
+        lines: [
+          encodeMessage({
+            id: 1,
+            method: "agentSession/read",
+            params: { sessionId: "session-stale" },
+          }),
+        ],
+      });
+      const messages = result.lines.map(decodeMessage);
+
+      expect(lifecycleConfigs).toHaveLength(2);
+      expect(fakeConnection.request).toHaveBeenCalledTimes(2);
+      expect(recordedRequests).toHaveLength(1);
+      expect(recordedRequests[0]).toMatchObject({
+        id: "electron-host:1",
+        method: "agentSession/read",
+      });
+      expect(messages).toEqual([
+        {
+          id: 1,
+          result: {
+            internalId: "electron-host:1",
+            method: "agentSession/read",
+          },
+        },
+      ]);
+      expect(warnSpy).toHaveBeenCalledWith(
+        "[electron-host] app-server stale connection detected; restarting sidecar",
+        expect.any(Error),
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("停止期间遇到 sidecar 退出等待错误时不应重启 App Server", async () => {
+    const { ElectronAppServerHost } = await import("./appServerHost");
+    const host = new ElectronAppServerHost();
+
+    await host.warmup();
+    setTurnStartRequestMode("throw-exited-before-next-message-after-release");
+    const request = host.handleJsonLines({
       lines: [
         encodeMessage({
           id: 1,
           method: "agentSession/read",
-          params: { sessionId: "session-stale" },
+          params: { sessionId: "session-closing" },
         }),
       ],
     });
-    const messages = result.lines.map(decodeMessage);
+    await waitForDelayedStaleErrorReady();
+    await host.stop();
+    releaseDelayedStaleError();
 
-    expect(lifecycleConfigs).toHaveLength(2);
-    expect(fakeConnection.request).toHaveBeenCalledTimes(2);
-    expect(recordedRequests).toHaveLength(1);
-    expect(recordedRequests[0]).toMatchObject({
-      id: "electron-host:1",
-      method: "agentSession/read",
-    });
-    expect(messages).toEqual([
-      {
-        id: 1,
-        result: {
-          internalId: "electron-host:1",
-          method: "agentSession/read",
-        },
-      },
-    ]);
+    await expect(request).rejects.toThrow("app-server host is stopping");
+    expect(lifecycleConfigs).toHaveLength(1);
+    expect(fakeConnection.request).toHaveBeenCalledTimes(1);
+    expect(recordedRequests).toHaveLength(0);
   });
 
   it("drainEvents 应能读取被长 turn/start 请求镜像的流式 notification", async () => {
@@ -546,5 +662,31 @@ describe("ElectronAppServerHost", () => {
     >;
     expect(requestCalls[0]?.[1]).toBe("conversationImport/thread/commit");
     expect(requestCalls[0]?.[2]).toMatchObject({ timeoutMs: 180000 });
+  });
+
+  it("current conversation import commit 支持 request 级长导入等待窗口", async () => {
+    const { ElectronAppServerHost } = await import("./appServerHost");
+    const host = new ElectronAppServerHost();
+
+    await host.handleJsonLines({
+      timeoutMs: 240000,
+      lines: [
+        encodeMessage({
+          id: "conversation-import-commit-long-sample",
+          method: "conversationImport/thread/commit",
+          params: {
+            sourceClient: "codex",
+            sourceThreadId: "thread-1",
+            confirmed: true,
+          },
+        }),
+      ],
+    });
+
+    const requestCalls = fakeConnection.request.mock.calls as unknown as Array<
+      [JsonRpcRequest, string, { timeoutMs?: number }]
+    >;
+    expect(requestCalls[0]?.[1]).toBe("conversationImport/thread/commit");
+    expect(requestCalls[0]?.[2]).toMatchObject({ timeoutMs: 240000 });
   });
 });

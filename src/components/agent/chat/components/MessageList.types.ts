@@ -8,6 +8,7 @@ import type {
 } from "@/lib/api/agentRuntime";
 import type { ArtifactTimelineOpenTarget } from "../utils/artifactTimelineNavigation";
 import type { buildMessageRenderGroupsProjection } from "../projection/messageTimelineRenderProjection";
+import type { SearchResultPreviewItem } from "../utils/searchResultPreview";
 import type {
   ActionRequired,
   AgentThreadItem,
@@ -68,6 +69,8 @@ export interface MessageListProps {
   onFileClick?: (fileName: string, content: string) => void;
   /** 时间线内 artifact 精确跳转 */
   onOpenArtifactFromTimeline?: (target: ArtifactTimelineOpenTarget) => void;
+  /** 打开 URL 来源预览 */
+  onOpenUrlPreview?: (item: SearchResultPreviewItem) => void;
   /** 打开站点能力已保存内容 */
   onOpenSavedSiteContent?: (target: SiteSavedContentTarget) => void;
   /** Artifact 点击回调 */
@@ -79,11 +82,6 @@ export interface MessageListProps {
   ) => void;
   /** 将助手结果沉淀为技能草稿 */
   onSaveMessageAsSkill?: (source: {
-    messageId: string;
-    content: string;
-  }) => void;
-  /** 将助手结果沉淀到灵感库 */
-  onSaveMessageAsInspiration?: (source: {
     messageId: string;
     content: string;
   }) => void;

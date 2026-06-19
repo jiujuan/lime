@@ -1,3 +1,6 @@
+use crate::runtime::memory_prompt::{
+    append_memory_context_to_system_prompt, append_soul_context_to_system_prompt,
+};
 use crate::ExecutionRequest;
 use crate::RuntimeCoreError;
 use aster::session::{TurnContextOverride, TurnOutputSchemaSource};
@@ -371,7 +374,7 @@ pub(super) fn request_tool_policy_from_request(
 ) -> RequestToolPolicy {
     let web_search = host_request.and_then(host_web_search);
     let search_mode = host_request.and_then(host_search_mode);
-    resolve_request_tool_policy_with_mode(web_search, search_mode, true)
+    resolve_request_tool_policy_with_mode(web_search, search_mode)
 }
 
 pub(super) fn session_config_from_request(
@@ -388,6 +391,14 @@ pub(super) fn session_config_from_request(
         workspace_scope.working_dir.as_deref(),
         workspace_scope.project_root.as_deref(),
     );
+    let runtime_metadata = request
+        .runtime_options
+        .as_ref()
+        .and_then(|options| options.metadata.as_ref())
+        .or(request.metadata.as_ref());
+    let system_prompt = append_memory_context_to_system_prompt(system_prompt, runtime_metadata);
+    let system_prompt =
+        append_soul_context_to_system_prompt(system_prompt, config_metadata.as_ref());
     let system_prompt =
         merge_system_prompt_with_request_tool_policy(system_prompt, request_tool_policy);
     let mut builder = SessionConfigBuilder::new(&scope.session_id)

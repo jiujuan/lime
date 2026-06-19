@@ -39,7 +39,7 @@ function renderCard(
             {
               key: "ref-1",
               label: "品牌 KV",
-              sourceLabel: "灵感库",
+              sourceLabel: "记忆参考",
               contentTypeLabel: "图片",
               usageLabel: "主视觉",
               selected: true,
@@ -279,7 +279,6 @@ describe("SceneAppExecutionSummaryCard", () => {
 
   it("应只展示历史摘要、继续动作和当前发布产物", () => {
     const onReviewCurrentProject = vi.fn();
-    const onSaveAsInspiration = vi.fn();
     const onSaveAsSkill = vi.fn();
     const onOpenSceneAppDetail = vi.fn();
     const onOpenSceneAppGovernance = vi.fn();
@@ -288,7 +287,6 @@ describe("SceneAppExecutionSummaryCard", () => {
     const onContentPostAction = vi.fn();
     const container = renderCard({
       onReviewCurrentProject,
-      onSaveAsInspiration,
       onSaveAsSkill,
       onOpenSceneAppDetail,
       onOpenSceneAppGovernance,
@@ -400,9 +398,6 @@ describe("SceneAppExecutionSummaryCard", () => {
     const reviewCurrentProjectButton = container.querySelector(
       '[data-testid="sceneapp-execution-summary-review-current-project"]',
     );
-    const saveAsInspirationButton = container.querySelector(
-      '[data-testid="sceneapp-execution-summary-save-as-inspiration"]',
-    );
     const saveAsSkillButton = container.querySelector(
       '[data-testid="sceneapp-execution-summary-save-as-skill"]',
     );
@@ -426,7 +421,11 @@ describe("SceneAppExecutionSummaryCard", () => {
     );
 
     expect(reviewCurrentProjectButton).not.toBeNull();
-    expect(saveAsInspirationButton).not.toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid="sceneapp-execution-summary-save-as-inspiration"]',
+      ),
+    ).toBeNull();
     expect(saveAsSkillButton).not.toBeNull();
     expect(detailButton).not.toBeNull();
     expect(governanceButton).not.toBeNull();
@@ -437,9 +436,6 @@ describe("SceneAppExecutionSummaryCard", () => {
 
     act(() => {
       reviewCurrentProjectButton?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-      saveAsInspirationButton?.dispatchEvent(
         new MouseEvent("click", { bubbles: true }),
       );
       saveAsSkillButton?.dispatchEvent(
@@ -464,7 +460,6 @@ describe("SceneAppExecutionSummaryCard", () => {
     });
 
     expect(onReviewCurrentProject).toHaveBeenCalledTimes(1);
-    expect(onSaveAsInspiration).toHaveBeenCalledTimes(1);
     expect(onSaveAsSkill).toHaveBeenCalledTimes(1);
     expect(onOpenSceneAppDetail).toHaveBeenCalledTimes(1);
     expect(onOpenSceneAppGovernance).toHaveBeenCalledTimes(1);
@@ -480,48 +475,25 @@ describe("SceneAppExecutionSummaryCard", () => {
     );
   });
 
-  it("结果已沉淀后应把灵感按钮切成已保存状态", () => {
-    const container = renderCard({
-      savedAsInspiration: true,
-      onSaveAsInspiration: vi.fn(),
-    });
+  it("旧灵感库按钮不应再出现场景结果卡", () => {
+    const container = renderCard();
 
-    const saveButton = container.querySelector(
-      '[data-testid="sceneapp-execution-summary-save-as-inspiration"]',
-    ) as HTMLButtonElement | null;
-    expect(saveButton?.textContent).toContain("已收进灵感库");
-    expect(saveButton?.disabled).toBe(true);
     expect(
       container.querySelector(
-        '[data-testid="sceneapp-execution-summary-saved-inspiration-hint"]',
-      )?.textContent,
-    ).toContain("下一轮推荐会继续带上它");
-  });
-
-  it("结果已沉淀后应支持直接去灵感库继续", () => {
-    const onOpenInspirationLibrary = vi.fn();
-    const container = renderCard({
-      savedAsInspiration: true,
-      onSaveAsInspiration: vi.fn(),
-      onOpenInspirationLibrary,
-    });
-
-    const openButton = container.querySelector(
-      '[data-testid="sceneapp-execution-summary-open-inspiration-library"]',
-    ) as HTMLButtonElement | null;
-    expect(openButton?.textContent).toContain("去灵感库继续");
-
-    act(() => {
-      openButton?.click();
-    });
-
-    expect(onOpenInspirationLibrary).toHaveBeenCalledTimes(1);
+        '[data-testid="sceneapp-execution-summary-save-as-inspiration"]',
+      ),
+    ).toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid="sceneapp-execution-summary-open-inspiration-library"]',
+      ),
+    ).toBeNull();
+    expect(container.textContent ?? "").not.toContain("灵感库");
   });
 
   it("不应恢复旧运行详情编排入口", () => {
     const container = renderCard({
       onReviewCurrentProject: vi.fn(),
-      onSaveAsInspiration: vi.fn(),
     });
 
     expect(

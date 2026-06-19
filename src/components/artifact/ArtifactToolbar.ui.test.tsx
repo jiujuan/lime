@@ -9,6 +9,7 @@ import { ArtifactToolbar } from "./ArtifactToolbar";
 const openHtmlPreviewWindowMock = vi.hoisted(() => vi.fn());
 const openPathWithDefaultAppMock = vi.hoisted(() => vi.fn());
 const hasDesktopHostInvokeCapabilityMock = vi.hoisted(() => vi.fn());
+const openExternalUrlWithSystemBrowserMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/api/fileSystem", async (importActual) => {
   const actual = await importActual<typeof import("@/lib/api/fileSystem")>();
@@ -26,6 +27,10 @@ vi.mock("@/lib/desktop-runtime", async (importActual) => {
     hasDesktopHostInvokeCapability: hasDesktopHostInvokeCapabilityMock,
   };
 });
+
+vi.mock("@/lib/api/externalUrl", () => ({
+  openExternalUrlWithSystemBrowser: openExternalUrlWithSystemBrowserMock,
+}));
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
@@ -95,6 +100,7 @@ beforeEach(async () => {
   registerLightweightRenderers();
   openHtmlPreviewWindowMock.mockResolvedValue(false);
   openPathWithDefaultAppMock.mockResolvedValue(undefined);
+  openExternalUrlWithSystemBrowserMock.mockResolvedValue(undefined);
   hasDesktopHostInvokeCapabilityMock.mockReturnValue(false);
   await changeLimeLocale("en-US");
 });
@@ -281,6 +287,37 @@ describe("ArtifactToolbar", () => {
     expect(openPathWithDefaultAppMock).toHaveBeenCalledWith(
       "/tmp/lime/archive.zip",
     );
+    expect(openHtmlPreviewWindowMock).not.toHaveBeenCalled();
+    expect(openWindow).not.toHaveBeenCalled();
+  });
+
+  it("URL preview artifact 应通过统一外部链接通道打开来源网页", async () => {
+    const openWindow = vi.fn();
+    vi.spyOn(window, "open").mockImplementation(openWindow);
+    const container = renderToolbar(
+      buildArtifact({
+        type: "document",
+        title: "在线报告",
+        content: "导入摘要",
+        meta: {
+          previewArtifact: true,
+          source: "url",
+          sourceRef: "https://example.com/report",
+          sourcePath: "https://example.com/report",
+          renderMode: "inline",
+        },
+      }),
+    );
+
+    await act(async () => {
+      queryButtonByTitle(container, "Open in new window")?.click();
+      await Promise.resolve();
+    });
+
+    expect(openExternalUrlWithSystemBrowserMock).toHaveBeenCalledWith(
+      "https://example.com/report",
+    );
+    expect(openPathWithDefaultAppMock).not.toHaveBeenCalled();
     expect(openHtmlPreviewWindowMock).not.toHaveBeenCalled();
     expect(openWindow).not.toHaveBeenCalled();
   });

@@ -297,6 +297,10 @@ describe("agentStreamTurnEventBinding", () => {
       "session-recovery",
       expect.any(Number),
       "你好",
+      {
+        requireTerminal: false,
+        turnId: null,
+      },
     );
     expect(messages[0]?.content).toBe("");
     expect(clearActiveStreamIfMatch).toHaveBeenCalledWith("event-recovery");
@@ -406,6 +410,235 @@ describe("agentStreamTurnEventBinding", () => {
     );
     expect(clearActiveStreamIfMatch).toHaveBeenCalledWith("event-dispatched");
     expect(disposeListener).toHaveBeenCalled();
+  });
+
+  it("提交已派发且运行时事件静默时，应通过快照恢复轮询释放发送态", async () => {
+    vi.useFakeTimers();
+
+    let streamActivated = false;
+    const attemptSilentTurnRecovery = vi
+      .fn()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    const clearActiveStreamIfMatch = vi.fn(() => true);
+    const disposeListener = vi.fn();
+    const setIsSending = vi.fn();
+    const runtime = {
+      listenToTurnEvents: vi.fn(async () => vi.fn()),
+    } as unknown as AgentRuntimeAdapter;
+    const requestState: StreamRequestState = {
+      accumulatedContent: "",
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+      queuedTurnId: null,
+    };
+
+    await registerAgentStreamTurnEventBinding({
+      runtime,
+      eventName: "event-deferred-recovery",
+      requestState,
+      attemptSilentTurnRecovery,
+      skipUserMessage: false,
+      effectiveProviderType: "anthropic",
+      effectiveModel: "gpt-5.5",
+      effectiveExecutionStrategy: "react",
+      content: "停止后恢复测试",
+      expectingQueue: false,
+      activeSessionId: "session-deferred-recovery",
+      resolvedWorkspaceId: "workspace-deferred-recovery",
+      assistantMsgId: "assistant-deferred-recovery",
+      pendingTurnKey: "pending-turn-deferred-recovery",
+      pendingItemKey: "pending-item-deferred-recovery",
+      effectiveWaitingRuntimeStatus: {
+        phase: "preparing",
+        title: "处理中",
+        detail: "正在准备执行上下文",
+      },
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      callbacks: {
+        activateStream: () => {
+          streamActivated = true;
+        },
+        isStreamActivated: () => streamActivated,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener,
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch,
+        upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
+        removeQueuedTurnState: () => {},
+      },
+      sounds: {
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+      },
+      appendThinkingToParts: (parts) => parts,
+      setMessages: noopDispatch<Message[]>(),
+      setPendingActions: noopDispatch<ActionRequired[]>(),
+      setThreadItems: noopDispatch<AgentThreadItem[]>(),
+      setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
+      setCurrentTurnId: noopDispatch<string | null>(),
+      setExecutionRuntime: noopDispatch<AsterSessionExecutionRuntime | null>(),
+      setIsSending: setIsSending as never,
+    });
+
+    requestState.submissionDispatchedAt = Date.now();
+
+    await vi.advanceTimersByTimeAsync(12_100);
+
+    expect(streamActivated).toBe(true);
+    expect(clearActiveStreamIfMatch).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(5_100);
+
+    expect(attemptSilentTurnRecovery).toHaveBeenCalledTimes(2);
+    expect(attemptSilentTurnRecovery).toHaveBeenNthCalledWith(
+      1,
+      "session-deferred-recovery",
+      expect.any(Number),
+      "停止后恢复测试",
+      {
+        requireTerminal: false,
+        turnId: null,
+      },
+    );
+    expect(attemptSilentTurnRecovery).toHaveBeenNthCalledWith(
+      2,
+      "session-deferred-recovery",
+      expect.any(Number),
+      "停止后恢复测试",
+      {
+        requireTerminal: true,
+        turnId: null,
+      },
+    );
+    expect(clearActiveStreamIfMatch).toHaveBeenCalledWith(
+      "event-deferred-recovery",
+    );
+    expect(disposeListener).toHaveBeenCalled();
+    expect(setIsSending).toHaveBeenCalledWith(false);
+  });
+
+  it("提交已接受但首包未到时，只应在 read model 出现真实终态后释放发送态", async () => {
+    vi.useFakeTimers();
+
+    let streamActivated = false;
+    const attemptSilentTurnRecovery = vi
+      .fn()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    const clearActiveStreamIfMatch = vi.fn(() => true);
+    const disposeListener = vi.fn();
+    const setIsSending = vi.fn();
+    const runtime = {
+      listenToTurnEvents: vi.fn(async () => vi.fn()),
+    } as unknown as AgentRuntimeAdapter;
+    const requestState: StreamRequestState = {
+      accumulatedContent: "",
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+      queuedTurnId: null,
+      currentTurnId: "turn-live-fast-complete",
+    };
+
+    await registerAgentStreamTurnEventBinding({
+      runtime,
+      eventName: "event-submit-accepted-terminal-recovery",
+      requestState,
+      attemptSilentTurnRecovery,
+      skipUserMessage: false,
+      effectiveProviderType: "openai",
+      effectiveModel: "gpt-5.5",
+      effectiveExecutionStrategy: "react",
+      content: "联网搜索并总结最新信息",
+      expectingQueue: false,
+      activeSessionId: "session-submit-accepted-terminal-recovery",
+      resolvedWorkspaceId: "workspace-submit-accepted-terminal-recovery",
+      assistantMsgId: "assistant-submit-accepted-terminal-recovery",
+      pendingTurnKey: "pending-turn-submit-accepted-terminal-recovery",
+      pendingItemKey: "pending-item-submit-accepted-terminal-recovery",
+      effectiveWaitingRuntimeStatus: {
+        phase: "preparing",
+        title: "处理中",
+        detail: "正在准备执行上下文",
+      },
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      callbacks: {
+        activateStream: () => {
+          streamActivated = true;
+        },
+        isStreamActivated: () => streamActivated,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener,
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch,
+        upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
+        removeQueuedTurnState: () => {},
+      },
+      sounds: {
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+      },
+      appendThinkingToParts: (parts) => parts,
+      setMessages: noopDispatch<Message[]>(),
+      setPendingActions: noopDispatch<ActionRequired[]>(),
+      setThreadItems: noopDispatch<AgentThreadItem[]>(),
+      setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
+      setCurrentTurnId: noopDispatch<string | null>(),
+      setExecutionRuntime: noopDispatch<AsterSessionExecutionRuntime | null>(),
+      setIsSending: setIsSending as never,
+    });
+
+    requestState.submissionDispatchedAt = Date.now();
+    requestState.submissionAcceptedAt = Date.now();
+    requestState.startTerminalRecoveryPoll?.();
+
+    await vi.advanceTimersByTimeAsync(5_100);
+
+    expect(attemptSilentTurnRecovery).toHaveBeenCalledTimes(1);
+    expect(attemptSilentTurnRecovery).toHaveBeenNthCalledWith(
+      1,
+      "session-submit-accepted-terminal-recovery",
+      expect.any(Number),
+      "联网搜索并总结最新信息",
+      {
+        requireTerminal: true,
+        turnId: "turn-live-fast-complete",
+      },
+    );
+    expect(clearActiveStreamIfMatch).not.toHaveBeenCalled();
+    expect(disposeListener).not.toHaveBeenCalled();
+    expect(setIsSending).not.toHaveBeenCalledWith(false);
+
+    await vi.advanceTimersByTimeAsync(5_100);
+
+    expect(attemptSilentTurnRecovery).toHaveBeenCalledTimes(2);
+    expect(attemptSilentTurnRecovery).toHaveBeenNthCalledWith(
+      2,
+      "session-submit-accepted-terminal-recovery",
+      expect.any(Number),
+      "联网搜索并总结最新信息",
+      {
+        requireTerminal: true,
+        turnId: "turn-live-fast-complete",
+      },
+    );
+    expect(clearActiveStreamIfMatch).toHaveBeenCalledWith(
+      "event-submit-accepted-terminal-recovery",
+    );
+    expect(disposeListener).toHaveBeenCalled();
+    expect(setIsSending).toHaveBeenCalledWith(false);
   });
 
   it("收到未知但结构合法的运行时事件时，应保留流活跃态并继续等待后续进度", async () => {

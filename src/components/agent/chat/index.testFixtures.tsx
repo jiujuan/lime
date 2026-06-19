@@ -3,6 +3,7 @@ import { act, type ComponentProps, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, vi } from "vitest";
 import { agentEnUSResource } from "@/i18n/agentResources";
+import { resetInitialSessionNavigationDeduplicationForTests } from "./workspace/useWorkspaceInitialSessionNavigation";
 
 export const WORKSPACE_HARNESS_TITLE =
   agentEnUSResource["agentChat.workspaceHarnessDialog.title"];
@@ -1144,6 +1145,12 @@ export function clickButton(container: HTMLElement, testId: string) {
   });
 }
 
+export function findButton(container: HTMLElement, testId: string) {
+  return container.querySelector(
+    `[data-testid="${testId}"]`,
+  ) as HTMLButtonElement | null;
+}
+
 export function createMockAgentChatUnifiedState(
   overrides: Record<string, unknown> = {},
 ) {
@@ -1283,6 +1290,7 @@ beforeEach(() => {
   vi.spyOn(console, "info").mockImplementation(() => undefined);
   localStorage.clear();
   sessionStorage.clear();
+  resetInitialSessionNavigationDeduplicationForTests();
   observedWorkspaceIds.length = 0;
 
   mockGetProject.mockImplementation(async (projectId: string) => {

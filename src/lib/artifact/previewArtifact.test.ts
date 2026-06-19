@@ -252,7 +252,13 @@ describe("previewArtifact", () => {
         isSourceBacked: true,
         source: "url",
         sourceRef: "https://example.com/report",
-        renderMode: "canvas",
+        contentKind: "markdown",
+        renderMode: "inline",
+        capabilities: expect.objectContaining({
+          preview: true,
+          edit: false,
+          systemOpen: true,
+        }),
       }),
     });
     expect(recordPreview.artifact).toMatchObject({
@@ -263,8 +269,51 @@ describe("previewArtifact", () => {
         isSourceBacked: true,
         source: "database_record",
         sourceRef: "material:123",
-        renderMode: "canvas",
+        contentKind: "text",
+        renderMode: "inline",
+        capabilities: expect.objectContaining({
+          preview: true,
+          edit: false,
+          systemOpen: false,
+          reveal: false,
+        }),
       }),
+    });
+  });
+
+  it("应把应用入口投影为 app_shell 来源摘要，而不是普通文件预览", () => {
+    const projection = createPreviewArtifact({
+      source: "app",
+      sourceRef: "agent-app:research",
+      title: "研究工作台",
+      content: "可继续整理来源和生成报告。",
+      path: "agent-app:research",
+      now: 100,
+    });
+
+    expect(projection).toMatchObject({
+      contentKind: "app_shell",
+      renderMode: "inline",
+      artifactType: "document",
+      artifact: {
+        id: expect.stringMatching(/^preview-app-/),
+        title: "研究工作台",
+        content: "可继续整理来源和生成报告。",
+        meta: expect.objectContaining({
+          previewArtifact: true,
+          isSourceBacked: true,
+          source: "app",
+          sourceRef: "agent-app:research",
+          contentKind: "app_shell",
+          renderMode: "inline",
+          capabilities: expect.objectContaining({
+            preview: true,
+            edit: false,
+            systemOpen: false,
+            reveal: false,
+          }),
+        }),
+      },
     });
   });
 

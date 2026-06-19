@@ -1,0 +1,68 @@
+{
+  "$defs": {
+    "MemoryStoreScope": {
+      "enum": [
+        "global",
+        "workspace"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "fileCount": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "initialized": {
+      "type": "boolean"
+    },
+    "memoryBytes": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "memoryExists": {
+      "type": "boolean"
+    },
+    "notesCount": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "rootPath": {
+      "type": "string"
+    },
+    "rootScope": {
+      "$ref": "#/$defs/MemoryStoreScope"
+    },
+    "summaryBytes": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "summaryExists": {
+      "type": "boolean"
+    },
+    "totalBytes": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "fileCount",
+    "initialized",
+    "memoryBytes",
+    "memoryExists",
+    "notesCount",
+    "rootPath",
+    "rootScope",
+    "summaryBytes",
+    "summaryExists",
+    "totalBytes"
+  ],
+  "title": "MemoryStoreHealthResponse",
+  "type": "object"
+}

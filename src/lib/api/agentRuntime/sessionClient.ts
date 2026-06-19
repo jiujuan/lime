@@ -39,6 +39,15 @@ function isTransientSessionReadError(error: unknown): boolean {
   );
 }
 
+function omitUndefinedSessionOptionalFields(
+  detail: AsterSessionDetail,
+): AsterSessionDetail {
+  if (detail.execution_runtime === undefined) {
+    delete detail.execution_runtime;
+  }
+  return detail;
+}
+
 export interface AgentRuntimeSessionClientDeps {
   appServerClient?: AppServerSessionRpcClient;
   appServerSessionClient?: AppServerSessionClient;
@@ -304,6 +313,7 @@ export function createSessionClient({
           ? normalizedDetail.todo_items
           : [],
       };
+      omitUndefinedSessionOptionalFields(normalizedSessionDetail);
       settled = true;
       recordAgentUiPerformanceMetric("agentRuntime.getSession.success", {
         ...getSessionMetricContext,

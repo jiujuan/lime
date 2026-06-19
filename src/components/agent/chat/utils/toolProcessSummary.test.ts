@@ -318,7 +318,7 @@ describe("toolProcessSummary", () => {
     expect(imageNarrative.summary).toBe("先搜索 product screenshot");
     expect(financeNarrative.postSummary).toBe("已获取 AAPL 内容");
     expect(weatherNarrative.postSummary).toBe("已获取 Tokyo 内容");
-    expect(timeNarrative.preSummary).toBe("先获取 +09:00");
+    expect(timeNarrative.preSummary).toBe("先获取 +09:00 内容");
     expect(resolveLibraryNarrative.postSummary).toBe("已搜索 Next.js");
     expect(queryDocsNarrative.postSummary).toBe(
       "已查看 React useEffect cleanup",
@@ -588,6 +588,65 @@ describe("toolProcessSummary", () => {
     expect(coverImageNarrative.postSummary).toBe(
       "已生成 开发 Lime 的经验 的封面图",
     );
+  });
+
+  it("generic、vision、站点和错误摘要应随当前语言切换", async () => {
+    await changeLimeLocale("en-US");
+
+    const readNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "Read",
+        status: "completed",
+        arguments: JSON.stringify({ file_path: "src/app.tsx" }),
+      }),
+    );
+    const writeNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "Write",
+        status: "running",
+        arguments: JSON.stringify({ file_path: "src/output.md" }),
+      }),
+    );
+    const visionNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "view_image",
+        status: "completed",
+        arguments: JSON.stringify({ path: "/workspace/assets/sample.png" }),
+      }),
+    );
+    const siteNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "lime_site_search",
+        status: "running",
+        arguments: JSON.stringify({ query: "GitHub issue search" }),
+      }),
+    );
+    const failedNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "Bash",
+        status: "failed",
+        result: {
+          success: false,
+          error: "-32603: -32002: sandbox execution failed",
+          output: "",
+        },
+      }),
+    );
+
+    expect(readNarrative.summary).toBe("Reviewed app.tsx");
+    expect(writeNarrative.summary).toBe("Preparing to write output.md");
+    expect(visionNarrative.summary).toBe("Image sample.png viewed");
+    expect(siteNarrative.summary).toBe(
+      "Searching site capabilities related to GitHub issue search first",
+    );
+    expect(failedNarrative.summary).toBe(
+      "Run failed: sandbox execution failed",
+    );
+    expect(readNarrative.summary).not.toContain("已查看");
+    expect(writeNarrative.summary).not.toContain("准备写入");
+    expect(visionNarrative.summary).not.toContain("图片");
+    expect(siteNarrative.summary).not.toContain("站点能力");
+    expect(failedNarrative.summary).not.toContain("执行失败");
   });
 
   it("应把 WebSearch 协议错误翻译成可操作提示", () => {

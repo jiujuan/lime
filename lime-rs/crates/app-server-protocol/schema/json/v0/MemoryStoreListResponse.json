@@ -1,0 +1,69 @@
+{
+  "$defs": {
+    "MemoryStoreEntry": {
+      "properties": {
+        "entryType": {
+          "type": "string"
+        },
+        "modifiedAt": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "path": {
+          "type": "string"
+        },
+        "size": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "entryType",
+        "modifiedAt",
+        "path",
+        "size"
+      ],
+      "type": "object"
+    },
+    "MemoryStoreScope": {
+      "enum": [
+        "global",
+        "workspace"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "entries": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/MemoryStoreEntry"
+      },
+      "type": "array"
+    },
+    "nextCursor": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "path": {
+      "type": "string"
+    },
+    "rootScope": {
+      "$ref": "#/$defs/MemoryStoreScope"
+    },
+    "truncated": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "path",
+    "rootScope",
+    "truncated"
+  ],
+  "title": "MemoryStoreListResponse",
+  "type": "object"
+}

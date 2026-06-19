@@ -30,6 +30,7 @@ export interface AgentStreamPreparedSendEnv {
     sessionId: string,
     requestStartedAt: number,
     promptText: string,
+    options?: { requireTerminal?: boolean; turnId?: string | null },
   ) => Promise<boolean>;
   executionStrategy: AsterExecutionStrategy;
   accessMode: AgentAccessMode;
@@ -63,6 +64,7 @@ export interface AgentStreamPreparedSendEnv {
   setActiveStream: (nextActive: ActiveStreamState | null) => void;
   clearActiveStreamIfMatch: (eventName: string) => boolean;
   setMessages: Dispatch<SetStateAction<Message[]>>;
+  getThreadItems?: () => readonly AgentThreadItem[];
   setThreadItems: Dispatch<SetStateAction<AgentThreadItem[]>>;
   setThreadTurns: Dispatch<SetStateAction<AgentThreadTurn[]>>;
   setCurrentTurnId: Dispatch<SetStateAction<string | null>>;

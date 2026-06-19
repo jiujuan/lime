@@ -39,6 +39,7 @@ const {
   mockSubscribeAppConfigChanged,
   mockListAgentRuntimeSessions,
   mockListInstalledAgentApps,
+  mockSelectAgentAppDirectory,
   mockGetProject,
   mockUpdateProject,
   mockDeleteProject,
@@ -77,6 +78,7 @@ const {
   mockSubscribeAppConfigChanged: vi.fn(),
   mockListAgentRuntimeSessions: vi.fn(),
   mockListInstalledAgentApps: vi.fn(),
+  mockSelectAgentAppDirectory: vi.fn(),
   mockGetProject: vi.fn(),
   mockUpdateProject: vi.fn(),
   mockDeleteProject: vi.fn(),
@@ -129,6 +131,7 @@ export {
   mockListenUpdateInstallSession,
   mockListAgentRuntimeSessions,
   mockListInstalledAgentApps,
+  mockSelectAgentAppDirectory,
   mockGetProject,
   mockUpdateProject,
   mockDeleteProject,
@@ -185,6 +188,7 @@ vi.mock("@/lib/api/conversationImport", () => ({
 vi.mock("@/lib/api/agentApps", () => ({
   AGENT_APPS_CHANGED_EVENT: "lime:agent-apps-changed",
   listInstalledAgentApps: mockListInstalledAgentApps,
+  selectAgentAppDirectory: mockSelectAgentAppDirectory,
 }));
 
 vi.mock("@/lib/api/project", () => ({
@@ -592,6 +596,10 @@ export async function resetAppSidebarTest() {
   mockSaveConfig.mockResolvedValue(undefined);
   mockListAgentRuntimeSessions.mockResolvedValue([]);
   mockListInstalledAgentApps.mockResolvedValue({ states: [], issues: [] });
+  mockSelectAgentAppDirectory.mockResolvedValue({
+    path: null,
+    cancelled: true,
+  });
   mockGetProject.mockResolvedValue(null);
   mockUpdateProject.mockResolvedValue({});
   mockDeleteProject.mockResolvedValue(true);

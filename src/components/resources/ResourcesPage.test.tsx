@@ -245,7 +245,7 @@ describe("ResourcesPage", () => {
     await flushEffects();
 
     expect(getBodyText()).not.toContain(
-      "集中查看当前项目里的文档、图片和导入内容；继续开工时回生成，需要沉淀线索时去灵感库。",
+      "集中查看当前项目里的文档、图片和导入内容；继续开工时回生成，沉淀资料时进入项目资料。",
     );
     expect(getBodyText()).not.toContain(
       "在目录浏览和跨目录分类视图之间切换，快速定位不同类型内容。",
@@ -253,7 +253,7 @@ describe("ResourcesPage", () => {
 
     const heroTip = await hoverTip("项目资料页说明");
     expect(getBodyText()).toContain(
-      "集中查看当前项目里的文档、图片和导入内容；继续开工时回生成，需要沉淀线索时去灵感库。",
+      "集中查看当前项目里的文档、图片和导入内容；继续开工时回生成，沉淀资料时进入项目资料。",
     );
     await leaveTip(heroTip);
 
@@ -264,7 +264,7 @@ describe("ResourcesPage", () => {
     await leaveTip(categoryTip);
   });
 
-  it("应显式提供回生成和灵感库的迁移按钮", async () => {
+  it("应显式提供回生成迁移按钮且不再引导旧灵感库", async () => {
     const onNavigate = vi.fn();
     const container = renderPage({ onNavigate });
     await flushEffects();
@@ -278,22 +278,12 @@ describe("ResourcesPage", () => {
     const backToAgentButton = Array.from(
       container.querySelectorAll("button"),
     ).find((button) => button.textContent?.includes("回生成"));
-    const backToMemoryButton = Array.from(
-      container.querySelectorAll("button"),
-    ).find((button) => button.textContent?.includes("去灵感库"));
 
     expect(backToAgentButton).toBeTruthy();
-    expect(backToMemoryButton).toBeTruthy();
+    expect(callout?.textContent).not.toContain("灵感库");
 
     await act(async () => {
       backToAgentButton?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      backToMemoryButton?.dispatchEvent(
         new MouseEvent("click", { bubbles: true }),
       );
       await Promise.resolve();
@@ -306,7 +296,7 @@ describe("ResourcesPage", () => {
         agentEntry: "new-task",
       }),
     );
-    expect(onNavigate).toHaveBeenNthCalledWith(2, "memory");
+    expect(onNavigate).toHaveBeenCalledTimes(1);
   });
 
   it("切到图片分类后应挂载图片工作台", async () => {

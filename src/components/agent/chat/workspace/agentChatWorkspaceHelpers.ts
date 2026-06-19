@@ -50,6 +50,7 @@ interface ResolveTaskCenterHomeSurfaceStateParams {
   sessionSwitchPending: boolean;
   hasInitialSessionRoute?: boolean;
   hasConversationActivity: boolean;
+  hasCurrentSessionActivity?: boolean;
   sessionId?: string | null;
   embeddedHomeSessionIds: ReadonlySet<string>;
   isAutoRestoringSession: boolean;
@@ -234,6 +235,18 @@ export function isTaskCenterDraftSendPendingForLayout({
   return !hasDisplayMessages || isSending || queuedTurnCount > 0;
 }
 
+export function shouldSuppressTaskCenterDraftContentForLayout({
+  draftSurfaceActive,
+  draftSendInFlight,
+  hasVisibleSessionActivity,
+}: {
+  draftSurfaceActive: boolean;
+  draftSendInFlight: boolean;
+  hasVisibleSessionActivity: boolean;
+}): boolean {
+  return draftSurfaceActive && !draftSendInFlight && !hasVisibleSessionActivity;
+}
+
 export function resolveTaskCenterHomeSurfaceState({
   agentEntry,
   draftSurfaceActive,
@@ -241,6 +254,7 @@ export function resolveTaskCenterHomeSurfaceState({
   sessionSwitchPending,
   hasInitialSessionRoute = false,
   hasConversationActivity,
+  hasCurrentSessionActivity = hasConversationActivity,
   sessionId,
   embeddedHomeSessionIds,
   isAutoRestoringSession,
@@ -249,16 +263,22 @@ export function resolveTaskCenterHomeSurfaceState({
   const hasEmbeddedHomeSession = Boolean(
     sessionId && embeddedHomeSessionIds.has(sessionId),
   );
+  const shouldProtectInitialSessionRoute =
+    hasInitialSessionRoute && !draftSurfaceActive;
   const shouldRenderEmbeddedHome = Boolean(
     agentEntry === "claw" &&
     !sessionSwitchPending &&
-    !hasInitialSessionRoute &&
+    !shouldProtectInitialSessionRoute &&
     !hasConversationActivity &&
+    !hasCurrentSessionActivity &&
     (draftSurfaceActive ||
       hasEmbeddedHomeSession),
   );
   const shouldHideCurrentSessionContent =
-    sessionSwitchPending || (shouldSuppressDraftContent && !hasInitialSessionRoute);
+    sessionSwitchPending ||
+    (shouldSuppressDraftContent &&
+      !shouldProtectInitialSessionRoute &&
+      !hasCurrentSessionActivity);
 
   return {
     shouldRenderEmbeddedHome,

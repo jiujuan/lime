@@ -335,6 +335,24 @@ describe("MarkdownRenderer", () => {
     expect(container.textContent).toContain("图片 · 点击查看大图");
   });
 
+  it("markdown 图片加载失败时不应暴露 alt 文本", () => {
+    const container = render("![image](https://cdn.example.com/missing.png)");
+    const image = container.querySelector("img");
+
+    expect(image).not.toBeNull();
+
+    act(() => {
+      image?.dispatchEvent(new Event("error"));
+    });
+
+    expect(container.querySelector("img")).toBeNull();
+    expect(
+      container.querySelector('[data-testid="markdown-image-unavailable"]'),
+    ).not.toBeNull();
+    expect(container.textContent).toContain("图片暂时无法显示");
+    expect(container.textContent).not.toContain("image");
+  });
+
   it("开发分析正文应渲染标题、表格、粗体和行内代码，而不是露出原始 Markdown", () => {
     const content = [
       "## BADOUCMS 架构分析",

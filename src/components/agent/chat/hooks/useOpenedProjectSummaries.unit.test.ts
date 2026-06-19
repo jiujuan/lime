@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildOpenedProjectIdOrder,
   compactOpenedProjectSummaries,
+  shouldResolveOpenedProject,
 } from "./useOpenedProjectSummaries";
 
 describe("buildOpenedProjectIdOrder", () => {
@@ -81,5 +82,16 @@ describe("compactOpenedProjectSummaries", () => {
         rootPath: null,
       },
     ]);
+  });
+});
+
+describe("shouldResolveOpenedProject", () => {
+  it("已解析为空的项目不应继续触发重复查询", () => {
+    expect(
+      shouldResolveOpenedProject("missing-project", {
+        "missing-project": null,
+      }),
+    ).toBe(false);
+    expect(shouldResolveOpenedProject("new-project", {})).toBe(true);
   });
 });

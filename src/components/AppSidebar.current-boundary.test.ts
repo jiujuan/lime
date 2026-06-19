@@ -21,11 +21,13 @@ function sourceBetween(
 
 describe("AppSidebar current App Server session boundary", () => {
   it("侧栏归档 / 恢复入口只能经 agentRuntime session gateway 更新 session", () => {
-    const source = readSource("src/components/AppSidebar.tsx");
+    const source = readSource(
+      "src/components/app-sidebar/useAppSidebarConversationActions.ts",
+    );
     const archiveHandler = sourceBetween(
       source,
-      "const handleToggleSessionArchive = useCallback(",
-      "const handleDeleteConversation = useCallback(",
+      "const toggleSessionArchive = useCallback(",
+      "const deleteConversation = useCallback(",
     );
 
     expect(archiveHandler).toContain("await updateAgentRuntimeSession({");

@@ -584,6 +584,30 @@
     },
     {
       "kind": "request",
+      "method": "memoryStore/addNote"
+    },
+    {
+      "kind": "request",
+      "method": "memoryStore/health"
+    },
+    {
+      "kind": "request",
+      "method": "memoryStore/list"
+    },
+    {
+      "kind": "request",
+      "method": "memoryStore/read"
+    },
+    {
+      "kind": "request",
+      "method": "memoryStore/reset"
+    },
+    {
+      "kind": "request",
+      "method": "memoryStore/search"
+    },
+    {
+      "kind": "request",
       "method": "model/list"
     },
     {
@@ -881,46 +905,6 @@
     {
       "kind": "request",
       "method": "telegramChannel/probe"
-    },
-    {
-      "kind": "request",
-      "method": "unifiedMemory/analyze"
-    },
-    {
-      "kind": "request",
-      "method": "unifiedMemory/create"
-    },
-    {
-      "kind": "request",
-      "method": "unifiedMemory/delete"
-    },
-    {
-      "kind": "request",
-      "method": "unifiedMemory/get"
-    },
-    {
-      "kind": "request",
-      "method": "unifiedMemory/hybridSearch"
-    },
-    {
-      "kind": "request",
-      "method": "unifiedMemory/list"
-    },
-    {
-      "kind": "request",
-      "method": "unifiedMemory/search"
-    },
-    {
-      "kind": "request",
-      "method": "unifiedMemory/semanticSearch"
-    },
-    {
-      "kind": "request",
-      "method": "unifiedMemory/stats"
-    },
-    {
-      "kind": "request",
-      "method": "unifiedMemory/update"
     },
     {
       "kind": "request",
@@ -1351,6 +1335,23 @@
       "MediaTaskArtifactLookupParams",
       "MediaTaskArtifactResponse",
       "MediaTaskArtifactVideoCreateParams",
+      "MemoryStoreAddNoteParams",
+      "MemoryStoreAddNoteResponse",
+      "MemoryStoreCitation",
+      "MemoryStoreEntry",
+      "MemoryStoreHealthResponse",
+      "MemoryStoreListParams",
+      "MemoryStoreListResponse",
+      "MemoryStoreReadParams",
+      "MemoryStoreReadResponse",
+      "MemoryStoreResetParams",
+      "MemoryStoreResetResponse",
+      "MemoryStoreRootParams",
+      "MemoryStoreScope",
+      "MemoryStoreSearchHit",
+      "MemoryStoreSearchMatchMode",
+      "MemoryStoreSearchParams",
+      "MemoryStoreSearchResponse",
       "ModelCapabilitiesInfo",
       "ModelInfo",
       "ModelListParams",
@@ -1507,32 +1508,6 @@
       "StructuredOutputContract",
       "SupportBundleExportResponse",
       "TransportKind",
-      "UnifiedMemory",
-      "UnifiedMemoryAnalysisResponse",
-      "UnifiedMemoryAnalyzeParams",
-      "UnifiedMemoryCategory",
-      "UnifiedMemoryCategoryCount",
-      "UnifiedMemoryCreateParams",
-      "UnifiedMemoryCreateRequest",
-      "UnifiedMemoryDeleteParams",
-      "UnifiedMemoryDeleteResponse",
-      "UnifiedMemoryGetParams",
-      "UnifiedMemoryGetResponse",
-      "UnifiedMemoryHybridSearchOptions",
-      "UnifiedMemoryHybridSearchParams",
-      "UnifiedMemoryListFilters",
-      "UnifiedMemoryListParams",
-      "UnifiedMemoryListResponse",
-      "UnifiedMemoryMetadata",
-      "UnifiedMemorySearchParams",
-      "UnifiedMemorySemanticSearchOptions",
-      "UnifiedMemorySemanticSearchParams",
-      "UnifiedMemorySource",
-      "UnifiedMemoryStatsResponse",
-      "UnifiedMemoryType",
-      "UnifiedMemoryUpdateParams",
-      "UnifiedMemoryUpdateRequest",
-      "UnifiedMemoryWriteResponse",
       "UsageStatsDailyTrendsListResponse",
       "UsageStatsDailyUsage",
       "UsageStatsModelRankingListResponse",

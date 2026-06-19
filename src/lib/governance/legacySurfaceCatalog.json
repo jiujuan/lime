@@ -1378,13 +1378,85 @@
     },
     {
       "id": "memory-feedback-frontend-surface",
-      "classification": "dead-candidate",
-      "description": "已删除的记忆反馈旧前端组件与 API 网关，当前记忆页面主链不再暴露该独立反馈侧链",
+      "classification": "dead",
+      "description": "已删除的记忆反馈旧前端组件与 API 网关；文件化记忆主线不再恢复旧 MemoryPage 附属反馈侧链",
       "targets": [
         "src/components/memory/MemoryFeedback.tsx",
         "src/components/memory/FeedbackStats.tsx",
         "src/lib/api/memoryFeedback.ts",
         "src/lib/api/memoryFeedback.test.ts"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "memory-page-inspiration-library-surface",
+      "classification": "dead",
+      "description": "旧 MemoryPage 灵感库 / 高级诊断混合视图；文件化记忆主线只允许通过 memory store、MemoryBackend、memory tools 与 settings.memory.soul 继续演进，不得恢复 GUI 主入口",
+      "targets": [
+        "src/components/memory/index.ts",
+        "src/components/memory/inspirationProjection.ts",
+        "src/components/memory/memoryLayerMetrics.ts",
+        "src/components/memory/memoryLayerMetrics.test.ts",
+        "src/components/memory/MemoryCuratedTaskSuggestionPanel.tsx",
+        "src/components/memory/MemoryCuratedTaskSuggestionPanel.test.tsx",
+        "src/components/memory/MemoryPage.tsx",
+        "src/components/memory/MemoryPage.test.tsx",
+        "src/components/agent/chat/utils/messageInspirationDraft.ts",
+        "src/components/agent/chat/utils/messageInspirationDraft.test.ts",
+        "src/components/agent/chat/utils/saveSceneAppExecutionAsInspiration.ts",
+        "src/components/agent/chat/utils/saveSceneAppExecutionAsInspiration.test.ts",
+        "src/components/agent/chat/utils/sceneAppExecutionInspirationDraft.ts",
+        "src/components/agent/chat/utils/sceneAppExecutionInspirationDraft.test.ts",
+        "src/lib/api/unifiedMemory.ts",
+        "src/lib/api/unifiedMemory.test.ts"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "memory-runtime-retired-gateway-surface",
+      "classification": "dead",
+      "description": "旧 memoryRuntime 前端网关和运行时召回 DTO；文件化记忆主线必须走 memoryStore/*、MemoryBackend 与 memory tools，配置类型只允许保留在 memoryConfigTypes / memory.soul",
+      "targets": [
+        "src/lib/api/memoryRuntime.ts",
+        "src/lib/api/memoryRuntime.test.ts",
+        "src/lib/api/memoryRuntimeTypes.ts",
+        "src/lib/runtimeMemoryPrefetchHistory.ts",
+        "src/lib/runtimeMemoryPrefetchHistory.test.ts",
+        "src/components/agent/chat/components/AgentThreadMemoryPrefetchPreview.tsx",
+        "src/components/agent/chat/components/AgentThreadMemoryPrefetchPreview.test.tsx",
+        "src/components/agent/chat/components/AgentThreadMemoryPrefetchBaselineCard.tsx"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "memory-crate-retired-sqlite-surface",
+      "classification": "dead",
+      "description": "已删除的旧 SQLite memory crate；文件化 memory store 由 App Server MemoryBackend 承接，不得恢复独立 memory crate、反馈侧链或旧 unified_memory 迁移",
+      "targets": [
+        "lime-rs/crates/memory/Cargo.toml",
+        "lime-rs/crates/memory/migrations/001_unified_memory.sql",
+        "lime-rs/crates/memory/migrations/003_feedback.sql",
+        "lime-rs/crates/memory/src/extractor.rs",
+        "lime-rs/crates/memory/src/feedback.rs",
+        "lime-rs/crates/memory/src/gatekeeper.rs",
+        "lime-rs/crates/memory/src/lib.rs",
+        "lime-rs/crates/memory/src/migration.rs",
+        "lime-rs/crates/memory/src/migrations/mod.rs",
+        "lime-rs/crates/memory/src/migrations/v1_unified_memory.rs",
+        "lime-rs/crates/memory/src/migrations/v1_unified_memory.sql",
+        "lime-rs/crates/memory/src/models/mod.rs",
+        "lime-rs/crates/memory/src/models/unified.rs",
+        "lime-rs/crates/memory/src/search.rs"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "memory-app-server-unified-retired-surface",
+      "classification": "dead",
+      "description": "已删除的 App Server 旧 unified memory 处理器和数据源；current 记忆读写只允许走 memoryStore/*、MemoryBackend 与 memory_store processor",
+      "targets": [
+        "lime-rs/crates/app-server/src/local_data_source/unified_memory.rs",
+        "lime-rs/crates/app-server/src/processor/unified.rs"
       ],
       "allowedPaths": []
     },

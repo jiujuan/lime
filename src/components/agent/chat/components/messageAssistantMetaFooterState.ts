@@ -1,6 +1,16 @@
 import type { InputbarRuntimeStatusLineModel } from "../utils/inputbarRuntimeStatusLine";
 import type { AgentRuntimeStatus, Message } from "../types";
 
+function isTerminalThreadReadStatus(status?: string | null): boolean {
+  return (
+    status === "completed" ||
+    status === "failed" ||
+    status === "aborted" ||
+    status === "cancelled" ||
+    status === "canceled"
+  );
+}
+
 export function shouldRenderAssistantRuntimeStatusPill(
   status?: AgentRuntimeStatus | null,
 ): boolean {
@@ -30,6 +40,7 @@ export interface ResolveMessageAssistantMetaFooterStateOptions {
   shouldPreviewHistoricalAssistantMessage: boolean;
   shouldSuppressStandaloneImageWorkbenchProcess: boolean;
   tailRuntimeStatusLine: InputbarRuntimeStatusLineModel | null;
+  threadReadStatus?: string | null;
 }
 
 export function resolveMessageAssistantMetaFooterState({
@@ -42,8 +53,19 @@ export function resolveMessageAssistantMetaFooterState({
   shouldPreviewHistoricalAssistantMessage,
   shouldSuppressStandaloneImageWorkbenchProcess,
   tailRuntimeStatusLine,
+  threadReadStatus,
 }: ResolveMessageAssistantMetaFooterStateOptions): MessageAssistantMetaFooterState {
   const hasTerminalRuntimeStatus = hasTerminalAssistantRuntimeStatus(message);
+  const hasFinalAssistantContent =
+    message.role === "assistant" &&
+    Boolean(
+      message.content.trim() ||
+        message.contentParts?.some(
+          (part) => part.type === "text" && part.text.trim().length > 0,
+        ),
+    );
+  const shouldSuppressStaleActiveRuntimeLine =
+    hasFinalAssistantContent && isTerminalThreadReadStatus(threadReadStatus);
   const shouldSuppressActiveRuntimeLine =
     tailRuntimeStatusLine?.status === "running" ||
     tailRuntimeStatusLine?.status === "queued";
@@ -65,6 +87,7 @@ export function resolveMessageAssistantMetaFooterState({
     Boolean(activeConversationRuntimeStatusLine) &&
     (activeConversationRuntimeStatusLine?.status === "running" ||
       activeConversationRuntimeStatusLine?.status === "queued") &&
+    !shouldSuppressStaleActiveRuntimeLine &&
     !shouldPreviewHistoricalAssistantMessage &&
     !shouldDeferHistoricalMarkdownRender;
   const shouldRenderImageWorkbenchUsageFooter =

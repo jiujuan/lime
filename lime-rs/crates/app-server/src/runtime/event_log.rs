@@ -1,4 +1,5 @@
 use app_server_protocol::AgentEvent;
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -29,23 +30,30 @@ impl EventLogWriter {
     }
 
     pub fn append(&self, event: &AgentEvent) -> Result<PathBuf, String> {
-        let path = self.session_path(&event.session_id);
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(|error| {
-                format!("无法创建 event log 父目录 {}: {error}", parent.display())
-            })?;
+        self.append_events(std::slice::from_ref(event))?
+            .into_iter()
+            .next()
+            .ok_or_else(|| format!("无法写入 event log: event {} 未产生路径", event.event_id))
+    }
+
+    pub fn append_events(&self, events: &[AgentEvent]) -> Result<Vec<PathBuf>, String> {
+        if events.is_empty() {
+            return Ok(Vec::new());
         }
-        let json = serde_json::to_vec(event)
-            .map_err(|error| format!("无法序列化 event {}: {error}", event.event_id))?;
-        let mut file = fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)
-            .map_err(|error| format!("无法打开 event log {}: {error}", path.display()))?;
-        file.write_all(&json)
-            .and_then(|_| file.write_all(b"\n"))
-            .map_err(|error| format!("无法写入 event log {}: {error}", path.display()))?;
-        Ok(path)
+        let mut events_by_path: BTreeMap<PathBuf, Vec<&AgentEvent>> = BTreeMap::new();
+        for event in events {
+            events_by_path
+                .entry(self.session_path(&event.session_id))
+                .or_default()
+                .push(event);
+        }
+
+        let mut paths = Vec::with_capacity(events_by_path.len());
+        for (path, events) in events_by_path {
+            append_events_to_path(&path, &events)?;
+            paths.push(path);
+        }
+        Ok(paths)
     }
 
     pub fn read_session_events(&self, session_id: &str) -> Result<Vec<EventLogRecord>, String> {
@@ -88,6 +96,29 @@ impl EventLogWriter {
             .join("sessions")
             .join(format!("session_{}.jsonl", safe_file_stem(session_id)))
     }
+}
+
+fn append_events_to_path(path: &Path, events: &[&AgentEvent]) -> Result<(), String> {
+    if events.is_empty() {
+        return Ok(());
+    }
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("无法创建 event log 父目录 {}: {error}", parent.display()))?;
+    }
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .map_err(|error| format!("无法打开 event log {}: {error}", path.display()))?;
+    for event in events {
+        let json = serde_json::to_vec(event)
+            .map_err(|error| format!("无法序列化 event {}: {error}", event.event_id))?;
+        file.write_all(&json)
+            .and_then(|_| file.write_all(b"\n"))
+            .map_err(|error| format!("无法写入 event log {}: {error}", path.display()))?;
+    }
+    Ok(())
 }
 
 fn safe_file_stem(value: &str) -> String {
@@ -145,6 +176,28 @@ mod tests {
         assert_eq!(records.len(), 2);
         assert_eq!(records[0].event.sequence, 1);
         assert_eq!(records[1].event.sequence, 2);
+    }
+
+    #[test]
+    fn append_events_groups_by_session_and_writes_all_events() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let writer = EventLogWriter::new(temp.path()).expect("writer");
+        let first = event(1);
+        let mut second = event(2);
+        second.session_id = "session-b".to_string();
+        second.event_id = "evt-2".to_string();
+
+        let paths = writer
+            .append_events(&[first.clone(), second.clone()])
+            .expect("append events");
+
+        assert_eq!(paths.len(), 2);
+        let first_records = writer.read_session_events("session-a").expect("session a");
+        let second_records = writer.read_session_events("session-b").expect("session b");
+        assert_eq!(first_records.len(), 1);
+        assert_eq!(second_records.len(), 1);
+        assert_eq!(first_records[0].event.sequence, first.sequence);
+        assert_eq!(second_records[0].event.sequence, second.sequence);
     }
 
     #[test]

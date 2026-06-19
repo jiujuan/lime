@@ -6,8 +6,10 @@ import { ImportedRuntimeEventDetailPanel } from "./ImportedRuntimeEventDetailPan
 
 const {
   mockReadConversationImportRuntimeEvents,
+  mockUseTranslationT,
 } = vi.hoisted(() => ({
   mockReadConversationImportRuntimeEvents: vi.fn(),
+  mockUseTranslationT: vi.fn(),
 }));
 
 vi.mock("@/lib/api/conversationImport", () => ({
@@ -16,7 +18,7 @@ vi.mock("@/lib/api/conversationImport", () => ({
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: interpolateTranslate,
+    t: mockUseTranslationT,
   }),
 }));
 
@@ -46,6 +48,8 @@ beforeEach(() => {
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
   mockReadConversationImportRuntimeEvents.mockReset();
+  mockUseTranslationT.mockReset();
+  mockUseTranslationT.mockImplementation(interpolateTranslate);
 });
 
 afterEach(() => {
@@ -87,7 +91,7 @@ describe("ImportedRuntimeEventDetailPanel", () => {
     mockReadConversationImportRuntimeEvents.mockResolvedValue({
       sessionId: "session-imported",
       offset: 0,
-      limit: 50,
+      limit: 10,
       totalEvents: 2,
       nextOffset: undefined,
       sourceRuntimeEvents: 120,
@@ -142,7 +146,7 @@ describe("ImportedRuntimeEventDetailPanel", () => {
       expect(mockReadConversationImportRuntimeEvents).toHaveBeenCalledWith({
         sessionId: "session-imported",
         offset: 0,
-        limit: 50,
+        limit: 10,
       });
     });
 
@@ -172,7 +176,7 @@ describe("ImportedRuntimeEventDetailPanel", () => {
     mockReadConversationImportRuntimeEvents.mockResolvedValue({
       sessionId: "session-imported",
       offset: 0,
-      limit: 50,
+      limit: 10,
       totalEvents: 3,
       nextOffset: undefined,
       sourceRuntimeEvents: 3,
@@ -239,5 +243,115 @@ describe("ImportedRuntimeEventDetailPanel", () => {
     expect(cards[0]).toContain("最先一句。");
     expect(cards[1]).toContain("npm test");
     expect(cards[2]).toContain("最后一句。");
+  });
+
+  it("标量 payload 摘要应使用本地化类型名", async () => {
+    mockReadConversationImportRuntimeEvents.mockResolvedValue({
+      sessionId: "session-imported",
+      offset: 0,
+      limit: 10,
+      totalEvents: 1,
+      nextOffset: undefined,
+      sourceRuntimeEvents: 1,
+      materializedRuntimeEvents: 1,
+      sidecarRuntimeEvents: 0,
+      projection: {},
+      events: [
+        {
+          sourceEventIndex: 0,
+          turnIndex: 0,
+          eventIndex: 0,
+          eventType: "message.delta",
+          payload: "plain text payload",
+        },
+      ],
+    });
+
+    const container = renderPanel({
+      enabled: true,
+      sessionId: "session-imported",
+      t: (key, options) => {
+        if (
+          key ===
+          "generalWorkbench.taskRail.importedRuntime.payload.type.string"
+        ) {
+          return "Text";
+        }
+        return interpolateTranslate(key, options);
+      },
+    });
+    const toggle = container.querySelector(
+      '[data-testid="imported-runtime-detail-toggle"]',
+    ) as HTMLButtonElement | null;
+
+    await act(async () => {
+      toggle?.click();
+      await Promise.resolve();
+    });
+
+    await vi.waitFor(() => {
+      expect(
+        container.querySelector('[data-testid="imported-runtime-detail-event"]'),
+      ).not.toBeNull();
+    });
+
+    expect(container.textContent).toContain("Text · 18");
+    expect(container.textContent).not.toContain("string · 18");
+  });
+
+  it("未传入上层 t 时应使用组件内 agent namespace 翻译", async () => {
+    mockUseTranslationT.mockImplementation((key, options) => {
+      const translations: Record<string, string> = {
+        "generalWorkbench.taskRail.importedRuntime.open": "View full record",
+        "generalWorkbench.taskRail.importedRuntime.title": "Full run record",
+        "generalWorkbench.taskRail.importedRuntime.payload.type.string": "Text",
+      };
+      return translations[key] ?? interpolateTranslate(key, options);
+    });
+    mockReadConversationImportRuntimeEvents.mockResolvedValue({
+      sessionId: "session-imported",
+      offset: 0,
+      limit: 10,
+      totalEvents: 1,
+      nextOffset: undefined,
+      sourceRuntimeEvents: 1,
+      materializedRuntimeEvents: 1,
+      sidecarRuntimeEvents: 0,
+      projection: {},
+      events: [
+        {
+          sourceEventIndex: 0,
+          turnIndex: 0,
+          eventIndex: 0,
+          eventType: "message.delta",
+          payload: "plain text payload",
+        },
+      ],
+    });
+
+    const container = renderPanel({
+      enabled: true,
+      sessionId: "session-imported",
+    });
+    const toggle = container.querySelector(
+      '[data-testid="imported-runtime-detail-toggle"]',
+    ) as HTMLButtonElement | null;
+
+    expect(toggle?.textContent).toContain("View full record");
+    expect(toggle?.textContent).not.toContain("查看完整记录");
+
+    await act(async () => {
+      toggle?.click();
+      await Promise.resolve();
+    });
+
+    await vi.waitFor(() => {
+      expect(
+        container.querySelector('[data-testid="imported-runtime-detail-event"]'),
+      ).not.toBeNull();
+    });
+
+    expect(container.textContent).toContain("Text · 18");
+    expect(container.textContent).not.toContain("文本 · 18");
   });
 });

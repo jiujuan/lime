@@ -1,4 +1,4 @@
-import type { MemoryCategory } from "@/lib/api/unifiedMemory";
+import type { MemoryCategory } from "./memoryReferenceTypes";
 
 const CATEGORY_LABELS: Record<MemoryCategory, string> = {
   identity: "风格",

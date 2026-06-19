@@ -19,7 +19,7 @@ describe("local history import real sample visual audit smoke guard", () => {
   it("uses real Electron and App Server JSON-RPC with an isolated runtime", () => {
     const content = readSmokeScript();
 
-    expect(content).toContain('import { _electron as electron }');
+    expect(content).toContain("import { _electron as electron }");
     expect(content).toContain("electron.launch({");
     expect(content).toContain("resolveDevAppServerBinary");
     expect(content).toContain("resolveElectronAppServerRuntimeEnv");
@@ -42,17 +42,20 @@ describe("local history import real sample visual audit smoke guard", () => {
   it("reads the real source as scan and preview, then commits only inside the isolated app data", () => {
     const content = readSmokeScript();
 
-    expect(content).toContain('sourceClient: SOURCE_CLIENT');
+    expect(content).toContain("sourceClient: SOURCE_CLIENT");
     expect(content).toContain('"conversationImport/source/scan"');
     expect(content).toContain('"conversationImport/thread/preview"');
     expect(content).toContain('"conversationImport/thread/commit"');
-    expect(content).toContain('confirmed: true');
+    expect(content).toContain("confirmed: true");
     expect(content).toContain('"agentSession/read"');
     expect(content).toContain("scorePreview");
     expect(content).toContain("willImportTimelineItems");
     expect(content).toContain("willImportAttachments");
     expect(content).toContain("readModelSummary");
     expect(content).toContain("readSummary.itemCounts");
+    expect(content).toContain("executionRuntime:");
+    expect(content).toContain("hasImportedThreadSettings");
+    expect(content).toContain("hasImportedContinuation");
   });
 
   it("opens the imported session through the GUI and audits multiple viewports and scroll positions", () => {
@@ -62,14 +65,44 @@ describe("local history import real sample visual audit smoke guard", () => {
     expect(content).toContain("openSessionFromSidebar");
     expect(content).toContain("inspectImportedConversationVisualState");
     expect(content).toContain("inspectImportedRuntimeDetailDrilldown");
+    expect(content).toContain("readRuntimeEventsProbe");
+    expect(content).toContain(
+      '"conversationImport/thread/runtimeEvents/read"',
+    );
+    expect(content).toContain(
+      '[data-testid="task-center-environment-trigger"]',
+    );
+    expect(content).toContain(
+      '[data-testid="task-center-environment-popover"]',
+    );
     expect(content).toContain('[data-testid="imported-runtime-detail-toggle"]');
+    expect(content).toContain('[data-testid="imported-runtime-detail-panel"]');
+    expect(content).toContain('[data-testid="imported-runtime-detail-body"]');
     expect(content).toContain('[data-testid="imported-runtime-detail-event"]');
+    expect(content).toContain('[data-testid="imported-runtime-detail-loading"]');
+    expect(content).toContain('[data-testid="imported-runtime-detail-error"]');
+    expect(content).toContain('[data-testid="imported-runtime-detail-empty"]');
     expect(content).toContain("data-event-kind");
     expect(content).toContain("runtimeDetailDrilldown");
-    expect(content).toContain('const SCROLL_POSITIONS = ["top", "middle", "bottom"]');
-    expect(content).toContain('{ label: "desktop", width: 1440, height: 1000 }');
+    expect(content).toContain("runtimeDetailDrilldownSnapshots");
+    expect(content).toContain("runtimeDetailFailure");
+    expect(content).toContain("panelTextPreview");
+    expect(content).toContain("bodyTextPreview");
+    expect(content).toContain("detailBodyTextPreview");
+    expect(content).toContain("toggleAriaExpanded");
+    expect(content).toContain("eventsContainerVisible");
+    expect(content).toContain("runtimeEventsProbe");
+    expect(content).toContain('page.keyboard.press("Escape")');
+    expect(content).toContain(
+      'const SCROLL_POSITIONS = ["top", "middle", "bottom"]',
+    );
+    expect(content).toContain(
+      '{ label: "desktop", width: 1440, height: 1000 }',
+    );
     expect(content).toContain('{ label: "compact", width: 1100, height: 820 }');
     expect(content).toContain('{ label: "narrow", width: 820, height: 900 }');
+    expect(content).toContain("openSnapshot?.textareaVisible");
+    expect(content).toContain("openSnapshot?.textareaSessionId");
     expect(content).toContain("inputbarVisible");
     expect(content).toContain("messageListVisible");
     expect(content).toContain("hasCommandRecordVisible");
@@ -77,7 +110,9 @@ describe("local history import real sample visual audit smoke guard", () => {
     expect(content).toContain("hasSearchEvidence");
     expect(content).toContain("hasApprovalText");
     expect(content).toContain("visibleTextCaptured");
-    expect(helper).toContain("page.screenshot({ path: screenshotPath, fullPage: true })");
+    expect(helper).toContain(
+      "page.screenshot({ path: screenshotPath, fullPage: true })",
+    );
     expect(helper).toContain("scrollMessageSurface");
     expect(helper).toContain('[data-testid="app-sidebar-conversation-open"]');
     expect(helper).toContain('textarea[name="agent-chat-message"]');

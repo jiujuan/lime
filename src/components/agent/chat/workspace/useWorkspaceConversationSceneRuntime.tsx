@@ -30,7 +30,10 @@ import type { CreationReplaySurfaceModel } from "../utils/creationReplaySurface"
 import { buildStepProgressProps } from "./chatSurfaceProps";
 import { WorkspaceConversationScene } from "./WorkspaceConversationScene";
 import { buildWorkspaceConversationCodingViews } from "./workspaceConversationCodingViews";
-import type { AsterTodoItem } from "@/lib/api/agentRuntime";
+import type {
+  AsterSessionExecutionRuntime,
+  AsterTodoItem,
+} from "@/lib/api/agentRuntime";
 import type { CodingWorkbenchRecoveryContext } from "./codingWorkbenchRecovery";
 import type { GeneralWorkbenchCreationTaskEvent } from "../components/generalWorkbenchWorkflowData";
 import { useWorkspaceTaskRailRuntime } from "./useWorkspaceTaskRailRuntime";
@@ -300,6 +303,7 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   todoItems?: AsterTodoItem[];
   currentTurnId: ConversationScenePresentationParams["messageList"]["currentTurnId"];
   threadRead: ConversationScenePresentationParams["messageList"]["threadRead"];
+  executionRuntime?: AsterSessionExecutionRuntime | null;
   pendingActions: ConversationScenePresentationParams["messageList"]["pendingActions"];
   submittedActionsInFlight: ConversationScenePresentationParams["messageList"]["submittedActionsInFlight"];
   queuedTurns: ConversationScenePresentationParams["messageList"]["queuedTurns"];
@@ -324,9 +328,9 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   handleOpenArtifactFromTimeline: (target: ArtifactTimelineOpenTarget) => void;
   handleOpenSavedSiteContent: ConversationScenePresentationParams["messageList"]["onOpenSavedSiteContent"];
   handleArtifactClick: ConversationScenePresentationParams["messageList"]["onArtifactClick"];
+  handleOpenUrlPreview?: ConversationScenePresentationParams["messageList"]["onOpenUrlPreview"];
   handleOpenMessagePreview?: ConversationScenePresentationParams["messageList"]["onOpenMessagePreview"];
   handleSaveMessageAsSkill?: ConversationScenePresentationParams["messageList"]["onSaveMessageAsSkill"];
-  handleSaveMessageAsInspiration?: ConversationScenePresentationParams["messageList"]["onSaveMessageAsInspiration"];
   handleSaveMessageAsKnowledge?: ConversationScenePresentationParams["messageList"]["onSaveMessageAsKnowledge"];
   handleOpenSubagentSession: ConversationScenePresentationParams["messageList"]["onOpenSubagentSession"];
   handlePermissionResponse: ConversationScenePresentationParams["messageList"]["onPermissionResponse"];
@@ -461,6 +465,7 @@ export function useWorkspaceConversationSceneRuntime({
   todoItems = [],
   currentTurnId,
   threadRead,
+  executionRuntime,
   pendingActions = EMPTY_PROJECTED_PENDING_ACTIONS,
   submittedActionsInFlight = EMPTY_PROJECTED_SUBMITTED_ACTIONS,
   queuedTurns = EMPTY_PROJECTED_QUEUED_TURNS,
@@ -481,9 +486,9 @@ export function useWorkspaceConversationSceneRuntime({
   handleOpenArtifactFromTimeline,
   handleOpenSavedSiteContent,
   handleArtifactClick,
+  handleOpenUrlPreview,
   handleOpenMessagePreview,
   handleSaveMessageAsSkill,
-  handleSaveMessageAsInspiration,
   handleSaveMessageAsKnowledge,
   handleOpenSubagentSession,
   handlePermissionResponse,
@@ -642,6 +647,7 @@ export function useWorkspaceConversationSceneRuntime({
     threadItems: projectedThreadItems,
     todoItems,
     threadRead: projectedThreadRead,
+    executionRuntime,
     childSubagentSessions: projectedChildSubagentSessions,
     providerType,
     model,
@@ -880,9 +886,9 @@ export function useWorkspaceConversationSceneRuntime({
       onOpenArtifactFromTimeline: handleOpenArtifactFromTimeline,
       onOpenSavedSiteContent: handleOpenSavedSiteContent,
       onArtifactClick: handleArtifactClick,
+      onOpenUrlPreview: handleOpenUrlPreview,
       onOpenMessagePreview: handleOpenMessagePreview,
       onSaveMessageAsSkill: handleSaveMessageAsSkill,
-      onSaveMessageAsInspiration: handleSaveMessageAsInspiration,
       onSaveMessageAsKnowledge: handleSaveMessageAsKnowledge,
       onOpenSubagentSession: handleOpenSubagentSession,
       onPermissionResponse: handlePermissionResponse,
@@ -922,8 +928,7 @@ export function useWorkspaceConversationSceneRuntime({
       browserOpenRequest: browserWorkbenchOpenRequest,
       onBrowserOpenRequestHandled: onBrowserWorkbenchOpenRequestHandled,
       previewOpenRequest: canvasWorkbenchPreviewOpenRequest,
-      onPreviewOpenRequestHandled:
-        onCanvasWorkbenchPreviewOpenRequestHandled,
+      onPreviewOpenRequestHandled: onCanvasWorkbenchPreviewOpenRequestHandled,
     },
   });
 }

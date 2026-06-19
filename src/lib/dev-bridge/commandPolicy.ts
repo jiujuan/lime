@@ -194,6 +194,7 @@ const APP_SERVER_CURRENT_METHODS = new Set([
   "conversationImport/source/scan",
   "conversationImport/thread/preview",
   "conversationImport/thread/commit",
+  "conversationImport/thread/runtimeEvents/read",
   "projectGit/status",
   "projectGit/diff",
   "projectGit/commits/list",

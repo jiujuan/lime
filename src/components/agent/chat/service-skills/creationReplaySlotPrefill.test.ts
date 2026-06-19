@@ -63,7 +63,7 @@ describe("buildCreationReplaySlotPrefill", () => {
         version: 1,
         kind: "memory_entry",
         source: {
-          page: "memory",
+          page: "memory_store",
           entry_id: "memory-1",
         },
         data: {
@@ -116,7 +116,7 @@ describe("buildCreationReplaySlotPrefill", () => {
         version: 1,
         kind: "memory_entry",
         source: {
-          page: "memory",
+          page: "memory_store",
           entry_id: "memory-1",
         },
         data: {
@@ -246,7 +246,7 @@ describe("buildCreationReplaySlotPrefill", () => {
         version: 1,
         kind: "memory_entry",
         source: {
-          page: "memory",
+          page: "memory_store",
           entry_id: "memory-trend-1",
         },
         data: {
@@ -376,7 +376,7 @@ describe("buildCreationReplaySlotPrefill", () => {
         version: 1,
         kind: "memory_entry",
         source: {
-          page: "memory",
+          page: "memory_store",
           entry_id: "memory-growth-1",
         },
         data: {
@@ -497,7 +497,7 @@ describe("buildCreationReplaySlotPrefill", () => {
         version: 1,
         kind: "memory_entry",
         source: {
-          page: "memory",
+          page: "memory_store",
           entry_id: "memory-article-1",
         },
         data: {
@@ -549,7 +549,7 @@ describe("buildCreationReplaySlotPrefill", () => {
         version: 1,
         kind: "memory_entry",
         source: {
-          page: "memory",
+          page: "memory_store",
         },
         data: {
           category: "experience",

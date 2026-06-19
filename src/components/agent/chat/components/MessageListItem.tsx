@@ -29,6 +29,7 @@ import { MessageTimelineSection } from "./MessageTimelineSection";
 import { MessageUserBody } from "./MessageUserBody";
 import type { MessageListRenderGroup } from "./MessageList.types";
 import { resolveMessageListItemProjection } from "./messageListItemProjection";
+import type { SearchResultPreviewItem } from "../utils/searchResultPreview";
 
 export interface MessageListItemProps {
   msg: Message;
@@ -73,6 +74,7 @@ export interface MessageListItemProps {
   onFileClick?: (fileName: string, content: string) => void;
   onInterruptCurrentTurn?: () => void | Promise<void>;
   onOpenArtifactFromTimeline?: (target: ArtifactTimelineOpenTarget) => void;
+  onOpenUrlPreview?: (item: SearchResultPreviewItem) => void;
   onOpenMessagePreview?: (
     target: MessagePreviewTarget,
     message: Message,
@@ -82,10 +84,6 @@ export interface MessageListItemProps {
   onOpenSubagentSession?: (sessionId: string) => void;
   onPermissionResponse?: (response: ConfirmResponse) => void;
   onQuoteMessage?: (content: string, id: string) => void;
-  onSaveMessageAsInspiration?: (source: {
-    messageId: string;
-    content: string;
-  }) => void;
   onSaveMessageAsKnowledge?: (source: {
     messageId: string;
     content: string;
@@ -146,13 +144,13 @@ export function MessageListItem({
   onFileClick,
   onInterruptCurrentTurn,
   onOpenArtifactFromTimeline,
+  onOpenUrlPreview,
   onOpenMessagePreview,
   onEditMessage,
   onOpenSavedSiteContent,
   onOpenSubagentSession,
   onPermissionResponse,
   onQuoteMessage,
-  onSaveMessageAsInspiration,
   onSaveMessageAsKnowledge,
   onSaveMessageAsSkill,
   onWriteFile,
@@ -228,9 +226,6 @@ export function MessageListItem({
   const canSaveMessageAsSkill = Boolean(
     onSaveMessageAsSkill && projection.canSaveMessageAsSkill,
   );
-  const canSaveMessageAsInspiration = Boolean(
-    onSaveMessageAsInspiration && projection.canSaveMessageAsInspiration,
-  );
   const canSaveMessageAsKnowledge = Boolean(
     onSaveMessageAsKnowledge && projection.canSaveMessageAsKnowledge,
   );
@@ -239,7 +234,6 @@ export function MessageListItem({
       Boolean(msg.imageWorkbenchPreview) &&
       (canQuoteMessage || canCopyMessage)) ||
     canSaveMessageAsSkill ||
-    canSaveMessageAsInspiration ||
     canSaveMessageAsKnowledge;
   const userMessageFooter =
     msg.role === "user" && !isUserCommandMessage ? (
@@ -290,6 +284,7 @@ export function MessageListItem({
     shouldPreviewHistoricalAssistantMessage,
     shouldSuppressStandaloneImageWorkbenchProcess,
     tailRuntimeStatusLine,
+    threadReadStatus: threadRead?.status ?? null,
   });
   const assistantMetaFooter = (
     <MessageAssistantMetaFooter
@@ -446,6 +441,7 @@ export function MessageListItem({
                 onA2UISubmit={onA2UISubmit}
                 onCodeBlockClick={onCodeBlockClick}
                 onFileClick={onFileClick}
+                onOpenUrlPreview={onOpenUrlPreview}
                 onOpenMessagePreview={onOpenMessagePreview}
                 onOpenSavedSiteContent={onOpenSavedSiteContent}
                 onPermissionResponse={onPermissionResponse}
@@ -539,7 +535,6 @@ export function MessageListItem({
                 actionContent={actionContent}
                 canCopyMessage={canCopyMessage}
                 canQuoteMessage={canQuoteMessage}
-                canSaveMessageAsInspiration={canSaveMessageAsInspiration}
                 canSaveMessageAsKnowledge={canSaveMessageAsKnowledge}
                 canSaveMessageAsSkill={canSaveMessageAsSkill}
                 copied={copiedId === msg.id}
@@ -550,7 +545,6 @@ export function MessageListItem({
                 messageId={msg.id}
                 onCopy={handleCopy}
                 onQuoteMessage={onQuoteMessage}
-                onSaveMessageAsInspiration={onSaveMessageAsInspiration}
                 onSaveMessageAsKnowledge={onSaveMessageAsKnowledge}
                 onSaveMessageAsSkill={onSaveMessageAsSkill}
               />

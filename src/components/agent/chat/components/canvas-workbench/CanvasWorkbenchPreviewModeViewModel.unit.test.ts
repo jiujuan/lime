@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Artifact } from "@/lib/artifact/types";
 import type { CanvasWorkbenchResolvedSelection } from "../CanvasWorkbenchLayoutViewModel";
 import {
+  resolveCanvasWorkbenchHtmlPreviewFrameState,
   resolveCanvasWorkbenchPreferredPreviewModeFromPath,
   resolveCanvasWorkbenchPreviewModeState,
 } from "./CanvasWorkbenchPreviewModeViewModel";
@@ -140,5 +141,45 @@ describe("CanvasWorkbenchPreviewModeViewModel", () => {
     expect(
       resolveCanvasWorkbenchPreferredPreviewModeFromPath("src/main.rs"),
     ).toBe("code");
+  });
+
+  it("导入 HTML 已有内容时应优先用 srcDoc，避免依赖本地文件 URL", () => {
+    const resolveLocalPreviewUrl = vi.fn(
+      () => "asset://local/imported-preview.html",
+    );
+    const state = resolveCanvasWorkbenchHtmlPreviewFrameState(
+      createSelection({
+        title: "imported-preview.html",
+        selectionPath: "/tmp/imported-preview.html",
+        content: "<!doctype html><html><body>导入预览</body></html>",
+      }),
+      resolveLocalPreviewUrl,
+    );
+
+    expect(resolveLocalPreviewUrl).not.toHaveBeenCalled();
+    expect(state.src).toBeNull();
+    expect(state.srcDoc).toContain("导入预览");
+    expect(state.sandbox).not.toContain("allow-same-origin");
+  });
+
+  it("HTML 内容为空时才回退使用本地文件 URL", () => {
+    const resolveLocalPreviewUrl = vi.fn(
+      () => "asset://local/imported-preview.html",
+    );
+    const state = resolveCanvasWorkbenchHtmlPreviewFrameState(
+      createSelection({
+        title: "imported-preview.html",
+        selectionPath: "/tmp/imported-preview.html",
+        content: "",
+      }),
+      resolveLocalPreviewUrl,
+    );
+
+    expect(resolveLocalPreviewUrl).toHaveBeenCalledWith(
+      "/tmp/imported-preview.html",
+    );
+    expect(state.src).toBe("asset://local/imported-preview.html");
+    expect(state.srcDoc).toBeUndefined();
+    expect(state.sandbox).toContain("allow-same-origin");
   });
 });

@@ -18,7 +18,6 @@ const {
   exportAgentRuntimeReplayCaseMock,
   exportAgentRuntimeReviewDecisionTemplateMock,
   saveAgentRuntimeReviewDecisionMock,
-  prefetchContextMemoryForTurnMock,
   mockOpenExternalUrlWithSystemBrowser,
   mockToast,
 } = vi.hoisted(() => ({
@@ -28,7 +27,6 @@ const {
   exportAgentRuntimeReplayCaseMock: vi.fn(),
   exportAgentRuntimeReviewDecisionTemplateMock: vi.fn(),
   saveAgentRuntimeReviewDecisionMock: vi.fn(),
-  prefetchContextMemoryForTurnMock: vi.fn(),
   mockOpenExternalUrlWithSystemBrowser: vi.fn().mockResolvedValue(undefined),
   mockToast: {
     success: vi.fn(),
@@ -46,7 +44,6 @@ export function getHarnessPanelTestMocks() {
     exportAgentRuntimeReplayCaseMock,
     exportAgentRuntimeReviewDecisionTemplateMock,
     saveAgentRuntimeReviewDecisionMock,
-    prefetchContextMemoryForTurnMock,
     mockOpenExternalUrlWithSystemBrowser,
     mockToast,
   };
@@ -84,10 +81,6 @@ vi.mock("react-syntax-highlighter", () => ({
 
 vi.mock("react-syntax-highlighter/dist/esm/styles/prism", () => ({
   oneLight: {},
-}));
-
-vi.mock("@/lib/api/memoryRuntime", () => ({
-  prefetchContextMemoryForTurn: prefetchContextMemoryForTurnMock,
 }));
 
 export interface RenderResult {
@@ -688,15 +681,6 @@ beforeEach(async () => {
   Object.defineProperty(window, "open", {
     configurable: true,
     value: vi.fn(),
-  });
-  prefetchContextMemoryForTurnMock.mockResolvedValue({
-    session_id: "session-default",
-    rules_source_paths: [],
-    working_memory_excerpt: null,
-    durable_memories: [],
-    team_memory_entries: [],
-    latest_compaction: null,
-    prompt: null,
   });
 });
 

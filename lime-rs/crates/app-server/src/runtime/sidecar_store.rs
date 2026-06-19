@@ -85,6 +85,26 @@ impl SidecarStore {
         )
         .ok()
     }
+
+    pub fn clear_session(&self, session_id: &str) -> Result<(), String> {
+        let session_id = session_id.trim();
+        if session_id.is_empty() {
+            return Err("sidecar session id must not be empty".to_string());
+        }
+        let relative_path =
+            normalize_sidecar_relative_path(&format!("sessions/{}", safe_file_stem(session_id)))?;
+        let path = self
+            .root
+            .join(relative_path_to_platform_path(&relative_path));
+        match fs::remove_dir_all(&path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(format!(
+                "无法删除 sidecar 会话目录 {}: {error}",
+                path.display()
+            )),
+        }
+    }
 }
 
 pub fn normalize_sidecar_relative_path(path: &str) -> Result<String, String> {
@@ -221,5 +241,31 @@ mod tests {
         assert!(normalize_sidecar_relative_path("../secret.txt").is_err());
         assert!(normalize_sidecar_relative_path("/tmp/secret.txt").is_err());
         assert!(normalize_sidecar_relative_path("file://secret.txt").is_err());
+    }
+
+    #[test]
+    fn clear_session_removes_session_scoped_sidecars() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let store = SidecarStore::new(temp.path()).expect("store");
+        let reference = store
+            .write_text(&SidecarWriteRequest {
+                session_id: "sess-a".to_string(),
+                kind: "conversation_import_runtime_events".to_string(),
+                logical_id: "normalized-runtime-events".to_string(),
+                relative_path: session_scoped_relative_path(
+                    "sess-a",
+                    "conversation-import/runtime-events.jsonl",
+                ),
+                content: "line".to_string(),
+            })
+            .expect("write");
+
+        assert_eq!(
+            store.read_text(&reference.relative_path).as_deref(),
+            Some("line")
+        );
+        store.clear_session("sess-a").expect("clear");
+        assert!(store.read_text(&reference.relative_path).is_none());
+        store.clear_session("sess-a").expect("clear missing");
     }
 }

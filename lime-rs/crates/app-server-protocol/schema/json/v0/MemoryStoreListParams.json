@@ -1,0 +1,46 @@
+{
+  "$defs": {
+    "MemoryStoreScope": {
+      "enum": [
+        "global",
+        "workspace"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "cursor": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "maxResults": {
+      "format": "uint",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "path": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "scope": {
+      "$ref": "#/$defs/MemoryStoreScope",
+      "default": "global"
+    },
+    "workspaceRoot": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "title": "MemoryStoreListParams",
+  "type": "object"
+}

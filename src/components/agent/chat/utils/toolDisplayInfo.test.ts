@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   buildToolHeadline,
@@ -12,6 +12,14 @@ import {
   resolveUserFacingToolDisplayLabel,
   resolveToolDisplayLabel,
 } from "./toolDisplayInfo";
+import { loadNamespaceResource } from "@/i18n/loadNamespace";
+import { SUPPORTED_LOCALES } from "@/i18n/locales";
+
+const resetDocumentLanguage = () => {
+  document.documentElement.lang = "";
+};
+
+afterEach(resetDocumentLanguage);
 
 const REFERENCE_JS_TOOL_NAME_MAPPINGS = [
   ["AgentTool", "agent"],
@@ -486,6 +494,103 @@ describe("toolDisplayInfo", () => {
     ).toBe("已处理 2 项安排");
   });
 
+  it("工具批次标题应走 agent namespace 资源而不是中文硬编码", () => {
+    document.documentElement.lang = "en-US";
+
+    const commandInfo = getToolDisplayInfo("exec_command", "completed");
+    expect(commandInfo.label).toBe("Command run");
+    expect(commandInfo.groupTitle).toBe("Command");
+    expect(commandInfo.verb).toBe("Run");
+    expect(commandInfo.action).toBe("Ran");
+
+    const mcpInfo = getToolDisplayInfo("McpAuthTool", "completed");
+    expect(mcpInfo.label).toBe("MCP authorization");
+    expect(mcpInfo.groupTitle).toBe("MCP");
+    expect(mcpInfo.action).toBe("MCP authorization completed");
+
+    expect(
+      buildToolGroupHeadline([
+        {
+          id: "tool-command-1",
+          name: "bash",
+          arguments: JSON.stringify({ command: "npm test" }),
+          status: "completed",
+          result: { success: true, output: "ok" },
+          startTime: new Date("2026-04-13T00:00:00.000Z"),
+          endTime: new Date("2026-04-13T00:00:01.000Z"),
+        },
+        {
+          id: "tool-command-2",
+          name: "exec_command",
+          arguments: JSON.stringify({ command: "npm run lint" }),
+          status: "completed",
+          result: { success: true, output: "ok" },
+          startTime: new Date("2026-04-13T00:00:02.000Z"),
+          endTime: new Date("2026-04-13T00:00:03.000Z"),
+        },
+      ]),
+    ).toBe("Ran 2 commands");
+
+    expect(
+      buildToolGroupHeadline([
+        {
+          id: "tool-browser-1",
+          name: "browser_click",
+          arguments: JSON.stringify({ element: "Import" }),
+          status: "running",
+          startTime: new Date("2026-04-13T00:00:04.000Z"),
+        },
+      ]),
+    ).toBe("1 page operation steps running");
+  });
+
+  it("i18n 未初始化时工具批次标题也应读取非中英语言资源", () => {
+    document.documentElement.lang = "ja-JP";
+
+    const browserInfo = getToolDisplayInfo(
+      "mcp__playwright__browser_screenshot",
+      "running",
+    );
+    expect(browserInfo.label).toBe("ページスクリーンショット");
+    expect(browserInfo.groupTitle).toBe("ブラウザー");
+    expect(browserInfo.verb).toBe("スクリーンショット");
+    expect(browserInfo.action).toBe("スクリーンショット取得中");
+
+    expect(
+      buildToolGroupHeadline([
+        {
+          id: "tool-command-ja-1",
+          name: "bash",
+          arguments: JSON.stringify({ command: "npm test" }),
+          status: "completed",
+          result: { success: true, output: "ok" },
+          startTime: new Date("2026-04-13T00:00:00.000Z"),
+          endTime: new Date("2026-04-13T00:00:01.000Z"),
+        },
+      ]),
+    ).toBe("1 件のコマンドを実行済み");
+
+    document.documentElement.lang = "ko-KR";
+
+    const siteInfo = getToolDisplayInfo("lime_site_recommend", "completed");
+    expect(siteInfo.label).toBe("사이트 기능 추천");
+    expect(siteInfo.groupTitle).toBe("사이트");
+    expect(siteInfo.verb).toBe("추천");
+    expect(siteInfo.action).toBe("추천됨");
+
+    expect(
+      buildToolGroupHeadline([
+        {
+          id: "tool-write-ko-1",
+          name: "write_file",
+          arguments: JSON.stringify({ path: "docs/result.md" }),
+          status: "running",
+          startTime: new Date("2026-04-13T00:00:02.000Z"),
+        },
+      ]),
+    ).toBe("파일 1개 저장 중");
+  });
+
   it("应为图片查看批次生成查看语义标题", () => {
     expect(
       buildToolGroupHeadline([
@@ -605,5 +710,28 @@ describe("toolDisplayInfo", () => {
         },
       ]),
     ).toBe("已完成 2 项站点操作");
+  });
+
+  it("工具批次标题资源应覆盖所有支持语言", () => {
+    const zhCNResource = loadNamespaceResource("zh-CN", "agent");
+    const requiredKeys = Object.keys(zhCNResource).filter(
+      (key) =>
+        key.startsWith("agentChat.toolCall.group.") &&
+        !key.endsWith(".hiddenItems") &&
+        !key.endsWith(".collapseWork") &&
+        !key.endsWith(".expandWork") &&
+        !key.endsWith(".collapseSearch") &&
+        !key.endsWith(".expandSearch") &&
+        !key.endsWith(".hiddenSearchGroups"),
+    );
+
+    expect(requiredKeys).toContain("agentChat.toolCall.group.command.completed");
+
+    for (const locale of SUPPORTED_LOCALES) {
+      const resource = loadNamespaceResource(locale, "agent");
+      for (const key of requiredKeys) {
+        expect(resource[key], `${locale} missing ${key}`).toBeTruthy();
+      }
+    }
   });
 });

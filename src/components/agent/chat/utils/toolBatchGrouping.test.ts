@@ -211,6 +211,38 @@ describe("toolBatchGrouping", () => {
     expect(summary?.supportingLines.join("\n")).not.toContain("metadata");
   });
 
+  it("运行中的 WebSearch / WebFetch 应展示搜索进行态而不是完成态", () => {
+    const summary = summarizeStreamingToolBatch([
+      {
+        ...createToolCall("web_search", {
+          query: "today world news Reuters",
+        }),
+        status: "running",
+      },
+      {
+        ...createToolCall("WebFetch", {
+          url: "https://www.reuters.com/world/",
+        }),
+        status: "running",
+      },
+    ]);
+
+    expect(summary).toEqual(
+      expect.objectContaining({
+        kind: "web_search",
+        title: "正在搜索网页 1 次，读取网页 1 次",
+        countLabel: "搜 1 / 读 1",
+        rawDetailLabel: "展开查看搜索与读取进度",
+      }),
+    );
+    expect(summary?.supportingLines).toEqual(
+      expect.arrayContaining([
+        "today world news Reuters",
+        "https://www.reuters.com/world/",
+      ]),
+    );
+  });
+
   it("应从 WebSearch 结果中提取来源行而不暴露原始输出", () => {
     const summary = summarizeStreamingToolBatch([
       {
@@ -387,9 +419,9 @@ describe("toolBatchGrouping", () => {
     expect(summary).toEqual(
       expect.objectContaining({
         kind: "web_search",
-        title: "已搜索网页 1 次",
-        countLabel: "1 次",
-        rawDetailLabel: "展开查看搜索来源",
+        title: "已搜索网页 1 次，读取网页 2 次",
+        countLabel: "搜 1 / 读 2",
+        rawDetailLabel: "展开查看搜索与读取来源",
       }),
     );
     expect(summary?.supportingLines).toEqual(

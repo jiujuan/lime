@@ -1,8 +1,26 @@
 import type {
+  ConversationImportSourceClient,
   ConversationImportSourceProvenance,
   ImportedThreadSummary,
 } from "@/lib/api/conversationImport";
 import { formatDate } from "@/i18n/format";
+
+export const DEFAULT_CONVERSATION_IMPORT_SOURCE_CLIENT: ConversationImportSourceClient =
+  "codex";
+
+const IMPORT_SOURCE_CLIENT_LABELS: Record<
+  ConversationImportSourceClient,
+  { key: string; defaultValue: string }
+> = {
+  codex: {
+    key: "navigation.sidebar.importDialog.source.localHistory",
+    defaultValue: "Local history",
+  },
+  claude_code: {
+    key: "navigation.sidebar.importDialog.source.claudeCode",
+    defaultValue: "Claude Code",
+  },
+};
 
 export interface ConversationImportDialogTranslate {
   (key: string, defaultValue: string): string;
@@ -17,8 +35,16 @@ export function normalizeOptional(value?: string | null): string | undefined {
 
 export function resolveImportThreadTitle(
   thread?: ImportedThreadSummary | null,
+  t?: ConversationImportDialogTranslate,
 ): string {
-  return normalizeOptional(thread?.title) || "本地历史对话";
+  return (
+    normalizeOptional(thread?.title) ||
+    t?.(
+      "navigation.sidebar.importDialog.threadList.defaultTitle",
+      "Local history conversation",
+    ) ||
+    "Local history conversation"
+  );
 }
 
 export function firstImportableThread(
@@ -29,6 +55,114 @@ export function firstImportableThread(
     threads[0] ??
     null
   );
+}
+
+export type ImportThreadGroupMode = "day" | "month";
+export type ImportThreadArchiveFilter = "all" | "active" | "archived";
+
+export interface ImportThreadGroup {
+  id: string;
+  label: string;
+  threads: ImportedThreadSummary[];
+}
+
+export function isSelectableImportThread(
+  thread?: ImportedThreadSummary | null,
+): boolean {
+  return (
+    thread?.importStatus === "not_imported" ||
+    thread?.importStatus === "imported"
+  );
+}
+
+export function initialImportSelection(
+  threads: ImportedThreadSummary[],
+): Set<string> {
+  const first = firstImportableThread(threads);
+  return first && isSelectableImportThread(first)
+    ? new Set([first.sourceThreadId])
+    : new Set();
+}
+
+export function selectedImportThreads(
+  threads: ImportedThreadSummary[],
+  selectedThreadIds: ReadonlySet<string>,
+): ImportedThreadSummary[] {
+  return threads.filter(
+    (thread) =>
+      selectedThreadIds.has(thread.sourceThreadId) &&
+      isSelectableImportThread(thread),
+  );
+}
+
+export function filterImportThreadsByArchiveStatus(
+  threads: ImportedThreadSummary[],
+  filter: ImportThreadArchiveFilter,
+): ImportedThreadSummary[] {
+  if (filter === "archived") {
+    return threads.filter((thread) => thread.archived);
+  }
+  if (filter === "active") {
+    return threads.filter((thread) => !thread.archived);
+  }
+  return threads;
+}
+
+export function buildImportThreadGroups(
+  threads: ImportedThreadSummary[],
+  mode: ImportThreadGroupMode,
+  locale: string,
+  t: ConversationImportDialogTranslate,
+): ImportThreadGroup[] {
+  const groups = new Map<string, ImportThreadGroup>();
+  for (const thread of threads) {
+    const group = resolveThreadGroup(thread, mode, locale, t);
+    const current = groups.get(group.id);
+    if (current) {
+      current.threads.push(thread);
+    } else {
+      groups.set(group.id, { ...group, threads: [thread] });
+    }
+  }
+  return [...groups.values()];
+}
+
+function resolveThreadGroup(
+  thread: ImportedThreadSummary,
+  mode: ImportThreadGroupMode,
+  locale: string,
+  t: ConversationImportDialogTranslate,
+): ImportThreadGroup {
+  const value = thread.updatedAt ?? thread.createdAt;
+  if (!value) {
+    return {
+      id: "unknown",
+      label: t("navigation.sidebar.importDialog.group.unknown", "Unknown time"),
+      threads: [],
+    };
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return {
+      id: "unknown",
+      label: t("navigation.sidebar.importDialog.group.unknown", "Unknown time"),
+      threads: [],
+    };
+  }
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const id = mode === "month" ? `${year}-${month}` : `${year}-${month}-${day}`;
+  const label =
+    mode === "month"
+      ? formatDate(value, { locale, year: "numeric", month: "short" })
+      : formatDate(value, {
+          locale,
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        });
+  return { id, label, threads: [] };
 }
 
 export function isImportedThread(
@@ -61,7 +195,7 @@ export function resolveImportThreadSecondaryText(
   return (
     updatedAt ||
     normalizeOptional(thread.cwd) ||
-    t("navigation.sidebar.importDialog.threadList.localHistory", "本地历史")
+    t("navigation.sidebar.importDialog.threadList.localHistory", "Local history")
   );
 }
 
@@ -84,11 +218,13 @@ export function formatImportOptionalDate(
 
 export function resolveImportSourceClientLabel(
   sourceClient: string | undefined,
+  t: ConversationImportDialogTranslate,
 ): string {
-  if (sourceClient === "claude_code") {
-    return "Claude Code";
-  }
-  return "本地历史";
+  const sourceLabel =
+    IMPORT_SOURCE_CLIENT_LABELS[
+      sourceClient as ConversationImportSourceClient
+    ] ?? IMPORT_SOURCE_CLIENT_LABELS.codex;
+  return t(sourceLabel.key, sourceLabel.defaultValue);
 }
 
 export function buildImportPreviewMetaText(
@@ -98,8 +234,8 @@ export function buildImportPreviewMetaText(
   return t("navigation.sidebar.importDialog.preview.meta", {
     updatedAt:
       updatedAt ||
-      t("navigation.sidebar.importDialog.preview.unknownTime", "未知时间"),
-    defaultValue: "历史对话 · {{updatedAt}}",
+      t("navigation.sidebar.importDialog.preview.unknownTime", "Unknown time"),
+    defaultValue: "History thread · {{updatedAt}}",
   });
 }
 
@@ -132,22 +268,22 @@ export function sourceEventLabel(
   if (normalized === "event_msg" || normalized === "response_item") {
     return t(
       "navigation.sidebar.importDialog.provenance.event.history",
-      "历史记录",
+      "History record",
     );
   }
   if (normalized.includes("tool")) {
     return t(
       "navigation.sidebar.importDialog.provenance.event.tool",
-      "工具记录",
+      "Tool record",
     );
   }
   if (normalized.includes("approval")) {
     return t(
       "navigation.sidebar.importDialog.provenance.event.approval",
-      "确认记录",
+      "Confirmation record",
     );
   }
-  return t("navigation.sidebar.importDialog.provenance.event.item", "来源记录");
+  return t("navigation.sidebar.importDialog.provenance.event.item", "Source record");
 }
 
 export function sourcePayloadLabel(
@@ -162,36 +298,36 @@ export function sourcePayloadLabel(
   if (normalized === "user_message" || normalized === "message_user") {
     return t(
       "navigation.sidebar.importDialog.provenance.payload.user",
-      "用户消息",
+      "User message",
     );
   }
   if (normalized === "agent_message" || normalized === "assistant_message") {
     return t(
       "navigation.sidebar.importDialog.provenance.payload.assistant",
-      "助手回复",
+      "Assistant reply",
     );
   }
   if (normalized.includes("function_call") || normalized.includes("tool")) {
     return t(
       "navigation.sidebar.importDialog.provenance.payload.tool",
-      "工具调用",
+      "Tool call",
     );
   }
   if (normalized.includes("approval")) {
     return t(
       "navigation.sidebar.importDialog.provenance.payload.approval",
-      "确认请求",
+      "Confirmation request",
     );
   }
   if (normalized.includes("patch")) {
     return t(
       "navigation.sidebar.importDialog.provenance.payload.patch",
-      "文件变更",
+      "File change",
     );
   }
   return t(
     "navigation.sidebar.importDialog.provenance.payload.item",
-    "导入条目",
+    "Imported item",
   );
 }
 
@@ -206,7 +342,7 @@ export function buildSourceProvenanceLabels(
   const labels: string[] = [];
   if (provenance.sourceEventSeq) {
     labels.push(
-      t("navigation.sidebar.importDialog.provenance.line", "来源行 #{{line}}", {
+      t("navigation.sidebar.importDialog.provenance.line", "Source line #{{line}}", {
         line: provenance.sourceEventSeq,
       }),
     );
@@ -224,9 +360,44 @@ export function buildSourceProvenanceLabels(
 
   if (provenance.sourceCallId) {
     labels.push(
-      t("navigation.sidebar.importDialog.provenance.call", "调用记录"),
+      t("navigation.sidebar.importDialog.provenance.call", "Call record"),
     );
   }
 
   return labels;
+}
+
+export function resolveImportWarningText(
+  warning: string,
+  t: ConversationImportDialogTranslate,
+): string {
+  const normalized = warning.trim();
+  if (
+    normalized ===
+    "Some source rollout items are counted but not shown in preview."
+  ) {
+    return t(
+      "navigation.sidebar.importDialog.warnings.provenanceOnlyPreview",
+      "Some source items are kept as provenance only and will not appear in the preview.",
+    );
+  }
+  if (
+    normalized ===
+    "Imported local history messages and supported tool/patch timeline events; unsupported source items remain as provenance only."
+  ) {
+    return t(
+      "navigation.sidebar.importDialog.warnings.provenanceOnlyCommit",
+      "Messages and supported activity are imported; unsupported source items are kept as provenance only.",
+    );
+  }
+  if (normalized.includes("high-volume local history runtime events")) {
+    return t(
+      "navigation.sidebar.importDialog.warnings.highVolumeRuntimeEvents",
+      "This conversation has many activity records. The default view shows a compact set; full records remain available in the detail panel.",
+    );
+  }
+  return t(
+    "navigation.sidebar.importDialog.warnings.generic",
+    "Some source details could only be kept as provenance.",
+  );
 }

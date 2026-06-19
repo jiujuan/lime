@@ -101,6 +101,7 @@ export interface SendMessageOptions {
   reasoningEffort?: string;
   systemPromptOverride?: string;
   searchMode?: AgentRuntimeWebSearchMode;
+  explicitToolPreferences?: boolean;
   skipSessionRestore?: boolean;
   skipSessionStartHooks?: boolean;
   skipPreSubmitResume?: boolean;

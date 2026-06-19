@@ -1,378 +1,324 @@
-# 灵感库 / 记忆系统目标架构
+# Lime 文件化记忆目标架构
 
-> 状态：current architecture plan  
-> 更新时间：2026-05-01  
-> 目标：在不新增长期记忆事实源的前提下，把底层 memory runtime 翻译成普通用户可理解的灵感库产品层。
+> 状态：current architecture plan
+> 更新时间：2026-06-18
+> 目标：以文件化 memory store 为唯一记忆事实源，App Server 提供受控工具和 prompt contributor，Soul 作为独立交互配置保留，SQLite 只保留状态与清理边界。
 
 ## 1. 架构原则
 
 ### 1.1 单事实源
 
-长期灵感只认：
+记忆内容只认：
 
 ```text
-unified_memory_*
+memory store folder
 ```
 
-运行时记忆只认：
+默认上下文只认：
 
 ```text
-memory_runtime_*
+memory_summary.md
 ```
 
-会话压缩只认：
+按需读取只认：
 
 ```text
-agent_runtime_compact_session
+memory tools -> MemoryBackend
 ```
 
-前台 `灵感库` 是 projection，不是新存储主链。
-
-Ribbi 产品形态对应的内部事实源是：
+交互身份只认：
 
 ```text
-taste / reference / memory / feedback -> context compile -> 单主生成容器
+memory.soul -> MemorySoulConfig
 ```
 
-这里的 taste / reference / memory / feedback 是后台编译对象，不是普通用户默认导航。
-
-### 1.2 前后台分层
+派生索引只认：
 
 ```text
-普通用户前台
-  -> 灵感库 projection
-  -> 风格 / 参考 / 成果 / 偏好 / 收藏
-  -> 继续生成 / 编辑 / 禁用 / 删除
-
-开发者面板 / 高级诊断后台
-  -> feature gate 默认关闭
-  -> memory_runtime_* stable read model
-  -> 来源链 / working memory / durable recall / Team Memory / compaction / active recall trace
+index/ 可删除、可重建、可降级
 ```
 
-固定规则：
+### 1.2 读写分离
 
-**普通用户前台不解释底层如何命中，只解释这条灵感如何帮助下一轮生成。**
+```text
+read path:
+  memory_summary.md -> prompt contributor
+  MEMORY.md / rollout_summaries -> memory tools
+  memory.soul -> interaction contributor / generation brief
 
-### 1.3 高级能力默认关闭，但 Memory baseline 常开
+write path:
+  explicit user request -> ad-hoc note
+  turn/session evidence -> rollout summary
+  background consolidation -> MEMORY.md / memory_summary.md
+  Soul editor / SOUL.md import -> memory.soul config
+```
 
-这些能力必须受开发者面板或高级设置控制，默认 off；这不等于关闭 Lime 的基础记忆能力：
+写入不得在同一 turn 里立即改变当前 prompt。Soul 的 artifact voice 只影响明确的 generation brief，不回写长期记忆。
 
-1. active memory / 自动召回预览。
-2. raw source / hit layer / provider 诊断。
-3. auto organization / dreaming 实验。
-4. external memory provider。
+### 1.3 数据库边界
 
-常开的 baseline：
+SQLite 允许保存：
 
-1. 已确认偏好、禁用列表、taste / voice summary cache。
-2. 当前会话工作上下文和短摘要。
-3. 少量 durable memory top-k 或 evidence id。
-4. 条目级删除、禁用、归档和影响解释。
+1. thread / turn 状态。
+2. memory mode / stage data。
+3. 旧实现清理标记。
+4. derived index metadata。
+5. reset / rebuild 记录。
 
-默认关闭的架构理由：
+SQLite 不允许保存：
 
-1. 防止普通用户感到系统“擅自记住并使用”。
-2. 避免误召回直接污染生成结果。
-3. 保护隐私、prompt cache 稳定和可审计边界。
-4. 给团队留下 trace / rollback / evaluation 的安全缓冲。
+1. 下一代记忆 canonical content。
+2. embedding BLOB 作为默认检索事实源。
+3. 多套 provider 输出的 raw recall truth。
+4. Soul artifact voice 的长期记忆副本。
 
-### 1.4 Claude Code 架构映射
+## 2. 目标目录结构
 
-| Claude Code 层 | Lime 底层 | Lime 前台 |
-| --- | --- | --- |
-| `CLAUDE.md` / rules | 规则来源链 | 我的方法 / 创作规则 |
-| auto-memory | 自动抽取候选 | 待整理灵感 |
-| session memory | working memory | 这轮正在做什么 |
-| persistent memory | unified memory | 灵感库 |
-| compaction | session compaction | 继续上一轮 |
-| `/memory` | 高级诊断入口 | 设置 / 高级 / 诊断 |
+```text
+memories/
+  memory_summary.md
+  MEMORY.md
+  rollout_summaries/
+    <thread-id>.jsonl
+    <thread-id>.md
+  skills/
+    <skill-name>/
+      SKILL.md
+      references/
+  extensions/
+    ad_hoc/
+      notes/
+        <timestamp>-<slug>.md
+  index/
+    manifest.json
+    local-search/
+```
 
-## 2. 当前事实源分类
+规则：
 
-### 2.1 `current`
+1. 目录根通过统一 path resolver 获取。
+2. workspace 级记忆与全局记忆必须可区分。
+3. 工具层只暴露相对路径。
+4. hidden path、symlink、path traversal 默认拒绝。
+5. `index/` 可被删除并重建，不影响记忆本体。
+6. `SOUL.md` 是导入 / 复制快照，不是 memory store 的 canonical 文件。
 
-这些路径共同构成 current 主链：
+## 3. 核心接口
 
-1. `internal/aiprompts/memory-compaction.md`
-2. `src/lib/api/memoryRuntime.ts`
-3. `lime-rs/src/commands/memory_management_cmd.rs`
-4. `lime-rs/src/services/memory_source_resolver_service.rs`
-5. `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs`
-6. `src/lib/api/unifiedMemory.ts`
-7. `lime-rs/src/commands/unified_memory_cmd.rs`
-8. `src/components/memory/inspirationProjection.ts`
-9. `src/components/agent/chat/utils/saveSceneAppExecutionAsInspiration.ts`
-10. `src/components/agent/chat/utils/curatedTaskRecommendationSignals.ts`
+```rust
+trait MemoryBackend: Clone + Send + Sync + 'static {
+    fn add_ad_hoc_note(&self, request: AddAdHocMemoryNoteRequest) -> Future<Result<AddAdHocMemoryNoteResponse>>;
+    fn list(&self, request: ListMemoriesRequest) -> Future<Result<ListMemoriesResponse>>;
+    fn read(&self, request: ReadMemoryRequest) -> Future<Result<ReadMemoryResponse>>;
+    fn search(&self, request: SearchMemoriesRequest) -> Future<Result<SearchMemoriesResponse>>;
+}
+```
 
-事实源声明：
+P0 backend：
 
-**长期创作者资产收敛到 `unified_memory_*`；当前回合上下文收敛到 `memory_runtime_*`；前台灵感库只做投影与操作编排。**
+```text
+LocalMemoryBackend
+```
 
-### 2.2 `compat`
+P2 可选 backend / index：
 
-这些路径仍可保留，但不能继续定义主链：
+```text
+IndexedMemoryBackend(LocalMemoryBackend + DerivedIndex)
+RemoteMemoryBackend
+```
 
-1. `src/lib/api/memory.ts`
-2. `lime-rs/src/commands/memory_cmd.rs`
-3. `src/lib/workspace/projectPrompt.ts`
+任何 backend 必须保持同一输出合同，不能把 provider-specific 字段泄露给普通调用方。
 
-定位：
+## 4. 层级划分
 
-- 只承接项目资料、角色、世界观、大纲等附属层。
-- 不新增长期灵感能力。
-- 不新增 runtime recall 能力。
-
-### 2.3 `deprecated`
-
-这些路径不应继续扩张：
-
-1. 独立 memory feedback 链。
-2. 任何重新恢复独立记忆反馈前端页的实现。
-3. 新增平行 `inspiration_*` CRUD 以绕开 `unified_memory_*` 的实现。
-
-### 2.4 `dead`
-
-本路线图不新增 dead 分类；后续若清理本地备份残留，按 `internal/aiprompts/governance.md` 执行。
-
-## 3. 目标分层
-
-### 3.1 Presentation Layer
+### 4.1 Store Layer
 
 职责：
 
-1. 展示灵感对象。
-2. 提供继续生成、编辑、禁用、删除、整理动作。
-3. 将底层类别翻译成创作者语言。
-4. 将推荐信号解释成可行动建议。
+1. 创建和校验 memory folder。
+2. 读取 / 写入 memory 文件。
+3. 路径 canonicalize 与越界防护。
+4. reset 与 rebuild 的文件级操作。
+
+### 4.2 Prompt Contributor
+
+职责：
+
+1. 读取 `memory_summary.md`。
+2. 按 token 预算截断。
+3. 生成 developer policy fragment。
+4. 当 summary 缺失或为空时返回空。
 
 不允许：
 
-1. 自己扫描磁盘构造记忆。
-2. 自己重组 durable recall。
-3. 自己决定 runtime prompt 应该注入什么。
+1. 在 prompt contributor 里搜索全量 memory。
+2. 在 prompt contributor 里调用 embedding provider。
+3. 注入 raw rollout summary。
+4. 把 Soul artifact voice 写入 summary。
 
-### 3.2 Projection Layer
-
-职责：
-
-1. `UnifiedMemory -> InspirationProjectionEntryViewModel`。
-2. `UnifiedMemory[] -> InspirationTasteSummaryViewModel`。
-3. 根据禁用、归档、待整理状态过滤默认推荐对象。
-4. 生成普通用户影响解释。
-
-关键对象：
-
-```text
-InspirationProjectionEntry
-  id
-  title
-  summary
-  projectionKind
-  tags
-  influenceState
-  influenceReason
-  nextActions
-```
-
-### 3.3 Action Orchestration Layer
+### 4.3 Tool Contributor
 
 职责：
 
-1. 保存结果到灵感库。
-2. 记录推荐信号。
-3. 构造 launcher prefill。
-4. 合并 reference selection。
-5. 同步 `生成 -> 灵感库 -> 生成` 闭环。
+1. 注册 `memory_list`、`memory_read`、`memory_search`、`memory_add_note`。
+2. 将工具参数转换为 backend request。
+3. 记录工具调用 telemetry。
+4. 输出 JSON 与 citation 字段。
 
-当前入口：
-
-1. `saveSceneAppExecutionAsInspiration(...)`
-2. `recordCuratedTaskRecommendationSignalFromMemory(...)`
-3. `buildCuratedTaskReferenceEntries(...)`
-4. `buildMemoryEntryCreationReplayRequestMetadata(...)`
-
-### 3.4 Durable Memory Layer
+### 4.4 Soul Contributor
 
 职责：
 
-1. 长期灵感 CRUD。
-2. 统计、列表、搜索。
-3. 从对话候选抽取结构化长期记忆。
-4. 被 runtime durable recall 消费。
-
-固定入口：
-
-```text
-unified_memory_*
-```
-
-### 3.5 Runtime Memory Layer
-
-职责：
-
-1. turn 前 prefetch。
-2. working memory 聚合。
-3. durable recall。
-4. Team Memory shadow。
-5. latest compaction。
-6. prompt augmentation。
-
-固定入口：
-
-```text
-memory_runtime_prefetch_for_turn
-memory_runtime_get_working_memory
-memory_runtime_get_extraction_status
-```
-
-### 3.6 Feature Gate Layer
-
-职责：
-
-1. 统一控制 `memory diagnostics`、`active memory recall preview`、`auto organization experiments`、`raw source / hit layer`、`external memory provider`。
-2. 保证默认关闭。
-3. 保证开关状态可见、可关闭、可用于测试断言。
-4. 保证开关只改变展示 / 实验运行，不改变 `unified_memory_*` 与 `memory_runtime_*` 的事实源地位。
+1. 读取保存后的 `memory.soul` 配置。
+2. 为交互身份、沟通节奏和解释深度提供 prompt 片段。
+3. 为 artifact voice 生成 `generation_brief_only` 元数据。
+4. 支持 `SOUL.md` 导入预览、warning 和复制输出。
 
 不允许：
 
-1. 每个组件各自维护一套诊断开关。
-2. 开关开启后绕过 current API 直接扫描磁盘或拼 prompt。
-3. 多个 external provider 同时 active。
+1. 把 `SOUL.md` 文件路径当运行时事实源。
+2. 把 artifact voice brief 写入长期记忆。
+3. 让专家 persona 回写全局 Soul。
+4. 重新接回旧 `companion_*` 桌宠命令链路。
 
-### 3.7 Advanced Diagnostics Layer
-
-职责：
-
-1. 给开发者、内测和客服解释上下文命中。
-2. 提供来源链、压缩、命中历史、memdir 状态。
-3. 不参与普通用户默认体验。
-
-固定规则：
-
-**高级诊断只读 current read model，不成为新事实源。**
-
-### 3.8 External Provider Boundary
+### 4.5 Consolidation Pipeline
 
 职责：
 
-1. built-in / current 主链始终存在。
-2. 同一时刻最多启用一个 external provider。
-3. provider 输出进入 fenced / untrusted recall block。
-4. provider 写入候选先经过 secret / injection scan 与待整理队列。
-5. provider 生命周期挂在统一 manager / gateway，不在前台组件散落实现。
+1. 把 ad-hoc note 和 rollout summary 整理进 `MEMORY.md`。
+2. 生成或刷新 `memory_summary.md`。
+3. 执行 secret / injection scan。
+4. 生成 diff 或 change record，便于审计。
 
 不允许：
 
-1. 外部 provider 直接写 `inspiration_*` 平行表。
-2. 外部 provider 直接修改当前系统 prompt。
-3. 外部 provider 在普通用户默认层展示 raw transcript。
+1. 无用户确认时保存凭证或敏感原文。
+2. 直接写旧 `unified_memory_*` 作为下一代事实源。
+3. 把 consolidation 失败变成 turn 失败。
+4. 从旧记忆表批量生成 current 文件。
 
-## 4. 数据生命周期
+### 4.6 Derived Index Layer
 
-### 4.1 保存结果
+职责：
 
-```text
-结果工作台
-  -> 构造 inspiration draft
-  -> createUnifiedMemory
-  -> record recommendation signal
-  -> 灵感库 projection 刷新
-  -> 推荐卡默认带上新成果
-```
+1. 对 memory folder 建派生索引。
+2. 支持健康检查、删除、重建。
+3. 索引缺失或损坏时降级到文本扫描。
 
-### 4.2 自动整理
+候选实现类型：
 
-```text
-会话结束 / 后台抽取
-  -> memory candidate
-  -> 待整理队列
-  -> 用户确认 / 合并 / 忽略
-  -> create/update UnifiedMemory
-  -> projection 刷新
-```
+1. 内嵌全文索引。
+2. 嵌入式搜索索引。
+3. 可选向量索引。
+4. 远端索引适配器。
 
-### 4.3 下一轮生成
+固定规则：这些都不是 P0 current truth，只是 P2 之后的派生检索实现。
 
-```text
-用户选择灵感
-  -> reference selection
-  -> CuratedTaskLauncher
-  -> request metadata.creation_replay
-  -> runtime turn
-  -> memory_runtime_prefetch_for_turn
-  -> prompt augmentation
-```
+## 5. 目标分类
 
-### 4.4 长会话续接
+### 5.1 `current`
 
-```text
-长会话
-  -> agent_runtime_compact_session
-  -> compaction summary
-  -> runtime prefetch
-  -> 高级诊断展示
-```
+1. `memory store folder`
+2. `MemoryBackend`
+3. `LocalMemoryBackend`
+4. `memory_summary.md` prompt contributor
+5. `memory tools`
+6. `ad-hoc note` 写入队列
+7. `rollout_summaries` 证据摘要
+8. `memory.soul` / `MemorySoulConfig`
+9. `SOUL.md` 导入 / 复制快照
+10. `memory.soul.artifact_voice` generation brief
 
-长会话续接默认不写入长期灵感库，除非用户显式保存或确认自动整理建议。
+### 5.2 `dead`
 
-### 4.5 Active Memory / 高级召回实验
+1. `inspiration_*` 新长期事实源。
+2. `make-next-generation-more-like-me.md` 旧扩展路线图。
+3. `unified_memory_*` 旧长期记忆主线。
+4. `memory_runtime_*` 旧默认召回主线。
+5. 旧 MemoryPage 灵感库 / 高级诊断混合视图。
+6. 旧 `companion_*` 桌宠命令链路。
+7. 旧 `lime-rs/src/**` 记忆路径引用。
+8. 生产路径依赖 mock memory backend。
+
+## 6. 生命周期
+
+### 6.1 Thread Start
 
 ```text
-开发者开关关闭
-  -> 不运行 hidden active recall
-  -> 普通生成只走现有 memory_runtime_prefetch_for_turn
-
-开发者开关开启
-  -> eligibility check
-  -> active recall / external provider prefetch
-  -> fenced untrusted context
-  -> trace / debug 仅诊断层显示
-  -> 候选写入仍进待整理
+thread/start
+  -> load memory config
+  -> resolve memory store root
+  -> read memory_summary.md
+  -> truncate
+  -> load memory.soul config
+  -> inject developer policy fragment
 ```
 
-固定判断：active recall 是运行时增强，不是普通灵感库的新事实源。
+### 6.2 Tool Read
 
-## 5. 状态与权限
+```text
+model decides memory is relevant
+  -> memory_search
+  -> MEMORY.md hit
+  -> memory_read exact path/line
+  -> answer with memory citation metadata
+```
 
-### 5.1 灵感影响状态
+### 6.3 Soul Use
 
-| 状态 | 是否默认影响生成 | 用户可见 | 说明 |
-| --- | --- | --- | --- |
-| `active` | 是 | 是 | 正式灵感 |
-| `disabled` | 否 | 是 | 保留但不再影响生成 |
-| `pending_review` | 否 | 是 | 自动整理候选 |
-| `archived` | 否 | 可选 | 历史保留 |
-| `deleted` | 否 | 否 | 删除 |
+```text
+settings.memory.soul
+  -> MemorySoulConfig
+  -> interaction contributor
+  -> expert persona inherits communication_rhythm only
+  -> artifact voice produces generation_brief_only
+```
 
-### 5.2 隐私规则
+### 6.4 Explicit Write
 
-1. 敏感信息不得自动进入正式灵感。
-2. 自动候选必须可审阅。
-3. 用户删除后不得继续出现在推荐、recall 或聚焦入口。
-4. 团队共享记忆不得覆盖用户私有禁用选择。
-5. 引用外部资源时优先保存指针与用途，不保存凭证内容。
-6. 自动写入和 provider 输出必须扫描 prompt injection、隐藏 Unicode、credential exfiltration 和敏感文件读取指令。
+```text
+user says remember / add note
+  -> memory_add_note
+  -> extensions/ad_hoc/notes/<timestamp>-slug.md
+  -> consolidation pending
+  -> later MEMORY.md / memory_summary.md refresh
+```
 
-## 6. 与其他路线图关系
+### 6.5 Reset
 
-1. `limenextv2`
-   - 提供前台主词、信息架构和创作者闭环。
-2. `task`
-   - 提供任务画像、模型路由与成本调度。
-3. `warp`
-   - 提供 execution profile、artifact/evidence、云本地分层参考。
-4. `voice / artifacts`
-   - 后续多模态素材可进入参考素材，但不能绕开 unified memory projection。
+```text
+memory/reset
+  -> clear memory folder
+  -> clear derived index
+  -> reset SQLite memory stage data
+  -> keep or reset memory.soul according to user-selected scope
+```
 
-## 7. 最小实现边界
+### 6.6 Old Path Cleanup
 
-第一刀不需要重写底层，只需要完成：
+```text
+old unified/runtime memory entry
+  -> reject new write
+  -> fail-fast or retired guard
+  -> no data import into memory store
+  -> guard prevents reactivation
+```
 
-1. 普通灵感库与高级诊断在 IA 上分离。
-2. 普通层隐藏底层术语。
-3. 灵感条目支持影响解释和禁用概念。
-4. 保存结果到灵感库继续使用 current `unified_memory_*`。
-5. 相关测试断言普通页面不出现 runtime 术语。
-6. 开发者面板开关默认关闭，且关闭时不运行 active memory / raw recall / auto organization 实验。
+## 7. 第一刀边界
+
+第一刀只需要完成：
+
+1. 文档和事实源收口。
+2. `MemoryBackend` 合同设计。
+3. memory folder layout 设计。
+4. prompt contributor 预算规则。
+5. memory tools 参数和输出合同。
+6. Soul current 边界说明。
+7. 旧路线图引用清理。
+
+第一刀不需要实现：
+
+1. 向量索引。
+2. 外部 provider。
+3. 旧灵感库产品页重做。
+4. 旧数据导入。

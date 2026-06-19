@@ -8,7 +8,6 @@ import {
 } from "./searchResultPreview";
 import {
   normalizeSiteToolResultSummary,
-  resolveSiteProjectTargetLabel,
 } from "./siteToolResultSummary";
 import {
   getToolDisplayInfo,
@@ -28,6 +27,7 @@ import {
   resolveLimeTaskProtocolFailureDisplayText,
 } from "./limeTaskProtocolNoise";
 import { resolveContentWorkbenchToolCopy } from "./contentWorkbenchToolCopy";
+import { resolveRequiredAgentChatCopy } from "./agentChatCopy";
 
 type ToolProcessStatus =
   | ToolCallState["status"]
@@ -58,9 +58,6 @@ interface ToolProcessInput {
   error?: string;
   metadata?: unknown;
 }
-
-const WEB_SEARCH_RUNTIME_UNAVAILABLE_MESSAGE =
-  "当前联网搜索链路未接通，请检查 Runtime 是否接通 WebSearch，或关闭联网搜索后重试。";
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -254,7 +251,13 @@ function resolveRuntimeProtocolErrorSummaryText(
   }
 
   const display = getToolDisplayInfo(toolName, "failed");
-  return shorten(`${display.label}失败，底层错误未返回详细信息`, maxLength);
+  return shorten(
+    resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.error.runtimeNoDetail",
+      { label: display.label },
+    ),
+    maxLength,
+  );
 }
 
 export function resolveToolErrorSummaryText(
@@ -268,7 +271,12 @@ export function resolveToolErrorSummaryText(
   }
 
   if (isLikelyWebSearchRuntimeUnavailable(toolName, normalized)) {
-    return shorten(WEB_SEARCH_RUNTIME_UNAVAILABLE_MESSAGE, maxLength);
+    return shorten(
+      resolveRequiredAgentChatCopy(
+        "toolCall.processSummary.error.webSearchRuntimeUnavailable",
+      ),
+      maxLength,
+    );
   }
 
   if (isLimeTaskProtocolFailure({ toolName, text: normalized })) {
@@ -312,13 +320,24 @@ export function resolveToolErrorDetailText(
 
     const stripped = stripRuntimeProtocolErrorPrefix(normalized);
     if (stripped) {
-      return `${stripped}\n\n原始错误：${normalized}`;
+      return resolveRequiredAgentChatCopy(
+        "toolCall.processSummary.error.withOriginal",
+        { message: stripped, original: normalized },
+      );
     }
 
     return normalized;
   }
 
-  return `${WEB_SEARCH_RUNTIME_UNAVAILABLE_MESSAGE}\n\n原始错误：${normalized}`;
+  return resolveRequiredAgentChatCopy(
+    "toolCall.processSummary.error.withOriginal",
+    {
+      message: resolveRequiredAgentChatCopy(
+        "toolCall.processSummary.error.webSearchRuntimeUnavailable",
+      ),
+      original: normalized,
+    },
+  );
 }
 
 function normalizeArgumentsRecord(
@@ -366,12 +385,19 @@ function resolveUrlLabel(
 function buildToolSearchPreSummary(args: Record<string, unknown>): string {
   const query = readString(args, ["query", "q"]) || "";
   if (/^(?:select|tool|tools|name|tag):/i.test(query)) {
-    return "先确认可用工具和入口";
+    return resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.toolSearch.confirmAvailable",
+    );
   }
   if (query) {
-    return `先找能处理 ${shorten(query, 32)} 的工具入口`;
+    return resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.toolSearch.findForQuery",
+      { query: shorten(query, 32) },
+    );
   }
-  return "先确认可用工具和入口";
+  return resolveRequiredAgentChatCopy(
+    "toolCall.processSummary.toolSearch.confirmAvailable",
+  );
 }
 
 function buildToolSearchPostSummary(output: string): string | null {
@@ -384,13 +410,22 @@ function buildToolSearchPostSummary(output: string): string | null {
     .slice(0, 2)
     .map((item) => resolveUserFacingToolSearchItemLabel(item.name))
     .filter(Boolean);
-  const prefix = `已确认可用工具 ${summary.count} 个`;
+  const prefix = resolveRequiredAgentChatCopy(
+    "toolCall.processSummary.toolSearch.confirmedCount",
+    { count: summary.count },
+  );
 
   if (toolNames.length === 0) {
     return prefix;
   }
 
-  return `${prefix} · ${toolNames.join(" · ")}`;
+  return resolveRequiredAgentChatCopy(
+    "toolCall.processSummary.toolSearch.confirmedWithTools",
+    {
+      countLabel: prefix,
+      tools: toolNames.join(" · "),
+    },
+  );
 }
 
 function buildWebSearchPostSummary(output: string): string | null {
@@ -399,11 +434,38 @@ function buildWebSearchPostSummary(output: string): string | null {
     return null;
   }
 
-  return `已找到 ${items.length} 个可参考来源`;
+  return resolveRequiredAgentChatCopy(
+    "toolCall.processSummary.webSearch.sourcesFound",
+    { count: items.length },
+  );
 }
 
 function buildFetchSearchFailureSummary(family: "fetch" | "search"): string {
-  return family === "fetch" ? "来源暂时无法读取" : "搜索结果暂时无法读取";
+  return family === "fetch"
+    ? resolveRequiredAgentChatCopy("toolCall.processSummary.fetch.unavailable")
+    : resolveRequiredAgentChatCopy("toolCall.processSummary.search.unavailable");
+}
+
+function resolveSiteProjectTargetCopy(params: {
+  source?: string;
+  projectId?: string;
+}): string {
+  if (params.source === "context_project") {
+    return resolveRequiredAgentChatCopy(
+      "toolCall.siteResult.target.currentProject",
+    );
+  }
+  if (params.source === "explicit_project") {
+    return resolveRequiredAgentChatCopy(
+      "toolCall.siteResult.target.selectedProject",
+    );
+  }
+  if (params.projectId?.trim()) {
+    return resolveRequiredAgentChatCopy("toolCall.siteResult.target.project", {
+      projectId: params.projectId.trim(),
+    });
+  }
+  return resolveRequiredAgentChatCopy("toolCall.siteResult.target.generic");
 }
 
 function buildSitePostSummary(metadata: unknown): string | null {
@@ -413,25 +475,32 @@ function buildSitePostSummary(metadata: unknown): string | null {
   }
 
   if (summary.saveErrorMessage) {
-    return `自动保存失败：${shorten(summary.saveErrorMessage, 56)}`;
+    return resolveRequiredAgentChatCopy("toolCall.siteResult.saveError", {
+      message: shorten(summary.saveErrorMessage, 56),
+    });
   }
 
   if (summary.savedContent?.title) {
-    return `已保存到${resolveSiteProjectTargetLabel({
-      source: summary.savedBy,
-      projectId: summary.savedProjectId || summary.savedContent.projectId,
-    })}：${summary.savedContent.title}`;
+    return resolveRequiredAgentChatCopy("toolCall.siteResult.saved", {
+      target: resolveSiteProjectTargetCopy({
+        source: summary.savedBy,
+        projectId: summary.savedProjectId || summary.savedContent.projectId,
+      }),
+      title: summary.savedContent.title,
+    });
   }
 
   if (summary.savedContent?.markdownRelativePath) {
-    return "已导出 Markdown 文稿";
+    return resolveRequiredAgentChatCopy("toolCall.siteResult.markdownExported");
   }
 
   if (summary.saveSkippedProjectId) {
-    return `未保存到${resolveSiteProjectTargetLabel({
-      source: summary.saveSkippedBy,
-      projectId: summary.saveSkippedProjectId,
-    })}`;
+    return resolveRequiredAgentChatCopy("toolCall.siteResult.saveSkipped", {
+      target: resolveSiteProjectTargetCopy({
+        source: summary.saveSkippedBy,
+        projectId: summary.saveSkippedProjectId,
+      }),
+    });
   }
 
   return null;
@@ -442,43 +511,43 @@ const LIME_TASK_SUMMARY_LABELS: Partial<
 > = {
   limecreatevideogenerationtask: {
     key: "label.videoGeneration",
-    defaultValue: "视频生成",
+    defaultValue: "Video generation",
   },
   limecreateaudiogenerationtask: {
     key: "label.audioGeneration",
-    defaultValue: "配音生成",
+    defaultValue: "Voice generation",
   },
   limecreatetranscriptiontask: {
     key: "label.transcription",
-    defaultValue: "转写",
+    defaultValue: "Transcription",
   },
   limecreatebroadcastgenerationtask: {
     key: "label.broadcastGeneration",
-    defaultValue: "口播生成",
+    defaultValue: "Broadcast generation",
   },
   limecreatecovergenerationtask: {
     key: "label.coverGeneration",
-    defaultValue: "封面生成",
+    defaultValue: "Cover generation",
   },
   limecreateresourcesearchtask: {
     key: "label.resourceSearch",
-    defaultValue: "素材检索",
+    defaultValue: "Asset search",
   },
   limecreatemodalresourcesearchtask: {
     key: "label.resourceSearch",
-    defaultValue: "素材检索",
+    defaultValue: "Asset search",
   },
   limecreateimagegenerationtask: {
     key: "label.imageGeneration",
-    defaultValue: "图片生成",
+    defaultValue: "Image generation",
   },
   limecreateurlparsetask: {
     key: "label.urlParse",
-    defaultValue: "链接解析",
+    defaultValue: "URL parsing",
   },
   limecreatetypesettingtask: {
     key: "label.typesetting",
-    defaultValue: "排版",
+    defaultValue: "Typesetting",
   },
 };
 
@@ -487,11 +556,11 @@ const DIRECT_CONTENT_SUMMARY_LABELS: Partial<
 > = {
   socialgeneratecoverimage: {
     key: "label.coverImage",
-    defaultValue: "封面图",
+    defaultValue: "cover image",
   },
   generateimage: {
     key: "label.image",
-    defaultValue: "图片",
+    defaultValue: "image",
   },
 };
 
@@ -580,45 +649,49 @@ function buildSiteToolSummary(
   subject: string | null,
 ): string | null {
   const normalizedSubject = normalizeNarrativeSubject(subject, [
-    "站点能力",
-    "站点能力目录",
-    "站点适配器",
+    resolveRequiredAgentChatCopy("toolCall.subject.siteCapability"),
+    resolveRequiredAgentChatCopy("toolCall.subject.siteCapabilityCatalog"),
+    resolveRequiredAgentChatCopy("toolCall.subject.siteAdapter"),
   ]);
 
   if (normalizedName === "limesitelist") {
-    return phase === "pre" ? "先查看可用站点能力" : "已查看可用站点能力";
+    return resolvePhasedProcessSummaryCopy(
+      "toolCall.processSummary.siteCapability.list",
+      phase,
+      null,
+    );
   }
 
   if (normalizedName === "limesiterecommend") {
-    return normalizedSubject
-      ? `${phase === "pre" ? "先推荐适合" : "已推荐适合"} ${normalizedSubject} 的站点能力`
-      : phase === "pre"
-        ? "先推荐合适的站点能力"
-        : "已推荐站点能力";
+    return resolvePhasedProcessSummaryCopy(
+      "toolCall.processSummary.siteCapability.recommend",
+      phase,
+      normalizedSubject,
+    );
   }
 
   if (normalizedName === "limesitesearch") {
-    return normalizedSubject
-      ? `${phase === "pre" ? "先搜索" : "已搜索"} ${normalizedSubject} 相关站点能力`
-      : phase === "pre"
-        ? "先搜索站点能力"
-        : "已搜索站点能力";
+    return resolvePhasedProcessSummaryCopy(
+      "toolCall.processSummary.siteCapability.search",
+      phase,
+      normalizedSubject,
+    );
   }
 
   if (normalizedName === "limesiteinfo") {
-    return normalizedSubject
-      ? `${phase === "pre" ? "先确认" : "已确认"} ${normalizedSubject} 的参数与登录要求`
-      : phase === "pre"
-        ? "先确认站点能力的参数与登录要求"
-        : "已确认站点能力的参数与登录要求";
+    return resolvePhasedProcessSummaryCopy(
+      "toolCall.processSummary.siteCapability.info",
+      phase,
+      normalizedSubject,
+    );
   }
 
   if (normalizedName === "limesiterun") {
-    return normalizedSubject
-      ? `${phase === "pre" ? "先执行" : "已执行"}站点能力 ${normalizedSubject}`
-      : phase === "pre"
-        ? "先执行站点能力"
-        : "已执行站点能力";
+    return resolvePhasedProcessSummaryCopy(
+      "toolCall.processSummary.siteCapability.run",
+      phase,
+      normalizedSubject,
+    );
   }
 
   return null;
@@ -630,12 +703,12 @@ function buildVisionToolSummary(
   subject: string | null,
 ): string | null {
   const normalizedSubject = normalizeNarrativeSubject(subject);
-  const prefix = phase === "pre" ? "先" : "已";
-  const verb = normalizedName === "viewimage" ? "查看" : "分析";
+  const key =
+    normalizedName === "viewimage"
+      ? "toolCall.processSummary.vision.view"
+      : "toolCall.processSummary.vision.analyze";
 
-  return normalizedSubject
-    ? `${prefix}${verb}图片 ${normalizedSubject}`
-    : `${prefix}${verb}图片`;
+  return resolvePhasedProcessSummaryCopy(key, phase, normalizedSubject);
 }
 
 function buildCommandPreSummary(
@@ -645,20 +718,30 @@ function buildCommandPreSummary(
   const command = readString(args, ["command", "cmd", "script"]) || "";
   if (normalizedName === "bash" || normalizedName.includes("shell")) {
     if (/^(?:rg|grep|findstr)\b/i.test(command)) {
-      return "先搜索代码位置";
+      return resolveRequiredAgentChatCopy(
+        "toolCall.processSummary.command.searchCode",
+      );
     }
     if (/^(?:sed|cat|head|tail)\b/i.test(command)) {
-      return "先查看文件片段";
+      return resolveRequiredAgentChatCopy(
+        "toolCall.processSummary.command.viewFileSnippet",
+      );
     }
     if (/^git\s+status\b/i.test(command)) {
-      return "先确认工作区状态";
+      return resolveRequiredAgentChatCopy(
+        "toolCall.processSummary.command.checkWorkspace",
+      );
     }
     if (/^git\s+diff\b/i.test(command)) {
-      return "先查看变更差异";
+      return resolveRequiredAgentChatCopy(
+        "toolCall.processSummary.command.viewDiff",
+      );
     }
   }
 
-  return "先运行命令确认当前状态";
+  return resolveRequiredAgentChatCopy(
+    "toolCall.processSummary.command.checkStatus",
+  );
 }
 
 function buildBrowserPreSummary(
@@ -672,18 +755,34 @@ function buildBrowserPreSummary(
     readString(metadata, ["selector", "element", "target", "label", "text"]);
 
   if (normalizedName.includes("navigate") || normalizedName.includes("goto")) {
-    return urlLabel ? `先打开 ${urlLabel}` : "先打开目标页面";
+    return urlLabel
+      ? resolveRequiredAgentChatCopy(
+          "toolCall.processSummary.browser.openUrl",
+          { target: urlLabel },
+        )
+      : resolveRequiredAgentChatCopy(
+          "toolCall.processSummary.browser.openTargetPage",
+        );
   }
 
   if (
     normalizedName.includes("snapshot") ||
     normalizedName.includes("screenshot")
   ) {
-    return "先抓取页面状态";
+    return resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.browser.capturePageState",
+    );
   }
 
   if (normalizedName.includes("click")) {
-    return target ? `先操作 ${shorten(target, 28)}` : "先操作页面元素";
+    return target
+      ? resolveRequiredAgentChatCopy(
+          "toolCall.processSummary.browser.operateTarget",
+          { target: shorten(target, 28) },
+        )
+      : resolveRequiredAgentChatCopy(
+          "toolCall.processSummary.browser.operateElement",
+        );
   }
 
   if (
@@ -692,17 +791,28 @@ function buildBrowserPreSummary(
     normalizedName.includes("selectoption") ||
     normalizedName.includes("presskey")
   ) {
-    return target ? `先填写 ${shorten(target, 28)}` : "先继续页面操作";
+    return target
+      ? resolveRequiredAgentChatCopy(
+          "toolCall.processSummary.browser.fillTarget",
+          { target: shorten(target, 28) },
+        )
+      : resolveRequiredAgentChatCopy(
+          "toolCall.processSummary.browser.continueOperation",
+        );
   }
 
   if (
     normalizedName.includes("evaluate") ||
     normalizedName.includes("runtime")
   ) {
-    return "先读取页面信息";
+    return resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.browser.readPageInfo",
+    );
   }
 
-  return "先查看页面状态";
+  return resolveRequiredAgentChatCopy(
+    "toolCall.processSummary.browser.viewPageState",
+  );
 }
 
 function buildBrowserPostSummary(
@@ -713,24 +823,61 @@ function buildBrowserPostSummary(
   const urlLabel = resolveUrlLabel(args, metadata);
 
   if (normalizedName.includes("navigate") || normalizedName.includes("goto")) {
-    return urlLabel ? `已打开 ${urlLabel}` : "已打开目标页面";
+    return urlLabel
+      ? resolveRequiredAgentChatCopy(
+          "toolCall.processSummary.browser.openedUrl",
+          { target: urlLabel },
+        )
+      : resolveRequiredAgentChatCopy(
+          "toolCall.processSummary.browser.openedTargetPage",
+        );
   }
 
   if (
     normalizedName.includes("snapshot") ||
     normalizedName.includes("screenshot")
   ) {
-    return "已拿到页面快照";
+    return resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.browser.snapshotCaptured",
+    );
   }
 
   if (
     normalizedName.includes("evaluate") ||
     normalizedName.includes("runtime")
   ) {
-    return "已拿到页面状态";
+    return resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.browser.stateCaptured",
+    );
   }
 
-  return "已完成页面操作";
+  return resolveRequiredAgentChatCopy(
+    "toolCall.processSummary.browser.operationCompleted",
+  );
+}
+
+function resolveProcessSummaryCopy(
+  key: string,
+  subject: string | null,
+): string {
+  return subject
+    ? resolveRequiredAgentChatCopy(`${key}WithSubject`, { subject })
+    : resolveRequiredAgentChatCopy(key);
+}
+
+function resolvePhasedProcessSummaryCopy(
+  baseKey: string,
+  phase: "pre" | "post",
+  subject: string | null,
+  values: Record<string, unknown> = {},
+): string {
+  const phaseKey = phase === "pre" ? "pre" : "post";
+  return subject
+    ? resolveRequiredAgentChatCopy(`${baseKey}.${phaseKey}WithSubject`, {
+        ...values,
+        subject,
+      })
+    : resolveRequiredAgentChatCopy(`${baseKey}.${phaseKey}`, values);
 }
 
 function buildGenericPostSummary(params: {
@@ -747,120 +894,171 @@ function buildGenericPostSummary(params: {
   const normalizedSubject = normalizeNarrativeSubject(subject);
 
   if (normalizedName === "enterworktree") {
-    return "已进入隔离工作树";
+    return resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.worktree.entered",
+    );
   }
   if (normalizedName === "exitworktree") {
-    return "已回到主工作区";
+    return resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.worktree.exited",
+    );
   }
   if (normalizedName === "config") {
-    return "已更新运行配置";
+    return resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.config.updated",
+    );
   }
   if (normalizedName === "workflow") {
-    return "已执行工作流";
+    return resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.workflow.completed",
+    );
   }
   if (normalizedName === "sleep") {
-    return "已完成等待";
+    return resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.wait.completed",
+    );
   }
   if (normalizedName === "enterplanmode") {
-    return "已进入计划模式";
+    return resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.planMode.entered",
+    );
   }
   if (normalizedName === "exitplanmode") {
-    return "已退出计划模式";
+    return resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.planMode.exited",
+    );
   }
   if (normalizedName === "structuredoutput") {
-    return "已整理最终答复";
+    return resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.finalAnswer.completed",
+    );
   }
   if (normalizedName === "skill") {
-    return normalizedSubject ? `已执行技能 ${normalizedSubject}` : "已执行技能";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.skill.executed",
+      normalizedSubject,
+    );
   }
   if (normalizedName === "listskills") {
-    return "已查看可用技能";
+    return resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.skill.listed",
+    );
   }
   if (normalizedName === "loadskill") {
-    return normalizedSubject ? `已加载技能 ${normalizedSubject}` : "已加载技能";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.skill.loaded",
+      normalizedSubject,
+    );
   }
   if (normalizedName === "listmcpresources") {
-    return normalizedSubject
-      ? `已查看 ${normalizedSubject}`
-      : "已查看可用 MCP 资源";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.mcp.resourcesListed",
+      normalizedSubject,
+    );
   }
   if (normalizedName === "readmcpresource") {
-    return normalizedSubject
-      ? `已读取 ${normalizedSubject}`
-      : "已读取 MCP 资源";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.mcp.resourceRead",
+      normalizedSubject,
+    );
   }
   if (normalizedName === "tasklist") {
-    return "已查看任务列表";
+    return resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.task.listed",
+    );
   }
   if (normalizedName === "taskcreate") {
-    return normalizedSubject ? `已开始 ${normalizedSubject}` : "已开始这一步";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.task.started",
+      normalizedSubject,
+    );
   }
   if (normalizedName === "taskget") {
-    return normalizedSubject
-      ? `已查看任务 ${normalizedSubject}`
-      : "已查看任务详情";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.task.detailViewed",
+      normalizedSubject,
+    );
   }
   if (normalizedName === "taskupdate") {
-    return normalizedSubject ? `已更新任务 ${normalizedSubject}` : "已更新任务";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.task.updated",
+      normalizedSubject,
+    );
   }
   if (normalizedName === "updateplan") {
-    return normalizedSubject ? `已更新计划 ${normalizedSubject}` : "已更新计划";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.plan.updated",
+      normalizedSubject,
+    );
   }
   if (normalizedName === "taskoutput") {
-    return normalizedSubject
-      ? `已查看 ${normalizedSubject} 的任务结果`
-      : "已查看任务结果";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.task.outputViewed",
+      normalizedSubject,
+    );
   }
   if (normalizedName === "taskstop") {
-    return normalizedSubject ? `已终止任务 ${normalizedSubject}` : "已终止任务";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.task.stopped",
+      normalizedSubject,
+    );
   }
   if (normalizedName === "teamcreate") {
-    return normalizedSubject
-      ? `已创建子代理组 ${normalizedSubject}`
-      : "已创建子代理组";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.team.created",
+      normalizedSubject,
+    );
   }
   if (normalizedName === "teamdelete") {
-    return normalizedSubject
-      ? `已删除子代理组 ${normalizedSubject}`
-      : "已删除子代理组";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.team.deleted",
+      normalizedSubject,
+    );
   }
   if (normalizedName === "listpeers") {
-    return normalizedSubject
-      ? `已查看 ${normalizedSubject} 的协作成员`
-      : "已查看子代理成员";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.team.peersListed",
+      normalizedSubject,
+    );
   }
   if (normalizedName === "waitagent") {
-    return normalizedSubject
-      ? `已查看子任务 ${normalizedSubject} 进展`
-      : "已查看子任务进展";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.subtask.progressViewed",
+      normalizedSubject,
+    );
   }
   if (normalizedName === "resumeagent") {
-    return normalizedSubject
-      ? `已继续子任务 ${normalizedSubject}`
-      : "已继续子任务";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.subtask.resumed",
+      normalizedSubject,
+    );
   }
   if (normalizedName === "closeagent") {
-    return normalizedSubject
-      ? `已暂停子任务 ${normalizedSubject}`
-      : "已暂停子任务";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.subtask.paused",
+      normalizedSubject,
+    );
   }
   if (normalizedName === "croncreate") {
-    return normalizedSubject
-      ? `已创建定时触发器 ${normalizedSubject}`
-      : "已创建定时触发器";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.cron.created",
+      normalizedSubject,
+    );
   }
   if (normalizedName === "cronlist") {
-    return "已查看定时触发器";
+    return resolveRequiredAgentChatCopy("toolCall.processSummary.cron.listed");
   }
   if (normalizedName === "crondelete") {
-    return normalizedSubject
-      ? `已删除定时触发器 ${normalizedSubject}`
-      : "已删除定时触发器";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.cron.deleted",
+      normalizedSubject,
+    );
   }
   if (normalizedName === "remotetrigger") {
-    return normalizedSubject
-      ? `已处理 ${normalizedSubject}`
-      : "已处理远程触发器";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.remoteTrigger.handled",
+      normalizedSubject,
+    );
   }
   const limeTaskSummary = buildLimeTaskSummary(
     "post",
@@ -879,56 +1077,79 @@ function buildGenericPostSummary(params: {
     return siteToolSummary;
   }
   if (normalizedName === "limerunserviceskill") {
-    return normalizedSubject
-      ? `已走服务技能兼容执行 ${normalizedSubject}`
-      : "已走服务技能兼容执行";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.serviceSkill.compatRun",
+      normalizedSubject,
+    );
   }
   if (normalizedName === "mcp") {
-    return "已完成 MCP 工具调用";
+    return resolveRequiredAgentChatCopy("toolCall.processSummary.mcp.called");
   }
   if (normalizedName === "mcpauth") {
-    return "已完成 MCP 授权";
+    return resolveRequiredAgentChatCopy("toolCall.processSummary.mcp.authorized");
   }
 
   switch (display.family) {
     case "vision":
       return buildVisionToolSummary("post", normalizedName, normalizedSubject);
     case "read":
-      return normalizedSubject
-        ? `已查看 ${normalizedSubject}`
-        : "已查看相关文件";
+      return resolveProcessSummaryCopy(
+        "toolCall.processSummary.generic.read",
+        normalizedSubject,
+      );
     case "list":
-      return normalizedSubject
-        ? `已定位 ${normalizedSubject}`
-        : "已定位相关文件";
+      return resolveProcessSummaryCopy(
+        "toolCall.processSummary.generic.located",
+        normalizedSubject,
+      );
     case "write":
-      return normalizedSubject ? `已写入 ${normalizedSubject}` : "已写入文件";
+      return resolveProcessSummaryCopy(
+        "toolCall.processSummary.generic.written",
+        normalizedSubject,
+      );
     case "edit":
-      return normalizedSubject
-        ? `已修改 ${normalizedSubject}`
-        : "已修改目标文件";
+      return resolveProcessSummaryCopy(
+        "toolCall.processSummary.generic.edited",
+        normalizedSubject,
+      );
     case "command":
-      return "已拿到命令结果";
+      return resolveRequiredAgentChatCopy(
+        "toolCall.processSummary.generic.commandCompleted",
+      );
     case "fetch":
-      return normalizedSubject
-        ? `已获取 ${normalizedSubject} 内容`
-        : "已获取外部内容";
+      return resolveProcessSummaryCopy(
+        "toolCall.processSummary.generic.fetched",
+        normalizedSubject,
+      );
     case "task":
-      return "已发起这一步";
+      return resolveRequiredAgentChatCopy(
+        "toolCall.processSummary.generic.stepStarted",
+      );
     case "subagent":
-      return "已把任务拆给子任务继续处理";
+      return resolveRequiredAgentChatCopy(
+        "toolCall.processSummary.generic.subtaskDelegated",
+      );
     case "search":
-      return normalizedSubject
-        ? `已搜索 ${normalizedSubject}`
-        : "已拿到搜索结果";
+      return resolveProcessSummaryCopy(
+        "toolCall.processSummary.generic.searched",
+        normalizedSubject,
+      );
     case "browser":
-      return "已完成页面操作";
+      return resolveRequiredAgentChatCopy(
+        "toolCall.processSummary.browser.operationCompleted",
+      );
     case "plan":
-      return normalizedSubject
-        ? `已处理 ${normalizedSubject}`
-        : "已完成计划操作";
+      return resolveProcessSummaryCopy(
+        "toolCall.processSummary.generic.planHandled",
+        normalizedSubject,
+      );
     default:
-      return normalizedSubject ? `已处理 ${normalizedSubject}` : null;
+      return normalizedSubject
+        ? resolveRequiredAgentChatCopy(
+            "toolCall.processSummary.generic.handledWithSubject",
+            { subject: normalizedSubject },
+          )
+        : null;
   }
 }
 
@@ -952,63 +1173,92 @@ function buildGenericPreSummary(params: {
   }
 
   if (normalizedName === "agent") {
-    return "先拆成子任务并行处理";
+    return resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.subtask.splitFirst",
+    );
   }
 
   if (normalizedName === "sendmessage") {
-    return "先补充子任务说明";
+    return resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.subtask.addNoteFirst",
+    );
   }
 
   if (normalizedName === "waitagent") {
-    return normalizedSubject
-      ? `先等待子任务 ${normalizedSubject} 返回结果`
-      : "先等待子任务返回结果";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.subtask.waitFirst",
+      normalizedSubject,
+    );
   }
 
   if (normalizedName === "resumeagent") {
-    return normalizedSubject
-      ? `先继续子任务 ${normalizedSubject}`
-      : "先继续子任务处理";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.subtask.resumeFirst",
+      normalizedSubject,
+    );
   }
 
   if (normalizedName === "closeagent") {
-    return normalizedSubject
-      ? `先暂停子任务 ${normalizedSubject}`
-      : "先暂停不再需要的子任务";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.subtask.pauseFirst",
+      normalizedSubject,
+    );
   }
 
   if (normalizedName === "requestuserinput") {
     return subject
-      ? `先确认 ${shorten(subject, 40)}`
-      : "先确认继续执行所需信息";
+      ? resolveRequiredAgentChatCopy(
+          "toolCall.processSummary.userInput.confirmFirstWithSubject",
+          { subject: shorten(subject, 40) },
+        )
+      : resolveRequiredAgentChatCopy(
+          "toolCall.processSummary.userInput.confirmFirst",
+        );
   }
 
   if (normalizedName === "enterworktree") {
-    return "先进入隔离工作树";
+    return resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.worktree.enterFirst",
+    );
   }
 
   if (normalizedName === "exitworktree") {
-    return "先回到主工作区";
+    return resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.worktree.exitFirst",
+    );
   }
 
   if (normalizedName === "config") {
-    return "先查看或调整运行配置";
+    return resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.config.reviewFirst",
+    );
   }
 
   if (normalizedName === "workflow") {
-    return "先执行预设工作流";
+    return resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.workflow.runFirst",
+    );
   }
 
   if (normalizedName === "sleep") {
-    return "先等待一段时间再继续";
+    return resolveRequiredAgentChatCopy("toolCall.processSummary.wait.first");
   }
 
   if (normalizedName === "sendusermessage" || normalizedName === "brief") {
-    return "先把中间结论同步给主线程";
+    return resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.userMessage.syncFirst",
+    );
   }
 
   if (isUnifiedWebSearchToolName(toolName)) {
-    return query ? `先搜索 ${shorten(query, 36)}` : "先搜索相关资料";
+    return query
+      ? resolveRequiredAgentChatCopy(
+          "toolCall.processSummary.webSearch.searchFirstWithQuery",
+          { query: shorten(query, 36) },
+        )
+      : resolveRequiredAgentChatCopy(
+          "toolCall.processSummary.webSearch.searchFirst",
+        );
   }
 
   if (isBrowserToolName(normalizedName)) {
@@ -1018,112 +1268,150 @@ function buildGenericPreSummary(params: {
   const display = getToolDisplayInfo(toolName, "running");
 
   if (normalizedName === "enterplanmode") {
-    return "先进入计划模式拆解方案";
+    return resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.planMode.enterFirst",
+    );
   }
 
   if (normalizedName === "exitplanmode") {
-    return "先退出计划模式继续执行";
+    return resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.planMode.exitFirst",
+    );
   }
 
   if (normalizedName === "structuredoutput") {
-    return "先整理最终答复";
+    return resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.finalAnswer.prepareFirst",
+    );
   }
 
   if (normalizedName === "skill") {
-    return normalizedSubject ? `先执行技能 ${normalizedSubject}` : "先执行技能";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.skill.executeFirst",
+      normalizedSubject,
+    );
   }
 
   if (normalizedName === "listskills") {
-    return "先查看可用技能";
+    return resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.skill.listFirst",
+    );
   }
 
   if (normalizedName === "loadskill") {
-    return normalizedSubject ? `先加载技能 ${normalizedSubject}` : "先加载技能";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.skill.loadFirst",
+      normalizedSubject,
+    );
   }
 
   if (normalizedName === "listmcpresources") {
-    return normalizedSubject
-      ? `先查看 ${normalizedSubject}`
-      : "先查看可用 MCP 资源";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.mcp.resourcesListFirst",
+      normalizedSubject,
+    );
   }
 
   if (normalizedName === "readmcpresource") {
-    return normalizedSubject
-      ? `先读取 ${normalizedSubject}`
-      : "先读取 MCP 资源";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.mcp.resourceReadFirst",
+      normalizedSubject,
+    );
   }
 
   if (normalizedName === "taskcreate") {
-    return normalizedSubject ? `先开始 ${normalizedSubject}` : "先开始这一步";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.task.startFirst",
+      normalizedSubject,
+    );
   }
 
   if (normalizedName === "tasklist") {
-    return "先查看任务列表";
+    return resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.task.listFirst",
+    );
   }
 
   if (normalizedName === "taskget") {
-    return normalizedSubject
-      ? `先查看任务 ${normalizedSubject}`
-      : "先查看任务详情";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.task.detailViewFirst",
+      normalizedSubject,
+    );
   }
 
   if (normalizedName === "taskupdate") {
-    return normalizedSubject
-      ? `先更新任务 ${normalizedSubject}`
-      : "先更新任务状态";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.task.updateFirst",
+      normalizedSubject,
+    );
   }
   if (normalizedName === "updateplan") {
-    return normalizedSubject ? `先更新计划 ${normalizedSubject}` : "先更新计划";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.plan.updateFirst",
+      normalizedSubject,
+    );
   }
 
   if (normalizedName === "taskoutput") {
-    return normalizedSubject
-      ? `先查看 ${normalizedSubject} 的任务结果`
-      : "先查看任务结果";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.task.outputViewFirst",
+      normalizedSubject,
+    );
   }
 
   if (normalizedName === "taskstop") {
-    return normalizedSubject ? `先终止任务 ${normalizedSubject}` : "先终止任务";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.task.stopFirst",
+      normalizedSubject,
+    );
   }
 
   if (normalizedName === "teamcreate") {
-    return normalizedSubject
-      ? `先创建子代理组 ${normalizedSubject}`
-      : "先创建子代理组";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.team.createFirst",
+      normalizedSubject,
+    );
   }
 
   if (normalizedName === "teamdelete") {
-    return normalizedSubject
-      ? `先删除子代理组 ${normalizedSubject}`
-      : "先删除子代理组";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.team.deleteFirst",
+      normalizedSubject,
+    );
   }
 
   if (normalizedName === "listpeers") {
-    return normalizedSubject
-      ? `先查看 ${normalizedSubject} 的协作成员`
-      : "先查看子代理成员";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.team.peersListFirst",
+      normalizedSubject,
+    );
   }
 
   if (normalizedName === "croncreate") {
-    return normalizedSubject
-      ? `先创建定时触发器 ${normalizedSubject}`
-      : "先创建定时触发器";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.cron.createFirst",
+      normalizedSubject,
+    );
   }
 
   if (normalizedName === "cronlist") {
-    return "先查看定时触发器";
+    return resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.cron.listFirst",
+    );
   }
 
   if (normalizedName === "crondelete") {
-    return normalizedSubject
-      ? `先删除定时触发器 ${normalizedSubject}`
-      : "先删除定时触发器";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.cron.deleteFirst",
+      normalizedSubject,
+    );
   }
 
   if (normalizedName === "remotetrigger") {
-    return normalizedSubject
-      ? `先处理 ${normalizedSubject}`
-      : "先处理远程触发器";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.remoteTrigger.handleFirst",
+      normalizedSubject,
+    );
   }
   const limeTaskSummary = buildLimeTaskSummary(
     "pre",
@@ -1143,64 +1431,91 @@ function buildGenericPreSummary(params: {
   }
 
   if (normalizedName === "limerunserviceskill") {
-    return normalizedSubject
-      ? `先走服务技能兼容执行 ${normalizedSubject}`
-      : "先走服务技能兼容执行";
+    return resolveProcessSummaryCopy(
+      "toolCall.processSummary.serviceSkill.compatRunFirst",
+      normalizedSubject,
+    );
   }
 
   if (normalizedName === "mcp") {
-    return "先调用 MCP 工具";
+    return resolveRequiredAgentChatCopy("toolCall.processSummary.mcp.callFirst");
   }
 
   if (normalizedName === "mcpauth") {
-    return "先完成 MCP 授权";
+    return resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.mcp.authorizeFirst",
+    );
   }
 
   switch (display.family) {
     case "vision":
       return buildVisionToolSummary("pre", normalizedName, normalizedSubject);
     case "read":
-      return normalizedSubject
-        ? `先查看 ${normalizedSubject}`
-        : "先查看相关文件";
+      return resolveProcessSummaryCopy(
+        "toolCall.processSummary.generic.readFirst",
+        normalizedSubject,
+      );
     case "list":
       if (normalizedName.includes("grep") || normalizedName.includes("glob")) {
-        return normalizedSubject
-          ? `先定位 ${normalizedSubject}`
-          : "先定位相关文件";
+        return resolveProcessSummaryCopy(
+          "toolCall.processSummary.generic.locateFirst",
+          normalizedSubject,
+        );
       }
-      return normalizedSubject
-        ? `先查看 ${normalizedSubject}`
-        : "先查看目录结构";
+      return resolveProcessSummaryCopy(
+        "toolCall.processSummary.generic.listFirst",
+        normalizedSubject,
+      );
     case "command":
       return buildCommandPreSummary(normalizedName, args);
     case "fetch": {
       const urlLabel = resolveUrlLabel(args, metadataRecord);
       if (urlLabel) {
-        return `先获取 ${urlLabel} 内容`;
+        return resolveRequiredAgentChatCopy(
+          "toolCall.processSummary.generic.fetchFirstWithSubject",
+          { subject: urlLabel },
+        );
       }
-      return normalizedSubject
-        ? `先获取 ${normalizedSubject}`
-        : "先获取外部内容";
+      return resolveProcessSummaryCopy(
+        "toolCall.processSummary.generic.fetchFirst",
+        normalizedSubject,
+      );
     }
     case "search":
-      return query ? `先搜索 ${shorten(query, 36)}` : "先搜索相关资料";
+      return query
+        ? resolveRequiredAgentChatCopy(
+            "toolCall.processSummary.generic.searchFirstWithSubject",
+            { subject: shorten(query, 36) },
+          )
+        : resolveRequiredAgentChatCopy(
+            "toolCall.processSummary.generic.searchFirst",
+          );
     case "write":
-      return normalizedSubject
-        ? `准备写入 ${normalizedSubject}`
-        : "准备写入文件";
+      return resolveProcessSummaryCopy(
+        "toolCall.processSummary.generic.writeFirst",
+        normalizedSubject,
+      );
     case "edit":
-      return normalizedSubject
-        ? `准备修改 ${normalizedSubject}`
-        : "准备修改目标文件";
+      return resolveProcessSummaryCopy(
+        "toolCall.processSummary.generic.editFirst",
+        normalizedSubject,
+      );
     case "task":
-      return "先发起这一步";
+      return resolveRequiredAgentChatCopy(
+        "toolCall.processSummary.generic.stepStartFirst",
+      );
     case "plan":
-      return normalizedSubject
-        ? `先处理 ${normalizedSubject}`
-        : "先处理计划任务";
+      return resolveProcessSummaryCopy(
+        "toolCall.processSummary.generic.planHandleFirst",
+        normalizedSubject,
+      );
     default:
-      return normalizedSubject ? `先处理 ${normalizedSubject}` : null;
+      return normalizedSubject
+        ? resolveRequiredAgentChatCopy(
+            "toolCall.processSummary.generic.handleFirstWithSubject",
+            { subject: normalizedSubject },
+          )
+        : null;
   }
 }
 
@@ -1255,12 +1570,23 @@ function buildNarrative(input: ToolProcessInput): ToolProcessNarrative {
     } else {
       postSummary =
         plainError ||
-        (failedOutputSummary ? `执行失败：${failedOutputSummary}` : null);
+        (failedOutputSummary
+          ? resolveRequiredAgentChatCopy(
+              "toolCall.processSummary.error.failed",
+              { message: failedOutputSummary },
+            )
+          : null);
     }
     if (postSummary && !limeTaskFailureSummary) {
       if (display.family !== "fetch" && display.family !== "search") {
-        if (!postSummary.startsWith("执行失败：")) {
-          postSummary = `执行失败：${postSummary}`;
+        const failurePrefix = resolveRequiredAgentChatCopy(
+          "toolCall.processSummary.error.failedPrefix",
+        );
+        if (!postSummary.startsWith(failurePrefix)) {
+          postSummary = resolveRequiredAgentChatCopy(
+            "toolCall.processSummary.error.failed",
+            { message: postSummary },
+          );
         }
       }
       postSource = "error";

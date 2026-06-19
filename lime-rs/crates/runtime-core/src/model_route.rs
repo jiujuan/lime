@@ -1,10 +1,14 @@
+use crate::model_routing::{
+    routing_decision_payload, routing_fallback_applied_payload,
+    routing_not_possible_payload_with_attempts, RoutingResolution, RuntimeModelSelection,
+};
 use crate::model_task::{capability_snapshot_from_model_capabilities, route_capability_gap};
 use app_server_protocol::{
     AuthKind, AuthMaterialRef, CapabilitySnapshot, EndpointInfo, EndpointKind, FramingKind,
     ModelRef, ModelRefSource, ModelTaskKind, ModelTaskRequest, ProtocolKind, ResolvedModelRoute,
     RouteDefaults, RouteFailure, RouteFailureCategory, RoutingDecision, TransportKind,
 };
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::borrow::Cow;
 
 pub struct ModelRouteSelection<'a> {
@@ -36,6 +40,13 @@ pub struct ModelRouteProvider<'a> {
     pub auth_header: &'a str,
     pub auth_prefix: Option<&'a str>,
     pub prompt_cache_mode: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RouteResolutionEvidencePayloads {
+    pub decision_payload: Value,
+    pub fallback_payload: Option<Value>,
+    pub not_possible_payload: Option<Value>,
 }
 
 pub fn resolved_route_from_task(
@@ -93,6 +104,96 @@ pub fn resolved_route_from_task(
             Some(route_failure(&selection, readiness))
         },
     }
+}
+
+pub fn route_resolution_evidence_payloads(
+    requested_selection: &RuntimeModelSelection,
+    routing_resolution: &RoutingResolution,
+    model_registry_payload: &Value,
+    task_request: &ModelTaskRequest,
+    resolved_route: &ResolvedModelRoute,
+) -> RouteResolutionEvidencePayloads {
+    let routing_payload = routing_decision_payload(
+        &routing_resolution.selection,
+        &routing_resolution.routing,
+        &routing_resolution.readiness,
+        model_registry_payload,
+    );
+    let decision_payload = route_evidence_payload(routing_payload, task_request, resolved_route);
+    let fallback_payload = (requested_selection != &routing_resolution.selection).then(|| {
+        route_evidence_payload(
+            routing_fallback_applied_payload(
+                requested_selection,
+                &routing_resolution.selection,
+                &routing_resolution.routing,
+                &routing_resolution.readiness,
+                model_registry_payload,
+                &routing_resolution.attempted,
+            ),
+            task_request,
+            resolved_route,
+        )
+    });
+    let not_possible_payload = resolved_route.failure.as_ref().map(|_| {
+        route_evidence_payload(
+            routing_not_possible_payload_with_attempts(
+                &routing_resolution.selection,
+                &routing_resolution.routing,
+                &routing_resolution.readiness,
+                model_registry_payload,
+                &routing_resolution.attempted,
+            ),
+            task_request,
+            resolved_route,
+        )
+    });
+
+    RouteResolutionEvidencePayloads {
+        decision_payload,
+        fallback_payload,
+        not_possible_payload,
+    }
+}
+
+pub fn route_evidence_payload(
+    mut payload: Value,
+    task_request: &ModelTaskRequest,
+    resolved_route: &ResolvedModelRoute,
+) -> Value {
+    let task_request_value = serde_json::to_value(task_request).unwrap_or_else(|_| json!({}));
+    let resolved_route_value = serde_json::to_value(resolved_route).unwrap_or_else(|_| json!({}));
+    if let Some(object) = payload.as_object_mut() {
+        object.insert("modelTaskRequest".to_string(), task_request_value.clone());
+        object.insert("model_task_request".to_string(), task_request_value);
+        object.insert("resolvedRoute".to_string(), resolved_route_value.clone());
+        object.insert("resolved_route".to_string(), resolved_route_value);
+        if let Some(failure) = resolved_route.failure.as_ref() {
+            let failure_value = serde_json::to_value(failure).unwrap_or_else(|_| json!({}));
+            object.insert("routeFailure".to_string(), failure_value.clone());
+            object.insert("route_failure".to_string(), failure_value);
+            object.insert("failureCategory".to_string(), json!(failure.category));
+            object.insert("failure_category".to_string(), json!(failure.category));
+            object.insert(
+                "reasonCode".to_string(),
+                Value::String(failure.reason_code.clone()),
+            );
+            object.insert(
+                "reason_code".to_string(),
+                Value::String(failure.reason_code.clone()),
+            );
+            if let Some(capability_gap) = failure.capability_gap.as_ref() {
+                object.insert(
+                    "capabilityGap".to_string(),
+                    Value::String(capability_gap.clone()),
+                );
+                object.insert(
+                    "capability_gap".to_string(),
+                    Value::String(capability_gap.clone()),
+                );
+            }
+        }
+    }
+    payload
 }
 
 fn resolve_protocol(
@@ -721,5 +822,257 @@ mod tests {
 
         assert_eq!(route.protocol, ProtocolKind::OpenaiResponses);
         assert!(route.failure.is_none());
+    }
+
+    #[test]
+    fn route_evidence_payload_preserves_task_and_route_failures() {
+        let task_request = build_model_task_request(ModelTaskRequestInput {
+            task_kind: ModelTaskKind::Chat,
+            source: ModelTaskSource::AgentTurn,
+            provider_id: Some("openai".to_string()),
+            model_id: Some("gpt-4.1".to_string()),
+            model_ref_source: ModelRefSource::Explicit,
+            modality_contract_key: Some("chat".to_string()),
+            routing_slot: Some("coding".to_string()),
+            task_families: vec!["chat".to_string()],
+            input_modalities: vec!["text".to_string()],
+            output_modalities: vec!["text".to_string()],
+            runtime_features: vec!["streaming".to_string()],
+            capabilities: vec!["streaming".to_string()],
+            session_id: Some("session-1".to_string()),
+            thread_id: Some("thread-1".to_string()),
+            turn_id: Some("turn-1".to_string()),
+            content_id: None,
+            trace_id: Some("trace-1".to_string()),
+        });
+        let route = ResolvedModelRoute {
+            model_ref: task_request.model_ref.clone().expect("model ref"),
+            provider: None,
+            model: None,
+            protocol: ProtocolKind::OpenaiChat,
+            endpoint: EndpointInfo {
+                kind: EndpointKind::ProviderBaseUrl,
+                base_url: Some("https://example.com".to_string()),
+                api_version: None,
+                project: None,
+                location: None,
+                region: None,
+            },
+            auth: AuthMaterialRef {
+                kind: app_server_protocol::AuthKind::NoAuth,
+                provider_id: Some("openai".to_string()),
+                credential_ref: None,
+                header_name: None,
+                header_prefix: None,
+            },
+            transport: TransportKind::Http,
+            framing: FramingKind::Sse,
+            defaults: RouteDefaults::default(),
+            capability_snapshot: CapabilitySnapshot {
+                task_families: vec!["chat".to_string()],
+                input_modalities: vec!["text".to_string()],
+                output_modalities: vec!["text".to_string()],
+                runtime_features: vec!["streaming".to_string()],
+                capabilities: Default::default(),
+                source: Some("api".to_string()),
+                reason_code: Some("declared".to_string()),
+            },
+            decision: RoutingDecision {
+                routing_mode: "profile_slot".to_string(),
+                decision_source: "runtime_selection".to_string(),
+                decision_reason: "explicit".to_string(),
+                settings_source: Some("runtime_options".to_string()),
+                service_model_slot: Some("coding".to_string()),
+                fallback_chain: vec!["coding".to_string()],
+                candidate_count: 1,
+                capability_gap: Some("task_family:chat".to_string()),
+            },
+            failure: Some(RouteFailure {
+                category: RouteFailureCategory::CapabilityGap,
+                reason_code: "capability_gap".to_string(),
+                message: Some("model capability gap: task_family:chat".to_string()),
+                provider_id: Some("openai".to_string()),
+                model_id: Some("gpt-4.1".to_string()),
+                capability_gap: Some("task_family:chat".to_string()),
+                retryable: false,
+            }),
+        };
+
+        let payload = route_evidence_payload(json!({"backend":"runtime"}), &task_request, &route);
+
+        assert_eq!(
+            payload
+                .pointer("/modelTaskRequest/modelRef/providerId")
+                .and_then(Value::as_str),
+            Some("openai")
+        );
+        assert_eq!(
+            payload
+                .pointer("/resolvedRoute/protocol")
+                .and_then(Value::as_str),
+            Some("openai_chat")
+        );
+        assert_eq!(
+            payload
+                .pointer("/routeFailure/reasonCode")
+                .and_then(Value::as_str),
+            Some("capability_gap")
+        );
+        assert_eq!(
+            payload.pointer("/capabilityGap").and_then(Value::as_str),
+            Some("task_family:chat")
+        );
+    }
+
+    #[test]
+    fn route_resolution_evidence_payloads_builds_fallback_and_failure_payloads() {
+        let requested_selection = RuntimeModelSelection {
+            provider: "workspace-coding".to_string(),
+            model: "coder-large".to_string(),
+            source: crate::model_routing::PROFILE_MODEL_SLOT_SOURCE,
+            reasoning_effort: None,
+        };
+        let routing_resolution = RoutingResolution {
+            selection: RuntimeModelSelection {
+                provider: "openai".to_string(),
+                model: "gpt-4.1-mini".to_string(),
+                source: crate::model_routing::PROFILE_MODEL_SLOT_SOURCE,
+                reasoning_effort: None,
+            },
+            routing: crate::model_routing::ModelRoutingDecision {
+                service_model_slot: "base".to_string(),
+                requested_provider: Some("workspace-coding".to_string()),
+                requested_model: Some("coder-large".to_string()),
+                settings_source: "profile_model_slot".to_string(),
+                decision_reason: "profile_slot_selected".to_string(),
+                fallback_chain: vec![
+                    "workspace-coding/coder-large".to_string(),
+                    "openai/gpt-4.1-mini".to_string(),
+                ],
+                profile_slots: Vec::new(),
+            },
+            readiness: crate::model_routing::ProviderReadiness::provider_store_ready(
+                Some("openai".to_string()),
+                1,
+                1,
+            ),
+            attempted: vec![
+                crate::model_routing::RoutingAttempt {
+                    slot: "coding".to_string(),
+                    provider: "workspace-coding".to_string(),
+                    model: "coder-large".to_string(),
+                    source: crate::model_routing::PROFILE_MODEL_SLOT_SOURCE.to_string(),
+                    readiness: crate::model_routing::ProviderReadiness::provider_store_needs_setup(
+                        "missing_enabled_api_key",
+                        Some("openai".to_string()),
+                        Some(true),
+                        0,
+                        1,
+                    ),
+                },
+                crate::model_routing::RoutingAttempt {
+                    slot: "base".to_string(),
+                    provider: "openai".to_string(),
+                    model: "gpt-4.1-mini".to_string(),
+                    source: crate::model_routing::PROFILE_MODEL_SLOT_SOURCE.to_string(),
+                    readiness: crate::model_routing::ProviderReadiness::provider_store_ready(
+                        Some("openai".to_string()),
+                        1,
+                        1,
+                    ),
+                },
+            ],
+        };
+        let task_request = build_model_task_request(ModelTaskRequestInput {
+            task_kind: ModelTaskKind::Chat,
+            source: ModelTaskSource::AgentTurn,
+            provider_id: Some("openai".to_string()),
+            model_id: Some("gpt-4.1-mini".to_string()),
+            model_ref_source: ModelRefSource::ProfileSlot,
+            modality_contract_key: Some("chat".to_string()),
+            routing_slot: Some("base".to_string()),
+            task_families: vec!["chat".to_string()],
+            input_modalities: vec!["text".to_string()],
+            output_modalities: vec!["text".to_string()],
+            runtime_features: vec!["streaming".to_string()],
+            capabilities: vec!["streaming".to_string()],
+            session_id: Some("session-1".to_string()),
+            thread_id: Some("thread-1".to_string()),
+            turn_id: Some("turn-1".to_string()),
+            content_id: None,
+            trace_id: None,
+        });
+        let route = resolved_route_from_task(
+            &task_request,
+            ModelRouteSelection {
+                provider_id: "openai",
+                model_id: "gpt-4.1-mini",
+                model_ref_source: ModelRefSource::ProfileSlot,
+                reasoning_effort: None,
+            },
+            &routing_decision_payload(
+                &routing_resolution.selection,
+                &routing_resolution.routing,
+                &routing_resolution.readiness,
+                &json!({
+                    "source": "api",
+                    "reasonCode": "matched_model",
+                    "modelCapabilities": {
+                        "taskFamilies": ["chat"],
+                        "inputModalities": ["text"],
+                        "outputModalities": ["text"],
+                        "runtimeFeatures": ["streaming"],
+                        "capabilities": {
+                            "streaming": true
+                        }
+                    }
+                }),
+            ),
+            None,
+            None,
+        );
+
+        let payloads = route_resolution_evidence_payloads(
+            &requested_selection,
+            &routing_resolution,
+            &json!({
+                "source": "api",
+                "reasonCode": "matched_model",
+                "modelCapabilities": {
+                    "taskFamilies": ["chat"],
+                    "inputModalities": ["text"],
+                    "outputModalities": ["text"],
+                    "runtimeFeatures": ["streaming"],
+                    "capabilities": {
+                        "streaming": true
+                    }
+                }
+            }),
+            &task_request,
+            &route,
+        );
+
+        assert_eq!(
+            payloads
+                .decision_payload
+                .pointer("/resolvedRoute/protocol")
+                .and_then(Value::as_str),
+            Some("openai_chat")
+        );
+        let fallback = payloads.fallback_payload.expect("fallback payload");
+        assert_eq!(
+            fallback
+                .pointer("/fallbackApplied")
+                .and_then(Value::as_bool),
+            Some(true)
+        );
+        assert_eq!(
+            fallback
+                .pointer("/routingAttempts")
+                .and_then(Value::as_array)
+                .map(Vec::len),
+            Some(2)
+        );
+        assert!(payloads.not_possible_payload.is_none());
     }
 }

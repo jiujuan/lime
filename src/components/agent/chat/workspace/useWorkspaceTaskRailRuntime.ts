@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from "react";
 import type {
   AgentRuntimeThreadReadModel,
+  AsterSessionExecutionRuntime,
   AsterTodoItem,
   AsterSubagentSessionInfo,
 } from "@/lib/api/agentRuntime";
@@ -30,6 +31,7 @@ export interface WorkspaceTaskRailRuntimeInput {
   threadItems?: AgentThreadItem[];
   todoItems?: AsterTodoItem[];
   threadRead?: AgentRuntimeThreadReadModel | null;
+  executionRuntime?: AsterSessionExecutionRuntime | null;
   childSubagentSessions?: AsterSubagentSessionInfo[];
   providerType?: string | null;
   model?: string | null;
@@ -52,6 +54,7 @@ export interface WorkspaceTaskRailProps {
   threadItems?: AgentThreadItem[];
   todoItems?: AsterTodoItem[];
   threadRead?: AgentRuntimeThreadReadModel | null;
+  executionRuntime?: AsterSessionExecutionRuntime | null;
   childSubagentSessions?: AsterSubagentSessionInfo[];
   context: GeneralWorkbenchTaskRailContextInput;
   onOpenOutput: (path: string) => void | Promise<void>;
@@ -116,6 +119,7 @@ export function useWorkspaceTaskRailRuntime({
   threadItems,
   todoItems,
   threadRead,
+  executionRuntime,
   childSubagentSessions,
   providerType,
   model,
@@ -151,6 +155,7 @@ export function useWorkspaceTaskRailRuntime({
       threadItems,
       todoItems,
       threadRead,
+      executionRuntime,
       childSubagentSessions,
       context: buildWorkspaceTaskRailRuntimeContext({
         providerType,
@@ -178,6 +183,7 @@ export function useWorkspaceTaskRailRuntime({
       providerType,
       reasoningEffort,
       threadRead,
+      executionRuntime,
       submittedActionsInFlight,
       threadItems,
       todoItems,

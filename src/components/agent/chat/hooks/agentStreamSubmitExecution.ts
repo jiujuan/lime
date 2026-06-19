@@ -37,6 +37,7 @@ interface ExecuteAgentStreamSubmitOptions {
     sessionId: string,
     requestStartedAt: number,
     promptText: string,
+    options?: { requireTerminal?: boolean; turnId?: string | null },
   ) => Promise<boolean>;
   sessionIdRef: MutableRefObject<string | null>;
   getWorkspaceIdForSubmit: () => string | undefined;
@@ -59,6 +60,7 @@ interface ExecuteAgentStreamSubmitOptions {
   webSearch?: boolean;
   searchMode?: AgentRuntimeWebSearchMode;
   thinking?: boolean;
+  explicitToolPreferences?: boolean;
   autoContinue?: AutoContinueRequestPayload;
   systemPrompt?: string;
   requestMetadata?: Record<string, unknown>;
@@ -111,6 +113,7 @@ interface ExecuteAgentStreamSubmitOptions {
   setMessages: Dispatch<SetStateAction<Message[]>>;
   setIsSending: Dispatch<SetStateAction<boolean>>;
   setPendingActions: Dispatch<SetStateAction<ActionRequired[]>>;
+  getThreadItems?: () => readonly AgentThreadItem[];
   setThreadItems: Dispatch<SetStateAction<AgentThreadItem[]>>;
   setThreadTurns: Dispatch<SetStateAction<AgentThreadTurn[]>>;
   setCurrentTurnId: Dispatch<SetStateAction<string | null>>;
@@ -143,6 +146,7 @@ export async function executeAgentStreamSubmit(
     webSearch,
     searchMode,
     thinking,
+    explicitToolPreferences,
     autoContinue,
     systemPrompt,
     requestMetadata,
@@ -171,6 +175,7 @@ export async function executeAgentStreamSubmit(
     setMessages,
     setIsSending,
     setPendingActions,
+    getThreadItems,
     setThreadItems,
     setThreadTurns,
     setCurrentTurnId,
@@ -210,7 +215,8 @@ export async function executeAgentStreamSubmit(
     assistantDraft?.preserveContent === true
       ? assistantDraft.content?.trim() || null
       : null;
-  const assistantFallbackContent = assistantDraft?.fallbackContent?.trim() || null;
+  const assistantFallbackContent =
+    assistantDraft?.fallbackContent?.trim() || null;
   const managedObjectiveText =
     extractInputbarManagedObjectiveText(requestMetadata);
   const eventBindingWorkspaceId = resolvedWorkspaceId ?? "";
@@ -260,6 +266,7 @@ export async function executeAgentStreamSubmit(
     appendThinkingToParts,
     setMessages,
     setPendingActions,
+    getThreadItems,
     setThreadItems,
     setThreadTurns,
     setCurrentTurnId,
@@ -275,6 +282,9 @@ export async function executeAgentStreamSubmit(
     effectiveProviderType,
     eventName,
     expectingQueue,
+    onSubmitAccepted: () => {
+      requestState.startTerminalRecoveryPoll?.();
+    },
     requestState,
     submit: async () => {
       if (managedObjectiveText) {
@@ -313,6 +323,7 @@ export async function executeAgentStreamSubmit(
           webSearch,
           searchMode,
           thinking,
+          explicitToolPreferences,
           autoContinue,
         }),
       );

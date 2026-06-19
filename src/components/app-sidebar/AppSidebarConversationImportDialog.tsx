@@ -4,8 +4,6 @@ import {
   CheckCircle2,
   FileInput,
   Loader2,
-  MessageSquare,
-  RefreshCw,
   X,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -18,19 +16,29 @@ import {
   type ConversationImportThreadPreviewResponse,
   type ImportedThreadSummary,
 } from "@/lib/api/conversationImport";
+import { selectAgentAppDirectory } from "@/lib/api/agentApps";
 import { formatNumber } from "@/i18n/format";
 import {
+  DEFAULT_CONVERSATION_IMPORT_SOURCE_CLIENT,
+  buildImportThreadGroups,
   buildImportPreviewMetaText,
   buildSourceProvenanceLabels,
+  filterImportThreadsByArchiveStatus,
   formatImportOptionalDate,
   firstImportableThread,
+  initialImportSelection,
+  isSelectableImportThread,
   isImportedThread,
   normalizeOptional,
   resolveImportSourceClientLabel,
-  resolveImportThreadSecondaryText,
   resolveImportThreadTitle,
+  resolveImportWarningText,
+  selectedImportThreads,
   truncateImportPreviewText,
+  type ImportThreadArchiveFilter,
+  type ImportThreadGroupMode,
 } from "./conversationImportDialogViewModel";
+import { AppSidebarConversationImportThreadList } from "./AppSidebarConversationImportThreadList";
 
 const SCAN_LIMIT = 40;
 const PREVIEW_LIMIT = 12;
@@ -59,6 +67,13 @@ export function AppSidebarConversationImportDialog({
   const [sourceRootInput, setSourceRootInput] = useState("");
   const [threads, setThreads] = useState<ImportedThreadSummary[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const [checkedThreadIds, setCheckedThreadIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [groupMode, setGroupMode] = useState<ImportThreadGroupMode>("day");
+  const [archiveFilter, setArchiveFilter] =
+    useState<ImportThreadArchiveFilter>("all");
+  const [selectingSourceRoot, setSelectingSourceRoot] = useState(false);
   const [preview, setPreview] =
     useState<ConversationImportThreadPreviewResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -75,21 +90,37 @@ export function AppSidebarConversationImportDialog({
   const committing = stage === "committing";
   const threadTitle = resolveImportThreadTitle(
     preview?.thread ?? selectedThread,
+    t,
   );
-  const replaceExisting = isImportedThread(preview?.thread ?? selectedThread);
   const commitThreads = useMemo(
-    () =>
-      threads.filter((thread) =>
-        ["not_imported", "imported"].includes(thread.importStatus),
-      ),
-    [threads],
+    () => selectedImportThreads(threads, checkedThreadIds),
+    [checkedThreadIds, threads],
   );
+  const visibleThreads = useMemo(
+    () => filterImportThreadsByArchiveStatus(threads, archiveFilter),
+    [archiveFilter, threads],
+  );
+  const selectableThreads = useMemo(
+    () => visibleThreads.filter(isSelectableImportThread),
+    [visibleThreads],
+  );
+  const importGroups = useMemo(
+    () => buildImportThreadGroups(visibleThreads, groupMode, i18n.language, t),
+    [groupMode, i18n.language, t, visibleThreads],
+  );
+  const checkedCount = commitThreads.length;
+  const checkedImportedCount = commitThreads.filter(isImportedThread).length;
+  const allSelectableChecked =
+    selectableThreads.length > 0 &&
+    selectableThreads.every((thread) =>
+      checkedThreadIds.has(thread.sourceThreadId),
+    );
   const dryRun = preview?.summary.dryRun;
   const fidelity = preview?.summary.fidelity;
   const targetLabel =
     normalizeOptional(projectName) ||
     normalizeOptional(workspaceId) ||
-    t("navigation.sidebar.importDialog.target.standalone", "独立对话");
+    t("navigation.sidebar.importDialog.target.standalone", "Standalone conversation");
   const selectedUpdatedAt = formatImportOptionalDate(
     preview?.thread.updatedAt ?? selectedThread?.updatedAt,
     i18n.language,
@@ -101,7 +132,7 @@ export function AppSidebarConversationImportDialog({
       setStage("previewing");
       setError(null);
       const result = await previewConversationImportThread({
-        sourceClient: "codex",
+        sourceClient: DEFAULT_CONVERSATION_IMPORT_SOURCE_CLIENT,
         sourceRoot: nextSourceRoot,
         sourceThreadId: thread.sourceThreadId,
         sourcePath: thread.sourcePath,
@@ -123,10 +154,10 @@ export function AppSidebarConversationImportDialog({
         const nextThreads: ImportedThreadSummary[] = [];
         do {
           const result = await scanConversationImportSource({
-            sourceClient: "codex",
+            sourceClient: DEFAULT_CONVERSATION_IMPORT_SOURCE_CLIENT,
             sourceRoot: resolvedSourceRoot,
             projectPath: normalizeOptional(projectPath),
-            includeArchived: false,
+            includeArchived: true,
             limit: SCAN_LIMIT,
             ...(cursor ? { cursor } : {}),
           });
@@ -137,18 +168,20 @@ export function AppSidebarConversationImportDialog({
         setThreads(nextThreads);
         const nextSelected = firstImportableThread(nextThreads);
         setSelectedThreadId(nextSelected?.sourceThreadId ?? null);
+        setCheckedThreadIds(initialImportSelection(nextThreads));
         if (nextSelected) {
           await loadPreview(nextSelected, resolvedSourceRoot);
         }
       } catch (scanError) {
         setThreads([]);
         setSelectedThreadId(null);
+        setCheckedThreadIds(new Set());
         setError(
           scanError instanceof Error && scanError.message.trim()
             ? scanError.message.trim()
             : t(
                 "navigation.sidebar.importDialog.error.scan",
-                "读取本地历史对话失败",
+                "Failed to read local history",
               ),
         );
       } finally {
@@ -187,7 +220,7 @@ export function AppSidebarConversationImportDialog({
             ? previewError.message.trim()
             : t(
                 "navigation.sidebar.importDialog.error.preview",
-                "读取对话预览失败",
+                "Failed to read conversation preview",
               ),
         );
       } finally {
@@ -204,6 +237,101 @@ export function AppSidebarConversationImportDialog({
     ],
   );
 
+  const handleToggleThread = useCallback(
+    (thread: ImportedThreadSummary) => {
+      if (committing || loading || !isSelectableImportThread(thread)) {
+        return;
+      }
+      setCheckedThreadIds((current) => {
+        const next = new Set(current);
+        if (next.has(thread.sourceThreadId)) {
+          next.delete(thread.sourceThreadId);
+        } else {
+          next.add(thread.sourceThreadId);
+        }
+        return next;
+      });
+      if (selectedThreadId !== thread.sourceThreadId) {
+        void handleSelectThread(thread);
+      }
+    },
+    [committing, handleSelectThread, loading, selectedThreadId],
+  );
+
+  const handleToggleAll = useCallback(() => {
+    if (committing || loading) {
+      return;
+    }
+    setCheckedThreadIds(() => {
+      if (allSelectableChecked) {
+        return new Set();
+      }
+      return new Set(selectableThreads.map((thread) => thread.sourceThreadId));
+    });
+  }, [allSelectableChecked, committing, loading, selectableThreads]);
+
+  const handleToggleGroup = useCallback(
+    (groupThreads: ImportedThreadSummary[]) => {
+      if (committing || loading) {
+        return;
+      }
+      const selectableGroupThreads = groupThreads.filter(
+        isSelectableImportThread,
+      );
+      const groupChecked =
+        selectableGroupThreads.length > 0 &&
+        selectableGroupThreads.every((thread) =>
+          checkedThreadIds.has(thread.sourceThreadId),
+        );
+      setCheckedThreadIds((current) => {
+        const next = new Set(current);
+        for (const thread of selectableGroupThreads) {
+          if (groupChecked) {
+            next.delete(thread.sourceThreadId);
+          } else {
+            next.add(thread.sourceThreadId);
+          }
+        }
+        return next;
+      });
+    },
+    [checkedThreadIds, committing, loading],
+  );
+
+  const handlePickSourceRoot = useCallback(async () => {
+    if (committing || loading || selectingSourceRoot) {
+      return;
+    }
+    setSelectingSourceRoot(true);
+    setError(null);
+    try {
+      const result = await selectAgentAppDirectory({
+        title: t(
+          "navigation.sidebar.importDialog.sourceRoot.dialogTitle",
+          "Select local history data directory",
+        ),
+      });
+      const nextSourceRoot = normalizeOptional(result.path);
+      if (result.cancelled || !nextSourceRoot) {
+        return;
+      }
+      sourceRootRef.current = nextSourceRoot;
+      setSourceRootInput(nextSourceRoot);
+      await loadThreads(nextSourceRoot);
+    } catch (pickError) {
+      setError(
+        pickError instanceof Error && pickError.message.trim()
+          ? pickError.message.trim()
+          : t(
+              "navigation.sidebar.importDialog.error.chooseDirectory",
+              "Failed to choose local history directory",
+            ),
+      );
+    } finally {
+      setSelectingSourceRoot(false);
+    }
+  }, [committing, loadThreads, loading, selectingSourceRoot, t]);
+
   const handleCommit = useCallback(async () => {
     if (commitThreads.length === 0) {
       return;
@@ -216,7 +344,7 @@ export function AppSidebarConversationImportDialog({
       const results: ConversationImportThreadCommitResponse[] = [];
       for (const thread of commitThreads) {
         const result = await commitConversationImportThread({
-          sourceClient: "codex",
+          sourceClient: DEFAULT_CONVERSATION_IMPORT_SOURCE_CLIENT,
           sourceRoot: resolvedSourceRoot,
           sourceThreadId: thread.sourceThreadId,
           sourcePath: thread.sourcePath,
@@ -233,7 +361,7 @@ export function AppSidebarConversationImportDialog({
           ? commitError.message.trim()
           : t(
               "navigation.sidebar.importDialog.error.commit",
-              "导入本地历史对话失败",
+              "Failed to import local history",
             ),
       );
     } finally {
@@ -258,14 +386,14 @@ export function AppSidebarConversationImportDialog({
       closeOnOverlayClick={!committing}
     >
       <div
-        className="relative flex max-h-[calc(100vh-4rem)] min-h-[560px] flex-col overflow-hidden bg-white text-slate-900"
+        className="relative flex max-h-[calc(100vh-4rem)] min-h-[540px] flex-col overflow-hidden bg-white text-slate-900"
         data-testid="app-sidebar-conversation-import-dialog"
       >
         <button
           type="button"
           aria-label={t(
             "navigation.sidebar.importDialog.close",
-            "关闭导入弹窗",
+            "Close import dialog",
           )}
           className="absolute right-4 top-4 z-10 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-transparent text-slate-500 transition hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
           disabled={committing}
@@ -274,165 +402,89 @@ export function AppSidebarConversationImportDialog({
           <X className="h-4 w-4" />
         </button>
 
-        <header className="border-b border-slate-200 bg-slate-50 px-6 py-5">
-          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-            <FileInput className="h-3.5 w-3.5" />
-            {t("navigation.sidebar.importDialog.eyebrow", "本地历史导入")}
-          </div>
-          <div className="mt-3 max-w-3xl">
-            <h2 className="text-xl font-semibold text-slate-950">
-              {t("navigation.sidebar.importDialog.title", "导入本地历史对话")}
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              {t(
-                "navigation.sidebar.importDialog.description",
-                "先读取本地历史对话并生成预览，确认后写入当前会话。",
-              )}
+        <header className="flex items-center justify-between gap-4 border-b border-slate-200 bg-slate-50 px-6 py-4 pr-16">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <FileInput className="h-4 w-4 text-emerald-700" />
+              <h2 className="text-lg font-semibold text-slate-950">
+                {t("navigation.sidebar.importDialog.title", "Import Conversation")}
+              </h2>
+            </div>
+            <p className="mt-1 truncate text-sm text-slate-500">
+              {targetLabel}
             </p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
+            {t(
+              "navigation.sidebar.importDialog.selection.selectedCount",
+              "Selected {{count}}",
+              {
+                count: checkedCount,
+              },
+            )}
           </div>
         </header>
 
-        <div className="grid min-h-0 flex-1 grid-cols-[minmax(260px,320px)_minmax(0,1fr)]">
-          <aside className="flex min-h-0 flex-col border-r border-slate-200 bg-slate-50/70">
-            <div className="space-y-3 border-b border-slate-200 p-4">
-              <label className="block text-xs font-semibold text-slate-600">
-                {t(
-                  "navigation.sidebar.importDialog.sourceRoot.label",
-                  "本地历史数据目录",
-                )}
-                <input
-                  value={sourceRootInput}
-                  onChange={(event) => setSourceRootInput(event.target.value)}
-                  placeholder={t(
-                    "navigation.sidebar.importDialog.sourceRoot.placeholder",
-                    "自动使用历史数据默认目录",
-                  )}
-                  className="mt-2 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-300"
-                  disabled={committing}
-                />
-              </label>
-              <button
-                type="button"
-                className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:border-emerald-200 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={loading || committing}
-                onClick={() => void loadThreads(sourceRoot)}
-              >
-                <RefreshCw
-                  className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
-                />
-                {loading
-                  ? t(
-                      "navigation.sidebar.importDialog.action.loading",
-                      "正在读取",
-                    )
-                  : t(
-                      "navigation.sidebar.importDialog.action.refresh",
-                      "重新扫描",
-                    )}
-              </button>
-            </div>
-
-            <div className="flex min-h-0 flex-1 flex-col p-3">
-              <div className="mb-2 flex items-center justify-between px-1">
-                <span className="text-xs font-bold text-slate-500">
-                  {t(
-                    "navigation.sidebar.importDialog.threadList.title",
-                    "可导入对话 {{count}}",
-                    {
-                      count: threads.length,
-                    },
-                  )}
-                </span>
-              </div>
-              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
-                {threads.length > 0 ? (
-                  threads.map((thread) => {
-                    const active = selectedThreadId === thread.sourceThreadId;
-                    const title = resolveImportThreadTitle(thread);
-                    const updatedAt = formatImportOptionalDate(
-                      thread.updatedAt,
-                      i18n.language,
-                    );
-                    return (
-                      <button
-                        key={thread.sourceThreadId}
-                        type="button"
-                        className={`w-full rounded-xl border p-3 text-left transition ${
-                          active
-                            ? "border-emerald-200 bg-white shadow-sm"
-                            : "border-transparent bg-transparent hover:border-slate-200 hover:bg-white"
-                        }`}
-                        disabled={loading || committing}
-                        title={title}
-                        onClick={() => void handleSelectThread(thread)}
-                      >
-                        <span className="flex items-start gap-2">
-                          <MessageSquare className="mt-0.5 h-4 w-4 flex-shrink-0 text-slate-500" />
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-semibold text-slate-900">
-                              {title}
-                            </span>
-                            <span className="mt-1 block truncate text-xs text-slate-500">
-                              {resolveImportThreadSecondaryText(
-                                thread,
-                                updatedAt,
-                                t,
-                              )}
-                            </span>
-                          </span>
-                        </span>
-                      </button>
-                    );
-                  })
-                ) : (
-                  <div className="flex min-h-[180px] items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white px-4 text-center text-sm font-medium text-slate-500">
-                    {loading
-                      ? t(
-                          "navigation.sidebar.importDialog.empty.loading",
-                          "正在读取本地历史对话",
-                        )
-                      : t(
-                          "navigation.sidebar.importDialog.empty.noThreads",
-                          "没有找到可导入的本地历史对话",
-                        )}
-                  </div>
-                )}
-              </div>
-            </div>
-          </aside>
+        <div className="grid min-h-0 flex-1 grid-cols-[minmax(300px,380px)_minmax(0,1fr)]">
+          <AppSidebarConversationImportThreadList
+            allSelectableChecked={allSelectableChecked}
+            archiveFilter={archiveFilter}
+            checkedThreadIds={checkedThreadIds}
+            committing={committing}
+            groupMode={groupMode}
+            importGroups={importGroups}
+            loading={loading}
+            locale={i18n.language}
+            selectableThreadCount={selectableThreads.length}
+            selectedThreadId={selectedThreadId}
+            selectingSourceRoot={selectingSourceRoot}
+            sourceRoot={sourceRoot}
+            sourceRootInput={sourceRootInput}
+            t={t}
+            visibleThreads={visibleThreads}
+            onArchiveFilterChange={setArchiveFilter}
+            onGroupModeChange={setGroupMode}
+            onPickSourceRoot={handlePickSourceRoot}
+            onRefresh={(nextSourceRoot) => void loadThreads(nextSourceRoot)}
+            onSelectThread={handleSelectThread}
+            onSourceRootInputChange={setSourceRootInput}
+            onToggleAll={handleToggleAll}
+            onToggleGroup={handleToggleGroup}
+            onToggleThread={handleToggleThread}
+          />
 
           <main className="flex min-h-0 flex-col">
             <div className="grid grid-cols-3 gap-3 border-b border-slate-200 p-4">
-              <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <div className="rounded-lg border border-slate-200 bg-white p-3">
                 <span className="text-xs font-semibold text-slate-500">
-                  {t("navigation.sidebar.importDialog.meta.source", "来源")}
+                  {t("navigation.sidebar.importDialog.meta.source", "Source")}
                 </span>
                 <strong className="mt-1 block text-sm text-slate-950">
-                  {resolveImportSourceClientLabel(preview?.source.sourceClient)}
+                  {resolveImportSourceClientLabel(
+                    preview?.source.sourceClient,
+                    t,
+                  )}
                 </strong>
               </div>
-              <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <div className="rounded-lg border border-slate-200 bg-white p-3">
                 <span className="text-xs font-semibold text-slate-500">
-                  {t("navigation.sidebar.importDialog.meta.target", "导入到")}
+                  {t("navigation.sidebar.importDialog.meta.selected", "Selected")}
                 </span>
                 <strong className="mt-1 block truncate text-sm text-slate-950">
-                  {targetLabel}
+                  {formatNumber(checkedCount, { locale: i18n.language })}
                 </strong>
               </div>
-              <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <div className="rounded-lg border border-slate-200 bg-white p-3">
                 <span className="text-xs font-semibold text-slate-500">
-                  {t("navigation.sidebar.importDialog.meta.messages", "消息")}
+                  {t(
+                    "navigation.sidebar.importDialog.meta.reimport",
+                    "Re-import",
+                  )}
                 </span>
                 <strong className="mt-1 block text-sm text-slate-950">
-                  {preview
-                    ? formatNumber(
-                        dryRun?.willImportMessages ??
-                          preview.summary.messageCount,
-                        {
-                          locale: i18n.language,
-                        },
-                      )
-                    : "-"}
+                  {formatNumber(checkedImportedCount, {
+                    locale: i18n.language,
+                  })}
                 </strong>
               </div>
             </div>
@@ -449,8 +501,8 @@ export function AppSidebarConversationImportDialog({
               ) : null}
 
               {preview ? (
-                <div className="space-y-5">
-                  <section className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="space-y-4">
+                  <section className="rounded-xl border border-slate-200 bg-white p-4">
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">
                         <h3 className="truncate text-lg font-semibold text-slate-950">
@@ -465,7 +517,7 @@ export function AppSidebarConversationImportDialog({
                           <CheckCircle2 className="h-3.5 w-3.5" />
                           {t(
                             "navigation.sidebar.importDialog.status.imported",
-                            "已导入",
+                            "Imported",
                           )}
                         </span>
                       ) : null}
@@ -476,7 +528,7 @@ export function AppSidebarConversationImportDialog({
                         [
                           t(
                             "navigation.sidebar.importDialog.summary.messages",
-                            "消息",
+                            "Messages",
                           ),
                           dryRun?.willImportMessages ??
                             preview.summary.messageCount,
@@ -484,21 +536,21 @@ export function AppSidebarConversationImportDialog({
                         [
                           t(
                             "navigation.sidebar.importDialog.summary.turns",
-                            "回合",
+                            "Turns",
                           ),
                           dryRun?.willImportTurns ?? 0,
                         ],
                         [
                           t(
                             "navigation.sidebar.importDialog.summary.attachments",
-                            "附件",
+                            "Attachments",
                           ),
                           dryRun?.willImportAttachments ?? 0,
                         ],
                         [
                           t(
                             "navigation.sidebar.importDialog.summary.timeline",
-                            "时间线",
+                            "Timeline",
                           ),
                           dryRun?.willImportTimelineItems ??
                             preview.summary.messageCount +
@@ -507,7 +559,7 @@ export function AppSidebarConversationImportDialog({
                       ].map(([label, value]) => (
                         <div
                           key={String(label)}
-                          className="rounded-xl bg-slate-50 p-3"
+                          className="rounded-lg bg-slate-50 p-3"
                         >
                           <span className="block text-xs font-semibold text-slate-500">
                             {label}
@@ -520,161 +572,28 @@ export function AppSidebarConversationImportDialog({
                         </div>
                       ))}
                     </div>
-
-                    <div className="mt-2 grid grid-cols-4 gap-2">
-                      {[
-                        [
-                          t(
-                            "navigation.sidebar.importDialog.summary.lines",
-                            "行数",
-                          ),
-                          preview.summary.lineCount,
-                        ],
-                        [
-                          t(
-                            "navigation.sidebar.importDialog.summary.events",
-                            "事件",
-                          ),
-                          preview.summary.rolloutEventItems,
-                        ],
-                        [
-                          t(
-                            "navigation.sidebar.importDialog.summary.unsupported",
-                            "未映射",
-                          ),
-                          dryRun?.unsupportedItems ??
-                            preview.summary.unsupportedCount,
-                        ],
-                        [
-                          t(
-                            "navigation.sidebar.importDialog.summary.preview",
-                            "预览",
-                          ),
-                          preview.messages.length,
-                        ],
-                      ].map(([label, value]) => (
-                        <div
-                          key={String(label)}
-                          className="rounded-xl bg-slate-50 p-3"
-                        >
-                          <span className="block text-xs font-semibold text-slate-500">
-                            {label}
-                          </span>
-                          <strong className="mt-1 block text-base text-slate-950">
-                            {formatNumber(Number(value), {
-                              locale: i18n.language,
-                            })}
-                          </strong>
-                        </div>
-                      ))}
-                    </div>
-
                     {fidelity ? (
-                      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                        <div className="mb-3 flex items-center justify-between gap-3">
-                          <span className="text-xs font-semibold text-slate-600">
-                            {t(
-                              "navigation.sidebar.importDialog.fidelity.title",
-                              "导入细节还原",
-                            )}
-                          </span>
-                          <span className="text-xs font-medium text-slate-500">
-                            {t(
-                              "navigation.sidebar.importDialog.fidelity.provenance",
-                              "保留来源序号与调用 ID",
-                            )}
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-4 gap-2">
-                          {[
-                            [
-                              t(
-                                "navigation.sidebar.importDialog.fidelity.tools",
-                                "工具",
-                              ),
-                              fidelity.tools,
-                            ],
-                            [
-                              t(
-                                "navigation.sidebar.importDialog.fidelity.commands",
-                                "命令",
-                              ),
-                              fidelity.commands,
-                            ],
-                            [
-                              t(
-                                "navigation.sidebar.importDialog.fidelity.patches",
-                                "补丁",
-                              ),
-                              fidelity.patches,
-                            ],
-                            [
-                              t(
-                                "navigation.sidebar.importDialog.fidelity.approvals",
-                                "审批",
-                              ),
-                              fidelity.approvals,
-                            ],
-                            [
-                              t(
-                                "navigation.sidebar.importDialog.fidelity.reasoning",
-                                "推理",
-                              ),
-                              fidelity.reasoning,
-                            ],
-                            [
-                              t(
-                                "navigation.sidebar.importDialog.fidelity.mcp",
-                                "MCP",
-                              ),
-                              fidelity.mcp,
-                            ],
-                            [
-                              t(
-                                "navigation.sidebar.importDialog.fidelity.webSearch",
-                                "搜索",
-                              ),
-                              fidelity.webSearch,
-                            ],
-                            [
-                              t(
-                                "navigation.sidebar.importDialog.fidelity.dropped",
-                                "预算裁剪",
-                              ),
-                              fidelity.budgetDropped,
-                            ],
-                          ].map(([label, value]) => (
-                            <div
-                              key={String(label)}
-                              className="rounded-lg bg-white px-3 py-2"
-                            >
-                              <span className="block text-[11px] font-semibold text-slate-500">
-                                {label}
-                              </span>
-                              <strong className="mt-1 block text-sm text-slate-950">
-                                {formatNumber(Number(value), {
-                                  locale: i18n.language,
-                                })}
-                              </strong>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
+                      <p className="mt-3 text-xs leading-5 text-slate-500">
+                        {t(
+                          "navigation.sidebar.importDialog.fidelity.compact",
+                          "Tools, commands, patches, approvals, and reasoning records will be preserved.",
+                        )}
+                      </p>
                     ) : null}
                   </section>
 
                   {preview.summary.warnings.length > 0 ? (
-                    <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                    <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
                       <div className="mb-2 flex items-center gap-2 font-semibold">
                         <AlertTriangle className="h-4 w-4" />
                         {t(
                           "navigation.sidebar.importDialog.warnings.title",
-                          "导入提示",
+                          "Import notes",
                         )}
                       </div>
                       <ul className="space-y-1">
                         {preview.summary.warnings.map((warning) => (
-                          <li key={warning}>{warning}</li>
+                          <li key={warning}>{resolveImportWarningText(warning, t)}</li>
                         ))}
                       </ul>
                     </section>
@@ -684,7 +603,7 @@ export function AppSidebarConversationImportDialog({
                     <h4 className="text-sm font-semibold text-slate-700">
                       {t(
                         "navigation.sidebar.importDialog.messages.title",
-                        "消息预览",
+                        "Message preview",
                       )}
                     </h4>
                     <div className="space-y-2">
@@ -696,18 +615,18 @@ export function AppSidebarConversationImportDialog({
                         return (
                           <article
                             key={`${message.role}-${index}`}
-                            className="rounded-2xl border border-slate-200 bg-white p-4"
+                            className="rounded-xl border border-slate-200 bg-white p-4"
                           >
                             <div className="mb-2 flex items-center justify-between gap-3">
                               <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
                                 {message.role === "assistant"
                                   ? t(
                                       "navigation.sidebar.importDialog.role.assistant",
-                                      "助手",
+                                      "Assistant",
                                     )
                                   : t(
                                       "navigation.sidebar.importDialog.role.user",
-                                      "用户",
+                                      "User",
                                     )}
                               </span>
                               <span className="flex flex-wrap justify-end gap-2">
@@ -715,7 +634,7 @@ export function AppSidebarConversationImportDialog({
                                   <span className="text-xs font-medium text-amber-700">
                                     {t(
                                       "navigation.sidebar.importDialog.messages.truncated",
-                                      "已截断",
+                                      "Truncated",
                                     )}
                                   </span>
                                 ) : null}
@@ -723,7 +642,7 @@ export function AppSidebarConversationImportDialog({
                                   <span className="text-xs font-medium text-emerald-700">
                                     {t(
                                       "navigation.sidebar.importDialog.messages.attachments",
-                                      "附件 {{count}}",
+                                      "Attachments {{count}}",
                                       {
                                         count: (message.attachments ?? [])
                                           .length,
@@ -750,19 +669,19 @@ export function AppSidebarConversationImportDialog({
                   </section>
                 </div>
               ) : (
-                <div className="flex min-h-[360px] items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 text-sm font-medium text-slate-500">
+                <div className="flex min-h-[360px] items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-sm font-medium text-slate-500">
                   {loading ? (
                     <span className="inline-flex items-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       {t(
                         "navigation.sidebar.importDialog.preview.loading",
-                        "正在生成预览",
+                        "Generating preview",
                       )}
                     </span>
                   ) : (
                     t(
                       "navigation.sidebar.importDialog.preview.empty",
-                      "请选择一条本地历史对话查看预览",
+                      "Select a local history conversation to preview",
                     )
                   )}
                 </div>
@@ -771,14 +690,14 @@ export function AppSidebarConversationImportDialog({
 
             <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4">
               <p className="max-w-xl text-xs leading-5 text-slate-500">
-                {replaceExisting
+                {checkedImportedCount > 0
                   ? t(
                       "navigation.sidebar.importDialog.confirmNotice.replace",
-                      "会先清理已导入会话并重新导入，不修改本地历史数据；后续继续对话仍走多模型运行时。",
+                      "Already imported conversations will be cleared and imported again.",
                     )
                   : t(
                       "navigation.sidebar.importDialog.confirmNotice",
-                      "确认后只写入当前会话，不修改本地历史数据；后续继续对话仍走多模型运行时。",
+                      "Only checked conversations will be imported.",
                     )}
               </p>
               <div className="flex items-center gap-2">
@@ -788,7 +707,7 @@ export function AppSidebarConversationImportDialog({
                   disabled={committing}
                   onClick={onClose}
                 >
-                  {t("navigation.sidebar.importDialog.action.cancel", "取消")}
+                  {t("navigation.sidebar.importDialog.action.cancel", "Cancel")}
                 </button>
                 <button
                   type="button"
@@ -803,16 +722,16 @@ export function AppSidebarConversationImportDialog({
                   {committing
                     ? t(
                         "navigation.sidebar.importDialog.action.importing",
-                        "正在导入",
+                        "Importing",
                       )
-                    : replaceExisting
+                    : checkedImportedCount > 0
                       ? t(
                           "navigation.sidebar.importDialog.action.replace",
-                          "清理并重新导入",
+                          "Re-import",
                         )
                       : t(
                           "navigation.sidebar.importDialog.action.confirm",
-                          "确认导入",
+                          "Import Conversation",
                         )}
                 </button>
               </div>

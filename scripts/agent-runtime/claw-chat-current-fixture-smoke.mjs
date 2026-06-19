@@ -1774,7 +1774,7 @@ async function waitForGuiPlanCompleted(page, options) {
             planDecisionText.includes("是，实施此计划"),
           planDecisionHasAdjustInput: Boolean(
             planDecisionPanel?.querySelector(
-              'input[placeholder*="告知 Codex 如何调整"]',
+              '[data-testid="plan-composer-adjust-input"]',
             ),
           ),
           planDecisionHasEscHint: planDecisionText.includes("ESC"),

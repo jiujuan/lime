@@ -1,6 +1,5 @@
 import {
   BadgeCheck,
-  BrainCircuit,
   BookOpen,
   Boxes,
   FlaskConical,
@@ -121,14 +120,6 @@ export const FOOTER_SIDEBAR_NAV_ITEMS: SidebarNavItemDefinition[] = [
     icon: BookOpen,
     page: "knowledge",
     isActive: (currentPage) => currentPage === "knowledge",
-    configurable: false,
-  },
-  {
-    id: "memory",
-    label: "灵感",
-    icon: BrainCircuit,
-    page: "memory",
-    isActive: (currentPage) => currentPage === "memory",
     configurable: false,
   },
   {

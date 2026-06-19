@@ -154,37 +154,37 @@ function buildImportedDetailLabels(
 
   appendCount(
     "generalWorkbench.importedHistory.detail.messages",
-    "消息 {{count}}",
+    "{{count}} messages",
     fidelity?.messages,
   );
   appendCount(
     "generalWorkbench.importedHistory.detail.reasoning",
-    "思考 {{count}}",
+    "{{count}} reasoning items",
     fidelity?.reasoning,
   );
   appendCount(
     "generalWorkbench.importedHistory.detail.commands",
-    "命令 {{count}}",
+    "{{count}} commands",
     fidelity?.commands,
   );
   appendCount(
     "generalWorkbench.importedHistory.detail.tools",
-    "工具 {{count}}",
+    "{{count}} tools",
     fidelity?.tools,
   );
   appendCount(
     "generalWorkbench.importedHistory.detail.patches",
-    "补丁 {{count}}",
+    "{{count}} patches",
     fidelity?.patches,
   );
   appendCount(
     "generalWorkbench.importedHistory.detail.approvals",
-    "确认 {{count}}",
+    "{{count}} confirmations",
     fidelity?.approvals,
   );
   appendCount(
     "generalWorkbench.importedHistory.detail.webSearch",
-    "搜索 {{count}}",
+    "{{count}} searches",
     fidelity?.webSearch,
   );
 
@@ -210,7 +210,7 @@ export function buildImportedConversationSourceSummary({
     importedText(
       t,
       "generalWorkbench.importedHistory.value",
-      "本地历史导入",
+      "Local history import",
     ),
     detailLabels.length > 0 ? detailLabels.slice(0, 4).join(" / ") : null,
   ].filter(Boolean);
@@ -220,12 +220,12 @@ export function buildImportedConversationSourceSummary({
     label: importedText(
       t,
       "generalWorkbench.importedHistory.label",
-      "导入",
+      "Imported",
     ),
     value: importedText(
       t,
       "generalWorkbench.importedHistory.value",
-      "本地历史导入",
+      "Local history import",
     ),
     title: titleParts.join(" · ") || null,
     detailLabels: detailLabels.slice(0, 3),
@@ -234,7 +234,7 @@ export function buildImportedConversationSourceSummary({
         ? importedText(
             t,
             "generalWorkbench.importedHistory.detailOverflow",
-            "另有 {{count}} 项",
+            "{{count}} more",
             { count: detailLabels.length - 3 },
           )
         : null,
@@ -244,13 +244,13 @@ export function buildImportedConversationSourceSummary({
             label: importedText(
               t,
               "generalWorkbench.importedHistory.status.partial",
-              "部分保留",
+              "Partially retained",
             ),
             tone: "warning",
             title: importedText(
               t,
               "generalWorkbench.importedHistory.status.partialTitle",
-              "有 {{unsupported}} 项未完整映射，{{budgetDropped}} 项因预算裁剪",
+              "{{unsupported}} items were not fully mapped, {{budgetDropped}} items were trimmed by budget",
               { unsupported, budgetDropped },
             ),
           }
@@ -258,13 +258,13 @@ export function buildImportedConversationSourceSummary({
             label: importedText(
               t,
               "generalWorkbench.importedHistory.status.restored",
-              "已还原",
+              "Restored",
             ),
             tone: "success",
             title: importedText(
               t,
               "generalWorkbench.importedHistory.status.restoredTitle",
-              "导入细节已进入当前会话轨迹",
+              "Imported details are now in this session timeline",
             ),
           },
   };

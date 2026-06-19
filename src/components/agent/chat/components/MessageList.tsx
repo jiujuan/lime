@@ -57,11 +57,11 @@ const MessageListInner: React.FC<MessageListProps> = ({
   onWriteFile,
   onFileClick,
   onOpenArtifactFromTimeline,
+  onOpenUrlPreview,
   onOpenSavedSiteContent,
   onArtifactClick,
   onOpenMessagePreview,
   onSaveMessageAsSkill,
-  onSaveMessageAsInspiration,
   onSaveMessageAsKnowledge,
   onOpenSubagentSession,
   onPermissionResponse,
@@ -288,13 +288,13 @@ const MessageListInner: React.FC<MessageListProps> = ({
         onFileClick={onFileClick}
         onInterruptCurrentTurn={onInterruptCurrentTurn}
         onOpenArtifactFromTimeline={onOpenArtifactFromTimeline}
+        onOpenUrlPreview={onOpenUrlPreview}
         onEditMessage={onEditMessage}
         onOpenMessagePreview={onOpenMessagePreview}
         onOpenSavedSiteContent={onOpenSavedSiteContent}
         onOpenSubagentSession={onOpenSubagentSession}
         onPermissionResponse={onPermissionResponse}
         onQuoteMessage={onQuoteMessage}
-        onSaveMessageAsInspiration={onSaveMessageAsInspiration}
         onSaveMessageAsKnowledge={onSaveMessageAsKnowledge}
         onSaveMessageAsSkill={onSaveMessageAsSkill}
         onWriteFile={onWriteFile}
@@ -325,12 +325,12 @@ const MessageListInner: React.FC<MessageListProps> = ({
       onFileClick,
       onInterruptCurrentTurn,
       onOpenArtifactFromTimeline,
+      onOpenUrlPreview,
       onOpenMessagePreview,
       onOpenSavedSiteContent,
       onOpenSubagentSession,
       onPermissionResponse,
       onQuoteMessage,
-      onSaveMessageAsInspiration,
       onSaveMessageAsKnowledge,
       onSaveMessageAsSkill,
       onWriteFile,

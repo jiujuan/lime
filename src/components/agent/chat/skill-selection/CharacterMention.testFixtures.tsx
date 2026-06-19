@@ -6,7 +6,6 @@ import { afterEach, beforeEach, expect, vi } from "vitest";
 import { CharacterMention } from "./CharacterMention";
 import type { Character } from "@/lib/api/memory";
 import type { Skill } from "@/lib/api/skills";
-import type { UnifiedMemory } from "@/lib/api/unifiedMemory";
 import {
   clearSkillCatalogCache,
   getSeededSkillCatalog,
@@ -23,13 +22,9 @@ import { changeLimeLocale } from "@/i18n/createI18n";
 
 const hoistedMocks = vi.hoisted(() => ({
   mockListServiceSkills: vi.fn(),
-  mockListUnifiedMemories: vi.fn<() => Promise<UnifiedMemory[]>>(
-    async () => [],
-  ),
 }));
 
 export const mockListServiceSkills = hoistedMocks.mockListServiceSkills;
-export const mockListUnifiedMemories = hoistedMocks.mockListUnifiedMemories;
 
 vi.mock("sonner", () => ({
   toast: {
@@ -46,10 +41,6 @@ vi.mock("@/lib/api/serviceSkills", async (importOriginal) => {
     listServiceSkills: () => hoistedMocks.mockListServiceSkills(),
   };
 });
-
-vi.mock("@/lib/api/unifiedMemory", () => ({
-  listUnifiedMemories: hoistedMocks.mockListUnifiedMemories,
-}));
 
 vi.mock("@/components/ui/popover", () => {
   const Popover = ({
@@ -288,7 +279,6 @@ afterEach(() => {
 
 beforeEach(() => {
   mockListServiceSkills.mockResolvedValue([]);
-  mockListUnifiedMemories.mockResolvedValue([]);
 });
 
 export interface HarnessProps {

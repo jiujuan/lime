@@ -321,6 +321,18 @@ describe("useWorkspaceConversationSceneRuntime", () => {
     );
   });
 
+  it("应把 URL 来源预览入口透传给消息列表", () => {
+    const handleOpenUrlPreview = vi.fn();
+    const params = createBaseParams({
+      handleOpenUrlPreview,
+    });
+
+    const sceneProps = getRenderedSceneProps(params);
+    expect(sceneProps.messageListProps.onOpenUrlPreview).toBe(
+      handleOpenUrlPreview,
+    );
+  });
+
   it("主题工作台场景不应再向外回写 stacked/split 布局状态", () => {
     const params = createBaseParams({
       activeTheme: "general",

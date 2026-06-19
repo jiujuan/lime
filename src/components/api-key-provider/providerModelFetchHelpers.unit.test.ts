@@ -92,6 +92,26 @@ describe("providerModelFetchHelpers", () => {
     ).toBe(true);
   });
 
+  it("合成 Provider 缺少 host 或 type 时应按非 Fal 处理", () => {
+    expect(
+      isFalProviderLike({
+        id: "lime-hub",
+        type: null,
+        api_host: undefined,
+      }),
+    ).toBe(false);
+    expect(
+      isProviderApiKeyRequired(
+        {
+          id: "lime-hub",
+          type: null,
+          api_host: undefined,
+        },
+        false,
+      ),
+    ).toBe(false);
+  });
+
   it("Fal 不支持 /models 时应优先确认手动声明的 Fal 模型", () => {
     expect(
       buildFalModelFetchStatus(

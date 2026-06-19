@@ -6,7 +6,6 @@ import { EmptyState } from "./EmptyState";
 import type { Character } from "@/lib/api/memory";
 import type { ProjectGitStatus } from "@/lib/api/projectGit";
 import type { Skill } from "@/lib/api/skills";
-import type { UnifiedMemory } from "@/lib/api/unifiedMemory";
 import type { ServiceSkillHomeItem } from "../service-skills/types";
 import type { InputCapabilitySelection } from "../skill-selection/inputCapabilitySelection";
 import type { InputbarSendPayload } from "./Inputbar/inputbarSendPayload";
@@ -18,7 +17,7 @@ import {
 } from "../utils/curatedTaskTemplates";
 import { changeLimeLocale } from "@/i18n/createI18n";
 import {
-  recordCuratedTaskRecommendationSignalFromMemory,
+  recordCuratedTaskRecommendationSignalFromMemoryReference,
   recordCuratedTaskRecommendationSignalFromReviewDecision,
 } from "../utils/curatedTaskRecommendationSignals";
 
@@ -91,10 +90,6 @@ const {
   mockGetChromeBridgeStatus: vi.fn(),
 }));
 
-const mockListUnifiedMemories = vi.hoisted(() =>
-  vi.fn<() => Promise<UnifiedMemory[]>>(async () => []),
-);
-
 const mockGetAgentRuntimeObjective = vi.hoisted(() =>
   vi.fn(async () => null),
 );
@@ -130,10 +125,6 @@ vi.mock("@/lib/api/appConfig", () => ({
 
 vi.mock("@/lib/api/channelsRuntime", () => ({
   gatewayChannelStatus: mockGatewayChannelStatus,
-}));
-
-vi.mock("@/lib/api/unifiedMemory", () => ({
-  listUnifiedMemories: mockListUnifiedMemories,
 }));
 
 vi.mock("@/lib/api/agentRuntime", async (importOriginal) => {
@@ -397,7 +388,6 @@ beforeEach(async () => {
     observer_count: 1,
     control_count: 0,
   });
-  mockListUnifiedMemories.mockResolvedValue([]);
   mockReadProjectGitStatus.mockResolvedValue({
     rootPath: "/workspace/lime",
     repositoryRoot: undefined,
@@ -2633,30 +2623,7 @@ describe("EmptyState", () => {
     });
   });
 
-  it("首页结果模板带着灵感引用发送时，应附带引用 route 与 request metadata", async () => {
-    const referenceMemory = {
-      id: "memory-1",
-      session_id: "session-1",
-      memory_type: "project" as const,
-      category: "context" as const,
-      title: "品牌风格样本",
-      content: "保留轻盈、专业、对比清晰的表达方式。",
-      summary: "轻盈但专业的品牌语气参考。",
-      tags: ["品牌", "语气"],
-      metadata: {
-        confidence: 0.92,
-        importance: 8,
-        access_count: 2,
-        last_accessed_at: 1_712_345_678_000,
-        source: "manual" as const,
-        embedding: null,
-      },
-      created_at: 1_712_345_670_000,
-      updated_at: 1_712_345_678_000,
-      archived: false,
-    };
-    mockListUnifiedMemories.mockResolvedValue([referenceMemory]);
-
+  it("首页结果模板带着记忆参考发送时，应附带引用 route 与 request metadata", async () => {
     const template = findCuratedTaskTemplateById("daily-trend-briefing");
     expect(template).toBeTruthy();
     const promptWithReference = buildCuratedTaskLaunchPrompt({
@@ -2682,6 +2649,26 @@ describe("EmptyState", () => {
       input: promptWithReference,
       setInput,
       onSend,
+      creationReplaySurface: {
+        kind: "memory_entry",
+        eyebrow: "当前带入记忆参考",
+        badgeLabel: "参考",
+        title: "品牌风格样本",
+        summary: "轻盈但专业的品牌语气参考。",
+        hint: "后续结果模板会默认把它一起带入。",
+        defaultReferenceMemoryIds: ["memory-1"],
+        defaultReferenceEntries: [
+          {
+            id: "memory-1",
+            sourceKind: "memory",
+            title: "品牌风格样本",
+            summary: "轻盈但专业的品牌语气参考。",
+            category: "context",
+            categoryLabel: "参考",
+            tags: ["品牌", "语气"],
+          },
+        ],
+      },
     });
 
     const templateButton = container.querySelector(
@@ -2710,9 +2697,10 @@ describe("EmptyState", () => {
     await act(async () => {
       updateFieldValue(themeInput, "AI 内容创作");
       updateFieldValue(platformInput, "X 与 TikTok 北美区");
-      referenceButton?.click();
       await Promise.resolve();
     });
+    expect(referenceButton).toBeTruthy();
+    expect(referenceButton?.disabled).toBe(false);
 
     const confirmButton = findLauncherConfirmButton();
     expect(confirmButton).toBeTruthy();
@@ -2738,9 +2726,16 @@ describe("EmptyState", () => {
           kind: "curated_task",
           taskId: "daily-trend-briefing",
           referenceMemoryIds: ["memory-1"],
+          referenceEntries: [
+            expect.objectContaining({
+              id: "memory-1",
+              sourceKind: "memory",
+            }),
+          ],
         }),
-        requestMetadata: {
-          harness: {
+        displayContent: expect.stringContaining("本轮可优先参考这些参考对象"),
+        requestMetadata: expect.objectContaining({
+          harness: expect.objectContaining({
             creation_replay: expect.objectContaining({
               kind: "memory_entry",
             }),
@@ -2753,41 +2748,17 @@ describe("EmptyState", () => {
                 }),
               ],
             }),
-          },
-        },
+          }),
+        }),
       }),
     });
   });
 
-  it("首页结果模板启动时，应默认沿用当前带入的灵感引用", async () => {
-    mockListUnifiedMemories.mockResolvedValue([
-      {
-        id: "memory-1",
-        session_id: "session-1",
-        memory_type: "project",
-        title: "品牌风格样本",
-        category: "context",
-        summary: "保留轻盈但专业的表达。",
-        content: "保留轻盈但专业的表达。",
-        tags: ["品牌", "语气"],
-        metadata: {
-          confidence: 0.9,
-          importance: 7,
-          access_count: 1,
-          last_accessed_at: null,
-          source: "manual",
-          embedding: null,
-        },
-        created_at: 1_712_345_670_000,
-        updated_at: 1_712_345_678_000,
-        archived: false,
-      },
-    ]);
-
+  it("首页结果模板启动时，应默认沿用当前带入的记忆参考", async () => {
     const container = renderEmptyState({
       creationReplaySurface: {
         kind: "memory_entry",
-        eyebrow: "当前带入灵感",
+        eyebrow: "当前带入记忆参考",
         badgeLabel: "参考",
         title: "品牌风格样本",
         summary: "保留轻盈但专业的表达。",
@@ -2985,8 +2956,8 @@ describe("EmptyState", () => {
     expect(container.textContent).not.toContain("先沿着当前做法开工");
   });
 
-  it("最近保存到灵感库的成果信号应影响首页结果模板推荐", async () => {
-    recordCuratedTaskRecommendationSignalFromMemory(
+  it("最近记忆参考成果信号应影响首页结果模板推荐", async () => {
+    recordCuratedTaskRecommendationSignalFromMemoryReference(
       {
         id: "memory-review-1",
         session_id: "session-review-1",

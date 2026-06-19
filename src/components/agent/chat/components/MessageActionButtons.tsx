@@ -1,6 +1,5 @@
 import React from "react";
 import {
-  BookmarkPlus,
   Check,
   Copy,
   FileText,
@@ -15,7 +14,6 @@ interface MessageActionButtonsProps {
   actionContent: string;
   canCopyMessage: boolean;
   canQuoteMessage: boolean;
-  canSaveMessageAsInspiration: boolean;
   canSaveMessageAsKnowledge: boolean;
   canSaveMessageAsSkill: boolean;
   copied: boolean;
@@ -26,10 +24,6 @@ interface MessageActionButtonsProps {
   messageId: string;
   onCopy?: (content: string, messageId: string) => void;
   onQuoteMessage?: (content: string, messageId: string) => void;
-  onSaveMessageAsInspiration?: (source: {
-    messageId: string;
-    content: string;
-  }) => void;
   onSaveMessageAsKnowledge?: (source: {
     messageId: string;
     content: string;
@@ -46,7 +40,6 @@ export function MessageActionButtons({
   actionContent,
   canCopyMessage,
   canQuoteMessage,
-  canSaveMessageAsInspiration,
   canSaveMessageAsKnowledge,
   canSaveMessageAsSkill,
   copied,
@@ -57,7 +50,6 @@ export function MessageActionButtons({
   messageId,
   onCopy,
   onQuoteMessage,
-  onSaveMessageAsInspiration,
   onSaveMessageAsKnowledge,
   onSaveMessageAsSkill,
 }: MessageActionButtonsProps) {
@@ -117,23 +109,6 @@ export function MessageActionButtons({
           title={t("agentChat.messageList.actions.saveAsSkill")}
         >
           <Sparkles size={12} />
-        </Button>
-      ) : null}
-      {canSaveMessageAsInspiration ? (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 rounded-full border border-amber-200/90 bg-amber-50/92 text-amber-600 shadow-sm shadow-amber-950/5 hover:bg-amber-100 hover:text-amber-700"
-          onClick={() =>
-            onSaveMessageAsInspiration?.({
-              messageId,
-              content: actionContent,
-            })
-          }
-          aria-label={t("agentChat.messageList.actions.saveToInspiration")}
-          title={t("agentChat.messageList.actions.saveToInspiration")}
-        >
-          <BookmarkPlus size={12} />
         </Button>
       ) : null}
       {canSaveMessageAsKnowledge ? (

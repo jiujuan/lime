@@ -1,8 +1,19 @@
 import { describe, expect, it } from "vitest";
+import { loadNamespaceResource } from "@/i18n/loadNamespace";
 import {
   buildImportedRuntimeEventDisplay,
   formatImportedRuntimePayloadPreview,
 } from "./importedRuntimeEventDetailViewModel";
+
+const IMPORTED_RUNTIME_REQUIRED_KEYS = [
+  "generalWorkbench.taskRail.importedRuntime.payload.type.bigint",
+  "generalWorkbench.taskRail.importedRuntime.payload.type.boolean",
+  "generalWorkbench.taskRail.importedRuntime.payload.type.function",
+  "generalWorkbench.taskRail.importedRuntime.payload.type.number",
+  "generalWorkbench.taskRail.importedRuntime.payload.type.string",
+  "generalWorkbench.taskRail.importedRuntime.payload.type.symbol",
+  "generalWorkbench.taskRail.importedRuntime.payload.type.value",
+] as const;
 
 describe("importedRuntimeEventDetailViewModel", () => {
   it("应对运行事件做稳定投影且不泄露来源路径", () => {
@@ -216,5 +227,15 @@ describe("importedRuntimeEventDetailViewModel", () => {
 
     expect(preview.truncated).toBe(true);
     expect(preview.text.length).toBeLessThanOrEqual(50);
+  });
+
+  it("完整记录 payload 类型展示文案覆盖五语言资源", () => {
+    for (const locale of ["zh-CN", "zh-TW", "en-US", "ja-JP", "ko-KR"]) {
+      const resource = loadNamespaceResource(locale, "agent");
+      for (const key of IMPORTED_RUNTIME_REQUIRED_KEYS) {
+        expect(resource[key], `${locale}:${key}`).toEqual(expect.any(String));
+        expect(String(resource[key]).trim()).not.toBe("");
+      }
+    }
   });
 });

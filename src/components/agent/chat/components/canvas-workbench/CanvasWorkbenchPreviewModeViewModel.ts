@@ -23,6 +23,16 @@ export interface CanvasWorkbenchPreviewModeState {
   isMarkdownLike: boolean;
 }
 
+export interface CanvasWorkbenchHtmlPreviewFrameState {
+  sandbox: string;
+  src: string | null;
+  srcDoc: string | undefined;
+}
+
+export type CanvasWorkbenchLocalPreviewUrlResolver = (
+  path?: string | null,
+) => string | null;
+
 const MODE_LABEL_KEYS = {
   markdown: "agentChat.canvasWorkbench.coding.tabs.markdown",
   html: "agentChat.canvasWorkbench.coding.tabs.html",
@@ -58,6 +68,10 @@ const EXTENSION_LANGUAGE_MAP: Record<string, string> = {
   yaml: "yaml",
   yml: "yaml",
 };
+
+const HTML_FILE_SANDBOX =
+  "allow-scripts allow-forms allow-popups allow-modals allow-same-origin";
+const HTML_SRCDOC_SANDBOX = "allow-scripts allow-forms allow-popups allow-modals";
 
 function normalizeValue(value?: string | null): string {
   return value?.trim() || "";
@@ -233,6 +247,27 @@ export function resolveCanvasWorkbenchPreviewModeState(
         enabled: hasContent,
       },
     },
+  };
+}
+
+export function resolveCanvasWorkbenchHtmlPreviewFrameState(
+  context: CanvasWorkbenchResolvedSelection | null | undefined,
+  resolveLocalPreviewUrl: CanvasWorkbenchLocalPreviewUrlResolver,
+): CanvasWorkbenchHtmlPreviewFrameState {
+  const inlineContent = context?.content ?? "";
+  if (inlineContent.trim()) {
+    return {
+      sandbox: HTML_SRCDOC_SANDBOX,
+      src: null,
+      srcDoc: inlineContent,
+    };
+  }
+
+  const src = resolveLocalPreviewUrl(context?.selectionPath) || null;
+  return {
+    sandbox: src ? HTML_FILE_SANDBOX : HTML_SRCDOC_SANDBOX,
+    src,
+    srcDoc: src ? undefined : inlineContent,
   };
 }
 

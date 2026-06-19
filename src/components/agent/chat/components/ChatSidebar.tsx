@@ -8,7 +8,6 @@ import React, {
 import { useTranslation } from "react-i18next";
 import {
   ArrowUpLeft,
-  BrainCircuit,
   Bot,
   BookOpen,
   ChevronDown,
@@ -87,7 +86,6 @@ interface ChatSidebarProps {
   onOpenTaskCenterHome?: () => void;
   onOpenSkillsPage?: () => void;
   onOpenKnowledgePage?: () => void;
-  onOpenMemoryPage?: () => void;
   topics: Topic[];
   topicsReady?: boolean;
   currentTopicId: string | null;
@@ -146,7 +144,6 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   onOpenTaskCenterHome,
   onOpenSkillsPage,
   onOpenKnowledgePage,
-  onOpenMemoryPage,
   topics,
   topicsReady = true,
   currentTopicId,
@@ -526,19 +523,12 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
             icon: BookOpen,
             onClick: onOpenKnowledgePage,
           },
-          {
-            id: "memory",
-            label: sidebarText("nav.inspirationLibrary"),
-            icon: BrainCircuit,
-            onClick: onOpenMemoryPage,
-          },
         ],
       },
     ],
     [
       onNewChat,
       onOpenKnowledgePage,
-      onOpenMemoryPage,
       onOpenSkillsPage,
       onOpenTaskCenterHome,
       sidebarText,

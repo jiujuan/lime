@@ -62,6 +62,7 @@ vi.mock("@/lib/api/agentRuntime", () => ({
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
+    i18n: { language: "zh-CN" },
     t: (key: string, values?: Record<string, unknown>) => {
       if (key === "agentChat.fileChangesSummary.summary") {
         return `已编辑 ${values?.count ?? 0} 个文件`;
@@ -143,6 +144,54 @@ vi.mock("react-i18next", () => ({
       }
       if (key === "agentChat.toolCall.importedCommandRecord.description") {
         return "从本地历史导入的执行记录，仅用于还原当时的过程；不会重新执行，也不需要再次授权。";
+      }
+      if (key === "agentChat.processGroup.completedThinking") {
+        return "已完成思考";
+      }
+      if (key === "agentChat.processGroup.importedSteps") {
+        return `导入过程 ${values?.count ?? 0} 个步骤`;
+      }
+      if (key === "agentChat.processGroup.failedSteps") {
+        return `失败 ${values?.count ?? 0} 个步骤`;
+      }
+      if (key === "agentChat.processGroup.runningSteps") {
+        return `进行中 ${values?.count ?? 0} 个步骤`;
+      }
+      if (key === "agentChat.processGroup.completedSteps") {
+        return `已完成 ${values?.count ?? 0} 个步骤`;
+      }
+      if (key === "agentChat.processGroup.thinking") {
+        return "思考中";
+      }
+      if (key === "agentChat.processGroup.toolCalls") {
+        return `${values?.count ?? 0} 个工具调用`;
+      }
+      if (key === "agentChat.processGroup.processMessages") {
+        return `${values?.count ?? 0} 条过程消息`;
+      }
+      if (key === "agentChat.processGroup.thinkingNotes") {
+        return `${values?.count ?? 0} 条思路`;
+      }
+      if (key === "agentChat.processGroup.separator") {
+        return "，";
+      }
+      if (key === "agentChat.searchResultPreview.previewAria") {
+        return `预览搜索结果：${values?.title ?? ""}`;
+      }
+      if (key === "agentChat.searchResultPreview.emptySnippet") {
+        return "暂无摘要";
+      }
+      if (key === "agentChat.toolCall.inline.expandDetails") {
+        return "展开过程详情";
+      }
+      if (key === "agentChat.toolCall.inline.collapseDetails") {
+        return "收起过程详情";
+      }
+      if (key === "agentChat.toolCall.siteResult.openMarkdownPreview") {
+        return "在下方预览导出 Markdown";
+      }
+      if (key === "agentChat.toolCall.siteResult.openSavedContent") {
+        return "打开已保存内容";
       }
       return key;
     },
@@ -270,6 +319,7 @@ function renderHarness(props: {
     contentId: string;
     title?: string;
   }) => void;
+  onOpenUrlPreview?: (item: unknown) => void;
   suppressProcessFlow?: boolean;
   showContentBlockActions?: boolean;
   onQuoteContent?: (content: string) => void;
@@ -1269,6 +1319,49 @@ describe("StreamingRenderer", () => {
     expect(container.textContent).not.toContain("npm test");
   });
 
+  it("其他本地历史来源的导入过程也应复用只读命令记录展示", () => {
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "other-imported-command-hydrated",
+            name: "Bash",
+            arguments: JSON.stringify({
+              command: "npm test",
+              cwd: "/workspace/imported-history",
+            }),
+            status: "completed",
+            result: {
+              success: true,
+              output: "ok",
+              metadata: {
+                source_client: "claude_code",
+              },
+            },
+            startTime: new Date("2026-06-17T10:00:00.000Z"),
+            endTime: new Date("2026-06-17T10:00:01.000Z"),
+          },
+        },
+        {
+          type: "text",
+          text: "已完成修复。",
+        },
+      ],
+      isStreaming: false,
+    });
+
+    const processGroupButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="streaming-process-group"] button',
+    );
+    expect(processGroupButton?.getAttribute("aria-expanded")).toBe("true");
+    expect(processGroupButton?.textContent).toContain("导入的命令记录");
+    expect(container.textContent).toContain("不会重新执行");
+    expect(container.textContent).not.toContain("npm test");
+    expect(container.textContent).not.toContain("claude_code");
+  });
+
   it("本地历史导入思考应默认展开并排在命令记录之前", () => {
     const importedMetadata = {
       imported: true,
@@ -1585,14 +1678,14 @@ describe("StreamingRenderer", () => {
 
     expect(processGroup?.getAttribute("aria-expanded")).toBe("false");
     expect(container.textContent).toContain("调研简报");
-    expect(container.textContent).toContain("已搜索网页 1 次");
+    expect(container.textContent).toContain("已搜索网页 1 次，读取网页 1 次");
     expect(container.textContent).toContain("current sources");
     expect(container.textContent).toContain("https://example.com/source");
     expect(container.textContent).not.toContain("Execution failed");
     expect(container.textContent).not.toContain("Fetching data issues");
   });
 
-  it("消息仍在输出时，运行中的工具批次也应默认折叠，避免实时输出切开正文", () => {
+  it("消息仍在输出时，普通运行工具批次仍应默认折叠，避免实时输出切开正文", () => {
     const { container } = renderHarness({
       content: "",
       contentParts: [
@@ -1603,9 +1696,9 @@ describe("StreamingRenderer", () => {
         {
           type: "tool_use",
           toolCall: {
-            id: "tool-running-fetch-1",
-            name: "WebFetch",
-            arguments: JSON.stringify({ url: "https://example.com/world" }),
+            id: "tool-running-command-1",
+            name: "Bash",
+            arguments: JSON.stringify({ command: "python scrape.py" }),
             status: "running",
             result: {
               success: true,
@@ -1617,9 +1710,9 @@ describe("StreamingRenderer", () => {
         {
           type: "tool_use",
           toolCall: {
-            id: "tool-running-fetch-2",
-            name: "WebFetch",
-            arguments: JSON.stringify({ url: "https://example.com/news" }),
+            id: "tool-running-command-2",
+            name: "Bash",
+            arguments: JSON.stringify({ command: "python normalize.py" }),
             status: "completed",
             result: {
               success: true,
@@ -1643,10 +1736,145 @@ describe("StreamingRenderer", () => {
 
     expect(processGroup?.getAttribute("aria-expanded")).toBe("false");
     expect(container.textContent).toContain("我先核实今天的国际新闻");
-    expect(container.textContent).toContain("已搜索关键线索");
+    expect(container.textContent).toContain("运行中 2 条命令");
     expect(container.textContent).toContain("国际新闻简报");
     expect(container.textContent).not.toContain("raw html payload");
     expect(container.textContent).not.toContain("another raw payload");
+  });
+
+  it("消息仍在输出时，联网搜索批次应默认展开为轻量进度并保持正文穿插", () => {
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "text",
+          text: "我先核实今天的国际新闻，再整理成简报。",
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-running-search-1",
+            name: "web_search",
+            arguments: JSON.stringify({ query: "today international news" }),
+            status: "running",
+            progress: { message: "正在搜索 Reuters 和 AP" },
+            result: {
+              success: true,
+              output: "raw search payload should stay hidden while running",
+            },
+            startTime: new Date("2026-06-02T09:00:00.000Z"),
+          },
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-running-fetch-1",
+            name: "WebFetch",
+            arguments: JSON.stringify({ url: "https://apnews.com/world" }),
+            status: "running",
+            result: {
+              success: true,
+              output: "raw fetch payload should stay hidden while running",
+            },
+            startTime: new Date("2026-06-02T09:00:01.000Z"),
+          },
+        },
+        {
+          type: "text",
+          text: "## 国际新闻简报\n\n- 正在整理已确认来源。",
+        },
+      ],
+      isStreaming: true,
+    });
+
+    const processGroup = container.querySelector<HTMLButtonElement>(
+      '[data-testid="streaming-process-group"] button',
+    );
+    const renderedText = container.textContent || "";
+    const introIndex = renderedText.indexOf("我先核实今天的国际新闻");
+    const processIndex = renderedText.indexOf(
+      "正在搜索网页 1 次，读取网页 1 次",
+    );
+    const queryIndex = renderedText.indexOf("today international news");
+    const briefingIndex = renderedText.indexOf("国际新闻简报");
+
+    expect(processGroup?.getAttribute("aria-expanded")).toBe("true");
+    expect(introIndex).toBeGreaterThanOrEqual(0);
+    expect(processIndex).toBeGreaterThan(introIndex);
+    expect(queryIndex).toBeGreaterThan(processIndex);
+    expect(briefingIndex).toBeGreaterThan(queryIndex);
+    expect(renderedText).toContain("https://apnews.com/world");
+    expect(renderedText).not.toContain("raw search payload");
+    expect(renderedText).not.toContain("raw fetch payload");
+  });
+
+  it("联网搜索之间穿插思考时，展开态应保留思考与工具顺序", () => {
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "text",
+          text: "我先拆成几组来源核验。",
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-search-with-thinking-1",
+            name: "web_search",
+            arguments: JSON.stringify({
+              query: "official learning tablet review",
+            }),
+            status: "running",
+            result: undefined,
+            startTime: new Date("2026-06-02T09:00:00.000Z"),
+          },
+        },
+        {
+          type: "thinking",
+          text: "第一组结果偏新闻稿，需要继续找第三方评测。",
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-search-with-thinking-2",
+            name: "web_search",
+            arguments: JSON.stringify({
+              query: "third party learning tablet benchmark",
+            }),
+            status: "running",
+            result: undefined,
+            startTime: new Date("2026-06-02T09:00:01.000Z"),
+          },
+        },
+        {
+          type: "text",
+          text: "找到足够来源后我会再整理结论。",
+        },
+      ],
+      isStreaming: true,
+    });
+
+    const processGroup = container.querySelector<HTMLButtonElement>(
+      '[data-testid="streaming-process-group"] button',
+    );
+    const renderedText = container.textContent || "";
+    const introIndex = renderedText.indexOf("我先拆成几组来源核验");
+    const firstQueryIndex = renderedText.indexOf(
+      "official learning tablet review",
+    );
+    const thinkingIndex = renderedText.indexOf(
+      "第一组结果偏新闻稿，需要继续找第三方评测。",
+    );
+    const secondQueryIndex = renderedText.indexOf(
+      "third party learning tablet benchmark",
+    );
+    const finalTextIndex = renderedText.indexOf("找到足够来源后");
+
+    expect(processGroup?.getAttribute("aria-expanded")).toBe("true");
+    expect(firstQueryIndex).toBeGreaterThan(introIndex);
+    expect(thinkingIndex).toBeGreaterThan(firstQueryIndex);
+    expect(secondQueryIndex).toBeGreaterThan(thinkingIndex);
+    expect(finalTextIndex).toBeGreaterThan(secondQueryIndex);
   });
 
   it("交错网页搜索应作为同一条回复里的轻量过程块，不切断最终简报", () => {
@@ -1737,7 +1965,8 @@ describe("StreamingRenderer", () => {
     ).toBeNull();
   });
 
-  it("网页搜索批次混入 WebFetch 时展开态也只展示搜索来源摘要", () => {
+  it("网页搜索批次混入 WebFetch 时展开态应展示可点击来源并复用快照", () => {
+    const onOpenUrlPreview = vi.fn();
     const { container } = renderHarness({
       content: "",
       contentParts: [
@@ -1759,6 +1988,7 @@ describe("StreamingRenderer", () => {
                   {
                     title: "Reuters World News",
                     url: "https://www.reuters.com/world/",
+                    snippet: "搜索结果摘要",
                   },
                 ],
               }),
@@ -1790,13 +2020,15 @@ describe("StreamingRenderer", () => {
           toolCall: {
             id: "tool-news-mixed-fetch-ok",
             name: "WebFetch",
-            arguments: JSON.stringify({ url: "https://news.un.org/en/" }),
+            arguments: JSON.stringify({
+              url: "https://www.reuters.com/world/",
+            }),
             status: "completed",
             result: {
               success: true,
               output: JSON.stringify({
-                code: 200,
-                result: "raw page payload should not be rendered",
+                title: "Reuters snapshot",
+                markdown: "# Reuters snapshot\n\n完整页面正文。",
               }),
             },
             startTime: new Date("2026-06-02T09:00:04.000Z"),
@@ -1809,12 +2041,15 @@ describe("StreamingRenderer", () => {
         },
       ],
       isStreaming: false,
+      onOpenUrlPreview,
     });
 
     const processGroupButton = container.querySelector<HTMLButtonElement>(
       '[data-testid="streaming-process-group"] button',
     );
-    expect(processGroupButton?.textContent).toContain("已搜索网页 1 次");
+    expect(processGroupButton?.textContent).toContain(
+      "已搜索网页 1 次，读取网页 2 次",
+    );
     expect(container.textContent).not.toContain("失败 3 个步骤");
     expect(container.textContent).not.toContain("raw page payload");
     expect(container.textContent).not.toContain("503 Service Unavailable");
@@ -1826,7 +2061,23 @@ describe("StreamingRenderer", () => {
     expect(container.textContent).toContain("June 2 2026 world news");
     expect(container.textContent).toContain("Reuters World News");
     expect(container.textContent).toContain("https://www.reuters.com/world/");
-    expect(container.textContent).toContain("https://news.un.org/en/");
+    act(() => {
+      const result = document.body.querySelector(
+        '[aria-label="预览搜索结果：Reuters World News"]',
+      ) as HTMLButtonElement | null;
+      result?.click();
+    });
+
+    expect(onOpenUrlPreview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Reuters World News",
+        url: "https://www.reuters.com/world/",
+        snippet: "搜索结果摘要",
+        snapshotTitle: "Reuters snapshot",
+        snapshotContent: "# Reuters snapshot\n\n完整页面正文。",
+        snapshotSource: "web_fetch",
+      }),
+    );
     expect(container.textContent).not.toContain("raw page payload");
     expect(container.textContent).not.toContain("503 Service Unavailable");
     expect(

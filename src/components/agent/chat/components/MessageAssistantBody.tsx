@@ -15,6 +15,7 @@ import type {
   SiteSavedContentTarget,
   WriteArtifactContext,
 } from "../types";
+import type { SearchResultPreviewItem } from "../utils/searchResultPreview";
 
 type ImageWorkbenchRendererState = ReturnType<
   typeof resolveImageWorkbenchRendererProcessState
@@ -40,6 +41,7 @@ interface MessageAssistantBodyProps {
   onA2UISubmit?: (formData: A2UIFormData, messageId: string) => void;
   onCodeBlockClick?: (language: string, code: string) => void;
   onFileClick?: (fileName: string, content: string) => void;
+  onOpenUrlPreview?: (item: SearchResultPreviewItem) => void;
   onOpenMessagePreview?: (
     target: MessagePreviewTarget,
     message: Message,
@@ -95,6 +97,7 @@ export function MessageAssistantBody({
   onA2UISubmit,
   onCodeBlockClick,
   onFileClick,
+  onOpenUrlPreview,
   onOpenMessagePreview,
   onOpenSavedSiteContent,
   onPermissionResponse,
@@ -171,6 +174,7 @@ export function MessageAssistantBody({
                 ? (quotedContent) => onQuoteMessage(quotedContent, message.id)
                 : undefined
             }
+            onOpenUrlPreview={onOpenUrlPreview}
           />
         ) : null
       ) : (
@@ -206,6 +210,7 @@ export function MessageAssistantBody({
           onFileClick={onFileClick}
           fileChangesUndoSessionId={sessionId}
           onOpenSavedSiteContent={onOpenSavedSiteContent}
+          onOpenUrlPreview={onOpenUrlPreview}
           onPermissionResponse={onPermissionResponse}
           collapseCodeBlocks={collapseCodeBlocks}
           shouldCollapseCodeBlock={shouldCollapseCodeBlock}

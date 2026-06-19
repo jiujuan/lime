@@ -291,6 +291,7 @@ export function shouldSuppressPreAnswerThinkingTimeline(params: {
 
 export interface InlineProcessCoverage {
   hasInlineProcessEntries: boolean;
+  plan: boolean;
   thinking: boolean;
   toolNameCounts: Map<string, number>;
   actionRequestCounts: Map<string, number>;
@@ -358,6 +359,8 @@ export function createInlineCoverageMatcher(coverage: InlineProcessCoverage) {
 
   return (item: AgentThreadItem): boolean => {
     switch (item.type) {
+      case "plan":
+        return coverage.plan;
       case "reasoning":
         return coverage.thinking;
       case "tool_call":
@@ -401,9 +404,14 @@ export function resolveInlineProcessCoverage(params: {
   const contentParts = params.contentParts || [];
   const toolNameCounts = new Map<string, number>();
   const actionRequestCounts = new Map<string, number>();
+  let plan = false;
   let thinking = false;
 
   if (contentParts.length > 0) {
+    plan = contentParts.some(
+      (part) =>
+        part.type === "text" && part.text.includes("<proposed_plan>"),
+    );
     thinking = contentParts.some(
       (part) => part.type === "thinking" && part.text.trim().length > 0,
     );
@@ -441,7 +449,11 @@ export function resolveInlineProcessCoverage(params: {
 
   return {
     hasInlineProcessEntries:
-      thinking || toolNameCounts.size > 0 || actionRequestCounts.size > 0,
+      plan ||
+      thinking ||
+      toolNameCounts.size > 0 ||
+      actionRequestCounts.size > 0,
+    plan,
     thinking,
     toolNameCounts,
     actionRequestCounts,
@@ -488,12 +500,63 @@ function isTimelineProcessBoundaryPart(
   );
 }
 
+function hasRunningProcessPart(parts?: Message["contentParts"]): boolean {
+  return Boolean(
+    parts?.some((part) => {
+      if (part.type === "tool_use") {
+        return part.toolCall.status === "running";
+      }
+
+      if (part.type === "action_required") {
+        return part.actionRequired.status !== "submitted";
+      }
+
+      return false;
+    }),
+  );
+}
+
+function appendOverlayAsThinkingContentPart(
+  parts: Message["contentParts"] | undefined,
+  overlayContent: string,
+): Message["contentParts"] {
+  const thinkingPart: NonNullable<Message["contentParts"]>[number] = {
+    type: "thinking",
+    text: overlayContent,
+  };
+  if (!parts?.length) {
+    return [thinkingPart];
+  }
+
+  const nextParts = [...parts];
+  const lastPart = nextParts[nextParts.length - 1];
+  if (lastPart?.type === "thinking") {
+    nextParts[nextParts.length - 1] = {
+      ...lastPart,
+      text: `${lastPart.text}\n\n${overlayContent}`,
+    };
+    return nextParts;
+  }
+
+  return [...nextParts, thinkingPart];
+}
+
 export function mergeStreamingOverlayContentParts(
   parts: Message["contentParts"] | undefined,
   overlayContent: string | null,
+  options?: {
+    holdOverlayAsProcessWhileRunning?: boolean;
+  },
 ): Message["contentParts"] | undefined {
   if (!overlayContent) {
     return parts;
+  }
+
+  if (
+    options?.holdOverlayAsProcessWhileRunning &&
+    hasRunningProcessPart(parts)
+  ) {
+    return appendOverlayAsThinkingContentPart(parts, overlayContent);
   }
 
   const textPart: NonNullable<Message["contentParts"]>[number] = {

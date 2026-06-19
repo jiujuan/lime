@@ -5,6 +5,7 @@ import {
   resolveDefaultSelectedArtifact,
   resolveRuntimeWorkspaceId,
   resolveTaskCenterHomeSurfaceState,
+  shouldSuppressTaskCenterDraftContentForLayout,
   shouldAutoRecoverWorkspacePathMissing,
 } from "./agentChatWorkspaceHelpers";
 
@@ -65,6 +66,25 @@ describe("resolveTaskCenterHomeSurfaceState", () => {
     expect(state.sceneSessionId).toBe("new-session");
   });
 
+  it("草稿 surface 标志滞留时，已有真实会话活动不应被首页覆盖", () => {
+    const state = resolveTaskCenterHomeSurfaceState({
+      agentEntry: "claw",
+      draftSurfaceActive: true,
+      shouldSuppressDraftContent: true,
+      sessionSwitchPending: false,
+      hasConversationActivity: false,
+      hasCurrentSessionActivity: true,
+      sessionId: "active-session",
+      embeddedHomeSessionIds: new Set(["active-session"]),
+      isAutoRestoringSession: false,
+      isSessionHydrating: false,
+    });
+
+    expect(state.shouldRenderEmbeddedHome).toBe(false);
+    expect(state.shouldHideCurrentSessionContent).toBe(false);
+    expect(state.sceneSessionId).toBe("active-session");
+  });
+
   it("从侧栏打开历史空会话时不应被任务中心首页覆盖", () => {
     const state = resolveTaskCenterHomeSurfaceState({
       agentEntry: "claw",
@@ -87,7 +107,7 @@ describe("resolveTaskCenterHomeSurfaceState", () => {
   it("路由携带 standalone initialSessionId 时不应被首页草稿 surface 覆盖", () => {
     const state = resolveTaskCenterHomeSurfaceState({
       agentEntry: "claw",
-      draftSurfaceActive: true,
+      draftSurfaceActive: false,
       shouldSuppressDraftContent: true,
       sessionSwitchPending: false,
       hasInitialSessionRoute: true,
@@ -101,6 +121,25 @@ describe("resolveTaskCenterHomeSurfaceState", () => {
     expect(state.shouldRenderEmbeddedHome).toBe(false);
     expect(state.shouldHideCurrentSessionContent).toBe(false);
     expect(state.isRestoringSession).toBe(false);
+    expect(state.sceneSessionId).toBeNull();
+  });
+
+  it("侧栏新建任务激活草稿 surface 时应压住旧 route session", () => {
+    const state = resolveTaskCenterHomeSurfaceState({
+      agentEntry: "claw",
+      draftSurfaceActive: true,
+      shouldSuppressDraftContent: true,
+      sessionSwitchPending: false,
+      hasInitialSessionRoute: true,
+      hasConversationActivity: false,
+      sessionId: "old-session",
+      embeddedHomeSessionIds: new Set(),
+      isAutoRestoringSession: false,
+      isSessionHydrating: false,
+    });
+
+    expect(state.shouldRenderEmbeddedHome).toBe(true);
+    expect(state.shouldHideCurrentSessionContent).toBe(true);
     expect(state.sceneSessionId).toBeNull();
   });
 });
@@ -134,6 +173,36 @@ describe("isTaskCenterDraftSendPendingForLayout", () => {
         queuedTurnCount: 0,
       }),
     ).toBe(true);
+  });
+});
+
+describe("shouldSuppressTaskCenterDraftContentForLayout", () => {
+  it("草稿首页仅在没有真实会话活动时压制当前内容", () => {
+    expect(
+      shouldSuppressTaskCenterDraftContentForLayout({
+        draftSurfaceActive: true,
+        draftSendInFlight: false,
+        hasVisibleSessionActivity: false,
+      }),
+    ).toBe(true);
+
+    expect(
+      shouldSuppressTaskCenterDraftContentForLayout({
+        draftSurfaceActive: true,
+        draftSendInFlight: false,
+        hasVisibleSessionActivity: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("草稿发送中不应被首页空态压制", () => {
+    expect(
+      shouldSuppressTaskCenterDraftContentForLayout({
+        draftSurfaceActive: true,
+        draftSendInFlight: true,
+        hasVisibleSessionActivity: false,
+      }),
+    ).toBe(false);
   });
 });
 

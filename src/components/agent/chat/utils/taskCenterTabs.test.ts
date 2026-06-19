@@ -188,7 +188,7 @@ describe("taskCenterTabs", () => {
     });
   });
 
-  it("初始化任务中心时应只在 claw 路由会话下覆盖当前 workspace 标签", () => {
+  it("初始化任务中心时应在 task center 路由会话下覆盖当前 workspace 标签", () => {
     const currentMap = {
       "workspace-a": ["topic-a", "topic-b"],
       "workspace-b": ["topic-c"],
@@ -213,7 +213,10 @@ describe("taskCenterTabs", () => {
         workspaceId: "workspace-a",
         normalizedInitialSessionId: "topic-selected",
       }),
-    ).toBe(currentMap);
+    ).toEqual({
+      "workspace-a": ["topic-selected"],
+      "workspace-b": ["topic-c"],
+    });
   });
 
   it("初始化任务中心时 standalone 路由会话应进入 legacy 标签桶", () => {
@@ -326,6 +329,22 @@ describe("taskCenterTabs", () => {
     ).toEqual({
       "__legacy__": ["topic-imported"],
       "workspace-a": ["topic-project"],
+    });
+  });
+
+  it("new-task 路由同步也应维护 task center 标签", () => {
+    expect(
+      resolveTaskCenterRouteTabSyncIntent({
+        agentEntry: "new-task",
+        workspaceId: "workspace-a",
+        normalizedInitialSessionId: "topic-selected",
+        lastSyncedInitialSessionId: null,
+        shouldRespectLocalSession: false,
+      }),
+    ).toMatchObject({
+      shouldSync: true,
+      routeChanged: true,
+      shouldClearActiveDraft: true,
     });
   });
 
@@ -749,6 +768,24 @@ describe("taskCenterTabs", () => {
     expect(
       resolveTaskCenterFallbackRestorePlan(
         createFallbackRestoreParams({
+          now: 10_000,
+        }),
+      ),
+    ).toEqual({
+      action: "restore",
+      fallbackTopicId: "topic-old",
+      nextRestore: {
+        topicId: "topic-old",
+        startedAt: 10_000,
+      },
+    });
+  });
+
+  it("new-task 当前没有有效任务会话时，也应恢复第一个可见旧任务标签", () => {
+    expect(
+      resolveTaskCenterFallbackRestorePlan(
+        createFallbackRestoreParams({
+          agentEntry: "new-task",
           now: 10_000,
         }),
       ),

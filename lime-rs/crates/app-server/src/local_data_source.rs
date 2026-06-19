@@ -6,10 +6,12 @@ use crate::ConnectAppDataSource;
 use crate::DiagnosticsAppDataSource;
 use crate::GatewayAppDataSource;
 use crate::KnowledgeAppDataSource;
+use crate::LocalMemoryBackend;
 use crate::ManagedObjectiveAuditUpdate;
 use crate::McpAppDataSource;
 use crate::MediaAppDataSource;
 use crate::MemoryAppDataSource;
+use crate::MemoryBackend;
 use crate::ModelProviderAppDataSource;
 use crate::RuntimeCoreError;
 use crate::SessionAppDataSource;
@@ -34,7 +36,6 @@ mod project_materials;
 mod session_files;
 mod session_objectives;
 mod skills;
-mod unified_memory;
 mod usage_stats;
 mod voice_asr_credentials;
 mod voice_instructions;
@@ -159,6 +160,18 @@ use app_server_protocol::MediaTaskArtifactListResponse;
 use app_server_protocol::MediaTaskArtifactLookupParams;
 use app_server_protocol::MediaTaskArtifactResponse;
 use app_server_protocol::MediaTaskArtifactVideoCreateParams;
+use app_server_protocol::MemoryStoreAddNoteParams;
+use app_server_protocol::MemoryStoreAddNoteResponse;
+use app_server_protocol::MemoryStoreHealthResponse;
+use app_server_protocol::MemoryStoreListParams;
+use app_server_protocol::MemoryStoreListResponse;
+use app_server_protocol::MemoryStoreReadParams;
+use app_server_protocol::MemoryStoreReadResponse;
+use app_server_protocol::MemoryStoreResetParams;
+use app_server_protocol::MemoryStoreResetResponse;
+use app_server_protocol::MemoryStoreRootParams;
+use app_server_protocol::MemoryStoreSearchParams;
+use app_server_protocol::MemoryStoreSearchResponse;
 use app_server_protocol::ModelListParams;
 use app_server_protocol::ModelListResponse;
 use app_server_protocol::ModelPreferencesListResponse;
@@ -256,21 +269,6 @@ use app_server_protocol::SkillRepositorySaveParams;
 use app_server_protocol::SkillScaffoldCreateParams;
 use app_server_protocol::SkillScaffoldCreateResponse;
 use app_server_protocol::SupportBundleExportResponse;
-use app_server_protocol::UnifiedMemoryAnalysisResponse;
-use app_server_protocol::UnifiedMemoryAnalyzeParams;
-use app_server_protocol::UnifiedMemoryCreateParams;
-use app_server_protocol::UnifiedMemoryDeleteParams;
-use app_server_protocol::UnifiedMemoryDeleteResponse;
-use app_server_protocol::UnifiedMemoryGetParams;
-use app_server_protocol::UnifiedMemoryGetResponse;
-use app_server_protocol::UnifiedMemoryHybridSearchParams;
-use app_server_protocol::UnifiedMemoryListParams;
-use app_server_protocol::UnifiedMemoryListResponse;
-use app_server_protocol::UnifiedMemorySearchParams;
-use app_server_protocol::UnifiedMemorySemanticSearchParams;
-use app_server_protocol::UnifiedMemoryStatsResponse;
-use app_server_protocol::UnifiedMemoryUpdateParams;
-use app_server_protocol::UnifiedMemoryWriteResponse;
 use app_server_protocol::UsageStatsDailyTrendsListResponse;
 use app_server_protocol::UsageStatsModelRankingListResponse;
 use app_server_protocol::UsageStatsRangeParams;
@@ -320,6 +318,7 @@ use app_server_protocol::WorkspaceSkillBindingsListResponse;
 use app_server_protocol::WorkspaceUpdateParams;
 use app_server_protocol::WorkspaceUpdateResponse;
 use lime_agent::initialize_aster_runtime;
+use lime_core::app_paths;
 use lime_core::config::load_config;
 use lime_core::database;
 use lime_core::database::DbConnection;
@@ -351,16 +350,23 @@ pub struct LocalAppDataSource {
     wechat_gateway_state: WechatGatewayState,
     gateway_tunnel_state: GatewayTunnelState,
     wechat_login_state: WechatLoginState,
+    memory_backend: Arc<dyn MemoryBackend>,
 }
 
 impl LocalAppDataSource {
     pub async fn initialize() -> Result<Self, String> {
         let db = database::init_database()?;
-        Self::initialize_with_db(db).await
+        Self::initialize_with_db_and_data_root(db, app_paths::best_effort_data_dir()).await
     }
 
     pub async fn initialize_with_db(db: DbConnection) -> Result<Self, String> {
-        unified_memory::ensure_unified_memory_schema(&db)?;
+        Self::initialize_with_db_and_data_root(db, app_paths::best_effort_data_dir()).await
+    }
+
+    pub async fn initialize_with_db_and_data_root(
+        db: DbConnection,
+        data_root: impl Into<std::path::PathBuf>,
+    ) -> Result<Self, String> {
         initialize_aster_runtime(db.clone())
             .map_err(|error| format!("初始化 App Server Channels Aster runtime 失败: {error}"))?;
         let config = load_config().map_err(|error| error.to_string())?;
@@ -372,6 +378,7 @@ impl LocalAppDataSource {
         model_registry_service.initialize().await?;
         let gateway_tunnel_state = GatewayTunnelState::default();
         gateway_tunnel::spawn_gateway_tunnel_daemon(gateway_tunnel_state.clone(), logs.clone());
+        let memory_backend = Arc::new(LocalMemoryBackend::new(data_root));
         Ok(Self {
             db,
             logs,
@@ -384,6 +391,7 @@ impl LocalAppDataSource {
             wechat_gateway_state: WechatGatewayState::default(),
             gateway_tunnel_state,
             wechat_login_state: WechatLoginState::default(),
+            memory_backend,
         })
     }
 }

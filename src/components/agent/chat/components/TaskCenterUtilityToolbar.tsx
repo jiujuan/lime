@@ -32,6 +32,7 @@ import { cn } from "@/lib/utils";
 import { agentText } from "./harnessPanelText";
 import type {
   AgentRuntimeThreadReadModel,
+  AsterSessionExecutionRuntime,
   AsterTodoItem,
   AsterSubagentSessionInfo,
 } from "@/lib/api/agentRuntime";
@@ -62,7 +63,7 @@ import {
   type GeneralWorkbenchCreationTaskEvent,
 } from "./generalWorkbenchWorkflowData";
 import { TaskCenterTaskRail } from "./TaskCenterTaskRail";
-import { hasImportedSourceProcessItem } from "../utils/importedSourceProcess";
+import { hasImportedRuntimeDetailSignal } from "../utils/importedSourceProcess";
 
 interface TaskCenterUtilityToolbarProps {
   projectRootPath?: string | null;
@@ -77,6 +78,7 @@ interface TaskCenterUtilityToolbarProps {
     threadItems?: readonly AgentThreadItem[];
     todoItems?: readonly AsterTodoItem[];
     threadRead?: AgentRuntimeThreadReadModel | null;
+    executionRuntime?: AsterSessionExecutionRuntime | null;
     childSubagentSessions?: readonly AsterSubagentSessionInfo[];
     context?: GeneralWorkbenchTaskRailContextInput;
     onOpenOutput?: (path: string) => void | Promise<void>;
@@ -102,8 +104,7 @@ const taskCenterToolButtonClassName =
 const taskCenterIconOnlyButtonClassName =
   "h-7 w-7 rounded-[12px] border border-transparent bg-transparent text-[color:var(--lime-chrome-muted)] shadow-none transition-[background-color,color] hover:bg-[color:var(--lime-chrome-tab-hover)] hover:text-[color:var(--lime-chrome-text)] disabled:cursor-not-allowed disabled:opacity-50";
 
-const taskCenterToolGroupClassName =
-  "inline-flex shrink-0 items-center gap-1";
+const taskCenterToolGroupClassName = "inline-flex shrink-0 items-center gap-1";
 
 function VisualStudioCodeIcon({ className }: { className?: string }) {
   return (
@@ -189,7 +190,8 @@ export function TaskCenterUtilityToolbar({
   const shouldRenderHarnessToggle =
     showHarnessToggle || Boolean(onToggleHarnessPanel);
   const isWorkbenchHeaderPlacement = placement === "workbench-header";
-  const shouldRenderPanelToolGroup = shouldRenderHarnessToggle || showCanvasToggle;
+  const shouldRenderPanelToolGroup =
+    shouldRenderHarnessToggle || showCanvasToggle;
 
   const handleOpenTool = React.useCallback(
     async (tool: ProjectPathOpenTool) => {
@@ -242,19 +244,16 @@ export function TaskCenterUtilityToolbar({
           : agentText("agentChat.navbar.environment.noGit", "非 Git 项目");
   const taskRailTranslate = React.useCallback(
     (key: string, options?: Record<string, unknown>) =>
-      (t as (nextKey: string, nextOptions?: Record<string, unknown>) => unknown)(
-        key,
-        options,
-      ),
+      (
+        t as (nextKey: string, nextOptions?: Record<string, unknown>) => unknown
+      )(key, options),
     [t],
   );
   const taskRailProjection = React.useMemo(() => {
     if (!taskRail) {
       return null;
     }
-    const completedSteps = countCompletedWorkflowSteps(
-      taskRail.workflowSteps,
-    );
+    const completedSteps = countCompletedWorkflowSteps(taskRail.workflowSteps);
     return buildGeneralWorkbenchTaskRailProjection({
       workflowSteps: taskRail.workflowSteps,
       completedSteps,
@@ -284,10 +283,19 @@ export function TaskCenterUtilityToolbar({
     return {
       enabled:
         Boolean(sessionId) &&
-        hasImportedSourceProcessItem(taskRail?.threadItems),
+        hasImportedRuntimeDetailSignal({
+          threadItems: taskRail?.threadItems,
+          executionRuntime: taskRail?.executionRuntime,
+          threadRead: taskRail?.threadRead,
+        }),
       sessionId,
     };
-  }, [taskRail?.sessionId, taskRail?.threadItems]);
+  }, [
+    taskRail?.executionRuntime,
+    taskRail?.sessionId,
+    taskRail?.threadItems,
+    taskRail?.threadRead,
+  ]);
   const runControlSurfaceProjection = React.useMemo(() => {
     if (!taskRailProjection) {
       return null;
@@ -295,10 +303,7 @@ export function TaskCenterUtilityToolbar({
 
     const environment: GeneralWorkbenchRunControlEnvironmentInput = {
       modeLabel: normalizedProjectRootPath
-        ? agentText(
-            "agentChat.navbar.environment.local",
-            "本地",
-          )
+        ? agentText("agentChat.navbar.environment.local", "本地")
         : null,
       branchLabel: status?.currentBranch?.trim() || null,
       gitStatusLabel: status
@@ -312,7 +317,11 @@ export function TaskCenterUtilityToolbar({
         : null,
     };
     const splitLane: GeneralWorkbenchRunControlSplitLaneInput = {
-      state: shellPanelOpen ? "open" : showCanvasToggle ? "available" : "unavailable",
+      state: shellPanelOpen
+        ? "open"
+        : showCanvasToggle
+          ? "available"
+          : "unavailable",
     };
 
     return buildGeneralWorkbenchRunControlSurfaceProjection({
@@ -382,7 +391,10 @@ export function TaskCenterUtilityToolbar({
           >
             <AppSwitcherAction
               icon={<VisualStudioCodeIcon className="h-3.5 w-3.5" />}
-              label={agentText("agentChat.navbar.appSwitcher.vscode", "VS Code")}
+              label={agentText(
+                "agentChat.navbar.appSwitcher.vscode",
+                "VS Code",
+              )}
               disabled={!normalizedProjectRootPath}
               onClick={() => void handleOpenTool("vscode")}
             />
@@ -497,14 +509,14 @@ export function TaskCenterUtilityToolbar({
               </button>
             </div>
             {taskRailProjection ? (
-            <TaskCenterTaskRail
-              projection={taskRailProjection}
-              runControlSurfaceProjection={runControlSurfaceProjection}
-              onOpenOutput={taskRail?.onOpenOutput}
-              onRespondToAction={taskRail?.onRespondToAction}
-              importedRuntimeDetail={importedRuntimeDetail}
-              t={taskRailTranslate}
-            />
+              <TaskCenterTaskRail
+                projection={taskRailProjection}
+                runControlSurfaceProjection={runControlSurfaceProjection}
+                onOpenOutput={taskRail?.onOpenOutput}
+                onRespondToAction={taskRail?.onRespondToAction}
+                importedRuntimeDetail={importedRuntimeDetail}
+                t={taskRailTranslate}
+              />
             ) : null}
           </PopoverContent>
         </Popover>
@@ -532,9 +544,13 @@ export function TaskCenterUtilityToolbar({
               onClick={onToggleHarnessPanel}
               aria-label={
                 harnessPanelVisible
-                  ? agentText("agentChat.navbar.closeHarness", "关闭{{label}}", {
-                      label: harnessToggleLabel,
-                    })
+                  ? agentText(
+                      "agentChat.navbar.closeHarness",
+                      "关闭{{label}}",
+                      {
+                        label: harnessToggleLabel,
+                      },
+                    )
                   : agentText("agentChat.navbar.openHarness", "打开{{label}}", {
                       label: harnessToggleLabel,
                     })
@@ -554,54 +570,57 @@ export function TaskCenterUtilityToolbar({
 
           {showCanvasToggle ? (
             <>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className={cn(
-              taskCenterIconOnlyButtonClassName,
-              shellPanelOpen &&
-                "bg-[color:var(--lime-chrome-tab-active-surface)] text-[color:var(--lime-text)]",
-            )}
-            disabled={!normalizedProjectRootPath}
-            aria-label={agentText("agentChat.navbar.openShell", "打开 Shell")}
-            aria-expanded={shellPanelOpen}
-            title={agentText("agentChat.navbar.openShell", "打开 Shell")}
-            data-testid="task-center-shell-toggle"
-            onClick={onToggleShellPanel}
-          >
-            <SquareTerminal className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className={cn(
-              taskCenterIconOnlyButtonClassName,
-              isCanvasOpen &&
-                "bg-[color:var(--lime-chrome-tab-active-surface)] text-[color:var(--lime-text)]",
-            )}
-            onClick={onToggleCanvas}
-            aria-label={agentText(
-              isCanvasOpen
-                ? "agentChat.navbar.closeWorkbench"
-                : "agentChat.navbar.openWorkbench",
-              isCanvasOpen ? "关闭工作台" : "打开工作台",
-            )}
-            title={agentText(
-              isCanvasOpen
-                ? "agentChat.navbar.closeWorkbench"
-                : "agentChat.navbar.openWorkbench",
-              isCanvasOpen ? "关闭工作台" : "打开工作台",
-            )}
-            data-testid="task-center-workbench-toggle"
-          >
-            {isCanvasOpen ? (
-              <PanelRightClose className="h-4 w-4" />
-            ) : (
-              <PanelRightOpen className="h-4 w-4" />
-            )}
-          </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  taskCenterIconOnlyButtonClassName,
+                  shellPanelOpen &&
+                    "bg-[color:var(--lime-chrome-tab-active-surface)] text-[color:var(--lime-text)]",
+                )}
+                disabled={!normalizedProjectRootPath}
+                aria-label={agentText(
+                  "agentChat.navbar.openShell",
+                  "打开 Shell",
+                )}
+                aria-expanded={shellPanelOpen}
+                title={agentText("agentChat.navbar.openShell", "打开 Shell")}
+                data-testid="task-center-shell-toggle"
+                onClick={onToggleShellPanel}
+              >
+                <SquareTerminal className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  taskCenterIconOnlyButtonClassName,
+                  isCanvasOpen &&
+                    "bg-[color:var(--lime-chrome-tab-active-surface)] text-[color:var(--lime-text)]",
+                )}
+                onClick={onToggleCanvas}
+                aria-label={agentText(
+                  isCanvasOpen
+                    ? "agentChat.navbar.closeWorkbench"
+                    : "agentChat.navbar.openWorkbench",
+                  isCanvasOpen ? "关闭工作台" : "打开工作台",
+                )}
+                title={agentText(
+                  isCanvasOpen
+                    ? "agentChat.navbar.closeWorkbench"
+                    : "agentChat.navbar.openWorkbench",
+                  isCanvasOpen ? "关闭工作台" : "打开工作台",
+                )}
+                data-testid="task-center-workbench-toggle"
+              >
+                {isCanvasOpen ? (
+                  <PanelRightClose className="h-4 w-4" />
+                ) : (
+                  <PanelRightOpen className="h-4 w-4" />
+                )}
+              </Button>
             </>
           ) : null}
         </div>

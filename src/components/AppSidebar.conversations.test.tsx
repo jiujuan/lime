@@ -22,6 +22,7 @@ import {
   mockRecordAgentUiPerformanceMetric,
   mockScanConversationImportSource,
   mockScheduleMinimumDelayIdleTask,
+  mockSelectAgentAppDirectory,
   mockToastSuccess,
   mockUpdateProject,
   mockUpdateAgentRuntimeSession,
@@ -377,7 +378,7 @@ describe("AppSidebar conversations", () => {
       sourceClient: "codex",
       sourceRoot: undefined,
       projectPath: undefined,
-      includeArchived: false,
+      includeArchived: true,
       limit: 40,
     });
     expect(mockPreviewConversationImportThread).toHaveBeenCalledWith(
@@ -387,11 +388,13 @@ describe("AppSidebar conversations", () => {
         limit: 12,
       }),
     );
-    expect(document.body.textContent).toContain("导入本地历史对话");
+    expect(document.body.textContent).toContain("导入对话");
     expect(document.body.textContent).toContain("请帮我修复运行时问题");
     expect(document.body.textContent).toContain("回合");
     expect(document.body.textContent).toContain("时间线");
-    expect(document.body.textContent).toContain("导入细节还原");
+    expect(document.body.textContent).toContain(
+      "将保留工具、命令、补丁、确认与思考记录。",
+    );
     expect(document.body.textContent).toContain("工具");
     expect(document.body.textContent).toContain("命令");
     expect(document.body.textContent).toContain("附件 1");
@@ -443,6 +446,16 @@ describe("AppSidebar conversations", () => {
 
     const projectMenu = await openProjectMenu("示例项目");
     expect(projectMenu?.textContent).toContain("导入对话");
+    expect(
+      projectMenu?.querySelector<HTMLButtonElement>(
+        '[data-testid="app-sidebar-project-menu-import-conversation"]',
+      )?.getAttribute("aria-label"),
+    ).toContain("示例项目");
+    expect(
+      projectMenu?.querySelector<HTMLButtonElement>(
+        '[data-testid="app-sidebar-project-menu-import-conversation"]',
+      )?.getAttribute("title"),
+    ).toContain("示例项目");
 
     await act(async () => {
       document.body
@@ -470,8 +483,8 @@ describe("AppSidebar conversations", () => {
         projectPath: "/repo/project-1",
       }),
     );
-    expect(mockCommitConversationImportThread).toHaveBeenCalledTimes(2);
-    expect(mockCommitConversationImportThread).toHaveBeenNthCalledWith(1, {
+    expect(mockCommitConversationImportThread).toHaveBeenCalledTimes(1);
+    expect(mockCommitConversationImportThread).toHaveBeenCalledWith({
       sourceClient: "codex",
       sourceRoot: "/Users/example/.codex",
       sourceThreadId: "codex-thread-1",
@@ -479,20 +492,12 @@ describe("AppSidebar conversations", () => {
       workspaceId: "project-1",
       confirmed: true,
     });
-    expect(mockCommitConversationImportThread).toHaveBeenNthCalledWith(2, {
-      sourceClient: "codex",
-      sourceRoot: "/Users/example/.codex",
-      sourceThreadId: "codex-thread-2",
-      sourcePath: "/Users/example/.codex/sessions/codex-thread-2.jsonl",
-      workspaceId: "project-1",
-      confirmed: true,
-    });
-    expect(mockToastSuccess).toHaveBeenCalledWith("已导入 4 条历史消息");
+    expect(mockToastSuccess).toHaveBeenCalledWith("已导入 2 条历史消息");
     const projectSection = container.querySelector(
       '[data-testid="app-sidebar-project-conversations"]',
     );
     expect(projectSection?.textContent).toContain("本地历史修复记录");
-    expect(projectSection?.textContent).toContain("本地历史第二条记录");
+    expect(projectSection?.textContent).not.toContain("本地历史第二条记录");
     expect(projectSection?.textContent).not.toMatch(/\bcodex\b/i);
     expect(projectSection?.textContent).not.toContain(".codex");
     expect(projectSection?.textContent).not.toContain("暂无聊天");
@@ -501,7 +506,7 @@ describe("AppSidebar conversations", () => {
       expect.objectContaining({
         agentEntry: "claw",
         projectId: "project-1",
-        initialSessionId: "session-imported-2",
+        initialSessionId: "session-imported",
       }),
     );
   });
@@ -562,7 +567,10 @@ describe("AppSidebar conversations", () => {
     });
     await flushEffects(4);
 
-    expect(document.body.textContent).toContain("清理并重新导入");
+    expect(document.body.textContent).toContain(
+      "已导入的会先清理后重新导入。",
+    );
+    expect(document.body.textContent).toContain("重新导入");
 
     await act(async () => {
       document.body
@@ -583,6 +591,258 @@ describe("AppSidebar conversations", () => {
       confirmed: true,
       replaceExisting: true,
     });
+  });
+
+  it("导入弹窗按组选择后应批量提交同组可导入对话", async () => {
+    mockScanConversationImportSource.mockResolvedValue({
+      source: {
+        sourceClient: "codex",
+        status: "ready",
+        sourceRoot: "/Users/example/.codex",
+        readable: true,
+        threadCount: 3,
+        indexedAt: "2026-06-16T00:00:00.000Z",
+        statePath: "/Users/example/.codex/state_5.sqlite",
+      },
+      threads: [
+        {
+          sourceClient: "codex",
+          sourceThreadId: "codex-thread-1",
+          title: "本地历史修复记录 A",
+          createdAt: "2026-06-15T00:00:00.000Z",
+          updatedAt: "2026-06-16T08:00:00.000Z",
+          cwd: "/repo/project-1",
+          source: "cli",
+          modelProvider: "openai",
+          archived: false,
+          sourcePath: "/Users/example/.codex/sessions/codex-thread-1.jsonl",
+          importStatus: "not_imported",
+        },
+        {
+          sourceClient: "codex",
+          sourceThreadId: "codex-thread-2",
+          title: "本地历史修复记录 B",
+          createdAt: "2026-06-15T00:00:00.000Z",
+          updatedAt: "2026-06-16T09:00:00.000Z",
+          cwd: "/repo/project-1",
+          source: "cli",
+          modelProvider: "openai",
+          archived: false,
+          sourcePath: "/Users/example/.codex/sessions/codex-thread-2.jsonl",
+          importStatus: "not_imported",
+        },
+        {
+          sourceClient: "codex",
+          sourceThreadId: "codex-thread-3",
+          title: "本地历史修复记录 C",
+          createdAt: "2026-07-01T00:00:00.000Z",
+          updatedAt: "2026-07-01T08:00:00.000Z",
+          cwd: "/repo/project-1",
+          source: "cli",
+          modelProvider: "openai",
+          archived: false,
+          sourcePath: "/Users/example/.codex/sessions/codex-thread-3.jsonl",
+          importStatus: "not_imported",
+        },
+      ],
+    });
+    mockPreviewConversationImportThread.mockResolvedValue(
+      buildMockConversationImportPreview(),
+    );
+
+    const container = mountSidebarContainer({
+      currentPage: "agent",
+      currentPageParams: {
+        agentEntry: "claw",
+        projectId: "project-1",
+      } as AgentPageParams,
+    });
+    await flushEffects(4);
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="app-sidebar-import-conversation-button"]',
+        )
+        ?.click();
+      await Promise.resolve();
+    });
+    await flushEffects(4);
+
+    await act(async () => {
+      Array.from(document.body.querySelectorAll<HTMLButtonElement>("button"))
+        .find((button) => button.textContent?.trim() === "选择本组")
+        ?.click();
+      await Promise.resolve();
+    });
+    await flushEffects(2);
+
+    await act(async () => {
+      document.body
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="app-sidebar-conversation-import-confirm"]',
+        )
+        ?.click();
+      await Promise.resolve();
+    });
+    await flushEffects(4);
+
+    expect(mockCommitConversationImportThread).toHaveBeenCalledTimes(2);
+    expect(mockCommitConversationImportThread).toHaveBeenNthCalledWith(1, {
+      sourceClient: "codex",
+      sourceRoot: "/Users/example/.codex",
+      sourceThreadId: "codex-thread-1",
+      sourcePath: "/Users/example/.codex/sessions/codex-thread-1.jsonl",
+      workspaceId: undefined,
+      confirmed: true,
+    });
+    expect(mockCommitConversationImportThread).toHaveBeenNthCalledWith(2, {
+      sourceClient: "codex",
+      sourceRoot: "/Users/example/.codex",
+      sourceThreadId: "codex-thread-2",
+      sourcePath: "/Users/example/.codex/sessions/codex-thread-2.jsonl",
+      workspaceId: undefined,
+      confirmed: true,
+    });
+  });
+
+  it("导入弹窗默认扫描归档会话，并支持只查看归档对话", async () => {
+    mockScanConversationImportSource.mockResolvedValue({
+      source: {
+        sourceClient: "codex",
+        status: "ready",
+        sourceRoot: "/Users/example/.codex",
+        readable: true,
+        threadCount: 2,
+        indexedAt: "2026-06-16T00:00:00.000Z",
+        statePath: "/Users/example/.codex/state_5.sqlite",
+      },
+      threads: [
+        {
+          sourceClient: "codex",
+          sourceThreadId: "active-thread",
+          title: "未归档修复记录",
+          createdAt: "2026-06-15T00:00:00.000Z",
+          updatedAt: "2026-06-16T08:00:00.000Z",
+          cwd: "/repo/project-1",
+          source: "cli",
+          modelProvider: "openai",
+          archived: false,
+          sourcePath: "/Users/example/.codex/sessions/active-thread.jsonl",
+          importStatus: "not_imported",
+        },
+        {
+          sourceClient: "codex",
+          sourceThreadId: "archived-thread",
+          title: "已归档修复记录",
+          createdAt: "2026-06-15T00:00:00.000Z",
+          updatedAt: "2026-06-16T09:00:00.000Z",
+          cwd: "/repo/project-1",
+          source: "cli",
+          modelProvider: "openai",
+          archived: true,
+          sourcePath:
+            "/Users/example/.codex/archived_sessions/archived-thread.jsonl",
+          importStatus: "not_imported",
+        },
+      ],
+    });
+    mockPreviewConversationImportThread.mockResolvedValue(
+      buildMockConversationImportPreview(),
+    );
+
+    const container = mountSidebarContainer({
+      currentPage: "agent",
+      currentPageParams: {
+        agentEntry: "claw",
+        projectId: "project-1",
+      } as AgentPageParams,
+    });
+    await flushEffects(4);
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="app-sidebar-import-conversation-button"]',
+        )
+        ?.click();
+      await Promise.resolve();
+    });
+    await flushEffects(4);
+
+    expect(mockScanConversationImportSource).toHaveBeenCalledWith({
+      sourceClient: "codex",
+      sourceRoot: undefined,
+      projectPath: undefined,
+      includeArchived: true,
+      limit: 40,
+    });
+    expect(document.body.textContent).toContain("未归档修复记录");
+    expect(document.body.textContent).toContain("已归档修复记录");
+
+    await act(async () => {
+      Array.from(document.body.querySelectorAll<HTMLButtonElement>("button"))
+        .find((button) => button.textContent?.trim() === "已归档")
+        ?.click();
+      await Promise.resolve();
+    });
+    await flushEffects(2);
+
+    expect(document.body.textContent).not.toContain("未归档修复记录");
+    expect(document.body.textContent).toContain("已归档修复记录");
+    expect(document.body.textContent).toContain("可导入对话 1");
+  });
+
+  it("导入弹窗支持通过系统目录选择器切换本地历史数据目录", async () => {
+    mockSelectAgentAppDirectory.mockResolvedValueOnce({
+      path: "/Users/example/Library/Application Support/local-history",
+      cancelled: false,
+    });
+
+    const container = mountSidebarContainer({
+      currentPage: "agent",
+      currentPageParams: {
+        agentEntry: "claw",
+        projectId: "project-1",
+      } as AgentPageParams,
+    });
+    await flushEffects(4);
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="app-sidebar-import-conversation-button"]',
+        )
+        ?.click();
+      await Promise.resolve();
+    });
+    await flushEffects(4);
+
+    await act(async () => {
+      document.body
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="app-sidebar-conversation-import-choose-directory"]',
+        )
+        ?.click();
+      await Promise.resolve();
+    });
+    await flushEffects(4);
+
+    expect(mockSelectAgentAppDirectory).toHaveBeenCalledWith({
+      title: "选择本地历史数据目录",
+    });
+    expect(mockScanConversationImportSource).toHaveBeenLastCalledWith({
+      sourceClient: "codex",
+      sourceRoot: "/Users/example/Library/Application Support/local-history",
+      projectPath: undefined,
+      includeArchived: true,
+      limit: 40,
+    });
+    expect(
+      document.body.querySelector<HTMLInputElement>(
+        'input[value="/Users/example/Library/Application Support/local-history"]',
+      ),
+    ).not.toBeNull();
   });
 
   it("项目没有可导入本地历史时项目菜单不显示导入入口", async () => {
@@ -630,7 +890,7 @@ describe("AppSidebar conversations", () => {
     expect(mockScanConversationImportSource).toHaveBeenCalledWith({
       sourceClient: "codex",
       projectPath: "/repo/project-1",
-      includeArchived: false,
+      includeArchived: true,
       limit: 40,
     });
   });

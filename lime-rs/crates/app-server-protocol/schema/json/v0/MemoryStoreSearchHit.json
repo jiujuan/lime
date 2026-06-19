@@ -1,0 +1,65 @@
+{
+  "$defs": {
+    "MemoryStoreCitation": {
+      "properties": {
+        "endLineNumber": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "path": {
+          "type": "string"
+        },
+        "startLineNumber": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "endLineNumber",
+        "path",
+        "startLineNumber"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "citation": {
+      "$ref": "#/$defs/MemoryStoreCitation"
+    },
+    "content": {
+      "type": "string"
+    },
+    "contentStartLineNumber": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "matchLineNumber": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "matchedQueries": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "path": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "citation",
+    "content",
+    "contentStartLineNumber",
+    "matchLineNumber",
+    "matchedQueries",
+    "path"
+  ],
+  "title": "MemoryStoreSearchHit",
+  "type": "object"
+}

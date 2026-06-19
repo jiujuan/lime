@@ -4,6 +4,61 @@ import { buildTimelineInlineContentParts } from "./messageListTimelineContentPar
 import type { AgentThreadItem } from "../types";
 
 describe("messageListTimelineContentParts", () => {
+  it("没有 agent_message 时仍应渲染 timeline 工具过程", () => {
+    const contentParts = buildTimelineInlineContentParts({
+      displayContent: "",
+      items: [
+        {
+          id: "web-search-running",
+          type: "web_search",
+          turn_id: "turn-running-search",
+          sequence: 1,
+          action: "web_search",
+          query: "今天 AI 行业公开新闻",
+          status: "in_progress",
+          started_at: "2026-06-18T10:00:00.000Z",
+          updated_at: "2026-06-18T10:00:01.000Z",
+        },
+      ] as AgentThreadItem[],
+    });
+
+    expect(contentParts?.map((part) => part.type)).toEqual(["tool_use"]);
+    expect(
+      contentParts?.[0]?.type === "tool_use"
+        ? contentParts[0].toolCall.status
+        : "",
+    ).toBe("running");
+  });
+
+  it("只有 timeline 工具过程但已有最终正文时应把正文接在工具后", () => {
+    const contentParts = buildTimelineInlineContentParts({
+      displayContent: "第一轮已经完成。\n\n## 第一轮结论",
+      items: [
+        {
+          id: "web-search-completed",
+          type: "web_search",
+          turn_id: "turn-completed-search",
+          sequence: 1,
+          action: "web_search",
+          query: "first turn",
+          status: "completed",
+          started_at: "2026-06-18T10:00:00.000Z",
+          completed_at: "2026-06-18T10:00:02.000Z",
+          updated_at: "2026-06-18T10:00:02.000Z",
+          results: [],
+        },
+      ] as AgentThreadItem[],
+    });
+
+    expect(contentParts?.map((part) => part.type)).toEqual([
+      "tool_use",
+      "text",
+    ]);
+    expect(
+      contentParts?.[1]?.type === "text" ? contentParts[1].text : "",
+    ).toContain("第一轮结论");
+  });
+
   it("本地历史导入的单条思考也应按来源顺序进入正文过程流", () => {
     const importedMetadata = {
       imported: true,
@@ -101,12 +156,12 @@ describe("messageListTimelineContentParts", () => {
     });
 
     expect(contentParts?.map((part) => part.type)).toEqual([
-      "text",
+      "thinking",
       "tool_use",
       "text",
     ]);
     expect(contentParts?.[0]).toMatchObject({
-      type: "text",
+      type: "thinking",
       text: "我来帮你分析这个项目的改进空间。先让我了解一下项目结构和关键文件。",
     });
     expect(contentParts?.[1]).toMatchObject({

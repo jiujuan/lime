@@ -1,4 +1,7 @@
-import type { MemoryCategory, UnifiedMemory } from "@/lib/api/unifiedMemory";
+import type {
+  MemoryCategory,
+  MemoryReferenceRecord,
+} from "@/lib/memory/memoryReferenceTypes";
 import {
   getUserFacingMemoryCategoryLabel,
   getUserFacingMemoryFallbackTitle,
@@ -130,14 +133,14 @@ function extractFirstStructuredContentLine(
   return undefined;
 }
 
-function getNormalizedMemoryContent(memory: UnifiedMemory): string {
+function getNormalizedMemoryContent(memory: MemoryReferenceRecord): string {
   return typeof memory.content === "string"
     ? memory.content.replace(/\r\n/g, "\n")
     : "";
 }
 
 function normalizeExperienceMemoryProjectGoal(
-  memory: UnifiedMemory,
+  memory: MemoryReferenceRecord,
 ): string | undefined {
   const content = getNormalizedMemoryContent(memory);
   const title = normalizeOptionalText(memory.title);
@@ -158,7 +161,7 @@ function normalizeExperienceMemoryProjectGoal(
 }
 
 function buildExperienceMemoryExistingResults(
-  memory: UnifiedMemory,
+  memory: MemoryReferenceRecord,
 ): string | undefined {
   const content = getNormalizedMemoryContent(memory);
   const structuredSummary = dedupeNonEmptyText([
@@ -184,7 +187,7 @@ function buildExperienceMemoryExistingResults(
 }
 
 function buildExperienceMemoryPlatformRegion(
-  memory: UnifiedMemory,
+  memory: MemoryReferenceRecord,
 ): string | undefined {
   const content = getNormalizedMemoryContent(memory);
   const platform = extractFirstStructuredContentLine(
@@ -207,7 +210,7 @@ function buildExperienceMemoryPlatformRegion(
 }
 
 function buildExperienceMemoryAudience(
-  memory: UnifiedMemory,
+  memory: MemoryReferenceRecord,
 ): string | undefined {
   return extractFirstStructuredContentLine(
     getNormalizedMemoryContent(memory),
@@ -216,7 +219,7 @@ function buildExperienceMemoryAudience(
 }
 
 function buildExperienceMemorySocialPostSubject(
-  memory: UnifiedMemory,
+  memory: MemoryReferenceRecord,
 ): string | undefined {
   const subject = dedupeNonEmptyText([
     normalizeExperienceMemoryProjectGoal(memory)
@@ -231,7 +234,7 @@ function buildExperienceMemorySocialPostSubject(
 }
 
 function buildCuratedTaskPrefillByTaskIdFromMemory(
-  memory: UnifiedMemory,
+  memory: MemoryReferenceRecord,
 ): Record<string, CuratedTaskInputValues> | undefined {
   if (memory.category !== "experience") {
     return undefined;
@@ -390,7 +393,7 @@ export function getCuratedTaskReferenceSourceLabel(
   return getCuratedTaskReferenceSourceKind(entry) ===
     "sceneapp_execution_summary"
     ? "项目结果"
-    : "灵感库";
+    : "记忆参考";
 }
 
 export function getCuratedTaskReferenceMemoryId(
@@ -461,7 +464,7 @@ export function mergeCuratedTaskReferenceEntries(
 }
 
 export function buildCuratedTaskReferenceEntries(
-  memories: UnifiedMemory[],
+  memories: MemoryReferenceRecord[],
 ): CuratedTaskReferenceEntry[] {
   return mergeCuratedTaskReferenceEntries(
     memories.map((memory) => {

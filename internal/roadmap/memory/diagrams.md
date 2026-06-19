@@ -1,384 +1,220 @@
-# 灵感库 / 记忆系统图谱
+# Lime 文件化记忆图谱
 
-> 状态：current diagrams  
-> 更新时间：2026-05-01  
-> 目标：用架构图、时序图和流程图固定普通用户灵感库与底层记忆主链的边界。
+> 状态：current diagrams
+> 更新时间：2026-06-18
+> 目标：用图固定文件化记忆、summary 注入、工具读取、Soul 配置、后台整理和旧路径清理边界。
 
-## 1. 总体架构图
+## 1. 总体架构
 
 ```mermaid
 flowchart TB
-  User[普通创作者] --> UI[灵感库前台]
-  Creator[进阶创作者] --> UI
-  Dev[开发者 / 内测诊断] --> DevPanel[开发者面板 / 高级设置]
-  DevPanel --> Gate{记忆高级开关}
-  Gate -- 开启 --> Diagnostics[高级记忆诊断]
-  Gate -- 关闭 --> NoDiag[只关闭增强 / 诊断]
+  User[用户] --> Thread[thread/start 或 turn/start]
+  Thread --> Config[读取 memory config]
+  Config --> Store[Memory Store Root]
+  Config --> Soul[memory.soul]
+  Store --> Summary[memory_summary.md]
+  Summary --> Budget[Token Budget / Truncation]
+  Soul --> Interaction[Interaction Contributor]
+  Budget --> Prompt[Developer Policy Fragment]
+  Interaction --> Prompt
+  Prompt --> Agent[Agent Loop]
 
-  UI --> Projection[Inspiration Projection Layer]
-  UI --> Actions[Action Orchestration Layer]
+  Agent --> NeedMemory{需要更多记忆?}
+  NeedMemory -- 否 --> Answer[继续生成]
+  NeedMemory -- 是 --> Tools[Memory Tools]
+  Tools --> Backend[MemoryBackend]
+  Backend --> Files[(MEMORY.md / rollout_summaries / notes)]
+  Backend --> Index[(Derived Index 可选)]
+  Files --> Tools
+  Index --> Tools
+  Tools --> Agent
 
-  Projection --> UnifiedApi[unified_memory_* API]
-  Actions --> UnifiedApi
-  Actions --> Recommendation[推荐信号 / creation replay]
-  Actions --> Launcher[Curated Task Launcher]
+  User --> Note[显式要求记住]
+  Note --> AddNote[memory_add_note]
+  AddNote --> Adhoc[extensions/ad_hoc/notes]
+  Adhoc --> Consolidation[后台整理]
+  Consolidation --> MemoryMd[MEMORY.md]
+  Consolidation --> Summary
 
-  UnifiedApi --> UnifiedStore[(Unified Memory Store)]
-  UnifiedStore --> RuntimeRecall[durable recall]
-  RuntimeRecall --> BaselinePack[常开 baseline brief]
+  User --> SoulEditor[Soul 编辑 / SOUL.md 导入]
+  SoulEditor --> Soul
+  Soul --> Brief[artifact voice generation brief]
+  Brief --> Agent
 
-  Launcher --> RuntimeTurn[agent_runtime_submit_turn]
-  RuntimeTurn --> Prefetch[memory_runtime_prefetch_for_turn]
-  Prefetch --> RuntimeSources[来源链 / working / durable / team / compaction]
-  RuntimeSources --> PromptAug[Prompt Augmentation]
-  BaselinePack --> PromptAug
-  PromptAug --> AgentLoop[Agent Query Loop]
-
-  Diagnostics --> RuntimeApi[memory_runtime_* stable read model]
-  Diagnostics --> ActiveRecall[active recall / external provider trace]
-  ActiveRecall --> Fenced[untrusted fenced context]
-  RuntimeApi --> RuntimeSources
-
-  AgentLoop --> Result[生成结果 / artifact]
-  Result --> Save[保存到灵感库]
-  Save --> Actions
-
-  classDef user fill:#E8FFF6,stroke:#10B981,color:#064E3B;
-  classDef product fill:#EFF6FF,stroke:#3B82F6,color:#1E3A8A;
-  classDef runtime fill:#FFF7ED,stroke:#F97316,color:#7C2D12;
+  classDef current fill:#E8FFF6,stroke:#10B981,color:#064E3B;
+  classDef optional fill:#FFF7ED,stroke:#F97316,color:#7C2D12;
   classDef store fill:#F8FAFC,stroke:#64748B,color:#0F172A;
 
-  class User,Creator,Dev user;
-  class UI,Projection,Actions,Recommendation,Launcher product;
-  class RuntimeTurn,Prefetch,RuntimeSources,PromptAug,AgentLoop,Diagnostics,RuntimeApi,ActiveRecall,Fenced,BaselinePack runtime;
-  class DevPanel,Gate,NoDiag product;
-  class UnifiedStore,UnifiedApi store;
+  class Summary,Budget,Prompt,Tools,Backend,Consolidation,Soul,Interaction,Brief current;
+  class Index optional;
+  class Store,Files,Adhoc,MemoryMd store;
 ```
 
 固定判断：
 
-- `灵感库前台` 只接 projection 和 action orchestration。
-- `高级记忆诊断` 只读 `memory_runtime_*`，并受开发者面板开关控制。
-- 两者共享底层事实源，但不共享前台语言。
-- 开发者开关关闭时只关闭增强 / 诊断，不关闭常开 baseline。
+1. 默认 prompt 只注入 summary 和受控 Soul 片段。
+2. 原文记忆只通过工具按需读取。
+3. Soul 是交互配置，不是 memory store 文件本体。
+4. 派生索引可选，不能替代文件事实源。
 
-## 1.1 Memory Baseline / Enhancement 成本流
+## 2. Read Path
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant Runtime as App Server Runtime
+  participant Store as Memory Store
+  participant Prompt as Prompt Contributor
+  participant Soul as Soul Contributor
+  participant Agent as Agent Loop
+  participant Tools as Memory Tools
+  participant Backend as MemoryBackend
+
+  Runtime->>Store: resolve memory root
+  Runtime->>Soul: load saved memory.soul
+  Prompt->>Store: read memory_summary.md
+  Store-->>Prompt: summary text
+  Prompt->>Prompt: truncate to budget
+  Soul-->>Agent: interaction rhythm fragment
+  Prompt-->>Agent: developer policy fragment
+  Agent->>Tools: memory_search({ queries })
+  Tools->>Backend: search(request)
+  Backend-->>Tools: matches(path,line,content)
+  Tools-->>Agent: JSON hits
+  Agent->>Tools: memory_read(path,lineOffset)
+  Tools->>Backend: read(request)
+  Backend-->>Tools: content + citation fields
+  Tools-->>Agent: JSON content
+```
+
+验收重点：
+
+1. summary 读取失败不阻塞 turn。
+2. search/read 输出必须可引用。
+3. 工具不能返回绝对路径。
+4. Soul 缺失或关闭时不影响 memory tools。
+
+## 3. Search Path
 
 ```mermaid
 flowchart TD
-  Request[生成请求] --> Budget[确定预算档位]
-  Budget --> Baseline[读取常开 baseline]
-  Baseline --> SmallPack[禁用列表 / 已确认偏好 / taste voice summary / evidence id]
-  SmallPack --> Brief[编译短 Generation Brief]
-  Budget --> EnhancedGate{增强开关 + 预算允许?}
-  EnhancedGate -- 否 --> Brief
-  EnhancedGate -- 是 --> Enhanced[active recall / deep extraction / external provider]
-  Enhanced --> Safe{是否安全影响本轮?}
-  Safe -- 是 --> Brief
-  Safe -- 否 --> Queue[异步待确认 / 后台整理]
-  Queue --> NextTurn[下一轮或用户确认后生效]
-  Brief --> Model[用户选择或模型路由决定的生成模型]
+  Search[memory_search] --> Validate[参数校验]
+  Validate --> Scope[resolve scoped path]
+  Scope --> HasIndex{派生索引健康?}
+  HasIndex -- 是 --> Indexed[Indexed search]
+  HasIndex -- 否 --> Text[Text scan fallback]
+  Indexed --> Normalize[排序 / 分页 / 截断]
+  Text --> Normalize
+  Normalize --> Result[SearchMemoriesResponse]
 
-  classDef baseline fill:#E8FFF6,stroke:#10B981,color:#064E3B;
-  classDef enhanced fill:#FFF7ED,stroke:#F97316,color:#7C2D12;
-  classDef product fill:#EFF6FF,stroke:#3B82F6,color:#1E3A8A;
-
-  class Baseline,SmallPack baseline;
-  class EnhancedGate,Enhanced,Safe,Queue enhanced;
-  class Request,Budget,Brief,NextTurn,Model product;
+  Validate --> RejectEmpty[拒绝空 query]
+  Scope --> RejectPath[拒绝 symlink / hidden / traversal]
 ```
 
-成本降级顺序：
+P0 固定：
 
-1. 保留 baseline。
-2. 降低 durable memory top-k。
-3. 去掉原文，只保留 summary / evidence id。
-4. 跳过 active recall / deep extraction / external provider。
-5. 延迟到后台整理或用户确认，不阻塞本轮生成。
+1. 文本扫描是 baseline。
+2. 派生索引只是优化。
+3. 索引坏了不影响读取记忆。
 
-## 2. 产品分层图
+## 4. Write Path
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant User as 用户 / Agent
+  participant Tool as memory_add_note
+  participant Store as Memory Store
+  participant Scan as Safety Scan
+  participant Queue as Ad-hoc Notes
+  participant Job as Consolidation Job
+  participant Memory as MEMORY.md
+  participant Summary as memory_summary.md
+
+  User->>Tool: add note(filename,note)
+  Tool->>Scan: validate filename and content
+  Scan-->>Tool: safe / warning
+  Tool->>Queue: write extensions/ad_hoc/notes/file.md
+  Queue-->>User: note accepted
+  Job->>Queue: read pending notes
+  Job->>Memory: propose/update entries
+  Job->>Summary: refresh compact summary
+```
+
+固定判断：
+
+1. 写 note 不等于立即改 summary。
+2. 后台整理失败不应让当前 turn 失败。
+3. 敏感内容必须停在待审状态。
+
+## 5. Soul Path
+
+```mermaid
+flowchart TD
+  Settings[settings.memory.soul] --> Config[MemorySoulConfig]
+  Import[SOUL.md import] --> Preview[parse + warnings + preview]
+  Preview --> Apply[apply draft and save]
+  Apply --> Config
+  Config --> Interaction[interaction identity / communication rhythm]
+  Config --> ArtifactVoice{artifact_voice enabled?}
+  ArtifactVoice -- 是 --> Brief[generation_brief_only]
+  ArtifactVoice -- 否 --> NoBrief[no artifact voice brief]
+  Interaction --> Runtime[Runtime prompt contributor]
+  Brief --> Runtime
+  Expert[Expert persona] --> Scope[inherit communication_rhythm only]
+  Scope --> Runtime
+```
+
+固定判断：
+
+1. `SOUL.md` 是导入 / 复制快照，运行时事实源是保存后的 `memory.soul`。
+2. 导入 warning 不能被跳过。
+3. artifact voice 只进入 generation brief，不写 `MEMORY.md` / `memory_summary.md`。
+4. expert persona 不回写全局 Soul。
+
+## 6. Old Path Shutdown
 
 ```mermaid
 flowchart LR
-  subgraph Frontstage[普通用户默认层]
-    A1[灵感总览]
-    A2[风格线索]
-    A3[参考素材]
-    A4[成果打法]
-    A5[偏好约束]
-    A6[收藏备选]
-    A7[待整理]
-  end
-
-  subgraph Control[进阶控制层]
-    B1[编辑]
-    B2[删除]
-    B3[禁用]
-    B4[合并]
-    B5[影响解释]
-    B6[自动整理建议]
-  end
-
-  subgraph Advanced[高级诊断层]
-    C1[来源链]
-    C2[会话工作记忆]
-    C3[持久记忆命中]
-    C4[Team Memory]
-    C5[压缩摘要]
-    C6[命中历史]
-    C7[memdir 整理]
-  end
-
-  Frontstage --> Control
-  Control -.高级展开.-> Gate{开发者开关}
-  Gate -- on --> Advanced
-  Gate -- off --> Hidden[保持隐藏]
+  OldUnified[unified_memory_*] --> RemoveUnified[remove entrypoints]
+  OldRuntime[memory_runtime_*] --> RemoveRuntime[remove default recall]
+  OldPage[old mixed MemoryPage / inspiration library] --> RemovePage[remove page and routes]
+  OldInspiration[inspiration_*] --> RemoveInspiration[forbidden to restore]
+  RemoveUnified --> Guard[fail-fast / retired guard / negative tests]
+  RemoveRuntime --> Guard
+  RemovePage --> Guard
+  RemoveInspiration --> Guard
+  Guard --> Current[Memory Store + Tools + Soul]
 ```
 
-固定判断：
+清理规则：
 
-- 普通用户默认只进入 `Frontstage`。
-- `Control` 可以逐步开放，但必须使用创作者语言。
-- `Advanced` 只能通过开发者面板 / 高级入口进入，默认 off。
+1. 旧数据不批量导入为 canonical truth。
+2. 旧 embedding 不进入 canonical truth。
+3. 旧入口只允许删除、fail-fast 或 retired guard，不允许只读续命。
+4. 旧灵感库不再作为产品入口或旁路事实源。
 
-## 3. 保存结果到灵感库时序图
-
-```mermaid
-sequenceDiagram
-  autonumber
-  participant U as 用户
-  participant Result as 结果工作台 / 消息卡
-  participant Draft as Inspiration Draft Builder
-  participant API as unified_memory_*
-  participant Signal as Recommendation Signal
-  participant Page as 灵感库 Projection
-
-  U->>Result: 点击“保存到灵感库”
-  Result->>Draft: buildSceneAppExecutionInspirationDraft
-  Draft-->>Result: category / title / summary / tags
-  Result->>API: createUnifiedMemory(draft.request)
-  API-->>Result: UnifiedMemory
-  Result->>Signal: recordCuratedTaskRecommendationSignalFromMemory
-  Signal-->>Page: signals changed
-  Page->>API: listUnifiedMemories / stats
-  API-->>Page: 最新灵感对象
-  Page-->>U: 显示“已收进灵感库 / 去灵感库继续”
-```
-
-验收重点：
-
-- 保存入口统一。
-- 重复保存有稳定状态。
-- 推荐信号刷新后，灵感库首页推荐同步更新。
-
-## 4. 围绕灵感继续生成时序图
-
-```mermaid
-sequenceDiagram
-  autonumber
-  participant U as 用户
-  participant Page as 灵感库
-  participant Projection as Projection Layer
-  participant Launcher as CuratedTaskLauncher
-  participant Metadata as Request Metadata
-  participant Runtime as Agent Runtime
-  participant Prefetch as memory_runtime_prefetch_for_turn
-  participant Agent as Agent Loop
-
-  U->>Page: 点击“围绕这条灵感继续”
-  Page->>Projection: buildScenePrefillFromInspiration
-  Projection-->>Page: prefill / reference entries
-  Page->>Launcher: 打开共享 launcher
-  U->>Launcher: 确认任务模板与输入
-  Launcher->>Metadata: build creation_replay + curated_task metadata
-  Metadata->>Runtime: submit turn
-  Runtime->>Prefetch: 获取来源链 / working / durable / compaction
-  Prefetch-->>Runtime: TurnMemoryPrefetchResult
-  Runtime->>Agent: 注入 prompt augmentation
-  Agent-->>U: 生成结果
-```
-
-验收重点：
-
-- 不退回裸 prompt。
-- 灵感条目通过 reference selection 进入 request metadata。
-- runtime recall 仍走 `memory_runtime_prefetch_for_turn`。
-
-## 5. 自动整理候选流程图
+## 7. Reset Path
 
 ```mermaid
 flowchart TD
-  Start[会话结束 / 结果生成 / 用户反馈] --> Extract[后台抽取候选]
-  Extract --> Classify{可复用吗?}
-  Classify -- 否 --> Drop[忽略临时流水账]
-  Classify -- 是 --> Sensitive{含敏感信息?}
-  Sensitive -- 是 --> ReviewSensitive[进入待整理并标记敏感]
-  Sensitive -- 否 --> Dedup{已有相似灵感?}
-  Dedup -- 是 --> MergeSuggestion[合并 / 更新建议]
-  Dedup -- 否 --> NewSuggestion[新建建议]
-  ReviewSensitive --> Queue[待整理队列]
-  MergeSuggestion --> Queue
-  NewSuggestion --> Queue
-  Queue --> UserDecision{用户处理}
-  UserDecision -- 确认 --> Write[create/update UnifiedMemory]
-  UserDecision -- 合并 --> Merge[更新既有 UnifiedMemory]
-  UserDecision -- 忽略 --> Ignore[不影响生成]
-  UserDecision -- 删除 --> Delete[移除候选]
-  Write --> Projection[刷新灵感库]
-  Merge --> Projection
+  Reset[memory/reset] --> Confirm[确认范围]
+  Confirm --> ClearStore[清空 memory folder]
+  Confirm --> ClearIndex[删除 index]
+  Confirm --> ResetSqlite[重置 SQLite stage data]
+  Confirm --> SoulScope{是否包含 Soul?}
+  SoulScope -- 是 --> ResetSoul[重置 memory.soul]
+  SoulScope -- 否 --> KeepSoul[保留 memory.soul]
+  ClearStore --> Done[返回成功]
+  ClearIndex --> Done
+  ResetSqlite --> Done
+  ResetSoul --> Done
+  KeepSoul --> Done
 ```
 
-固定判断：
+要求：
 
-- 自动候选未确认前不影响默认生成。
-- 临时流水账不进入灵感库。
-- 敏感候选必须优先进入审核状态。
-
-## 6. 普通入口与高级入口判定流程
-
-```mermaid
-flowchart TD
-  Entry[用户打开灵感相关页面] --> Mode{入口来源}
-  Mode -- 主导航 / 首页卡片 --> Normal[普通灵感库]
-  Mode -- 开发者面板 / 设置高级 / dev flag / 线程可靠性 --> Gate{高级开关开启?}
-  Mode -- 结果页“去灵感库继续” --> Focus[普通灵感库 + 成果聚焦]
-  Gate -- 是 --> Advanced[高级记忆诊断]
-  Gate -- 否 --> Normal
-
-  Normal --> ShowUserObjects[展示风格 / 参考 / 成果 / 偏好 / 收藏]
-  Focus --> ShowFocusedOutcome[聚焦对应成果并显示继续动作]
-  Advanced --> ShowRuntime[展示来源链 / working / durable / compaction]
-
-  ShowUserObjects --> HideRuntime[隐藏 runtime 术语]
-  ShowFocusedOutcome --> HideRuntime
-  ShowRuntime --> ExplainRuntime[允许显示 source bucket / hit layer / memdir]
-```
-
-验收重点：
-
-- 主导航进入时不显示高级诊断分区。
-- 线程可靠性或设置高级入口可以进入诊断层。
-- 结果页跳转必须聚焦成果，而不是泛化首页。
-
-## 7. 状态机
-
-```mermaid
-stateDiagram-v2
-  [*] --> PendingReview: 自动抽取候选
-  [*] --> Active: 用户显式保存
-
-  PendingReview --> Active: 用户确认
-  PendingReview --> Deleted: 用户删除候选
-  PendingReview --> Archived: 用户忽略但保留
-
-  Active --> Disabled: 用户禁用
-  Disabled --> Active: 用户重新启用
-  Active --> Archived: 用户归档
-  Archived --> Active: 用户恢复
-  Active --> Deleted: 用户删除
-  Disabled --> Deleted: 用户删除
-  Archived --> Deleted: 用户删除
-
-  Deleted --> [*]
-```
-
-固定判断：
-
-- 只有 `Active` 默认影响生成。
-- `PendingReview` 不默认影响生成。
-- `Disabled` 保留展示，但不进入默认 reference selection。
-
-## 8. 诊断数据读取图
-
-```mermaid
-flowchart TB
-  Diagnostics[高级记忆诊断 UI] --> RuntimeApi[memory_runtime_*]
-  RuntimeApi --> Sources[resolve_effective_sources]
-  RuntimeApi --> Working[collect_working_memory_view]
-  RuntimeApi --> Durable[resolve_durable_memory_recall]
-  RuntimeApi --> Extraction[memory_runtime_get_extraction_status]
-  RuntimeApi --> PrefetchHistory[Runtime prefetch history]
-  RuntimeApi --> Compaction[latest / recent compactions]
-
-  Sources --> View[诊断视图]
-  Working --> View
-  Durable --> View
-  Extraction --> View
-  PrefetchHistory --> View
-  Compaction --> View
-
-  View -.只读.-> User[开发者 / 内测 / 客服]
-```
-
-固定判断：
-
-- 诊断 UI 不扫描磁盘。
-- 诊断 UI 不自己拼 prompt。
-- 诊断 UI 只解释 current read model。
-
-## 9. 开发者面板记忆开关流程
-
-```mermaid
-flowchart TD
-  Start[打开开发者面板 / 高级设置] --> Toggles[Memory Advanced Toggles]
-  Toggles --> Diagnostics{memory diagnostics?}
-  Toggles --> Active{active memory recall preview?}
-  Toggles --> AutoOrg{auto organization experiments?}
-  Toggles --> Raw{raw source / hit layer?}
-  Toggles --> Provider{external memory provider?}
-
-  Diagnostics -- off --> HideDiag[隐藏诊断分区]
-  Diagnostics -- on --> ShowDiag[显示来源链 / working / durable / compaction]
-
-  Active -- off --> NoActive[不运行 hidden active recall]
-  Active -- on --> Eligibility[检查 agent / session eligibility]
-  Eligibility --> Prefetch[active recall prefetch]
-  Prefetch --> Fence[包进 untrusted fenced context]
-  Fence --> Trace[trace / debug 仅诊断层可见]
-
-  AutoOrg -- off --> NoDream[不运行 dreaming / auto organize]
-  AutoOrg -- on --> Candidate[生成待整理候选]
-  Candidate --> Scan[secret / injection scan]
-  Scan --> Pending[进入待整理队列]
-
-  Raw -- off --> HideRaw[隐藏 provider / hit layer]
-  Raw -- on --> ShowRaw[诊断层显示 raw metadata]
-
-  Provider -- off --> Builtin[只用 current 主链]
-  Provider -- on --> One{已有 external provider?}
-  One -- 否 --> EnableOne[启用一个 provider]
-  One -- 是 --> RejectSecond[拒绝第二个 provider]
-```
-
-固定判断：开关只放大可观察性和实验能力，不改变 `unified_memory_*` / `memory_runtime_*` 的事实源地位。
-
-## 10. Active Memory 默认关闭流程
-
-```mermaid
-sequenceDiagram
-  autonumber
-  participant U as 普通用户
-  participant Gate as Feature Gate
-  participant Runtime as Agent Runtime
-  participant Provider as Active Recall / External Provider
-  participant Fence as Fenced Context
-  participant Trace as Developer Trace
-
-  U->>Runtime: 发起生成
-  Runtime->>Gate: 读取 active memory recall preview
-  alt 开关关闭
-    Gate-->>Runtime: disabled
-    Runtime->>Runtime: 仅使用 current memory_runtime_prefetch_for_turn
-    Runtime-->>U: 正常生成，无 hidden active recall
-  else 开关开启
-    Gate-->>Runtime: enabled
-    Runtime->>Runtime: eligibility check
-    Runtime->>Provider: prefetch relevant memory
-    Provider-->>Fence: recalled context
-    Fence-->>Runtime: untrusted context block
-    Runtime->>Trace: 写入诊断 trace
-    Runtime-->>U: 正常生成，普通前台不显示 raw tags
-  end
-```
-
-验收重点：默认关闭时不产生 hidden recall；开启后也不把 recalled context 当用户新输入。
+1. reset 必须明确全局 / workspace 范围。
+2. reset 不应误删线程历史。
+3. reset 后下一轮不再注入旧 summary。
+4. Soul 是否重置必须由用户选择的范围决定，不能被 memory folder 清空隐式删除。

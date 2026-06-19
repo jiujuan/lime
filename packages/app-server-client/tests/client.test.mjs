@@ -220,17 +220,13 @@ const {
   METHOD_MCP_TOOL_LIST,
   METHOD_MCP_TOOL_LIST_FOR_CONTEXT,
   METHOD_MCP_TOOL_SEARCH,
+  METHOD_MEMORY_STORE_ADD_NOTE,
+  METHOD_MEMORY_STORE_HEALTH,
+  METHOD_MEMORY_STORE_LIST,
+  METHOD_MEMORY_STORE_READ,
+  METHOD_MEMORY_STORE_RESET,
+  METHOD_MEMORY_STORE_SEARCH,
   METHOD_PROJECT_MEMORY_READ,
-  METHOD_UNIFIED_MEMORY_ANALYZE,
-  METHOD_UNIFIED_MEMORY_CREATE,
-  METHOD_UNIFIED_MEMORY_DELETE,
-  METHOD_UNIFIED_MEMORY_GET,
-  METHOD_UNIFIED_MEMORY_HYBRID_SEARCH,
-  METHOD_UNIFIED_MEMORY_LIST,
-  METHOD_UNIFIED_MEMORY_SEARCH,
-  METHOD_UNIFIED_MEMORY_SEMANTIC_SEARCH,
-  METHOD_UNIFIED_MEMORY_STATS,
-  METHOD_UNIFIED_MEMORY_UPDATE,
   METHOD_SESSION_FILE_DELETE,
   METHOD_SESSION_FILE_GET_OR_CREATE,
   METHOD_SESSION_FILE_LIST,
@@ -962,6 +958,39 @@ test("builds app data surface requests with current methods", () => {
   const memory = client.readProjectMemory({
     projectId: "workspace-main",
   });
+  const memoryStoreList = client.listMemoryStore({
+    scope: "workspace",
+    workspaceRoot: "/workspace/project",
+    path: "skills",
+    maxResults: 20,
+  });
+  const memoryStoreRead = client.readMemoryStore({
+    scope: "workspace",
+    workspaceRoot: "/workspace/project",
+    path: "MEMORY.md",
+    maxLines: 40,
+  });
+  const memoryStoreSearch = client.searchMemoryStore({
+    scope: "workspace",
+    workspaceRoot: "/workspace/project",
+    queries: ["voice", "preference"],
+    matchMode: "allWithinLines",
+    withinLines: 4,
+  });
+  const memoryStoreAddNote = client.addMemoryStoreNote({
+    scope: "workspace",
+    workspaceRoot: "/workspace/project",
+    title: "Tone note",
+    content: "Prefer concise answers.",
+  });
+  const memoryStoreHealth = client.healthMemoryStore({
+    scope: "workspace",
+    workspaceRoot: "/workspace/project",
+  });
+  const memoryStoreReset = client.resetMemoryStore({
+    scope: "workspace",
+    workspaceRoot: "/workspace/project",
+  });
   const logs = client.listLogs();
   const persistedTail = client.readPersistedLogTail({ lines: 250 });
   const clearedLogs = client.clearLogs();
@@ -1309,6 +1338,45 @@ test("builds app data surface requests with current methods", () => {
   assert.equal(memory.method, METHOD_PROJECT_MEMORY_READ);
   assert.deepEqual(memory.params, {
     projectId: "workspace-main",
+  });
+  assert.equal(memoryStoreList.method, METHOD_MEMORY_STORE_LIST);
+  assert.deepEqual(memoryStoreList.params, {
+    scope: "workspace",
+    workspaceRoot: "/workspace/project",
+    path: "skills",
+    maxResults: 20,
+  });
+  assert.equal(memoryStoreRead.method, METHOD_MEMORY_STORE_READ);
+  assert.deepEqual(memoryStoreRead.params, {
+    scope: "workspace",
+    workspaceRoot: "/workspace/project",
+    path: "MEMORY.md",
+    maxLines: 40,
+  });
+  assert.equal(memoryStoreSearch.method, METHOD_MEMORY_STORE_SEARCH);
+  assert.deepEqual(memoryStoreSearch.params, {
+    scope: "workspace",
+    workspaceRoot: "/workspace/project",
+    queries: ["voice", "preference"],
+    matchMode: "allWithinLines",
+    withinLines: 4,
+  });
+  assert.equal(memoryStoreAddNote.method, METHOD_MEMORY_STORE_ADD_NOTE);
+  assert.deepEqual(memoryStoreAddNote.params, {
+    scope: "workspace",
+    workspaceRoot: "/workspace/project",
+    title: "Tone note",
+    content: "Prefer concise answers.",
+  });
+  assert.equal(memoryStoreHealth.method, METHOD_MEMORY_STORE_HEALTH);
+  assert.deepEqual(memoryStoreHealth.params, {
+    scope: "workspace",
+    workspaceRoot: "/workspace/project",
+  });
+  assert.equal(memoryStoreReset.method, METHOD_MEMORY_STORE_RESET);
+  assert.deepEqual(memoryStoreReset.params, {
+    scope: "workspace",
+    workspaceRoot: "/workspace/project",
   });
   assert.equal(logs.method, METHOD_LOG_LIST);
   assert.deepEqual(logs.params, {});
@@ -2211,16 +2279,12 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_MCP_RESOURCE_LIST, kind: "request" },
     { method: METHOD_MCP_RESOURCE_READ, kind: "request" },
     { method: METHOD_PROJECT_MEMORY_READ, kind: "request" },
-    { method: METHOD_UNIFIED_MEMORY_LIST, kind: "request" },
-    { method: METHOD_UNIFIED_MEMORY_GET, kind: "request" },
-    { method: METHOD_UNIFIED_MEMORY_CREATE, kind: "request" },
-    { method: METHOD_UNIFIED_MEMORY_UPDATE, kind: "request" },
-    { method: METHOD_UNIFIED_MEMORY_DELETE, kind: "request" },
-    { method: METHOD_UNIFIED_MEMORY_SEARCH, kind: "request" },
-    { method: METHOD_UNIFIED_MEMORY_STATS, kind: "request" },
-    { method: METHOD_UNIFIED_MEMORY_ANALYZE, kind: "request" },
-    { method: METHOD_UNIFIED_MEMORY_SEMANTIC_SEARCH, kind: "request" },
-    { method: METHOD_UNIFIED_MEMORY_HYBRID_SEARCH, kind: "request" },
+    { method: METHOD_MEMORY_STORE_LIST, kind: "request" },
+    { method: METHOD_MEMORY_STORE_READ, kind: "request" },
+    { method: METHOD_MEMORY_STORE_SEARCH, kind: "request" },
+    { method: METHOD_MEMORY_STORE_ADD_NOTE, kind: "request" },
+    { method: METHOD_MEMORY_STORE_HEALTH, kind: "request" },
+    { method: METHOD_MEMORY_STORE_RESET, kind: "request" },
     { method: METHOD_LOG_LIST, kind: "request" },
     { method: METHOD_LOG_PERSISTED_TAIL, kind: "request" },
     { method: METHOD_LOG_CLEAR, kind: "request" },

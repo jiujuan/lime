@@ -11,7 +11,7 @@ use app_server_protocol::{
 use lime_agent::AsterProviderProtocol;
 use lime_agent::ProviderConfig;
 use lime_core::database::dao::api_key_provider::ProviderWithKeys;
-use serde_json::{json, Value};
+use serde_json::Value;
 
 pub(super) fn chat_task_request_from_runtime(
     request: &ExecutionRequest,
@@ -82,47 +82,6 @@ pub(super) fn resolved_route_from_runtime(
         provider,
         direct_provider_config.map(direct_route_config),
     )
-}
-
-pub(super) fn route_evidence_payload(
-    mut payload: Value,
-    task_request: &ModelTaskRequest,
-    resolved_route: &ResolvedModelRoute,
-) -> Value {
-    let task_request_value = serde_json::to_value(task_request).unwrap_or_else(|_| json!({}));
-    let resolved_route_value = serde_json::to_value(resolved_route).unwrap_or_else(|_| json!({}));
-    if let Some(object) = payload.as_object_mut() {
-        object.insert("modelTaskRequest".to_string(), task_request_value.clone());
-        object.insert("model_task_request".to_string(), task_request_value);
-        object.insert("resolvedRoute".to_string(), resolved_route_value.clone());
-        object.insert("resolved_route".to_string(), resolved_route_value);
-        if let Some(failure) = resolved_route.failure.as_ref() {
-            let failure_value = serde_json::to_value(failure).unwrap_or_else(|_| json!({}));
-            object.insert("routeFailure".to_string(), failure_value.clone());
-            object.insert("route_failure".to_string(), failure_value);
-            object.insert("failureCategory".to_string(), json!(failure.category));
-            object.insert("failure_category".to_string(), json!(failure.category));
-            object.insert(
-                "reasonCode".to_string(),
-                Value::String(failure.reason_code.clone()),
-            );
-            object.insert(
-                "reason_code".to_string(),
-                Value::String(failure.reason_code.clone()),
-            );
-            if let Some(capability_gap) = failure.capability_gap.as_ref() {
-                object.insert(
-                    "capabilityGap".to_string(),
-                    Value::String(capability_gap.clone()),
-                );
-                object.insert(
-                    "capability_gap".to_string(),
-                    Value::String(capability_gap.clone()),
-                );
-            }
-        }
-    }
-    payload
 }
 
 fn model_ref_source(source: &str) -> ModelRefSource {
@@ -200,6 +159,7 @@ mod tests {
     use super::*;
     use crate::runtime_backend::tests::request_for_test;
     use app_server_protocol::RouteFailureCategory;
+    use serde_json::json;
 
     #[test]
     fn chat_task_request_adds_vision_requirement_for_image_attachments() {

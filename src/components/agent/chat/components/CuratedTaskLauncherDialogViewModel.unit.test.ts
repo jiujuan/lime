@@ -199,7 +199,7 @@ describe("CuratedTaskLauncherDialogViewModel", () => {
       preferredTaskIds: ["account-project-review"],
     });
     const selected = selectLatestReviewTaskSignal([
-      reviewSignal({ title: "other", source: "saved_inspiration", createdAt: 500 }),
+      reviewSignal({ title: "other", source: "memory_reference", createdAt: 500 }),
       reviewSignal({ title: "old", createdAt: 100 }),
       latest,
     ]);

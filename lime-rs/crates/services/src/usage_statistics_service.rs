@@ -428,6 +428,20 @@ mod tests {
         conn
     }
 
+    fn create_test_legacy_agent_messages_table(conn: &Connection) {
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS agent_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content_json TEXT NOT NULL,
+                timestamp TEXT NOT NULL
+            )",
+            [],
+        )
+        .expect("create legacy agent_messages test table");
+    }
+
     fn insert_agent_session(conn: &Connection, id: &str, model: &str, created_at: &str) {
         conn.execute(
             "INSERT INTO agent_sessions (
@@ -440,6 +454,7 @@ mod tests {
     }
 
     fn insert_agent_message(conn: &Connection, session_id: &str, content: &str, timestamp: &str) {
+        create_test_legacy_agent_messages_table(conn);
         conn.execute(
             "INSERT INTO agent_messages (session_id, role, content_json, timestamp)
              VALUES (?1, 'assistant', ?2, ?3)",

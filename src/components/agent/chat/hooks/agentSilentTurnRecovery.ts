@@ -4,6 +4,15 @@ import { normalizeLegacyThreadItems } from "@/lib/api/agentTextNormalization";
 const SILENT_TURN_RECOVERY_GRACE_MS = 15_000;
 const SILENT_TURN_RECOVERY_ACTIVITY_SKEW_MS = 5_000;
 
+const TERMINAL_TURN_STATUSES = new Set([
+  "aborted",
+  "canceled",
+  "cancelled",
+  "completed",
+  "done",
+  "failed",
+]);
+
 function normalizeTimestampMs(
   value: string | number | null | undefined,
 ): number {
@@ -43,6 +52,49 @@ function maxTimestampMs(
 
 function normalizeText(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function isTerminalTurnStatus(status: unknown): boolean {
+  return TERMINAL_TURN_STATUSES.has(String(status || "").toLowerCase());
+}
+
+export function hasRecoverableTerminalTurnActivity(
+  detail: Pick<AsterSessionDetail, "turns">,
+  requestStartedAt: number,
+  promptText: string,
+  turnId?: string | null,
+): boolean {
+  const recoveryThresholdMs = requestStartedAt - SILENT_TURN_RECOVERY_GRACE_MS;
+  const activityThresholdMs =
+    requestStartedAt - SILENT_TURN_RECOVERY_ACTIVITY_SKEW_MS;
+  const normalizedPrompt = promptText.trim();
+  const normalizedTurnId = turnId?.trim() || null;
+
+  return (detail.turns ?? []).some((turn) => {
+    if (!isTerminalTurnStatus(turn.status)) {
+      return false;
+    }
+
+    const latestTurnTimestampMs = maxTimestampMs(
+      turn.started_at,
+      turn.created_at,
+      turn.updated_at,
+      turn.completed_at,
+    );
+    if (latestTurnTimestampMs < activityThresholdMs) {
+      return false;
+    }
+
+    if (normalizedTurnId && turn.id === normalizedTurnId) {
+      return latestTurnTimestampMs >= recoveryThresholdMs;
+    }
+
+    return (
+      normalizedPrompt.length > 0 &&
+      normalizeText(turn.prompt_text) === normalizedPrompt &&
+      latestTurnTimestampMs >= recoveryThresholdMs
+    );
+  });
 }
 
 export function hasRecoverableSilentTurnActivity(

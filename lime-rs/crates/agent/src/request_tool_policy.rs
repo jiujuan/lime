@@ -18,6 +18,7 @@ use aster::conversation::message::{Message, MessageContent, SystemNotificationTy
 use aster::providers::errors::ProviderError;
 use aster::session::SessionManager;
 use futures::StreamExt;
+use lime_core::database::dao::agent_timeline::{AgentThreadItem, AgentThreadItemPayload};
 use lime_core::env_compat;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -62,6 +63,8 @@ const NEWS_PREFLIGHT_QUERY_PARALLELISM: usize = 4;
 const NEWS_PREFLIGHT_QUERY_OUTPUT_CHAR_LIMIT: usize = 1_600;
 const NEWS_PREFLIGHT_CONTEXT_CHAR_LIMIT: usize = 6_000;
 const NEWS_PREFLIGHT_RESULT_LINES: usize = 18;
+const WEB_SEARCH_SYNTHESIS_MIN_SUCCESSFUL_ATTEMPTS: usize = 3;
+const WEB_SEARCH_SYNTHESIS_MIN_COMPLETED_ATTEMPTS: usize = 4;
 const WEB_SEARCH_EMPTY_REPLY_RETRY_PROMPT: &str = "请继续。你已经完成本回合所需的 WebSearch 预检索，现在必须直接给出最终答复，不要再次调用 WebSearch 或 WebFetch。请至少输出：1. 结论摘要；2. 主题归纳；3. 关键信息；4. 如有分歧，说明来源差异。";
 const ASTER_AUTO_COMPACTION_START_PREFIX: &str = "Exceeded auto-compact threshold of ";
 const ASTER_AUTO_COMPACTION_COMPLETE_TEXT: &str = "Compaction complete";
@@ -118,6 +121,7 @@ pub struct ToolAttemptRecord {
     pub tool_name: String,
     pub success: Option<bool>,
     pub error: Option<String>,
+    pub observed_item_lifecycle: bool,
 }
 
 #[derive(Debug, Default)]
@@ -147,6 +151,7 @@ impl WebSearchExecutionTracker {
                     tool_name: tool_name.to_string(),
                     success: None,
                     error: None,
+                    observed_item_lifecycle: false,
                 },
             );
         }
@@ -163,11 +168,62 @@ impl WebSearchExecutionTracker {
             return;
         }
         if let Some(record) = self.attempts_by_id.get_mut(tool_id) {
+            if record.observed_item_lifecycle && record.success.is_some() {
+                return;
+            }
             record.success = Some(success);
             record.error = error
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
                 .map(|value| value.to_string());
+        }
+    }
+
+    pub fn record_tool_item(
+        &mut self,
+        policy: &RequestToolPolicy,
+        item: &AgentThreadItem,
+        completed: bool,
+    ) {
+        let AgentThreadItemPayload::ToolCall {
+            tool_name,
+            success,
+            error,
+            ..
+        } = &item.payload
+        else {
+            return;
+        };
+        if !policy.effective_web_search || item.id.trim().is_empty() || tool_name.trim().is_empty()
+        {
+            return;
+        }
+
+        if !self.attempts_by_id.contains_key(&item.id) {
+            self.ordered_tool_ids.push(item.id.clone());
+            self.attempts_by_id.insert(
+                item.id.clone(),
+                ToolAttemptRecord {
+                    tool_id: item.id.clone(),
+                    tool_name: tool_name.clone(),
+                    success: None,
+                    error: None,
+                    observed_item_lifecycle: true,
+                },
+            );
+        }
+
+        if let Some(record) = self.attempts_by_id.get_mut(&item.id) {
+            record.observed_item_lifecycle = true;
+            record.tool_name = tool_name.clone();
+            if completed {
+                record.success = Some(success.unwrap_or(true));
+                record.error = error
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(|value| value.to_string());
+            }
         }
     }
 
@@ -247,6 +303,37 @@ impl WebSearchExecutionTracker {
             .collect::<Vec<_>>()
             .join("; ")
     }
+
+    fn completed_attempt_count_for_policy(&self, policy: &RequestToolPolicy) -> usize {
+        self.ordered_tool_ids
+            .iter()
+            .filter_map(|tool_id| self.attempts_by_id.get(tool_id))
+            .filter(|record| {
+                policy.matches_any_allowed_tool(&record.tool_name) && record.success.is_some()
+            })
+            .count()
+    }
+
+    fn successful_attempt_count_for_policy(&self, policy: &RequestToolPolicy) -> usize {
+        self.ordered_tool_ids
+            .iter()
+            .filter_map(|tool_id| self.attempts_by_id.get(tool_id))
+            .filter(|record| {
+                policy.matches_any_allowed_tool(&record.tool_name)
+                    && record.success.unwrap_or(false)
+            })
+            .count()
+    }
+
+    fn has_successful_required_attempt(&self, policy: &RequestToolPolicy) -> bool {
+        self.ordered_tool_ids
+            .iter()
+            .filter_map(|tool_id| self.attempts_by_id.get(tool_id))
+            .any(|record| {
+                policy.matches_any_required_tool(&record.tool_name)
+                    && record.success.unwrap_or(false)
+            })
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -299,6 +386,8 @@ struct StreamEventDiagnostics {
     text_delta_count: usize,
     tool_start_count: usize,
     tool_end_count: usize,
+    tool_item_start_count: usize,
+    tool_item_end_count: usize,
     error_count: usize,
     context_trace_events: usize,
     artifact_snapshot_count: usize,
@@ -309,6 +398,17 @@ struct StreamEventDiagnostics {
     max_context_trace_steps: usize,
     last_persisted_artifact_path: Option<String>,
     last_saved_markdown_path: Option<String>,
+}
+
+impl StreamEventDiagnostics {
+    fn effective_tool_start_count(&self) -> usize {
+        self.tool_start_count
+            .max(self.tool_item_start_count.max(self.tool_item_end_count))
+    }
+
+    fn effective_tool_end_count(&self) -> usize {
+        self.tool_end_count.max(self.tool_item_end_count)
+    }
 }
 
 fn update_stream_event_diagnostics(
@@ -348,6 +448,16 @@ fn update_stream_event_diagnostics(
                     output_chars,
                     result.success
                 );
+            }
+        }
+        RuntimeAgentEvent::ItemStarted { item } | RuntimeAgentEvent::ItemUpdated { item } => {
+            if matches!(item.payload, AgentThreadItemPayload::ToolCall { .. }) {
+                diagnostics.tool_item_start_count += 1;
+            }
+        }
+        RuntimeAgentEvent::ItemCompleted { item } => {
+            if matches!(item.payload, AgentThreadItemPayload::ToolCall { .. }) {
+                diagnostics.tool_item_end_count += 1;
             }
         }
         RuntimeAgentEvent::ContextTrace { steps } => {
@@ -593,7 +703,7 @@ fn should_retry_provider_tail_failure(
     emitted_any: bool,
 ) -> bool {
     emitted_any
-        && (diagnostics.text_delta_count > 0 || diagnostics.tool_end_count > 0)
+        && (diagnostics.text_delta_count > 0 || diagnostics.effective_tool_end_count() > 0)
         && retryable_provider_tail_failure_detail(error_message).is_some()
 }
 
@@ -751,28 +861,23 @@ impl RequestToolPolicy {
 /// 解析请求级工具策略
 ///
 /// 规则：
-/// - `effective_web_search = request_web_search.unwrap_or(mode_default)`
+/// - 只有显式 `web_search=true` 或 `search_mode=allowed|required` 才开启联网工具面
 /// - 白/黑名单支持环境变量覆盖：
 ///   - `LIME_WEB_SEARCH_REQUIRED_TOOLS`（兼容 `PROXYCAST_WEB_SEARCH_REQUIRED_TOOLS`）
 ///   - `LIME_WEB_SEARCH_ALLOWED_TOOLS`（兼容 `PROXYCAST_WEB_SEARCH_ALLOWED_TOOLS`）
 ///   - `LIME_WEB_SEARCH_DISALLOWED_TOOLS`（兼容 `PROXYCAST_WEB_SEARCH_DISALLOWED_TOOLS`）
-pub fn resolve_request_tool_policy(
-    request_web_search: Option<bool>,
-    mode_default: bool,
-) -> RequestToolPolicy {
-    resolve_request_tool_policy_with_mode(request_web_search, None, mode_default)
+pub fn resolve_request_tool_policy(request_web_search: Option<bool>) -> RequestToolPolicy {
+    resolve_request_tool_policy_with_mode(request_web_search, None)
 }
 
 pub fn resolve_request_tool_policy_with_mode(
     request_web_search: Option<bool>,
     request_search_mode: Option<RequestToolPolicyMode>,
-    mode_default: bool,
 ) -> RequestToolPolicy {
     let search_mode = match (request_web_search, request_search_mode) {
         (Some(false), _) => RequestToolPolicyMode::Disabled,
         (_, Some(mode)) => mode,
         (Some(true), None) => RequestToolPolicyMode::Allowed,
-        (None, None) if mode_default => RequestToolPolicyMode::Allowed,
         _ => RequestToolPolicyMode::Disabled,
     };
     let effective_web_search = search_mode.enables_web_search();
@@ -937,8 +1042,16 @@ pub fn merge_system_prompt_with_web_search_preflight_context(
     }
 }
 
+#[cfg(test)]
 fn should_run_web_search_preflight(policy: &RequestToolPolicy, _message_text: &str) -> bool {
-    if !is_web_search_preflight_enabled() {
+    should_run_web_search_preflight_with_enabled(policy, is_web_search_preflight_enabled())
+}
+
+fn should_run_web_search_preflight_with_enabled(
+    policy: &RequestToolPolicy,
+    preflight_enabled: bool,
+) -> bool {
+    if !preflight_enabled {
         return false;
     }
 
@@ -947,27 +1060,27 @@ fn should_run_web_search_preflight(policy: &RequestToolPolicy, _message_text: &s
 
 fn build_preflight_queries(message_text: &str, policy: &RequestToolPolicy) -> Vec<String> {
     let base_query = derive_preflight_query(message_text);
-    if !policy.requires_web_search() || !message_requires_fresh_web_search(message_text) {
+    if !policy.requires_web_search() || NEWS_PREFLIGHT_QUERY_PARALLELISM <= 1 {
         return vec![base_query];
     }
 
     let current_date = chrono::Local::now().format("%Y-%m-%d").to_string();
     let mut queries = Vec::new();
-    push_unique_query(&mut queries, base_query.clone());
-    push_unique_query(&mut queries, format!("{base_query} {current_date}"));
-    push_unique_query(
+    push_unique_preflight_query(&mut queries, base_query.clone());
+    push_unique_preflight_query(&mut queries, format!("{base_query} {current_date}"));
+    push_unique_preflight_query(
         &mut queries,
-        format!("{base_query} latest headlines {current_date}"),
+        format!("{base_query} authoritative sources {current_date}"),
     );
-    push_unique_query(
+    push_unique_preflight_query(
         &mut queries,
-        format!("{base_query} international news roundup {current_date}"),
+        format!("{base_query} latest updates {current_date}"),
     );
     queries.truncate(NEWS_PREFLIGHT_QUERY_PARALLELISM);
     queries
 }
 
-fn push_unique_query(queries: &mut Vec<String>, query: String) {
+fn push_unique_preflight_query(queries: &mut Vec<String>, query: String) {
     let normalized = query.split_whitespace().collect::<Vec<_>>().join(" ");
     if normalized.is_empty() {
         return;
@@ -978,54 +1091,6 @@ fn push_unique_query(queries: &mut Vec<String>, query: String) {
     {
         queries.push(normalized);
     }
-}
-
-fn message_requires_fresh_web_search(message_text: &str) -> bool {
-    let normalized = message_text.trim().to_ascii_lowercase();
-    if normalized.is_empty() {
-        return false;
-    }
-
-    [
-        "今天",
-        "今日",
-        "最新",
-        "实时",
-        "新闻",
-        "热点",
-        "头条",
-        "快讯",
-        "搜索",
-        "搜一下",
-        "查一下",
-        "联网",
-        "网上",
-        "价格",
-        "行情",
-        "政策",
-        "法规",
-        "规则",
-        "版本",
-        "发布",
-        "today",
-        "latest",
-        "recent",
-        "current",
-        "breaking",
-        "news",
-        "headlines",
-        "roundup",
-        "price",
-        "policy",
-        "release",
-        "search",
-        "lookup",
-        "look up",
-        "browse",
-        "verify",
-    ]
-    .iter()
-    .any(|marker| normalized.contains(marker))
 }
 
 fn normalize_url_candidate(raw_url: &str) -> String {
@@ -1406,8 +1471,8 @@ fn resolve_reply_retry_mode(
 
     let trimmed_text_output = current_text_output.trim();
     if !trimmed_text_output.is_empty()
-        && diagnostics.tool_start_count > 0
-        && diagnostics.tool_end_count > 0
+        && diagnostics.effective_tool_start_count() > 0
+        && diagnostics.effective_tool_end_count() > 0
         && looks_like_incomplete_tool_batch_summary(trimmed_text_output)
     {
         return ReplyRetryMode::IntermediateConclusion;
@@ -1422,8 +1487,8 @@ fn resolve_reply_retry_mode(
         return ReplyRetryMode::WebSearchSynthesis;
     }
 
-    if diagnostics.tool_start_count == 0
-        && diagnostics.tool_end_count == 0
+    if diagnostics.effective_tool_start_count() == 0
+        && diagnostics.effective_tool_end_count() == 0
         && diagnostics.saved_site_content_count == 0
         && diagnostics.persisted_artifact_count == 0
     {
@@ -1431,6 +1496,33 @@ fn resolve_reply_retry_mode(
     }
 
     ReplyRetryMode::None
+}
+
+fn should_synthesize_web_search_after_enough_evidence(
+    policy: &RequestToolPolicy,
+    tracker: &WebSearchExecutionTracker,
+    diagnostics: &StreamEventDiagnostics,
+) -> bool {
+    if !policy.effective_web_search
+        || diagnostics.text_delta_count > 0
+        || diagnostics.error_count > 0
+        || diagnostics.effective_tool_start_count() != diagnostics.effective_tool_end_count()
+    {
+        return false;
+    }
+
+    if policy.requires_web_search() && !tracker.has_successful_required_attempt(policy) {
+        return false;
+    }
+
+    let successful = tracker.successful_attempt_count_for_policy(policy);
+    if successful >= WEB_SEARCH_SYNTHESIS_MIN_SUCCESSFUL_ATTEMPTS {
+        return true;
+    }
+
+    successful > 0
+        && tracker.completed_attempt_count_for_policy(policy)
+            >= WEB_SEARCH_SYNTHESIS_MIN_COMPLETED_ATTEMPTS
 }
 
 fn build_empty_final_reply_attempts_summary(
@@ -1441,10 +1533,11 @@ fn build_empty_final_reply_attempts_summary(
         return tracker.format_attempts();
     }
 
-    if diagnostics.tool_start_count > 0 || diagnostics.tool_end_count > 0 {
+    if diagnostics.effective_tool_start_count() > 0 || diagnostics.effective_tool_end_count() > 0 {
         return format!(
             "已执行非联网工具（tool_start={}, tool_end={}）",
-            diagnostics.tool_start_count, diagnostics.tool_end_count
+            diagnostics.effective_tool_start_count(),
+            diagnostics.effective_tool_end_count()
         );
     }
 
@@ -1457,7 +1550,8 @@ fn build_empty_final_reply_error_message(
 ) -> String {
     let attempts_summary = build_empty_final_reply_attempts_summary(diagnostics, tracker);
 
-    if diagnostics.tool_start_count == 0 && diagnostics.tool_end_count == 0 {
+    if diagnostics.effective_tool_start_count() == 0 && diagnostics.effective_tool_end_count() == 0
+    {
         format!("模型未输出最终答复，且未执行任何工具。\n尝试记录: {attempts_summary}")
     } else {
         format!("已完成当前回合的工具执行，但模型未输出最终答复。\n尝试记录: {attempts_summary}")
@@ -1505,7 +1599,7 @@ where
         started_at.elapsed().as_millis()
     );
 
-    loop {
+    'stream_loop: loop {
         let event_result = match cancel_probe.as_ref() {
             Some(token) => {
                 tokio::select! {
@@ -1572,6 +1666,13 @@ where
                                 event_errors.push(message.clone());
                             }
                         }
+                        RuntimeAgentEvent::ItemStarted { item }
+                        | RuntimeAgentEvent::ItemUpdated { item } => {
+                            web_search_tracker.record_tool_item(request_tool_policy, item, false);
+                        }
+                        RuntimeAgentEvent::ItemCompleted { item } => {
+                            web_search_tracker.record_tool_item(request_tool_policy, item, true);
+                        }
                         RuntimeAgentEvent::ToolStart {
                             tool_name, tool_id, ..
                         } => web_search_tracker.record_tool_start(
@@ -1590,6 +1691,15 @@ where
                         _ => {}
                     }
                     update_stream_event_diagnostics(diagnostics, &runtime_event);
+                    let should_cutover_to_web_search_synthesis = matches!(
+                        &runtime_event,
+                        RuntimeAgentEvent::ToolEnd { .. } | RuntimeAgentEvent::ItemCompleted { .. }
+                    )
+                        && should_synthesize_web_search_after_enough_evidence(
+                            request_tool_policy,
+                            web_search_tracker,
+                            diagnostics,
+                        );
                     match runtime_event {
                         RuntimeAgentEvent::TextDelta { text } => {
                             if let Some(batch_event) = text_delta_batcher.push(text) {
@@ -1607,6 +1717,18 @@ where
                             *emitted_any = true;
                             on_event(&other_event);
                         }
+                    }
+                    if should_cutover_to_web_search_synthesis {
+                        tracing::warn!(
+                            "[AsterAgent][WebSearchSynthesis] cutting over after enough tool evidence: session_id={}, successful={}, completed={}, attempts={}",
+                            session_id,
+                            web_search_tracker
+                                .successful_attempt_count_for_policy(request_tool_policy),
+                            web_search_tracker
+                                .completed_attempt_count_for_policy(request_tool_policy),
+                            web_search_tracker.format_attempts()
+                        );
+                        break 'stream_loop;
                     }
                 }
             }
@@ -1669,16 +1791,30 @@ fn extract_inline_agent_provider_error(message: &Message) -> Option<String> {
     Some(format!("Agent provider execution failed: {detail}"))
 }
 
-/// 当开启联网搜索时，在正式回复前执行 WebSearch 预检索。
+/// 诊断开关开启时，在正式回复前执行 WebSearch 预检索。
 ///
 /// 目标：
-/// - 仅在显式 `required` 搜索模式下先完成一次必需 WebSearch。
+/// - 默认不阻塞正式模型流，避免 `@搜索` 首字长时间无输出。
+/// - 仅在 `LIME_WEB_SEARCH_PREFLIGHT_ENABLED=1` 且显式 `required` 时预检索。
 /// - 统一生成 tool_start/tool_end 事件，供前端 harness 展示。
 /// - 将预检索结果压缩注入 system prompt，帮助模型做更深的事实整合。
 /// - 若本回合被明确要求必须先搜索，且预检索全部失败，则由上层中断本次回答。
 pub async fn execute_web_search_preflight_if_needed(
     request: WebSearchPreflightRequest<'_>,
     tracker: &mut WebSearchExecutionTracker,
+) -> Result<PreflightToolExecution, String> {
+    execute_web_search_preflight_if_needed_with_enabled(
+        request,
+        tracker,
+        is_web_search_preflight_enabled(),
+    )
+    .await
+}
+
+async fn execute_web_search_preflight_if_needed_with_enabled(
+    request: WebSearchPreflightRequest<'_>,
+    tracker: &mut WebSearchExecutionTracker,
+    preflight_enabled: bool,
 ) -> Result<PreflightToolExecution, String> {
     let WebSearchPreflightRequest {
         agent,
@@ -1690,7 +1826,7 @@ pub async fn execute_web_search_preflight_if_needed(
         policy,
     } = request;
 
-    if !should_run_web_search_preflight(policy, message_text) {
+    if !should_run_web_search_preflight_with_enabled(policy, preflight_enabled) {
         return Ok(PreflightToolExecution::none());
     }
 
@@ -1854,7 +1990,7 @@ struct PreflightSearchPlan {
     params: Value,
 }
 
-/// 统一流式执行器：执行 preflight + reply 流，并复用统一的策略校验。
+/// 统一流式执行器：执行可选诊断 preflight + reply 流，并复用统一的策略校验。
 pub async fn stream_reply_with_policy<F>(
     agent: &Agent,
     message_text: &str,
@@ -1902,7 +2038,7 @@ where
         request_tool_policy.search_mode.as_str()
     );
 
-    // 只在显式 Required 模式做预检索；Allowed 只是暴露工具候选能力，由模型按需决定。
+    // preflight 默认关闭；Required 只表达工具必须完成，不应默认阻塞首字。
     let preflight = if request_tool_policy.requires_web_search() {
         execute_web_search_preflight_if_needed(
             WebSearchPreflightRequest {
@@ -2332,7 +2468,7 @@ fn is_web_search_preflight_enabled() -> bool {
             "0" | "false" | "no" | "off" => false,
             _ => true,
         },
-        None => true,
+        None => false,
     }
 }
 
@@ -2950,13 +3086,13 @@ mod tests {
 
     #[test]
     fn resolves_effective_web_search_with_request_override() {
-        let policy = resolve_request_tool_policy(Some(false), true);
+        let policy = resolve_request_tool_policy(Some(false));
         assert!(!policy.effective_web_search);
         assert_eq!(policy.search_mode, RequestToolPolicyMode::Disabled);
         assert!(policy.required_tools.is_empty());
         assert!(policy.allowed_tools.is_empty());
 
-        let policy = resolve_request_tool_policy(Some(true), false);
+        let policy = resolve_request_tool_policy(Some(true));
         assert!(policy.effective_web_search);
         assert_eq!(policy.search_mode, RequestToolPolicyMode::Allowed);
     }
@@ -3019,14 +3155,19 @@ mod tests {
     }
 
     #[test]
-    fn resolves_effective_web_search_with_mode_default() {
-        let policy = resolve_request_tool_policy(None, true);
-        assert!(policy.effective_web_search);
-        assert_eq!(policy.search_mode, RequestToolPolicyMode::Allowed);
-
-        let policy = resolve_request_tool_policy(None, false);
+    fn disables_web_search_without_explicit_request() {
+        let policy = resolve_request_tool_policy(None);
         assert!(!policy.effective_web_search);
         assert_eq!(policy.search_mode, RequestToolPolicyMode::Disabled);
+    }
+
+    #[test]
+    fn enables_allowed_mode_when_explicitly_requested() {
+        let policy =
+            resolve_request_tool_policy_with_mode(None, Some(RequestToolPolicyMode::Allowed));
+        assert!(policy.effective_web_search);
+        assert_eq!(policy.search_mode, RequestToolPolicyMode::Allowed);
+        assert!(!policy.requires_web_search());
     }
 
     #[test]
@@ -3034,7 +3175,6 @@ mod tests {
         let policy = resolve_request_tool_policy_with_mode(
             Some(true),
             Some(RequestToolPolicyMode::Required),
-            false,
         );
         assert!(policy.effective_web_search);
         assert!(policy.requires_web_search());
@@ -3044,11 +3184,8 @@ mod tests {
 
     #[test]
     fn disabled_mode_should_not_expose_web_search_tool_surface() {
-        let policy = resolve_request_tool_policy_with_mode(
-            None,
-            Some(RequestToolPolicyMode::Disabled),
-            true,
-        );
+        let policy =
+            resolve_request_tool_policy_with_mode(None, Some(RequestToolPolicyMode::Disabled));
 
         assert_eq!(policy.search_mode, RequestToolPolicyMode::Disabled);
         assert!(!policy.effective_web_search);
@@ -3061,7 +3198,7 @@ mod tests {
     #[test]
     fn keeps_original_prompt_when_disabled() {
         let base = Some("base".to_string());
-        let policy = resolve_request_tool_policy(Some(false), false);
+        let policy = resolve_request_tool_policy(Some(false));
         assert_eq!(
             merge_system_prompt_with_request_tool_policy(base.clone(), &policy),
             base
@@ -3070,7 +3207,7 @@ mod tests {
 
     #[test]
     fn appends_policy_prompt_when_enabled() {
-        let policy = resolve_request_tool_policy(Some(true), false);
+        let policy = resolve_request_tool_policy(Some(true));
         let merged =
             merge_system_prompt_with_request_tool_policy(Some("base".to_string()), &policy)
                 .expect("merged prompt should exist");
@@ -3085,7 +3222,6 @@ mod tests {
         let policy = resolve_request_tool_policy_with_mode(
             Some(true),
             Some(RequestToolPolicyMode::Required),
-            false,
         );
         let merged =
             merge_system_prompt_with_request_tool_policy(Some("base".to_string()), &policy)
@@ -3096,16 +3232,37 @@ mod tests {
     #[test]
     fn no_duplicate_when_marker_exists() {
         let base = Some(format!("{REQUEST_TOOL_POLICY_MARKER}\nexists"));
-        let policy = resolve_request_tool_policy(Some(true), false);
+        let policy = resolve_request_tool_policy(Some(true));
         assert_eq!(
             merge_system_prompt_with_request_tool_policy(base.clone(), &policy),
             base
         );
     }
 
+    fn completed_tool_item(id: impl Into<String>, sequence: i64) -> AgentThreadItem {
+        AgentThreadItem {
+            id: id.into(),
+            thread_id: "thread-1".to_string(),
+            turn_id: "turn-1".to_string(),
+            sequence,
+            status: lime_core::database::dao::agent_timeline::AgentThreadItemStatus::Completed,
+            started_at: "2026-06-18T00:00:00Z".to_string(),
+            completed_at: Some("2026-06-18T00:00:01Z".to_string()),
+            updated_at: "2026-06-18T00:00:01Z".to_string(),
+            payload: AgentThreadItemPayload::ToolCall {
+                tool_name: "WebSearch".to_string(),
+                arguments: Some(serde_json::json!({ "query": "latest news" })),
+                output: Some("results".to_string()),
+                success: Some(true),
+                error: None,
+                metadata: None,
+            },
+        }
+    }
+
     #[test]
     fn tracker_does_not_require_websearch_when_only_allowed() {
-        let policy = resolve_request_tool_policy(Some(true), false);
+        let policy = resolve_request_tool_policy(Some(true));
         let mut tracker = WebSearchExecutionTracker::default();
         tracker.record_tool_start(&policy, "tool-1", "WebFetch");
         tracker.record_tool_end(&policy, "tool-1", true, None);
@@ -3117,7 +3274,6 @@ mod tests {
         let policy = resolve_request_tool_policy_with_mode(
             Some(true),
             Some(RequestToolPolicyMode::Required),
-            false,
         );
         let mut tracker = WebSearchExecutionTracker::default();
         tracker.record_tool_start(&policy, "tool-1", "WebSearch");
@@ -3126,11 +3282,49 @@ mod tests {
     }
 
     #[test]
+    fn tracker_accepts_required_websearch_from_item_lifecycle() {
+        let policy = resolve_request_tool_policy_with_mode(
+            Some(true),
+            Some(RequestToolPolicyMode::Required),
+        );
+        let mut tracker = WebSearchExecutionTracker::default();
+        let item = completed_tool_item("tool-item-1", 1);
+
+        tracker.record_tool_item(&policy, &item, true);
+
+        assert!(tracker.validate_web_search_requirement(&policy).is_ok());
+        assert_eq!(tracker.format_attempts(), "WebSearch#tool-item-1:success");
+    }
+
+    #[test]
+    fn tracker_keeps_item_terminal_when_late_legacy_tool_end_conflicts() {
+        let policy = resolve_request_tool_policy_with_mode(
+            Some(true),
+            Some(RequestToolPolicyMode::Required),
+        );
+        let mut tracker = WebSearchExecutionTracker::default();
+        let item = completed_tool_item("tool-item-conflict", 1);
+
+        tracker.record_tool_item(&policy, &item, true);
+        tracker.record_tool_end(
+            &policy,
+            "tool-item-conflict",
+            false,
+            Some("legacy failure arrived late"),
+        );
+
+        assert!(tracker.validate_web_search_requirement(&policy).is_ok());
+        assert_eq!(
+            tracker.format_attempts(),
+            "WebSearch#tool-item-conflict:success"
+        );
+    }
+
+    #[test]
     fn tracker_reports_failure_record() {
         let policy = resolve_request_tool_policy_with_mode(
             Some(true),
             Some(RequestToolPolicyMode::Required),
-            false,
         );
         let mut tracker = WebSearchExecutionTracker::default();
         tracker.record_tool_start(&policy, "tool-1", "WebSearch");
@@ -3143,12 +3337,137 @@ mod tests {
     }
 
     #[test]
-    fn allowed_web_search_should_not_run_preflight_from_message_keywords() {
+    fn web_search_synthesis_boundary_triggers_after_enough_successful_attempts() {
+        let policy = resolve_request_tool_policy(Some(true));
+        let mut tracker = WebSearchExecutionTracker::default();
+        for index in 0..WEB_SEARCH_SYNTHESIS_MIN_SUCCESSFUL_ATTEMPTS {
+            let tool_id = format!("web-search-{index}");
+            tracker.record_tool_start(&policy, &tool_id, "WebSearch");
+            tracker.record_tool_end(&policy, &tool_id, true, None);
+        }
+        let diagnostics = StreamEventDiagnostics {
+            tool_start_count: WEB_SEARCH_SYNTHESIS_MIN_SUCCESSFUL_ATTEMPTS,
+            tool_end_count: WEB_SEARCH_SYNTHESIS_MIN_SUCCESSFUL_ATTEMPTS,
+            ..StreamEventDiagnostics::default()
+        };
+
+        assert!(should_synthesize_web_search_after_enough_evidence(
+            &policy,
+            &tracker,
+            &diagnostics
+        ));
+    }
+
+    #[test]
+    fn web_search_synthesis_boundary_accepts_item_lifecycle_counts() {
+        let policy = resolve_request_tool_policy(Some(true));
+        let mut tracker = WebSearchExecutionTracker::default();
+        for index in 0..WEB_SEARCH_SYNTHESIS_MIN_SUCCESSFUL_ATTEMPTS {
+            let tool_id = format!("web-search-item-{index}");
+            let item = completed_tool_item(tool_id, index as i64);
+            tracker.record_tool_item(&policy, &item, true);
+        }
+        let diagnostics = StreamEventDiagnostics {
+            tool_item_start_count: WEB_SEARCH_SYNTHESIS_MIN_SUCCESSFUL_ATTEMPTS,
+            tool_item_end_count: WEB_SEARCH_SYNTHESIS_MIN_SUCCESSFUL_ATTEMPTS,
+            ..StreamEventDiagnostics::default()
+        };
+
+        assert!(should_synthesize_web_search_after_enough_evidence(
+            &policy,
+            &tracker,
+            &diagnostics
+        ));
+    }
+
+    #[test]
+    fn web_search_synthesis_boundary_triggers_after_mixed_completed_attempts() {
+        let policy = resolve_request_tool_policy(Some(true));
+        let mut tracker = WebSearchExecutionTracker::default();
+        for index in 0..WEB_SEARCH_SYNTHESIS_MIN_COMPLETED_ATTEMPTS {
+            let tool_id = format!("web-fetch-{index}");
+            tracker.record_tool_start(&policy, &tool_id, "WebFetch");
+            tracker.record_tool_end(
+                &policy,
+                &tool_id,
+                index == 0,
+                (index != 0).then_some("fetch failed"),
+            );
+        }
+        let diagnostics = StreamEventDiagnostics {
+            tool_start_count: WEB_SEARCH_SYNTHESIS_MIN_COMPLETED_ATTEMPTS,
+            tool_end_count: WEB_SEARCH_SYNTHESIS_MIN_COMPLETED_ATTEMPTS,
+            ..StreamEventDiagnostics::default()
+        };
+
+        assert!(should_synthesize_web_search_after_enough_evidence(
+            &policy,
+            &tracker,
+            &diagnostics
+        ));
+    }
+
+    #[test]
+    fn web_search_synthesis_boundary_waits_for_text_or_pending_tools() {
+        let policy = resolve_request_tool_policy(Some(true));
+        let mut tracker = WebSearchExecutionTracker::default();
+        for index in 0..WEB_SEARCH_SYNTHESIS_MIN_SUCCESSFUL_ATTEMPTS {
+            let tool_id = format!("web-search-{index}");
+            tracker.record_tool_start(&policy, &tool_id, "WebSearch");
+            tracker.record_tool_end(&policy, &tool_id, true, None);
+        }
+
+        let with_text = StreamEventDiagnostics {
+            text_delta_count: 1,
+            tool_start_count: WEB_SEARCH_SYNTHESIS_MIN_SUCCESSFUL_ATTEMPTS,
+            tool_end_count: WEB_SEARCH_SYNTHESIS_MIN_SUCCESSFUL_ATTEMPTS,
+            ..StreamEventDiagnostics::default()
+        };
+        assert!(!should_synthesize_web_search_after_enough_evidence(
+            &policy, &tracker, &with_text
+        ));
+
+        let pending_tool = StreamEventDiagnostics {
+            tool_start_count: WEB_SEARCH_SYNTHESIS_MIN_SUCCESSFUL_ATTEMPTS + 1,
+            tool_end_count: WEB_SEARCH_SYNTHESIS_MIN_SUCCESSFUL_ATTEMPTS,
+            ..StreamEventDiagnostics::default()
+        };
+        assert!(!should_synthesize_web_search_after_enough_evidence(
+            &policy,
+            &tracker,
+            &pending_tool
+        ));
+    }
+
+    #[test]
+    fn required_web_search_synthesis_boundary_requires_successful_required_tool() {
         let policy = resolve_request_tool_policy_with_mode(
             Some(true),
-            Some(RequestToolPolicyMode::Allowed),
-            false,
+            Some(RequestToolPolicyMode::Required),
         );
+        let mut tracker = WebSearchExecutionTracker::default();
+        for index in 0..WEB_SEARCH_SYNTHESIS_MIN_SUCCESSFUL_ATTEMPTS {
+            let tool_id = format!("web-fetch-{index}");
+            tracker.record_tool_start(&policy, &tool_id, "WebFetch");
+            tracker.record_tool_end(&policy, &tool_id, true, None);
+        }
+        let diagnostics = StreamEventDiagnostics {
+            tool_start_count: WEB_SEARCH_SYNTHESIS_MIN_SUCCESSFUL_ATTEMPTS,
+            tool_end_count: WEB_SEARCH_SYNTHESIS_MIN_SUCCESSFUL_ATTEMPTS,
+            ..StreamEventDiagnostics::default()
+        };
+
+        assert!(!should_synthesize_web_search_after_enough_evidence(
+            &policy,
+            &tracker,
+            &diagnostics
+        ));
+    }
+
+    #[test]
+    fn allowed_web_search_should_not_run_preflight_from_message_keywords() {
+        let policy =
+            resolve_request_tool_policy_with_mode(Some(true), Some(RequestToolPolicyMode::Allowed));
 
         assert!(!should_run_web_search_preflight(
             &policy,
@@ -3161,37 +3480,43 @@ mod tests {
     }
 
     #[test]
-    fn required_web_search_should_run_preflight_without_keyword_detection() {
+    fn required_web_search_should_not_preflight_by_default() {
         let policy = resolve_request_tool_policy_with_mode(
             Some(true),
             Some(RequestToolPolicyMode::Required),
-            false,
         );
 
-        assert!(should_run_web_search_preflight(&policy, "继续"));
-        assert_eq!(
-            build_preflight_queries("继续", &policy),
-            vec!["继续".to_string()]
-        );
+        assert!(!should_run_web_search_preflight(&policy, "继续"));
     }
 
     #[test]
-    fn required_news_web_search_should_expand_preflight_queries() {
+    fn required_web_search_preflight_can_be_enabled_for_diagnostics() {
         let policy = resolve_request_tool_policy_with_mode(
             Some(true),
             Some(RequestToolPolicyMode::Required),
-            false,
         );
 
-        let queries = build_preflight_queries("请搜索今天最新 AI 新闻", &policy);
+        assert!(should_run_web_search_preflight_with_enabled(&policy, true));
+        let queries = build_preflight_queries("继续", &policy);
         assert_eq!(queries.len(), NEWS_PREFLIGHT_QUERY_PARALLELISM);
-        assert_eq!(queries[0], "请搜索今天最新 AI 新闻");
+        assert_eq!(queries[0], "继续");
+        assert!(queries.iter().any(|query| query.contains("latest updates")));
+    }
+
+    #[test]
+    fn required_web_search_should_expand_generic_parallel_preflight_queries() {
+        let policy = resolve_request_tool_policy_with_mode(
+            Some(true),
+            Some(RequestToolPolicyMode::Required),
+        );
+
+        let queries = build_preflight_queries("学习机 权威评测对比", &policy);
+        assert_eq!(queries.len(), NEWS_PREFLIGHT_QUERY_PARALLELISM);
+        assert_eq!(queries[0], "学习机 权威评测对比");
         assert!(queries
             .iter()
-            .any(|query| query.contains("latest headlines")));
-        assert!(queries
-            .iter()
-            .any(|query| query.contains("international news roundup")));
+            .any(|query| query.contains("authoritative sources")));
+        assert!(queries.iter().any(|query| query.contains("latest updates")));
     }
 
     #[test]
@@ -3266,7 +3591,6 @@ mod tests {
         let policy = resolve_request_tool_policy_with_mode(
             Some(true),
             Some(RequestToolPolicyMode::Required),
-            false,
         );
         let mut metadata = HashMap::new();
         metadata.insert("webSearchEnabled".to_string(), serde_json::json!(true));
@@ -3276,7 +3600,7 @@ mod tests {
         };
         let mut tracker = WebSearchExecutionTracker::default();
 
-        let execution = execute_web_search_preflight_if_needed(
+        let execution = execute_web_search_preflight_if_needed_with_enabled(
             WebSearchPreflightRequest {
                 agent: &agent,
                 session_id: "session-web-preflight-permission",
@@ -3287,6 +3611,7 @@ mod tests {
                 policy: &policy,
             },
             &mut tracker,
+            true,
         )
         .await
         .expect("预调用应继承 turn context 并免确认执行");
@@ -3650,7 +3975,7 @@ mod tests {
             include_context_trace: None,
             turn_context: Some(build_auto_compaction_disabled_turn_context()),
         };
-        let policy = resolve_request_tool_policy(Some(false), false);
+        let policy = resolve_request_tool_policy(Some(false));
         let mut runtime_events = Vec::new();
 
         let error = stream_message_reply_with_policy(
@@ -3719,7 +4044,7 @@ mod tests {
             include_context_trace: None,
             turn_context: None,
         };
-        let policy = resolve_request_tool_policy(Some(false), false);
+        let policy = resolve_request_tool_policy(Some(false));
         let mut runtime_events = Vec::new();
 
         let reply = stream_message_reply_with_policy(
@@ -3773,7 +4098,7 @@ mod tests {
             include_context_trace: None,
             turn_context: None,
         };
-        let policy = resolve_request_tool_policy(Some(true), false);
+        let policy = resolve_request_tool_policy(Some(true));
         let mut runtime_events = Vec::new();
 
         let reply = stream_message_reply_with_policy(
@@ -3818,7 +4143,7 @@ mod tests {
             include_context_trace: None,
             turn_context: None,
         };
-        let policy = resolve_request_tool_policy(Some(false), false);
+        let policy = resolve_request_tool_policy(Some(false));
         let cancel_token = CancellationToken::new();
         let cancel_for_task = cancel_token.clone();
         tokio::spawn(async move {
@@ -3894,7 +4219,7 @@ mod tests {
             include_context_trace: None,
             turn_context: None,
         };
-        let policy = resolve_request_tool_policy(Some(false), false);
+        let policy = resolve_request_tool_policy(Some(false));
         let mut runtime_events = Vec::new();
 
         let error = stream_message_reply_with_policy(

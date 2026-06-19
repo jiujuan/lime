@@ -366,6 +366,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     getWorkspaceIdForSubmit: context.getWorkspaceIdForSubmit,
     setWorkspacePathMissing: context.setWorkspacePathMissing,
     setMessages: session.setMessages,
+    getThreadItems: () => session.threadItems,
     setThreadItems: session.setThreadItems,
     setThreadTurns: session.setThreadTurns,
     setCurrentTurnId: session.setCurrentTurnId,

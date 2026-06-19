@@ -106,7 +106,10 @@ function baseItem(
   return {
     id: params.id,
     thread_id: activeThreadId(event, context),
-    turn_id: params.turnId || resolveTurnId(context),
+    turn_id:
+      params.turnId ||
+      readString(event as unknown as Record<string, unknown>, "turn_id", "turnId") ||
+      resolveTurnId(context),
     sequence: sequenceFromEvent(event),
     status: params.status,
     started_at: timestamp,

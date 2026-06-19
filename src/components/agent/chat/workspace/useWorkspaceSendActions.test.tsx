@@ -2866,7 +2866,10 @@ Extract it into the Agent Skills directory.`,
       expect(mockSendMessage.mock.calls[0]?.[0]).toBe(
         "@搜索 关键词:AI Agent 融资 站点:36Kr 时间:近30天 深度:深度 重点:融资额与产品发布 输出:要点",
       );
+      expect(mockSendMessage.mock.calls[0]?.[2]).toBe(true);
       expect(mockSendMessage.mock.calls[0]?.[8]).toMatchObject({
+        searchMode: "allowed",
+        explicitToolPreferences: true,
         requestMetadata: {
           harness: {
             allow_model_skills: true,
@@ -2940,7 +2943,10 @@ Extract it into the Agent Skills directory.`,
       expect(mockSendMessage.mock.calls[0]?.[0]).toBe(
         "@搜索 关键词:AI Agent 融资 站点:36Kr 时间:近30天 深度:深度 重点:融资额与产品发布 输出:要点",
       );
+      expect(mockSendMessage.mock.calls[0]?.[2]).toBe(true);
       expect(mockSendMessage.mock.calls[0]?.[8]).toMatchObject({
+        searchMode: "allowed",
+        explicitToolPreferences: true,
         requestMetadata: {
           harness: {
             research_skill_launch: {

@@ -1,5 +1,6 @@
 import React from "react";
 import { AlertCircle, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import {
   readConversationImportRuntimeEvents,
   type ConversationImportRuntimeEventDetail,
@@ -93,20 +94,72 @@ function payloadSummaryText(
         "{{count}} 项",
         { count: summary.itemCount },
       );
-    case "scalar":
+    case "scalar": {
+      const typeLabel = payloadTypeLabel(t, summary.valueType);
       return summary.length !== undefined
         ? taskRailText(
             t,
             "generalWorkbench.taskRail.importedRuntime.payload.scalarLength",
             "{{type}} · {{count}} 字符",
-            { type: summary.valueType, count: summary.length },
+            { type: typeLabel, count: summary.length },
           )
         : taskRailText(
             t,
             "generalWorkbench.taskRail.importedRuntime.payload.scalar",
             "{{type}}",
-            { type: summary.valueType },
+            { type: typeLabel },
           );
+    }
+  }
+}
+
+function payloadTypeLabel(
+  t: TaskRailTranslate | undefined,
+  valueType: string,
+): string {
+  switch (valueType) {
+    case "string":
+      return taskRailText(
+        t,
+        "generalWorkbench.taskRail.importedRuntime.payload.type.string",
+        "文本",
+      );
+    case "number":
+      return taskRailText(
+        t,
+        "generalWorkbench.taskRail.importedRuntime.payload.type.number",
+        "数字",
+      );
+    case "boolean":
+      return taskRailText(
+        t,
+        "generalWorkbench.taskRail.importedRuntime.payload.type.boolean",
+        "布尔值",
+      );
+    case "bigint":
+      return taskRailText(
+        t,
+        "generalWorkbench.taskRail.importedRuntime.payload.type.bigint",
+        "大整数",
+      );
+    case "symbol":
+      return taskRailText(
+        t,
+        "generalWorkbench.taskRail.importedRuntime.payload.type.symbol",
+        "符号",
+      );
+    case "function":
+      return taskRailText(
+        t,
+        "generalWorkbench.taskRail.importedRuntime.payload.type.function",
+        "函数",
+      );
+    default:
+      return taskRailText(
+        t,
+        "generalWorkbench.taskRail.importedRuntime.payload.type.value",
+        "值",
+      );
   }
 }
 
@@ -247,8 +300,11 @@ export function ImportedRuntimeEventDetailPanel({
   enabled,
   sessionId,
   t,
-  pageSize = 50,
+  pageSize = 10,
 }: ImportedRuntimeEventDetailPanelProps) {
+  const { t: agentT } = useTranslation("agent");
+  const effectiveT: TaskRailTranslate =
+    t ?? ((key, options) => agentT(key, options));
   const normalizedSessionId = sessionId?.trim() || null;
   const [expanded, setExpanded] = React.useState(false);
   const [events, setEvents] = React.useState<ConversationImportRuntimeEventDetail[]>([]);
@@ -330,7 +386,7 @@ export function ImportedRuntimeEventDetailPanel({
       >
         <span>
           {taskRailText(
-            t,
+            effectiveT,
             expanded
               ? "generalWorkbench.taskRail.importedRuntime.close"
               : "generalWorkbench.taskRail.importedRuntime.open",
@@ -349,7 +405,7 @@ export function ImportedRuntimeEventDetailPanel({
           <div className="text-[11px] leading-5 text-[color:var(--lime-text-muted)]">
             {summary
               ? taskRailText(
-                  t,
+                  effectiveT,
                   "generalWorkbench.taskRail.importedRuntime.summary",
                   "已默认展示 {{materialized}} / {{total}} 条，完整记录保留 {{sidecar}} 条",
                   {
@@ -359,7 +415,7 @@ export function ImportedRuntimeEventDetailPanel({
                   },
                 )
               : taskRailText(
-                  t,
+                  effectiveT,
                   "generalWorkbench.taskRail.importedRuntime.title",
                   "完整运行记录",
                 )}
@@ -373,7 +429,7 @@ export function ImportedRuntimeEventDetailPanel({
               <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <span>
                 {taskRailText(
-                  t,
+                  effectiveT,
                   "generalWorkbench.taskRail.importedRuntime.error",
                   "完整记录读取失败",
                 )}
@@ -388,7 +444,11 @@ export function ImportedRuntimeEventDetailPanel({
               data-testid="imported-runtime-detail-events"
             >
               {visibleEvents.map((event) => (
-                <ImportedRuntimeEventCard key={event.id} event={event} t={t} />
+                <ImportedRuntimeEventCard
+                  key={event.id}
+                  event={event}
+                  t={effectiveT}
+                />
               ))}
             </div>
           ) : null}
@@ -401,7 +461,7 @@ export function ImportedRuntimeEventDetailPanel({
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
               <span>
                 {taskRailText(
-                  t,
+                  effectiveT,
                   "generalWorkbench.taskRail.importedRuntime.loading",
                   "正在读取完整记录",
                 )}
@@ -415,7 +475,7 @@ export function ImportedRuntimeEventDetailPanel({
               data-testid="imported-runtime-detail-empty"
             >
               {taskRailText(
-                t,
+                effectiveT,
                 "generalWorkbench.taskRail.importedRuntime.empty",
                 "暂无更多记录",
               )}
@@ -431,7 +491,7 @@ export function ImportedRuntimeEventDetailPanel({
               data-testid="imported-runtime-detail-load-more"
             >
               {taskRailText(
-                t,
+                effectiveT,
                 "generalWorkbench.taskRail.importedRuntime.loadMore",
                 "加载更多",
               )}

@@ -180,9 +180,9 @@ describe("AgentChatPage 自动引导", { timeout: 20_000 }, () => {
     });
     await flushEffects(12);
 
-    const navbar = container.querySelector(
-      '[data-testid="chat-navbar"]',
-    ) as HTMLElement | null;
+    const harnessToggle = container.querySelector(
+      '[data-testid="theme-workbench-harness-toggle"]',
+    ) as HTMLButtonElement | null;
     const harnessCard = container.querySelector(
       '[data-testid="theme-workbench-harness-card"]',
     ) as HTMLElement | null;
@@ -190,8 +190,7 @@ describe("AgentChatPage 自动引导", { timeout: 20_000 }, () => {
       '[data-testid="general-workbench-sidebar"]',
     ) as HTMLElement | null;
 
-    expect(navbar?.getAttribute("data-show-harness-toggle")).toBe("true");
-    expect(navbar?.getAttribute("data-harness-panel-visible")).toBe("false");
+    expect(harnessToggle).not.toBeNull();
     expect(harnessCard).not.toBeNull();
     expect(harnessCard?.getAttribute("data-run-state")).toBe("idle");
     expect(harnessCard?.getAttribute("data-layout")).toBe("icon");
@@ -264,10 +263,6 @@ describe("AgentChatPage 自动引导", { timeout: 20_000 }, () => {
     clickButton(container, "theme-workbench-harness-toggle");
     await flushEffects(2);
 
-    const navbar = container.querySelector(
-      '[data-testid="chat-navbar"]',
-    ) as HTMLElement | null;
-    expect(navbar?.getAttribute("data-harness-panel-visible")).toBe("true");
     expect(
       document.body.querySelector('[data-testid="harness-status-panel"]'),
     ).not.toBeNull();

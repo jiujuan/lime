@@ -8,8 +8,7 @@ use lime_core::models::provider_type::is_custom_provider_id;
 use lime_core::models::RuntimeProviderType;
 use lime_services::api_key_provider_service::ApiKeyProviderService;
 use runtime_core::{
-    resolve_ready_model_routing, ModelRoutingDecision, ProviderReadiness, RoutingAttempt,
-    RoutingResolution,
+    resolve_ready_model_routing, ModelRoutingDecision, ProviderReadiness, RoutingResolution,
 };
 use serde_json::Value;
 use std::str::FromStr;
@@ -71,40 +70,6 @@ pub(super) fn routing_decision_payload(
     model_registry: &RuntimeModelRegistryMetadata,
 ) -> Value {
     runtime_core::routing_decision_payload(selection, routing, readiness, model_registry.payload())
-}
-
-pub(super) fn routing_fallback_applied_payload(
-    requested_selection: &RuntimeModelSelection,
-    selection: &RuntimeModelSelection,
-    routing: &ModelRoutingDecision,
-    readiness: &ProviderReadiness,
-    model_registry: &RuntimeModelRegistryMetadata,
-    attempted: &[RoutingAttempt],
-) -> Value {
-    runtime_core::routing_fallback_applied_payload(
-        requested_selection,
-        selection,
-        routing,
-        readiness,
-        model_registry.payload(),
-        attempted,
-    )
-}
-
-pub(super) fn routing_not_possible_payload_with_attempts(
-    selection: &RuntimeModelSelection,
-    routing: &ModelRoutingDecision,
-    readiness: &ProviderReadiness,
-    model_registry: &RuntimeModelRegistryMetadata,
-    attempted: &[RoutingAttempt],
-) -> Value {
-    runtime_core::routing_not_possible_payload_with_attempts(
-        selection,
-        routing,
-        readiness,
-        model_registry.payload(),
-        attempted,
-    )
 }
 
 fn readiness_from_configured_provider(provider: &ProviderWithKeys) -> ProviderReadiness {

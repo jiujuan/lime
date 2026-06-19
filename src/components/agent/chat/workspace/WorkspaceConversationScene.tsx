@@ -21,6 +21,7 @@ import type { SidebarActivityLog } from "../hooks/useThemeContextWorkspace";
 import type { GeneralWorkbenchCreationTaskEvent } from "../components/generalWorkbenchWorkflowData";
 import type { GeneralWorkbenchTaskRailContextInput } from "../components/generalWorkbenchTaskRailViewModel";
 import type { ConfirmResponse } from "../types";
+import type { AsterSessionExecutionRuntime } from "@/lib/api/agentRuntime";
 import { CreationReplaySurfaceBanner } from "../components/CreationReplaySurfaceBanner";
 import { EmptyState } from "../components/EmptyState";
 import type { InputbarSendHandler } from "../components/Inputbar/inputbarSendPayload";
@@ -315,6 +316,7 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
     submittedActionsInFlight?: MessageListProps["submittedActionsInFlight"];
     threadItems?: MessageListProps["threadItems"];
     threadRead?: MessageListProps["threadRead"];
+    executionRuntime?: AsterSessionExecutionRuntime | null;
     childSubagentSessions?: MessageListProps["childSubagentSessions"];
     context?: GeneralWorkbenchTaskRailContextInput;
     onOpenOutput?: (path: string) => void | Promise<void>;

@@ -1,235 +1,205 @@
-# 灵感库 / 记忆系统验收标准
+# Lime 文件化记忆验收标准
 
-> 状态：current acceptance plan  
-> 更新时间：2026-05-01  
-> 目标：定义普通用户体验、进阶控制、高级诊断和工程边界的可验证验收标准。
+> 状态：current acceptance plan
+> 更新时间：2026-06-18
+> 目标：定义 memory store、summary 注入、工具读取、Soul 保留、写入整理、旧路径清理和派生索引的可验证标准。
 
-## 1. 普通用户验收
-
-### 1.1 首屏理解
-
-场景：用户从主导航点击 `灵感库`。
+## 1. Store 验收
 
 必须满足：
 
-1. 首屏解释为灵感、参考、风格、成果、收藏或继续生成。
-2. 不出现 `memory_runtime`、`prefetch`、`compaction`、`memdir`、`source bucket` 等底层术语。
-3. 用户能看到至少一个明确动作：保存、导入、继续生成、整理。
-4. 空态说明如何积累第一条灵感，而不是说明记忆系统如何工作。
-5. 默认不运行 active memory / hidden recall / auto organization 实验。
+1. memory root 通过统一路径 resolver 获取。
+2. 工具输出只使用相对路径。
+3. `memory_summary.md`、`MEMORY.md`、`extensions/ad_hoc/notes/` 结构稳定。
+4. hidden path、symlink、path traversal 默认拒绝。
+5. 非 UTF-8 文件不会导致 search/list 整体失败。
+6. reset 能清空 memory folder 和 index。
 
-失败示例：
+不通过：
 
-- 首屏默认展示来源链。
-- 普通用户必须理解 working memory 才能继续。
-- 页面标题写成“记忆诊断”。
+1. 代码里硬编码 macOS / Windows 用户目录。
+2. 工具返回绝对路径。
+3. 前端组件绕过 backend 直接扫描文件。
 
-### 1.2 保存结果
-
-场景：用户在结果工作台保存满意结果。
-
-必须满足：
-
-1. 保存入口文案为 `保存到灵感库` 或同义创作者语言。
-2. 保存成功后原结果卡显示已保存状态。
-3. 用户能点击 `去灵感库继续`。
-4. 灵感库落到成果分区并聚焦该结果。
-5. 下一轮推荐能带上该成果。
-
-失败示例：
-
-- 保存后只能 toast，页面状态不变。
-- 重复点击产生重复成果。
-- 跳转到泛化首页，用户找不到刚保存的结果。
-
-### 1.3 围绕灵感继续
-
-场景：用户从灵感条目点击继续生成。
+## 2. Prompt 注入验收
 
 必须满足：
 
-1. 打开共享 launcher。
-2. 默认带入该灵感的标题、摘要和标签。
-3. 用户可确认或调整输入。
-4. 发送后 request metadata 能关联该灵感。
-5. 生成结果可继续保存回灵感库。
+1. 每轮默认只读 `memory_summary.md`。
+2. summary 为空时不注入。
+3. summary 超预算时截断。
+4. 注入块明确标识为 memory，不是用户本轮输入。
+5. summary 读取失败不阻塞 turn。
+6. summary 不包含未脱敏凭证或敏感原文。
+7. Soul 片段来自保存后的 `memory.soul`，并受开关和范围控制。
 
-失败示例：
+不通过：
 
-- 直接拼接裸 prompt。
-- 丢失灵感引用。
-- launcher 里无法看出正在围绕哪条灵感。
+1. 自动读取 `MEMORY.md` 全文注入。
+2. 每轮自动搜索所有 rollout summaries。
+3. 注入内容随历史线性增长。
+4. 把 `SOUL.md` 文件路径当运行时事实源。
 
-## 2. 进阶控制验收
+## 3. Tool 验收
 
-### 2.1 编辑
-
-必须满足：
-
-1. 用户能编辑标题、摘要、标签和类型。
-2. 编辑后列表、详情、推荐卡同步更新。
-3. 编辑不改变 memory id。
-4. 错误输入有清晰提示。
-
-### 2.2 禁用
+### 3.1 `memory_list`
 
 必须满足：
 
-1. 禁用条目仍可在灵感库看到。
-2. 禁用条目不进入默认 reference selection。
-3. 禁用条目不参与推荐排序提升。
-4. 用户可以重新启用。
-5. 禁用状态有明确说明：“保留，但不影响生成”。
+1. 支持 `path`、`cursor`、`maxResults`。
+2. 返回 file / directory 类型。
+3. 支持 `truncated / nextCursor`。
 
-### 2.3 删除
+### 3.2 `memory_read`
 
 必须满足：
 
-1. 删除前有确认。
-2. 删除后条目不再出现在列表、推荐、聚焦入口。
-3. 删除不会破坏旧会话阅读。
-4. 已删除对象的 recommendation signal 被清理或安全忽略。
+1. 支持 `path`、`lineOffset`、`maxLines`、`maxTokens`。
+2. 返回 `startLineNumber`、`content`、`truncated`。
+3. 行号为 1-indexed。
+4. 超范围有明确错误。
 
-### 2.4 待整理
-
-必须满足：
-
-1. 自动候选未确认前不影响生成。
-2. 候选显示来源摘要。
-3. 用户可确认、合并、忽略、删除。
-4. 合并不会制造重复条目。
-5. 敏感候选默认要求确认。
-
-## 3. 高级诊断验收
-
-### 3.1 入口隔离
+### 3.3 `memory_search`
 
 必须满足：
 
-1. 高级诊断不在普通主导航默认展开。
-2. 可从开发者面板、设置高级、线程可靠性或 dev flag 进入。
-3. 进入后明确标识这是诊断层，不是普通灵感库。
-4. 默认关闭时，普通用户看不到也触发不了诊断层。
+1. 支持多 query。
+2. 支持 `any`、`allOnSameLine`、`allWithinLines`。
+3. 支持 `caseSensitive`、`normalized`、`contextLines`、`cursor`。
+4. 返回 `matchedQueries`、`matchLineNumber`、`contentStartLineNumber`。
+5. 空 query 被拒绝。
 
-### 3.2 事实源一致
-
-必须满足：
-
-1. 来源链读 `memory_runtime_*` 或对应 current read model。
-2. working memory 不由 UI 扫描磁盘拼装。
-3. durable recall 不由 UI 自己决定回退策略。
-4. compaction summary 来自 current compaction cache / runtime API。
-5. Team Memory 只作为 shadow 展示，不替代显式选择。
-
-### 3.3 排障能力
+### 3.4 `memory_add_note`
 
 必须满足：
 
-1. 能解释当前 turn 命中了哪些层。
-2. 能看到最近 prefetch history。
-3. 能看到最新 compaction summary。
-4. 能看到来源路径或来源类型。
-5. 能为客服 / 研发提供 evidence 线索。
+1. 只写 `extensions/ad_hoc/notes/`。
+2. 文件名经过校验。
+3. 空 note 被拒绝。
+4. 不直接修改 `MEMORY.md` 或 `memory_summary.md`。
 
-### 3.4 开发者开关
-
-必须满足：
-
-1. `memory diagnostics` 默认 off。
-2. `active memory recall preview` 默认 off。
-3. `auto organization experiments` 默认 off。
-4. `raw source / hit layer` 默认 off。
-5. `external memory provider` 默认 off，且同一时刻最多一个 active。
-6. 每个开关开启后都有可见状态、关闭动作和最小 trace。
-7. 关闭后下一轮不再运行对应 hidden recall / auto organization。
-
-失败示例：
-
-- 普通导航进入后已经显示 active recall debug。
-- 关闭开关后后台仍持续写入自动整理候选。
-- 多个外部 provider 同时影响同一轮生成。
-
-## 4. 工程验收
-
-### 4.1 单事实源
+## 4. Soul 验收
 
 必须满足：
 
-1. 长期灵感仍走 `unified_memory_*`。
-2. 当前回合记忆仍走 `memory_runtime_*`。
-3. 压缩仍走 `agent_runtime_compact_session`。
-4. 不新增平行 `inspiration_*` 长期 CRUD 主链。
-5. 新前台 projection 不反向定义 runtime prompt。
-6. 开发者开关只控制展示 / 实验，不改变事实源地位。
+1. `memory.soul` / `MemorySoulConfig` 保持 current。
+2. `SOUL.md` 导入必须先预览，再应用到草稿并保存。
+3. `SOUL.md` 导入 warning 至少覆盖 `project_rules`、`local_path`、`secret_like`、`too_long`。
+4. `SOUL.md` 复制输出只是快照；运行时读取保存后的 app config。
+5. balanced / direct / creator 模板仍能写入 `memory.soul`。
+6. `buildSoulArtifactVoiceGenerationBrief` 只生成 `generation_brief_only`。
+7. artifact voice brief 不写 `MEMORY.md`、`memory_summary.md` 或 ad-hoc note。
+8. expert persona 只继承 `communication_rhythm`，并且 `writes_back_to_global_soul` 为 false。
 
-### 4.2 命令边界和 mock 同步
+不通过：
 
-如果新增或修改 Electron Desktop Host IPC / App Server JSON-RPC / legacy desktop facade 命令边界，必须满足：
+1. 把 Soul 判成旧 `companion_*` 桌宠链路并删除。
+2. `SOUL.md` 导入绕过 warning 直接保存。
+3. artifact voice 进入长期记忆。
+4. expert persona 覆盖全局 Soul。
 
-1. 前端 API 网关同步。
-2. App Server protocol / runtime 或 Electron Host bridge 同步。
-3. `agentCommandCatalog` 同步。
-4. DevBridge mock / desktop-host mock 同步。
-5. `npm run test:contracts` 通过。
-6. 不得在 `lime-rs/src/commands/**` 新增业务逻辑；该目录只允许清理旧 wrapper 或保留带退出条件的薄兼容委托。
+## 5. Citation 验收
 
-### 4.3 测试覆盖
+必须满足：
 
-普通灵感库变化至少覆盖：
+1. 任何被最终回答使用的 memory hit 都能产生 path / line range。
+2. citation 指向 memory folder 内实际读取的文件。
+3. 不引用空行。
+4. 不把 workspace 普通文件伪装成 memory citation。
+5. 回答里不把未验证旧记忆当成当前事实。
 
-1. 普通首屏不出现底层术语。
-2. 保存结果后状态变化。
-3. 结果跳转聚焦成果。
-4. 禁用条目不进入默认推荐。
-5. 删除条目不被推荐信号继续引用。
-6. 高级诊断入口仍可打开。
-7. 开发者开关默认关闭。
-8. active recall 开启后 recalled context 被 fenced / untrusted 包裹。
-9. 自动整理候选经过 secret / injection scan 且未确认前不影响生成。
+## 6. 写入与整理验收
 
-建议命令：
+必须满足：
+
+1. 显式“记住”写入 ad-hoc note。
+2. 后台 consolidation 才能更新 `MEMORY.md` / `memory_summary.md`。
+3. consolidation 有安全扫描。
+4. 敏感或冲突条目进入待审或跳过。
+5. consolidation 失败不让当前 turn 失败。
+6. 写入当前 turn 后不立即改写当前 prompt。
+
+不通过：
+
+1. 用户一句话被无审计地写进 summary。
+2. 自动整理候选马上影响当前生成。
+3. secret-like 内容进入 `memory_summary.md`。
+
+## 7. 旧记忆与旧灵感库清理验收
+
+必须满足：
+
+1. `unified_memory_*` 不再作为产品入口、写入入口或旁路事实源。
+2. `memory_runtime_*` 不再决定默认 recall。
+3. 旧 MemoryPage 灵感库 / 高级诊断混合视图被删除或 retired guard 封住。
+4. `inspiration_*` 不再作为长期事实源出现。
+5. embedding BLOB 不成为新事实源。
+6. 旧入口删除前只允许 fail-fast / retired guard。
+7. 不把旧数据批量导入为 memory store canonical content。
+8. 旧 `companion_*` 桌宠命令链路只作为 dead / forbidden-to-restore 出现。
+
+不通过：
+
+1. 同一条记忆同时在文件和数据库里双写为 current。
+2. 旧 `memory_runtime_*` 继续决定默认 recall。
+3. 旧路径为了兼容继续新增业务逻辑。
+4. 旧灵感库继续作为 GUI 或旁路入口。
+5. 清理失败无报告或无 owner。
+
+## 8. 派生索引验收
+
+必须满足：
+
+1. index 可删除。
+2. index 可完整重建。
+3. index 损坏时降级文本扫描。
+4. index manifest 记录 schema version、source checksum 或更新时间。
+5. index 不保存 canonical content。
+6. 向量库或 FTS 库不影响 memory store 读写。
+
+不通过：
+
+1. 没有索引就不能搜索。
+2. 索引成为唯一存储。
+3. 向量库动态库加载失败导致 memory tools 全部不可用。
+
+## 9. Governance 验收
+
+必须满足：
+
+1. `internal/roadmap/memory` 不再把旧灵感库路线当 current。
+2. 不再引用 `lime-rs/src/**` 作为新实现落点。
+3. 不再把 active recall、external provider、Dreaming 作为默认主线。
+4. 不再把任何具体外部索引库作为 P0 current。
+5. 不出现外部项目名作为路线图标题或主线口径。
+6. 不出现旧数据搬入口径。
+7. `make-next-generation-more-like-me.md` 已删除。
+
+建议检查：
 
 ```bash
-npm exec vitest run "src/components/memory/MemoryPage.test.tsx"
-npx eslint "src/components/memory/MemoryPage.tsx" "src/components/memory/MemoryPage.test.tsx"
+rg -n "make-next-generation-more-like-me|active memory|external memory provider|lime-rs/src" "internal/roadmap/memory"
+rg -ni "具体外部索引库|外部向量数据库" "internal/roadmap/memory"
+rg -n "Soul|SOUL|soul|companion" "internal/roadmap/memory"
 ```
 
-如涉及协议：
+允许出现的情况：
 
-```bash
-npm run test:contracts
-```
+1. 旧主线词只在 `dead` / `非目标` / `清理` 段落中出现。
+2. `Soul` / `SOUL` / `soul` 出现在 current、功能需求、图谱和验收边界中。
+3. `companion_*` 只在 dead / 不通过判定中出现。
 
-如涉及 GUI 主路径：
-
-```bash
-npm run verify:gui-smoke
-```
-
-## 5. 产品验收清单
-
-发布前逐项确认：
-
-1. 主导航仍叫 `灵感库`。
-2. 普通页面没有底层 runtime 术语。
-3. 每条正式灵感都有继续动作。
-4. 用户可以控制是否影响生成。
-5. 自动候选不默认污染生成。
-6. 高级诊断仍可定位上下文问题。
-7. active recall / raw hit layer / auto organization 默认关闭。
-8. Memory baseline 常开，高级开关关闭时仍保留已确认偏好、禁用列表和最小 summary / evidence id。
-9. 文档明确 current / compat / deprecated 边界。
-
-## 6. 不通过判定
+## 10. 不通过判定
 
 出现任一情况，本路线图阶段不算完成：
 
-1. 新增第二套长期灵感事实源。
-2. 普通用户默认页必须理解 `prefetch` 或 `compaction`。
-3. 自动抽取未确认就默认影响生成。
-4. 用户无法删除或禁用错误灵感。
-5. 保存结果后不能围绕它继续。
-6. 诊断能力被删除，导致无法解释上下文命中。
-7. 默认启用 active recall 或 raw provider trace，导致普通生成被不可见上下文影响。
-8. recalled context 未标记 untrusted，或 provider 输出可被当作用户新输入。
-9. 开发者面板开关关闭后连基础偏好、禁用列表或 taste / voice summary 也被关闭，导致产品失忆。
+1. 新增第二套长期记忆数据库事实源。
+2. 默认依赖向量数据库才能检索记忆。
+3. summary 注入无预算。
+4. 记忆工具不能返回 citation。
+5. 前端或 Electron Host 承接记忆业务逻辑。
+6. 旧 `unified_memory_*` 继续增长下一代能力。
+7. reset 后仍注入旧 summary。
+8. 派生索引损坏导致记忆系统不可用。
+9. 生产路径依赖 mock memory backend。
+10. Soul 功能被旧桌宠治理误删。

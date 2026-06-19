@@ -38,6 +38,7 @@ const APP_SERVER_CONVERSATION_IMPORT_THREAD_COMMIT_METHOD =
 const APP_SERVER_AGENT_APP_UI_RUNTIME_START_TIMEOUT_MS = 60_000;
 const APP_SERVER_PROJECT_SHELL_DRAIN_EVENTS_TIMEOUT_MS = 3_000;
 const APP_SERVER_CONVERSATION_IMPORT_THREAD_COMMIT_TIMEOUT_MS = 180_000;
+const APP_SERVER_REQUEST_TIMEOUT_OVERRIDE_CEILING_MS = 600_000;
 const APP_SERVER_STREAMING_TURN_ACK_GRACE_MS = 250;
 const APP_SERVER_PROXY_REQUEST_ID_PREFIX = "electron-host";
 const APP_SERVER_DATA_DIR_NAME = "app-server";
@@ -52,6 +53,7 @@ type ElectronAppServerLaunchConfig = {
 
 type HandleJsonLinesRequest = {
   lines: string[];
+  timeoutMs?: number;
 };
 
 type DrainEventsRequest = {
@@ -67,6 +69,7 @@ export class ElectronAppServerHost {
   #connected: ConnectedAppServerSidecar | null = null;
   #connectPromise: Promise<ConnectedAppServerSidecar> | null = null;
   #nextProxyRequestId = 1;
+  #stopping = false;
 
   async warmup(): Promise<InitializeResponse> {
     const connected = await this.#connect();
@@ -121,6 +124,7 @@ export class ElectronAppServerHost {
         }
         const timeoutMs = resolveAppServerRequestTimeoutMs(
           proxiedMessage.message.method,
+          request.timeoutMs,
         );
         const result = await this.#requestAppServer<unknown>(
           connected,
@@ -164,6 +168,7 @@ export class ElectronAppServerHost {
   }
 
   async stop(): Promise<void> {
+    this.#stopping = true;
     await this.#lifecycle?.stop();
     this.#lifecycle = null;
     this.#connected = null;
@@ -171,6 +176,9 @@ export class ElectronAppServerHost {
   }
 
   async #connect(): Promise<ConnectedAppServerSidecar> {
+    if (this.#stopping) {
+      throw appServerHostStoppingError();
+    }
     if (this.#connected) {
       const lifecycleConnected = this.#lifecycle?.connected;
       if (lifecycleConnected && lifecycleConnected !== this.#connected) {
@@ -303,6 +311,9 @@ export class ElectronAppServerHost {
       if (!isStaleSidecarConnectionError(error)) {
         throw error;
       }
+      if (this.#stopping) {
+        throw appServerHostStoppingError();
+      }
 
       console.warn(
         "[electron-host] app-server stale connection detected; restarting sidecar",
@@ -333,6 +344,9 @@ export class ElectronAppServerHost {
     } catch (error) {
       if (!isStaleSidecarConnectionError(error)) {
         throw error;
+      }
+      if (this.#stopping) {
+        throw appServerHostStoppingError();
       }
 
       console.warn(
@@ -372,6 +386,10 @@ function isStaleSidecarConnectionError(error: unknown): boolean {
       error.message.includes("app-server sidecar is closed") ||
       error.message.includes("app-server exited before next message"))
   );
+}
+
+function appServerHostStoppingError(): Error {
+  return new Error("app-server host is stopping");
 }
 
 function isAppServerRequestTimeoutError(error: unknown): boolean {
@@ -623,7 +641,22 @@ function parsePositiveInteger(value: string | undefined): number | undefined {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
 }
 
-function resolveAppServerRequestTimeoutMs(method: string): number {
+function resolveAppServerRequestTimeoutMs(
+  method: string,
+  requestedTimeoutMs?: unknown,
+): number {
+  const defaultTimeoutMs = resolveDefaultAppServerRequestTimeoutMs(method);
+  const overrideTimeoutMs = parsePositiveIntegerValue(requestedTimeoutMs);
+  if (!overrideTimeoutMs) {
+    return defaultTimeoutMs;
+  }
+  return Math.min(
+    Math.max(defaultTimeoutMs, overrideTimeoutMs),
+    APP_SERVER_REQUEST_TIMEOUT_OVERRIDE_CEILING_MS,
+  );
+}
+
+function resolveDefaultAppServerRequestTimeoutMs(method: string): number {
   if (method === APP_SERVER_AGENT_APP_UI_RUNTIME_START_METHOD) {
     return APP_SERVER_AGENT_APP_UI_RUNTIME_START_TIMEOUT_MS;
   }
@@ -642,6 +675,12 @@ function resolveAppServerRequestTimeoutMs(method: string): number {
   return backendTimeoutMs
     ? backendTimeoutMs + APP_SERVER_BACKEND_TIMEOUT_GRACE_MS
     : DEFAULT_APP_SERVER_REQUEST_TIMEOUT_MS;
+}
+
+function parsePositiveIntegerValue(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value > 0
+    ? value
+    : undefined;
 }
 
 function resolveDevAppServerBinaryPath(appPath: string): string {

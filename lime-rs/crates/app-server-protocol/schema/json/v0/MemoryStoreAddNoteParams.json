@@ -1,0 +1,44 @@
+{
+  "$defs": {
+    "MemoryStoreScope": {
+      "enum": [
+        "global",
+        "workspace"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "content": {
+      "type": "string"
+    },
+    "scope": {
+      "$ref": "#/$defs/MemoryStoreScope",
+      "default": "global"
+    },
+    "slug": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "title": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "workspaceRoot": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "content"
+  ],
+  "title": "MemoryStoreAddNoteParams",
+  "type": "object"
+}

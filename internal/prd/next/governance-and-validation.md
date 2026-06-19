@@ -167,10 +167,10 @@ npm run electron:verify:package
 真实 Claw 主路径：
 
 ```bash
-scripts/claw-chat-ready-streaming-smoke.mjs --allow-live-provider
+npm run smoke:claw-chat-ready-streaming -- --timeout-ms 180000
 ```
 
-要求：live provider smoke 必须显式授权；未授权时 fail closed。
+要求：该脚本本身就是用户显式发起的 Claw live Provider / WebSearch-WebFetch E2E 入口，不再要求 `--allow-live-provider` 二次授权。默认 fixture、GUI smoke 和批量回归仍不得调用正式 Provider。
 
 ## 9. PR / 收尾检查
 

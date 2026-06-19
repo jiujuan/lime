@@ -3,21 +3,23 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
 
-const { mockGetConfig, mockSaveConfig, mockGetUnifiedMemoryStats } = vi.hoisted(
-  () => ({
-    mockGetConfig: vi.fn(),
-    mockGetUnifiedMemoryStats: vi.fn(),
-    mockSaveConfig: vi.fn(),
-  }),
-);
+const { mockGetConfig, mockSaveConfig } = vi.hoisted(() => ({
+  mockGetConfig: vi.fn(),
+  mockSaveConfig: vi.fn(),
+}));
+const { mockGetMemoryStoreHealth, mockResetMemoryStore } = vi.hoisted(() => ({
+  mockGetMemoryStoreHealth: vi.fn(),
+  mockResetMemoryStore: vi.fn(),
+}));
 
 vi.mock("@/lib/api/appConfig", () => ({
   getConfig: mockGetConfig,
   saveConfig: mockSaveConfig,
 }));
 
-vi.mock("@/lib/api/unifiedMemory", () => ({
-  getUnifiedMemoryStats: mockGetUnifiedMemoryStats,
+vi.mock("@/lib/api/memoryStore", () => ({
+  getMemoryStoreHealth: mockGetMemoryStoreHealth,
+  resetMemoryStore: mockResetMemoryStore,
 }));
 
 import { MemorySettings } from ".";
@@ -105,6 +107,7 @@ beforeEach(async () => {
 
   vi.clearAllMocks();
   await changeLimeLocale("en-US");
+  vi.spyOn(window, "confirm").mockReturnValue(true);
 
   mockGetConfig.mockResolvedValue({
     memory: {
@@ -146,11 +149,24 @@ beforeEach(async () => {
       },
     },
   });
-  mockGetUnifiedMemoryStats.mockResolvedValue({
-    total_entries: 12,
-    storage_used: 2048,
-    memory_count: 12,
-    categories: [],
+  mockGetMemoryStoreHealth.mockResolvedValue({
+    rootScope: "global",
+    rootPath: "/data/memories",
+    initialized: true,
+    fileCount: 2,
+    totalBytes: 1536,
+    summaryExists: true,
+    summaryBytes: 512,
+    memoryExists: true,
+    memoryBytes: 1024,
+    notesCount: 1,
+  });
+  mockResetMemoryStore.mockResolvedValue({
+    rootScope: "global",
+    rootPath: "/data/memories",
+    removedFiles: 3,
+    removedDirectories: 4,
+    preservedSoul: true,
   });
 });
 
@@ -166,6 +182,7 @@ afterEach(async () => {
     target.container.remove();
   }
   vi.clearAllTimers();
+  vi.restoreAllMocks();
   await changeLimeLocale("zh-CN");
 });
 
@@ -183,6 +200,10 @@ describe("MemorySettings", () => {
     expect(bodyText).toContain("AI personality");
     expect(bodyText).toContain("Advanced");
     expect(bodyText).toContain("Everyday memory status");
+    expect(bodyText).toContain("2 files, 1.5 KB");
+    expect(bodyText).toContain("1 note(s)");
+    expect(bodyText).toContain("/data/memories");
+    expect(bodyText).toContain("Embedding config");
     expect(bodyText).not.toContain("Writing voice");
     expect(bodyText).not.toContain("Import SOUL.md");
     expect(bodyText).not.toContain("SOUL.md file content");
@@ -199,6 +220,39 @@ describe("MemorySettings", () => {
     expect(bodyText).not.toContain("Provider ID");
     expect(bodyText).not.toContain("@import");
     expect(bodyText).not.toContain("memdir");
+  });
+
+  it("刷新和重置只操作文件化记忆，不清理 Soul 草稿", async () => {
+    const container = renderComponent();
+    await flushEffects();
+
+    expect(mockGetMemoryStoreHealth).toHaveBeenCalledWith({
+      scope: "global",
+    });
+
+    await act(async () => {
+      findButton(container, "Refresh").click();
+      await Promise.resolve();
+    });
+    await flushEffects();
+
+    expect(mockGetMemoryStoreHealth).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      findButton(container, "Reset memory files").click();
+      await Promise.resolve();
+    });
+    await flushEffects();
+
+    expect(window.confirm).toHaveBeenCalledWith(
+      expect.stringContaining("AI personality"),
+    );
+    expect(mockResetMemoryStore).toHaveBeenCalledWith({
+      scope: "global",
+    });
+    expect(document.body.textContent).toContain(
+      "Memory files reset. Removed 3 files and 4 folders.",
+    );
   });
 
   it("切换到本地 ONNX 后应保存嵌入配置且保留旧记忆字段", async () => {

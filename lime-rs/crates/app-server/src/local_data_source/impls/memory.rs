@@ -14,72 +14,45 @@ impl MemoryAppDataSource for LocalAppDataSource {
         })
     }
 
-    async fn list_unified_memories(
+    async fn list_memory_store(
         &self,
-        params: UnifiedMemoryListParams,
-    ) -> Result<UnifiedMemoryListResponse, RuntimeCoreError> {
-        unified_memory::list_unified_memories(&self.db, params).map_err(data_error)
+        params: MemoryStoreListParams,
+    ) -> Result<MemoryStoreListResponse, RuntimeCoreError> {
+        self.memory_backend.list(params).await
     }
 
-    async fn get_unified_memory(
+    async fn read_memory_store(
         &self,
-        params: UnifiedMemoryGetParams,
-    ) -> Result<UnifiedMemoryGetResponse, RuntimeCoreError> {
-        unified_memory::get_unified_memory(&self.db, params).map_err(data_error)
+        params: MemoryStoreReadParams,
+    ) -> Result<MemoryStoreReadResponse, RuntimeCoreError> {
+        self.memory_backend.read(params).await
     }
 
-    async fn create_unified_memory(
+    async fn search_memory_store(
         &self,
-        params: UnifiedMemoryCreateParams,
-    ) -> Result<UnifiedMemoryWriteResponse, RuntimeCoreError> {
-        unified_memory::create_unified_memory(&self.db, params).map_err(data_error)
+        params: MemoryStoreSearchParams,
+    ) -> Result<MemoryStoreSearchResponse, RuntimeCoreError> {
+        self.memory_backend.search(params).await
     }
 
-    async fn update_unified_memory(
+    async fn add_memory_store_note(
         &self,
-        params: UnifiedMemoryUpdateParams,
-    ) -> Result<UnifiedMemoryWriteResponse, RuntimeCoreError> {
-        unified_memory::update_unified_memory(&self.db, params).map_err(data_error)
+        params: MemoryStoreAddNoteParams,
+    ) -> Result<MemoryStoreAddNoteResponse, RuntimeCoreError> {
+        self.memory_backend.add_note(params).await
     }
 
-    async fn delete_unified_memory(
+    async fn health_memory_store(
         &self,
-        params: UnifiedMemoryDeleteParams,
-    ) -> Result<UnifiedMemoryDeleteResponse, RuntimeCoreError> {
-        unified_memory::delete_unified_memory(&self.db, params).map_err(data_error)
+        params: MemoryStoreRootParams,
+    ) -> Result<MemoryStoreHealthResponse, RuntimeCoreError> {
+        self.memory_backend.health(params).await
     }
 
-    async fn search_unified_memories(
+    async fn reset_memory_store(
         &self,
-        params: UnifiedMemorySearchParams,
-    ) -> Result<UnifiedMemoryListResponse, RuntimeCoreError> {
-        unified_memory::search_unified_memories(&self.db, params).map_err(data_error)
-    }
-
-    async fn read_unified_memory_stats(
-        &self,
-    ) -> Result<UnifiedMemoryStatsResponse, RuntimeCoreError> {
-        unified_memory::read_unified_memory_stats(&self.db).map_err(data_error)
-    }
-
-    async fn analyze_unified_memories(
-        &self,
-        params: UnifiedMemoryAnalyzeParams,
-    ) -> Result<UnifiedMemoryAnalysisResponse, RuntimeCoreError> {
-        unified_memory::analyze_unified_memories(params).map_err(data_error)
-    }
-
-    async fn semantic_search_unified_memories(
-        &self,
-        params: UnifiedMemorySemanticSearchParams,
-    ) -> Result<UnifiedMemoryListResponse, RuntimeCoreError> {
-        unified_memory::semantic_search_unified_memories(params).map_err(data_error)
-    }
-
-    async fn hybrid_search_unified_memories(
-        &self,
-        params: UnifiedMemoryHybridSearchParams,
-    ) -> Result<UnifiedMemoryListResponse, RuntimeCoreError> {
-        unified_memory::hybrid_search_unified_memories(params).map_err(data_error)
+        params: MemoryStoreResetParams,
+    ) -> Result<MemoryStoreResetResponse, RuntimeCoreError> {
+        self.memory_backend.reset(params).await
     }
 }

@@ -1,5 +1,5 @@
 use super::*;
-use crate::{EventLogWriter, ProjectionStore, StorageRoots};
+use crate::{EventLogWriter, ProjectionStore, SidecarStore, StorageRoots};
 use app_server_protocol::ConversationImportThreadStatus;
 
 #[test]
@@ -74,6 +74,7 @@ async fn committing_same_codex_thread_with_replace_existing_reimports_source() {
     let event_log_writer = Arc::new(EventLogWriter::new(&roots.event_log_root).expect("writer"));
     let projection_store =
         Arc::new(ProjectionStore::initialize(&roots.projection_db_path).expect("projection"));
+    let sidecar_store = Arc::new(SidecarStore::new(&roots.sidecar_root).expect("sidecar"));
     let rollout_path = temp.path().join("rollout-thread-replace.jsonl");
     write_rollout_with_assistant_reply(
         &rollout_path,
@@ -84,7 +85,8 @@ async fn committing_same_codex_thread_with_replace_existing_reimports_source() {
     );
     let core = RuntimeCore::default()
         .with_event_log_writer(event_log_writer.clone())
-        .with_projection_store(projection_store.clone());
+        .with_projection_store(projection_store.clone())
+        .with_sidecar_store(sidecar_store.clone());
 
     let first = commit::commit_conversation_import_thread(
         &core,
@@ -104,6 +106,9 @@ async fn committing_same_codex_thread_with_replace_existing_reimports_source() {
         .read_session_events(&first.session.session_id)
         .expect("old events")
         .is_empty());
+    let first_sidecar_path =
+        imported_runtime_sidecar_path(&first).expect("old imported runtime sidecar path");
+    assert!(sidecar_store.read_text(&first_sidecar_path).is_some());
 
     write_rollout_with_assistant_reply(
         &rollout_path,
@@ -141,10 +146,14 @@ async fn committing_same_codex_thread_with_replace_existing_reimports_source() {
         .read_session_events(&first.session.session_id)
         .expect("old event log after replace")
         .is_empty());
+    assert!(sidecar_store.read_text(&first_sidecar_path).is_none());
     assert!(projection_store
         .read_session_projection(&second.session.session_id)
         .expect("new projection after replace")
         .is_some());
+    let second_sidecar_path =
+        imported_runtime_sidecar_path(&second).expect("new imported runtime sidecar path");
+    assert!(sidecar_store.read_text(&second_sidecar_path).is_some());
 
     let missing_old = core
         .read_session_current(AgentSessionReadParams {
@@ -188,6 +197,21 @@ async fn committing_same_codex_thread_with_replace_existing_reimports_source() {
         .collect::<Vec<_>>();
     assert!(assistant_texts.contains(&"new imported reply"));
     assert!(!assistant_texts.contains(&"old imported reply"));
+}
+
+fn imported_runtime_sidecar_path(
+    response: &ConversationImportThreadCommitResponse,
+) -> Option<String> {
+    response
+        .session
+        .business_object_ref
+        .as_ref()
+        .and_then(|reference| reference.metadata.as_ref())
+        .and_then(|metadata| metadata.get("importedRuntimeProjection"))
+        .and_then(|projection| projection.get("sidecar"))
+        .and_then(|sidecar| sidecar.get("relativePath"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string)
 }
 
 #[tokio::test]

@@ -16,6 +16,12 @@ import {
   IMPORTED_PREVIEW_HTML_TEXT,
   IMPORTED_PREVIEW_MARKDOWN_FILE,
   IMPORTED_PREVIEW_MARKDOWN_TEXT,
+  IMPORTED_PREVIEW_PPTX_FILE,
+  IMPORTED_PREVIEW_PPTX_TEXT,
+  IMPORTED_PREVIEW_PDF_FILE,
+  IMPORTED_PREVIEW_PDF_TEXT,
+  IMPORTED_PREVIEW_XLSX_FILE,
+  IMPORTED_PREVIEW_XLSX_TEXT,
   IMPORTED_REASONING_TEXT,
   IMPORTED_USER_TEXT,
   LEGACY_CONTINUATION_SENTINEL,
@@ -170,12 +176,9 @@ export async function waitForImportPreview(page, options) {
     snapshot.bodyText.includes("本地历史导入点击闭环") &&
     snapshot.bodyText.includes(IMPORTED_USER_TEXT) &&
     snapshot.bodyText.includes(IMPORTED_ASSISTANT_TEXT) &&
-    snapshot.bodyText.includes("导入细节还原") &&
-    snapshot.bodyText.includes("工具") &&
+    snapshot.bodyText.includes("将保留工具、命令、补丁、确认与思考记录") &&
     snapshot.bodyText.includes("命令") &&
-    snapshot.bodyText.includes("补丁") &&
-    snapshot.bodyText.includes("审批") &&
-    snapshot.bodyText.includes("搜索");
+    snapshot.bodyText.includes("补丁");
 
   while (Date.now() - startedAt < options.timeoutMs) {
     const snapshot = await waitForUiSnapshot(
@@ -634,6 +637,9 @@ async function waitForWorkbenchFilePreview(page, options, expected) {
       const emptySurface = document.querySelector(
         '[data-testid="artifact-empty-surface"]',
       );
+      const fallbackSurface = document.querySelector(
+        '[data-testid="preview-artifact-fallback-surface"]',
+      );
       const bodyText = document.body?.innerText || "";
       const previewPanelText = previewPanel?.textContent || "";
       const workbenchText =
@@ -660,6 +666,10 @@ async function waitForWorkbenchFilePreview(page, options, expected) {
         htmlPreviewVisible: Boolean(htmlPreview),
         codePreviewVisible: Boolean(codePreview),
         emptySurfaceVisible: Boolean(emptySurface),
+        fallbackSurfaceVisible: Boolean(fallbackSurface),
+        fallbackRenderMode:
+          fallbackSurface?.getAttribute("data-preview-render-mode") || "",
+        fallbackSurfaceText: fallbackSurface?.textContent || "",
         htmlPreviewSrc:
           htmlPreview instanceof HTMLIFrameElement ? htmlPreview.src : "",
         htmlPreviewSrcDoc:
@@ -673,6 +683,17 @@ async function waitForWorkbenchFilePreview(page, options, expected) {
         expected.fileName,
       ) &&
       (result.previewPanelText || result.workbenchText).includes(expected.text)
+    ) {
+      return result;
+    }
+    if (
+      expected.kind === "system_open" &&
+      result.workbenchVisible &&
+      result.previewPanelVisible &&
+      result.fallbackSurfaceVisible &&
+      result.fallbackRenderMode === "system_open" &&
+      result.fallbackSurfaceText.includes(expected.fileName) &&
+      result.fallbackSurfaceText.includes(expected.text)
     ) {
       return result;
     }
@@ -723,6 +744,14 @@ async function clickImportedToolFilePreview(page, options, expected) {
         previewText.includes(expected.fileName),
       `${expected.fileName} 未进入 HTML iframe 预览`,
     );
+  } else if (expected.kind === "system_open") {
+    assert(
+      result.fallbackSurfaceVisible &&
+        result.fallbackRenderMode === "system_open" &&
+        previewText.includes(expected.fileName) &&
+        previewText.includes(expected.text),
+      `${expected.fileName} 未进入 system_open preview fallback`,
+    );
   } else {
     assert(
       previewText.includes(expected.fileName) &&
@@ -739,6 +768,19 @@ async function clickImportedToolFilePreview(page, options, expected) {
     assert(
       !forbiddenTexts.some((text) => result.bodyText.includes(text)),
       `${expected.fileName} 预览暴露了 DOCX ZIP/OpenXML 噪音`,
+    );
+  }
+  if (expected.kind === "xlsx" || expected.kind === "pptx") {
+    const forbiddenTexts = [
+      "PK\u0003\u0004",
+      "xl/worksheets/sheet1.xml",
+      "xl/sharedStrings.xml",
+      "ppt/slides/slide1.xml",
+      "[Content_Types].xml",
+    ];
+    assert(
+      !forbiddenTexts.some((text) => result.bodyText.includes(text)),
+      `${expected.fileName} 预览暴露了 Office ZIP/OpenXML 噪音`,
     );
   }
   return {
@@ -775,11 +817,29 @@ export async function inspectImportedFilePreviewArtifacts(page, options) {
     kind: "docx",
     text: IMPORTED_PREVIEW_DOCX_TEXT,
   });
+  const xlsx = await clickImportedToolFilePreview(page, options, {
+    fileName: IMPORTED_PREVIEW_XLSX_FILE,
+    kind: "xlsx",
+    text: IMPORTED_PREVIEW_XLSX_TEXT,
+  });
+  const pptx = await clickImportedToolFilePreview(page, options, {
+    fileName: IMPORTED_PREVIEW_PPTX_FILE,
+    kind: "pptx",
+    text: IMPORTED_PREVIEW_PPTX_TEXT,
+  });
+  const pdf = await clickImportedToolFilePreview(page, options, {
+    fileName: IMPORTED_PREVIEW_PDF_FILE,
+    kind: "pdf",
+    text: IMPORTED_PREVIEW_PDF_TEXT,
+  });
 
   return {
     markdown,
     html,
     docx,
+    xlsx,
+    pptx,
+    pdf,
     openedAllImportedPreviewArtifacts: true,
   };
 }

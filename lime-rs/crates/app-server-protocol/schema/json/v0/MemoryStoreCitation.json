@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "endLineNumber": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "path": {
+      "type": "string"
+    },
+    "startLineNumber": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "endLineNumber",
+    "path",
+    "startLineNumber"
+  ],
+  "title": "MemoryStoreCitation",
+  "type": "object"
+}

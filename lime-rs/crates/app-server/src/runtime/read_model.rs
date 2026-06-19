@@ -7,10 +7,10 @@ use super::raw_string_field;
 use super::status::agent_session_status_label;
 use super::status::agent_turn_is_active;
 use super::status::agent_turn_status_label;
-use super::string_array_field;
 use super::string_field;
 use super::thread_item_projection;
 use super::timestamp_seconds;
+use super::tool_item_projection;
 use super::turn_input_events;
 use super::StoredSession;
 use app_server_protocol::AgentEvent;
@@ -27,10 +27,12 @@ pub(super) fn runtime_session_read_detail(stored: &StoredSession) -> serde_json:
     let thread_read = runtime_thread_read_from_stored_session(stored);
     let messages = runtime_session_messages(stored);
     let mut items = thread_item_projection::thread_items_from_events(stored);
+    items.extend(tool_item_projection::tool_items_from_events(stored));
     items.extend(file_checkpoint_projection::file_artifact_items_from_events(
         &stored.events,
     ));
     items.extend(runtime_error_items_from_events(stored));
+    sort_read_detail_items(&mut items);
     let messages_count = messages.len();
     json!({
         "id": stored.session.session_id,
@@ -39,6 +41,7 @@ pub(super) fn runtime_session_read_detail(stored: &StoredSession) -> serde_json:
         "workspace_id": stored.session.workspace_id,
         "status": agent_session_status_label(stored.session.status),
         "working_dir": session_working_dir(&stored.session),
+        "archived_at": session_archived_at(&stored.session),
         "execution_strategy": session_execution_strategy(&stored.session),
         "execution_runtime": session_execution_runtime(&stored.session),
         "messages_count": messages_count,
@@ -58,6 +61,43 @@ pub(super) fn runtime_session_read_detail(stored: &StoredSession) -> serde_json:
         "outputs": output_refs::read_model_outputs(stored.output_blobs.values(), None),
         "thread_read": thread_read,
     })
+}
+
+fn session_archived_at(session: &AgentSession) -> Option<String> {
+    session
+        .business_object_ref
+        .as_ref()
+        .and_then(|reference| reference.metadata.as_ref())
+        .and_then(|metadata| raw_string_field(metadata, &["archivedAt", "archived_at"]))
+}
+
+fn sort_read_detail_items(items: &mut [serde_json::Value]) {
+    items.sort_by(|left, right| {
+        let left_sequence = item_sequence(left);
+        let right_sequence = item_sequence(right);
+        left_sequence
+            .cmp(&right_sequence)
+            .then_with(|| item_timestamp(left).cmp(&item_timestamp(right)))
+            .then_with(|| item_id(left).cmp(&item_id(right)))
+    });
+}
+
+fn item_sequence(item: &serde_json::Value) -> u64 {
+    item.get("sequence")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(u64::MAX)
+}
+
+fn item_timestamp(item: &serde_json::Value) -> String {
+    string_field(
+        item,
+        &["started_at", "updated_at", "completed_at", "created_at"],
+    )
+    .unwrap_or_default()
+}
+
+fn item_id(item: &serde_json::Value) -> String {
+    string_field(item, &["id"]).unwrap_or_default()
 }
 
 pub(super) fn runtime_session_messages(stored: &StoredSession) -> Vec<serde_json::Value> {
@@ -305,7 +345,7 @@ fn runtime_thread_read_from_stored_session(stored: &StoredSession) -> serde_json
         "active_command_id": coding_activity.active_command_id,
         "active_test_run_id": coding_activity.active_test_run_id,
         "active_action_id": coding_activity.active_action_id,
-        "tool_calls": tool_calls_from_events(&stored.events),
+        "tool_calls": tool_item_projection::tool_calls_from_events(&stored.events),
         "commands": coding_activity.commands,
         "tests": coding_activity.tests,
         "change_summary": coding_activity.change_summary,
@@ -582,130 +622,6 @@ fn event_action_type(payload: &serde_json::Value) -> Option<AgentSessionActionTy
         "elicitation" => Some(AgentSessionActionType::Elicitation),
         _ => None,
     }
-}
-
-fn tool_calls_from_events(events: &[AgentEvent]) -> Vec<serde_json::Value> {
-    let mut calls: Vec<serde_json::Value> = Vec::new();
-    for event in events {
-        let Some(tool_call) = tool_call_from_event(event) else {
-            continue;
-        };
-        let call_id = tool_call_id_from_event_payload(&event.payload);
-        let tool_name = string_field(&tool_call, &["tool_name", "toolName", "name"]);
-        if let Some(existing) = calls.iter_mut().find(|existing| {
-            if let Some(call_id) = call_id.as_deref() {
-                string_field(existing, &["id", "tool_call_id", "toolCallId"]).as_deref()
-                    == Some(call_id)
-            } else if let Some(tool_name) = tool_name.as_deref() {
-                string_field(existing, &["tool_name", "toolName", "name"]).as_deref()
-                    == Some(tool_name)
-                    && string_field(existing, &["turn_id", "turnId"]).as_deref()
-                        == event.turn_id.as_deref()
-            } else {
-                false
-            }
-        }) {
-            merge_tool_call(existing, tool_call);
-        } else {
-            calls.push(tool_call);
-        }
-    }
-    calls
-}
-
-fn tool_call_id_from_event_payload(payload: &serde_json::Value) -> Option<String> {
-    string_field(
-        payload,
-        &["id", "tool_call_id", "toolCallId", "toolId", "tool_id"],
-    )
-}
-
-fn tool_call_from_event(event: &AgentEvent) -> Option<serde_json::Value> {
-    let status = match event.event_type.as_str() {
-        "tool.started" => "running",
-        "tool.result" => "completed",
-        "tool.failed" => "failed",
-        _ => return None,
-    };
-    let payload = &event.payload;
-    let mut record = serde_json::Map::new();
-    let id = tool_call_id_from_event_payload(payload).unwrap_or_else(|| event.event_id.clone());
-    record.insert("id".to_string(), json!(id));
-    if let Some(tool_name) = string_field(payload, &["tool_name", "toolName", "name"]) {
-        record.insert("tool_name".to_string(), json!(tool_name));
-    }
-    if let Some(arguments) = payload.get("arguments").cloned() {
-        record.insert("arguments".to_string(), arguments);
-    }
-    record.insert("status".to_string(), json!(status));
-    record.insert(
-        "success".to_string(),
-        json!(event.event_type.as_str() != "tool.failed"),
-    );
-    if let Some(output) = tool_output_from_event_payload(payload) {
-        record.insert("output_preview".to_string(), json!(output));
-        record.insert("output".to_string(), json!(output));
-    }
-    if let Some(output_ref) = string_field(payload, &["outputRef", "output_ref"]) {
-        record.insert("output_ref".to_string(), json!(output_ref));
-    }
-    let ref_ids = string_array_field(payload, &["refIds", "ref_ids"]);
-    if !ref_ids.is_empty() {
-        record.insert("ref_ids".to_string(), json!(ref_ids));
-    }
-    if let Some(output_truncated) = payload
-        .get("outputTruncated")
-        .or_else(|| payload.get("output_truncated"))
-        .and_then(serde_json::Value::as_bool)
-    {
-        record.insert("output_truncated".to_string(), json!(output_truncated));
-    }
-    if let Some(output_bytes) = payload
-        .get("outputBytes")
-        .or_else(|| payload.get("output_bytes"))
-        .and_then(serde_json::Value::as_u64)
-    {
-        record.insert("output_bytes".to_string(), json!(output_bytes));
-    }
-    if let Some(error) = payload.get("error").cloned() {
-        record.insert("error".to_string(), error);
-    }
-    record.insert("event_id".to_string(), json!(event.event_id));
-    record.insert("turn_id".to_string(), json!(event.turn_id));
-    record.insert("timestamp".to_string(), json!(event.timestamp));
-    Some(serde_json::Value::Object(record))
-}
-
-fn merge_tool_call(existing: &mut serde_json::Value, next: serde_json::Value) {
-    let (Some(existing), Some(next)) = (existing.as_object_mut(), next.as_object()) else {
-        return;
-    };
-    for (key, value) in next {
-        if value.is_null() {
-            continue;
-        }
-        existing.insert(key.clone(), value.clone());
-    }
-}
-
-fn tool_output_from_event_payload(payload: &serde_json::Value) -> Option<String> {
-    string_field(
-        payload,
-        &[
-            "output",
-            "output_preview",
-            "outputPreview",
-            "text",
-            "content",
-            "result",
-        ],
-    )
-    .or_else(|| {
-        payload
-            .get("result")
-            .filter(|value| !value.is_string() && !value.is_null())
-            .map(|value| value.to_string())
-    })
 }
 
 fn session_execution_strategy(session: &AgentSession) -> Option<String> {

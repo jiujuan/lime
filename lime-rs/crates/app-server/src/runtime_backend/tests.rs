@@ -4,6 +4,7 @@ use super::request_context::{
     selection_from_session_default, turn_context_from_request, RuntimeModelSelection,
 };
 use super::*;
+use crate::NoopAppDataSource;
 use crate::RuntimeHostContext;
 use app_server_protocol::AgentInput;
 use app_server_protocol::AgentSession;
@@ -14,6 +15,10 @@ use app_server_protocol::AgentTurnStatus;
 use app_server_protocol::BusinessObjectRef;
 use app_server_protocol::ProtocolKind;
 use app_server_protocol::RuntimeOptions;
+use lime_agent::agent_tools::catalog::{
+    MEMORY_ADD_NOTE_TOOL_NAME, MEMORY_LIST_TOOL_NAME, MEMORY_READ_TOOL_NAME,
+    MEMORY_SEARCH_TOOL_NAME,
+};
 use lime_agent::AsterProviderProtocol;
 use lime_agent::{AgentEvent as RuntimeAgentEvent, AgentToolResult, RequestToolPolicyMode};
 use std::collections::HashMap;
@@ -171,6 +176,47 @@ async fn respond_action_emits_resolved_fact_with_action_identity() {
     assert_eq!(event.payload["confirmed"].as_bool(), Some(false));
     assert_eq!(event.payload["decision"].as_str(), Some("deny"));
     assert_eq!(event.payload["scope"]["turnId"].as_str(), Some("turn-1"));
+}
+
+#[tokio::test]
+async fn runtime_backend_registers_memory_tools_in_agent_registry() {
+    let db: lime_core::database::DbConnection = std::sync::Arc::new(std::sync::Mutex::new(
+        rusqlite::Connection::open_in_memory().expect("db"),
+    ));
+    {
+        let conn = db.lock().expect("db lock");
+        lime_core::database::schema::create_tables(&conn).expect("schema");
+    }
+    lime_agent::initialize_aster_runtime(db.clone()).expect("runtime dirs");
+
+    let backend = RuntimeBackend::with_db(db.clone());
+    ExecutionBackend::set_app_data_source(&backend, std::sync::Arc::new(NoopAppDataSource))
+        .expect("app data source should be accepted");
+    backend
+        .agent_state
+        .init_agent_with_db(&db)
+        .await
+        .expect("agent should initialize");
+    backend
+        .register_memory_tools_if_available()
+        .await
+        .expect("memory tools should register");
+
+    let agent_arc = backend.agent_state.get_agent_arc();
+    let agent_guard = agent_arc.read().await;
+    let agent = agent_guard.as_ref().expect("agent");
+    let registry = agent.tool_registry().read().await;
+    for tool_name in [
+        MEMORY_LIST_TOOL_NAME,
+        MEMORY_READ_TOOL_NAME,
+        MEMORY_SEARCH_TOOL_NAME,
+        MEMORY_ADD_NOTE_TOOL_NAME,
+    ] {
+        assert!(
+            registry.contains_native(tool_name),
+            "{tool_name} should be registered as a native memory tool"
+        );
+    }
 }
 
 #[test]
@@ -659,15 +705,97 @@ fn session_extension_data_provider_routing_is_used_as_session_default() {
 }
 
 #[test]
-fn natural_language_news_turn_leaves_search_mode_to_model_tool_choice() {
+fn natural_language_news_turn_does_not_enable_search_without_explicit_request() {
     let request = request_for_test("整理今天的国际新闻", None, None);
     let host_request = aster_chat_request_from_request(&request);
 
     let policy = request_tool_policy_from_request(host_request.as_ref());
 
-    assert!(policy.effective_web_search);
-    assert_eq!(policy.search_mode, RequestToolPolicyMode::Allowed);
+    assert!(!policy.effective_web_search);
+    assert_eq!(policy.search_mode, RequestToolPolicyMode::Disabled);
     assert!(!policy.requires_web_search());
+}
+
+#[test]
+fn session_config_appends_memory_context_to_system_prompt() {
+    let mut request = request_for_test(
+        "hello",
+        None,
+        Some(json!({
+            crate::runtime::memory_prompt::MEMORY_PROMPT_CONTEXT_KEY: {
+                "scope": "workspace",
+                "path": "memory_summary.md",
+                "content": "Use direct language.",
+                "truncated": false,
+                "citation": {
+                    "startLineNumber": 1,
+                    "endLineNumber": 1
+                }
+            }
+        })),
+    );
+    let options = request.runtime_options.as_mut().expect("runtime options");
+    options.provider_preference = Some("openai".to_string());
+    options.model_preference = Some("gpt-4.1".to_string());
+    let host_request = aster_chat_request_from_request(&request);
+    let scope = session_scope_from_request(&request).expect("session scope");
+    let selection = selection_from_explicit_preferences(&request).expect("selection");
+    let policy = request_tool_policy_from_request(host_request.as_ref());
+
+    let config = session_config_from_request(
+        &request,
+        host_request.as_ref(),
+        &scope,
+        &selection,
+        &policy,
+        None,
+    );
+
+    let prompt = config.system_prompt.expect("system prompt");
+    assert!(prompt.contains("## Long-Term Memory Summary"));
+    assert!(prompt.contains("不是用户本轮输入"));
+    assert!(prompt.contains("Use direct language."));
+}
+
+#[test]
+fn session_config_appends_soul_context_from_config_metadata() {
+    let mut request = request_for_test("hello", None, None);
+    let options = request.runtime_options.as_mut().expect("runtime options");
+    options.provider_preference = Some("openai".to_string());
+    options.model_preference = Some("gpt-4.1".to_string());
+    let host_request = aster_chat_request_from_request(&request);
+    let scope = session_scope_from_request(&request).expect("session scope");
+    let selection = selection_from_explicit_preferences(&request).expect("selection");
+    let policy = request_tool_policy_from_request(host_request.as_ref());
+    let config_metadata = Some(json!({
+        "memory": {
+            "soul": {
+                "schema": "memory_soul_prompt_context.v1",
+                "source": "memory.soul",
+                "scope": "interaction_only",
+                "summary": "Lead with the answer.",
+                "communicationStyle": ["State risks plainly"],
+                "avoid": ["Do not use vague encouragement"]
+            }
+        }
+    }));
+
+    let config = session_config_from_request(
+        &request,
+        host_request.as_ref(),
+        &scope,
+        &selection,
+        &policy,
+        config_metadata,
+    );
+
+    let prompt = config.system_prompt.expect("system prompt");
+    assert!(prompt.contains("## Interaction Soul"));
+    assert!(prompt.contains("saved app config `memory.soul`"));
+    assert!(prompt.contains("Lead with the answer."));
+    assert!(prompt.contains("State risks plainly"));
+    assert!(prompt.contains("generation brief"));
+    assert!(!prompt.contains("SOUL.md"));
 }
 
 #[test]
@@ -1050,6 +1178,26 @@ fn explicit_web_search_false_keeps_search_disabled() {
 
     assert!(!policy.effective_web_search);
     assert_eq!(policy.search_mode, RequestToolPolicyMode::Disabled);
+}
+
+#[test]
+fn explicit_allowed_search_mode_enables_model_tool_choice() {
+    let request = request_for_test(
+        "整理今天的国际新闻",
+        Some(json!({
+            "asterChatRequest": {
+                "search_mode": "allowed"
+            }
+        })),
+        None,
+    );
+    let host_request = aster_chat_request_from_request(&request);
+
+    let policy = request_tool_policy_from_request(host_request.as_ref());
+
+    assert!(policy.effective_web_search);
+    assert_eq!(policy.search_mode, RequestToolPolicyMode::Allowed);
+    assert!(!policy.requires_web_search());
 }
 
 #[test]

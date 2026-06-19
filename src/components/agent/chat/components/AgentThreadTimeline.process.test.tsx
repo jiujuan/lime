@@ -2,6 +2,7 @@ import { act } from "react";
 import { describe, expect, it } from "vitest";
 import type { AgentThreadItem } from "../types";
 import { at, createBaseItem, renderTimeline } from "./AgentThreadTimeline.testFixtures";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
 describe("AgentThreadTimeline", () => {
   it("应按真实发生顺序渲染思考与工具块", () => {
@@ -170,6 +171,56 @@ describe("AgentThreadTimeline", () => {
     expect(
       container.querySelectorAll('[data-testid="tool-call-item"]'),
     ).toHaveLength(2);
+  });
+
+  it("本地历史导入过程摘要应跟随当前语言资源", async () => {
+    await changeLimeLocale("en-US");
+    const container = renderTimeline(
+      [
+        {
+          ...createBaseItem("command-imported", 1),
+          type: "command_execution",
+          command: "npm test",
+          cwd: "/workspace/imported-codex",
+          aggregated_output: "Exit code: 0\nOutput:\nok",
+          exit_code: 0,
+          metadata: {
+            imported: true,
+            source_client: "codex",
+          },
+        },
+        {
+          ...createBaseItem("search-imported", 2),
+          type: "web_search",
+          action: "search_query",
+          query: "Lime history import",
+          output: "search result summary",
+          metadata: {
+            imported: true,
+            source_client: "codex",
+          },
+        },
+      ] as AgentThreadItem[],
+      {
+        turn: {
+          status: "completed",
+        },
+        collapseInactiveDetails: true,
+      },
+    );
+
+    const summaryText =
+      container
+        .querySelector<HTMLDetailsElement>(
+          '[data-testid="agent-thread-block:1:process"]',
+        )
+        ?.querySelector("summary")?.textContent ?? "";
+
+    expect(summaryText).toContain("Imported command record");
+    expect(summaryText).toContain("1 command records");
+    expect(summaryText).toContain("1 search records");
+    expect(summaryText).not.toContain("导入的命令记录");
+    expect(summaryText).not.toContain("搜索记录");
   });
 
   it("连续执行流里有运行中步骤时，应聚合为一个高亮过程块", () => {

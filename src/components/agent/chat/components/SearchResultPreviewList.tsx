@@ -18,12 +18,12 @@ import type { SearchResultPreviewItem } from "../utils/searchResultPreview";
 
 function SearchResultHoverCard({
   item,
-  onOpenUrl,
+  onOpenItem,
   popoverSide = "right",
   popoverAlign = "start",
 }: {
   item: SearchResultPreviewItem;
-  onOpenUrl: (url: string) => void | Promise<void>;
+  onOpenItem: (item: SearchResultPreviewItem) => void | Promise<void>;
   popoverSide?: "top" | "right" | "bottom" | "left";
   popoverAlign?: "start" | "center" | "end";
 }) {
@@ -122,7 +122,7 @@ function SearchResultHoverCard({
           onMouseLeave={handleScheduleClose}
           onFocus={handleOpenPreview}
           onBlur={handleScheduleClose}
-          onClick={() => void onOpenUrl(item.url)}
+          onClick={() => void onOpenItem(item)}
         >
           <div className="flex items-start gap-3">
             <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-slate-300" />
@@ -171,7 +171,7 @@ function SearchResultHoverCard({
           <button
             type="button"
             className="flex w-full items-center justify-between gap-3 rounded-xl border border-border bg-background px-3 py-2 text-left text-xs text-primary transition-colors hover:bg-muted/60"
-            onClick={() => void onOpenUrl(item.url)}
+            onClick={() => void onOpenItem(item)}
           >
             <span className="truncate">{item.url}</span>
             <ExternalLink className="h-3.5 w-3.5 shrink-0" />
@@ -185,13 +185,15 @@ function SearchResultHoverCard({
 export function SearchResultPreviewList({
   items,
   onOpenUrl,
+  onOpenItem,
   popoverSide = "right",
   popoverAlign = "start",
   className,
   collapsedCount = 4,
 }: {
   items: SearchResultPreviewItem[];
-  onOpenUrl: (url: string) => void | Promise<void>;
+  onOpenUrl?: (url: string) => void | Promise<void>;
+  onOpenItem?: (item: SearchResultPreviewItem) => void | Promise<void>;
   popoverSide?: "top" | "right" | "bottom" | "left";
   popoverAlign?: "start" | "center" | "end";
   className?: string;
@@ -200,6 +202,15 @@ export function SearchResultPreviewList({
   const { i18n, t } = useTranslation("agent");
   const locale = i18n.language;
   const [expanded, setExpanded] = useState(false);
+  const handleOpenItem = useCallback(
+    (item: SearchResultPreviewItem) => {
+      if (onOpenItem) {
+        return onOpenItem(item);
+      }
+      return onOpenUrl?.(item.url);
+    },
+    [onOpenItem, onOpenUrl],
+  );
   const identityKey = useMemo(
     () => items.map((item) => item.id).join("|"),
     [items],
@@ -224,7 +235,7 @@ export function SearchResultPreviewList({
         <SearchResultHoverCard
           key={item.id}
           item={item}
-          onOpenUrl={onOpenUrl}
+          onOpenItem={handleOpenItem}
           popoverSide={popoverSide}
           popoverAlign={popoverAlign}
         />

@@ -67,6 +67,7 @@ export interface PreparedAgentStreamUserInputSend {
   requestMetadata?: Record<string, unknown>;
   assistantDraft?: AssistantDraftState;
   skillRequest?: SendMessageOptions["skillRequest"];
+  explicitToolPreferences?: boolean;
   skipSessionRestore?: boolean;
   skipSessionStartHooks?: boolean;
   skipPreSubmitResume?: boolean;
@@ -118,6 +119,7 @@ export function prepareAgentStreamUserInputSend(
   const assistantDraft = sendOptions?.assistantDraft;
   const capabilityRoute = sendOptions?.capabilityRoute;
   const searchMode = sendOptions?.searchMode;
+  const explicitToolPreferences = sendOptions?.explicitToolPreferences === true;
   const skipSessionRestore = sendOptions?.skipSessionRestore === true;
   const skipSessionStartHooks = sendOptions?.skipSessionStartHooks === true;
   const skipPreSubmitResume = sendOptions?.skipPreSubmitResume === true;
@@ -168,6 +170,7 @@ export function prepareAgentStreamUserInputSend(
     requestMetadata,
     assistantDraft,
     skillRequest,
+    explicitToolPreferences,
     skipSessionRestore,
     skipSessionStartHooks,
     skipPreSubmitResume,

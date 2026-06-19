@@ -14,7 +14,13 @@ import {
   type ReactElement,
   type MouseEvent as ReactMouseEvent,
 } from "react";
-import { Gift, Search, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import {
+  Gift,
+  Palette,
+  Search,
+  PanelLeftClose,
+  PanelLeftOpen,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { AgentPageParams, Page, PageParams } from "@/types/page";
@@ -41,6 +47,7 @@ import {
 } from "@/components/ui/tooltip";
 import { LIME_BRAND_LOGO_SRC, LIME_BRAND_NAME } from "@/lib/branding";
 import { AppSidebarAccountMenu } from "@/components/app-sidebar/AppSidebarAccountMenu";
+import { AppSidebarAppearancePopover } from "@/components/app-sidebar/AppSidebarAppearancePopover";
 import { AppSidebarConversationShelf } from "@/components/app-sidebar/AppSidebarConversationShelf";
 import { AppSidebarConversationImportDialog } from "@/components/app-sidebar/AppSidebarConversationImportDialog";
 import { AppSidebarInviteDialog } from "@/components/app-sidebar/AppSidebarInviteDialog";
@@ -74,6 +81,7 @@ import {
   FooterArea,
   FooterPrimaryActionRow,
   FooterSettingsAction,
+  FooterAppearanceActionSlot,
   FooterUpdateActionSlot,
   IconActionButton,
   HeaderInviteButton,
@@ -356,7 +364,19 @@ export function AppSidebar({
       );
     };
   }, []);
-  const { themeState } = useAppSidebarAppearance();
+  const {
+    appearanceColorSchemes,
+    appearanceControlRef,
+    appearancePopoverOpen,
+    appearanceThemeOptions,
+    colorSchemeId,
+    copy: appearanceCopy,
+    handleColorSchemeChange,
+    handleRandomColorScheme,
+    handleThemeModeChange,
+    setAppearancePopoverOpen,
+    themeState,
+  } = useAppSidebarAppearance();
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [languageMenuOpen, setLanguageMenuOpen] = useState(false);
   const [language, setLanguageState] = useState<LocalePreference>("zh-CN");
@@ -1564,11 +1584,41 @@ export function AppSidebar({
                   />
                 </FooterSettingsAction>
                 <FooterUpdateActionSlot $collapsed={collapsed}>
+                  <FooterAppearanceActionSlot ref={appearanceControlRef}>
+                    <IconActionButton
+                      type="button"
+                      $active={appearancePopoverOpen}
+                      title={appearanceCopy.entryLabel}
+                      aria-label={appearanceCopy.entryLabel}
+                      aria-expanded={appearancePopoverOpen}
+                      aria-haspopup="dialog"
+                      onClick={() => {
+                        setAccountMenuOpen(false);
+                        setLanguageMenuOpen(false);
+                        setAppearancePopoverOpen((current) => !current);
+                      }}
+                    >
+                      <Palette />
+                    </IconActionButton>
+                    {appearancePopoverOpen ? (
+                      <AppSidebarAppearancePopover
+                        themeMode={themeState.themeMode}
+                        colorSchemeId={colorSchemeId}
+                        themeOptions={appearanceThemeOptions}
+                        colorSchemes={appearanceColorSchemes}
+                        copy={appearanceCopy}
+                        onThemeModeChange={handleThemeModeChange}
+                        onColorSchemeChange={handleColorSchemeChange}
+                        onRandomColorScheme={handleRandomColorScheme}
+                      />
+                    ) : null}
+                  </FooterAppearanceActionSlot>
                   <AppUpdateEntry
                     collapsed={collapsed}
                     onOpenPanel={() => {
                       setAccountMenuOpen(false);
                       setLanguageMenuOpen(false);
+                      setAppearancePopoverOpen(false);
                     }}
                   />
                 </FooterUpdateActionSlot>

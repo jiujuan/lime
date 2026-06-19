@@ -1352,12 +1352,30 @@ mod tests {
         LimeSessionStore::new(Arc::new(Mutex::new(conn)))
     }
 
+    fn create_test_legacy_agent_messages_table(conn: &Connection) {
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS agent_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content_json TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                tool_calls_json TEXT,
+                tool_call_id TEXT,
+                reasoning_content TEXT
+            )",
+            [],
+        )
+        .expect("创建 legacy agent_messages 测试表失败");
+    }
+
     fn insert_legacy_agent_message_fixture(
         conn: &Connection,
         session_id: &str,
         role: &str,
         message: &Message,
     ) {
+        create_test_legacy_agent_messages_table(conn);
         let legacy_table = "agent_messages";
         let insert_legacy_message_sql = format!(
             "INSERT INTO {legacy_table} (session_id, role, content_json, timestamp)
@@ -1840,13 +1858,23 @@ mod tests {
         assert_eq!(conversation.messages()[0].as_concat_text(), "hello");
 
         let conn = store.db.lock().expect("锁数据库");
-        let legacy_count: i64 = conn
+        let legacy_count: i64 = if conn
             .query_row(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'agent_messages'",
+                [],
+                |_| Ok(()),
+            )
+            .is_ok()
+        {
+            conn.query_row(
                 "SELECT COUNT(*) FROM agent_messages WHERE session_id = ?",
                 [session.id.as_str()],
                 |row| row.get(0),
             )
-            .expect("查询旧消息数失败");
+            .expect("查询旧消息数失败")
+        } else {
+            0
+        };
         assert_eq!(legacy_count, 0);
     }
 

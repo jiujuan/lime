@@ -18,10 +18,12 @@ describe("sidebarNav", () => {
     expect(FOOTER_SIDEBAR_NAV_ITEMS.map((item) => item.label)).toEqual([
       "设置",
       "项目资料",
-      "灵感",
       "持续流程",
       "消息渠道",
     ]);
+    expect(FOOTER_SIDEBAR_NAV_ITEMS.map((item) => item.id)).not.toContain(
+      "memory",
+    );
   });
 
   it("恢复导航设置时应过滤固定系统入口和已下线 companion", () => {

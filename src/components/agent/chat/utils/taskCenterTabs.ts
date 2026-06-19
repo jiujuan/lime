@@ -64,6 +64,10 @@ export type TaskCenterFallbackRestorePlan =
       };
     };
 
+export function isTaskCenterAgentEntry(agentEntry?: string | null): boolean {
+  return agentEntry === "claw" || agentEntry === "new-task";
+}
+
 export function shouldResumeTaskSession(
   topic?:
     | Pick<Topic, "status" | "statusReason">
@@ -406,10 +410,7 @@ export function initializeTaskCenterOpenTabMap(params: {
   maxCount?: number;
 }): TaskCenterWorkspaceTabMap {
   const initialSessionId = params.normalizedInitialSessionId || null;
-  if (
-    params.agentEntry !== "claw" ||
-    !initialSessionId
-  ) {
+  if (!isTaskCenterAgentEntry(params.agentEntry) || !initialSessionId) {
     return params.initialTabMap;
   }
 
@@ -451,7 +452,7 @@ export function resolveTaskCenterRouteTabSyncIntent(params: {
   shouldRespectLocalSession: boolean;
 }): TaskCenterRouteTabSyncIntent {
   const initialSessionId = params.normalizedInitialSessionId || null;
-  if (params.agentEntry !== "claw" || !initialSessionId) {
+  if (!isTaskCenterAgentEntry(params.agentEntry) || !initialSessionId) {
     return {
       shouldSync: false,
       routeChanged: false,
@@ -633,7 +634,7 @@ export function resolveTaskCenterFallbackRestorePlan(params: {
   previousRestore?: { topicId: string; startedAt: number } | null;
   now: number;
 }): TaskCenterFallbackRestorePlan {
-  if (params.agentEntry !== "claw") {
+  if (!isTaskCenterAgentEntry(params.agentEntry)) {
     return { action: "skip", reason: "not-task-center" };
   }
 

@@ -13,6 +13,7 @@ import {
   resolveToolFilePath as resolveToolFilePathFromInfo,
   resolveToolPrimarySubject as resolveToolPrimarySubjectFromInfo,
 } from "../utils/toolDisplayInfo";
+import { isImportedSourceMetadata } from "../utils/importedSourceMetadata";
 
 export interface ToolResultNotice {
   key: string;
@@ -519,19 +520,6 @@ export function readRecordBoolean(
   return null;
 }
 
-function hasImportedSourceMetadata(
-  metadata?: Record<string, unknown>,
-): boolean {
-  if (!metadata) return false;
-  return (
-    metadata.imported === true ||
-    metadata.imported_synthetic === true ||
-    metadata.importedSynthetic === true ||
-    metadata.source_client === "codex" ||
-    metadata.sourceClient === "codex"
-  );
-}
-
 export function resolveImportedSourceToolPresentation(
   toolCall: ToolCallState,
 ): ImportedSourceToolPresentation | null {
@@ -541,7 +529,7 @@ export function resolveImportedSourceToolPresentation(
   };
   const normalizedMetadata =
     Object.keys(metadata).length > 0 ? metadata : undefined;
-  if (!hasImportedSourceMetadata(normalizedMetadata)) {
+  if (!isImportedSourceMetadata(normalizedMetadata)) {
     return null;
   }
 
@@ -569,7 +557,7 @@ export function resolveCommandToolSummary(params: {
   metadata?: Record<string, unknown>;
 }): CommandToolSummary | null {
   const { toolName, args, metadata } = params;
-  if (hasImportedSourceMetadata(metadata)) {
+  if (isImportedSourceMetadata(metadata)) {
     return null;
   }
 
@@ -714,7 +702,7 @@ export function resolveCommandOutputStreams(params: {
   error?: string;
   metadata?: Record<string, unknown>;
 }): CommandOutputStream[] {
-  if (hasImportedSourceMetadata(params.metadata)) {
+  if (isImportedSourceMetadata(params.metadata)) {
     return [];
   }
 

@@ -14,7 +14,7 @@ use super::session_store_subagent_context::{
 use super::session_store_types::SessionDetail;
 use super::{get_session_sync_with_history_page, resolve_session_provider_selector};
 use crate::aster_runtime_support::load_aster_runtime_snapshot;
-use crate::event_converter::convert_to_tauri_message;
+use crate::protocol_projection::project_message;
 use crate::session_execution_runtime::{
     build_session_execution_runtime, reconcile_session_execution_runtime_permission_fallback,
 };
@@ -39,7 +39,7 @@ pub(super) fn apply_current_runtime_conversation(
         .messages()
         .iter()
         .filter(|message| message.is_user_visible())
-        .map(convert_to_tauri_message)
+        .map(project_message)
         .collect::<Vec<_>>();
 
     if let Some(limit) = history_limit {

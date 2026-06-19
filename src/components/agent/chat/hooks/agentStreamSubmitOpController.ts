@@ -30,6 +30,7 @@ export function buildAgentStreamSubmitOp(
       submitOpOptions.requestMetadata,
       activeSessionId,
     ),
+    explicitToolPreferences: submitOpOptions.explicitToolPreferences,
     sessionId: activeSessionId,
     workspaceId: submitWorkspaceId,
     turnId: requestTurnId,

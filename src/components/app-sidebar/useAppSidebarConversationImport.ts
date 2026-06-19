@@ -6,6 +6,7 @@ import {
   type ConversationImportThreadCommitResponse,
 } from "@/lib/api/conversationImport";
 import type { SidebarOpenedProjectSummary } from "@/components/app-sidebar/sidebarConversationGroups";
+import { DEFAULT_CONVERSATION_IMPORT_SOURCE_CLIENT } from "./conversationImportDialogViewModel";
 
 interface UseAppSidebarConversationImportParams {
   projects?: SidebarOpenedProjectSummary[];
@@ -93,9 +94,9 @@ export function useAppSidebarConversationImport({
       stableProjectImportProbeTargets.map(async (target) => {
         try {
           const result = await scanConversationImportSource({
-            sourceClient: "codex",
+            sourceClient: DEFAULT_CONVERSATION_IMPORT_SOURCE_CLIENT,
             projectPath: target.projectPath,
-            includeArchived: false,
+            includeArchived: true,
             limit: PROJECT_IMPORT_SCAN_LIMIT,
           });
           return {
@@ -152,7 +153,7 @@ export function useAppSidebarConversationImport({
       toast.success(
         t(
           "navigation.sidebar.importDialog.toast.success",
-          "已导入 {{count}} 条历史消息",
+          "Imported {{count}} historical messages",
           {
             count: totalMessages,
           },

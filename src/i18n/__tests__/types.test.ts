@@ -598,7 +598,7 @@ function assertI18nKeyTypes() {
     ns: "agent",
     count: 2,
   });
-  i18n.t("sceneAppExecutionSummary.followup.action.saveInspiration", {
+  i18n.t("sceneAppExecutionSummary.followup.action.saveAsSkill", {
     ns: "agent",
   });
   i18n.t("generalWorkbench.workflow.current.title", { ns: "agent" });
@@ -683,8 +683,6 @@ function assertI18nKeyTypes() {
   i18n.t("skills.workspace.curatedTask.suggestion.action.start", {
     ns: "agent",
   });
-  i18n.t("memoryLibrary.title", { ns: "agent" });
-  i18n.t("memoryLibrary.points.title", { ns: "agent" });
   i18n.t("skills.workspace.managedJob.created", {
     ns: "agent",
     name: "Daily Review",
@@ -882,12 +880,6 @@ function assertI18nKeyTypes() {
   i18n.t("workspace.document.editor.slashCommand.prompt.imageUrl", {
     ns: "workspace",
   });
-  i18n.t("workspace.runtimeAgentsGuide.action.initialize", {
-    ns: "workspace",
-  });
-  i18n.t("workspace.runtimeAgentsGuide.initialized.title", {
-    ns: "workspace",
-  });
   i18n.t("workspace.artifactToolbar.type.code", { ns: "workspace" });
   i18n.t("workspace.artifactToolbar.writePhase.streaming", {
     ns: "workspace",
@@ -942,6 +934,24 @@ function assertI18nKeyTypes() {
     ns: "workspace",
   });
   i18n.t("workspace.resourceManager.unsupported.title", {
+    ns: "workspace",
+  });
+  i18n.t("workspace.artifactRenderer.previewFallback.systemOpen.title", {
+    ns: "workspace",
+  });
+  i18n.t("workspace.artifactRenderer.previewFallback.unsupported.detail", {
+    ns: "workspace",
+  });
+  i18n.t("workspace.artifactRenderer.previewSource.source.url", {
+    ns: "workspace",
+  });
+  i18n.t("workspace.artifactRenderer.previewSource.source.databaseRecord", {
+    ns: "workspace",
+  });
+  i18n.t("workspace.artifactRenderer.previewSource.source.app", {
+    ns: "workspace",
+  });
+  i18n.t("workspace.artifactRenderer.previewSource.empty", {
     ns: "workspace",
   });
   i18n.t("workspace.resourceManager.unsupported.mimeType", {

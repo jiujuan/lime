@@ -374,7 +374,77 @@ describe("useWorkspaceArtifactPreviewActions", () => {
     expect(setArtifactViewMode).toHaveBeenCalledWith("preview", {
       artifactId: artifact.id,
     });
-    expect(onRequestCanvasPreviewOpen).not.toHaveBeenCalled();
+    expect(onRequestCanvasPreviewOpen).toHaveBeenCalledWith({
+      filePath: null,
+      selectionKey: `artifact:${artifact.id}`,
+    });
+    expect(setLayoutMode).toHaveBeenCalledWith("chat-canvas");
+  });
+
+  it("通用模式打开来源摘要 preview artifact 时不应把 URL 当文件懒加载", async () => {
+    const readFilePreviewSpy = vi.spyOn(fileBrowserModule, "readFilePreview");
+    const upsertGeneralArtifact = vi.fn();
+    const setGeneralCanvasState = vi.fn();
+    const setSelectedArtifactId = vi.fn();
+    const setArtifactViewMode = vi.fn();
+    const setLayoutMode = vi.fn();
+    const suppressBrowserAssistCanvasAutoOpen = vi.fn();
+    const onRequestCanvasPreviewOpen = vi.fn();
+    const artifact = createArtifact({
+      id: "preview-url-example",
+      title: "在线报告",
+      content: "",
+      meta: {
+        previewArtifact: true,
+        isSourceBacked: true,
+        source: "url",
+        sourceRef: "https://example.com/report",
+        sourcePath: "https://example.com/report",
+        filePath: "https://example.com/report",
+        filename: "report",
+        contentKind: "markdown",
+        renderMode: "inline",
+      },
+    });
+    const { render, getValue } = renderHook({
+      upsertGeneralArtifact,
+      setGeneralCanvasState,
+      setSelectedArtifactId,
+      setArtifactViewMode,
+      setLayoutMode,
+      suppressBrowserAssistCanvasAutoOpen,
+      onRequestCanvasPreviewOpen,
+      isGeneralCanvasOpen: true,
+    });
+
+    await render();
+
+    act(() => {
+      getValue().handleArtifactClick(artifact);
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(readFilePreviewSpy).not.toHaveBeenCalled();
+    expect(upsertGeneralArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "preview-url-example",
+        meta: expect.objectContaining({
+          source: "url",
+          renderMode: "inline",
+        }),
+      }),
+    );
+    expect(setSelectedArtifactId).toHaveBeenCalledWith("preview-url-example");
+    expect(onRequestCanvasPreviewOpen).toHaveBeenCalledWith({
+      filePath: null,
+      selectionKey: "artifact:preview-url-example",
+    });
+    expect(setArtifactViewMode).toHaveBeenCalledWith("preview", {
+      artifactId: "preview-url-example",
+    });
     expect(setLayoutMode).toHaveBeenCalledWith("chat-canvas");
   });
 
@@ -888,12 +958,12 @@ describe("useWorkspaceArtifactPreviewActions", () => {
     expect(setGeneralCanvasState).toHaveBeenCalledWith(expect.any(Function));
   });
 
-  it("通用模式打开无文本抽取的 PDF 路径时应投影为 system_open artifact", async () => {
+  it("通用模式打开可抽取文本的 PDF 路径时应投影为 document_text artifact", async () => {
     const pdfPath = "/Users/coso/Documents/other/汇报材料.pdf";
     const readFilePreviewSpy = vi.spyOn(fileBrowserModule, "readFilePreview").mockResolvedValue({
       path: pdfPath,
-      content: null,
-      isBinary: true,
+      content: "PDF 正文预览\n\n关键结论",
+      isBinary: false,
       size: 55007,
       error: null,
     });
@@ -928,7 +998,7 @@ describe("useWorkspaceArtifactPreviewActions", () => {
       expect.objectContaining({
         type: "document",
         title: "汇报材料.pdf",
-        content: "该文档暂不支持在工作台内嵌预览。\n\n/Users/coso/Documents/other/汇报材料.pdf",
+        content: "PDF 正文预览\n\n关键结论",
         meta: expect.objectContaining({
           previewArtifact: true,
           isSourceBacked: true,
@@ -939,10 +1009,10 @@ describe("useWorkspaceArtifactPreviewActions", () => {
           filename: "汇报材料.pdf",
           fileKind: "pdf",
           contentKind: "document",
-          renderMode: "system_open",
+          renderMode: "document_text",
           lifecycle: "transient",
           capabilities: expect.objectContaining({
-            preview: false,
+            preview: true,
             systemOpen: true,
           }),
         }),
@@ -958,6 +1028,63 @@ describe("useWorkspaceArtifactPreviewActions", () => {
     });
     expect(setLayoutMode).toHaveBeenCalledWith("chat-canvas");
     expect(setGeneralCanvasState).toHaveBeenCalledWith(expect.any(Function));
+  });
+
+  it("通用模式打开可抽取文本的 Excel 路径时应复用 document_text artifact", async () => {
+    const xlsxPath = "/Users/coso/Documents/other/导入验收矩阵.xlsx";
+    const readFilePreviewSpy = vi.spyOn(fileBrowserModule, "readFilePreview").mockResolvedValue({
+      path: xlsxPath,
+      content: "能力\t状态\nWebSearch\tcurrent",
+      isBinary: false,
+      size: 12048,
+      error: null,
+    });
+    const setGeneralCanvasState = vi.fn();
+    const setSelectedArtifactId = vi.fn();
+    const setArtifactViewMode = vi.fn();
+    const setLayoutMode = vi.fn();
+    const suppressBrowserAssistCanvasAutoOpen = vi.fn();
+    const upsertGeneralArtifact = vi.fn();
+    const onRequestCanvasPreviewOpen = vi.fn();
+    const { render, getValue } = renderHook({
+      upsertGeneralArtifact,
+      setGeneralCanvasState,
+      setSelectedArtifactId,
+      setArtifactViewMode,
+      setLayoutMode,
+      suppressBrowserAssistCanvasAutoOpen,
+      onRequestCanvasPreviewOpen,
+    });
+
+    await render();
+
+    await act(async () => {
+      getValue().handleFileClick(xlsxPath, "");
+      await flushAsyncWork();
+    });
+
+    expect(readFilePreviewSpy).toHaveBeenCalledWith(xlsxPath, 64 * 1024);
+    const artifact = upsertGeneralArtifact.mock.calls[0]?.[0] as Artifact;
+    expect(artifact).toEqual(
+      expect.objectContaining({
+        type: "document",
+        title: "导入验收矩阵.xlsx",
+        content: "能力\t状态\nWebSearch\tcurrent",
+        meta: expect.objectContaining({
+          previewArtifact: true,
+          source: "file",
+          sourceRef: xlsxPath,
+          filename: "导入验收矩阵.xlsx",
+          fileKind: "xlsx",
+          contentKind: "document",
+          renderMode: "document_text",
+        }),
+      }),
+    );
+    expect(onRequestCanvasPreviewOpen).toHaveBeenCalledWith({
+      filePath: xlsxPath,
+      selectionKey: `artifact:${artifact.id}`,
+    });
   });
 
   it("点击占位任务文件时应按需读取会话内容并更新主题工作台画布", async () => {

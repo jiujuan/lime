@@ -3,13 +3,13 @@ import {
   createMockAgentChatUnifiedState,
   createProject,
   flushEffects,
-  getSendMessageCall,
   getHookCallOrderForWorkspace,
   getIndexTestMocks,
   installMockAgentChatUnifiedState,
   mountPage,
   observedWorkspaceIds,
   renderPage,
+  sharedSendMessageMock,
 } from "./index.testFixtures";
 
 const {
@@ -66,7 +66,7 @@ describe("AgentChatPage 话题切换项目恢复", () => {
     expect(mockGetOrCreateDefaultProject).not.toHaveBeenCalled();
   });
 
-  it("无可用项目时不应自动创建默认项目或切换话题", async () => {
+  it("无可用项目时不应自动创建默认项目，但允许 detached 话题切换", async () => {
     mockGetProject.mockImplementation(async (projectId: string) => {
       if (projectId === "default-new") {
         return createProject("default-new");
@@ -90,7 +90,7 @@ describe("AgentChatPage 话题切换项目恢复", () => {
     expect(mockToast.info).not.toHaveBeenCalledWith(
       "未找到可用项目，已自动创建默认项目",
     );
-    expect(switchTopicMock).not.toHaveBeenCalledWith("topic-a", expect.objectContaining({ allowDetachedSession: true }));
+    expect(switchTopicMock).toHaveBeenCalledWith("topic-a", expect.objectContaining({ allowDetachedSession: true }));
     expect(observedWorkspaceIds[observedWorkspaceIds.length - 1]).toBe(
       "",
     );
@@ -190,7 +190,7 @@ describe("AgentChatPage 话题切换项目恢复", () => {
     );
   });
 
-  it("临时 workspace 路径缺失时应切回默认工作区并自动重发", async () => {
+  it("临时 workspace 路径缺失时不应自动创建默认工作区或重发", async () => {
     localStorage.setItem("agent_last_project_id", JSON.stringify("temp-ws"));
     mockGetProject.mockImplementation(async (projectId: string) => {
       if (projectId === "temp-ws") {
@@ -228,15 +228,15 @@ describe("AgentChatPage 话题切换项目恢复", () => {
     renderPage();
     await flushEffects(6);
 
-    expect(mockGetOrCreateDefaultProject).toHaveBeenCalledTimes(1);
-    expect(mockEnsureWorkspaceReady).toHaveBeenCalledWith(
+    expect(mockGetOrCreateDefaultProject).not.toHaveBeenCalled();
+    expect(mockEnsureWorkspaceReady).not.toHaveBeenCalledWith(
       "project-default-real",
     );
     expect(observedWorkspaceIds).toContain("temp-ws");
     expect(observedWorkspaceIds[observedWorkspaceIds.length - 1]).toBe(
-      "project-default-real",
+      "temp-ws",
     );
-    expect(getSendMessageCall().content).toBe("只回答一个字：好");
+    expect(sharedSendMessageMock).not.toHaveBeenCalled();
   });
 
   it("收到首页新会话请求时应清空当前工作区上下文", async () => {

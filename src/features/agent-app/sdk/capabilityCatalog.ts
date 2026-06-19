@@ -250,7 +250,7 @@ export const LIME_CAPABILITY_DEFINITIONS = [
     methods: ["query", "write", "compact", "getStatus"],
     summary: "工作记忆、长期记忆、团队记忆和上下文压缩。",
     appResponsibility: "声明业务记忆意图和可写范围。",
-    limeResponsibility: "复用 memory_runtime / unified_memory 主链并处理压缩。",
+    limeResponsibility: "复用 memory store / MemoryBackend / memory tools 主链并处理压缩。",
     profile: { adapter: "adapter" },
   },
   {

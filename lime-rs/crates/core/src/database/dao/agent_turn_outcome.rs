@@ -89,10 +89,30 @@ mod tests {
     use crate::database::schema::create_tables;
     use rusqlite::Connection;
 
+    fn create_test_legacy_outcome_table(conn: &Connection) -> Result<(), rusqlite::Error> {
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS agent_turn_outcomes (
+                turn_id TEXT PRIMARY KEY,
+                thread_id TEXT NOT NULL,
+                outcome_type TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                primary_cause TEXT,
+                retryable INTEGER NOT NULL,
+                details_json TEXT,
+                ended_at TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )",
+            [],
+        )?;
+        Ok(())
+    }
+
     #[test]
     fn should_upsert_and_query_turn_outcome() {
         let conn = Connection::open_in_memory().expect("创建内存数据库失败");
         create_tables(&conn).expect("创建表结构失败");
+        create_test_legacy_outcome_table(&conn).expect("创建 legacy outcome 测试表失败");
 
         let record = AgentTurnOutcomeRecord {
             turn_id: "turn-1".to_string(),

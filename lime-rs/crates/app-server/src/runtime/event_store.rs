@@ -186,22 +186,18 @@ fn append_runtime_events_to_stored_session(
     }
     let appended_events = events.clone();
     if let Some(event_log_writer) = event_log_writer {
-        for event in &appended_events {
-            event_log_writer
-                .append(event)
-                .map_err(RuntimeCoreError::Backend)?;
-        }
+        event_log_writer
+            .append_events(&appended_events)
+            .map_err(RuntimeCoreError::Backend)?;
     }
     if let Some(projection_store) = projection_store {
-        for event in &appended_events {
-            if let Err(error) = projection_store.apply_event(event) {
-                tracing::warn!(
-                    "[projection-store] failed to apply event {} for session {}: {}",
-                    event.event_id,
-                    event.session_id,
-                    error
-                );
-            }
+        if let Err(error) = projection_store.apply_events(&appended_events) {
+            tracing::warn!(
+                "[projection-store] failed to apply {} events for session {}: {}",
+                appended_events.len(),
+                session_id,
+                error
+            );
         }
     }
     for event in events {

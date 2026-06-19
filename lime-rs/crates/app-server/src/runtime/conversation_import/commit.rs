@@ -176,6 +176,11 @@ fn clear_existing_imported_session(
             .clear_session(session_id)
             .map_err(RuntimeCoreError::Backend)?;
     }
+    if let Some(sidecar_store) = core.sidecar_store.as_ref() {
+        sidecar_store
+            .clear_session(session_id)
+            .map_err(RuntimeCoreError::Backend)?;
+    }
     Ok(())
 }
 

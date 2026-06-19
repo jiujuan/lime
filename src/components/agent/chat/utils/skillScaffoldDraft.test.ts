@@ -111,20 +111,20 @@ describe("buildSkillsPageParamsFromMessage", () => {
     expect(result?.initialScaffoldRequestKey).toBe(33445566);
   });
 
-  it("来自灵感库回放时应把灵感线索带入技能草稿输入约束", () => {
+  it("来自记忆参考回放时应把参考线索带入技能草稿输入约束", () => {
     vi.spyOn(Date, "now").mockReturnValue(44556677);
 
     const result = buildSkillsPageParamsFromMessage(
       {
         messageId: "msg-replay-memory",
-        content: "继续把这条灵感扩写成一套完整的可复用结果。",
+        content: "继续把这条参考扩写成一套完整的可复用结果。",
       },
       {
         creationReplay: {
           version: 1,
           kind: "memory_entry",
           source: {
-            page: "memory",
+            page: "memory_store",
           },
           data: {
             category: "identity",
@@ -138,13 +138,13 @@ describe("buildSkillsPageParamsFromMessage", () => {
 
     expect(result?.initialScaffoldDraft).toMatchObject({
       description:
-        "沉淀自一次继续复用“夏日短视频语气”灵感后的成功结果。 整体要轻快、清爽、有画面感。",
+        "沉淀自一次继续复用“夏日短视频语气”记忆参考后的成功结果。 整体要轻快、清爽、有画面感。",
       whenToUse: expect.arrayContaining([
-        "适合继续围绕灵感库中的“夏日短视频语气”这条风格线索扩展成完整工作流。",
+        "适合继续围绕记忆参考中的“夏日短视频语气”这条风格线索扩展成完整工作流。",
       ]),
       inputs: expect.arrayContaining([
-        "参考灵感：夏日短视频语气",
-        "灵感摘要：整体要轻快、清爽、有画面感。",
+        "参考记忆：夏日短视频语气",
+        "记忆摘要：整体要轻快、清爽、有画面感。",
         "参考标签：小红书、口播",
       ]),
     });

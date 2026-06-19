@@ -169,3 +169,20 @@ pub struct ProviderWireRequest {
     pub path: String,
     pub body: Value,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ResponsesImageGenerationInputShape {
+    #[default]
+    PromptString,
+    InputList,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ResponsesImageGenerationOptions {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outer_model: Option<String>,
+    #[serde(default)]
+    pub input_shape: ResponsesImageGenerationInputShape,
+}

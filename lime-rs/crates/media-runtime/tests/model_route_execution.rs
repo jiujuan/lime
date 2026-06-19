@@ -121,6 +121,13 @@ async fn image_worker_uses_resolved_route_provider_and_model() {
             .and_then(Value::as_str),
         Some("not_embedded")
     );
+    assert_route_runtime_evidence(
+        &migrated.record.payload,
+        "image_generation",
+        "route-provider",
+        "route-image-model",
+        "openai_images",
+    );
 
     server.abort();
 }
@@ -357,8 +364,73 @@ async fn video_worker_uses_resolved_route_provider_and_model() {
             .and_then(Value::as_str),
         Some("local_lime_service:/v1/videos/generations")
     );
+    assert_route_runtime_evidence(
+        &migrated.record.payload,
+        "video_generation",
+        "route-video-provider",
+        "route-video-model",
+        "fal",
+    );
 
     server.abort();
+}
+
+fn assert_route_runtime_evidence(
+    payload: &Value,
+    task_family: &str,
+    provider_id: &str,
+    model_id: &str,
+    protocol: &str,
+) {
+    assert_eq!(
+        payload
+            .pointer("/llm_events/1/type")
+            .and_then(Value::as_str),
+        Some("turn.completed")
+    );
+    assert_eq!(
+        payload.pointer("/llmEvents/1/type").and_then(Value::as_str),
+        Some("turn.completed")
+    );
+
+    for diagnostics_root in ["/provider_diagnostics", "/providerDiagnostics"] {
+        assert_eq!(
+            payload
+                .pointer(&format!("{diagnostics_root}/taskFamily"))
+                .and_then(Value::as_str),
+            Some(task_family)
+        );
+        assert_eq!(
+            payload
+                .pointer(&format!("{diagnostics_root}/providerId"))
+                .and_then(Value::as_str),
+            Some(provider_id)
+        );
+        assert_eq!(
+            payload
+                .pointer(&format!("{diagnostics_root}/modelId"))
+                .and_then(Value::as_str),
+            Some(model_id)
+        );
+        assert_eq!(
+            payload
+                .pointer(&format!("{diagnostics_root}/protocol"))
+                .and_then(Value::as_str),
+            Some(protocol)
+        );
+        assert_eq!(
+            payload
+                .pointer(&format!("{diagnostics_root}/transport"))
+                .and_then(Value::as_str),
+            Some("local_lime_service")
+        );
+        assert_eq!(
+            payload
+                .pointer(&format!("{diagnostics_root}/credential"))
+                .and_then(Value::as_str),
+            Some("not_embedded")
+        );
+    }
 }
 
 #[tokio::test]

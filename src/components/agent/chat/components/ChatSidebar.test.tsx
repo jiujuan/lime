@@ -42,8 +42,8 @@ describe("ChatSidebar", () => {
     expect(container.textContent).toContain("能力");
     expect(container.textContent).toContain("Skills");
     expect(container.textContent).toContain("资料");
-    expect(container.textContent).toContain("灵感");
     expect(container.textContent).toContain("项目资料");
+    expect(container.textContent).not.toContain("灵感库");
     expect(searchInput).toBeTruthy();
     expect(
       container.querySelector('button[aria-label="新建对话"]'),
@@ -59,13 +59,11 @@ describe("ChatSidebar", () => {
     const onOpenTaskCenterHome = vi.fn();
     const onOpenSkillsPage = vi.fn();
     const onOpenKnowledgePage = vi.fn();
-    const onOpenMemoryPage = vi.fn();
     const container = renderSidebar({
       contextVariant: "task-center",
       onOpenTaskCenterHome,
       onOpenSkillsPage,
       onOpenKnowledgePage,
-      onOpenMemoryPage,
     });
 
     act(() => {
@@ -89,18 +87,9 @@ describe("ChatSidebar", () => {
         ) as HTMLButtonElement | undefined
       )?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
-    act(() => {
-      (
-        Array.from(container.querySelectorAll("button")).find((button) =>
-          button.textContent?.includes("灵感"),
-        ) as HTMLButtonElement | undefined
-      )?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
     expect(onOpenTaskCenterHome).toHaveBeenCalledTimes(1);
     expect(onOpenSkillsPage).toHaveBeenCalledTimes(1);
     expect(onOpenKnowledgePage).toHaveBeenCalledTimes(1);
-    expect(onOpenMemoryPage).toHaveBeenCalledTimes(1);
   });
   it("任务中心顶部新建对话应打开任务中心空白草稿而不是复用当前会话", () => {
     const onNewChat = vi.fn();

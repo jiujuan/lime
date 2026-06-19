@@ -241,6 +241,94 @@ describe("legacySurfaceCatalog", () => {
     ]);
   });
 
+  it("应将旧 MemoryPage 灵感库混合视图标记为 dead surface", () => {
+    const monitor = legacySurfaceCatalogJson.imports.find(
+      (entry) => entry.id === "memory-page-inspiration-library-surface",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.targets).toEqual([
+      "src/components/memory/index.ts",
+      "src/components/memory/inspirationProjection.ts",
+      "src/components/memory/memoryLayerMetrics.ts",
+      "src/components/memory/memoryLayerMetrics.test.ts",
+      "src/components/memory/MemoryCuratedTaskSuggestionPanel.tsx",
+      "src/components/memory/MemoryCuratedTaskSuggestionPanel.test.tsx",
+      "src/components/memory/MemoryPage.tsx",
+      "src/components/memory/MemoryPage.test.tsx",
+      "src/components/agent/chat/utils/messageInspirationDraft.ts",
+      "src/components/agent/chat/utils/messageInspirationDraft.test.ts",
+      "src/components/agent/chat/utils/saveSceneAppExecutionAsInspiration.ts",
+      "src/components/agent/chat/utils/saveSceneAppExecutionAsInspiration.test.ts",
+      "src/components/agent/chat/utils/sceneAppExecutionInspirationDraft.ts",
+      "src/components/agent/chat/utils/sceneAppExecutionInspirationDraft.test.ts",
+      "src/lib/api/unifiedMemory.ts",
+      "src/lib/api/unifiedMemory.test.ts",
+    ]);
+  });
+
+  it("应将旧 memoryRuntime 网关和预取诊断面标记为 dead surface", () => {
+    const monitor = legacySurfaceCatalogJson.imports.find(
+      (entry) => entry.id === "memory-runtime-retired-gateway-surface",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.targets).toEqual([
+      "src/lib/api/memoryRuntime.ts",
+      "src/lib/api/memoryRuntime.test.ts",
+      "src/lib/api/memoryRuntimeTypes.ts",
+      "src/lib/runtimeMemoryPrefetchHistory.ts",
+      "src/lib/runtimeMemoryPrefetchHistory.test.ts",
+      "src/components/agent/chat/components/AgentThreadMemoryPrefetchPreview.tsx",
+      "src/components/agent/chat/components/AgentThreadMemoryPrefetchPreview.test.tsx",
+      "src/components/agent/chat/components/AgentThreadMemoryPrefetchBaselineCard.tsx",
+    ]);
+  });
+
+  it("应将旧 SQLite memory crate 标记为 dead surface", () => {
+    const monitor = legacySurfaceCatalogJson.imports.find(
+      (entry) => entry.id === "memory-crate-retired-sqlite-surface",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.targets).toEqual([
+      "lime-rs/crates/memory/Cargo.toml",
+      "lime-rs/crates/memory/migrations/001_unified_memory.sql",
+      "lime-rs/crates/memory/migrations/003_feedback.sql",
+      "lime-rs/crates/memory/src/extractor.rs",
+      "lime-rs/crates/memory/src/feedback.rs",
+      "lime-rs/crates/memory/src/gatekeeper.rs",
+      "lime-rs/crates/memory/src/lib.rs",
+      "lime-rs/crates/memory/src/migration.rs",
+      "lime-rs/crates/memory/src/migrations/mod.rs",
+      "lime-rs/crates/memory/src/migrations/v1_unified_memory.rs",
+      "lime-rs/crates/memory/src/migrations/v1_unified_memory.sql",
+      "lime-rs/crates/memory/src/models/mod.rs",
+      "lime-rs/crates/memory/src/models/unified.rs",
+      "lime-rs/crates/memory/src/search.rs",
+    ]);
+  });
+
+  it("应将 App Server 旧 unified memory 处理器标记为 dead surface", () => {
+    const monitor = legacySurfaceCatalogJson.imports.find(
+      (entry) => entry.id === "memory-app-server-unified-retired-surface",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.targets).toEqual([
+      "lime-rs/crates/app-server/src/local_data_source/unified_memory.rs",
+      "lime-rs/crates/app-server/src/processor/unified.rs",
+    ]);
+  });
+
   it("应记录已删除的 Team selector/panel 与 TeamWorkspace 产品 UI 面", () => {
     const selectorImportMonitor = legacySurfaceCatalogJson.imports.find(
       (entry) => entry.id === "agent-chat-retired-team-selector-ui-surface",
@@ -1539,7 +1627,7 @@ describe("legacySurfaceCatalog", () => {
     );
 
     expect(monitor).toBeTruthy();
-    expect(monitor?.classification).toBe("dead-candidate");
+    expect(monitor?.classification).toBe("dead");
     expect(monitor?.allowedPaths).toEqual([]);
     expect(monitor?.targets).toEqual([
       "src/components/memory/MemoryFeedback.tsx",

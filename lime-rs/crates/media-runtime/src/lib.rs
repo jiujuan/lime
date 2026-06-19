@@ -6,12 +6,17 @@ use std::time::Duration;
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use chrono::Utc;
 use image::{codecs::png::PngEncoder, ColorType, ImageEncoder, ImageFormat};
+use runtime_core::{
+    build_openai_images_generation_body, build_responses_image_generation_body, LlmMessage,
+    LlmRequest, LlmRole, ResponsesImageGenerationInputShape, ResponsesImageGenerationOptions,
+};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Map, Value};
 use thiserror::Error;
 use tokio::task::JoinSet;
 use uuid::Uuid;
 
+mod llm_events;
 mod model_route;
 mod video_worker;
 
@@ -30,7 +35,6 @@ const CHROMA_KEY_DISTANCE_THRESHOLD: i16 = 32;
 const IMAGE_TASK_POSTPROCESS_MAX_IMAGE_BYTES: u64 = 20 * 1024 * 1024;
 const IMAGE_EXECUTOR_MODE_IMAGES_API: &str = "images_api";
 const IMAGE_EXECUTOR_MODE_RESPONSES_IMAGE_GENERATION: &str = "responses_image_generation";
-const DEFAULT_RESPONSES_IMAGE_GENERATION_OUTER_MODEL: &str = "gpt-5.5";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImageGenerationRunnerConfig {
@@ -1567,62 +1571,6 @@ fn collect_generated_images(response_body: &Value) -> Vec<Value> {
         .unwrap_or_default()
 }
 
-fn normalize_responses_image_generation_tool_model(model: &str) -> String {
-    let trimmed = model.trim();
-    if let Some(version) = trimmed.strip_prefix("gpt-images-") {
-        return format!("gpt-image-{version}");
-    }
-
-    trimmed.to_string()
-}
-
-fn build_responses_image_generation_tool(model: &str) -> Value {
-    let mut tool = Map::new();
-    tool.insert("type".to_string(), json!("image_generation"));
-    let normalized_model = normalize_responses_image_generation_tool_model(model);
-    let trimmed_model = normalized_model.trim();
-    if !trimmed_model.is_empty() {
-        tool.insert("model".to_string(), json!(trimmed_model));
-    }
-    Value::Object(tool)
-}
-
-fn build_responses_image_generation_input(prompt: &str, use_input_list: bool) -> Value {
-    if use_input_list {
-        return json!([
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "input_text",
-                        "text": prompt,
-                    }
-                ],
-            }
-        ]);
-    }
-
-    json!(prompt)
-}
-
-fn build_responses_image_generation_request_body(
-    prepared_input: &PreparedImageTaskInput,
-    request_prompt: &str,
-    use_input_list: bool,
-) -> Value {
-    json!({
-        "model": prepared_input
-            .outer_model
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .unwrap_or(DEFAULT_RESPONSES_IMAGE_GENERATION_OUTER_MODEL),
-        "input": build_responses_image_generation_input(request_prompt, use_input_list),
-        "tools": [build_responses_image_generation_tool(&prepared_input.model)],
-        "stream": true,
-    })
-}
-
 fn build_responses_image_generation_endpoint(endpoint: &str) -> String {
     let trimmed = endpoint.trim().trim_end_matches('/');
     let (base, query) = trimmed
@@ -1810,17 +1758,89 @@ fn build_image_generation_request_body(
     request_prompt: &str,
     request_count: u32,
     task_id: &str,
-) -> Value {
-    json!({
-        "prompt": request_prompt,
-        "model": prepared_input.model.clone(),
-        "n": request_count.max(1),
-        "size": prepared_input.size.clone(),
-        "response_format": "b64_json",
-        "quality": Value::Null,
-        "style": prepared_input.style.clone(),
-        "user": task_id,
+) -> Result<Value, TaskErrorRecord> {
+    let request = image_generation_llm_request(
+        prepared_input,
+        request_prompt,
+        task_id,
+        Some(request_count.max(1)),
+    );
+    build_openai_images_generation_body(&prepared_input.model, &request).map_err(|error| {
+        build_image_task_error(
+            "image_request_mapping_failed",
+            format!("构建图片生成请求失败: {error}"),
+            false,
+            "request",
+        )
     })
+}
+
+fn build_responses_image_generation_request_body(
+    prepared_input: &PreparedImageTaskInput,
+    request_prompt: &str,
+    task_id: &str,
+    use_input_list: bool,
+) -> Result<Value, TaskErrorRecord> {
+    let request = image_generation_llm_request(prepared_input, request_prompt, task_id, None);
+    let options = ResponsesImageGenerationOptions {
+        outer_model: prepared_input.outer_model.clone(),
+        input_shape: if use_input_list {
+            ResponsesImageGenerationInputShape::InputList
+        } else {
+            ResponsesImageGenerationInputShape::PromptString
+        },
+    };
+    build_responses_image_generation_body(&prepared_input.model, &request, &options).map_err(
+        |error| {
+            build_image_task_error(
+                "responses_image_request_mapping_failed",
+                format!("构建 Responses 图片生成请求失败: {error}"),
+                false,
+                "request",
+            )
+        },
+    )
+}
+
+fn image_generation_llm_request(
+    prepared_input: &PreparedImageTaskInput,
+    request_prompt: &str,
+    task_id: &str,
+    count: Option<u32>,
+) -> LlmRequest {
+    let mut metadata = std::collections::BTreeMap::new();
+    if let Some(count) = count {
+        metadata.insert("n".to_string(), json!(count.max(1)));
+    }
+    if let Some(size) = prepared_input
+        .size
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        metadata.insert("size".to_string(), json!(size));
+    }
+    metadata.insert("response_format".to_string(), json!("b64_json"));
+    metadata.insert("user".to_string(), json!(task_id));
+    if let Some(style) = prepared_input
+        .style
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        metadata.insert("style".to_string(), json!(style));
+    }
+
+    LlmRequest {
+        instructions: None,
+        messages: vec![LlmMessage::text(LlmRole::User, request_prompt)],
+        tools: Vec::new(),
+        temperature: None,
+        max_output_tokens: None,
+        stream: false,
+        reasoning_effort: None,
+        metadata,
+    }
 }
 
 async fn request_single_image_generation(
@@ -1831,7 +1851,7 @@ async fn request_single_image_generation(
     task_id: &str,
 ) -> Result<(Value, Value), TaskErrorRecord> {
     let request_body =
-        build_image_generation_request_body(prepared_input, request_prompt, 1, task_id);
+        build_image_generation_request_body(prepared_input, request_prompt, 1, task_id)?;
 
     let mut request_builder = client
         .post(&runner_config.endpoint)
@@ -1921,8 +1941,9 @@ async fn send_responses_image_generation_request(
     let request_body = build_responses_image_generation_request_body(
         prepared_input,
         request_prompt,
+        "",
         use_input_list,
-    );
+    )?;
     let endpoint = build_responses_image_generation_endpoint(&runner_config.endpoint);
     let response = client
         .post(&endpoint)
@@ -2620,6 +2641,10 @@ where
         task_id,
         TaskArtifactPatch {
             status: Some("failed".to_string()),
+            payload_patch: Some(llm_events::image_failed_payload_patch(
+                &current.record.payload,
+                &error,
+            )),
             last_error: Some(Some(error.clone())),
             progress: Some(build_image_task_progress(
                 "failed",
@@ -2803,6 +2828,13 @@ where
                         workspace_root,
                         task_id,
                         TaskArtifactPatch {
+                            payload_patch: Some(llm_events::image_running_payload_patch(
+                                &latest.record.payload,
+                                &prepared_input.executor_mode,
+                                images.iter().filter(|value| value.is_some()).count(),
+                                failures.iter().filter(|value| value.is_some()).count(),
+                                requested_count,
+                            )),
                             result: Some(Some(build_image_task_result_value(
                                 &prepared_input,
                                 requested_count as u32,
@@ -2878,6 +2910,13 @@ where
                 workspace_root,
                 task_id,
                 TaskArtifactPatch {
+                    payload_patch: Some(llm_events::image_running_payload_patch(
+                        &latest.record.payload,
+                        &prepared_input.executor_mode,
+                        images.iter().filter(|value| value.is_some()).count(),
+                        failures.iter().filter(|value| value.is_some()).count(),
+                        requested_count,
+                    )),
                     result: Some(Some(build_image_task_result_value(
                         &prepared_input,
                         requested_count as u32,
@@ -2956,6 +2995,12 @@ where
         task_id,
         TaskArtifactPatch {
             status: Some(final_status.to_string()),
+            payload_patch: Some(llm_events::image_completed_payload_patch(
+                &latest.record.payload,
+                &prepared_input.executor_mode,
+                completed_images.len(),
+                failed_slots.len(),
+            )),
             result: Some(Some(result_value)),
             last_error: Some(None),
             progress: Some(build_image_task_progress_with_preview(
@@ -4534,6 +4579,38 @@ mod tests {
                 .clone(),
             Some("b64_json".to_string())
         );
+        assert_eq!(
+            result
+                .record
+                .payload
+                .pointer("/llm_events/1/type")
+                .and_then(Value::as_str),
+            Some("turn.completed")
+        );
+        assert_eq!(
+            result
+                .record
+                .payload
+                .pointer("/provider_diagnostics/taskFamily")
+                .and_then(Value::as_str),
+            Some("image_generation")
+        );
+        assert_eq!(
+            result
+                .record
+                .payload
+                .pointer("/provider_diagnostics/providerId")
+                .and_then(Value::as_str),
+            None
+        );
+        assert_eq!(
+            result
+                .record
+                .payload
+                .pointer("/provider_diagnostics/transport")
+                .and_then(Value::as_str),
+            Some("local_lime_service")
+        );
 
         server.abort();
     }
@@ -4772,20 +4849,6 @@ mod tests {
         assert_eq!(
             build_responses_image_generation_endpoint("https://gateway.example.com/v1/responses"),
             "https://gateway.example.com/v1/responses"
-        );
-    }
-
-    #[test]
-    fn responses_image_generation_tool_should_normalize_gpt_images_2_alias() {
-        let tool = build_responses_image_generation_tool("gpt-images-2");
-
-        assert_eq!(
-            tool.get("type").and_then(Value::as_str),
-            Some("image_generation")
-        );
-        assert_eq!(
-            tool.get("model").and_then(Value::as_str),
-            Some("gpt-image-2")
         );
     }
 

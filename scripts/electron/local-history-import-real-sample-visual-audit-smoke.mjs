@@ -32,7 +32,8 @@ const DEFAULT_PROJECT_PATH = path.join(
 
 const DEFAULTS = {
   appUrl: "",
-  projectPath: process.env.CODEX_IMPORT_SMOKE_PROJECT_PATH || DEFAULT_PROJECT_PATH,
+  projectPath:
+    process.env.CODEX_IMPORT_SMOKE_PROJECT_PATH || DEFAULT_PROJECT_PATH,
   sourceRoot:
     process.env.CODEX_IMPORT_SMOKE_SOURCE_ROOT ||
     process.env.CODEX_HOME ||
@@ -155,7 +156,9 @@ function parseArgs(argv) {
     ["commitTimeoutMs", 30_000],
   ]) {
     if (!Number.isFinite(options[key]) || options[key] < min) {
-      throw new Error(`--${key.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`)} 必须是 >= ${min} 的数字`);
+      throw new Error(
+        `--${key.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`)} 必须是 >= ${min} 的数字`,
+      );
     }
   }
   if (!options.evidenceDir || !options.prefix) {
@@ -166,7 +169,9 @@ function parseArgs(argv) {
 
 function numericScore(value, keyHint = "") {
   if (typeof value === "number" && Number.isFinite(value)) {
-    return keyHint.match(/command|tool|patch|approval|search|reasoning|attachment/i)
+    return keyHint.match(
+      /command|tool|patch|approval|search|reasoning|attachment/i,
+    )
       ? value * 80
       : value;
   }
@@ -268,6 +273,10 @@ function contentTextFromMessage(message) {
 
 function summarizeReadModel(readResult) {
   const detail = readResult?.detail || {};
+  const executionRuntime =
+    detail && typeof detail === "object"
+      ? detail.execution_runtime || detail.executionRuntime || null
+      : null;
   const messages = Array.isArray(detail.messages) ? detail.messages : [];
   const items = Array.isArray(detail.items) ? detail.items : [];
   const itemCounts = items.reduce((counts, item) => {
@@ -276,7 +285,8 @@ function summarizeReadModel(readResult) {
     return counts;
   }, {});
   const attachmentMessages = messages.filter(
-    (message) => Array.isArray(message.attachments) && message.attachments.length > 0,
+    (message) =>
+      Array.isArray(message.attachments) && message.attachments.length > 0,
   ).length;
 
   return {
@@ -287,7 +297,26 @@ function summarizeReadModel(readResult) {
     itemCounts,
     attachmentMessages,
     hasUserMessage: messages.some((message) => message.role === "user"),
-    hasAssistantMessage: messages.some((message) => message.role === "assistant"),
+    hasAssistantMessage: messages.some(
+      (message) => message.role === "assistant",
+    ),
+    executionRuntime: executionRuntime
+      ? sanitizeJson({
+          sourceClient:
+            executionRuntime.source_client ||
+            executionRuntime.sourceClient ||
+            null,
+          hasImportedThreadSettings: Boolean(
+            executionRuntime.imported_thread_settings ||
+            executionRuntime.importedThreadSettings,
+          ),
+          hasImportedContinuation: Boolean(
+            executionRuntime.imported_continuation ||
+            executionRuntime.importedContinuation,
+          ),
+          source: executionRuntime.source || null,
+        })
+      : null,
     excerpts: messages
       .map(contentTextFromMessage)
       .filter((text) => text.length >= 12)
@@ -309,15 +338,25 @@ async function readImportedSession(page, options, sessionId) {
   const summary = summarizeReadModel(read.result);
   assert(summary.hasUserMessage, "read model 缺少导入用户消息");
   assert(summary.hasAssistantMessage, "read model 缺少导入助手消息");
-  assert(summary.messagesLength >= 4, "真实样本导入消息数过少，无法做长历史审计");
-  assert(summary.itemsLength >= 4, "真实样本导入 timeline item 过少，无法做细节审计");
+  assert(
+    summary.messagesLength >= 4,
+    "真实样本导入消息数过少，无法做长历史审计",
+  );
+  assert(
+    summary.itemsLength >= 4,
+    "真实样本导入 timeline item 过少，无法做细节审计",
+  );
   return {
     read: read.result,
     summary,
   };
 }
 
-function buildForbiddenSourceLeakTokens({ sourceRoot, sourceThreadId, sourcePath }) {
+function buildForbiddenSourceLeakTokens({
+  sourceRoot,
+  sourceThreadId,
+  sourcePath,
+}) {
   return [
     sourceRoot,
     sourcePath,
@@ -364,17 +403,32 @@ function sanitizeOpenSnapshot(snapshot) {
   });
 }
 
-function assertVisualAudits(audits, readSummary) {
-  assert(audits.length === VIEWPORTS.length * SCROLL_POSITIONS.length, "视觉审计截图数量不完整");
+function assertVisualAudits(audits, readSummary, openSnapshot) {
+  assert(
+    audits.length === VIEWPORTS.length * SCROLL_POSITIONS.length,
+    "视觉审计截图数量不完整",
+  );
+  assert(openSnapshot?.textareaVisible, "导入会话打开后输入框不可见");
+  assert(
+    openSnapshot?.textareaDisabled === false,
+    "导入会话打开后输入框不可用",
+  );
+  assert(
+    openSnapshot?.textareaSessionId === readSummary.sessionId,
+    "导入会话打开后输入框 session 未绑定目标会话",
+  );
   for (const audit of audits) {
     assert(audit.targetSessionVisible, `${audit.label} 未停留在目标 session`);
     assert(audit.visibleTextCaptured, `${audit.label} GUI 可见文本为空`);
-    assert(audit.inputbarVisible, `${audit.label} 输入框不可见`);
-    assert(!audit.inputbarDisabled, `${audit.label} 输入框不可用`);
-    assert(!audit.inputbarOccludesMainContent, `${audit.label} 输入框遮挡主内容`);
     assert(audit.messageListVisible, `${audit.label} 消息列表不可见`);
-    assert(!audit.importedBannerVisible, `${audit.label} 不应展示导入主线 banner`);
-    assert(!audit.importedRunControlVisible, `${audit.label} 不应展示导入运行控制卡`);
+    assert(
+      !audit.importedBannerVisible,
+      `${audit.label} 不应展示导入主线 banner`,
+    );
+    assert(
+      !audit.importedRunControlVisible,
+      `${audit.label} 不应展示导入运行控制卡`,
+    );
     assert(
       audit.leakedTokens.length === 0,
       `${audit.label} 暴露了 source 内部字段: ${audit.leakedTokens.join(", ")}`,
@@ -387,82 +441,356 @@ function assertVisualAudits(audits, readSummary) {
     );
   }
   if ((readSummary.itemCounts.patch || 0) > 0) {
-    assert(audits.some((audit) => audit.hasPatchText), "真实样本 GUI 未展示补丁记录");
+    assert(
+      audits.some((audit) => audit.hasPatchText),
+      "真实样本 GUI 未展示补丁记录",
+    );
   }
   if ((readSummary.itemCounts.web_search || 0) > 0) {
-    assert(audits.some((audit) => audit.hasSearchEvidence), "真实样本 GUI 未展示搜索记录");
+    assert(
+      audits.some((audit) => audit.hasSearchEvidence),
+      "真实样本 GUI 未展示搜索记录",
+    );
   }
   if ((readSummary.itemCounts.approval_request || 0) > 0) {
-    assert(audits.some((audit) => audit.hasApprovalText), "真实样本 GUI 未展示审批记录");
+    assert(
+      audits.some((audit) => audit.hasApprovalText),
+      "真实样本 GUI 未展示审批记录",
+    );
   }
 }
 
-async function inspectImportedRuntimeDetailDrilldown(page, options, forbiddenTokens) {
-  const opened = await page.evaluate(() => {
-    const toggle = document.querySelector(
-      '[data-testid="imported-runtime-detail-toggle"]',
-    );
-    if (!(toggle instanceof HTMLElement)) {
-      return { clicked: false, reason: "missing-toggle" };
-    }
-    toggle.click();
-    return { clicked: true };
-  });
-  assert(
-    opened?.clicked,
-    `真实样本 GUI 未提供完整记录下钻入口: ${JSON.stringify(sanitizeJson(opened))}`,
+function runtimeDetailFailure(message, snapshot) {
+  return new Error(
+    `${message}: ${JSON.stringify(sanitizeJson(snapshot ?? null))}`,
   );
+}
 
-  const startedAt = Date.now();
-  let snapshot = null;
-  while (Date.now() - startedAt < options.previewTimeoutMs) {
-    snapshot = await page.evaluate((tokens) => {
+async function readRuntimeEventsProbe(page, options, sessionId) {
+  if (!sessionId) {
+    return { ok: false, skipped: true, reason: "missing-session-id" };
+  }
+  try {
+    const response = await invokeAppServerFromPage(
+      page,
+      "conversationImport/thread/runtimeEvents/read",
+      {
+        sessionId,
+        offset: 0,
+        limit: 5,
+      },
+      { idPrefix: RPC_ID_PREFIX, timeoutMs: options.previewTimeoutMs },
+    );
+    const result = response.result || {};
+    return sanitizeJson({
+      ok: true,
+      totalEvents: result.totalEvents,
+      sourceRuntimeEvents: result.sourceRuntimeEvents,
+      materializedRuntimeEvents: result.materializedRuntimeEvents,
+      sidecarRuntimeEvents: result.sidecarRuntimeEvents,
+      eventCount: Array.isArray(result.events) ? result.events.length : null,
+      eventTypes: Array.isArray(result.events)
+        ? result.events
+            .map((event) => event?.eventType)
+            .filter(Boolean)
+            .slice(0, 12)
+        : [],
+      hasProjection: Boolean(result.projection),
+      nextOffset: result.nextOffset ?? null,
+    });
+  } catch (error) {
+    return sanitizeJson({
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function captureRuntimeDetailDomSnapshot(page, forbiddenTokens) {
+  return sanitizeJson(
+    await page.evaluate((tokens) => {
+      const textOf = (element) =>
+        element instanceof HTMLElement ? element.innerText || "" : "";
+      const preview = (value, maxLength = 1200) =>
+        typeof value === "string" && value.length > maxLength
+          ? `${value.slice(0, maxLength)}... [truncated ${value.length - maxLength} chars]`
+          : value || "";
       const panel = document.querySelector(
         '[data-testid="imported-runtime-detail-panel"]',
       );
       const body = document.querySelector(
         '[data-testid="imported-runtime-detail-body"]',
       );
+      const toggle = document.querySelector(
+        '[data-testid="imported-runtime-detail-toggle"]',
+      );
+      const eventsContainer = document.querySelector(
+        '[data-testid="imported-runtime-detail-events"]',
+      );
+      const loading = document.querySelector(
+        '[data-testid="imported-runtime-detail-loading"]',
+      );
+      const error = document.querySelector(
+        '[data-testid="imported-runtime-detail-error"]',
+      );
+      const empty = document.querySelector(
+        '[data-testid="imported-runtime-detail-empty"]',
+      );
       const events = Array.from(
-        document.querySelectorAll('[data-testid="imported-runtime-detail-event"]'),
+        document.querySelectorAll(
+          '[data-testid="imported-runtime-detail-event"]',
+        ),
       );
       const payloads = Array.from(
         document.querySelectorAll(
           '[data-testid="imported-runtime-detail-event-payload"]',
         ),
       );
-      const text = panel instanceof HTMLElement ? panel.innerText || "" : "";
+      const panelText = textOf(panel);
+      const bodyText = textOf(body);
+      const allButtons = Array.from(document.querySelectorAll("button"))
+        .map((button) => textOf(button).trim())
+        .filter(Boolean)
+        .slice(-30);
+      const popover = document.querySelector(
+        '[data-testid="task-center-environment-popover"]',
+      );
       return {
+        url: window.location.href,
+        bodyTextLength: document.body?.innerText?.length || 0,
+        bodyTextPreview: preview(document.body?.innerText || "", 1600),
         panelVisible: panel instanceof HTMLElement,
         bodyVisible: body instanceof HTMLElement,
+        panelTextLength: panelText.length,
+        panelTextPreview: preview(panelText),
+        detailBodyTextLength: bodyText.length,
+        detailBodyTextPreview: preview(bodyText),
+        summaryText:
+          body instanceof HTMLElement ? preview(bodyText.split("\n")[0] || "") : "",
+        toggleVisible: toggle instanceof HTMLElement,
+        toggleText: textOf(toggle).trim(),
+        toggleAriaExpanded:
+          toggle instanceof HTMLElement
+            ? toggle.getAttribute("aria-expanded")
+            : null,
+        eventsContainerVisible: eventsContainer instanceof HTMLElement,
+        loadingVisible: loading instanceof HTMLElement,
+        loadingText: textOf(loading).trim(),
+        errorVisible: error instanceof HTMLElement,
+        errorText: textOf(error).trim(),
+        emptyVisible: empty instanceof HTMLElement,
+        emptyText: textOf(empty).trim(),
         eventCount: events.length,
         eventKinds: events
           .map((event) => event.getAttribute("data-event-kind"))
           .filter(Boolean),
+        eventTextPreviews: events
+          .map((event) => preview(textOf(event), 500))
+          .filter(Boolean)
+          .slice(0, 8),
         hasFacts: Boolean(
           document.querySelector(
             '[data-testid="imported-runtime-detail-event-facts"]',
           ),
         ),
         hasPayloadPreview: payloads.length > 0,
+        payloadPreviewCount: payloads.length,
         hasSemanticTitle:
-          text.includes("命令") ||
-          text.includes("工具") ||
-          text.includes("搜索") ||
-          text.includes("思考") ||
-          text.includes("补丁") ||
-          text.includes("权限"),
-        hasSourceSummary: text.includes("已默认展示") || text.includes("shown by default"),
-        leakedTokens: tokens.filter((token) => token && text.includes(token)),
+          panelText.includes("命令") ||
+          panelText.includes("工具") ||
+          panelText.includes("搜索") ||
+          panelText.includes("思考") ||
+          panelText.includes("补丁") ||
+          panelText.includes("权限") ||
+          panelText.includes("Command") ||
+          panelText.includes("Tool") ||
+          panelText.includes("Search") ||
+          panelText.includes("Reasoning") ||
+          panelText.includes("Patch") ||
+          panelText.includes("Approval"),
+        hasSourceSummary:
+          panelText.includes("已默认展示") ||
+          panelText.includes("shown by default") ||
+          panelText.includes("完整来源记录") ||
+          panelText.includes("full source records"),
+        leakedTokens: tokens.filter(
+          (token) => token && panelText.includes(token),
+        ),
         rawFieldLeaks: [
           "sourceThreadId",
           "sourcePath",
           "threadId",
           "sessionId",
           "rollout_path",
-        ].filter((token) => text.includes(token)),
+        ].filter((token) => panelText.includes(token)),
+        popoverVisible: popover instanceof HTMLElement,
+        popoverTextPreview: preview(textOf(popover), 1200),
+        recentButtonLabels: allButtons,
       };
-    }, forbiddenTokens);
+    }, forbiddenTokens),
+  );
+}
+
+async function inspectImportedRuntimeDetailDrilldown(
+  page,
+  options,
+  forbiddenTokens,
+  sessionId,
+  onSnapshot,
+) {
+  const recordSnapshot = (snapshot) => {
+    const sanitized = sanitizeJson(snapshot);
+    onSnapshot?.(sanitized);
+    return sanitized;
+  };
+  const runtimeEventsProbe = await readRuntimeEventsProbe(
+    page,
+    options,
+    sessionId,
+  );
+  recordSnapshot({ phase: "runtime-events-probe", runtimeEventsProbe });
+
+  const environmentOpened = await page.evaluate(() => {
+    const trigger = document.querySelector(
+      '[data-testid="task-center-environment-trigger"]',
+    );
+    if (!(trigger instanceof HTMLElement)) {
+      return { clicked: false, reason: "missing-environment-trigger" };
+    }
+    trigger.click();
+    return { clicked: true };
+  });
+  recordSnapshot({
+    phase: "environment-open",
+    environmentOpened,
+    runtimeEventsProbe,
+  });
+  assert(
+    environmentOpened?.clicked,
+    `真实样本 GUI 未提供环境信息入口: ${JSON.stringify(
+      sanitizeJson({ environmentOpened, runtimeEventsProbe }),
+    )}`,
+  );
+
+  const popoverOpenedAt = Date.now();
+  let popoverVisible = false;
+  let popoverSnapshot = null;
+  while (Date.now() - popoverOpenedAt < options.previewTimeoutMs) {
+    popoverSnapshot = await page.evaluate(() => {
+      const popover = document.querySelector(
+        '[data-testid="task-center-environment-popover"]',
+      );
+      const text = popover instanceof HTMLElement ? popover.innerText || "" : "";
+      return {
+        visible: popover instanceof HTMLElement,
+        textLength: text.length,
+        textPreview: text.slice(0, 1200),
+        buttonLabels: Array.from(popover?.querySelectorAll("button") || [])
+          .map((button) =>
+            button instanceof HTMLElement ? button.innerText.trim() : "",
+          )
+          .filter(Boolean)
+          .slice(0, 20),
+      };
+    });
+    popoverVisible = popoverSnapshot?.visible === true;
+    if (popoverVisible) {
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  recordSnapshot({
+    phase: "environment-popover",
+    popoverSnapshot,
+    runtimeEventsProbe,
+  });
+  assert(
+    popoverVisible,
+    `真实样本 GUI 环境信息面板未打开: ${JSON.stringify(
+      sanitizeJson({ popoverSnapshot, runtimeEventsProbe }),
+    )}`,
+  );
+
+  let opened = null;
+  const toggleWaitStartedAt = Date.now();
+  while (Date.now() - toggleWaitStartedAt < options.previewTimeoutMs) {
+    opened = await page.evaluate(() => {
+      const toggle = document.querySelector(
+        '[data-testid="imported-runtime-detail-toggle"]',
+      );
+      if (!(toggle instanceof HTMLElement)) {
+        const popover = document.querySelector(
+          '[data-testid="task-center-environment-popover"]',
+        );
+        const popoverText =
+          popover instanceof HTMLElement ? popover.innerText || "" : "";
+        return {
+          clicked: false,
+          reason: "missing-toggle",
+          popoverTextLength: popoverText.length,
+          popoverTextPreview: popoverText.slice(0, 500),
+          hasSourcesSection: Boolean(
+            document.querySelector(
+              '[data-testid="task-center-run-control-sources"]',
+            ),
+          ),
+          hasRunControlSurface: Boolean(
+            document.querySelector(
+              '[data-testid="task-center-run-control-surface"]',
+            ),
+          ),
+          taskRailItemCount: document.querySelectorAll(
+            '[data-testid="task-center-task-rail-item"]',
+          ).length,
+          environmentSectionCount: document.querySelectorAll(
+            '[data-testid^="task-center-run-control-"]',
+          ).length,
+          buttonLabels: Array.from(popover?.querySelectorAll("button") || [])
+            .map((button) =>
+              button instanceof HTMLElement ? button.innerText.trim() : "",
+            )
+            .filter(Boolean)
+            .slice(0, 20),
+        };
+      }
+      toggle.click();
+      return { clicked: true };
+    });
+    if (opened?.clicked) {
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  recordSnapshot({
+    phase: "detail-toggle",
+    opened,
+    runtimeEventsProbe,
+  });
+  assert(
+    opened?.clicked,
+    `真实样本 GUI 未提供完整记录下钻入口: ${JSON.stringify(
+      sanitizeJson({ opened, runtimeEventsProbe }),
+    )}`,
+  );
+
+  const startedAt = Date.now();
+  let snapshot = null;
+  let lastPanelSnapshot = null;
+  let lastErrorSnapshot = null;
+  while (Date.now() - startedAt < options.previewTimeoutMs) {
+    snapshot = {
+      ...(await captureRuntimeDetailDomSnapshot(page, forbiddenTokens)),
+      phase: "detail-panel",
+      runtimeEventsProbe,
+    };
+    recordSnapshot(snapshot);
+    if (snapshot?.panelVisible) {
+      lastPanelSnapshot = snapshot;
+    }
+    if (snapshot?.errorVisible) {
+      lastErrorSnapshot = snapshot;
+      break;
+    }
     if (
       snapshot?.panelVisible &&
       snapshot.bodyVisible &&
@@ -474,32 +802,75 @@ async function inspectImportedRuntimeDetailDrilldown(page, options, forbiddenTok
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
 
-  assert(snapshot?.panelVisible, "完整记录下钻面板不可见");
-  assert(snapshot?.bodyVisible, "完整记录下钻内容不可见");
-  assert(snapshot?.eventCount > 0, "完整记录下钻没有渲染事件卡片");
-  assert(snapshot?.eventKinds.length > 0, "完整记录事件卡片缺少语义 kind");
-  assert(snapshot?.hasFacts, "完整记录事件卡片缺少事实摘要");
-  assert(snapshot?.hasPayloadPreview, "完整记录事件卡片缺少原始负载预览");
-  assert(snapshot?.hasSemanticTitle, "完整记录事件卡片缺少可读语义标题");
-  assert(snapshot?.hasSourceSummary, "完整记录下钻缺少来源规模摘要");
+  if (lastErrorSnapshot) {
+    throw runtimeDetailFailure("完整记录读取失败", lastErrorSnapshot);
+  }
+  if (!snapshot?.panelVisible) {
+    throw runtimeDetailFailure("完整记录下钻面板不可见", lastPanelSnapshot || snapshot);
+  }
+  if (!snapshot?.bodyVisible) {
+    throw runtimeDetailFailure("完整记录下钻内容不可见", snapshot);
+  }
+  if (!(snapshot?.eventCount > 0)) {
+    throw runtimeDetailFailure("完整记录下钻没有渲染事件卡片", snapshot);
+  }
+  if (!(snapshot?.eventKinds.length > 0)) {
+    throw runtimeDetailFailure("完整记录事件卡片缺少语义 kind", snapshot);
+  }
+  if (!snapshot?.hasFacts) {
+    throw runtimeDetailFailure("完整记录事件卡片缺少事实摘要", snapshot);
+  }
+  if (!snapshot?.hasPayloadPreview) {
+    throw runtimeDetailFailure("完整记录事件卡片缺少原始负载预览", snapshot);
+  }
+  if (!snapshot?.hasSemanticTitle) {
+    throw runtimeDetailFailure("完整记录事件卡片缺少可读语义标题", snapshot);
+  }
+  if (!snapshot?.hasSourceSummary) {
+    throw runtimeDetailFailure("完整记录下钻缺少来源规模摘要", snapshot);
+  }
   assert(
     snapshot.leakedTokens.length === 0,
-    `完整记录下钻暴露了 source 内部字段: ${snapshot.leakedTokens.join(", ")}`,
+    `完整记录下钻暴露了 source 内部字段: ${JSON.stringify(
+      sanitizeJson(snapshot),
+    )}`,
   );
   assert(
     snapshot.rawFieldLeaks.length === 0,
-    `完整记录下钻暴露了 raw 字段名: ${snapshot.rawFieldLeaks.join(", ")}`,
+    `完整记录下钻暴露了 raw 字段名: ${JSON.stringify(sanitizeJson(snapshot))}`,
   );
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await page.evaluate(() => {
+    const trigger = document.querySelector(
+      '[data-testid="task-center-environment-trigger"]',
+    );
+    const popover = document.querySelector(
+      '[data-testid="task-center-environment-popover"]',
+    );
+    if (trigger instanceof HTMLElement && popover instanceof HTMLElement) {
+      trigger.click();
+    }
+  });
   return sanitizeJson(snapshot);
 }
 
 async function run() {
   const options = parseArgs(process.argv.slice(2));
-  assert(fs.existsSync(options.projectPath), `项目路径不存在: ${options.projectPath}`);
-  assert(fs.existsSync(options.sourceRoot), `本地历史源不存在: ${options.sourceRoot}`);
+  assert(
+    fs.existsSync(options.projectPath),
+    `项目路径不存在: ${options.projectPath}`,
+  );
+  assert(
+    fs.existsSync(options.sourceRoot),
+    `本地历史源不存在: ${options.sourceRoot}`,
+  );
   fs.mkdirSync(options.evidenceDir, { recursive: true });
 
-  const summaryPath = path.join(options.evidenceDir, `${options.prefix}-summary.json`);
+  const summaryPath = path.join(
+    options.evidenceDir,
+    `${options.prefix}-summary.json`,
+  );
   const rawPath = path.join(options.evidenceDir, `${options.prefix}-raw.json`);
   const screenshotDir = path.join(options.evidenceDir, "screenshots");
   fs.mkdirSync(screenshotDir, { recursive: true });
@@ -526,7 +897,9 @@ async function run() {
     sourceRoot: options.keepTemp ? options.sourceRoot : "[source-root]",
     appUrl: options.appUrl || null,
     tempRoot: options.keepTemp ? runtimeEnv.tempRoot : null,
-    electronUserDataDir: options.keepTemp ? runtimeEnv.electronUserDataDir : null,
+    electronUserDataDir: options.keepTemp
+      ? runtimeEnv.electronUserDataDir
+      : null,
     appServerBinary,
     selectedThread: null,
     readModelSummary: null,
@@ -546,6 +919,7 @@ async function run() {
   let openSnapshot = null;
   let visualAudits = [];
   let runtimeDetailDrilldown = null;
+  const runtimeDetailDrilldownSnapshots = [];
 
   try {
     console.log(`${LOG_PREFIX} stage=launch-electron`);
@@ -596,7 +970,9 @@ async function run() {
       sourceThreadId: selected.thread.sourceThreadId,
       title: selected.thread.title,
       cwd: selected.thread.cwd,
-      sourcePath: options.keepTemp ? selected.thread.sourcePath : "[source-path]",
+      sourcePath: options.keepTemp
+        ? selected.thread.sourcePath
+        : "[source-path]",
       score: selected.score,
       lineCount: selected.preview.summary?.lineCount,
       messageCount: selected.preview.summary?.messageCount,
@@ -638,6 +1014,10 @@ async function run() {
       page,
       options,
       forbiddenTokens,
+      commit.session.sessionId,
+      (snapshot) => {
+        runtimeDetailDrilldownSnapshots.push(snapshot);
+      },
     );
     for (const viewport of VIEWPORTS) {
       for (const position of SCROLL_POSITIONS) {
@@ -650,13 +1030,19 @@ async function run() {
           viewport,
           position,
           sessionId: commit.session.sessionId,
+          sessionTitle:
+            commit.thread.title ||
+            selected.thread.title ||
+            readModel.summary.title ||
+            readModel.summary.excerpts[0] ||
+            commit.session.sessionId,
           forbiddenTokens,
           screenshotPath,
         });
         visualAudits.push(audit);
       }
     }
-    assertVisualAudits(visualAudits, readModel.summary);
+    assertVisualAudits(visualAudits, readModel.summary, openSnapshot);
     assert(
       consoleErrors.length === 0,
       `观察到 console error: ${consoleErrors.join(" | ")}`,
@@ -677,6 +1063,7 @@ async function run() {
         readModelSummary: readModel.summary,
         openSnapshot: sanitizeOpenSnapshot(openSnapshot),
         runtimeDetailDrilldown,
+        runtimeDetailDrilldownSnapshots,
         visualAudits,
       }),
     );
@@ -700,6 +1087,9 @@ async function run() {
       })),
     );
     summary.runtimeDetailDrilldown = runtimeDetailDrilldown;
+    summary.runtimeDetailDrilldownSnapshots = sanitizeJson(
+      runtimeDetailDrilldownSnapshots,
+    );
     summary.consoleErrors = consoleErrors;
     summary.ok = true;
     summary.completedAt = new Date().toISOString();
@@ -708,6 +1098,10 @@ async function run() {
   } catch (error) {
     summary.error = error instanceof Error ? error.message : String(error);
     summary.consoleErrors = consoleErrors;
+    summary.runtimeDetailDrilldown = runtimeDetailDrilldown;
+    summary.runtimeDetailDrilldownSnapshots = sanitizeJson(
+      runtimeDetailDrilldownSnapshots,
+    );
     writeJsonFile(summaryPath, summary);
     writeJsonFile(
       rawPath,
@@ -719,6 +1113,7 @@ async function run() {
         readModelSummary: readModel?.summary || null,
         openSnapshot: sanitizeOpenSnapshot(openSnapshot),
         runtimeDetailDrilldown,
+        runtimeDetailDrilldownSnapshots,
         visualAudits,
         error: summary.error,
       }),

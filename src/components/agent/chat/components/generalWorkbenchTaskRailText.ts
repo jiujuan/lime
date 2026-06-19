@@ -174,6 +174,20 @@ export function fallbackTranslate(key: string, options?: Record<string, unknown>
       return `${options?.type ?? ""}`;
     case "generalWorkbench.taskRail.importedRuntime.payload.scalarLength":
       return `${options?.type ?? ""} · ${options?.count ?? 0} 字符`;
+    case "generalWorkbench.taskRail.importedRuntime.payload.type.string":
+      return "文本";
+    case "generalWorkbench.taskRail.importedRuntime.payload.type.number":
+      return "数字";
+    case "generalWorkbench.taskRail.importedRuntime.payload.type.boolean":
+      return "布尔值";
+    case "generalWorkbench.taskRail.importedRuntime.payload.type.bigint":
+      return "大整数";
+    case "generalWorkbench.taskRail.importedRuntime.payload.type.symbol":
+      return "符号";
+    case "generalWorkbench.taskRail.importedRuntime.payload.type.function":
+      return "函数";
+    case "generalWorkbench.taskRail.importedRuntime.payload.type.value":
+      return "值";
     case "generalWorkbench.taskRail.context.model":
       return "模型";
     case "generalWorkbench.taskRail.context.permission":

@@ -108,7 +108,10 @@ import {
   refreshAgentSessionReadModelState,
 } from "./agentSessionRefresh";
 import type { AgentAccessMode } from "./agentChatStorage";
-import { hasRecoverableSilentTurnActivity } from "./agentSilentTurnRecovery";
+import {
+  hasRecoverableSilentTurnActivity,
+  hasRecoverableTerminalTurnActivity,
+} from "./agentSilentTurnRecovery";
 import { scheduleMinimumDelayIdleTask } from "@/lib/utils/scheduleMinimumDelayIdleTask";
 import { hasDesktopHostInvokeCapability } from "@/lib/desktop-runtime";
 import { useTranslation } from "react-i18next";
@@ -2475,6 +2478,10 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       targetSessionId: string,
       requestStartedAt: number,
       promptText: string,
+      options?: {
+        requireTerminal?: boolean;
+        turnId?: string | null;
+      },
     ) => {
       const resolvedSessionId = targetSessionId.trim();
       if (!resolvedSessionId) {
@@ -2495,11 +2502,18 @@ export function useAgentSession(options: UseAgentSessionOptions) {
           return false;
         }
         if (
-          !hasRecoverableSilentTurnActivity(
-            detail,
-            requestStartedAt,
-            promptText,
-          )
+          options?.requireTerminal
+            ? !hasRecoverableTerminalTurnActivity(
+                detail,
+                requestStartedAt,
+                promptText,
+                options.turnId,
+              )
+            : !hasRecoverableSilentTurnActivity(
+                detail,
+                requestStartedAt,
+                promptText,
+              )
         ) {
           return false;
         }

@@ -414,11 +414,11 @@ export function AppSidebarConversationShelf({
   );
   const importConversationLabel = t(
     "navigation.sidebar.conversations.importConversation",
-    "导入对话",
+    "Import Conversation",
   );
   const importProjectConversationLabel = t(
     "navigation.sidebar.conversations.importProjectConversation",
-    "导入本地历史对话到此项目",
+    "Import Conversation",
   );
   const loadingRecentLabel = t(
     "navigation.sidebar.conversations.loadingRecent",
@@ -650,7 +650,7 @@ export function AppSidebarConversationShelf({
           importConversationFor: (title) =>
             t("navigation.sidebar.conversations.importProjectConversationFor", {
               title,
-              defaultValue: "导入本地历史对话到 {{title}}",
+              defaultValue: "Import local history to {{title}}",
             }),
           rename: projectRenameActionLabel,
           remove: projectRemoveActionLabel,

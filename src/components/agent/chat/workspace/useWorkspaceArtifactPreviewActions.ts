@@ -46,11 +46,20 @@ function shouldUseProjectedPreviewArtifact(artifact: Artifact): boolean {
     return false;
   }
 
+  const source = typeof artifact.meta.source === "string" ? artifact.meta.source : "";
+  const contentKind =
+    typeof artifact.meta.contentKind === "string"
+      ? artifact.meta.contentKind
+      : "";
   const renderMode =
     typeof artifact.meta.renderMode === "string"
       ? artifact.meta.renderMode
       : "";
   return (
+    source === "url" ||
+    source === "database_record" ||
+    source === "app" ||
+    contentKind === "app_shell" ||
     renderMode === "media" ||
     renderMode === "system_open" ||
     renderMode === "unsupported"
@@ -369,15 +378,14 @@ export function useWorkspaceArtifactPreviewActions({
       }
 
       setSelectedArtifactId(nextArtifact.id);
-      if (shouldRequestCanvasDocumentSelection(nextArtifact)) {
-        onRequestCanvasPreviewOpen?.({
-          filePath:
-            nextArtifact.meta.filePath ||
+      onRequestCanvasPreviewOpen?.({
+        filePath: shouldRequestCanvasDocumentSelection(nextArtifact)
+          ? nextArtifact.meta.filePath ||
             nextArtifact.meta.sourcePath ||
-            nextArtifact.title,
-          selectionKey: `artifact:${nextArtifact.id}`,
-        });
-      }
+            nextArtifact.title
+          : null,
+        selectionKey: `artifact:${nextArtifact.id}`,
+      });
       setArtifactViewMode(
         resolveDefaultArtifactViewMode(nextArtifact, {
           preferSourceWhenStreaming: true,

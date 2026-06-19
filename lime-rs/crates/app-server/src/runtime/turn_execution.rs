@@ -154,6 +154,7 @@ impl RuntimeCore {
                     params.runtime_options.take(),
                 ));
         }
+        self.prepare_memory_prompt_context(&mut params).await;
 
         if let Some(capability_id) = params
             .runtime_options

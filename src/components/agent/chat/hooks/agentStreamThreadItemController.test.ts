@@ -115,6 +115,46 @@ describe("agentStreamThreadItemController", () => {
     });
   });
 
+  it("同一 tool id 出现在不同 turn 时不应覆盖上一轮工具 item", () => {
+    const firstTurnItem = threadItem({
+      id: "tool-search",
+      type: "tool_call",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+      tool_name: "web_search",
+      output: "第一轮结果",
+      status: "completed",
+      success: true,
+      sequence: 10,
+    });
+    const secondTurnItem = threadItem({
+      id: "tool-search",
+      type: "tool_call",
+      thread_id: "thread-1",
+      turn_id: "turn-2",
+      tool_name: "web_search",
+      output: "第二轮结果",
+      status: "completed",
+      success: true,
+      sequence: 20,
+      started_at: "2026-05-05T00:01:00.000Z",
+      updated_at: "2026-05-05T00:01:01.000Z",
+    });
+
+    const items = upsertThreadItemState([firstTurnItem], secondTurnItem);
+
+    expect(items).toHaveLength(2);
+    expect(
+      items.map((item) => [
+        item.turn_id,
+        item.type === "tool_call" ? item.output : undefined,
+      ]),
+    ).toEqual([
+      ["turn-1", "第一轮结果"],
+      ["turn-2", "第二轮结果"],
+    ]);
+  });
+
   it("应把工具增量实时投影为通用 tool_call item，保留多模态 metadata", () => {
     const started = projectAgentStreamTimelineItem(
       {
@@ -165,6 +205,35 @@ describe("agentStreamThreadItemController", () => {
         output_kind: "preview",
         streaming: true,
       },
+    });
+  });
+
+  it("legacy tool event 带 turn_id 时应优先使用事件 turn，不挂到当前 fallback turn", () => {
+    expect(
+      projectAgentStreamTimelineItem(
+        {
+          type: "tool_end",
+          tool_id: "tool-search",
+          turn_id: "turn-from-event",
+          result: {
+            success: true,
+            output: "搜索完成",
+          },
+          sequence: 24,
+          timestamp: "2026-05-05T00:01:04.000Z",
+        },
+        {
+          activeSessionId: "thread-1",
+          fallbackTurnId: "turn-fallback",
+          now: "2026-05-05T00:01:04.000Z",
+        },
+      ),
+    ).toMatchObject({
+      id: "tool-search",
+      type: "tool_call",
+      turn_id: "turn-from-event",
+      output: "搜索完成",
+      status: "completed",
     });
   });
 

@@ -1,180 +1,97 @@
-# Lime 灵感库 / 记忆产品路线图
+# Lime 文件化记忆路线图
 
-> 状态：current planning source  
-> 更新时间：2026-05-01  
-> 目标：把 Lime 的底层记忆能力收敛成面向创作者的 `灵感库` 产品，而不是把 Claude Code 式记忆工作台直接暴露给普通用户。
+> 状态：current planning source
+> 更新时间：2026-06-18
+> 主目标：把 Lime 记忆主线收敛到文件化 memory store、稳定摘要注入、专用记忆工具、backend 抽象和可重建检索层；Soul 继续作为用户可编辑的交互身份与沟通节奏配置保留。
 
 ## 1. 本路线图回答什么
 
-本目录统一回答下面几类问题：
+本目录只回答 Lime 记忆系统后续如何收敛：
 
-1. Lime 为什么继续参考 Claude Code 的记忆架构，但不照搬它的前台形态。
-2. 普通用户默认能看到哪些灵感对象，哪些底层记忆诊断必须隐藏到高级入口。
-3. `unified_memory_*`、`memory_runtime_*`、`agent_runtime_compact_session` 与前台 `灵感库` 的边界如何划分。
-4. 结果、参考、风格、偏好如何沉淀成可继续生成的创作者资产。
-5. 主动记忆、自动整理实验、raw recall / hit layer 如何通过开发者面板开关，且默认关闭。
-6. 后续如何分阶段把当前 MemoryPage 从“灵感库 + 记忆诊断混合页”收口成“普通用户灵感库 + 高级诊断工作台”。
-7. 灵感、记忆、历史结果和反馈如何让下一次生成更像用户，而不是依赖单个 system prompt，也不是把个性化做成重服务端 AI Agent 或自有小模型训练。
+1. 记忆事实源如何从数据库式长期对象收敛到可读、可审计、可版本化的 memory folder。
+2. 运行时如何只注入稳定 `memory_summary.md`，而不是把历史、召回结果或诊断全量塞进 prompt。
+3. Agent 如何通过 `memory_list` / `memory_read` / `memory_search` / `memory_add_note` 访问记忆。
+4. 记忆读、写、整理、清空如何拆成独立边界。
+5. Soul 如何作为 `memory.soul` 配置保留，并通过 `SOUL.md` 导入 / 复制和 generation brief 参与交互风格。
+6. SQLite 如何只保留线程状态、stage data、清理标记和索引元数据，不承担语义检索事实源。
+7. 如果未来需要向量或全文索引，如何作为可删除、可重建的派生索引接入，而不是成为第二套记忆真相。
 
-## 2. 参考事实源
+## 2. 当前裁决
 
-外部研究：
+### 2.1 `current`
 
-1. [../../research/memory/README.md](../../research/memory/README.md)
-2. [../../research/memory/inspiration-library-memory-research.md](../../research/memory/inspiration-library-memory-research.md)
-3. [../../research/ribbi/taste-memory-evolution.md](../../research/ribbi/taste-memory-evolution.md)
-4. [../../research/warp/claudecode-compatibility.md](../../research/warp/claudecode-compatibility.md)
-5. OpenClaw 本地调研：`/Users/coso/Documents/dev/js/openclaw/docs/concepts/memory.md`、`active-memory.md`、`dreaming.md`
-6. Codex 本地调研：`/Users/coso/Documents/dev/rust/codex/codex-rs/config/src/types.rs`、`memories/read/src/prompts.rs`、`memories/write/src/start.rs`、`memories/write/src/guard.rs`
-7. Claude Code 本地调研：`/Users/coso/Documents/dev/js/claudecode/src/memdir/findRelevantMemories.ts`、`services/SessionMemory/sessionMemory.ts`、`services/SessionMemory/sessionMemoryUtils.ts`、`services/compact/autoCompact.ts`
-8. Hermes Agent 本地调研：`/Users/coso/Documents/dev/python/hermes-agent/agent/memory_manager.py`、`memory_provider.py`、`tools/memory_tool.py`、`agent/context_compressor.py`
-9. Warp 本地调研：`/Users/coso/Documents/dev/rust/warp/app/src/ai/request_usage_model.rs`、`terminal/input.rs`、`terminal/profile_model_selector.rs`、`ai/blocklist/context_model.rs`
-10. Ribbi 访谈外部线索：[智源社区转载](https://hub.baai.ac.cn/view/53981)、[知乎专栏](https://zhuanlan.zhihu.com/p/2027420996353761358)、[36Kr 访谈](https://eu.36kr.com/zh/p/3778121523025154)
+Lime 后续记忆主线只允许向这组边界收敛：
 
-Lime current 主链：
+1. `memory store`：平台无关 App data / workspace scoped 记忆目录，由统一路径入口解析。
+2. `memory_summary.md`：每轮默认可注入的稳定摘要，必须有 token 上限。
+3. `MEMORY.md`：人工和后台整理后的记忆登记册，作为搜索入口。
+4. `rollout_summaries/`：会话 / 运行证据摘要，只在被 `MEMORY.md` 指向时读取。
+5. `extensions/ad_hoc/notes/`：用户或 Agent 显式添加的待整理备注。
+6. `MemoryBackend` trait：统一承接 list/read/search/add note，当前实现是本地文件系统。
+7. `memory tools`：Agent 通过工具读取和搜索记忆，结果必须带 path/line/citation。
+8. `prompt contributor`：只把截断后的 summary 作为 developer policy/context 注入。
+9. `memory.soul` / `MemorySoulConfig`：用户可编辑的交互身份、沟通节奏和 artifact voice 配置。
+10. `SOUL.md`：`memory.soul` 的导入和复制快照；运行时使用保存后的配置，不依赖该文件路径。
 
-1. [../../aiprompts/memory-compaction.md](../../aiprompts/memory-compaction.md)
-2. [../../aiprompts/governance.md](../../aiprompts/governance.md)
-3. [../../aiprompts/commands.md](../../aiprompts/commands.md)
-4. [../limenextv2/README.md](../limenextv2/README.md)
-5. [../limenextv2/product-principles.md](../limenextv2/product-principles.md)
+### 2.2 `dead`
 
-## 3. 固定结论
+这些内容本轮直接退出：
 
-### 3.1 Claude Code 是架构参考，不是前台模板
+1. `internal/roadmap/memory/make-next-generation-more-like-me.md`
+2. 新增 `inspiration_*` 平行长期事实源。
+3. 旧 `unified_memory_*` 长期记忆主线。
+4. 旧 `memory_runtime_*` 默认召回主线。
+5. 旧 MemoryPage 灵感库 / 高级诊断混合视图。
+6. SQLite embedding BLOB 与全表余弦扫描。
+7. active memory recall preview。
+8. auto organization / dreaming 实验。
+9. external memory provider。
+10. 默认引入任何具体外部索引库或向量数据库。
+11. 旧 `companion_*` 桌宠命令链路。
+12. 把旧 `lime-rs/src/**` 或旧 Tauri command wrapper 写回记忆路线图。
+13. 把外部 provider 或向量索引当成 memory current truth。
 
-Lime 继续学习 Claude Code 的：
+## 3. Soul 边界
 
-1. 分层记忆来源。
-2. 自动抽取与去重。
-3. 会话记忆与长期记忆分离。
-4. 相关性召回，而不是全量拼接。
-5. 压缩续接。
-6. 用户可审阅、可编辑、可删除。
+Soul 继续支持，但它不是长期记忆本体：
 
-Lime 不照搬 Claude Code 的：
+1. Soul 是 `memory.soul` 配置，负责交互身份、语气、解释深度、挑战方式、避免项和 artifact voice。
+2. `SOUL.md` 是导入 / 复制快照，导入时保留 `project_rules`、`local_path`、`secret_like`、`too_long` 等风险提示。
+3. artifact voice 只生成 `generation_brief_only`，不得写入 `MEMORY.md`、`memory_summary.md` 或长期记忆文件。
+4. 专家 persona 可以继承全局 Soul 的 `communication_rhythm`，但不得回写全局 Soul。
+5. Soul 与旧 `companion_*` 桌宠命令链路无关；后者按 `dead` 处理。
 
-1. `CLAUDE.md / MEMORY.md` 前台语言。
-2. `/memory` 式工程命令入口。
-3. 以文件和规则为中心的普通用户心智。
-4. 把 runtime 诊断信息作为默认导航。
+## 4. 核心工程形态
 
-固定裁决：
+关键不是“搜索更高级”，而是边界清楚：
 
-**底层按 Claude Code 分层，前台按 Lime 创作者心智重写。**
+1. 记忆先是文件，不是黑盒数据库。
+2. summary 小而稳定，默认注入；原文按需工具读取。
+3. 搜索先做轻量文本匹配，命中后再读取精确行范围。
+4. backend 是 trait，当前本地文件系统，后续可替换远端或索引实现。
+5. 写入必须显式、可追踪、可审核；后台整理不能直接污染当前 turn。
+6. SQLite 只保存线程状态、配置、stage data、清理标记和派生索引元数据，不做记忆语义事实源。
 
-### 3.2 灵感库不是另一套数据库
+## 5. 文件分工
 
-`灵感库` 是 `unified_memory` 的普通用户投影，不新增平行事实源。
+1. [prd.md](./prd.md)：产品与工程需求，定义 P0/P1/P2 和非目标。
+2. [architecture.md](./architecture.md)：目标架构、事实源分类、backend 与数据生命周期。
+3. [diagrams.md](./diagrams.md)：读路径、工具路径、写路径、Soul 路径和清理路径图。
+4. [rollout-plan.md](./rollout-plan.md)：分阶段实施计划、验证和退出条件。
+5. [acceptance.md](./acceptance.md)：验收标准和不通过判定。
 
-固定映射：
+## 6. 必须避免
 
-| `unified_memory.category` | 灵感库前台对象 | 用户理解 |
-| --- | --- | --- |
-| `identity` | 风格线索 | 这像我的表达、审美或品牌感 |
-| `context` | 参考素材 | 下次生成要带上的资料、案例或链接 |
-| `preference` | 偏好约束 | 以后要遵守或避免的取舍 |
-| `experience` | 成果打法 | 已经跑通、下次能复用的结构或结果 |
-| `activity` | 收藏备选 | 暂存，等待整理成更稳定资产 |
-
-### 3.3 普通用户默认只看前台价值
-
-默认开放：
-
-1. 灵感总览。
-2. 风格 / 参考 / 成果 / 偏好 / 收藏。
-3. 保存结果到灵感库。
-4. 围绕灵感继续生成。
-5. 编辑、删除、禁用、解释影响。
-6. 自动整理建议。
-
-默认隐藏：
-
-1. 来源链。
-2. working memory。
-3. runtime prefetch。
-4. Team Memory shadow。
-5. compaction summary。
-6. memdir scaffold / cleanup。
-7. source bucket / provider / memory type。
-8. active memory recall preview。
-9. raw source / hit layer。
-10. auto organization / dreaming 实验。
-
-一句话：
-
-**普通用户要的是“我的创作资产越来越懂我”，不是“我会管理一套 Agent 记忆系统”。**
-
-### 3.4 Ribbi 是产品形态北极星
-
-固定判断：
-
-**Ribbi 是 Lime 的产品形态参考；Claude Code、OpenClaw、Hermes 是底层记忆架构参考。**
-
-这意味着：
-
-1. 普通前台继续压缩到 `生成` 主容器、`灵感库`、少量创作入口和继续动作。
-2. taste / reference / memory / feedback 在后台持续进化，但不以底层术语争夺主导航。
-3. 主动记忆、raw recall 预览、自动整理实验和外部 provider 进入开发者面板 / 高级设置，默认关闭。
-4. 默认关闭不是放弃建设，而是把高风险能力留在可观察、可回滚、可审计的成熟路径里。
-
-### 3.5 “更像我”靠个性化上下文编排，不靠顶层 Prompt Router
-
-固定判断：
-
-**Lime 的顶层能力叫 `Personalization Context Orchestration / 个性化上下文编排`；`Promptlet Router` 只是选择细粒度 promptlet 的子模块。**
-
-这意味着：
-
-1. `Prompt Router` 作为顶层名称会和现有 `model routing` 混淆，不作为路线图主术语。
-2. 默认路线不训练自有小模型，也不把个性化做成重服务端 AI Agent；先用客户端优先的现有模型调用、缓存、相关性召回、promptlet 分层和 `Generation Brief` 编译实现个性化。
-3. 灵感库影响下一次生成时，必须先变成可解释、可禁用、可回滚的创作简报，不把所有灵感全量拼进 prompt。
-4. Claude Code 的多 prompt 边界值得学；Ribbi 的 taste layer 和 companion 产品表达值得学；两者都不应该变成普通用户可见的 prompt 管理器。
-5. Buddy / Ribbi 青蛙类能力只作为 `Companion Overlay`，不写入创作事实源，不覆盖用户 / 品牌 / 任务约束。
-6. Companion 采用 `bones + soul` 边界：外观、稀有度和基础属性 deterministic；`personality / soul` 可生成、可编辑、可持久化。
-7. 服务端只做必要同步、授权、模型访问代理、配置下发和可选云能力；不承接长期个性化训练主链。
-8. Memory 不能作为整体能力关闭；必须常开的只是低成本 baseline，高成本 active recall / deep extraction / raw diagnostics 才默认分层或关闭。
-9. Codex 虽然有 `use_memories / generate_memories` 开关，但它面向开发者配置；对 Lime 的借鉴是拆 read / write / enhancement，而不是给普通用户一个总失忆开关。
-
-## 4. 目录文档分工
-
-1. [prd.md](./prd.md)
-   - 产品背景、用户、目标、范围、需求、指标和验收。
-2. [architecture.md](./architecture.md)
-   - 前台投影、底层记忆主链、数据边界、current / compat / deprecated 分类。
-3. [diagrams.md](./diagrams.md)
-   - 架构图、时序图、流程图、状态图和分层图。
-4. [rollout-plan.md](./rollout-plan.md)
-   - 分阶段实施切片、风险、验证和迁移顺序。
-5. [acceptance.md](./acceptance.md)
-   - 普通用户、进阶用户、诊断用户和工程边界验收标准。
-6. [make-next-generation-more-like-me.md](./make-next-generation-more-like-me.md)
-   - 个性化上下文编排、promptlet 分层、`Generation Brief`、Buddy / Ribbi companion 边界和“客户端优先、不训练自有小模型”的论证。
-
-## 5. 分阶段总览
-
-| 阶段 | 目标 | 主产物 |
-| --- | --- | --- |
-| Phase 0 | 固定口径与事实源 | research + PRD + current/advanced 分层 |
-| Phase 1 | 拆普通灵感库与高级诊断 | `MemoryPage` IA 分层，开发者面板开关默认关闭，不改底层事实源 |
-| Phase 2 | 补用户控制 | 编辑、删除、禁用、影响解释、整理建议 |
-| Phase 3 | 做自动整理队列 | 自动抽取 -> 待确认 -> 入库 / 忽略 / 合并 |
-| Phase 4 | 强化生成闭环 | 保存结果 -> 推荐信号 -> 围绕灵感继续生成 |
-| Phase 5 | 味觉层 / 方法层融合 | taste summary、`Generation Brief`、我的方法、结果复盘互相回流 |
-| Phase 6 | 高级诊断收口 | runtime memory / compaction / Team Memory / active recall 仅开发者面板或高级入口 |
-
-## 6. 当前必须避免的误区
-
-1. 把“记忆能力”做成普通用户默认概念。
-2. 新增 `inspiration_*` 数据库表，和 `unified_memory_*` 形成双事实源。
-3. 把 session working memory 直接沉淀成长期灵感。
-4. 为了看起来智能，把所有聊天历史都保存成灵感。
-5. 没有编辑 / 删除 / 禁用能力就自动影响生成。
-6. 把高级诊断页误当成主导航体验。
-7. 因为默认关闭 active memory / diagnostics，就推迟建设底层审计、fenced recall 和用户控制。
+1. 为了补性能，直接把向量库接成记忆事实源。
+2. 在旧记忆或旧灵感库上继续追加新一代记忆语义。
+3. 让前端页面自己扫描磁盘或拼装 prompt。
+4. 把 raw recall、外部 provider、active recall 当默认能力。
+5. 让自动整理候选在用户确认前影响当前生成。
+6. 把 Soul 错判为旧 companion 桌宠链路。
+7. 在文档或实现里恢复 `lime-rs/src/**` 旧路径。
 
 ## 7. 这一步如何服务主线
 
-这套路线图的主线收益是：
+本轮收口把 memory 路线图从“旧灵感库 + 旧记忆实现延续”改成单一文件化记忆主线，并已把 `MemoryBackend` / 本地 memory store / `memoryStore/*` 前端网关接入 App Server current 边界。`memory_summary.md` 已通过 RuntimeCore turn start 读取并以受控 prompt contributor 注入；Soul 已作为保存后的 `memory.soul` current 配置注入受控交互片段；`memory_list` / `memory_read` / `memory_search` / `memory_add_note` 已注册为 App Server runtime native tools，并真实调用 current `MemoryAppDataSource`。旧 MemoryPage 灵感库、旧 `unifiedMemory` 网关、旧 `memoryRuntime` 召回网关和旧 memory crate 已进入 `dead / deleted / forbidden-to-restore`。
 
-**把 Lime 已经存在的 memory runtime、unified memory、结果沉淀和推荐信号收成一个面向创作者的灵感库产品闭环，同时保留 Claude Code 式底层治理能力。**
+下一刀转入 Phase 3/4：继续证明旧记忆与旧灵感库只剩 guard/test-only 残留，并补 memory reset / health / tool telemetry 的用户控制闭环；不要再恢复旧记忆或旧灵感库入口。

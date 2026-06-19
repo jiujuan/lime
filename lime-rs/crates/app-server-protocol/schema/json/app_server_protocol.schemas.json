@@ -8286,14 +8286,28 @@
             "readable": {
               "type": "boolean"
             },
+            "rolloutFileCount": {
+              "default": 0,
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
             "sourceClient": {
               "$ref": "#/$defs/ConversationImportSourceClient"
+            },
+            "sourceHomeExists": {
+              "default": false,
+              "type": "boolean"
             },
             "sourceRoot": {
               "type": [
                 "null",
                 "string"
               ]
+            },
+            "stateDbReadable": {
+              "default": false,
+              "type": "boolean"
             },
             "statePath": {
               "type": [
@@ -8465,14 +8479,28 @@
         "readable": {
           "type": "boolean"
         },
+        "rolloutFileCount": {
+          "default": 0,
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
         "sourceClient": {
           "$ref": "#/$defs/ConversationImportSourceClient"
+        },
+        "sourceHomeExists": {
+          "default": false,
+          "type": "boolean"
         },
         "sourceRoot": {
           "type": [
             "null",
             "string"
           ]
+        },
+        "stateDbReadable": {
+          "default": false,
+          "type": "boolean"
         },
         "statePath": {
           "type": [
@@ -9404,14 +9432,28 @@
             "readable": {
               "type": "boolean"
             },
+            "rolloutFileCount": {
+              "default": 0,
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
             "sourceClient": {
               "$ref": "#/$defs/ConversationImportSourceClient"
+            },
+            "sourceHomeExists": {
+              "default": false,
+              "type": "boolean"
             },
             "sourceRoot": {
               "type": [
                 "null",
                 "string"
               ]
+            },
+            "stateDbReadable": {
+              "default": false,
+              "type": "boolean"
             },
             "statePath": {
               "type": [
@@ -16219,6 +16261,788 @@
       "title": "MediaTaskArtifactVideoCreateParams",
       "type": "object"
     },
+    "MemoryStoreAddNoteParams": {
+      "$defs": {
+        "MemoryStoreScope": {
+          "enum": [
+            "global",
+            "workspace"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "content": {
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/MemoryStoreScope",
+          "default": "global"
+        },
+        "slug": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "title": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "workspaceRoot": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "content"
+      ],
+      "title": "MemoryStoreAddNoteParams",
+      "type": "object"
+    },
+    "MemoryStoreAddNoteResponse": {
+      "$defs": {
+        "MemoryStoreCitation": {
+          "properties": {
+            "endLineNumber": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "path": {
+              "type": "string"
+            },
+            "startLineNumber": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "endLineNumber",
+            "path",
+            "startLineNumber"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "citation": {
+          "$ref": "#/$defs/MemoryStoreCitation"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "citation",
+        "path"
+      ],
+      "title": "MemoryStoreAddNoteResponse",
+      "type": "object"
+    },
+    "MemoryStoreCitation": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "endLineNumber": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "path": {
+          "type": "string"
+        },
+        "startLineNumber": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "endLineNumber",
+        "path",
+        "startLineNumber"
+      ],
+      "title": "MemoryStoreCitation",
+      "type": "object"
+    },
+    "MemoryStoreEntry": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "entryType": {
+          "type": "string"
+        },
+        "modifiedAt": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "path": {
+          "type": "string"
+        },
+        "size": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "entryType",
+        "modifiedAt",
+        "path",
+        "size"
+      ],
+      "title": "MemoryStoreEntry",
+      "type": "object"
+    },
+    "MemoryStoreHealthResponse": {
+      "$defs": {
+        "MemoryStoreScope": {
+          "enum": [
+            "global",
+            "workspace"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "fileCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "initialized": {
+          "type": "boolean"
+        },
+        "memoryBytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "memoryExists": {
+          "type": "boolean"
+        },
+        "notesCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rootPath": {
+          "type": "string"
+        },
+        "rootScope": {
+          "$ref": "#/$defs/MemoryStoreScope"
+        },
+        "summaryBytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "summaryExists": {
+          "type": "boolean"
+        },
+        "totalBytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "fileCount",
+        "initialized",
+        "memoryBytes",
+        "memoryExists",
+        "notesCount",
+        "rootPath",
+        "rootScope",
+        "summaryBytes",
+        "summaryExists",
+        "totalBytes"
+      ],
+      "title": "MemoryStoreHealthResponse",
+      "type": "object"
+    },
+    "MemoryStoreListParams": {
+      "$defs": {
+        "MemoryStoreScope": {
+          "enum": [
+            "global",
+            "workspace"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "cursor": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "maxResults": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "path": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "scope": {
+          "$ref": "#/$defs/MemoryStoreScope",
+          "default": "global"
+        },
+        "workspaceRoot": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "title": "MemoryStoreListParams",
+      "type": "object"
+    },
+    "MemoryStoreListResponse": {
+      "$defs": {
+        "MemoryStoreEntry": {
+          "properties": {
+            "entryType": {
+              "type": "string"
+            },
+            "modifiedAt": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "path": {
+              "type": "string"
+            },
+            "size": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "entryType",
+            "modifiedAt",
+            "path",
+            "size"
+          ],
+          "type": "object"
+        },
+        "MemoryStoreScope": {
+          "enum": [
+            "global",
+            "workspace"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "entries": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/MemoryStoreEntry"
+          },
+          "type": "array"
+        },
+        "nextCursor": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "rootScope": {
+          "$ref": "#/$defs/MemoryStoreScope"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "path",
+        "rootScope",
+        "truncated"
+      ],
+      "title": "MemoryStoreListResponse",
+      "type": "object"
+    },
+    "MemoryStoreReadParams": {
+      "$defs": {
+        "MemoryStoreScope": {
+          "enum": [
+            "global",
+            "workspace"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "lineOffset": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "maxLines": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "maxTokens": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/MemoryStoreScope",
+          "default": "global"
+        },
+        "workspaceRoot": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "MemoryStoreReadParams",
+      "type": "object"
+    },
+    "MemoryStoreReadResponse": {
+      "$defs": {
+        "MemoryStoreCitation": {
+          "properties": {
+            "endLineNumber": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "path": {
+              "type": "string"
+            },
+            "startLineNumber": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "endLineNumber",
+            "path",
+            "startLineNumber"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "citation": {
+          "$ref": "#/$defs/MemoryStoreCitation"
+        },
+        "content": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "startLineNumber": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "citation",
+        "content",
+        "path",
+        "startLineNumber",
+        "truncated"
+      ],
+      "title": "MemoryStoreReadResponse",
+      "type": "object"
+    },
+    "MemoryStoreResetParams": {
+      "$defs": {
+        "MemoryStoreScope": {
+          "enum": [
+            "global",
+            "workspace"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/MemoryStoreScope",
+          "default": "global"
+        },
+        "workspaceRoot": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "title": "MemoryStoreResetParams",
+      "type": "object"
+    },
+    "MemoryStoreResetResponse": {
+      "$defs": {
+        "MemoryStoreScope": {
+          "enum": [
+            "global",
+            "workspace"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "preservedSoul": {
+          "type": "boolean"
+        },
+        "removedDirectories": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "removedFiles": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rootPath": {
+          "type": "string"
+        },
+        "rootScope": {
+          "$ref": "#/$defs/MemoryStoreScope"
+        }
+      },
+      "required": [
+        "preservedSoul",
+        "removedDirectories",
+        "removedFiles",
+        "rootPath",
+        "rootScope"
+      ],
+      "title": "MemoryStoreResetResponse",
+      "type": "object"
+    },
+    "MemoryStoreRootParams": {
+      "$defs": {
+        "MemoryStoreScope": {
+          "enum": [
+            "global",
+            "workspace"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/MemoryStoreScope",
+          "default": "global"
+        },
+        "workspaceRoot": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "title": "MemoryStoreRootParams",
+      "type": "object"
+    },
+    "MemoryStoreScope": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "enum": [
+        "global",
+        "workspace"
+      ],
+      "title": "MemoryStoreScope",
+      "type": "string"
+    },
+    "MemoryStoreSearchHit": {
+      "$defs": {
+        "MemoryStoreCitation": {
+          "properties": {
+            "endLineNumber": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "path": {
+              "type": "string"
+            },
+            "startLineNumber": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "endLineNumber",
+            "path",
+            "startLineNumber"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "citation": {
+          "$ref": "#/$defs/MemoryStoreCitation"
+        },
+        "content": {
+          "type": "string"
+        },
+        "contentStartLineNumber": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "matchLineNumber": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "matchedQueries": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "citation",
+        "content",
+        "contentStartLineNumber",
+        "matchLineNumber",
+        "matchedQueries",
+        "path"
+      ],
+      "title": "MemoryStoreSearchHit",
+      "type": "object"
+    },
+    "MemoryStoreSearchMatchMode": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "enum": [
+        "allOnSameLine",
+        "allWithinLines",
+        "any"
+      ],
+      "title": "MemoryStoreSearchMatchMode",
+      "type": "string"
+    },
+    "MemoryStoreSearchParams": {
+      "$defs": {
+        "MemoryStoreScope": {
+          "enum": [
+            "global",
+            "workspace"
+          ],
+          "type": "string"
+        },
+        "MemoryStoreSearchMatchMode": {
+          "enum": [
+            "allOnSameLine",
+            "allWithinLines",
+            "any"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "caseSensitive": {
+          "default": false,
+          "type": "boolean"
+        },
+        "contextLines": {
+          "default": 0,
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cursor": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "matchMode": {
+          "$ref": "#/$defs/MemoryStoreSearchMatchMode",
+          "default": "any"
+        },
+        "maxResults": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "normalized": {
+          "default": false,
+          "type": "boolean"
+        },
+        "queries": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "scope": {
+          "$ref": "#/$defs/MemoryStoreScope",
+          "default": "global"
+        },
+        "withinLines": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "workspaceRoot": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "title": "MemoryStoreSearchParams",
+      "type": "object"
+    },
+    "MemoryStoreSearchResponse": {
+      "$defs": {
+        "MemoryStoreCitation": {
+          "properties": {
+            "endLineNumber": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "path": {
+              "type": "string"
+            },
+            "startLineNumber": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "endLineNumber",
+            "path",
+            "startLineNumber"
+          ],
+          "type": "object"
+        },
+        "MemoryStoreSearchHit": {
+          "properties": {
+            "citation": {
+              "$ref": "#/$defs/MemoryStoreCitation"
+            },
+            "content": {
+              "type": "string"
+            },
+            "contentStartLineNumber": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "matchLineNumber": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "matchedQueries": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "citation",
+            "content",
+            "contentStartLineNumber",
+            "matchLineNumber",
+            "matchedQueries",
+            "path"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "hits": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/MemoryStoreSearchHit"
+          },
+          "type": "array"
+        },
+        "nextCursor": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "truncated"
+      ],
+      "title": "MemoryStoreSearchResponse",
+      "type": "object"
+    },
     "ModelCapabilitiesInfo": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -22939,1619 +23763,6 @@
       "title": "TransportKind",
       "type": "string"
     },
-    "UnifiedMemory": {
-      "$defs": {
-        "UnifiedMemoryCategory": {
-          "enum": [
-            "activity",
-            "context",
-            "experience",
-            "identity",
-            "preference"
-          ],
-          "type": "string"
-        },
-        "UnifiedMemoryMetadata": {
-          "properties": {
-            "access_count": {
-              "format": "uint32",
-              "minimum": 0,
-              "type": "integer"
-            },
-            "confidence": {
-              "format": "float",
-              "type": "number"
-            },
-            "embedding": {
-              "default": null,
-              "items": {
-                "format": "float",
-                "type": "number"
-              },
-              "type": [
-                "array",
-                "null"
-              ]
-            },
-            "importance": {
-              "format": "uint8",
-              "maximum": 255,
-              "minimum": 0,
-              "type": "integer"
-            },
-            "last_accessed_at": {
-              "default": null,
-              "format": "int64",
-              "type": [
-                "integer",
-                "null"
-              ]
-            },
-            "source": {
-              "$ref": "#/$defs/UnifiedMemorySource"
-            }
-          },
-          "required": [
-            "access_count",
-            "confidence",
-            "importance",
-            "source"
-          ],
-          "type": "object"
-        },
-        "UnifiedMemorySource": {
-          "enum": [
-            "auto_extracted",
-            "imported",
-            "manual"
-          ],
-          "type": "string"
-        },
-        "UnifiedMemoryType": {
-          "enum": [
-            "conversation",
-            "project"
-          ],
-          "type": "string"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "archived": {
-          "type": "boolean"
-        },
-        "category": {
-          "$ref": "#/$defs/UnifiedMemoryCategory"
-        },
-        "content": {
-          "type": "string"
-        },
-        "created_at": {
-          "format": "int64",
-          "type": "integer"
-        },
-        "id": {
-          "type": "string"
-        },
-        "memory_type": {
-          "$ref": "#/$defs/UnifiedMemoryType"
-        },
-        "metadata": {
-          "$ref": "#/$defs/UnifiedMemoryMetadata"
-        },
-        "session_id": {
-          "type": "string"
-        },
-        "summary": {
-          "type": "string"
-        },
-        "tags": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "title": {
-          "type": "string"
-        },
-        "updated_at": {
-          "format": "int64",
-          "type": "integer"
-        }
-      },
-      "required": [
-        "archived",
-        "category",
-        "content",
-        "created_at",
-        "id",
-        "memory_type",
-        "metadata",
-        "session_id",
-        "summary",
-        "title",
-        "updated_at"
-      ],
-      "title": "UnifiedMemory",
-      "type": "object"
-    },
-    "UnifiedMemoryAnalysisResponse": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "analyzed_messages": {
-          "format": "uint32",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "analyzed_sessions": {
-          "format": "uint32",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "deduplicated_entries": {
-          "format": "uint32",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "generated_entries": {
-          "format": "uint32",
-          "minimum": 0,
-          "type": "integer"
-        }
-      },
-      "required": [
-        "analyzed_messages",
-        "analyzed_sessions",
-        "deduplicated_entries",
-        "generated_entries"
-      ],
-      "title": "UnifiedMemoryAnalysisResponse",
-      "type": "object"
-    },
-    "UnifiedMemoryAnalyzeParams": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "from_timestamp": {
-          "format": "int64",
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "to_timestamp": {
-          "format": "int64",
-          "type": [
-            "integer",
-            "null"
-          ]
-        }
-      },
-      "title": "UnifiedMemoryAnalyzeParams",
-      "type": "object"
-    },
-    "UnifiedMemoryCategory": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "enum": [
-        "activity",
-        "context",
-        "experience",
-        "identity",
-        "preference"
-      ],
-      "title": "UnifiedMemoryCategory",
-      "type": "string"
-    },
-    "UnifiedMemoryCategoryCount": {
-      "$defs": {
-        "UnifiedMemoryCategory": {
-          "enum": [
-            "activity",
-            "context",
-            "experience",
-            "identity",
-            "preference"
-          ],
-          "type": "string"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "category": {
-          "$ref": "#/$defs/UnifiedMemoryCategory"
-        },
-        "count": {
-          "format": "uint32",
-          "minimum": 0,
-          "type": "integer"
-        }
-      },
-      "required": [
-        "category",
-        "count"
-      ],
-      "title": "UnifiedMemoryCategoryCount",
-      "type": "object"
-    },
-    "UnifiedMemoryCreateParams": {
-      "$defs": {
-        "UnifiedMemoryCategory": {
-          "enum": [
-            "activity",
-            "context",
-            "experience",
-            "identity",
-            "preference"
-          ],
-          "type": "string"
-        },
-        "UnifiedMemoryCreateRequest": {
-          "properties": {
-            "category": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/UnifiedMemoryCategory"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "confidence": {
-              "format": "float",
-              "type": [
-                "null",
-                "number"
-              ]
-            },
-            "content": {
-              "type": "string"
-            },
-            "importance": {
-              "format": "uint8",
-              "maximum": 255,
-              "minimum": 0,
-              "type": [
-                "integer",
-                "null"
-              ]
-            },
-            "session_id": {
-              "type": "string"
-            },
-            "summary": {
-              "type": "string"
-            },
-            "tags": {
-              "items": {
-                "type": "string"
-              },
-              "type": [
-                "array",
-                "null"
-              ]
-            },
-            "title": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "content",
-            "session_id",
-            "summary",
-            "title"
-          ],
-          "type": "object"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "request": {
-          "$ref": "#/$defs/UnifiedMemoryCreateRequest"
-        }
-      },
-      "required": [
-        "request"
-      ],
-      "title": "UnifiedMemoryCreateParams",
-      "type": "object"
-    },
-    "UnifiedMemoryCreateRequest": {
-      "$defs": {
-        "UnifiedMemoryCategory": {
-          "enum": [
-            "activity",
-            "context",
-            "experience",
-            "identity",
-            "preference"
-          ],
-          "type": "string"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "category": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/UnifiedMemoryCategory"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "confidence": {
-          "format": "float",
-          "type": [
-            "null",
-            "number"
-          ]
-        },
-        "content": {
-          "type": "string"
-        },
-        "importance": {
-          "format": "uint8",
-          "maximum": 255,
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "session_id": {
-          "type": "string"
-        },
-        "summary": {
-          "type": "string"
-        },
-        "tags": {
-          "items": {
-            "type": "string"
-          },
-          "type": [
-            "array",
-            "null"
-          ]
-        },
-        "title": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "content",
-        "session_id",
-        "summary",
-        "title"
-      ],
-      "title": "UnifiedMemoryCreateRequest",
-      "type": "object"
-    },
-    "UnifiedMemoryDeleteParams": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "id": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "id"
-      ],
-      "title": "UnifiedMemoryDeleteParams",
-      "type": "object"
-    },
-    "UnifiedMemoryDeleteResponse": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "deleted": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "deleted"
-      ],
-      "title": "UnifiedMemoryDeleteResponse",
-      "type": "object"
-    },
-    "UnifiedMemoryGetParams": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "id": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "id"
-      ],
-      "title": "UnifiedMemoryGetParams",
-      "type": "object"
-    },
-    "UnifiedMemoryGetResponse": {
-      "$defs": {
-        "UnifiedMemory": {
-          "properties": {
-            "archived": {
-              "type": "boolean"
-            },
-            "category": {
-              "$ref": "#/$defs/UnifiedMemoryCategory"
-            },
-            "content": {
-              "type": "string"
-            },
-            "created_at": {
-              "format": "int64",
-              "type": "integer"
-            },
-            "id": {
-              "type": "string"
-            },
-            "memory_type": {
-              "$ref": "#/$defs/UnifiedMemoryType"
-            },
-            "metadata": {
-              "$ref": "#/$defs/UnifiedMemoryMetadata"
-            },
-            "session_id": {
-              "type": "string"
-            },
-            "summary": {
-              "type": "string"
-            },
-            "tags": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "title": {
-              "type": "string"
-            },
-            "updated_at": {
-              "format": "int64",
-              "type": "integer"
-            }
-          },
-          "required": [
-            "archived",
-            "category",
-            "content",
-            "created_at",
-            "id",
-            "memory_type",
-            "metadata",
-            "session_id",
-            "summary",
-            "title",
-            "updated_at"
-          ],
-          "type": "object"
-        },
-        "UnifiedMemoryCategory": {
-          "enum": [
-            "activity",
-            "context",
-            "experience",
-            "identity",
-            "preference"
-          ],
-          "type": "string"
-        },
-        "UnifiedMemoryMetadata": {
-          "properties": {
-            "access_count": {
-              "format": "uint32",
-              "minimum": 0,
-              "type": "integer"
-            },
-            "confidence": {
-              "format": "float",
-              "type": "number"
-            },
-            "embedding": {
-              "default": null,
-              "items": {
-                "format": "float",
-                "type": "number"
-              },
-              "type": [
-                "array",
-                "null"
-              ]
-            },
-            "importance": {
-              "format": "uint8",
-              "maximum": 255,
-              "minimum": 0,
-              "type": "integer"
-            },
-            "last_accessed_at": {
-              "default": null,
-              "format": "int64",
-              "type": [
-                "integer",
-                "null"
-              ]
-            },
-            "source": {
-              "$ref": "#/$defs/UnifiedMemorySource"
-            }
-          },
-          "required": [
-            "access_count",
-            "confidence",
-            "importance",
-            "source"
-          ],
-          "type": "object"
-        },
-        "UnifiedMemorySource": {
-          "enum": [
-            "auto_extracted",
-            "imported",
-            "manual"
-          ],
-          "type": "string"
-        },
-        "UnifiedMemoryType": {
-          "enum": [
-            "conversation",
-            "project"
-          ],
-          "type": "string"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "memory": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/UnifiedMemory"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        }
-      },
-      "title": "UnifiedMemoryGetResponse",
-      "type": "object"
-    },
-    "UnifiedMemoryHybridSearchOptions": {
-      "$defs": {
-        "UnifiedMemoryCategory": {
-          "enum": [
-            "activity",
-            "context",
-            "experience",
-            "identity",
-            "preference"
-          ],
-          "type": "string"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "category": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/UnifiedMemoryCategory"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "keyword_weight": {
-          "format": "float",
-          "type": [
-            "null",
-            "number"
-          ]
-        },
-        "limit": {
-          "format": "uint",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "min_similarity": {
-          "format": "float",
-          "type": [
-            "null",
-            "number"
-          ]
-        },
-        "query": {
-          "type": "string"
-        },
-        "semantic_weight": {
-          "format": "float",
-          "type": "number"
-        }
-      },
-      "required": [
-        "query",
-        "semantic_weight"
-      ],
-      "title": "UnifiedMemoryHybridSearchOptions",
-      "type": "object"
-    },
-    "UnifiedMemoryHybridSearchParams": {
-      "$defs": {
-        "UnifiedMemoryCategory": {
-          "enum": [
-            "activity",
-            "context",
-            "experience",
-            "identity",
-            "preference"
-          ],
-          "type": "string"
-        },
-        "UnifiedMemoryHybridSearchOptions": {
-          "properties": {
-            "category": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/UnifiedMemoryCategory"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "keyword_weight": {
-              "format": "float",
-              "type": [
-                "null",
-                "number"
-              ]
-            },
-            "limit": {
-              "format": "uint",
-              "minimum": 0,
-              "type": [
-                "integer",
-                "null"
-              ]
-            },
-            "min_similarity": {
-              "format": "float",
-              "type": [
-                "null",
-                "number"
-              ]
-            },
-            "query": {
-              "type": "string"
-            },
-            "semantic_weight": {
-              "format": "float",
-              "type": "number"
-            }
-          },
-          "required": [
-            "query",
-            "semantic_weight"
-          ],
-          "type": "object"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "options": {
-          "$ref": "#/$defs/UnifiedMemoryHybridSearchOptions"
-        }
-      },
-      "required": [
-        "options"
-      ],
-      "title": "UnifiedMemoryHybridSearchParams",
-      "type": "object"
-    },
-    "UnifiedMemoryListFilters": {
-      "$defs": {
-        "UnifiedMemoryCategory": {
-          "enum": [
-            "activity",
-            "context",
-            "experience",
-            "identity",
-            "preference"
-          ],
-          "type": "string"
-        },
-        "UnifiedMemoryType": {
-          "enum": [
-            "conversation",
-            "project"
-          ],
-          "type": "string"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "archived": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "category": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/UnifiedMemoryCategory"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "limit": {
-          "format": "uint",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "memory_type": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/UnifiedMemoryType"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "offset": {
-          "format": "uint",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "order": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "session_id": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "sort_by": {
-          "type": [
-            "null",
-            "string"
-          ]
-        }
-      },
-      "title": "UnifiedMemoryListFilters",
-      "type": "object"
-    },
-    "UnifiedMemoryListParams": {
-      "$defs": {
-        "UnifiedMemoryCategory": {
-          "enum": [
-            "activity",
-            "context",
-            "experience",
-            "identity",
-            "preference"
-          ],
-          "type": "string"
-        },
-        "UnifiedMemoryListFilters": {
-          "properties": {
-            "archived": {
-              "type": [
-                "boolean",
-                "null"
-              ]
-            },
-            "category": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/UnifiedMemoryCategory"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "limit": {
-              "format": "uint",
-              "minimum": 0,
-              "type": [
-                "integer",
-                "null"
-              ]
-            },
-            "memory_type": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/UnifiedMemoryType"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "offset": {
-              "format": "uint",
-              "minimum": 0,
-              "type": [
-                "integer",
-                "null"
-              ]
-            },
-            "order": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "session_id": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "sort_by": {
-              "type": [
-                "null",
-                "string"
-              ]
-            }
-          },
-          "type": "object"
-        },
-        "UnifiedMemoryType": {
-          "enum": [
-            "conversation",
-            "project"
-          ],
-          "type": "string"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "filters": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/UnifiedMemoryListFilters"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "title": "UnifiedMemoryListParams",
-      "type": "object"
-    },
-    "UnifiedMemoryListResponse": {
-      "$defs": {
-        "UnifiedMemory": {
-          "properties": {
-            "archived": {
-              "type": "boolean"
-            },
-            "category": {
-              "$ref": "#/$defs/UnifiedMemoryCategory"
-            },
-            "content": {
-              "type": "string"
-            },
-            "created_at": {
-              "format": "int64",
-              "type": "integer"
-            },
-            "id": {
-              "type": "string"
-            },
-            "memory_type": {
-              "$ref": "#/$defs/UnifiedMemoryType"
-            },
-            "metadata": {
-              "$ref": "#/$defs/UnifiedMemoryMetadata"
-            },
-            "session_id": {
-              "type": "string"
-            },
-            "summary": {
-              "type": "string"
-            },
-            "tags": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "title": {
-              "type": "string"
-            },
-            "updated_at": {
-              "format": "int64",
-              "type": "integer"
-            }
-          },
-          "required": [
-            "archived",
-            "category",
-            "content",
-            "created_at",
-            "id",
-            "memory_type",
-            "metadata",
-            "session_id",
-            "summary",
-            "title",
-            "updated_at"
-          ],
-          "type": "object"
-        },
-        "UnifiedMemoryCategory": {
-          "enum": [
-            "activity",
-            "context",
-            "experience",
-            "identity",
-            "preference"
-          ],
-          "type": "string"
-        },
-        "UnifiedMemoryMetadata": {
-          "properties": {
-            "access_count": {
-              "format": "uint32",
-              "minimum": 0,
-              "type": "integer"
-            },
-            "confidence": {
-              "format": "float",
-              "type": "number"
-            },
-            "embedding": {
-              "default": null,
-              "items": {
-                "format": "float",
-                "type": "number"
-              },
-              "type": [
-                "array",
-                "null"
-              ]
-            },
-            "importance": {
-              "format": "uint8",
-              "maximum": 255,
-              "minimum": 0,
-              "type": "integer"
-            },
-            "last_accessed_at": {
-              "default": null,
-              "format": "int64",
-              "type": [
-                "integer",
-                "null"
-              ]
-            },
-            "source": {
-              "$ref": "#/$defs/UnifiedMemorySource"
-            }
-          },
-          "required": [
-            "access_count",
-            "confidence",
-            "importance",
-            "source"
-          ],
-          "type": "object"
-        },
-        "UnifiedMemorySource": {
-          "enum": [
-            "auto_extracted",
-            "imported",
-            "manual"
-          ],
-          "type": "string"
-        },
-        "UnifiedMemoryType": {
-          "enum": [
-            "conversation",
-            "project"
-          ],
-          "type": "string"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "memories": {
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/UnifiedMemory"
-          },
-          "type": "array"
-        }
-      },
-      "title": "UnifiedMemoryListResponse",
-      "type": "object"
-    },
-    "UnifiedMemoryMetadata": {
-      "$defs": {
-        "UnifiedMemorySource": {
-          "enum": [
-            "auto_extracted",
-            "imported",
-            "manual"
-          ],
-          "type": "string"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "access_count": {
-          "format": "uint32",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "confidence": {
-          "format": "float",
-          "type": "number"
-        },
-        "embedding": {
-          "default": null,
-          "items": {
-            "format": "float",
-            "type": "number"
-          },
-          "type": [
-            "array",
-            "null"
-          ]
-        },
-        "importance": {
-          "format": "uint8",
-          "maximum": 255,
-          "minimum": 0,
-          "type": "integer"
-        },
-        "last_accessed_at": {
-          "default": null,
-          "format": "int64",
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "source": {
-          "$ref": "#/$defs/UnifiedMemorySource"
-        }
-      },
-      "required": [
-        "access_count",
-        "confidence",
-        "importance",
-        "source"
-      ],
-      "title": "UnifiedMemoryMetadata",
-      "type": "object"
-    },
-    "UnifiedMemorySearchParams": {
-      "$defs": {
-        "UnifiedMemoryCategory": {
-          "enum": [
-            "activity",
-            "context",
-            "experience",
-            "identity",
-            "preference"
-          ],
-          "type": "string"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "category": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/UnifiedMemoryCategory"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "limit": {
-          "format": "uint",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "query": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "query"
-      ],
-      "title": "UnifiedMemorySearchParams",
-      "type": "object"
-    },
-    "UnifiedMemorySemanticSearchOptions": {
-      "$defs": {
-        "UnifiedMemoryCategory": {
-          "enum": [
-            "activity",
-            "context",
-            "experience",
-            "identity",
-            "preference"
-          ],
-          "type": "string"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "category": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/UnifiedMemoryCategory"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "limit": {
-          "format": "uint",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "min_similarity": {
-          "format": "float",
-          "type": [
-            "null",
-            "number"
-          ]
-        },
-        "query": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "query"
-      ],
-      "title": "UnifiedMemorySemanticSearchOptions",
-      "type": "object"
-    },
-    "UnifiedMemorySemanticSearchParams": {
-      "$defs": {
-        "UnifiedMemoryCategory": {
-          "enum": [
-            "activity",
-            "context",
-            "experience",
-            "identity",
-            "preference"
-          ],
-          "type": "string"
-        },
-        "UnifiedMemorySemanticSearchOptions": {
-          "properties": {
-            "category": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/UnifiedMemoryCategory"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "limit": {
-              "format": "uint",
-              "minimum": 0,
-              "type": [
-                "integer",
-                "null"
-              ]
-            },
-            "min_similarity": {
-              "format": "float",
-              "type": [
-                "null",
-                "number"
-              ]
-            },
-            "query": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "query"
-          ],
-          "type": "object"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "options": {
-          "$ref": "#/$defs/UnifiedMemorySemanticSearchOptions"
-        }
-      },
-      "required": [
-        "options"
-      ],
-      "title": "UnifiedMemorySemanticSearchParams",
-      "type": "object"
-    },
-    "UnifiedMemorySource": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "enum": [
-        "auto_extracted",
-        "imported",
-        "manual"
-      ],
-      "title": "UnifiedMemorySource",
-      "type": "string"
-    },
-    "UnifiedMemoryStatsResponse": {
-      "$defs": {
-        "UnifiedMemoryCategory": {
-          "enum": [
-            "activity",
-            "context",
-            "experience",
-            "identity",
-            "preference"
-          ],
-          "type": "string"
-        },
-        "UnifiedMemoryCategoryCount": {
-          "properties": {
-            "category": {
-              "$ref": "#/$defs/UnifiedMemoryCategory"
-            },
-            "count": {
-              "format": "uint32",
-              "minimum": 0,
-              "type": "integer"
-            }
-          },
-          "required": [
-            "category",
-            "count"
-          ],
-          "type": "object"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "categories": {
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/UnifiedMemoryCategoryCount"
-          },
-          "type": "array"
-        },
-        "memory_count": {
-          "format": "uint32",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "storage_used": {
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "total_entries": {
-          "format": "uint32",
-          "minimum": 0,
-          "type": "integer"
-        }
-      },
-      "required": [
-        "memory_count",
-        "storage_used",
-        "total_entries"
-      ],
-      "title": "UnifiedMemoryStatsResponse",
-      "type": "object"
-    },
-    "UnifiedMemoryType": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "enum": [
-        "conversation",
-        "project"
-      ],
-      "title": "UnifiedMemoryType",
-      "type": "string"
-    },
-    "UnifiedMemoryUpdateParams": {
-      "$defs": {
-        "UnifiedMemoryUpdateRequest": {
-          "properties": {
-            "confidence": {
-              "format": "float",
-              "type": [
-                "null",
-                "number"
-              ]
-            },
-            "content": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "importance": {
-              "format": "uint8",
-              "maximum": 255,
-              "minimum": 0,
-              "type": [
-                "integer",
-                "null"
-              ]
-            },
-            "summary": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "tags": {
-              "items": {
-                "type": "string"
-              },
-              "type": [
-                "array",
-                "null"
-              ]
-            },
-            "title": {
-              "type": [
-                "null",
-                "string"
-              ]
-            }
-          },
-          "type": "object"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "request": {
-          "$ref": "#/$defs/UnifiedMemoryUpdateRequest"
-        }
-      },
-      "required": [
-        "id",
-        "request"
-      ],
-      "title": "UnifiedMemoryUpdateParams",
-      "type": "object"
-    },
-    "UnifiedMemoryUpdateRequest": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "confidence": {
-          "format": "float",
-          "type": [
-            "null",
-            "number"
-          ]
-        },
-        "content": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "importance": {
-          "format": "uint8",
-          "maximum": 255,
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "summary": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "tags": {
-          "items": {
-            "type": "string"
-          },
-          "type": [
-            "array",
-            "null"
-          ]
-        },
-        "title": {
-          "type": [
-            "null",
-            "string"
-          ]
-        }
-      },
-      "title": "UnifiedMemoryUpdateRequest",
-      "type": "object"
-    },
-    "UnifiedMemoryWriteResponse": {
-      "$defs": {
-        "UnifiedMemory": {
-          "properties": {
-            "archived": {
-              "type": "boolean"
-            },
-            "category": {
-              "$ref": "#/$defs/UnifiedMemoryCategory"
-            },
-            "content": {
-              "type": "string"
-            },
-            "created_at": {
-              "format": "int64",
-              "type": "integer"
-            },
-            "id": {
-              "type": "string"
-            },
-            "memory_type": {
-              "$ref": "#/$defs/UnifiedMemoryType"
-            },
-            "metadata": {
-              "$ref": "#/$defs/UnifiedMemoryMetadata"
-            },
-            "session_id": {
-              "type": "string"
-            },
-            "summary": {
-              "type": "string"
-            },
-            "tags": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "title": {
-              "type": "string"
-            },
-            "updated_at": {
-              "format": "int64",
-              "type": "integer"
-            }
-          },
-          "required": [
-            "archived",
-            "category",
-            "content",
-            "created_at",
-            "id",
-            "memory_type",
-            "metadata",
-            "session_id",
-            "summary",
-            "title",
-            "updated_at"
-          ],
-          "type": "object"
-        },
-        "UnifiedMemoryCategory": {
-          "enum": [
-            "activity",
-            "context",
-            "experience",
-            "identity",
-            "preference"
-          ],
-          "type": "string"
-        },
-        "UnifiedMemoryMetadata": {
-          "properties": {
-            "access_count": {
-              "format": "uint32",
-              "minimum": 0,
-              "type": "integer"
-            },
-            "confidence": {
-              "format": "float",
-              "type": "number"
-            },
-            "embedding": {
-              "default": null,
-              "items": {
-                "format": "float",
-                "type": "number"
-              },
-              "type": [
-                "array",
-                "null"
-              ]
-            },
-            "importance": {
-              "format": "uint8",
-              "maximum": 255,
-              "minimum": 0,
-              "type": "integer"
-            },
-            "last_accessed_at": {
-              "default": null,
-              "format": "int64",
-              "type": [
-                "integer",
-                "null"
-              ]
-            },
-            "source": {
-              "$ref": "#/$defs/UnifiedMemorySource"
-            }
-          },
-          "required": [
-            "access_count",
-            "confidence",
-            "importance",
-            "source"
-          ],
-          "type": "object"
-        },
-        "UnifiedMemorySource": {
-          "enum": [
-            "auto_extracted",
-            "imported",
-            "manual"
-          ],
-          "type": "string"
-        },
-        "UnifiedMemoryType": {
-          "enum": [
-            "conversation",
-            "project"
-          ],
-          "type": "string"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "memory": {
-          "$ref": "#/$defs/UnifiedMemory"
-        }
-      },
-      "required": [
-        "memory"
-      ],
-      "title": "UnifiedMemoryWriteResponse",
-      "type": "object"
-    },
     "UsageStatsDailyTrendsListResponse": {
       "$defs": {
         "UsageStatsDailyUsage": {
@@ -27576,6 +26787,12 @@
               "mediaTaskArtifact/image/create",
               "mediaTaskArtifact/list",
               "mediaTaskArtifact/video/create",
+              "memoryStore/addNote",
+              "memoryStore/health",
+              "memoryStore/list",
+              "memoryStore/read",
+              "memoryStore/reset",
+              "memoryStore/search",
               "model/list",
               "modelPreferences/list",
               "modelProvider/catalog/list",
@@ -27651,16 +26868,6 @@
               "skillRepository/list",
               "skillRepository/save",
               "telegramChannel/probe",
-              "unifiedMemory/analyze",
-              "unifiedMemory/create",
-              "unifiedMemory/delete",
-              "unifiedMemory/get",
-              "unifiedMemory/hybridSearch",
-              "unifiedMemory/list",
-              "unifiedMemory/search",
-              "unifiedMemory/semanticSearch",
-              "unifiedMemory/stats",
-              "unifiedMemory/update",
               "usageStats/dailyTrends/list",
               "usageStats/modelRanking/list",
               "usageStats/read",

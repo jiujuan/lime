@@ -5,7 +5,7 @@ import {
 } from "./curatedTaskTemplates";
 import {
   CURATED_TASK_RECOMMENDATION_SIGNAL_EVENT,
-  recordCuratedTaskRecommendationSignalFromMemory,
+  recordCuratedTaskRecommendationSignalFromMemoryReference,
   recordCuratedTaskRecommendationSignalFromReviewDecision,
   subscribeCuratedTaskRecommendationSignalsChanged,
 } from "./curatedTaskRecommendationSignals";
@@ -22,8 +22,8 @@ describe("curatedTaskRecommendationSignals", () => {
     vi.useRealTimers();
   });
 
-  it("保存到灵感库后的成果信号应把复盘模板抬进 featured 推荐", () => {
-    recordCuratedTaskRecommendationSignalFromMemory(
+  it("记忆参考成果信号应把复盘模板抬进 featured 推荐", () => {
+    recordCuratedTaskRecommendationSignalFromMemoryReference(
       {
         id: "memory-review-1",
         session_id: "session-review-1",
@@ -168,7 +168,7 @@ describe("curatedTaskRecommendationSignals", () => {
     );
     window.dispatchEvent(
       new StorageEvent("storage", {
-        key: "lime:curated-task-recommendation-signals:v1",
+        key: "lime:curated-task-recommendation-signals:v2",
       }),
     );
 

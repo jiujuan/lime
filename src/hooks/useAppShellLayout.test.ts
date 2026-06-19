@@ -62,10 +62,10 @@ describe("getAppShellLayoutState", () => {
     });
   });
 
-  it("memory 页应显示 sidebar 且不追加 agent 间距", () => {
+  it("skills 页应显示 sidebar 且不追加 agent 间距", () => {
     expect(
       getAppShellLayoutState({
-        currentPage: "memory",
+        currentPage: "skills",
         pageParams: {},
         agentHasMessages: false,
       }),
@@ -76,10 +76,10 @@ describe("getAppShellLayoutState", () => {
     });
   });
 
-  it("skills 页应显示 sidebar 且不追加 agent 间距", () => {
+  it("项目资料页应显示 sidebar 且不追加 agent 间距", () => {
     expect(
       getAppShellLayoutState({
-        currentPage: "skills",
+        currentPage: "knowledge",
         pageParams: {},
         agentHasMessages: false,
       }),

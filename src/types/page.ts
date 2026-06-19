@@ -9,7 +9,6 @@
 
 import type { SettingsTabs } from "./settings";
 import type { SkillScaffoldTarget } from "@/lib/api/skills";
-import type { MemoryCategory } from "@/lib/api/unifiedMemory";
 import type { SceneAppExecutionSummaryViewModel } from "@/lib/agent/legacySceneAppExecutionSummary";
 import type { InputCapabilitySendRoute } from "@/components/agent/chat/skill-selection/inputCapabilitySelection";
 
@@ -27,8 +26,7 @@ export type Page =
   | "channels"
   | "resources"
   | "browser-runtime"
-  | "settings"
-  | "memory";
+  | "settings";
 
 export interface AgentPendingServiceSkillLaunchParams {
   skillId: string;
@@ -159,28 +157,6 @@ export interface SettingsPageParams {
   executionPolicyFocus?: ExecutionPolicyFocusContext;
 }
 
-export type MemoryPageSection =
-  | "home"
-  | "rules"
-  | "working"
-  | "durable"
-  | "team"
-  | "compaction"
-  | "identity"
-  | "context"
-  | "preference"
-  | "experience"
-  | "activity";
-
-export interface MemoryPageParams {
-  section?: MemoryPageSection;
-  focusMemoryTitle?: string;
-  focusMemoryCategory?: MemoryCategory;
-  runtimeSessionId?: string;
-  runtimeWorkingDir?: string;
-  runtimeUserMessage?: string;
-}
-
 export interface SkillScaffoldDraft extends Record<string, unknown> {
   target?: SkillScaffoldTarget;
   directory?: string;
@@ -296,5 +272,4 @@ export type PageParams =
   | AgentAppLabPageParams
   | AgentAppsPageParams
   | KnowledgePageParams
-  | MemoryPageParams
   | Record<string, unknown>;

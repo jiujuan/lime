@@ -31,6 +31,7 @@ export interface RunAgentStreamSubmitLifecycleOptions {
   effectiveProviderType: string;
   eventName: string;
   expectingQueue: boolean;
+  onSubmitAccepted?: () => void;
   requestState: StreamRequestState;
   submit: () => Promise<void>;
   deps?: AgentStreamSubmitLifecycleDeps;
@@ -45,6 +46,7 @@ export async function runAgentStreamSubmitLifecycle(
     effectiveProviderType,
     eventName,
     expectingQueue,
+    onSubmitAccepted,
     requestState,
     submit,
     deps,
@@ -75,11 +77,12 @@ export async function runAgentStreamSubmitLifecycle(
 
   try {
     await submit();
+    requestState.submissionAcceptedAt = now();
     const submitAcceptedContext = buildAgentStreamSubmitAcceptedContext({
       activeSessionId,
       eventName,
       timing: {
-        now: now(),
+        now: requestState.submissionAcceptedAt,
         requestStartedAt: requestState.requestStartedAt,
         submissionDispatchedAt: requestState.submissionDispatchedAt,
       },
@@ -90,6 +93,7 @@ export async function runAgentStreamSubmitLifecycle(
       submitAcceptedContext,
     );
     logDebug("AgentStream", "submitAccepted", submitAcceptedContext);
+    onSubmitAccepted?.();
   } catch (error) {
     const failedTiming = {
       now: now(),

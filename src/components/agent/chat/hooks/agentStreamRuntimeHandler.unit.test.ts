@@ -307,7 +307,176 @@ describe("agentStreamRuntimeHandler", () => {
     ]);
   });
 
-  it("应把 App Server tool.failed 事件投影成失败工具终态", () => {
+  it("已有 item lifecycle 时 legacy 工具增量不应新建 message.toolCalls", () => {
+    clearAgentUiProjectionEvents();
+    let messages: Message[] = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-06-19T10:00:00.000Z"),
+        runtimeTurnId: "turn-1",
+      },
+    ];
+    let threadItems: AgentThreadItem[] = [
+      {
+        id: "tool-1",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        sequence: 2,
+        type: "tool_call",
+        status: "in_progress",
+        tool_name: "mcp__runner__execute",
+        arguments: { command: "npm test" },
+        metadata: {
+          source: "item_lifecycle",
+        },
+        started_at: "2026-06-19T10:00:00.000Z",
+        updated_at: "2026-06-19T10:00:00.000Z",
+      },
+    ];
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const setThreadItems = vi.fn(
+      (
+        value:
+          | AgentThreadItem[]
+          | ((prev: AgentThreadItem[]) => AgentThreadItem[]),
+      ) => {
+        threadItems = typeof value === "function" ? value(threadItems) : value;
+      },
+    );
+    const requestState = {
+      accumulatedContent: "",
+      queuedTurnId: "turn-1",
+      currentTurnId: "turn-1",
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+    };
+    const baseOptions = {
+      requestState,
+      callbacks: {
+        activateStream: () => {},
+        isStreamActivated: () => true,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener: () => {},
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch: () => true,
+        upsertQueuedTurn: () => {},
+        removeQueuedTurnState: () => {},
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+        appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
+          parts,
+      },
+      eventName: "agent-runtime-item-first-delta-test",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-1",
+      activeSessionId: "session-1",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react" as const,
+      content: "",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>([
+        ["tool-1", "mcp__runner__execute"],
+      ]),
+      setMessages: setMessages as never,
+      setPendingActions: vi.fn() as never,
+      getThreadItems: () => threadItems,
+      setThreadItems: setThreadItems as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: vi.fn() as never,
+    };
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "tool_input_delta",
+        tool_id: "tool-1",
+        tool_name: "mcp__runner__execute",
+        turn_id: "turn-1",
+        delta: '{"command":"npm test"}',
+        accumulated_arguments: '{"command":"npm test"}',
+        provider: "openai_compatible",
+      } as AgentEvent,
+    });
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "tool_progress",
+        tool_id: "tool-1",
+        turn_id: "turn-1",
+        progress: {
+          message: "正在执行测试",
+          progress: 1,
+          total: 2,
+        },
+      } as AgentEvent,
+    });
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "tool_output_delta",
+        tool_id: "tool-1",
+        turn_id: "turn-1",
+        delta: "partial output",
+        output_kind: "log",
+      } as AgentEvent,
+    });
+
+    expect(messages[0]?.toolCalls).toBeUndefined();
+    expect(messages[0]?.contentParts).toBeUndefined();
+    expect(threadItems[0]).toMatchObject({
+      id: "tool-1",
+      type: "tool_call",
+      status: "in_progress",
+      arguments: { command: "npm test" },
+      output: "partial output",
+      metadata: expect.objectContaining({
+        source: "item_lifecycle",
+        output_kind: "log",
+        streaming: true,
+        progress: {
+          message: "正在执行测试",
+          progress: 1,
+          total: 2,
+        },
+      }),
+    });
+    expect(
+      selectAgentUiProjectionEvents(conversationProjectionStore.getSnapshot()),
+    ).toEqual([
+      expect.objectContaining({
+        type: "tool.args.delta",
+        sourceType: "tool_input_delta",
+        toolCallId: "tool-1",
+      }),
+      expect.objectContaining({
+        type: "tool.progress",
+        sourceType: "tool_progress",
+        toolCallId: "tool-1",
+      }),
+      expect.objectContaining({
+        type: "tool.output.delta",
+        sourceType: "tool_output_delta",
+        toolCallId: "tool-1",
+      }),
+    ]);
+  });
+
+  it("已有 item lifecycle 时 App Server tool.failed 不应再改 message 层工具卡", () => {
     clearAgentUiProjectionEvents();
     let messages: Message[] = [
       {
@@ -362,8 +531,7 @@ describe("agentStreamRuntimeHandler", () => {
           | AgentThreadItem[]
           | ((prev: AgentThreadItem[]) => AgentThreadItem[]),
       ) => {
-        threadItems =
-          typeof value === "function" ? value(threadItems) : value;
+        threadItems = typeof value === "function" ? value(threadItems) : value;
       },
     );
     const parsed = parseAgentEvent({
@@ -414,11 +582,10 @@ describe("agentStreamRuntimeHandler", () => {
       actionLoggedKeys: new Set<string>(),
       toolLogIdByToolId: new Map<string, string>(),
       toolStartedAtByToolId: new Map<string, number>(),
-      toolNameByToolId: new Map<string, string>([
-        ["tool-failed-1", "Bash"],
-      ]),
+      toolNameByToolId: new Map<string, string>([["tool-failed-1", "Bash"]]),
       setMessages: setMessages as never,
       setPendingActions: vi.fn() as never,
+      getThreadItems: () => threadItems,
       setThreadItems: setThreadItems as never,
       setThreadTurns: vi.fn() as never,
       setCurrentTurnId: vi.fn() as never,
@@ -428,23 +595,13 @@ describe("agentStreamRuntimeHandler", () => {
 
     expect(messages[0]?.toolCalls?.[0]).toMatchObject({
       id: "tool-failed-1",
-      status: "failed",
-      result: {
-        success: false,
-        output: "test failed",
-        error: "exit code 101",
-      },
+      status: "running",
     });
     expect(messages[0]?.contentParts?.[0]).toMatchObject({
       type: "tool_use",
       toolCall: {
         id: "tool-failed-1",
-        status: "failed",
-        result: {
-          success: false,
-          output: "test failed",
-          error: "exit code 101",
-        },
+        status: "running",
       },
     });
     expect(threadItems[0]).toMatchObject({
@@ -463,6 +620,147 @@ describe("agentStreamRuntimeHandler", () => {
         toolCallId: "tool-failed-1",
       }),
     ]);
+  });
+
+  it("item_completed 应把已有 legacy 工具卡同步为完成态", () => {
+    let messages: Message[] = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-06-18T08:00:00.000Z"),
+        runtimeTurnId: "turn-1",
+        toolCalls: [
+          {
+            id: "tool-search-1",
+            name: "web_search",
+            arguments: JSON.stringify({ query: "学习机评测" }),
+            status: "running",
+            startTime: new Date("2026-06-18T08:00:00.000Z"),
+          },
+        ],
+        contentParts: [
+          {
+            type: "tool_use",
+            toolCall: {
+              id: "tool-search-1",
+              name: "web_search",
+              arguments: JSON.stringify({ query: "学习机评测" }),
+              status: "running",
+              startTime: new Date("2026-06-18T08:00:00.000Z"),
+            },
+          },
+        ],
+      },
+    ];
+    let threadItems: AgentThreadItem[] = [];
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const setThreadItems = vi.fn(
+      (
+        value:
+          | AgentThreadItem[]
+          | ((prev: AgentThreadItem[]) => AgentThreadItem[]),
+      ) => {
+        threadItems = typeof value === "function" ? value(threadItems) : value;
+      },
+    );
+
+    handleTurnStreamEvent({
+      data: {
+        type: "item_completed",
+        item: {
+          id: "tool-search-1",
+          thread_id: "session-1",
+          turn_id: "turn-1",
+          sequence: 4,
+          status: "completed",
+          started_at: "2026-06-18T08:00:00.000Z",
+          updated_at: "2026-06-18T08:00:02.000Z",
+          completed_at: "2026-06-18T08:00:02.000Z",
+          type: "tool_call",
+          tool_name: "web_search",
+          arguments: { query: "学习机评测" },
+          output: "权威评测摘要",
+          success: true,
+          metadata: {
+            source: "item_lifecycle",
+          },
+        },
+      } as AgentEvent,
+      requestState: {
+        accumulatedContent: "",
+        queuedTurnId: "turn-1",
+        requestLogId: null,
+        requestStartedAt: 0,
+        requestFinished: false,
+      },
+      callbacks: {
+        activateStream: () => {},
+        isStreamActivated: () => true,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener: () => {},
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch: () => true,
+        upsertQueuedTurn: () => {},
+        removeQueuedTurnState: () => {},
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+        appendThinkingToParts: (parts) => parts,
+      },
+      eventName: "agent-runtime-item-tool-sync-test",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-1",
+      activeSessionId: "session-1",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react",
+      content: "",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      setMessages: setMessages as never,
+      setPendingActions: vi.fn() as never,
+      getThreadItems: () => threadItems,
+      setThreadItems: setThreadItems as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: vi.fn() as never,
+    });
+
+    expect(threadItems[0]).toMatchObject({
+      id: "tool-search-1",
+      type: "tool_call",
+      status: "completed",
+      output: "权威评测摘要",
+    });
+    expect(messages[0]?.toolCalls?.[0]).toMatchObject({
+      id: "tool-search-1",
+      status: "completed",
+      result: {
+        success: true,
+        output: "权威评测摘要",
+      },
+    });
+    expect(messages[0]?.contentParts?.[0]).toMatchObject({
+      type: "tool_use",
+      toolCall: {
+        id: "tool-search-1",
+        status: "completed",
+        result: {
+          success: true,
+          output: "权威评测摘要",
+        },
+      },
+    });
   });
 
   it("收到 turn_completed 时应把 usage 写回 assistant 消息", () => {
@@ -484,7 +782,17 @@ describe("agentStreamRuntimeHandler", () => {
 
     handleTurnStreamEvent({
       data: {
-        type: "turn_completed", turn: { id: "turn-test", thread_id: "thread-test", prompt_text: "test", status: "completed", started_at: "2026-06-07T10:00:00.000Z", completed_at: "2026-06-07T10:00:01.000Z", created_at: "2026-06-07T10:00:00.000Z", updated_at: "2026-06-07T10:00:01.000Z" },
+        type: "turn_completed",
+        turn: {
+          id: "turn-test",
+          thread_id: "thread-test",
+          prompt_text: "test",
+          status: "completed",
+          started_at: "2026-06-07T10:00:00.000Z",
+          completed_at: "2026-06-07T10:00:01.000Z",
+          created_at: "2026-06-07T10:00:00.000Z",
+          updated_at: "2026-06-07T10:00:01.000Z",
+        },
         usage: {
           input_tokens: 12_000,
           output_tokens: 19_000,
@@ -869,7 +1177,19 @@ describe("agentStreamRuntimeHandler", () => {
     const disposeListener = vi.fn();
 
     handleTurnStreamEvent({
-      data: { type: "turn_completed", turn: { id: "turn-test", thread_id: "thread-test", prompt_text: "test", status: "completed", started_at: "2026-06-07T10:00:00.000Z", completed_at: "2026-06-07T10:00:01.000Z", created_at: "2026-06-07T10:00:00.000Z", updated_at: "2026-06-07T10:00:01.000Z" } } as AgentEvent,
+      data: {
+        type: "turn_completed",
+        turn: {
+          id: "turn-test",
+          thread_id: "thread-test",
+          prompt_text: "test",
+          status: "completed",
+          started_at: "2026-06-07T10:00:00.000Z",
+          completed_at: "2026-06-07T10:00:01.000Z",
+          created_at: "2026-06-07T10:00:00.000Z",
+          updated_at: "2026-06-07T10:00:01.000Z",
+        },
+      } as AgentEvent,
       requestState: {
         accumulatedContent: "整理完成",
         queuedTurnId: null,
@@ -1026,7 +1346,19 @@ describe("agentStreamRuntimeHandler", () => {
     const disposeListener = vi.fn();
 
     handleTurnStreamEvent({
-      data: { type: "turn_completed", turn: { id: "turn-test", thread_id: "thread-test", prompt_text: "test", status: "completed", started_at: "2026-06-07T10:00:00.000Z", completed_at: "2026-06-07T10:00:01.000Z", created_at: "2026-06-07T10:00:00.000Z", updated_at: "2026-06-07T10:00:01.000Z" } } as AgentEvent,
+      data: {
+        type: "turn_completed",
+        turn: {
+          id: "turn-test",
+          thread_id: "thread-test",
+          prompt_text: "test",
+          status: "completed",
+          started_at: "2026-06-07T10:00:00.000Z",
+          completed_at: "2026-06-07T10:00:01.000Z",
+          created_at: "2026-06-07T10:00:00.000Z",
+          updated_at: "2026-06-07T10:00:01.000Z",
+        },
+      } as AgentEvent,
       requestState: {
         accumulatedContent: "旧请求完成",
         queuedTurnId: null,
@@ -1662,7 +1994,19 @@ describe("agentStreamRuntimeHandler", () => {
 
     handleTurnStreamEvent({
       ...baseOptions,
-      data: { type: "turn_completed", turn: { id: "turn-test", thread_id: "thread-test", prompt_text: "test", status: "completed", started_at: "2026-06-07T10:00:00.000Z", completed_at: "2026-06-07T10:00:01.000Z", created_at: "2026-06-07T10:00:00.000Z", updated_at: "2026-06-07T10:00:01.000Z" } } as AgentEvent,
+      data: {
+        type: "turn_completed",
+        turn: {
+          id: "turn-test",
+          thread_id: "thread-test",
+          prompt_text: "test",
+          status: "completed",
+          started_at: "2026-06-07T10:00:00.000Z",
+          completed_at: "2026-06-07T10:00:01.000Z",
+          created_at: "2026-06-07T10:00:00.000Z",
+          updated_at: "2026-06-07T10:00:01.000Z",
+        },
+      } as AgentEvent,
     });
 
     expect(messages[0]?.content).toBe("我来为你生成这张照片。");
@@ -1753,7 +2097,19 @@ describe("agentStreamRuntimeHandler", () => {
 
     handleTurnStreamEvent({
       ...baseOptions,
-      data: { type: "turn_completed", turn: { id: "turn-test", thread_id: "thread-test", prompt_text: "test", status: "completed", started_at: "2026-06-07T10:00:00.000Z", completed_at: "2026-06-07T10:00:01.000Z", created_at: "2026-06-07T10:00:00.000Z", updated_at: "2026-06-07T10:00:01.000Z" } } as AgentEvent,
+      data: {
+        type: "turn_completed",
+        turn: {
+          id: "turn-test",
+          thread_id: "thread-test",
+          prompt_text: "test",
+          status: "completed",
+          started_at: "2026-06-07T10:00:00.000Z",
+          completed_at: "2026-06-07T10:00:01.000Z",
+          created_at: "2026-06-07T10:00:00.000Z",
+          updated_at: "2026-06-07T10:00:01.000Z",
+        },
+      } as AgentEvent,
     });
 
     expect(messages[0]).toMatchObject({
@@ -1947,8 +2303,7 @@ describe("agentStreamRuntimeHandler", () => {
           | AgentThreadItem[]
           | ((prev: AgentThreadItem[]) => AgentThreadItem[]),
       ) => {
-        threadItems =
-          typeof value === "function" ? value(threadItems) : value;
+        threadItems = typeof value === "function" ? value(threadItems) : value;
       },
     );
 
@@ -2058,8 +2413,7 @@ describe("agentStreamRuntimeHandler", () => {
           | AgentThreadItem[]
           | ((prev: AgentThreadItem[]) => AgentThreadItem[]),
       ) => {
-        threadItems =
-          typeof value === "function" ? value(threadItems) : value;
+        threadItems = typeof value === "function" ? value(threadItems) : value;
       },
     );
     const requestState = {
@@ -2240,8 +2594,7 @@ describe("agentStreamRuntimeHandler", () => {
           | AgentThreadItem[]
           | ((prev: AgentThreadItem[]) => AgentThreadItem[]),
       ) => {
-        threadItems =
-          typeof value === "function" ? value(threadItems) : value;
+        threadItems = typeof value === "function" ? value(threadItems) : value;
       },
     );
 
@@ -2349,7 +2702,17 @@ describe("agentStreamRuntimeHandler", () => {
 
     handleTurnStreamEvent({
       data: {
-        type: "turn_completed", turn: { id: "turn-test", thread_id: "thread-test", prompt_text: "test", status: "completed", started_at: "2026-06-07T10:00:00.000Z", completed_at: "2026-06-07T10:00:01.000Z", created_at: "2026-06-07T10:00:00.000Z", updated_at: "2026-06-07T10:00:01.000Z" },
+        type: "turn_completed",
+        turn: {
+          id: "turn-test",
+          thread_id: "thread-test",
+          prompt_text: "test",
+          status: "completed",
+          started_at: "2026-06-07T10:00:00.000Z",
+          completed_at: "2026-06-07T10:00:01.000Z",
+          created_at: "2026-06-07T10:00:00.000Z",
+          updated_at: "2026-06-07T10:00:01.000Z",
+        },
       } as AgentEvent,
       requestState: {
         accumulatedContent:
@@ -2421,7 +2784,17 @@ describe("agentStreamRuntimeHandler", () => {
 
     handleTurnStreamEvent({
       data: {
-        type: "turn_completed", turn: { id: "turn-test", thread_id: "thread-test", prompt_text: "test", status: "completed", started_at: "2026-06-07T10:00:00.000Z", completed_at: "2026-06-07T10:00:01.000Z", created_at: "2026-06-07T10:00:00.000Z", updated_at: "2026-06-07T10:00:01.000Z" },
+        type: "turn_completed",
+        turn: {
+          id: "turn-test",
+          thread_id: "thread-test",
+          prompt_text: "test",
+          status: "completed",
+          started_at: "2026-06-07T10:00:00.000Z",
+          completed_at: "2026-06-07T10:00:01.000Z",
+          created_at: "2026-06-07T10:00:00.000Z",
+          updated_at: "2026-06-07T10:00:01.000Z",
+        },
       } as AgentEvent,
       requestState: {
         accumulatedContent: "",
@@ -2575,7 +2948,17 @@ describe("agentStreamRuntimeHandler", () => {
 
     handleTurnStreamEvent({
       data: {
-        type: "turn_completed", turn: { id: "turn-test", thread_id: "thread-test", prompt_text: "test", status: "completed", started_at: "2026-06-07T10:00:00.000Z", completed_at: "2026-06-07T10:00:01.000Z", created_at: "2026-06-07T10:00:00.000Z", updated_at: "2026-06-07T10:00:01.000Z" },
+        type: "turn_completed",
+        turn: {
+          id: "turn-test",
+          thread_id: "thread-test",
+          prompt_text: "test",
+          status: "completed",
+          started_at: "2026-06-07T10:00:00.000Z",
+          completed_at: "2026-06-07T10:00:01.000Z",
+          created_at: "2026-06-07T10:00:00.000Z",
+          updated_at: "2026-06-07T10:00:01.000Z",
+        },
       } as AgentEvent,
       requestState,
       callbacks,

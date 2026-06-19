@@ -668,6 +668,19 @@ describe("http-client", () => {
         },
       }),
     ).toBe(30000);
+    expect(
+      resolveBridgeRequestTimeoutMs("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
+              id: "import-runtime-events",
+              method: "conversationImport/thread/runtimeEvents/read",
+              params: { sessionId: "session-imported", offset: 0, limit: 50 },
+            }),
+          ],
+        },
+      }),
+    ).toBe(30000);
     expect(resolveBridgeRequestTimeoutMs("agent_app_start_ui_runtime")).toBe(
       150000,
     );

@@ -13,7 +13,6 @@ import type {
   AutomationPageParams,
   BrowserRuntimePageParams,
   KnowledgePageParams,
-  MemoryPageParams,
   Page,
   PageParams,
   ResourcesPageParams,
@@ -42,10 +41,6 @@ const columnPageStyle = {
 const loadResourcesPage = () =>
   import("./resources").then((module) => ({
     default: module.ResourcesPage,
-  }));
-const loadMemoryPage = () =>
-  import("./memory").then((module) => ({
-    default: module.MemoryPage,
   }));
 const loadSkillsWorkspacePage = () =>
   import("./skills").then((module) => ({
@@ -78,7 +73,6 @@ const loadBrowserRuntimeWorkspace = () =>
   }));
 
 const ResourcesPage = lazy(loadResourcesPage);
-const MemoryPage = lazy(loadMemoryPage);
 const SkillsWorkspacePage = lazy(loadSkillsWorkspacePage);
 const KnowledgePage = lazy(loadKnowledgePage);
 const AgentAppLabPage = lazy(loadAgentAppLabPage);
@@ -303,19 +297,6 @@ export function AppPageContent({
           initialSaveTitle={browserRuntimeParams.initialSaveTitle}
         />
       </PageWrapper>
-    );
-  }
-
-  if (activePage === "memory") {
-    return (
-      <div style={columnPageStyle}>
-        <div className="flex-1 min-h-0 overflow-auto">
-          <MemoryPage
-            onNavigate={onNavigate}
-            pageParams={activePageParams as MemoryPageParams}
-          />
-        </div>
-      </div>
     );
   }
 

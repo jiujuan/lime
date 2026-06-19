@@ -890,6 +890,7 @@ describe("Agent API 治理护栏", () => {
 
     await expect(getAgentRuntimeSession("session-runtime-2")).resolves.toEqual({
       id: "session-runtime-2",
+      thread_id: "thread-runtime-2",
       name: "Runtime Detail",
       model: "gpt-5.4",
       created_at: 1710001000,

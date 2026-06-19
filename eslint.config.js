@@ -134,7 +134,7 @@ const generalChatRestrictedPaths = [
   {
     name: "@/lib/api/compat",
     message:
-      "api/compat.ts 属于历史记忆兼容层，请不要在新代码中接入；旧记忆运行时请使用 @/lib/api/memoryRuntime，统一记忆请使用 @/lib/api/unifiedMemory。",
+      "api/compat.ts 属于历史记忆兼容层，请不要在新代码中接入；记忆主链请使用当前 memory store / memoryRuntime / Soul 配置入口。",
   },
   {
     name: "@/lib/api/agent",
@@ -885,7 +885,7 @@ const unifiedMemoryCommandSelectors = [
 ].map((command) => ({
   selector: `CallExpression[callee.name='safeInvoke'][arguments.0.value='${command}'], CallExpression[callee.name='invoke'][arguments.0.value='${command}']`,
   message:
-    "统一记忆命令请统一通过 `src/lib/api/unifiedMemory.ts` 暴露的网关函数调用，避免继续在其他模块中直接拼接命令名。",
+    "旧 unified_memory_* 命令已下线；不要恢复旧统一记忆网关，记忆主链请收敛到当前 memory store / MemoryBackend / memory tools。",
 }));
 
 const apiCompatibilityCommandSelectors = ["check_api_compatibility"].map(
@@ -1195,7 +1195,6 @@ export default [
       "src/lib/api/frontendCrash.ts",
       "src/lib/api/memoryFeedback.ts",
       "src/lib/api/toolHooks.ts",
-      "src/lib/api/unifiedMemory.ts",
       "src/lib/api/serverRuntime.ts",
       "src/lib/api/logs.ts",
       "src/lib/api/apiCompatibility.ts",

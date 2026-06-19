@@ -46,10 +46,18 @@ pub(super) fn load_for_migration(
     conn: &rusqlite::Connection,
     session_id: &str,
 ) -> Result<Conversation> {
-    let mut stmt = conn.prepare(
+    let mut stmt = match conn.prepare(
         "SELECT role, content_json, timestamp, tool_calls_json, tool_call_id
          FROM agent_messages WHERE session_id = ? ORDER BY id ASC",
-    )?;
+    ) {
+        Ok(stmt) => stmt,
+        Err(rusqlite::Error::SqliteFailure(_, Some(message)))
+            if message.contains("no such table: agent_messages") =>
+        {
+            return Ok(Conversation::new_unvalidated(Vec::new()));
+        }
+        Err(error) => return Err(error.into()),
+    };
 
     let messages: Vec<Message> = stmt
         .query_map([session_id], |row| {

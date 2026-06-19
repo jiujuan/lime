@@ -30,6 +30,8 @@ export interface StreamRequestState {
   requestLogId: string | null;
   requestStartedAt: number;
   submissionDispatchedAt?: number | null;
+  submissionAcceptedAt?: number | null;
+  startTerminalRecoveryPoll?: () => void;
   listenerBoundAt?: number | null;
   firstEventReceivedAt?: number | null;
   firstRuntimeStatusAt?: number | null;
@@ -44,6 +46,7 @@ export interface StreamRequestState {
   maxTextDeltaBacklogChars?: number;
   requestFinished: boolean;
   queuedTurnId: string | null;
+  currentTurnId?: string | null;
   queuedDraftCleanupTimerId?: ReturnType<typeof setTimeout> | null;
   pendingTextRenderTimerId?: ReturnType<typeof setTimeout> | null;
   renderedContent?: string;
@@ -106,6 +109,7 @@ export function createAgentStreamSubmissionLifecycle(
     requestLogId: null,
     requestStartedAt: 0,
     submissionDispatchedAt: null,
+    submissionAcceptedAt: null,
     listenerBoundAt: null,
     firstEventReceivedAt: null,
     firstRuntimeStatusAt: null,

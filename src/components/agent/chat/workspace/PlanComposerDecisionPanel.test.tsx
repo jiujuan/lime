@@ -78,8 +78,8 @@ function changeInputValue(input: HTMLInputElement, value: string) {
 }
 
 function getAdjustmentInput(container: HTMLElement) {
-  return Array.from(container.querySelectorAll<HTMLInputElement>("input")).find(
-    (input) => input.type === "text",
+  return container.querySelector<HTMLInputElement>(
+    '[data-testid="plan-composer-adjust-input"]',
   );
 }
 
@@ -118,6 +118,7 @@ describe("PlanComposerDecisionPanel", () => {
     expect(container.textContent).toContain("Proceed");
     expect(container.textContent).toContain("Continue the current plan.");
     expect(container.textContent).not.toContain("Revise");
+    expect(getAdjustmentInput(container)?.type).toBe("text");
     expect(getAdjustmentInput(container)?.getAttribute("placeholder")).toBe(
       "否，请告诉我如何调整",
     );

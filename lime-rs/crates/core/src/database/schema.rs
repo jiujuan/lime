@@ -1435,10 +1435,45 @@ mod tests {
     }
 
     #[test]
-    fn should_create_reliability_projection_tables() {
+    fn should_drop_retired_reliability_projection_tables() {
         let conn = Connection::open_in_memory().unwrap();
+        conn.execute(
+            "CREATE TABLE agent_thread_incidents (
+                id TEXT PRIMARY KEY,
+                thread_id TEXT NOT NULL,
+                turn_id TEXT,
+                item_id TEXT,
+                incident_type TEXT NOT NULL,
+                severity TEXT NOT NULL,
+                status TEXT NOT NULL,
+                title TEXT NOT NULL,
+                details_json TEXT,
+                detected_at TEXT NOT NULL,
+                cleared_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "CREATE TABLE agent_turn_outcomes (
+                turn_id TEXT PRIMARY KEY,
+                thread_id TEXT NOT NULL,
+                outcome_type TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                primary_cause TEXT,
+                retryable INTEGER NOT NULL,
+                details_json TEXT,
+                ended_at TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )",
+            [],
+        )
+        .unwrap();
 
-        create_tables(&conn).expect("应成功创建 reliability projection 表");
+        create_tables(&conn).expect("应成功清理 retired reliability projection 表");
 
         let mut tables = conn
             .prepare(
@@ -1455,12 +1490,6 @@ mod tests {
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
 
-        assert_eq!(
-            table_names,
-            vec![
-                "agent_thread_incidents".to_string(),
-                "agent_turn_outcomes".to_string(),
-            ]
-        );
+        assert!(table_names.is_empty());
     }
 }

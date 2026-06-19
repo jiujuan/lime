@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { loadNamespaceResource } from "@/i18n/loadNamespace";
+import { SUPPORTED_LOCALES } from "@/i18n/locales";
 import type { AgentThreadItem } from "../types";
 import { buildImportedConversationSourceSummary } from "./importedConversationSourceSummary";
+
+function importedHistoryResourceKeys(resource: Record<string, string>): string[] {
+  return Object.keys(resource)
+    .filter((key) => key.startsWith("generalWorkbench.importedHistory."))
+    .sort();
+}
 
 const t = (key: string, values?: Record<string, unknown>) => {
   const templates: Record<string, string> = {
@@ -47,6 +55,25 @@ function importedCommandItem(
 }
 
 describe("buildImportedConversationSourceSummary", () => {
+  it("导入来源摘要文案覆盖五语言资源", () => {
+    const requiredKeys = importedHistoryResourceKeys(
+      loadNamespaceResource("zh-CN", "agent"),
+    );
+
+    expect(requiredKeys).toContain("generalWorkbench.importedHistory.value");
+    expect(requiredKeys).toContain(
+      "generalWorkbench.importedHistory.status.restoredTitle",
+    );
+
+    for (const locale of SUPPORTED_LOCALES) {
+      const resource = loadNamespaceResource(locale, "agent");
+      for (const key of requiredKeys) {
+        expect(resource[key], `${locale}:${key}`).toEqual(expect.any(String));
+        expect(String(resource[key]).trim()).not.toBe("");
+      }
+    }
+  });
+
   it("应从本地历史导入 metadata 构建中性摘要", () => {
     const summary = buildImportedConversationSourceSummary({
       threadItems: [
@@ -123,5 +150,30 @@ describe("buildImportedConversationSourceSummary", () => {
       tone: "warning",
       title: "有 2 项未完整映射，1 项因预算裁剪",
     });
+  });
+
+  it("资源缺失时导入摘要 fallback 不应回退成中文", () => {
+    const summary = buildImportedConversationSourceSummary({
+      threadItems: [
+        importedCommandItem({
+          source_provenance: {
+            sourceClient: "codex",
+          },
+          codex_import_fidelity: {
+            messages: 3,
+            reasoning: 1,
+            unsupported: 2,
+            budget_dropped: 1,
+          },
+        }),
+      ],
+      t: (_key, options) => options?.defaultValue,
+    });
+
+    const serialized = JSON.stringify(summary);
+    expect(serialized).toContain("Local history import");
+    expect(serialized).toContain("3 messages");
+    expect(serialized).toContain("Partially retained");
+    expect(serialized).not.toMatch(/[\u4e00-\u9fff]/);
   });
 });

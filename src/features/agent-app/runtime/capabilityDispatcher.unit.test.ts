@@ -712,7 +712,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
       }),
     ).resolves.toEqual({
       status: "not_available",
-      reason: "memory_runtime_mutation_not_exposed_to_agent_apps",
+      reason: "memory_store_mutation_not_exposed_to_agent_apps",
       source: "app_server_runtime_projection",
     });
 
@@ -730,7 +730,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
       }),
     ).resolves.toEqual({
       status: "not_available",
-      reason: "memory_runtime_mutation_not_exposed_to_agent_apps",
+      reason: "memory_store_mutation_not_exposed_to_agent_apps",
       source: "app_server_runtime_projection",
     });
 

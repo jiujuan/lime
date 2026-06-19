@@ -171,6 +171,82 @@ fn active_scan_does_not_cross_load_archived_rollout_for_stale_active_row() {
 }
 
 #[test]
+fn scans_codex_state_db_project_path_exact_prefix_and_contains() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let db_path = temp.path().join("state_5.sqlite");
+    let conn = Connection::open(&db_path).expect("db");
+    create_legacy_threads_table(&conn);
+    insert_thread(
+        &conn,
+        "thread-exact",
+        "Exact project",
+        "/workspace/lime",
+        &write_named_rollout(temp.path(), "thread-exact", "exact").to_string_lossy(),
+        1,
+        1,
+        false,
+    );
+    insert_thread(
+        &conn,
+        "thread-child",
+        "Child project",
+        "/workspace/lime/crates/app-server",
+        &write_named_rollout(temp.path(), "thread-child", "child").to_string_lossy(),
+        1,
+        2,
+        false,
+    );
+    insert_thread(
+        &conn,
+        "thread-contained",
+        "Contained project",
+        "/Users/coso/Documents/dev/ai/aiclientproxy/lime",
+        &write_named_rollout(temp.path(), "thread-contained", "contained").to_string_lossy(),
+        1,
+        3,
+        false,
+    );
+    insert_thread(
+        &conn,
+        "thread-sibling-prefix",
+        "Sibling prefix",
+        "/workspace/lime-old",
+        &write_named_rollout(temp.path(), "thread-sibling-prefix", "sibling").to_string_lossy(),
+        1,
+        4,
+        false,
+    );
+
+    let response = codex::scan_source(ConversationImportSourceScanParams {
+        source_root: Some(temp.path().to_string_lossy().into_owned()),
+        project_path: Some("/workspace/lime".to_string()),
+        limit: Some(10),
+        ..Default::default()
+    })
+    .expect("scan exact and prefix");
+    let thread_ids = response
+        .threads
+        .iter()
+        .map(|thread| thread.source_thread_id.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(thread_ids, vec!["thread-child", "thread-exact"]);
+    assert_eq!(response.source.thread_count, 2);
+
+    let contains_response = codex::scan_source(ConversationImportSourceScanParams {
+        source_root: Some(temp.path().to_string_lossy().into_owned()),
+        project_path: Some("aiclientproxy/lime".to_string()),
+        limit: Some(10),
+        ..Default::default()
+    })
+    .expect("scan contains");
+    assert_eq!(contains_response.source.thread_count, 1);
+    assert_eq!(
+        contains_response.threads[0].source_thread_id,
+        "thread-contained"
+    );
+}
+
+#[test]
 fn previews_and_commits_compressed_codex_rollout() {
     let temp = tempfile::tempdir().expect("tempdir");
     let db_path = temp.path().join("state_5.sqlite");

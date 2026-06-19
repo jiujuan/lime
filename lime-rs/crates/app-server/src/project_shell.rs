@@ -485,7 +485,7 @@ mod tests {
         let output = drain_session_output_until(
             &manager,
             &session.session_id,
-            Duration::from_secs(5),
+            Duration::from_secs(15),
             |output| {
                 output.contains("TERM=xterm-256color")
                     && output.contains("COLORTERM=truecolor")

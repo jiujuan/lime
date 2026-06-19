@@ -1,7 +1,6 @@
 import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 import {
-  clickButton,
   createMockAgentChatUnifiedState,
   FIXED_TOPIC_UPDATED_AT,
   flushEffects,
@@ -10,9 +9,10 @@ import {
 } from "./index.testFixtures";
 import { buildHomeAgentParams } from "@/lib/workspace/navigation";
 import { TASK_CENTER_OPEN_TAB_IDS_STORAGE_KEY } from "./utils/taskCenterTabs";
+import { requestTaskCenterDraftTask } from "./taskCenterDraftTaskEvents";
 
 describe("AgentChatPage 任务中心初始会话标签", () => {
-  it("切到另一条旧会话后仍应继续新增本地草稿标签", async () => {
+  it("切到另一条旧会话后仍应继续在当前页新建本地草稿", async () => {
     const onNavigate = vi.fn();
     vi.mocked(buildHomeAgentParams).mockClear();
     const state: Record<string, unknown> = createMockAgentChatUnifiedState({
@@ -43,35 +43,32 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     });
     await flushEffects();
 
-    clickButton(mounted.container, "task-center-tab-create-button");
+    expect(requestTaskCenterDraftTask({ source: "sidebar" })).toBe(true);
     await flushEffects();
     mounted.rerender();
     await flushEffects();
 
-    const firstDraft = mounted.container.querySelector(
-      '[data-testid^="task-center-tab-task-draft-"][data-active="true"]',
-    );
-    expect(firstDraft).not.toBeNull();
+    expect(
+      mounted.container.querySelector('[data-testid="task-center-tab-strip"]'),
+    ).toBeNull();
+    expect(
+      mounted.container.querySelector(
+        '[data-testid^="task-center-tab-task-draft-"]',
+      ),
+    ).toBeNull();
+    expect(
+      mounted.container.querySelector('[data-testid="empty-state"]'),
+    ).not.toBeNull();
 
     state.sessionId = "topic-next";
     mounted.rerender({ initialSessionId: "topic-next" });
     await flushEffects();
 
-    expect(
-      mounted.container
-        .querySelector('[data-testid="task-center-tab-topic-next"]')
-        ?.getAttribute("data-active"),
-    ).toBe("true");
-
-    clickButton(mounted.container, "task-center-tab-create-button");
+    expect(requestTaskCenterDraftTask({ source: "sidebar" })).toBe(true);
     await flushEffects();
     mounted.rerender();
     await flushEffects();
 
-    const activeDrafts = mounted.container.querySelectorAll(
-      '[data-testid^="task-center-tab-task-draft-"][data-active="true"]',
-    );
-    expect(activeDrafts).toHaveLength(1);
     expect(state.createFreshSession).not.toHaveBeenCalled();
     expect(buildHomeAgentParams).not.toHaveBeenCalled();
     expect(onNavigate).not.toHaveBeenCalled();
@@ -123,17 +120,13 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     });
     await flushEffects();
 
-    expect(switchTopic).toHaveBeenCalledWith("topic-a", expect.objectContaining({ allowDetachedSession: true }));
+    expect(switchTopic).toHaveBeenCalledWith(
+      "topic-a",
+      expect.objectContaining({ allowDetachedSession: true }),
+    );
     expect(
-      mounted.container
-        .querySelector('[data-testid="task-center-tab-topic-a"]')
-        ?.getAttribute("data-active"),
-    ).toBe("true");
-    expect(
-      mounted.container
-        .querySelector('[data-testid="task-center-tab-topic-current"]')
-        ?.getAttribute("data-active"),
-    ).not.toBe("true");
+      mounted.container.querySelector('[data-testid="task-center-tab-strip"]'),
+    ).toBeNull();
 
     act(() => {
       resolveSwitchTopic?.();
@@ -141,7 +134,7 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     await flushEffects();
   });
 
-  it("外层侧边栏打开历史会话后，路由追平不应覆盖已有会话标签", async () => {
+  it("外层侧边栏打开历史会话后，路由追平应只保留目标会话", async () => {
     const state: Record<string, unknown> = createMockAgentChatUnifiedState({
       sessionId: "topic-current",
       topics: [
@@ -176,27 +169,23 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
       initialSessionId: "topic-next",
     });
     await flushEffects();
-    expect(switchTopic).toHaveBeenCalledWith("topic-next", expect.objectContaining({ allowDetachedSession: true }));
+    expect(switchTopic).toHaveBeenCalledWith(
+      "topic-next",
+      expect.objectContaining({ allowDetachedSession: true }),
+    );
 
     mounted.rerender();
     await flushEffects();
 
     expect(switchTopic).toHaveBeenCalledTimes(1);
     expect(
-      mounted.container
-        .querySelector('[data-testid="task-center-tab-topic-next"]')
-        ?.getAttribute("data-active"),
-    ).toBe("true");
-    expect(
-      mounted.container.querySelector(
-        '[data-testid="task-center-tab-topic-current"]',
-      ),
-    ).not.toBeNull();
+      mounted.container.querySelector('[data-testid="task-center-tab-strip"]'),
+    ).toBeNull();
     expect(
       JSON.parse(
         localStorage.getItem(TASK_CENTER_OPEN_TAB_IDS_STORAGE_KEY) ?? "{}",
       )["workspace-test"],
-    ).toEqual(["topic-next", "topic-current"]);
+    ).toEqual(["topic-next"]);
   });
 
   it("打开历史会话时不应先清空当前消息再切换", async () => {
@@ -245,11 +234,15 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     });
     await flushEffects();
 
-    expect(switchTopic).toHaveBeenNthCalledWith(1, "topic-a", expect.objectContaining({ allowDetachedSession: true }));
+    expect(switchTopic).toHaveBeenNthCalledWith(
+      1,
+      "topic-a",
+      expect.objectContaining({ allowDetachedSession: true }),
+    );
     expect(setMessages).not.toHaveBeenCalledWith([]);
   });
 
-  it("new-task 首页应支持连续新增多个本地草稿标签", async () => {
+  it("new-task 首页连续新建任务事件应保留在当前页", async () => {
     const onNavigate = vi.fn();
     vi.mocked(buildHomeAgentParams).mockClear();
     const state: Record<string, unknown> = createMockAgentChatUnifiedState({
@@ -266,33 +259,27 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     });
     await flushEffects();
 
-    const createButton = mounted.container.querySelector<HTMLButtonElement>(
-      '[data-testid="task-center-tab-create-button"]',
-    );
-    expect(createButton).not.toBeNull();
-    createButton?.click();
+    expect(requestTaskCenterDraftTask({ source: "sidebar" })).toBe(true);
     await flushEffects();
     mounted.rerender();
     await flushEffects();
 
-    mounted.container
-      .querySelector<HTMLButtonElement>(
-        '[data-testid="task-center-tab-create-button"]',
-      )
-      ?.click();
+    expect(requestTaskCenterDraftTask({ source: "sidebar" })).toBe(true);
     await flushEffects();
     mounted.rerender();
     await flushEffects();
 
-    const draftTabs = mounted.container.querySelectorAll(
-      '[data-testid^="task-center-tab-task-draft-"]',
-    );
-    expect(draftTabs).toHaveLength(2);
     expect(
-      mounted.container.querySelectorAll(
-        '[data-testid^="task-center-tab-task-draft-"][data-active="true"]',
+      mounted.container.querySelector('[data-testid="task-center-tab-strip"]'),
+    ).toBeNull();
+    expect(
+      mounted.container.querySelector(
+        '[data-testid^="task-center-tab-task-draft-"]',
       ),
-    ).toHaveLength(1);
+    ).toBeNull();
+    expect(
+      mounted.container.querySelector('[data-testid="empty-state"]'),
+    ).not.toBeNull();
     expect(state.createFreshSession).not.toHaveBeenCalled();
     expect(buildHomeAgentParams).not.toHaveBeenCalled();
     expect(onNavigate).not.toHaveBeenCalled();
@@ -330,15 +317,16 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     mounted.rerender();
     await flushEffects();
 
-    expect(switchTopic).toHaveBeenCalledWith("topic-next", expect.objectContaining({ allowDetachedSession: true }));
+    expect(switchTopic).toHaveBeenCalledWith(
+      "topic-next",
+      expect.objectContaining({ allowDetachedSession: true }),
+    );
     expect(
-      mounted.container
-        .querySelector('[data-testid="task-center-tab-topic-next"]')
-        ?.getAttribute("data-active"),
-    ).toBe("true");
+      mounted.container.querySelector('[data-testid="task-center-tab-strip"]'),
+    ).toBeNull();
   });
 
-  it("外部路由带项目时顶部项目切换应同步导航", async () => {
+  it("外部路由带项目时不再渲染顶部项目切换入口", async () => {
     const onNavigate = vi.fn();
     installMockAgentChatUnifiedState(createMockAgentChatUnifiedState());
 
@@ -349,13 +337,15 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     });
     await flushEffects();
 
-    clickButton(mounted.container, "set-project");
-    await flushEffects();
-
-    expect(onNavigate).toHaveBeenCalledWith("agent", {
-      agentEntry: "claw",
-      projectId: "project-manual",
-    });
+    expect(
+      mounted.container.querySelector('[data-testid="chat-navbar"]'),
+    ).toBeNull();
+    expect(
+      mounted.container.querySelector(
+        '[data-testid="inputbar-project-context-project-trigger"]',
+      ),
+    ).toBeNull();
+    expect(onNavigate).not.toHaveBeenCalled();
   });
 
 });

@@ -6,6 +6,33 @@ use serde_json::Value;
 
 use super::{media, CodexRolloutParseMode, MAX_PREVIEW_TEXT_BYTES, USER_MESSAGE_BEGIN};
 
+const CONTEXTUAL_USER_PREFIXES: &[&str] = &[
+    "# AGENTS.md instructions",
+    "<environment_context>",
+    "<additional_context>",
+    "<skill>",
+    "<user_shell_command>",
+    "<turn_aborted>",
+    "<subagent_notification>",
+    "<goal_context>",
+    "<codex_internal_context",
+    "<legacy_unified_exec_process_limit_warning>",
+    "<legacy_apply_patch_exec_command_warning>",
+    "<legacy_model_mismatch_warning>",
+];
+
+const CONTEXTUAL_DEVELOPER_PREFIXES: &[&str] = &[
+    "<permissions instructions>",
+    "<model_switch>",
+    "<collaboration_mode>",
+    "<realtime_conversation>",
+    "<skills_instructions>",
+    "<personality_spec>",
+    "<token_budget>",
+    "<app-context>",
+    "<plugins_instructions>",
+];
+
 pub(super) fn response_item_preview_message(
     payload: Option<&Value>,
     timestamp: Option<String>,
@@ -21,6 +48,9 @@ pub(super) fn response_item_preview_message(
         return None;
     }
     let content = payload.get("content")?;
+    if role == "user" && is_contextual_user_message_content(content) {
+        return None;
+    }
     let attachments = if role == "user" {
         media::response_item_attachments(content)
     } else {
@@ -123,6 +153,36 @@ fn collect_message_text(content: &Value) -> Option<String> {
         .collect::<Vec<_>>()
         .join("\n");
     (!text.is_empty()).then_some(text)
+}
+
+fn is_contextual_user_message_content(content: &Value) -> bool {
+    content
+        .as_array()
+        .is_some_and(|parts| parts.iter().any(is_contextual_message_part))
+}
+
+fn is_contextual_message_part(part: &Value) -> bool {
+    let Some(text) = part
+        .get("text")
+        .and_then(Value::as_str)
+        .or_else(|| part.get("message").and_then(Value::as_str))
+    else {
+        return false;
+    };
+    let trimmed = text.trim_start();
+    if trimmed.is_empty() {
+        return false;
+    }
+    CONTEXTUAL_USER_PREFIXES
+        .iter()
+        .chain(CONTEXTUAL_DEVELOPER_PREFIXES.iter())
+        .any(|prefix| starts_with_ignore_ascii_case(trimmed, prefix))
+}
+
+fn starts_with_ignore_ascii_case(value: &str, prefix: &str) -> bool {
+    value
+        .get(..prefix.len())
+        .is_some_and(|candidate| candidate.eq_ignore_ascii_case(prefix))
 }
 
 fn truncate_text_for_mode(text: &str, mode: &CodexRolloutParseMode) -> TruncatedText {

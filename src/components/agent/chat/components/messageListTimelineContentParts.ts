@@ -100,14 +100,104 @@ function appendPlanContentPart(
   );
 }
 
+function isTextContentPart(
+  part: MessageContentPart,
+): part is Extract<MessageContentPart, { type: "text" }> {
+  return part.type === "text";
+}
+
+function isThinkingContentPart(
+  part: MessageContentPart,
+): part is Extract<MessageContentPart, { type: "thinking" }> {
+  return part.type === "thinking";
+}
+
+function collectExistingProcessLeadParts(
+  parts?: Message["contentParts"],
+): MessageContentPart[] {
+  const leadParts: MessageContentPart[] = [];
+  for (const part of parts || []) {
+    if (isThinkingContentPart(part) && part.text.trim().length > 0) {
+      leadParts.push(part);
+      continue;
+    }
+
+    if (
+      part.type === "tool_use" ||
+      part.type === "action_required" ||
+      part.type === "file_changes_batch"
+    ) {
+      break;
+    }
+
+    if (isTextContentPart(part)) {
+      break;
+    }
+  }
+  return leadParts;
+}
+
+function resolveExistingFinalTextPart(
+  parts?: Message["contentParts"],
+): MessageContentPart | null {
+  const textParts = (parts || []).filter(isTextContentPart);
+  return textParts[textParts.length - 1] || null;
+}
+
+function mergeExistingLeadAndFinalParts(params: {
+  parts: MessageContentPart[];
+  existingContentParts?: Message["contentParts"];
+  displayContent: string;
+}): MessageContentPart[] {
+  const existingLeadParts = collectExistingProcessLeadParts(
+    params.existingContentParts,
+  );
+  const existingFinalTextPart = resolveExistingFinalTextPart(
+    params.existingContentParts,
+  );
+  if (!existingLeadParts.length && !existingFinalTextPart) {
+    return params.parts;
+  }
+
+  const merged = [...existingLeadParts, ...params.parts];
+  const finalText = existingFinalTextPart?.text.trim();
+  if (!finalText) {
+    return merged;
+  }
+
+  const hasSameFinalText = merged.some(
+    (part) => isTextContentPart(part) && part.text.trim() === finalText,
+  );
+  const planOnlyTextPart =
+    merged.filter(isTextContentPart).length === 1 &&
+    merged.some(
+      (part) =>
+        isTextContentPart(part) &&
+        part.text.trim().startsWith("<proposed_plan>"),
+    );
+  if (
+    !hasSameFinalText ||
+    (planOnlyTextPart && finalText === params.displayContent.trim())
+  ) {
+    merged.push(existingFinalTextPart);
+  }
+
+  return merged;
+}
+
 function shouldRenderTimelineAgentMessageText(item: AgentThreadItem): boolean {
   if (item.type !== "agent_message") {
     return false;
   }
 
+  return shouldUseAgentMessageAsFinalText(item.phase);
+}
+
+function shouldRenderTimelineAgentMessageAsThinking(
+  item: AgentThreadItem,
+): boolean {
   return (
-    shouldUseAgentMessageAsFinalText(item.phase) ||
-    isAgentMessageCommentaryPhase(item.phase)
+    item.type === "agent_message" && isAgentMessageCommentaryPhase(item.phase)
   );
 }
 
@@ -154,6 +244,12 @@ function buildTimelineActionContentPart(
     type: "action_required",
     actionRequired,
   };
+}
+
+function hasFinalTextContentPart(parts: MessageContentPart[]): boolean {
+  return parts.some(
+    (part) => part.type === "text" && part.text.trim().length > 0,
+  );
 }
 
 function buildTimelinePatchContentPart(
@@ -243,7 +339,8 @@ export function buildTimelineInlineContentParts(params: {
   const hasAgentMessage = items.some(
     (item) =>
       item.type === "agent_message" &&
-      shouldRenderTimelineAgentMessageText(item) &&
+      (shouldRenderTimelineAgentMessageText(item) ||
+        shouldRenderTimelineAgentMessageAsThinking(item)) &&
       item.text.trim().length > 0,
   );
   const hasImportedProcess = hasImportedSourceProcessItem(items);
@@ -282,7 +379,14 @@ export function buildTimelineInlineContentParts(params: {
   ) {
     return undefined;
   }
-  if (!hasAgentMessage && !hasImportedProcess) {
+  if (
+    !hasAgentMessage &&
+    !hasImportedProcess &&
+    reasoningCount === 0 &&
+    planCount === 0 &&
+    toolLikeCount === 0 &&
+    actionLikeCount === 0
+  ) {
     return undefined;
   }
 
@@ -310,6 +414,15 @@ export function buildTimelineInlineContentParts(params: {
       continue;
     }
 
+    if (shouldRenderTimelineAgentMessageAsThinking(item)) {
+      appendThinkingContentPart(
+        parts,
+        item.text,
+        metadataRecord(item.metadata),
+      );
+      continue;
+    }
+
     const patchPart = buildTimelinePatchContentPart(item);
     if (patchPart) {
       parts.push(patchPart);
@@ -328,6 +441,10 @@ export function buildTimelineInlineContentParts(params: {
     }
   }
 
+  if (!hasFinalTextContentPart(parts)) {
+    appendTextContentPart(parts, params.displayContent);
+  }
+
   const hasTextPart = parts.some(
     (part) => part.type === "text" && part.text.trim().length > 0,
   );
@@ -342,12 +459,18 @@ export function buildTimelineInlineContentParts(params: {
     return undefined;
   }
 
+  const mergedParts = mergeExistingLeadAndFinalParts({
+    parts,
+    existingContentParts: params.existingContentParts,
+    displayContent: params.displayContent,
+  });
+
   const fileChangeParts = (params.existingContentParts || []).filter(
     (part) => part.type === "file_changes_batch",
   );
   if (fileChangeParts.length > 0) {
-    parts.push(...fileChangeParts);
+    mergedParts.push(...fileChangeParts);
   }
 
-  return parts;
+  return mergedParts;
 }

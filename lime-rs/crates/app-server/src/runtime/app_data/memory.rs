@@ -13,82 +13,46 @@ pub trait MemoryAppDataSource: Send + Sync {
         Ok(ProjectMemoryReadResponse::default())
     }
 
-    async fn list_unified_memories(
+    async fn list_memory_store(
         &self,
-        _params: UnifiedMemoryListParams,
-    ) -> Result<UnifiedMemoryListResponse, RuntimeCoreError> {
-        Err(unavailable("unifiedMemory/list"))
+        _params: MemoryStoreListParams,
+    ) -> Result<MemoryStoreListResponse, RuntimeCoreError> {
+        Err(unavailable("memoryStore/list"))
     }
 
-    async fn get_unified_memory(
+    async fn read_memory_store(
         &self,
-        _params: UnifiedMemoryGetParams,
-    ) -> Result<UnifiedMemoryGetResponse, RuntimeCoreError> {
-        Err(unavailable("unifiedMemory/get"))
+        _params: MemoryStoreReadParams,
+    ) -> Result<MemoryStoreReadResponse, RuntimeCoreError> {
+        Err(unavailable("memoryStore/read"))
     }
 
-    async fn create_unified_memory(
+    async fn search_memory_store(
         &self,
-        _params: UnifiedMemoryCreateParams,
-    ) -> Result<UnifiedMemoryWriteResponse, RuntimeCoreError> {
-        Err(unavailable("unifiedMemory/create"))
+        _params: MemoryStoreSearchParams,
+    ) -> Result<MemoryStoreSearchResponse, RuntimeCoreError> {
+        Err(unavailable("memoryStore/search"))
     }
 
-    async fn update_unified_memory(
+    async fn add_memory_store_note(
         &self,
-        _params: UnifiedMemoryUpdateParams,
-    ) -> Result<UnifiedMemoryWriteResponse, RuntimeCoreError> {
-        Err(unavailable("unifiedMemory/update"))
+        _params: MemoryStoreAddNoteParams,
+    ) -> Result<MemoryStoreAddNoteResponse, RuntimeCoreError> {
+        Err(unavailable("memoryStore/addNote"))
     }
 
-    async fn delete_unified_memory(
+    async fn health_memory_store(
         &self,
-        _params: UnifiedMemoryDeleteParams,
-    ) -> Result<UnifiedMemoryDeleteResponse, RuntimeCoreError> {
-        Err(unavailable("unifiedMemory/delete"))
+        _params: MemoryStoreRootParams,
+    ) -> Result<MemoryStoreHealthResponse, RuntimeCoreError> {
+        Err(unavailable("memoryStore/health"))
     }
 
-    async fn search_unified_memories(
+    async fn reset_memory_store(
         &self,
-        _params: UnifiedMemorySearchParams,
-    ) -> Result<UnifiedMemoryListResponse, RuntimeCoreError> {
-        Err(unavailable("unifiedMemory/search"))
-    }
-
-    async fn read_unified_memory_stats(
-        &self,
-    ) -> Result<UnifiedMemoryStatsResponse, RuntimeCoreError> {
-        Err(unavailable("unifiedMemory/stats"))
-    }
-
-    async fn analyze_unified_memories(
-        &self,
-        _params: UnifiedMemoryAnalyzeParams,
-    ) -> Result<UnifiedMemoryAnalysisResponse, RuntimeCoreError> {
-        Err(RuntimeCoreError::Backend(
-            "unifiedMemory/analyze requires RuntimeCore memory extraction current implementation"
-                .to_string(),
-        ))
-    }
-
-    async fn semantic_search_unified_memories(
-        &self,
-        _params: UnifiedMemorySemanticSearchParams,
-    ) -> Result<UnifiedMemoryListResponse, RuntimeCoreError> {
-        Err(RuntimeCoreError::Backend(
-            "unifiedMemory/semanticSearch requires current embedding provider integration"
-                .to_string(),
-        ))
-    }
-
-    async fn hybrid_search_unified_memories(
-        &self,
-        _params: UnifiedMemoryHybridSearchParams,
-    ) -> Result<UnifiedMemoryListResponse, RuntimeCoreError> {
-        Err(RuntimeCoreError::Backend(
-            "unifiedMemory/hybridSearch requires current embedding provider integration"
-                .to_string(),
-        ))
+        _params: MemoryStoreResetParams,
+    ) -> Result<MemoryStoreResetResponse, RuntimeCoreError> {
+        Err(unavailable("memoryStore/reset"))
     }
 }
 

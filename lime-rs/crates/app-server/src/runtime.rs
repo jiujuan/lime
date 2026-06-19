@@ -25,6 +25,7 @@ mod load_context;
 mod mcp;
 mod media_tasks;
 mod memory;
+pub(crate) mod memory_prompt;
 mod model_providers;
 mod objectives;
 mod output_refs;
@@ -44,6 +45,7 @@ mod skills;
 mod status;
 mod storage_roots;
 mod thread_item_projection;
+mod tool_item_projection;
 mod tool_lifecycle;
 mod turn_execution;
 mod turn_input_events;
@@ -300,6 +302,13 @@ pub struct ToolInventoryReadRequest {
 
 #[async_trait]
 pub trait ExecutionBackend: Send + Sync {
+    fn set_app_data_source(
+        &self,
+        _app_data_source: Arc<dyn AppDataSource>,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+
     async fn start_turn(
         &self,
         request: ExecutionRequest,
@@ -436,6 +445,11 @@ impl RuntimeCore {
     }
 
     pub fn with_app_data_source(mut self, app_data_source: Arc<dyn AppDataSource>) -> Self {
+        if let Err(error) = self.backend.set_app_data_source(app_data_source.clone()) {
+            tracing::warn!(
+                "runtime backend rejected app data source injection; app data source remains available to RuntimeCore: {error}"
+            );
+        }
         self.app_data_source = app_data_source;
         self
     }

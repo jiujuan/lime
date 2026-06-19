@@ -6,6 +6,12 @@ const TRACKER_PATH = "internal/roadmap/codeximport/implementation-tracker.md";
 const ARTIFACT_ROADMAP_PATH = "internal/roadmap/artifacts/roadmap.md";
 const RUNTIME_EVENTS_TEST_PATH =
   "lime-rs/crates/app-server/src/runtime/conversation_import/tests/runtime_events.rs";
+const SOURCE_SCAN_TEST_PATH =
+  "lime-rs/crates/app-server/src/runtime/conversation_import/tests.rs";
+const SOURCE_HEALTH_TEST_PATH =
+  "lime-rs/crates/app-server/src/runtime/conversation_import/tests/health.rs";
+const PATH_RESOLUTION_TEST_PATH =
+  "lime-rs/crates/app-server/src/runtime/conversation_import/tests/path_resolution.rs";
 const SECURITY_TEST_PATH =
   "lime-rs/crates/app-server/src/runtime/conversation_import/tests/security.rs";
 const EVIDENCE_TEST_PATH =
@@ -23,8 +29,16 @@ const CLICK_THROUGH_GUI_HELPER_PATH =
 const CLICK_THROUGH_FIXTURE_HELPER_PATH =
   "scripts/electron/lib/local-history-import-click-through-fixture.mjs";
 const PREVIEW_ARTIFACT_TEST_PATH = "src/lib/artifact/previewArtifact.test.ts";
+const ARTIFACT_RENDERER_TEST_PATH =
+  "src/components/artifact/ArtifactRenderer.ui.test.tsx";
+const ARTIFACT_TOOLBAR_TEST_PATH =
+  "src/components/artifact/ArtifactToolbar.ui.test.tsx";
 const WORKSPACE_PREVIEW_ACTIONS_TEST_PATH =
   "src/components/agent/chat/workspace/useWorkspaceArtifactPreviewActions.test.tsx";
+const SESSION_CLIENT_PATH = "src/lib/api/agentRuntime/sessionClient.ts";
+const SESSION_CLIENT_BOUNDARY_TEST_PATH =
+  "src/lib/api/agentRuntime/sessionClient.current-boundary.test.ts";
+const CONVERSATION_IMPORT_API_TEST_PATH = "src/lib/api/conversationImport.test.ts";
 
 function readFile(filePath) {
   return fs.readFileSync(filePath, "utf8");
@@ -52,7 +66,12 @@ describe("codex import fidelity acceptance matrix guard", () => {
 
   it("keeps every high-fidelity source category tied to a concrete guard", () => {
     const matrix = readFile(MATRIX_PATH);
-    const runtimeTests = readFile(RUNTIME_EVENTS_TEST_PATH);
+    const runtimeTests = readFiles(
+      RUNTIME_EVENTS_TEST_PATH,
+      SOURCE_SCAN_TEST_PATH,
+      SOURCE_HEALTH_TEST_PATH,
+      PATH_RESOLUTION_TEST_PATH,
+    );
     const smokeGuards = readFiles(
       CLICK_THROUGH_SMOKE_TEST_PATH,
       CLICK_THROUGH_SMOKE_PATH,
@@ -63,13 +82,15 @@ describe("codex import fidelity acceptance matrix guard", () => {
 
     const requiredRows = [
       "source discovery",
+      "read-only source health",
+      "project path filtering",
       "rollout path repair",
       "message ordering",
       "attachments",
       "reasoning",
       "shell command",
       "file read preview",
-      "Markdown / HTML / DOCX / image preview",
+      "Markdown / HTML / DOCX / XLSX / PPTX / PDF / image / binary fallback preview",
       "patch",
       "approval",
       "web search",
@@ -92,6 +113,9 @@ describe("codex import fidelity acceptance matrix guard", () => {
     const requiredRustEvidence = [
       "commit_preserves_codex_tool_command_and_patch_timeline",
       "commit_preserves_high_volume_codex_tool_events_with_bounded_default_projection",
+      "scans_session_index_fallback_reports_read_only_health",
+      "scans_missing_source_reports_read_only_health",
+      "scans_codex_state_db_project_path_exact_prefix_and_contains",
       "commit_applies_import_runtime_projection_budget_per_thread",
       "commit_preserves_imported_assistant_message_order_between_runtime_events",
       "commit_preserves_imported_update_plan_timeline_item",
@@ -104,6 +128,8 @@ describe("codex import fidelity acceptance matrix guard", () => {
       "view_image_tool_call",
       "image_generation_begin",
       "context_compacted",
+      "entered_review_mode",
+      "exited_review_mode",
       "subagent_activity",
       "collab_agent_spawn_begin",
     ];
@@ -111,6 +137,11 @@ describe("codex import fidelity acceptance matrix guard", () => {
     for (const token of requiredRustEvidence) {
       expect(runtimeTests).toContain(token);
     }
+
+    const apiTests = readFile(CONVERSATION_IMPORT_API_TEST_PATH);
+    expect(apiTests).toContain("sourceHomeExists");
+    expect(apiTests).toContain("stateDbReadable");
+    expect(apiTests).toContain("rolloutFileCount");
 
     const requiredGuiEvidence = [
       "hasReasoningVisible",
@@ -139,6 +170,8 @@ describe("codex import fidelity acceptance matrix guard", () => {
     const artifactRoadmap = readFile(ARTIFACT_ROADMAP_PATH);
     const previewArtifactTests = readFiles(
       PREVIEW_ARTIFACT_TEST_PATH,
+      ARTIFACT_RENDERER_TEST_PATH,
+      ARTIFACT_TOOLBAR_TEST_PATH,
       WORKSPACE_PREVIEW_ACTIONS_TEST_PATH,
     );
     const clickThroughSurface = readFiles(
@@ -149,13 +182,21 @@ describe("codex import fidelity acceptance matrix guard", () => {
 
     expect(matrix).toContain("Preview Artifact Contract");
     expect(matrix).toContain("`thread_read.tool_calls.arguments.path` + `inline-tool-open-file` + Preview Artifact Contract");
+    expect(matrix).toContain("URL / record / app shell source preview");
+    expect(matrix).toContain("PreviewSourceSummaryRenderer");
     expect(artifactRoadmap).toContain("打开链路 artifact 化，业务事实源不 artifact 化");
     expect(artifactRoadmap).toContain("openArtifactInWorkbench");
     expect(artifactRoadmap).toContain("selectionKey=artifact:<id>");
+    expect(artifactRoadmap).toContain("PreviewSourceSummaryRenderer");
     expect(artifactRoadmap).toContain("PDF、Excel、PPT");
+    expect(artifactRoadmap).toContain("document-preview");
+    expect(artifactRoadmap).toContain("renderMode=document_text");
     expect(artifactRoadmap).toContain("renderMode=system_open");
     expect(artifactRoadmap).toContain("open_with_default_app");
-    expect(matrix).toContain("PDF、Excel、PPT 已有统一 Preview Artifact `system_open` 兜底");
+    expect(matrix).toContain("DOCX / XLSX / PPTX 与可解析 PDF 文本流走 `document_text`");
+    expect(matrix).toContain("PDF OCR / 扫描件 / 复杂字体映射");
+    expect(matrix).toContain("`entered_review_mode`、`exited_review_mode`");
+    expect(matrix).toContain("`context_compaction`、`reasoning`、`agent_message`");
     expect(previewArtifactTests).toContain("research.pdf");
     expect(previewArtifactTests).toContain("budget.xlsx");
     expect(previewArtifactTests).toContain("deck.pptx");
@@ -163,6 +204,10 @@ describe("codex import fidelity acceptance matrix guard", () => {
     expect(previewArtifactTests).toContain("demo.mp4");
     expect(previewArtifactTests).toContain('source: "url"');
     expect(previewArtifactTests).toContain('source: "database_record"');
+    expect(previewArtifactTests).toContain('source: "app"');
+    expect(previewArtifactTests).toContain('contentKind: "app_shell"');
+    expect(previewArtifactTests).toContain("preview-source-summary-renderer");
+    expect(previewArtifactTests).toContain("openExternalUrlWithSystemBrowser");
     expect(previewArtifactTests).toContain('renderMode: "system_open"');
     expect(clickThroughSurface).toContain("inline-tool-open-file");
     expect(clickThroughSurface).toContain("inspectImportedFilePreviewArtifacts");
@@ -191,6 +236,30 @@ describe("codex import fidelity acceptance matrix guard", () => {
     expect(clickThroughSurface).toContain("hasContinueUserMessage");
     expect(clickThroughSurface).toContain("hasContinueAssistantMessage");
     expect(clickThroughSurface).toContain('not.toContain("agent_runtime_")');
+  });
+
+  it("keeps user-level deletion policy separate from reimport cleanup", () => {
+    const matrix = readFile(MATRIX_PATH);
+    const tracker = readFile(TRACKER_PATH);
+    const sessionClient = readFile(SESSION_CLIENT_PATH);
+    const sessionClientBoundary = readFile(SESSION_CLIENT_BOUNDARY_TEST_PATH);
+
+    expect(matrix).toContain(
+      "导入数据的用户级“彻底删除 / 导出后删除 / 保留策略”还需要独立产品规则和存储清理守卫。",
+    );
+    expect(tracker).toContain("CI-050");
+    expect(tracker).toContain("用户级删除 / 保留策略");
+    expect(tracker).toContain("replaceExisting=true");
+    expect(tracker).toContain("session-scoped sidecar");
+    expect(tracker).toContain("不等同于用户级彻底删除");
+    expect(sessionClient).toContain("deleteAgentRuntimeSession");
+    expect(sessionClient).toContain("archived: true");
+    expect(sessionClientBoundary).toContain(
+      "session archive / restore / delete projection must use agentSession/update",
+    );
+    expect(sessionClientBoundary).toContain(
+      "delete projection 不应直接请求 App Server 通用 request 或 legacy bridge",
+    );
   });
 
   it("guards privacy and non-Codex compatibility as explicit boundaries", () => {

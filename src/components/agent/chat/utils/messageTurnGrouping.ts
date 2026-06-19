@@ -1,4 +1,5 @@
 import type { Message } from "../types";
+import { projectConversationMessagesByRuntimeTurn } from "./conversationTimelineOrdering";
 
 export interface MessageTurnGroup {
   id: string;
@@ -18,11 +19,6 @@ function createGroup(seed: Message): MessageTurnGroup {
     startedAt: seed.timestamp,
     endedAt: seed.timestamp,
   };
-}
-
-function normalizeRuntimeTurnId(message: Message): string | null {
-  const normalized = message.runtimeTurnId?.trim();
-  return normalized || null;
 }
 
 function refreshGroupRange(group: MessageTurnGroup, message: Message) {
@@ -56,75 +52,25 @@ function appendMessageToGroup(group: MessageTurnGroup, message: Message) {
   refreshGroupRange(group, message);
 }
 
-function getGroupRuntimeTurnId(group: MessageTurnGroup): string | null {
-  if (group.userMessage) {
-    return normalizeRuntimeTurnId(group.userMessage);
-  }
-  for (const message of group.messages) {
-    const runtimeTurnId = normalizeRuntimeTurnId(message);
-    if (runtimeTurnId) {
-      return runtimeTurnId;
-    }
-  }
-  return null;
-}
-
 export function buildMessageTurnGroups(
   messages: Message[],
 ): MessageTurnGroup[] {
   const groups: MessageTurnGroup[] = [];
-  const groupByRuntimeTurnId = new Map<string, MessageTurnGroup>();
   let current: MessageTurnGroup | null = null;
 
-  for (const message of messages) {
-    const runtimeTurnId = normalizeRuntimeTurnId(message);
-
-    if (message.role === "assistant" && runtimeTurnId) {
-      const runtimeGroup = groupByRuntimeTurnId.get(runtimeTurnId);
-      if (runtimeGroup) {
-        appendMessageToGroup(runtimeGroup, message);
-        continue;
-      }
-    }
-
+  for (const message of projectConversationMessagesByRuntimeTurn(messages)) {
     if (!current) {
       current = createGroup(message);
-      if (runtimeTurnId) {
-        groupByRuntimeTurnId.set(runtimeTurnId, current);
-      }
       continue;
     }
 
     if (message.role === "user") {
-      if (runtimeTurnId) {
-        const runtimeGroup = groupByRuntimeTurnId.get(runtimeTurnId);
-        if (runtimeGroup) {
-          appendMessageToGroup(runtimeGroup, message);
-          continue;
-        }
-      }
       groups.push(current);
       current = createGroup(message);
-      if (runtimeTurnId) {
-        groupByRuntimeTurnId.set(runtimeTurnId, current);
-      }
       continue;
     }
 
-    if (runtimeTurnId) {
-      const currentRuntimeTurnId = getGroupRuntimeTurnId(current);
-      if (currentRuntimeTurnId && currentRuntimeTurnId !== runtimeTurnId) {
-        groups.push(current);
-        current = createGroup(message);
-        groupByRuntimeTurnId.set(runtimeTurnId, current);
-        continue;
-      }
-    }
-
     appendMessageToGroup(current, message);
-    if (runtimeTurnId) {
-      groupByRuntimeTurnId.set(runtimeTurnId, current);
-    }
   }
 
   if (current) {

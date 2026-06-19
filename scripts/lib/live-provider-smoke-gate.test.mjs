@@ -13,6 +13,9 @@ import {
   liveProviderSmokeEnv,
 } from "./live-provider-smoke-gate.mjs";
 
+const CHILD_PROCESS_TIMEOUT_MS = 15_000;
+const CHILD_PROCESS_TEST_TIMEOUT_MS = 20_000;
+
 describe("live-provider-smoke-gate", () => {
   it("默认禁止 live Provider smoke", () => {
     expect(liveProviderSmokeAllowed({})).toBe(false);
@@ -59,91 +62,117 @@ describe("live-provider-smoke-gate", () => {
     ).toBe(false);
   });
 
-  it("Vitest 智能入口默认应阻断直接点名 live Provider 测试", () => {
-    const result = spawnSync(
-      "node",
-      [
-        "scripts/run-vitest-smart.mjs",
-        "src/components/image-gen/useImageGen.live.test.ts",
-      ],
-      {
-        cwd: process.cwd(),
-        encoding: "utf8",
-        env: {
-          ...process.env,
-          [LIVE_PROVIDER_SMOKE_ENV]: "",
-          [REAL_API_TEST_ENV]: "",
+  it(
+    "Vitest 智能入口默认应阻断直接点名 live Provider 测试",
+    () => {
+      const result = spawnSync(
+        "node",
+        [
+          "scripts/run-vitest-smart.mjs",
+          "src/components/image-gen/useImageGen.live.test.ts",
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8",
+          timeout: CHILD_PROCESS_TIMEOUT_MS,
+          env: {
+            ...process.env,
+            [LIVE_PROVIDER_SMOKE_ENV]: "",
+            [REAL_API_TEST_ENV]: "",
+          },
         },
-      },
+      );
+
+      expect(result.status).toBe(1);
+      expect(`${result.stdout}${result.stderr}`).toContain("默认禁止执行");
+    },
+    CHILD_PROCESS_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "内容工厂 full-flow 默认应在调用 DevBridge 前阻断 live Provider",
+    () => {
+      const result = spawnSync(
+        "node",
+        ["scripts/agent-app/content-factory-flow.mjs"],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8",
+          timeout: CHILD_PROCESS_TIMEOUT_MS,
+          env: {
+            ...process.env,
+            [LIVE_PROVIDER_SMOKE_ENV]: "",
+            [REAL_API_TEST_ENV]: "",
+          },
+        },
+      );
+
+      expect(result.status).toBe(1);
+      expect(`${result.stdout}${result.stderr}`).toContain("默认禁止执行");
+    },
+    CHILD_PROCESS_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "Agent Apps 内容工厂 action E2E 默认应阻断 live Provider",
+    () => {
+      const result = spawnSync(
+        "node",
+        [
+          "scripts/agent-app/apps-smoke.mjs",
+          "--include-content-factory-action-e2e",
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8",
+          timeout: CHILD_PROCESS_TIMEOUT_MS,
+          env: {
+            ...process.env,
+            [LIVE_PROVIDER_SMOKE_ENV]: "",
+            [REAL_API_TEST_ENV]: "",
+          },
+        },
+      );
+
+      expect(result.status).toBe(1);
+      expect(`${result.stdout}${result.stderr}`).toContain("默认禁止执行");
+    },
+    CHILD_PROCESS_TEST_TIMEOUT_MS,
+  );
+
+  it("Claw streaming GUI E2E 是显式 live 入口，不应再接入二次授权 gate", () => {
+    const content = fs.readFileSync(
+      path.join(process.cwd(), "scripts/claw-chat-ready-streaming-smoke.mjs"),
+      "utf8",
     );
 
-    expect(result.status).toBe(1);
-    expect(`${result.stdout}${result.stderr}`).toContain("默认禁止执行");
+    expect(content).not.toContain("./lib/live-provider-smoke-gate.mjs");
+    expect(content).not.toContain("assertLiveProviderSmokeAllowed(");
+    expect(content).not.toContain("liveProviderSmokeAllowed(");
+    expect(content).not.toContain("allowLiveProvider");
+    expect(content).not.toContain("--allow-live-provider");
+    expect(content).toContain('logStage("wait-health")');
   });
 
-  it("内容工厂 full-flow 默认应在调用 DevBridge 前阻断 live Provider", () => {
-    const result = spawnSync(
-      "node",
-      ["scripts/agent-app/content-factory-flow.mjs"],
-      {
-        cwd: process.cwd(),
-        encoding: "utf8",
-        env: {
-          ...process.env,
-          [LIVE_PROVIDER_SMOKE_ENV]: "",
-          [REAL_API_TEST_ENV]: "",
-        },
-      },
+  it("Claw streaming GUI E2E 自动选型应优先工具调用更稳的模型", () => {
+    const content = fs.readFileSync(
+      path.join(process.cwd(), "scripts/claw-chat-ready-streaming-smoke.mjs"),
+      "utf8",
     );
 
-    expect(result.status).toBe(1);
-    expect(`${result.stdout}${result.stderr}`).toContain("默认禁止执行");
+    expect(content).toContain("function modelLooksLightweight(");
+    expect(content).toContain("function modelLooksExpensive(");
+    expect(content).toContain("function modelLooksToolReliable(");
+    expect(content).toContain("modelLooksToolReliable(value)");
+    expect(content).toContain("modelLooksLightweight(model)");
+    expect(content).toContain("modelLooksExpensive(model)");
+    expect(content).toContain("candidateRank(candidate)");
+    expect(content).toContain("modelPenalty");
+    expect(content).toContain("? 12");
+    expect(content).toContain("? 18");
   });
 
-  it("Agent Apps 内容工厂 action E2E 默认应阻断 live Provider", () => {
-    const result = spawnSync(
-      "node",
-      [
-        "scripts/agent-app/apps-smoke.mjs",
-        "--include-content-factory-action-e2e",
-      ],
-      {
-        cwd: process.cwd(),
-        encoding: "utf8",
-        env: {
-          ...process.env,
-          [LIVE_PROVIDER_SMOKE_ENV]: "",
-          [REAL_API_TEST_ENV]: "",
-        },
-      },
-    );
-
-    expect(result.status).toBe(1);
-    expect(`${result.stdout}${result.stderr}`).toContain("默认禁止执行");
-  });
-
-  it("Claw streaming GUI E2E 默认应在 DevBridge 健康检查前阻断 live Provider", () => {
-    const result = spawnSync(
-      "node",
-      ["scripts/claw-chat-ready-streaming-smoke.mjs", "--timeout-ms", "30000"],
-      {
-        cwd: process.cwd(),
-        encoding: "utf8",
-        env: {
-          ...process.env,
-          [LIVE_PROVIDER_SMOKE_ENV]: "",
-          [REAL_API_TEST_ENV]: "",
-        },
-      },
-    );
-    const output = `${result.stdout}${result.stderr}`;
-
-    expect(result.status).toBe(1);
-    expect(output).toContain("默认禁止执行");
-    expect(output).not.toContain("stage=wait-health");
-  });
-
-  it("Claw streaming GUI E2E 授权后必须要求真实 WebSearch/WebFetch 工具事实", () => {
+  it("Claw streaming GUI E2E 必须要求真实 WebSearch/WebFetch 工具事实", () => {
     const content = fs.readFileSync(
       path.join(process.cwd(), "scripts/claw-chat-ready-streaming-smoke.mjs"),
       "utf8",
@@ -159,6 +188,9 @@ describe("live-provider-smoke-gate", () => {
       "它不是 Playwright _electron.launch() renderer IPC E2E。",
     );
     expect(content).toContain("LIVE_WEB_TOOL_PROMPT");
+    expect(content).toContain("@搜索 关键词:联网工具验证");
+    expect(content).toContain("web_search=true");
+    expect(content).toContain('search_mode="allowed"');
     expect(content).toContain("REQUIRED_LIVE_WEB_TOOL_NAMES");
     expect(content).toContain("./lib/claw-chat-live-web-tool-evidence.mjs");
     expect(content).toContain("liveWebToolEvidenceFromSession");
@@ -214,8 +246,33 @@ describe("live-provider-smoke-gate", () => {
     expect(content).toContain(
       "summary.assertions.liveWebRequiredToolOutputsPresent",
     );
+    expect(content).toContain(
+      "summary.assertions.liveWebExplicitSearchAllowed",
+    );
     expect(content).toContain("submit-live-web-tools-turn");
     expect(content).toContain("failureCleanupLiveWebInterrupt");
+  });
+
+  it("Claw streaming GUI E2E 应允许长 turn 快速完成后继续验证 live Web 工具", () => {
+    const content = fs.readFileSync(
+      path.join(process.cwd(), "scripts/claw-chat-ready-streaming-smoke.mjs"),
+      "utf8",
+    );
+
+    expect(content).toContain("longTurnFastCompletedBeforeInterrupt");
+    expect(content).toContain("fastCompletedBeforeInterrupt: true");
+    expect(content).toContain("long-turn-fast-completed-before-stop");
+    expect(content).toContain("longTurnFastCompleteAccepted");
+    expect(content).toContain("longTurnCanBeInterrupted");
+    expect(content).toContain(
+      "(summary.assertions.longTurnCanBeInterrupted ||",
+    );
+    expect(content).toContain(
+      "summary.assertions.longTurnFastCompleteAccepted) &&",
+    );
+    expect(content).not.toContain(
+      '["failed", "aborted", "completed"].includes(turn.status)',
+    );
   });
 
   it("Claw streaming GUI E2E 的 WebSearch/WebFetch helper 必须定义真实联网工具集合", () => {
@@ -270,61 +327,75 @@ describe("live-provider-smoke-gate", () => {
     expect(content).toContain("allRequiredToolEventsForTurn).toBe(false)");
   });
 
-  it("知识库真实 Provider E2E 即使指定 provider/model 也必须显式授权", () => {
-    const result = spawnSync(
-      "node",
-      [
-        "scripts/knowledge-provider-e2e.mjs",
-        "--provider",
-        "deepseek",
-        "--model",
-        "deepseek-v4-flash",
-      ],
-      {
-        cwd: process.cwd(),
-        encoding: "utf8",
-        env: {
-          ...process.env,
-          [LIVE_PROVIDER_SMOKE_ENV]: "",
-          [REAL_API_TEST_ENV]: "",
+  it(
+    "知识库真实 Provider E2E 即使指定 provider/model 也必须显式授权",
+    () => {
+      const result = spawnSync(
+        "node",
+        [
+          "scripts/knowledge-provider-e2e.mjs",
+          "--provider",
+          "deepseek",
+          "--model",
+          "deepseek-v4-flash",
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8",
+          timeout: CHILD_PROCESS_TIMEOUT_MS,
+          env: {
+            ...process.env,
+            [LIVE_PROVIDER_SMOKE_ENV]: "",
+            [REAL_API_TEST_ENV]: "",
+          },
         },
-      },
-    );
+      );
 
-    expect(result.status).toBe(1);
-    expect(`${result.stdout}${result.stderr}`).toContain("默认禁止执行");
-  });
+      expect(result.status).toBe(1);
+      expect(`${result.stdout}${result.stderr}`).toContain("默认禁止执行");
+    },
+    CHILD_PROCESS_TEST_TIMEOUT_MS,
+  );
 
-  it("Managed Objective continuation 指定 Deepseek 时必须显式授权", () => {
-    const result = spawnSync(
-      "node",
-      [
-        "scripts/managed-objective-continuation-smoke.mjs",
-        "--provider-preference",
-        "deepseek",
-        "--model-preference",
-        "deepseek-v4-flash",
-        "--no-write",
-      ],
-      {
-        cwd: process.cwd(),
-        encoding: "utf8",
-        env: {
-          ...process.env,
-          [LIVE_PROVIDER_SMOKE_ENV]: "",
-          [REAL_API_TEST_ENV]: "",
+  it(
+    "Managed Objective continuation 指定 Deepseek 时必须显式授权",
+    () => {
+      const result = spawnSync(
+        "node",
+        [
+          "scripts/managed-objective-continuation-smoke.mjs",
+          "--provider-preference",
+          "deepseek",
+          "--model-preference",
+          "deepseek-v4-flash",
+          "--no-write",
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8",
+          timeout: CHILD_PROCESS_TIMEOUT_MS,
+          env: {
+            ...process.env,
+            [LIVE_PROVIDER_SMOKE_ENV]: "",
+            [REAL_API_TEST_ENV]: "",
+          },
         },
-      },
-    );
+      );
 
-    expect(result.status).toBe(1);
-    expect(`${result.stdout}${result.stderr}`).toContain("默认禁止执行");
-  });
+      expect(result.status).toBe(1);
+      expect(`${result.stdout}${result.stderr}`).toContain("默认禁止执行");
+    },
+    CHILD_PROCESS_TEST_TIMEOUT_MS,
+  );
 
   it("提交真实 AgentRuntime / Provider 的脚本必须默认接入 live gate", () => {
     const riskyCommandPattern =
       /"agent_runtime_submit_turn"|"test_api_key_provider_chat"|"modelProvider\/testChat"/;
+    const explicitLiveEntrypoints = new Set([
+      "scripts/claw-chat-ready-streaming-smoke.mjs",
+    ]);
     const violations = listSmokeScripts()
+      .filter(({ relativePath }) => !explicitLiveEntrypoints.has(relativePath))
       .filter(({ content }) => riskyCommandPattern.test(content))
       .filter(({ content }) => {
         const hasLiveGate = content.includes("assertLiveProviderSmokeAllowed(");

@@ -22,6 +22,7 @@ function buildProjection(
     lastAssistantMessageId?: string | null;
     shouldDeferMessageDetails?: boolean;
     streamingTextOverlay?: AgentStreamTextOverlaySnapshot | null;
+    turnStatus?: "queued" | "running" | "completed" | "failed" | "aborted";
   } = {},
 ) {
   return resolveMessageListItemProjection({
@@ -37,7 +38,7 @@ function buildProjection(
         ? ({
             turn: {
               id: "turn-legacy-unphased-final",
-              status: "completed",
+              status: options.turnStatus ?? "completed",
             },
             items: timelineItems,
           } as never)
@@ -56,6 +57,43 @@ function buildProjection(
 }
 
 describe("messageListItemProjection", () => {
+  it("用户图片附件消息应隐藏图片不可达诊断正文", () => {
+    const message: Message = {
+      id: "user-image-unavailable-diagnostic",
+      role: "user",
+      content: "[Image #1]",
+      timestamp: new Date("2026-06-02T10:00:00.000Z"),
+      images: [
+        {
+          data: "",
+          mediaType: "image/png",
+          sourceUri: "asset://missing-image.png",
+        },
+      ],
+    };
+
+    const projection = buildProjection(message);
+
+    expect(projection.displayContent).toBe("");
+    expect(projection.actionContent).toBe("");
+  });
+
+  it("用户 markdown 图片旁边重复 alt 文本时不应在 displayContent 里再渲染一遍", () => {
+    const message: Message = {
+      id: "user-markdown-image-alt-echo",
+      role: "user",
+      content:
+        "![图片附件未加载](asset://missing.png) 图片附件未加载",
+      timestamp: new Date("2026-06-02T10:00:00.000Z"),
+    };
+
+    const projection = buildProjection(message);
+
+    expect(projection.displayContent).toBe(
+      "![图片附件未加载](asset://missing.png)",
+    );
+  });
+
   it("流式 overlay 应保持当前 assistant 输出态", () => {
     const message: Message = {
       id: "assistant-overlay-current",
@@ -247,6 +285,400 @@ describe("messageListItemProjection", () => {
     );
   });
 
+  it("网页搜索仍在运行时流式 overlay 不应提前显示成最终正文", () => {
+    const message: Message = {
+      id: "assistant-running-search-overlay",
+      role: "assistant",
+      content: "",
+      timestamp: new Date("2026-06-02T10:00:00.000Z"),
+      isThinking: true,
+    };
+
+    const projection = buildProjection(
+      message,
+      [
+        {
+          id: "search-running",
+          thread_id: "thread-running-search",
+          turn_id: "turn-legacy-unphased-final",
+          sequence: 1,
+          status: "in_progress",
+          started_at: "2026-06-02T10:00:01.000Z",
+          updated_at: "2026-06-02T10:00:02.000Z",
+          type: "web_search",
+          action: "web_search",
+          query: "今天 AI 行业公开新闻",
+        } as never,
+      ],
+      {
+        turnStatus: "running",
+        streamingTextOverlay: {
+          messageId: message.id,
+          eventName: "response.output_text.delta",
+          content: "## 今日 AI 新闻\n\n- 第一条要闻。",
+          updatedAt: Date.parse("2026-06-02T10:00:03.000Z"),
+        },
+      },
+    );
+
+    const parts = projection.rendererContentParts || [];
+    expect(parts.map((part) => part.type)).toEqual(["tool_use"]);
+    expect(projection.actionContent).toBe("");
+    expect(projection.rendererContent).toBe("");
+    expect(projection.rendererRawContent).toBe("");
+    expect(JSON.stringify(parts)).not.toContain("今日 AI 新闻");
+  });
+
+  it("网页搜索仍在运行时 final_answer item 不应提前显示成最终正文", () => {
+    const message: Message = {
+      id: "assistant-running-search-final-item",
+      role: "assistant",
+      content: "## 今日 AI 新闻\n\n- 第一条要闻。",
+      timestamp: new Date("2026-06-02T10:00:00.000Z"),
+      isThinking: true,
+    };
+
+    const projection = buildProjection(
+      message,
+      [
+        {
+          id: "search-running-before-final",
+          thread_id: "thread-running-search",
+          turn_id: "turn-legacy-unphased-final",
+          sequence: 1,
+          status: "in_progress",
+          started_at: "2026-06-02T10:00:01.000Z",
+          updated_at: "2026-06-02T10:00:02.000Z",
+          type: "web_search",
+          action: "web_search",
+          query: "今天 AI 行业公开新闻",
+        } as never,
+        {
+          id: "assistant-running-final-answer",
+          type: "agent_message",
+          turn_id: "turn-legacy-unphased-final",
+          sequence: 2,
+          phase: "final_answer",
+          text: "## 今日 AI 新闻\n\n- 第一条要闻。",
+          status: "completed",
+          started_at: "2026-06-02T10:00:03.000Z",
+          completed_at: "2026-06-02T10:00:04.000Z",
+          updated_at: "2026-06-02T10:00:04.000Z",
+        } as never,
+      ],
+      {
+        turnStatus: "running",
+      },
+    );
+
+    const parts = projection.rendererContentParts || [];
+    expect(parts.map((part) => part.type)).toEqual(["tool_use"]);
+    expect(projection.actionContent).toBe("");
+    expect(projection.rendererContent).toBe("");
+    expect(projection.rendererRawContent).toBe("");
+    expect(parts[0]?.type === "tool_use" ? parts[0].toolCall.status : "").toBe(
+      "running",
+    );
+    expect(JSON.stringify(parts)).not.toContain("今日 AI 新闻");
+  });
+
+  it("网页搜索状态为 running 时 final_answer item 也不应提前显示成最终正文", () => {
+    const message: Message = {
+      id: "assistant-running-string-search-final-item",
+      role: "assistant",
+      content: "## 今日 AI 新闻\n\n- 第一条要闻。",
+      timestamp: new Date("2026-06-02T10:00:00.000Z"),
+      isThinking: true,
+    };
+
+    const projection = buildProjection(
+      message,
+      [
+        {
+          id: "search-running-string-before-final",
+          thread_id: "thread-running-search",
+          turn_id: "turn-legacy-unphased-final",
+          sequence: 1,
+          status: "running",
+          started_at: "2026-06-02T10:00:01.000Z",
+          updated_at: "2026-06-02T10:00:02.000Z",
+          type: "tool_call",
+          tool_name: "WebSearch",
+          arguments: { query: "今天 AI 行业公开新闻" },
+          output: "",
+        } as never,
+        {
+          id: "assistant-final-after-running-string-search",
+          type: "agent_message",
+          turn_id: "turn-legacy-unphased-final",
+          sequence: 2,
+          phase: "final_answer",
+          text: "## 今日 AI 新闻\n\n- 第一条要闻。",
+          status: "completed",
+          started_at: "2026-06-02T10:00:03.000Z",
+          completed_at: "2026-06-02T10:00:04.000Z",
+          updated_at: "2026-06-02T10:00:04.000Z",
+        } as never,
+      ],
+      {
+        turnStatus: "running",
+      },
+    );
+
+    const parts = projection.rendererContentParts || [];
+    expect(parts.map((part) => part.type)).toEqual(["tool_use"]);
+    expect(projection.actionContent).toBe("");
+    expect(projection.rendererContent).toBe("");
+    expect(projection.rendererRawContent).toBe("");
+    expect(parts[0]?.type === "tool_use" ? parts[0].toolCall.status : "").toBe(
+      "running",
+    );
+    expect(JSON.stringify(parts)).not.toContain("今日 AI 新闻");
+  });
+
+  it("网页搜索仍在运行且 message.content 已有正文时也不应显示到工具下方", () => {
+    const message: Message = {
+      id: "assistant-running-search-message-content",
+      role: "assistant",
+      content: "## 今日 AI 新闻\n\n- 第一条要闻。",
+      timestamp: new Date("2026-06-02T10:00:00.000Z"),
+      isThinking: true,
+      thinkingContent: "我正在继续等待搜索结果。",
+    };
+
+    const projection = buildProjection(
+      message,
+      [
+        {
+          id: "search-running-before-message-content",
+          thread_id: "thread-running-search",
+          turn_id: "turn-legacy-unphased-final",
+          sequence: 1,
+          status: "in_progress",
+          started_at: "2026-06-02T10:00:01.000Z",
+          updated_at: "2026-06-02T10:00:02.000Z",
+          type: "web_search",
+          action: "web_search",
+          query: "今天 AI 行业公开新闻",
+        } as never,
+      ],
+      {
+        turnStatus: "running",
+      },
+    );
+
+    const parts = projection.rendererContentParts || [];
+    expect(parts.map((part) => part.type)).toEqual(["thinking", "tool_use"]);
+    expect(projection.actionContent).toBe("");
+    expect(projection.rendererContent).toBe("");
+    expect(projection.rendererRawContent).toBe("");
+    expect(JSON.stringify(parts)).not.toContain("今日 AI 新闻");
+  });
+
+  it("turn 已完成且不再发送时，旧 running 网页搜索残留不应吞掉最终正文", () => {
+    const message: Message = {
+      id: "assistant-running-search-final-item-turn-completed",
+      role: "assistant",
+      content: "## 今日 AI 新闻\n\n- 第一条要闻。",
+      timestamp: new Date("2026-06-02T10:00:00.000Z"),
+      isThinking: false,
+    };
+
+    const projection = buildProjection(
+      message,
+      [
+        {
+          id: "search-still-running-after-turn-completed",
+          thread_id: "thread-running-search",
+          turn_id: "turn-legacy-unphased-final",
+          sequence: 1,
+          status: "in_progress",
+          started_at: "2026-06-02T10:00:01.000Z",
+          updated_at: "2026-06-02T10:00:02.000Z",
+          type: "web_search",
+          action: "web_search",
+          query: "今天 AI 行业公开新闻",
+        } as never,
+        {
+          id: "assistant-final-arrived-before-search-terminal",
+          type: "agent_message",
+          turn_id: "turn-legacy-unphased-final",
+          sequence: 2,
+          phase: "final_answer",
+          text: "## 今日 AI 新闻\n\n- 第一条要闻。",
+          status: "completed",
+          started_at: "2026-06-02T10:00:03.000Z",
+          completed_at: "2026-06-02T10:00:04.000Z",
+          updated_at: "2026-06-02T10:00:04.000Z",
+        } as never,
+      ],
+      {
+        turnStatus: "completed",
+        isSending: false,
+      },
+    );
+
+    const parts = projection.rendererContentParts || [];
+    expect(parts.map((part) => part.type)).toEqual([
+      "tool_use",
+      "text",
+    ]);
+    expect(projection.actionContent).toBe("## 今日 AI 新闻\n\n- 第一条要闻。");
+    expect(projection.rendererContent).toBe("## 今日 AI 新闻\n\n- 第一条要闻。");
+    expect(projection.rendererRawContent).toBe(
+      "## 今日 AI 新闻\n\n- 第一条要闻。",
+    );
+    expect(parts[0]?.type === "tool_use" ? parts[0].toolCall.status : "").toBe(
+      "completed",
+    );
+    expect(parts[1]?.type === "text" ? parts[1].text : "").toContain(
+      "今日 AI 新闻",
+    );
+  });
+
+  it("turn 暂标完成但发送态仍未释放时，running 网页搜索仍应 hold 最终正文", () => {
+    const message: Message = {
+      id: "assistant-running-search-final-item-still-sending",
+      role: "assistant",
+      content: "## 今日 AI 新闻\n\n- 第一条要闻。",
+      timestamp: new Date("2026-06-02T10:00:00.000Z"),
+      isThinking: false,
+    };
+
+    const projection = buildProjection(
+      message,
+      [
+        {
+          id: "search-still-running-while-sending",
+          thread_id: "thread-running-search",
+          turn_id: "turn-legacy-unphased-final",
+          sequence: 1,
+          status: "in_progress",
+          started_at: "2026-06-02T10:00:01.000Z",
+          updated_at: "2026-06-02T10:00:02.000Z",
+          type: "web_search",
+          action: "web_search",
+          query: "今天 AI 行业公开新闻",
+        } as never,
+        {
+          id: "assistant-final-arrived-before-search-terminal-sending",
+          type: "agent_message",
+          turn_id: "turn-legacy-unphased-final",
+          sequence: 2,
+          phase: "final_answer",
+          text: "## 今日 AI 新闻\n\n- 第一条要闻。",
+          status: "completed",
+          started_at: "2026-06-02T10:00:03.000Z",
+          completed_at: "2026-06-02T10:00:04.000Z",
+          updated_at: "2026-06-02T10:00:04.000Z",
+        } as never,
+      ],
+      {
+        turnStatus: "completed",
+        isSending: true,
+      },
+    );
+
+    const parts = projection.rendererContentParts || [];
+    expect(parts.map((part) => part.type)).toEqual(["tool_use"]);
+    expect(projection.actionContent).toBe("");
+    expect(projection.rendererContent).toBe("");
+    expect(projection.rendererRawContent).toBe("");
+    expect(parts[0]?.type === "tool_use" ? parts[0].toolCall.status : "").toBe(
+      "running",
+    );
+    expect(JSON.stringify(parts)).not.toContain("今日 AI 新闻");
+  });
+
+  it("无 timeline 的完成态 contentParts running 搜索残留不应吞掉最终正文", () => {
+    const message: Message = {
+      id: "assistant-stale-running-tool-content-parts",
+      role: "assistant",
+      content: "根据多源检索结果，以下是主要国际新闻整理。",
+      timestamp: new Date("2026-06-02T10:00:00.000Z"),
+      isThinking: false,
+      contentParts: [
+        {
+          type: "text",
+          text: "我来搜索今天的国际新闻。",
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-web-search-stale-running",
+            name: "WebSearch",
+            status: "running",
+            startTime: new Date("2026-06-02T10:00:01.000Z"),
+          },
+        },
+        {
+          type: "text",
+          text: "根据多源检索结果，以下是主要国际新闻整理。",
+        },
+      ],
+    };
+
+    const projection = buildProjection(message, null, {
+      isSending: false,
+    });
+
+    expect(projection.rendererContent).toBe(
+      "根据多源检索结果，以下是主要国际新闻整理。",
+    );
+    expect(projection.actionContent).toBe(
+      "根据多源检索结果，以下是主要国际新闻整理。",
+    );
+    expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
+      "tool_use",
+      "text",
+    ]);
+  });
+
+  it("运行中的网页搜索应优先保留更完整的本地 thinkingContent", () => {
+    const message: Message = {
+      id: "assistant-running-search-thinking",
+      role: "assistant",
+      content: "",
+      timestamp: new Date("2026-06-02T10:00:00.000Z"),
+      isThinking: true,
+      thinkingContent: "The search plan is forming.",
+      contentParts: [
+        {
+          type: "thinking",
+          text: "The",
+        },
+      ],
+    };
+
+    const projection = buildProjection(
+      message,
+      [
+        {
+          id: "search-running-thinker",
+          thread_id: "thread-running-search",
+          turn_id: "turn-legacy-unphased-final",
+          sequence: 1,
+          status: "in_progress",
+          started_at: "2026-06-02T10:00:01.000Z",
+          updated_at: "2026-06-02T10:00:02.000Z",
+          type: "web_search",
+          action: "web_search",
+          query: "今天 AI 行业公开新闻",
+        } as never,
+      ],
+      {
+        turnStatus: "running",
+      },
+    );
+
+    const parts = projection.rendererContentParts || [];
+    expect(parts.map((part) => part.type)).toEqual(["thinking", "tool_use"]);
+    expect(parts[0]?.type === "thinking" ? parts[0].text : "").toBe(
+      "The search plan is forming.",
+    );
+    expect(projection.actionContent).toBe("");
+  });
+
   it("非 web_search 工具过程存在时也应只把最后 text part 作为最终正文", () => {
     const message: Message = {
       id: "assistant-live-generic-tool",
@@ -434,6 +866,353 @@ describe("messageListItemProjection", () => {
       "tool_use",
       "text",
     ]);
+  });
+
+  it("timeline 已有工具 item 时不应再把 legacy message.toolCalls 作为第二套过程源", () => {
+    const message: Message = {
+      id: "assistant-live-thread-items-own-tools",
+      role: "assistant",
+      content: "## 结论\n\n- 已完成联网核验。",
+      timestamp: new Date("2026-06-02T10:00:30.000Z"),
+      toolCalls: [
+        {
+          id: "legacy-web-search",
+          name: "web_search",
+          arguments: '{"query":"legacy duplicate"}',
+          status: "completed",
+          result: {
+            success: true,
+            output: "legacy duplicate output",
+          },
+          startTime: new Date("2026-06-02T10:00:03.000Z"),
+          endTime: new Date("2026-06-02T10:00:05.000Z"),
+        },
+      ],
+    };
+
+    const projection = buildProjection(message, [
+      {
+        id: "tool-web-search-current",
+        type: "tool_call",
+        turn_id: "turn-legacy-unphased-final",
+        sequence: 1,
+        tool_name: "web_search",
+        arguments: { query: "current thread item" },
+        output: "current output",
+        success: true,
+        status: "completed",
+        started_at: "2026-06-02T10:00:03.000Z",
+        completed_at: "2026-06-02T10:00:05.000Z",
+        updated_at: "2026-06-02T10:00:05.000Z",
+      },
+      {
+        id: "assistant-final",
+        type: "agent_message",
+        turn_id: "turn-legacy-unphased-final",
+        sequence: 2,
+        phase: "final_answer",
+        text: "## 结论\n\n- 已完成联网核验。",
+        status: "completed",
+        started_at: "2026-06-02T10:00:28.000Z",
+        completed_at: "2026-06-02T10:00:30.000Z",
+        updated_at: "2026-06-02T10:00:30.000Z",
+      },
+    ] as never);
+
+    expect(projection.rendererToolCalls).toBeUndefined();
+    expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
+      "tool_use",
+      "text",
+    ]);
+    const toolParts = projection.rendererContentParts?.filter(
+      (
+        part,
+      ): part is Extract<
+        NonNullable<Message["contentParts"]>[number],
+        { type: "tool_use" }
+      > => part.type === "tool_use",
+    );
+    expect(toolParts).toHaveLength(1);
+    expect(toolParts?.[0]?.toolCall.id).toBe("tool-web-search-current");
+    expect(JSON.stringify(projection.rendererContentParts)).not.toContain(
+      "legacy duplicate",
+    );
+  });
+
+  it("无 timeline 时应继续允许 legacy message.toolCalls 作为兼容过程源", () => {
+    const message: Message = {
+      id: "assistant-legacy-toolcalls-without-timeline",
+      role: "assistant",
+      content: "",
+      timestamp: new Date("2026-06-02T10:00:30.000Z"),
+      isThinking: true,
+      toolCalls: [
+        {
+          id: "legacy-search-without-timeline",
+          name: "web_search",
+          arguments: '{"query":"legacy no timeline"}',
+          status: "running",
+          startTime: new Date("2026-06-02T10:00:03.000Z"),
+        },
+      ],
+    };
+
+    const projection = buildProjection(message, null, {
+      isSending: true,
+    });
+
+    expect(projection.rendererToolCalls).toEqual([
+      expect.objectContaining({ id: "legacy-search-without-timeline" }),
+    ]);
+    expect(projection.inlineProcessCoverage.hasInlineProcessEntries).toBe(true);
+  });
+
+  it("timeline 只有状态摘要时应继续允许 legacy message.toolCalls 兜底旧过程", () => {
+    const message: Message = {
+      id: "assistant-timeline-summary-blocks-legacy-tools",
+      role: "assistant",
+      content: "",
+      timestamp: new Date("2026-06-02T10:00:30.000Z"),
+      isThinking: true,
+      toolCalls: [
+        {
+          id: "legacy-tool-while-summary-exists",
+          name: "web_search",
+          arguments: '{"query":"legacy summary duplicate"}',
+          status: "running",
+          startTime: new Date("2026-06-02T10:00:03.000Z"),
+        },
+      ],
+    };
+
+    const projection = buildProjection(
+      message,
+      [
+        {
+          id: "turn-summary-current-source",
+          type: "turn_summary",
+          turn_id: "turn-legacy-unphased-final",
+          sequence: 1,
+          text: "正在连接搜索工具。",
+          status: "in_progress",
+          started_at: "2026-06-02T10:00:01.000Z",
+          updated_at: "2026-06-02T10:00:02.000Z",
+        } as never,
+      ],
+      {
+        isSending: true,
+        turnStatus: "running",
+      },
+    );
+
+    expect(projection.rendererToolCalls).toEqual([
+      expect.objectContaining({ id: "legacy-tool-while-summary-exists" }),
+    ]);
+    expect(
+      projection.inlineProcessCoverage.toolNameCounts.get("web_search"),
+    ).toBe(1);
+  });
+
+  it("timeline 过程项未生成 tool_use part 时仍应禁用 legacy message.toolCalls", () => {
+    const message: Message = {
+      id: "assistant-context-compaction-blocks-legacy-tools",
+      role: "assistant",
+      content: "已整理上下文后继续。",
+      timestamp: new Date("2026-06-02T10:00:30.000Z"),
+      isThinking: false,
+      toolCalls: [
+        {
+          id: "legacy-tool-while-context-compaction-exists",
+          name: "web_search",
+          arguments: '{"query":"legacy context duplicate"}',
+          status: "completed",
+          result: {
+            success: true,
+            output: "legacy duplicate output",
+          },
+          startTime: new Date("2026-06-02T10:00:03.000Z"),
+          endTime: new Date("2026-06-02T10:00:05.000Z"),
+        },
+      ],
+    };
+
+    const projection = buildProjection(message, [
+      {
+        id: "context-compaction-current-source",
+        type: "context_compaction",
+        turn_id: "turn-legacy-unphased-final",
+        sequence: 1,
+        stage: "completed",
+        trigger: "manual",
+        detail: "已压缩上下文。",
+        status: "completed",
+        started_at: "2026-06-02T10:00:01.000Z",
+        completed_at: "2026-06-02T10:00:02.000Z",
+        updated_at: "2026-06-02T10:00:02.000Z",
+      } as never,
+      {
+        id: "assistant-final-after-compaction",
+        type: "agent_message",
+        turn_id: "turn-legacy-unphased-final",
+        sequence: 2,
+        phase: "final_answer",
+        text: "已整理上下文后继续。",
+        status: "completed",
+        started_at: "2026-06-02T10:00:28.000Z",
+        completed_at: "2026-06-02T10:00:30.000Z",
+        updated_at: "2026-06-02T10:00:30.000Z",
+      } as never,
+    ] as never);
+
+    expect(projection.rendererToolCalls).toBeUndefined();
+    expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
+      "text",
+    ]);
+    expect(JSON.stringify(projection)).not.toContain(
+      "legacy context duplicate",
+    );
+  });
+
+  it("Codex 导入 timeline 应继续保留只读工具过程渲染", () => {
+    const importedMetadata = {
+      imported: true,
+      imported_synthetic: true,
+      source_client: "codex",
+    };
+    const message: Message = {
+      id: "assistant-imported-codex-history",
+      role: "assistant",
+      content: "已完成导入会话复盘。",
+      timestamp: new Date("2026-06-02T10:00:30.000Z"),
+    };
+
+    const projection = buildProjection(message, [
+      {
+        id: "imported-reasoning",
+        type: "reasoning",
+        turn_id: "turn-legacy-unphased-final",
+        sequence: 1,
+        text: "先检查导入记录。",
+        summary: ["先检查导入记录。"],
+        metadata: importedMetadata,
+        status: "completed",
+        started_at: "2026-06-02T10:00:01.000Z",
+        completed_at: "2026-06-02T10:00:02.000Z",
+        updated_at: "2026-06-02T10:00:02.000Z",
+      },
+      {
+        id: "imported-command",
+        type: "command_execution",
+        turn_id: "turn-legacy-unphased-final",
+        sequence: 2,
+        command: "npm test",
+        cwd: "/workspace/imported-codex",
+        aggregated_output: "ok",
+        metadata: importedMetadata,
+        status: "completed",
+        started_at: "2026-06-02T10:00:03.000Z",
+        completed_at: "2026-06-02T10:00:04.000Z",
+        updated_at: "2026-06-02T10:00:04.000Z",
+      },
+      {
+        id: "assistant-imported-final",
+        type: "agent_message",
+        turn_id: "turn-legacy-unphased-final",
+        sequence: 3,
+        phase: "final_answer",
+        text: "已完成导入会话复盘。",
+        metadata: importedMetadata,
+        status: "completed",
+        started_at: "2026-06-02T10:00:28.000Z",
+        completed_at: "2026-06-02T10:00:30.000Z",
+        updated_at: "2026-06-02T10:00:30.000Z",
+      },
+    ] as never);
+
+    expect(projection.rendererToolCalls).toBeUndefined();
+    expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
+      "thinking",
+      "tool_use",
+      "text",
+    ]);
+    expect(projection.primaryTimeline?.items).toBeUndefined();
+    expect(projection.shouldRenderCompactPrimaryTimeline).toBe(false);
+    expect(projection.actionContent).toBe("已完成导入会话复盘。");
+  });
+
+  it("running 搜索后的 commentary 不应越序成为最终正文", () => {
+    const message: Message = {
+      id: "assistant-live-search-running",
+      role: "assistant",
+      content: "",
+      timestamp: new Date("2026-06-02T10:00:30.000Z"),
+      isThinking: true,
+    };
+
+    const projection = buildProjection(message, [
+      {
+        id: "assistant-search-plan",
+        type: "agent_message",
+        turn_id: "turn-live-search-running",
+        sequence: 1,
+        phase: "commentary",
+        text: "我先设计几组搜索查询，并对比权威来源。",
+        status: "completed",
+        started_at: "2026-06-02T10:00:01.000Z",
+        completed_at: "2026-06-02T10:00:02.000Z",
+        updated_at: "2026-06-02T10:00:02.000Z",
+      },
+      {
+        id: "web-search-first",
+        type: "web_search",
+        turn_id: "turn-live-search-running",
+        sequence: 2,
+        action: "search",
+        query: "学习机 权威 评测 对比",
+        output: "搜索结果摘要",
+        status: "completed",
+        started_at: "2026-06-02T10:00:03.000Z",
+        completed_at: "2026-06-02T10:00:04.000Z",
+        updated_at: "2026-06-02T10:00:04.000Z",
+      },
+      {
+        id: "web-search-running",
+        type: "web_search",
+        turn_id: "turn-live-search-running",
+        sequence: 3,
+        action: "search",
+        query: "科大讯飞 学习机 评测 竞品",
+        output: "",
+        status: "in_progress",
+        started_at: "2026-06-02T10:00:05.000Z",
+        updated_at: "2026-06-02T10:00:05.000Z",
+      },
+      {
+        id: "assistant-search-progress",
+        type: "agent_message",
+        turn_id: "turn-live-search-running",
+        sequence: 4,
+        phase: "commentary",
+        text: "来帮你搜索和分析一下不同学习机的评测结论。",
+        status: "completed",
+        started_at: "2026-06-02T10:00:06.000Z",
+        completed_at: "2026-06-02T10:00:07.000Z",
+        updated_at: "2026-06-02T10:00:07.000Z",
+      },
+    ] as never);
+
+    expect(projection.actionContent).toBe("");
+    expect(projection.rendererRawContent).toBe("");
+    expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
+      "thinking",
+      "tool_use",
+      "tool_use",
+      "thinking",
+    ]);
+    expect(projection.rendererContentParts?.[3]).toMatchObject({
+      type: "thinking",
+      text: "来帮你搜索和分析一下不同学习机的评测结论。",
+    });
   });
 
   it("历史 timeline 的审批和问答应按顺序进入交错过程", () => {

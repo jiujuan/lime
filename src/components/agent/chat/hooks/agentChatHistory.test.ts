@@ -48,6 +48,80 @@ describe("agentChatHistory", () => {
     ]);
   });
 
+  it("hydrate 合并短正文片段时不应把 renderer 最终 text part 截断", () => {
+    const fullAnswer =
+      "根据我的搜索结果，T30 Pro 更偏向高阶学习规划，T90 更偏向基础学科覆盖和价格平衡。";
+    const localMessages = [
+      {
+        id: "local-user-learning-device",
+        role: "user" as const,
+        content: "科大讯飞学习机怎么选",
+        timestamp: new Date("2026-06-18T08:30:00.000Z"),
+      },
+      {
+        id: "local-assistant-learning-device",
+        role: "assistant" as const,
+        content: fullAnswer,
+        timestamp: new Date("2026-06-18T08:30:20.000Z"),
+        contentParts: [
+          {
+            type: "tool_use" as const,
+            toolCall: {
+              id: "tool-websearch-learning-device",
+              name: "WebSearch",
+              arguments: '{"query":"科大讯飞 T30 Pro T90 区别"}',
+              status: "completed" as const,
+              startTime: new Date("2026-06-18T08:30:02.000Z"),
+              endTime: new Date("2026-06-18T08:30:06.000Z"),
+              result: {
+                success: true,
+                output: "搜索完成",
+              },
+            },
+          },
+          {
+            type: "text" as const,
+            text: fullAnswer,
+          },
+        ],
+      },
+    ];
+    const hydratedMessages = [
+      {
+        id: "session-learning-device-0",
+        role: "user" as const,
+        content: "科大讯飞学习机怎么选",
+        timestamp: new Date("2026-06-18T08:30:00.000Z"),
+      },
+      {
+        id: "session-learning-device-1",
+        role: "assistant" as const,
+        content: "根据我",
+        timestamp: new Date("2026-06-18T08:30:20.000Z"),
+        contentParts: [
+          {
+            type: "text" as const,
+            text: "根据我",
+          },
+        ],
+      },
+    ];
+
+    const mergedMessages = mergeHydratedMessagesWithLocalState(
+      localMessages,
+      hydratedMessages,
+    );
+    const assistantTextParts = mergedMessages[1]?.contentParts?.filter(
+      (part) => part.type === "text",
+    );
+
+    expect(mergedMessages[1]?.content).toBe(fullAnswer);
+    expect(assistantTextParts?.at(-1)).toMatchObject({ text: fullAnswer });
+    expect(assistantTextParts?.map((part) => part.text)).not.toContain(
+      "根据我",
+    );
+  });
+
   it("已完成 assistant 历史消息不应保留 running 工具状态", () => {
     const timestamp = new Date("2026-06-07T10:34:45.000Z");
     const messages = normalizeHistoryMessages([
@@ -179,6 +253,112 @@ describe("agentChatHistory", () => {
       ],
       runtimeTurnId: "turn-app-server-message-assistant",
     });
+  });
+
+  it("App Server read detail.messages 错序时应按 runtime turn 恢复 user -> assistant", () => {
+    const detail: AsterSessionDetail = {
+      id: "session-app-server-messages-out-of-order",
+      created_at: 1,
+      updated_at: 2,
+      messages_count: 4,
+      history_limit: 4,
+      history_offset: 0,
+      history_cursor: {
+        oldest_message_id: null,
+        start_index: 0,
+        loaded_count: 4,
+      },
+      history_truncated: false,
+      messages: [
+        {
+          role: "user",
+          timestamp: 1780704000,
+          runtimeTurnId: "turn-native-1",
+          content: [{ type: "text", text: "第一轮问题" }],
+        },
+        {
+          role: "user",
+          timestamp: 1780704002,
+          runtimeTurnId: "turn-native-2",
+          content: [{ type: "text", text: "第二轮问题" }],
+        },
+        {
+          role: "assistant",
+          timestamp: 1780704001,
+          runtime_turn_id: "turn-native-1",
+          usage: {
+            input_tokens: 8,
+            output_tokens: 13,
+          },
+          content: [
+            {
+              type: "thinking",
+              text: "先分析第一轮。",
+            },
+            {
+              type: "text",
+              text: "第一轮回答",
+            },
+          ],
+        },
+        {
+          role: "assistant",
+          timestamp: 1780704003,
+          runtime_turn_id: "turn-native-2",
+          content: [
+            {
+              type: "tool_request",
+              id: "call-native-2",
+              tool_name: "read_file",
+              arguments: { path: "/tmp/native-2.txt" },
+            } as never,
+            {
+              type: "tool_response",
+              id: "call-native-2",
+              success: true,
+              output: "第二轮工具输出",
+            } as never,
+            {
+              type: "text",
+              text: "第二轮回答",
+            },
+          ],
+        },
+      ],
+    };
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "session-app-server-messages-out-of-order",
+    );
+
+    expect(messages.map((message) => message.content)).toEqual([
+      "第一轮问题",
+      "第一轮回答",
+      "第二轮问题",
+      "第二轮回答",
+    ]);
+    expect(messages[1]).toMatchObject({
+      role: "assistant",
+      runtimeTurnId: "turn-native-1",
+      usage: {
+        input_tokens: 8,
+        output_tokens: 13,
+      },
+      thinkingContent: "先分析第一轮。",
+    });
+    expect(messages[3]).toMatchObject({
+      role: "assistant",
+      runtimeTurnId: "turn-native-2",
+    });
+    expect(
+      messages[3]?.toolCalls?.some(
+        (toolCall) =>
+          toolCall.id === "call-native-2" &&
+          toolCall.name === "read_file" &&
+          toolCall.status === "completed",
+      ),
+    ).toBe(true);
   });
 
   it("历史 tool_response 应继承同一工具请求参数以恢复文件预览入口", () => {
@@ -595,6 +775,115 @@ describe("agentChatHistory", () => {
             cwd: "/workspace/app",
           },
         },
+      },
+    });
+  });
+
+  it("timeline 已有工具过程时不应再注入 thread_read.tool_calls 兼容摘要", () => {
+    const detail: AsterSessionDetail = {
+      id: "session-timeline-tool-read-summary",
+      thread_id: "thread-timeline-tool-read-summary",
+      created_at: 1,
+      updated_at: 2,
+      messages: [
+        {
+          id: "turn-current:user",
+          role: "user",
+          timestamp: 1_781_000_001,
+          content: [{ type: "text", text: "搜索最新评测" }] as never,
+        },
+        {
+          id: "turn-current:assistant",
+          role: "assistant",
+          timestamp: 1_781_000_004,
+          runtimeTurnId: "turn-current",
+          content: [{ type: "text", text: "已完成搜索。" }] as never,
+        } as never,
+      ],
+      turns: [
+        {
+          id: "turn-current",
+          thread_id: "thread-timeline-tool-read-summary",
+          prompt_text: "搜索最新评测",
+          status: "completed",
+          started_at: "2026-06-16T00:00:01.000Z",
+          completed_at: "2026-06-16T00:00:04.000Z",
+          created_at: "2026-06-16T00:00:01.000Z",
+          updated_at: "2026-06-16T00:00:04.000Z",
+        },
+      ],
+      items: [
+        {
+          id: "tool-current-search",
+          thread_id: "thread-timeline-tool-read-summary",
+          turn_id: "turn-current",
+          sequence: 1,
+          type: "tool_call",
+          status: "completed",
+          tool_name: "search_query",
+          arguments: { q: "学习机 权威评测" },
+          output: "timeline search result",
+          success: true,
+          started_at: "2026-06-16T00:00:02.000Z",
+          completed_at: "2026-06-16T00:00:03.000Z",
+          updated_at: "2026-06-16T00:00:03.000Z",
+        } as never,
+        {
+          id: "assistant-current",
+          thread_id: "thread-timeline-tool-read-summary",
+          turn_id: "turn-current",
+          sequence: 2,
+          type: "agent_message",
+          status: "completed",
+          text: "已完成搜索。",
+          started_at: "2026-06-16T00:00:04.000Z",
+          completed_at: "2026-06-16T00:00:04.000Z",
+          updated_at: "2026-06-16T00:00:04.000Z",
+        } as never,
+      ],
+      thread_read: {
+        thread_id: "thread-timeline-tool-read-summary",
+        status: "completed",
+        profile_status: "completed",
+        turns: [
+          {
+            turn_id: "turn-current",
+            status: "completed",
+          },
+        ],
+        tool_calls: [
+          {
+            id: "tool-current-search",
+            turn_id: "turn-current",
+            tool_name: "search_query",
+            status: "completed",
+            output_preview: "read model duplicate summary",
+            output: "read model duplicate summary",
+            success: true,
+            started_at: "2026-06-16T00:00:02.000Z",
+            completed_at: "2026-06-16T00:00:03.000Z",
+          },
+        ],
+      } as never,
+    };
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "session-timeline-tool-read-summary",
+    );
+    const assistant = messages.find((message) => message.role === "assistant");
+    const toolParts =
+      assistant?.contentParts?.filter((part) => part.type === "tool_use") || [];
+
+    expect(messages).toHaveLength(2);
+    expect(assistant?.runtimeTurnId).toBe("turn-current");
+    expect(toolParts).toHaveLength(1);
+    expect(assistant?.toolCalls).toHaveLength(1);
+    expect(assistant?.toolCalls?.[0]).toMatchObject({
+      id: "tool-current-search",
+      name: "search_query",
+      result: {
+        output: "timeline search result",
       },
     });
   });
@@ -3207,6 +3496,144 @@ describe("agentChatHistory", () => {
     expect(mergedMessages[0]?.id).toBe("local-user-1");
     expect(mergedMessages[1]?.id).toBe("local-assistant-1");
     expect(mergedMessages[1]?.images).toBeUndefined();
+  });
+
+  it("刷新会话详情合并本地状态后应继续按 runtime turn 归位", () => {
+    const localMessages = [
+      {
+        id: "local-user-turn-1",
+        role: "user" as const,
+        content: "第一轮问题",
+        timestamp: new Date("2026-06-18T08:00:00.000Z"),
+        runtimeTurnId: "turn-merge-1",
+      },
+      {
+        id: "local-user-turn-2",
+        role: "user" as const,
+        content: "第二轮问题",
+        images: [
+          {
+            mediaType: "image/png",
+            data: "image-turn-2",
+            sourcePath: "/tmp/turn-2.png",
+          },
+        ],
+        timestamp: new Date("2026-06-18T08:00:02.000Z"),
+        runtimeTurnId: "turn-merge-2",
+      },
+      {
+        id: "local-assistant-turn-1",
+        role: "assistant" as const,
+        content: "第一轮本地过程",
+        timestamp: new Date("2026-06-18T08:00:01.000Z"),
+        runtimeTurnId: "turn-merge-1",
+        thinkingContent: "第一轮思考",
+        contentParts: [
+          {
+            type: "thinking" as const,
+            text: "第一轮思考",
+          },
+        ],
+      },
+    ];
+    const hydratedMessages = [
+      {
+        id: "history-user-turn-1",
+        role: "user" as const,
+        content: "第一轮问题",
+        timestamp: new Date("2026-06-18T08:00:00.500Z"),
+        runtimeTurnId: "turn-merge-1",
+      },
+      {
+        id: "history-user-turn-2",
+        role: "user" as const,
+        content: "第二轮问题",
+        timestamp: new Date("2026-06-18T08:00:02.500Z"),
+        runtimeTurnId: "turn-merge-2",
+      },
+      {
+        id: "history-assistant-turn-1",
+        role: "assistant" as const,
+        content: "第一轮回答",
+        timestamp: new Date("2026-06-18T08:00:01.000Z"),
+        runtimeTurnId: "turn-merge-1",
+        usage: {
+          input_tokens: 10,
+          output_tokens: 20,
+        },
+        contentParts: [
+          {
+            type: "text" as const,
+            text: "第一轮回答",
+          },
+        ],
+      },
+      {
+        id: "history-assistant-turn-2",
+        role: "assistant" as const,
+        content: "第二轮回答",
+        timestamp: new Date("2026-06-18T08:00:03.000Z"),
+        runtimeTurnId: "turn-merge-2",
+        toolCalls: [
+          {
+            id: "tool-turn-2",
+            name: "read_file",
+            arguments: '{"path":"/tmp/turn-2.png"}',
+            status: "completed" as const,
+            startTime: new Date("2026-06-18T08:00:02.600Z"),
+            endTime: new Date("2026-06-18T08:00:02.900Z"),
+            result: {
+              success: true,
+              output: "已读取图片",
+            },
+          },
+        ],
+        contentParts: [
+          {
+            type: "tool_use" as const,
+            toolCall: {
+              id: "tool-turn-2",
+              name: "read_file",
+              arguments: '{"path":"/tmp/turn-2.png"}',
+              status: "completed" as const,
+              startTime: new Date("2026-06-18T08:00:02.600Z"),
+              endTime: new Date("2026-06-18T08:00:02.900Z"),
+              result: {
+                success: true,
+                output: "已读取图片",
+              },
+            },
+          },
+          {
+            type: "text" as const,
+            text: "第二轮回答",
+          },
+        ],
+      },
+    ];
+
+    const mergedMessages = mergeHydratedMessagesWithLocalState(
+      localMessages,
+      hydratedMessages,
+    );
+
+    expect(mergedMessages.map((message) => message.content)).toEqual([
+      "第一轮问题",
+      "第一轮本地过程",
+      "第二轮问题",
+      "第二轮回答",
+    ]);
+    expect(mergedMessages[1]).toMatchObject({
+      role: "assistant",
+      runtimeTurnId: "turn-merge-1",
+      usage: {
+        input_tokens: 10,
+        output_tokens: 20,
+      },
+      thinkingContent: "第一轮思考",
+    });
+    expect(mergedMessages[2]?.images?.[0]?.sourcePath).toBe("/tmp/turn-2.png");
+    expect(mergedMessages[3]?.toolCalls?.[0]?.name).toBe("read_file");
   });
 
   it("刷新会话详情时不应把已完成输出替换成后端历史投影", () => {

@@ -1,4 +1,5 @@
 mod coding_events;
+mod memory_tools;
 mod model_registry_metadata;
 mod model_route_contract;
 mod model_route_resolver;
@@ -6,8 +7,10 @@ mod model_routing;
 mod tool_events;
 mod tool_inventory;
 
+use crate::runtime::memory_prompt::memory_soul_prompt_context_from_config;
 use crate::runtime::ToolInventoryReadRequest;
 use crate::ActionRespondRequest;
+use crate::AppDataSource;
 use crate::CancelExecutionRequest;
 use crate::ExecutionBackend;
 use crate::ExecutionRequest;
@@ -26,6 +29,7 @@ use lime_core::database::{self, DbConnection};
 use lime_services::api_key_provider_service::ApiKeyProviderService;
 use serde_json::{json, Value};
 use std::sync::Arc;
+use std::sync::RwLock;
 
 mod request_context;
 
@@ -40,6 +44,7 @@ pub struct RuntimeBackend {
     agent_state: AsterAgentState,
     api_key_provider_service: ApiKeyProviderService,
     db: Option<DbConnection>,
+    app_data_source: Arc<RwLock<Option<Arc<dyn AppDataSource>>>>,
 }
 
 impl RuntimeBackend {
@@ -48,6 +53,7 @@ impl RuntimeBackend {
             agent_state: AsterAgentState::new(),
             api_key_provider_service: ApiKeyProviderService::new(),
             db: None,
+            app_data_source: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -56,7 +62,31 @@ impl RuntimeBackend {
             agent_state: AsterAgentState::new(),
             api_key_provider_service: ApiKeyProviderService::new(),
             db: Some(db),
+            app_data_source: Arc::new(RwLock::new(None)),
         }
+    }
+
+    async fn register_memory_tools_if_available(&self) -> Result<(), RuntimeCoreError> {
+        let app_data_source = self
+            .app_data_source
+            .read()
+            .map_err(|_| {
+                RuntimeCoreError::Backend("memory tool app data source lock poisoned".to_string())
+            })?
+            .clone();
+        let Some(app_data_source) = app_data_source else {
+            return Ok(());
+        };
+        if !self.agent_state.is_initialized().await {
+            return Ok(());
+        }
+        for tool in memory_tools::create_memory_tools(app_data_source.clone()) {
+            self.agent_state
+                .register_native_tool(tool)
+                .await
+                .map_err(backend_error)?;
+        }
+        Ok(())
     }
 
     async fn handle_turn_start(
@@ -137,6 +167,7 @@ impl RuntimeBackend {
             .await
             .map_err(backend_error)?
         };
+        self.register_memory_tools_if_available().await?;
         let request_tool_policy = request_tool_policy_from_request(host_request.as_ref());
         let config_metadata = current_agent_runtime_config_metadata();
         let session_config = session_config_from_request(
@@ -229,6 +260,17 @@ impl RuntimeBackend {
 
 #[async_trait]
 impl ExecutionBackend for RuntimeBackend {
+    fn set_app_data_source(
+        &self,
+        app_data_source: Arc<dyn AppDataSource>,
+    ) -> Result<(), RuntimeCoreError> {
+        let mut guard = self.app_data_source.write().map_err(|_| {
+            RuntimeCoreError::Backend("memory tool app data source lock poisoned".to_string())
+        })?;
+        *guard = Some(app_data_source);
+        Ok(())
+    }
+
     async fn start_turn(
         &self,
         request: ExecutionRequest,
@@ -277,6 +319,7 @@ impl ExecutionBackend for RuntimeBackend {
         &self,
         request: ToolInventoryReadRequest,
     ) -> Result<Value, RuntimeCoreError> {
+        self.register_memory_tools_if_available().await?;
         tool_inventory::read_tool_inventory(
             &self.agent_state,
             request,
@@ -368,13 +411,25 @@ fn current_agent_runtime_config_metadata() -> Option<Value> {
             json!(config.agent.tool_execution),
         );
     }
-    if agent_config.is_empty() {
+    let soul_context = memory_soul_prompt_context_from_config(config.memory.soul.as_ref());
+    if agent_config.is_empty() && soul_context.is_none() {
         return None;
     }
 
-    Some(json!({
-        "agent": agent_config,
-    }))
+    let mut metadata = serde_json::Map::new();
+    if !agent_config.is_empty() {
+        metadata.insert("agent".to_string(), Value::Object(agent_config));
+    }
+    if let Some(soul_context) = soul_context {
+        metadata.insert(
+            "memory".to_string(),
+            json!({
+                "soul": soul_context,
+            }),
+        );
+    }
+
+    Some(Value::Object(metadata))
 }
 
 fn initialize_runtime_database(

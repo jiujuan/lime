@@ -14,6 +14,7 @@ import type { TaskCenterDraftSendRequest } from "../homePendingPreview";
 import {
   applyTaskCenterRouteTabSyncToMap,
   initializeTaskCenterOpenTabMap,
+  isTaskCenterAgentEntry,
   MAX_TASK_CENTER_OPEN_TABS,
   normalizeTaskCenterWorkspaceTabMap,
   reconcileTaskCenterTabIds,
@@ -144,7 +145,7 @@ export function useTaskCenterTabSessionRuntime({
     startedAt: number;
   } | null>(null);
   const taskCenterRouteTabSyncRef = useRef<string | null>(null);
-  const isTaskCenterEntry = agentEntry === "claw" || agentEntry === "new-task";
+  const isTaskCenterEntry = isTaskCenterAgentEntry(agentEntry);
   const shouldRespectTaskCenterLocalSession =
     shouldRespectTaskCenterLocalSessionOverride({
       localSessionOverride: taskCenterLocalSessionOverride,
@@ -190,10 +191,6 @@ export function useTaskCenterTabSessionRuntime({
         setHomePendingPreviewRequest(null);
         setTaskCenterLocalSessionOverride(null);
       }
-      return;
-    }
-
-    if (agentEntry !== "claw") {
       return;
     }
 
@@ -263,7 +260,7 @@ export function useTaskCenterTabSessionRuntime({
 
   useEffect(() => {
     if (
-      agentEntry !== "claw" ||
+      !isTaskCenterEntry ||
       !taskCenterWorkspaceId ||
       !normalizedInitialSessionId ||
       normalizedInitialSessionId === sessionId ||
@@ -279,7 +276,7 @@ export function useTaskCenterTabSessionRuntime({
     );
     setTaskCenterDetachedTopicId(null);
   }, [
-    agentEntry,
+    isTaskCenterEntry,
     normalizedInitialSessionId,
     sessionId,
     shouldRespectTaskCenterLocalSession,
@@ -287,7 +284,7 @@ export function useTaskCenterTabSessionRuntime({
   ]);
 
   useEffect(() => {
-    if (agentEntry !== "claw" || !taskCenterWorkspaceId) {
+    if (!isTaskCenterEntry || !taskCenterWorkspaceId) {
       return;
     }
 
@@ -325,7 +322,7 @@ export function useTaskCenterTabSessionRuntime({
       );
     });
   }, [
-    agentEntry,
+    isTaskCenterEntry,
     normalizedInitialSessionId,
     sessionId,
     shouldRespectTaskCenterLocalSession,

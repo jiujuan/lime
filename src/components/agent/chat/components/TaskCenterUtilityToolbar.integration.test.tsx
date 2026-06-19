@@ -2,6 +2,7 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime";
 import { TaskCenterUtilityToolbar } from "./TaskCenterUtilityToolbar";
 import { TaskCenterShellPanel } from "./TaskCenterShellPanel";
 
@@ -202,7 +203,7 @@ beforeEach(() => {
   mockReadConversationImportRuntimeEvents.mockResolvedValue({
     sessionId: "session-imported",
     offset: 0,
-    limit: 50,
+    limit: 10,
     totalEvents: 2,
     nextOffset: undefined,
     sourceRuntimeEvents: 120,
@@ -352,7 +353,9 @@ describe("TaskCenterUtilityToolbar", () => {
               {
                 id: "tool-rg",
                 name: "rg",
-                arguments: JSON.stringify({ query: "TaskCenterUtilityToolbar" }),
+                arguments: JSON.stringify({
+                  query: "TaskCenterUtilityToolbar",
+                }),
                 status: "completed",
                 result: {
                   success: true,
@@ -451,7 +454,9 @@ describe("TaskCenterUtilityToolbar", () => {
       '[data-testid="task-center-task-rail"]',
     );
     const items = Array.from(
-      document.body.querySelectorAll('[data-testid="task-center-task-rail-item"]'),
+      document.body.querySelectorAll(
+        '[data-testid="task-center-task-rail-item"]',
+      ),
     );
 
     expect(popover?.textContent).toContain("环境信息");
@@ -501,11 +506,13 @@ describe("TaskCenterUtilityToolbar", () => {
       "internal/roadmap/agent-workspace/task-rail.md",
     );
     expect(taskRail?.textContent).not.toContain("/tmp/project");
-    expect(popover?.textContent?.replace(taskRail?.textContent ?? "", "")).not.toContain(
-      "来源",
-    );
     expect(
-      document.body.querySelector('[data-testid="task-center-task-rail-context"]'),
+      popover?.textContent?.replace(taskRail?.textContent ?? "", ""),
+    ).not.toContain("来源");
+    expect(
+      document.body.querySelector(
+        '[data-testid="task-center-task-rail-context"]',
+      ),
     ).toBeNull();
     expect(
       Array.from(
@@ -525,13 +532,17 @@ describe("TaskCenterUtilityToolbar", () => {
       ),
     ).not.toBeNull();
     expect(
-      document.body.querySelector('[data-testid="task-center-run-control-plan"]'),
+      document.body.querySelector(
+        '[data-testid="task-center-run-control-plan"]',
+      ),
     ).not.toBeNull();
     expect(
       document.body.querySelector('[data-testid="task-center-task-rail-plan"]'),
     ).toBeNull();
     expect(
-      document.body.querySelector('[data-testid="task-center-run-control-goal"]'),
+      document.body.querySelector(
+        '[data-testid="task-center-run-control-goal"]',
+      ),
     ).not.toBeNull();
     expect(
       document.body.querySelector(
@@ -554,7 +565,9 @@ describe("TaskCenterUtilityToolbar", () => {
       ),
     ).toBeNull();
     expect(
-      document.body.querySelector('[data-testid="task-center-task-rail-outputs"]'),
+      document.body.querySelector(
+        '[data-testid="task-center-task-rail-outputs"]',
+      ),
     ).toBeNull();
     expect(
       Array.from(
@@ -643,7 +656,7 @@ describe("TaskCenterUtilityToolbar", () => {
     expect(mockReadConversationImportRuntimeEvents).toHaveBeenCalledWith({
       sessionId: "session-imported",
       offset: 0,
-      limit: 50,
+      limit: 10,
     });
     const panel = document.body.querySelector(
       '[data-testid="imported-runtime-detail-panel"]',
@@ -656,6 +669,119 @@ describe("TaskCenterUtilityToolbar", () => {
     expect(panel?.textContent).not.toContain(
       "/Users/example/.codex/sessions/thread.jsonl",
     );
+  });
+
+  it("导入会话即使当前时间线窗口没有导入标记也应显示完整运行记录入口", async () => {
+    const container = renderToolbar({
+      taskRail: {
+        sessionId: "session-imported",
+        workflowSteps: [],
+        messages: [],
+        context: {
+          sourceCount: 1,
+          sourceLabels: ["docs.example.com"],
+        },
+        executionRuntime: {
+          session_id: "session-imported",
+          source_client: "codex",
+          imported_thread_settings: {
+            cwd: "/tmp/project",
+          },
+          source: "session",
+        },
+        threadItems: [
+          {
+            id: "web-source",
+            type: "web_search",
+            thread_id: "thread-1",
+            turn_id: "turn-1",
+            sequence: 1,
+            status: "completed",
+            query: "workspace docs",
+            started_at: "2026-06-16T10:00:00.000Z",
+            completed_at: "2026-06-16T10:00:01.000Z",
+            updated_at: "2026-06-16T10:00:01.000Z",
+          },
+        ],
+      },
+    });
+    const trigger = container.querySelector(
+      '[data-testid="task-center-environment-trigger"]',
+    ) as HTMLButtonElement | null;
+
+    await act(async () => {
+      trigger?.click();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    const toggle = document.body.querySelector<HTMLButtonElement>(
+      '[data-testid="imported-runtime-detail-toggle"]',
+    );
+    expect(toggle?.textContent).toContain("查看完整记录");
+
+    await act(async () => {
+      toggle?.click();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    expect(mockReadConversationImportRuntimeEvents).toHaveBeenCalledWith({
+      sessionId: "session-imported",
+      offset: 0,
+      limit: 10,
+    });
+  });
+
+  it("导入会话在当前窗口未物化条目且缺少运行时摘要时仍应从 threadRead 显示完整记录入口", async () => {
+    const container = renderToolbar({
+      taskRail: {
+        sessionId: "session-imported-thread-read",
+        workflowSteps: [],
+        messages: [],
+        threadItems: [],
+        threadRead: {
+          thread_id: "thread-imported",
+          status: "completed",
+          diagnostics: {
+            warning_count: 0,
+            context_compaction_count: 0,
+            failed_tool_call_count: 0,
+            failed_command_count: 0,
+            pending_request_count: 0,
+          },
+          runtime_summary: {
+            sourceClient: "codex",
+          } as unknown as AgentRuntimeThreadReadModel["runtime_summary"],
+        },
+      },
+    });
+    const trigger = container.querySelector(
+      '[data-testid="task-center-environment-trigger"]',
+    ) as HTMLButtonElement | null;
+
+    await act(async () => {
+      trigger?.click();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    const sourceSection = document.body.querySelector(
+      '[data-testid="task-center-run-control-sources"]',
+    );
+    const toggle = document.body.querySelector<HTMLButtonElement>(
+      '[data-testid="imported-runtime-detail-toggle"]',
+    );
+    expect(sourceSection).not.toBeNull();
+    expect(toggle?.textContent).toContain("查看完整记录");
+
+    await act(async () => {
+      toggle?.click();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    expect(mockReadConversationImportRuntimeEvents).toHaveBeenCalledWith({
+      sessionId: "session-imported-thread-read",
+      offset: 0,
+      limit: 10,
+    });
   });
 
   it("普通来源会话不应显示完整运行记录入口", async () => {
@@ -694,7 +820,9 @@ describe("TaskCenterUtilityToolbar", () => {
     });
 
     expect(
-      document.body.querySelector('[data-testid="imported-runtime-detail-panel"]'),
+      document.body.querySelector(
+        '[data-testid="imported-runtime-detail-panel"]',
+      ),
     ).toBeNull();
     expect(mockReadConversationImportRuntimeEvents).not.toHaveBeenCalled();
   });
@@ -719,7 +847,7 @@ describe("TaskCenterUtilityToolbar", () => {
             updated_at: "2026-06-16T10:00:01.000Z",
             metadata: {
               imported: true,
-              source_client: "codex",
+              source_client: "claude_code",
             },
           },
         ],
@@ -1096,9 +1224,9 @@ describe("TaskCenterUtilityToolbar", () => {
     expect(taskRail?.textContent).toContain("已完成");
     expect(taskRail?.textContent).toContain("输出");
     expect(taskRail?.textContent).toContain("result.md");
-    expect(activityItems.map((item) => item.getAttribute("data-status"))).toEqual(
-      ["failed", "completed"],
-    );
+    expect(
+      activityItems.map((item) => item.getAttribute("data-status")),
+    ).toEqual(["failed", "completed"]);
 
     const outputButton = document.body.querySelector<HTMLButtonElement>(
       'button[data-testid="task-center-task-rail-item"][data-kind="artifact"]',
@@ -1445,26 +1573,28 @@ describe("TaskCenterUtilityToolbar", () => {
     expect(taskRail?.textContent).toContain("子任务1/2");
     expect(taskRail?.textContent).toContain("执行");
     expect(taskRail?.textContent).toContain("执行 npm run restore:check");
-    expect(taskRail?.textContent).toContain(
-      "执行 run control restore sources",
-    );
+    expect(taskRail?.textContent).toContain("执行 run control restore sources");
     expect(taskRail?.textContent).toContain("确认1 条待确认");
     expect(taskRail?.textContent).toContain("允许保存 evidence？");
     expect(taskRail?.textContent).toContain("已允许");
     expect(taskRail?.textContent).toContain("允许写入 restore.md？");
     expect(taskRail?.textContent).toContain("输出1 项");
     expect(taskRail?.textContent).toContain("restore.md");
-    expect(approvalItems.map((item) => item.getAttribute("data-status"))).toEqual(
-      ["pending", "approved"],
-    );
+    expect(
+      approvalItems.map((item) => item.getAttribute("data-status")),
+    ).toEqual(["pending", "approved"]);
     expect(
       document.body.querySelector('[data-testid="task-center-task-rail-plan"]'),
     ).toBeNull();
     expect(
-      document.body.querySelector('[data-testid="task-center-task-rail-context"]'),
+      document.body.querySelector(
+        '[data-testid="task-center-task-rail-context"]',
+      ),
     ).toBeNull();
     expect(
-      document.body.querySelector('[data-testid="task-center-task-rail-outputs"]'),
+      document.body.querySelector(
+        '[data-testid="task-center-task-rail-outputs"]',
+      ),
     ).toBeNull();
 
     const outputButton = document.body.querySelector<HTMLButtonElement>(

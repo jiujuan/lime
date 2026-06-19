@@ -528,6 +528,52 @@ describe("messageDisplaySanitizer", () => {
     ).toBe("已收到图片");
   });
 
+  it("用户消息已有结构化图片时应隐藏纯运行时附件占位文本", () => {
+    expect(
+      sanitizeMessageTextForDisplay("[Image #1]", {
+        role: "user",
+        hasImages: true,
+      }),
+    ).toBe("");
+    expect(
+      sanitizeMessageTextForDisplay("[Image #1]", {
+        role: "user",
+        hasImages: false,
+      }),
+    ).toBe("图片");
+  });
+
+  it("用户 markdown 图片旁边重复输出 alt 时应只保留图片结构", () => {
+    const text = [
+      "![图片附件未加载](asset://missing.png) 图片附件未加载",
+      "",
+      "这是用户补充说明。",
+    ].join("\n");
+
+    expect(
+      sanitizeMessageTextForDisplay(text, {
+        role: "user",
+      }),
+    ).toBe(
+      [
+        "![图片附件未加载](asset://missing.png)",
+        "",
+        "这是用户补充说明。",
+      ].join("\n"),
+    );
+  });
+
+  it("用户普通正文不应因为包含图片错误说明而被误删", () => {
+    expect(
+      sanitizeMessageTextForDisplay(
+        "这段文字说明图片无法链接，需要人工检查。",
+        {
+          role: "user",
+        },
+      ),
+    ).toBe("这段文字说明图片无法链接，需要人工检查。");
+  });
+
   it("应去掉 assistant 消息里的 markdown 阶段结论标题", () => {
     const text = "## 阶段结论\n\n已经找到关键线索。";
 

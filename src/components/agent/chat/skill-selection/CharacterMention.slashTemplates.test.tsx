@@ -6,7 +6,6 @@ import {
   createSkill,
   findLauncherConfirmButton,
   getTextarea,
-  mockListUnifiedMemories,
   renderHarness,
   typeSlashAndWait,
   updateFieldValue,
@@ -18,7 +17,7 @@ import {
   recordCuratedTaskTemplateUsage,
 } from "../utils/curatedTaskTemplates";
 import {
-  recordCuratedTaskRecommendationSignalFromMemory,
+  recordCuratedTaskRecommendationSignalFromMemoryReference,
   recordCuratedTaskRecommendationSignalFromReviewDecision,
 } from "../utils/curatedTaskRecommendationSignals";
 
@@ -328,31 +327,7 @@ describe("CharacterMention slash templates", () => {
     );
   });
 
-  it("slash 面板启动结果模板时，应默认沿用当前带入的灵感引用", async () => {
-    mockListUnifiedMemories.mockResolvedValue([
-      {
-        id: "memory-1",
-        session_id: "session-1",
-        memory_type: "project",
-        title: "品牌风格样本",
-        category: "context",
-        summary: "保留轻盈但专业的表达。",
-        content: "保留轻盈但专业的表达。",
-        tags: ["品牌", "语气"],
-        metadata: {
-          confidence: 0.9,
-          importance: 7,
-          access_count: 1,
-          last_accessed_at: null,
-          source: "manual",
-          embedding: null,
-        },
-        created_at: 1_712_345_670_000,
-        updated_at: 1_712_345_678_000,
-        archived: false,
-      },
-    ]);
-
+  it("slash 面板启动结果模板时，应默认沿用当前带入的记忆参考", async () => {
     const container = renderHarness({
       defaultCuratedTaskReferenceMemoryIds: ["memory-1"],
       defaultCuratedTaskReferenceEntries: [
@@ -388,8 +363,8 @@ describe("CharacterMention slash templates", () => {
     );
   });
 
-  it("slash 面板的结果模板应复用保存到灵感库后的推荐信号排序", async () => {
-    recordCuratedTaskRecommendationSignalFromMemory(
+  it("slash 面板的结果模板应复用记忆参考推荐信号排序", async () => {
+    recordCuratedTaskRecommendationSignalFromMemoryReference(
       {
         id: "memory-review-1",
         session_id: "session-review-1",

@@ -1,32 +1,57 @@
 import { describe, expect, it } from "vitest";
+import { loadNamespaceResource } from "@/i18n/loadNamespace";
+import { SUPPORTED_LOCALES } from "@/i18n/locales";
 import type { ImportedThreadSummary } from "@/lib/api/conversationImport";
 import {
+  buildImportThreadGroups,
   buildImportPreviewMetaText,
   buildSourceProvenanceLabels,
+  filterImportThreadsByArchiveStatus,
   firstImportableThread,
+  initialImportSelection,
   isImportedThread,
+  isSelectableImportThread,
   resolveImportConfirmActionKey,
   resolveImportConfirmNoticeKey,
   resolveImportSourceClientLabel,
   resolveImportThreadSecondaryText,
   resolveImportThreadTitle,
+  resolveImportWarningText,
+  selectedImportThreads,
   sourceEventLabel,
   sourcePayloadLabel,
   truncateImportPreviewText,
   type ConversationImportDialogTranslate,
 } from "./conversationImportDialogViewModel";
 
+const zhNavigationResource = loadNamespaceResource("zh-CN", "navigation");
+const IMPORT_DIALOG_KEY_PREFIXES = [
+  "navigation.sidebar.importDialog.",
+  "navigation.sidebar.conversations.import",
+] as const;
+
+function importDialogResourceKeys(resource: Record<string, string>): string[] {
+  return Object.keys(resource)
+    .filter((key) =>
+      IMPORT_DIALOG_KEY_PREFIXES.some((prefix) => key.startsWith(prefix)),
+    )
+    .sort();
+}
+
 const t: ConversationImportDialogTranslate = (
   key: string,
   defaultValueOrOptions?: string | Record<string, unknown>,
   maybeOptions?: Record<string, unknown>,
 ) => {
+  const resourceValue = zhNavigationResource[key];
   const defaultValue =
-    typeof defaultValueOrOptions === "string"
-      ? defaultValueOrOptions
-      : typeof defaultValueOrOptions?.defaultValue === "string"
-        ? defaultValueOrOptions.defaultValue
-        : key;
+    typeof resourceValue === "string"
+      ? resourceValue
+      : typeof defaultValueOrOptions === "string"
+        ? defaultValueOrOptions
+        : typeof defaultValueOrOptions?.defaultValue === "string"
+          ? defaultValueOrOptions.defaultValue
+          : key;
   const options =
     typeof defaultValueOrOptions === "string"
       ? maybeOptions
@@ -60,9 +85,9 @@ describe("conversationImportDialogViewModel", () => {
   it("标题和副标题 fallback 不回显底层来源 thread id 或默认数据目录", () => {
     const item = thread({ title: undefined, cwd: undefined });
 
-    expect(resolveImportThreadTitle(item)).toBe("本地历史对话");
+    expect(resolveImportThreadTitle(item, t)).toBe("本地历史对话");
     expect(resolveImportThreadSecondaryText(item, null, t)).toBe("本地历史");
-    expect(resolveImportThreadTitle(item)).not.toContain("codex-thread");
+    expect(resolveImportThreadTitle(item, t)).not.toContain("codex-thread");
     expect(resolveImportThreadSecondaryText(item, null, t)).not.toContain(
       ".codex",
     );
@@ -77,9 +102,11 @@ describe("conversationImportDialogViewModel", () => {
   });
 
   it("source client label 只在第二来源导入场景显示来源名，默认来源展示为本地历史", () => {
-    expect(resolveImportSourceClientLabel("codex")).toBe("本地历史");
-    expect(resolveImportSourceClientLabel(undefined)).toBe("本地历史");
-    expect(resolveImportSourceClientLabel("claude_code")).toBe("Claude Code");
+    expect(resolveImportSourceClientLabel("codex", t)).toBe("本地历史");
+    expect(resolveImportSourceClientLabel(undefined, t)).toBe("本地历史");
+    expect(resolveImportSourceClientLabel("claude_code", t)).toBe(
+      "Claude Code",
+    );
   });
 
   it("默认选择第一条未导入对话，全部已导入时回退第一条", () => {
@@ -96,6 +123,98 @@ describe("conversationImportDialogViewModel", () => {
       "imported-thread",
     );
     expect(firstImportableThread([])).toBeNull();
+  });
+
+  it("批量导入默认只勾选第一条可导入对话，不隐式全量导入", () => {
+    const imported = thread({
+      sourceThreadId: "imported-thread",
+      importStatus: "imported",
+    });
+    const fresh = thread({ sourceThreadId: "fresh-thread" });
+    const conflict = thread({
+      sourceThreadId: "conflict-thread",
+      importStatus: "conflict",
+    });
+
+    const selection = initialImportSelection([imported, fresh, conflict]);
+
+    expect([...selection]).toEqual(["fresh-thread"]);
+    expect(isSelectableImportThread(imported)).toBe(true);
+    expect(isSelectableImportThread(fresh)).toBe(true);
+    expect(isSelectableImportThread(conflict)).toBe(false);
+    expect(
+      selectedImportThreads([imported, fresh, conflict], selection).map(
+        (item) => item.sourceThreadId,
+      ),
+    ).toEqual(["fresh-thread"]);
+  });
+
+  it("可按天和按月对导入列表分组", () => {
+    const first = thread({
+      sourceThreadId: "thread-day-1",
+      updatedAt: "2026-06-16T09:00:00.000Z",
+    });
+    const second = thread({
+      sourceThreadId: "thread-day-2",
+      updatedAt: "2026-06-16T10:00:00.000Z",
+    });
+    const nextMonth = thread({
+      sourceThreadId: "thread-month-2",
+      updatedAt: "2026-07-01T10:00:00.000Z",
+    });
+
+    const dayGroups = buildImportThreadGroups(
+      [first, second, nextMonth],
+      "day",
+      "zh-CN",
+      t,
+    );
+    const monthGroups = buildImportThreadGroups(
+      [first, second, nextMonth],
+      "month",
+      "zh-CN",
+      t,
+    );
+
+    expect(dayGroups.map((group) => group.id)).toEqual([
+      "2026-06-16",
+      "2026-07-01",
+    ]);
+    expect(dayGroups[0].threads.map((item) => item.sourceThreadId)).toEqual([
+      "thread-day-1",
+      "thread-day-2",
+    ]);
+    expect(monthGroups.map((group) => group.id)).toEqual([
+      "2026-06",
+      "2026-07",
+    ]);
+  });
+
+  it("可按归档状态筛选导入列表，默认 all 不隐藏归档会话", () => {
+    const active = thread({
+      sourceThreadId: "active-thread",
+      archived: false,
+    });
+    const archived = thread({
+      sourceThreadId: "archived-thread",
+      archived: true,
+    });
+
+    expect(
+      filterImportThreadsByArchiveStatus([active, archived], "all").map(
+        (item) => item.sourceThreadId,
+      ),
+    ).toEqual(["active-thread", "archived-thread"]);
+    expect(
+      filterImportThreadsByArchiveStatus([active, archived], "active").map(
+        (item) => item.sourceThreadId,
+      ),
+    ).toEqual(["active-thread"]);
+    expect(
+      filterImportThreadsByArchiveStatus([active, archived], "archived").map(
+        (item) => item.sourceThreadId,
+      ),
+    ).toEqual(["archived-thread"]);
   });
 
   it("已导入线程使用清理并重新导入确认态", () => {
@@ -145,6 +264,52 @@ describe("conversationImportDialogViewModel", () => {
     expect(sourcePayloadLabel("function_call_output", t)).toBe("工具调用");
     expect(sourcePayloadLabel("patch_apply_end", t)).toBe("文件变更");
     expect(sourcePayloadLabel(undefined, t)).toBeNull();
+  });
+
+  it("后端导入 warning 应映射成展示层本地化文案", () => {
+    expect(
+      resolveImportWarningText(
+        "Some source rollout items are counted but not shown in preview.",
+        t,
+      ),
+    ).toBe("部分来源条目只保留为来源记录，不会出现在预览里。");
+    expect(
+      resolveImportWarningText(
+        "Imported local history messages and supported tool/patch timeline events; unsupported source items remain as provenance only.",
+        t,
+      ),
+    ).toBe(
+      "消息和已支持的过程会导入，未支持的来源条目只保留为来源记录。",
+    );
+    expect(
+      resolveImportWarningText(
+        "Skipped high-volume local history runtime events outside default window.",
+        t,
+      ),
+    ).toContain("大量过程记录");
+    expect(resolveImportWarningText("raw backend diagnostic", t)).toBe(
+      "部分来源细节只能保留为来源记录。",
+    );
+  });
+
+  it("导入弹窗与入口文案覆盖五语言资源", () => {
+    const requiredKeys = importDialogResourceKeys(zhNavigationResource);
+
+    expect(requiredKeys).toContain("navigation.sidebar.importDialog.title");
+    expect(requiredKeys).toContain(
+      "navigation.sidebar.importDialog.warnings.provenanceOnlyCommit",
+    );
+    expect(requiredKeys).toContain(
+      "navigation.sidebar.conversations.importConversation",
+    );
+
+    for (const locale of SUPPORTED_LOCALES) {
+      const resource = loadNamespaceResource(locale, "navigation");
+      for (const key of requiredKeys) {
+        expect(resource[key], `${locale}:${key}`).toEqual(expect.any(String));
+        expect(String(resource[key]).trim()).not.toBe("");
+      }
+    }
   });
 
   it("预览正文会归一化空白并限制长度", () => {

@@ -162,6 +162,18 @@ pub use app_server_protocol::MediaTaskArtifactListParams;
 pub use app_server_protocol::MediaTaskArtifactListResponse;
 pub use app_server_protocol::MediaTaskArtifactLookupParams;
 pub use app_server_protocol::MediaTaskArtifactResponse;
+pub use app_server_protocol::MemoryStoreAddNoteParams;
+pub use app_server_protocol::MemoryStoreAddNoteResponse;
+pub use app_server_protocol::MemoryStoreHealthResponse;
+pub use app_server_protocol::MemoryStoreListParams;
+pub use app_server_protocol::MemoryStoreListResponse;
+pub use app_server_protocol::MemoryStoreReadParams;
+pub use app_server_protocol::MemoryStoreReadResponse;
+pub use app_server_protocol::MemoryStoreResetParams;
+pub use app_server_protocol::MemoryStoreResetResponse;
+pub use app_server_protocol::MemoryStoreRootParams;
+pub use app_server_protocol::MemoryStoreSearchParams;
+pub use app_server_protocol::MemoryStoreSearchResponse;
 pub use app_server_protocol::ModelListParams;
 pub use app_server_protocol::ModelProviderAliasReadParams;
 pub use app_server_protocol::ProjectMemoryReadParams;
@@ -324,6 +336,12 @@ pub use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_CANCEL;
 pub use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_GET;
 pub use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE;
 pub use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_LIST;
+pub use app_server_protocol::METHOD_MEMORY_STORE_ADD_NOTE;
+pub use app_server_protocol::METHOD_MEMORY_STORE_HEALTH;
+pub use app_server_protocol::METHOD_MEMORY_STORE_LIST;
+pub use app_server_protocol::METHOD_MEMORY_STORE_READ;
+pub use app_server_protocol::METHOD_MEMORY_STORE_RESET;
+pub use app_server_protocol::METHOD_MEMORY_STORE_SEARCH;
 pub use app_server_protocol::METHOD_MODEL_LIST;
 pub use app_server_protocol::METHOD_MODEL_PREFERENCES_LIST;
 pub use app_server_protocol::METHOD_MODEL_PROVIDER_ALIAS_LIST;
@@ -1069,6 +1087,48 @@ impl AppServerClient {
         params: ProjectMemoryReadParams,
     ) -> Result<JsonRpcRequest, ClientError> {
         self.typed_request(typed::read_project_memory(params))
+    }
+
+    pub fn list_memory_store(
+        &mut self,
+        params: MemoryStoreListParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::list_memory_store(params))
+    }
+
+    pub fn read_memory_store(
+        &mut self,
+        params: MemoryStoreReadParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::read_memory_store(params))
+    }
+
+    pub fn search_memory_store(
+        &mut self,
+        params: MemoryStoreSearchParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::search_memory_store(params))
+    }
+
+    pub fn add_memory_store_note(
+        &mut self,
+        params: MemoryStoreAddNoteParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::add_memory_store_note(params))
+    }
+
+    pub fn health_memory_store(
+        &mut self,
+        params: MemoryStoreRootParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::health_memory_store(params))
+    }
+
+    pub fn reset_memory_store(
+        &mut self,
+        params: MemoryStoreResetParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::reset_memory_store(params))
     }
 
     pub fn list_logs(&mut self) -> Result<JsonRpcRequest, ClientError> {
@@ -1820,6 +1880,38 @@ pub mod typed {
         params: ProjectMemoryReadParams,
     ) -> TypedRequest<ProjectMemoryReadParams> {
         TypedRequest::new(METHOD_PROJECT_MEMORY_READ, params)
+    }
+
+    pub fn list_memory_store(params: MemoryStoreListParams) -> TypedRequest<MemoryStoreListParams> {
+        TypedRequest::new(METHOD_MEMORY_STORE_LIST, params)
+    }
+
+    pub fn read_memory_store(params: MemoryStoreReadParams) -> TypedRequest<MemoryStoreReadParams> {
+        TypedRequest::new(METHOD_MEMORY_STORE_READ, params)
+    }
+
+    pub fn search_memory_store(
+        params: MemoryStoreSearchParams,
+    ) -> TypedRequest<MemoryStoreSearchParams> {
+        TypedRequest::new(METHOD_MEMORY_STORE_SEARCH, params)
+    }
+
+    pub fn add_memory_store_note(
+        params: MemoryStoreAddNoteParams,
+    ) -> TypedRequest<MemoryStoreAddNoteParams> {
+        TypedRequest::new(METHOD_MEMORY_STORE_ADD_NOTE, params)
+    }
+
+    pub fn health_memory_store(
+        params: MemoryStoreRootParams,
+    ) -> TypedRequest<MemoryStoreRootParams> {
+        TypedRequest::new(METHOD_MEMORY_STORE_HEALTH, params)
+    }
+
+    pub fn reset_memory_store(
+        params: MemoryStoreResetParams,
+    ) -> TypedRequest<MemoryStoreResetParams> {
+        TypedRequest::new(METHOD_MEMORY_STORE_RESET, params)
     }
 
     pub fn list_logs() -> TypedRequest<serde_json::Value> {
@@ -2833,6 +2925,70 @@ mod tests {
                 project_id: "workspace-main".to_string(),
             })
             .expect("project memory");
+        let memory_store_list = client
+            .list_memory_store(MemoryStoreListParams {
+                root: MemoryStoreRootParams {
+                    scope: app_server_protocol::MemoryStoreScope::Workspace,
+                    workspace_root: Some("/workspace/project".to_string()),
+                },
+                path: Some("skills".to_string()),
+                cursor: None,
+                max_results: Some(20),
+            })
+            .expect("memory store list");
+        let memory_store_read = client
+            .read_memory_store(MemoryStoreReadParams {
+                root: MemoryStoreRootParams {
+                    scope: app_server_protocol::MemoryStoreScope::Workspace,
+                    workspace_root: Some("/workspace/project".to_string()),
+                },
+                path: "MEMORY.md".to_string(),
+                line_offset: None,
+                max_lines: Some(40),
+                max_tokens: None,
+            })
+            .expect("memory store read");
+        let memory_store_search = client
+            .search_memory_store(MemoryStoreSearchParams {
+                root: MemoryStoreRootParams {
+                    scope: app_server_protocol::MemoryStoreScope::Workspace,
+                    workspace_root: Some("/workspace/project".to_string()),
+                },
+                queries: vec!["voice".to_string(), "preference".to_string()],
+                match_mode: app_server_protocol::MemoryStoreSearchMatchMode::AllWithinLines,
+                within_lines: Some(4),
+                case_sensitive: false,
+                normalized: false,
+                context_lines: 0,
+                cursor: None,
+                max_results: None,
+            })
+            .expect("memory store search");
+        let memory_store_add_note = client
+            .add_memory_store_note(MemoryStoreAddNoteParams {
+                root: MemoryStoreRootParams {
+                    scope: app_server_protocol::MemoryStoreScope::Workspace,
+                    workspace_root: Some("/workspace/project".to_string()),
+                },
+                content: "Prefer concise answers.".to_string(),
+                title: Some("Tone note".to_string()),
+                slug: None,
+            })
+            .expect("memory store add note");
+        let memory_store_health = client
+            .health_memory_store(MemoryStoreRootParams {
+                scope: app_server_protocol::MemoryStoreScope::Workspace,
+                workspace_root: Some("/workspace/project".to_string()),
+            })
+            .expect("memory store health");
+        let memory_store_reset = client
+            .reset_memory_store(MemoryStoreResetParams {
+                root: MemoryStoreRootParams {
+                    scope: app_server_protocol::MemoryStoreScope::Workspace,
+                    workspace_root: Some("/workspace/project".to_string()),
+                },
+            })
+            .expect("memory store reset");
         let logs = client.list_logs().expect("logs");
         let persisted_tail = client
             .read_persisted_log_tail(LogPersistedTailParams { lines: Some(250) })
@@ -3026,6 +3182,66 @@ mod tests {
         assert_eq!(
             memory.params.expect("params"),
             json!({ "projectId": "workspace-main" })
+        );
+        assert_eq!(memory_store_list.method, METHOD_MEMORY_STORE_LIST);
+        assert_eq!(
+            memory_store_list.params.expect("params"),
+            json!({
+                "scope": "workspace",
+                "workspaceRoot": "/workspace/project",
+                "path": "skills",
+                "maxResults": 20,
+            })
+        );
+        assert_eq!(memory_store_read.method, METHOD_MEMORY_STORE_READ);
+        assert_eq!(
+            memory_store_read.params.expect("params"),
+            json!({
+                "scope": "workspace",
+                "workspaceRoot": "/workspace/project",
+                "path": "MEMORY.md",
+                "maxLines": 40,
+            })
+        );
+        assert_eq!(memory_store_search.method, METHOD_MEMORY_STORE_SEARCH);
+        assert_eq!(
+            memory_store_search.params.expect("params"),
+            json!({
+                "scope": "workspace",
+                "workspaceRoot": "/workspace/project",
+                "queries": ["voice", "preference"],
+                "matchMode": "allWithinLines",
+                "withinLines": 4,
+                "caseSensitive": false,
+                "normalized": false,
+                "contextLines": 0,
+            })
+        );
+        assert_eq!(memory_store_add_note.method, METHOD_MEMORY_STORE_ADD_NOTE);
+        assert_eq!(
+            memory_store_add_note.params.expect("params"),
+            json!({
+                "scope": "workspace",
+                "workspaceRoot": "/workspace/project",
+                "content": "Prefer concise answers.",
+                "title": "Tone note",
+            })
+        );
+        assert_eq!(memory_store_health.method, METHOD_MEMORY_STORE_HEALTH);
+        assert_eq!(
+            memory_store_health.params.expect("params"),
+            json!({
+                "scope": "workspace",
+                "workspaceRoot": "/workspace/project",
+            })
+        );
+        assert_eq!(memory_store_reset.method, METHOD_MEMORY_STORE_RESET);
+        assert_eq!(
+            memory_store_reset.params.expect("params"),
+            json!({
+                "scope": "workspace",
+                "workspaceRoot": "/workspace/project",
+            })
         );
         assert_eq!(logs.method, METHOD_LOG_LIST);
         assert_eq!(logs.params.expect("params"), json!({}));

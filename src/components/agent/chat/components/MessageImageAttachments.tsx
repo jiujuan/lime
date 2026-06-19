@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { Message } from "../types";
 import { resolveLocalFilePreviewUrl } from "@/lib/api/fileSystem";
 import { buildMessageImageDataUrl } from "../utils/imageAttachments";
+import { ImageUnavailablePlaceholder } from "./ImageUnavailablePlaceholder";
 
 interface MessageImageAttachmentsProps {
   images: Message["images"];
@@ -33,6 +34,9 @@ export function MessageImageAttachments({
   onOpenImage,
 }: MessageImageAttachmentsProps) {
   const { t } = useTranslation("agent");
+  const [failedImageKeys, setFailedImageKeys] = React.useState<Set<string>>(
+    () => new Set(),
+  );
 
   if (!images?.length) {
     return null;
@@ -42,12 +46,27 @@ export function MessageImageAttachments({
     <div className="flex flex-wrap gap-2">
       {images.map((img, index) => {
         const src = resolveMessageImageSrc(img);
-        const image = (
+        const imageKey = `${index}:${src || img.sourcePath || img.sourceUri || img.mediaType}`;
+        const isUnavailable = !src || failedImageKeys.has(imageKey);
+        const image = isUnavailable ? (
+          <ImageUnavailablePlaceholder
+            label={t("agentChat.messageImageAttachments.unavailable")}
+            testId={`message-image-attachment-unavailable-${index}`}
+            className="h-28 w-40 max-w-xs"
+          />
+        ) : (
           <img
             src={src}
             className="max-h-64 max-w-xs rounded-lg border border-border object-contain"
             alt={t("agentChat.messageImageAttachments.alt")}
             data-testid={`message-image-attachment-${index}`}
+            onError={() => {
+              setFailedImageKeys((current) => {
+                const next = new Set(current);
+                next.add(imageKey);
+                return next;
+              });
+            }}
           />
         );
 

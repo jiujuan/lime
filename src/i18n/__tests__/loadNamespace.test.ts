@@ -618,12 +618,8 @@ describe("i18n namespace loader", () => {
       expect(resources[locale].agent).toHaveProperty(
         "skills.workspace.curatedTask.suggestion.action.start",
       );
-      expect(resources[locale].agent).toHaveProperty("memoryLibrary.title");
       expect(resources[locale].agent).toHaveProperty(
-        "memoryLibrary.points.title",
-      );
-      expect(resources[locale].agent).toHaveProperty(
-        "sceneAppExecutionSummary.followup.action.saveInspiration",
+        "sceneAppExecutionSummary.followup.action.saveAsSkill",
       );
       expect(resources[locale].agent).toHaveProperty(
         "skills.workspace.managedJob.created",
@@ -820,12 +816,6 @@ describe("i18n namespace loader", () => {
         "workspace.document.editor.slashCommand.prompt.imageUrl",
       );
       expect(resources[locale].workspace).toHaveProperty(
-        "workspace.runtimeAgentsGuide.action.initialize",
-      );
-      expect(resources[locale].workspace).toHaveProperty(
-        "workspace.runtimeAgentsGuide.initialized.title",
-      );
-      expect(resources[locale].workspace).toHaveProperty(
         "workspace.artifactToolbar.type.code",
       );
       expect(resources[locale].workspace).toHaveProperty(
@@ -890,6 +880,24 @@ describe("i18n namespace loader", () => {
       );
       expect(resources[locale].workspace).toHaveProperty(
         "workspace.resourceManager.unsupported.title",
+      );
+      expect(resources[locale].workspace).toHaveProperty(
+        "workspace.artifactRenderer.previewFallback.systemOpen.title",
+      );
+      expect(resources[locale].workspace).toHaveProperty(
+        "workspace.artifactRenderer.previewFallback.unsupported.detail",
+      );
+      expect(resources[locale].workspace).toHaveProperty(
+        "workspace.artifactRenderer.previewSource.source.url",
+      );
+      expect(resources[locale].workspace).toHaveProperty(
+        "workspace.artifactRenderer.previewSource.source.databaseRecord",
+      );
+      expect(resources[locale].workspace).toHaveProperty(
+        "workspace.artifactRenderer.previewSource.source.app",
+      );
+      expect(resources[locale].workspace).toHaveProperty(
+        "workspace.artifactRenderer.previewSource.empty",
       );
       expect(resources[locale].workspace).toHaveProperty(
         "workspace.resourceManager.unsupported.mimeType",
@@ -1061,7 +1069,10 @@ describe("i18n namespace loader", () => {
         "settings.memory.embedding.provider.ollama.label",
       );
       expect(resources[locale].settings).toHaveProperty(
-        "settings.memory.embedding.status.indexedValue",
+        "settings.memory.embedding.status.configured",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.memory.embedding.status.fullTextOnly",
       );
       expect(resources[locale].settings).toHaveProperty(
         "settings.memory.embedding.providerSelect.description",

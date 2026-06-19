@@ -52,6 +52,9 @@ const ASSISTANT_RUNTIME_ERROR_ENVELOPE_RETRY_RE =
   /\n+\s*Please retry if you think this is a transient or recoverable error\.\s*$/;
 const ASSISTANT_RUNTIME_ERROR_TITLE_RE =
   /^Ran into this erro(?:r\b|\.\.\.$)/i;
+const MARKDOWN_IMAGE_RE = /!\[([^\]\n]*)]\((?:[^()\\\n]|\\.|\([^)\n]*\))*\)/;
+const MARKDOWN_IMAGE_GLOBAL_RE =
+  /!\[([^\]\n]*)]\((?:[^()\\\n]|\\.|\([^)\n]*\))*\)/g;
 
 interface SanitizeMessageTextOptions {
   role: Message["role"];
@@ -267,6 +270,87 @@ function stripAssistantPhaseSummaryTitle(text: string): string {
     .trim();
 }
 
+function hasMarkdownImageSyntax(text: string): boolean {
+  return MARKDOWN_IMAGE_RE.test(text);
+}
+
+function normalizeMarkdownAltEcho(value: string): string {
+  return collapseDisplayWhitespace(value);
+}
+
+function stripMarkdownAltEchoSegment(
+  segment: string,
+  normalizedAlts: Set<string>,
+): string {
+  const normalized = normalizeMarkdownAltEcho(segment);
+  if (!normalized) {
+    return segment;
+  }
+  return normalizedAlts.has(normalized) ? "" : segment;
+}
+
+function stripInlineMarkdownImageAltEchoes(line: string): {
+  line: string;
+  normalizedAlts: Set<string>;
+} {
+  const matches = Array.from(line.matchAll(MARKDOWN_IMAGE_GLOBAL_RE));
+  const normalizedAlts = new Set(
+    matches
+      .map((match) => normalizeMarkdownAltEcho(match[1] || ""))
+      .filter(Boolean),
+  );
+  if (!matches.length || !normalizedAlts.size) {
+    return { line, normalizedAlts };
+  }
+
+  let cursor = 0;
+  let nextLine = "";
+  for (const match of matches) {
+    const start = match.index ?? 0;
+    nextLine += stripMarkdownAltEchoSegment(
+      line.slice(cursor, start),
+      normalizedAlts,
+    );
+    nextLine += match[0];
+    cursor = start + match[0].length;
+  }
+  nextLine += stripMarkdownAltEchoSegment(line.slice(cursor), normalizedAlts);
+
+  return { line: nextLine, normalizedAlts };
+}
+
+function stripRedundantMarkdownImageAltEchoes(text: string): string {
+  if (!hasMarkdownImageSyntax(text)) {
+    return text;
+  }
+
+  const lines = text.split(/\r?\n/);
+  const projected = lines.map(stripInlineMarkdownImageAltEchoes);
+  const strippedLines = projected.map((entry, index) => {
+    if (entry.normalizedAlts.size > 0) {
+      return entry.line;
+    }
+
+    const normalized = normalizeMarkdownAltEcho(entry.line);
+    if (!normalized) {
+      return entry.line;
+    }
+
+    const previousAlts = projected[index - 1]?.normalizedAlts;
+    const nextAlts = projected[index + 1]?.normalizedAlts;
+    if (previousAlts?.has(normalized) || nextAlts?.has(normalized)) {
+      return "";
+    }
+
+    return entry.line;
+  });
+
+  return strippedLines
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export function isAssistantRuntimeErrorDisplayText(
   text: string,
   options: { allowTruncatedTitle?: boolean } = {},
@@ -307,12 +391,20 @@ export function sanitizeMessageTextForDisplay(
     return "";
   }
 
-  if (!containsRuntimeAttachmentPlaceholder(formattedRuntimePeerMessage)) {
-    return formattedRuntimePeerMessage;
+  const displayMessage = options.role === "user"
+    ? stripRedundantMarkdownImageAltEchoes(formattedRuntimePeerMessage)
+    : formattedRuntimePeerMessage;
+
+  if (!displayMessage) {
+    return "";
+  }
+
+  if (!containsRuntimeAttachmentPlaceholder(displayMessage)) {
+    return displayMessage;
   }
 
   if (
-    isOnlyRuntimeAttachmentPlaceholderText(formattedRuntimePeerMessage) &&
+    isOnlyRuntimeAttachmentPlaceholderText(displayMessage) &&
     ((options.role === "user" && options.hasImages) ||
       options.role === "assistant")
   ) {
@@ -320,7 +412,7 @@ export function sanitizeMessageTextForDisplay(
   }
 
   return collapseDisplayWhitespace(
-    replaceRuntimeAttachmentPlaceholders(formattedRuntimePeerMessage, "图片"),
+    replaceRuntimeAttachmentPlaceholders(displayMessage, "图片"),
   );
 }
 

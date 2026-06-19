@@ -525,6 +525,103 @@ fn commit_preserves_imported_assistant_message_order_between_runtime_events() {
     }));
 }
 
+#[tokio::test]
+async fn commit_delays_imported_turn_terminal_until_after_late_runtime_events() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let rollout_path = temp
+        .path()
+        .join("rollout-late-runtime-after-terminal.jsonl");
+    fs::write(
+        &rollout_path,
+        [
+            session_meta("thread-late-runtime-after-terminal"),
+            event_user_message("run after terminal"),
+            event_turn_complete("turn-source-1"),
+            response_function_call(
+                "call_late_exec",
+                "exec_command",
+                serde_json::json!({"cmd": "echo late", "workdir": "/workspace/app"}),
+            ),
+            response_function_call_output(
+                "call_late_exec",
+                "Exit code: 0\nWall time: 0 seconds\nOutput:\nlate",
+            ),
+            event_agent_message("late answer"),
+        ]
+        .join("\n"),
+    )
+    .expect("write rollout");
+    let sidecar_root = tempfile::tempdir().expect("sidecar root");
+    let sidecar_store = Arc::new(SidecarStore::new(sidecar_root.path()).expect("sidecar store"));
+    let core = RuntimeCore::default().with_sidecar_store(sidecar_store.clone());
+
+    let response = commit::commit_conversation_import_thread(
+        &core,
+        ConversationImportThreadCommitParams {
+            source_root: Some(temp.path().to_string_lossy().into_owned()),
+            source_path: Some(rollout_path.to_string_lossy().into_owned()),
+            confirmed: true,
+            ..Default::default()
+        },
+    )
+    .expect("commit");
+
+    assert_eq!(response.imported_turns, 1);
+    let session_id = response.session.session_id.clone();
+    let read = core
+        .read_session(AgentSessionReadParams {
+            session_id: session_id.clone(),
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .expect("read imported session");
+    let detail = read.detail.expect("detail");
+    let items = detail["items"].as_array().expect("timeline items");
+    assert!(items.iter().any(|item| {
+        item["type"] == "command_execution"
+            && item["id"] == "call_late_exec"
+            && item["status"] == "completed"
+            && item["aggregated_output"]
+                .as_str()
+                .is_some_and(|output| output.contains("late"))
+    }));
+    assert!(items
+        .iter()
+        .any(|item| { item["type"] == "agent_message" && item["text"] == "late answer" }));
+
+    let detail_page = core
+        .read_conversation_import_runtime_events(ConversationImportThreadRuntimeEventsReadParams {
+            session_id,
+            offset: Some(0),
+            limit: Some(32),
+            turn_index: Some(0),
+            event_type: None,
+        })
+        .await
+        .expect("read imported event detail");
+    let event_types = detail_page
+        .events
+        .iter()
+        .map(|event| event.event_type.as_str())
+        .collect::<Vec<_>>();
+    let terminal_index = event_types
+        .iter()
+        .rposition(|event_type| *event_type == "turn.completed")
+        .expect("turn completed event");
+    let command_index = event_types
+        .iter()
+        .position(|event_type| *event_type == "command.started")
+        .expect("command started event");
+    let message_index = event_types
+        .iter()
+        .rposition(|event_type| *event_type == "message.delta")
+        .expect("assistant message event");
+    assert!(command_index < terminal_index);
+    assert!(message_index < terminal_index);
+    assert_eq!(terminal_index, event_types.len() - 1);
+}
+
 #[test]
 fn commit_preserves_imported_update_plan_timeline_item() {
     let temp = tempfile::tempdir().expect("tempdir");
@@ -1033,6 +1130,20 @@ fn event_exec_approval_request(call_id: &str) -> String {
             "call_id": call_id,
             "command": ["npm", "test"],
             "reason": "Codex needs approval to run tests"
+        }
+    })
+    .to_string()
+}
+
+fn event_turn_complete(turn_id: &str) -> String {
+    serde_json::json!({
+        "timestamp": "2026-06-16T00:00:01.375Z",
+        "type": "event_msg",
+        "payload": {
+            "type": "turn_complete",
+            "turn_id": turn_id,
+            "completed_at": "2026-06-16T00:00:01.375Z",
+            "duration_ms": 10
         }
     })
     .to_string()

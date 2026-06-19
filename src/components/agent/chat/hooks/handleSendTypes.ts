@@ -23,6 +23,7 @@ export interface HandleSendOptions {
   reasoningEffort?: string;
   systemPromptOverride?: string;
   searchMode?: AgentRuntimeWebSearchMode;
+  explicitToolPreferences?: boolean;
   assistantDraft?: AssistantDraftState;
   skipSessionRestore?: boolean;
   skipSessionStartHooks?: boolean;

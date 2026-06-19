@@ -685,32 +685,53 @@ function readSessionDetail(
       ? ((detail as Record<string, unknown>)
           .threadRead as AsterSessionDetail["thread_read"])
       : undefined;
+  const detailExecutionRuntime = isRecord(detail.execution_runtime)
+    ? detail.execution_runtime
+    : isRecord((detail as Record<string, unknown>).executionRuntime)
+      ? ((detail as Record<string, unknown>)
+          .executionRuntime as AsterSessionDetail["execution_runtime"])
+      : detail.execution_runtime === null ||
+          (detail as Record<string, unknown>).executionRuntime === null
+        ? null
+        : undefined;
   return {
     ...fallback,
     ...detail,
     id: typeof detail.id === "string" ? detail.id : fallback.id,
     thread_id:
-      typeof detail.thread_id === "string" ? detail.thread_id : fallback.thread_id,
+      typeof detail.thread_id === "string"
+        ? detail.thread_id
+        : fallback.thread_id,
     name: typeof detail.name === "string" ? detail.name : fallback.name,
     created_at:
-      typeof detail.created_at === "number" && Number.isFinite(detail.created_at)
+      typeof detail.created_at === "number" &&
+      Number.isFinite(detail.created_at)
         ? detail.created_at
         : fallback.created_at,
     updated_at:
-      typeof detail.updated_at === "number" && Number.isFinite(detail.updated_at)
+      typeof detail.updated_at === "number" &&
+      Number.isFinite(detail.updated_at)
         ? detail.updated_at
         : fallback.updated_at,
     workspace_id:
       typeof detail.workspace_id === "string"
         ? detail.workspace_id
         : fallback.workspace_id,
-    messages: Array.isArray(detail.messages) ? detail.messages : fallback.messages,
+    messages: Array.isArray(detail.messages)
+      ? detail.messages
+      : fallback.messages,
     turns: Array.isArray(detail.turns) ? detail.turns : fallback.turns,
     items: Array.isArray(detail.items) ? detail.items : fallback.items,
     queued_turns: Array.isArray(detail.queued_turns)
       ? detail.queued_turns
       : fallback.queued_turns,
-    thread_read: detailThreadRead ?? projectAppServerSessionReadToThreadReadModel(response),
+    thread_read:
+      detailThreadRead ??
+      projectAppServerSessionReadToThreadReadModel(response),
+    execution_runtime:
+      detailExecutionRuntime === undefined
+        ? fallback.execution_runtime
+        : detailExecutionRuntime,
     todo_items: Array.isArray(detail.todo_items)
       ? detail.todo_items
       : fallback.todo_items,

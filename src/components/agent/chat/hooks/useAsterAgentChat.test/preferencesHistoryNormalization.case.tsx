@@ -274,12 +274,11 @@ describe("useAsterAgentChat 偏好持久化 - history normalization", () => {
         role: "user",
         content: "请参考这张图",
       });
-      expect(value.messages[0]?.images).toEqual([
-        {
-          mediaType: "image/png",
-          data: "aGVsbG8=",
-        },
-      ]);
+      expect(value.messages[0]?.images).toHaveLength(1);
+      expect(value.messages[0]?.images?.[0]).toMatchObject({
+        mediaType: "image/png",
+        data: "aGVsbG8=",
+      });
       expect(value.messages[1]).toMatchObject({
         role: "assistant",
         content: "已收到图片",

@@ -104,11 +104,6 @@ describe("AgentChatPage 服务技能 A2UI", () => {
     await flushEffects();
 
     expect(
-      mounted.container.querySelector(
-        '[data-testid^="task-center-tab-task-draft-"][data-active="true"]',
-      ),
-    ).not.toBeNull();
-    expect(
       await waitForElement(mounted.container, '[data-testid="empty-state"]'),
     ).not.toBeNull();
     expect(

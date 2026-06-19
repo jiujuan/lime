@@ -29,6 +29,7 @@ import {
 } from "@/lib/markdown/markdownBundleMeta";
 import { ArtifactPlaceholder } from "./ArtifactPlaceholder";
 import { A2UITaskCard, A2UITaskLoadingCard } from "./A2UITaskCard";
+import { MarkdownImageWithFallback } from "./MarkdownImageWithFallback";
 
 const STREAMING_LIGHT_RENDER_THRESHOLD = 2_000;
 const STREAMING_LIGHT_RENDER_DEBOUNCE_MS = 48;
@@ -307,36 +308,6 @@ const MarkdownQuoteBody = styled.div`
 
   p:last-child {
     margin-bottom: 0;
-  }
-`;
-
-const ImageContainer = styled.div`
-  margin: 12px 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-`;
-
-const ImageCaption = styled.span`
-  font-size: 12px;
-  color: hsl(var(--muted-foreground));
-  text-align: center;
-`;
-
-const GeneratedImage = styled.img`
-  max-width: 100%;
-  max-height: 512px;
-  border-radius: 10px;
-  object-fit: contain;
-  cursor: pointer;
-  border: 1px solid hsl(var(--border));
-  transition:
-    border-color 0.18s ease,
-    box-shadow 0.2s ease;
-
-  &:hover {
-    border-color: hsl(var(--ring));
-    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
   }
 `;
 
@@ -1505,6 +1476,8 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
     );
     const imageOpenTitle = t("agentChat.markdown.image.openTitle");
     const imageCaption = t("agentChat.markdown.image.caption");
+    const imageUnavailableLabel = t("agentChat.markdown.image.unavailable");
+    const imageDefaultAlt = t("agentChat.markdown.image.defaultAlt");
     const quoteContentBlockLabel = t("agentChat.markdown.block.quote");
     const copyContentBlockLabel = t("agentChat.markdown.block.copy");
     const shouldBlockBrowserImagePreview = React.useCallback(
@@ -1560,7 +1533,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
       while ((match = base64ImageRegex.exec(renderContent)) !== null) {
         const placeholder = `__BASE64_IMAGE_${index}__`;
         images.push({
-          alt: match[1] || "Generated Image",
+          alt: match[1] || imageDefaultAlt,
           src: match[2],
           placeholder,
         });
@@ -1578,7 +1551,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
         ),
         images,
       };
-    }, [renderContent]);
+    }, [imageDefaultAlt, renderContent]);
 
     // 渲染 base64 图片
     const renderBase64Images = () => {
@@ -1622,19 +1595,15 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
         };
 
         return (
-          <ImageContainer key={`base64-img-${idx}`}>
-            <GeneratedImage
-              src={img.src}
-              alt={img.alt}
-              onClick={handleImageClick}
-              title={imageOpenTitle}
-              onError={(e) => {
-                console.error("[MarkdownRenderer] 图片加载失败:", img.alt);
-                (e.target as HTMLImageElement).style.display = "none";
-              }}
-            />
-            <ImageCaption>{imageCaption}</ImageCaption>
-          </ImageContainer>
+          <MarkdownImageWithFallback
+            key={`base64-img-${idx}`}
+            src={img.src}
+            alt={img.alt}
+            onClick={handleImageClick}
+            title={imageOpenTitle}
+            caption={imageCaption}
+            unavailableLabel={imageUnavailableLabel}
+          />
         );
       });
     };
@@ -2050,11 +2019,12 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
                   };
 
                   return (
-                    <GeneratedImage
+                    <MarkdownImageWithFallback
                       src={resolvedSrc}
-                      alt={alt || "Image"}
+                      alt={alt}
                       onClick={handleImageClick}
                       title={imageOpenTitle}
+                      unavailableLabel={imageUnavailableLabel}
                       {...props}
                     />
                   );

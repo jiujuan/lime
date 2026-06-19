@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "entryType": {
+      "type": "string"
+    },
+    "modifiedAt": {
+      "format": "int64",
+      "type": "integer"
+    },
+    "path": {
+      "type": "string"
+    },
+    "size": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "entryType",
+    "modifiedAt",
+    "path",
+    "size"
+  ],
+  "title": "MemoryStoreEntry",
+  "type": "object"
+}

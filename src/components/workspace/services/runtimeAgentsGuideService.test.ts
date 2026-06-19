@@ -3,16 +3,11 @@ import {
   notifyProjectCreatedWithRuntimeAgentsGuide,
   notifyProjectRuntimeAgentsGuide,
 } from "./runtimeAgentsGuideService";
-import { changeLimeLocale } from "@/i18n/createI18n";
 
 const {
-  mockEnsureWorkspaceLocalAgentsGitignore,
-  mockScaffoldRuntimeAgentsTemplate,
   mockToastError,
   mockToastSuccess,
 } = vi.hoisted(() => ({
-  mockEnsureWorkspaceLocalAgentsGitignore: vi.fn(),
-  mockScaffoldRuntimeAgentsTemplate: vi.fn(),
   mockToastError: vi.fn(),
   mockToastSuccess: vi.fn(),
 }));
@@ -24,25 +19,13 @@ vi.mock("sonner", () => ({
   },
 }));
 
-vi.mock("@/lib/api/memoryRuntime", () => ({
-  ensureWorkspaceLocalAgentsGitignore: mockEnsureWorkspaceLocalAgentsGitignore,
-  scaffoldRuntimeAgentsTemplate: mockScaffoldRuntimeAgentsTemplate,
-}));
-
 describe("runtimeAgentsGuideService", () => {
-  beforeEach(async () => {
-    await changeLimeLocale("zh-CN");
+  beforeEach(() => {
     window.localStorage.clear();
     vi.clearAllMocks();
-    mockScaffoldRuntimeAgentsTemplate.mockResolvedValue({
-      status: "created",
-    });
-    mockEnsureWorkspaceLocalAgentsGitignore.mockResolvedValue({
-      status: "added",
-    });
   });
 
-  it("首次创建项目时应展示运行时 AGENTS 引导", () => {
+  it("首次创建项目时只展示成功提示，不再暴露旧运行时记忆初始化入口", () => {
     notifyProjectCreatedWithRuntimeAgentsGuide(
       {
         id: "project-1",
@@ -53,16 +36,7 @@ describe("runtimeAgentsGuideService", () => {
     );
 
     expect(mockToastSuccess).toHaveBeenCalledTimes(1);
-    expect(mockToastSuccess).toHaveBeenCalledWith(
-      "项目创建成功",
-      expect.objectContaining({
-        description: expect.stringContaining(".lime/AGENTS.md"),
-        action: expect.objectContaining({
-          label: "一键初始化",
-          onClick: expect.any(Function),
-        }),
-      }),
-    );
+    expect(mockToastSuccess).toHaveBeenCalledWith("项目创建成功");
   });
 
   it("同一项目重复通知时应退化为普通成功提示", () => {
@@ -84,80 +58,6 @@ describe("runtimeAgentsGuideService", () => {
     );
 
     expect(mockToastSuccess).toHaveBeenNthCalledWith(2, "项目创建成功");
-  });
-
-  it("点击一键初始化后应生成模板并补齐 gitignore", async () => {
-    notifyProjectCreatedWithRuntimeAgentsGuide(
-      {
-        id: "project-1",
-        name: "项目 A",
-        rootPath: "/tmp/workspace/project-a",
-      },
-      "项目创建成功",
-    );
-
-    const action = mockToastSuccess.mock.calls[0]?.[1]?.action;
-    expect(action?.label).toBe("一键初始化");
-
-    await action?.onClick();
-    await Promise.resolve();
-
-    expect(mockScaffoldRuntimeAgentsTemplate).toHaveBeenNthCalledWith(
-      1,
-      "workspace",
-      "/tmp/workspace/project-a",
-      false,
-    );
-    expect(mockScaffoldRuntimeAgentsTemplate).toHaveBeenNthCalledWith(
-      2,
-      "workspace_local",
-      "/tmp/workspace/project-a",
-      false,
-    );
-    expect(mockEnsureWorkspaceLocalAgentsGitignore).toHaveBeenCalledWith(
-      "/tmp/workspace/project-a",
-    );
-    expect(mockToastSuccess).toHaveBeenLastCalledWith(
-      "已初始化运行时 AGENTS 模板",
-      expect.objectContaining({
-        description: expect.stringContaining(".gitignore"),
-      }),
-    );
-  });
-
-  it("英文界面应使用 workspace namespace 的运行时 AGENTS 引导文案", async () => {
-    await changeLimeLocale("en-US");
-
-    notifyProjectCreatedWithRuntimeAgentsGuide(
-      {
-        id: "project-1",
-        name: "Project A",
-        rootPath: "/tmp/workspace/project-a",
-      },
-      "Project created",
-    );
-
-    expect(mockToastSuccess).toHaveBeenCalledWith(
-      "Project created",
-      expect.objectContaining({
-        description: expect.stringContaining("Initialize the shared rule"),
-        action: expect.objectContaining({
-          label: "Initialize now",
-          onClick: expect.any(Function),
-        }),
-      }),
-    );
-
-    const action = mockToastSuccess.mock.calls[0]?.[1]?.action;
-    await action?.onClick();
-    await Promise.resolve();
-
-    expect(mockToastSuccess).toHaveBeenLastCalledWith(
-      "Runtime AGENTS templates initialized",
-      expect.objectContaining({
-        description: expect.stringContaining("Shared template created"),
-      }),
-    );
   });
 
   it("已展示过引导且关闭回退成功提示时不应再次弹出 toast", () => {

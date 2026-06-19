@@ -203,17 +203,13 @@ import {
   METHOD_MCP_TOOL_LIST,
   METHOD_MCP_TOOL_LIST_FOR_CONTEXT,
   METHOD_MCP_TOOL_SEARCH,
+  METHOD_MEMORY_STORE_ADD_NOTE,
+  METHOD_MEMORY_STORE_HEALTH,
+  METHOD_MEMORY_STORE_LIST,
+  METHOD_MEMORY_STORE_READ,
+  METHOD_MEMORY_STORE_RESET,
+  METHOD_MEMORY_STORE_SEARCH,
   METHOD_PROJECT_MEMORY_READ,
-  METHOD_UNIFIED_MEMORY_ANALYZE,
-  METHOD_UNIFIED_MEMORY_CREATE,
-  METHOD_UNIFIED_MEMORY_DELETE,
-  METHOD_UNIFIED_MEMORY_GET,
-  METHOD_UNIFIED_MEMORY_HYBRID_SEARCH,
-  METHOD_UNIFIED_MEMORY_LIST,
-  METHOD_UNIFIED_MEMORY_SEARCH,
-  METHOD_UNIFIED_MEMORY_SEMANTIC_SEARCH,
-  METHOD_UNIFIED_MEMORY_STATS,
-  METHOD_UNIFIED_MEMORY_UPDATE,
   METHOD_SESSION_FILE_DELETE,
   METHOD_SESSION_FILE_GET_OR_CREATE,
   METHOD_SESSION_FILE_LIST,
@@ -575,25 +571,22 @@ import {
   type McpToolListForContextParams,
   type McpToolListResponse,
   type McpToolSearchParams,
+  type MemoryStoreAddNoteParams,
+  type MemoryStoreAddNoteResponse,
+  type MemoryStoreHealthResponse,
+  type MemoryStoreListParams,
+  type MemoryStoreListResponse,
+  type MemoryStoreReadParams,
+  type MemoryStoreReadResponse,
+  type MemoryStoreResetParams,
+  type MemoryStoreResetResponse,
+  type MemoryStoreRootParams,
+  type MemoryStoreSearchParams,
+  type MemoryStoreSearchResponse,
   type ProtocolSchemaFile,
   type ProtocolSchemaGroup,
   type ProjectMemoryReadParams,
   type ProjectMemoryReadResponse,
-  type UnifiedMemoryAnalysisResponse,
-  type UnifiedMemoryAnalyzeParams,
-  type UnifiedMemoryCreateParams,
-  type UnifiedMemoryDeleteParams,
-  type UnifiedMemoryDeleteResponse,
-  type UnifiedMemoryGetParams,
-  type UnifiedMemoryGetResponse,
-  type UnifiedMemoryHybridSearchParams,
-  type UnifiedMemoryListParams,
-  type UnifiedMemoryListResponse,
-  type UnifiedMemorySearchParams,
-  type UnifiedMemorySemanticSearchParams,
-  type UnifiedMemoryStatsResponse,
-  type UnifiedMemoryUpdateParams,
-  type UnifiedMemoryWriteResponse,
   type RequestId,
   type SkillDownloadInstallParams,
   type SkillDownloadInstallResponse,
@@ -1459,48 +1452,28 @@ export class AppServerClient {
     return this.request(METHOD_PROJECT_MEMORY_READ, params);
   }
 
-  listUnifiedMemories(params: UnifiedMemoryListParams): JsonRpcRequest {
-    return this.request(METHOD_UNIFIED_MEMORY_LIST, params);
+  listMemoryStore(params: MemoryStoreListParams): JsonRpcRequest {
+    return this.request(METHOD_MEMORY_STORE_LIST, params);
   }
 
-  getUnifiedMemory(params: UnifiedMemoryGetParams): JsonRpcRequest {
-    return this.request(METHOD_UNIFIED_MEMORY_GET, params);
+  readMemoryStore(params: MemoryStoreReadParams): JsonRpcRequest {
+    return this.request(METHOD_MEMORY_STORE_READ, params);
   }
 
-  createUnifiedMemory(params: UnifiedMemoryCreateParams): JsonRpcRequest {
-    return this.request(METHOD_UNIFIED_MEMORY_CREATE, params);
+  searchMemoryStore(params: MemoryStoreSearchParams): JsonRpcRequest {
+    return this.request(METHOD_MEMORY_STORE_SEARCH, params);
   }
 
-  updateUnifiedMemory(params: UnifiedMemoryUpdateParams): JsonRpcRequest {
-    return this.request(METHOD_UNIFIED_MEMORY_UPDATE, params);
+  addMemoryStoreNote(params: MemoryStoreAddNoteParams): JsonRpcRequest {
+    return this.request(METHOD_MEMORY_STORE_ADD_NOTE, params);
   }
 
-  deleteUnifiedMemory(params: UnifiedMemoryDeleteParams): JsonRpcRequest {
-    return this.request(METHOD_UNIFIED_MEMORY_DELETE, params);
+  healthMemoryStore(params: MemoryStoreRootParams): JsonRpcRequest {
+    return this.request(METHOD_MEMORY_STORE_HEALTH, params);
   }
 
-  searchUnifiedMemories(params: UnifiedMemorySearchParams): JsonRpcRequest {
-    return this.request(METHOD_UNIFIED_MEMORY_SEARCH, params);
-  }
-
-  readUnifiedMemoryStats(): JsonRpcRequest {
-    return this.request(METHOD_UNIFIED_MEMORY_STATS, {});
-  }
-
-  analyzeUnifiedMemories(params: UnifiedMemoryAnalyzeParams): JsonRpcRequest {
-    return this.request(METHOD_UNIFIED_MEMORY_ANALYZE, params);
-  }
-
-  semanticSearchUnifiedMemories(
-    params: UnifiedMemorySemanticSearchParams,
-  ): JsonRpcRequest {
-    return this.request(METHOD_UNIFIED_MEMORY_SEMANTIC_SEARCH, params);
-  }
-
-  hybridSearchUnifiedMemories(
-    params: UnifiedMemoryHybridSearchParams,
-  ): JsonRpcRequest {
-    return this.request(METHOD_UNIFIED_MEMORY_HYBRID_SEARCH, params);
+  resetMemoryStore(params: MemoryStoreResetParams): JsonRpcRequest {
+    return this.request(METHOD_MEMORY_STORE_RESET, params);
   }
 
   listLogs(): JsonRpcRequest {
@@ -3429,111 +3402,68 @@ export class AppServerConnection {
     );
   }
 
-  async listUnifiedMemories(
-    params: UnifiedMemoryListParams,
+  async listMemoryStore(
+    params: MemoryStoreListParams,
     options: AppServerRequestOptions = {},
-  ): Promise<AppServerRequestResult<UnifiedMemoryListResponse>> {
-    return await this.request<UnifiedMemoryListResponse>(
-      this.client.listUnifiedMemories(params),
-      METHOD_UNIFIED_MEMORY_LIST,
+  ): Promise<AppServerRequestResult<MemoryStoreListResponse>> {
+    return await this.request<MemoryStoreListResponse>(
+      this.client.listMemoryStore(params),
+      METHOD_MEMORY_STORE_LIST,
       options,
     );
   }
 
-  async getUnifiedMemory(
-    params: UnifiedMemoryGetParams,
+  async readMemoryStore(
+    params: MemoryStoreReadParams,
     options: AppServerRequestOptions = {},
-  ): Promise<AppServerRequestResult<UnifiedMemoryGetResponse>> {
-    return await this.request<UnifiedMemoryGetResponse>(
-      this.client.getUnifiedMemory(params),
-      METHOD_UNIFIED_MEMORY_GET,
+  ): Promise<AppServerRequestResult<MemoryStoreReadResponse>> {
+    return await this.request<MemoryStoreReadResponse>(
+      this.client.readMemoryStore(params),
+      METHOD_MEMORY_STORE_READ,
       options,
     );
   }
 
-  async createUnifiedMemory(
-    params: UnifiedMemoryCreateParams,
+  async searchMemoryStore(
+    params: MemoryStoreSearchParams,
     options: AppServerRequestOptions = {},
-  ): Promise<AppServerRequestResult<UnifiedMemoryWriteResponse>> {
-    return await this.request<UnifiedMemoryWriteResponse>(
-      this.client.createUnifiedMemory(params),
-      METHOD_UNIFIED_MEMORY_CREATE,
+  ): Promise<AppServerRequestResult<MemoryStoreSearchResponse>> {
+    return await this.request<MemoryStoreSearchResponse>(
+      this.client.searchMemoryStore(params),
+      METHOD_MEMORY_STORE_SEARCH,
       options,
     );
   }
 
-  async updateUnifiedMemory(
-    params: UnifiedMemoryUpdateParams,
+  async addMemoryStoreNote(
+    params: MemoryStoreAddNoteParams,
     options: AppServerRequestOptions = {},
-  ): Promise<AppServerRequestResult<UnifiedMemoryWriteResponse>> {
-    return await this.request<UnifiedMemoryWriteResponse>(
-      this.client.updateUnifiedMemory(params),
-      METHOD_UNIFIED_MEMORY_UPDATE,
+  ): Promise<AppServerRequestResult<MemoryStoreAddNoteResponse>> {
+    return await this.request<MemoryStoreAddNoteResponse>(
+      this.client.addMemoryStoreNote(params),
+      METHOD_MEMORY_STORE_ADD_NOTE,
       options,
     );
   }
 
-  async deleteUnifiedMemory(
-    params: UnifiedMemoryDeleteParams,
+  async healthMemoryStore(
+    params: MemoryStoreRootParams,
     options: AppServerRequestOptions = {},
-  ): Promise<AppServerRequestResult<UnifiedMemoryDeleteResponse>> {
-    return await this.request<UnifiedMemoryDeleteResponse>(
-      this.client.deleteUnifiedMemory(params),
-      METHOD_UNIFIED_MEMORY_DELETE,
+  ): Promise<AppServerRequestResult<MemoryStoreHealthResponse>> {
+    return await this.request<MemoryStoreHealthResponse>(
+      this.client.healthMemoryStore(params),
+      METHOD_MEMORY_STORE_HEALTH,
       options,
     );
   }
 
-  async searchUnifiedMemories(
-    params: UnifiedMemorySearchParams,
+  async resetMemoryStore(
+    params: MemoryStoreResetParams,
     options: AppServerRequestOptions = {},
-  ): Promise<AppServerRequestResult<UnifiedMemoryListResponse>> {
-    return await this.request<UnifiedMemoryListResponse>(
-      this.client.searchUnifiedMemories(params),
-      METHOD_UNIFIED_MEMORY_SEARCH,
-      options,
-    );
-  }
-
-  async readUnifiedMemoryStats(
-    options: AppServerRequestOptions = {},
-  ): Promise<AppServerRequestResult<UnifiedMemoryStatsResponse>> {
-    return await this.request<UnifiedMemoryStatsResponse>(
-      this.client.readUnifiedMemoryStats(),
-      METHOD_UNIFIED_MEMORY_STATS,
-      options,
-    );
-  }
-
-  async analyzeUnifiedMemories(
-    params: UnifiedMemoryAnalyzeParams,
-    options: AppServerRequestOptions = {},
-  ): Promise<AppServerRequestResult<UnifiedMemoryAnalysisResponse>> {
-    return await this.request<UnifiedMemoryAnalysisResponse>(
-      this.client.analyzeUnifiedMemories(params),
-      METHOD_UNIFIED_MEMORY_ANALYZE,
-      options,
-    );
-  }
-
-  async semanticSearchUnifiedMemories(
-    params: UnifiedMemorySemanticSearchParams,
-    options: AppServerRequestOptions = {},
-  ): Promise<AppServerRequestResult<UnifiedMemoryListResponse>> {
-    return await this.request<UnifiedMemoryListResponse>(
-      this.client.semanticSearchUnifiedMemories(params),
-      METHOD_UNIFIED_MEMORY_SEMANTIC_SEARCH,
-      options,
-    );
-  }
-
-  async hybridSearchUnifiedMemories(
-    params: UnifiedMemoryHybridSearchParams,
-    options: AppServerRequestOptions = {},
-  ): Promise<AppServerRequestResult<UnifiedMemoryListResponse>> {
-    return await this.request<UnifiedMemoryListResponse>(
-      this.client.hybridSearchUnifiedMemories(params),
-      METHOD_UNIFIED_MEMORY_HYBRID_SEARCH,
+  ): Promise<AppServerRequestResult<MemoryStoreResetResponse>> {
+    return await this.request<MemoryStoreResetResponse>(
+      this.client.resetMemoryStore(params),
+      METHOD_MEMORY_STORE_RESET,
       options,
     );
   }

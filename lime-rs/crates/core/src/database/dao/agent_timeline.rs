@@ -255,9 +255,18 @@ pub struct AgentThreadItem {
 
 pub struct AgentTimelineDao;
 
+fn is_missing_legacy_timeline_table(error: &rusqlite::Error) -> bool {
+    matches!(
+        error,
+        rusqlite::Error::SqliteFailure(_, Some(message))
+            if message.contains("no such table: agent_thread_turns")
+                || message.contains("no such table: agent_thread_items")
+    )
+}
+
 impl AgentTimelineDao {
     pub fn create_turn(conn: &Connection, turn: &AgentThreadTurn) -> Result<(), rusqlite::Error> {
-        conn.execute(
+        let result = conn.execute(
             "INSERT INTO agent_thread_turns (
                 id, session_id, prompt_text, status, started_at, completed_at,
                 error_message, created_at, updated_at
@@ -273,12 +282,18 @@ impl AgentTimelineDao {
                 turn.created_at,
                 turn.updated_at,
             ],
-        )?;
+        );
+        if let Err(error) = result {
+            if is_missing_legacy_timeline_table(&error) {
+                return Ok(());
+            }
+            return Err(error);
+        }
         Ok(())
     }
 
     pub fn upsert_turn(conn: &Connection, turn: &AgentThreadTurn) -> Result<(), rusqlite::Error> {
-        conn.execute(
+        let result = conn.execute(
             "INSERT INTO agent_thread_turns (
                 id, session_id, prompt_text, status, started_at, completed_at,
                 error_message, created_at, updated_at
@@ -303,7 +318,13 @@ impl AgentTimelineDao {
                 turn.created_at,
                 turn.updated_at,
             ],
-        )?;
+        );
+        if let Err(error) = result {
+            if is_missing_legacy_timeline_table(&error) {
+                return Ok(());
+            }
+            return Err(error);
+        }
         Ok(())
     }
 
@@ -315,7 +336,7 @@ impl AgentTimelineDao {
         error_message: Option<&str>,
         updated_at: &str,
     ) -> Result<(), rusqlite::Error> {
-        conn.execute(
+        let result = conn.execute(
             "UPDATE agent_thread_turns
              SET status = ?1,
                  completed_at = COALESCE(?2, completed_at),
@@ -329,7 +350,13 @@ impl AgentTimelineDao {
                 updated_at,
                 turn_id,
             ],
-        )?;
+        );
+        if let Err(error) = result {
+            if is_missing_legacy_timeline_table(&error) {
+                return Ok(());
+            }
+            return Err(error);
+        }
         Ok(())
     }
 
@@ -337,13 +364,17 @@ impl AgentTimelineDao {
         conn: &Connection,
         thread_id: &str,
     ) -> Result<Vec<AgentThreadTurn>, rusqlite::Error> {
-        let mut stmt = conn.prepare(
+        let mut stmt = match conn.prepare(
             "SELECT id, session_id, prompt_text, status, started_at, completed_at,
                     error_message, created_at, updated_at
              FROM agent_thread_turns
              WHERE session_id = ?1
              ORDER BY started_at ASC, id ASC",
-        )?;
+        ) {
+            Ok(stmt) => stmt,
+            Err(error) if is_missing_legacy_timeline_table(&error) => return Ok(Vec::new()),
+            Err(error) => return Err(error),
+        };
 
         let rows = stmt.query_map(params![thread_id], |row| {
             let status_raw: String = row.get(3)?;
@@ -385,7 +416,7 @@ impl AgentTimelineDao {
             return Ok(Vec::new());
         }
 
-        let mut stmt = conn.prepare(
+        let mut stmt = match conn.prepare(
             "SELECT id, session_id, prompt_text, status, started_at, completed_at,
                     error_message, created_at, updated_at
              FROM (
@@ -398,7 +429,11 @@ impl AgentTimelineDao {
                  OFFSET ?3
              )
              ORDER BY started_at ASC, id ASC",
-        )?;
+        ) {
+            Ok(stmt) => stmt,
+            Err(error) if is_missing_legacy_timeline_table(&error) => return Ok(Vec::new()),
+            Err(error) => return Err(error),
+        };
 
         let rows = stmt.query_map(params![thread_id, limit as i64, offset as i64], |row| {
             let status_raw: String = row.get(3)?;
@@ -432,7 +467,7 @@ impl AgentTimelineDao {
             return Ok(Vec::new());
         }
 
-        let mut stmt = conn.prepare(
+        let mut stmt = match conn.prepare(
             "SELECT id, session_id, prompt_text, status, started_at, completed_at,
                     error_message, created_at, updated_at
              FROM (
@@ -444,7 +479,11 @@ impl AgentTimelineDao {
                  LIMIT ?3
              )
              ORDER BY started_at ASC, id ASC",
-        )?;
+        ) {
+            Ok(stmt) => stmt,
+            Err(error) if is_missing_legacy_timeline_table(&error) => return Ok(Vec::new()),
+            Err(error) => return Err(error),
+        };
 
         let rows = stmt.query_map(params![thread_id, before_started_at, limit as i64], |row| {
             let status_raw: String = row.get(3)?;
@@ -474,7 +513,7 @@ impl AgentTimelineDao {
         let payload_json = serde_json::to_string(&payload_projection)
             .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
 
-        conn.execute(
+        let result = conn.execute(
             "INSERT INTO agent_thread_items (
                 id, session_id, turn_id, sequence, item_type, status, started_at,
                 completed_at, updated_at, payload_json
@@ -501,7 +540,13 @@ impl AgentTimelineDao {
                 item.updated_at,
                 payload_json,
             ],
-        )?;
+        );
+        if let Err(error) = result {
+            if is_missing_legacy_timeline_table(&error) {
+                return Ok(());
+            }
+            return Err(error);
+        }
         Ok(())
     }
 
@@ -509,12 +554,16 @@ impl AgentTimelineDao {
         conn: &Connection,
         item_id: &str,
     ) -> Result<Option<AgentThreadItem>, rusqlite::Error> {
-        let mut stmt = conn.prepare(
+        let mut stmt = match conn.prepare(
             "SELECT id, session_id, turn_id, sequence, status, started_at, completed_at,
                     updated_at, payload_json
              FROM agent_thread_items
              WHERE id = ?1",
-        )?;
+        ) {
+            Ok(stmt) => stmt,
+            Err(error) if is_missing_legacy_timeline_table(&error) => return Ok(None),
+            Err(error) => return Err(error),
+        };
 
         let mut rows = stmt.query(params![item_id])?;
         if let Some(row) = rows.next()? {
@@ -528,7 +577,7 @@ impl AgentTimelineDao {
         conn: &Connection,
         thread_id: &str,
     ) -> Result<Vec<AgentThreadItem>, rusqlite::Error> {
-        let mut stmt = conn.prepare(
+        let mut stmt = match conn.prepare(
             "SELECT id, session_id, turn_id, sequence, status, started_at, completed_at,
                     updated_at, payload_json
              FROM agent_thread_items
@@ -538,7 +587,11 @@ impl AgentTimelineDao {
                  FROM agent_thread_turns
                  WHERE agent_thread_turns.id = agent_thread_items.turn_id
              ) ASC, sequence ASC, id ASC",
-        )?;
+        ) {
+            Ok(stmt) => stmt,
+            Err(error) if is_missing_legacy_timeline_table(&error) => return Ok(Vec::new()),
+            Err(error) => return Err(error),
+        };
 
         let rows = stmt.query_map(params![thread_id], Self::row_to_item)?;
         rows.collect()
@@ -548,7 +601,7 @@ impl AgentTimelineDao {
         conn: &Connection,
         thread_id: &str,
     ) -> Result<Option<String>, rusqlite::Error> {
-        let mut stmt = conn.prepare(
+        let mut stmt = match conn.prepare(
             "SELECT id, session_id, turn_id, sequence, status, started_at, completed_at,
                     updated_at, payload_json
              FROM agent_thread_items
@@ -556,7 +609,11 @@ impl AgentTimelineDao {
                AND item_type = 'user_message'
              ORDER BY sequence ASC, started_at ASC, id ASC
              LIMIT 1",
-        )?;
+        ) {
+            Ok(stmt) => stmt,
+            Err(error) if is_missing_legacy_timeline_table(&error) => return Ok(None),
+            Err(error) => return Err(error),
+        };
 
         let mut rows = stmt.query(params![thread_id])?;
         let Some(row) = rows.next()? else {
@@ -611,7 +668,11 @@ impl AgentTimelineDao {
              )
              ORDER BY sort_started_at ASC, sequence ASC, id ASC",
         );
-        let mut stmt = conn.prepare(&sql)?;
+        let mut stmt = match conn.prepare(&sql) {
+            Ok(stmt) => stmt,
+            Err(error) if is_missing_legacy_timeline_table(&error) => return Ok(Vec::new()),
+            Err(error) => return Err(error),
+        };
 
         let rows = stmt.query_map(
             params![thread_id, limit as i64, offset as i64],
@@ -661,7 +722,11 @@ impl AgentTimelineDao {
              )
              ORDER BY sort_started_at ASC, sequence ASC, id ASC",
         );
-        let mut stmt = conn.prepare(&sql)?;
+        let mut stmt = match conn.prepare(&sql) {
+            Ok(stmt) => stmt,
+            Err(error) if is_missing_legacy_timeline_table(&error) => return Ok(Vec::new()),
+            Err(error) => return Err(error),
+        };
 
         let rows = stmt.query_map(
             params![thread_id, before_started_at, limit as i64],
@@ -708,12 +773,90 @@ mod tests {
     fn setup_conn() -> Connection {
         let conn = Connection::open_in_memory().expect("创建内存数据库失败");
         create_tables(&conn).expect("创建表结构失败");
+        create_test_legacy_timeline_tables(&conn).expect("创建 legacy timeline 测试表失败");
         conn.execute(
             "INSERT INTO agent_sessions (id, model, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
             params!["thread-1", "general:test", "2026-03-13T00:00:00Z", "2026-03-13T00:00:00Z"],
         )
         .unwrap();
         conn
+    }
+
+    fn setup_current_conn_without_legacy_timeline() -> Connection {
+        let conn = Connection::open_in_memory().expect("创建内存数据库失败");
+        create_tables(&conn).expect("创建表结构失败");
+        conn.execute(
+            "INSERT INTO agent_sessions (id, model, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
+            params!["thread-1", "general:test", "2026-03-13T00:00:00Z", "2026-03-13T00:00:00Z"],
+        )
+        .unwrap();
+        conn
+    }
+
+    fn create_test_legacy_timeline_tables(conn: &Connection) -> Result<(), rusqlite::Error> {
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS agent_thread_turns (
+                id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                prompt_text TEXT NOT NULL,
+                status TEXT NOT NULL,
+                started_at TEXT NOT NULL,
+                completed_at TEXT,
+                error_message TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )",
+            [],
+        )?;
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS agent_thread_items (
+                id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                turn_id TEXT NOT NULL,
+                sequence INTEGER NOT NULL,
+                item_type TEXT NOT NULL,
+                status TEXT NOT NULL,
+                started_at TEXT NOT NULL,
+                completed_at TEXT,
+                updated_at TEXT NOT NULL,
+                payload_json TEXT NOT NULL
+            )",
+            [],
+        )?;
+        Ok(())
+    }
+
+    #[test]
+    fn missing_legacy_timeline_tables_should_return_empty_projection() {
+        let conn = setup_current_conn_without_legacy_timeline();
+
+        AgentTimelineDao::create_turn(
+            &conn,
+            &AgentThreadTurn {
+                id: "turn-missing-table".to_string(),
+                thread_id: "thread-1".to_string(),
+                prompt_text: "旧表已退场".to_string(),
+                status: AgentThreadTurnStatus::Running,
+                started_at: "2026-03-13T01:00:00Z".to_string(),
+                completed_at: None,
+                error_message: None,
+                created_at: "2026-03-13T01:00:00Z".to_string(),
+                updated_at: "2026-03-13T01:00:00Z".to_string(),
+            },
+        )
+        .unwrap();
+
+        assert!(AgentTimelineDao::list_turns_by_thread(&conn, "thread-1")
+            .unwrap()
+            .is_empty());
+        assert!(AgentTimelineDao::list_items_by_thread(&conn, "thread-1")
+            .unwrap()
+            .is_empty());
+        assert!(
+            AgentTimelineDao::first_user_message_text_by_thread(&conn, "thread-1")
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]

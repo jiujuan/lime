@@ -20,9 +20,6 @@ interface SceneAppExecutionSummaryCardProps {
   latestReviewFeedbackSignal?: CuratedTaskRecommendationSignal | null;
   onContinueReviewFeedback?: (taskId: string) => void;
   onReviewCurrentProject?: () => void;
-  savedAsInspiration?: boolean;
-  onSaveAsInspiration?: () => void;
-  onOpenInspirationLibrary?: () => void;
   onSaveAsSkill?: () => void;
   onOpenSceneAppDetail?: () => void;
   onOpenSceneAppGovernance?: () => void;
@@ -191,9 +188,6 @@ export function SceneAppExecutionSummaryCard({
   latestReviewFeedbackSignal = null,
   onContinueReviewFeedback,
   onReviewCurrentProject,
-  savedAsInspiration = false,
-  onSaveAsInspiration,
-  onOpenInspirationLibrary,
   onSaveAsSkill,
   onOpenSceneAppDetail,
   onOpenSceneAppGovernance,
@@ -233,7 +227,6 @@ export function SceneAppExecutionSummaryCard({
       : t("sceneAppExecutionSummary.value.pending"));
   const hasFollowupSection = Boolean(
     onReviewCurrentProject ||
-    onSaveAsInspiration ||
     onSaveAsSkill ||
     onOpenSceneAppDetail ||
     onOpenSceneAppGovernance ||
@@ -657,28 +650,6 @@ export function SceneAppExecutionSummaryCard({
                   {t("sceneAppExecutionSummary.followup.action.reviewCurrent")}
                 </Button>
               ) : null}
-              {onSaveAsInspiration ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  data-testid="sceneapp-execution-summary-save-as-inspiration"
-                  disabled={savedAsInspiration}
-                  className={
-                    savedAsInspiration
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
-                      : undefined
-                  }
-                  onClick={onSaveAsInspiration}
-                >
-                  {savedAsInspiration
-                    ? t(
-                        "sceneAppExecutionSummary.followup.action.inspirationSaved",
-                      )
-                    : t(
-                        "sceneAppExecutionSummary.followup.action.saveInspiration",
-                      )}
-                </Button>
-              ) : null}
               {onSaveAsSkill ? (
                 <Button
                   type="button"
@@ -724,30 +695,6 @@ export function SceneAppExecutionSummaryCard({
                 </Button>
               ) : null}
             </div>
-            {savedAsInspiration ? (
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <p
-                  className="text-xs leading-5 text-emerald-700"
-                  data-testid="sceneapp-execution-summary-saved-inspiration-hint"
-                >
-                  {t("sceneAppExecutionSummary.followup.savedHint")}
-                </p>
-                {onOpenInspirationLibrary ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 rounded-full px-2 text-xs font-medium text-emerald-800 hover:bg-emerald-50 hover:text-emerald-900"
-                    data-testid="sceneapp-execution-summary-open-inspiration-library"
-                    onClick={onOpenInspirationLibrary}
-                  >
-                    {t(
-                      "sceneAppExecutionSummary.followup.action.openInspiration",
-                    )}
-                  </Button>
-                ) : null}
-              </div>
-            ) : null}
             {humanReviewAvailable && quickReviewActions.length ? (
               <div className="mt-4">
                 <div className="text-xs font-medium text-slate-500">

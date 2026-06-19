@@ -2,7 +2,15 @@ use crate::RuntimeCoreError;
 use crate::RuntimeEvent;
 use crate::RuntimeEventSink;
 use lime_agent::{AgentEvent as RuntimeAgentEvent, AgentToolResult};
+#[cfg(test)]
+use runtime_core::runtime_event_from_llm_event as runtime_core_event_from_llm_event;
 use serde_json::{json, Value};
+
+#[cfg(test)]
+pub(super) fn runtime_event_from_llm_event(event: &runtime_core::LlmEvent) -> RuntimeEvent {
+    let mapped = runtime_core_event_from_llm_event(event);
+    RuntimeEvent::new(mapped.event_type, mapped.payload)
+}
 
 pub(super) fn emit_runtime_agent_event(
     event: &RuntimeAgentEvent,
@@ -247,6 +255,33 @@ mod tests {
             events[1].payload["source"].as_str(),
             Some("runtime_tool_start")
         );
+    }
+
+    #[test]
+    fn llm_event_mapping_delegates_to_runtime_core_contract() {
+        let event = runtime_event_from_llm_event(&runtime_core::LlmEvent::OutputDelta {
+            part: runtime_core::LlmOutputPart::Text {
+                text: "hello".to_string(),
+            },
+        });
+
+        assert_eq!(event.event_type, "message.delta");
+        assert_eq!(event.payload["text"].as_str(), Some("hello"));
+        assert_eq!(event.payload["backend"].as_str(), Some("llm_protocol"));
+    }
+
+    #[test]
+    fn llm_tool_delta_uses_current_tool_args_delta_event() {
+        let event = runtime_event_from_llm_event(&runtime_core::LlmEvent::ToolCallDelta {
+            call_id: "call_1".to_string(),
+            name: "read_file".to_string(),
+            arguments_delta: "{\"path\"".to_string(),
+        });
+
+        assert_eq!(event.event_type, "tool.args.delta");
+        assert_eq!(event.payload["toolCallId"].as_str(), Some("call_1"));
+        assert_eq!(event.payload["toolName"].as_str(), Some("read_file"));
+        assert_eq!(event.payload["delta"].as_str(), Some("{\"path\""));
     }
 
     #[test]

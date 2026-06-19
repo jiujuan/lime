@@ -712,10 +712,6 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
     onNavigate?.("agent", buildHomeAgentParams());
   }, [onNavigate]);
 
-  const handleOpenInspiration = useCallback(() => {
-    onNavigate?.("memory");
-  }, [onNavigate]);
-
   const activeCategoryLabel = getCategoryLabel(viewCategory);
   const ActiveCategoryIcon = resourceCategoryIconMap[viewCategory];
 
@@ -919,17 +915,6 @@ export function ResourcesPage({ onNavigate, pageParams }: ResourcesPageProps) {
                   {t("workspace.resources.action.backToGenerate")}
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
-                {onNavigate ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="rounded-2xl border-slate-200 bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-900"
-                    onClick={handleOpenInspiration}
-                  >
-                    {t("workspace.resources.action.openInspiration")}
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Button>
-                ) : null}
               </div>
             </div>
           </section>

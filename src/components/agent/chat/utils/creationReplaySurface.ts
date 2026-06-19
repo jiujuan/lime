@@ -1,4 +1,4 @@
-import type { MemoryCategory } from "@/lib/api/unifiedMemory";
+import type { MemoryCategory } from "@/lib/memory/memoryReferenceTypes";
 import type { CuratedTaskReferenceEntry } from "./curatedTaskReferenceSelection";
 import type { CreationReplayMetadata } from "./creationReplayMetadata";
 import {

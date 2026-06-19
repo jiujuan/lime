@@ -181,7 +181,7 @@ describe("AgentChatPage 自动引导", { timeout: 20_000 }, () => {
           version: 1,
           kind: "memory_entry",
           source: {
-            page: "memory",
+            page: "memory_store",
             project_id: "project-creation-replay",
             entry_id: "memory-creation-replay",
           },

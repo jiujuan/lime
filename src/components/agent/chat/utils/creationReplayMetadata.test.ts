@@ -72,7 +72,7 @@ describe("buildMemoryEntryCreationReplayRequestMetadata", () => {
           version: 1,
           kind: "memory_entry",
           source: {
-            page: "memory",
+            page: "memory_store",
             project_id: "project-9",
             entry_id: "memory-2",
           },
@@ -97,7 +97,7 @@ describe("extractCreationReplayMetadata", () => {
           version: 1,
           kind: "memory_entry",
           source: {
-            page: "memory",
+            page: "memory_store",
             project_id: "project-12",
             entry_id: "memory-12",
           },

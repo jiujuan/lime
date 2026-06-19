@@ -1,5 +1,10 @@
 // @generated types re-export — 从 Rust JSON Schema 自动生成的类型定义
 // 新代码优先从这里导入类型；手写类型逐步迁移后将删除
+import type {
+  ConversationImportSourceClient as GeneratedConversationImportSourceClient,
+  ConversationImportSourceStatus as GeneratedConversationImportSourceStatus,
+  ConversationImportThreadStatus as GeneratedConversationImportThreadStatus,
+} from "./generated/protocol-types.js";
 export * from "./generated/protocol-types.js";
 export type {
   ExecutionProcessDrainOutputParams,
@@ -197,17 +202,12 @@ export const METHOD_MCP_PROMPT_GET = "mcpPrompt/get";
 export const METHOD_MCP_RESOURCE_LIST = "mcpResource/list";
 export const METHOD_MCP_RESOURCE_READ = "mcpResource/read";
 export const METHOD_PROJECT_MEMORY_READ = "projectMemory/read";
-export const METHOD_UNIFIED_MEMORY_LIST = "unifiedMemory/list";
-export const METHOD_UNIFIED_MEMORY_GET = "unifiedMemory/get";
-export const METHOD_UNIFIED_MEMORY_CREATE = "unifiedMemory/create";
-export const METHOD_UNIFIED_MEMORY_UPDATE = "unifiedMemory/update";
-export const METHOD_UNIFIED_MEMORY_DELETE = "unifiedMemory/delete";
-export const METHOD_UNIFIED_MEMORY_SEARCH = "unifiedMemory/search";
-export const METHOD_UNIFIED_MEMORY_STATS = "unifiedMemory/stats";
-export const METHOD_UNIFIED_MEMORY_ANALYZE = "unifiedMemory/analyze";
-export const METHOD_UNIFIED_MEMORY_SEMANTIC_SEARCH =
-  "unifiedMemory/semanticSearch";
-export const METHOD_UNIFIED_MEMORY_HYBRID_SEARCH = "unifiedMemory/hybridSearch";
+export const METHOD_MEMORY_STORE_LIST = "memoryStore/list";
+export const METHOD_MEMORY_STORE_READ = "memoryStore/read";
+export const METHOD_MEMORY_STORE_SEARCH = "memoryStore/search";
+export const METHOD_MEMORY_STORE_ADD_NOTE = "memoryStore/addNote";
+export const METHOD_MEMORY_STORE_HEALTH = "memoryStore/health";
+export const METHOD_MEMORY_STORE_RESET = "memoryStore/reset";
 export const METHOD_LOG_LIST = "log/list";
 export const METHOD_LOG_PERSISTED_TAIL = "log/persistedTail";
 export const METHOD_LOG_CLEAR = "log/clear";
@@ -352,6 +352,19 @@ export const METHOD_CONVERSATION_IMPORT_THREAD_COMMIT =
   "conversationImport/thread/commit";
 export const METHOD_CONVERSATION_IMPORT_THREAD_RUNTIME_EVENTS_READ =
   "conversationImport/thread/runtimeEvents/read";
+export const CONVERSATION_IMPORT_SOURCE_CLIENTS =
+  ["codex", "claude_code"] as const satisfies readonly GeneratedConversationImportSourceClient[];
+export const CONVERSATION_IMPORT_SOURCE_STATUSES = [
+  "ready",
+  "missing",
+  "unsupported",
+  "error",
+] as const satisfies readonly GeneratedConversationImportSourceStatus[];
+export const CONVERSATION_IMPORT_THREAD_STATUSES = [
+  "not_imported",
+  "imported",
+  "conflict",
+] as const satisfies readonly GeneratedConversationImportThreadStatus[];
 
 export type AppServerMethodKind = "request" | "notification";
 
@@ -535,16 +548,12 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_MCP_RESOURCE_LIST, kind: "request" },
   { method: METHOD_MCP_RESOURCE_READ, kind: "request" },
   { method: METHOD_PROJECT_MEMORY_READ, kind: "request" },
-  { method: METHOD_UNIFIED_MEMORY_LIST, kind: "request" },
-  { method: METHOD_UNIFIED_MEMORY_GET, kind: "request" },
-  { method: METHOD_UNIFIED_MEMORY_CREATE, kind: "request" },
-  { method: METHOD_UNIFIED_MEMORY_UPDATE, kind: "request" },
-  { method: METHOD_UNIFIED_MEMORY_DELETE, kind: "request" },
-  { method: METHOD_UNIFIED_MEMORY_SEARCH, kind: "request" },
-  { method: METHOD_UNIFIED_MEMORY_STATS, kind: "request" },
-  { method: METHOD_UNIFIED_MEMORY_ANALYZE, kind: "request" },
-  { method: METHOD_UNIFIED_MEMORY_SEMANTIC_SEARCH, kind: "request" },
-  { method: METHOD_UNIFIED_MEMORY_HYBRID_SEARCH, kind: "request" },
+  { method: METHOD_MEMORY_STORE_LIST, kind: "request" },
+  { method: METHOD_MEMORY_STORE_READ, kind: "request" },
+  { method: METHOD_MEMORY_STORE_SEARCH, kind: "request" },
+  { method: METHOD_MEMORY_STORE_ADD_NOTE, kind: "request" },
+  { method: METHOD_MEMORY_STORE_HEALTH, kind: "request" },
+  { method: METHOD_MEMORY_STORE_RESET, kind: "request" },
   { method: METHOD_LOG_LIST, kind: "request" },
   { method: METHOD_LOG_PERSISTED_TAIL, kind: "request" },
   { method: METHOD_LOG_CLEAR, kind: "request" },
@@ -3221,161 +3230,6 @@ export type ProjectMemoryReadResponse = {
   memory: unknown;
 };
 
-export type UnifiedMemoryType = "conversation" | "project";
-
-export type UnifiedMemoryCategory =
-  | "identity"
-  | "context"
-  | "preference"
-  | "experience"
-  | "activity";
-
-export type UnifiedMemorySource = "auto_extracted" | "manual" | "imported";
-
-export type UnifiedMemoryMetadata = {
-  confidence: number;
-  importance: number;
-  access_count: number;
-  last_accessed_at: number | null;
-  source: UnifiedMemorySource;
-  embedding: number[] | null;
-};
-
-export type UnifiedMemory = {
-  id: string;
-  session_id: string;
-  memory_type: UnifiedMemoryType;
-  category: UnifiedMemoryCategory;
-  title: string;
-  content: string;
-  summary: string;
-  tags: string[];
-  metadata: UnifiedMemoryMetadata;
-  created_at: number;
-  updated_at: number;
-  archived: boolean;
-};
-
-export type UnifiedMemoryListFilters = {
-  session_id?: string;
-  memory_type?: UnifiedMemoryType;
-  category?: UnifiedMemoryCategory;
-  archived?: boolean;
-  sort_by?: string;
-  order?: string;
-  offset?: number;
-  limit?: number;
-};
-
-export type UnifiedMemoryListParams = {
-  filters?: UnifiedMemoryListFilters | null;
-};
-
-export type UnifiedMemoryListResponse = {
-  memories: UnifiedMemory[];
-};
-
-export type UnifiedMemoryGetParams = {
-  id: string;
-};
-
-export type UnifiedMemoryGetResponse = {
-  memory: UnifiedMemory | null;
-};
-
-export type UnifiedMemoryCreateRequest = {
-  session_id: string;
-  title: string;
-  content: string;
-  summary: string;
-  category?: UnifiedMemoryCategory;
-  tags?: string[];
-  confidence?: number;
-  importance?: number;
-};
-
-export type UnifiedMemoryCreateParams = {
-  request: UnifiedMemoryCreateRequest;
-};
-
-export type UnifiedMemoryUpdateRequest = {
-  title?: string;
-  content?: string;
-  summary?: string;
-  tags?: string[];
-  confidence?: number;
-  importance?: number;
-};
-
-export type UnifiedMemoryUpdateParams = {
-  id: string;
-  request: UnifiedMemoryUpdateRequest;
-};
-
-export type UnifiedMemoryWriteResponse = {
-  memory: UnifiedMemory;
-};
-
-export type UnifiedMemoryDeleteParams = {
-  id: string;
-};
-
-export type UnifiedMemoryDeleteResponse = {
-  deleted: boolean;
-};
-
-export type UnifiedMemorySearchParams = {
-  query: string;
-  category?: UnifiedMemoryCategory;
-  limit?: number;
-};
-
-export type UnifiedMemoryAnalyzeParams = {
-  from_timestamp?: number;
-  to_timestamp?: number;
-};
-
-export type UnifiedMemoryAnalysisResponse = {
-  analyzed_sessions: number;
-  analyzed_messages: number;
-  generated_entries: number;
-  deduplicated_entries: number;
-};
-
-export type UnifiedMemorySemanticSearchOptions = {
-  query: string;
-  category?: UnifiedMemoryCategory;
-  min_similarity?: number;
-  limit?: number;
-};
-
-export type UnifiedMemorySemanticSearchParams = {
-  options: UnifiedMemorySemanticSearchOptions;
-};
-
-export type UnifiedMemoryHybridSearchOptions = {
-  query: string;
-  category?: UnifiedMemoryCategory;
-  semantic_weight: number;
-  keyword_weight?: number;
-  min_similarity?: number;
-  limit?: number;
-};
-
-export type UnifiedMemoryHybridSearchParams = {
-  options: UnifiedMemoryHybridSearchOptions;
-};
-
-export type UnifiedMemoryStatsResponse = {
-  total_entries: number;
-  storage_used: number;
-  memory_count: number;
-  categories: Array<{
-    category: UnifiedMemoryCategory;
-    count: number;
-  }>;
-};
-
 export type UsageStatsRangeParams = {
   timeRange: string;
 };
@@ -3549,6 +3403,9 @@ export type ConversationImportSourceSummary = {
   sourceRoot?: string;
   readable: boolean;
   threadCount: number;
+  sourceHomeExists: boolean;
+  stateDbReadable: boolean;
+  rolloutFileCount: number;
   indexedAt?: string;
   statePath?: string;
   message?: string;

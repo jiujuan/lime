@@ -6,6 +6,9 @@ export interface SearchResultPreviewItem {
   url: string;
   hostname: string;
   snippet?: string;
+  snapshotContent?: string;
+  snapshotTitle?: string;
+  snapshotSource?: "web_fetch";
 }
 
 const URL_PATTERN_SOURCE = String.raw`\bhttps?:\/\/[^\s<>"'\`]+`;

@@ -16,9 +16,9 @@ export interface ProviderModelFetchStatusCopy {
 }
 
 export interface ProviderModelFetchProfile {
-  id: string;
-  type: string;
-  api_host: string;
+  id?: string | null;
+  type?: string | null;
+  api_host?: string | null;
 }
 
 export function extractApiModelIds(
@@ -36,12 +36,16 @@ export function isResponsesImageModel(modelId: string): boolean {
   return normalized.includes("gpt-image") || normalized.includes("gpt-images");
 }
 
+function normalizeProfileField(value: unknown): string {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
 export function isFalProviderLike(
   provider: ProviderWithKeysDisplay | ProviderModelFetchProfile,
 ): boolean {
-  const providerId = provider.id.trim().toLowerCase();
-  const providerType = provider.type.trim().toLowerCase();
-  const apiHost = provider.api_host.trim().toLowerCase();
+  const providerId = normalizeProfileField(provider.id);
+  const providerType = normalizeProfileField(provider.type);
+  const apiHost = normalizeProfileField(provider.api_host);
 
   return (
     providerType === "fal" ||

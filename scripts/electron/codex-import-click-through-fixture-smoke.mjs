@@ -227,7 +227,11 @@ function summarizeReadModel(readResult) {
       (item) =>
         item?.type === "web_search" &&
         item?.id === "call_search" &&
-        item?.action === "search_query",
+        (String(item?.action || "").includes("search_query") ||
+          String(item?.tool_name || "").includes("web_search") ||
+          String(item?.output || item?.output_preview || "").includes(
+            "search_query",
+          )),
     ),
     hasApprovalItem: items.some(
       (item) =>
@@ -356,6 +360,8 @@ function summarizeImportedFilePreviewArtifacts(previewSummary) {
           htmlPreviewVisible: item.htmlPreviewVisible === true,
           codePreviewVisible: item.codePreviewVisible === true,
           emptySurfaceVisible: item.emptySurfaceVisible === true,
+          fallbackSurfaceVisible: item.fallbackSurfaceVisible === true,
+          fallbackRenderMode: item.fallbackRenderMode || "",
           htmlPreviewSrc: item.htmlPreviewSrc || "",
           bodyTextLength:
             typeof item.bodyText === "string" ? item.bodyText.length : 0,
@@ -371,6 +377,9 @@ function summarizeImportedFilePreviewArtifacts(previewSummary) {
     markdown: summarize(previewSummary.markdown),
     html: summarize(previewSummary.html),
     docx: summarize(previewSummary.docx),
+    xlsx: summarize(previewSummary.xlsx),
+    pptx: summarize(previewSummary.pptx),
+    pdf: summarize(previewSummary.pdf),
   };
 }
 
@@ -405,7 +414,9 @@ async function extractClickThroughSummary(
         traceRaw,
         errorRaw,
         bodyTextLength: bodyText.length,
-        hasDialogPreview: bodyText.includes("导入细节还原"),
+        hasDialogPreview: bodyText.includes(
+          "将保留工具、命令、补丁、确认与思考记录",
+        ),
         hasImportedSourceTaskRail: bodyText.includes(sourceThreadId),
         hasImportedUserMessage: bodyText.includes(importedUserText),
         hasImportedAssistantMessage: bodyText.includes(importedAssistantText),

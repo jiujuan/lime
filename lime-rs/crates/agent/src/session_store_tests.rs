@@ -56,7 +56,60 @@ impl Drop for EnvGuard {
 fn create_test_db() -> DbConnection {
     let conn = rusqlite::Connection::open_in_memory().expect("open in-memory db");
     schema::create_tables(&conn).expect("create tables");
+    create_test_legacy_agent_messages_table(&conn).expect("create test legacy agent_messages");
     Arc::new(Mutex::new(conn))
+}
+
+fn create_test_legacy_agent_messages_table(
+    conn: &rusqlite::Connection,
+) -> Result<(), rusqlite::Error> {
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS agent_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            role TEXT NOT NULL,
+            content_json TEXT NOT NULL,
+            timestamp TEXT NOT NULL,
+            tool_calls_json TEXT,
+            tool_call_id TEXT,
+            reasoning_content TEXT
+        )",
+        [],
+    )?;
+    Ok(())
+}
+
+fn create_test_legacy_timeline_tables(conn: &rusqlite::Connection) -> Result<(), rusqlite::Error> {
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS agent_thread_turns (
+            id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            prompt_text TEXT NOT NULL,
+            status TEXT NOT NULL,
+            started_at TEXT NOT NULL,
+            completed_at TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS agent_thread_items (
+            id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            turn_id TEXT NOT NULL,
+            sequence INTEGER NOT NULL,
+            item_type TEXT NOT NULL,
+            status TEXT NOT NULL,
+            started_at TEXT NOT NULL,
+            completed_at TEXT,
+            updated_at TEXT NOT NULL,
+            payload_json TEXT NOT NULL
+        )",
+        [],
+    )?;
+    Ok(())
 }
 
 fn insert_test_workspace(db: &DbConnection, workspace_id: &str, root_path: &str) {
@@ -1404,6 +1457,7 @@ fn get_session_sync_with_full_timeline_without_messages_should_skip_messages() {
 
     {
         let conn = db.lock().expect("lock db");
+        create_test_legacy_timeline_tables(&conn).expect("create test legacy timeline");
         AgentTimelineDao::create_turn(
             &conn,
             &AgentThreadTurn {

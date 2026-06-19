@@ -28,6 +28,8 @@ import {
   openHtmlPreviewWindow,
   openPathWithDefaultApp,
 } from "@/lib/api/fileSystem";
+import { openExternalUrlWithSystemBrowser } from "@/lib/api/externalUrl";
+import { resolveHttpExternalHref } from "@/lib/markdown/externalLinks";
 import { hasDesktopHostInvokeCapability } from "@/lib/desktop-runtime";
 import type { Artifact } from "@/lib/artifact/types";
 import { resolveArtifactWritePhase } from "@/components/agent/chat/utils/messageArtifacts";
@@ -280,6 +282,19 @@ function shouldOpenWithSystemApp(artifact: Artifact): boolean {
   return resolvePreviewArtifactRenderMode(artifact) === "system_open";
 }
 
+function resolvePreviewArtifactExternalUrl(artifact: Artifact): string | null {
+  if (readStringMeta(artifact.meta, "source") !== "url") {
+    return null;
+  }
+
+  return (
+    resolveHttpExternalHref(readStringMeta(artifact.meta, "sourceRef")) ||
+    resolveHttpExternalHref(readStringMeta(artifact.meta, "sourcePath")) ||
+    resolveHttpExternalHref(readStringMeta(artifact.meta, "url")) ||
+    resolveHttpExternalHref(artifact.content.trim())
+  );
+}
+
 function resolveArtifactLocalSourcePath(artifact: Artifact): string | null {
   const candidatePaths = [
     readStringMeta(artifact.meta, "filePath"),
@@ -494,6 +509,12 @@ export const ArtifactToolbar: React.FC<ArtifactToolbarProps> = memo(
      * @requirements 13.4
      */
     const handleOpenInWindow = useCallback(async () => {
+      const externalUrl = resolvePreviewArtifactExternalUrl(artifact);
+      if (externalUrl) {
+        await openExternalUrlWithSystemBrowser(externalUrl);
+        return;
+      }
+
       if (shouldOpenWithSystemApp(artifact)) {
         const sourcePath = resolveArtifactLocalSourcePath(artifact);
         if (sourcePath) {

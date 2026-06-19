@@ -7,7 +7,7 @@ describe("buildCreationReplaySurfaceModel", () => {
       version: 1,
       kind: "memory_entry",
       source: {
-        page: "memory",
+        page: "memory_store",
         project_id: "project-1",
         entry_id: "memory-identity-1",
       },
@@ -42,7 +42,7 @@ describe("buildCreationReplaySurfaceModel", () => {
       version: 1,
       kind: "memory_entry",
       source: {
-        page: "memory",
+        page: "memory_store",
         project_id: "project-2",
       },
       data: {

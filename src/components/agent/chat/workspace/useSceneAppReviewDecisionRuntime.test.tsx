@@ -5,10 +5,8 @@ import type {
   AgentRuntimeReviewDecisionTemplate,
   AgentRuntimeSaveReviewDecisionRequest,
 } from "@/lib/api/agentRuntime";
-import type { UnifiedMemory } from "@/lib/api/unifiedMemory";
 import type { SceneAppExecutionSummaryViewModel } from "@/lib/agent/legacySceneAppExecutionSummary";
 import {
-  recordCuratedTaskRecommendationSignalFromMemory,
   recordCuratedTaskRecommendationSignalFromReviewDecision,
 } from "../utils/curatedTaskRecommendationSignals";
 import {
@@ -20,7 +18,6 @@ import type { SceneAppExecutionSummaryRuntimeState } from "./useSceneAppExecutio
 
 const exportAgentRuntimeReviewDecisionTemplateMock = vi.fn();
 const saveAgentRuntimeReviewDecisionMock = vi.fn();
-const createUnifiedMemoryMock = vi.fn();
 
 vi.mock("sonner", () => ({
   toast: {
@@ -39,11 +36,6 @@ vi.mock("@/lib/api/agentRuntime", () => ({
     request: AgentRuntimeSaveReviewDecisionRequest,
   ): Promise<AgentRuntimeReviewDecisionTemplate> =>
     saveAgentRuntimeReviewDecisionMock(request),
-}));
-
-vi.mock("@/lib/api/unifiedMemory", () => ({
-  createUnifiedMemory: (request: unknown): Promise<unknown> =>
-    createUnifiedMemoryMock(request),
 }));
 
 type HookProps = UseSceneAppReviewDecisionRuntimeParams;
@@ -108,33 +100,6 @@ function createRuntimeState(
     },
     loading: false,
     requestRefresh: vi.fn(),
-  };
-}
-
-function createUnifiedMemory(
-  overrides: Partial<UnifiedMemory> = {},
-): UnifiedMemory {
-  return {
-    id: "memory-1",
-    session_id: "session-1",
-    memory_type: "project",
-    category: "experience",
-    title: "公众号选题 · 样本偏少",
-    content: "灵感内容",
-    summary: "灵感摘要",
-    tags: ["选题"],
-    metadata: {
-      confidence: 0.9,
-      importance: 8,
-      access_count: 0,
-      last_accessed_at: null,
-      source: "manual",
-      embedding: null,
-    },
-    created_at: Date.now(),
-    updated_at: Date.now(),
-    archived: false,
-    ...overrides,
   };
 }
 
@@ -220,7 +185,6 @@ describe("useSceneAppReviewDecisionRuntime", () => {
     window.localStorage.clear();
     exportAgentRuntimeReviewDecisionTemplateMock.mockReset();
     saveAgentRuntimeReviewDecisionMock.mockReset();
-    createUnifiedMemoryMock.mockReset();
   });
 
   afterEach(() => {
@@ -335,26 +299,6 @@ describe("useSceneAppReviewDecisionRuntime", () => {
         title: "公众号选题 · 继续观察",
       }),
     );
-  });
-
-  it("推荐信号变化后会重新计算灵感保存状态", () => {
-    const summary = createSummary();
-    renderHook({
-      sceneAppExecutionSummaryState: createRuntimeState(summary),
-    });
-    expect(latest?.savedAsInspiration).toBe(false);
-
-    act(() => {
-      recordCuratedTaskRecommendationSignalFromMemory(
-        createUnifiedMemory(),
-        {
-          projectId: "project-1",
-          sessionId: "session-1",
-        },
-      );
-    });
-
-    expect(latest?.savedAsInspiration).toBe(true);
   });
 
   it("能从最新人工复核信号进入 Skill 沉淀页", () => {

@@ -94,6 +94,17 @@ export interface ConversationProjectionStore {
 
 const MAX_STREAM_DIAGNOSTICS = 500;
 const MAX_AGENT_UI_PROJECTION_EVENTS = 1000;
+const CANONICAL_TOOL_SOURCE_TYPES = new Set([
+  "item_started",
+  "item_updated",
+  "item_completed",
+]);
+const LEGACY_TOOL_LIFECYCLE_EVENT_TYPES = new Set([
+  "tool.started",
+  "tool.args",
+  "tool.result",
+  "tool.failed",
+]);
 
 function createInitialState(): ConversationProjectionState {
   return {
@@ -113,6 +124,64 @@ function normalizeSessionKey(
   diagnostic: Pick<ConversationStreamDiagnostic, "sessionId" | "requestId">,
 ): string | null {
   return diagnostic.sessionId ?? diagnostic.requestId ?? null;
+}
+
+function toolEventScopeKey(event: AgentUiProjectionEvent): string | null {
+  if (!event.toolCallId) {
+    return null;
+  }
+  return [
+    event.sessionId ?? "",
+    event.threadId ?? "",
+    event.turnId ?? "",
+    event.toolCallId,
+  ].join("\u001f");
+}
+
+function isCanonicalToolEvent(event: AgentUiProjectionEvent): boolean {
+  return (
+    event.owner === "tool" &&
+    event.scope === "tool_call" &&
+    Boolean(event.toolCallId) &&
+    CANONICAL_TOOL_SOURCE_TYPES.has(event.sourceType)
+  );
+}
+
+function isLegacyToolLifecycleEvent(event: AgentUiProjectionEvent): boolean {
+  return (
+    event.owner === "tool" &&
+    event.scope === "tool_call" &&
+    Boolean(event.toolCallId) &&
+    !CANONICAL_TOOL_SOURCE_TYPES.has(event.sourceType) &&
+    LEGACY_TOOL_LIFECYCLE_EVENT_TYPES.has(event.type)
+  );
+}
+
+function normalizeAgentUiProjectionEventsForItemFirstToolLifecycle(
+  events: AgentUiProjectionEvent[],
+): AgentUiProjectionEvent[] {
+  const canonicalToolKeys = new Set<string>();
+  for (const event of events) {
+    if (!isCanonicalToolEvent(event)) {
+      continue;
+    }
+    const key = toolEventScopeKey(event);
+    if (key) {
+      canonicalToolKeys.add(key);
+    }
+  }
+
+  return events.filter((event) => {
+    const key = toolEventScopeKey(event);
+    if (
+      isLegacyToolLifecycleEvent(event) &&
+      key &&
+      canonicalToolKeys.has(key)
+    ) {
+      return false;
+    }
+    return true;
+  });
 }
 
 export function createConversationProjectionStore(): ConversationProjectionStore {
@@ -175,7 +244,11 @@ export function createConversationProjectionStore(): ConversationProjectionStore
         return [];
       }
 
-      const nextEvents = [...state.agentUi.events, ...events];
+      const recorded = normalizeAgentUiProjectionEventsForItemFirstToolLifecycle([
+        ...state.agentUi.events,
+        ...events,
+      ]);
+      const nextEvents = recorded;
       if (nextEvents.length > MAX_AGENT_UI_PROJECTION_EVENTS) {
         nextEvents.splice(
           0,
@@ -193,7 +266,7 @@ export function createConversationProjectionStore(): ConversationProjectionStore
         },
       };
       emit();
-      return events;
+      return events.filter((event) => nextEvents.includes(event));
     },
 
     clearAgentUiProjectionEvents() {

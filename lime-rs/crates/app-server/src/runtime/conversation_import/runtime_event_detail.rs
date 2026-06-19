@@ -7,7 +7,7 @@ use app_server_protocol::{
 use serde::Deserialize;
 use serde_json::Value;
 
-const DEFAULT_LIMIT: usize = 200;
+const DEFAULT_LIMIT: usize = 50;
 const MAX_LIMIT: usize = 1_000;
 
 #[derive(Debug, Deserialize)]
@@ -58,6 +58,12 @@ pub(super) async fn read_conversation_import_runtime_events(
         .filter(|value| !value.is_empty())
         .map(str::to_string);
 
+    let projection_source_runtime_events = projection_usize(&projection, "sourceRuntimeEvents");
+    let projection_materialized_runtime_events =
+        projection_usize(&projection, "materializedRuntimeEvents").unwrap_or(0);
+    let projection_sidecar_runtime_events = projection_usize(&projection, "sidecarRuntimeEvents");
+    let can_use_projection_total = params.turn_index.is_none() && event_type_filter.is_none();
+
     let mut filtered_total = 0usize;
     let mut events = Vec::new();
     for (source_event_index, line) in content.lines().enumerate() {
@@ -94,21 +100,30 @@ pub(super) async fn read_conversation_import_runtime_events(
             });
         }
         filtered_total += 1;
+        if can_use_projection_total
+            && events.len() >= limit
+            && projection_source_runtime_events.is_some()
+        {
+            break;
+        }
     }
 
-    let next_offset = (offset + events.len() < filtered_total).then_some(offset + events.len());
-    let source_runtime_events =
-        projection_usize(&projection, "sourceRuntimeEvents").unwrap_or(filtered_total);
-    let materialized_runtime_events =
-        projection_usize(&projection, "materializedRuntimeEvents").unwrap_or(0);
-    let sidecar_runtime_events = projection_usize(&projection, "sidecarRuntimeEvents")
+    let total_events = if can_use_projection_total {
+        projection_source_runtime_events.unwrap_or(filtered_total)
+    } else {
+        filtered_total
+    };
+    let next_offset = (offset + events.len() < total_events).then_some(offset + events.len());
+    let source_runtime_events = projection_source_runtime_events.unwrap_or(total_events);
+    let materialized_runtime_events = projection_materialized_runtime_events;
+    let sidecar_runtime_events = projection_sidecar_runtime_events
         .unwrap_or_else(|| source_runtime_events.saturating_sub(materialized_runtime_events));
 
     Ok(ConversationImportThreadRuntimeEventsReadResponse {
         session_id,
         offset,
         limit,
-        total_events: filtered_total,
+        total_events,
         next_offset,
         source_runtime_events,
         materialized_runtime_events,

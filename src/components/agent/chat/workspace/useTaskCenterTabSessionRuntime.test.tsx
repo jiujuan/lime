@@ -192,6 +192,37 @@ describe("useTaskCenterTabSessionRuntime", () => {
     });
   });
 
+  it("new-task 初始路由也会替换当前工作区标签，避免会话回到首页", () => {
+    const persisted: TaskCenterWorkspaceTabMap = {
+      "workspace-a": ["old-topic"],
+    };
+    window.localStorage.setItem(
+      TASK_CENTER_OPEN_TAB_IDS_STORAGE_KEY,
+      JSON.stringify(persisted),
+    );
+
+    const state = renderHarness({
+      agentEntry: "new-task",
+      normalizedInitialSessionId: "topic-a",
+      sessionId: "topic-a",
+      topics: [createTopic("topic-a")],
+    });
+
+    expect(state.runtime.taskCenterOpenTabIds).toEqual(["topic-a"]);
+    expect(state.runtime.isTaskCenterEntry).toBe(true);
+  });
+
+  it("new-task 路由 session 暂未成为已知 topic 时同样标记 detached", () => {
+    renderHarness({
+      agentEntry: "new-task",
+      normalizedInitialSessionId: "topic-missing",
+      sessionId: "topic-missing",
+      topics: [],
+    });
+
+    expect(latest?.runtime.taskCenterDetachedTopicId).toBe("topic-missing");
+  });
+
   it("可维护打开标签、嵌入 home 标记和本地 session override", () => {
     renderHarness({
       topics: [createTopic("topic-a"), createTopic("topic-b"), createTopic("topic-c")],

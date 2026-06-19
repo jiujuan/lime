@@ -1,7 +1,7 @@
 import type {
   MemorySoulArtifactVoiceConfig,
   MemorySoulConfig,
-} from "@/lib/api/memoryRuntimeTypes";
+} from "@/lib/api/memoryConfigTypes";
 
 export type SoulImportWarningCode =
   | "empty"

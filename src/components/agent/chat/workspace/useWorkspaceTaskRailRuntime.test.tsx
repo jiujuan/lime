@@ -44,8 +44,7 @@ function renderHook(initialProps?: Partial<HookProps>) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
-  let latestValue: ReturnType<typeof useWorkspaceTaskRailRuntime> | null =
-    null;
+  let latestValue: ReturnType<typeof useWorkspaceTaskRailRuntime> | null = null;
   const defaultProps = createBaseProps(initialProps);
 
   function Probe(props: HookProps) {
@@ -354,6 +353,25 @@ describe("useWorkspaceTaskRailRuntime", () => {
 
     expect(getValue().workflowSteps).toEqual([]);
     expect(getValue().todoItems).toBe(todoItems);
+  });
+
+  it("应透传导入会话运行态供任务中心显示完整记录入口", async () => {
+    const executionRuntime = {
+      session_id: "session-imported",
+      source_client: "codex",
+      imported_thread_settings: {
+        cwd: "/tmp/project-1",
+      },
+      source: "session" as const,
+    };
+    const { render, getValue } = renderHook({
+      sessionId: "session-imported",
+      executionRuntime,
+    });
+
+    await render();
+
+    expect(getValue().executionRuntime).toBe(executionRuntime);
   });
 
   it("打开输出时应先按工作区根目录解析相对路径", async () => {

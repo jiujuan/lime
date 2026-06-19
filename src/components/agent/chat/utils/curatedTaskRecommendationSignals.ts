@@ -2,14 +2,17 @@ import type {
   AgentRuntimeReviewDecisionStatus,
   AgentRuntimeSaveReviewDecisionRequest,
 } from "@/lib/api/agentRuntime";
-import type { MemoryCategory, UnifiedMemory } from "@/lib/api/unifiedMemory";
+import type {
+  MemoryCategory,
+  MemoryReferenceRecord,
+} from "@/lib/memory/memoryReferenceTypes";
 import {
   getCuratedTaskReferenceFallbackTitle,
   type CuratedTaskReferenceEntry,
 } from "./curatedTaskReferenceSelection";
 
 export type CuratedTaskRecommendationSignalSource =
-  | "saved_inspiration"
+  | "memory_reference"
   | "active_reference"
   | "review_feedback";
 
@@ -30,7 +33,7 @@ interface StoredCuratedTaskRecommendationSignal extends CuratedTaskRecommendatio
 }
 
 const CURATED_TASK_RECOMMENDATION_SIGNAL_STORAGE_KEY =
-  "lime:curated-task-recommendation-signals:v1";
+  "lime:curated-task-recommendation-signals:v2";
 const CURATED_TASK_RECOMMENDATION_SIGNAL_MAX_RECORDS = 24;
 const CURATED_TASK_RECOMMENDATION_SIGNAL_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -158,7 +161,7 @@ function isStoredSignal(
     typeof signal.key === "string" &&
     signal.key.length > 0 &&
     typeof signal.source === "string" &&
-    (signal.source === "saved_inspiration" ||
+    (signal.source === "memory_reference" ||
       signal.source === "active_reference" ||
       signal.source === "review_feedback") &&
     isMemoryCategory(signal.category) &&
@@ -265,15 +268,15 @@ export function subscribeCuratedTaskRecommendationSignalsChanged(
   };
 }
 
-export function buildCuratedTaskRecommendationSignalFromMemory(
-  memory: UnifiedMemory,
+export function buildCuratedTaskRecommendationSignalFromMemoryReference(
+  memory: MemoryReferenceRecord,
   options: {
     projectId?: string | null;
     sessionId?: string | null;
   } = {},
 ): CuratedTaskRecommendationSignal {
   return {
-    source: "saved_inspiration",
+    source: "memory_reference",
     category: memory.category,
     title:
       normalizeOptionalText(memory.title) ||
@@ -425,15 +428,15 @@ export function recordCuratedTaskRecommendationSignal(
   emitSignalsChanged();
 }
 
-export function recordCuratedTaskRecommendationSignalFromMemory(
-  memory: UnifiedMemory,
+export function recordCuratedTaskRecommendationSignalFromMemoryReference(
+  memory: MemoryReferenceRecord,
   options: {
     projectId?: string | null;
     sessionId?: string | null;
   } = {},
 ): void {
   recordCuratedTaskRecommendationSignal(
-    buildCuratedTaskRecommendationSignalFromMemory(memory, options),
+    buildCuratedTaskRecommendationSignalFromMemoryReference(memory, options),
   );
 }
 

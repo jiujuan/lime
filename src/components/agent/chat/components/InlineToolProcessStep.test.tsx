@@ -3,7 +3,9 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { InlineToolProcessStep } from "./InlineToolProcessStep";
 import type { AgentToolCallState as ToolCallState } from "@/lib/api/agentProtocol";
+import { openExternalUrlWithSystemBrowser } from "@/lib/api/externalUrl";
 import { changeLimeLocale } from "@/i18n/createI18n";
+import type { SearchResultPreviewItem } from "../utils/searchResultPreview";
 
 vi.mock("@/lib/api/externalUrl", () => ({
   openExternalUrlWithSystemBrowser: vi.fn().mockResolvedValue(undefined),
@@ -24,6 +26,8 @@ interface RenderOptions {
   isMessageStreaming?: boolean;
   onFileClick?: (fileName: string, content: string) => void;
   onOpenSavedSiteContent?: (target: unknown) => void;
+  onOpenUrlPreview?: (item: SearchResultPreviewItem) => void;
+  urlPreviewToolCalls?: ToolCallState[];
 }
 
 const mountedRoots: RenderResult[] = [];
@@ -43,6 +47,8 @@ function renderTool(
         isMessageStreaming={options?.isMessageStreaming}
         onFileClick={options?.onFileClick}
         onOpenSavedSiteContent={options?.onOpenSavedSiteContent}
+        onOpenUrlPreview={options?.onOpenUrlPreview}
+        urlPreviewToolCalls={options?.urlPreviewToolCalls}
       />,
     );
   });
@@ -110,6 +116,162 @@ describe("InlineToolProcessStep", () => {
 
     expect(container.textContent).toContain("实时输出：正在运行 12 个测试用例");
     expect(container.textContent).not.toContain("进度：正在处理第 2 项");
+  });
+
+  it("工具过程摘要应随当前语言切换，不硬编码中文", async () => {
+    await changeLimeLocale("en-US");
+
+    const { container } = renderTool({
+      id: "tool-streaming-output-i18n-1",
+      name: "mcp__runner__execute",
+      arguments: JSON.stringify({ command: "npm test" }),
+      status: "running",
+      result: {
+        success: true,
+        output: "running 12 tests",
+      },
+      progress: {
+        message: "processing item 2",
+        progress: 2,
+        total: 4,
+      },
+      metadata: {
+        execution_origin: "preload",
+        skill_title: "analysis",
+      },
+      startTime: new Date("2026-05-09T10:00:00.000Z"),
+    });
+
+    expect(container.textContent).toContain("Live output: running 12 tests");
+    expect(container.textContent).toContain("System pre-run");
+    expect(container.textContent).toContain("Skill: analysis");
+    expect(container.textContent).not.toContain("实时输出");
+    expect(container.textContent).not.toContain("系统预执行");
+  });
+
+  it("高频工具过程摘要应随当前语言切换", async () => {
+    await changeLimeLocale("en-US");
+
+    const toolSearch = renderTool({
+      id: "tool-summary-i18n-search-tool",
+      name: "ToolSearch",
+      arguments: JSON.stringify({ query: "select:Read,Write" }),
+      status: "completed",
+      result: {
+        success: true,
+        output: JSON.stringify({
+          query: "select:Read,Write",
+          count: 2,
+          notes: [],
+          tools: [{ name: "Read" }, { name: "Write" }],
+        }),
+      },
+      startTime: new Date("2026-05-09T10:01:00.000Z"),
+      endTime: new Date("2026-05-09T10:01:01.000Z"),
+    });
+    expect(toolSearch.container.textContent).toContain(
+      "2 available tools confirmed",
+    );
+    expect(toolSearch.container.textContent).not.toContain("已确认可用工具");
+
+    const webFetch = renderTool({
+      id: "tool-summary-i18n-fetch-failed",
+      name: "WebFetch",
+      arguments: JSON.stringify({ url: "https://example.com/unavailable" }),
+      status: "failed",
+      result: {
+        success: false,
+        error: "404 Not Found",
+        output: "",
+      },
+      startTime: new Date("2026-05-09T10:02:00.000Z"),
+      endTime: new Date("2026-05-09T10:02:01.000Z"),
+    });
+    expect(webFetch.container.textContent).toContain(
+      "Source temporarily unavailable",
+    );
+    expect(webFetch.container.textContent).not.toContain("来源暂时无法读取");
+
+    const command = renderTool({
+      id: "tool-summary-i18n-command",
+      name: "Bash",
+      arguments: JSON.stringify({ command: "git status --short" }),
+      status: "running",
+      startTime: new Date("2026-05-09T10:03:00.000Z"),
+    });
+    expect(command.container.textContent).toContain(
+      "Checking workspace state first",
+    );
+    expect(command.container.textContent).not.toContain("先确认工作区状态");
+
+    const browser = renderTool({
+      id: "tool-summary-i18n-browser",
+      name: "mcp__playwright__browser_navigate",
+      arguments: JSON.stringify({ url: "https://example.com/page" }),
+      status: "running",
+      startTime: new Date("2026-05-09T10:04:00.000Z"),
+    });
+    expect(browser.container.textContent).toContain("Opening example.com");
+    expect(browser.container.textContent).not.toContain("先打开");
+  });
+
+  it("任务、技能、MCP 与计划过程摘要应随当前语言切换", async () => {
+    await changeLimeLocale("en-US");
+
+    const skill = renderTool({
+      id: "tool-summary-i18n-skill",
+      name: "Skill",
+      arguments: JSON.stringify({ name: "analysis" }),
+      status: "running",
+      startTime: new Date("2026-05-09T10:05:00.000Z"),
+    });
+    expect(skill.container.textContent).toContain(
+      "Executing Skill analysis first",
+    );
+    expect(skill.container.textContent).not.toContain("先执行技能");
+
+    const taskCreate = renderTool({
+      id: "tool-summary-i18n-task-create",
+      name: "TaskCreateTool",
+      arguments: JSON.stringify({ title: "Daily trends" }),
+      status: "completed",
+      startTime: new Date("2026-05-09T10:06:00.000Z"),
+      endTime: new Date("2026-05-09T10:06:01.000Z"),
+    });
+    expect(taskCreate.container.textContent).toContain("Started Daily trends");
+    expect(taskCreate.container.textContent).not.toContain("已开始");
+
+    const mcpResources = renderTool({
+      id: "tool-summary-i18n-mcp-resources",
+      name: "ListMcpResourcesTool",
+      arguments: JSON.stringify({ server: "docs" }),
+      status: "completed",
+      startTime: new Date("2026-05-09T10:07:00.000Z"),
+      endTime: new Date("2026-05-09T10:07:01.000Z"),
+    });
+    expect(mcpResources.container.textContent).toContain("Reviewed docs");
+    expect(mcpResources.container.textContent).not.toContain("已查看");
+
+    const mcpAuth = renderTool({
+      id: "tool-summary-i18n-mcp-auth",
+      name: "McpAuthTool",
+      status: "completed",
+      startTime: new Date("2026-05-09T10:08:00.000Z"),
+      endTime: new Date("2026-05-09T10:08:01.000Z"),
+    });
+    expect(mcpAuth.container.textContent).toContain(
+      "MCP authorization completed",
+    );
+    expect(mcpAuth.container.textContent).not.toContain("已完成 MCP 授权");
+
+    const updatePlan = renderTool({
+      id: "tool-summary-i18n-update-plan",
+      name: "update_plan",
+      status: "running",
+      startTime: new Date("2026-05-09T10:09:00.000Z"),
+    });
+    expect(updatePlan.container.textContent).toContain("Updating plan first");
+    expect(updatePlan.container.textContent).not.toContain("先更新计划");
   });
 
   it("ToolSearch 在流式阶段应保持结构化预览，不自动展开原始 JSON", () => {
@@ -425,27 +587,31 @@ describe("InlineToolProcessStep", () => {
     expect(container.textContent).not.toContain("默认可见");
   });
 
-  it("WebSearch 展开后应优先展示搜索结果列表", () => {
-    const { container } = renderTool({
-      id: "tool-search-web-1",
-      name: "WebSearch",
-      arguments: JSON.stringify({ query: "AI Agent 最新热点" }),
-      status: "completed",
-      result: {
-        success: true,
-        output: [
-          "Xinhua world news summary at 0030 GMT, March 13",
-          "https://example.com/xinhua",
-          "全球要闻摘要，覆盖国际局势与市场动态。",
-          "",
-          "Friday morning news: March 13, 2026 | WORLD - wng.org",
-          "https://example.com/wng",
-          "补充国际动态与区域冲突更新。",
-        ].join("\n"),
+  it("WebSearch 展开后应优先展示搜索结果列表并打开 URL 预览", () => {
+    const onOpenUrlPreview = vi.fn();
+    const { container } = renderTool(
+      {
+        id: "tool-search-web-1",
+        name: "WebSearch",
+        arguments: JSON.stringify({ query: "AI Agent 最新热点" }),
+        status: "completed",
+        result: {
+          success: true,
+          output: [
+            "Xinhua world news summary at 0030 GMT, March 13",
+            "https://example.com/xinhua",
+            "全球要闻摘要，覆盖国际局势与市场动态。",
+            "",
+            "Friday morning news: March 13, 2026 | WORLD - wng.org",
+            "https://example.com/wng",
+            "补充国际动态与区域冲突更新。",
+          ].join("\n"),
+        },
+        startTime: new Date("2026-04-13T10:20:00.000Z"),
+        endTime: new Date("2026-04-13T10:20:01.000Z"),
       },
-      startTime: new Date("2026-04-13T10:20:00.000Z"),
-      endTime: new Date("2026-04-13T10:20:01.000Z"),
-    });
+      { onOpenUrlPreview },
+    );
 
     act(() => {
       const toggle = container.querySelector(
@@ -459,12 +625,99 @@ describe("InlineToolProcessStep", () => {
         '[aria-label="预览搜索结果：Xinhua world news summary at 0030 GMT, March 13"]',
       ),
     ).not.toBeNull();
+    act(() => {
+      const firstResult = document.body.querySelector(
+        '[aria-label="预览搜索结果：Xinhua world news summary at 0030 GMT, March 13"]',
+      ) as HTMLButtonElement | null;
+      firstResult?.click();
+    });
+
+    expect(onOpenUrlPreview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Xinhua world news summary at 0030 GMT, March 13",
+        url: "https://example.com/xinhua",
+        snippet: "全球要闻摘要，覆盖国际局势与市场动态。",
+      }),
+    );
+    expect(openExternalUrlWithSystemBrowser).not.toHaveBeenCalled();
     expect(container.textContent).toContain(
       "Friday morning news: March 13, 2026 | WORLD - wng.org",
     );
     expect(
       container.querySelector('[data-testid="markdown-renderer"]'),
     ).toBeNull();
+  });
+
+  it("WebSearch 点击 URL 预览时应复用同组 WebFetch 正文快照", () => {
+    const onOpenUrlPreview = vi.fn();
+    const { container } = renderTool(
+      {
+        id: "tool-search-web-with-fetch-1",
+        name: "WebSearch",
+        arguments: JSON.stringify({ query: "国际新闻" }),
+        status: "completed",
+        result: {
+          success: true,
+          output: JSON.stringify({
+            results: [
+              {
+                title: "Reuters World News",
+                url: "https://www.reuters.com/world/",
+                snippet: "搜索结果摘要",
+              },
+            ],
+          }),
+        },
+        startTime: new Date("2026-06-18T10:20:00.000Z"),
+        endTime: new Date("2026-06-18T10:20:01.000Z"),
+      },
+      {
+        onOpenUrlPreview,
+        urlPreviewToolCalls: [
+          {
+            id: "tool-fetch-reuters-1",
+            name: "WebFetch",
+            arguments: JSON.stringify({
+              url: "https://www.reuters.com/world/",
+            }),
+            status: "completed",
+            result: {
+              success: true,
+              output: JSON.stringify({
+                title: "Reuters snapshot",
+                markdown: "# Reuters snapshot\n\n正文来自 WebFetch。",
+              }),
+            },
+            startTime: new Date("2026-06-18T10:20:02.000Z"),
+            endTime: new Date("2026-06-18T10:20:03.000Z"),
+          },
+        ],
+      },
+    );
+
+    act(() => {
+      const toggle = container.querySelector(
+        'button[title="展开过程详情"]',
+      ) as HTMLButtonElement | null;
+      toggle?.click();
+    });
+    act(() => {
+      const result = document.body.querySelector(
+        '[aria-label="预览搜索结果：Reuters World News"]',
+      ) as HTMLButtonElement | null;
+      result?.click();
+    });
+
+    expect(onOpenUrlPreview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Reuters World News",
+        url: "https://www.reuters.com/world/",
+        snippet: "搜索结果摘要",
+        snapshotTitle: "Reuters snapshot",
+        snapshotContent: "# Reuters snapshot\n\n正文来自 WebFetch。",
+        snapshotSource: "web_fetch",
+      }),
+    );
   });
 
   it("WebSearch 协议错误应展示可操作提示，并保留原始错误供排查", () => {
@@ -776,7 +1029,7 @@ describe("InlineToolProcessStep", () => {
     );
 
     expect(container.textContent).toContain(
-      "已保存到当前项目：Google Cloud 周报",
+      "结果已自动保存到当前项目：Google Cloud 周报",
     );
     expect(container.textContent).toContain("已导出 Markdown 文稿");
     expect(container.textContent).toContain("附带图片 3 张");
@@ -804,5 +1057,48 @@ describe("InlineToolProcessStep", () => {
         relativePath: "exports/social-article/google-cloud/index.md",
       },
     });
+  });
+
+  it("站点保存提示应随当前语言切换", async () => {
+    await changeLimeLocale("en-US");
+    const { container } = renderTool(
+      {
+        id: "tool-inline-site-run-i18n-1",
+        name: "lime_site_run",
+        arguments: JSON.stringify({
+          adapter_name: "x/article",
+          args: { url: "https://x.com/google/article/1" },
+        }),
+        status: "completed",
+        result: {
+          success: true,
+          output: "ok",
+          metadata: {
+            tool_family: "site",
+            saved_content: {
+              content_id: "content-inline-site-i18n-1",
+              project_id: "project-inline-site-i18n-1",
+              title: "Google Cloud weekly",
+              markdown_relative_path:
+                "exports/social-article/google-cloud/index.md",
+              image_count: 3,
+            },
+            saved_by: "context_project",
+          },
+        },
+        startTime: new Date("2026-04-13T10:40:00.000Z"),
+        endTime: new Date("2026-04-13T10:40:01.000Z"),
+      },
+      { onOpenSavedSiteContent: vi.fn() },
+    );
+
+    expect(container.textContent).toContain(
+      "Result saved to current project: Google Cloud weekly",
+    );
+    expect(container.textContent).toContain("Markdown draft exported");
+    expect(container.textContent).toContain("3 images attached");
+    expect(container.textContent).toContain("Preview exported Markdown below");
+    expect(container.textContent).not.toContain("已保存到当前项目");
+    expect(container.textContent).not.toContain("附带图片");
   });
 });

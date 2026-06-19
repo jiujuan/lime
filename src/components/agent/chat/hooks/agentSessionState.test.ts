@@ -478,6 +478,95 @@ describe("agentSessionState", () => {
     });
   });
 
+  it("同会话 hydrate 时远端短正文片段不应截断本地已完成 assistant 输出", () => {
+    const currentMessages = [
+      createMessage({
+        id: "local-user-search",
+        role: "user",
+        content: "帮我分析一下学习机怎么选",
+        timestamp: new Date("2026-06-18T08:30:00.000Z"),
+      }),
+      createMessage({
+        id: "local-assistant-search",
+        role: "assistant",
+        content:
+          "根据我的搜索结果，建议优先比较权威评测、教材覆盖、护眼能力和售后渠道，再决定是否购买科大讯飞。",
+        timestamp: new Date("2026-06-18T08:30:20.000Z"),
+        contentParts: [
+          {
+            type: "tool_use",
+            toolCall: {
+              id: "tool-websearch-learning-device",
+              name: "WebSearch",
+              arguments: '{"query":"学习机 权威评测对比"}',
+              status: "completed",
+              startTime: new Date("2026-06-18T08:30:01.000Z"),
+              endTime: new Date("2026-06-18T08:30:05.000Z"),
+              result: {
+                success: true,
+                output: "https://example.com/review",
+              },
+            },
+          },
+          {
+            type: "text",
+            text: "根据我的搜索结果，建议优先比较权威评测、教材覆盖、护眼能力和售后渠道，再决定是否购买科大讯飞。",
+          },
+        ],
+      }),
+      createMessage({
+        id: "local-user-follow",
+        role: "user",
+        content: "T30 Pro 和 T90 有什么区别呢",
+        timestamp: new Date("2026-06-18T08:31:00.000Z"),
+      }),
+    ];
+    const detail = {
+      id: "topic-search",
+      created_at: 1700000000,
+      updated_at: 1700000001,
+      messages: [
+        {
+          role: "user",
+          timestamp: 1781767800,
+          content: [{ type: "text", text: "帮我分析一下学习机怎么选" }],
+        },
+        {
+          role: "assistant",
+          timestamp: 1781767820,
+          content: [{ type: "text", text: "根据我" }],
+        },
+        {
+          role: "user",
+          timestamp: 1781767860,
+          content: [{ type: "text", text: "T30 Pro 和 T90 有什么区别呢" }],
+        },
+      ],
+    } satisfies AsterSessionDetail;
+
+    const result = buildHydratedAgentSessionSnapshot({
+      topicId: "topic-search",
+      detail,
+      currentSessionId: "topic-search",
+      currentMessages,
+      currentThreadTurns: [],
+      currentThreadItems: [],
+      currentExecutionRuntime: null,
+      currentExecutionStrategy: "react",
+      topics: [],
+    });
+
+    expect(result.snapshot.messages[1]?.content).toContain("建议优先比较");
+    expect(result.snapshot.messages[1]?.content).not.toBe("根据我");
+    expect(result.snapshot.messages[1]?.contentParts?.at(-1)).toMatchObject({
+      type: "text",
+      text: expect.stringContaining("售后渠道"),
+    });
+    expect(result.snapshot.messages[2]?.content).toBe(
+      "T30 Pro 和 T90 有什么区别呢",
+    );
+  });
+
   it("同会话 hydrate 保护本地 timeline 时仍应合入 App Server thread_read.tool_calls", () => {
     const currentMessages = [
       createMessage({

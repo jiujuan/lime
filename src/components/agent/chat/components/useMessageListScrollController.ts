@@ -31,7 +31,7 @@ export function useMessageListAutoScroll({
     const previousVisibleMessageCount = previousVisibleMessageCountRef.current;
     previousVisibleMessageCountRef.current = renderedMessageCount;
 
-    if ((!shouldAutoScroll && !isSending) || !scrollRef.current) {
+    if (!shouldAutoScroll || !scrollRef.current) {
       return;
     }
 
@@ -66,7 +66,13 @@ export function useMessageListScrollController() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isUserScrolling, setIsUserScrolling] = useState(false);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
+  const shouldAutoScrollRef = useRef(true);
   const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const setAutoScrollEnabled = useCallback((value: boolean) => {
+    shouldAutoScrollRef.current = value;
+    setShouldAutoScroll(value);
+  }, []);
 
   const markUserScrolling = useCallback(() => {
     setIsUserScrolling(true);
@@ -89,11 +95,14 @@ export function useMessageListScrollController() {
 
     const handleScroll = () => {
       markUserScrolling();
-      setShouldAutoScroll(isNearScrollBottom(container));
+      setAutoScrollEnabled(isNearScrollBottom(container));
     };
 
-    const handleWheel = () => {
+    const handleWheel = (event: WheelEvent) => {
       markUserScrolling();
+      if (event.deltaY < 0) {
+        setAutoScrollEnabled(false);
+      }
     };
 
     container.addEventListener("scroll", handleScroll, { passive: true });
@@ -108,7 +117,7 @@ export function useMessageListScrollController() {
         scrollTimeoutRef.current = null;
       }
     };
-  }, [markUserScrolling]);
+  }, [markUserScrolling, setAutoScrollEnabled]);
 
   const scrollToTail = useCallback((behavior: "auto" | "smooth") => {
     scrollRef.current?.scrollIntoView({
@@ -122,7 +131,11 @@ export function useMessageListScrollController() {
       return;
     }
 
-    setShouldAutoScroll(true);
+    if (!shouldAutoScrollRef.current) {
+      return;
+    }
+
+    setAutoScrollEnabled(true);
 
     const run = () => scrollToTail("auto");
 
@@ -132,7 +145,7 @@ export function useMessageListScrollController() {
     }
 
     run();
-  }, [scrollToTail]);
+  }, [scrollToTail, setAutoScrollEnabled]);
 
   return {
     containerRef,

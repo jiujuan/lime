@@ -1,5 +1,8 @@
 import { AppServerClient } from "@/lib/api/appServer";
 import {
+  CONVERSATION_IMPORT_SOURCE_CLIENTS,
+  CONVERSATION_IMPORT_SOURCE_STATUSES,
+  CONVERSATION_IMPORT_THREAD_STATUSES,
   METHOD_CONVERSATION_IMPORT_SOURCE_SCAN,
   METHOD_CONVERSATION_IMPORT_THREAD_COMMIT,
   METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW,
@@ -39,9 +42,15 @@ export type {
 
 type ConversationImportAppServerClient = Pick<AppServerClient, "request">;
 
-const SOURCE_CLIENTS = new Set(["codex", "claude_code"]);
-const SOURCE_STATUSES = new Set(["ready", "missing", "unsupported", "error"]);
-const THREAD_STATUSES = new Set(["not_imported", "imported", "conflict"]);
+const SOURCE_CLIENTS = new Set<ConversationImportSourceClient>(
+  CONVERSATION_IMPORT_SOURCE_CLIENTS,
+);
+const SOURCE_STATUSES = new Set<ConversationImportSourceStatus>(
+  CONVERSATION_IMPORT_SOURCE_STATUSES,
+);
+const THREAD_STATUSES = new Set<ConversationImportThreadStatus>(
+  CONVERSATION_IMPORT_THREAD_STATUSES,
+);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -49,6 +58,24 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === "string";
+}
+
+function isConversationImportSourceClient(
+  value: unknown,
+): value is ConversationImportSourceClient {
+  return typeof value === "string" && SOURCE_CLIENTS.has(value);
+}
+
+function isConversationImportSourceStatus(
+  value: unknown,
+): value is ConversationImportSourceStatus {
+  return typeof value === "string" && SOURCE_STATUSES.has(value);
+}
+
+function isConversationImportThreadStatus(
+  value: unknown,
+): value is ConversationImportThreadStatus {
+  return typeof value === "string" && THREAD_STATUSES.has(value);
 }
 
 function isAgentSession(value: unknown): boolean {
@@ -71,7 +98,7 @@ function isImportedThreadSummary(
     return false;
   }
   return (
-    SOURCE_CLIENTS.has(String(value.sourceClient)) &&
+    isConversationImportSourceClient(value.sourceClient) &&
     typeof value.sourceThreadId === "string" &&
     isOptionalString(value.title) &&
     isOptionalString(value.createdAt) &&
@@ -81,7 +108,7 @@ function isImportedThreadSummary(
     isOptionalString(value.modelProvider) &&
     typeof value.archived === "boolean" &&
     isOptionalString(value.sourcePath) &&
-    THREAD_STATUSES.has(String(value.importStatus)) &&
+    isConversationImportThreadStatus(value.importStatus) &&
     (value.metadata === undefined ||
       value.metadata === null ||
       typeof value.metadata !== "function")
@@ -100,7 +127,7 @@ function isSourceProvenance(
   }
   return (
     isRecord(value) &&
-    SOURCE_CLIENTS.has(String(value.sourceClient)) &&
+    isConversationImportSourceClient(value.sourceClient) &&
     isOptionalString(value.sourceThreadId) &&
     isOptionalString(value.sourcePath) &&
     isOptionalString(value.sourceEventType) &&
@@ -201,11 +228,14 @@ function assertConversationImportSourceScanResponse(
   }
   const { source } = value;
   if (
-    !SOURCE_CLIENTS.has(String(source.sourceClient)) ||
-    !SOURCE_STATUSES.has(String(source.status)) ||
+    !isConversationImportSourceClient(source.sourceClient) ||
+    !isConversationImportSourceStatus(source.status) ||
     !isOptionalString(source.sourceRoot) ||
     typeof source.readable !== "boolean" ||
     typeof source.threadCount !== "number" ||
+    typeof source.sourceHomeExists !== "boolean" ||
+    typeof source.stateDbReadable !== "boolean" ||
+    typeof source.rolloutFileCount !== "number" ||
     !isOptionalString(source.indexedAt) ||
     !isOptionalString(source.statePath) ||
     !isOptionalString(source.message) ||

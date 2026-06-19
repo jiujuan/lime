@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, Check, LoaderCircle, Sparkles } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ArrowRight, Check, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,15 +21,12 @@ import {
   type CuratedTaskTemplateItem,
 } from "@/components/agent/chat/utils/curatedTaskTemplates";
 import { formatNumber } from "@/i18n/format";
-import { listUnifiedMemories } from "@/lib/api/unifiedMemory";
 import { cn } from "@/lib/utils";
 import {
   listCuratedTaskRecommendationSignals,
-  subscribeCuratedTaskRecommendationSignalsChanged,
 } from "@/components/agent/chat/utils/curatedTaskRecommendationSignals";
 import {
   buildCuratedTaskLaunchInputPrefillFromReferenceEntries,
-  buildCuratedTaskReferenceEntries,
   extractCuratedTaskReferenceMemoryIds,
   getCuratedTaskReferenceSourceLabel,
   mergeCuratedTaskReferenceEntries,
@@ -109,14 +106,6 @@ export function CuratedTaskLauncherDialog({
   const [selectedReferenceEntryIds, setSelectedReferenceEntryIds] = useState<
     string[]
   >([]);
-  const [isReferenceEntriesLoading, setIsReferenceEntriesLoading] =
-    useState(false);
-  const [referenceEntriesError, setReferenceEntriesError] = useState<
-    string | null
-  >(null);
-  const [referenceEntriesVersion, setReferenceEntriesVersion] = useState(0);
-  const selectedReferenceEntryIdsRef = useRef<string[]>([]);
-
   const seededReferenceEntries = useMemo(
     () => mergeCuratedTaskReferenceEntries(initialReferenceEntries ?? []),
     [initialReferenceEntries],
@@ -129,16 +118,6 @@ export function CuratedTaskLauncherDialog({
       ]) ?? [],
     [initialReferenceMemoryIds, seededReferenceEntries],
   );
-
-  useEffect(() => {
-    return subscribeCuratedTaskRecommendationSignalsChanged(() => {
-      setReferenceEntriesVersion((previous) => previous + 1);
-    });
-  }, []);
-
-  useEffect(() => {
-    selectedReferenceEntryIdsRef.current = selectedReferenceEntryIds;
-  }, [selectedReferenceEntryIds]);
 
   useEffect(() => {
     if (!task || !open) {
@@ -162,79 +141,12 @@ export function CuratedTaskLauncherDialog({
     if (!task || !open) {
       setReferenceEntries([]);
       setSelectedReferenceEntryIds([]);
-      setIsReferenceEntriesLoading(false);
-      setReferenceEntriesError(null);
       return;
     }
 
     setReferenceEntries(seededReferenceEntries);
     setSelectedReferenceEntryIds(seededReferenceEntryIds);
-    setReferenceEntriesError(null);
   }, [open, seededReferenceEntries, seededReferenceEntryIds, task]);
-
-  useEffect(() => {
-    if (!task || !open) {
-      setIsReferenceEntriesLoading(false);
-      return;
-    }
-
-    setIsReferenceEntriesLoading(true);
-    setReferenceEntriesError(null);
-
-    let cancelled = false;
-
-    void listUnifiedMemories({
-      archived: false,
-      sort_by: "updated_at",
-      order: "desc",
-      limit: 12,
-    })
-      .then((memories) => {
-        if (cancelled) {
-          return;
-        }
-
-        setReferenceEntries((current) => {
-          const selectedReferenceEntries = current.filter((entry) =>
-            selectedReferenceEntryIdsRef.current.includes(entry.id),
-          );
-
-          return mergeCuratedTaskReferenceEntries([
-            ...seededReferenceEntries,
-            ...selectedReferenceEntries,
-            ...buildCuratedTaskReferenceEntries(memories),
-          ]);
-        });
-      })
-      .catch(() => {
-        if (cancelled) {
-          return;
-        }
-
-        setReferenceEntries((current) => {
-          const selectedReferenceEntries = current.filter((entry) =>
-            selectedReferenceEntryIdsRef.current.includes(entry.id),
-          );
-
-          return mergeCuratedTaskReferenceEntries([
-            ...seededReferenceEntries,
-            ...selectedReferenceEntries,
-          ]);
-        });
-        setReferenceEntriesError(t("curatedTask.launcher.reference.loadError"));
-      })
-      .finally(() => {
-        if (cancelled) {
-          return;
-        }
-
-        setIsReferenceEntriesLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [open, referenceEntriesVersion, seededReferenceEntries, task, t]);
 
   const {
     isLaunchDisabled,
@@ -630,14 +542,7 @@ export function CuratedTaskLauncherDialog({
                   ) : null}
                 </div>
 
-                {isReferenceEntriesLoading ? (
-                  <div className="mt-4 flex items-center gap-2 rounded-[18px] border border-dashed border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
-                    <LoaderCircle className="h-4 w-4 animate-spin text-slate-500" />
-                    {t("curatedTask.launcher.reference.loading")}
-                  </div>
-                ) : null}
-
-                {!isReferenceEntriesLoading && referenceEntries.length > 0 ? (
+                {referenceEntries.length > 0 ? (
                   <div className="mt-4 grid gap-2.5">
                     {referenceEntries.map((entry) => {
                       const selected = selectedReferenceEntryIds.includes(
@@ -749,17 +654,9 @@ export function CuratedTaskLauncherDialog({
                   </div>
                 ) : null}
 
-                {!isReferenceEntriesLoading &&
-                referenceEntries.length === 0 &&
-                !referenceEntriesError ? (
+                {referenceEntries.length === 0 ? (
                   <div className="mt-4 rounded-[18px] border border-dashed border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
                     {t("curatedTask.launcher.reference.empty")}
-                  </div>
-                ) : null}
-
-                {referenceEntriesError ? (
-                  <div className="mt-4 rounded-[18px] border border-dashed border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                    {referenceEntriesError}
                   </div>
                 ) : null}
 

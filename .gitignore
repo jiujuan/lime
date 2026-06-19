@@ -74,6 +74,9 @@ internal/roadmap/db/**
 !internal/roadmap/coding/
 internal/roadmap/coding/**
 !internal/roadmap/coding/*.md
+!internal/roadmap/turn/
+internal/roadmap/turn/**
+!internal/roadmap/turn/*.md
 !internal/roadmap/agent-workspace/
 internal/roadmap/agent-workspace/**
 !internal/roadmap/agent-workspace/*.md

@@ -1,239 +1,213 @@
-# 灵感库 / 记忆系统实施计划
+# Lime 文件化记忆实施计划
 
-> 状态：current rollout plan  
-> 更新时间：2026-05-01  
-> 目标：用小步收口方式，把当前混合型 MemoryPage 演进成普通用户灵感库与高级记忆诊断两层，而不打断 current 记忆主链。
+> 状态：current rollout plan
+> 更新时间：2026-06-18
+> 目标：用小步交付把 Lime 记忆主线收敛到文件化 memory store，清理旧记忆 / 旧灵感库 surface，并保留 Soul 交互配置。
 
 ## 1. 实施原则
 
-1. 先分层，不重写底层。
-2. 先用户控制，再自动保存。
-3. 先稳定结果闭环，再扩多模态导入。
-4. 先隐藏诊断默认入口，不删除诊断能力。
-5. 每一刀都必须继续收敛到 `unified_memory_*` / `memory_runtime_*`。
-6. Active memory、raw hit layer、auto organization、external provider 先走开发者面板，默认关闭。
+1. 先定 store 和 backend 合同，再删除旧入口。
+2. 先让 summary 注入稳定，再开放工具读取。
+3. 先文本搜索和 citation，再考虑派生索引。
+4. 旧记忆和旧灵感库数据不批量导入为新事实源。
+5. Soul 保留在 `memory.soul` 配置层，不并入长期记忆文件。
+6. 派生索引损坏时必须可降级。
+7. 不在本路线图继续扩展旧灵感库、active recall、external provider。
 
-## 2. Phase 0：口径和路线图落盘
+## 2. Phase 0：文档和事实源收口
 
 目标：
 
-1. 固定 Claude Code 架构参考与 Lime 前台差异。
-2. 建立 research 与 roadmap 双事实源。
-3. 明确普通用户层和高级诊断层。
-4. 明确 Ribbi 是产品形态北极星，Claude Code / OpenClaw / Hermes 是底层架构参考。
-5. 明确高级记忆能力默认关闭，而不是不建设。
+1. 删除旧“更像我 / companion / taste layer”扩展路线。
+2. 把 memory roadmap 改成文件化记忆单主线。
+3. 明确 `unified_memory_*` / `memory_runtime_*` / 旧灵感库为 dead / cleanup surface。
+4. 明确 Soul 是 current 交互配置，不是旧 companion 桌宠。
+5. 明确向量数据库只是未来派生索引候选。
 
 主产物：
 
-1. `internal/research/memory/README.md`
-2. `internal/research/memory/inspiration-library-memory-research.md`
-3. `internal/roadmap/memory/README.md`
-4. `internal/roadmap/memory/prd.md`
-5. `internal/roadmap/memory/architecture.md`
-6. `internal/roadmap/memory/diagrams.md`
-7. `internal/roadmap/memory/rollout-plan.md`
-8. `internal/roadmap/memory/acceptance.md`
-
-验收：
-
-- research 只解释竞品与方向判断。
-- roadmap 给出 PRD、架构、图谱、实施和验收。
-- 文档只把 `internal/research/memory` 当 current research 路径。
-
-## 3. Phase 1：普通灵感库与高级诊断 IA 分离
-
-目标：
-
-1. `MemoryPage` 默认只展示灵感库前台层。
-2. 底层来源链、working memory、Team Memory、compaction、命中历史移入开发者面板 / 高级入口或折叠诊断面。
-3. active memory recall preview、raw source / hit layer、auto organization experiments 默认关闭。
-4. 侧栏 / 主导航继续只叫 `灵感库`。
-
-建议改动：
-
-1. 增加普通模式 section：`home / style / reference / outcome / preference / collection / pending`。
-2. 增加高级模式入口：`diagnostics` 或设置页高级开关。
-3. 增加开发者面板开关：`memory diagnostics`、`active memory recall preview`、`auto organization experiments`、`raw source / hit layer`。
-4. 保留旧诊断组件，但从普通默认路径移出。
-5. 更新测试，断言普通页面不出现底层术语，且高级开关默认关闭。
-
-不做：
-
-1. 不改 `memory_runtime_*`。
-2. 不改 `unified_memory_*` 数据模型。
-3. 不删除诊断能力。
-4. 不默认启用 active recall 或自动整理实验。
+1. `README.md`
+2. `prd.md`
+3. `architecture.md`
+4. `diagrams.md`
+5. `rollout-plan.md`
+6. `acceptance.md`
 
 验证：
 
 ```bash
-npm exec vitest run "src/components/memory/MemoryPage.test.tsx"
-npx eslint "src/components/memory/MemoryPage.tsx" "src/components/memory/MemoryPage.test.tsx"
+rg -n "make-next-generation-more-like-me|active memory|external memory provider|lime-rs/src" "internal/roadmap/memory"
+rg -n "Soul|SOUL|soul|companion" "internal/roadmap/memory"
 ```
 
-如果主导航或 GUI 主路径明显变化，再补：
+预期：
 
-```bash
-npm run verify:gui-smoke
-```
+1. 不出现外部项目名或旧数据搬入口径。
+2. 旧主线词只出现在 dead / 非目标 / 清理说明中。
+3. Soul 出现在 current 和验收边界中；`companion_*` 只作为 dead 出现。
 
-## 4. Phase 2：用户控制闭环
+## 3. Phase 1：Memory Store、Backend 合同与 Soul 保留
 
 目标：
 
-1. 灵感条目支持编辑、删除、禁用。
-2. 禁用条目不进入默认 reference selection。
-3. 删除条目不再被推荐信号引用。
-4. 每条灵感展示普通用户可理解的影响说明。
+1. 定义 memory folder layout。
+2. 定义 `MemoryBackend` request / response。
+3. 实现本地文件系统 backend。
+4. 建立 path traversal、symlink、hidden path 防护。
+5. 保持 `memory.soul` 配置读写、模板、`SOUL.md` 导入 / 复制能力。
+
+建议落点：
+
+1. App Server / RuntimeCore current 主链。
+2. 新增领域模块命名用 `memory_store` / `memory_tools`，不新增品牌前缀。
+3. 路径解析复用统一 app path / workspace path 边界。
+4. Soul 复用现有 `MemorySoulConfig` 和 `src/lib/soul/soulConfig.ts` 契约。
+
+最小测试：
+
+1. list/read/search/add note 单元测试。
+2. symlink / traversal / hidden path 拒绝测试。
+3. 非 UTF-8 文件跳过测试。
+4. `SOUL.md` 导入预览、warning、应用草稿、复制输出测试。
+5. artifact voice brief 不写长期记忆测试。
+
+## 4. Phase 2：Summary 注入与 Memory Tools
+
+当前进度：
+
+1. 已完成 `memory_summary.md` prompt contributor：`RuntimeCore` 在 turn start 前通过 `MemoryAppDataSource::read_memory_store` 读取 summary，写入 `runtime_options.metadata.memory_store_prompt_context`，`runtime_backend` 在合成 system prompt 时追加受控 memory block。
+2. 已覆盖空 summary 不注入、读取失败不阻塞、workspace scope 优先、summary block 标识为长期记忆且不是用户本轮输入。
+3. 已完成 Soul 交互 contributor：运行时读取保存后的 `memory.soul` 配置，注入受控交互片段；不读取、不引用 `SOUL.md` 路径。
+4. 已完成 dedicated memory tools 注册：`RuntimeBackend` 通过 App Server current `AppDataSource / MemoryAppDataSource` 注入 `memory_list`、`memory_read`、`memory_search`、`memory_add_note` native tools，避免只存在 catalog 的假入口。
+5. 尚未完成 tool telemetry 的持久化与 GUI 展示增强；当前工具结果已经通过 tool result metadata 返回 path / citation / truncated / nextCursor。
+
+目标：
+
+1. thread start / turn start 注入截断后的 `memory_summary.md`。
+2. 注册 dedicated memory tools。
+3. 工具输出带 citation 字段。
+4. prompt 指令约束 quick memory pass，避免无界搜索。
+5. Soul 作为交互 contributor 注入受控片段。
 
 建议改动：
 
-1. 在 projection view model 增加 `influenceState`、`influenceReason`、`nextActions`。
-2. 给 `UnifiedMemory` 增加统一 metadata 状态约定，或先在现有 metadata 中保守承接。
-3. 更新 `buildCuratedTaskReferenceEntries(...)` 过滤 disabled / archived / pending。
-4. 删除后清理或忽略关联 recommendation signal。
+1. Prompt contributor 只读 summary。
+2. Tool contributor 挂到 App Server current runtime。
+3. Tool telemetry 记录 tool name、path scope、truncated。
+4. 前端或 GUI 只展示工具结果，不自行读取 memory folder。
+5. 专家 persona 只继承 Soul 的 `communication_rhythm`，不回写全局 Soul。
 
-风险：
+最小测试：
 
-- 如果状态仅存在前端缓存，会与 runtime recall 分叉。
-- 因此状态必须进入统一持久层或统一 metadata 约定。
+1. 空 summary 不注入。
+2. 长 summary 截断。
+3. `memory_search` 分页和 `matchMode`。
+4. `memory_read` 的 `lineOffset / maxLines / maxTokens`。
+5. Soul 关闭时不注入交互片段。
+6. expert persona metadata 不包含 `SOUL.md` 文件路径。
 
-验证：
-
-```bash
-npm exec vitest run "src/components/memory/MemoryPage.test.tsx" "src/components/agent/chat/utils/curatedTaskReferenceSelection.test.ts"
-npx eslint "src/components/memory/MemoryPage.tsx" "src/components/agent/chat/utils/curatedTaskReferenceSelection.ts"
-```
-
-如新增命令或改变 `unified_memory_*` 协议，补：
+如涉及 App Server JSON-RPC 或前端 API 网关，补：
 
 ```bash
 npm run test:contracts
 ```
 
-## 5. Phase 3：自动整理待确认队列
+## 5. Phase 3：旧记忆与旧灵感库清理
+
+当前进度：
+
+1. 旧 `src/components/memory/**` 混合 MemoryPage、旧灵感保存 helper、旧 `unifiedMemory` / `memoryRuntime` 前端网关、旧 memory feedback 前端侧链已删除。
+2. 旧 `lime-rs/crates/memory/**` SQLite memory crate、App Server 旧 `local_data_source/unified_memory.rs` 和旧 `processor/unified.rs` 已删除。
+3. `legacySurfaceCatalog` 与 `memoryStore.current-boundary.test.ts` 已把上述路径标记为 `dead / forbidden-to-restore`。
+4. 旧 MemoryPage 的 `memoryLibrary.*` 多语言资源已删除，并由 `memoryStore.current-boundary.test.ts` 防回流。
+5. 旧数据不迁移，不批量导入 memory store canonical content。
 
 目标：
 
-1. 自动抽取候选先进入待整理。
-2. 用户确认后才进入正式灵感库。
-3. 支持新建、合并、更新、忽略、删除候选。
-4. 候选显示来源摘要与建议理由。
+1. 删除 `unified_memory_*` 产品入口和新增写入入口。
+2. 删除 `memory_runtime_*` 默认 recall 入口。
+3. 删除旧 MemoryPage 灵感库 / 高级诊断混合入口。
+4. 为暂未物理删除的旧命令名、旧 UI 入口和旧 provider 口径补负向守卫。
 
 建议改动：
 
-1. 定义 `pending_review` 状态。
-2. 把自动抽取与显式保存区分开。
-3. 给 Memory 页面新增待整理视图。
-4. 抽取 prompt 明确“不要保存可由当前项目状态推导出的事实”。
-5. 敏感候选默认不自动 active。
-6. 借鉴 OpenClaw Dreaming：auto organization / dreaming 实验默认 off，开启后也只写待整理候选和可审阅摘要。
-7. 借鉴 Hermes：候选写入前做 injection / secret scan。
+1. 旧入口 fail-fast，而不是继续做数据导入或只读续命。
+2. 旧 embedding 只保留到物理删除窗口，不进入 canonical file。
+3. 删除前保留必要 retired guard。
+4. 清理报告记录 remaining references、owner 和删除条件。
 
-风险：
+退出条件：
 
-- 自动整理容易制造噪音。
-- Phase 3 必须先做阈值和去重，不能全量保存历史。
+1. `unified_memory_*` 不再作为产品入口、写入入口或旁路事实源。
+2. runtime 不再依赖 `memory_runtime_*` 做默认 recall。
+3. 旧灵感库页面、旧 API 和旧 provider 口径不再服务业务流程。
+4. `companion_*` 不再出现在 current 文档、命令目录或 GUI 主路径中。
+5. `npm run governance:legacy-report` 中 memory 相关条目只允许表现为已删除、零引用或显式 retired guard；若出现 production 引用，必须先处理再继续 memory tools / Soul 注入。
 
-验证：
-
-```bash
-npm exec vitest run "src/components/memory/MemoryPage.test.tsx" "src/lib/api/unifiedMemory.test.ts"
-```
-
-如改 Rust 抽取逻辑，补相关 `cargo test` 定向测试。
-
-## 6. Phase 4：生成闭环强化
+## 6. Phase 4：用户控制与 Reset
 
 目标：
 
-1. 所有高价值结果都能保存到灵感库。
-2. 从灵感库继续生成统一进入 shared launcher。
-3. 推荐信号实时影响首页、灵感库和 slash / curated task 推荐。
-4. 结果 -> 灵感库 -> 推荐 -> 生成 -> 新结果闭环可解释。
+1. 用户能查看 memory store 摘要状态。
+2. 用户能清空全局或 workspace memory。
+3. 用户能添加修正 note。
+4. 用户能看到记忆是否参与当前 turn。
+5. 用户能明确选择 reset 是否包含 Soul。
 
 建议改动：
 
-1. 继续统一 `saveSceneAppExecutionAsInspiration(...)` 调用方。
-2. 为普通灵感条目增加“推荐下一步”解释。
-3. 将成果类灵感与 `我的方法` 草稿建立轻量回流。
-4. 给保存后的结果卡展示“下一轮推荐会带上它”。
+1. 设置页提供 memory summary、store health、reset。
+   - 2026-06-19：已补 `memoryStore/health` / `memoryStore/reset` App Server current 方法、Rust / npm client、前端 `memoryStore` 网关和设置页日常记忆状态面板。
+   - reset 当前默认只清文件化 memory store root 下的 `MEMORY.md`、`memory_summary.md`、notes、index 与稳定目录内容；执行后重建空布局。
+   - reset 默认保留 `memory.soul`，设置页确认文案明确 AI 个性不会被清理。
+2. reset 清 memory folder、index；旧 SQLite stage data 已随旧 memory crate / unified memory 删除，不再作为 current reset 对象。
+3. reset 不删除 thread history。
+4. 使用记忆的回答可展示 citation。
+5. Soul reset 单独受 scope 控制，不被 memory folder 清空隐式触发；包含 Soul scope 的 reset 不是当前默认入口，后续如需要再定义显式参数和 UI。
 
-验证：
+最小测试：
 
-```bash
-npm exec vitest run "src/components/memory/MemoryPage.test.tsx" "src/components/agent/chat/utils/saveSceneAppExecutionAsInspiration.test.ts" "src/components/agent/chat/utils/curatedTaskRecommendationSignals.test.ts"
-```
+1. reset 后 summary 不再注入。
+   - 已覆盖后端 reset 会清空并重建 `memory_summary.md`。
+2. reset 不删除 thread history。
+   - 当前 reset 实现只遍历 memory store root 子项，不触碰 session / thread store；仍需补跨 store 集成验证。
+3. add note 后 note 文件存在且不会立即改 summary。
+   - Phase 2 已覆盖 add note 写入 `extensions/ad_hoc/notes`；summary 合并仍是后续 consolidation 入口。
+4. 不含 Soul scope 的 reset 保留 `memory.soul`。
+   - 已覆盖后端返回 `preserved_soul: true`，设置页确认文案和回归测试确认 reset 只调 `memoryStore/reset`。
+5. 包含 Soul scope 的 reset 恢复默认 Soul 配置。
+   - 后续可选入口；当前默认 reset 不包含 Soul，避免把交互配置误当长期记忆本体。
 
-GUI 相关补：
-
-```bash
-npm run verify:gui-smoke
-```
-
-## 7. Phase 5：Taste Layer 与我的方法融合
+## 7. Phase 5：派生索引
 
 目标：
 
-1. 从风格 / 偏好 / 参考里生成 taste summary。
-2. 成果打法可以升级为 `我的方法`。
-3. 复盘反馈能反哺灵感库和方法推荐。
-4. 多模态参考进入同一 reference projection。
+1. 当 memory folder 增大后，加入可选索引。
+2. 索引只缓存 search projection，不保存 canonical content。
+3. 支持 rebuild / health / fallback。
 
-建议改动：
+候选类型：
 
-1. `buildInspirationTasteSummary(...)` 从展示摘要升级为可持久、可解释对象。
-2. 成果条目提供“整理成我的方法”。
-3. 复盘结果写回偏好 / 成果 / 方法候选。
-4. 图片、链接、文档、转写等参考统一以 `context` / `reference` 投影。
+1. 内嵌全文索引。
+2. 嵌入式搜索索引。
+3. 可选向量索引。
+4. 远端索引适配器。
 
-不做：
+准入条件：
 
-1. 不新建 taste 平行事实源，除非后续明确 schema 与同步策略。
-2. 不让多模态导入绕过用户确认。
+1. 双平台打包验证通过。
+2. 索引损坏能自动降级。
+3. index 删除后可完整重建。
+4. 不要求生产路径加载 mock backend。
 
-## 8. Phase 6：高级诊断收口
+## 8. 每轮完成定义
 
-目标：
+每个阶段收尾必须回答：
 
-1. 诊断入口固定到开发者面板、高级设置、线程可靠性或 dev flag。
-2. 诊断视图只消费 `memory_runtime_*`。
-3. 诊断视图支持 evidence 导出或问题定位。
-4. active recall / raw source / hit layer / external provider trace 均受开关控制。
-5. 普通灵感库不再承载 runtime 术语。
-
-建议改动：
-
-1. 抽出 `MemoryDiagnosticsPanel`。
-2. 普通 `InspirationLibraryPage` 与诊断 panel 共享数据 hook，但分离文案和布局。
-3. 抽出统一 feature gate，不让各组件自建诊断开关。
-4. 用测试封住普通页面底层术语和默认关闭状态。
-5. 文档更新 `internal/aiprompts/memory-compaction.md` 的用户可见层说明。
-
-验证：
-
-```bash
-npm exec vitest run "src/components/memory/MemoryPage.test.tsx" "src/components/agent/chat/components/AgentThreadMemoryPrefetchPreview.test.tsx" 2>/dev/null || true
-npm run test:contracts
-```
-
-## 9. 迁移与兼容
-
-1. 旧 `MemoryPage` 的底层分区先迁到高级入口，不直接删除。
-2. 旧 page params 继续兼容 `memory/home`、`memory/experience` 等深链。
-3. 新普通 section 不改变 `unified_memory.category`。
-4. 旧项目资料 compat 继续留在 `project memory` 附属层。
-5. 如果新增状态字段，必须提供旧数据默认 `active` 的解释策略。
-6. 外部 provider 只允许作为 experimental / advanced 附加层；同一时刻最多一个 active，关闭后不影响内置 current 主链。
-
-## 10. 每轮完成定义
-
-每个实施阶段完成时必须回答：
-
-1. 普通用户看到的页面是否更简单。
-2. 底层事实源是否仍然唯一。
-3. 用户是否有足够控制权。
-4. 高级诊断是否仍可排障。
-5. 保存 / 推荐 / 继续生成闭环是否可验证。
-6. 开发者开关默认关闭是否可验证。
-7. 开启高级能力后，recalled context 是否 fenced / untrusted，候选是否经过 scan 和待确认。
+1. 当前唯一记忆事实源是否仍是 memory store。
+2. Soul 是否仍在 `memory.soul` 配置层，而不是长期记忆文件。
+3. 旧 `unified_memory_*` / `memory_runtime_*` 是否只在 dead / cleanup 范围。
+4. 是否新增了平行记忆事实源。
+5. summary 注入是否有预算和空态处理。
+6. 工具结果是否可 citation。
+7. 派生索引是否可删除、可重建、可降级。

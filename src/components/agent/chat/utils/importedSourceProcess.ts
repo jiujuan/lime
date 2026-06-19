@@ -1,4 +1,10 @@
 import type { AgentThreadItem } from "../types";
+import type {
+  AgentRuntimeThreadReadModel,
+  AsterSessionExecutionRuntime,
+} from "@/lib/api/agentRuntime";
+import { isImportedSourceExecutionRuntime } from "./sessionExecutionRuntime";
+import { isImportedSourceMetadata } from "./importedSourceMetadata";
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -7,20 +13,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>;
 }
 
-export function isImportedSourceMetadata(metadata: unknown): boolean {
-  const record = asRecord(metadata);
-  if (!record) {
-    return false;
-  }
-
-  return (
-    record.imported === true ||
-    record.imported_synthetic === true ||
-    record.importedSynthetic === true ||
-    record.source_client === "codex" ||
-    record.sourceClient === "codex"
-  );
-}
+export { isImportedSourceMetadata } from "./importedSourceMetadata";
 
 export function isImportedSourceProcessItem(item: AgentThreadItem): boolean {
   if (
@@ -46,4 +39,50 @@ export function hasImportedSourceProcessItem(
   items: readonly AgentThreadItem[] | undefined,
 ): boolean {
   return Boolean(items?.some(isImportedSourceProcessItem));
+}
+
+function hasImportedSourceRecordSignal(value: unknown): boolean {
+  const record = asRecord(value);
+  if (!record) {
+    return false;
+  }
+
+  return (
+    isImportedSourceMetadata(record) ||
+    Boolean(record.imported_continuation) ||
+    Boolean(record.importedContinuation) ||
+    Boolean(record.imported_thread_settings) ||
+    Boolean(record.importedThreadSettings) ||
+    Boolean(record.importedRuntimeProjection)
+  );
+}
+
+export function hasImportedSourceThreadReadSignal(
+  threadRead?: AgentRuntimeThreadReadModel | null,
+): boolean {
+  if (!threadRead) {
+    return false;
+  }
+
+  return (
+    hasImportedSourceRecordSignal(threadRead) ||
+    hasImportedSourceRecordSignal(threadRead.diagnostics) ||
+    hasImportedSourceRecordSignal(threadRead.runtime_summary)
+  );
+}
+
+export function hasImportedRuntimeDetailSignal({
+  threadItems,
+  executionRuntime,
+  threadRead,
+}: {
+  threadItems?: readonly AgentThreadItem[];
+  executionRuntime?: AsterSessionExecutionRuntime | null;
+  threadRead?: AgentRuntimeThreadReadModel | null;
+}): boolean {
+  return (
+    hasImportedSourceProcessItem(threadItems) ||
+    isImportedSourceExecutionRuntime(executionRuntime) ||
+    hasImportedSourceThreadReadSignal(threadRead)
+  );
 }

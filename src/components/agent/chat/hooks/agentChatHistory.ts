@@ -52,6 +52,7 @@ import {
   buildFailedAgentMessageContent,
   buildFailedAgentRuntimeStatus,
 } from "../utils/agentRuntimeStatus";
+import { projectConversationMessagesByRuntimeTurn } from "../utils/conversationTimelineOrdering";
 import {
   toActionRequired,
   toToolCallState,
@@ -230,6 +231,7 @@ export const appendTextWithOverlapDetection = (
   if (!chunk) return base;
   if (chunk.startsWith(base)) return chunk;
   if (base.endsWith(chunk)) return base;
+  if (base.includes(chunk)) return base;
 
   const maxOverlap = Math.min(base.length, chunk.length);
   for (let overlap = maxOverlap; overlap > 0; overlap -= 1) {
@@ -375,6 +377,27 @@ function mergeToolUseContentPart(
       };
 }
 
+function shouldAppendHydratedTextPart(
+  baseParts: ContentPart[],
+  text: string,
+): boolean {
+  const normalizedText = normalizeSignatureText(text);
+  if (!normalizedText) {
+    return false;
+  }
+
+  return !baseParts.some((part) => {
+    if (part.type !== "text") {
+      return false;
+    }
+    const normalizedExistingText = normalizeSignatureText(part.text);
+    return (
+      normalizedExistingText === normalizedText ||
+      normalizedExistingText.includes(normalizedText)
+    );
+  });
+}
+
 function mergeHydratedToolStateContentParts(
   baseParts?: ContentPart[],
   overlayParts?: ContentPart[],
@@ -427,6 +450,7 @@ function mergeHydratedToolStateContentParts(
       }
       actionRequiredIndexById.set(part.actionRequired.requestId, base.length);
       base.push(part);
+      continue;
     }
   }
 
@@ -574,12 +598,7 @@ function mergeHydratedContentParts(
       }
 
       if (part.type === "text" && part.text.trim()) {
-        const alreadyHasSameText = merged.some(
-          (candidate) =>
-            candidate.type === "text" &&
-            candidate.text.trim() === part.text.trim(),
-        );
-        if (!alreadyHasSameText) {
+        if (shouldAppendHydratedTextPart(merged, part.text)) {
           merged.push(part);
         }
         continue;
@@ -800,6 +819,7 @@ function buildMessageFromThreadItem(
           ]
         : undefined,
     timestamp: Number.isNaN(timestamp.getTime()) ? new Date(0) : timestamp,
+    runtimeTurnId: item.turn_id,
   };
 }
 
@@ -1826,6 +1846,7 @@ function hydrateSessionDetailMessagesFromTurns(
         timestamp: parseHistoryTimestamp(
           turn.started_at || turn.created_at || turn.updated_at,
         ),
+        runtimeTurnId: turn.id,
       };
     })
     .filter((message): message is Message => message !== null);
@@ -2537,6 +2558,13 @@ function shouldPreserveLocalAssistantVisibleOutput(
     return true;
   }
 
+  if (
+    remoteContent.length < localContent.length &&
+    localContent.includes(remoteContent)
+  ) {
+    return true;
+  }
+
   const localTimestampMs = resolveMessageTimestampMs(localMessage);
   const remoteTimestampMs = resolveMessageTimestampMs(remoteMessage);
   if (
@@ -3204,9 +3232,11 @@ export const mergeHydratedMessagesWithLocalState = (
     return localTimestampMs >= lastHydratedTimestampMs;
   });
 
-  return retainedLocalTail.length > 0
-    ? [...mergedMessagesWithRecoveredLocalUsers, ...retainedLocalTail]
-    : mergedMessagesWithRecoveredLocalUsers;
+  return projectConversationMessagesByRuntimeTurn(
+    retainedLocalTail.length > 0
+      ? [...mergedMessagesWithRecoveredLocalUsers, ...retainedLocalTail]
+      : mergedMessagesWithRecoveredLocalUsers,
+  );
 };
 
 const messageImageSignature = (images?: MessageImage[]): string => {
@@ -3754,16 +3784,6 @@ export const hydrateSessionDetailMessages = (
   const hydratedMessages = mergeAdjacentAssistantMessages(
     dedupeAdjacentHistoryMessages(loadedMessages),
   );
-  const failedRuntimeMessage = hydrateFailedRuntimeReadModelMessage(
-    detail,
-    topicId,
-  );
-  const threadReadToolCallMessages =
-    hydrateSessionDetailMessagesFromThreadReadToolCalls(detail, topicId);
-  const readModelProcessMessages = [
-    ...threadReadToolCallMessages,
-    ...(failedRuntimeMessage ? [failedRuntimeMessage] : []),
-  ];
   const threadItemTimelineMessages =
     options.includeTimelineFallback === false
       ? []
@@ -3783,6 +3803,17 @@ export const hydrateSessionDetailMessages = (
         (message.toolCalls?.length || 0) > 0 ||
         (message.actionRequests?.length || 0) > 0),
   );
+  const failedRuntimeMessage = hydrateFailedRuntimeReadModelMessage(
+    detail,
+    topicId,
+  );
+  const threadReadToolCallMessages = hasThreadItemProcessMessages
+    ? []
+    : hydrateSessionDetailMessagesFromThreadReadToolCalls(detail, topicId);
+  const readModelProcessMessages = [
+    ...threadReadToolCallMessages,
+    ...(failedRuntimeMessage ? [failedRuntimeMessage] : []),
+  ];
   const timelineMessages =
     readModelProcessMessages.length === 0 &&
     timelineFallbackMessages.length === 0
@@ -3814,23 +3845,29 @@ export const hydrateSessionDetailMessages = (
           ]),
         )
       : hydratedWithTimelineProcess;
-    return mergeMissingUserMessagesFromTimeline(
-      hydratedWithFailedRuntime,
-      detail,
-      topicId,
+    return projectConversationMessagesByRuntimeTurn(
+      mergeMissingUserMessagesFromTimeline(
+        hydratedWithFailedRuntime,
+        detail,
+        topicId,
+      ),
     );
   }
 
   if (detail.messages.length > 0) {
-    return timelineMessages.length > 0 ? timelineMessages : hydratedMessages;
+    return projectConversationMessagesByRuntimeTurn(
+      timelineMessages.length > 0 ? timelineMessages : hydratedMessages,
+    );
   }
 
   if (options.includeTimelineFallback !== false) {
     if (timelineMessages.length > 0) {
-      return timelineMessages;
+      return projectConversationMessagesByRuntimeTurn(timelineMessages);
     }
 
-    return hydrateSessionDetailMessagesFromTurns(detail, topicId);
+    return projectConversationMessagesByRuntimeTurn(
+      hydrateSessionDetailMessagesFromTurns(detail, topicId),
+    );
   }
 
   return [];

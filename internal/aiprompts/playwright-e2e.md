@@ -624,7 +624,7 @@ npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 优先排查：
 
 - 是否通过 `npm run electron:dev` 启动了 Electron Desktop Host 与 App Server sidecar
-- preload allowlist 是否暴露了对应 API，前端是否仍在直接访问旧 `window.__TAURI__` / 裸 `invoke`
+- preload allowlist 是否暴露了对应 API，前端是否仍在直接访问旧宿主全局对象 / 裸 `invoke`
 - 当前页面是否需要强制刷新以拿到最新前端代码
 
 ### 2. Bridge `unknown command` / App Server `method not found`

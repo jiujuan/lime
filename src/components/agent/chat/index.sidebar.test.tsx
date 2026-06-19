@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  clickButton,
   createMockAgentChatUnifiedState,
   flushEffects,
   getIndexTestMocks,
@@ -58,9 +57,12 @@ describe("AgentChatPage 侧栏显示控制", () => {
 
     expect(container.querySelector('[data-testid="chat-sidebar"]')).toBeNull();
     expect(container.querySelector('[data-testid="toggle-history"]')).toBeNull();
-
-    clickButton(container, "set-project");
-    await flushEffects();
+    expect(container.querySelector('[data-testid="chat-navbar"]')).toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid="inputbar-project-context-project-trigger"]',
+      ),
+    ).toBeNull();
     expect(container.querySelector('[data-testid="chat-sidebar"]')).toBeNull();
   });
 

@@ -200,6 +200,42 @@ describe("ToolCallDisplayViewModel", () => {
     });
   });
 
+  it("导入命令记录不应把来源判断写死到单一客户端", () => {
+    const toolCall = baseToolCall({
+      name: "exec_command",
+      arguments: JSON.stringify({ command: "npm test" }),
+      result: {
+        success: true,
+        output: "ok",
+        metadata: {
+          source_client: "claude_code",
+          exit_code: 0,
+          stdout_text: "ok",
+        },
+      },
+    });
+
+    expect(resolveImportedSourceToolPresentation(toolCall)).toEqual({
+      kind: "command_record",
+    });
+    expect(
+      resolveCommandToolSummary({
+        toolName: toolCall.name,
+        args: { command: "npm test" },
+        metadata: normalizeToolResultMetadata(toolCall.result?.metadata),
+      }),
+    ).toBeNull();
+    expect(
+      resolveCommandOutputStreams({
+        output: toolCall.result?.output,
+        metadata: normalizeToolResultMetadata(toolCall.result?.metadata),
+      }),
+    ).toEqual([]);
+    expect(
+      buildToolGroupPreview([toolCall], () => "+1", () => "导入的命令记录"),
+    ).toBe("导入的命令记录");
+  });
+
   it("应识别 Skill 调用并隐藏原始 metadata 细节", () => {
     const info = resolveSkillInvocationContentInfo({
       toolCall: baseToolCall({

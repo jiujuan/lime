@@ -56,6 +56,9 @@ fn setup_data_source() -> LocalAppDataSource {
         wechat_gateway_state: WechatGatewayState::default(),
         gateway_tunnel_state: GatewayTunnelState::default(),
         wechat_login_state: WechatLoginState::default(),
+        memory_backend: Arc::new(LocalMemoryBackend::new(
+            std::env::temp_dir().join("app-server-local-data-source-test-memory"),
+        )),
     }
 }
 

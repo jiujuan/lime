@@ -18,11 +18,6 @@ import {
   recordCuratedTaskRecommendationSignalFromReviewDecision,
   subscribeCuratedTaskRecommendationSignalsChanged,
 } from "../utils/curatedTaskRecommendationSignals";
-import {
-  buildSceneAppExecutionInspirationLibraryPageParams,
-  hasSavedSceneAppExecutionAsInspiration,
-  saveSceneAppExecutionAsInspiration,
-} from "../utils/saveSceneAppExecutionAsInspiration";
 import { buildSkillsPageParamsFromSceneAppExecution } from "../utils/sceneAppSkillScaffoldDraft";
 import type { SceneAppExecutionSummaryRuntimeState } from "./useSceneAppExecutionSummaryRuntime";
 
@@ -46,7 +41,6 @@ export interface SceneAppReviewDecisionRuntimeState {
   latestReviewFeedbackSignal: ReturnType<
     typeof listCuratedTaskRecommendationSignals
   >[number] | null;
-  savedAsInspiration: boolean;
   setDialogOpen: (open: boolean) => void;
   handleOpenHumanReview: () => void;
   handleSaveHumanReview: (
@@ -56,8 +50,6 @@ export interface SceneAppReviewDecisionRuntimeState {
     actionKey: SceneAppQuickReviewActionKey,
   ) => void;
   handleSaveAsSkill: () => void;
-  handleSaveAsInspiration: () => void;
-  handleOpenInspirationLibrary: () => void;
 }
 
 const REVIEWABLE_SCENE_APP_STATUSES: SceneAppRunSummary["status"][] = [
@@ -246,37 +238,6 @@ export function useSceneAppReviewDecisionRuntime({
     toast.success("已带着这轮结果去整理做法");
   }, [onNavigate, projectId, sessionId, summary]);
 
-  const handleSaveAsInspiration = useCallback(() => {
-    void saveSceneAppExecutionAsInspiration({
-      summary,
-      projectId,
-      sessionId,
-    });
-  }, [projectId, sessionId, summary]);
-
-  const handleOpenInspirationLibrary = useCallback(() => {
-    if (!onNavigate) {
-      toast.error("当前入口暂不支持直接打开灵感库");
-      return;
-    }
-
-    onNavigate(
-      "memory",
-      buildSceneAppExecutionInspirationLibraryPageParams({
-        summary,
-      }),
-    );
-  }, [onNavigate, summary]);
-
-  const savedAsInspiration = useMemo(() => {
-    void signalsVersion;
-    return hasSavedSceneAppExecutionAsInspiration({
-      summary,
-      projectId,
-      sessionId,
-    });
-  }, [projectId, sessionId, signalsVersion, summary]);
-
   const latestReviewFeedbackSignal = useMemo(() => {
     void signalsVersion;
     return (
@@ -298,27 +259,21 @@ export function useSceneAppReviewDecisionRuntime({
       humanReviewAvailable,
       quickReviewPending: loading || saving,
       latestReviewFeedbackSignal,
-      savedAsInspiration,
       setDialogOpen,
       handleOpenHumanReview,
       handleSaveHumanReview,
       handleApplyQuickReview,
       handleSaveAsSkill,
-      handleSaveAsInspiration,
-      handleOpenInspirationLibrary,
     }),
     [
       dialogOpen,
       handleApplyQuickReview,
       handleOpenHumanReview,
-      handleOpenInspirationLibrary,
-      handleSaveAsInspiration,
       handleSaveAsSkill,
       handleSaveHumanReview,
       humanReviewAvailable,
       latestReviewFeedbackSignal,
       loading,
-      savedAsInspiration,
       saving,
       template,
     ],

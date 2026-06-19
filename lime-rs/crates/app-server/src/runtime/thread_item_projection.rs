@@ -11,7 +11,6 @@ use std::collections::HashMap;
 pub(super) fn thread_items_from_events(stored: &StoredSession) -> Vec<Value> {
     let mut items = Vec::new();
     let mut last_text_item_by_turn = std::collections::HashMap::<String, usize>::new();
-    let mut tool_items = HashMap::<String, Value>::new();
     let mut command_items = HashMap::<String, Value>::new();
     let mut patch_items = HashMap::<String, Value>::new();
     let mut approval_items = HashMap::<String, Value>::new();
@@ -46,9 +45,7 @@ pub(super) fn thread_items_from_events(stored: &StoredSession) -> Vec<Value> {
                     items.push(item);
                 }
             }
-            "tool.started" | "tool.result" | "tool.failed" => {
-                upsert_tool_item(stored, event, &mut tool_items);
-            }
+            "tool.started" | "tool.result" | "tool.failed" => {}
             "command.started" | "command.output" | "command.exited" => {
                 upsert_command_item(stored, event, &mut command_items);
             }
@@ -70,10 +67,6 @@ pub(super) fn thread_items_from_events(stored: &StoredSession) -> Vec<Value> {
     }
 
     items.extend(command_items.into_values());
-    items.extend(tool_items.into_values().filter(|item| {
-        !item_tool_name(item)
-            .is_some_and(|name| is_command_tool_name(&name) || is_update_plan_tool_name(&name))
-    }));
     items.extend(patch_items.into_values());
     items.extend(approval_items.into_values());
     items.extend(context_compaction_items.into_values());
@@ -119,76 +112,6 @@ fn is_imported_agent_message_event(event: &AgentEvent) -> bool {
         .unwrap_or(false)
         || string_field(&event.payload, &["sourceClient", "source_client"])
             .is_some_and(|value| !value.trim().is_empty())
-}
-
-fn item_tool_name(item: &Value) -> Option<String> {
-    string_field(item, &["tool_name", "name"])
-}
-
-fn upsert_tool_item(
-    stored: &StoredSession,
-    event: &AgentEvent,
-    items: &mut HashMap<String, Value>,
-) {
-    let Some(tool_call_id) = tool_call_id(&event.payload).or_else(|| Some(event.event_id.clone()))
-    else {
-        return;
-    };
-    let tool_name = string_field(&event.payload, &["toolName", "tool_name", "name"]);
-    let item_type = if tool_name.as_deref().is_some_and(is_web_search_tool_name) {
-        "web_search"
-    } else {
-        "tool_call"
-    };
-    let status = match event.event_type.as_str() {
-        "tool.started" => "in_progress",
-        "tool.failed" => "failed",
-        _ => "completed",
-    };
-    let entry = items
-        .entry(tool_call_id.clone())
-        .or_insert_with(|| lifecycle_base_item(stored, event, &tool_call_id, item_type, status));
-    let Some(object) = entry.as_object_mut() else {
-        return;
-    };
-
-    update_lifecycle_item(object, event, status);
-    if let Some(tool_name) = tool_name {
-        object.insert("tool_name".to_string(), json!(tool_name));
-    }
-    merge_optional_field(object, "arguments", event.payload.get("arguments").cloned());
-    merge_optional_field(
-        object,
-        "output",
-        tool_output(&event.payload).map(Value::String),
-    );
-    merge_optional_field(
-        object,
-        "success",
-        event
-            .payload
-            .get("success")
-            .and_then(Value::as_bool)
-            .map(Value::Bool),
-    );
-    merge_optional_field(
-        object,
-        "error",
-        raw_string_field(&event.payload, &["error", "message", "reason"]).map(Value::String),
-    );
-    if item_type == "web_search" {
-        merge_optional_field(
-            object,
-            "query",
-            web_search_query(&event.payload).map(Value::String),
-        );
-        merge_optional_field(
-            object,
-            "action",
-            web_search_action(&event.payload).map(Value::String),
-        );
-    }
-    merge_lifecycle_metadata(object, event);
 }
 
 fn upsert_command_item(
@@ -615,13 +538,6 @@ fn merge_metadata_array(metadata: &mut Map<String, Value>, key: &str, value: Val
     }
 }
 
-fn tool_call_id(payload: &Value) -> Option<String> {
-    string_field(
-        payload,
-        &["toolCallId", "tool_call_id", "toolId", "tool_id", "id"],
-    )
-}
-
 fn command_id(payload: &Value) -> Option<String> {
     string_field(
         payload,
@@ -895,78 +811,6 @@ fn command_exit_item_status(payload: &Value) -> &'static str {
         Some(0) | None => "completed",
         Some(_) => "failed",
     }
-}
-
-fn is_command_tool_name(value: &str) -> bool {
-    matches!(
-        value.trim(),
-        "exec_command" | "command_execution" | "Bash" | "bash"
-    )
-}
-
-fn is_web_search_tool_name(value: &str) -> bool {
-    matches!(
-        value.trim(),
-        "web_search" | "webSearch" | "search_query" | "WebSearch"
-    )
-}
-
-fn is_update_plan_tool_name(value: &str) -> bool {
-    let normalized = value
-        .trim()
-        .chars()
-        .filter(|character| !matches!(character, '_' | '-' | ' '))
-        .collect::<String>()
-        .to_ascii_lowercase();
-    matches!(normalized.as_str(), "updateplan" | "updateplantool")
-}
-
-fn tool_output(payload: &Value) -> Option<String> {
-    raw_string_field(
-        payload,
-        &[
-            "outputPreview",
-            "output_preview",
-            "output",
-            "text",
-            "content",
-        ],
-    )
-    .or_else(|| {
-        payload
-            .get("result")
-            .filter(|value| !value.is_null())
-            .map(Value::to_string)
-    })
-}
-
-fn web_search_query(payload: &Value) -> Option<String> {
-    payload
-        .get("arguments")
-        .and_then(|value| {
-            raw_string_field(value, &["query", "q"]).or_else(|| {
-                value
-                    .get("search_query")
-                    .and_then(Value::as_array)
-                    .and_then(|queries| queries.first())
-                    .and_then(|query| raw_string_field(query, &["q", "query"]))
-            })
-        })
-        .or_else(|| raw_string_field(payload, &["query", "q"]))
-}
-
-fn web_search_action(payload: &Value) -> Option<String> {
-    let value = payload
-        .get("result")
-        .or_else(|| payload.get("action"))
-        .filter(|value| !value.is_null());
-    if let Some(value) = value {
-        return value
-            .as_str()
-            .map(str::to_string)
-            .or_else(|| Some(value.to_string()));
-    }
-    raw_string_field(payload, &["action", "sourceEventType", "source_event_type"])
 }
 
 fn summary_list(payload: &Value) -> Vec<String> {

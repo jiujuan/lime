@@ -56,6 +56,16 @@ function dedupeProjectIds(projectIds: Array<string | null | undefined>) {
   });
 }
 
+export function shouldResolveOpenedProject(
+  projectId: string,
+  resolvedProjectsById: Record<string, OpenedProjectSummary | null>,
+): boolean {
+  return !Object.prototype.hasOwnProperty.call(
+    resolvedProjectsById,
+    projectId,
+  );
+}
+
 export function buildOpenedProjectIdOrder(
   openedProjectIds: Array<string | null | undefined>,
   currentProjectId?: string | null,
@@ -136,7 +146,7 @@ export function useOpenedProjectSummaries(
       if (projectId === normalizedCurrentProjectId && currentProject?.name) {
         return false;
       }
-      return !resolvedProjectsById[projectId];
+      return shouldResolveOpenedProject(projectId, resolvedProjectsById);
     });
     if (idsToResolve.length === 0) {
       return;

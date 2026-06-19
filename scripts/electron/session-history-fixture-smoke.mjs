@@ -85,6 +85,8 @@ const SETTINGS_ARCHIVED_CONVERSATIONS_SELECTOR =
   '[data-testid="settings-archived-conversations"]';
 const SETTINGS_ARCHIVED_RESTORE_SELECTOR =
   '[data-testid="settings-archived-conversation-restore"]';
+const SETTINGS_ENTRY_TEXT_PATTERN =
+  /设置|AI 服务商|AI Providers|Model Settings/;
 const LAST_PROJECT_ID_KEY = "agent_last_project_id";
 const OPENED_PROJECT_IDS_KEY = "agent_opened_project_ids";
 const APP_SIDEBAR_COLLAPSED_STORAGE_KEY = "lime.app-sidebar.collapsed";
@@ -1066,9 +1068,33 @@ async function runSettingsGuiRestorePhase(page, options) {
     state: "visible",
     timeout: options.timeoutMs,
   });
-  await page
-    .locator(`${SIDEBAR_ACCOUNT_MENU_SELECTOR} button[aria-label="设置"]`)
-    .click();
+  const clicked = await page.evaluate(
+    ({ menuSelector, patternSource, patternFlags }) => {
+      const pattern = new RegExp(patternSource, patternFlags);
+      const menu = document.querySelector(menuSelector);
+      if (!menu) {
+        return false;
+      }
+      const buttons = Array.from(menu.querySelectorAll("button"));
+      const target = buttons.find((button) => {
+        const text = button.textContent || "";
+        const aria = button.getAttribute("aria-label") || "";
+        const title = button.getAttribute("title") || "";
+        return pattern.test(`${text}\n${aria}\n${title}`);
+      });
+      if (!(target instanceof HTMLButtonElement)) {
+        return false;
+      }
+      target.click();
+      return true;
+    },
+    {
+      menuSelector: SIDEBAR_ACCOUNT_MENU_SELECTOR,
+      patternSource: SETTINGS_ENTRY_TEXT_PATTERN.source,
+      patternFlags: SETTINGS_ENTRY_TEXT_PATTERN.flags,
+    },
+  );
+  assert(clicked, "未找到账号菜单里的设置入口");
   await page
     .locator('[data-testid="settings-sidebar-tab-archived-conversations"]')
     .click();

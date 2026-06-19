@@ -24,6 +24,7 @@ mod evidence_exports;
 mod external_events;
 mod gateway_runner;
 mod knowledge;
+mod memory_prompt;
 mod objectives;
 mod read_model;
 mod session_list_projection;

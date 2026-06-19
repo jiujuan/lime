@@ -8,7 +8,6 @@ use app_server_protocol::{
     ConversationImportThreadStatus, ImportedThreadSummary,
 };
 use chrono::{SecondsFormat, Utc};
-use serde::Deserialize;
 use serde_json::Value;
 use std::fs;
 use std::io::{BufRead, BufReader, Read};
@@ -21,6 +20,8 @@ pub(super) mod events;
 mod media;
 mod messages;
 mod paths;
+mod project_filter;
+mod session_index;
 mod state;
 
 const DEFAULT_LIMIT: usize = 50;
@@ -52,6 +53,9 @@ pub(super) fn scan_source(
                 false,
                 0,
                 None,
+                false,
+                false,
+                0,
                 Some("source home directory does not exist".to_string()),
             ),
             threads: Vec::new(),
@@ -60,13 +64,20 @@ pub(super) fn scan_source(
     }
 
     let state_path = state::newest_state_db(&source_root);
+    let mut state_db_readable = false;
     let mut threads = match state_path.as_deref() {
-        Some(path) => state::scan_state_db(path).unwrap_or_else(|_| Vec::new()),
+        Some(path) => match state::scan_state_db(path) {
+            Ok(threads) => {
+                state_db_readable = true;
+                threads
+            }
+            Err(_) => Vec::new(),
+        },
         None => Vec::new(),
     };
 
     if threads.is_empty() {
-        threads = scan_session_index(&source_root);
+        threads = session_index::scan(&source_root);
     }
 
     for thread in &mut threads {
@@ -78,7 +89,10 @@ pub(super) fn scan_source(
         .filter(|thread| thread.source_path.is_some())
         .filter(|thread| include_archived || !thread.archived)
         .filter(|thread| match project_path.as_deref() {
-            Some(project_path) => thread.cwd.as_deref() == Some(project_path),
+            Some(project_path) => thread
+                .cwd
+                .as_deref()
+                .is_some_and(|cwd| project_filter::matches(cwd, project_path)),
             None => true,
         })
         .filter(|thread| match query.as_deref() {
@@ -117,6 +131,9 @@ pub(super) fn scan_source(
             true,
             total,
             state_path.as_deref(),
+            true,
+            state_db_readable,
+            paths::count_rollout_files(&source_root),
             None,
         ),
         threads: page,
@@ -181,6 +198,10 @@ pub(super) fn preview_thread(
         merge_indexed_thread_metadata(&mut preview.thread, indexed_thread);
     }
     preview.thread.source_path = Some(path_to_string(&source_path));
+    let state_path = state::newest_state_db(&source_root);
+    let state_db_readable = state_path
+        .as_deref()
+        .is_some_and(|path| state::scan_state_db(path).is_ok());
     Ok(ConversationImportThreadPreviewResponse {
         source: source_summary(
             ConversationImportSourceClient::Codex,
@@ -188,7 +209,10 @@ pub(super) fn preview_thread(
             Some(&source_root),
             true,
             1,
-            state::newest_state_db(&source_root).as_deref(),
+            state_path.as_deref(),
+            true,
+            state_db_readable,
+            paths::count_rollout_files(&source_root),
             Some(
                 "Preview is read-only. Import commit still requires user confirmation.".to_string(),
             ),
@@ -401,7 +425,7 @@ pub(super) fn find_thread(source_root: &Path, thread_id: &str) -> Option<Importe
         .unwrap_or_default();
     state_threads
         .into_iter()
-        .chain(scan_session_index(source_root))
+        .chain(session_index::scan(source_root))
         .filter(|thread| thread.source_thread_id == thread_id)
         .find_map(|mut thread| {
             repair_thread_source_path(source_root, &mut thread).then_some(thread)
@@ -678,6 +702,9 @@ pub(super) fn source_summary(
     readable: bool,
     thread_count: usize,
     state_path: Option<&Path>,
+    source_home_exists: bool,
+    state_db_readable: bool,
+    rollout_file_count: usize,
     message: Option<String>,
 ) -> ConversationImportSourceSummary {
     ConversationImportSourceSummary {
@@ -686,6 +713,9 @@ pub(super) fn source_summary(
         source_root: source_root.map(path_to_string),
         readable,
         thread_count,
+        source_home_exists,
+        state_db_readable,
+        rollout_file_count,
         indexed_at: Some(now_timestamp()),
         state_path: state_path.map(path_to_string),
         message,
@@ -704,55 +734,6 @@ pub(super) fn resolve_home(explicit_root: Option<&str>) -> Option<PathBuf> {
 
 pub(super) fn newest_state_db(source_root: &Path) -> Option<PathBuf> {
     state::newest_state_db(source_root)
-}
-
-#[derive(Debug, Deserialize)]
-struct SessionIndexLine {
-    #[serde(default)]
-    id: Option<String>,
-    #[serde(default)]
-    thread_name: Option<String>,
-    #[serde(default)]
-    title: Option<String>,
-    #[serde(default)]
-    updated_at: Option<String>,
-    #[serde(default)]
-    created_at: Option<String>,
-    #[serde(default)]
-    cwd: Option<String>,
-    #[serde(default)]
-    path: Option<String>,
-}
-
-fn scan_session_index(source_root: &Path) -> Vec<ImportedThreadSummary> {
-    let path = source_root.join("session_index.jsonl");
-    let file = match fs::File::open(path) {
-        Ok(file) => file,
-        Err(_) => return Vec::new(),
-    };
-    BufReader::new(file)
-        .lines()
-        .map_while(Result::ok)
-        .filter_map(|line| serde_json::from_str::<SessionIndexLine>(&line).ok())
-        .filter_map(|line| {
-            let id = normalize_filter(line.id.as_deref())?;
-            Some(ImportedThreadSummary {
-                source_client: ConversationImportSourceClient::Codex,
-                source_thread_id: id,
-                title: normalize_filter(line.title.as_deref())
-                    .or_else(|| normalize_filter(line.thread_name.as_deref())),
-                created_at: line.created_at,
-                updated_at: line.updated_at,
-                cwd: normalize_filter(line.cwd.as_deref()),
-                source: Some("session_index".to_string()),
-                model_provider: None,
-                archived: false,
-                source_path: normalize_filter(line.path.as_deref()),
-                import_status: ConversationImportThreadStatus::NotImported,
-                metadata: None,
-            })
-        })
-        .collect()
 }
 
 fn parse_cursor(cursor: Option<&str>) -> Result<usize, RuntimeCoreError> {
