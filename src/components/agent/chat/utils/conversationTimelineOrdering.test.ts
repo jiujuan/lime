@@ -118,6 +118,7 @@ describe("projectConversationMessagesByRuntimeTurn", () => {
             name: "read_file",
             arguments: '{"path":"/tmp/input.png"}',
             status: "completed",
+            startTime: new Date("2026-06-02T10:00:01.000Z"),
             result: {
               success: true,
               output: "image bytes",
@@ -136,6 +137,7 @@ describe("projectConversationMessagesByRuntimeTurn", () => {
               name: "read_file",
               arguments: '{"path":"/tmp/input.png"}',
               status: "completed",
+              startTime: new Date("2026-06-02T10:00:01.000Z"),
               result: {
                 success: true,
                 output: "image bytes",

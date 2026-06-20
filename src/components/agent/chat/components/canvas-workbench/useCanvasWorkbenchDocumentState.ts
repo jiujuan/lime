@@ -209,6 +209,13 @@ export function useCanvasWorkbenchDocumentState({
     if (!selectedKey || isKnownSelectionKey(selectedKey)) {
       return;
     }
+    if (
+      selectedKey.startsWith("artifact:") ||
+      selectedKey.startsWith("task:") ||
+      selectedKey.startsWith("version:")
+    ) {
+      return;
+    }
     setSelectedKey(fallbackSelectionKey);
   }, [fallbackSelectionKey, isKnownSelectionKey, selectedKey]);
 
@@ -280,10 +287,13 @@ export function useCanvasWorkbenchDocumentState({
   );
 
   const sessionContext = useMemo(() => {
+    if (documentContext) {
+      return documentContext;
+    }
     if (defaultPreview?.content.trim()) {
       return buildDefaultPreviewSelection(defaultPreview, workbenchCopy);
     }
-    return documentContext;
+    return null;
   }, [defaultPreview, documentContext, workbenchCopy]);
 
   const workspacePanelRootPath = useMemo(

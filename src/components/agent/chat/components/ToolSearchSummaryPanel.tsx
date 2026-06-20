@@ -43,35 +43,70 @@ function resolveUserFacingToolSearchNote(
     return null;
   }
 
-  return trimmed.replace(/\bdeferred\b/gi, "更多").trim();
+  return trimmed
+    .replace(
+      /\bdeferred\b/gi,
+      t("agentChat.toolCall.toolSearch.note.deferredLabel"),
+    )
+    .trim();
+}
+
+function resolveUserFacingToolSearchNotes(
+  notes: string[],
+  t: (key: string, values?: Record<string, unknown>) => string,
+): string[] {
+  const userFacingNotes: string[] = [];
+  notes.forEach((note) => {
+    const userFacingNote = resolveUserFacingToolSearchNote(note, t);
+    if (userFacingNote) {
+      userFacingNotes.push(userFacingNote);
+    }
+  });
+  return userFacingNotes;
+}
+
+function formatPendingMcpServers(
+  servers: string[],
+  locale: string | undefined,
+): string {
+  const separator = /^(?:zh|ja)/i.test(locale || "") ? "、" : ", ";
+  return servers.join(separator);
 }
 
 export function ToolSearchSummaryPanel({
   summary,
   testId,
 }: ToolSearchSummaryPanelProps) {
-  const { t } = useTranslation("agent");
+  const { i18n, t } = useTranslation("agent");
+  const translateToolSearch = (
+    key: string,
+    values?: Record<string, unknown>,
+  ): string => String(t(key as never, values as never));
   const pendingServersText =
     summary.pendingMcpServers && summary.pendingMcpServers.length > 0
-      ? t("agentChat.toolCall.toolSearch.pendingServers", {
-          servers: summary.pendingMcpServers.join(", "),
+      ? translateToolSearch("agentChat.toolCall.toolSearch.pendingServers", {
+          servers: formatPendingMcpServers(
+            summary.pendingMcpServers,
+            i18n.language,
+          ),
         })
       : null;
-  const userFacingNotes = summary.notes
-    .map((note) => resolveUserFacingToolSearchNote(note, t))
-    .filter((note): note is string => Boolean(note));
+  const userFacingNotes = resolveUserFacingToolSearchNotes(
+    summary.notes,
+    translateToolSearch,
+  );
 
   return (
     <div className="space-y-2" data-testid={testId}>
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
         <span>
-          {t("agentChat.toolCall.toolSearch.foundTools", {
+          {translateToolSearch("agentChat.toolCall.toolSearch.foundTools", {
             count: summary.count,
           })}
         </span>
         {shouldShowUserFacingQuery(summary.query) ? (
           <span className="break-all">
-            {t("agentChat.toolCall.toolSearch.query", {
+            {translateToolSearch("agentChat.toolCall.toolSearch.query", {
               query: summary.query,
             })}
           </span>

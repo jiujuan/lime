@@ -897,6 +897,10 @@ pub fn resolve_extension_tool_runtime_status(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent_tools::catalog::{
+        MEMORY_ADD_NOTE_TOOL_NAME, MEMORY_LIST_TOOL_NAME, MEMORY_READ_TOOL_NAME,
+        MEMORY_SEARCH_TOOL_NAME,
+    };
     use lime_core::config::{
         ToolExecutionOverrideConfig as ConfigToolExecutionOverrideConfig,
         ToolExecutionPolicyConfig as ConfigToolExecutionPolicyConfig,
@@ -1042,8 +1046,8 @@ mod tests {
             ],
         });
 
-        assert_eq!(inventory.counts.catalog_total, 43);
-        assert_eq!(inventory.counts.catalog_current_total, 43);
+        assert_eq!(inventory.counts.catalog_total, 47);
+        assert_eq!(inventory.counts.catalog_current_total, 47);
         assert_eq!(inventory.counts.catalog_compat_total, 0);
         assert_eq!(inventory.counts.registry_total, 4);
         assert_eq!(inventory.counts.registry_visible_total, 3);
@@ -1057,6 +1061,20 @@ mod tests {
         assert!(inventory
             .default_allowed_tools
             .contains(&"ToolSearch".to_string()));
+        for memory_tool_name in [
+            MEMORY_LIST_TOOL_NAME,
+            MEMORY_READ_TOOL_NAME,
+            MEMORY_SEARCH_TOOL_NAME,
+            MEMORY_ADD_NOTE_TOOL_NAME,
+        ] {
+            let memory_catalog = inventory
+                .catalog_tools
+                .iter()
+                .find(|entry| entry.name == memory_tool_name)
+                .expect("memory catalog entry should exist");
+            assert_eq!(memory_catalog.lifecycle, ToolLifecycle::Current);
+            assert_eq!(memory_catalog.capabilities, vec![ToolCapability::Memory]);
+        }
         let bash_catalog = inventory
             .catalog_tools
             .iter()

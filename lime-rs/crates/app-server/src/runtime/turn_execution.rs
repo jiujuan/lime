@@ -155,6 +155,7 @@ impl RuntimeCore {
                 ));
         }
         self.prepare_memory_prompt_context(&mut params).await;
+        self.prepare_session_compaction_prompt_context(&mut params);
 
         if let Some(capability_id) = params
             .runtime_options

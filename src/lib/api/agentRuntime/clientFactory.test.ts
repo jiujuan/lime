@@ -118,6 +118,19 @@ function appServerClientMock(): AgentRuntimeAppServerClient {
       messages: [],
       notifications: [],
     }),
+    deleteSession: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        sessionId: "session-1",
+        deleted: true,
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
     request: vi.fn().mockImplementation((method: string) => {
       if (method === "workspaceSkillBindings/list") {
         return Promise.resolve({
@@ -813,9 +826,8 @@ describe("agentRuntime clientFactory", () => {
       title: "新标题",
       archived: true,
     });
-    expect(appServerClient.updateSession).toHaveBeenCalledWith({
+    expect(appServerClient.deleteSession).toHaveBeenCalledWith({
       sessionId: "session-1",
-      archived: true,
     });
     expect(bridgeInvoke).not.toHaveBeenCalled();
   });

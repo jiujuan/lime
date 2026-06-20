@@ -42,15 +42,9 @@ export type {
 
 type ConversationImportAppServerClient = Pick<AppServerClient, "request">;
 
-const SOURCE_CLIENTS = new Set<ConversationImportSourceClient>(
-  CONVERSATION_IMPORT_SOURCE_CLIENTS,
-);
-const SOURCE_STATUSES = new Set<ConversationImportSourceStatus>(
-  CONVERSATION_IMPORT_SOURCE_STATUSES,
-);
-const THREAD_STATUSES = new Set<ConversationImportThreadStatus>(
-  CONVERSATION_IMPORT_THREAD_STATUSES,
-);
+const SOURCE_CLIENT_VALUES = new Set<string>(CONVERSATION_IMPORT_SOURCE_CLIENTS);
+const SOURCE_STATUS_VALUES = new Set<string>(CONVERSATION_IMPORT_SOURCE_STATUSES);
+const THREAD_STATUS_VALUES = new Set<string>(CONVERSATION_IMPORT_THREAD_STATUSES);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -63,19 +57,19 @@ function isOptionalString(value: unknown): value is string | undefined {
 function isConversationImportSourceClient(
   value: unknown,
 ): value is ConversationImportSourceClient {
-  return typeof value === "string" && SOURCE_CLIENTS.has(value);
+  return typeof value === "string" && SOURCE_CLIENT_VALUES.has(value);
 }
 
 function isConversationImportSourceStatus(
   value: unknown,
 ): value is ConversationImportSourceStatus {
-  return typeof value === "string" && SOURCE_STATUSES.has(value);
+  return typeof value === "string" && SOURCE_STATUS_VALUES.has(value);
 }
 
 function isConversationImportThreadStatus(
   value: unknown,
 ): value is ConversationImportThreadStatus {
-  return typeof value === "string" && THREAD_STATUSES.has(value);
+  return typeof value === "string" && THREAD_STATUS_VALUES.has(value);
 }
 
 function isAgentSession(value: unknown): boolean {

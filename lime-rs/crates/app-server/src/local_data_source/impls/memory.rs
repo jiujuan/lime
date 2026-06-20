@@ -42,6 +42,34 @@ impl MemoryAppDataSource for LocalAppDataSource {
         self.memory_backend.add_note(params).await
     }
 
+    async fn write_memory_rollout_summary(
+        &self,
+        params: RolloutSummaryWriteParams,
+    ) -> Result<MemoryStoreAddNoteResponse, RuntimeCoreError> {
+        self.memory_backend.write_rollout_summary(params).await
+    }
+
+    async fn consolidate_memory_store(
+        &self,
+        params: MemoryStoreConsolidateParams,
+    ) -> Result<MemoryStoreConsolidateResponse, RuntimeCoreError> {
+        self.memory_backend.consolidate(params).await
+    }
+
+    async fn list_memory_store_review_notes(
+        &self,
+        params: MemoryStoreReviewListParams,
+    ) -> Result<MemoryStoreReviewListResponse, RuntimeCoreError> {
+        self.memory_backend.list_review(params).await
+    }
+
+    async fn resolve_memory_store_review_note(
+        &self,
+        params: MemoryStoreReviewResolveParams,
+    ) -> Result<MemoryStoreReviewResolveResponse, RuntimeCoreError> {
+        self.memory_backend.resolve_review(params).await
+    }
+
     async fn health_memory_store(
         &self,
         params: MemoryStoreRootParams,
@@ -54,5 +82,12 @@ impl MemoryAppDataSource for LocalAppDataSource {
         params: MemoryStoreResetParams,
     ) -> Result<MemoryStoreResetResponse, RuntimeCoreError> {
         self.memory_backend.reset(params).await
+    }
+
+    async fn rebuild_memory_store_index(
+        &self,
+        params: MemoryStoreRootParams,
+    ) -> Result<MemoryStoreIndexRebuildResponse, RuntimeCoreError> {
+        self.memory_backend.rebuild_index(params).await
     }
 }

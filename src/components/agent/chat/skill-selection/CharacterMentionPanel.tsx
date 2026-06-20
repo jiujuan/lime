@@ -15,7 +15,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
-import type { Character } from "@/lib/api/memory";
+import type { Character } from "@/lib/api/projectMemory";
 import type { Skill } from "@/lib/api/skills";
 import type {
   ServiceSkillGroup,

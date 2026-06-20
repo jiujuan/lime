@@ -1,13 +1,13 @@
-import { resolveAgentChatCopy } from "./agentChatCopy";
+import { resolveRequiredAgentChatCopy } from "./agentChatCopy";
 
 export function resolveContentWorkbenchToolCopy(
   key: string,
-  defaultValue: string,
-  values: Record<string, unknown> = {},
+  defaultValueOrValues: string | Record<string, unknown> = {},
+  maybeValues: Record<string, unknown> = {},
 ): string {
-  return resolveAgentChatCopy(
-    `contentWorkbenchTools.${key}`,
-    defaultValue,
-    values,
-  );
+  const values =
+    typeof defaultValueOrValues === "string"
+      ? maybeValues
+      : defaultValueOrValues;
+  return resolveRequiredAgentChatCopy(`contentWorkbenchTools.${key}`, values);
 }

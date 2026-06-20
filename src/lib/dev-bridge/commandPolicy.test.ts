@@ -41,7 +41,7 @@ describe("commandPolicy", () => {
     expect(isBridgeTruthCommand("agent_app_launch_shell")).toBe(false);
     expect(isBridgeTruthCommand("knowledge_list_packs")).toBe(false);
     expect(isBridgeTruthCommand("get_automation_jobs")).toBe(false);
-    expect(isBridgeTruthCommand("project_memory_get")).toBe(true);
+    expect(isBridgeTruthCommand("project_memory_get")).toBe(false);
     for (const command of [
       "save_layered_design_project_export",
       "read_layered_design_project_export",

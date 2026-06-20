@@ -1,6 +1,6 @@
 # Turn / Tool 生命周期重构路线图
 
-> 状态：in-progress
+> 状态：已完成当前阶段
 > 更新时间：2026-06-19
 > 目标：以 Codex CLI 的 turn / item / event 模型为准，系统性重设 Lime 的 turn 执行、工具生命周期、前后端事件合同与 GUI 投影，解决工具事件串线、流式输出卡顿、历史回复截断和多模型工具状态不一致问题。
 > 参考事实源：`/Users/coso/Documents/dev/rust/codex`

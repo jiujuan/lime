@@ -206,4 +206,32 @@ describe("useWorkspaceInitialSessionNavigation", () => {
     expect(switchTopic).toHaveBeenCalledTimes(1);
     expect(switchTopic).toHaveBeenCalledWith("session-dedupe", undefined);
   });
+
+  it("不同工作区实例恢复同一初始会话时不应互相去重", async () => {
+    const firstSwitchTopic = vi.fn(async () => undefined);
+    const secondSwitchTopic = vi.fn(async () => undefined);
+
+    renderHook({
+      initialSessionId: "session-shared",
+      currentSessionId: "session-current-a",
+      switchTopic: firstSwitchTopic,
+    });
+    await flushEffects();
+
+    renderHook({
+      initialSessionId: "session-shared",
+      currentSessionId: "session-current-b",
+      switchTopic: secondSwitchTopic,
+    });
+    await flushEffects();
+
+    expect(firstSwitchTopic).toHaveBeenCalledWith(
+      "session-shared",
+      undefined,
+    );
+    expect(secondSwitchTopic).toHaveBeenCalledWith(
+      "session-shared",
+      undefined,
+    );
+  });
 });

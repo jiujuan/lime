@@ -52,6 +52,7 @@ pub mod team_tools;
 pub mod tool_search_tool;
 mod view_image;
 pub mod web;
+mod web_fetch_content;
 mod workflow_integration;
 pub mod workflow_tool;
 pub mod worktree_tools;

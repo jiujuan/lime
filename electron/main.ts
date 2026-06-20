@@ -32,6 +32,7 @@ import {
   isWindowLifecycleLoadAbort,
 } from "./mainWindowLoadErrors";
 import { ElectronUpdateHost } from "./updateHost";
+import { waitForElectronSmokeMemorySettingsReady } from "./smokeMemorySettings";
 import {
   buildUpdateNotificationWindowBounds,
   type RectangleLike,
@@ -402,6 +403,8 @@ async function runElectronSmokeChecks(window: BrowserWindow): Promise<void> {
   );
   await waitForElectronSmokeWorkbenchReady(window);
   console.log("[electron-smoke] claw workbench shell ready");
+  await waitForElectronSmokeMemorySettingsReady(window);
+  console.log("[electron-smoke] memory settings ready");
 }
 
 async function waitForElectronSmokeWorkbenchReady(

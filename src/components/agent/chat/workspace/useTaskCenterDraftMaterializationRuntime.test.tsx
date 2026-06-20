@@ -1,7 +1,7 @@
 import { act, useEffect, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Character } from "@/lib/api/memory";
+import type { Character } from "@/lib/api/projectMemory";
 import type { TaskCenterDraftSendRequest } from "../homePendingPreview";
 import {
   TASK_CENTER_DRAFT_SESSION_WARMUP_DELAY_MS,

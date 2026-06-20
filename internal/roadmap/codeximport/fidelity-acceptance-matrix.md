@@ -2,7 +2,7 @@
 title: Codex 导入 Fidelity 验收矩阵
 status: current
 owner: app-server-runtime
-updated: 2026-06-18
+updated: 2026-06-19
 ---
 
 # Codex 导入 Fidelity 验收矩阵
@@ -50,6 +50,7 @@ Codex state_*.sqlite / session_index.jsonl / rollout JSONL
 | runtime detail drilldown | 默认窗口外的完整导入事件 | Task Center 来源区 `imported-runtime-detail-*` 语义卡片、facts、payload preview | current | `local-history-import-real-sample-visual-audit-smoke.test.mjs`、`ImportedRuntimeEventDetailPanel.test.tsx` |
 | continue same session | 导入后的新 turn | `agentSession/turn/start` current 主链，继承导入 cwd / imported metadata，但 provider/model 使用 Lime 当前选择 | current | `codex-import-click-through-electron-fixture` backend ledger、`codex-import-continuation-fixture` |
 | evidence / replay | 导入 session business object、runtime event metadata、item provenance | `evidence/export` / replay 使用 Lime canonical events，带 source provenance | current | `imported_codex_thread_exports_evidence_with_source_provenance` |
+| session delete / retention boundary | 导入后持久化出的 Lime session 数据、外部来源目录 | `agentSession/delete` 清理 Lime memory / projection / event log / session-scoped sidecar；归档 / 恢复仍走 `agentSession/update`；不删除外部来源目录 | current | `persisted_session_delete_clears_projection_and_event_log`、`sessionClient.current-boundary.test.ts`、`npm run test:contracts` |
 | privacy / source leak boundary | source path、thread id、raw event 字段、敏感文件路径 | denylist + source root guard + GUI visible text leak guard + evidence 摘要化 | current | `security.rs`、`local-history-import-visual-audit`、`local-history-import-real-sample-visual-audit` |
 | non-Codex importer | `claude_code` / future clients | 同一 adapter contract，当前返回 unsupported，不污染 Codex-first schema | compat / deferred | `scan unsupported` 分支；不阻塞 Codex-first 全量产品化 |
 
@@ -59,7 +60,7 @@ Codex state_*.sqlite / session_index.jsonl / rollout JSONL
 
 1. PDF、Excel、PPT 已统一进入 Preview Artifact：DOCX / XLSX / PPTX 与可解析 PDF 文本流走 `document_text`，抽取为空或不支持时走 `system_open` 兜底和右侧 metadata fallback surface；音频、视频已有媒体 renderer；URL、database_record 和 app shell 已有来源摘要 renderer；WebSearch 结果点击也已进入 `source=url` preview artifact，并可复用同消息 / 同过程组已存在的成功 WebFetch 正文快照。但 PDF OCR / 扫描件 / 复杂字体映射、URL 主动抓取快照、数据库记录详情的业务级深渲染仍按 `internal/roadmap/artifacts/roadmap.md` P4 推进。
 2. Claude Code importer 只保留 adapter 合同，尚未进入产品化导入。
-3. 导入数据的用户级“彻底删除 / 导出后删除 / 保留策略”还需要独立产品规则和存储清理守卫。
+3. 导出后删除、删除前导出确认和保留期限策略还需要独立产品规则；当前 `agentSession/delete` 只清理 Lime 持久化出的 session 数据，不删除外部来源目录。
 4. 所有未来 Codex 新事件类型默认先进入 unsupported / provenance-only，再补 mapper 与矩阵行；不得静默丢弃。
 
 ## 机械守卫

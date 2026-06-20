@@ -476,6 +476,65 @@ impl RuntimeCore {
         Ok(AgentSessionArchiveManyResponse { sessions })
     }
 
+    pub async fn delete_agent_session(
+        &self,
+        params: AgentSessionDeleteParams,
+    ) -> Result<AgentSessionDeleteResponse, RuntimeCoreError> {
+        let session_id = params.session_id.trim().to_string();
+        if session_id.is_empty() {
+            return Err(RuntimeCoreError::Backend(
+                "sessionId is required for agentSession/delete".to_string(),
+            ));
+        }
+
+        let mut deleted = {
+            let mut state = self
+                .state
+                .lock()
+                .expect("runtime core state mutex poisoned");
+            state.sessions.remove(&session_id).is_some()
+        };
+
+        if let Some(projection_store) = self.projection_store.as_ref() {
+            if projection_store
+                .read_session_projection(&session_id)
+                .map_err(RuntimeCoreError::Backend)?
+                .is_some()
+            {
+                deleted = true;
+            }
+            projection_store
+                .clear_session(&session_id)
+                .map_err(RuntimeCoreError::Backend)?;
+        }
+        if let Some(event_log_writer) = self.event_log_writer.as_ref() {
+            if !event_log_writer
+                .read_session_events(&session_id)
+                .map_err(RuntimeCoreError::Backend)?
+                .is_empty()
+            {
+                deleted = true;
+            }
+            event_log_writer
+                .clear_session(&session_id)
+                .map_err(RuntimeCoreError::Backend)?;
+        }
+        if let Some(sidecar_store) = self.sidecar_store.as_ref() {
+            sidecar_store
+                .clear_session(&session_id)
+                .map_err(RuntimeCoreError::Backend)?;
+        }
+
+        if !deleted {
+            return Err(RuntimeCoreError::SessionNotFound(session_id));
+        }
+
+        Ok(AgentSessionDeleteResponse {
+            session_id,
+            deleted: true,
+        })
+    }
+
     fn update_runtime_core_session_overview(
         &self,
         params: AgentSessionUpdateParams,

@@ -10,6 +10,7 @@ import {
   observedWorkspaceIds,
   renderPage,
   sharedSendMessageMock,
+  sharedSwitchTopicMock,
 } from "./index.testFixtures";
 
 const {
@@ -18,7 +19,6 @@ const {
   mockGetOrCreateDefaultProject,
   mockGetProject,
   mockToast,
-  mockUseAgentChatUnified,
 } = getIndexTestMocks();
 
 describe("AgentChatPage 话题切换项目恢复", () => {
@@ -34,12 +34,14 @@ describe("AgentChatPage 话题切换项目恢复", () => {
     mounted.rerender({ initialSessionId: "topic-a" });
     await flushEffects();
 
-    const switchTopicMock = mockUseAgentChatUnified.mock.results[0]?.value
-      ?.switchTopic as ReturnType<typeof vi.fn>;
-    expect(switchTopicMock).toHaveBeenCalledWith("topic-a", expect.objectContaining({ allowDetachedSession: true }));
+    expect(sharedSwitchTopicMock).toHaveBeenCalledWith(
+      "topic-a",
+      expect.objectContaining({ allowDetachedSession: true }),
+    );
 
     const workspaceHookOrder = getHookCallOrderForWorkspace("project-topic");
-    const switchTopicOrder = switchTopicMock.mock.invocationCallOrder[0];
+    const switchTopicOrder =
+      sharedSwitchTopicMock.mock.invocationCallOrder[0];
     expect(workspaceHookOrder).toBeLessThan(switchTopicOrder);
     expect(observedWorkspaceIds).toContain("project-topic");
     expect(mockToast.error).not.toHaveBeenCalled();
@@ -57,9 +59,7 @@ describe("AgentChatPage 话题切换项目恢复", () => {
     mounted.rerender({ initialSessionId: "topic-a" });
     await flushEffects();
 
-    const switchTopicMock = mockUseAgentChatUnified.mock.results[0]?.value
-      ?.switchTopic as ReturnType<typeof vi.fn>;
-    expect(switchTopicMock).not.toHaveBeenCalled();
+    expect(sharedSwitchTopicMock).not.toHaveBeenCalled();
     expect(mockToast.error).toHaveBeenCalledWith(
       "该任务绑定了其他项目，请先切换到对应项目",
     );
@@ -84,13 +84,14 @@ describe("AgentChatPage 话题切换项目恢复", () => {
     mounted.rerender({ initialSessionId: "topic-a" });
     await flushEffects();
 
-    const switchTopicMock = mockUseAgentChatUnified.mock.results[0]?.value
-      ?.switchTopic as ReturnType<typeof vi.fn>;
     expect(mockGetOrCreateDefaultProject).not.toHaveBeenCalled();
     expect(mockToast.info).not.toHaveBeenCalledWith(
       "未找到可用项目，已自动创建默认项目",
     );
-    expect(switchTopicMock).toHaveBeenCalledWith("topic-a", expect.objectContaining({ allowDetachedSession: true }));
+    expect(sharedSwitchTopicMock).toHaveBeenCalledWith(
+      "topic-a",
+      expect.objectContaining({ allowDetachedSession: true }),
+    );
     expect(observedWorkspaceIds[observedWorkspaceIds.length - 1]).toBe(
       "",
     );

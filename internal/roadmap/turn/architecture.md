@@ -1,7 +1,7 @@
 # Turn / Tool 生命周期架构设计
 
-> 状态：design-drafted
-> 更新时间：2026-06-18
+> 状态：已实现并作为 current 参考
+> 更新时间：2026-06-19
 > 作用：定义 Lime turn 执行、工具生命周期、事件流、read model 和 GUI 投影的目标架构。
 
 ## 1. 架构目标
@@ -250,4 +250,3 @@ Workspace owns visual layout only
 ```
 
 GUI 不允许写回 runtime truth；任何用户动作必须回到 App Server current API。
-

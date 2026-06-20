@@ -4,7 +4,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, vi } from "vitest";
 import { CharacterMention } from "./CharacterMention";
-import type { Character } from "@/lib/api/memory";
+import type { Character } from "@/lib/api/projectMemory";
 import type { Skill } from "@/lib/api/skills";
 import {
   clearSkillCatalogCache,

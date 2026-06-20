@@ -442,6 +442,62 @@ pub(super) fn build_handoff_review_summary_markdown(
     content
 }
 
+pub(super) fn build_rollout_summary_candidate_markdown(
+    read: &AgentSessionReadResponse,
+    metrics: &HandoffMetrics,
+    recent_artifacts: &[HandoffRecentArtifact],
+    exported_at: &str,
+    export_relative_root: &str,
+    export_kind: &str,
+) -> String {
+    let mut content = String::new();
+    let _ = writeln!(
+        content,
+        "Session `{}` exported `{export_kind}` evidence for follow-up consolidation.",
+        read.session.session_id
+    );
+    let _ = writeln!(content);
+    let _ = writeln!(content, "## Export Evidence");
+    let _ = writeln!(content, "- sessionId: `{}`", read.session.session_id);
+    let _ = writeln!(content, "- threadId: `{}`", read.session.thread_id);
+    let _ = writeln!(content, "- exportKind: `{export_kind}`");
+    let _ = writeln!(content, "- exportRoot: `{export_relative_root}`");
+    let _ = writeln!(
+        content,
+        "- threadStatus: `{}`",
+        agent_session_status_label(read.session.status)
+    );
+    if let Some(latest_turn_status) = metrics.latest_turn_status.as_deref() {
+        let _ = writeln!(content, "- latestTurnStatus: `{latest_turn_status}`");
+    }
+    let _ = writeln!(content, "- exportedAt: `{exported_at}`");
+    let _ = writeln!(content);
+    let _ = writeln!(content, "## Candidate Memory");
+    let _ = writeln!(
+        content,
+        "- Review `{export_relative_root}` before promoting this candidate into long-term memory."
+    );
+    if metrics.todo_pending > 0 || metrics.todo_in_progress > 0 {
+        let _ = writeln!(
+            content,
+            "- Pending work remains: {} pending, {} in progress.",
+            metrics.todo_pending, metrics.todo_in_progress
+        );
+    }
+    if !recent_artifacts.is_empty() {
+        let _ = writeln!(content);
+        let _ = writeln!(content, "## Referenced Artifacts");
+        for artifact in recent_artifacts {
+            let _ = writeln!(
+                content,
+                "- {} `{}` ({})",
+                artifact.title, artifact.path, artifact.kind
+            );
+        }
+    }
+    content
+}
+
 pub(super) fn build_handoff_progress_json(
     read: &AgentSessionReadResponse,
     metrics: &HandoffMetrics,

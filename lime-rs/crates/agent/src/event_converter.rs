@@ -742,6 +742,7 @@ fn extract_tool_result_metadata<T: serde::Serialize>(
         for key in [
             "metadata",
             "meta",
+            "_meta",
             "structured_content",
             "structuredContent",
         ] {
@@ -777,6 +778,20 @@ fn extract_tool_result_metadata<T: serde::Serialize>(
     serde_json::to_value(result)
         .ok()
         .and_then(|value| find_metadata(&value, 0))
+}
+
+fn legacy_message_tool_response_metadata(
+    metadata: Option<std::collections::HashMap<String, serde_json::Value>>,
+) -> std::collections::HashMap<String, serde_json::Value> {
+    let mut metadata = metadata.unwrap_or_default();
+    metadata.insert(
+        "source".to_string(),
+        serde_json::json!("legacy_message_tool_response"),
+    );
+    metadata.insert("sourceType".to_string(), serde_json::json!("tool_end"));
+    metadata.insert("compat".to_string(), serde_json::json!(true));
+    metadata.insert("canonical".to_string(), serde_json::json!(false));
+    metadata
 }
 
 fn read_object_string(
@@ -1518,7 +1533,9 @@ fn convert_message(message: Message) -> Vec<TauriAgentEvent> {
                             &tool_response.id,
                             &extracted.output,
                             result,
-                            extract_tool_result_metadata(result),
+                            Some(legacy_message_tool_response_metadata(
+                                extract_tool_result_metadata(result),
+                            )),
                         );
                         (
                             true,
@@ -1536,7 +1553,13 @@ fn convert_message(message: Message) -> Vec<TauriAgentEvent> {
                             },
                         )
                     }
-                    Err(e) => (false, String::new(), Some(e.to_string()), None, None),
+                    Err(e) => (
+                        false,
+                        String::new(),
+                        Some(e.to_string()),
+                        None,
+                        Some(legacy_message_tool_response_metadata(None)),
+                    ),
                 };
 
                 events.push(TauriAgentEvent::ToolEnd {
@@ -2809,6 +2832,84 @@ mod tests {
             metadata.get("output_file"),
             Some(&serde_json::json!("/tmp/aster_tasks/task-1.log"))
         );
+    }
+
+    #[test]
+    fn test_convert_message_tool_response_marks_legacy_tool_end_as_compat() {
+        let message = Message::assistant().with_tool_response(
+            "tool-legacy-1",
+            Ok(rmcp::model::CallToolResult {
+                content: vec![rmcp::model::Content::text("任务已完成")],
+                structured_content: None,
+                meta: Some(rmcp::model::Meta(serde_json::Map::from_iter([
+                    ("exit_code".to_string(), serde_json::json!(0)),
+                    ("source".to_string(), serde_json::json!("tool_payload")),
+                    ("sourceType".to_string(), serde_json::json!("custom_result")),
+                    ("compat".to_string(), serde_json::json!(false)),
+                    ("canonical".to_string(), serde_json::json!(true)),
+                ]))),
+                is_error: None,
+            }),
+        );
+
+        let events = convert_message(message);
+
+        let tool_end = events
+            .iter()
+            .find_map(|event| match event {
+                TauriAgentEvent::ToolEnd { result, .. } => Some(result),
+                _ => None,
+            })
+            .expect("expected legacy tool_end event");
+        let metadata = tool_end
+            .metadata
+            .as_ref()
+            .expect("legacy tool_end metadata");
+        assert_eq!(
+            metadata.get("source"),
+            Some(&serde_json::json!("legacy_message_tool_response"))
+        );
+        assert_eq!(
+            metadata.get("sourceType"),
+            Some(&serde_json::json!("tool_end"))
+        );
+        assert_eq!(metadata.get("compat"), Some(&serde_json::json!(true)));
+        assert_eq!(metadata.get("canonical"), Some(&serde_json::json!(false)));
+        assert_eq!(metadata.get("exit_code"), Some(&serde_json::json!(0)));
+    }
+
+    #[test]
+    fn test_convert_failed_message_tool_response_marks_legacy_tool_end_as_compat() {
+        let message = Message::assistant().with_tool_response(
+            "tool-legacy-failed",
+            Err(rmcp::model::ErrorData::new(
+                rmcp::model::ErrorCode::INTERNAL_ERROR,
+                "tool failed",
+                None,
+            )),
+        );
+
+        let events = convert_message(message);
+
+        let tool_end = events
+            .iter()
+            .find_map(|event| match event {
+                TauriAgentEvent::ToolEnd { result, .. } => Some(result),
+                _ => None,
+            })
+            .expect("expected legacy failed tool_end event");
+        assert!(!tool_end.success);
+        assert_eq!(tool_end.error.as_deref(), Some("-32603: tool failed"));
+        let metadata = tool_end
+            .metadata
+            .as_ref()
+            .expect("legacy failed tool_end metadata");
+        assert_eq!(
+            metadata.get("source"),
+            Some(&serde_json::json!("legacy_message_tool_response"))
+        );
+        assert_eq!(metadata.get("compat"), Some(&serde_json::json!(true)));
+        assert_eq!(metadata.get("canonical"), Some(&serde_json::json!(false)));
     }
 
     #[test]

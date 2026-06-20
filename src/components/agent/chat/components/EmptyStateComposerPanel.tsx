@@ -26,7 +26,7 @@ import { SkillBadge } from "../skill-selection/SkillBadge";
 import { SkillSelector } from "../skill-selection/SkillSelector";
 import { CREATION_MODE_CONFIG } from "./constants";
 import type { CreationMode } from "./types";
-import type { Character } from "@/lib/api/memory";
+import type { Character } from "@/lib/api/projectMemory";
 import type { MessageImage, MessagePathReference } from "../types";
 import {
   EMPTY_STATE_PASSIVE_BADGE_CLASSNAME,

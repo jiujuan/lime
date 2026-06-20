@@ -1,7 +1,7 @@
 # Turn / Tool 生命周期图纸集
 
-> 状态：design-drafted
-> 更新时间：2026-06-18
+> 状态：已实现并作为 current 参考
+> 更新时间：2026-06-19
 > 作用：用 Mermaid 图固定 turn、item、tool、event log、read model 和 UI projection 的目标结构。
 
 ## 1. 总体架构图
@@ -180,4 +180,3 @@ flowchart LR
 ```
 
 退出条件：P5 完成后，新增工具能力只允许接入 item lifecycle。
-

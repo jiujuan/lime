@@ -311,9 +311,9 @@ function normalizeConnectionTestResponse(
   }
   return {
     success: Boolean(response.success),
-    latency_ms: response.latencyMs,
-    error: response.error,
-    models: response.models,
+    latency_ms: response.latencyMs ?? undefined,
+    error: response.error ?? undefined,
+    models: response.models ?? undefined,
   };
 }
 
@@ -325,10 +325,10 @@ function normalizeChatTestResponse(
   }
   return {
     success: Boolean(response.success),
-    latency_ms: response.latencyMs,
-    error: response.error,
-    content: response.content,
-    raw: response.raw,
+    latency_ms: response.latencyMs ?? undefined,
+    error: response.error ?? undefined,
+    content: response.content ?? undefined,
+    raw: response.raw ?? undefined,
   };
 }
 

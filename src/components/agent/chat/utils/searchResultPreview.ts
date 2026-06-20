@@ -221,6 +221,71 @@ function normalizeSearchText(value: string): string {
     .trim();
 }
 
+function readJsonishFieldLine(
+  value: string,
+): { key: string; rawValue: string } | null {
+  const normalized = value.trim().replace(/,$/, "").trim();
+  const match = normalized.match(/^["']?([A-Za-z_][\w-]*)["']?\s*:\s*(.*)$/);
+  if (!match) {
+    return null;
+  }
+  return {
+    key: match[1]?.toLowerCase() || "",
+    rawValue: match[2]?.trim() || "",
+  };
+}
+
+function normalizeJsonishFieldValue(rawValue: string): string {
+  const normalized = rawValue.trim().replace(/,$/, "").trim();
+  if (!normalized || normalized === "null" || normalized === "undefined") {
+    return "";
+  }
+
+  if (
+    (normalized.startsWith('"') && normalized.endsWith('"')) ||
+    (normalized.startsWith("'") && normalized.endsWith("'"))
+  ) {
+    const jsonCompatible =
+      normalized.startsWith("'") && normalized.endsWith("'")
+        ? `"${normalized.slice(1, -1).replace(/"/g, '\\"')}"`
+        : normalized;
+    try {
+      const parsed = JSON.parse(jsonCompatible) as unknown;
+      return typeof parsed === "string" ? parsed : "";
+    } catch {
+      return normalized.slice(1, -1);
+    }
+  }
+
+  return normalized;
+}
+
+function normalizeSearchTitleCandidate(value: string): string {
+  const field = readJsonishFieldLine(value);
+  if (field) {
+    if (
+      [
+        "title",
+        "name",
+        "headline",
+        "label",
+        "summary",
+        "snippet",
+        "description",
+      ].includes(field.key)
+    ) {
+      return normalizeSearchText(normalizeJsonishFieldValue(field.rawValue));
+    }
+    return "";
+  }
+
+  const normalized = normalizeSearchText(value);
+  if (!normalized || /^[{}[\],]+$/.test(normalized)) {
+    return "";
+  }
+  return normalized;
+}
+
 export function getHostnameFromUrl(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, "");
@@ -383,9 +448,9 @@ function parseSearchResultText(rawText: string): SearchResultPreviewItem[] {
       continue;
     }
 
-    let title = normalizeSearchText(currentLine.replace(url, ""));
+    let title = normalizeSearchTitleCandidate(currentLine.replace(url, ""));
     if (!title && index > 0) {
-      const previousLine = normalizeSearchText(lines[index - 1] || "");
+      const previousLine = normalizeSearchTitleCandidate(lines[index - 1] || "");
       if (previousLine && !findFirstUrl(previousLine)) {
         title = previousLine;
       }
@@ -393,7 +458,7 @@ function parseSearchResultText(rawText: string): SearchResultPreviewItem[] {
 
     const snippetLines: string[] = [];
     for (let nextIndex = index + 1; nextIndex < lines.length; nextIndex += 1) {
-      const nextLine = normalizeSearchText(lines[nextIndex] || "");
+      const nextLine = normalizeSearchTitleCandidate(lines[nextIndex] || "");
       if (!nextLine || findFirstUrl(nextLine)) {
         break;
       }

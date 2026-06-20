@@ -164,13 +164,22 @@ pub use app_server_protocol::MediaTaskArtifactLookupParams;
 pub use app_server_protocol::MediaTaskArtifactResponse;
 pub use app_server_protocol::MemoryStoreAddNoteParams;
 pub use app_server_protocol::MemoryStoreAddNoteResponse;
+pub use app_server_protocol::MemoryStoreConsolidateParams;
+pub use app_server_protocol::MemoryStoreConsolidateResponse;
 pub use app_server_protocol::MemoryStoreHealthResponse;
+pub use app_server_protocol::MemoryStoreIndexRebuildResponse;
 pub use app_server_protocol::MemoryStoreListParams;
 pub use app_server_protocol::MemoryStoreListResponse;
 pub use app_server_protocol::MemoryStoreReadParams;
 pub use app_server_protocol::MemoryStoreReadResponse;
 pub use app_server_protocol::MemoryStoreResetParams;
 pub use app_server_protocol::MemoryStoreResetResponse;
+pub use app_server_protocol::MemoryStoreReviewListParams;
+pub use app_server_protocol::MemoryStoreReviewListResponse;
+pub use app_server_protocol::MemoryStoreReviewNote;
+pub use app_server_protocol::MemoryStoreReviewResolveAction;
+pub use app_server_protocol::MemoryStoreReviewResolveParams;
+pub use app_server_protocol::MemoryStoreReviewResolveResponse;
 pub use app_server_protocol::MemoryStoreRootParams;
 pub use app_server_protocol::MemoryStoreSearchParams;
 pub use app_server_protocol::MemoryStoreSearchResponse;
@@ -337,10 +346,14 @@ pub use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_GET;
 pub use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE;
 pub use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_LIST;
 pub use app_server_protocol::METHOD_MEMORY_STORE_ADD_NOTE;
+pub use app_server_protocol::METHOD_MEMORY_STORE_CONSOLIDATE;
 pub use app_server_protocol::METHOD_MEMORY_STORE_HEALTH;
+pub use app_server_protocol::METHOD_MEMORY_STORE_INDEX_REBUILD;
 pub use app_server_protocol::METHOD_MEMORY_STORE_LIST;
 pub use app_server_protocol::METHOD_MEMORY_STORE_READ;
 pub use app_server_protocol::METHOD_MEMORY_STORE_RESET;
+pub use app_server_protocol::METHOD_MEMORY_STORE_REVIEW_LIST;
+pub use app_server_protocol::METHOD_MEMORY_STORE_REVIEW_RESOLVE;
 pub use app_server_protocol::METHOD_MEMORY_STORE_SEARCH;
 pub use app_server_protocol::METHOD_MODEL_LIST;
 pub use app_server_protocol::METHOD_MODEL_PREFERENCES_LIST;
@@ -1117,6 +1130,27 @@ impl AppServerClient {
         self.typed_request(typed::add_memory_store_note(params))
     }
 
+    pub fn consolidate_memory_store(
+        &mut self,
+        params: MemoryStoreConsolidateParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::consolidate_memory_store(params))
+    }
+
+    pub fn list_memory_store_review_notes(
+        &mut self,
+        params: MemoryStoreReviewListParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::list_memory_store_review_notes(params))
+    }
+
+    pub fn resolve_memory_store_review_note(
+        &mut self,
+        params: MemoryStoreReviewResolveParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::resolve_memory_store_review_note(params))
+    }
+
     pub fn health_memory_store(
         &mut self,
         params: MemoryStoreRootParams,
@@ -1129,6 +1163,13 @@ impl AppServerClient {
         params: MemoryStoreResetParams,
     ) -> Result<JsonRpcRequest, ClientError> {
         self.typed_request(typed::reset_memory_store(params))
+    }
+
+    pub fn rebuild_memory_store_index(
+        &mut self,
+        params: MemoryStoreRootParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::rebuild_memory_store_index(params))
     }
 
     pub fn list_logs(&mut self) -> Result<JsonRpcRequest, ClientError> {
@@ -1902,6 +1943,24 @@ pub mod typed {
         TypedRequest::new(METHOD_MEMORY_STORE_ADD_NOTE, params)
     }
 
+    pub fn consolidate_memory_store(
+        params: MemoryStoreConsolidateParams,
+    ) -> TypedRequest<MemoryStoreConsolidateParams> {
+        TypedRequest::new(METHOD_MEMORY_STORE_CONSOLIDATE, params)
+    }
+
+    pub fn list_memory_store_review_notes(
+        params: MemoryStoreReviewListParams,
+    ) -> TypedRequest<MemoryStoreReviewListParams> {
+        TypedRequest::new(METHOD_MEMORY_STORE_REVIEW_LIST, params)
+    }
+
+    pub fn resolve_memory_store_review_note(
+        params: MemoryStoreReviewResolveParams,
+    ) -> TypedRequest<MemoryStoreReviewResolveParams> {
+        TypedRequest::new(METHOD_MEMORY_STORE_REVIEW_RESOLVE, params)
+    }
+
     pub fn health_memory_store(
         params: MemoryStoreRootParams,
     ) -> TypedRequest<MemoryStoreRootParams> {
@@ -1912,6 +1971,12 @@ pub mod typed {
         params: MemoryStoreResetParams,
     ) -> TypedRequest<MemoryStoreResetParams> {
         TypedRequest::new(METHOD_MEMORY_STORE_RESET, params)
+    }
+
+    pub fn rebuild_memory_store_index(
+        params: MemoryStoreRootParams,
+    ) -> TypedRequest<MemoryStoreRootParams> {
+        TypedRequest::new(METHOD_MEMORY_STORE_INDEX_REBUILD, params)
     }
 
     pub fn list_logs() -> TypedRequest<serde_json::Value> {
@@ -2975,6 +3040,35 @@ mod tests {
                 slug: None,
             })
             .expect("memory store add note");
+        let memory_store_consolidate = client
+            .consolidate_memory_store(MemoryStoreConsolidateParams {
+                root: MemoryStoreRootParams {
+                    scope: app_server_protocol::MemoryStoreScope::Workspace,
+                    workspace_root: Some("/workspace/project".to_string()),
+                },
+                max_notes: Some(10),
+            })
+            .expect("memory store consolidate");
+        let memory_store_review_list = client
+            .list_memory_store_review_notes(MemoryStoreReviewListParams {
+                root: MemoryStoreRootParams {
+                    scope: app_server_protocol::MemoryStoreScope::Workspace,
+                    workspace_root: Some("/workspace/project".to_string()),
+                },
+                cursor: None,
+                max_results: Some(10),
+            })
+            .expect("memory store review list");
+        let memory_store_review_resolve = client
+            .resolve_memory_store_review_note(MemoryStoreReviewResolveParams {
+                root: MemoryStoreRootParams {
+                    scope: app_server_protocol::MemoryStoreScope::Workspace,
+                    workspace_root: Some("/workspace/project".to_string()),
+                },
+                path: "extensions/ad_hoc/review/secret.md".to_string(),
+                action: MemoryStoreReviewResolveAction::Reject,
+            })
+            .expect("memory store review resolve");
         let memory_store_health = client
             .health_memory_store(MemoryStoreRootParams {
                 scope: app_server_protocol::MemoryStoreScope::Workspace,
@@ -2989,6 +3083,12 @@ mod tests {
                 },
             })
             .expect("memory store reset");
+        let memory_store_index_rebuild = client
+            .rebuild_memory_store_index(MemoryStoreRootParams {
+                scope: app_server_protocol::MemoryStoreScope::Workspace,
+                workspace_root: Some("/workspace/project".to_string()),
+            })
+            .expect("memory store index rebuild");
         let logs = client.list_logs().expect("logs");
         let persisted_tail = client
             .read_persisted_log_tail(LogPersistedTailParams { lines: Some(250) })
@@ -3227,6 +3327,43 @@ mod tests {
                 "title": "Tone note",
             })
         );
+        assert_eq!(
+            memory_store_consolidate.method,
+            METHOD_MEMORY_STORE_CONSOLIDATE
+        );
+        assert_eq!(
+            memory_store_consolidate.params.expect("params"),
+            json!({
+                "scope": "workspace",
+                "workspaceRoot": "/workspace/project",
+                "maxNotes": 10,
+            })
+        );
+        assert_eq!(
+            memory_store_review_list.method,
+            METHOD_MEMORY_STORE_REVIEW_LIST
+        );
+        assert_eq!(
+            memory_store_review_list.params.expect("params"),
+            json!({
+                "scope": "workspace",
+                "workspaceRoot": "/workspace/project",
+                "maxResults": 10,
+            })
+        );
+        assert_eq!(
+            memory_store_review_resolve.method,
+            METHOD_MEMORY_STORE_REVIEW_RESOLVE
+        );
+        assert_eq!(
+            memory_store_review_resolve.params.expect("params"),
+            json!({
+                "scope": "workspace",
+                "workspaceRoot": "/workspace/project",
+                "path": "extensions/ad_hoc/review/secret.md",
+                "action": "reject",
+            })
+        );
         assert_eq!(memory_store_health.method, METHOD_MEMORY_STORE_HEALTH);
         assert_eq!(
             memory_store_health.params.expect("params"),
@@ -3238,6 +3375,17 @@ mod tests {
         assert_eq!(memory_store_reset.method, METHOD_MEMORY_STORE_RESET);
         assert_eq!(
             memory_store_reset.params.expect("params"),
+            json!({
+                "scope": "workspace",
+                "workspaceRoot": "/workspace/project",
+            })
+        );
+        assert_eq!(
+            memory_store_index_rebuild.method,
+            METHOD_MEMORY_STORE_INDEX_REBUILD
+        );
+        assert_eq!(
+            memory_store_index_rebuild.params.expect("params"),
             json!({
                 "scope": "workspace",
                 "workspaceRoot": "/workspace/project",

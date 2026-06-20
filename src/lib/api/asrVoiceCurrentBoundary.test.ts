@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { cwd } from "node:process";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 const RETIRED_AUDIO_DEVICE_FACADE_COMMAND = "list_audio_devices";
 const RETIRED_VOICE_INPUT_CONFIG_FACADE_COMMANDS = [
@@ -147,6 +147,12 @@ function listProductionGuiTsFiles(): string[] {
   ];
 }
 
+let productionGuiSourceByPath = new Map<string, string>();
+
+function getProductionGuiSource(path: string): string {
+  return productionGuiSourceByPath.get(path) ?? readRepoFile(path);
+}
+
 function expectStringLiteralsAbsent(source: string, literals: string[]): void {
   for (const literal of literals) {
     expect(source).not.toContain(`"${literal}"`);
@@ -277,6 +283,15 @@ function readAppServerVoiceInstructionSources(): string {
 }
 
 describe("ASR / Voice current boundary", () => {
+  beforeAll(() => {
+    const productionFiles = listProductionGuiTsFiles().filter(
+      (path) => path !== "src/lib/api/asrProvider.ts",
+    );
+    productionGuiSourceByPath = new Map(
+      productionFiles.map((path) => [path, readRepoFile(path)]),
+    );
+  }, 20_000);
+
   it("麦克风设备列表应固定走 renderer mediaDevices current", () => {
     const asrProviderSource = readRepoFile("src/lib/api/asrProvider.ts");
     const restrictedSources = [
@@ -631,26 +646,22 @@ describe("ASR / Voice current boundary", () => {
   });
 
   it("生产 GUI 不应重新 import 实时语音 fail-closed wrapper", () => {
-    const productionFiles = listProductionGuiTsFiles().filter(
-      (path) => path !== "src/lib/api/asrProvider.ts",
-    );
-    const violations = productionFiles.flatMap((path) => {
+    const violations = [...productionGuiSourceByPath].flatMap(
+      ([path, source]) => {
       const imports = findAsrProviderNamedImports(
-        readRepoFile(path),
+        source,
         RETIRED_VOICE_REALTIME_FRONTEND_HELPERS,
       );
       return imports.map((name) => `${path}: ${name}`);
-    });
+      },
+    );
 
     expect(violations).toEqual([]);
   });
 
   it("生产 GUI 不应重新暴露实时语音默认入口", () => {
-    const productionFiles = listProductionGuiTsFiles().filter(
-      (path) => path !== "src/lib/api/asrProvider.ts",
-    );
-    const violations = productionFiles.flatMap((path) => {
-      const source = readRepoFile(path);
+    const violations = [...productionGuiSourceByPath].flatMap(([path]) => {
+      const source = getProductionGuiSource(path);
       return RETIRED_VOICE_REALTIME_GUI_FALSE_ENTRY_LITERALS.flatMap(
         (literal) =>
           source.includes(`"${literal}"`) || source.includes(`'${literal}'`)

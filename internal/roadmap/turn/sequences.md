@@ -1,7 +1,7 @@
 # Turn / Tool 生命周期时序图
 
-> 状态：design-drafted
-> 更新时间：2026-06-18
+> 状态：已实现并作为 current 参考
+> 更新时间：2026-06-19
 > 作用：固定关键运行场景的前后端时序，确保后续实现、测试和 E2E 使用同一判断口径。
 
 ## 1. 普通文本 turn
@@ -243,4 +243,3 @@ sequenceDiagram
 1. approval request 是 item，不是 message 文本。
 2. 工具等待态和 approval action 可用 id join。
 3. 拒绝审批时 tool item 终态为 failed / denied。
-

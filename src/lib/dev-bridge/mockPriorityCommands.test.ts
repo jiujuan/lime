@@ -23,7 +23,6 @@ describe("mockPriorityCommands", () => {
       "agent_app_start_ui_runtime",
       "get_model_registry",
       "knowledge_list_packs",
-      "project_memory_get",
       "session_files_save_file",
     ];
 
@@ -118,7 +117,7 @@ describe("mockPriorityCommands", () => {
       false,
     );
     expect(shouldDisallowMockFallbackInBrowser("project_memory_get")).toBe(
-      true,
+      false,
     );
     expect(
       shouldDisallowMockFallbackInBrowser("agent_app_start_ui_runtime"),

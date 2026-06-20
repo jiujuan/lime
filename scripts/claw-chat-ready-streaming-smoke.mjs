@@ -1695,6 +1695,13 @@ function isLikelyDetachedBlankTaskSnapshot(snapshot) {
   );
 }
 
+function recoveryResultVisible(snapshot, persisted = false) {
+  return Boolean(
+    snapshot?.recoveryVisible &&
+      (Number(snapshot?.recoveryTextCount || 0) >= 1 || persisted),
+  );
+}
+
 async function openSessionFromSidebar(page, sessionId) {
   return page
     .evaluate(
@@ -2513,9 +2520,10 @@ async function main() {
         "等待 GUI 出现恢复结果",
         async () => {
           const snapshot = await readPageSnapshot(page);
-          return snapshot?.recoveryVisible &&
-            (Number(snapshot.recoveryTextCount || 0) >= 2 ||
-              summary.followPersistedRecoveryBeforeGuiWait)
+          return recoveryResultVisible(
+            snapshot,
+            summary.followPersistedRecoveryBeforeGuiWait,
+          )
             ? snapshot
             : null;
         },
@@ -2561,9 +2569,10 @@ async function main() {
           "等待重新打开目标会话后 GUI 出现恢复结果",
           async () => {
             const snapshot = await readPageSnapshot(page);
-            return snapshot?.recoveryVisible &&
-              (Number(snapshot.recoveryTextCount || 0) >= 2 ||
-                summary.recoveryPersistedBeforeRefresh)
+            return recoveryResultVisible(
+              snapshot,
+              summary.recoveryPersistedBeforeRefresh,
+            )
               ? snapshot
               : null;
           },

@@ -9,7 +9,7 @@ import type {
   Character,
   WorldBuilding,
   OutlineNode,
-} from "@/lib/api/memory";
+} from "@/lib/api/projectMemory";
 
 const DEFAULT_CHARACTER_NAME = "默认主角";
 const DEFAULT_OUTLINE_TITLE = "第一章";

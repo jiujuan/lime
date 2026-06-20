@@ -1,12 +1,22 @@
 use app_server_protocol::*;
 use async_trait::async_trait;
 use chrono::Utc;
+use serde::Serialize;
+use std::collections::hash_map::DefaultHasher;
 use std::ffi::OsStr;
 use std::fs;
+use std::hash::{Hash, Hasher};
 use std::io;
 use std::path::{Component, Path, PathBuf};
 
 use crate::RuntimeCoreError;
+
+mod audit;
+mod consolidation;
+mod review;
+mod rollout;
+
+pub use rollout::RolloutSummaryWriteParams;
 
 const MEMORY_ROOT_DIR: &str = "memories";
 const WORKSPACE_STATE_DIR: &str = ".lime";
@@ -16,6 +26,8 @@ const NOTES_DIR: &str = "extensions/ad_hoc/notes";
 const ROLLOUT_SUMMARIES_DIR: &str = "rollout_summaries";
 const SKILLS_DIR: &str = "skills";
 const INDEX_DIR: &str = "index";
+const INDEX_MANIFEST_FILE: &str = "manifest.json";
+const INDEX_SCHEMA_VERSION: &str = "memory-index-manifest/v1";
 const DEFAULT_LIST_LIMIT: usize = 50;
 const MAX_LIST_LIMIT: usize = 200;
 const DEFAULT_READ_LINES: usize = 80;
@@ -45,6 +57,26 @@ pub trait MemoryBackend: Send + Sync {
         params: MemoryStoreAddNoteParams,
     ) -> Result<MemoryStoreAddNoteResponse, RuntimeCoreError>;
 
+    async fn write_rollout_summary(
+        &self,
+        params: RolloutSummaryWriteParams,
+    ) -> Result<MemoryStoreAddNoteResponse, RuntimeCoreError>;
+
+    async fn consolidate(
+        &self,
+        params: MemoryStoreConsolidateParams,
+    ) -> Result<MemoryStoreConsolidateResponse, RuntimeCoreError>;
+
+    async fn list_review(
+        &self,
+        params: MemoryStoreReviewListParams,
+    ) -> Result<MemoryStoreReviewListResponse, RuntimeCoreError>;
+
+    async fn resolve_review(
+        &self,
+        params: MemoryStoreReviewResolveParams,
+    ) -> Result<MemoryStoreReviewResolveResponse, RuntimeCoreError>;
+
     async fn health(
         &self,
         params: MemoryStoreRootParams,
@@ -54,6 +86,11 @@ pub trait MemoryBackend: Send + Sync {
         &self,
         params: MemoryStoreResetParams,
     ) -> Result<MemoryStoreResetResponse, RuntimeCoreError>;
+
+    async fn rebuild_index(
+        &self,
+        params: MemoryStoreRootParams,
+    ) -> Result<MemoryStoreIndexRebuildResponse, RuntimeCoreError>;
 }
 
 #[derive(Debug, Clone)]
@@ -95,6 +132,7 @@ impl LocalMemoryBackend {
         fs::create_dir_all(root.join(ROLLOUT_SUMMARIES_DIR)).map_err(io_error)?;
         fs::create_dir_all(root.join(SKILLS_DIR)).map_err(io_error)?;
         fs::create_dir_all(root.join(NOTES_DIR)).map_err(io_error)?;
+        fs::create_dir_all(root.join(audit::AUDIT_DIR)).map_err(io_error)?;
         fs::create_dir_all(root.join(INDEX_DIR)).map_err(io_error)?;
         ensure_file(root.join(SUMMARY_FILE))?;
         ensure_file(root.join(MEMORY_FILE))?;
@@ -341,6 +379,34 @@ impl MemoryBackend for LocalMemoryBackend {
         })
     }
 
+    async fn write_rollout_summary(
+        &self,
+        params: RolloutSummaryWriteParams,
+    ) -> Result<MemoryStoreAddNoteResponse, RuntimeCoreError> {
+        rollout::write_rollout_summary(self, params).await
+    }
+
+    async fn consolidate(
+        &self,
+        params: MemoryStoreConsolidateParams,
+    ) -> Result<MemoryStoreConsolidateResponse, RuntimeCoreError> {
+        consolidation::consolidate_memory_store(self, params).await
+    }
+
+    async fn list_review(
+        &self,
+        params: MemoryStoreReviewListParams,
+    ) -> Result<MemoryStoreReviewListResponse, RuntimeCoreError> {
+        review::list_review_notes(self, params).await
+    }
+
+    async fn resolve_review(
+        &self,
+        params: MemoryStoreReviewResolveParams,
+    ) -> Result<MemoryStoreReviewResolveResponse, RuntimeCoreError> {
+        review::resolve_review_note(self, params).await
+    }
+
     async fn health(
         &self,
         params: MemoryStoreRootParams,
@@ -382,6 +448,44 @@ impl MemoryBackend for LocalMemoryBackend {
             removed_files: removed.files,
             removed_directories: removed.directories,
             preserved_soul: true,
+        })
+    }
+
+    async fn rebuild_index(
+        &self,
+        params: MemoryStoreRootParams,
+    ) -> Result<MemoryStoreIndexRebuildResponse, RuntimeCoreError> {
+        let root = self.resolve_root(&params)?;
+        self.ensure_layout(&root)?;
+        let source_stats = collect_index_source_stats(&root)?;
+        let indexed_at = Utc::now().to_rfc3339();
+        let manifest_path = root.join(INDEX_DIR).join(INDEX_MANIFEST_FILE);
+        reject_symlink_chain(&root, &manifest_path)?;
+        let manifest = MemoryIndexManifest {
+            schema_version: INDEX_SCHEMA_VERSION,
+            indexed_at: &indexed_at,
+            root_scope: params.scope,
+            source_file_count: source_stats.file_count,
+            source_total_bytes: source_stats.total_bytes,
+            source_checksum: &source_stats.checksum,
+        };
+        let manifest_content = serde_json::to_string_pretty(&manifest).map_err(|error| {
+            backend_error(format!("memory index manifest serialize failed: {error}"))
+        })?;
+        fs::write(&manifest_path, format!("{manifest_content}\n")).map_err(io_error)?;
+
+        Ok(MemoryStoreIndexRebuildResponse {
+            root_scope: params.scope,
+            root_path: path_to_display_string(&root)?,
+            manifest_path: path_to_relative_string(
+                Path::new(INDEX_DIR).join(INDEX_MANIFEST_FILE).as_path(),
+            )?,
+            schema_version: INDEX_SCHEMA_VERSION.to_string(),
+            source_file_count: source_stats.file_count,
+            source_total_bytes: source_stats.total_bytes,
+            source_checksum: source_stats.checksum,
+            indexed_at,
+            rebuilt: true,
         })
     }
 }
@@ -498,7 +602,11 @@ fn collect_searchable_files(root: &Path) -> Result<Vec<PathBuf>, RuntimeCoreErro
             if is_symlink(&path)? {
                 continue;
             }
-            if path.strip_prefix(root).ok().is_some_and(is_under_index_dir) {
+            if path
+                .strip_prefix(root)
+                .ok()
+                .is_some_and(is_under_derived_dir)
+            {
                 continue;
             }
             let metadata = fs::metadata(&path).map_err(io_error)?;
@@ -517,6 +625,24 @@ fn collect_searchable_files(root: &Path) -> Result<Vec<PathBuf>, RuntimeCoreErro
 struct StoreStats {
     file_count: usize,
     total_bytes: u64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct IndexSourceStats {
+    file_count: usize,
+    total_bytes: u64,
+    checksum: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MemoryIndexManifest<'a> {
+    schema_version: &'a str,
+    indexed_at: &'a str,
+    root_scope: MemoryStoreScope,
+    source_file_count: usize,
+    source_total_bytes: u64,
+    source_checksum: &'a str,
 }
 
 fn collect_store_stats(root: &Path) -> Result<StoreStats, RuntimeCoreError> {
@@ -542,6 +668,27 @@ fn collect_store_stats(root: &Path) -> Result<StoreStats, RuntimeCoreError> {
         }
     }
     Ok(stats)
+}
+
+fn collect_index_source_stats(root: &Path) -> Result<IndexSourceStats, RuntimeCoreError> {
+    let files = collect_searchable_files(root)?;
+    let mut hasher = DefaultHasher::new();
+    let mut total_bytes = 0_u64;
+    for file in &files {
+        let metadata = fs::metadata(file).map_err(io_error)?;
+        total_bytes = total_bytes.saturating_add(metadata.len());
+        let relative = file
+            .strip_prefix(root)
+            .map_err(|_| backend_error("memory path is outside root"))?;
+        path_to_relative_string(relative)?.hash(&mut hasher);
+        metadata.len().hash(&mut hasher);
+        modified_at_seconds(&metadata).hash(&mut hasher);
+    }
+    Ok(IndexSourceStats {
+        file_count: files.len(),
+        total_bytes,
+        checksum: format!("{:016x}", hasher.finish()),
+    })
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -640,10 +787,11 @@ fn path_to_display_string(path: &Path) -> Result<String, RuntimeCoreError> {
         .ok_or_else(|| backend_error("memory root path must be UTF-8"))
 }
 
-fn is_under_index_dir(path: &Path) -> bool {
-    path.components()
-        .next()
-        .is_some_and(|component| component.as_os_str() == INDEX_DIR)
+fn is_under_derived_dir(path: &Path) -> bool {
+    path.components().next().is_some_and(|component| {
+        let segment = component.as_os_str();
+        segment == INDEX_DIR || segment == audit::AUDIT_DIR
+    })
 }
 
 #[derive(Debug, Clone)]

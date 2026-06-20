@@ -1,0 +1,57 @@
+{
+  "$defs": {
+    "MemoryStoreCitation": {
+      "properties": {
+        "endLineNumber": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "path": {
+          "type": "string"
+        },
+        "startLineNumber": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "endLineNumber",
+        "path",
+        "startLineNumber"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "citation": {
+      "$ref": "#/$defs/MemoryStoreCitation"
+    },
+    "modifiedAt": {
+      "format": "int64",
+      "type": "integer"
+    },
+    "path": {
+      "type": "string"
+    },
+    "preview": {
+      "type": "string"
+    },
+    "size": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "citation",
+    "modifiedAt",
+    "path",
+    "preview",
+    "size"
+  ],
+  "title": "MemoryStoreReviewNote",
+  "type": "object"
+}

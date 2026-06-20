@@ -1568,6 +1568,54 @@ describe("messageListItemProjection", () => {
     ]);
   });
 
+  it("搜索后的累计思考不应回写到搜索前的思考块", () => {
+    const message: Message = {
+      id: "assistant-thinking-after-search",
+      role: "assistant",
+      content: "",
+      timestamp: new Date("2026-06-20T10:00:00.000Z"),
+      isThinking: true,
+      thinkingContent: "先确定搜索范围。搜索结果还要筛掉广告。",
+      contentParts: [
+        {
+          type: "thinking",
+          text: "先确定搜索范围。",
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-search-after-thinking",
+            name: "web_search",
+            arguments: JSON.stringify({
+              query: "五年级 学习机 评测 对比",
+            }),
+            status: "running",
+            startTime: new Date("2026-06-20T10:00:01.000Z"),
+          },
+        },
+      ],
+    };
+
+    const projection = buildProjection(message, null, {
+      isSending: true,
+      turnStatus: "running",
+    });
+
+    expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
+      "thinking",
+      "tool_use",
+      "thinking",
+    ]);
+    expect(projection.rendererContentParts?.[0]).toMatchObject({
+      type: "thinking",
+      text: "先确定搜索范围。",
+    });
+    expect(projection.rendererContentParts?.[2]).toMatchObject({
+      type: "thinking",
+      text: "搜索结果还要筛掉广告。",
+    });
+  });
+
   it("历史任务板工具应保持时间线穿插顺序且不把任务 JSON 当正文", () => {
     const message: Message = {
       id: "assistant-task-board-history",

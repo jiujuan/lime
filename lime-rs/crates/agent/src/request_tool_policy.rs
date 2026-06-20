@@ -26,7 +26,7 @@ use serde_json::Map;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -65,6 +65,7 @@ const NEWS_PREFLIGHT_CONTEXT_CHAR_LIMIT: usize = 6_000;
 const NEWS_PREFLIGHT_RESULT_LINES: usize = 18;
 const WEB_SEARCH_SYNTHESIS_MIN_SUCCESSFUL_ATTEMPTS: usize = 3;
 const WEB_SEARCH_SYNTHESIS_MIN_COMPLETED_ATTEMPTS: usize = 4;
+const STREAM_CANCEL_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const WEB_SEARCH_EMPTY_REPLY_RETRY_PROMPT: &str = "请继续。你已经完成本回合所需的 WebSearch 预检索，现在必须直接给出最终答复，不要再次调用 WebSearch 或 WebFetch。请至少输出：1. 结论摘要；2. 主题归纳；3. 关键信息；4. 如有分歧，说明来源差异。";
 const ASTER_AUTO_COMPACTION_START_PREFIX: &str = "Exceeded auto-compact threshold of ";
 const ASTER_AUTO_COMPACTION_COMPLETE_TEXT: &str = "Compaction complete";
@@ -398,6 +399,72 @@ struct StreamEventDiagnostics {
     max_context_trace_steps: usize,
     last_persisted_artifact_path: Option<String>,
     last_saved_markdown_path: Option<String>,
+}
+
+#[derive(Debug, Default)]
+struct WebRetrievalProcessState {
+    active_tool_ids: HashSet<String>,
+    completed_tool_ids: HashSet<String>,
+    observed_completed_count: usize,
+    emitted_synthesis_status: bool,
+    final_text_started: bool,
+}
+
+impl WebRetrievalProcessState {
+    fn observe_text_delta(&mut self, text: &str) {
+        if !text.trim().is_empty() {
+            self.final_text_started = true;
+        }
+    }
+
+    fn observe_tool_start(&mut self, tool_id: &str, tool_name: &str) {
+        if !is_web_retrieval_tool_name(tool_name) || tool_id.trim().is_empty() {
+            return;
+        }
+        self.active_tool_ids.insert(tool_id.to_string());
+    }
+
+    fn observe_tool_end(&mut self, tool_id: &str) {
+        if self.active_tool_ids.remove(tool_id)
+            && self.completed_tool_ids.insert(tool_id.to_string())
+        {
+            self.observed_completed_count += 1;
+        }
+    }
+
+    fn observe_tool_item(&mut self, item: &AgentThreadItem, completed: bool) {
+        let AgentThreadItemPayload::ToolCall { tool_name, .. } = &item.payload else {
+            return;
+        };
+        if !is_web_retrieval_tool_name(tool_name) || item.id.trim().is_empty() {
+            return;
+        }
+
+        if completed {
+            self.active_tool_ids.remove(&item.id);
+            if self.completed_tool_ids.insert(item.id.clone()) {
+                self.observed_completed_count += 1;
+            }
+        } else {
+            self.active_tool_ids.insert(item.id.clone());
+        }
+    }
+
+    fn should_emit_synthesis_status(&self) -> bool {
+        self.observed_completed_count > 0
+            && self.active_tool_ids.is_empty()
+            && !self.emitted_synthesis_status
+            && !self.final_text_started
+    }
+
+    fn mark_synthesis_status_emitted(&mut self) {
+        self.emitted_synthesis_status = true;
+    }
+}
+
+fn is_web_retrieval_tool_name(tool_name: &str) -> bool {
+    let normalized = normalize_tool_name(tool_name);
+    normalized.contains("websearch") || normalized.contains("webfetch")
 }
 
 impl StreamEventDiagnostics {
@@ -1339,6 +1406,27 @@ fn build_web_search_synthesis_runtime_status(coverage_summary: Option<&str>) -> 
     }
 }
 
+fn build_web_retrieval_synthesis_runtime_status(completed_count: usize) -> AgentRuntimeStatus {
+    let completed_label = if completed_count > 1 {
+        format!("已收到 {completed_count} 个网页检索结果")
+    } else {
+        "已收到网页检索结果".to_string()
+    };
+
+    AgentRuntimeStatus {
+        phase: "synthesizing".to_string(),
+        title: "正在整理联网结果".to_string(),
+        detail: "网页检索工具已返回结果，正在整理来源、判断是否还缺证据，并准备输出最终答复。"
+            .to_string(),
+        checkpoints: vec![
+            completed_label,
+            "正在归纳来源与关键信息".to_string(),
+            "如仍缺证据，会继续请求网页工具".to_string(),
+        ],
+        metadata: Some(build_diagnostics_runtime_status_metadata()),
+    }
+}
+
 fn duplicate_session_config(config: &aster::agents::SessionConfig) -> aster::agents::SessionConfig {
     aster::agents::SessionConfig {
         id: config.id.clone(),
@@ -1580,7 +1668,9 @@ where
     let mut auto_compaction_projection = AutoCompactionProjectionState;
     let mut inline_provider_error = None;
     let mut text_delta_batcher = TextDeltaBatcher::default();
+    let mut web_retrieval_process_state = WebRetrievalProcessState::default();
     let session_id = session_config.id.clone();
+    let session_config_for_status = duplicate_session_config(&session_config);
     tracing::info!(
         "[AsterAgent][TTFT] agent.reply start: session_id={}, message_chars={}",
         session_id,
@@ -1601,12 +1691,16 @@ where
 
     'stream_loop: loop {
         let event_result = match cancel_probe.as_ref() {
-            Some(token) => {
-                tokio::select! {
-                    _ = token.cancelled() => break,
-                    next = stream.next() => next,
+            Some(token) => loop {
+                if token.is_cancelled() {
+                    break None;
                 }
-            }
+                match tokio::time::timeout(STREAM_CANCEL_POLL_INTERVAL, stream.next()).await {
+                    Ok(next) => break next,
+                    Err(_) if token.is_cancelled() => break None,
+                    Err(_) => continue,
+                }
+            },
             None => stream.next().await,
         };
         let Some(event_result) = event_result else {
@@ -1658,6 +1752,7 @@ where
                                         text.chars().count()
                                     );
                                 }
+                                web_retrieval_process_state.observe_text_delta(text);
                                 text_chunks.push(text.clone());
                             }
                         }
@@ -1669,17 +1764,22 @@ where
                         RuntimeAgentEvent::ItemStarted { item }
                         | RuntimeAgentEvent::ItemUpdated { item } => {
                             web_search_tracker.record_tool_item(request_tool_policy, item, false);
+                            web_retrieval_process_state.observe_tool_item(item, false);
                         }
                         RuntimeAgentEvent::ItemCompleted { item } => {
                             web_search_tracker.record_tool_item(request_tool_policy, item, true);
+                            web_retrieval_process_state.observe_tool_item(item, true);
                         }
                         RuntimeAgentEvent::ToolStart {
                             tool_name, tool_id, ..
-                        } => web_search_tracker.record_tool_start(
-                            request_tool_policy,
-                            tool_id,
-                            tool_name,
-                        ),
+                        } => {
+                            web_search_tracker.record_tool_start(
+                                request_tool_policy,
+                                tool_id,
+                                tool_name,
+                            );
+                            web_retrieval_process_state.observe_tool_start(tool_id, tool_name);
+                        }
                         RuntimeAgentEvent::ToolEnd { tool_id, result } => {
                             web_search_tracker.record_tool_end(
                                 request_tool_policy,
@@ -1687,6 +1787,7 @@ where
                                 result.success,
                                 result.error.as_deref(),
                             );
+                            web_retrieval_process_state.observe_tool_end(tool_id);
                         }
                         _ => {}
                     }
@@ -1717,6 +1818,23 @@ where
                             *emitted_any = true;
                             on_event(&other_event);
                         }
+                    }
+                    if web_retrieval_process_state.should_emit_synthesis_status() {
+                        web_retrieval_process_state.mark_synthesis_status_emitted();
+                        tracing::info!(
+                            "[AsterAgent][RuntimeStatus] emitting web retrieval synthesis status: session_id={}, completed_web_tools={}",
+                            session_id,
+                            web_retrieval_process_state.observed_completed_count
+                        );
+                        emit_runtime_status_with_projection(
+                            agent,
+                            &session_config_for_status,
+                            build_web_retrieval_synthesis_runtime_status(
+                                web_retrieval_process_state.observed_completed_count,
+                            ),
+                            on_event,
+                        )
+                        .await;
                     }
                     if should_cutover_to_web_search_synthesis {
                         tracing::warn!(
@@ -3465,6 +3583,53 @@ mod tests {
     }
 
     #[test]
+    fn web_retrieval_process_state_emits_once_after_web_tool_returns() {
+        let mut state = WebRetrievalProcessState::default();
+
+        state.observe_tool_start("tool-1", "WebSearch");
+        assert!(!state.should_emit_synthesis_status());
+
+        state.observe_tool_end("tool-1");
+        assert!(state.should_emit_synthesis_status());
+        let status = build_web_retrieval_synthesis_runtime_status(state.observed_completed_count);
+        assert_eq!(status.phase, "synthesizing");
+        assert_eq!(status.title, "正在整理联网结果");
+        assert!(status.detail.contains("网页检索工具已返回结果"));
+
+        state.mark_synthesis_status_emitted();
+        assert!(!state.should_emit_synthesis_status());
+    }
+
+    #[test]
+    fn web_retrieval_process_state_handles_item_lifecycle_without_double_counting() {
+        let mut state = WebRetrievalProcessState::default();
+        let item = completed_tool_item("web-item-1", 1);
+
+        state.observe_tool_item(&item, false);
+        state.observe_tool_item(&item, false);
+        assert!(!state.should_emit_synthesis_status());
+
+        state.observe_tool_item(&item, true);
+        state.observe_tool_end("web-item-1");
+
+        assert_eq!(state.observed_completed_count, 1);
+        assert!(state.should_emit_synthesis_status());
+    }
+
+    #[test]
+    fn web_retrieval_process_state_ignores_non_web_tools_and_final_text_started() {
+        let mut state = WebRetrievalProcessState::default();
+        state.observe_tool_start("tool-read", "Read");
+        state.observe_tool_end("tool-read");
+        assert!(!state.should_emit_synthesis_status());
+
+        state.observe_tool_start("tool-fetch", "WebFetch");
+        state.observe_text_delta("最终答复已经开始");
+        state.observe_tool_end("tool-fetch");
+        assert!(!state.should_emit_synthesis_status());
+    }
+
+    #[test]
     fn allowed_web_search_should_not_run_preflight_from_message_keywords() {
         let policy =
             resolve_request_tool_policy_with_mode(Some(true), Some(RequestToolPolicyMode::Allowed));
@@ -4145,14 +4310,10 @@ mod tests {
         };
         let policy = resolve_request_tool_policy(Some(false));
         let cancel_token = CancellationToken::new();
-        let cancel_for_task = cancel_token.clone();
-        tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(100)).await;
-            cancel_for_task.cancel();
-        });
+        let cancel_from_event = cancel_token.clone();
 
         let reply = tokio::time::timeout(
-            Duration::from_secs(2),
+            Duration::from_secs(10),
             stream_message_reply_with_policy(
                 &agent,
                 Message::user().with_text("请流式输出"),
@@ -4160,7 +4321,15 @@ mod tests {
                 session_config,
                 Some(cancel_token),
                 &policy,
-                |_| {},
+                |event| {
+                    if matches!(
+                        event,
+                        RuntimeAgentEvent::TextDeltaBatch { text, .. } if text == "第一段"
+                    ) || matches!(event, RuntimeAgentEvent::TextDelta { text } if text == "第一段")
+                    {
+                        cancel_from_event.cancel();
+                    }
+                },
             ),
         )
         .await

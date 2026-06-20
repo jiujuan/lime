@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import process from "node:process";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -163,6 +164,212 @@ describe("i18n unused key scan", () => {
     ]);
     expect(result.unusedKeys).toEqual([
       { key: "settings.theme.static", namespace: "settings" },
+    ]);
+  });
+
+  it("应识别 agent chat copy helper 的静态 key 前缀", () => {
+    const root = createTempDir();
+    writeResource(root, "zh-CN", "agent", {
+      "agentChat.toolCall.memoryEvidence.path": "路径",
+      "agentChat.toolCall.memoryEvidence.unused": "未使用",
+    });
+    writeFile(
+      root,
+      "src/components/MemoryEvidence.ts",
+      [
+        'import { resolveRequiredAgentChatCopy } from "./agentChatCopy";',
+        "export function MemoryEvidence() {",
+        '  return resolveRequiredAgentChatCopy("toolCall.memoryEvidence.path");',
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const result = scanUnusedI18nKeys({
+      resourcesDir: path.join(root, "resources"),
+      sourceDirs: [path.join(root, "src")],
+    });
+
+    expect(result.referencedKeys).toEqual([
+      "agentChat.toolCall.memoryEvidence.path",
+    ]);
+    expect(result.unusedKeys).toEqual([
+      {
+        key: "agentChat.toolCall.memoryEvidence.unused",
+        namespace: "agent",
+      },
+    ]);
+  });
+
+  it("应把 agent chat partial key 视为真实资源 key 引用", () => {
+    const root = createTempDir();
+    writeResource(root, "zh-CN", "agentRuntime", {
+      "agentChat.toolCall.label.fileRead": "文件读取",
+      "agentChat.toolCall.label.fileWrite": "文件写入",
+      "agentChat.toolCall.userFacing.fileRead": "文件读取",
+    });
+    writeFile(
+      root,
+      "src/components/toolDisplayCopy.ts",
+      [
+        "const TOOL_DISPLAY_LABEL_KEYS = {",
+        '  "文件读取": "toolCall.label.fileRead",',
+        "};",
+        "const OTHER_KEY = \"toolCall.userFacing.fileRead\";",
+        "",
+      ].join("\n"),
+    );
+
+    const result = scanUnusedI18nKeys({
+      resourcesDir: path.join(root, "resources"),
+      sourceDirs: [path.join(root, "src")],
+    });
+
+    expect(result.referencedKeys).toEqual([
+      "agentChat.toolCall.label.fileRead",
+      "agentChat.toolCall.userFacing.fileRead",
+    ]);
+    expect(result.unusedKeys).toEqual([
+      {
+        key: "agentChat.toolCall.label.fileWrite",
+        namespace: "agentRuntime",
+      },
+    ]);
+  });
+
+  it("应识别 process summary helper 派生的 WithSubject key", () => {
+    const root = createTempDir();
+    writeResource(root, "zh-CN", "agentMessageList", {
+      "agentChat.toolCall.processSummary.generic.read": "已读取",
+      "agentChat.toolCall.processSummary.generic.readWithSubject":
+        "已读取 {{subject}}",
+      "agentChat.toolCall.processSummary.generic.write": "已写入",
+    });
+    writeFile(
+      root,
+      "src/components/toolProcessSummary.ts",
+      [
+        "function demo(subject: string | null) {",
+        "  return resolveProcessSummaryCopy(",
+        '    "toolCall.processSummary.generic.read",',
+        "    subject,",
+        "  );",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const result = scanUnusedI18nKeys({
+      resourcesDir: path.join(root, "resources"),
+      sourceDirs: [path.join(root, "src")],
+    });
+
+    expect(result.referencedKeys).toEqual([
+      "agentChat.toolCall.processSummary.generic.read",
+      "agentChat.toolCall.processSummary.generic.readWithSubject",
+    ]);
+    expect(result.unusedKeys).toEqual([
+      {
+        key: "agentChat.toolCall.processSummary.generic.write",
+        namespace: "agentMessageList",
+      },
+    ]);
+  });
+
+  it("应识别 phased process summary helper 派生的 pre/post key", () => {
+    const root = createTempDir();
+    writeResource(root, "zh-CN", "agentMessageList", {
+      "agentChat.toolCall.processSummary.vision.view.post": "已查看图片",
+      "agentChat.toolCall.processSummary.vision.view.postWithSubject":
+        "已查看 {{subject}}",
+      "agentChat.toolCall.processSummary.vision.view.pre": "先查看图片",
+      "agentChat.toolCall.processSummary.vision.view.preWithSubject":
+        "先查看 {{subject}}",
+      "agentChat.toolCall.processSummary.vision.analyze.pre": "先分析图片",
+    });
+    writeFile(
+      root,
+      "src/components/toolProcessSummary.ts",
+      [
+        "function demo(phase: \"pre\" | \"post\", subject: string | null) {",
+        "  return resolvePhasedProcessSummaryCopy(",
+        '    "toolCall.processSummary.vision.view",',
+        "    phase,",
+        "    subject,",
+        "  );",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const result = scanUnusedI18nKeys({
+      resourcesDir: path.join(root, "resources"),
+      sourceDirs: [path.join(root, "src")],
+    });
+
+    expect(result.referencedKeys).toEqual([
+      "agentChat.toolCall.processSummary.vision.view.post",
+      "agentChat.toolCall.processSummary.vision.view.postWithSubject",
+      "agentChat.toolCall.processSummary.vision.view.pre",
+      "agentChat.toolCall.processSummary.vision.view.preWithSubject",
+    ]);
+    expect(result.unusedKeys).toEqual([
+      {
+        key: "agentChat.toolCall.processSummary.vision.analyze.pre",
+        namespace: "agentMessageList",
+      },
+    ]);
+  });
+
+  it("应识别 agent chat copy helper 的模板动态 key 前缀", () => {
+    const root = createTempDir();
+    writeResource(root, "zh-CN", "agent", {
+      "agentChat.toolCall.action.read.completed": "已读取",
+      "agentChat.toolCall.action.read.running": "正在读取",
+      "agentChat.toolCall.action.write.completed": "已写入",
+      "agentChat.toolCall.label.generic": "工具",
+    });
+    writeFile(
+      root,
+      "src/components/ToolAction.ts",
+      [
+        'import { resolveRequiredAgentChatCopy } from "./agentChatCopy";',
+        "export function ToolAction(action: string, status: string) {",
+        "  return resolveRequiredAgentChatCopy(`toolCall.action.${action}.${status}`);",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const result = scanUnusedI18nKeys({
+      resourcesDir: path.join(root, "resources"),
+      sourceDirs: [path.join(root, "src")],
+    });
+
+    expect(result.dynamicKeyPatterns).toEqual([
+      expect.objectContaining({
+        pattern: "^agentChat\\.toolCall\\.action\\.(.+?)\\.(.+?)$",
+      }),
+    ]);
+    expect(result.protectedKeys).toEqual([
+      {
+        key: "agentChat.toolCall.action.read.completed",
+        namespace: "agent",
+      },
+      {
+        key: "agentChat.toolCall.action.read.running",
+        namespace: "agent",
+      },
+      {
+        key: "agentChat.toolCall.action.write.completed",
+        namespace: "agent",
+      },
+    ]);
+    expect(result.unusedKeys).toEqual([
+      {
+        key: "agentChat.toolCall.label.generic",
+        namespace: "agent",
+      },
     ]);
   });
 

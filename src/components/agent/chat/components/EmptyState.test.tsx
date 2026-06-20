@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EmptyState } from "./EmptyState";
-import type { Character } from "@/lib/api/memory";
+import type { Character } from "@/lib/api/projectMemory";
 import type { ProjectGitStatus } from "@/lib/api/projectGit";
 import type { Skill } from "@/lib/api/skills";
 import type { ServiceSkillHomeItem } from "../service-skills/types";

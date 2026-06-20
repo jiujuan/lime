@@ -129,6 +129,14 @@ const TOOL_NAME_KEY_ALIASES: Record<string, string> = {
   listmcpresourcestool: "listmcpresources",
   listmcpresourcetemplatestool: "listmcpresourcetemplates",
   readmcpresourcetool: "readmcpresource",
+  memoryaddnote: "memoryaddnote",
+  memoryaddnotetool: "memoryaddnote",
+  memorylist: "memorylist",
+  memorylisttool: "memorylist",
+  memoryread: "memoryread",
+  memoryreadtool: "memoryread",
+  memorysearch: "memorysearch",
+  memorysearchtool: "memorysearch",
   notebookedittool: "notebookedit",
   powershelltool: "powershell",
   remotetriggertool: "remotetrigger",
@@ -311,6 +319,21 @@ export const resolveToolPrimarySubject = (
       "path",
       "query",
       "command",
+    ]);
+  }
+
+  if (
+    normalizedName === "memorylist" ||
+    normalizedName === "memoryread" ||
+    normalizedName === "memorysearch" ||
+    normalizedName === "memoryaddnote"
+  ) {
+    return resolveToolArgumentPreview(args, [
+      "path",
+      "queries",
+      "query",
+      "title",
+      "scope",
     ]);
   }
 

@@ -134,7 +134,7 @@ const generalChatRestrictedPaths = [
   {
     name: "@/lib/api/compat",
     message:
-      "api/compat.ts 属于历史记忆兼容层，请不要在新代码中接入；记忆主链请使用当前 memory store / memoryRuntime / Soul 配置入口。",
+      "api/compat.ts 属于历史记忆兼容层，请不要在新代码中接入；记忆主链请使用当前 memory store / MemoryBackend / memory tools / Soul 配置入口。",
   },
   {
     name: "@/lib/api/agent",
@@ -208,7 +208,7 @@ const generalChatRestrictedPaths = [
       "MemoryStatsResponse",
     ],
     message:
-      "记忆分析/清理能力已迁移到 @/lib/api/memoryRuntime，请不要继续从 已删除的桌面宿主聚合 Hook 聚合层引入。",
+      "旧记忆分析/清理能力已下线；记忆整理、审阅和重建索引请走 src/lib/api/memoryStore.ts -> App Server memoryStore/*，不要继续从已删除的桌面宿主聚合 Hook 聚合层引入。",
   },
   {
     name: LEGACY_DESKTOP_HOST_AGGREGATE_HOOK_PATH,
@@ -311,7 +311,7 @@ const generalChatRestrictedPaths = [
       "MemorySourcesConfig",
     ],
     message:
-      "记忆运行时相关能力已迁移到 @/lib/api/memoryRuntime，请不要继续从 已删除的桌面宿主聚合 Hook 聚合层引入。",
+      "旧记忆运行时相关能力已下线；记忆设置和显式整理请走 src/lib/api/memoryStore.ts 与 memory.soul current 配置，不要继续从已删除的桌面宿主聚合 Hook 聚合层引入。",
   },
   {
     name: LEGACY_DESKTOP_HOST_AGGREGATE_HOOK_PATH,
@@ -723,7 +723,7 @@ const memoryRuntimeCommandSelectors = [
 ].map((command) => ({
   selector: `CallExpression[callee.name='safeInvoke'][arguments.0.value='${command}'], CallExpression[callee.name='invoke'][arguments.0.value='${command}']`,
   message:
-    "记忆运行时相关后端命令请统一通过 `src/lib/api/memoryRuntime.ts` 暴露的网关函数调用，避免继续在其他模块中直接拼接命令名。",
+    "旧记忆运行时命令已下线；记忆主链请走 `src/lib/api/memoryStore.ts`、MemoryBackend 和 memory tools，不要恢复旧 runtime 网关。",
 }));
 
 const projectMemoryCommandSelectors = [
@@ -745,7 +745,7 @@ const projectMemoryCommandSelectors = [
 ].map((command) => ({
   selector: `CallExpression[callee.name='safeInvoke'][arguments.0.value='${command}'], CallExpression[callee.name='invoke'][arguments.0.value='${command}']`,
   message:
-    "项目记忆 CRUD 相关后端命令请统一通过 `src/lib/api/memory.ts` 暴露的网关函数调用，避免继续在其他模块中直接拼接命令名。",
+    "旧项目记忆 CRUD 命令已下线；项目上下文读取请走 `src/lib/api/projectMemory.ts` -> `projectMemory/read`，不要恢复旧聚合网关。",
 }));
 
 const toolHooksCommandSelectors = [
@@ -782,7 +782,7 @@ const memoryFeedbackCommandSelectors = [
 ].map((command) => ({
   selector: `CallExpression[callee.name='safeInvoke'][arguments.0.value='${command}'], CallExpression[callee.name='invoke'][arguments.0.value='${command}']`,
   message:
-    "记忆反馈相关命令请统一通过 `src/lib/api/memoryFeedback.ts` 暴露的网关函数调用，避免继续在其他模块中直接拼接命令名。",
+    "旧记忆反馈命令已下线；记忆整理、审阅和证据展示请走 memory store current 主链，不要恢复旧反馈网关。",
 }));
 
 const contextMemoryCommandSelectors = [
@@ -797,7 +797,7 @@ const contextMemoryCommandSelectors = [
 ].map((command) => ({
   selector: `CallExpression[callee.name='safeInvoke'][arguments.0.value='${command}'], CallExpression[callee.name='invoke'][arguments.0.value='${command}']`,
   message:
-    "上下文记忆命令请统一通过 `src/lib/api/contextMemory.ts` 暴露的网关函数调用，避免继续在其他模块中直接拼接命令名。",
+    "旧上下文记忆命令已下线；长期记忆走 memory store，session / evidence 走 App Server current 方法，不要恢复旧上下文记忆网关。",
 }));
 
 const asrProviderCommandSelectors = [
@@ -1181,7 +1181,6 @@ export default [
       "src/lib/api/posterMaterials.ts",
       "src/lib/api/subAgentScheduler.ts",
       "src/lib/api/fileSystem.ts",
-      "src/lib/api/memory.ts",
       "src/lib/api/fileBrowser.ts",
       "src/lib/api/a2uiForm.ts",
       "src/lib/api/appUpdate.ts",
@@ -1191,9 +1190,7 @@ export default [
       "src/lib/api/notification.ts",
       "src/lib/api/novel.ts",
       "src/lib/api/autoFix.ts",
-      "src/lib/api/contextMemory.ts",
       "src/lib/api/frontendCrash.ts",
-      "src/lib/api/memoryFeedback.ts",
       "src/lib/api/toolHooks.ts",
       "src/lib/api/serverRuntime.ts",
       "src/lib/api/logs.ts",
@@ -1202,7 +1199,6 @@ export default [
       "src/lib/api/channelsRuntime.ts",
       "src/lib/api/endpointProviders.ts",
       "src/lib/api/experimentalFeatures.ts",
-      "src/lib/api/memoryRuntime.ts",
       "src/lib/api/modelCatalog.ts",
       "src/lib/api/profileAssets.ts",
       "src/lib/api/usageStats.ts",

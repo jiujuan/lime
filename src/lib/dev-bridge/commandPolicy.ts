@@ -40,7 +40,6 @@ const bridgeTruthCommands = new Set<string>([
   "get_default_provider",
   "app_server_handle_json_lines",
   "app_server_drain_events",
-  "project_memory_get",
   "get_file_name",
 ]);
 

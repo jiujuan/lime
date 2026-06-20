@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { ProjectMemory } from "@/lib/api/memory";
+import type { ProjectMemory } from "@/lib/api/projectMemory";
 import type { ThemeType } from "@/lib/workspace/workbenchContract";
 import type { Message } from "../types";
 import { useThemeContextWorkspace } from "../hooks";

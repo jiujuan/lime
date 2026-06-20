@@ -3133,8 +3133,15 @@ describe("MessageList", () => {
     ).not.toBeNull();
     expect(container.textContent).not.toContain("思考中");
     expect(container.textContent).toContain("Generating reply");
-    expect(container.textContent).toContain(
+    expect(container.textContent).not.toContain(
       "The runtime has started processing and is waiting for the first output.",
+    );
+    expect(
+      container
+        .querySelector('[data-testid="assistant-first-token-runtime-status"]')
+        ?.getAttribute("aria-label"),
+    ).toContain(
+      "The request is being processed and output will start shortly.",
     );
     expect(container.textContent).not.toContain("直接回答优先");
   });
@@ -3192,7 +3199,12 @@ describe("MessageList", () => {
       container.querySelector('[data-testid="inputbar-runtime-status-line"]'),
     ).toBeNull();
     expect(container.textContent).toContain("正在生成回复");
-    expect(container.textContent).toContain("等待首个输出");
+    expect(container.textContent).not.toContain("等待首个输出");
+    expect(
+      container
+        .querySelector('[data-testid="assistant-first-token-runtime-status"]')
+        ?.getAttribute("aria-label"),
+    ).toContain("正在处理请求，等待开始输出。");
     expect(container.textContent).not.toContain("已完成");
     expect(container.textContent).not.toContain("00:12");
   });
@@ -5051,6 +5063,7 @@ describe("MessageList", () => {
             name: "WebSearch",
             arguments: JSON.stringify({ query: "AI Agent 最新热点" }),
             status: "completed",
+            startTime: now,
             result: {
               success: true,
               output:

@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -124,8 +125,15 @@ export function PlanComposerDecisionPanel({
   onDismiss,
 }: PlanComposerDecisionPanelProps) {
   const { t } = useTranslation("agent");
-  const question = resolvePrimaryQuestion(request, t);
-  const options = useMemo(() => resolvePrimaryOptions(request, t), [request, t]);
+  const translatePlanDecision = useCallback(
+    (key: string): string => String(t(key as never)),
+    [t],
+  );
+  const question = resolvePrimaryQuestion(request, translatePlanDecision);
+  const options = useMemo(
+    () => resolvePrimaryOptions(request, translatePlanDecision),
+    [request, translatePlanDecision],
+  );
   const [selectedLabel, setSelectedLabel] = useState(
     options[0]?.label ?? "",
   );
@@ -209,7 +217,9 @@ export function PlanComposerDecisionPanel({
       {
         requestId: request.requestId,
         confirmed: false,
-        response: t("agentChat.planComposerDecision.ignoreResponse"),
+        response: translatePlanDecision(
+          "agentChat.planComposerDecision.ignoreResponse",
+        ),
         actionType: request.actionType,
         userData: "",
       },
@@ -284,7 +294,9 @@ export function PlanComposerDecisionPanel({
             data-testid="plan-composer-adjust-input"
             value={adjustment}
             disabled={isSubmitting}
-            placeholder={t("agentChat.planComposerDecision.option.adjust")}
+            placeholder={translatePlanDecision(
+              "agentChat.planComposerDecision.option.adjust",
+            )}
             className="min-w-0 flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-500 disabled:cursor-not-allowed"
             onChange={(event) => setAdjustment(event.target.value)}
           />
@@ -298,11 +310,17 @@ export function PlanComposerDecisionPanel({
           >
             <span>
               {submissionState?.kind === "ignore"
-                ? t("agentChat.planComposerDecision.ignoring")
-                : t("agentChat.planComposerDecision.ignore")}
+                ? translatePlanDecision(
+                    "agentChat.planComposerDecision.ignoring",
+                  )
+                : translatePlanDecision(
+                    "agentChat.planComposerDecision.ignore",
+                  )}
             </span>
             <kbd className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-slate-500">
-              {t("agentChat.planComposerDecision.escapeShortcut")}
+              {translatePlanDecision(
+                "agentChat.planComposerDecision.escapeShortcut",
+              )}
             </kbd>
           </button>
           <button
@@ -316,8 +334,12 @@ export function PlanComposerDecisionPanel({
             ) : null}
             <span>
               {submissionState?.kind === "submit"
-                ? t("agentChat.planComposerDecision.submitting")
-                : t("agentChat.planComposerDecision.submit")}
+                ? translatePlanDecision(
+                    "agentChat.planComposerDecision.submitting",
+                  )
+                : translatePlanDecision(
+                    "agentChat.planComposerDecision.submit",
+                  )}
             </span>
             {submissionState?.kind === "submit" ? null : (
               <CornerDownLeft className="h-3.5 w-3.5" />

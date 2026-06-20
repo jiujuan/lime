@@ -29,6 +29,7 @@ import {
   APP_SERVER_METHOD_AGENT_SESSION_ACTION_REPLAY,
   APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND,
   APP_SERVER_METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT,
+  APP_SERVER_METHOD_AGENT_SESSION_DELETE,
   APP_SERVER_METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT,
   APP_SERVER_METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE,
   APP_SERVER_METHOD_AGENT_SESSION_READ,
@@ -1946,7 +1947,10 @@ describe("Agent API 治理护栏", () => {
   });
 
   it("deleteAgentRuntimeSession / updateAgentRuntimeSession 应走 current 边界，标题生成只做本地投影", async () => {
-    mockAppServerResponse({});
+    mockAppServerResponse({
+      sessionId: "session-runtime-3",
+      deleted: true,
+    });
     mockAppServerResponse({
       session: {
         sessionId: "session-runtime-3",
@@ -1971,9 +1975,8 @@ describe("Agent API 治理护栏", () => {
       ),
     ).resolves.toBe("新的智能标题");
 
-    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_UPDATE, {
+    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_DELETE, {
       sessionId: "session-runtime-3",
-      archived: true,
     });
     expectAppServerRequest(2, APP_SERVER_METHOD_AGENT_SESSION_UPDATE, {
       sessionId: "session-runtime-3",

@@ -1413,6 +1413,16 @@
       "allowedPaths": []
     },
     {
+      "id": "memory-retired-project-crud-gateway-surface",
+      "classification": "dead",
+      "description": "已删除的旧 src/lib/api/memory.ts 聚合网关；projectMemory/read 已收敛到 projectMemory current API，角色 / 世界观 / 大纲旧 CRUD 壳不得恢复为记忆主链",
+      "targets": [
+        "src/lib/api/memory.ts",
+        "src/lib/api/memory.test.ts"
+      ],
+      "allowedPaths": []
+    },
+    {
       "id": "memory-runtime-retired-gateway-surface",
       "classification": "dead",
       "description": "旧 memoryRuntime 前端网关和运行时召回 DTO；文件化记忆主线必须走 memoryStore/*、MemoryBackend 与 memory tools，配置类型只允许保留在 memoryConfigTypes / memory.soul",
@@ -4822,22 +4832,19 @@
     },
     {
       "id": "rust-memory-profile-prompt-helper-leak",
-      "classification": "deprecated",
-      "description": "低层 build_memory_profile_prompt helper 泄漏到统一装配边界之外",
+      "classification": "dead",
+      "description": "已删除的旧 build_memory_profile_prompt helper 回流；文件化记忆主线不再从旧 lime-rs/src prompt helper 装配记忆",
       "patterns": ["build_memory_profile_prompt("],
       "includePathPrefixes": ["lime-rs/src"],
-      "allowedPaths": ["lime-rs/src/services/memory_profile_prompt_service.rs"]
+      "allowedPaths": []
     },
     {
       "id": "rust-memory-sources-prompt-helper-leak",
-      "classification": "deprecated",
-      "description": "低层 build_memory_sources_prompt helper 泄漏到统一装配边界之外",
+      "classification": "dead",
+      "description": "已删除的旧 build_memory_sources_prompt helper 回流；文件化记忆主线不再从旧 lime-rs/src prompt helper 装配记忆来源",
       "patterns": ["build_memory_sources_prompt("],
       "includePathPrefixes": ["lime-rs/src"],
-      "allowedPaths": [
-        "lime-rs/src/services/memory_profile_prompt_service.rs",
-        "lime-rs/src/services/memory_source_resolver_service.rs"
-      ]
+      "allowedPaths": []
     },
     {
       "id": "rust-project-session-config-helper-leak",

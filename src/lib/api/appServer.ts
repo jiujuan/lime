@@ -6,6 +6,7 @@ import {
   METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT,
   METHOD_AGENT_SESSION_ARCHIVE_MANY,
   METHOD_AGENT_SESSION_COMPACT,
+  METHOD_AGENT_SESSION_DELETE,
   METHOD_AGENT_SESSION_EVENT,
   METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF,
   METHOD_AGENT_SESSION_FILE_CHECKPOINT_GET,
@@ -167,6 +168,8 @@ import {
   type AgentSessionHandoffBundleExportResponse,
   type AgentSessionArchiveManyParams,
   type AgentSessionArchiveManyResponse,
+  type AgentSessionDeleteParams,
+  type AgentSessionDeleteResponse,
   type AgentSessionListParams,
   type AgentSessionListResponse,
   type AgentSessionObjectiveClearParams,
@@ -432,6 +435,8 @@ export const APP_SERVER_METHOD_AGENT_SESSION_UPDATE =
   METHOD_AGENT_SESSION_UPDATE;
 export const APP_SERVER_METHOD_AGENT_SESSION_ARCHIVE_MANY =
   METHOD_AGENT_SESSION_ARCHIVE_MANY;
+export const APP_SERVER_METHOD_AGENT_SESSION_DELETE =
+  METHOD_AGENT_SESSION_DELETE;
 export const APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_READ =
   METHOD_AGENT_SESSION_OBJECTIVE_READ;
 export const APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_SET =
@@ -739,6 +744,8 @@ export type AppServerAgentSessionArchiveManyParams =
   AgentSessionArchiveManyParams;
 export type AppServerAgentSessionArchiveManyResponse =
   AgentSessionArchiveManyResponse;
+export type AppServerAgentSessionDeleteParams = AgentSessionDeleteParams;
+export type AppServerAgentSessionDeleteResponse = AgentSessionDeleteResponse;
 export type AppServerManagedObjectiveStatus = ManagedObjectiveStatus;
 export type AppServerManagedObjective = ManagedObjective;
 export type AppServerAgentSessionObjectiveReadParams =
@@ -1400,6 +1407,15 @@ export class AppServerClient {
   ): Promise<AppServerRequestResult<AppServerAgentSessionArchiveManyResponse>> {
     return await this.request<AppServerAgentSessionArchiveManyResponse>(
       APP_SERVER_METHOD_AGENT_SESSION_ARCHIVE_MANY,
+      params,
+    );
+  }
+
+  async deleteSession(
+    params: AppServerAgentSessionDeleteParams,
+  ): Promise<AppServerRequestResult<AppServerAgentSessionDeleteResponse>> {
+    return await this.request<AppServerAgentSessionDeleteResponse>(
+      APP_SERVER_METHOD_AGENT_SESSION_DELETE,
       params,
     );
   }

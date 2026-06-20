@@ -67,6 +67,7 @@ export const METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE =
 export const METHOD_AGENT_SESSION_LIST = "agentSession/list";
 export const METHOD_AGENT_SESSION_UPDATE = "agentSession/update";
 export const METHOD_AGENT_SESSION_ARCHIVE_MANY = "agentSession/archiveMany";
+export const METHOD_AGENT_SESSION_DELETE = "agentSession/delete";
 export const METHOD_AGENT_SESSION_OBJECTIVE_READ =
   "agentSession/objective/read";
 export const METHOD_AGENT_SESSION_OBJECTIVE_SET = "agentSession/objective/set";
@@ -206,8 +207,13 @@ export const METHOD_MEMORY_STORE_LIST = "memoryStore/list";
 export const METHOD_MEMORY_STORE_READ = "memoryStore/read";
 export const METHOD_MEMORY_STORE_SEARCH = "memoryStore/search";
 export const METHOD_MEMORY_STORE_ADD_NOTE = "memoryStore/addNote";
+export const METHOD_MEMORY_STORE_CONSOLIDATE = "memoryStore/consolidate";
+export const METHOD_MEMORY_STORE_REVIEW_LIST = "memoryStore/review/list";
+export const METHOD_MEMORY_STORE_REVIEW_RESOLVE =
+  "memoryStore/review/resolve";
 export const METHOD_MEMORY_STORE_HEALTH = "memoryStore/health";
 export const METHOD_MEMORY_STORE_RESET = "memoryStore/reset";
+export const METHOD_MEMORY_STORE_INDEX_REBUILD = "memoryStore/index/rebuild";
 export const METHOD_LOG_LIST = "log/list";
 export const METHOD_LOG_PERSISTED_TAIL = "log/persistedTail";
 export const METHOD_LOG_CLEAR = "log/clear";
@@ -413,6 +419,7 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_AGENT_SESSION_LIST, kind: "request" },
   { method: METHOD_AGENT_SESSION_UPDATE, kind: "request" },
   { method: METHOD_AGENT_SESSION_ARCHIVE_MANY, kind: "request" },
+  { method: METHOD_AGENT_SESSION_DELETE, kind: "request" },
   { method: METHOD_AGENT_SESSION_OBJECTIVE_READ, kind: "request" },
   { method: METHOD_AGENT_SESSION_OBJECTIVE_SET, kind: "request" },
   {
@@ -552,8 +559,12 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_MEMORY_STORE_READ, kind: "request" },
   { method: METHOD_MEMORY_STORE_SEARCH, kind: "request" },
   { method: METHOD_MEMORY_STORE_ADD_NOTE, kind: "request" },
+  { method: METHOD_MEMORY_STORE_CONSOLIDATE, kind: "request" },
+  { method: METHOD_MEMORY_STORE_REVIEW_LIST, kind: "request" },
+  { method: METHOD_MEMORY_STORE_REVIEW_RESOLVE, kind: "request" },
   { method: METHOD_MEMORY_STORE_HEALTH, kind: "request" },
   { method: METHOD_MEMORY_STORE_RESET, kind: "request" },
+  { method: METHOD_MEMORY_STORE_INDEX_REBUILD, kind: "request" },
   { method: METHOD_LOG_LIST, kind: "request" },
   { method: METHOD_LOG_PERSISTED_TAIL, kind: "request" },
   { method: METHOD_LOG_CLEAR, kind: "request" },
@@ -1361,6 +1372,15 @@ export type AgentSessionArchiveManyParams = {
 
 export type AgentSessionArchiveManyResponse = {
   sessions: AgentSessionOverview[];
+};
+
+export type AgentSessionDeleteParams = {
+  sessionId: string;
+};
+
+export type AgentSessionDeleteResponse = {
+  sessionId: string;
+  deleted: boolean;
 };
 
 export type ManagedObjectiveStatus =

@@ -125,6 +125,41 @@ REMINDER: You MUST include the sources above in your response.
     ]);
   });
 
+  it("不应把 Codex 半结构化片段中的 url 字段行当成来源标题", () => {
+    const items = resolveSearchResultPreviewItemsFromText(`
+"url": ""
+https://help.yahoo.com/kb/mail-for-desktop
+"url": ""
+https://login.yahoo.com/
+"title": "知乎专栏 › p › 658835261",
+https://zhuanlan.zhihu.com/p/658835261
+    `);
+
+    expect(items).toEqual([
+      {
+        id: "search-text-0-https://help.yahoo.com/kb/mail-for-desktop",
+        title: "help.yahoo.com",
+        url: "https://help.yahoo.com/kb/mail-for-desktop",
+        hostname: "help.yahoo.com",
+        snippet: undefined,
+      },
+      {
+        id: "search-text-1-https://login.yahoo.com/",
+        title: "login.yahoo.com",
+        url: "https://login.yahoo.com/",
+        hostname: "login.yahoo.com",
+        snippet: undefined,
+      },
+      {
+        id: "search-text-2-https://zhuanlan.zhihu.com/p/658835261",
+        title: "知乎专栏 › p › 658835261",
+        url: "https://zhuanlan.zhihu.com/p/658835261",
+        hostname: "zhuanlan.zhihu.com",
+        snippet: undefined,
+      },
+    ]);
+  });
+
   it("应过滤搜索引擎导航与备案页脚噪音，只保留真实来源", () => {
     const items = resolveSearchResultPreviewItemsFromText(
       JSON.stringify({

@@ -619,9 +619,7 @@ function contentPartSortTime(part: ContentPart): number | null {
     return Number.isNaN(timestamp) ? null : timestamp;
   }
   if (part.type === "action_required") {
-    const value = part.actionRequired.timestamp;
-    const timestamp = value instanceof Date ? value.getTime() : NaN;
-    return Number.isNaN(timestamp) ? null : timestamp;
+    return null;
   }
   return null;
 }
@@ -1189,7 +1187,7 @@ function isImportedHistorySession(detail: AsterSessionDetail): boolean {
   const runtime = detail.execution_runtime;
   const runtimeRecord =
     runtime && typeof runtime === "object" && !Array.isArray(runtime)
-      ? (runtime as Record<string, unknown>)
+      ? (runtime as unknown as Record<string, unknown>)
       : null;
   if (
     readHistoryString(runtimeRecord?.source_client) ||

@@ -1,6 +1,6 @@
 # Turn / Tool 生命周期测试用例
 
-> 状态：in-progress
+> 状态：已完成当前阶段
 > 更新时间：2026-06-19
 > 作用：把 turn/item 重构转成可执行测试矩阵，避免只靠视觉判断或单点 smoke 宣称完成。
 
@@ -56,6 +56,13 @@ submit turn
 | TURN-RUST-006 | failed tool terminal | `ToolResponse` error | `ItemCompleted(status=failed,error)` |
 | TURN-RUST-007 | WebSearch tracker 不驱动 UI 分组 | WebSearch + WebFetch 成功 | tracker 只返回策略状态，不生成 UI 分组字段 |
 | TURN-RUST-008 | provider 尾段失败保留工具结果 | tool completed 后 stream error | completed tool item 保持 completed |
+| TURN-RUST-009 | WebFetch 默认回灌按相关片段裁剪 | HTML / 文本正文含大量无关段落，prompt 指向局部主题 | 默认返回相关片段，避免把整页内容塞回模型 |
+| TURN-RUST-010 | WebFetch HTML 清洗去除样式脚本 | HTML 含 `head/style/script/meta` 与正文 | 输出只保留正文文本，不包含 CSS / JS 噪音 |
+| TURN-RUST-011 | 连续普通 user turn 不合并 | 两条连续 `Role::User`，第一条为恢复指令，第二条为 `@搜索` 联网指令 | 输出仍为两个独立 user message，避免跨 turn 串话 |
+| TURN-RUST-012 | MOIM 注入不污染用户原文 | 注入 `<info-msg>` 时前后存在普通 user / assistant | MOIM 为 `agent_only()` 独立消息，不依赖 user merge，不显示给用户 |
+| TURN-RUST-013 | WebFetch HTML 清洗去除内联属性噪音 | HTML 含 `style=mask-image...`、`class=wp-block`、`data:*`、`aria-label` 与正文 | 输出保留正文，不包含 `mask-image/wp-block/data:image/aria-label` |
+| TURN-RUST-014 | legacy ToolEnd 强制标记 compat | `MessageContent::ToolResponse` 派生 legacy `ToolEnd`，工具 metadata 自带 `source/canonical` | `ToolEnd.result.metadata.source=legacy_message_tool_response`、`compat=true`、`canonical=false`，同时保留工具自有 `exit_code` |
+| TURN-RUST-015 | 失败 legacy ToolEnd 也标记 compat | `MessageContent::ToolResponse` error | `ToolEnd.success=false`，metadata 仍有 `source=legacy_message_tool_response`、`compat=true`、`canonical=false` |
 
 ## 4. App Server / read model 用例
 
@@ -100,6 +107,7 @@ submit turn
 | TURN-FE-024 | item lifecycle 存在时 legacy failed 不改 message 主状态 | `threadItems` 已有非 legacy `tool_call`，随后收到 `tool.failed` | read item 进入 failed，旧 message 层工具卡不被 legacy terminal 改写 |
 | TURN-FE-025 | history hydrate 禁用 thread_read 工具摘要重复注入 | `detail.items` 已有 process timeline item，同时 `thread_read.tool_calls` 也包含同一工具 | hydrate 后 assistant 只保留 timeline 生成的一份 `tool_use/toolCalls`，`thread_read.tool_calls` 不覆盖输出 |
 | TURN-FE-026 | history hydrate 保留 thread_read 兼容兜底 | 无 `detail.items` process timeline，但 `thread_read.tool_calls` 有工具摘要 | hydrate 后旧历史仍显示 `tool_use/toolCalls`，确保 legacy-only / read-model-only 会话可恢复 |
+| TURN-FE-027 | WebSearch / WebFetch 展开态分组 | 同一搜索批次含 WebSearch 结果和多个 WebFetch 读取 URL | 展开态显示 `搜索来源` 与 `读取页面` 两组；来源仍可点击预览，读取页面不暴露原始 payload / 失败诊断 |
 
 ## 6. Contract 用例
 
@@ -112,6 +120,8 @@ submit turn
 | TURN-CONTRACT-005 | history API 返回 items | session get/list | turn items 字段完整 |
 | TURN-CONTRACT-006 | 前端 stream handler 保持 item-first | `agentStreamRuntimeHandler.ts` | 存在 `shouldLetLegacyToolEventUpdateMessageLayer`、`syncExistingMessageToolCallFromThreadItem`、`getThreadItems` |
 | TURN-CONTRACT-007 | 前端单测锁住 item terminal 同步 | `agentStreamRuntimeHandler.unit.test.ts` | 覆盖 `item_completed 应把已有 legacy 工具卡同步为完成态` |
+| TURN-CONTRACT-008 | MessageList 禁止 legacy 工具过程回流为主渲染 | `messageListItemProjection.ts` / `messageListItemProjection.unit.test.ts` | `message.toolCalls` 只在没有真实 process timeline item 时作为 compat fallback；timeline 已有过程项时关闭第二套 legacy 渲染 |
+| TURN-CONTRACT-009 | legacy message ToolEnd 不可冒充 canonical | `lime-rs/crates/agent/src/event_converter.rs` | 存在 `legacy_message_tool_response_metadata` 和成功 / 失败 ToolResponse compat 测试，contract 阻止无标记 legacy `ToolEnd` 回流 |
 
 最低入口：
 
@@ -160,6 +170,8 @@ npm run verify:gui-smoke
 | TURN-LIVE-006 | 第二轮不截断 | 第一轮完成后发第二轮 | 第一轮文本和工具卡保持 |
 | TURN-LIVE-007 | event log 可复核 | 读取 session jsonl | event sequence 与 UI 一致 |
 | TURN-LIVE-008 | WebFetch 读取次数可见 | 真实 WebSearch 后触发 WebFetch | 最终截图中搜索过程摘要显示 `读取网页 N 次`，且最终答复在工具完成态之后 |
+| TURN-LIVE-009 | 连续 user turn 不串话 | 停止 / 恢复后再发送 `@搜索` live turn | provider request 的 `last_user_preview` 只包含当前 `@搜索` 指令，不拼接上一轮恢复指令 |
+| TURN-LIVE-010 | WebFetch 工具回灌为干净正文 | live WebFetch 抓取公开新闻页面 | tool result preview 为正文片段，不含 CSS / HTML 属性噪音，最终 turn completed |
 
 建议执行：
 
@@ -183,6 +195,7 @@ npm run smoke:claw-chat-ready-streaming -- --timeout-ms 180000
 | TURN-GOV-003 | 禁止 tool stream current truth | 搜索新增 projection | `tool_start/tool_end` 不作为主工具卡 owner |
 | TURN-GOV-004 | 禁止 mock fallback | 检查 bridge/runtime | 生产路径不走 mock backend |
 | TURN-GOV-005 | 禁止 timeout 合成完成态 | 搜索 grace/final timeout | 不用固定 timeout 伪造 `turn_completed` |
+| TURN-GOV-006 | smoke 不用重复文案计数误判恢复 | 停止后恢复结果只显示一次 | GUI 可见一次恢复结果或 read model 已持久化即判定恢复闭环，不要求重复出现 |
 
 ## 11. 完成门槛
 
@@ -190,8 +203,8 @@ npm run smoke:claw-chat-ready-streaming -- --timeout-ms 180000
 
 1. [已完成] Rust unit 覆盖 item-first WebSearch tracker、late legacy terminal conflict 和 item lifecycle synthesis boundary。
 2. [已完成] App Server read model 覆盖 item-first 聚合、legacy synthetic item 和 terminal priority。
-3. [部分完成] Frontend projection 已补 `item_completed` 同步已有 legacy 工具卡单测，并由 `npm run smoke:agent-runtime-current-fixture` 覆盖 current fixture、Claw cancel-then-continue 和 Coding Workbench Electron fixture；混合 live tool GUI 仍需 P3 继续补强。
-4. [已完成] Contract 通过，并包含 `message_requires_fresh_web_search`、`mode_default`、item-first tracker、frontend stream handler item-first 和 production mock fallback 守卫。
+3. [已完成当前阶段] Frontend projection 已补 `item_completed` 同步已有 legacy 工具卡、MessageList process timeline 禁用 legacy `message.toolCalls` fallback、历史 hydrate 禁用 `thread_read.tool_calls` 重复注入，并由 current fixture / live E2E 覆盖 WebSearch + WebFetch GUI 时序。
+4. [已完成] Contract 通过，并包含 `message_requires_fresh_web_search`、`mode_default`、item-first tracker、frontend stream handler item-first、MessageList legacy fallback gating、legacy message ToolEnd compat 标记和 production mock fallback 守卫。
 5. [已完成] `npm run verify:gui-smoke` 已通过，最终输出 `claw workbench shell ready`。
 6. [已完成] 真实联网 smoke 已跑通 `WebSearch + WebFetch + final answer + stop/recovery`；最新截图已复核搜索完成态后才显示最终答复。
 
@@ -332,3 +345,119 @@ npm run smoke:agent-session-history-electron-fixture
 - ESLint：上述 2 个相关文件通过。
 - `npm run smoke:agent-runtime-current-fixture`：通过，包含 Coding Workbench Electron fixture 和 Claw cancel-then-continue Electron fixture；Claw session `claw-chat-current-1781840256786-93832`，`liveProviderUsed=false`。
 - `npm run smoke:agent-session-history-electron-fixture`：通过，summary 写入 `.lime/qc/gui-evidence/agent-session-history-electron-fixture/agent-session-history-electron-fixture-summary.json`，methods 为 `initialize,agentSession/start,agentSession/read,agentSession/update,agentSession/list`。
+
+2026-06-19 本轮追加 WebFetch 工具回灌清洗后复测：
+
+```bash
+cargo fmt --manifest-path "lime-rs/crates/aster-rust/crates/aster/Cargo.toml" --check
+cargo test --manifest-path "lime-rs/crates/aster-rust/Cargo.toml" -p aster-core web_fetch -- --nocapture
+git diff --check -- "lime-rs/crates/aster-rust/crates/aster/src/tools/web.rs"
+```
+
+结果：
+
+- `cargo fmt`：通过。
+- `aster-core web_fetch`：`10 passed`，新增覆盖默认 WebFetch 按 prompt 选取相关片段、HTML 文本抽取移除 `head/style/script/meta` 噪音，以及剥离内联 `style/class/data/aria` 属性噪音。
+- `git diff --check`：通过。
+
+2026-06-19 本轮追加连续 user turn 边界修复、MOIM agent-only 注入和 live smoke 断言修复后复测：
+
+```bash
+cargo fmt --manifest-path "lime-rs/crates/aster-rust/crates/aster/Cargo.toml" --check
+cargo test --manifest-path "lime-rs/crates/aster-rust/Cargo.toml" -p aster-core conversation::tests -- --nocapture
+cargo test --manifest-path "lime-rs/crates/aster-rust/Cargo.toml" -p aster-core agents::moim::tests -- --nocapture
+cargo test --manifest-path "lime-rs/crates/aster-rust/Cargo.toml" -p aster-core web_fetch -- --nocapture
+node --check "scripts/claw-chat-ready-streaming-smoke.mjs"
+npm run smoke:agent-runtime-current-fixture
+npm run smoke:claw-chat-ready-streaming -- --timeout-ms 180000
+```
+
+结果：
+
+- `conversation::tests`：`13 passed`，新增覆盖连续普通 user turn 不合并，避免停止 / 恢复后下一轮 `@搜索` 与上一轮恢复指令串话。
+- `agents::moim::tests`：`3 passed`，覆盖 MOIM 作为 `agent_only()` 独立消息注入，不再依赖 user merge，也不污染用户可见原文。
+- `aster-core web_fetch`：`10 passed`。
+- `node --check scripts/claw-chat-ready-streaming-smoke.mjs`：通过，恢复结果可见断言语法有效。
+- `npm run smoke:agent-runtime-current-fixture`：通过，`liveProviderUsed=false`，继续覆盖 current fixture、Claw cancel-then-continue 和 Electron fixture guard。
+- `npm run smoke:claw-chat-ready-streaming -- --timeout-ms 180000`：通过，真实 provider `custom-cb381b4f-d2fa-4eff-ba22-c867c38ba8d3 / gpt-5.5`，session `sess_de695aeb9194426f9d25f44a47ea3e83`，live web turn `2aaec918-d251-4c20-9f53-20bf068d4846`；`liveWebTurnCompleted=true`、`liveWebSearchCompleted=true`、`liveWebFetchCompleted=true`、`liveWebRequiredToolEventOrderValid=true`、`noRuntimeMockFallbackSeen=true`、`noBlockingConsoleErrors=true`。
+- request log 复核：`~/Library/Application Support/lime/aster/state/logs/llm_request.2.jsonl` 的 `last_user_preview` 只包含当前 `@搜索...WebSearch...WebFetch...` 指令，没有拼接上一轮“复原完成”；WebFetch preview 为新华网正文片段，不再含 `mask-image/wp-block/data:image/aria-label`。
+
+2026-06-19 本轮追加 WebSearch / WebFetch 展开态分组后复测：
+
+```bash
+npx vitest run "src/components/agent/chat/utils/toolBatchGrouping.test.ts" --silent=passed-only --disableConsoleIntercept
+npx vitest run "src/components/agent/chat/components/StreamingRenderer.test.tsx" --testNamePattern "WebFetch|联网搜索|网页搜索|已失败的工具批次" --silent=passed-only --disableConsoleIntercept
+npx vitest run "src/components/agent/chat/utils/agentThreadGrouping.test.ts" --testNamePattern "WebSearch|网页搜索|搜索" --silent=passed-only --disableConsoleIntercept
+npx vitest run "src/i18n/__tests__/loadNamespace.test.ts" --silent=passed-only --disableConsoleIntercept
+npx eslint "src/components/agent/chat/utils/toolBatchGrouping.ts" "src/components/agent/chat/utils/toolBatchGrouping.test.ts" "src/components/agent/chat/components/StreamingProcessGroup.tsx" "src/components/agent/chat/components/StreamingRenderer.test.tsx"
+```
+
+结果：
+
+- `toolBatchGrouping.test.ts`：`17 passed`，新增覆盖 WebSearch / WebFetch 批次输出 `web_search_sources` 与 `web_fetch_pages` 两个 section。
+- `StreamingRenderer.test.tsx` 定向：`6 passed, 56 skipped`，覆盖展开态显示 `搜索来源` / `读取页面`，同时保留搜索来源点击预览与 WebFetch 快照复用。
+- `agentThreadGrouping.test.ts` 定向：`2 passed, 20 skipped`，确认 read model / task rail 搜索摘要未被展开态 section 改动破坏。
+- `loadNamespace.test.ts`：`7 passed`，确认新增五语言文案资源可加载。
+- ESLint：上述 4 个相关 TS/TSX 文件通过。
+
+2026-06-20 追加 Codex 风格 WebSearch / WebFetch GUI fixture 回归：
+
+```bash
+node --check "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs"
+npx vitest run "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs" --silent=passed-only --disableConsoleIntercept --testTimeout=30000
+npm run smoke:claw-chat-current-fixture -- --scenario web-tools-rendering --timeout-ms 180000 --prefix claw-chat-current-fixture-web-tools-rendering-dev-pass --app-url http://127.0.0.1:1420/
+npm run electron:build
+npm run smoke:claw-chat-current-fixture -- --scenario web-tools-rendering --timeout-ms 180000 --prefix claw-chat-current-fixture-web-tools-rendering-dist-pass
+```
+
+结果：
+
+- `claw-chat-current-fixture-smoke.test.mjs`：`10 passed`，新增守卫 `web-tools-rendering` 场景必须走真实 Electron Desktop Host + App Server JSON-RPC current 链路，并断言 WebSearch 默认展开、显示 inline sources、WebFetch 显示读取页面、最终正文继续穿插、传输层 JSON 包络隐藏。
+- `web-tools-rendering` 真实 Electron fixture：通过，summary `.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-web-tools-rendering-dev-pass-summary.json`，截图 `.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-web-tools-rendering-dev-pass-chat.png`。
+- 构建后默认 `dist/index.html` Electron fixture：通过，summary `.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-web-tools-rendering-dist-pass-summary.json`，截图 `.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-web-tools-rendering-dist-pass-chat.png`，证明不依赖 dev server，默认桌面端入口也不会回到旧折叠 / JSON 泄露行为。
+- 关键断言：`webProcessGroupExpanded=true`、`hasSearchSourceSection=true`、`hasFetchPageSection=true`、`hasFetchPageUrl=true`、`hasFinalTextAfterProcess=true`、`rawJsonEnvelopeVisible=false`、`forbiddenTransportHits=[]`、`noConsoleErrors=true`。
+
+2026-06-19 本轮追加 MessageList legacy `message.toolCalls` 回流 contract 守卫后复测：
+
+```bash
+npm run test:contracts
+npx vitest run "src/components/agent/chat/components/messageListItemProjection.unit.test.ts" --testNamePattern "timeline 已有工具 item|无 timeline|turn_summary|timeline 过程项未生成" --silent=passed-only --disableConsoleIntercept
+npx eslint "scripts/check-app-server-client-contract.mjs" "src/components/agent/chat/components/messageListItemProjection.ts" "src/components/agent/chat/components/messageListItemProjection.unit.test.ts"
+npm run smoke:agent-runtime-current-fixture
+```
+
+结果：
+
+- `npm run test:contracts`：通过，`app-server-client-contract` 增至 `278 checks`，新增 `MessageList` 禁止 legacy `message.toolCalls` 在已有 process timeline 时回流为主渲染的 contract；`mock priority commands: 0`。
+- `messageListItemProjection.unit.test.ts` 定向：`4 passed, 26 skipped`，覆盖 timeline 已有工具 item、无 timeline 兼容兜底、`turn_summary` 兼容兜底、timeline 过程项未生成 `tool_use` 时仍禁用 legacy 工具兜底。
+- ESLint：上述 3 个文件通过。
+- `npm run smoke:agent-runtime-current-fixture`：通过，继续覆盖 history/cache、流式完成态、MessageList 终态 UI、Electron fixture guard、Coding Workbench Electron fixture、Claw cancel-then-continue Electron fixture；`liveProviderUsed=false`。
+
+2026-06-19 本轮追加 Rust legacy `ToolEnd` compat 标记后复测：
+
+```bash
+cargo fmt --manifest-path "lime-rs/Cargo.toml" --all --check
+cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent event_converter -- --nocapture
+npm run test:contracts
+```
+
+结果：
+
+- `cargo fmt --all --check`：通过。
+- `lime-agent event_converter`：`32 passed`，新增覆盖 `MessageContent::ToolResponse` 派生 legacy `ToolEnd` 时强制写入 `source=legacy_message_tool_response`、`sourceType=tool_end`、`compat=true`、`canonical=false`；失败 ToolResponse 同样标记 compat；RMCP `_meta` metadata 能被提取并保留非治理字段如 `exit_code`。
+- `npm run test:contracts`：通过，`app-server-client-contract` 增至 `279 checks`，新增 `Lime Agent legacy message tool_end is marked as compat projection`；`mock priority commands: 0`。
+- `npm run smoke:agent-runtime-current-fixture`：通过，覆盖 history/cache hydration、流式完成态、MessageList 终态 UI、Electron fixture guard、真实 GUI coding 输入到 Coding Workbench Electron fixture、Claw 停止后同会话继续输出 Electron fixture；`liveProviderUsed=false`，Claw fixture session `claw-chat-current-1781857059119-21801`。
+
+2026-06-19 本轮追加 WebFetch 内容 helper 拆分后复测：
+
+```bash
+cargo fmt --manifest-path "lime-rs/crates/aster-rust/crates/aster/Cargo.toml" --check
+cargo test --manifest-path "lime-rs/crates/aster-rust/Cargo.toml" -p aster-core web_fetch -- --nocapture
+git diff --check -- "lime-rs/crates/aster-rust/crates/aster/src/tools/web.rs" "lime-rs/crates/aster-rust/crates/aster/src/tools/web_fetch_content.rs" "lime-rs/crates/aster-rust/crates/aster/src/tools/mod.rs" "internal/roadmap/turn/implementation-plan.md" "internal/roadmap/turn/test-cases.md"
+```
+
+结果：
+
+- `cargo fmt`：通过。
+- `aster-core web_fetch`：`11 passed`，WebFetch HTML 清洗、正文抽取、默认相关片段过滤和动态片段过滤测试已迁入 `web_fetch_content.rs`，redirect / permission / creation 测试继续留在 `web.rs`。
+- `git diff --check`：通过。

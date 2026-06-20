@@ -7,6 +7,7 @@ import { resolveThinkingDisplayParts } from "./thinkingBlockDisplay";
 import {
   summarizeStreamingToolBatch,
   type ToolBatchSummaryDescriptor,
+  type ToolBatchSummarySectionKind,
 } from "../utils/toolBatchGrouping";
 import {
   isUnifiedWebSearchToolName,
@@ -70,9 +71,14 @@ function buildStreamingProcessSummary(
         entry.kind === "thinking" && isImportedProcessMetadata(entry.metadata),
     ) ||
     (importedToolCount > 0 && thinkingCount > 0);
-  const batchDescriptor =
-    toolEntries.length > 1 && importedToolCount === 0
+  const summarizedBatchDescriptor =
+    toolEntries.length > 0
       ? summarizeStreamingToolBatch(toolEntries.map((entry) => entry.toolCall))
+      : null;
+  const batchDescriptor =
+    summarizedBatchDescriptor &&
+    (importedToolCount === 0 || summarizedBatchDescriptor.kind === "web_search")
+      ? summarizedBatchDescriptor
       : null;
   if (batchDescriptor) {
     return {
@@ -234,6 +240,51 @@ export const GroupedProcessShell: React.FC<{
   </div>
 );
 
+function WebSearchSupportingSections({
+  descriptor,
+  resolveSectionTitle,
+}: {
+  descriptor: ToolBatchSummaryDescriptor;
+  resolveSectionTitle: (kind: ToolBatchSummarySectionKind) => string;
+}) {
+  const sections =
+    descriptor.supportingSections && descriptor.supportingSections.length > 0
+      ? descriptor.supportingSections
+      : [
+          {
+            kind: null,
+            lines: descriptor.supportingLines,
+          },
+        ];
+
+  return (
+    <div className="space-y-3">
+      {sections.map((section, sectionIndex) => (
+        <div
+          key={`${section.kind || "web-search-lines"}-${sectionIndex}`}
+          className="space-y-1.5"
+        >
+          {section.kind ? (
+            <div className="text-[11px] font-medium leading-5 text-slate-500">
+              {resolveSectionTitle(section.kind)}
+            </div>
+          ) : null}
+          <div className="space-y-1">
+            {section.lines.slice(0, 8).map((line, lineIndex) => (
+              <div
+                key={`${section.kind || "line"}-${lineIndex}-${line}`}
+                className="text-xs leading-5 text-slate-500"
+              >
+                {line}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export const StreamingProcessGroup: React.FC<{
   entries: StreamingProcessEntry[];
   defaultExpanded?: boolean;
@@ -246,6 +297,16 @@ export const StreamingProcessGroup: React.FC<{
   ) => React.ReactNode;
 }> = ({ entries, defaultExpanded = false, onOpenUrlPreview, renderEntry }) => {
   const { t } = useTranslation("agent");
+  const resolveWebSearchSectionTitle = (
+    kind: ToolBatchSummarySectionKind,
+  ) =>
+    kind === "web_fetch_pages"
+      ? t("agentChat.processGroup.webSearch.section.webFetchPages", {
+          defaultValue: "Read pages",
+        })
+      : t("agentChat.processGroup.webSearch.section.webSearchSources", {
+          defaultValue: "Search sources",
+        });
   const [expanded, setExpanded] = useState(defaultExpanded);
   const previousDefaultExpandedRef = useRef(defaultExpanded);
   const toolCalls = useMemo(
@@ -327,7 +388,8 @@ export const StreamingProcessGroup: React.FC<{
       toolCalls,
     });
   }, [toolCalls]);
-  const hasNonToolEntries = entries.some((entry) => entry.kind !== "tool");
+  const nonToolEntries = entries.filter((entry) => entry.kind !== "tool");
+  const hasNonToolEntries = nonToolEntries.length > 0;
 
   React.useEffect(() => {
     if (previousDefaultExpandedRef.current !== defaultExpanded) {
@@ -361,7 +423,9 @@ export const StreamingProcessGroup: React.FC<{
               {metaText}
             </span>
           ) : null}
-          {!hasNonToolEntries && descriptor?.supportingLines?.length ? (
+          {!hasNonToolEntries &&
+          descriptor?.kind !== "web_search" &&
+          descriptor?.supportingLines?.length ? (
             <span className="mt-0.5 block space-y-0.5">
               {descriptor.supportingLines.slice(0, 5).map((line) => (
                 <span
@@ -377,34 +441,79 @@ export const StreamingProcessGroup: React.FC<{
       </button>
       {expanded ? (
         <div className="ml-2">
-          {descriptor?.kind === "web_search" && hasNonToolEntries ? (
-            entries.map((entry, index) => (
-              <React.Fragment key={entry.id}>
-                {renderEntry(entry, true, index === 0 ? "└" : "·", entries)}
-              </React.Fragment>
-            ))
-          ) : descriptor?.kind === "web_search" &&
-            onOpenUrlPreview &&
-            webSearchPreviewItems.length > 0 ? (
+          {descriptor?.kind === "web_search" &&
+          onOpenUrlPreview &&
+          webSearchPreviewItems.length > 0 ? (
             <GroupedProcessShell groupMarker="└">
-              <SearchResultPreviewList
-                items={webSearchPreviewItems}
-                onOpenItem={onOpenUrlPreview}
-                popoverSide="bottom"
-                popoverAlign="start"
-                className="max-w-2xl"
-              />
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  {descriptor.supportingSections?.[0] ? (
+                    <div className="text-[11px] font-medium leading-5 text-slate-500">
+                      {resolveWebSearchSectionTitle(
+                        descriptor.supportingSections[0].kind,
+                      )}
+                    </div>
+                  ) : null}
+                  <SearchResultPreviewList
+                    items={webSearchPreviewItems}
+                    onOpenItem={onOpenUrlPreview}
+                    popoverSide="bottom"
+                    popoverAlign="start"
+                    className="max-w-2xl"
+                    variant="inline"
+                  />
+                </div>
+                {descriptor.supportingSections
+                  ?.slice(1)
+                  .map((section, sectionIndex) => (
+                    <div
+                      key={`${section.kind}-${sectionIndex}`}
+                      className="space-y-1.5"
+                    >
+                      <div className="text-[11px] font-medium leading-5 text-slate-500">
+                        {resolveWebSearchSectionTitle(section.kind)}
+                      </div>
+                      <div className="space-y-1">
+                        {section.lines.slice(0, 8).map((line, lineIndex) => (
+                          <div
+                            key={`${section.kind}-${lineIndex}-${line}`}
+                            className="text-xs leading-5 text-slate-500"
+                          >
+                            {line}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                {hasNonToolEntries ? (
+                  <div className="space-y-1">
+                    {nonToolEntries.map((entry) => (
+                      <React.Fragment key={entry.id}>
+                        {renderEntry(entry, true, "·", entries)}
+                      </React.Fragment>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             </GroupedProcessShell>
           ) : descriptor?.kind === "web_search" &&
             descriptor.supportingLines.length > 0 ? (
-            descriptor.supportingLines.slice(0, 10).map((line, index) => (
-              <GroupedProcessShell
-                key={`web-search-source-${index}-${line}`}
-                groupMarker={index === 0 ? "└" : "·"}
-              >
-                <div className="text-xs leading-5 text-slate-500">{line}</div>
-              </GroupedProcessShell>
-            ))
+            <GroupedProcessShell groupMarker="└">
+              {hasNonToolEntries ? (
+                <div className="space-y-1">
+                  {entries.map((entry, index) => (
+                    <React.Fragment key={entry.id}>
+                      {renderEntry(entry, true, index === 0 ? "└" : "·", entries)}
+                    </React.Fragment>
+                  ))}
+                </div>
+              ) : (
+                <WebSearchSupportingSections
+                  descriptor={descriptor}
+                  resolveSectionTitle={resolveWebSearchSectionTitle}
+                />
+              )}
+            </GroupedProcessShell>
           ) : (
             entries.map((entry, index) => (
               <React.Fragment key={entry.id}>

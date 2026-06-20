@@ -76,20 +76,22 @@ export const AssistantFirstTokenRuntimeStatus: React.FC<{
     t(`agentChat.messageList.firstTokenStatus.${phase}.detail`),
     120,
   );
+  const accessibleLabel = [title, detail]
+    .filter((item, index, array) => Boolean(item) && array.indexOf(item) === index)
+    .join("，");
 
   return (
     <div
       data-testid="assistant-first-token-runtime-status"
-      className="inline-flex max-w-full items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600"
+      className="inline-flex max-w-full items-center gap-1.5 rounded-md px-2 py-[3px] text-[11px] font-medium leading-4 text-slate-500"
       aria-live="polite"
+      aria-label={accessibleLabel || undefined}
     >
-      <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin text-slate-500" />
-      <span className="min-w-0">
-        <span className="block font-medium leading-5 text-slate-700">
-          {title}
-        </span>
-        <span className="mt-0.5 block leading-5 text-slate-500">{detail}</span>
-      </span>
+      <Loader2
+        className="h-3 w-3 shrink-0 animate-spin text-emerald-600 motion-reduce:animate-none"
+        aria-hidden
+      />
+      <span className="truncate">{title}</span>
     </div>
   );
 };
@@ -100,6 +102,12 @@ export const AssistantStreamingInlineIndicator: React.FC<{
   const { t } = useTranslation("agent");
   const status = runtime.status === "queued" ? "queued" : "running";
   const isQueued = status === "queued";
+  const labelKey =
+    status === "running" &&
+    runtime.batchDescriptor &&
+    runtime.batchDescriptor.hasRunning !== true
+      ? "synthesizing"
+      : status;
 
   return (
     <div
@@ -121,7 +129,7 @@ export const AssistantStreamingInlineIndicator: React.FC<{
         ].join(" ")}
         aria-hidden
       />
-      <span>{t(`agentChat.messageList.streamingInline.${status}`)}</span>
+      <span>{t(`agentChat.messageList.streamingInline.${labelKey}`)}</span>
     </div>
   );
 };

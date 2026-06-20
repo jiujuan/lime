@@ -26,6 +26,7 @@ import {
   isUnifiedWebSearchToolName,
   resolveSearchResultPreviewItemsFromText,
 } from "../utils/searchResultPreview";
+import { isUnifiedWebFetchToolName } from "../utils/toolNameFamily";
 import { attachUrlPreviewSnapshotsToSearchResults } from "../utils/urlPreviewSnapshot";
 import {
   normalizeSiteToolResultSummary,
@@ -43,6 +44,7 @@ import {
   resolveToolProcessNarrative,
   isLikelyWebRetrievalDiagnosticNoise,
 } from "../utils/toolProcessSummary";
+import { resolveMemoryToolEvidence } from "../utils/memoryToolEvidence";
 import {
   extractStructuredToolDetailText,
   normalizeToolResultDetailText,
@@ -55,6 +57,7 @@ import {
 } from "../utils/limeTaskProtocolNoise";
 import { resolveImportedSourceToolPresentation } from "./ToolCallDisplayViewModel";
 import { resolveRequiredAgentChatCopy } from "../utils/agentChatCopy";
+import { MemoryToolEvidencePanel } from "./MemoryToolEvidencePanel";
 
 interface InlineToolProcessStepProps {
   toolCall: ToolCallState;
@@ -233,6 +236,33 @@ function summarizeDiagnosticResultPreview(value: string): string | null {
     : resolveRequiredAgentChatCopy("toolCall.inline.searchDiagnostic.collapsed");
 }
 
+function resolveWebFetchResultText(params: {
+  rawResultText: string;
+  fallbackSummary?: string | null;
+}): string {
+  const parsed = parseStructuredToolResult(params.rawResultText);
+  const parsedRecord = asRecord(parsed);
+  const directResult =
+    readString(parsedRecord, [
+      "markdown",
+      "markdownContent",
+      "markdown_content",
+      "content",
+      "text",
+      "body",
+      "summary",
+      "result",
+      "output",
+    ]) ||
+    extractStructuredToolDetailText(parsed);
+
+  return (
+    directResult?.trim() ||
+    params.fallbackSummary?.trim() ||
+    normalizeToolResultDetailText(params.rawResultText)
+  );
+}
+
 function normalizeSummaryLine(
   value: string | null,
   headline: string,
@@ -353,8 +383,11 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
   const filePath = useMemo(() => resolveToolFilePath(parsedArgs), [parsedArgs]);
   const fileContent = useMemo(() => {
     const content = parsedArgs.content || parsedArgs.text;
-    return content ? String(content) : "";
-  }, [parsedArgs.content, parsedArgs.text]);
+    if (content) {
+      return String(content);
+    }
+    return toolCall.result?.output ? String(toolCall.result.output) : "";
+  }, [parsedArgs.content, parsedArgs.text, toolCall.result?.output]);
   const subject = useMemo(
     () => resolveToolPrimarySubject(toolCall.name, parsedArgs, filePath),
     [filePath, parsedArgs, toolCall.name],
@@ -405,9 +438,23 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     () => resolveToolProcessNarrative(toolCall),
     [toolCall],
   );
+  const memoryToolEvidence = useMemo(
+    () => resolveMemoryToolEvidence(toolCall),
+    [toolCall],
+  );
   const resultText = useMemo(() => {
     if (importedSourcePresentation) {
       return t("agentChat.toolCall.importedCommandRecord.description");
+    }
+
+    if (isUnifiedWebFetchToolName(toolCall.name)) {
+      return resolveWebFetchResultText({
+        rawResultText,
+        fallbackSummary:
+          processNarrative.postSummary ||
+          processNarrative.summary ||
+          processNarrative.preSummary,
+      });
     }
 
     if (toolCall.status !== "failed") {
@@ -500,6 +547,9 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     if (toolSearchSummary) {
       return summarizeToolSearchPreview(toolSearchSummary);
     }
+    if (memoryToolEvidence) {
+      return memoryToolEvidence.summary;
+    }
     if (searchResultItems.length > 0) {
       return summarizeSearchResultPreview(searchResultItems.length);
     }
@@ -509,6 +559,7 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     return resultPreview;
   }, [
     isRawDiagnosticDetail,
+    memoryToolEvidence,
     rawResultText,
     resultPreview,
     searchResultItems.length,
@@ -611,10 +662,14 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     toolCall.status,
   ]);
   const hasDetails =
-    Boolean(resultText) ||
+    (Boolean(resultText) &&
+      (!isUnifiedWebSearchToolName(toolCall.name) ||
+        toolCall.status === "failed" ||
+        isRawDiagnosticDetail)) ||
     resultImages.length > 0 ||
     searchResultItems.length > 0 ||
     Boolean(toolSearchSummary) ||
+    Boolean(memoryToolEvidence) ||
     siteNoticeLines.length > 0 ||
     Boolean(savedSiteContentTarget) ||
     Boolean(skillTitle && skillTitle !== subject);
@@ -638,12 +693,22 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
   );
 
   useEffect(() => {
-    if (toolCall.status === "running" || siteNoticeLines.length > 0) {
+    if (
+      (toolCall.status === "running" &&
+        !isUnifiedWebSearchToolName(toolCall.name) &&
+        !isUnifiedWebFetchToolName(toolCall.name)) ||
+      siteNoticeLines.length > 0
+    ) {
       setExpanded(true);
       return;
     }
 
-    if (isMessageStreaming && !toolSearchSummary) {
+    if (
+      isMessageStreaming &&
+      !toolSearchSummary &&
+      !isUnifiedWebSearchToolName(toolCall.name) &&
+      !isUnifiedWebFetchToolName(toolCall.name)
+    ) {
       setExpanded(resultText.length <= LARGE_RESULT_AUTO_COLLAPSE_CHARS);
     }
   }, [
@@ -651,7 +716,9 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     resultText.length,
     siteNoticeLines.length,
     toolCall.status,
+    toolCall.name,
     toolSearchSummary,
+    memoryToolEvidence,
   ]);
 
   useEffect(() => {
@@ -928,6 +995,12 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
             </div>
           ) : null}
 
+          {memoryToolEvidence ? (
+            <div className="ml-1 mt-2">
+              <MemoryToolEvidencePanel evidence={memoryToolEvidence} />
+            </div>
+          ) : null}
+
           {expanded && hasDetails ? (
             <div className="ml-1 mt-2 space-y-2 border-l border-slate-200 pl-3">
               {siteNoticeLines.length > 0 ? (
@@ -975,7 +1048,9 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
                 />
               ) : null}
 
-              {!toolSearchSummary && searchResultItems.length > 0 ? (
+              {!toolSearchSummary &&
+              !memoryToolEvidence &&
+              searchResultItems.length > 0 ? (
                 <SearchResultPreviewList
                   items={searchResultItems}
                   onOpenItem={handleOpenSearchResult}
@@ -986,6 +1061,7 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
               ) : null}
 
               {!toolSearchSummary &&
+              !memoryToolEvidence &&
               searchResultItems.length === 0 &&
               resultText ? (
                 <div className="text-sm leading-6 text-slate-700">

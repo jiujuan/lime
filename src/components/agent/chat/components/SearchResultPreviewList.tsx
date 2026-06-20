@@ -190,6 +190,7 @@ export function SearchResultPreviewList({
   popoverAlign = "start",
   className,
   collapsedCount = 4,
+  variant = "card",
 }: {
   items: SearchResultPreviewItem[];
   onOpenUrl?: (url: string) => void | Promise<void>;
@@ -198,6 +199,7 @@ export function SearchResultPreviewList({
   popoverAlign?: "start" | "center" | "end";
   className?: string;
   collapsedCount?: number;
+  variant?: "card" | "inline";
 }) {
   const { i18n, t } = useTranslation("agent");
   const locale = i18n.language;
@@ -230,20 +232,45 @@ export function SearchResultPreviewList({
   const hiddenCount = items.length - visibleItems.length;
 
   return (
-    <div className={cn("space-y-2", className)}>
-      {visibleItems.map((item) => (
-        <SearchResultHoverCard
-          key={item.id}
-          item={item}
-          onOpenItem={handleOpenItem}
-          popoverSide={popoverSide}
-          popoverAlign={popoverAlign}
-        />
-      ))}
+    <div className={cn(variant === "inline" ? "space-y-1" : "space-y-2", className)}>
+      {visibleItems.map((item) =>
+        variant === "inline" ? (
+          <button
+            key={item.id}
+            type="button"
+            className="block w-full rounded-md px-1.5 py-0.5 text-left transition-colors hover:bg-slate-50"
+            onClick={() => void handleOpenItem(item)}
+            aria-label={t("agentChat.searchResultPreview.previewAria", {
+              title: item.title,
+            })}
+          >
+            <span className="block truncate text-xs leading-5 text-slate-600">
+              {item.title}
+            </span>
+            <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] leading-4 text-slate-400">
+              <Globe className="h-3 w-3 shrink-0" />
+              <span className="truncate">{item.url}</span>
+            </span>
+          </button>
+        ) : (
+          <SearchResultHoverCard
+            key={item.id}
+            item={item}
+            onOpenItem={handleOpenItem}
+            popoverSide={popoverSide}
+            popoverAlign={popoverAlign}
+          />
+        ),
+      )}
       {shouldCollapse ? (
         <button
           type="button"
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+          className={cn(
+            "flex w-full items-center justify-center gap-2 text-xs transition-colors",
+            variant === "inline"
+              ? "rounded-md px-2 py-1 text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+              : "rounded-xl border border-dashed border-border bg-muted/30 px-3 py-2 text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+          )}
           onClick={() => setExpanded((prev) => !prev)}
           aria-label={
             expanded

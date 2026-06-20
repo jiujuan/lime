@@ -401,6 +401,71 @@ async fn persisted_session_archive_many_ignores_empty_request() {
     assert_eq!(session_ids(&recent), vec![SESSION_ID.to_string()]);
 }
 
+#[tokio::test]
+async fn persisted_session_delete_clears_projection_and_event_log() {
+    let app = projection_app_server(&[(
+        SESSION_ID,
+        THREAD_ID,
+        "Persisted Session",
+        "2026-06-07T00:00:00.000Z",
+    )])
+    .await;
+    initialize_server(&app.server, 1, "session-delete-jsonrpc-test").await;
+    assert_eq!(
+        app.event_log_writer
+            .read_session_events(SESSION_ID)
+            .expect("seeded event log")
+            .len(),
+        1
+    );
+
+    let deleted = request(
+        &app.server,
+        2,
+        METHOD_AGENT_SESSION_DELETE,
+        json!({
+            "sessionId": format!(" {SESSION_ID} ")
+        }),
+    )
+    .await;
+    assert_eq!(
+        deleted.pointer("/result/sessionId"),
+        Some(&json!(SESSION_ID))
+    );
+    assert_eq!(deleted.pointer("/result/deleted"), Some(&json!(true)));
+
+    let recent = request(
+        &app.server,
+        3,
+        METHOD_AGENT_SESSION_LIST,
+        json!({
+            "workspaceId": WORKSPACE_ID,
+            "includeArchived": true
+        }),
+    )
+    .await;
+    assert_eq!(session_ids(&recent), Vec::<String>::new());
+    assert!(app
+        .event_log_writer
+        .read_session_events(SESSION_ID)
+        .expect("event log after delete")
+        .is_empty());
+
+    let read_missing = request_error(
+        &app.server,
+        4,
+        METHOD_AGENT_SESSION_READ,
+        json!({
+            "sessionId": SESSION_ID
+        }),
+    )
+    .await;
+    assert_eq!(
+        read_missing.pointer("/error/code"),
+        Some(&json!(error_codes::SESSION_NOT_FOUND))
+    );
+}
+
 async fn initialize_server(server: &AppServer, id: u64, client_name: &str) {
     let initialize = request(
         server,
@@ -443,6 +508,33 @@ async fn request(server: &AppServer, id: u64, method: &str, params: Value) -> Va
     if let Some(error) = response.get("error") {
         panic!("{method} failed: {error}");
     }
+    assert_eq!(response.get("id"), Some(&json!(id)));
+    response
+}
+
+async fn request_error(server: &AppServer, id: u64, method: &str, params: Value) -> Value {
+    let lines = server
+        .handle_json_line(
+            &json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "method": method,
+                "params": params,
+            })
+            .to_string(),
+        )
+        .await
+        .expect("handle JSON-RPC request");
+    assert_eq!(
+        lines.len(),
+        1,
+        "{method} should return exactly one response"
+    );
+    let response: Value = serde_json::from_str(&lines[0]).expect("decode JSON-RPC response");
+    assert!(
+        response.get("error").is_some(),
+        "{method} should return an error response"
+    );
     assert_eq!(response.get("id"), Some(&json!(id)));
     response
 }

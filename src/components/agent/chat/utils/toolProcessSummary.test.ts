@@ -649,6 +649,54 @@ describe("toolProcessSummary", () => {
     expect(failedNarrative.summary).not.toContain("执行失败");
   });
 
+  it("内容任务过程摘要应随当前语言切换且不回退中文 defaultValue", async () => {
+    await changeLimeLocale("en-US");
+
+    const audioNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "lime_create_audio_generation_task",
+        status: "completed",
+        arguments: JSON.stringify({ prompt: "warm podcast narration" }),
+      }),
+    );
+    const resourceNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "lime_create_modal_resource_search_task",
+        status: "running",
+        arguments: JSON.stringify({ query: "podcast BGM" }),
+      }),
+    );
+    const coverImageNarrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "social_generate_cover_image",
+        status: "completed",
+        arguments: JSON.stringify({ subject: "release recap" }),
+      }),
+    );
+
+    expect(audioNarrative.postSummary).toBe(
+      "Started Voice generation for warm podcast narration",
+    );
+    expect(resourceNarrative.preSummary).toBe(
+      "Start Asset search for podcast BGM",
+    );
+    expect(resourceNarrative.summary).toBe("Start Asset search for podcast BGM");
+    expect(coverImageNarrative.preSummary).toBe(
+      "Generate cover image for release recap",
+    );
+    expect(coverImageNarrative.postSummary).toBe(
+      "Generated cover image for release recap",
+    );
+    expect(
+      [
+        audioNarrative.postSummary,
+        resourceNarrative.preSummary,
+        coverImageNarrative.preSummary,
+        coverImageNarrative.postSummary,
+      ].join(" "),
+    ).not.toMatch(/先发起|已发起|先生成|已生成|配音生成|素材检索|封面图/);
+  });
+
   it("应把 WebSearch 协议错误翻译成可操作提示", () => {
     const narrative = resolveToolProcessNarrative(
       createToolCall({

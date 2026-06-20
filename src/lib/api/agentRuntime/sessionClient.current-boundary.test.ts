@@ -44,11 +44,21 @@ function appServerClientMock(): AppServerSessionRpcClient {
       notifications: [],
       messages: [],
     }),
+    deleteSession: vi.fn().mockResolvedValue({
+      id: 3,
+      result: {
+        sessionId: "session-deleted",
+        deleted: true,
+      },
+      response: { id: 3, result: {} },
+      notifications: [],
+      messages: [],
+    }),
   };
 }
 
 describe("agentRuntime sessionClient current App Server boundary", () => {
-  it("session archive / restore / delete projection must use agentSession/update", async () => {
+  it("session archive / restore use agentSession/update and delete uses agentSession/delete", async () => {
     const appServerClient = appServerClientMock();
     const client = createSessionClient({
       appServerClient,
@@ -78,9 +88,9 @@ describe("agentRuntime sessionClient current App Server boundary", () => {
       sessionId: "session-archived",
       archived: false,
     });
-    expect(appServerClient.updateSession).toHaveBeenNthCalledWith(3, {
+    expect(appServerClient.updateSession).toHaveBeenCalledTimes(2);
+    expect(appServerClient.deleteSession).toHaveBeenCalledWith({
       sessionId: "session-deleted",
-      archived: true,
     });
     expect(appServerClient.request).not.toHaveBeenCalled();
   });
@@ -110,7 +120,7 @@ describe("agentRuntime sessionClient current App Server boundary", () => {
     expect(appServerClient.request).not.toHaveBeenCalled();
   });
 
-  it("delete projection 不应直接请求 App Server 通用 request 或 legacy bridge", async () => {
+  it("delete projection must use typed agentSession/delete helper", async () => {
     const appServerClient = appServerClientMock();
     const client = createSessionClient({
       appServerClient,
@@ -120,10 +130,10 @@ describe("agentRuntime sessionClient current App Server boundary", () => {
       client.deleteAgentRuntimeSession(" session-deleted "),
     ).resolves.toBeUndefined();
 
-    expect(appServerClient.updateSession).toHaveBeenCalledWith({
+    expect(appServerClient.deleteSession).toHaveBeenCalledWith({
       sessionId: "session-deleted",
-      archived: true,
     });
+    expect(appServerClient.updateSession).not.toHaveBeenCalled();
     expect(appServerClient.request).not.toHaveBeenCalled();
   });
 

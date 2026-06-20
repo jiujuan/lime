@@ -5,10 +5,10 @@ use super::{
     RpcDispatch,
 };
 use app_server_protocol::{
-    AgentSessionArchiveManyParams, AgentSessionCompactParams, AgentSessionFileCheckpointDiffParams,
-    AgentSessionFileCheckpointGetParams, AgentSessionFileCheckpointListParams,
-    AgentSessionFileCheckpointRestoreParams, AgentSessionListParams,
-    AgentSessionObjectiveAuditParams, AgentSessionObjectiveClearParams,
+    AgentSessionArchiveManyParams, AgentSessionCompactParams, AgentSessionDeleteParams,
+    AgentSessionFileCheckpointDiffParams, AgentSessionFileCheckpointGetParams,
+    AgentSessionFileCheckpointListParams, AgentSessionFileCheckpointRestoreParams,
+    AgentSessionListParams, AgentSessionObjectiveAuditParams, AgentSessionObjectiveClearParams,
     AgentSessionObjectiveContinueParams, AgentSessionObjectiveReadParams,
     AgentSessionObjectiveSetParams, AgentSessionObjectiveStatusUpdateParams,
     AgentSessionQueuedTurnPromoteParams, AgentSessionQueuedTurnRemoveParams,
@@ -54,6 +54,20 @@ impl RequestProcessor {
         let response = self
             .runtime
             .archive_many_agent_sessions(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_session_delete_impl(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentSessionDeleteParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .delete_agent_session(params)
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)

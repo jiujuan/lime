@@ -99,7 +99,7 @@ import {
   type EnsureBrowserAssistCanvasOptions,
 } from "./workspaceSendHelpers";
 import { recordTeamFormationAgentUiProjection } from "../projection/teamFormationAgentUiProjection";
-import type { Character } from "@/lib/api/memory";
+import type { Character } from "@/lib/api/projectMemory";
 import type { TeamMemorySnapshot } from "@/lib/teamMemorySync";
 import type { ThemeType } from "@/lib/workspace/workbenchContract";
 import type {

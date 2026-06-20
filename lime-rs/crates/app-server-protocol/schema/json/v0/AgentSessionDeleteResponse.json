@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "deleted": {
+      "type": "boolean"
+    },
+    "sessionId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "deleted",
+    "sessionId"
+  ],
+  "title": "AgentSessionDeleteResponse",
+  "type": "object"
+}

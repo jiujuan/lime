@@ -3,11 +3,20 @@ import { describe, expect, it } from "vitest";
 import { buildTimelineInlineContentParts } from "./messageListTimelineContentParts";
 import type { AgentThreadItem } from "../types";
 
+function buildThreadItems(
+  items: Array<Record<string, unknown> & { turn_id: string; thread_id?: string }>,
+): AgentThreadItem[] {
+  return items.map((item) => ({
+    ...item,
+    thread_id: item.thread_id ?? `thread-${item.turn_id}`,
+  })) as AgentThreadItem[];
+}
+
 describe("messageListTimelineContentParts", () => {
   it("没有 agent_message 时仍应渲染 timeline 工具过程", () => {
     const contentParts = buildTimelineInlineContentParts({
       displayContent: "",
-      items: [
+      items: buildThreadItems([
         {
           id: "web-search-running",
           type: "web_search",
@@ -19,7 +28,7 @@ describe("messageListTimelineContentParts", () => {
           started_at: "2026-06-18T10:00:00.000Z",
           updated_at: "2026-06-18T10:00:01.000Z",
         },
-      ] as AgentThreadItem[],
+      ]),
     });
 
     expect(contentParts?.map((part) => part.type)).toEqual(["tool_use"]);
@@ -33,7 +42,7 @@ describe("messageListTimelineContentParts", () => {
   it("只有 timeline 工具过程但已有最终正文时应把正文接在工具后", () => {
     const contentParts = buildTimelineInlineContentParts({
       displayContent: "第一轮已经完成。\n\n## 第一轮结论",
-      items: [
+      items: buildThreadItems([
         {
           id: "web-search-completed",
           type: "web_search",
@@ -47,7 +56,7 @@ describe("messageListTimelineContentParts", () => {
           updated_at: "2026-06-18T10:00:02.000Z",
           results: [],
         },
-      ] as AgentThreadItem[],
+      ]),
     });
 
     expect(contentParts?.map((part) => part.type)).toEqual([
@@ -67,7 +76,7 @@ describe("messageListTimelineContentParts", () => {
     };
     const contentParts = buildTimelineInlineContentParts({
       displayContent: "已确认处理方案。",
-      items: [
+      items: buildThreadItems([
         {
           id: "reasoning-imported-single",
           type: "reasoning",
@@ -94,7 +103,7 @@ describe("messageListTimelineContentParts", () => {
           completed_at: "2026-06-02T09:00:03.000Z",
           updated_at: "2026-06-02T09:00:03.000Z",
         },
-      ] as AgentThreadItem[],
+      ]),
     });
 
     expect(contentParts).toEqual([
@@ -113,7 +122,7 @@ describe("messageListTimelineContentParts", () => {
   it("应按事件序保留工具前的 commentary 首句", () => {
     const contentParts = buildTimelineInlineContentParts({
       displayContent: "我已经看完关键文件，下面是改进建议。",
-      items: [
+      items: buildThreadItems([
         {
           id: "assistant-commentary-intro",
           type: "agent_message",
@@ -152,7 +161,7 @@ describe("messageListTimelineContentParts", () => {
           completed_at: "2026-06-02T10:00:05.000Z",
           updated_at: "2026-06-02T10:00:05.000Z",
         },
-      ] as AgentThreadItem[],
+      ]),
     });
 
     expect(contentParts?.map((part) => part.type)).toEqual([
@@ -181,7 +190,7 @@ describe("messageListTimelineContentParts", () => {
   it("历史未知动态 MCP 工具应保持工具族顺序并进入渲染内容", () => {
     const contentParts = buildTimelineInlineContentParts({
       displayContent: "最终结论：动态 MCP 线索已经汇总。",
-      items: [
+      items: buildThreadItems([
         {
           id: "assistant-dynamic-mcp-intro",
           type: "agent_message",
@@ -235,7 +244,7 @@ describe("messageListTimelineContentParts", () => {
           completed_at: "2026-06-02T10:02:07.000Z",
           updated_at: "2026-06-02T10:02:07.000Z",
         },
-      ] as AgentThreadItem[],
+      ]),
     });
 
     expect(contentParts?.map((part) => part.type)).toEqual([
@@ -268,7 +277,7 @@ describe("messageListTimelineContentParts", () => {
     };
     const contentParts = buildTimelineInlineContentParts({
       displayContent: "计划已经整理完。",
-      items: [
+      items: buildThreadItems([
         {
           id: "reasoning-before-plan",
           type: "reasoning",
@@ -321,7 +330,7 @@ describe("messageListTimelineContentParts", () => {
           updated_at: "2026-06-02T10:03:07.000Z",
           metadata: importedMetadata,
         },
-      ] as AgentThreadItem[],
+      ]),
     });
 
     expect(contentParts?.map((part) => part.type)).toEqual([
@@ -351,7 +360,7 @@ describe("messageListTimelineContentParts", () => {
     };
     const contentParts = buildTimelineInlineContentParts({
       displayContent: "继续执行计划。",
-      items: [
+      items: buildThreadItems([
         {
           id: "plan-only-imported",
           type: "plan",
@@ -377,7 +386,7 @@ describe("messageListTimelineContentParts", () => {
           updated_at: "2026-06-02T10:04:03.000Z",
           metadata: importedMetadata,
         },
-      ] as AgentThreadItem[],
+      ]),
     });
 
     expect(contentParts?.map((part) => part.type)).toEqual(["text"]);
@@ -395,7 +404,7 @@ describe("messageListTimelineContentParts", () => {
     };
     const contentParts = buildTimelineInlineContentParts({
       displayContent: "已完成修复。",
-      items: [
+      items: buildThreadItems([
         {
           id: "assistant-codex-import-progress",
           type: "agent_message",
@@ -475,7 +484,7 @@ describe("messageListTimelineContentParts", () => {
           updated_at: "2026-06-02T10:02:00.000Z",
           metadata: importedMetadata,
         },
-      ] as AgentThreadItem[],
+      ]),
     });
 
     expect(contentParts?.map((part) => part.type)).toEqual([
@@ -530,7 +539,7 @@ describe("messageListTimelineContentParts", () => {
     };
     const contentParts = buildTimelineInlineContentParts({
       displayContent: "已完成上下文整理。",
-      items: [
+      items: buildThreadItems([
         {
           id: "context-compaction-imported",
           type: "context_compaction",
@@ -572,7 +581,7 @@ describe("messageListTimelineContentParts", () => {
           updated_at: "2026-06-02T10:05:05.000Z",
           metadata: importedMetadata,
         },
-      ] as AgentThreadItem[],
+      ]),
     });
 
     expect(contentParts).toEqual([

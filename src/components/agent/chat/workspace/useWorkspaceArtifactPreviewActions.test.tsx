@@ -276,13 +276,62 @@ describe("useWorkspaceArtifactPreviewActions", () => {
     expect(setGeneralCanvasState).toHaveBeenCalledWith(expect.any(Function));
   });
 
+  it("非通用模式打开带文本的 PDF 文件时应作为文档切到工作台预览", async () => {
+    const setTaskFiles = vi.fn();
+    const setSelectedFileId = vi.fn();
+    const setCanvasState = vi.fn();
+    const setLayoutMode = vi.fn();
+    const onRequestCanvasPreviewOpen = vi.fn();
+    const { render, getValue } = renderHook({
+      activeTheme: "coding",
+      isThemeWorkbench: false,
+      setTaskFiles,
+      setSelectedFileId,
+      setCanvasState,
+      setLayoutMode,
+      onRequestCanvasPreviewOpen,
+    });
+    const filePath =
+      "/tmp/imported-local-history/docs/imported-preview.pdf";
+    const content =
+      "导入会话 PDF 预览内容：可解析文本流应进入文档预览。";
+
+    await render();
+
+    act(() => {
+      getValue().handleFileClick(filePath, content);
+    });
+
+    expect(setSelectedFileId).toHaveBeenCalledTimes(1);
+    const selectedFileId = setSelectedFileId.mock.calls[0]?.[0] as string;
+    expect(selectedFileId).toEqual(expect.any(String));
+    expect(setTaskFiles).toHaveBeenCalledTimes(1);
+    const updater = setTaskFiles.mock.calls[0]?.[0] as (
+      files: Array<{
+        id: string;
+        name: string;
+        type: string;
+        content?: string;
+      }>,
+    ) => unknown;
+    expect(updater([])).toEqual([
+      expect.objectContaining({
+        id: selectedFileId,
+        name: filePath,
+        type: "document",
+        content,
+      }),
+    ]);
+    expect(onRequestCanvasPreviewOpen).toHaveBeenCalledWith({
+      filePath,
+      selectionKey: `task:${selectedFileId}`,
+    });
+    expect(setCanvasState).toHaveBeenCalledWith(expect.any(Function));
+    expect(setLayoutMode).toHaveBeenCalledWith("chat-canvas");
+  });
+
   it("通用模式打开媒体 preview artifact 时不应再按空文件懒加载", async () => {
-    const readSessionFile = vi.fn(async () => ({
-      path: "message-1:attachment:0",
-      content: "",
-      isBinary: true,
-      size: 0,
-    }));
+    const readSessionFile = vi.fn(async () => "");
     const upsertGeneralArtifact = vi.fn();
     const setGeneralCanvasState = vi.fn();
     const setSelectedArtifactId = vi.fn();
@@ -523,6 +572,58 @@ describe("useWorkspaceArtifactPreviewActions", () => {
     });
     expect(setLayoutMode).toHaveBeenCalledWith("chat-canvas");
     expect(setGeneralCanvasState).toHaveBeenCalledTimes(1);
+  });
+
+  it("非通用模式点击文件时应显式请求工作台切到新任务文件预览", async () => {
+    const randomUUIDSpy = vi
+      .spyOn(crypto, "randomUUID")
+      .mockReturnValue("11111111-1111-4111-8111-111111111111");
+    const setTaskFiles = vi.fn();
+    const setSelectedFileId = vi.fn();
+    const setCanvasState = vi.fn();
+    const setLayoutMode = vi.fn();
+    const onRequestCanvasPreviewOpen = vi.fn();
+    const { render, getValue } = renderHook({
+      activeTheme: "article",
+      mappedTheme: "general",
+      isThemeWorkbench: true,
+      setTaskFiles,
+      setSelectedFileId,
+      setCanvasState,
+      setLayoutMode,
+      onRequestCanvasPreviewOpen,
+    });
+
+    await render();
+
+    act(() => {
+      getValue().handleFileClick(
+        "imported-preview.md",
+        "# 导入会话 Markdown 预览内容",
+      );
+    });
+
+    expect(randomUUIDSpy).toHaveBeenCalledTimes(1);
+    expect(setSelectedFileId).toHaveBeenCalledWith(
+      "11111111-1111-4111-8111-111111111111",
+    );
+    expect(setTaskFiles).toHaveBeenCalledTimes(1);
+    const updateTaskFiles = setTaskFiles.mock.calls[0]?.[0];
+    expect(typeof updateTaskFiles).toBe("function");
+    expect(updateTaskFiles([])).toEqual([
+      expect.objectContaining({
+        id: "11111111-1111-4111-8111-111111111111",
+        name: "imported-preview.md",
+        type: "document",
+        content: "# 导入会话 Markdown 预览内容",
+      }),
+    ]);
+    expect(onRequestCanvasPreviewOpen).toHaveBeenCalledWith({
+      filePath: "imported-preview.md",
+      selectionKey: "task:11111111-1111-4111-8111-111111111111",
+    });
+    expect(setCanvasState).toHaveBeenCalledWith(expect.any(Function));
+    expect(setLayoutMode).toHaveBeenCalledWith("chat-canvas");
   });
 
   it("读取带 App Server scope 的 artifact 时应走 artifact/read current 主链", async () => {

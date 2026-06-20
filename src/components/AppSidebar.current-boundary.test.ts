@@ -60,16 +60,15 @@ describe("AppSidebar current App Server session boundary", () => {
       "appServerSessionClient.updateAgentRuntimeSession(request)",
     );
     expect(deleteFunction).toContain(
-      "return await updateAgentRuntimeSession({",
+      "appServerSessionClient.deleteAgentRuntimeSession(sessionId)",
     );
-    expect(deleteFunction).toContain("session_id: sessionId");
-    expect(deleteFunction).toContain("archived: true");
+    expect(deleteFunction).toContain('reason: "deleted"');
     expect(source).not.toContain('"agent_runtime_update_session"');
     expect(source).not.toContain('"agent_runtime_delete_session"');
     expect(source).not.toContain("invokeCommand(");
   });
 
-  it("App Server session gateway 必须通过 agentSession/list/read/update 事实源", () => {
+  it("App Server session gateway 必须通过 agentSession/list/read/update/delete 事实源", () => {
     const source = readSource(
       "src/lib/api/agentRuntime/appServerSessionClient.ts",
     );
@@ -92,9 +91,12 @@ describe("AppSidebar current App Server session boundary", () => {
     expect(listFunction).toContain("METHOD_AGENT_SESSION_LIST");
     expect(getFunction).toContain("appServerClient.readSession(");
     expect(updateFunction).toContain("appServerClient.updateSession(");
+    expect(updateFunction).toContain("appServerClient.deleteSession(");
+    expect(updateFunction).toContain("agentSession/delete did not confirm deletion");
     expect(source).not.toContain('"agent_runtime_list_sessions"');
     expect(source).not.toContain('"agent_runtime_get_session"');
     expect(source).not.toContain('"agent_runtime_update_session"');
+    expect(source).not.toContain('"agent_runtime_delete_session"');
     expect(source).not.toContain("safeInvoke");
     expect(source).not.toContain("invokeCommand");
   });

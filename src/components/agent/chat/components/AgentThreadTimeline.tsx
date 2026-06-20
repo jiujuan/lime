@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import {
   AlertTriangle,
@@ -1046,6 +1052,11 @@ export const AgentThreadTimeline: React.FC<AgentThreadTimelineProps> = ({
   collapseInactiveDetails = false,
 }) => {
   const { t } = useTranslation("agent");
+  const translateThreadGrouping = useCallback(
+    (key: string, options?: Record<string, unknown>): string =>
+      String(t(key as never, options as never)),
+    [t],
+  );
   const pendingRuntimeConfirmationPrompt = useMemo(
     () => resolvePendingRuntimeConfirmationPrompt({ items, actionRequests }),
     [actionRequests, items],
@@ -1060,8 +1071,11 @@ export const AgentThreadTimeline: React.FC<AgentThreadTimelineProps> = ({
   );
 
   const displayModel = useMemo(
-    () => buildAgentThreadDisplayModel(visibleItems, { t }),
-    [t, visibleItems],
+    () =>
+      buildAgentThreadDisplayModel(visibleItems, {
+        t: translateThreadGrouping,
+      }),
+    [translateThreadGrouping, visibleItems],
   );
   const activeBlockIndex = resolveActiveBlockIndex(displayModel.orderedBlocks);
   const focusBlockIndex = resolveFocusBlockIndex({

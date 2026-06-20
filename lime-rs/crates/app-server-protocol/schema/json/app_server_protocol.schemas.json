@@ -2256,6 +2256,36 @@
       "title": "AgentSessionCompactResponse",
       "type": "object"
     },
+    "AgentSessionDeleteParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId"
+      ],
+      "title": "AgentSessionDeleteParams",
+      "type": "object"
+    },
+    "AgentSessionDeleteResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "deleted": {
+          "type": "boolean"
+        },
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "deleted",
+        "sessionId"
+      ],
+      "title": "AgentSessionDeleteResponse",
+      "type": "object"
+    },
     "AgentSessionEventParams": {
       "$defs": {
         "AgentEvent": {
@@ -16372,6 +16402,103 @@
       "title": "MemoryStoreCitation",
       "type": "object"
     },
+    "MemoryStoreConsolidateParams": {
+      "$defs": {
+        "MemoryStoreScope": {
+          "enum": [
+            "global",
+            "workspace"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "maxNotes": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "scope": {
+          "$ref": "#/$defs/MemoryStoreScope",
+          "default": "global"
+        },
+        "workspaceRoot": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "title": "MemoryStoreConsolidateParams",
+      "type": "object"
+    },
+    "MemoryStoreConsolidateResponse": {
+      "$defs": {
+        "MemoryStoreScope": {
+          "enum": [
+            "global",
+            "workspace"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "archivedNotes": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "memoryPath": {
+          "type": "string"
+        },
+        "processedNotes": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rootPath": {
+          "type": "string"
+        },
+        "rootScope": {
+          "$ref": "#/$defs/MemoryStoreScope"
+        },
+        "skippedNotes": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "summaryPath": {
+          "type": "string"
+        },
+        "updated": {
+          "type": "boolean"
+        },
+        "warnings": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "archivedNotes",
+        "memoryPath",
+        "processedNotes",
+        "rootPath",
+        "rootScope",
+        "skippedNotes",
+        "summaryPath",
+        "updated"
+      ],
+      "title": "MemoryStoreConsolidateResponse",
+      "type": "object"
+    },
     "MemoryStoreEntry": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -16466,6 +16593,64 @@
         "totalBytes"
       ],
       "title": "MemoryStoreHealthResponse",
+      "type": "object"
+    },
+    "MemoryStoreIndexRebuildResponse": {
+      "$defs": {
+        "MemoryStoreScope": {
+          "enum": [
+            "global",
+            "workspace"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "indexedAt": {
+          "type": "string"
+        },
+        "manifestPath": {
+          "type": "string"
+        },
+        "rebuilt": {
+          "type": "boolean"
+        },
+        "rootPath": {
+          "type": "string"
+        },
+        "rootScope": {
+          "$ref": "#/$defs/MemoryStoreScope"
+        },
+        "schemaVersion": {
+          "type": "string"
+        },
+        "sourceChecksum": {
+          "type": "string"
+        },
+        "sourceFileCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sourceTotalBytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "indexedAt",
+        "manifestPath",
+        "rebuilt",
+        "rootPath",
+        "rootScope",
+        "schemaVersion",
+        "sourceChecksum",
+        "sourceFileCount",
+        "sourceTotalBytes"
+      ],
+      "title": "MemoryStoreIndexRebuildResponse",
       "type": "object"
     },
     "MemoryStoreListParams": {
@@ -16761,6 +16946,308 @@
         "rootScope"
       ],
       "title": "MemoryStoreResetResponse",
+      "type": "object"
+    },
+    "MemoryStoreReviewListParams": {
+      "$defs": {
+        "MemoryStoreScope": {
+          "enum": [
+            "global",
+            "workspace"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "cursor": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "maxResults": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "scope": {
+          "$ref": "#/$defs/MemoryStoreScope",
+          "default": "global"
+        },
+        "workspaceRoot": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "title": "MemoryStoreReviewListParams",
+      "type": "object"
+    },
+    "MemoryStoreReviewListResponse": {
+      "$defs": {
+        "MemoryStoreCitation": {
+          "properties": {
+            "endLineNumber": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "path": {
+              "type": "string"
+            },
+            "startLineNumber": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "endLineNumber",
+            "path",
+            "startLineNumber"
+          ],
+          "type": "object"
+        },
+        "MemoryStoreReviewNote": {
+          "properties": {
+            "citation": {
+              "$ref": "#/$defs/MemoryStoreCitation"
+            },
+            "modifiedAt": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "path": {
+              "type": "string"
+            },
+            "preview": {
+              "type": "string"
+            },
+            "size": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "citation",
+            "modifiedAt",
+            "path",
+            "preview",
+            "size"
+          ],
+          "type": "object"
+        },
+        "MemoryStoreScope": {
+          "enum": [
+            "global",
+            "workspace"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "nextCursor": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "notes": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/MemoryStoreReviewNote"
+          },
+          "type": "array"
+        },
+        "rootPath": {
+          "type": "string"
+        },
+        "rootScope": {
+          "$ref": "#/$defs/MemoryStoreScope"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "rootPath",
+        "rootScope",
+        "truncated"
+      ],
+      "title": "MemoryStoreReviewListResponse",
+      "type": "object"
+    },
+    "MemoryStoreReviewNote": {
+      "$defs": {
+        "MemoryStoreCitation": {
+          "properties": {
+            "endLineNumber": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "path": {
+              "type": "string"
+            },
+            "startLineNumber": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "endLineNumber",
+            "path",
+            "startLineNumber"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "citation": {
+          "$ref": "#/$defs/MemoryStoreCitation"
+        },
+        "modifiedAt": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "path": {
+          "type": "string"
+        },
+        "preview": {
+          "type": "string"
+        },
+        "size": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "citation",
+        "modifiedAt",
+        "path",
+        "preview",
+        "size"
+      ],
+      "title": "MemoryStoreReviewNote",
+      "type": "object"
+    },
+    "MemoryStoreReviewResolveAction": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "enum": [
+        "accept",
+        "reject"
+      ],
+      "title": "MemoryStoreReviewResolveAction",
+      "type": "string"
+    },
+    "MemoryStoreReviewResolveParams": {
+      "$defs": {
+        "MemoryStoreReviewResolveAction": {
+          "enum": [
+            "accept",
+            "reject"
+          ],
+          "type": "string"
+        },
+        "MemoryStoreScope": {
+          "enum": [
+            "global",
+            "workspace"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/MemoryStoreReviewResolveAction"
+        },
+        "path": {
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/MemoryStoreScope",
+          "default": "global"
+        },
+        "workspaceRoot": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "action",
+        "path"
+      ],
+      "title": "MemoryStoreReviewResolveParams",
+      "type": "object"
+    },
+    "MemoryStoreReviewResolveResponse": {
+      "$defs": {
+        "MemoryStoreReviewResolveAction": {
+          "enum": [
+            "accept",
+            "reject"
+          ],
+          "type": "string"
+        },
+        "MemoryStoreScope": {
+          "enum": [
+            "global",
+            "workspace"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/MemoryStoreReviewResolveAction"
+        },
+        "archivedPath": {
+          "type": "string"
+        },
+        "memoryPath": {
+          "type": "string"
+        },
+        "rootPath": {
+          "type": "string"
+        },
+        "rootScope": {
+          "$ref": "#/$defs/MemoryStoreScope"
+        },
+        "sourcePath": {
+          "type": "string"
+        },
+        "summaryPath": {
+          "type": "string"
+        },
+        "updated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "action",
+        "archivedPath",
+        "memoryPath",
+        "rootPath",
+        "rootScope",
+        "sourcePath",
+        "summaryPath",
+        "updated"
+      ],
+      "title": "MemoryStoreReviewResolveResponse",
       "type": "object"
     },
     "MemoryStoreRootParams": {
@@ -26662,6 +27149,7 @@
               "agentSession/analysisHandoff/export",
               "agentSession/archiveMany",
               "agentSession/compact",
+              "agentSession/delete",
               "agentSession/fileCheckpoint/diff",
               "agentSession/fileCheckpoint/get",
               "agentSession/fileCheckpoint/list",
@@ -26788,10 +27276,14 @@
               "mediaTaskArtifact/list",
               "mediaTaskArtifact/video/create",
               "memoryStore/addNote",
+              "memoryStore/consolidate",
               "memoryStore/health",
+              "memoryStore/index/rebuild",
               "memoryStore/list",
               "memoryStore/read",
               "memoryStore/reset",
+              "memoryStore/review/list",
+              "memoryStore/review/resolve",
               "memoryStore/search",
               "model/list",
               "modelPreferences/list",

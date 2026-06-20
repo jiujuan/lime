@@ -1,8 +1,6 @@
 import type { AgentToolCallState as ToolCallState } from "@/lib/api/agentProtocol";
 import type { ActionRequired } from "../types";
-import {
-  isUnifiedWebSearchToolName,
-} from "../utils/searchResultPreview";
+import { isUnifiedWebSearchToolName } from "../utils/searchResultPreview";
 import { isUnifiedWebFetchToolName } from "../utils/toolNameFamily";
 import { isImportedSourceMetadata } from "../utils/importedSourceMetadata";
 
@@ -38,32 +36,150 @@ export function isImportedToolCall(toolCall: ToolCallState): boolean {
   );
 }
 
-export function shouldAutoExpandProcessEntries(
-  entries: StreamingProcessEntry[],
-  isMessageStreaming: boolean,
+export function isWebRetrievalToolCall(toolCall: ToolCallState): boolean {
+  return (
+    isUnifiedWebSearchToolName(toolCall.name) ||
+    isUnifiedWebFetchToolName(toolCall.name)
+  );
+}
+
+function isSuccessfulOrRunningWebRetrievalToolCall(
+  toolCall: ToolCallState,
 ): boolean {
-  if (
-    entries.some(
-      (entry) =>
-        entry.kind === "thinking" && isImportedProcessMetadata(entry.metadata),
-    )
-  ) {
-    return true;
-  }
+  return (
+    isWebRetrievalToolCall(toolCall) &&
+    (toolCall.status === "running" || toolCall.status === "completed")
+  );
+}
 
-  if (
-    entries.some(
-      (entry) => entry.kind === "tool" && isImportedToolCall(entry.toolCall),
-    )
-  ) {
-    return true;
-  }
+function isSuccessfulOrRunningWebSearchToolCall(
+  toolCall: ToolCallState,
+): boolean {
+  return (
+    isUnifiedWebSearchToolName(toolCall.name) &&
+    (toolCall.status === "running" || toolCall.status === "completed")
+  );
+}
 
-  if (!isMessageStreaming) {
+function hasSuccessfulOrRunningWebSearchProcess(
+  entries: StreamingProcessEntry[],
+): boolean {
+  const webRetrievalEntries = entries.filter(
+    (entry): entry is Extract<StreamingProcessEntry, { kind: "tool" }> =>
+      entry.kind === "tool" && isWebRetrievalToolCall(entry.toolCall),
+  );
+  if (webRetrievalEntries.length === 0) {
     return false;
   }
 
-  if (hasRunningWebRetrievalProcess(entries)) {
+  return webRetrievalEntries.some((entry) =>
+    isSuccessfulOrRunningWebSearchToolCall(entry.toolCall),
+  );
+}
+
+function hasSuccessfulOrRunningWebRetrievalProcess(
+  entries: StreamingProcessEntry[],
+): boolean {
+  const webRetrievalEntries = entries.filter(
+    (entry): entry is Extract<StreamingProcessEntry, { kind: "tool" }> =>
+      entry.kind === "tool" && isWebRetrievalToolCall(entry.toolCall),
+  );
+  if (webRetrievalEntries.length === 0) {
+    return false;
+  }
+
+  return webRetrievalEntries.some((entry) =>
+    isSuccessfulOrRunningWebRetrievalToolCall(entry.toolCall),
+  );
+}
+
+export function shouldSplitImportedProcessBeforeEntry(
+  currentEntries: StreamingProcessEntry[],
+  nextEntry: StreamingProcessEntry,
+): boolean {
+  if (currentEntries.length === 0) {
+    return false;
+  }
+
+  const currentHasImportedTool = currentEntries.some(
+    (entry) => entry.kind === "tool" && isImportedToolCall(entry.toolCall),
+  );
+  const nextIsImportedTool =
+    nextEntry.kind === "tool" && isImportedToolCall(nextEntry.toolCall);
+  if (!currentHasImportedTool || !nextIsImportedTool) {
+    return false;
+  }
+
+  const currentHasWebRetrieval = currentEntries.some(
+    (entry) =>
+      entry.kind === "tool" && isWebRetrievalToolCall(entry.toolCall),
+  );
+  const currentHasNonWebRetrieval = currentEntries.some(
+    (entry) =>
+      entry.kind !== "tool" || !isWebRetrievalToolCall(entry.toolCall),
+  );
+  const nextIsWebRetrieval = isWebRetrievalToolCall(nextEntry.toolCall);
+
+  return (
+    (currentHasWebRetrieval && !nextIsWebRetrieval) ||
+    (currentHasNonWebRetrieval && nextIsWebRetrieval)
+  );
+}
+
+export function shouldAutoExpandProcessEntries(
+  entries: StreamingProcessEntry[],
+  isMessageStreaming: boolean,
+  options?: {
+    isTailProcessRun?: boolean;
+  },
+): boolean {
+  const hasImportedThinking = entries.some(
+    (entry) =>
+      entry.kind === "thinking" && isImportedProcessMetadata(entry.metadata),
+  );
+  const hasImportedTool = entries.some(
+    (entry) => entry.kind === "tool" && isImportedToolCall(entry.toolCall),
+  );
+  const hasImportedProcess = hasImportedThinking || hasImportedTool;
+  const hasRunningWebRetrieval = hasRunningWebRetrievalProcess(entries);
+  const isImportedWebRetrievalOnly =
+    hasImportedTool &&
+    entries.every(
+      (entry) =>
+        entry.kind === "tool" &&
+        isImportedToolCall(entry.toolCall) &&
+        isWebRetrievalToolCall(entry.toolCall),
+    );
+
+  if (!isMessageStreaming) {
+    if (
+      !hasImportedProcess &&
+      hasSuccessfulOrRunningWebSearchProcess(entries)
+    ) {
+      return true;
+    }
+    if (isImportedWebRetrievalOnly) {
+      return hasRunningWebRetrieval;
+    }
+    return hasImportedThinking || hasImportedTool;
+  }
+
+  if (!hasImportedProcess && hasRunningWebRetrieval) {
+    return true;
+  }
+
+  if (
+    !hasImportedProcess &&
+    hasSuccessfulOrRunningWebSearchProcess(entries)
+  ) {
+    return true;
+  }
+
+  if (
+    options?.isTailProcessRun &&
+    !hasImportedProcess &&
+    hasSuccessfulOrRunningWebRetrievalProcess(entries)
+  ) {
     return true;
   }
 
@@ -90,7 +206,6 @@ function hasRunningWebRetrievalProcess(
     (entry) =>
       entry.kind === "tool" &&
       entry.toolCall.status === "running" &&
-      (isUnifiedWebSearchToolName(entry.toolCall.name) ||
-        isUnifiedWebFetchToolName(entry.toolCall.name)),
+      isWebRetrievalToolCall(entry.toolCall),
   );
 }

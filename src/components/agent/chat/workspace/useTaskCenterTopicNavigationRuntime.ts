@@ -5,7 +5,7 @@ import {
   type MutableRefObject,
   type SetStateAction,
 } from "react";
-import type { Character } from "@/lib/api/memory";
+import type { Character } from "@/lib/api/projectMemory";
 import { scheduleMinimumDelayIdleTask } from "@/lib/utils/scheduleMinimumDelayIdleTask";
 import type { Topic } from "../hooks/agentChatShared";
 import { loadPersistedSessionWorkspaceId } from "../hooks/agentProjectStorage";

@@ -14,7 +14,7 @@ import React, {
 } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import type { Character } from "@/lib/api/memory";
+import type { Character } from "@/lib/api/projectMemory";
 import type { Skill } from "@/lib/api/skills";
 import {
   listServiceSkills,

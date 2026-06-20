@@ -276,6 +276,7 @@ export function AppSidebarAccountMenu({
             <AccountMenuItem
               type="button"
               aria-label={copy.modelSettingsLabel}
+              data-testid="app-sidebar-account-model-settings"
               onClick={onOpenModelSettings}
             >
               <AccountMenuItemLeading>

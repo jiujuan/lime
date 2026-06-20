@@ -102,6 +102,7 @@ describe("codex import fidelity acceptance matrix guard", () => {
       "runtime detail drilldown",
       "continue same session",
       "evidence / replay",
+      "session delete / retention boundary",
       "privacy / source leak boundary",
       "non-Codex importer",
     ];
@@ -238,27 +239,30 @@ describe("codex import fidelity acceptance matrix guard", () => {
     expect(clickThroughSurface).toContain('not.toContain("agent_runtime_")');
   });
 
-  it("keeps user-level deletion policy separate from reimport cleanup", () => {
+  it("keeps session delete separate from archive, reimport cleanup, and source retention", () => {
     const matrix = readFile(MATRIX_PATH);
     const tracker = readFile(TRACKER_PATH);
     const sessionClient = readFile(SESSION_CLIENT_PATH);
     const sessionClientBoundary = readFile(SESSION_CLIENT_BOUNDARY_TEST_PATH);
 
-    expect(matrix).toContain(
-      "导入数据的用户级“彻底删除 / 导出后删除 / 保留策略”还需要独立产品规则和存储清理守卫。",
-    );
+    expect(matrix).toContain("session delete / retention boundary");
+    expect(matrix).toContain("`agentSession/delete` 清理 Lime memory / projection / event log / session-scoped sidecar");
+    expect(matrix).toContain("不删除外部来源目录");
+    expect(matrix).toContain("导出后删除、删除前导出确认和保留期限策略还需要独立产品规则");
     expect(tracker).toContain("CI-050");
-    expect(tracker).toContain("用户级删除 / 保留策略");
+    expect(tracker).toContain("用户级删除 / 保留策略 current 收口");
     expect(tracker).toContain("replaceExisting=true");
     expect(tracker).toContain("session-scoped sidecar");
-    expect(tracker).toContain("不等同于用户级彻底删除");
+    expect(tracker).toContain("App Server JSON-RPC `agentSession/delete` current 主链");
+    expect(tracker).toContain("不删除外部来源目录");
     expect(sessionClient).toContain("deleteAgentRuntimeSession");
-    expect(sessionClient).toContain("archived: true");
+    expect(sessionClient).toContain("appServerSessionClient.deleteAgentRuntimeSession(sessionId)");
     expect(sessionClientBoundary).toContain(
-      "session archive / restore / delete projection must use agentSession/update",
+      "session archive / restore use agentSession/update and delete uses agentSession/delete",
     );
+    expect(sessionClientBoundary).toContain("archived: true");
     expect(sessionClientBoundary).toContain(
-      "delete projection 不应直接请求 App Server 通用 request 或 legacy bridge",
+      "delete projection must use typed agentSession/delete helper",
     );
   });
 

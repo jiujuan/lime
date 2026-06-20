@@ -391,10 +391,11 @@ export function createSessionClient({
   }
 
   async function deleteAgentRuntimeSession(sessionId: string): Promise<void> {
-    return await updateAgentRuntimeSession({
-      session_id: sessionId,
-      archived: true,
-    }, "deleted");
+    await appServerSessionClient.deleteAgentRuntimeSession(sessionId);
+    notifyAgentRuntimeSessionsChanged({
+      reason: "deleted",
+      sessionId: sessionId.trim(),
+    });
   }
 
   return {

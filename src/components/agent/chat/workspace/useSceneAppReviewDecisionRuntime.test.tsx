@@ -68,7 +68,6 @@ function createSummary(
       runId: "run-1",
       statusLabel: "成功",
       statusTone: "success",
-      stageLabel: "已完成",
       summary: "运行态已回流",
       nextAction: "继续放量",
       evidenceSourceLabel: "fixture",

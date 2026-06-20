@@ -1,6 +1,6 @@
 use super::support::*;
 use super::*;
-use crate::runtime::memory_prompt::MEMORY_PROMPT_CONTEXT_KEY;
+use crate::runtime::memory_prompt::{CONTEXT_PACKET_TELEMETRY_KEY, MEMORY_PROMPT_CONTEXT_KEY};
 
 fn read_response(content: &str, truncated: bool) -> MemoryStoreReadResponse {
     MemoryStoreReadResponse {
@@ -93,6 +93,18 @@ async fn start_turn_injects_workspace_memory_summary_context() {
     );
     assert_eq!(context["path"].as_str(), Some("memory_summary.md"));
     assert_eq!(context["content"].as_str(), Some("Prefer concise answers."));
+    assert_eq!(
+        context["contextPacketTelemetry"]["packets"][0]["kind"].as_str(),
+        Some("long_term_memory_summary")
+    );
+    assert_eq!(
+        metadata[CONTEXT_PACKET_TELEMETRY_KEY]["packets"][0]["source"].as_str(),
+        Some("memory.store")
+    );
+    assert_eq!(
+        metadata[CONTEXT_PACKET_TELEMETRY_KEY]["packets"][0]["admitted"].as_bool(),
+        Some(true)
+    );
 
     let read_requests = data_source.memory_store_read_requests();
     assert_eq!(read_requests.len(), 1);
@@ -148,4 +160,33 @@ async fn start_turn_does_not_block_when_memory_summary_read_fails() {
         .and_then(|metadata| metadata.get(MEMORY_PROMPT_CONTEXT_KEY))
         .is_none());
     assert_eq!(data_source.memory_store_read_requests().len(), 1);
+}
+
+#[tokio::test]
+async fn start_turn_rejects_secret_like_memory_summary_packet() {
+    let data_source = Arc::new(
+        TestSessionDataSource::new(empty_agent_session_read_response("missing"))
+            .with_memory_store_read_response(Ok(read_response(
+                "api_key = abcdefghijklmnop\n",
+                false,
+            ))),
+    );
+
+    let backend = start_memory_prompt_turn(data_source, None).await;
+
+    let requests = backend
+        .requests
+        .lock()
+        .expect("test backend requests mutex poisoned");
+    let metadata = requests[0]
+        .runtime_options
+        .as_ref()
+        .and_then(|options| options.metadata.as_ref())
+        .expect("runtime metadata");
+    let telemetry = &metadata[CONTEXT_PACKET_TELEMETRY_KEY];
+    assert_eq!(telemetry["admittedCount"].as_u64(), Some(0));
+    assert_eq!(
+        telemetry["packets"][0]["rejectedReason"].as_str(),
+        Some("secret_like")
+    );
 }

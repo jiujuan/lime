@@ -88,6 +88,16 @@ function appServerClientMock(): AppServerSessionRpcClient {
       notifications: [],
       messages: [],
     }),
+    deleteSession: vi.fn().mockResolvedValue({
+      id: 6,
+      result: {
+        sessionId: "session-1",
+        deleted: true,
+      },
+      response: { id: 6, result: {} },
+      notifications: [],
+      messages: [],
+    }),
   };
 }
 
@@ -968,6 +978,20 @@ describe("appServerSessionClient", () => {
 
     expect(appServerClient.archiveManySessions).toHaveBeenCalledWith({
       sessionIds: ["session-1", "session-2"],
+    });
+    expect(appServerClient.updateSession).not.toHaveBeenCalled();
+  });
+
+  it("delete 应通过 agentSession/delete 物理清理 current session", async () => {
+    const appServerClient = appServerClientMock();
+    const client = createAppServerSessionClient({ appServerClient });
+
+    await expect(
+      client.deleteAgentRuntimeSession(" session-1 "),
+    ).resolves.toBeUndefined();
+
+    expect(appServerClient.deleteSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
     });
     expect(appServerClient.updateSession).not.toHaveBeenCalled();
   });

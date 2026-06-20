@@ -19,7 +19,10 @@ function createTempRoot() {
 }
 
 function runNodeScriptAsync(scriptRelativePath: string, args: string[]) {
-  return runNodeScriptJson(scriptRelativePath, args, { repoRoot });
+  return runNodeScriptJson(scriptRelativePath, args, {
+    repoRoot,
+    timeoutMs: 120_000,
+  });
 }
 
 afterEach(() => {

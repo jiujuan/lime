@@ -20,8 +20,19 @@ export interface ToolBatchSummaryDescriptor {
   kind: ToolBatchKind;
   title: string;
   supportingLines: string[];
+  supportingSections?: ToolBatchSummarySection[];
   countLabel: string;
   rawDetailLabel: string;
+  hasRunning?: boolean;
+}
+
+export type ToolBatchSummarySectionKind =
+  | "web_search_sources"
+  | "web_fetch_pages";
+
+export interface ToolBatchSummarySection {
+  kind: ToolBatchSummarySectionKind;
+  lines: string[];
 }
 
 type ToolOperationKind =
@@ -53,6 +64,7 @@ interface ToolBatchAccumulator {
   significantCount: number;
   absorbedCount: number;
   otherCount: number;
+  hasRunning: boolean;
   latestHint: string | null;
   latestWebSearchHint: string | null;
   webSearchHints: string[];
@@ -130,6 +142,10 @@ function readString(
     }
   }
   return null;
+}
+
+function isRunningToolLikeStatus(status?: ToolLikeStatus): boolean {
+  return status === "running" || status === "in_progress";
 }
 
 function pushUniqueHint(target: string[], hint: string | null): void {
@@ -344,6 +360,7 @@ function accumulateBatch(entries: ToolLikeDescriptor[]): ToolBatchAccumulator {
     significantCount: 0,
     absorbedCount: 0,
     otherCount: 0,
+    hasRunning: false,
     latestHint: null,
     latestWebSearchHint: null,
     webSearchHints: [],
@@ -353,6 +370,9 @@ function accumulateBatch(entries: ToolLikeDescriptor[]): ToolBatchAccumulator {
   };
 
   for (const entry of entries) {
+    if (isRunningToolLikeStatus(entry.status)) {
+      accumulator.hasRunning = true;
+    }
     const operationKind = resolveToolOperationKind(entry);
     switch (operationKind) {
       case "read":
@@ -455,7 +475,7 @@ function buildWebSearchDescriptor(
     const operationKind = resolveToolOperationKind(entry);
     return (
       (operationKind === "web_search" || operationKind === "web_fetch") &&
-      (entry.status === "running" || entry.status === "in_progress")
+      isRunningToolLikeStatus(entry.status)
     );
   });
 
@@ -471,6 +491,19 @@ function buildWebSearchDescriptor(
             ? `搜索网页 ${webSearchCount} 次，读取网页 ${webFetchCount} 次`
             : `搜索网页 ${webSearchCount} 次`,
         ];
+  const supportingSections: ToolBatchSummarySection[] = [];
+  if (accumulator.webSearchHints.length > 0) {
+    supportingSections.push({
+      kind: "web_search_sources",
+      lines: accumulator.webSearchHints.slice(0, 5),
+    });
+  }
+  if (accumulator.webFetchHints.length > 0) {
+    supportingSections.push({
+      kind: "web_fetch_pages",
+      lines: accumulator.webFetchHints.slice(0, 5),
+    });
+  }
   if (
     accumulator.latestWebSearchHint &&
     !supportingLines.some((line) =>
@@ -487,6 +520,8 @@ function buildWebSearchDescriptor(
         ? `${hasRunningWebRetrieval ? "正在搜索网页" : "已搜索网页"} ${webSearchCount} 次，读取网页 ${webFetchCount} 次`
         : `${hasRunningWebRetrieval ? "正在搜索网页" : "已搜索网页"} ${webSearchCount} 次`,
     supportingLines,
+    supportingSections:
+      supportingSections.length > 1 ? supportingSections : undefined,
     countLabel:
       webFetchCount > 0
         ? `搜 ${webSearchCount} / 读 ${webFetchCount}`
@@ -498,6 +533,7 @@ function buildWebSearchDescriptor(
       : webFetchCount > 0
         ? "展开查看搜索与读取来源"
         : "展开查看搜索来源",
+    hasRunning: hasRunningWebRetrieval,
   };
 }
 
@@ -565,6 +601,7 @@ function buildExplorationDescriptor(
     supportingLines,
     countLabel: countParts.join(" / ") || `${significantCount} 步`,
     rawDetailLabel: "展开查看探索明细",
+    hasRunning: accumulator.hasRunning,
   };
 }
 
@@ -600,21 +637,25 @@ function buildBrowserDescriptor(
     supportingLines,
     countLabel: `${accumulator.browserCount} 步`,
     rawDetailLabel: "展开查看页面操作明细",
+    hasRunning: accumulator.hasRunning,
   };
 }
 
 function buildDescriptorFromEntries(
   entries: ToolLikeDescriptor[],
 ): ToolBatchSummaryDescriptor | null {
-  if (entries.length < 2) {
+  if (entries.length < 1) {
     return null;
   }
 
   const accumulator = accumulateBatch(entries);
+  const webSearchDescriptor = buildWebSearchDescriptor(accumulator, entries);
+  if (webSearchDescriptor || entries.length < 2) {
+    return webSearchDescriptor;
+  }
+
   return (
-    buildWebSearchDescriptor(accumulator, entries) ||
-    buildExplorationDescriptor(accumulator) ||
-    buildBrowserDescriptor(accumulator)
+    buildExplorationDescriptor(accumulator) || buildBrowserDescriptor(accumulator)
   );
 }
 

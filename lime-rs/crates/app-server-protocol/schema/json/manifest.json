@@ -75,6 +75,10 @@
       "method": "agentSession/compact"
     },
     {
+      "kind": "request",
+      "method": "agentSession/delete"
+    },
+    {
       "kind": "notification",
       "method": "agentSession/event"
     },
@@ -588,7 +592,15 @@
     },
     {
       "kind": "request",
+      "method": "memoryStore/consolidate"
+    },
+    {
+      "kind": "request",
       "method": "memoryStore/health"
+    },
+    {
+      "kind": "request",
+      "method": "memoryStore/index/rebuild"
     },
     {
       "kind": "request",
@@ -601,6 +613,14 @@
     {
       "kind": "request",
       "method": "memoryStore/reset"
+    },
+    {
+      "kind": "request",
+      "method": "memoryStore/review/list"
+    },
+    {
+      "kind": "request",
+      "method": "memoryStore/review/resolve"
     },
     {
       "kind": "request",
@@ -1091,6 +1111,8 @@
       "AgentSessionArchiveManyResponse",
       "AgentSessionCompactParams",
       "AgentSessionCompactResponse",
+      "AgentSessionDeleteParams",
+      "AgentSessionDeleteResponse",
       "AgentSessionEventParams",
       "AgentSessionFileCheckpointDetail",
       "AgentSessionFileCheckpointDiffParams",
@@ -1338,14 +1360,23 @@
       "MemoryStoreAddNoteParams",
       "MemoryStoreAddNoteResponse",
       "MemoryStoreCitation",
+      "MemoryStoreConsolidateParams",
+      "MemoryStoreConsolidateResponse",
       "MemoryStoreEntry",
       "MemoryStoreHealthResponse",
+      "MemoryStoreIndexRebuildResponse",
       "MemoryStoreListParams",
       "MemoryStoreListResponse",
       "MemoryStoreReadParams",
       "MemoryStoreReadResponse",
       "MemoryStoreResetParams",
       "MemoryStoreResetResponse",
+      "MemoryStoreReviewListParams",
+      "MemoryStoreReviewListResponse",
+      "MemoryStoreReviewNote",
+      "MemoryStoreReviewResolveAction",
+      "MemoryStoreReviewResolveParams",
+      "MemoryStoreReviewResolveResponse",
       "MemoryStoreRootParams",
       "MemoryStoreScope",
       "MemoryStoreSearchHit",

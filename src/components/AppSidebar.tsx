@@ -927,8 +927,8 @@ export function AppSidebar({
           Date.parse(response.session.updatedAt) / 1000,
         ),
         archived_at: null,
-        workspace_id: response.session.workspaceId ?? null,
-        working_dir: response.thread.cwd ?? null,
+        workspace_id: response.session.workspaceId ?? undefined,
+        working_dir: response.thread.cwd ?? undefined,
       });
     },
   });

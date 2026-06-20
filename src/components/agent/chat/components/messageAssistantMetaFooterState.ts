@@ -32,6 +32,7 @@ export interface MessageAssistantMetaFooterState {
 
 export interface ResolveMessageAssistantMetaFooterStateOptions {
   activeConversationRuntimeStatusLine: InputbarRuntimeStatusLineModel | null;
+  hasActiveInteractiveRuntime: boolean;
   hasAssistantBodyContent: boolean;
   isConversationTailAssistant: boolean;
   lastAssistantMessageId: string | null;
@@ -45,6 +46,7 @@ export interface ResolveMessageAssistantMetaFooterStateOptions {
 
 export function resolveMessageAssistantMetaFooterState({
   activeConversationRuntimeStatusLine,
+  hasActiveInteractiveRuntime,
   hasAssistantBodyContent,
   isConversationTailAssistant,
   lastAssistantMessageId,
@@ -65,7 +67,9 @@ export function resolveMessageAssistantMetaFooterState({
         ),
     );
   const shouldSuppressStaleActiveRuntimeLine =
-    hasFinalAssistantContent && isTerminalThreadReadStatus(threadReadStatus);
+    hasFinalAssistantContent &&
+    (isTerminalThreadReadStatus(threadReadStatus) ||
+      !hasActiveInteractiveRuntime);
   const shouldSuppressActiveRuntimeLine =
     tailRuntimeStatusLine?.status === "running" ||
     tailRuntimeStatusLine?.status === "queued";

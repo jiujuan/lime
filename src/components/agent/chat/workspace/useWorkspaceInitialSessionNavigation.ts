@@ -2,7 +2,16 @@ import { useEffect, useRef } from "react";
 import { logAgentDebug } from "@/lib/agentDebug";
 
 const INITIAL_SESSION_NAVIGATION_DEDUPE_MS = 2_000;
-const recentInitialSessionNavigationStarts = new Map<string, number>();
+type InitialSessionSwitchTopic = (
+  topicId: string,
+  options?: InitialSessionSwitchOptions,
+) => Promise<unknown>;
+
+let switchTopicScopedNavigationStarts = new WeakMap<
+  InitialSessionSwitchTopic,
+  Map<string, number>
+>();
+const externalNavigationStartsBySessionId = new Map<string, number>();
 
 interface InitialSessionSwitchOptions {
   forceRefresh?: boolean;
@@ -17,14 +26,7 @@ interface InitialSessionSwitchResolution extends InitialSessionSwitchOptions {
 interface UseWorkspaceInitialSessionNavigationParams {
   initialSessionId?: string | null;
   currentSessionId?: string | null;
-  switchTopic: (
-    topicId: string,
-    options?: {
-      forceRefresh?: boolean;
-      resumeSessionStartHooks?: boolean;
-      allowDetachedSession?: boolean;
-    },
-  ) => Promise<unknown>;
+  switchTopic: InitialSessionSwitchTopic;
   resolveInitialSessionSwitch?: (
     sessionId: string,
   ) => InitialSessionSwitchResolution | null | undefined;
@@ -40,7 +42,8 @@ function normalizeSessionId(value?: string | null): string | null {
 }
 
 export function resetInitialSessionNavigationDeduplicationForTests() {
-  recentInitialSessionNavigationStarts.clear();
+  switchTopicScopedNavigationStarts = new WeakMap();
+  externalNavigationStartsBySessionId.clear();
 }
 
 export function rememberInitialSessionNavigationStart(sessionId: string) {
@@ -49,7 +52,7 @@ export function rememberInitialSessionNavigationStart(sessionId: string) {
     return;
   }
 
-  recentInitialSessionNavigationStarts.set(normalizedSessionId, Date.now());
+  externalNavigationStartsBySessionId.set(normalizedSessionId, Date.now());
 }
 
 export function useWorkspaceInitialSessionNavigation({
@@ -70,7 +73,7 @@ export function useWorkspaceInitialSessionNavigation({
 
     if (normalizedCurrentSessionId === normalizedInitialSessionId) {
       appliedInitialSessionIdRef.current = normalizedInitialSessionId;
-      recentInitialSessionNavigationStarts.delete(normalizedInitialSessionId);
+      externalNavigationStartsBySessionId.delete(normalizedInitialSessionId);
       return;
     }
 
@@ -96,9 +99,18 @@ export function useWorkspaceInitialSessionNavigation({
       return;
     }
 
+    const dedupeKey = `${normalizedCurrentSessionId ?? ""}->${normalizedInitialSessionId}`;
+    let switchTopicStarts = switchTopicScopedNavigationStarts.get(switchTopic);
+    if (!switchTopicStarts) {
+      switchTopicStarts = new Map();
+      switchTopicScopedNavigationStarts.set(switchTopic, switchTopicStarts);
+    }
+
     const startedAt = Date.now();
-    const lastStartedAt =
-      recentInitialSessionNavigationStarts.get(normalizedInitialSessionId) ?? 0;
+    const scopedLastStartedAt = switchTopicStarts.get(dedupeKey) ?? 0;
+    const externalLastStartedAt =
+      externalNavigationStartsBySessionId.get(normalizedInitialSessionId) ?? 0;
+    const lastStartedAt = Math.max(scopedLastStartedAt, externalLastStartedAt);
     if (startedAt - lastStartedAt < INITIAL_SESSION_NAVIGATION_DEDUPE_MS) {
       logAgentDebug(
         "AgentChatPage",
@@ -117,10 +129,7 @@ export function useWorkspaceInitialSessionNavigation({
     }
 
     appliedInitialSessionIdRef.current = normalizedInitialSessionId;
-    recentInitialSessionNavigationStarts.set(
-      normalizedInitialSessionId,
-      startedAt,
-    );
+    switchTopicStarts.set(dedupeKey, startedAt);
     logAgentDebug("AgentChatPage", "initialSessionNavigation.start", {
       currentSessionId: normalizedCurrentSessionId,
       forceRefresh: resolvedSwitchOptions?.forceRefresh === true,
@@ -150,7 +159,8 @@ export function useWorkspaceInitialSessionNavigation({
     ).catch(
       (error) => {
         appliedInitialSessionIdRef.current = null;
-        recentInitialSessionNavigationStarts.delete(normalizedInitialSessionId);
+        switchTopicStarts.delete(dedupeKey);
+        externalNavigationStartsBySessionId.delete(normalizedInitialSessionId);
         logAgentDebug(
           "AgentChatPage",
           "initialSessionNavigation.error",

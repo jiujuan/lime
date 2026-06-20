@@ -1,4 +1,4 @@
-import type { Character } from "@/lib/api/memory";
+import type { Character } from "@/lib/api/projectMemory";
 import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
 import type { AgentI18nResource } from "@/i18n/agentResources";
 import type { AgentInitialInputCapabilityParams } from "@/types/page";

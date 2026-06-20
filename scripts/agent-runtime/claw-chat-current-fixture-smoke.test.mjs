@@ -166,6 +166,32 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain('"web_search"');
   });
 
+  it("covers Codex-style WebSearch/WebFetch rendering in the real Electron fixture", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain("web-tools-rendering");
+    expect(content).toContain("WEB_TOOLS_RENDERING_PROMPT");
+    expect(content).toContain("WEB_TOOLS_SEARCH_TITLE");
+    expect(content).toContain("WEB_TOOLS_SEARCH_URL");
+    expect(content).toContain("waitForGuiWebToolsRenderingCompleted");
+    expect(content).toContain("webProcessGroupExpanded");
+    expect(content).toContain("hasSearchSourceSection");
+    expect(content).toContain("hasFetchPageSection");
+    expect(content).toContain("hasFetchPageUrl");
+    expect(content).toContain("hasFetchMarkdownHidden");
+    expect(content).toContain("rawJsonEnvelopeVisible");
+    expect(content).toContain("guiWebSearchProcessDefaultExpanded");
+    expect(content).toContain("guiWebSearchProcessShowsInlineSources");
+    expect(content).toContain("guiWebFetchProcessShowsReadPages");
+    expect(content).toContain("guiWebSearchFinalTextInterleaved");
+    expect(content).toContain("guiWebFetchTransportEnvelopeHidden");
+    expect(content).toContain("WEB_TOOLS_RENDERING_ASSERTION_KEYS");
+    expect(content).toContain("bytes: 2048");
+    expect(content).toContain('codeText: "OK"');
+    expect(content).toContain("forbiddenTransportFragments");
+    expect(content).not.toContain("agent_runtime_");
+  });
+
   it("does not use live providers, App Server mock backend, renderer mocks, or legacy commands", () => {
     const content = readSmokeScript();
 

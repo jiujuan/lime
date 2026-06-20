@@ -315,7 +315,10 @@ function buildSoulTemplatePatch(
 
 function LoadingSkeleton() {
   return (
-    <div className="mx-auto max-w-[820px] space-y-5 pb-8">
+    <div
+      className="mx-auto max-w-[820px] space-y-5 pb-8"
+      data-testid="settings-memory-page"
+    >
       <div className="h-[88px] animate-pulse rounded-md border border-slate-200 bg-white" />
       <div className="h-[160px] animate-pulse rounded-md border border-slate-200 bg-white" />
       <div className="h-[220px] animate-pulse rounded-md border border-slate-200 bg-white" />
@@ -570,7 +573,10 @@ export function MemorySettings() {
   );
 
   return (
-    <div className="mx-auto max-w-[820px] space-y-5 pb-8">
+    <div
+      className="mx-auto max-w-[820px] space-y-5 pb-8"
+      data-testid="settings-memory-page"
+    >
       {message ? (
         <div
           className={cn(
@@ -633,6 +639,7 @@ export function MemorySettings() {
                 type="button"
                 role="tab"
                 aria-selected={selected}
+                data-testid={`settings-memory-tab-${tab.id}`}
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
                   "rounded-md px-3 py-3 text-left transition",
@@ -654,7 +661,10 @@ export function MemorySettings() {
       </section>
 
       {activeTab === "soul" ? (
-        <section className="rounded-md border border-slate-200/90 bg-white p-5 shadow-sm shadow-slate-950/5">
+        <section
+          className="rounded-md border border-slate-200/90 bg-white p-5 shadow-sm shadow-slate-950/5"
+          data-testid="settings-memory-soul-panel"
+        >
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 items-start gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-sky-200 bg-sky-50 text-sky-700">
@@ -777,7 +787,10 @@ export function MemorySettings() {
       ) : null}
 
       {activeTab === "advanced" ? (
-        <section className="rounded-md border border-slate-200/90 bg-white p-5 shadow-sm shadow-slate-950/5">
+        <section
+          className="rounded-md border border-slate-200/90 bg-white p-5 shadow-sm shadow-slate-950/5"
+          data-testid="settings-memory-advanced-panel"
+        >
           <label
             className="text-sm font-semibold text-slate-950"
             htmlFor="memory-embedding-provider"
@@ -838,6 +851,7 @@ export function MemorySettings() {
                 type="button"
                 onClick={handleSoulExportCopy}
                 disabled={!soulExportMarkdown}
+                data-testid="settings-memory-soul-copy-export"
                 className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950 disabled:opacity-60"
               >
                 {memoryT(t, "settings.memory.soul.action.copyExport")}
@@ -865,6 +879,7 @@ export function MemorySettings() {
               value={soulImportText}
               onChange={(event) => setSoulImportText(event.target.value)}
               rows={5}
+              data-testid="settings-memory-soul-import-textarea"
               placeholder={memoryT(
                 t,
                 "settings.memory.soul.import.placeholder",

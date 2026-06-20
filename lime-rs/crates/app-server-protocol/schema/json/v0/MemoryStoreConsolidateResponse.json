@@ -1,0 +1,63 @@
+{
+  "$defs": {
+    "MemoryStoreScope": {
+      "enum": [
+        "global",
+        "workspace"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "archivedNotes": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "memoryPath": {
+      "type": "string"
+    },
+    "processedNotes": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "rootPath": {
+      "type": "string"
+    },
+    "rootScope": {
+      "$ref": "#/$defs/MemoryStoreScope"
+    },
+    "skippedNotes": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "summaryPath": {
+      "type": "string"
+    },
+    "updated": {
+      "type": "boolean"
+    },
+    "warnings": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "archivedNotes",
+    "memoryPath",
+    "processedNotes",
+    "rootPath",
+    "rootScope",
+    "skippedNotes",
+    "summaryPath",
+    "updated"
+  ],
+  "title": "MemoryStoreConsolidateResponse",
+  "type": "object"
+}

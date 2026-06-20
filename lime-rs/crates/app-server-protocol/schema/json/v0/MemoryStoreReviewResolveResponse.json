@@ -1,0 +1,57 @@
+{
+  "$defs": {
+    "MemoryStoreReviewResolveAction": {
+      "enum": [
+        "accept",
+        "reject"
+      ],
+      "type": "string"
+    },
+    "MemoryStoreScope": {
+      "enum": [
+        "global",
+        "workspace"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "action": {
+      "$ref": "#/$defs/MemoryStoreReviewResolveAction"
+    },
+    "archivedPath": {
+      "type": "string"
+    },
+    "memoryPath": {
+      "type": "string"
+    },
+    "rootPath": {
+      "type": "string"
+    },
+    "rootScope": {
+      "$ref": "#/$defs/MemoryStoreScope"
+    },
+    "sourcePath": {
+      "type": "string"
+    },
+    "summaryPath": {
+      "type": "string"
+    },
+    "updated": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "action",
+    "archivedPath",
+    "memoryPath",
+    "rootPath",
+    "rootScope",
+    "sourcePath",
+    "summaryPath",
+    "updated"
+  ],
+  "title": "MemoryStoreReviewResolveResponse",
+  "type": "object"
+}

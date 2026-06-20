@@ -7,8 +7,28 @@ const { mockGetConfig, mockSaveConfig } = vi.hoisted(() => ({
   mockGetConfig: vi.fn(),
   mockSaveConfig: vi.fn(),
 }));
-const { mockGetMemoryStoreHealth, mockResetMemoryStore } = vi.hoisted(() => ({
+const { mockGetDefaultProject } = vi.hoisted(() => ({
+  mockGetDefaultProject: vi.fn(),
+}));
+const {
+  mockAddMemoryStoreNote,
+  mockConsolidateMemoryStore,
+  mockGetMemoryStoreHealth,
+  mockListMemoryStore,
+  mockListMemoryStoreReviewNotes,
+  mockReadMemoryStore,
+  mockRebuildMemoryStoreIndex,
+  mockResolveMemoryStoreReviewNote,
+  mockResetMemoryStore,
+} = vi.hoisted(() => ({
+  mockAddMemoryStoreNote: vi.fn(),
+  mockConsolidateMemoryStore: vi.fn(),
   mockGetMemoryStoreHealth: vi.fn(),
+  mockListMemoryStore: vi.fn(),
+  mockListMemoryStoreReviewNotes: vi.fn(),
+  mockReadMemoryStore: vi.fn(),
+  mockRebuildMemoryStoreIndex: vi.fn(),
+  mockResolveMemoryStoreReviewNote: vi.fn(),
   mockResetMemoryStore: vi.fn(),
 }));
 
@@ -17,8 +37,19 @@ vi.mock("@/lib/api/appConfig", () => ({
   saveConfig: mockSaveConfig,
 }));
 
+vi.mock("@/lib/api/project", () => ({
+  getDefaultProject: mockGetDefaultProject,
+}));
+
 vi.mock("@/lib/api/memoryStore", () => ({
+  addMemoryStoreNote: mockAddMemoryStoreNote,
+  consolidateMemoryStore: mockConsolidateMemoryStore,
   getMemoryStoreHealth: mockGetMemoryStoreHealth,
+  listMemoryStore: mockListMemoryStore,
+  listMemoryStoreReviewNotes: mockListMemoryStoreReviewNotes,
+  readMemoryStore: mockReadMemoryStore,
+  rebuildMemoryStoreIndex: mockRebuildMemoryStoreIndex,
+  resolveMemoryStoreReviewNote: mockResolveMemoryStoreReviewNote,
   resetMemoryStore: mockResetMemoryStore,
 }));
 
@@ -161,12 +192,79 @@ beforeEach(async () => {
     memoryBytes: 1024,
     notesCount: 1,
   });
+  mockGetDefaultProject.mockResolvedValue({
+    id: "default",
+    name: "Default workspace",
+    workspaceType: "general",
+    rootPath: "/repo/default",
+    isDefault: true,
+    createdAt: 1,
+    updatedAt: 1,
+    isFavorite: false,
+    isArchived: false,
+    tags: [],
+  });
+  mockListMemoryStore.mockResolvedValue({
+    rootScope: "workspace",
+    path: "rollout_summaries",
+    entries: [],
+    truncated: false,
+    nextCursor: null,
+  });
+  mockReadMemoryStore.mockResolvedValue({
+    path: "rollout_summaries/20260619T010203Z-handoff.md",
+    startLineNumber: 1,
+    content: "",
+    truncated: false,
+    citation: {
+      path: "rollout_summaries/20260619T010203Z-handoff.md",
+      startLineNumber: 1,
+      endLineNumber: 1,
+    },
+  });
+  mockListMemoryStoreReviewNotes.mockResolvedValue({
+    rootScope: "global",
+    rootPath: "/data/memories",
+    notes: [],
+    truncated: false,
+    nextCursor: null,
+  });
   mockResetMemoryStore.mockResolvedValue({
     rootScope: "global",
     rootPath: "/data/memories",
     removedFiles: 3,
     removedDirectories: 4,
     preservedSoul: true,
+  });
+  mockRebuildMemoryStoreIndex.mockResolvedValue({
+    rootScope: "global",
+    rootPath: "/data/memories",
+    manifestPath: "index/manifest.json",
+    schemaVersion: "memory-index-manifest/v1",
+    sourceFileCount: 2,
+    sourceTotalBytes: 1536,
+    sourceChecksum: "feedface",
+    indexedAt: "2026-06-19T10:00:00Z",
+    rebuilt: true,
+  });
+  mockAddMemoryStoreNote.mockResolvedValue({
+    path: "extensions/ad_hoc/notes/settings-memory-correction.md",
+    citation: {
+      path: "extensions/ad_hoc/notes/settings-memory-correction.md",
+      startLineNumber: 1,
+      endLineNumber: 1,
+    },
+  });
+  mockConsolidateMemoryStore.mockResolvedValue({
+    rootScope: "global",
+    rootPath: "/data/memories",
+    processedNotes: 1,
+    skippedNotes: 0,
+    archivedNotes: 1,
+    memoryPath: "MEMORY.md",
+    summaryPath: "memory_summary.md",
+    warnings: [],
+    updated: true,
   });
 });
 
@@ -202,6 +300,7 @@ describe("MemorySettings", () => {
     expect(bodyText).toContain("Everyday memory status");
     expect(bodyText).toContain("2 files, 1.5 KB");
     expect(bodyText).toContain("1 note(s)");
+    expect(bodyText).toContain("No memory notes need review.");
     expect(bodyText).toContain("/data/memories");
     expect(bodyText).toContain("Embedding config");
     expect(bodyText).not.toContain("Writing voice");
@@ -229,6 +328,16 @@ describe("MemorySettings", () => {
     expect(mockGetMemoryStoreHealth).toHaveBeenCalledWith({
       scope: "global",
     });
+    expect(mockListMemoryStoreReviewNotes).toHaveBeenCalledWith({
+      scope: "global",
+      maxResults: 20,
+    });
+    expect(mockListMemoryStore).toHaveBeenCalledWith({
+      scope: "workspace",
+      workspaceRoot: "/repo/default",
+      path: "rollout_summaries",
+      maxResults: 20,
+    });
 
     await act(async () => {
       findButton(container, "Refresh").click();
@@ -237,6 +346,7 @@ describe("MemorySettings", () => {
     await flushEffects();
 
     expect(mockGetMemoryStoreHealth).toHaveBeenCalledTimes(2);
+    expect(mockListMemoryStore).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       findButton(container, "Reset memory files").click();
@@ -250,9 +360,116 @@ describe("MemorySettings", () => {
     expect(mockResetMemoryStore).toHaveBeenCalledWith({
       scope: "global",
     });
+    expect(mockListMemoryStoreReviewNotes).toHaveBeenCalledTimes(2);
+    expect(mockListMemoryStore).toHaveBeenCalledTimes(2);
     expect(document.body.textContent).toContain(
       "Memory files reset. Removed 3 files and 4 folders.",
     );
+  });
+
+  it("应展示待审阅笔记并通过 current API 接受或拒绝", async () => {
+    mockListMemoryStoreReviewNotes.mockResolvedValue({
+      rootScope: "global",
+      rootPath: "/data/memories",
+      notes: [
+        {
+          path: "extensions/ad_hoc/review/secret.md",
+          size: 128,
+          modifiedAt: 1_785_000_000,
+          preview: "api_key should be reviewed",
+          citation: {
+            path: "extensions/ad_hoc/review/secret.md",
+            startLineNumber: 1,
+            endLineNumber: 3,
+          },
+        },
+      ],
+      truncated: false,
+      nextCursor: null,
+    });
+    mockResolveMemoryStoreReviewNote.mockResolvedValue({
+      rootScope: "global",
+      rootPath: "/data/memories",
+      sourcePath: "extensions/ad_hoc/review/secret.md",
+      archivedPath: "extensions/ad_hoc/processed/secret.md",
+      action: "accept",
+      memoryPath: "MEMORY.md",
+      summaryPath: "memory_summary.md",
+      updated: true,
+    });
+    const container = renderComponent();
+    await flushEffects();
+
+    expect(document.body.textContent).toContain("1 note(s) pending review");
+    expect(document.body.textContent).toContain("api_key should be reviewed");
+
+    await act(async () => {
+      findButton(container, "Accept").click();
+      await Promise.resolve();
+    });
+    await flushEffects();
+
+    expect(mockResolveMemoryStoreReviewNote).toHaveBeenCalledWith({
+      scope: "global",
+      path: "extensions/ad_hoc/review/secret.md",
+      action: "accept",
+    });
+    expect(mockGetMemoryStoreHealth).toHaveBeenCalledTimes(2);
+    expect(mockListMemoryStoreReviewNotes).toHaveBeenCalledTimes(2);
+    expect(mockListMemoryStore).toHaveBeenCalledTimes(2);
+    expect(document.body.textContent).toContain("Memory note accepted");
+
+    await act(async () => {
+      findButton(container, "Reject").click();
+      await Promise.resolve();
+    });
+    await flushEffects();
+
+    expect(mockResolveMemoryStoreReviewNote).toHaveBeenLastCalledWith({
+      scope: "global",
+      path: "extensions/ad_hoc/review/secret.md",
+      action: "reject",
+    });
+  });
+
+  it("应从日常记忆面板保存修正笔记并刷新状态", async () => {
+    const container = renderComponent();
+    await flushEffects();
+
+    await act(async () => {
+      findButton(container, "Save correction").click();
+      await Promise.resolve();
+    });
+    await flushEffects();
+
+    expect(mockAddMemoryStoreNote).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain(
+      "Enter a memory correction to save",
+    );
+
+    const textarea = findTextareaByPlaceholder(
+      container,
+      "Example: When answering product plans, explain tradeoffs before giving the recommendation.",
+    );
+    await act(async () => {
+      changeTextareaValue(textarea, "Prefer concise recommendation first.");
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      findButton(container, "Save correction").click();
+      await Promise.resolve();
+    });
+    await flushEffects();
+
+    expect(mockAddMemoryStoreNote).toHaveBeenCalledWith({
+      scope: "global",
+      title: "Settings memory correction",
+      content: "Prefer concise recommendation first.",
+    });
+    expect(mockGetMemoryStoreHealth).toHaveBeenCalledTimes(2);
+    expect(textarea.value).toBe("");
+    expect(document.body.textContent).toContain("Memory correction saved");
   });
 
   it("切换到本地 ONNX 后应保存嵌入配置且保留旧记忆字段", async () => {

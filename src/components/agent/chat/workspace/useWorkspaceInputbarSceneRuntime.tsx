@@ -10,7 +10,7 @@ import { useTranslation } from "react-i18next";
 import { Info, Palette } from "lucide-react";
 import styled from "styled-components";
 import { Switch } from "@/components/ui/switch";
-import type { Character } from "@/lib/api/memory";
+import type { Character } from "@/lib/api/projectMemory";
 import type { AsterSubagentParentContext } from "@/lib/api/agentRuntime";
 import type {
   AgentInitialInputCapabilityParams,

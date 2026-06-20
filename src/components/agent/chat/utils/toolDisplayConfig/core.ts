@@ -6,6 +6,7 @@ import {
   FileText,
   FolderOpen,
   Globe,
+  NotebookText,
   Search,
   Settings,
   Terminal,
@@ -14,6 +15,70 @@ import {
 import type { ToolDisplayConfig } from "../toolDisplayTypes";
 
 export const CORE_EXACT_TOOL_CONFIGS = [
+  [
+    "memorylist",
+    {
+      family: "list",
+      label: "记忆列表",
+      verb: "查看",
+      icon: NotebookText,
+      groupTitle: "记忆",
+      actionKey: "list",
+      actions: {
+        failed: "记忆列表读取失败",
+        completed: "已查看记忆列表",
+        running: "正在查看记忆列表",
+      },
+    },
+  ],
+  [
+    "memoryread",
+    {
+      family: "read",
+      label: "记忆读取",
+      verb: "查看",
+      icon: NotebookText,
+      groupTitle: "记忆",
+      actionKey: "read",
+      actions: {
+        failed: "记忆读取失败",
+        completed: "已读取记忆",
+        running: "正在读取记忆",
+      },
+    },
+  ],
+  [
+    "memorysearch",
+    {
+      family: "search",
+      label: "记忆搜索",
+      verb: "搜索",
+      icon: NotebookText,
+      groupTitle: "记忆",
+      actionKey: "search",
+      actions: {
+        failed: "记忆搜索失败",
+        completed: "已搜索记忆",
+        running: "正在搜索记忆",
+      },
+    },
+  ],
+  [
+    "memoryaddnote",
+    {
+      family: "write",
+      label: "记忆修正",
+      verb: "保存",
+      icon: NotebookText,
+      groupTitle: "记忆",
+      actionKey: "write",
+      actions: {
+        failed: "记忆修正保存失败",
+        completed: "已保存记忆修正",
+        running: "正在保存记忆修正",
+      },
+    },
+  ],
   [
     "read",
     {

@@ -31,7 +31,7 @@ import type {
   Message,
   MessageImage,
 } from "../types";
-import type { Character } from "@/lib/api/memory";
+import type { Character } from "@/lib/api/projectMemory";
 import {
   buildTeamMemoryShadowRequestMetadata,
   type TeamMemoryShadowRequestMetadata,

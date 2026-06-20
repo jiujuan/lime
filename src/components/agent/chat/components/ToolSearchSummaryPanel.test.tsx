@@ -1,7 +1,50 @@
 import { act, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToolSearchSummaryPanel } from "./ToolSearchSummaryPanel";
+
+const TOOL_SEARCH_TRANSLATIONS: Record<string, Record<string, string>> = {
+  "zh-CN": {
+    "agentChat.toolCall.toolSearch.foundTools": "找到工具：{{count}} 个",
+    "agentChat.toolCall.toolSearch.note.deferredLabel": "延迟加载工具",
+    "agentChat.toolCall.toolSearch.note.noMoreMatches": "没有找到更多匹配工具",
+    "agentChat.toolCall.toolSearch.note.ready":
+      "已确认工具入口，接下来可直接执行对应工具",
+    "agentChat.toolCall.toolSearch.pendingServers":
+      "以下 MCP 服务仍在连接中：{{servers}}",
+    "agentChat.toolCall.toolSearch.query": "查询：{{query}}",
+  },
+  "en-US": {
+    "agentChat.toolCall.toolSearch.foundTools": "Found tools: {{count}}",
+    "agentChat.toolCall.toolSearch.note.deferredLabel": "deferred tools",
+    "agentChat.toolCall.toolSearch.note.noMoreMatches":
+      "No more matching tools found",
+    "agentChat.toolCall.toolSearch.note.ready":
+      "Tool entry confirmed. You can run the matching tool directly next.",
+    "agentChat.toolCall.toolSearch.pendingServers":
+      "These MCP services are still connecting: {{servers}}",
+    "agentChat.toolCall.toolSearch.query": "Query: {{query}}",
+  },
+};
+let currentLanguage = "zh-CN";
+
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    i18n: {
+      get language() {
+        return currentLanguage;
+      },
+    },
+    t: (key: string, values?: Record<string, unknown>) => {
+      const template = TOOL_SEARCH_TRANSLATIONS[currentLanguage]?.[key] ?? key;
+      return Object.entries(values ?? {}).reduce(
+        (text, [name, value]) =>
+          text.replaceAll(`{{${name}}}`, String(value)),
+        template,
+      );
+    },
+  }),
+}));
 
 interface RenderResult {
   container: HTMLDivElement;
@@ -32,6 +75,7 @@ beforeEach(() => {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  currentLanguage = "zh-CN";
 });
 
 afterEach(() => {
@@ -124,5 +168,19 @@ describe("ToolSearchSummaryPanel", () => {
     expect(container.textContent).toContain(
       "以下 MCP 服务仍在连接中：slack、playwright",
     );
+  });
+
+  it("英文界面不应把 deferred note 替换成中文", () => {
+    currentLanguage = "en-US";
+
+    const { container } = renderPanel({
+      query: "tools",
+      count: 0,
+      notes: ["Waiting for deferred entries"],
+      tools: [],
+    });
+
+    expect(container.textContent).toContain("Waiting for deferred tools entries");
+    expect(container.textContent).not.toContain("更多");
   });
 });

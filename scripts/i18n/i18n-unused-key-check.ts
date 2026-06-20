@@ -100,6 +100,14 @@ const SKIP_SOURCE_SEGMENTS = [
   "/node_modules/",
 ];
 const TEST_FILE_PATTERN = /\.(test|spec)\.[^.]+$/;
+const PREFIXED_I18N_HELPER_CALLS = new Map<string, string>([
+  ["resolveAgentChatCopy", "agentChat."],
+  ["resolveRequiredAgentChatCopy", "agentChat."],
+]);
+const AGENT_CHAT_PARTIAL_KEY_PREFIXES = [
+  "contentWorkbenchTools.",
+  "toolCall.",
+] as const;
 
 function normalizePath(filePath: string): string {
   return filePath.split(path.sep).join("/");
@@ -259,6 +267,30 @@ function isI18nTranslateCall(
   return false;
 }
 
+function getPrefixedI18nHelperPrefix(node: ts.CallExpression): string | null {
+  if (!ts.isIdentifier(node.expression)) {
+    return null;
+  }
+
+  return PREFIXED_I18N_HELPER_CALLS.get(node.expression.text) ?? null;
+}
+
+function normalizeAgentChatPartialKey(value: string): string | null {
+  return AGENT_CHAT_PARTIAL_KEY_PREFIXES.some((prefix) =>
+    value.startsWith(prefix),
+  )
+    ? `agentChat.${value}`
+    : null;
+}
+
+function addLiteralReference(literals: Set<string>, value: string): void {
+  literals.add(value);
+  const normalizedAgentChatKey = normalizeAgentChatPartialKey(value);
+  if (normalizedAgentChatKey) {
+    literals.add(normalizedAgentChatKey);
+  }
+}
+
 function expressionReturnsTranslationCallIdentifier(
   expression: ts.Expression,
   translationCallIdentifiers: Set<string>,
@@ -366,6 +398,104 @@ function resolveStaticStringExpression(
   return null;
 }
 
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values)];
+}
+
+function combineStaticStringParts(left: string[], right: string[]): string[] {
+  const combined: string[] = [];
+  for (const leftValue of left) {
+    for (const rightValue of right) {
+      combined.push(`${leftValue}${rightValue}`);
+    }
+  }
+  return uniqueStrings(combined).slice(0, 50);
+}
+
+function resolvePossibleStaticStringExpressions(
+  expression: ts.Expression,
+  constStrings: Map<string, string>,
+  constInitializers: Map<string, ts.Expression>,
+): string[] {
+  const current = unwrapStaticExpression(expression);
+
+  if (
+    ts.isStringLiteral(current) ||
+    ts.isNoSubstitutionTemplateLiteral(current)
+  ) {
+    return [current.text];
+  }
+
+  if (ts.isIdentifier(current)) {
+    const staticValue = constStrings.get(current.text);
+    if (staticValue !== undefined) {
+      return [staticValue];
+    }
+
+    const initializer = constInitializers.get(current.text);
+    return initializer
+      ? resolvePossibleStaticStringExpressions(
+          initializer,
+          constStrings,
+          constInitializers,
+        )
+      : [];
+  }
+
+  if (
+    ts.isBinaryExpression(current) &&
+    current.operatorToken.kind === ts.SyntaxKind.PlusToken
+  ) {
+    return combineStaticStringParts(
+      resolvePossibleStaticStringExpressions(
+        current.left,
+        constStrings,
+        constInitializers,
+      ),
+      resolvePossibleStaticStringExpressions(
+        current.right,
+        constStrings,
+        constInitializers,
+      ),
+    );
+  }
+
+  if (ts.isConditionalExpression(current)) {
+    return uniqueStrings([
+      ...resolvePossibleStaticStringExpressions(
+        current.whenTrue,
+        constStrings,
+        constInitializers,
+      ),
+      ...resolvePossibleStaticStringExpressions(
+        current.whenFalse,
+        constStrings,
+        constInitializers,
+      ),
+    ]);
+  }
+
+  if (ts.isTemplateExpression(current)) {
+    let values = [current.head.text];
+    for (const span of current.templateSpans) {
+      const expressionValues = resolvePossibleStaticStringExpressions(
+        span.expression,
+        constStrings,
+        constInitializers,
+      );
+      if (expressionValues.length === 0) {
+        return [];
+      }
+      values = combineStaticStringParts(values, expressionValues).map(
+        (value) => `${value}${span.literal.text}`,
+      );
+    }
+    return uniqueStrings(values);
+  }
+
+  return [];
+}
+
 function collectConstStringValues(
   sourceFile: ts.SourceFile,
 ): Map<string, string> {
@@ -432,6 +562,7 @@ function createDynamicKeyPattern(
   constStrings: Map<string, string>,
   constInitializers: Map<string, ts.Expression>,
   expression: ts.Expression,
+  staticPrefix = "",
 ): I18nDynamicKeyPattern | null {
   function render(expr: ts.Expression): {
     pattern: string;
@@ -523,17 +654,19 @@ function createDynamicKeyPattern(
   }
 
   const rendered = render(expression);
+  const prefixedPattern = `${escapeRegExp(staticPrefix)}${rendered.pattern}`;
+  const prefixedPrefix = `${staticPrefix}${rendered.prefix}`;
   if (!rendered.hasWildcard && !rendered.prefix.includes(".")) {
     return null;
   }
   if (
-    !rendered.prefix ||
-    !/^[A-Za-z][\w-]*(?:\.[A-Za-z0-9][\w-]*)+\.$/.test(rendered.prefix)
+    !prefixedPrefix ||
+    !/^[A-Za-z][\w-]*(?:\.[A-Za-z0-9][\w-]*)+\.$/.test(prefixedPrefix)
   ) {
     return null;
   }
 
-  const pattern = `^${rendered.pattern}$`;
+  const pattern = `^${prefixedPattern}$`;
   const position = sourceFile.getLineAndCharacterOfPosition(
     expression.getStart(sourceFile),
   );
@@ -541,6 +674,60 @@ function createDynamicKeyPattern(
     pattern,
     source: `${displayPath(filePath)}:${position.line + 1}`,
   };
+}
+
+function collectDerivedAgentChatCopyKeys(
+  node: ts.CallExpression,
+  constStrings: Map<string, string>,
+  constInitializers: Map<string, ts.Expression>,
+): string[] {
+  if (!ts.isIdentifier(node.expression)) {
+    return [];
+  }
+
+  if (node.expression.text === "resolveProcessSummaryCopy") {
+    const keyArg = node.arguments[0];
+    if (!keyArg) {
+      return [];
+    }
+
+    return resolvePossibleStaticStringExpressions(
+      keyArg,
+      constStrings,
+      constInitializers,
+    ).flatMap((key) => [key, `${key}WithSubject`]);
+  }
+
+  if (node.expression.text === "resolvePhasedProcessSummaryCopy") {
+    const keyArg = node.arguments[0];
+    if (!keyArg) {
+      return [];
+    }
+
+    const phaseArg = node.arguments[1];
+    const phases =
+      phaseArg === undefined
+        ? ["pre", "post"]
+        : resolvePossibleStaticStringExpressions(
+            phaseArg,
+            constStrings,
+            constInitializers,
+          ).filter((phase) => phase === "pre" || phase === "post");
+    const normalizedPhases = phases.length > 0 ? phases : ["pre", "post"];
+
+    return resolvePossibleStaticStringExpressions(
+      keyArg,
+      constStrings,
+      constInitializers,
+    ).flatMap((key) =>
+      normalizedPhases.flatMap((phase) => [
+        `${key}.${phase}`,
+        `${key}.${phase}WithSubject`,
+      ]),
+    );
+  }
+
+  return [];
 }
 
 function collectKeyReferences(filePath: string): {
@@ -564,7 +751,7 @@ function collectKeyReferences(filePath: string): {
 
   const visit = (node: ts.Node) => {
     if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
-      literals.add(node.text);
+      addLiteralReference(literals, node.text);
     }
     if (
       ts.isCallExpression(node) &&
@@ -582,6 +769,41 @@ function collectKeyReferences(filePath: string): {
         if (pattern) {
           dynamicPatterns.set(pattern.pattern, pattern);
         }
+      }
+    }
+    if (ts.isCallExpression(node)) {
+      const staticPrefix = getPrefixedI18nHelperPrefix(node);
+      const firstArg = node.arguments[0];
+      if (staticPrefix && firstArg) {
+        const staticKeys = resolvePossibleStaticStringExpressions(
+          firstArg,
+          constStrings,
+          constInitializers,
+        );
+        if (staticKeys.length > 0) {
+          for (const staticKey of staticKeys) {
+            addLiteralReference(literals, `${staticPrefix}${staticKey}`);
+          }
+        } else {
+          const pattern = createDynamicKeyPattern(
+            filePath,
+            sourceFile,
+            constStrings,
+            constInitializers,
+            firstArg,
+            staticPrefix,
+          );
+          if (pattern) {
+            dynamicPatterns.set(pattern.pattern, pattern);
+          }
+        }
+      }
+      for (const key of collectDerivedAgentChatCopyKeys(
+        node,
+        constStrings,
+        constInitializers,
+      )) {
+        addLiteralReference(literals, key);
       }
     }
     ts.forEachChild(node, visit);

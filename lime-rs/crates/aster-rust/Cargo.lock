@@ -1987,7 +1987,7 @@ dependencies = [
 
 [[package]]
 name = "document-preview"
-version = "1.73.0"
+version = "1.74.0"
 dependencies = [
  "flate2",
  "zip",

@@ -1,9 +1,20 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
+import { loadNamespaceResource } from "@/i18n/loadNamespace";
+import { SUPPORTED_LOCALES } from "@/i18n/locales";
 import {
   buildImageTaskPreviewFromToolResult,
   buildTaskPreviewFromToolResult,
   buildToolResultArtifactFromToolResult,
 } from "./taskPreviewFromToolResult";
+
+beforeEach(async () => {
+  await changeLimeLocale("zh-CN");
+});
+
+afterEach(async () => {
+  await changeLimeLocale("zh-CN");
+});
 
 describe("buildImageTaskPreviewFromToolResult", () => {
   it("应在图片任务完成后输出更友好的完成态摘要", () => {
@@ -208,6 +219,56 @@ describe("buildImageTaskPreviewFromToolResult", () => {
       statusMessage: "3x3 分镜生成完成。",
     });
   });
+
+  it("英文界面不应在图片任务默认状态里混入中文 fallback", async () => {
+    await changeLimeLocale("en-US");
+    const preview = buildImageTaskPreviewFromToolResult({
+      toolId: "tool-image-en",
+      toolName: "Bash",
+      toolArguments: JSON.stringify({
+        command:
+          'lime media image generate --prompt "workspace concept" --layout-hint storyboard_3x3',
+      }),
+      toolResult: {
+        metadata: {
+          task_id: "task-image-en",
+          task_type: "image_generate",
+          status: "succeeded",
+          requested_count: 9,
+          received_count: 9,
+          layout_hint: "storyboard_3x3",
+        },
+      },
+      fallbackPrompt: "",
+    });
+
+    expect(preview).toMatchObject({
+      taskId: "task-image-en",
+      prompt: "workspace concept",
+      statusMessage: "3x3 storyboard generation completed.",
+    });
+    expect(JSON.stringify(preview)).not.toMatch(/[图片圖片分镜分鏡生成进行進行]/);
+  });
+
+  it("图片任务预览文案资源应覆盖所有支持语言", () => {
+    const requiredKeys = [
+      "agentChat.taskPreview.image.fallbackPrompt",
+      "agentChat.taskPreview.image.status.cancelled",
+      "agentChat.taskPreview.image.status.complete.default",
+      "agentChat.taskPreview.image.status.complete.storyboard3x3",
+      "agentChat.taskPreview.image.status.failed",
+      "agentChat.taskPreview.image.status.partial.default",
+      "agentChat.taskPreview.image.status.partial.storyboard3x3",
+      "agentChat.taskPreview.image.status.running",
+    ];
+
+    for (const locale of SUPPORTED_LOCALES) {
+      const resource = loadNamespaceResource(locale, "agent");
+      for (const key of requiredKeys) {
+        expect(resource[key], `${locale} missing ${key}`).toBeTruthy();
+      }
+    }
+  });
 });
 
 describe("buildTaskPreviewFromToolResult web image search", () => {
@@ -267,7 +328,7 @@ describe("buildTaskPreviewFromToolResult web image search", () => {
       providerId: "pexels",
       phase: "completed",
       statusMessage:
-        "已找到 2 张Pexels图片候选，打开查看可继续挑选与查看来源。",
+        "已找到 2 张 Pexels 图片候选，打开查看可继续挑选与查看来源。",
       metaItems: ["Pexels", "2 个候选", "landscape"],
       imageCandidates: [
         expect.objectContaining({
@@ -301,7 +362,7 @@ describe("buildTaskPreviewFromToolResult web image search", () => {
       filePath: ".lime/runtime/resource-search/tool-web-image-1.md",
       metadata: {
         artifact_type: "document",
-        previewText: "已找到 2 张Pexels图片候选",
+        previewText: "已找到 2 张 Pexels 图片候选",
         provider: "pexels",
         query: "cozy coffee table",
         returnedCount: 2,
@@ -324,6 +385,113 @@ describe("buildTaskPreviewFromToolResult web image search", () => {
         }),
       ],
     });
+  });
+
+  it("英文界面不应在联网搜图预览和 artifact 文档里混入中文拼接", async () => {
+    await changeLimeLocale("en-US");
+    const toolResult = {
+      metadata: {
+        result: {
+          query: "workspace moodboard",
+          returnedCount: 1,
+          hits: [
+            {
+              thumbnail_url: "https://images.example/thumb.jpg",
+              content_url: "https://images.example/full.jpg",
+            },
+          ],
+        },
+      },
+    };
+
+    const preview = buildTaskPreviewFromToolResult({
+      toolId: "tool-web-image-en",
+      toolName: "lime_search_web_images",
+      toolArguments: JSON.stringify({ query: "workspace moodboard" }),
+      toolResult,
+      fallbackPrompt: "find a workspace moodboard",
+    });
+
+    expect(preview).toMatchObject({
+      kind: "modal_resource_search",
+      title: "web image library image candidates",
+      statusMessage:
+        "Found 1 web image library image candidate(s). Open them to keep reviewing and checking sources.",
+      metaItems: ["web image library", "1 candidate(s)"],
+      imageCandidates: [
+        expect.objectContaining({
+          name: "Image candidate 1",
+        }),
+      ],
+    });
+
+    const artifact = buildToolResultArtifactFromToolResult({
+      toolId: "tool-web-image-en",
+      toolName: "lime_search_web_images",
+      toolArguments: JSON.stringify({ query: "workspace moodboard" }),
+      toolResult,
+      fallbackPrompt: "find a workspace moodboard",
+    });
+
+    expect(artifact?.metadata.previewText).toBe(
+      "Found 1 web image library image candidate(s)",
+    );
+    expect(artifact?.metadata.artifactDocument).toMatchObject({
+      language: "en-US",
+      title: "web image library image candidates",
+      summary:
+        '1 image asset candidate(s) were returned for "workspace moodboard".',
+      blocks: [
+        expect.objectContaining({
+          eyebrow: "Asset search",
+          summary:
+            "1 high-relevance image candidate(s) were returned. Open the right panel to keep reviewing and checking sources.",
+          highlights: [
+            "Source: web image library",
+            "Candidates: 1",
+          ],
+        }),
+        expect.objectContaining({
+          alt: "Image candidate 1",
+        }),
+      ],
+      sources: [
+        expect.objectContaining({
+          label: "Image candidate 1",
+        }),
+      ],
+    });
+
+    const visibleCopy = JSON.stringify({
+      preview,
+      artifactDocument: artifact?.metadata.artifactDocument,
+    });
+    expect(visibleCopy).not.toMatch(/[候選候选素材畫幅画幅来源來源]/);
+  });
+
+  it("联网搜图预览文案资源应覆盖所有支持语言", () => {
+    const requiredKeys = [
+      "agentChat.taskPreview.webImageSearch.artifact.eyebrow",
+      "agentChat.taskPreview.webImageSearch.artifact.heroSummary",
+      "agentChat.taskPreview.webImageSearch.artifact.summary",
+      "agentChat.taskPreview.webImageSearch.candidateLabel",
+      "agentChat.taskPreview.webImageSearch.countMeta",
+      "agentChat.taskPreview.webImageSearch.highlight.aspect",
+      "agentChat.taskPreview.webImageSearch.highlight.candidates",
+      "agentChat.taskPreview.webImageSearch.highlight.source",
+      "agentChat.taskPreview.webImageSearch.previewText",
+      "agentChat.taskPreview.webImageSearch.provider.generic",
+      "agentChat.taskPreview.webImageSearch.queryFallback",
+      "agentChat.taskPreview.webImageSearch.status",
+      "agentChat.taskPreview.webImageSearch.title",
+    ];
+
+    for (const locale of SUPPORTED_LOCALES) {
+      const resource = loadNamespaceResource(locale, "agent");
+      for (const key of requiredKeys) {
+        expect(resource[key], `${locale} missing ${key}`).toBeTruthy();
+      }
+    }
   });
 });
 
@@ -382,6 +550,55 @@ describe("buildTaskPreviewFromToolResult video", () => {
       phase: "queued",
       statusMessage: "视频任务已进入排队队列，稍后会自动开始生成。",
     });
+  });
+
+  it("英文界面不应在视频任务默认状态里混入中文 fallback", async () => {
+    await changeLimeLocale("en-US");
+    const preview = buildTaskPreviewFromToolResult({
+      toolId: "tool-video-en",
+      toolName: "Bash",
+      toolArguments: JSON.stringify({
+        command:
+          'lime media video generate --prompt "launch film" --duration 15 --aspect-ratio 16:9 --resolution 720p',
+      }),
+      toolResult: {
+        metadata: {
+          task_id: "task-video-en",
+          task_type: "video_generate",
+          status: "queued",
+        },
+      },
+      fallbackPrompt: "",
+    });
+
+    expect(preview).toMatchObject({
+      kind: "video_generate",
+      taskId: "task-video-en",
+      prompt: "launch film",
+      statusMessage: "The video task is queued and will start automatically.",
+    });
+    expect(JSON.stringify(preview)).not.toMatch(/[视频影片任務任务生成排队排隊]/);
+  });
+
+  it("视频任务预览文案资源应覆盖所有支持语言", () => {
+    const requiredKeys = [
+      "agentChat.taskPreview.video.fallbackPrompt",
+      "agentChat.taskPreview.video.status.cancelled",
+      "agentChat.taskPreview.video.status.complete.synced",
+      "agentChat.taskPreview.video.status.complete.waitingResult",
+      "agentChat.taskPreview.video.status.failed",
+      "agentChat.taskPreview.video.status.partial.synced",
+      "agentChat.taskPreview.video.status.partial.waitingResult",
+      "agentChat.taskPreview.video.status.queued",
+      "agentChat.taskPreview.video.status.running",
+    ];
+
+    for (const locale of SUPPORTED_LOCALES) {
+      const resource = loadNamespaceResource(locale, "agent");
+      for (const key of requiredKeys) {
+        expect(resource[key], `${locale} missing ${key}`).toBeTruthy();
+      }
+    }
   });
 });
 
@@ -614,5 +831,137 @@ describe("buildTaskPreviewFromToolResult audio", () => {
         audioUrl: "https://cdn.example/audio/task-audio-2.mp3",
       },
     });
+  });
+
+  it("英文界面的配音与转写 artifact 文档不应混入中文 fallback", async () => {
+    await changeLimeLocale("en-US");
+
+    const audioArtifact = buildToolResultArtifactFromToolResult({
+      toolId: "tool-audio-en",
+      toolName: "lime_create_audio_generation_task",
+      toolArguments: JSON.stringify({
+        sourceText: "Welcome to the workspace.",
+        voice: "warm_female",
+        audioPath: "https://cdn.example/audio/task-audio-en.mp3",
+      }),
+      toolResult: {
+        metadata: {
+          task_id: "task-audio-en",
+          task_type: "audio_generate",
+          status: "succeeded",
+          artifact_path: ".lime/tasks/audio_generate/task-audio-en.json",
+          model: "voice-pro",
+        },
+      },
+      fallbackPrompt: "@voice Welcome to the workspace.",
+    });
+
+    expect(audioArtifact?.metadata.previewText).toBe(
+      "Audio results are synced. Open them to continue previewing and managing the task.",
+    );
+    expect(audioArtifact?.metadata.artifactDocument).toMatchObject({
+      language: "en-US",
+      title: "Voice generation task",
+      blocks: expect.arrayContaining([
+        expect.objectContaining({
+          eyebrow: "Voice generation",
+          highlights: expect.arrayContaining([
+            "Status: complete",
+            "Voice: warm_female",
+            "Model: voice-pro",
+          ]),
+        }),
+        expect.objectContaining({
+          id: "source-text",
+          markdown: expect.stringContaining("### Text to voice"),
+        }),
+        expect.objectContaining({
+          id: "audio-output",
+          title: "Audio result synced",
+          body: "Audio path: https://cdn.example/audio/task-audio-en.mp3",
+        }),
+      ]),
+    });
+
+    const transcriptionArtifact = buildToolResultArtifactFromToolResult({
+      toolId: "tool-transcription-en",
+      toolName: "lime_create_transcription_task",
+      toolArguments: JSON.stringify({
+        prompt: "Transcribe the interview",
+        sourcePath: "materials/interview.wav",
+        language: "en-US",
+        outputFormat: "txt",
+      }),
+      toolResult: {
+        metadata: {
+          task_id: "task-transcription-en",
+          task_type: "transcription_generate",
+          status: "succeeded",
+          artifact_path:
+            ".lime/tasks/transcription_generate/task-transcription-en.json",
+          transcript_path:
+            ".lime/runtime/transcripts/task-transcription-en.txt",
+          transcript_text: "Welcome to the interview.",
+          transcript_segments: [
+            {
+              start: 1,
+              end: 3.2,
+              speaker: "",
+              text: "Welcome to the interview.",
+            },
+          ],
+          model: "gpt-4o-transcribe",
+        },
+      },
+      fallbackPrompt: "@transcribe materials/interview.wav",
+    });
+
+    expect(transcriptionArtifact?.metadata.previewText).toBe(
+      "Transcription results are synced. Open them to continue reviewing the text.",
+    );
+    expect(transcriptionArtifact?.metadata.artifactDocument).toMatchObject({
+      language: "en-US",
+      title: "Transcription task",
+      blocks: expect.arrayContaining([
+        expect.objectContaining({
+          eyebrow: "Transcription",
+          highlights: expect.arrayContaining([
+            "Status: complete",
+            "Language: en-US",
+            "Format: txt",
+            "Model: gpt-4o-transcribe",
+            "Segments: 1",
+            "Characters: 25",
+          ]),
+        }),
+        expect.objectContaining({
+          id: "source",
+          markdown: expect.stringContaining("### Transcription source"),
+        }),
+        expect.objectContaining({
+          id: "transcript-segments",
+          title: "Transcript timeline (editable by segment)",
+          columns: ["Time", "Speaker", "Content"],
+          rows: [["00:01 - 00:03", "Unlabeled", "Welcome to the interview."]],
+        }),
+        expect.objectContaining({
+          id: "transcript-output",
+          title: "Transcript synced for review",
+          body: expect.stringContaining(
+            "without rewriting the original ASR output",
+          ),
+        }),
+      ]),
+    });
+
+    const visibleCopy = JSON.stringify({
+      audio: audioArtifact?.metadata.artifactDocument,
+      transcription: transcriptionArtifact?.metadata.artifactDocument,
+      audioPreviewText: audioArtifact?.metadata.previewText,
+      transcriptionPreviewText: transcriptionArtifact?.metadata.previewText,
+    });
+    expect(visibleCopy).not.toMatch(
+      /[配音转寫轉写音频音訊路径路徑来源來源等待校对校對候选候選]/,
+    );
   });
 });

@@ -46,7 +46,7 @@ describe("electron/ipcChannels", () => {
     );
     expect(isElectronHostCommand("get_automation_status")).toBe(false);
     expect(isElectronHostCommand("get_automation_health")).toBe(false);
-    expect(isElectronHostCommand("project_memory_get")).toBe(true);
+    expect(isElectronHostCommand("project_memory_get")).toBe(false);
     for (const command of [
       "get_model_registry",
       "get_model_preferences",
@@ -206,7 +206,6 @@ describe("electron/ipcChannels", () => {
       "aster_agent_init",
       "get_default_provider",
       "get_local_skills_for_app",
-      "project_memory_get",
       "workspace_ensure",
       "workspace_ensure_default_ready",
       "workspace_ensure_ready",

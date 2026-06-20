@@ -155,6 +155,24 @@ function hasProcessBoundaryContentPart(
   );
 }
 
+function findLastProcessBoundaryIndex(parts: MessageContentPart[]): number {
+  for (let index = parts.length - 1; index >= 0; index -= 1) {
+    const part = parts[index];
+    if (
+      part?.type === "tool_use" ||
+      part?.type === "action_required" ||
+      part?.type === "file_changes_batch"
+    ) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function isLikelyCompleteThinkingSegment(text: string): boolean {
+  return /[.!?;:。！？；：]\s*$/.test(text.trim());
+}
+
 function collectFileChangeBatchPaths(
   parts?: Message["contentParts"],
 ): string[] {
@@ -481,11 +499,55 @@ function ensureInlineThinkingContentPart(params: {
   }
 
   const parts = params.parts || [];
+  const existingThinkingText = parts
+    .filter(
+      (part): part is Extract<MessageContentPart, { type: "thinking" }> =>
+        part.type === "thinking" && part.text.trim().length > 0,
+    )
+    .map((part) => part.text)
+    .join("");
+  const normalizedExistingThinking = existingThinkingText.trim();
+  const processBoundaryIndex = findLastProcessBoundaryIndex(parts);
   const thinkingPartIndex = parts.findIndex(
     (part) => part.type === "thinking" && part.text.trim().length > 0,
   );
   if (thinkingPartIndex >= 0) {
     const existingPart = parts[thinkingPartIndex];
+    const missingThinkingTail =
+      normalizedExistingThinking &&
+      normalizedThinking.startsWith(normalizedExistingThinking)
+        ? normalizedThinking.slice(normalizedExistingThinking.length).trim()
+        : "";
+    if (
+      processBoundaryIndex >= 0 &&
+      missingThinkingTail &&
+      isLikelyCompleteThinkingSegment(normalizedExistingThinking)
+    ) {
+      const nextParts = [...parts];
+      const insertIndex = processBoundaryIndex + 1;
+      const existingThinkingAfterBoundaryIndex = nextParts.findIndex(
+        (part, index) =>
+          index > processBoundaryIndex &&
+          part.type === "thinking" &&
+          part.text.trim().length > 0,
+      );
+      const existingThinkingAfterBoundary =
+        existingThinkingAfterBoundaryIndex >= 0
+          ? nextParts[existingThinkingAfterBoundaryIndex]
+          : undefined;
+      if (existingThinkingAfterBoundary?.type === "thinking") {
+        nextParts[existingThinkingAfterBoundaryIndex] = {
+          ...existingThinkingAfterBoundary,
+          text: `${existingThinkingAfterBoundary.text}\n\n${missingThinkingTail}`,
+        };
+      } else {
+        nextParts.splice(insertIndex, 0, {
+          type: "thinking",
+          text: missingThinkingTail,
+        });
+      }
+      return nextParts;
+    }
     if (
       existingPart?.type === "thinking" &&
       normalizedThinking.startsWith(existingPart.text.trim()) &&

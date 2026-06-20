@@ -1,10 +1,12 @@
 use super::super::*;
+use crate::MemoryBackend;
 
 pub(in crate::runtime::tests) struct TestSessionDataSource {
     persisted: Option<AgentSessionReadResponse>,
     workspace: Option<serde_json::Value>,
     memory_store_read_response: Mutex<Option<Result<MemoryStoreReadResponse, String>>>,
     memory_store_read_requests: Mutex<Vec<MemoryStoreReadParams>>,
+    memory_backend: Option<crate::LocalMemoryBackend>,
     objective: Mutex<Option<ManagedObjective>>,
     audit_updates: Mutex<Vec<ManagedObjectiveAuditUpdate>>,
     knowledge_compile_requests: Mutex<Vec<lime_knowledge::KnowledgeCompilePackRequest>>,
@@ -17,6 +19,7 @@ impl TestSessionDataSource {
             workspace: None,
             memory_store_read_response: Mutex::new(None),
             memory_store_read_requests: Mutex::new(Vec::new()),
+            memory_backend: None,
             objective: Mutex::new(None),
             audit_updates: Mutex::new(Vec::new()),
             knowledge_compile_requests: Mutex::new(Vec::new()),
@@ -26,6 +29,16 @@ impl TestSessionDataSource {
     pub(in crate::runtime::tests) fn with_workspace(self, workspace: serde_json::Value) -> Self {
         Self {
             workspace: Some(workspace),
+            ..self
+        }
+    }
+
+    pub(in crate::runtime::tests) fn with_memory_data_root(
+        self,
+        data_root: impl Into<std::path::PathBuf>,
+    ) -> Self {
+        Self {
+            memory_backend: Some(crate::LocalMemoryBackend::new(data_root)),
             ..self
         }
     }
@@ -247,6 +260,30 @@ impl MemoryAppDataSource for TestSessionDataSource {
                 "memoryStore/read unavailable in test data source".to_string(),
             )),
         }
+    }
+
+    async fn write_memory_rollout_summary(
+        &self,
+        params: crate::RolloutSummaryWriteParams,
+    ) -> Result<MemoryStoreAddNoteResponse, RuntimeCoreError> {
+        let Some(memory_backend) = &self.memory_backend else {
+            return Err(RuntimeCoreError::Backend(
+                "memory rollout summary write unavailable in test data source".to_string(),
+            ));
+        };
+        memory_backend.write_rollout_summary(params).await
+    }
+
+    async fn consolidate_memory_store(
+        &self,
+        params: MemoryStoreConsolidateParams,
+    ) -> Result<MemoryStoreConsolidateResponse, RuntimeCoreError> {
+        let Some(memory_backend) = &self.memory_backend else {
+            return Err(RuntimeCoreError::Backend(
+                "memoryStore/consolidate unavailable in test data source".to_string(),
+            ));
+        };
+        memory_backend.consolidate(params).await
     }
 }
 impl DiagnosticsAppDataSource for TestSessionDataSource {}

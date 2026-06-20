@@ -13,6 +13,9 @@
 use super::base::{PermissionCheckResult, Tool};
 use super::context::{ToolContext, ToolResult};
 use super::error::ToolError;
+use super::web_fetch_content::{
+    html_to_markdown, prepare_response_content, WebFetchContentOptions,
+};
 use async_trait::async_trait;
 use lru::LruCache;
 use reqwest::{redirect::Policy, Client};
@@ -27,9 +30,6 @@ use urlencoding::encode;
 
 /// 响应体大小限制 (10MB)
 const MAX_RESPONSE_SIZE: usize = 10 * 1024 * 1024;
-const DEFAULT_WEB_FETCH_MAX_CHARS: usize = 20_000;
-const DEFAULT_DYNAMIC_FILTER_MAX_CHARS: usize = 12_000;
-const DEFAULT_DYNAMIC_FILTER_MAX_CHUNKS: usize = 8;
 const MAX_WEB_FETCH_REDIRECTS: usize = 10;
 
 /// WebFetch 缓存 TTL (15分钟)
@@ -943,166 +943,17 @@ impl WebFetchTool {
         }
     }
 
-    /// HTML 转 Markdown
-    fn html_to_markdown(&self, html: &str) -> String {
-        let cleaned_html = self.remove_non_content_html_blocks(html);
-        self.html_to_text(&cleaned_html)
-    }
-
-    fn remove_non_content_html_blocks(&self, html: &str) -> String {
-        let block_re = regex::Regex::new(
-            r"(?is)<(?:script|style|noscript|iframe|object|embed|svg|head|template)\b[^>]*>.*?</(?:script|style|noscript|iframe|object|embed|svg|head|template)>",
-        )
-        .unwrap();
-        let standalone_re = regex::Regex::new(r"(?is)<(?:meta|link|base)\b[^>]*(?:/?>)").unwrap();
-        let without_blocks = block_re.replace_all(html, " ");
-        standalone_re
-            .replace_all(without_blocks.as_ref(), " ")
-            .into_owned()
-    }
-
-    /// HTML 转纯文本（简化版）
-    fn html_to_text(&self, html: &str) -> String {
-        // 使用正则表达式移除 HTML 标签
-        let re = regex::Regex::new(r"<[^>]+>").unwrap();
-        let text = re.replace_all(html, " ");
-
-        // 清理空白字符
-        let re_whitespace = regex::Regex::new(r"\s+").unwrap();
-        let cleaned = re_whitespace.replace_all(&text, " ");
-
-        // HTML 实体解码
-        cleaned
-            .replace("&nbsp;", " ")
-            .replace("&amp;", "&")
-            .replace("&lt;", "<")
-            .replace("&gt;", ">")
-            .replace("&quot;", "\"")
-            .replace("&#x27;", "'")
-            .trim()
-            .to_string()
-    }
-
-    fn truncate_chars(&self, text: &str, max_chars: usize) -> String {
-        if text.chars().count() <= max_chars {
-            return text.to_string();
-        }
-        let truncated = text.chars().take(max_chars).collect::<String>();
-        format!("{}...\n\n[内容已截断]", truncated)
-    }
-
-    fn split_into_chunks(&self, content: &str, max_chunk_chars: usize) -> Vec<String> {
-        let mut chunks = Vec::new();
-
-        for paragraph in content.split("\n\n") {
-            let paragraph = paragraph.trim();
-            if paragraph.is_empty() {
-                continue;
-            }
-
-            if paragraph.chars().count() <= max_chunk_chars {
-                chunks.push(paragraph.to_string());
-                continue;
-            }
-
-            // 超长段落按字符窗口切分，避免单块过大失去过滤效果。
-            let mut current = String::new();
-            for ch in paragraph.chars() {
-                current.push(ch);
-                if current.chars().count() >= max_chunk_chars {
-                    chunks.push(current.clone());
-                    current.clear();
-                }
-            }
-            if !current.is_empty() {
-                chunks.push(current);
-            }
-        }
-
-        if chunks.is_empty() {
-            chunks.push(content.to_string());
-        }
-
-        chunks
-    }
-
-    fn dynamic_filter_content(
-        &self,
-        content: &str,
-        query: &str,
-        max_chars: usize,
-        max_chunks: usize,
-    ) -> Option<String> {
-        let terms: Vec<String> = query
-            .split_whitespace()
-            .map(|t| t.trim().to_lowercase())
-            .filter(|t| t.len() >= 2)
-            .collect();
-
-        if terms.is_empty() {
-            return None;
-        }
-
-        let chunks = self.split_into_chunks(content, 1_500);
-        let mut scored: Vec<(usize, usize)> = chunks
-            .iter()
-            .enumerate()
-            .filter_map(|(idx, chunk)| {
-                let lower = chunk.to_lowercase();
-                let score = terms
-                    .iter()
-                    .map(|term| lower.matches(term).count())
-                    .sum::<usize>();
-                (score > 0).then_some((idx, score))
-            })
-            .collect();
-
-        if scored.is_empty() {
-            return None;
-        }
-
-        scored.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
-        let mut selected_indices: Vec<usize> = scored
-            .into_iter()
-            .take(max_chunks.max(1))
-            .map(|(idx, _)| idx)
-            .collect();
-        selected_indices.sort_unstable();
-
-        let selected = selected_indices
-            .into_iter()
-            .filter_map(|idx| chunks.get(idx))
-            .cloned()
-            .collect::<Vec<String>>()
-            .join("\n\n");
-
-        Some(self.truncate_chars(&selected, max_chars))
-    }
-
     fn prepare_response_content(&self, content: &str, input: &WebFetchInput) -> (String, bool) {
-        let default_max_chars = if input.dynamic_filter || input.focus_query.is_some() {
-            DEFAULT_DYNAMIC_FILTER_MAX_CHARS
-        } else {
-            DEFAULT_WEB_FETCH_MAX_CHARS
-        };
-        let max_chars = input.max_chars.unwrap_or(default_max_chars);
-        let max_chars = max_chars.clamp(500, DEFAULT_WEB_FETCH_MAX_CHARS);
-
-        let query = input
-            .focus_query
-            .as_deref()
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .unwrap_or(&input.prompt);
-
-        let max_chunks = input
-            .max_chunks
-            .unwrap_or(DEFAULT_DYNAMIC_FILTER_MAX_CHUNKS);
-        if let Some(filtered) = self.dynamic_filter_content(content, query, max_chars, max_chunks) {
-            return (filtered, true);
-        }
-
-        (self.truncate_chars(content, max_chars), false)
+        prepare_response_content(
+            content,
+            WebFetchContentOptions {
+                prompt: &input.prompt,
+                focus_query: input.focus_query.as_deref(),
+                dynamic_filter: input.dynamic_filter,
+                max_chars: input.max_chars,
+                max_chunks: input.max_chunks,
+            },
+        )
     }
 
     /// 实际的 URL 抓取逻辑
@@ -1183,7 +1034,7 @@ impl WebFetchTool {
             }
 
             let processed_content = if content_type.contains("text/html") {
-                self.html_to_markdown(&body)
+                html_to_markdown(&body)
             } else if content_type.contains("application/json") {
                 match serde_json::from_str::<serde_json::Value>(&body) {
                     Ok(json) => serde_json::to_string_pretty(&json).unwrap_or(body),
@@ -2601,64 +2452,6 @@ mod tests {
 
         assert!(allowed.is_none());
         assert!(blocked.is_none());
-    }
-
-    #[test]
-    fn test_dynamic_filter_content_prefers_relevant_chunks() {
-        let tool = WebFetchTool::new();
-        let content = "Football match report and scores.\n\nRust ownership and borrow checker explanation.\n\nTravel tips and hotel recommendations.";
-        let input = WebFetchInput {
-            url: "https://example.com".to_string(),
-            prompt: "总结 Rust 所有权".to_string(),
-            focus_query: Some("Rust ownership borrow checker".to_string()),
-            dynamic_filter: true,
-            max_chars: Some(3000),
-            max_chunks: Some(2),
-        };
-
-        let (filtered, used_dynamic_filter) = tool.prepare_response_content(content, &input);
-        assert!(used_dynamic_filter);
-        assert!(filtered.contains("Rust ownership"));
-        assert!(!filtered.contains("Football match report"));
-    }
-
-    #[test]
-    fn test_web_fetch_default_mode_prefers_relevant_chunks() {
-        let tool = WebFetchTool::new();
-        let content = "Football match report and scores.\n\nRust ownership and borrow checker explanation.\n\nTravel tips and hotel recommendations.";
-        let input = WebFetchInput {
-            url: "https://example.com".to_string(),
-            prompt: "总结 Rust 所有权".to_string(),
-            focus_query: None,
-            dynamic_filter: false,
-            max_chars: Some(3000),
-            max_chunks: None,
-        };
-
-        let (result, used_dynamic_filter) = tool.prepare_response_content(content, &input);
-        assert!(used_dynamic_filter);
-        assert!(result.contains("Rust ownership"));
-        assert!(!result.contains("Football match report"));
-    }
-
-    #[test]
-    fn test_web_fetch_html_text_removes_scripts_and_styles() {
-        let tool = WebFetchTool::new();
-        let html = r#"
-            <html>
-              <head>
-                <style>.Modal-modalBackground{background:#000}</style>
-                <script>alert('x')</script>
-                <meta name="description" content="noise">
-              </head>
-              <body>Hello <b>world</b></body>
-            </html>
-        "#;
-
-        let text = tool.html_to_markdown(html);
-        assert_eq!(text, "Hello world");
-        assert!(!text.contains("Modal-modalBackground"));
-        assert!(!text.contains("alert"));
     }
 
     #[tokio::test]

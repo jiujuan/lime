@@ -276,6 +276,7 @@ export function MessageListItem({
     ) : null;
   const assistantMetaFooterState = resolveMessageAssistantMetaFooterState({
     activeConversationRuntimeStatusLine,
+    hasActiveInteractiveRuntime,
     hasAssistantBodyContent,
     isConversationTailAssistant,
     lastAssistantMessageId,

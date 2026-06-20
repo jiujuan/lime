@@ -405,7 +405,9 @@ pub fn merge_consecutive_messages(messages: Vec<Message>) -> (Vec<Message>, Vec<
     for message in messages {
         if let Some(last) = merged_messages.last_mut() {
             let effective = effective_role(&message);
-            if effective_role(last) == effective {
+            if should_merge_consecutive_effective_role(&effective)
+                && effective_role(last) == effective
+            {
                 last.content.extend(message.content);
                 issues.push(format!("Merged consecutive {} messages", effective));
                 continue;
@@ -415,6 +417,10 @@ pub fn merge_consecutive_messages(messages: Vec<Message>) -> (Vec<Message>, Vec<
     }
 
     (merged_messages, issues)
+}
+
+fn should_merge_consecutive_effective_role(effective_role: &str) -> bool {
+    matches!(effective_role, "assistant" | "tool")
 }
 
 fn has_tool_response(message: &Message) -> bool {
@@ -623,22 +629,23 @@ mod tests {
 
         let (fixed, issues) = run_verify(messages);
 
-        assert_eq!(fixed.len(), 3);
+        assert_eq!(fixed.len(), 4);
 
         assert_has_issues_unordered!(
             fixed,
             issues,
             "Merged consecutive assistant messages",
-            "Merged consecutive user messages",
             "Removed tool response 'orphan_1' from assistant message",
             "Removed tool request 'bad_req' from user message",
         );
 
         assert_eq!(fixed[0].role, Role::User);
-        assert_eq!(fixed[1].role, Role::Assistant);
-        assert_eq!(fixed[2].role, Role::User);
+        assert_eq!(fixed[1].role, Role::User);
+        assert_eq!(fixed[2].role, Role::Assistant);
+        assert_eq!(fixed[3].role, Role::User);
 
-        assert_eq!(fixed[0].content.len(), 2);
+        assert_eq!(fixed[0].as_concat_text(), "Hello");
+        assert_eq!(fixed[1].as_concat_text(), "Another user message");
     }
 
     #[test]
@@ -764,6 +771,26 @@ mod tests {
     }
 
     #[test]
+    fn test_consecutive_user_turns_are_not_merged() {
+        let messages = vec![
+            Message::user().with_text("停止后恢复测试：只输出复原完成"),
+            Message::user().with_text("@搜索 关键词: 联网工具验证。请调用 WebSearch 和 WebFetch。"),
+        ];
+
+        let (fixed, issues) = run_verify(messages);
+
+        assert!(issues.is_empty(), "unexpected issues: {issues:?}");
+        assert_eq!(fixed.len(), 2);
+        assert_eq!(fixed[0].role, Role::User);
+        assert_eq!(fixed[0].as_concat_text(), "停止后恢复测试：只输出复原完成");
+        assert_eq!(fixed[1].role, Role::User);
+        assert_eq!(
+            fixed[1].as_concat_text(),
+            "@搜索 关键词: 联网工具验证。请调用 WebSearch 和 WebFetch。"
+        );
+    }
+
+    #[test]
     fn test_merge_text_content_items() {
         use crate::conversation::message::MessageContent;
         use rmcp::model::{AnnotateAble, RawTextContent};
@@ -861,7 +888,7 @@ mod tests {
         let mut msg2_non_visible = Message::user().with_text("Non-visible note 1");
         msg2_non_visible.metadata.agent_visible = false;
 
-        // These two consecutive user messages should be merged (triggering a fix)
+        // Consecutive user turns are independent turn boundaries and must not be merged.
         let mut msg3_user = Message::user().with_text("Second user message");
         msg3_user.metadata.agent_visible = true;
 
@@ -893,9 +920,7 @@ mod tests {
 
         let (fixed, issues) = fix_conversation(Conversation::new_unvalidated(messages.clone()));
 
-        // Should have merged consecutive user messages
-        assert!(!issues.is_empty());
-        assert!(issues.iter().any(|i| i.contains("Merged consecutive")));
+        assert!(issues.is_empty(), "unexpected issues: {issues:?}");
 
         let fixed_messages = fixed.messages();
 
@@ -911,16 +936,23 @@ mod tests {
         assert_eq!(non_visible_texts[1], "Non-visible note 2");
         assert_eq!(non_visible_texts[2], "Non-visible note 3");
 
-        // Verify visible messages were processed
+        // Verify visible messages were preserved without turn rewrite.
         let visible_texts: Vec<String> = fixed_messages
             .iter()
             .filter(|m| m.metadata.agent_visible)
             .map(|m| m.as_concat_text())
             .collect();
 
-        // Should have 3 visible messages: first user, merged user messages, assistant, final user
-        // But after merging consecutive users and fixing lead/trail, we get fewer
-        assert!(!visible_texts.is_empty());
+        assert_eq!(
+            visible_texts,
+            vec![
+                "First user message",
+                "Second user message",
+                "Third user message",
+                "Assistant response",
+                "Final user message",
+            ]
+        );
 
         // The key assertion: non-visible messages should be preserved and not reordered
         // relative to each other
@@ -943,7 +975,7 @@ mod tests {
 
     #[test]
     fn test_shadow_map_with_multiple_consecutive_merges() {
-        // Test the shadow map handles multiple consecutive visible messages that all merge
+        // Test the shadow map preserves multiple consecutive visible user messages.
         let mut msg1 = Message::user().with_text("User 1");
         msg1.metadata.agent_visible = true;
 
@@ -973,8 +1005,7 @@ mod tests {
 
         let (fixed, issues) = fix_conversation(Conversation::new_unvalidated(messages));
 
-        // Should have merged the consecutive user messages
-        assert!(issues.iter().any(|i| i.contains("Merged consecutive")));
+        assert!(issues.is_empty(), "unexpected issues: {issues:?}");
 
         let fixed_messages = fixed.messages();
 
@@ -989,18 +1020,13 @@ mod tests {
         assert_eq!(non_visible[0], "Non-visible A");
         assert_eq!(non_visible[1], "Non-visible B");
 
-        // The merged message should contain all the user texts
         let visible: Vec<String> = fixed_messages
             .iter()
             .filter(|m| m.metadata.agent_visible)
             .map(|m| m.as_concat_text())
             .collect();
 
-        assert_eq!(visible.len(), 1);
-        assert!(visible[0].contains("User 1"));
-        assert!(visible[0].contains("User 2"));
-        assert!(visible[0].contains("User 3"));
-        assert!(visible[0].contains("User 4"));
+        assert_eq!(visible, vec!["User 1", "User 2", "User 3", "User 4"]);
     }
 
     #[test]

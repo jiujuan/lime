@@ -20,7 +20,6 @@ import {
   METHOD_AGENT_SESSION_TURN_START,
   METHOD_MODEL_LIST,
   METHOD_MODEL_PROVIDER_LIST,
-  METHOD_PROJECT_MEMORY_READ,
   METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS,
   METHOD_PROJECT_SHELL_SESSION_KILL,
   METHOD_PROJECT_SHELL_SESSION_RESIZE,
@@ -48,7 +47,6 @@ import {
   type AgentAppUiRuntimeStopParams,
   type ModelListResponse,
   type ModelProviderListResponse,
-  type ProjectMemoryReadResponse,
   type WorkspaceEnsureProjectResponse,
   type SkillListResponse,
   type WorkspaceEnsureReadyResponse,
@@ -445,8 +443,6 @@ export class ElectronHostCommands {
         return this.#getBrowserBackendPolicy();
       case "get_browser_backends_status":
         return this.#getBrowserBackendsStatus();
-      case "project_memory_get":
-        return await this.#readProjectMemory(args);
       case "agent_app_select_directory":
         return await this.#selectAgentAppDirectory(args);
       case "agent_app_launch_shell":
@@ -2141,23 +2137,6 @@ export class ElectronHostCommands {
       ],
       diagnostic: this.#diagnosticMeta("get_browser_backends_status"),
     };
-  }
-
-  async #readProjectMemory(args: HostArgs): Promise<unknown> {
-    const request = readRequest(args);
-    const projectId =
-      readString(request, "projectId") ??
-      readString(request, "project_id") ??
-      readString(args, "projectId") ??
-      readString(args, "project_id");
-    if (!projectId) {
-      throw new Error("project_memory_get requires projectId");
-    }
-    const response = await this.#appServerRequest<ProjectMemoryReadResponse>(
-      METHOD_PROJECT_MEMORY_READ,
-      { projectId },
-    );
-    return response.memory;
   }
 
   async #readConfig(): Promise<Record<string, unknown>> {

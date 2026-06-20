@@ -1,3 +1,4 @@
+use super::context_packet::{assemble_context_packets, ContextPacket, ContextScope};
 use super::RuntimeCore;
 use app_server_protocol::{
     AgentSessionTurnStartParams, MemoryStoreReadParams, MemoryStoreRootParams, MemoryStoreScope,
@@ -9,10 +10,16 @@ use std::path::PathBuf;
 
 pub(crate) const MEMORY_PROMPT_CONTEXT_KEY: &str = "memory_store_prompt_context";
 pub(crate) const MEMORY_SOUL_PROMPT_CONTEXT_KEY: &str = "memory_soul_prompt_context";
+pub(crate) const SESSION_COMPACTION_PROMPT_CONTEXT_KEY: &str = "session_compaction_prompt_context";
+pub(crate) const CONTEXT_PACKET_TELEMETRY_KEY: &str = "context_packet_telemetry";
 const SUMMARY_PATH: &str = "memory_summary.md";
 const SUMMARY_MAX_TOKENS: usize = 1_200;
 const PROMPT_CONTEXT_VERSION: &str = "memory_store_prompt_context.v1";
 const SOUL_CONTEXT_VERSION: &str = "memory_soul_prompt_context.v1";
+const SESSION_COMPACTION_CONTEXT_VERSION: &str = "session_compaction_prompt_context.v1";
+const MEMORY_PACKET_MAX_TOKENS: usize = 1_200;
+const SOUL_PACKET_MAX_TOKENS: usize = 400;
+const SESSION_COMPACTION_PACKET_MAX_TOKENS: usize = 1_600;
 const SOUL_TEXT_MAX_CHARS: usize = 600;
 const SOUL_SHORT_TEXT_MAX_CHARS: usize = 160;
 const SOUL_LIST_ITEM_MAX_CHARS: usize = 120;
@@ -44,19 +51,53 @@ impl RuntimeCore {
         if summary.is_empty() {
             return;
         }
-        let context = json!({
+        let scope = match root.scope {
+            MemoryStoreScope::Global => "global",
+            MemoryStoreScope::Workspace => "workspace",
+        };
+        let mut context = json!({
             "schema": PROMPT_CONTEXT_VERSION,
-            "scope": match root.scope {
-                MemoryStoreScope::Global => "global",
-                MemoryStoreScope::Workspace => "workspace",
-            },
+            "scope": scope,
             "workspaceRoot": root.workspace_root,
             "path": response.path,
             "content": summary,
             "truncated": response.truncated,
             "citation": response.citation,
         });
+        let packet = memory_packet_from_prompt_context(&context);
+        if let Some(packet) = packet {
+            let assembly = assemble_context_packets(vec![packet]);
+            context["contextPacketTelemetry"] = assembly.telemetry.clone();
+            merge_context_packet_telemetry(params, assembly.telemetry);
+        }
         merge_runtime_options_metadata(params, MEMORY_PROMPT_CONTEXT_KEY, context);
+    }
+
+    pub(in crate::runtime) fn prepare_session_compaction_prompt_context(
+        &self,
+        params: &mut AgentSessionTurnStartParams,
+    ) {
+        let Some(context) = self.latest_session_compaction_prompt_context(&params.session_id)
+        else {
+            return;
+        };
+        let packet = session_compaction_packet_from_prompt_context(&context);
+        if let Some(packet) = packet {
+            let assembly = assemble_context_packets(vec![packet]);
+            let mut context = context;
+            context["contextPacketTelemetry"] = assembly.telemetry.clone();
+            merge_context_packet_telemetry(params, assembly.telemetry);
+            merge_runtime_options_metadata(params, SESSION_COMPACTION_PROMPT_CONTEXT_KEY, context);
+        }
+    }
+
+    fn latest_session_compaction_prompt_context(&self, session_id: &str) -> Option<Value> {
+        self.events_for_session(session_id)
+            .ok()?
+            .into_iter()
+            .rev()
+            .find(|event| event.event_type == "context.compaction.completed")
+            .and_then(|event| session_compaction_prompt_context_from_event(&event.payload))
     }
 }
 
@@ -64,9 +105,15 @@ pub(crate) fn append_memory_context_to_system_prompt(
     system_prompt: Option<String>,
     runtime_metadata: Option<&Value>,
 ) -> Option<String> {
+    let system_prompt = append_context_block(
+        system_prompt,
+        memory_prompt_assembly_from_metadata(runtime_metadata)
+            .and_then(|assembly| assembly.rendered),
+    );
     append_context_block(
         system_prompt,
-        memory_prompt_context_from_metadata(runtime_metadata),
+        session_compaction_prompt_assembly_from_metadata(runtime_metadata)
+            .and_then(|assembly| assembly.rendered),
     )
 }
 
@@ -76,7 +123,7 @@ pub(crate) fn append_soul_context_to_system_prompt(
 ) -> Option<String> {
     append_context_block(
         system_prompt,
-        soul_prompt_context_from_metadata(config_metadata),
+        soul_prompt_assembly_from_metadata(config_metadata).and_then(|assembly| assembly.rendered),
     )
 }
 
@@ -128,8 +175,15 @@ pub(crate) fn memory_soul_prompt_context_from_config(
     Some(Value::Object(context))
 }
 
-fn memory_prompt_context_from_metadata(metadata: Option<&Value>) -> Option<String> {
+fn memory_prompt_assembly_from_metadata(
+    metadata: Option<&Value>,
+) -> Option<super::context_packet::ContextAssembly> {
     let value = metadata?.get(MEMORY_PROMPT_CONTEXT_KEY)?;
+    let packet = memory_packet_from_prompt_context(value)?;
+    Some(assemble_context_packets(vec![packet]))
+}
+
+fn memory_packet_from_prompt_context(value: &Value) -> Option<ContextPacket> {
     let content = value
         .get("content")
         .and_then(Value::as_str)
@@ -168,22 +222,79 @@ fn memory_prompt_context_from_metadata(metadata: Option<&Value>) -> Option<Strin
         .get("truncated")
         .and_then(Value::as_bool)
         .unwrap_or(false);
-    let truncated_hint = if truncated {
-        "\n- 该摘要已被截断；如当前任务需要更多长期记忆，请优先使用 memory tools 进行 search/read，并保留 citation。"
-    } else {
-        ""
-    };
-
-    Some(format!(
-        "## Long-Term Memory Summary\n\
-         来源：memory store `{path}`，scope `{scope}`，lines {start_line}-{end_line}。\n\
-         这些内容是长期记忆摘要，不是用户本轮输入；只在与当前任务明显相关时使用。不要把摘要当成绝对事实；需要更多细节时使用 memory tools search/read，并在结果中保留 citation。{truncated_hint}\n\
-         \n\
-         ```memory-summary\n{content}\n```"
+    let mut metadata = Map::new();
+    metadata.insert("path".to_string(), json!(path));
+    metadata.insert("scope".to_string(), json!(scope));
+    metadata.insert("startLineNumber".to_string(), json!(start_line));
+    metadata.insert("endLineNumber".to_string(), json!(end_line));
+    Some(ContextPacket::memory_summary(
+        content,
+        match scope {
+            "workspace" => ContextScope::Workspace,
+            _ => ContextScope::Global,
+        },
+        MEMORY_PACKET_MAX_TOKENS,
+        truncated,
+        metadata,
     ))
 }
 
-fn soul_prompt_context_from_metadata(metadata: Option<&Value>) -> Option<String> {
+fn session_compaction_prompt_context_from_event(payload: &Value) -> Option<Value> {
+    let summary = payload
+        .get("summary")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?;
+    let mut context = Map::new();
+    context.insert(
+        "schema".to_string(),
+        json!(SESSION_COMPACTION_CONTEXT_VERSION),
+    );
+    copy_optional_value(payload, &mut context, "compactionId");
+    copy_optional_value(payload, &mut context, "contextEpoch");
+    copy_optional_value(payload, &mut context, "tailStartTurnId");
+    copy_optional_value(payload, &mut context, "turnCount");
+    copy_optional_value(payload, &mut context, "trigger");
+    copy_optional_value(payload, &mut context, "sidecarRef");
+    context.insert("summary".to_string(), json!(summary));
+    Some(Value::Object(context))
+}
+
+fn session_compaction_prompt_assembly_from_metadata(
+    metadata: Option<&Value>,
+) -> Option<super::context_packet::ContextAssembly> {
+    let value = metadata?.get(SESSION_COMPACTION_PROMPT_CONTEXT_KEY)?;
+    let packet = session_compaction_packet_from_prompt_context(value)?;
+    Some(assemble_context_packets(vec![packet]))
+}
+
+fn session_compaction_packet_from_prompt_context(value: &Value) -> Option<ContextPacket> {
+    let summary = value
+        .get("summary")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|summary| !summary.is_empty())?;
+    let mut metadata = Map::new();
+    copy_optional_value(value, &mut metadata, "compactionId");
+    copy_optional_value(value, &mut metadata, "contextEpoch");
+    copy_optional_value(value, &mut metadata, "tailStartTurnId");
+    copy_optional_value(value, &mut metadata, "turnCount");
+    copy_optional_value(value, &mut metadata, "trigger");
+    Some(ContextPacket::session_compaction(
+        summary,
+        SESSION_COMPACTION_PACKET_MAX_TOKENS,
+        metadata,
+    ))
+}
+
+fn soul_prompt_assembly_from_metadata(
+    metadata: Option<&Value>,
+) -> Option<super::context_packet::ContextAssembly> {
+    let packet = soul_packet_from_metadata(metadata)?;
+    Some(assemble_context_packets(vec![packet]))
+}
+
+fn soul_packet_from_metadata(metadata: Option<&Value>) -> Option<ContextPacket> {
     let metadata = metadata?;
     let value = metadata
         .pointer("/memory/soul")
@@ -219,11 +330,7 @@ fn soul_prompt_context_from_metadata(metadata: Option<&Value>) -> Option<String>
         return None;
     }
 
-    let mut lines = vec![
-        "## Interaction Soul".to_string(),
-        format!("来源：saved app config `memory.soul`，scope `{scope}`。"),
-        "这些内容只影响对话方式和协作节奏，不是用户本轮输入，也不是长期事实。正式 artifact / 创作声线只能使用显式 generation brief；不要从这里推断或写入 artifact voice。".to_string(),
-    ];
+    let mut lines = Vec::new();
     if let Some(name) = non_empty_str(name) {
         lines.push(format!("- Name: {name}"));
     }
@@ -252,7 +359,13 @@ fn soul_prompt_context_from_metadata(metadata: Option<&Value>) -> Option<String>
         lines.extend(avoid.into_iter().map(|item| format!("  - {item}")));
     }
 
-    Some(lines.join("\n"))
+    let mut metadata = Map::new();
+    metadata.insert("scope".to_string(), json!(scope));
+    Some(ContextPacket::interaction_soul(
+        lines.join("\n"),
+        SOUL_PACKET_MAX_TOKENS,
+        metadata,
+    ))
 }
 
 fn memory_summary_root(params: &AgentSessionTurnStartParams) -> Option<MemoryStoreRootParams> {
@@ -349,6 +462,69 @@ fn merge_runtime_options_metadata(
     };
     metadata.insert(key.to_string(), value);
     options.metadata = Some(Value::Object(metadata));
+}
+
+fn merge_context_packet_telemetry(params: &mut AgentSessionTurnStartParams, telemetry: Value) {
+    let options = params
+        .runtime_options
+        .get_or_insert_with(RuntimeOptions::default);
+    let mut metadata = match options.metadata.take() {
+        Some(Value::Object(map)) => map,
+        Some(existing) => {
+            let mut map = Map::new();
+            map.insert("original".to_string(), existing);
+            map
+        }
+        None => Map::new(),
+    };
+    let merged = metadata
+        .remove(CONTEXT_PACKET_TELEMETRY_KEY)
+        .map(|existing| merge_context_telemetry_values(existing, telemetry.clone()))
+        .unwrap_or(telemetry);
+    metadata.insert(CONTEXT_PACKET_TELEMETRY_KEY.to_string(), merged);
+    options.metadata = Some(Value::Object(metadata));
+}
+
+fn merge_context_telemetry_values(existing: Value, next: Value) -> Value {
+    let existing_packets = existing
+        .get("packets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let next_packets = next
+        .get("packets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let mut packets = existing_packets;
+    packets.extend(next_packets);
+    let admitted_count = packets
+        .iter()
+        .filter(|packet| packet.get("admitted").and_then(Value::as_bool) == Some(true))
+        .count();
+    let total_tokens = packets
+        .iter()
+        .filter_map(|packet| packet.get("actualTokens").and_then(Value::as_u64))
+        .sum::<u64>();
+    json!({
+        "schema": "context_packet_assembly.v1",
+        "packetCount": packets.len(),
+        "admittedCount": admitted_count,
+        "rejectedCount": packets.len().saturating_sub(admitted_count),
+        "totalTokens": total_tokens,
+        "hardPacketMaxTokens": next
+            .get("hardPacketMaxTokens")
+            .or_else(|| existing.get("hardPacketMaxTokens"))
+            .cloned()
+            .unwrap_or_else(|| json!(null)),
+        "packets": packets,
+    })
+}
+
+fn copy_optional_value(source: &Value, target: &mut Map<String, Value>, key: &str) {
+    if let Some(value) = source.get(key) {
+        target.insert(key.to_string(), value.clone());
+    }
 }
 
 fn append_context_block(system_prompt: Option<String>, context: Option<String>) -> Option<String> {

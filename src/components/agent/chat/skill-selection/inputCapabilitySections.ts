@@ -1,4 +1,4 @@
-import type { Character } from "@/lib/api/memory";
+import type { Character } from "@/lib/api/projectMemory";
 import type { Skill } from "@/lib/api/skills";
 import { buildServiceSkillRecommendationBuckets } from "@/components/agent/chat/service-skills/recommendedServiceSkills";
 import { buildServiceSkillCapabilityDescription } from "@/components/agent/chat/service-skills/skillPresentation";

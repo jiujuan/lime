@@ -2,6 +2,180 @@ use super::support::*;
 use super::*;
 
 #[tokio::test]
+async fn compact_agent_session_writes_session_context_artifact() {
+    let sidecar_root = tempfile::tempdir().expect("sidecar root");
+    let sidecar_store = Arc::new(SidecarStore::new(sidecar_root.path()).expect("sidecar store"));
+    let core = RuntimeCore::with_backend(Arc::new(CompletedBackend))
+        .with_sidecar_store(sidecar_store.clone());
+    core.start_session(AgentSessionStartParams {
+        session_id: Some("sess_compact".to_string()),
+        thread_id: Some("thread_compact".to_string()),
+        app_id: "agent-chat".to_string(),
+        workspace_id: Some("workspace-current".to_string()),
+        business_object_ref: None,
+        locale: None,
+    })
+    .expect("session");
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: "sess_compact".to_string(),
+            turn_id: Some("turn_compact_1".to_string()),
+            input: AgentInput {
+                text: "请总结上下文".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: None,
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("turn");
+
+    let output = core
+        .compact_agent_session(AgentSessionCompactParams {
+            session_id: "sess_compact".to_string(),
+            event_name: None,
+        })
+        .await
+        .expect("compact");
+
+    assert!(output.response.compacted);
+    let completed = output
+        .events
+        .iter()
+        .find(|event| event.event_type == "context.compaction.completed")
+        .expect("completed event");
+    assert_eq!(completed.payload["contextEpoch"].as_u64(), Some(1));
+    assert_eq!(
+        completed.payload["tailStartTurnId"].as_str(),
+        Some("turn_compact_1")
+    );
+    assert_eq!(
+        completed.payload["artifact"]["policy"]["historyRewrite"].as_bool(),
+        Some(false)
+    );
+    assert_eq!(
+        completed.payload["artifact"]["policy"]["longTermMemoryWrite"].as_bool(),
+        Some(false)
+    );
+    let relative_path = completed.payload["sidecarRef"]["relativePath"]
+        .as_str()
+        .expect("sidecar relative path");
+    let sidecar = sidecar_store
+        .read_text(relative_path)
+        .expect("sidecar content");
+    assert!(sidecar.contains("\"schema\": \"session_context_compaction.v1\""));
+    assert!(sidecar.contains("请总结上下文"));
+}
+
+#[tokio::test]
+async fn compact_agent_session_injects_next_turn_session_context_packet() {
+    let backend = Arc::new(FinalDoneRecordingBackend {
+        requests: Mutex::new(Vec::new()),
+    });
+    let core = RuntimeCore::with_backend(backend.clone());
+    core.start_session(AgentSessionStartParams {
+        session_id: Some("sess_compact_next_turn".to_string()),
+        thread_id: Some("thread_compact_next_turn".to_string()),
+        app_id: "agent-chat".to_string(),
+        workspace_id: Some("workspace-current".to_string()),
+        business_object_ref: None,
+        locale: None,
+    })
+    .expect("session");
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: "sess_compact_next_turn".to_string(),
+            turn_id: Some("turn_compact_next_1".to_string()),
+            input: AgentInput {
+                text: "第一轮需要保留的事实".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: None,
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("first turn");
+    core.compact_agent_session(AgentSessionCompactParams {
+        session_id: "sess_compact_next_turn".to_string(),
+        event_name: None,
+    })
+    .await
+    .expect("compact");
+
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: "sess_compact_next_turn".to_string(),
+            turn_id: Some("turn_compact_next_2".to_string()),
+            input: AgentInput {
+                text: "继续".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: Some(RuntimeOptions {
+                metadata: Some(json!({
+                    "system_prompt": "base prompt"
+                })),
+                ..RuntimeOptions::default()
+            }),
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("second turn");
+
+    let requests = backend
+        .requests
+        .lock()
+        .expect("test backend requests mutex poisoned");
+    assert_eq!(requests.len(), 2);
+    let metadata = requests[1]
+        .runtime_options
+        .as_ref()
+        .and_then(|options| options.metadata.as_ref())
+        .expect("runtime metadata");
+    let compaction_context = metadata
+        .get(crate::runtime::memory_prompt::SESSION_COMPACTION_PROMPT_CONTEXT_KEY)
+        .expect("compaction prompt context");
+    assert_eq!(
+        compaction_context["schema"].as_str(),
+        Some("session_compaction_prompt_context.v1")
+    );
+    assert_eq!(compaction_context["contextEpoch"].as_u64(), Some(1));
+    assert!(compaction_context["summary"]
+        .as_str()
+        .expect("summary")
+        .contains("Turn completed."));
+    let telemetry = metadata
+        .get(crate::runtime::memory_prompt::CONTEXT_PACKET_TELEMETRY_KEY)
+        .expect("context telemetry");
+    assert_eq!(telemetry["packetCount"].as_u64(), Some(1));
+    assert_eq!(
+        telemetry["packets"][0]["kind"].as_str(),
+        Some("session_context_compaction")
+    );
+    assert_eq!(
+        telemetry["packets"][0]["source"].as_str(),
+        Some("session.compaction")
+    );
+
+    let prompt = crate::runtime::memory_prompt::append_memory_context_to_system_prompt(
+        Some("base prompt".to_string()),
+        Some(metadata),
+    )
+    .expect("system prompt");
+    assert!(prompt.starts_with("base prompt\n\n## Session Context Compaction"));
+    assert!(prompt.contains("不是长期记忆"));
+    assert!(prompt.contains("不得把本摘要自动写入 memory store"));
+}
+
+#[tokio::test]
 async fn list_agent_sessions_projects_runtime_core_sessions_only() {
     let core = RuntimeCore::default();
     core.start_session(AgentSessionStartParams {

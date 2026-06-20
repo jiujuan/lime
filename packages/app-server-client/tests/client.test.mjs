@@ -59,6 +59,7 @@ const {
   METHOD_AGENT_SESSION_ARCHIVE_MANY,
   METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT,
   METHOD_AGENT_SESSION_COMPACT,
+  METHOD_AGENT_SESSION_DELETE,
   METHOD_AGENT_SESSION_EVENT,
   METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF,
   METHOD_AGENT_SESSION_FILE_CHECKPOINT_GET,
@@ -221,9 +222,13 @@ const {
   METHOD_MCP_TOOL_LIST_FOR_CONTEXT,
   METHOD_MCP_TOOL_SEARCH,
   METHOD_MEMORY_STORE_ADD_NOTE,
+  METHOD_MEMORY_STORE_CONSOLIDATE,
   METHOD_MEMORY_STORE_HEALTH,
+  METHOD_MEMORY_STORE_INDEX_REBUILD,
   METHOD_MEMORY_STORE_LIST,
   METHOD_MEMORY_STORE_READ,
+  METHOD_MEMORY_STORE_REVIEW_LIST,
+  METHOD_MEMORY_STORE_REVIEW_RESOLVE,
   METHOD_MEMORY_STORE_RESET,
   METHOD_MEMORY_STORE_SEARCH,
   METHOD_PROJECT_MEMORY_READ,
@@ -420,6 +425,9 @@ test("builds workspace and skill read requests with current methods", () => {
   const archiveManySessions = client.archiveManySessions({
     sessionIds: ["session-main", "session-second"],
   });
+  const deleteSession = client.deleteSession({
+    sessionId: "session-main",
+  });
   const readObjective = client.readAgentSessionObjective({
     sessionId: "session-main",
   });
@@ -493,6 +501,10 @@ test("builds workspace and skill read requests with current methods", () => {
   assert.equal(archiveManySessions.method, METHOD_AGENT_SESSION_ARCHIVE_MANY);
   assert.deepEqual(archiveManySessions.params, {
     sessionIds: ["session-main", "session-second"],
+  });
+  assert.equal(deleteSession.method, METHOD_AGENT_SESSION_DELETE);
+  assert.deepEqual(deleteSession.params, {
+    sessionId: "session-main",
   });
   assert.equal(readObjective.method, METHOD_AGENT_SESSION_OBJECTIVE_READ);
   assert.deepEqual(readObjective.params, {
@@ -983,11 +995,31 @@ test("builds app data surface requests with current methods", () => {
     title: "Tone note",
     content: "Prefer concise answers.",
   });
+  const memoryStoreConsolidate = client.consolidateMemoryStore({
+    scope: "workspace",
+    workspaceRoot: "/workspace/project",
+    maxNotes: 10,
+  });
+  const memoryStoreReviewList = client.listMemoryStoreReviewNotes({
+    scope: "workspace",
+    workspaceRoot: "/workspace/project",
+    maxResults: 10,
+  });
+  const memoryStoreReviewResolve = client.resolveMemoryStoreReviewNote({
+    scope: "workspace",
+    workspaceRoot: "/workspace/project",
+    path: "extensions/ad_hoc/review/secret.md",
+    action: "reject",
+  });
   const memoryStoreHealth = client.healthMemoryStore({
     scope: "workspace",
     workspaceRoot: "/workspace/project",
   });
   const memoryStoreReset = client.resetMemoryStore({
+    scope: "workspace",
+    workspaceRoot: "/workspace/project",
+  });
+  const memoryStoreIndexRebuild = client.rebuildMemoryStoreIndex({
     scope: "workspace",
     workspaceRoot: "/workspace/project",
   });
@@ -1368,6 +1400,28 @@ test("builds app data surface requests with current methods", () => {
     title: "Tone note",
     content: "Prefer concise answers.",
   });
+  assert.equal(memoryStoreConsolidate.method, METHOD_MEMORY_STORE_CONSOLIDATE);
+  assert.deepEqual(memoryStoreConsolidate.params, {
+    scope: "workspace",
+    workspaceRoot: "/workspace/project",
+    maxNotes: 10,
+  });
+  assert.equal(memoryStoreReviewList.method, METHOD_MEMORY_STORE_REVIEW_LIST);
+  assert.deepEqual(memoryStoreReviewList.params, {
+    scope: "workspace",
+    workspaceRoot: "/workspace/project",
+    maxResults: 10,
+  });
+  assert.equal(
+    memoryStoreReviewResolve.method,
+    METHOD_MEMORY_STORE_REVIEW_RESOLVE,
+  );
+  assert.deepEqual(memoryStoreReviewResolve.params, {
+    scope: "workspace",
+    workspaceRoot: "/workspace/project",
+    path: "extensions/ad_hoc/review/secret.md",
+    action: "reject",
+  });
   assert.equal(memoryStoreHealth.method, METHOD_MEMORY_STORE_HEALTH);
   assert.deepEqual(memoryStoreHealth.params, {
     scope: "workspace",
@@ -1375,6 +1429,14 @@ test("builds app data surface requests with current methods", () => {
   });
   assert.equal(memoryStoreReset.method, METHOD_MEMORY_STORE_RESET);
   assert.deepEqual(memoryStoreReset.params, {
+    scope: "workspace",
+    workspaceRoot: "/workspace/project",
+  });
+  assert.equal(
+    memoryStoreIndexRebuild.method,
+    METHOD_MEMORY_STORE_INDEX_REBUILD,
+  );
+  assert.deepEqual(memoryStoreIndexRebuild.params, {
     scope: "workspace",
     workspaceRoot: "/workspace/project",
   });
@@ -2147,6 +2209,7 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_AGENT_SESSION_LIST, kind: "request" },
     { method: METHOD_AGENT_SESSION_UPDATE, kind: "request" },
     { method: METHOD_AGENT_SESSION_ARCHIVE_MANY, kind: "request" },
+    { method: METHOD_AGENT_SESSION_DELETE, kind: "request" },
     { method: METHOD_AGENT_SESSION_OBJECTIVE_READ, kind: "request" },
     { method: METHOD_AGENT_SESSION_OBJECTIVE_SET, kind: "request" },
     {
@@ -2283,8 +2346,12 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_MEMORY_STORE_READ, kind: "request" },
     { method: METHOD_MEMORY_STORE_SEARCH, kind: "request" },
     { method: METHOD_MEMORY_STORE_ADD_NOTE, kind: "request" },
+    { method: METHOD_MEMORY_STORE_CONSOLIDATE, kind: "request" },
+    { method: METHOD_MEMORY_STORE_REVIEW_LIST, kind: "request" },
+    { method: METHOD_MEMORY_STORE_REVIEW_RESOLVE, kind: "request" },
     { method: METHOD_MEMORY_STORE_HEALTH, kind: "request" },
     { method: METHOD_MEMORY_STORE_RESET, kind: "request" },
+    { method: METHOD_MEMORY_STORE_INDEX_REBUILD, kind: "request" },
     { method: METHOD_LOG_LIST, kind: "request" },
     { method: METHOD_LOG_PERSISTED_TAIL, kind: "request" },
     { method: METHOD_LOG_CLEAR, kind: "request" },

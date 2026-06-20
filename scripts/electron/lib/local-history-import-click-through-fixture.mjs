@@ -609,7 +609,7 @@ function writeSourceRolloutFixture(rolloutPath, importedCwd) {
       payload: {
         type: "function_call_output",
         call_id: "call_read_pdf",
-        output: "",
+        output: IMPORTED_PREVIEW_PDF_TEXT,
       },
     },
     {

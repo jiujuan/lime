@@ -85,6 +85,21 @@ function resolveHistoricalMessageHydrationText(
   return "";
 }
 
+function hasPlainHistoricalContentParts(
+  contentParts?: readonly unknown[],
+): boolean {
+  if ((contentParts?.length ?? 0) === 0) {
+    return true;
+  }
+
+  return (contentParts || []).every((part) => {
+    if (!part || typeof part !== "object") {
+      return false;
+    }
+    return (part as { type?: unknown }).type === "text";
+  });
+}
+
 export function isHistoricalAssistantMessageHydrationCandidate<
   TMessage extends HistoricalConversationMessageLike,
 >(message: TMessage, state: HistoricalMessageHydrationState): boolean {
@@ -97,7 +112,8 @@ export function isHistoricalAssistantMessageHydrationCandidate<
     !message.isThinking &&
     !message.thinkingContent &&
     (message.toolCalls?.length ?? 0) === 0 &&
-    (message.actionRequests?.length ?? 0) === 0
+    (message.actionRequests?.length ?? 0) === 0 &&
+    hasPlainHistoricalContentParts(message.contentParts)
   );
 }
 

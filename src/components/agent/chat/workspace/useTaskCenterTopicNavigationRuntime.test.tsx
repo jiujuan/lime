@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Character } from "@/lib/api/memory";
+import type { Character } from "@/lib/api/projectMemory";
 import type { Topic } from "../hooks/agentChatShared";
 import type { TaskCenterDraftSendRequest } from "../homePendingPreview";
 import type { TaskCenterWorkspaceTabMap } from "../utils/taskCenterTabs";

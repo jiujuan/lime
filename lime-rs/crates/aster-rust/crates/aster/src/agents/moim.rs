@@ -22,14 +22,13 @@ pub async fn inject_moim(
             .iter()
             .rposition(|m| m.role == Role::Assistant)
             .unwrap_or(0);
-        messages.insert(idx, Message::user().with_text(moim));
+        messages.insert(idx, Message::user().with_text(moim).agent_only());
 
         let (fixed, issues) = fix_conversation(Conversation::new_unvalidated(messages));
 
-        let has_unexpected_issues = issues.iter().any(|issue| {
-            !issue.contains("Merged consecutive user messages")
-                && !issue.contains("Merged consecutive assistant messages")
-        });
+        let has_unexpected_issues = issues
+            .iter()
+            .any(|issue| !issue.contains("Merged consecutive assistant messages"));
 
         if has_unexpected_issues {
             tracing::warn!("MOIM injection caused unexpected issues: {:?}", issues);
@@ -58,18 +57,15 @@ mod tests {
         let result = inject_moim(conv, &em).await;
         let msgs = result.messages();
 
-        assert_eq!(msgs.len(), 3);
+        assert_eq!(msgs.len(), 4);
         assert_eq!(msgs[0].content[0].as_text().unwrap(), "Hello");
-        assert_eq!(msgs[1].content[0].as_text().unwrap(), "Hi");
-
-        let merged_content = msgs[0]
-            .content
-            .iter()
-            .filter_map(|c| c.as_text())
-            .collect::<Vec<_>>()
-            .join("");
-        assert!(merged_content.contains("Hello"));
-        assert!(merged_content.contains("<info-msg>"));
+        assert!(msgs[1].content[0]
+            .as_text()
+            .unwrap()
+            .starts_with("<info-msg>\nIt is currently "));
+        assert!(!msgs[1].is_user_visible());
+        assert!(msgs[1].is_agent_visible());
+        assert_eq!(msgs[2].content[0].as_text().unwrap(), "Hi");
     }
 
     #[tokio::test]
@@ -79,16 +75,15 @@ mod tests {
         let conv = Conversation::new_unvalidated(vec![Message::user().with_text("Hello")]);
         let result = inject_moim(conv, &em).await;
 
-        assert_eq!(result.messages().len(), 1);
+        assert_eq!(result.messages().len(), 2);
 
-        let merged_content = result.messages()[0]
-            .content
-            .iter()
-            .filter_map(|c| c.as_text())
-            .collect::<Vec<_>>()
-            .join("");
-        assert!(merged_content.contains("Hello"));
-        assert!(merged_content.contains("<info-msg>"));
+        assert!(result.messages()[0].content[0]
+            .as_text()
+            .unwrap()
+            .starts_with("<info-msg>\nIt is currently "));
+        assert!(!result.messages()[0].is_user_visible());
+        assert!(result.messages()[0].is_agent_visible());
+        assert_eq!(result.messages()[1].content[0].as_text().unwrap(), "Hello");
     }
 
     #[tokio::test]

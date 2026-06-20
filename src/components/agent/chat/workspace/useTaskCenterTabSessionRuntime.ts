@@ -33,7 +33,7 @@ import type { AgentChatWorkspaceProps } from "../agentChatWorkspaceContract";
 import { normalizeProjectId } from "../utils/topicProjectResolution";
 import type { TaskCenterDraftTab } from "./agentChatWorkspaceHelpers";
 
-type AgentEntry = NonNullable<AgentChatWorkspaceProps["agentEntry"]>;
+type AgentEntry = AgentChatWorkspaceProps["agentEntry"] | null;
 
 function resolveTaskCenterTabWorkspaceId(
   workspaceIdOverride: string | null | undefined,
@@ -43,7 +43,7 @@ function resolveTaskCenterTabWorkspaceId(
 }
 
 interface UseTaskCenterTabSessionRuntimeParams {
-  agentEntry: AgentEntry;
+  agentEntry?: AgentEntry;
   normalizedInitialSessionId?: string | null;
   sessionId?: string | null;
   taskCenterDraftSurfaceActiveRef: MutableRefObject<boolean>;

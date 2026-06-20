@@ -2,7 +2,7 @@ import React from "react";
 import styled from "styled-components";
 import { useTranslation } from "react-i18next";
 import type { MessagePathReference } from "../../types";
-import type { Character } from "@/lib/api/memory";
+import type { Character } from "@/lib/api/projectMemory";
 import type {
   AsterSessionExecutionRuntime,
   QueuedTurnSnapshot,

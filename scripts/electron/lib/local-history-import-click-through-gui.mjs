@@ -612,7 +612,7 @@ async function waitForWorkbenchFilePreview(page, options, expected) {
   const startedAt = Date.now();
   let result = null;
   while (Date.now() - startedAt < Math.min(options.timeoutMs, 20_000)) {
-    result = await page.evaluate(() => {
+    result = await page.evaluate((expectedFileName) => {
       const artifactWorkbench = document.querySelector(
         '[data-testid="artifact-workbench-shell"]',
       );
@@ -648,6 +648,19 @@ async function waitForWorkbenchFilePreview(page, options, expected) {
         canvasWorkbenchLayout?.textContent ||
         previewPanelText ||
         "";
+      const inlineFileButtons = Array.from(
+        document.querySelectorAll('[data-testid="inline-tool-open-file"]'),
+      ).map((button) => ({
+        filePath: button.getAttribute("data-file-path") || "",
+        title: button.getAttribute("title") || "",
+        ariaLabel: button.getAttribute("aria-label") || "",
+        text: button.textContent || "",
+      }));
+      const matchingInlineFileButtons = inlineFileButtons.filter((button) =>
+        button.filePath.endsWith(expectedFileName),
+      );
+      const traceRaw =
+        window.localStorage.getItem("lime_invoke_trace_buffer_v1") || "";
       return {
         bodyText,
         workbenchVisible: Boolean(
@@ -674,8 +687,14 @@ async function waitForWorkbenchFilePreview(page, options, expected) {
           htmlPreview instanceof HTMLIFrameElement ? htmlPreview.src : "",
         htmlPreviewSrcDoc:
           htmlPreview instanceof HTMLIFrameElement ? htmlPreview.srcdoc : "",
+        inlineFileButtons,
+        matchingInlineFileButtons,
+        traceHasFileSystemReadFilePreview: traceRaw.includes(
+          "fileSystem/readFilePreview",
+        ),
+        traceHasExpectedFile: traceRaw.includes(expectedFileName),
       };
-    });
+    }, expected.fileName);
     if (
       result.workbenchVisible &&
       result.previewPanelVisible &&

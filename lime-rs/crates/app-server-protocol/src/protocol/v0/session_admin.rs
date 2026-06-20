@@ -100,6 +100,19 @@ pub struct AgentSessionArchiveManyResponse {
     pub sessions: Vec<AgentSessionOverview>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionDeleteParams {
+    pub session_id: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionDeleteResponse {
+    pub session_id: String,
+    pub deleted: bool,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ManagedObjectiveStatus {

@@ -37,6 +37,8 @@ export const PreviewArtifactFallbackSurface = memo(
     tone = "dark",
   }: PreviewArtifactFallbackSurfaceProps) {
     const { t } = useTranslation("workspace");
+    const translateWorkspace = (key: string): string =>
+      String(t(key as never));
     const isLight = tone === "light";
     const filePath =
       resolveArtifactProtocolFilePath(artifact) ||
@@ -87,7 +89,7 @@ export const PreviewArtifactFallbackSurface = memo(
               isLight ? "text-slate-950" : "text-white",
             )}
           >
-            {t(resolveTitleKey(mode))}
+            {translateWorkspace(resolveTitleKey(mode))}
           </h2>
           <p
             className={cn(
@@ -95,7 +97,7 @@ export const PreviewArtifactFallbackSurface = memo(
               isLight ? "text-slate-500" : "text-gray-400",
             )}
           >
-            {t(resolveDetailKey(mode))}
+            {translateWorkspace(resolveDetailKey(mode))}
           </p>
           <div
             className={cn(

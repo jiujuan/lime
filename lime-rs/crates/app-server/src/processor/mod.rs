@@ -72,6 +72,7 @@ use app_server_protocol::METHOD_AGENT_SESSION_ACTION_RESPOND;
 use app_server_protocol::METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT;
 use app_server_protocol::METHOD_AGENT_SESSION_ARCHIVE_MANY;
 use app_server_protocol::METHOD_AGENT_SESSION_COMPACT;
+use app_server_protocol::METHOD_AGENT_SESSION_DELETE;
 use app_server_protocol::METHOD_AGENT_SESSION_EVENT;
 use app_server_protocol::METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF;
 use app_server_protocol::METHOD_AGENT_SESSION_FILE_CHECKPOINT_GET;
@@ -200,10 +201,14 @@ use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE;
 use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_LIST;
 use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE;
 use app_server_protocol::METHOD_MEMORY_STORE_ADD_NOTE;
+use app_server_protocol::METHOD_MEMORY_STORE_CONSOLIDATE;
 use app_server_protocol::METHOD_MEMORY_STORE_HEALTH;
+use app_server_protocol::METHOD_MEMORY_STORE_INDEX_REBUILD;
 use app_server_protocol::METHOD_MEMORY_STORE_LIST;
 use app_server_protocol::METHOD_MEMORY_STORE_READ;
 use app_server_protocol::METHOD_MEMORY_STORE_RESET;
+use app_server_protocol::METHOD_MEMORY_STORE_REVIEW_LIST;
+use app_server_protocol::METHOD_MEMORY_STORE_REVIEW_RESOLVE;
 use app_server_protocol::METHOD_MEMORY_STORE_SEARCH;
 use app_server_protocol::METHOD_MODEL_LIST;
 use app_server_protocol::METHOD_MODEL_PREFERENCES_LIST;
@@ -465,6 +470,7 @@ impl RequestProcessor {
             METHOD_AGENT_SESSION_ARCHIVE_MANY => {
                 self.handle_session_archive_many_impl(params).await
             }
+            METHOD_AGENT_SESSION_DELETE => self.handle_session_delete_impl(params).await,
             METHOD_AGENT_SESSION_OBJECTIVE_READ => self.handle_objective_read_impl(params).await,
             METHOD_AGENT_SESSION_OBJECTIVE_SET => self.handle_objective_set_impl(params).await,
             METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE => {
@@ -830,8 +836,20 @@ impl RequestProcessor {
             METHOD_MEMORY_STORE_READ => self.handle_memory_store_read_impl(params).await,
             METHOD_MEMORY_STORE_SEARCH => self.handle_memory_store_search_impl(params).await,
             METHOD_MEMORY_STORE_ADD_NOTE => self.handle_memory_store_add_note_impl(params).await,
+            METHOD_MEMORY_STORE_CONSOLIDATE => {
+                self.handle_memory_store_consolidate_impl(params).await
+            }
+            METHOD_MEMORY_STORE_REVIEW_LIST => {
+                self.handle_memory_store_review_list_impl(params).await
+            }
+            METHOD_MEMORY_STORE_REVIEW_RESOLVE => {
+                self.handle_memory_store_review_resolve_impl(params).await
+            }
             METHOD_MEMORY_STORE_HEALTH => self.handle_memory_store_health_impl(params).await,
             METHOD_MEMORY_STORE_RESET => self.handle_memory_store_reset_impl(params).await,
+            METHOD_MEMORY_STORE_INDEX_REBUILD => {
+                self.handle_memory_store_index_rebuild_impl(params).await
+            }
             METHOD_LOG_LIST => self.handle_log_list_impl().await,
             METHOD_LOG_PERSISTED_TAIL => self.handle_log_persisted_tail_impl(params).await,
             METHOD_LOG_CLEAR => self.handle_log_clear_impl().await,

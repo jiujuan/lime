@@ -91,6 +91,43 @@ pub struct MemoryStoreAddNoteParams {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct MemoryStoreConsolidateParams {
+    #[serde(flatten)]
+    pub root: MemoryStoreRootParams,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_notes: Option<usize>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryStoreReviewListParams {
+    #[serde(flatten)]
+    pub root: MemoryStoreRootParams,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_results: Option<usize>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum MemoryStoreReviewResolveAction {
+    #[default]
+    Accept,
+    Reject,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryStoreReviewResolveParams {
+    #[serde(flatten)]
+    pub root: MemoryStoreRootParams,
+    pub path: String,
+    pub action: MemoryStoreReviewResolveAction,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct MemoryStoreResetParams {
     #[serde(flatten)]
     pub root: MemoryStoreRootParams,
@@ -165,6 +202,56 @@ pub struct MemoryStoreAddNoteResponse {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct MemoryStoreConsolidateResponse {
+    pub root_scope: MemoryStoreScope,
+    pub root_path: String,
+    pub processed_notes: usize,
+    pub skipped_notes: usize,
+    pub archived_notes: usize,
+    pub memory_path: String,
+    pub summary_path: String,
+    #[serde(default)]
+    pub warnings: Vec<String>,
+    pub updated: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryStoreReviewNote {
+    pub path: String,
+    pub size: u64,
+    pub modified_at: i64,
+    pub preview: String,
+    pub citation: MemoryStoreCitation,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryStoreReviewListResponse {
+    pub root_scope: MemoryStoreScope,
+    pub root_path: String,
+    #[serde(default)]
+    pub notes: Vec<MemoryStoreReviewNote>,
+    pub truncated: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryStoreReviewResolveResponse {
+    pub root_scope: MemoryStoreScope,
+    pub root_path: String,
+    pub source_path: String,
+    pub archived_path: String,
+    pub action: MemoryStoreReviewResolveAction,
+    pub memory_path: String,
+    pub summary_path: String,
+    pub updated: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct MemoryStoreHealthResponse {
     pub root_scope: MemoryStoreScope,
     pub root_path: String,
@@ -186,4 +273,18 @@ pub struct MemoryStoreResetResponse {
     pub removed_files: usize,
     pub removed_directories: usize,
     pub preserved_soul: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryStoreIndexRebuildResponse {
+    pub root_scope: MemoryStoreScope,
+    pub root_path: String,
+    pub manifest_path: String,
+    pub schema_version: String,
+    pub source_file_count: usize,
+    pub source_total_bytes: u64,
+    pub source_checksum: String,
+    pub indexed_at: String,
+    pub rebuilt: bool,
 }

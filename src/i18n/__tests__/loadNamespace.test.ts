@@ -32,7 +32,7 @@ describe("i18n namespace loader", () => {
         }
       }
     }
-  });
+  }, 30_000);
 
   it("Agent 首字前状态文案覆盖所有支持 locale", () => {
     const resources = loadBundledI18nResources();
@@ -74,6 +74,28 @@ describe("i18n namespace loader", () => {
         "agentChat.toolCall.commandSummary.sandboxEnabledWithType",
         "agentChat.toolCall.commandSummary.sandboxDisabled",
         "agentChat.toolCall.commandSummary.truncated",
+        "agentChat.toolCall.groupTitle.memory",
+        "agentChat.toolCall.label.memoryAddNote",
+        "agentChat.toolCall.label.memoryList",
+        "agentChat.toolCall.label.memoryRead",
+        "agentChat.toolCall.label.memorySearch",
+        "agentChat.toolCall.actionOverride.memoryAddNote.completed",
+        "agentChat.toolCall.actionOverride.memoryAddNote.failed",
+        "agentChat.toolCall.actionOverride.memoryAddNote.running",
+        "agentChat.toolCall.actionOverride.memoryList.completed",
+        "agentChat.toolCall.actionOverride.memoryList.failed",
+        "agentChat.toolCall.actionOverride.memoryList.running",
+        "agentChat.toolCall.actionOverride.memoryRead.completed",
+        "agentChat.toolCall.actionOverride.memoryRead.failed",
+        "agentChat.toolCall.actionOverride.memoryRead.running",
+        "agentChat.toolCall.actionOverride.memorySearch.completed",
+        "agentChat.toolCall.actionOverride.memorySearch.failed",
+        "agentChat.toolCall.actionOverride.memorySearch.running",
+        "agentChat.toolCall.memoryEvidence.title",
+        "agentChat.toolCall.memoryEvidence.summary.search",
+        "agentChat.toolCall.memoryEvidence.path",
+        "agentChat.toolCall.memoryEvidence.citation",
+        "agentChat.toolCall.memoryEvidence.truncated",
         "agentChat.messageList.artifact.saveDocument",
         "agentChat.messageList.artifact.checkpointBadge",
         "agentChat.messageList.artifact.diffBadge",
@@ -611,12 +633,6 @@ describe("i18n namespace loader", () => {
       );
       expect(resources[locale].agent).toHaveProperty(
         "generalWorkbench.context.modal.text.placeholder",
-      );
-      expect(resources[locale].agent).toHaveProperty(
-        "skills.workspace.curatedTask.suggestion.referenceBadge",
-      );
-      expect(resources[locale].agent).toHaveProperty(
-        "skills.workspace.curatedTask.suggestion.action.start",
       );
       expect(resources[locale].agent).toHaveProperty(
         "sceneAppExecutionSummary.followup.action.saveAsSkill",

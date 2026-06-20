@@ -15,7 +15,7 @@ import {
 } from "./useTaskCenterTabSessionRuntime";
 
 interface HarnessProps {
-  agentEntry?: "new-task" | "claw" | "home";
+  agentEntry?: "new-task" | "claw" | null;
   normalizedInitialSessionId?: string | null;
   sessionId?: string | null;
   taskCenterWorkspaceId?: string | null;
@@ -277,7 +277,7 @@ describe("useTaskCenterTabSessionRuntime", () => {
 
   it("离开 task center 入口时清理 draft 与 pending 请求", () => {
     const state = renderHarness({
-      agentEntry: "home",
+      agentEntry: null,
       normalizedInitialSessionId: "topic-a",
       sessionId: "topic-a",
     });

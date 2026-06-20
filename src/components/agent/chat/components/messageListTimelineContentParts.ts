@@ -139,9 +139,43 @@ function collectExistingProcessLeadParts(
 
 function resolveExistingFinalTextPart(
   parts?: Message["contentParts"],
-): MessageContentPart | null {
+): Extract<MessageContentPart, { type: "text" }> | null {
   const textParts = (parts || []).filter(isTextContentPart);
   return textParts[textParts.length - 1] || null;
+}
+
+function collectThinkingText(parts: MessageContentPart[]): string {
+  return parts
+    .filter(isThinkingContentPart)
+    .map((part) => part.text)
+    .join("")
+    .trim();
+}
+
+function removeTimelineLeadThinkingCoveredByExistingLead(params: {
+  timelineParts: MessageContentPart[];
+  existingLeadParts: MessageContentPart[];
+}): MessageContentPart[] {
+  const existingLeadThinking = collectThinkingText(params.existingLeadParts);
+  if (!existingLeadThinking) {
+    return params.timelineParts;
+  }
+
+  let changed = false;
+  const nextParts: MessageContentPart[] = [];
+  for (const part of params.timelineParts) {
+    if (
+      !nextParts.length &&
+      isThinkingContentPart(part) &&
+      existingLeadThinking.startsWith(part.text.trim())
+    ) {
+      changed = true;
+      continue;
+    }
+    nextParts.push(part);
+  }
+
+  return changed ? nextParts : params.timelineParts;
 }
 
 function mergeExistingLeadAndFinalParts(params: {
@@ -159,7 +193,11 @@ function mergeExistingLeadAndFinalParts(params: {
     return params.parts;
   }
 
-  const merged = [...existingLeadParts, ...params.parts];
+  const timelineParts = removeTimelineLeadThinkingCoveredByExistingLead({
+    timelineParts: params.parts,
+    existingLeadParts,
+  });
+  const merged = [...existingLeadParts, ...timelineParts];
   const finalText = existingFinalTextPart?.text.trim();
   if (!finalText) {
     return merged;
@@ -176,8 +214,9 @@ function mergeExistingLeadAndFinalParts(params: {
         part.text.trim().startsWith("<proposed_plan>"),
     );
   if (
-    !hasSameFinalText ||
-    (planOnlyTextPart && finalText === params.displayContent.trim())
+    existingFinalTextPart &&
+    (!hasSameFinalText ||
+      (planOnlyTextPart && finalText === params.displayContent.trim()))
   ) {
     merged.push(existingFinalTextPart);
   }
@@ -195,7 +234,7 @@ function shouldRenderTimelineAgentMessageText(item: AgentThreadItem): boolean {
 
 function shouldRenderTimelineAgentMessageAsThinking(
   item: AgentThreadItem,
-): boolean {
+): item is Extract<AgentThreadItem, { type: "agent_message" }> {
   return (
     item.type === "agent_message" && isAgentMessageCommentaryPhase(item.phase)
   );
@@ -337,11 +376,16 @@ export function buildTimelineInlineContentParts(params: {
 }): Message["contentParts"] | undefined {
   const items = params.items || [];
   const hasAgentMessage = items.some(
-    (item) =>
-      item.type === "agent_message" &&
-      (shouldRenderTimelineAgentMessageText(item) ||
-        shouldRenderTimelineAgentMessageAsThinking(item)) &&
-      item.text.trim().length > 0,
+    (item) => {
+      if (item.type !== "agent_message") {
+        return false;
+      }
+      return (
+        (shouldRenderTimelineAgentMessageText(item) ||
+          shouldRenderTimelineAgentMessageAsThinking(item)) &&
+        item.text.trim().length > 0
+      );
+    },
   );
   const hasImportedProcess = hasImportedSourceProcessItem(items);
 

@@ -297,9 +297,12 @@ describe("useWorkspaceInputbarSceneRuntime", () => {
     const container = renderHookNode(
       createDefaultProps({
         generalWorkbenchEntryPrompt: {
+          kind: "resume",
+          signature: "resume:continue-last-work",
           title: "继续上次工作",
           description: "补充上下文后继续。",
           actionLabel: "继续",
+          prompt: "继续上次工作",
         },
       }),
     );

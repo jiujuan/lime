@@ -28,6 +28,7 @@ export type AppServerSessionRpcClient = Pick<
   | "readSession"
   | "updateSession"
   | "archiveManySessions"
+  | "deleteSession"
   | "request"
 >;
 
@@ -148,9 +149,23 @@ export function createAppServerSessionClient({
     return sessions.map(appServerSessionOverviewToRuntimeInfo);
   }
 
+  async function deleteAgentRuntimeSession(sessionId: string): Promise<void> {
+    const normalizedSessionId = sessionId.trim();
+    if (!normalizedSessionId) {
+      throw new Error("sessionId is required for agentSession/delete");
+    }
+    const response = await appServerClient.deleteSession({
+      sessionId: normalizedSessionId,
+    });
+    if (response.result.deleted !== true) {
+      throw new Error("agentSession/delete did not confirm deletion");
+    }
+  }
+
   return {
     archiveManyAgentRuntimeSessions,
     createAgentRuntimeSession,
+    deleteAgentRuntimeSession,
     getAgentRuntimeSession,
     listAgentRuntimeSessions,
     updateAgentRuntimeSession,

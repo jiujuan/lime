@@ -304,7 +304,7 @@ export function ImportedRuntimeEventDetailPanel({
 }: ImportedRuntimeEventDetailPanelProps) {
   const { t: agentT } = useTranslation("agent");
   const effectiveT: TaskRailTranslate =
-    t ?? ((key, options) => agentT(key, options));
+    t ?? ((key, options) => String(agentT(key as never, options as never)));
   const normalizedSessionId = sessionId?.trim() || null;
   const [expanded, setExpanded] = React.useState(false);
   const [events, setEvents] = React.useState<ConversationImportRuntimeEventDetail[]>([]);

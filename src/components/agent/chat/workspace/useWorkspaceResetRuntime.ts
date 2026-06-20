@@ -14,7 +14,7 @@ import type {
 import type { CanvasStateUnion } from "@/components/workspace/canvas/canvasUtils";
 import type { TaskFile } from "../components/TaskFiles";
 import { buildHomeAgentParams } from "@/lib/workspace/navigation";
-import type { Character } from "@/lib/api/memory";
+import type { Character } from "@/lib/api/projectMemory";
 import type { Page, PageParams } from "@/types/page";
 
 type SetStringState = Dispatch<SetStateAction<string>>;

@@ -42,10 +42,17 @@ const NEWS_PROMPT = "整理今天的国际新闻";
 const CONTINUE_PROMPT = "继续输出";
 const PLAN_PROMPT = "先给我一个修复计划，不要直接改代码";
 const GOAL_PROMPT = "本周完成 Goal E2E 修复";
+const WEB_TOOLS_RENDERING_PROMPT = "验证网页搜索渲染";
 const ASSISTANT_DONE_TEXT = "CLAW_NEWS_FIXTURE_DONE";
 const CONTINUE_DONE_TEXT = "CLAW_CONTINUE_FIXTURE_DONE";
 const PLAN_DONE_TEXT = "CLAW_PLAN_FIXTURE_DONE";
 const GOAL_DONE_TEXT = "CLAW_GOAL_FIXTURE_DONE";
+const WEB_TOOLS_RENDERING_DONE_TEXT = "CLAW_WEB_TOOLS_RENDERING_DONE";
+const WEB_TOOLS_SEARCH_TITLE = "Lime WebSearch Rendering Source";
+const WEB_TOOLS_SEARCH_URL = "https://example.com/lime-websearch-rendering";
+const WEB_TOOLS_SEARCH_SNIPPET = "Search source used to verify inline rendering";
+const WEB_TOOLS_FETCH_MARKDOWN =
+  "WebFetch 正文摘要：页面确认搜索来源可以展开，同时最终正文继续输出。";
 const PLAN_STEPS = [
   { step: "确认计划模式请求进入 App Server", status: "completed" },
   { step: "输出 proposed_plan", status: "in_progress" },
@@ -59,6 +66,8 @@ const FIXTURE_MODEL = "fixture-model";
 const SESSION_ID = `claw-chat-current-${Date.now()}-${process.pid}`;
 const THREAD_ID = `${SESSION_ID}-thread`;
 const SESSION_TITLE = "Claw 新闻输入 Electron fixture";
+const WEB_TOOLS_SEARCH_TOOL_CALL_ID = `${SESSION_ID}:tool:websearch-rendering`;
+const WEB_TOOLS_FETCH_TOOL_CALL_ID = `${SESSION_ID}:tool:webfetch-rendering`;
 const EVENT_READ_PROBE_PROMPT =
   "验证 agentSession/event 与 read model 同 turn 对齐。";
 const EVENT_READ_PROBE_TURN_ID = `${SESSION_ID}-event-read-probe`;
@@ -68,6 +77,16 @@ const EVENT_READ_PROBE_TOOL_CALL_ID = `${EVENT_READ_PROBE_TURN_ID}:tool:webfetch
 const EVENT_READ_PROBE_TOOL_NAME = "WebFetch";
 const EVENT_READ_PROBE_TOOL_OUTPUT =
   "fixture fetched https://example.com/claw-event-read";
+const WEB_TOOLS_RENDERING_ASSERTION_KEYS = [
+  "webToolsRenderingPromptReachedBackend",
+  "guiWebToolsRenderingInputSubmitted",
+  "guiWebSearchProcessDefaultExpanded",
+  "guiWebSearchProcessShowsInlineSources",
+  "guiWebFetchProcessShowsReadPages",
+  "guiWebSearchFinalTextInterleaved",
+  "guiWebFetchTransportEnvelopeHidden",
+  "readModelWebToolsRenderingCompleted",
+];
 
 function printHelp() {
   console.log(`
@@ -90,7 +109,7 @@ Claw Chat Current Electron Fixture Smoke
   --app-url <url>        可选 renderer dev server，例如 http://127.0.0.1:1420/
   --evidence-dir <path>  证据目录
   --prefix <name>        证据文件前缀
-  --scenario <name>      complete | cancel | cancel-then-continue | plan | goal，默认 complete
+  --scenario <name>      complete | cancel | cancel-then-continue | plan | goal | web-tools-rendering，默认 complete
   --timeout-ms <ms>      总超时，默认 180000
   --interval-ms <ms>     轮询间隔，默认 500
   --keep-temp            保留临时目录便于调试
@@ -153,13 +172,17 @@ function parseArgs(argv) {
   if (!options.evidenceDir || !options.prefix) {
     throw new Error("--evidence-dir / --prefix 均不能为空");
   }
-  if (
-    !["complete", "cancel", "cancel-then-continue", "plan", "goal"].includes(
-      options.scenario,
-    )
-  ) {
+  const allowedScenarios = [
+    "complete",
+    "cancel",
+    "cancel-then-continue",
+    "plan",
+    "goal",
+    "web-tools-rendering",
+  ];
+  if (!allowedScenarios.includes(options.scenario)) {
     throw new Error(
-      "--scenario 只能是 complete、cancel、cancel-then-continue、plan 或 goal",
+      `--scenario 只能是 ${allowedScenarios.join("、")}`,
     );
   }
   return options;
@@ -391,6 +414,7 @@ if (input.kind === "turnStart") {
   const isContinuePrompt = inputText.includes("${CONTINUE_PROMPT}");
   const isPlanPrompt = inputText.includes("${PLAN_PROMPT}");
   const isGoalPrompt = inputText.includes("${GOAL_PROMPT}");
+  const isWebToolsRenderingPrompt = inputText.includes("${WEB_TOOLS_RENDERING_PROMPT}");
   const assistantDoneText = isEventReadProbe
     ? "${EVENT_READ_PROBE_DONE_TEXT}"
     : isContinuePrompt
@@ -399,6 +423,8 @@ if (input.kind === "turnStart") {
         ? "${PLAN_DONE_TEXT}"
         : isGoalPrompt
           ? "${GOAL_DONE_TEXT}"
+          : isWebToolsRenderingPrompt
+            ? "${WEB_TOOLS_RENDERING_DONE_TEXT}"
     : "${ASSISTANT_DONE_TEXT}";
   const initialEvents = [
     {
@@ -412,6 +438,8 @@ if (input.kind === "turnStart") {
               ? "我先给出计划，不会直接改代码：\\n"
               : isGoalPrompt
                 ? "追求目标已进入当前回合：\\n"
+                : isWebToolsRenderingPrompt
+                  ? "我先联网核实目标页面来源。\\n"
           : "以下是今日国际新闻简要整理：\\n"
       }
     }
@@ -422,6 +450,8 @@ if (input.kind === "turnStart") {
       ? ${JSON.stringify(proposedPlanFixtureText)}
       : isGoalPrompt
         ? "目标已绑定到本轮请求，后续会围绕 ${GOAL_PROMPT} 收口。\\n"
+        : isWebToolsRenderingPrompt
+          ? "网页搜索渲染结论：搜索来源已展开，读取页面已归入同一过程，最终正文继续输出。\\n"
         : "1. 多国外交议题持续升温，地区安全与经贸协商仍是焦点。\\n2. 全球市场继续关注能源、供应链和主要央行政策变化。\\n3. 国际组织呼吁在气候、粮食与人道援助议题上保持协调。\\n";
   const shouldWaitForCancel =
     (process.env.CLAW_CHAT_FIXTURE_SCENARIO === "cancel" ||
@@ -448,6 +478,111 @@ if (input.kind === "turnStart") {
 
   emitEvents(initialEvents);
   await sleep(120);
+  if (isWebToolsRenderingPrompt) {
+    emitEvents([
+      {
+        type: "tool.started",
+        payload: {
+          toolCallId: "${WEB_TOOLS_SEARCH_TOOL_CALL_ID}",
+          tool_call_id: "${WEB_TOOLS_SEARCH_TOOL_CALL_ID}",
+          toolId: "${WEB_TOOLS_SEARCH_TOOL_CALL_ID}",
+          tool_id: "${WEB_TOOLS_SEARCH_TOOL_CALL_ID}",
+          id: "${WEB_TOOLS_SEARCH_TOOL_CALL_ID}",
+          toolName: "WebSearch",
+          tool_name: "WebSearch",
+          name: "WebSearch",
+          arguments: {
+            query: "Lime WebSearch rendering"
+          }
+        }
+      }
+    ]);
+    await sleep(80);
+    emitEvents([
+      {
+        type: "tool.result",
+        payload: {
+          toolCallId: "${WEB_TOOLS_SEARCH_TOOL_CALL_ID}",
+          tool_call_id: "${WEB_TOOLS_SEARCH_TOOL_CALL_ID}",
+          toolId: "${WEB_TOOLS_SEARCH_TOOL_CALL_ID}",
+          tool_id: "${WEB_TOOLS_SEARCH_TOOL_CALL_ID}",
+          id: "${WEB_TOOLS_SEARCH_TOOL_CALL_ID}",
+          toolName: "WebSearch",
+          tool_name: "WebSearch",
+          outputPreview: ${JSON.stringify(JSON.stringify({
+            results: [
+              {
+                title: WEB_TOOLS_SEARCH_TITLE,
+                url: WEB_TOOLS_SEARCH_URL,
+                snippet: WEB_TOOLS_SEARCH_SNIPPET,
+              },
+            ],
+          }))},
+          output: ${JSON.stringify(JSON.stringify({
+            results: [
+              {
+                title: WEB_TOOLS_SEARCH_TITLE,
+                url: WEB_TOOLS_SEARCH_URL,
+                snippet: WEB_TOOLS_SEARCH_SNIPPET,
+              },
+            ],
+          }))},
+          success: true
+        }
+      }
+    ]);
+    await sleep(80);
+    emitEvents([
+      {
+        type: "tool.started",
+        payload: {
+          toolCallId: "${WEB_TOOLS_FETCH_TOOL_CALL_ID}",
+          tool_call_id: "${WEB_TOOLS_FETCH_TOOL_CALL_ID}",
+          toolId: "${WEB_TOOLS_FETCH_TOOL_CALL_ID}",
+          tool_id: "${WEB_TOOLS_FETCH_TOOL_CALL_ID}",
+          id: "${WEB_TOOLS_FETCH_TOOL_CALL_ID}",
+          toolName: "WebFetch",
+          tool_name: "WebFetch",
+          name: "WebFetch",
+          arguments: {
+            url: "${WEB_TOOLS_SEARCH_URL}"
+          }
+        }
+      }
+    ]);
+    await sleep(80);
+    emitEvents([
+      {
+        type: "tool.result",
+        payload: {
+          toolCallId: "${WEB_TOOLS_FETCH_TOOL_CALL_ID}",
+          tool_call_id: "${WEB_TOOLS_FETCH_TOOL_CALL_ID}",
+          toolId: "${WEB_TOOLS_FETCH_TOOL_CALL_ID}",
+          tool_id: "${WEB_TOOLS_FETCH_TOOL_CALL_ID}",
+          id: "${WEB_TOOLS_FETCH_TOOL_CALL_ID}",
+          toolName: "WebFetch",
+          tool_name: "WebFetch",
+          outputPreview: ${JSON.stringify(JSON.stringify({
+            bytes: 2048,
+            code: 200,
+            codeText: "OK",
+            result: WEB_TOOLS_FETCH_MARKDOWN,
+          }))},
+          output: ${JSON.stringify(JSON.stringify({
+            bytes: 2048,
+            code: 200,
+            codeText: "OK",
+            result: WEB_TOOLS_FETCH_MARKDOWN,
+          }))},
+          success: true,
+          metadata: {
+            url: "${WEB_TOOLS_SEARCH_URL}"
+          }
+        }
+      }
+    ]);
+    await sleep(80);
+  }
   if (isEventReadProbe) {
     emitEvents([
       {
@@ -1683,6 +1818,165 @@ async function waitForGuiChatCompleted(
   );
 }
 
+async function waitForGuiWebToolsRenderingCompleted(page, options) {
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const snapshot = await evaluatePageSnapshot(
+      page,
+      ({
+        prompt,
+        doneText,
+        searchTitle,
+        searchUrl,
+        fetchMarkdown,
+      }) => {
+        const text = document.body?.innerText || "";
+        const textarea = document.querySelector(
+          'textarea[name="agent-chat-message"]',
+        );
+        const rect = textarea?.getBoundingClientRect();
+        const style = textarea ? window.getComputedStyle(textarea) : null;
+        const textareaVisible = Boolean(
+          textarea &&
+            rect &&
+            rect.width > 16 &&
+            rect.height > 16 &&
+            style?.visibility !== "hidden" &&
+            style?.display !== "none",
+        );
+        const buttons = Array.from(document.querySelectorAll("button")).map(
+          (button) => ({
+            title: button.getAttribute("title") || "",
+            text: button.textContent || "",
+            aria: button.getAttribute("aria-label") || "",
+            disabled: button.disabled,
+          }),
+        );
+        const stopButtonVisible = buttons.some((button) => {
+          const label = [button.title, button.text, button.aria].join("\n");
+          return (
+            !button.disabled &&
+            (label.includes("停止") ||
+              label.includes("终止") ||
+              /\bStop\b/i.test(label))
+          );
+        });
+        const processGroups = Array.from(
+          document.querySelectorAll('[data-testid="streaming-process-group"]'),
+        ).map((group) => {
+          const button = group.querySelector("button");
+          return {
+            text: group.textContent || "",
+            buttonText: button?.textContent || "",
+            expanded: button?.getAttribute("aria-expanded") || "",
+          };
+        });
+        const webProcessGroup = processGroups.find(
+          (group) =>
+            group.buttonText.includes("已搜索网页 1 次，读取网页 1 次") ||
+            group.text.includes("已搜索网页 1 次，读取网页 1 次"),
+        );
+        const promptIndex = text.indexOf(prompt);
+        const processIndex = text.indexOf("已搜索网页 1 次，读取网页 1 次");
+        const finalIndex = text.indexOf("网页搜索渲染结论");
+        const sourceIndex = text.indexOf(searchTitle);
+        const forbiddenTransportFragments = [
+          '"bytes"',
+          '"codeText"',
+          '"result"',
+          "bytes:",
+          "codeText:",
+          "2048",
+          "{ bytes",
+          "{bytes",
+        ];
+        return {
+          url: window.location.href,
+          hasPrompt: text.includes(prompt),
+          hasAssistantSummary: text.includes("网页搜索渲染结论"),
+          hasDoneText: text.includes(doneText),
+          hasProcessTitle: text.includes("已搜索网页 1 次，读取网页 1 次"),
+          hasSearchSourceSection: Boolean(
+            webProcessGroup?.text.includes("搜索来源") ||
+              webProcessGroup?.text.includes("Search sources"),
+          ),
+          hasFetchPageSection: Boolean(
+            webProcessGroup?.text.includes("读取页面") ||
+              webProcessGroup?.text.includes("Read pages"),
+          ),
+          hasSearchTitle: text.includes(searchTitle),
+          hasSearchUrl: text.includes(searchUrl),
+          hasFetchMarkdownHidden: !text.includes(fetchMarkdown),
+          hasFetchPageUrl: Boolean(webProcessGroup?.text.includes(searchUrl)),
+          hasFinalTextAfterProcess:
+            promptIndex >= 0 &&
+            processIndex > promptIndex &&
+            sourceIndex > processIndex &&
+            finalIndex > processIndex,
+          webProcessGroupExpanded: webProcessGroup?.expanded === "true",
+          webProcessGroupText: webProcessGroup?.text || "",
+          processGroupCount: processGroups.length,
+          rawJsonEnvelopeVisible: forbiddenTransportFragments.some((value) =>
+            text.includes(value),
+          ),
+          forbiddenTransportHits: forbiddenTransportFragments.filter((value) =>
+            text.includes(value),
+          ),
+          textareaVisible,
+          textareaDisabled:
+            textarea instanceof HTMLTextAreaElement ? textarea.disabled : null,
+          textareaValue:
+            textarea instanceof HTMLTextAreaElement ? textarea.value : null,
+          stopButtonVisible,
+          hasMessageList: Boolean(
+            document.querySelector('[data-testid="message-list"]') ||
+              document.querySelector('[data-testid="message-list-frame"]'),
+          ),
+          bodyText: text,
+        };
+      },
+      {
+        prompt: WEB_TOOLS_RENDERING_PROMPT,
+        doneText: WEB_TOOLS_RENDERING_DONE_TEXT,
+        searchTitle: WEB_TOOLS_SEARCH_TITLE,
+        searchUrl: WEB_TOOLS_SEARCH_URL,
+        fetchMarkdown: WEB_TOOLS_FETCH_MARKDOWN,
+      },
+    );
+    if (!snapshot) {
+      await sleep(options.intervalMs);
+      continue;
+    }
+    lastSnapshot = snapshot;
+    if (
+      snapshot.hasPrompt &&
+      (snapshot.hasAssistantSummary || snapshot.hasDoneText) &&
+      snapshot.hasProcessTitle &&
+      snapshot.webProcessGroupExpanded &&
+      snapshot.hasSearchSourceSection &&
+      snapshot.hasFetchPageSection &&
+      snapshot.hasSearchTitle &&
+      snapshot.hasSearchUrl &&
+      snapshot.hasFetchPageUrl &&
+      snapshot.hasFetchMarkdownHidden &&
+      snapshot.hasFinalTextAfterProcess &&
+      snapshot.rawJsonEnvelopeVisible === false &&
+      snapshot.textareaVisible &&
+      snapshot.textareaDisabled === false &&
+      snapshot.stopButtonVisible === false
+    ) {
+      return snapshot;
+    }
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `Claw GUI 未完成网页搜索渲染验收: ${JSON.stringify(
+      sanitizeJson(lastSnapshot),
+    )}`,
+  );
+}
+
 async function waitForGuiPlanCompleted(page, options) {
   const startedAt = Date.now();
   let lastSnapshot = null;
@@ -2463,11 +2757,14 @@ async function run() {
     goalModeEnabled: null,
     goalInputSend: null,
     guiGoalCompleted: null,
+    webToolsRenderingInputSend: null,
+    guiWebToolsRenderingCompleted: null,
     readModelCompleted: null,
     readModelCanceled: null,
     readModelContinueCompleted: null,
     readModelPlanCompleted: null,
     readModelGoalCompleted: null,
+    readModelWebToolsRenderingCompleted: null,
     eventReadProbe: null,
     assertions: {},
     summary: summaryPath,
@@ -2720,6 +3017,55 @@ async function run() {
           readModelGoalCompleted || {},
         ).includes("目标已绑定到本轮请求"),
       });
+    } else if (options.scenario === "web-tools-rendering") {
+      logStage("send-web-tools-rendering-prompt-from-gui");
+      summary.webToolsRenderingInputSend = sanitizeJson(
+        await sendPromptFromGui(page, options, WEB_TOOLS_RENDERING_PROMPT),
+      );
+
+      logStage("wait-gui-web-tools-rendering-completed");
+      summary.guiWebToolsRenderingCompleted = sanitizeJson(
+        await waitForGuiWebToolsRenderingCompleted(page, options),
+      );
+
+      logStage("wait-read-model-web-tools-rendering-completed");
+      const readModelWebToolsRenderingCompleted =
+        await waitForSessionReadCompleted(page, options, appServerRequests, {
+          prompt: WEB_TOOLS_RENDERING_PROMPT,
+          doneText: WEB_TOOLS_RENDERING_DONE_TEXT,
+          summaryText: "网页搜索渲染结论",
+        });
+      summary.readModelWebToolsRenderingCompleted = sanitizeJson({
+        detailItemCount: Array.isArray(
+          readModelWebToolsRenderingCompleted?.detail?.items,
+        )
+          ? readModelWebToolsRenderingCompleted.detail.items.length
+          : null,
+        toolCallCount: collectReadModelToolCalls(
+          readModelWebToolsRenderingCompleted,
+        ).length,
+        latestTurnStatus:
+          readModelWebToolsRenderingCompleted?.detail?.thread_read
+            ?.runtime_summary?.latestTurnStatus ??
+          readModelWebToolsRenderingCompleted?.detail?.thread_read?.status ??
+          readModelWebToolsRenderingCompleted?.detail?.status ??
+          null,
+        includesPrompt: JSON.stringify(
+          readModelWebToolsRenderingCompleted || {},
+        ).includes(WEB_TOOLS_RENDERING_PROMPT),
+        includesAssistantDone: JSON.stringify(
+          readModelWebToolsRenderingCompleted || {},
+        ).includes(WEB_TOOLS_RENDERING_DONE_TEXT),
+        includesAssistantSummary: JSON.stringify(
+          readModelWebToolsRenderingCompleted || {},
+        ).includes("网页搜索渲染结论"),
+        includesWebSearchTool: JSON.stringify(
+          readModelWebToolsRenderingCompleted || {},
+        ).includes(WEB_TOOLS_SEARCH_TOOL_CALL_ID),
+        includesWebFetchTool: JSON.stringify(
+          readModelWebToolsRenderingCompleted || {},
+        ).includes(WEB_TOOLS_FETCH_TOOL_CALL_ID),
+      });
     } else {
       logStage("send-news-prompt-from-gui");
       summary.inputSend = sanitizeJson(
@@ -2824,7 +3170,11 @@ async function run() {
           ).includes("继续输出已恢复"),
         });
       }
-    } else if (options.scenario !== "plan" && options.scenario !== "goal") {
+    } else if (
+      options.scenario !== "plan" &&
+      options.scenario !== "goal" &&
+      options.scenario !== "web-tools-rendering"
+    ) {
       logStage("wait-gui-completed");
       summary.guiCompleted = sanitizeJson(
         await waitForGuiChatCompleted(page, options),
@@ -2900,6 +3250,11 @@ async function run() {
     const goalTurnStart = backendLedger.find(
       (entry) => entry.kind === "turnStart" && entry.inputText === GOAL_PROMPT,
     );
+    const webToolsRenderingTurnStart = backendLedger.find(
+      (entry) =>
+        entry.kind === "turnStart" &&
+        entry.inputText === WEB_TOOLS_RENDERING_PROMPT,
+    );
     const continueTurnStart = backendLedger.find(
       (entry) =>
         entry.kind === "turnStart" && entry.inputText === CONTINUE_PROMPT,
@@ -2912,12 +3267,16 @@ async function run() {
       options.scenario === "cancel-then-continue";
     const isPlanScenario = options.scenario === "plan";
     const isGoalScenario = options.scenario === "goal";
+    const isWebToolsRenderingScenario =
+      options.scenario === "web-tools-rendering";
     const asterChatRequest =
       (isPlanScenario
         ? planTurnStart?.asterChatRequest
         : isGoalScenario
           ? goalTurnStart?.asterChatRequest
-          : newsTurnStart?.asterChatRequest) ?? {};
+          : isWebToolsRenderingScenario
+            ? webToolsRenderingTurnStart?.asterChatRequest
+            : newsTurnStart?.asterChatRequest) ?? {};
     const hasCancelPhase = isCancelOnlyScenario || isCancelThenContinueScenario;
     const goalHarness = readHarnessMetadataFromTurnStart(goalTurnStart);
     const goalObjectiveText = readObjectiveTextFromHarness(goalHarness);
@@ -2936,7 +3295,9 @@ async function run() {
       ? planTurnStart?.inputText === PLAN_PROMPT
       : isGoalScenario
         ? goalTurnStart?.inputText === GOAL_PROMPT
-        : newsTurnStart?.inputText === NEWS_PROMPT;
+        : isWebToolsRenderingScenario
+          ? webToolsRenderingTurnStart?.inputText === WEB_TOOLS_RENDERING_PROMPT
+          : newsTurnStart?.inputText === NEWS_PROMPT;
     const commonAssertions = {
       electronPreloadBridge: rendererSnapshot.electron === true,
       appServerJsonRpcUsed:
@@ -2978,8 +3339,10 @@ async function run() {
               true
           : isPlanScenario
             ? summary.guiPlanCompleted?.hasPrompt === true
-            : isGoalScenario
-              ? summary.guiGoalCompleted?.hasPrompt === true
+          : isGoalScenario
+            ? summary.guiGoalCompleted?.hasPrompt === true
+            : isWebToolsRenderingScenario
+              ? summary.guiWebToolsRenderingCompleted?.hasPrompt === true
           : summary.guiCompleted?.hasPrompt === true,
       guiAssistantOutputVisible: isCancelOnlyScenario
         ? summary.guiCanceled?.hasStoppedCopy === true
@@ -2992,6 +3355,10 @@ async function run() {
             : isGoalScenario
               ? summary.guiGoalCompleted?.hasAssistantSummary === true ||
                 summary.guiGoalCompleted?.hasDoneText === true
+              : isWebToolsRenderingScenario
+                ? summary.guiWebToolsRenderingCompleted?.hasAssistantSummary ===
+                    true ||
+                  summary.guiWebToolsRenderingCompleted?.hasDoneText === true
           : summary.guiCompleted?.hasAssistantSummary === true ||
             summary.guiCompleted?.hasDoneText === true,
       guiInputRemainsReady: isCancelOnlyScenario
@@ -3006,6 +3373,11 @@ async function run() {
             : isGoalScenario
               ? summary.guiGoalCompleted?.textareaVisible === true &&
                 summary.guiGoalCompleted?.textareaDisabled === false
+              : isWebToolsRenderingScenario
+                ? summary.guiWebToolsRenderingCompleted?.textareaVisible ===
+                    true &&
+                  summary.guiWebToolsRenderingCompleted?.textareaDisabled ===
+                    false
           : summary.guiCompleted?.textareaVisible === true &&
             summary.guiCompleted?.textareaDisabled === false,
       guiNotStuckStreaming: isCancelOnlyScenario
@@ -3016,6 +3388,9 @@ async function run() {
             ? summary.guiPlanCompleted?.stopButtonVisible === false
             : isGoalScenario
               ? summary.guiGoalCompleted?.stopButtonVisible === false
+              : isWebToolsRenderingScenario
+                ? summary.guiWebToolsRenderingCompleted?.stopButtonVisible ===
+                  false
           : summary.guiCompleted?.stopButtonVisible === false,
       pageMentionsPromptAndAssistant: isCancelOnlyScenario
         ? pageText.includes(NEWS_PROMPT) &&
@@ -3035,6 +3410,11 @@ async function run() {
               ? pageText.includes(GOAL_PROMPT) &&
                 (pageText.includes("目标已绑定到本轮请求") ||
                   pageText.includes(GOAL_DONE_TEXT))
+              : isWebToolsRenderingScenario
+                ? pageText.includes(WEB_TOOLS_RENDERING_PROMPT) &&
+                  pageText.includes("已搜索网页 1 次，读取网页 1 次") &&
+                  pageText.includes(WEB_TOOLS_SEARCH_TITLE) &&
+                  pageText.includes("网页搜索渲染结论")
           : pageText.includes(NEWS_PROMPT) &&
             (pageText.includes("今日国际新闻简要整理") ||
               pageText.includes(ASSISTANT_DONE_TEXT)),
@@ -3090,50 +3470,93 @@ async function run() {
               (summary.readModelGoalCompleted?.includesAssistantDone === true ||
                 summary.readModelGoalCompleted?.includesAssistantSummary === true),
           }
+      : isWebToolsRenderingScenario
+        ? {
+            webToolsRenderingPromptReachedBackend:
+              webToolsRenderingTurnStart?.inputText ===
+              WEB_TOOLS_RENDERING_PROMPT,
+            guiWebToolsRenderingInputSubmitted:
+              summary.webToolsRenderingInputSend?.afterFill
+                ?.promptVisibleInTextarea === true &&
+              summary.webToolsRenderingInputSend?.clicked?.clicked === true,
+            guiWebSearchProcessDefaultExpanded:
+              summary.guiWebToolsRenderingCompleted
+                ?.webProcessGroupExpanded === true,
+            guiWebSearchProcessShowsInlineSources:
+              summary.guiWebToolsRenderingCompleted
+                ?.hasSearchSourceSection === true &&
+              summary.guiWebToolsRenderingCompleted?.hasSearchTitle === true &&
+              summary.guiWebToolsRenderingCompleted?.hasSearchUrl === true,
+            guiWebFetchProcessShowsReadPages:
+              summary.guiWebToolsRenderingCompleted?.hasFetchPageSection ===
+                true &&
+              summary.guiWebToolsRenderingCompleted?.hasFetchPageUrl === true,
+            guiWebSearchFinalTextInterleaved:
+              summary.guiWebToolsRenderingCompleted
+                ?.hasFinalTextAfterProcess === true,
+            guiWebFetchTransportEnvelopeHidden:
+              summary.guiWebToolsRenderingCompleted?.rawJsonEnvelopeVisible ===
+                false &&
+              summary.guiWebToolsRenderingCompleted?.hasFetchMarkdownHidden ===
+                true,
+            readModelWebToolsRenderingCompleted:
+              summary.readModelWebToolsRenderingCompleted?.includesPrompt ===
+                true &&
+              (summary.readModelWebToolsRenderingCompleted
+                ?.includesAssistantDone === true ||
+                summary.readModelWebToolsRenderingCompleted
+                  ?.includesAssistantSummary === true) &&
+              summary.readModelWebToolsRenderingCompleted
+                ?.includesWebSearchTool === true &&
+              summary.readModelWebToolsRenderingCompleted
+                ?.includesWebFetchTool === true,
+        }
       : hasCancelPhase
         ? {
             usedCurrentTurnCancel: appServerRequestMethods.includes(
               APP_SERVER_METHOD_SESSION_TURN_CANCEL,
-          ),
-          externalFixtureCancelUsed: backendLedger.some(
-            (entry) => entry.kind === "turnCancel",
-          ),
-          fixtureCancelReachedBackend:
-            latestTurnCancel?.sessionId === SESSION_ID &&
-            typeof latestTurnCancel?.turnId === "string" &&
-            latestTurnCancel.turnId.trim().length > 0,
-          guiStopClicked: summary.stopClick?.clicked?.clicked === true,
-          readModelCanceled:
-            summary.readModelCanceled?.includesPrompt === true &&
-            summary.readModelCanceled?.includesCanceled === true,
-          ...(isCancelThenContinueScenario
-            ? {
-                continuePromptReachedBackend:
-                  continueTurnStart?.inputText === CONTINUE_PROMPT,
-                guiContinueInputSubmitted:
-                  summary.continueInputSend?.afterFill
-                    ?.promptVisibleInTextarea === true &&
-                  summary.continueInputSend?.clicked?.clicked === true,
-                guiContinueCompleted:
-                  summary.guiContinueCompleted?.hasPrompt === true &&
-                  (summary.guiContinueCompleted?.hasAssistantSummary === true ||
-                    summary.guiContinueCompleted?.hasDoneText === true) &&
-                  summary.guiContinueCompleted?.textareaVisible === true &&
-                  summary.guiContinueCompleted?.textareaDisabled === false &&
-                  summary.guiContinueCompleted?.stopButtonVisible === false,
-                readModelContinueCompleted:
-                  summary.readModelContinueCompleted?.includesPrompt === true &&
-                  (summary.readModelContinueCompleted?.includesAssistantDone ===
-                    true ||
-                    summary.readModelContinueCompleted
-                      ?.includesAssistantSummary === true),
-                backendRecordedCancelThenContinue:
-                  backendLedger.filter((entry) => entry.kind === "turnStart")
-                    .length >= 2 &&
-                  backendLedger.some((entry) => entry.kind === "turnCancel"),
-              }
-            : {}),
-        }
+            ),
+            externalFixtureCancelUsed: backendLedger.some(
+              (entry) => entry.kind === "turnCancel",
+            ),
+            fixtureCancelReachedBackend:
+              latestTurnCancel?.sessionId === SESSION_ID &&
+              typeof latestTurnCancel?.turnId === "string" &&
+              latestTurnCancel.turnId.trim().length > 0,
+            guiStopClicked: summary.stopClick?.clicked?.clicked === true,
+            readModelCanceled:
+              summary.readModelCanceled?.includesPrompt === true &&
+              summary.readModelCanceled?.includesCanceled === true,
+            ...(isCancelThenContinueScenario
+              ? {
+                  continuePromptReachedBackend:
+                    continueTurnStart?.inputText === CONTINUE_PROMPT,
+                  guiContinueInputSubmitted:
+                    summary.continueInputSend?.afterFill
+                      ?.promptVisibleInTextarea === true &&
+                    summary.continueInputSend?.clicked?.clicked === true,
+                  guiContinueCompleted:
+                    summary.guiContinueCompleted?.hasPrompt === true &&
+                    (summary.guiContinueCompleted?.hasAssistantSummary ===
+                      true ||
+                      summary.guiContinueCompleted?.hasDoneText === true) &&
+                    summary.guiContinueCompleted?.textareaVisible === true &&
+                    summary.guiContinueCompleted?.textareaDisabled === false &&
+                    summary.guiContinueCompleted?.stopButtonVisible === false,
+                  readModelContinueCompleted:
+                    summary.readModelContinueCompleted?.includesPrompt ===
+                      true &&
+                    (summary.readModelContinueCompleted
+                      ?.includesAssistantDone === true ||
+                      summary.readModelContinueCompleted
+                        ?.includesAssistantSummary === true),
+                  backendRecordedCancelThenContinue:
+                    backendLedger.filter((entry) => entry.kind === "turnStart")
+                      .length >= 2 &&
+                    backendLedger.some((entry) => entry.kind === "turnCancel"),
+                }
+              : {}),
+          }
         : {
           noEpochFallbackTitle:
             summary.guiCompleted?.hasEpochFallbackTitle === false,
@@ -3187,6 +3610,7 @@ async function run() {
           "goalManagedObjectiveReachedBackend",
           "guiGoalCompleted",
           "readModelGoalCompleted",
+          ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
         ]
       : isCancelThenContinueScenario
         ? [
@@ -3209,6 +3633,7 @@ async function run() {
             "goalManagedObjectiveReachedBackend",
             "guiGoalCompleted",
             "readModelGoalCompleted",
+            ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
           ]
         : isPlanScenario
           ? [
@@ -3233,6 +3658,7 @@ async function run() {
               "goalManagedObjectiveReachedBackend",
               "guiGoalCompleted",
               "readModelGoalCompleted",
+              ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
             ]
           : isGoalScenario
             ? [
@@ -3259,6 +3685,39 @@ async function run() {
                 "guiPlanDecisionDrawerVisible",
                 "readModelPlanCompleted",
                 "proposedPlanVisible",
+                ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
+              ]
+            : isWebToolsRenderingScenario
+              ? [
+                  "usedCurrentTurnCancel",
+                  "externalFixtureCancelUsed",
+                  "fixtureCancelReachedBackend",
+                  "guiStopClicked",
+                  "readModelCanceled",
+                  "continuePromptReachedBackend",
+                  "guiContinueInputSubmitted",
+                  "guiContinueCompleted",
+                  "readModelContinueCompleted",
+                  "backendRecordedCancelThenContinue",
+                  "noEpochFallbackTitle",
+                  "readModelCompleted",
+                  "eventReadProbeObserved",
+                  "readModelEventReadAligned",
+                  "readModelToolCallAligned",
+                  "planModeEnabledInGui",
+                  "planPromptReachedBackend",
+                  "planCollaborationModeReachedBackend",
+                  "guiPlanRailVisible",
+                  "guiPlanStepsVisible",
+                  "guiPlanDecisionDrawerVisible",
+                  "readModelPlanCompleted",
+                  "proposedPlanVisible",
+                  "goalModeEnabledInGui",
+                  "goalPromptReachedBackend",
+                  "goalObjectiveTextReachedBackend",
+                  "goalManagedObjectiveReachedBackend",
+                  "guiGoalCompleted",
+                  "readModelGoalCompleted",
               ]
         : [
             "usedCurrentTurnCancel",
@@ -3284,6 +3743,7 @@ async function run() {
             "goalManagedObjectiveReachedBackend",
             "guiGoalCompleted",
             "readModelGoalCompleted",
+            ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
           ];
     const assertions = {
       ...commonAssertions,

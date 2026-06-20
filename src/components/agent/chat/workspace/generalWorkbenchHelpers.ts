@@ -833,11 +833,36 @@ export function isGeneralWorkbenchPrimaryDocumentArtifact(
   return isPrimaryResultDocumentPath(fileName);
 }
 
+const DOCUMENT_FILE_EXTENSIONS = new Set([
+  "csv",
+  "doc",
+  "docx",
+  "htm",
+  "html",
+  "json",
+  "md",
+  "mdx",
+  "odt",
+  "pdf",
+  "ppt",
+  "pptx",
+  "rtf",
+  "text",
+  "toml",
+  "tsv",
+  "txt",
+  "xls",
+  "xlsx",
+  "xml",
+  "yaml",
+  "yml",
+]);
+
 function inferTaskFileType(fileName: string): TaskFile["type"] {
   const normalized = fileName.trim().toLowerCase();
   const extension = normalized.split(".").pop() || "";
 
-  if (extension === "md" || extension === "markdown" || extension === "txt") {
+  if (DOCUMENT_FILE_EXTENSIONS.has(extension)) {
     return "document";
   }
   if (

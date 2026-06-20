@@ -1,4 +1,4 @@
-import type { ToolDisplayConfig } from "../toolDisplayTypes";
+import type { ToolDisplayConfig } from "./toolDisplayTypes";
 import { CORE_EXACT_TOOL_CONFIGS } from "./toolDisplayConfig/core";
 import { CONTENT_EXACT_TOOL_CONFIGS } from "./toolDisplayConfig/content";
 import { SITE_EXACT_TOOL_CONFIGS } from "./toolDisplayConfig/site";

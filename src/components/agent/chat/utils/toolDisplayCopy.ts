@@ -118,6 +118,10 @@ const TOOL_DISPLAY_LABEL_KEYS: Record<string, string> = {
   工作区同步: "toolCall.label.workspaceSync",
   计划: "toolCall.label.plan",
   搜索: "toolCall.label.search",
+  记忆列表: "toolCall.label.memoryList",
+  记忆读取: "toolCall.label.memoryRead",
+  记忆搜索: "toolCall.label.memorySearch",
+  记忆修正: "toolCall.label.memoryAddNote",
 };
 
 const TOOL_DISPLAY_GROUP_TITLE_KEYS: Record<string, string> = {
@@ -149,6 +153,7 @@ const TOOL_DISPLAY_GROUP_TITLE_KEYS: Record<string, string> = {
   站点: "toolCall.groupTitle.site",
   浏览器: "toolCall.groupTitle.browser",
   工作区: "toolCall.groupTitle.workspace",
+  记忆: "toolCall.groupTitle.memory",
   工具: "toolCall.groupTitle.generic",
 };
 
@@ -313,6 +318,18 @@ const TOOL_DISPLAY_ACTION_OVERRIDE_KEYS: Record<string, string> = {
   获取日志失败: "toolCall.actionOverride.getLog.failed",
   已获取日志: "toolCall.actionOverride.getLog.completed",
   获取日志中: "toolCall.actionOverride.getLog.running",
+  记忆列表读取失败: "toolCall.actionOverride.memoryList.failed",
+  已查看记忆列表: "toolCall.actionOverride.memoryList.completed",
+  正在查看记忆列表: "toolCall.actionOverride.memoryList.running",
+  记忆读取失败: "toolCall.actionOverride.memoryRead.failed",
+  已读取记忆: "toolCall.actionOverride.memoryRead.completed",
+  正在读取记忆: "toolCall.actionOverride.memoryRead.running",
+  记忆搜索失败: "toolCall.actionOverride.memorySearch.failed",
+  已搜索记忆: "toolCall.actionOverride.memorySearch.completed",
+  正在搜索记忆: "toolCall.actionOverride.memorySearch.running",
+  记忆修正保存失败: "toolCall.actionOverride.memoryAddNote.failed",
+  已保存记忆修正: "toolCall.actionOverride.memoryAddNote.completed",
+  正在保存记忆修正: "toolCall.actionOverride.memoryAddNote.running",
 };
 
 const USER_FACING_TOOL_LABEL_KEYS: Record<string, string> = {

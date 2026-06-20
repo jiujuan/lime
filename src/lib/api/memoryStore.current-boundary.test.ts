@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { cwd } from "node:process";
 import { describe, expect, it } from "vitest";
@@ -8,8 +8,12 @@ const CURRENT_MEMORY_STORE_METHODS = [
   "memoryStore/read",
   "memoryStore/search",
   "memoryStore/addNote",
+  "memoryStore/consolidate",
+  "memoryStore/review/list",
+  "memoryStore/review/resolve",
   "memoryStore/health",
   "memoryStore/reset",
+  "memoryStore/index/rebuild",
 ];
 
 const CURRENT_MEMORY_STORE_METHOD_CONSTANTS = [
@@ -17,8 +21,12 @@ const CURRENT_MEMORY_STORE_METHOD_CONSTANTS = [
   "METHOD_MEMORY_STORE_READ",
   "METHOD_MEMORY_STORE_SEARCH",
   "METHOD_MEMORY_STORE_ADD_NOTE",
+  "METHOD_MEMORY_STORE_CONSOLIDATE",
+  "METHOD_MEMORY_STORE_REVIEW_LIST",
+  "METHOD_MEMORY_STORE_REVIEW_RESOLVE",
   "METHOD_MEMORY_STORE_HEALTH",
   "METHOD_MEMORY_STORE_RESET",
+  "METHOD_MEMORY_STORE_INDEX_REBUILD",
 ];
 
 const CURRENT_MEMORY_STORE_FRONTEND_EXPORTS = [
@@ -26,8 +34,12 @@ const CURRENT_MEMORY_STORE_FRONTEND_EXPORTS = [
   "readMemoryStore",
   "searchMemoryStore",
   "addMemoryStoreNote",
+  "consolidateMemoryStore",
+  "listMemoryStoreReviewNotes",
+  "resolveMemoryStoreReviewNote",
   "getMemoryStoreHealth",
   "resetMemoryStore",
+  "rebuildMemoryStoreIndex",
 ];
 
 const RETIRED_MEMORY_API_SNIPPETS = [
@@ -44,6 +56,8 @@ const RETIRED_MEMORY_API_SNIPPETS = [
 ];
 
 const RETIRED_MEMORY_FILES = [
+  "src/lib/api/memory.ts",
+  "src/lib/api/memory.test.ts",
   "src/lib/api/unifiedMemory.ts",
   "src/lib/api/unifiedMemory.test.ts",
   "src/lib/api/memoryRuntime.ts",
@@ -111,24 +125,6 @@ function repoPathExists(path: string): boolean {
   return existsSync(resolve(cwd(), path));
 }
 
-function listRepoFiles(path: string): string[] {
-  const absolutePath = resolve(cwd(), path);
-  if (!existsSync(absolutePath)) {
-    return [];
-  }
-  const stat = statSync(absolutePath);
-  if (!stat.isDirectory()) {
-    return [path];
-  }
-  return readdirSync(absolutePath, { withFileTypes: true }).flatMap((entry) => {
-    const entryPath = `${path}/${entry.name}`;
-    if (entry.isDirectory()) {
-      return listRepoFiles(entryPath);
-    }
-    return [entryPath];
-  });
-}
-
 function expectSnippetsAbsent(source: string, snippets: string[]): void {
   for (const snippet of snippets) {
     expect(source).not.toContain(snippet);
@@ -179,10 +175,10 @@ describe("memoryStore current App Server boundary", () => {
     expect(restoredFiles).toEqual([]);
   });
 
-  it("旧记忆与旧灵感库目录不再包含实现文件", () => {
-    const restoredFiles = RETIRED_MEMORY_DIRECTORIES.flatMap(listRepoFiles);
+  it("旧记忆与旧灵感库目录保持 deleted / forbidden-to-restore", () => {
+    const restoredDirectories = RETIRED_MEMORY_DIRECTORIES.filter(repoPathExists);
 
-    expect(restoredFiles).toEqual([]);
+    expect(restoredDirectories).toEqual([]);
   });
 
   it("旧 MemoryPage 记忆库 i18n 资源不得回流", () => {
@@ -217,5 +213,38 @@ describe("memoryStore current App Server boundary", () => {
     for (const retiredFile of RETIRED_MEMORY_FILES) {
       expect(source).toContain(`"${retiredFile}"`);
     }
+  });
+
+  it("开发守卫和续测指南不得把旧记忆网关或旧灵感库当 current 入口", () => {
+    const eslintSource = readRepoFile("eslint.config.js");
+    const playwrightGuide = readRepoFile("internal/aiprompts/playwright-e2e.md");
+    const memoryGuide = readRepoFile("internal/aiprompts/memory-compaction.md");
+
+    expect(eslintSource).not.toContain(
+      "通过 `src/lib/api/memory.ts` 暴露的网关函数调用",
+    );
+    expect(eslintSource).not.toContain(
+      "通过 `src/lib/api/memoryRuntime.ts` 暴露的网关函数调用",
+    );
+    expect(eslintSource).not.toContain(
+      "通过 `src/lib/api/memoryFeedback.ts` 暴露的网关函数调用",
+    );
+    expect(eslintSource).not.toContain(
+      "通过 `src/lib/api/contextMemory.ts` 暴露的网关函数调用",
+    );
+    expect(eslintSource).not.toContain('"src/lib/api/memory.ts"');
+    expect(eslintSource).not.toContain('"src/lib/api/memoryRuntime.ts"');
+    expect(eslintSource).not.toContain('"src/lib/api/memoryFeedback.ts"');
+    expect(eslintSource).not.toContain('"src/lib/api/contextMemory.ts"');
+
+    expect(playwrightGuide).toContain("### 记忆设置验证");
+    expect(playwrightGuide).toContain("设置");
+    expect(playwrightGuide).toContain("日常记忆");
+    expect(playwrightGuide).not.toContain("### 记忆工作台验证");
+    expect(playwrightGuide).not.toContain("从左侧导航进入 `灵感库`");
+    expect(playwrightGuide).not.toContain("打开 `长期记忆`");
+
+    expect(memoryGuide).toContain("src/lib/api/memoryConfigTypes.ts");
+    expect(memoryGuide).not.toContain("src/lib/api/memoryRuntimeTypes.ts");
   });
 });

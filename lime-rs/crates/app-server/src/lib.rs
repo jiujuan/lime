@@ -127,6 +127,7 @@ pub use knowledge_builder_runtime::NativeKnowledgeBuilderRuntimeExecutor;
 pub use local_data_source::LocalAppDataSource;
 pub use memory_store::LocalMemoryBackend;
 pub use memory_store::MemoryBackend;
+pub use memory_store::RolloutSummaryWriteParams;
 use processor::event_notification_jsonrpc;
 use processor::RequestProcessor;
 pub use runtime::ActionRespondRequest;

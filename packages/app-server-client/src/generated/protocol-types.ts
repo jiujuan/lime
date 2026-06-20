@@ -312,6 +312,15 @@ export interface AgentSessionCompactResponse {
   turns?: AgentTurn[];
 }
 
+export interface AgentSessionDeleteParams {
+  sessionId: string;
+}
+
+export interface AgentSessionDeleteResponse {
+  deleted: boolean;
+  sessionId: string;
+}
+
 export interface AgentSessionEventParams {
   event: AgentEvent;
 }
@@ -2142,6 +2151,24 @@ export interface MemoryStoreCitation {
   startLineNumber: number;
 }
 
+export interface MemoryStoreConsolidateParams {
+  maxNotes?: number | null;
+  scope?: MemoryStoreScope;
+  workspaceRoot?: null | string;
+}
+
+export interface MemoryStoreConsolidateResponse {
+  archivedNotes: number;
+  memoryPath: string;
+  processedNotes: number;
+  rootPath: string;
+  rootScope: MemoryStoreScope;
+  skippedNotes: number;
+  summaryPath: string;
+  updated: boolean;
+  warnings?: string[];
+}
+
 export interface MemoryStoreEntry {
   entryType: string;
   modifiedAt: number;
@@ -2160,6 +2187,18 @@ export interface MemoryStoreHealthResponse {
   summaryBytes: number;
   summaryExists: boolean;
   totalBytes: number;
+}
+
+export interface MemoryStoreIndexRebuildResponse {
+  indexedAt: string;
+  manifestPath: string;
+  rebuilt: boolean;
+  rootPath: string;
+  rootScope: MemoryStoreScope;
+  schemaVersion: string;
+  sourceChecksum: string;
+  sourceFileCount: number;
+  sourceTotalBytes: number;
 }
 
 export interface MemoryStoreListParams {
@@ -2206,6 +2245,49 @@ export interface MemoryStoreResetResponse {
   removedFiles: number;
   rootPath: string;
   rootScope: MemoryStoreScope;
+}
+
+export interface MemoryStoreReviewListParams {
+  cursor?: null | string;
+  maxResults?: number | null;
+  scope?: MemoryStoreScope;
+  workspaceRoot?: null | string;
+}
+
+export interface MemoryStoreReviewListResponse {
+  nextCursor?: null | string;
+  notes?: MemoryStoreReviewNote[];
+  rootPath: string;
+  rootScope: MemoryStoreScope;
+  truncated: boolean;
+}
+
+export interface MemoryStoreReviewNote {
+  citation: MemoryStoreCitation;
+  modifiedAt: number;
+  path: string;
+  preview: string;
+  size: number;
+}
+
+export type MemoryStoreReviewResolveAction = "accept" | "reject";
+
+export interface MemoryStoreReviewResolveParams {
+  action: MemoryStoreReviewResolveAction;
+  path: string;
+  scope?: MemoryStoreScope;
+  workspaceRoot?: null | string;
+}
+
+export interface MemoryStoreReviewResolveResponse {
+  action: MemoryStoreReviewResolveAction;
+  archivedPath: string;
+  memoryPath: string;
+  rootPath: string;
+  rootScope: MemoryStoreScope;
+  sourcePath: string;
+  summaryPath: string;
+  updated: boolean;
 }
 
 export interface MemoryStoreRootParams {

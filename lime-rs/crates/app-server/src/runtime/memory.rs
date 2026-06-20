@@ -37,6 +37,31 @@ impl RuntimeCore {
         self.app_data_source.add_memory_store_note(params).await
     }
 
+    pub async fn consolidate_memory_store(
+        &self,
+        params: MemoryStoreConsolidateParams,
+    ) -> Result<MemoryStoreConsolidateResponse, RuntimeCoreError> {
+        self.app_data_source.consolidate_memory_store(params).await
+    }
+
+    pub async fn list_memory_store_review_notes(
+        &self,
+        params: MemoryStoreReviewListParams,
+    ) -> Result<MemoryStoreReviewListResponse, RuntimeCoreError> {
+        self.app_data_source
+            .list_memory_store_review_notes(params)
+            .await
+    }
+
+    pub async fn resolve_memory_store_review_note(
+        &self,
+        params: MemoryStoreReviewResolveParams,
+    ) -> Result<MemoryStoreReviewResolveResponse, RuntimeCoreError> {
+        self.app_data_source
+            .resolve_memory_store_review_note(params)
+            .await
+    }
+
     pub async fn health_memory_store(
         &self,
         params: MemoryStoreRootParams,
@@ -49,5 +74,14 @@ impl RuntimeCore {
         params: MemoryStoreResetParams,
     ) -> Result<MemoryStoreResetResponse, RuntimeCoreError> {
         self.app_data_source.reset_memory_store(params).await
+    }
+
+    pub async fn rebuild_memory_store_index(
+        &self,
+        params: MemoryStoreRootParams,
+    ) -> Result<MemoryStoreIndexRebuildResponse, RuntimeCoreError> {
+        self.app_data_source
+            .rebuild_memory_store_index(params)
+            .await
     }
 }

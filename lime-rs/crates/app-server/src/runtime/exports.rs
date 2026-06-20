@@ -29,6 +29,8 @@ use app_server_protocol::ArtifactSummary;
 use app_server_protocol::EvidenceExportParams;
 use app_server_protocol::EvidenceExportResponse;
 use app_server_protocol::EvidencePackSummary;
+use app_server_protocol::MemoryStoreRootParams;
+use app_server_protocol::MemoryStoreScope;
 use lime_infra::telemetry::RequestLog;
 use std::fs;
 
@@ -290,6 +292,18 @@ impl RuntimeCore {
             )?,
         ];
 
+        self.write_export_rollout_summary_candidate(
+            &read,
+            &metrics,
+            &recent_artifacts,
+            &workspace_root,
+            &exported_at,
+            &bundle_relative_root,
+            "handoff_bundle",
+            "agentSession/handoffBundle/export",
+        )
+        .await?;
+
         Ok(AgentSessionHandoffBundleExportResponse {
             session_id: read.session.session_id,
             thread_id: read.session.thread_id,
@@ -376,6 +390,18 @@ impl RuntimeCore {
             )?,
         ];
 
+        self.write_export_rollout_summary_candidate(
+            &read,
+            &metrics,
+            &recent_artifacts,
+            &workspace_root,
+            &exported_at,
+            &replay_relative_root,
+            "replay_case",
+            METHOD,
+        )
+        .await?;
+
         Ok(AgentSessionReplayCaseExportResponse {
             session_id: read.session.session_id,
             thread_id: read.session.thread_id,
@@ -451,6 +477,18 @@ impl RuntimeCore {
             )?,
         ];
 
+        self.write_export_rollout_summary_candidate(
+            &read,
+            &metrics,
+            &recent_artifacts,
+            &workspace_root,
+            &exported_at,
+            &analysis_relative_root,
+            "analysis_handoff",
+            METHOD,
+        )
+        .await?;
+
         Ok(AgentSessionAnalysisHandoffExportResponse {
             session_id: read.session.session_id,
             thread_id: read.session.thread_id,
@@ -471,6 +509,39 @@ impl RuntimeCore {
             copy_prompt,
             artifacts,
         })
+    }
+
+    async fn write_export_rollout_summary_candidate(
+        &self,
+        read: &app_server_protocol::AgentSessionReadResponse,
+        metrics: &HandoffMetrics,
+        recent_artifacts: &[HandoffRecentArtifact],
+        workspace_root: &std::path::Path,
+        exported_at: &str,
+        export_relative_root: &str,
+        export_kind: &str,
+        source_method: &str,
+    ) -> Result<(), RuntimeCoreError> {
+        self.app_data_source
+            .write_memory_rollout_summary(crate::RolloutSummaryWriteParams {
+                root: MemoryStoreRootParams {
+                    scope: MemoryStoreScope::Workspace,
+                    workspace_root: Some(workspace_root.to_string_lossy().to_string()),
+                },
+                title: format!("{export_kind}-{}", read.session.session_id),
+                source: source_method.to_string(),
+                exported_at: exported_at.to_string(),
+                content: build_rollout_summary_candidate_markdown(
+                    read,
+                    metrics,
+                    recent_artifacts,
+                    exported_at,
+                    export_relative_root,
+                    export_kind,
+                ),
+            })
+            .await?;
+        Ok(())
     }
 
     pub async fn export_review_decision_template(
@@ -519,6 +590,7 @@ impl RuntimeCore {
         let workspace_root = canonical_runtime_export_workspace_root(&read, method)?;
         let exported_at = timestamp();
         let metrics = handoff_metrics(&read);
+        let recent_artifacts = handoff_recent_artifacts(&read);
         let (handoff_relative_root, evidence_relative_root, replay_relative_root) =
             runtime_export_base_roots(&session_id);
         let (analysis_relative_root, analysis_absolute_root) =
@@ -551,12 +623,7 @@ impl RuntimeCore {
                 ANALYSIS_BRIEF_FILE_NAME,
                 "analysis_brief",
                 "Analysis brief",
-                build_analysis_brief_markdown(
-                    &read,
-                    &metrics,
-                    &handoff_recent_artifacts(&read),
-                    &exported_at,
-                ),
+                build_analysis_brief_markdown(&read, &metrics, &recent_artifacts, &exported_at),
             )?,
         ];
         let artifacts = vec![
@@ -589,6 +656,20 @@ impl RuntimeCore {
                 )?,
             )?,
         ];
+
+        if saving {
+            self.write_export_rollout_summary_candidate(
+                &read,
+                &metrics,
+                &recent_artifacts,
+                &workspace_root,
+                &exported_at,
+                &review_relative_root,
+                "review_decision",
+                method,
+            )
+            .await?;
+        }
 
         Ok(AgentSessionReviewDecisionTemplateExportResponse {
             session_id: read.session.session_id,

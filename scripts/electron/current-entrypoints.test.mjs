@@ -235,13 +235,48 @@ describe("Electron current package entrypoints", () => {
 
   it("Electron smoke gates Claw workbench shell and composer readiness", () => {
     const mainContent = readFile("electron/main.ts");
+    const memorySmokeContent = readFile("electron/smokeMemorySettings.ts");
     const smokeScript = readFile("scripts/electron/smoke.mjs");
 
     expect(mainContent).toContain("waitForElectronSmokeWorkbenchReady");
+    expect(mainContent).toContain("waitForElectronSmokeMemorySettingsReady");
     expect(mainContent).toContain('[data-testid="workspace-shell-scene"]');
     expect(mainContent).toContain('[data-testid="inputbar-core-container"]');
     expect(mainContent).toContain('textarea[name="agent-chat-message"]');
     expect(mainContent).toContain("claw workbench shell ready");
+    expect(mainContent).toContain("memory settings ready");
+    expect(memorySmokeContent).toContain(
+      '[data-testid="app-sidebar-account-model-settings"]',
+    );
+    expect(memorySmokeContent).toContain(
+      '[data-testid="settings-sidebar-tab-memory"]',
+    );
+    expect(memorySmokeContent).toContain(
+      '[data-testid="settings-memory-store-panel"]',
+    );
+    expect(memorySmokeContent).toContain(
+      '[data-testid="settings-memory-review-refresh"]',
+    );
+    expect(memorySmokeContent).toContain(
+      '[data-testid="settings-memory-index-rebuild"]',
+    );
+    expect(memorySmokeContent).toContain(
+      '[data-testid="settings-memory-consolidate"]',
+    );
+    expect(memorySmokeContent).toContain(
+      '[data-testid="settings-memory-rollout-refresh"]',
+    );
+    expect(memorySmokeContent).toContain(
+      '[data-testid="settings-memory-rollout-consolidate"]',
+    );
+    expect(memorySmokeContent).toContain(
+      '[data-testid="settings-memory-soul-panel"]',
+    );
+    expect(memorySmokeContent).toContain(
+      '[data-testid="settings-memory-advanced-panel"]',
+    );
+    expect(memorySmokeContent).toContain("/灵感库/");
+    expect(memorySmokeContent).toContain("/MemoryPage/");
     expect(mainContent).not.toContain('"agentSession/turn/start"');
     expect(mainContent).not.toContain('"test_api_key_provider_chat"');
     expect(smokeScript).toContain("mkdtempSync");

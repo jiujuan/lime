@@ -1,7 +1,7 @@
 import React from "react";
 import { FolderOpen } from "lucide-react";
 import type { ChatInputAdapter } from "@/components/input-kit/adapters/types";
-import type { Character } from "@/lib/api/memory";
+import type { Character } from "@/lib/api/projectMemory";
 import type {
   AsterSessionExecutionRuntime,
   QueuedTurnSnapshot,

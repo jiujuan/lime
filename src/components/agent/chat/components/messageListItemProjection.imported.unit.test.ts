@@ -11,6 +11,7 @@ function buildImportedProjection(
     {
       id: "command-codex-import",
       type: "command_execution",
+      thread_id: "thread-imported-history",
       turn_id: "turn-imported-history",
       sequence: 1,
       command: "npm test",
@@ -29,6 +30,7 @@ function buildImportedProjection(
     {
       id: "assistant-codex-import-final",
       type: "agent_message",
+      thread_id: "thread-imported-history",
       turn_id: "turn-imported-history",
       sequence: 2,
       phase: "final_answer",
@@ -102,7 +104,7 @@ describe("messageListItemProjection imported history", () => {
     });
   });
 
-  it("本地历史导入命令即使没有额外助手过程文本也应显示为过程记录", () => {
+  it("本地历史导入命令没有额外助手过程文本时应保留过程记录和最终正文", () => {
     const projection = buildImportedProjection(
       {
         id: "assistant-codex-import-command-only",
@@ -114,6 +116,7 @@ describe("messageListItemProjection imported history", () => {
         {
           id: "command-codex-import",
           type: "command_execution",
+          thread_id: "thread-imported-history",
           turn_id: "turn-imported-history",
           sequence: 1,
           command: "npm test",
@@ -134,6 +137,7 @@ describe("messageListItemProjection imported history", () => {
 
     expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
       "tool_use",
+      "text",
     ]);
     expect(projection.rendererContentParts?.[0]).toMatchObject({
       type: "tool_use",
@@ -147,6 +151,10 @@ describe("messageListItemProjection imported history", () => {
           },
         },
       },
+    });
+    expect(projection.rendererContentParts?.[1]).toEqual({
+      type: "text",
+      text: "已完成修复。",
     });
   });
 });

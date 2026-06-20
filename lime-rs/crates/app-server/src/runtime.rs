@@ -9,6 +9,8 @@ mod backend;
 mod capabilities;
 mod coding_activity_projection;
 mod connect;
+mod context_compaction;
+mod context_packet;
 mod conversation_import;
 mod diagnostics;
 mod event_log;

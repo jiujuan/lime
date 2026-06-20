@@ -46,6 +46,7 @@ describe("messageListItemProjection timeline", () => {
       {
         id: "assistant-commentary-intro",
         type: "agent_message",
+        thread_id: "thread-commentary-process-final",
         turn_id: "turn-commentary-process-final",
         sequence: 1,
         phase: "commentary",
@@ -58,6 +59,7 @@ describe("messageListItemProjection timeline", () => {
       {
         id: "command-list-project",
         type: "command_execution",
+        thread_id: "thread-commentary-process-final",
         turn_id: "turn-commentary-process-final",
         sequence: 2,
         command: "ls -la /repo",
@@ -72,6 +74,7 @@ describe("messageListItemProjection timeline", () => {
       {
         id: "assistant-final-answer",
         type: "agent_message",
+        thread_id: "thread-commentary-process-final",
         turn_id: "turn-commentary-process-final",
         sequence: 3,
         phase: "final_answer",

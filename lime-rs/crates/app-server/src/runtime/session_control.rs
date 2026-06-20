@@ -71,6 +71,13 @@ impl RuntimeCore {
         )?;
         self.ensure_current_session_hydrated(&session_id).await?;
         let (session, turns) = self.session_snapshot(&session_id)?;
+        let existing_events = self.events_for_session(&session_id)?;
+        let compaction = super::context_compaction::build_session_context_compaction(
+            &session,
+            &turns,
+            &existing_events,
+            self.sidecar_store.as_deref(),
+        )?;
         let event_name = params
             .event_name
             .as_deref()
@@ -87,6 +94,9 @@ impl RuntimeCore {
                     json!({
                         "source": "agentSession/compact",
                         "eventName": event_name,
+                        "compactionId": compaction.compaction_id,
+                        "contextEpoch": compaction.context_epoch,
+                        "tailStartTurnId": compaction.tail_start_turn_id,
                         "turnCount": turns.len(),
                         "trigger": "manual",
                     }),
@@ -96,9 +106,14 @@ impl RuntimeCore {
                     json!({
                         "source": "agentSession/compact",
                         "eventName": event_name,
+                        "compactionId": compaction.compaction_id,
+                        "contextEpoch": compaction.context_epoch,
+                        "tailStartTurnId": compaction.tail_start_turn_id,
                         "turnCount": turns.len(),
                         "trigger": "manual",
-                        "summary": "App Server current compaction checkpoint recorded.",
+                        "summary": compaction.summary,
+                        "artifact": compaction.artifact,
+                        "sidecarRef": compaction.sidecar_ref,
                     }),
                 ),
             ],

@@ -1,6 +1,6 @@
 # Turn / Tool 生命周期实施计划
 
-> 状态：in-progress
+> 状态：已完成当前阶段
 > 更新时间：2026-06-19
 > 作用：把 turn/item 重构拆成可执行阶段，保证每一刀都服务 current 主链。
 
@@ -39,7 +39,7 @@
 
 ## 3. P1 Rust 事件转换链收敛
 
-状态：部分完成。
+状态：已完成当前阶段。
 
 目标：让后端源头不再为同一工具调用输出两套并列事实。
 
@@ -62,15 +62,19 @@
 
 1. [已完成] Aster `TurnItemRuntimeProjector` 已把 `MessageContent::ToolRequest / ToolResponse` 投影为 `ItemStarted / ItemCompleted`，tool id 直接复用 tool request id。
 2. [已完成] `RequestToolPolicy` 已优先消费 `ItemStarted / ItemUpdated / ItemCompleted` 的 `ToolCall` item，并把 legacy `ToolStart / ToolEnd` 作为兼容 fallback；late legacy terminal 不覆盖 item terminal。
-3. [待完成] legacy `ToolStart / ToolEnd` 仍保留给 coding mirror、tool delta lifecycle 和外部兼容，后续只能继续收缩 GUI current 引用，不能直接删除 operational stream。
+3. [已完成当前阶段] legacy `ToolStart / ToolEnd` 仍保留给 coding mirror、tool delta lifecycle 和外部兼容，但 `MessageContent::ToolResponse` 派生出的 legacy `ToolEnd.result.metadata` 已强制标记 `source=legacy_message_tool_response`、`sourceType=tool_end`、`compat=true`、`canonical=false`；`ToolStart` 不扩协议字段，继续由 item lifecycle / contract / GUI projection 限制为 compat operational stream，不能作为 current 事实源。
 
 证据：
 
 ```bash
 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent event_converter -- --nocapture
 ```
 
-结果：`48 passed`，覆盖 `tracker_accepts_required_websearch_from_item_lifecycle`、`tracker_keeps_item_terminal_when_late_legacy_tool_end_conflicts`、`web_search_synthesis_boundary_accepts_item_lifecycle_counts`。
+结果：
+
+- `request_tool_policy`：`48 passed`，覆盖 `tracker_accepts_required_websearch_from_item_lifecycle`、`tracker_keeps_item_terminal_when_late_legacy_tool_end_conflicts`、`web_search_synthesis_boundary_accepts_item_lifecycle_counts`。
+- `event_converter`：`32 passed`，覆盖 `test_convert_message_tool_response_marks_legacy_tool_end_as_compat`、`test_convert_failed_message_tool_response_marks_legacy_tool_end_as_compat`，并补齐 RMCP `_meta` metadata 提取，确保工具自有 metadata 可保留但不能把 legacy `ToolEnd` 冒充 canonical item。
 
 ## 4. P2 App Server read model item-first
 
@@ -109,7 +113,7 @@ cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server runtime::tests::re
 
 ## 5. P3 前端 projection item-first
 
-状态：当前前端投影阶段已完成，后续继续把后端/read model 与前端 projection store 更系统地收窄到 item-first。
+状态：已完成当前阶段；后续仅保留更系统收窄后端/read model 与前端 projection store 的长期治理项。
 
 目标：前端工具卡由 `threadItemProjection` 驱动，legacy tool projection 只补细节。
 
@@ -199,7 +203,7 @@ Codex 参考事实：
 
 ## 6. P4 策略与治理收口
 
-状态：部分完成。
+状态：已完成当前阶段。
 
 目标：封住旧策略和旧事实源回流。
 
@@ -216,7 +220,7 @@ Codex 参考事实：
 1. [已完成] `message_requires_fresh_web_search` 与 `mode_default=true` 回流由 `scripts/check-app-server-client-contract.mjs` 阻断。
 2. [已完成] `RequestToolPolicy` item-first tracker 守卫已纳入 contract，避免策略重新只依赖 legacy `ToolStart / ToolEnd`。
 3. [已完成] `npm run test:contracts` 通过，生产 mock fallback 扫描仍为 `mock priority commands: 0`。
-4. [待完成] 前端 projection 的 legacy `tool.*` 展示残留仍需继续按 P3 收缩。
+4. [已完成当前阶段] 前端 projection 的 legacy `tool.*` 展示残留已被 contract 守住：`MessageList` 只有在没有真实 process timeline item 时才允许 `message.toolCalls` 作为 compat fallback；timeline 已有 `tool / plan / reasoning / context` 等过程项时不得并列渲染第二套 legacy 工具过程。
 
 ## 7. P5 真实 GUI / E2E 验收
 
@@ -249,8 +253,13 @@ Codex 参考事实：
 4. [已完成] `npm run smoke:claw-chat-ready-streaming -- --timeout-ms 180000` 通过，真实 provider `custom-cb381b4f-d2fa-4eff-ba22-c867c38ba8d3 / gpt-5.5`，WebSearch 与 WebFetch 均出现 started/result，turn completed，无 runtime mock fallback。
 5. [已完成] 最新截图 `.lime/qc/gui-evidence/claw-chat-ready-streaming/claw-chat-ready-streaming-05-live-web-tools-final.png` 已人工复核：搜索工具为完成态后才出现最终答复，没有再出现“搜索中 + final 已显示”的错序。
 6. [已完成] 工具过程展示已把 WebFetch 纳入 GUI 收起摘要，最终截图可见 `已搜索网页 1 次，读取网页 1 次`；live evidence 中 WebSearch / WebFetch 均有 started/result。
-7. [待完成] 仍可继续 polish 展开态信息密度：当 WebFetch 数量较多时，考虑把“搜索来源”和“读取页面”在展开列表里分组，但不得恢复两套工具事实源。
+7. [已完成] 搜索批次展开态已把 WebSearch 来源和 WebFetch 读取页面分组展示：同一个 item-first process group 内保留可点击搜索来源，同时补充 `读取页面` 列表；没有新增第二套工具事实源，也不回退 legacy `tool.*` 主状态。
 8. [已完成] 2026-06-19 真实 live E2E 复跑通过：session `sess_c0a24b00f5e54626b36a428f06de2c2e`，live web turn `eeb72c03-efa5-408b-a907-4e874a0e70c8`；断言包含 `liveWebSearchCompleted=true`、`liveWebFetchCompleted=true`、`liveWebRequiredToolsCompleted=true`、`liveWebRequiredToolEventOrderValid=true`、`noRuntimeMockFallbackSeen=true`、`noBlockingConsoleErrors=true`。首次 live run 曾在 app-server stopping / `3030` reset 的环境准备态失败，随后 `smoke:agent-runtime-current-fixture` 与 live E2E 复跑通过，未归类为 projection 逻辑失败。
+9. [已完成] 2026-06-19 live E2E 暴露 WebFetch 工具回灌问题：session `sess_e12b8416aed3437a9543514fd05b45ca`，turn `eb0353b2-9c09-4753-af18-da7651244c32` 中 WebSearch / WebFetch 均已 completed，但 turn 仍 running；evidence 显示 WebFetch 返回 CNBC 页面时把大量 CSS / HTML 样式噪音作为工具输出回灌给模型，导致工具完成后的最终答复阶段长时间无终态。修复已落在 `WebFetchTool`：移除非内容 HTML 块、剥离 `style/class/id/aria/data/on*` 等内联噪音属性，再用 HTML parser 抽正文文本；不使用 timeout、grace timer 或 synthetic `turn.completed` 假收口。
+10. [已完成] 2026-06-19 live E2E 暴露连续 user turn 合并导致的串话：恢复回合“只输出复原完成”和下一轮 `@搜索...WebSearch/WebFetch...` 曾被 `fix_conversation -> merge_consecutive_messages` 合进同一 provider user message。修复后普通 `Role::User` 不再合并，只保留 assistant / tool effective role 合并；MOIM 改为 `agent_only()` 独立 user message，避免再依赖 user 合并把 `<info-msg>` 塞进用户原文。这与 Codex `/Users/coso/Documents/dev/rust/codex/AGENTS.md` 的 `No history rewrite - the context must be built up incrementally` 对齐。
+11. [已完成] 2026-06-19 最新真实 live E2E 通过：session `sess_de695aeb9194426f9d25f44a47ea3e83`，live web turn `2aaec918-d251-4c20-9f53-20bf068d4846`，provider `custom-cb381b4f-d2fa-4eff-ba22-c867c38ba8d3 / gpt-5.5`；summary verdict=`pass`，断言包含 `liveWebTurnCompleted=true`、`liveWebSearchCompleted=true`、`liveWebFetchCompleted=true`、`liveWebRequiredToolEventOrderValid=true`、`noRuntimeMockFallbackSeen=true`、`noBlockingConsoleErrors=true`。
+12. [已完成] 最新 request log 复核：`~/Library/Application Support/lime/aster/state/logs/llm_request.2.jsonl` 中 turn `2aaec918-d251-4c20-9f53-20bf068d4846` 的 `last_user_preview` 为纯 `@搜索...WebSearch...WebFetch...` 请求，没有拼接上一轮“复原完成”指令；同一 live evidence 的 WebFetch preview 为新华网正文片段，不再出现 `mask-image`、`wp-block`、`data:image`、`aria-label` 等 HTML/CSS 噪音。
+13. [已完成] 中间失败已分类：一次是 provider 首进度超时，read model 仍停在 `running item_count=0`，不是 WebFetch completed 后卡住；一次是 smoke 对恢复结果计数过严，GUI 已显示一次“复原完成”却要求 `recoveryTextCount >= 2`。smoke 已改为 `recoveryResultVisible()`，恢复结果可见一次或已持久化即可通过。
 
 ## 8. 风险与处理
 
@@ -260,7 +269,9 @@ Codex 参考事实：
 | 历史数据只有 legacy tool event | 老会话工具卡缺失 | synthetic item fallback，标记 legacy source |
 | 前端 active buffer 与 history hydrate 竞争 | 回复截断或重复 | 按 turn/item key merge，terminal item 优先 |
 | WebSearch 循环太久 | 用户感觉卡住 | item started/progress 可见，策略只做证据收口，不用 timeout 假完成 |
+| WebFetch 回灌整页样式噪音 | 工具 completed 后最终模型请求长时间无输出 | 清洗 HTML 非内容块并按 prompt 裁剪工具结果，不合成 terminal event |
 | 多模型 tool schema 不同 | arguments/output 形状不一致 | adapter 归一化为 `tool_call` item payload |
+| `web.rs` 超大文件继续膨胀 | 单文件职责过重，后续修改风险高 | 已拆出 `web_fetch_content.rs` 承接 WebFetch HTML 清洗、正文抽取和相关片段过滤；`web.rs` 仍约 2729 行，后续只应继续拆 WebSearch provider / search result formatting 等剩余职责 |
 
 ## 9. 退出条件
 

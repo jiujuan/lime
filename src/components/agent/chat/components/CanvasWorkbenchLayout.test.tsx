@@ -453,7 +453,115 @@ describe("CanvasWorkbenchLayout", () => {
     ).toContain("imported-attachment.png");
   });
 
+  it("当前停在图片附件时，previewOpenRequest 应切到导入 Markdown artifact", async () => {
+    const imageArtifact = createArtifact(
+      "preview-session-file-image",
+      "/tmp/attachment-1.png",
+      "asset://attachment-1.png",
+      70,
+    );
+    imageArtifact.meta = {
+      ...imageArtifact.meta,
+      previewArtifact: true,
+      isSourceBacked: true,
+      source: "session_file",
+      sourceRef: "/tmp/attachment-1.png",
+      sourcePath: "/tmp/attachment-1.png",
+      contentKind: "image",
+      renderMode: "media",
+      previewUrl: "asset://attachment-1.png",
+      openedFrom: "message-attachment",
+    };
+    const markdownArtifact = createArtifact(
+      "preview-imported-markdown",
+      "/tmp/imported-preview.md",
+      "# 导入会话 Markdown 预览内容\n\n文件打开链路进入 Artifact Workbench。",
+      80,
+    );
+    markdownArtifact.meta = {
+      ...markdownArtifact.meta,
+      previewArtifact: true,
+      isSourceBacked: true,
+      source: "file",
+      sourceRef: "/tmp/imported-preview.md",
+      sourcePath: "/tmp/imported-preview.md",
+      filePath: "/tmp/imported-preview.md",
+      contentKind: "markdown",
+      renderMode: "inline",
+      openedFrom: "general-workbench-file",
+    };
+
+    const onPreviewOpenRequestHandled = vi.fn();
+    const container = mount({
+      artifacts: [imageArtifact, markdownArtifact],
+      canvasState: null,
+      taskFiles: [],
+      workspaceRoot: "/workspace",
+      workspaceUnavailable: false,
+      defaultPreview: {
+        selectionKey: "artifact:preview-session-file-image",
+        title: "attachment-1",
+        content: "asset://attachment-1.png",
+        filePath: "/tmp/attachment-1.png",
+        absolutePath: "/tmp/attachment-1.png",
+        previousContent: null,
+      } satisfies CanvasWorkbenchDefaultPreview,
+      loadFilePreview: vi.fn(async (path: string) => ({
+        path,
+        content: null,
+        isBinary: true,
+        size: 0,
+        error: null,
+      })),
+      onOpenPath: vi.fn(async () => undefined),
+      onRevealPath: vi.fn(async () => undefined),
+      previewOpenRequest: {
+        requestKey: 12,
+        filePath: "/tmp/imported-preview.md",
+        selectionKey: "artifact:preview-imported-markdown",
+      },
+      onPreviewOpenRequestHandled,
+    });
+
+    await flushEffects();
+
+    expect(onPreviewOpenRequestHandled).toHaveBeenCalledWith(12);
+    expect(
+      container.querySelector(
+        '[data-testid="canvas-workbench-markdown-preview"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid="canvas-workbench-preview-mode-panel"]',
+      )?.textContent,
+    ).toContain("导入会话 Markdown 预览内容");
+    expect(
+      container.querySelector(
+        '[data-testid="canvas-workbench-preview-mode-panel"]',
+      )?.textContent,
+    ).not.toContain("attachment-1.png");
+  });
+
   it("previewOpenRequest 早于 artifact 入库时应等待选择上下文命中再确认并切到 HTML 预览", async () => {
+    const imageArtifact = createArtifact(
+      "preview-session-file-image-before-html",
+      "/tmp/attachment-before-html.png",
+      "asset://attachment-before-html.png",
+      70,
+    );
+    imageArtifact.meta = {
+      ...imageArtifact.meta,
+      previewArtifact: true,
+      isSourceBacked: true,
+      source: "session_file",
+      sourceRef: "/tmp/attachment-before-html.png",
+      sourcePath: "/tmp/attachment-before-html.png",
+      contentKind: "image",
+      renderMode: "media",
+      previewUrl: "asset://attachment-before-html.png",
+      openedFrom: "message-attachment",
+    };
     const artifact = createArtifact(
       "preview-imported-html",
       "/tmp/imported-preview.html",
@@ -476,12 +584,19 @@ describe("CanvasWorkbenchLayout", () => {
 
     const onPreviewOpenRequestHandled = vi.fn();
     const baseProps: CanvasWorkbenchLayoutProps = {
-      artifacts: [],
+      artifacts: [imageArtifact],
       canvasState: null,
       taskFiles: [],
       workspaceRoot: "/workspace",
       workspaceUnavailable: false,
-      defaultPreview: null,
+      defaultPreview: {
+        selectionKey: "artifact:preview-session-file-image-before-html",
+        title: "attachment-before-html",
+        content: "asset://attachment-before-html.png",
+        filePath: "/tmp/attachment-before-html.png",
+        absolutePath: "/tmp/attachment-before-html.png",
+        previousContent: null,
+      } satisfies CanvasWorkbenchDefaultPreview,
       loadFilePreview: vi.fn(async (path: string) => ({
         path,
         content: null,
@@ -506,7 +621,7 @@ describe("CanvasWorkbenchLayout", () => {
 
     harness.rerender({
       ...baseProps,
-      artifacts: [artifact],
+      artifacts: [imageArtifact, artifact],
     });
     await flushEffects();
 

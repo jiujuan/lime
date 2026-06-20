@@ -21,6 +21,7 @@ import {
   isImportedProcessMetadata,
   isImportedToolCall,
   shouldAutoExpandProcessEntries,
+  shouldSplitImportedProcessBeforeEntry,
   type StreamingProcessEntry,
 } from "./StreamingProcessGroupModel";
 import { ThinkingBlock } from "./ThinkingBlock";
@@ -1130,7 +1131,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
       (
         entries: StreamingProcessEntry[],
         key: string,
-        options?: { forceGroup?: boolean },
+        options?: { forceGroup?: boolean; isTailProcessRun?: boolean },
       ) => {
         if (entries.length === 0) {
           return null;
@@ -1164,6 +1165,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
               defaultExpanded={shouldAutoExpandProcessEntries(
                 processEntries,
                 isStreaming,
+                { isTailProcessRun: options?.isTailProcessRun === true },
               )}
               onOpenUrlPreview={onOpenUrlPreview}
               renderEntry={renderProcessEntry}
@@ -1389,14 +1391,20 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
       const nodes: React.ReactNode[] = [];
       let processBuffer: StreamingProcessEntry[] = [];
 
-      const flushProcessBuffer = (keySuffix: string) => {
+      const flushProcessBuffer = (
+        keySuffix: string,
+        options?: { isTailProcessRun?: boolean },
+      ) => {
         if (processBuffer.length === 0) {
           return;
         }
         const renderedRun = renderProcessRun(
           processBuffer,
           `interleaved-process-${keySuffix}`,
-          { forceGroup: true },
+          {
+            forceGroup: true,
+            isTailProcessRun: options?.isTailProcessRun === true,
+          },
         );
         if (renderedRun) {
           nodes.push(renderedRun);
@@ -1436,11 +1444,15 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
           if (suppressProcessFlow) {
             return;
           }
-          processBuffer.push({
+          const nextEntry: StreamingProcessEntry = {
             kind: "tool",
             id: part.toolCall.id,
             toolCall: part.toolCall,
-          });
+          };
+          if (shouldSplitImportedProcessBeforeEntry(processBuffer, nextEntry)) {
+            flushProcessBuffer(String(index));
+          }
+          processBuffer.push(nextEntry);
           return;
         }
 
@@ -1499,7 +1511,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
         }
       });
 
-      flushProcessBuffer("tail");
+      flushProcessBuffer("tail", { isTailProcessRun: true });
 
       return (
         <div className="flex flex-col gap-2">

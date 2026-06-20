@@ -80,7 +80,7 @@ import {
   getProjectMemory,
   type ProjectMemory,
   type Character,
-} from "@/lib/api/memory";
+} from "@/lib/api/projectMemory";
 import { logAgentDebug } from "@/lib/agentDebug";
 import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
 import { setActiveContentTarget } from "@/lib/activeContentTarget";
@@ -526,7 +526,7 @@ export function AgentChatWorkspace({
     dismissBrowserWorkspaceHint: handleDismissBrowserWorkspaceHint,
   } = useBrowserWorkspaceHomeHint({
     enabled: shouldUseBrowserWorkspaceHomeChrome,
-    projectId,
+    projectId: projectId ?? null,
     entryBannerMessage,
   });
   const shouldPrioritizeInitialSessionEntry =

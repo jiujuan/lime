@@ -592,20 +592,12 @@ function buildLimeTaskSummary(
       ? resolveContentWorkbenchToolCopy(
           `summary.direct.${phase}WithSubject`,
           {
-            pre: "先生成 {{subject}} 的{{label}}",
-            post: "已生成 {{subject}} 的{{label}}",
-          }[phase],
-          {
             subject: normalizedSubject,
             label,
           },
         )
       : resolveContentWorkbenchToolCopy(
           `summary.direct.${phase}`,
-          {
-            pre: "先生成{{label}}",
-            post: "已生成{{label}}",
-          }[phase],
           { label },
         );
   }
@@ -625,20 +617,12 @@ function buildLimeTaskSummary(
     ? resolveContentWorkbenchToolCopy(
         `summary.task.${phase}WithSubject`,
         {
-          pre: "先发起 {{subject}} 的{{label}}",
-          post: "已发起 {{subject}} 的{{label}}",
-        }[phase],
-        {
           subject: normalizedSubject,
           label,
         },
       )
     : resolveContentWorkbenchToolCopy(
         `summary.task.${phase}`,
-        {
-          pre: "先发起{{label}}",
-          post: "已发起{{label}}",
-        }[phase],
         { label },
       );
 }

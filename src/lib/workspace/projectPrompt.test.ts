@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Character, OutlineNode, ProjectMemory } from "@/lib/api/memory";
+import type { Character, OutlineNode, ProjectMemory } from "@/lib/api/projectMemory";
 import { generateProjectMemoryPrompt } from "./projectPrompt";
 
 const baseCharacter = {

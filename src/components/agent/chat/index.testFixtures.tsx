@@ -824,7 +824,7 @@ vi.mock("@/lib/api/project", () => ({
   updateContent: mockUpdateContent,
 }));
 
-vi.mock("@/lib/api/memory", () => ({
+vi.mock("@/lib/api/projectMemory", () => ({
   getProjectMemory: mockGetProjectMemory,
 }));
 

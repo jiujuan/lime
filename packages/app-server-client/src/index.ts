@@ -31,6 +31,7 @@ import {
   METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT,
   METHOD_AGENT_SESSION_ARCHIVE_MANY,
   METHOD_AGENT_SESSION_COMPACT,
+  METHOD_AGENT_SESSION_DELETE,
   METHOD_AGENT_SESSION_EVENT,
   METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT,
   METHOD_AGENT_SESSION_LIST,
@@ -204,9 +205,13 @@ import {
   METHOD_MCP_TOOL_LIST_FOR_CONTEXT,
   METHOD_MCP_TOOL_SEARCH,
   METHOD_MEMORY_STORE_ADD_NOTE,
+  METHOD_MEMORY_STORE_CONSOLIDATE,
   METHOD_MEMORY_STORE_HEALTH,
+  METHOD_MEMORY_STORE_INDEX_REBUILD,
   METHOD_MEMORY_STORE_LIST,
   METHOD_MEMORY_STORE_READ,
+  METHOD_MEMORY_STORE_REVIEW_LIST,
+  METHOD_MEMORY_STORE_REVIEW_RESOLVE,
   METHOD_MEMORY_STORE_RESET,
   METHOD_MEMORY_STORE_SEARCH,
   METHOD_PROJECT_MEMORY_READ,
@@ -290,6 +295,8 @@ import {
   type AgentSessionActionRespondResponse,
   type AgentSessionArchiveManyParams,
   type AgentSessionArchiveManyResponse,
+  type AgentSessionDeleteParams,
+  type AgentSessionDeleteResponse,
   type AgentSessionCompactParams,
   type AgentSessionCompactResponse,
   type AgentSessionEventNotification,
@@ -573,11 +580,18 @@ import {
   type McpToolSearchParams,
   type MemoryStoreAddNoteParams,
   type MemoryStoreAddNoteResponse,
+  type MemoryStoreConsolidateParams,
+  type MemoryStoreConsolidateResponse,
   type MemoryStoreHealthResponse,
+  type MemoryStoreIndexRebuildResponse,
   type MemoryStoreListParams,
   type MemoryStoreListResponse,
   type MemoryStoreReadParams,
   type MemoryStoreReadResponse,
+  type MemoryStoreReviewListParams,
+  type MemoryStoreReviewListResponse,
+  type MemoryStoreReviewResolveParams,
+  type MemoryStoreReviewResolveResponse,
   type MemoryStoreResetParams,
   type MemoryStoreResetResponse,
   type MemoryStoreRootParams,
@@ -950,6 +964,10 @@ export class AppServerClient {
 
   archiveManySessions(params: AgentSessionArchiveManyParams): JsonRpcRequest {
     return this.request(METHOD_AGENT_SESSION_ARCHIVE_MANY, params);
+  }
+
+  deleteSession(params: AgentSessionDeleteParams): JsonRpcRequest {
+    return this.request(METHOD_AGENT_SESSION_DELETE, params);
   }
 
   readAgentSessionObjective(
@@ -1468,12 +1486,32 @@ export class AppServerClient {
     return this.request(METHOD_MEMORY_STORE_ADD_NOTE, params);
   }
 
+  consolidateMemoryStore(params: MemoryStoreConsolidateParams): JsonRpcRequest {
+    return this.request(METHOD_MEMORY_STORE_CONSOLIDATE, params);
+  }
+
+  listMemoryStoreReviewNotes(
+    params: MemoryStoreReviewListParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_MEMORY_STORE_REVIEW_LIST, params);
+  }
+
+  resolveMemoryStoreReviewNote(
+    params: MemoryStoreReviewResolveParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_MEMORY_STORE_REVIEW_RESOLVE, params);
+  }
+
   healthMemoryStore(params: MemoryStoreRootParams): JsonRpcRequest {
     return this.request(METHOD_MEMORY_STORE_HEALTH, params);
   }
 
   resetMemoryStore(params: MemoryStoreResetParams): JsonRpcRequest {
     return this.request(METHOD_MEMORY_STORE_RESET, params);
+  }
+
+  rebuildMemoryStoreIndex(params: MemoryStoreRootParams): JsonRpcRequest {
+    return this.request(METHOD_MEMORY_STORE_INDEX_REBUILD, params);
   }
 
   listLogs(): JsonRpcRequest {
@@ -2224,6 +2262,17 @@ export class AppServerConnection {
     return await this.request<AgentSessionArchiveManyResponse>(
       this.client.archiveManySessions(params),
       METHOD_AGENT_SESSION_ARCHIVE_MANY,
+      options,
+    );
+  }
+
+  async deleteSession(
+    params: AgentSessionDeleteParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentSessionDeleteResponse>> {
+    return await this.request<AgentSessionDeleteResponse>(
+      this.client.deleteSession(params),
+      METHOD_AGENT_SESSION_DELETE,
       options,
     );
   }
@@ -3446,6 +3495,39 @@ export class AppServerConnection {
     );
   }
 
+  async consolidateMemoryStore(
+    params: MemoryStoreConsolidateParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<MemoryStoreConsolidateResponse>> {
+    return await this.request<MemoryStoreConsolidateResponse>(
+      this.client.consolidateMemoryStore(params),
+      METHOD_MEMORY_STORE_CONSOLIDATE,
+      options,
+    );
+  }
+
+  async listMemoryStoreReviewNotes(
+    params: MemoryStoreReviewListParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<MemoryStoreReviewListResponse>> {
+    return await this.request<MemoryStoreReviewListResponse>(
+      this.client.listMemoryStoreReviewNotes(params),
+      METHOD_MEMORY_STORE_REVIEW_LIST,
+      options,
+    );
+  }
+
+  async resolveMemoryStoreReviewNote(
+    params: MemoryStoreReviewResolveParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<MemoryStoreReviewResolveResponse>> {
+    return await this.request<MemoryStoreReviewResolveResponse>(
+      this.client.resolveMemoryStoreReviewNote(params),
+      METHOD_MEMORY_STORE_REVIEW_RESOLVE,
+      options,
+    );
+  }
+
   async healthMemoryStore(
     params: MemoryStoreRootParams,
     options: AppServerRequestOptions = {},
@@ -3464,6 +3546,17 @@ export class AppServerConnection {
     return await this.request<MemoryStoreResetResponse>(
       this.client.resetMemoryStore(params),
       METHOD_MEMORY_STORE_RESET,
+      options,
+    );
+  }
+
+  async rebuildMemoryStoreIndex(
+    params: MemoryStoreRootParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<MemoryStoreIndexRebuildResponse>> {
+    return await this.request<MemoryStoreIndexRebuildResponse>(
+      this.client.rebuildMemoryStoreIndex(params),
+      METHOD_MEMORY_STORE_INDEX_REBUILD,
       options,
     );
   }

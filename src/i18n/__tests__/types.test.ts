@@ -676,13 +676,6 @@ function assertI18nKeyTypes() {
   });
   i18n.t("generalWorkbench.context.modal.add.uploadAria", { ns: "agent" });
   i18n.t("generalWorkbench.context.modal.text.placeholder", { ns: "agent" });
-  i18n.t("skills.workspace.curatedTask.suggestion.referenceBadge", {
-    ns: "agent",
-    countLabel: "2",
-  });
-  i18n.t("skills.workspace.curatedTask.suggestion.action.start", {
-    ns: "agent",
-  });
   i18n.t("skills.workspace.managedJob.created", {
     ns: "agent",
     name: "Daily Review",
@@ -1099,10 +1092,7 @@ function assertI18nKeyTypes() {
   i18n.t("settings.memory.embedding.provider.ollama.label", {
     ns: "settings",
   });
-  i18n.t("settings.memory.embedding.status.indexedValue", {
-    ns: "settings",
-    count: 12,
-  });
+  i18n.t("settings.memory.embedding.status.configured", { ns: "settings" });
   i18n.t("settings.memory.embedding.providerSelect.description", {
     ns: "settings",
   });

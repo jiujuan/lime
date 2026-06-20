@@ -397,7 +397,7 @@ describe("InlineToolProcessStep", () => {
 
     expect(onFileClick).toHaveBeenCalledWith(
       "/tmp/imported-local-history/docs/imported-preview.docx",
-      "",
+      "导入会话 DOCX 预览内容",
     );
   });
 
@@ -408,7 +408,7 @@ describe("InlineToolProcessStep", () => {
       {
         id: "tool-read-file-open-object-1",
         name: "read_file",
-        arguments: { path: filePath },
+        arguments: JSON.stringify({ path: filePath }),
         status: "completed",
         result: {
           success: true,
@@ -431,7 +431,10 @@ describe("InlineToolProcessStep", () => {
       button?.click();
     });
 
-    expect(onFileClick).toHaveBeenCalledWith(filePath, "");
+    expect(onFileClick).toHaveBeenCalledWith(
+      filePath,
+      "导入会话 Markdown 预览内容",
+    );
   });
 
   it("工具详情遇到 TypeScript 尖括号语法时也应转义再渲染", () => {
@@ -458,6 +461,74 @@ describe("InlineToolProcessStep", () => {
 
     expect(container.textContent).toContain("&lt;T&gt;");
     expect(container.textContent).toContain("&lt;typeof schema&gt;");
+  });
+
+  it("记忆工具应展示本轮使用的路径、引用和分页证据", () => {
+    const { container } = renderTool({
+      id: "tool-memory-read-1",
+      name: "memory_read",
+      arguments: JSON.stringify({ path: "MEMORY.md" }),
+      status: "completed",
+      result: {
+        success: true,
+        output: "Remember the launch tone.",
+        metadata: {
+          operation: "read",
+          path: "MEMORY.md",
+          rootScope: "workspace",
+          citation: {
+            path: "MEMORY.md",
+            startLine: 3,
+            endLine: 6,
+          },
+        },
+      },
+      startTime: new Date("2026-06-19T10:10:00.000Z"),
+      endTime: new Date("2026-06-19T10:10:01.000Z"),
+    });
+
+    expect(container.textContent).toContain("已读取记忆 MEMORY.md");
+    expect(container.textContent).toContain("记忆使用证据");
+    expect(container.textContent).toContain("路径：MEMORY.md");
+    expect(container.textContent).toContain("引用：MEMORY.md:3-6");
+    expect(
+      container.querySelector('[data-testid="inline-tool-memory-evidence"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="markdown-renderer"]'),
+    ).toBeNull();
+  });
+
+  it("记忆搜索工具应在英文环境展示命中数和截断状态", async () => {
+    await changeLimeLocale("en-US");
+
+    const { container } = renderTool({
+      id: "tool-memory-search-1",
+      name: "memory_search",
+      arguments: JSON.stringify({ queries: ["launch tone"] }),
+      status: "completed",
+      result: {
+        success: true,
+        output: "Found 2 memory hits. More hits are available via nextCursor.",
+        metadata: {
+          operation: "search",
+          hits: [
+            { path: "MEMORY.md", matchLineNumber: 4 },
+            { path: "rollout_summaries/thread.md", matchLineNumber: 8 },
+          ],
+          truncated: true,
+          nextCursor: "cursor-2",
+        },
+      },
+      startTime: new Date("2026-06-19T10:11:00.000Z"),
+      endTime: new Date("2026-06-19T10:11:01.000Z"),
+    });
+
+    expect(container.textContent).toContain("Memory searched launch tone");
+    expect(container.textContent).toContain("Searched memory with 2 hit(s)");
+    expect(container.textContent).toContain("2 hit(s)");
+    expect(container.textContent).toContain("More results are available");
+    expect(container.textContent).not.toContain("已搜索记忆");
   });
 
   it("Skill 过程步骤应能展开查看本次执行读取的 SKILL.md", () => {

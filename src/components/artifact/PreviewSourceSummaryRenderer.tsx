@@ -76,6 +76,8 @@ export const PreviewSourceSummaryRenderer = memo(
     tone = "dark",
   }: PreviewSourceSummaryRendererProps) {
     const { t } = useTranslation("workspace");
+    const translateWorkspace = (key: string): string =>
+      String(t(key as never));
     const isLight = tone === "light";
     const Icon = resolveIcon(sourceKind);
     const contentKind = readStringMeta(artifact.meta, "contentKind");
@@ -128,7 +130,7 @@ export const PreviewSourceSummaryRenderer = memo(
                         : "border-white/10 bg-white/10 text-gray-300",
                     )}
                   >
-                    {t(resolveSourceLabelKey(sourceKind))}
+                    {translateWorkspace(resolveSourceLabelKey(sourceKind))}
                   </span>
                 </div>
                 <h2
@@ -145,7 +147,7 @@ export const PreviewSourceSummaryRenderer = memo(
                     isLight ? "text-slate-500" : "text-gray-400",
                   )}
                 >
-                  {t(resolveDetailKey(sourceKind))}
+                  {translateWorkspace(resolveDetailKey(sourceKind))}
                 </p>
               </div>
             </div>

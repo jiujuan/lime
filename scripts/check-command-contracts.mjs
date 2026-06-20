@@ -756,7 +756,6 @@ const currentElectronHostRequiredCommands = new Set([
   "get_experimental_config",
   "open_external_url",
   "open_system_settings_url",
-  "project_memory_get",
   "save_experimental_config",
   "start_oem_cloud_oauth_callback_bridge",
   "workspace_ensure",
@@ -773,7 +772,6 @@ const currentElectronHostRequiredCommands = new Set([
 const currentDevBridgeTruthRequiredCommands = new Set([
   "open_external_url",
   "start_oem_cloud_oauth_callback_bridge",
-  "project_memory_get",
 ]);
 
 const electronDiagnosticFacadeCommands = new Set([

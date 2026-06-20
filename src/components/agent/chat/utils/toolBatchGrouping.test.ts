@@ -156,6 +156,24 @@ describe("toolBatchGrouping", () => {
     );
   });
 
+  it("单条 WebSearch 也应生成网页搜索摘要", () => {
+    const summary = summarizeStreamingToolBatch([
+      createToolCall("web_search", {
+        query: "Lime history import",
+      }),
+    ]);
+
+    expect(summary).toEqual(
+      expect.objectContaining({
+        kind: "web_search",
+        title: "已搜索网页 1 次",
+        countLabel: "1 次",
+        rawDetailLabel: "展开查看搜索来源",
+      }),
+    );
+    expect(summary?.supportingLines).toContain("Lime history import");
+  });
+
   it("全部 WebSearch 失败时仍应聚合为轻量网页搜索轨迹", () => {
     const diagnosticOutput = JSON.stringify({
       metadata: {
@@ -432,6 +450,16 @@ describe("toolBatchGrouping", () => {
         "https://news.un.org/en/",
       ]),
     );
+    expect(summary?.supportingSections).toEqual([
+      {
+        kind: "web_search_sources",
+        lines: ["June 2 2026 world news", "Reuters World News"],
+      },
+      {
+        kind: "web_fetch_pages",
+        lines: ["https://www.reuters.com/world/", "https://news.un.org/en/"],
+      },
+    ]);
   });
 
   it("普通搜索工具仍应按项目线索展示，避免混成 WebSearch", () => {
