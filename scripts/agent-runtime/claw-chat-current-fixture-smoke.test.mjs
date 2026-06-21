@@ -173,6 +173,8 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("WEB_TOOLS_RENDERING_PROMPT");
     expect(content).toContain("WEB_TOOLS_SEARCH_TITLE");
     expect(content).toContain("WEB_TOOLS_SEARCH_URL");
+    expect(content).toContain("WEB_TOOLS_MID_THINKING_TEXT");
+    expect(content).toContain("WEB_TOOLS_REASONING_ITEM_ID");
     expect(content).toContain("waitForGuiWebToolsRenderingCompleted");
     expect(content).toContain("webProcessGroupExpanded");
     expect(content).toContain("hasSearchSourceSection");
@@ -180,11 +182,15 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("hasFetchPageUrl");
     expect(content).toContain("hasFetchMarkdownHidden");
     expect(content).toContain("rawJsonEnvelopeVisible");
-    expect(content).toContain("guiWebSearchProcessDefaultExpanded");
-    expect(content).toContain("guiWebSearchProcessShowsInlineSources");
-    expect(content).toContain("guiWebFetchProcessShowsReadPages");
+    expect(content).toContain("guiWebSearchProcessDefaultCollapsed");
+    expect(content).toContain("guiWebSearchProcessShowsSourcesAfterExpand");
+    expect(content).toContain("guiWebFetchProcessShowsReadPagesAfterExpand");
+    expect(content).toContain("guiWebToolsTimelineOrderPreserved");
     expect(content).toContain("guiWebSearchFinalTextInterleaved");
     expect(content).toContain("guiWebFetchTransportEnvelopeHidden");
+    expect(content).toContain('type: "item.updated"');
+    expect(content).toContain('type: "item.completed"');
+    expect(content).toContain("hasTimelineOrderPreserved");
     expect(content).toContain("WEB_TOOLS_RENDERING_ASSERTION_KEYS");
     expect(content).toContain("bytes: 2048");
     expect(content).toContain('codeText: "OK"');

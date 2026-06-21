@@ -85,7 +85,7 @@ function resolveHistoricalMessageHydrationText(
   return "";
 }
 
-function hasPlainHistoricalContentParts(
+function hasDeferrableHistoricalContentParts(
   contentParts?: readonly unknown[],
 ): boolean {
   if ((contentParts?.length ?? 0) === 0) {
@@ -96,7 +96,18 @@ function hasPlainHistoricalContentParts(
     if (!part || typeof part !== "object") {
       return false;
     }
-    return (part as { type?: unknown }).type === "text";
+    const record = part as {
+      type?: unknown;
+      toolCall?: { status?: unknown };
+    };
+    if (record.type === "tool_use") {
+      return record.toolCall?.status === "completed";
+    }
+    return (
+      record.type === "text" ||
+      record.type === "thinking" ||
+      record.type === "file_changes_batch"
+    );
   });
 }
 
@@ -113,7 +124,7 @@ export function isHistoricalAssistantMessageHydrationCandidate<
     !message.thinkingContent &&
     (message.toolCalls?.length ?? 0) === 0 &&
     (message.actionRequests?.length ?? 0) === 0 &&
-    hasPlainHistoricalContentParts(message.contentParts)
+    hasDeferrableHistoricalContentParts(message.contentParts)
   );
 }
 

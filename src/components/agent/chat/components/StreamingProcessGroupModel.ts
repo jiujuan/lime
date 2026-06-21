@@ -52,31 +52,6 @@ function isSuccessfulOrRunningWebRetrievalToolCall(
   );
 }
 
-function isSuccessfulOrRunningWebSearchToolCall(
-  toolCall: ToolCallState,
-): boolean {
-  return (
-    isUnifiedWebSearchToolName(toolCall.name) &&
-    (toolCall.status === "running" || toolCall.status === "completed")
-  );
-}
-
-function hasSuccessfulOrRunningWebSearchProcess(
-  entries: StreamingProcessEntry[],
-): boolean {
-  const webRetrievalEntries = entries.filter(
-    (entry): entry is Extract<StreamingProcessEntry, { kind: "tool" }> =>
-      entry.kind === "tool" && isWebRetrievalToolCall(entry.toolCall),
-  );
-  if (webRetrievalEntries.length === 0) {
-    return false;
-  }
-
-  return webRetrievalEntries.some((entry) =>
-    isSuccessfulOrRunningWebSearchToolCall(entry.toolCall),
-  );
-}
-
 function hasSuccessfulOrRunningWebRetrievalProcess(
   entries: StreamingProcessEntry[],
 ): boolean {
@@ -93,7 +68,20 @@ function hasSuccessfulOrRunningWebRetrievalProcess(
   );
 }
 
-export function shouldSplitImportedProcessBeforeEntry(
+function hasOnlyWebRetrievalTools(
+  entries: StreamingProcessEntry[],
+): boolean {
+  const toolEntries = entries.filter(
+    (entry): entry is Extract<StreamingProcessEntry, { kind: "tool" }> =>
+      entry.kind === "tool",
+  );
+  return (
+    toolEntries.length > 0 &&
+    toolEntries.every((entry) => isWebRetrievalToolCall(entry.toolCall))
+  );
+}
+
+export function shouldSplitProcessBeforeEntry(
   currentEntries: StreamingProcessEntry[],
   nextEntry: StreamingProcessEntry,
 ): boolean {
@@ -101,15 +89,8 @@ export function shouldSplitImportedProcessBeforeEntry(
     return false;
   }
 
-  const currentHasImportedTool = currentEntries.some(
-    (entry) => entry.kind === "tool" && isImportedToolCall(entry.toolCall),
-  );
-  const nextIsImportedTool =
-    nextEntry.kind === "tool" && isImportedToolCall(nextEntry.toolCall);
-  if (!currentHasImportedTool || !nextIsImportedTool) {
-    return false;
-  }
-
+  const nextIsWebRetrieval =
+    nextEntry.kind === "tool" && isWebRetrievalToolCall(nextEntry.toolCall);
   const currentHasWebRetrieval = currentEntries.some(
     (entry) =>
       entry.kind === "tool" && isWebRetrievalToolCall(entry.toolCall),
@@ -118,12 +99,19 @@ export function shouldSplitImportedProcessBeforeEntry(
     (entry) =>
       entry.kind !== "tool" || !isWebRetrievalToolCall(entry.toolCall),
   );
-  const nextIsWebRetrieval = isWebRetrievalToolCall(nextEntry.toolCall);
 
-  return (
-    (currentHasWebRetrieval && !nextIsWebRetrieval) ||
-    (currentHasNonWebRetrieval && nextIsWebRetrieval)
-  );
+  if (
+    currentHasWebRetrieval &&
+    !nextIsWebRetrieval
+  ) {
+    return nextEntry.kind !== "thinking";
+  }
+
+  if (currentHasNonWebRetrieval && nextIsWebRetrieval) {
+    return !currentHasWebRetrieval;
+  }
+
+  return false;
 }
 
 export function shouldAutoExpandProcessEntries(
@@ -152,16 +140,14 @@ export function shouldAutoExpandProcessEntries(
     );
 
   if (!isMessageStreaming) {
-    if (
-      !hasImportedProcess &&
-      hasSuccessfulOrRunningWebSearchProcess(entries)
-    ) {
-      return true;
-    }
     if (isImportedWebRetrievalOnly) {
       return hasRunningWebRetrieval;
     }
     return hasImportedThinking || hasImportedTool;
+  }
+
+  if (isImportedWebRetrievalOnly && hasRunningWebRetrieval) {
+    return true;
   }
 
   if (!hasImportedProcess && hasRunningWebRetrieval) {
@@ -170,7 +156,8 @@ export function shouldAutoExpandProcessEntries(
 
   if (
     !hasImportedProcess &&
-    hasSuccessfulOrRunningWebSearchProcess(entries)
+    hasOnlyWebRetrievalTools(entries) &&
+    hasSuccessfulOrRunningWebRetrievalProcess(entries)
   ) {
     return true;
   }

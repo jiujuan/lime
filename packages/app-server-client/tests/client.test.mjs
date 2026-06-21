@@ -211,6 +211,7 @@ const {
   METHOD_MCP_SERVER_ENABLED_SET,
   METHOD_MCP_SERVER_IMPORT_FROM_APP,
   METHOD_MCP_SERVER_LIST,
+  METHOD_MCP_SERVER_OAUTH_LOGIN,
   METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE,
   METHOD_MCP_SERVER_START,
   METHOD_MCP_SERVER_STATUS_LIST,
@@ -933,6 +934,11 @@ test("builds app data surface requests with current methods", () => {
     appType: "codex",
   });
   const mcpServerSync = client.syncAllMcpServersToLive();
+  const mcpServerOAuthLogin = client.loginMcpServerOauth({
+    name: "filesystem",
+    scopes: ["files.read"],
+    timeoutSecs: 120,
+  });
   const mcpServerStart = client.startMcpServer({
     name: "filesystem",
   });
@@ -1322,6 +1328,12 @@ test("builds app data surface requests with current methods", () => {
   });
   assert.equal(mcpServerSync.method, METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE);
   assert.deepEqual(mcpServerSync.params, {});
+  assert.equal(mcpServerOAuthLogin.method, METHOD_MCP_SERVER_OAUTH_LOGIN);
+  assert.deepEqual(mcpServerOAuthLogin.params, {
+    name: "filesystem",
+    scopes: ["files.read"],
+    timeoutSecs: 120,
+  });
   assert.equal(mcpServerStart.method, METHOD_MCP_SERVER_START);
   assert.deepEqual(mcpServerStart.params, {
     name: "filesystem",
@@ -2330,6 +2342,7 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_MCP_SERVER_ENABLED_SET, kind: "request" },
     { method: METHOD_MCP_SERVER_IMPORT_FROM_APP, kind: "request" },
     { method: METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE, kind: "request" },
+    { method: METHOD_MCP_SERVER_OAUTH_LOGIN, kind: "request" },
     { method: METHOD_MCP_SERVER_START, kind: "request" },
     { method: METHOD_MCP_SERVER_STOP, kind: "request" },
     { method: METHOD_MCP_TOOL_LIST, kind: "request" },
@@ -2672,6 +2685,7 @@ test("exports app-server method catalog with request and notification kinds", ()
     isAppServerRequestMethod(METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE),
     true,
   );
+  assert.equal(isAppServerRequestMethod(METHOD_MCP_SERVER_OAUTH_LOGIN), true);
   assert.equal(isAppServerRequestMethod(METHOD_MCP_SERVER_START), true);
   assert.equal(isAppServerRequestMethod(METHOD_MCP_SERVER_STOP), true);
   assert.equal(isAppServerRequestMethod(METHOD_MCP_TOOL_LIST), true);

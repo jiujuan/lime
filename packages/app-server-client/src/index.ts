@@ -194,6 +194,7 @@ import {
   METHOD_MCP_SERVER_ENABLED_SET,
   METHOD_MCP_SERVER_IMPORT_FROM_APP,
   METHOD_MCP_SERVER_LIST,
+  METHOD_MCP_SERVER_OAUTH_LOGIN,
   METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE,
   METHOD_MCP_SERVER_START,
   METHOD_MCP_SERVER_STATUS_LIST,
@@ -568,6 +569,8 @@ import {
   type McpServerImportFromAppResponse,
   type McpServerListResponse,
   type McpServerLifecycleResponse,
+  type McpServerOauthLoginParams,
+  type McpServerOauthLoginResponse,
   type McpServerStartParams,
   type McpServerStatusListResponse,
   type McpServerStopParams,
@@ -1420,6 +1423,10 @@ export class AppServerClient {
 
   syncAllMcpServersToLive(): JsonRpcRequest {
     return this.request(METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE, {});
+  }
+
+  loginMcpServerOauth(params: McpServerOauthLoginParams): JsonRpcRequest {
+    return this.request(METHOD_MCP_SERVER_OAUTH_LOGIN, params);
   }
 
   startMcpServer(params: McpServerStartParams): JsonRpcRequest {
@@ -3318,6 +3325,17 @@ export class AppServerConnection {
     return await this.request<McpServerListResponse>(
       this.client.syncAllMcpServersToLive(),
       METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE,
+      options,
+    );
+  }
+
+  async loginMcpServerOauth(
+    params: McpServerOauthLoginParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<McpServerOauthLoginResponse>> {
+    return await this.request<McpServerOauthLoginResponse>(
+      this.client.loginMcpServerOauth(params),
+      METHOD_MCP_SERVER_OAUTH_LOGIN,
       options,
     );
   }

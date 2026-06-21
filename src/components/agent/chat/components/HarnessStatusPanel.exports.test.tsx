@@ -206,6 +206,21 @@ describe("HarnessStatusPanel exports", () => {
             "Artifact 校验已恢复 1 个产物，fallback 0 次。",
           ],
         },
+        skill_invocations: [
+          {
+            event: "skill_invocation",
+            skill_name: "project:capability-report",
+            status: "completed",
+            source_event_id: "evt-skill-1",
+            source_event_type: "tool.result",
+            turn_id: "turn-evidence-1",
+            tool_call_id: "skill-call-1",
+            workspace_skill_runtime_enable: {
+              source: "manual_session_enable",
+              approval: "manual",
+            },
+          },
+        ],
         modality_runtime_contracts: {
           snapshot_count: 2,
           snapshot_index: {
@@ -409,6 +424,9 @@ describe("HarnessStatusPanel exports", () => {
     expect(document.body.textContent).toContain("completed · 证据完成");
     expect(document.body.textContent).toContain("Owner success");
     expect(document.body.textContent).toContain("Skill ToolCall");
+    expect(document.body.textContent).toContain(
+      "project:capability-report · completed",
+    );
     expect(document.body.textContent).toContain("验证结果");
     expect(document.body.textContent).toContain("阻塞失败");
     expect(document.body.textContent).toContain("验证失败焦点");

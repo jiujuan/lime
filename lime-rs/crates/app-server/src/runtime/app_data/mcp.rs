@@ -71,6 +71,13 @@ pub trait McpAppDataSource: Send + Sync {
         Err(requires_current("mcpServer/stop"))
     }
 
+    async fn login_mcp_server_oauth(
+        &self,
+        _params: McpServerOauthLoginParams,
+    ) -> Result<McpServerOauthLoginResponse, RuntimeCoreError> {
+        Err(requires_current("mcpServer/oauth/login"))
+    }
+
     async fn list_mcp_tools(&self) -> Result<McpToolListResponse, RuntimeCoreError> {
         Ok(McpToolListResponse::default())
     }

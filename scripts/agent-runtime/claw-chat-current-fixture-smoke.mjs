@@ -50,9 +50,22 @@ const GOAL_DONE_TEXT = "CLAW_GOAL_FIXTURE_DONE";
 const WEB_TOOLS_RENDERING_DONE_TEXT = "CLAW_WEB_TOOLS_RENDERING_DONE";
 const WEB_TOOLS_SEARCH_TITLE = "Lime WebSearch Rendering Source";
 const WEB_TOOLS_SEARCH_URL = "https://example.com/lime-websearch-rendering";
+const WEB_TOOLS_SEARCH_SOURCE_LABEL = "example.com/lime-websearch-rendering";
 const WEB_TOOLS_SEARCH_SNIPPET = "Search source used to verify inline rendering";
+const WEB_TOOLS_MID_THINKING_TEXT =
+  "搜索结果还需要继续筛掉广告软文，我先读取有效来源。";
 const WEB_TOOLS_FETCH_MARKDOWN =
   "WebFetch 正文摘要：页面确认搜索来源可以展开，同时最终正文继续输出。";
+const WEB_TOOLS_BROKEN_MARKDOWN_TEXT = [
+  "五年级选购指南###",
+  "####如果孩子基础一般，优先看护眼、内容和家长管理。",
+  "**推荐 型号 **：Lime 学习机 S30",
+  "**理由 **：系统清晰，适合五年级基础巩固。",
+  "对比表：",
+  "| 品牌 | 型号 | 场景 |",
+  "| --- | --- | --- |",
+  "| Lime | S30 | 五年级巩固 |",
+].join("\n");
 const PLAN_STEPS = [
   { step: "确认计划模式请求进入 App Server", status: "completed" },
   { step: "输出 proposed_plan", status: "in_progress" },
@@ -67,6 +80,7 @@ const SESSION_ID = `claw-chat-current-${Date.now()}-${process.pid}`;
 const THREAD_ID = `${SESSION_ID}-thread`;
 const SESSION_TITLE = "Claw 新闻输入 Electron fixture";
 const WEB_TOOLS_SEARCH_TOOL_CALL_ID = `${SESSION_ID}:tool:websearch-rendering`;
+const WEB_TOOLS_REASONING_ITEM_ID = `${SESSION_ID}:reasoning:web-tools-rendering`;
 const WEB_TOOLS_FETCH_TOOL_CALL_ID = `${SESSION_ID}:tool:webfetch-rendering`;
 const EVENT_READ_PROBE_PROMPT =
   "验证 agentSession/event 与 read model 同 turn 对齐。";
@@ -80,9 +94,12 @@ const EVENT_READ_PROBE_TOOL_OUTPUT =
 const WEB_TOOLS_RENDERING_ASSERTION_KEYS = [
   "webToolsRenderingPromptReachedBackend",
   "guiWebToolsRenderingInputSubmitted",
-  "guiWebSearchProcessDefaultExpanded",
-  "guiWebSearchProcessShowsInlineSources",
-  "guiWebFetchProcessShowsReadPages",
+  "guiWebSearchProcessDefaultCollapsed",
+  "guiWebSearchProcessShowsSourcesAfterExpand",
+  "guiWebFetchProcessShowsReadPagesAfterExpand",
+  "guiWebToolsTimelineOrderPreserved",
+  "guiWebSearchNoiseHidden",
+  "guiMarkdownRendered",
   "guiWebSearchFinalTextInterleaved",
   "guiWebFetchTransportEnvelopeHidden",
   "readModelWebToolsRenderingCompleted",
@@ -342,6 +359,7 @@ function createTempRuntimeEnv() {
 
 function writeFixtureBackend(backendPath) {
   const proposedPlanFixtureText = `${PROPOSED_PLAN_BLOCK}\n计划已写入右侧计划轨，等待你确认后再执行。\n`;
+  const webToolsRenderingFixtureText = `网页搜索渲染结论：搜索来源已展开，读取页面已归入同一过程，最终正文继续输出。\n${WEB_TOOLS_BROKEN_MARKDOWN_TEXT}\n`;
   fs.writeFileSync(
     backendPath,
     `#!/usr/bin/env node
@@ -375,6 +393,20 @@ function emitEvents(events) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function currentThreadId() {
+  return input.request?.session?.threadId ??
+    input.request?.session?.thread_id ??
+    "${THREAD_ID}";
+}
+
+function currentTurnId() {
+  return input.request?.turn?.turnId ??
+    input.request?.turn?.turn_id ??
+    asterChatRequest?.turn_id ??
+    asterChatRequest?.turnId ??
+    "";
 }
 
 appendLedgerEntry({
@@ -451,7 +483,7 @@ if (input.kind === "turnStart") {
       : isGoalPrompt
         ? "目标已绑定到本轮请求，后续会围绕 ${GOAL_PROMPT} 收口。\\n"
         : isWebToolsRenderingPrompt
-          ? "网页搜索渲染结论：搜索来源已展开，读取页面已归入同一过程，最终正文继续输出。\\n"
+          ? ${JSON.stringify(webToolsRenderingFixtureText)}
         : "1. 多国外交议题持续升温，地区安全与经贸协商仍是焦点。\\n2. 全球市场继续关注能源、供应链和主要央行政策变化。\\n3. 国际组织呼吁在气候、粮食与人道援助议题上保持协调。\\n";
   const shouldWaitForCancel =
     (process.env.CLAW_CHAT_FIXTURE_SCENARIO === "cancel" ||
@@ -512,6 +544,21 @@ if (input.kind === "turnStart") {
           outputPreview: ${JSON.stringify(JSON.stringify({
             results: [
               {
+                title: "Help",
+                url: "https://help.yahoo.com/kb/search-for-desktop",
+                snippet: "Yahoo search help navigation",
+              },
+              {
+                title: "Sign In",
+                url: "https://login.yahoo.com/?src=search",
+                snippet: "Yahoo sign in navigation",
+              },
+              {
+                title: "Yahoo Scout",
+                url: "https://scout.yahoo.com/chat",
+                snippet: "Yahoo search assistant navigation",
+              },
+              {
                 title: WEB_TOOLS_SEARCH_TITLE,
                 url: WEB_TOOLS_SEARCH_URL,
                 snippet: WEB_TOOLS_SEARCH_SNIPPET,
@@ -521,6 +568,21 @@ if (input.kind === "turnStart") {
           output: ${JSON.stringify(JSON.stringify({
             results: [
               {
+                title: "Help",
+                url: "https://help.yahoo.com/kb/search-for-desktop",
+                snippet: "Yahoo search help navigation",
+              },
+              {
+                title: "Sign In",
+                url: "https://login.yahoo.com/?src=search",
+                snippet: "Yahoo sign in navigation",
+              },
+              {
+                title: "Yahoo Scout",
+                url: "https://scout.yahoo.com/chat",
+                snippet: "Yahoo search assistant navigation",
+              },
+              {
                 title: WEB_TOOLS_SEARCH_TITLE,
                 url: WEB_TOOLS_SEARCH_URL,
                 snippet: WEB_TOOLS_SEARCH_SNIPPET,
@@ -528,6 +590,30 @@ if (input.kind === "turnStart") {
             ],
           }))},
           success: true
+        }
+      }
+    ]);
+    await sleep(80);
+    const webToolsReasoningStartedAt = new Date().toISOString();
+    emitEvents([
+      {
+        type: "item.updated",
+        payload: {
+          item: {
+            id: "${WEB_TOOLS_REASONING_ITEM_ID}",
+            thread_id: currentThreadId(),
+            threadId: currentThreadId(),
+            turn_id: currentTurnId(),
+            turnId: currentTurnId(),
+            type: "reasoning",
+            text: "${WEB_TOOLS_MID_THINKING_TEXT}",
+            sequence: 3,
+            status: "in_progress",
+            started_at: webToolsReasoningStartedAt,
+            startedAt: webToolsReasoningStartedAt,
+            updated_at: webToolsReasoningStartedAt,
+            updatedAt: webToolsReasoningStartedAt
+          }
         }
       }
     ]);
@@ -582,6 +668,31 @@ if (input.kind === "turnStart") {
       }
     ]);
     await sleep(80);
+    emitEvents([
+      {
+        type: "item.completed",
+        payload: {
+          item: {
+            id: "${WEB_TOOLS_REASONING_ITEM_ID}",
+            thread_id: currentThreadId(),
+            threadId: currentThreadId(),
+            turn_id: currentTurnId(),
+            turnId: currentTurnId(),
+            type: "reasoning",
+            text: "${WEB_TOOLS_MID_THINKING_TEXT}",
+            sequence: 3,
+            status: "completed",
+            started_at: webToolsReasoningStartedAt,
+            startedAt: webToolsReasoningStartedAt,
+            completed_at: new Date().toISOString(),
+            completedAt: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          }
+        }
+      }
+    ]);
+    await sleep(900);
   }
   if (isEventReadProbe) {
     emitEvents([
@@ -1829,6 +1940,8 @@ async function waitForGuiWebToolsRenderingCompleted(page, options) {
         doneText,
         searchTitle,
         searchUrl,
+        searchSourceLabel,
+        midThinkingText,
         fetchMarkdown,
       }) => {
         const text = document.body?.innerText || "";
@@ -1881,6 +1994,20 @@ async function waitForGuiWebToolsRenderingCompleted(page, options) {
         const processIndex = text.indexOf("已搜索网页 1 次，读取网页 1 次");
         const finalIndex = text.indexOf("网页搜索渲染结论");
         const sourceIndex = text.indexOf(searchTitle);
+        const midThinkingIndex = text.indexOf(midThinkingText);
+        const fetchPageIndex = text.indexOf(
+          searchSourceLabel,
+          Math.max(midThinkingIndex, 0),
+        );
+        const markdownHeading = Array.from(
+          document.querySelectorAll("h1,h2,h3,h4,h5,h6"),
+        ).find((node) => node.textContent?.includes("五年级选购指南"));
+        const markdownStrongTexts = Array.from(
+          document.querySelectorAll("strong"),
+        ).map((node) => node.textContent || "");
+        const markdownTableVisible = Boolean(
+          document.querySelector('[data-testid="markdown-table-scroll"] table'),
+        );
         const forbiddenTransportFragments = [
           '"bytes"',
           '"codeText"',
@@ -1890,6 +2017,21 @@ async function waitForGuiWebToolsRenderingCompleted(page, options) {
           "2048",
           "{ bytes",
           "{bytes",
+        ];
+        const forbiddenSearchNoiseFragments = [
+          "Help",
+          "Sign In",
+          "Yahoo Scout",
+          "https://help.yahoo.com/kb/search-for-desktop",
+          "https://login.yahoo.com/",
+          "https://scout.yahoo.com/chat",
+        ];
+        const forbiddenRawMarkdownFragments = [
+          "五年级选购指南###",
+          "####如果孩子基础",
+          "**推荐 型号 **",
+          "**理由 **",
+          "| 品牌 | 型号 |",
         ];
         return {
           url: window.location.href,
@@ -1906,14 +2048,25 @@ async function waitForGuiWebToolsRenderingCompleted(page, options) {
               webProcessGroup?.text.includes("Read pages"),
           ),
           hasSearchTitle: text.includes(searchTitle),
+          hasMidThinkingText: text.includes(midThinkingText),
           hasSearchUrl: text.includes(searchUrl),
+          hasSearchSourceLabel: text.includes(searchSourceLabel),
+          hasFullSearchUrlVisible: text.includes(searchUrl),
           hasFetchMarkdownHidden: !text.includes(fetchMarkdown),
-          hasFetchPageUrl: Boolean(webProcessGroup?.text.includes(searchUrl)),
+          hasFetchPageUrl: Boolean(
+            webProcessGroup?.text.includes(searchSourceLabel),
+          ),
           hasFinalTextAfterProcess:
             promptIndex >= 0 &&
             processIndex > promptIndex &&
-            sourceIndex > processIndex &&
+            (sourceIndex < 0 || sourceIndex > processIndex) &&
             finalIndex > processIndex,
+          hasTimelineOrderPreserved:
+            processIndex >= 0 &&
+            sourceIndex > processIndex &&
+            midThinkingIndex > sourceIndex &&
+            fetchPageIndex > midThinkingIndex &&
+            finalIndex > fetchPageIndex,
           webProcessGroupExpanded: webProcessGroup?.expanded === "true",
           webProcessGroupText: webProcessGroup?.text || "",
           processGroupCount: processGroups.length,
@@ -1923,6 +2076,23 @@ async function waitForGuiWebToolsRenderingCompleted(page, options) {
           forbiddenTransportHits: forbiddenTransportFragments.filter((value) =>
             text.includes(value),
           ),
+          searchNoiseVisible: forbiddenSearchNoiseFragments.some((value) =>
+            text.includes(value),
+          ),
+          forbiddenSearchNoiseHits: forbiddenSearchNoiseFragments.filter(
+            (value) => text.includes(value),
+          ),
+          rawMarkdownVisible: forbiddenRawMarkdownFragments.some((value) =>
+            text.includes(value),
+          ),
+          forbiddenRawMarkdownHits: forbiddenRawMarkdownFragments.filter(
+            (value) => text.includes(value),
+          ),
+          markdownHeadingVisible: Boolean(markdownHeading),
+          markdownStrongVisible:
+            markdownStrongTexts.includes("推荐 型号") &&
+            markdownStrongTexts.includes("理由"),
+          markdownTableVisible,
           textareaVisible,
           textareaDisabled:
             textarea instanceof HTMLTextAreaElement ? textarea.disabled : null,
@@ -1941,6 +2111,8 @@ async function waitForGuiWebToolsRenderingCompleted(page, options) {
         doneText: WEB_TOOLS_RENDERING_DONE_TEXT,
         searchTitle: WEB_TOOLS_SEARCH_TITLE,
         searchUrl: WEB_TOOLS_SEARCH_URL,
+        searchSourceLabel: WEB_TOOLS_SEARCH_SOURCE_LABEL,
+        midThinkingText: WEB_TOOLS_MID_THINKING_TEXT,
         fetchMarkdown: WEB_TOOLS_FETCH_MARKDOWN,
       },
     );
@@ -1953,20 +2125,35 @@ async function waitForGuiWebToolsRenderingCompleted(page, options) {
       snapshot.hasPrompt &&
       (snapshot.hasAssistantSummary || snapshot.hasDoneText) &&
       snapshot.hasProcessTitle &&
-      snapshot.webProcessGroupExpanded &&
-      snapshot.hasSearchSourceSection &&
-      snapshot.hasFetchPageSection &&
-      snapshot.hasSearchTitle &&
-      snapshot.hasSearchUrl &&
-      snapshot.hasFetchPageUrl &&
+      snapshot.webProcessGroupExpanded === false &&
+      snapshot.hasSearchSourceSection === false &&
+      snapshot.hasFetchPageSection === false &&
+      snapshot.hasSearchTitle === false &&
+      snapshot.hasMidThinkingText === false &&
+      snapshot.hasSearchSourceLabel === false &&
+      snapshot.hasFullSearchUrlVisible === false &&
+      snapshot.hasFetchPageUrl === false &&
       snapshot.hasFetchMarkdownHidden &&
       snapshot.hasFinalTextAfterProcess &&
+      snapshot.hasTimelineOrderPreserved === false &&
       snapshot.rawJsonEnvelopeVisible === false &&
+      snapshot.searchNoiseVisible === false &&
+      snapshot.rawMarkdownVisible === false &&
+      snapshot.markdownHeadingVisible &&
+      snapshot.markdownStrongVisible &&
+      snapshot.markdownTableVisible &&
       snapshot.textareaVisible &&
       snapshot.textareaDisabled === false &&
       snapshot.stopButtonVisible === false
     ) {
-      return snapshot;
+      const expandedSnapshot = await expandAndInspectGuiWebToolsProcess(page, {
+        ...options,
+        defaultSnapshot: snapshot,
+      });
+      return sanitizeJson({
+        ...snapshot,
+        expandedDetails: expandedSnapshot,
+      });
     }
     await sleep(options.intervalMs);
   }
@@ -1975,6 +2162,190 @@ async function waitForGuiWebToolsRenderingCompleted(page, options) {
       sanitizeJson(lastSnapshot),
     )}`,
   );
+}
+
+async function expandAndInspectGuiWebToolsProcess(page, options) {
+  await page.evaluate(() => {
+    const groups = Array.from(
+      document.querySelectorAll('[data-testid="streaming-process-group"]'),
+    );
+    const targetGroup = groups.find((group) =>
+      (group.textContent || "").includes("已搜索网页 1 次，读取网页 1 次"),
+    );
+    const button = targetGroup?.querySelector("button");
+    if (button instanceof HTMLButtonElement) {
+      button.click();
+    }
+  });
+
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < Math.min(options.timeoutMs, 30000)) {
+    const snapshot = await evaluatePageSnapshot(
+      page,
+      ({
+        searchTitle,
+        searchUrl,
+        searchSourceLabel,
+        midThinkingText,
+        fetchMarkdown,
+      }) => {
+        const text = document.body?.innerText || "";
+        const processGroups = Array.from(
+          document.querySelectorAll('[data-testid="streaming-process-group"]'),
+        ).map((group) => {
+          const button = group.querySelector("button");
+          return {
+            text: group.textContent || "",
+            buttonText: button?.textContent || "",
+            expanded: button?.getAttribute("aria-expanded") || "",
+          };
+        });
+        const webProcessGroup = processGroups.find(
+          (group) =>
+            group.buttonText.includes("已搜索网页 1 次，读取网页 1 次") ||
+            group.text.includes("已搜索网页 1 次，读取网页 1 次"),
+        );
+        const processText = webProcessGroup?.text || "";
+        const processIndex = processText.indexOf(
+          "已搜索网页 1 次，读取网页 1 次",
+        );
+        const sourceIndex = processText.indexOf(searchTitle);
+        const midThinkingIndex = processText.indexOf(midThinkingText);
+        const fetchPageIndex = processText.indexOf(
+          searchSourceLabel,
+          Math.max(midThinkingIndex, 0),
+        );
+        return {
+          webProcessGroupExpanded: webProcessGroup?.expanded === "true",
+          hasSearchSourceSection: Boolean(
+            webProcessGroup?.text.includes("搜索来源") ||
+              webProcessGroup?.text.includes("Search sources"),
+          ),
+          hasFetchPageSection: Boolean(
+            webProcessGroup?.text.includes("读取页面") ||
+              webProcessGroup?.text.includes("Read pages"),
+          ),
+          hasSearchTitle: text.includes(searchTitle),
+          hasMidThinkingText: processText.includes(midThinkingText),
+          hasSearchSourceLabel: text.includes(searchSourceLabel),
+          hasFullSearchUrlVisible: text.includes(searchUrl),
+          hasFetchMarkdownHidden: !text.includes(fetchMarkdown),
+          hasFetchPageUrl: Boolean(
+            webProcessGroup?.text.includes(searchSourceLabel),
+          ),
+          hasTimelineOrderPreserved:
+            processIndex >= 0 &&
+            sourceIndex > processIndex &&
+            midThinkingIndex > sourceIndex &&
+            fetchPageIndex > midThinkingIndex,
+          webProcessGroupText: processText,
+        };
+      },
+      {
+        searchTitle: WEB_TOOLS_SEARCH_TITLE,
+        searchUrl: WEB_TOOLS_SEARCH_URL,
+        searchSourceLabel: WEB_TOOLS_SEARCH_SOURCE_LABEL,
+        midThinkingText: WEB_TOOLS_MID_THINKING_TEXT,
+        fetchMarkdown: WEB_TOOLS_FETCH_MARKDOWN,
+      },
+    );
+    lastSnapshot = snapshot;
+    if (
+      snapshot?.webProcessGroupExpanded &&
+      snapshot.hasSearchSourceSection &&
+      snapshot.hasFetchPageSection &&
+      snapshot.hasSearchTitle &&
+      snapshot.hasMidThinkingText &&
+      snapshot.hasSearchSourceLabel &&
+      snapshot.hasFullSearchUrlVisible === false &&
+      snapshot.hasFetchPageUrl &&
+      snapshot.hasTimelineOrderPreserved &&
+      snapshot.hasFetchMarkdownHidden
+    ) {
+      return snapshot;
+    }
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `Claw GUI 网页搜索过程展开验收失败: ${JSON.stringify(
+      sanitizeJson({ defaultSnapshot: options.defaultSnapshot, lastSnapshot }),
+    )}`,
+  );
+}
+
+async function inspectGuiWebToolsRenderingDebug(page) {
+  return await evaluatePageSnapshot(page, () => {
+    const text = document.body?.innerText || "";
+    const processGroups = Array.from(
+      document.querySelectorAll('[data-testid="streaming-process-group"]'),
+    ).map((group, index) => {
+      const button = group.querySelector("button");
+      return {
+        index,
+        processKind: group.getAttribute("data-process-kind") || "",
+        processRunning: group.getAttribute("data-process-running") || "",
+        visualTone: group.getAttribute("data-visual-tone") || "",
+        expanded: button?.getAttribute("aria-expanded") || "",
+        buttonText: button?.textContent || "",
+        text: group.textContent || "",
+      };
+    });
+    const thinkingBlocks = Array.from(
+      document.querySelectorAll('[data-testid="thinking-block"]'),
+    ).map((block, index) => ({
+      index,
+      visualStyle: block.getAttribute("data-visual-style") || "",
+      text: block.textContent || "",
+    }));
+    const processRows = Array.from(
+      document.querySelectorAll(
+        '[data-testid="web-retrieval-process-row"], [data-testid="inline-tool-process-step"]',
+      ),
+    ).map((row, index) => ({
+      index,
+      testId: row.getAttribute("data-testid") || "",
+      grouped: row.getAttribute("data-grouped") || "",
+      toolStatus: row.getAttribute("data-tool-status") || "",
+      text: row.textContent || "",
+    }));
+    const renderers = Array.from(
+      document.querySelectorAll('[data-testid="streaming-renderer"]'),
+    ).map((renderer, index) => ({
+      index,
+      renderMode: renderer.getAttribute("data-render-mode") || "",
+      contentPartTypes: renderer.getAttribute("data-content-part-types") || "",
+      text: renderer.textContent || "",
+    }));
+    const messageBubbles = Array.from(
+      document.querySelectorAll("[data-message-role]"),
+    ).map((bubble, index) => ({
+      index,
+      role: bubble.getAttribute("data-message-role") || "",
+      messageContentPartTypes:
+        bubble.getAttribute("data-message-content-part-types") || "",
+      rendererContentPartTypes:
+        bubble.getAttribute("data-renderer-content-part-types") || "",
+      timelineItems: bubble.getAttribute("data-timeline-items") || "",
+      text: bubble.textContent || "",
+    }));
+    const messageList = document.querySelector('[data-testid="message-list"]');
+    const frame = document.querySelector('[data-testid="message-list-frame"]');
+    return {
+      url: window.location.href,
+      hasMidThinkingInBody: text.includes(
+        "搜索结果还需要继续筛掉广告软文，我先读取有效来源。",
+      ),
+      processGroups,
+      thinkingBlocks,
+      processRows,
+      renderers,
+      messageBubbles,
+      messageListText: messageList?.textContent || "",
+      messageFrameText: frame?.textContent || "",
+      bodyText: text,
+    };
+  });
 }
 
 async function waitForGuiPlanCompleted(page, options) {
@@ -3024,9 +3395,52 @@ async function run() {
       );
 
       logStage("wait-gui-web-tools-rendering-completed");
-      summary.guiWebToolsRenderingCompleted = sanitizeJson(
-        await waitForGuiWebToolsRenderingCompleted(page, options),
-      );
+      try {
+        summary.guiWebToolsRenderingCompleted = sanitizeJson(
+          await waitForGuiWebToolsRenderingCompleted(page, options),
+        );
+      } catch (error) {
+        try {
+          summary.guiWebToolsRenderingDebug = sanitizeJson(
+            await inspectGuiWebToolsRenderingDebug(page),
+          );
+        } catch (debugError) {
+          summary.guiWebToolsRenderingDebug = sanitizeJson({
+            error: String(debugError?.message || debugError),
+          });
+        }
+        try {
+          const probe = await invokeAppServerFromPage(
+            page,
+            APP_SERVER_METHOD_SESSION_READ,
+            {
+              sessionId: SESSION_ID,
+              historyLimit: 100,
+            },
+            appServerRequests,
+          );
+          const serializedProbe = JSON.stringify(probe.result || {});
+          summary.readModelWebToolsRenderingFailureProbe = sanitizeJson({
+            detailItemCount: Array.isArray(probe.result?.detail?.items)
+              ? probe.result.detail.items.length
+              : null,
+            includesMidThinking: serializedProbe.includes(
+              WEB_TOOLS_MID_THINKING_TEXT,
+            ),
+            includesWebSearchTool: serializedProbe.includes(
+              WEB_TOOLS_SEARCH_TOOL_CALL_ID,
+            ),
+            includesWebFetchTool: serializedProbe.includes(
+              WEB_TOOLS_FETCH_TOOL_CALL_ID,
+            ),
+          });
+        } catch (probeError) {
+          summary.readModelWebToolsRenderingFailureProbe = sanitizeJson({
+            error: String(probeError?.message || probeError),
+          });
+        }
+        throw error;
+      }
 
       logStage("wait-read-model-web-tools-rendering-completed");
       const readModelWebToolsRenderingCompleted =
@@ -3411,10 +3825,15 @@ async function run() {
                 (pageText.includes("目标已绑定到本轮请求") ||
                   pageText.includes(GOAL_DONE_TEXT))
               : isWebToolsRenderingScenario
-                ? pageText.includes(WEB_TOOLS_RENDERING_PROMPT) &&
-                  pageText.includes("已搜索网页 1 次，读取网页 1 次") &&
-                  pageText.includes(WEB_TOOLS_SEARCH_TITLE) &&
-                  pageText.includes("网页搜索渲染结论")
+                ? summary.guiWebToolsRenderingCompleted?.hasPrompt === true &&
+                  summary.guiWebToolsRenderingCompleted?.hasProcessTitle ===
+                    true &&
+                  summary.guiWebToolsRenderingCompleted?.expandedDetails
+                    ?.hasSearchTitle === true &&
+                  summary.guiWebToolsRenderingCompleted
+                    ?.expandedDetails?.hasSearchSourceLabel === true &&
+                  summary.guiWebToolsRenderingCompleted
+                    ?.hasAssistantSummary === true
           : pageText.includes(NEWS_PROMPT) &&
             (pageText.includes("今日国际新闻简要整理") ||
               pageText.includes(ASSISTANT_DONE_TEXT)),
@@ -3479,18 +3898,40 @@ async function run() {
               summary.webToolsRenderingInputSend?.afterFill
                 ?.promptVisibleInTextarea === true &&
               summary.webToolsRenderingInputSend?.clicked?.clicked === true,
-            guiWebSearchProcessDefaultExpanded:
+            guiWebSearchProcessDefaultCollapsed:
               summary.guiWebToolsRenderingCompleted
-                ?.webProcessGroupExpanded === true,
-            guiWebSearchProcessShowsInlineSources:
-              summary.guiWebToolsRenderingCompleted
+                ?.webProcessGroupExpanded === false,
+            guiWebSearchProcessShowsSourcesAfterExpand:
+              summary.guiWebToolsRenderingCompleted?.expandedDetails
                 ?.hasSearchSourceSection === true &&
-              summary.guiWebToolsRenderingCompleted?.hasSearchTitle === true &&
-              summary.guiWebToolsRenderingCompleted?.hasSearchUrl === true,
-            guiWebFetchProcessShowsReadPages:
-              summary.guiWebToolsRenderingCompleted?.hasFetchPageSection ===
+              summary.guiWebToolsRenderingCompleted?.expandedDetails
+                ?.hasSearchTitle === true &&
+              summary.guiWebToolsRenderingCompleted?.expandedDetails
+                ?.hasSearchSourceLabel === true &&
+              summary.guiWebToolsRenderingCompleted?.expandedDetails
+                ?.hasFullSearchUrlVisible ===
+                false,
+            guiWebFetchProcessShowsReadPagesAfterExpand:
+              summary.guiWebToolsRenderingCompleted?.expandedDetails
+                ?.hasFetchPageSection ===
                 true &&
-              summary.guiWebToolsRenderingCompleted?.hasFetchPageUrl === true,
+              summary.guiWebToolsRenderingCompleted?.expandedDetails
+                ?.hasFetchPageUrl === true,
+            guiWebToolsTimelineOrderPreserved:
+              summary.guiWebToolsRenderingCompleted?.expandedDetails
+                ?.hasTimelineOrderPreserved === true,
+            guiWebSearchNoiseHidden:
+              summary.guiWebToolsRenderingCompleted?.searchNoiseVisible ===
+              false,
+            guiMarkdownRendered:
+              summary.guiWebToolsRenderingCompleted?.rawMarkdownVisible ===
+                false &&
+              summary.guiWebToolsRenderingCompleted?.markdownHeadingVisible ===
+                true &&
+              summary.guiWebToolsRenderingCompleted?.markdownStrongVisible ===
+                true &&
+              summary.guiWebToolsRenderingCompleted?.markdownTableVisible ===
+                true,
             guiWebSearchFinalTextInterleaved:
               summary.guiWebToolsRenderingCompleted
                 ?.hasFinalTextAfterProcess === true,

@@ -1,4 +1,5 @@
 use super::super::*;
+use app_server_protocol::{McpServerOauthLoginParams, McpServerOauthLoginResponse};
 use async_trait::async_trait;
 
 #[async_trait]
@@ -66,6 +67,13 @@ impl McpAppDataSource for LocalAppDataSource {
         params: McpServerStopParams,
     ) -> Result<McpServerLifecycleResponse, RuntimeCoreError> {
         mcp::stop_mcp_server(&self.mcp_manager, params).await
+    }
+
+    async fn login_mcp_server_oauth(
+        &self,
+        params: McpServerOauthLoginParams,
+    ) -> Result<McpServerOauthLoginResponse, RuntimeCoreError> {
+        mcp::login_mcp_server_oauth(&self.db, &self.mcp_manager, params).await
     }
 
     async fn list_mcp_tools(&self) -> Result<McpToolListResponse, RuntimeCoreError> {

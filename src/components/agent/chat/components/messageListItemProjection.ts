@@ -327,6 +327,19 @@ function hasRunningWebRetrievalTimelineItem(
   );
 }
 
+function hasCompletedOrRunningWebRetrievalTimelineItem(
+  items?: AgentThreadItem[],
+): boolean {
+  return Boolean(
+    items?.some(
+      (item) =>
+        (item.status === "completed" ||
+          isRunningThreadItemStatus(item.status)) &&
+        isWebRetrievalThreadItem(item),
+    ),
+  );
+}
+
 function normalizeInactiveRunningWebRetrievalContentParts(
   parts: Message["contentParts"] | undefined,
   shouldNormalize: boolean,
@@ -486,6 +499,18 @@ function hasFinalAnswerTextAfterRunningWebRetrieval(
   }
 
   return false;
+}
+
+function hasFinalAnswerTextTimelineItem(items?: AgentThreadItem[]): boolean {
+  return Boolean(
+    items?.some(
+      (item) =>
+        item.type === "agent_message" &&
+        !isAgentMessageCommentaryPhase(item.phase) &&
+        shouldUseAgentMessageAsFinalText(item.phase) &&
+        item.text.trim().length > 0,
+    ),
+  );
 }
 
 function ensureInlineThinkingContentPart(params: {
@@ -658,10 +683,15 @@ export function resolveMessageListItemProjection({
   } = imageWorkbenchProcessDisplayState;
   const isConversationTailAssistant =
     message.role === "assistant" && message.id === group.lastAssistantId;
+  const isTimelineOwnerAssistant =
+    message.role === "assistant" &&
+    group.timeline !== null &&
+    (group.timelineMessageId === message.id ||
+      (!group.timelineMessageId && isConversationTailAssistant));
   const timeline =
     message.role !== "assistant"
       ? null
-      : isConversationTailAssistant
+      : isTimelineOwnerAssistant
         ? group.timeline
         : null;
   const rawTimelineItems = timeline?.items;
@@ -670,12 +700,17 @@ export function resolveMessageListItemProjection({
     hasPersistedReasoningTimelineItem(rawTimelineItems);
   const hasRunningTimelineProcess =
     timeline !== null && hasRunningWebRetrievalTimelineItem(rawTimelineItems);
+  const hasCompletedOrRunningWebRetrievalTimelineProcess =
+    timeline !== null &&
+    hasCompletedOrRunningWebRetrievalTimelineItem(rawTimelineItems);
   const hasRunningWebRetrievalPart =
     hasRunningWebRetrievalContentPart(rawDisplayContentParts);
   const hasActiveTimelineTurn =
     timeline !== null && isActiveThreadTurnStatus(timeline.turn.status);
   const hasFinalAnswerAfterRunningWebRetrieval =
     hasFinalAnswerTextAfterRunningWebRetrieval(rawTimelineItems);
+  const hasFinalAnswerTimelineItem =
+    hasFinalAnswerTextTimelineItem(rawTimelineItems);
   const isActiveAssistantOutput =
     message.isThinking ||
     isSending ||
@@ -695,19 +730,54 @@ export function resolveMessageListItemProjection({
       rawTimelineItems,
       shouldNormalizeInactiveRunningWebRetrieval,
     );
+  const primaryTimelineKey = timeline ? `leading:${timeline.turn.id}` : null;
+  const hasImportedSourcePrimaryTimeline = hasImportedSourceProcessItem(
+    timelineItemsForDisplay,
+  );
+  const shouldPreferCompactHistoricalTimeline =
+    Boolean(primaryTimelineKey) &&
+    isRestoredHistoryWindow &&
+    !focusedTimelineItemId &&
+    timeline?.turn.status === "completed" &&
+    timeline.turn.id !== activeCurrentTurnId &&
+    !hasImportedSourcePrimaryTimeline &&
+    !expandedHistoricalTimelineKeys.has(primaryTimelineKey!) &&
+    (shouldDeferThreadItemsScan ||
+      (timelineItemsForDisplay?.length || 0) >=
+        MESSAGE_LIST_HISTORICAL_TIMELINE_COMPACT_ITEM_THRESHOLD);
+  const shouldKeepExpandedHistoricalTimelineInTimeline =
+    Boolean(primaryTimelineKey) &&
+    isRestoredHistoryWindow &&
+    !focusedTimelineItemId &&
+    timeline?.turn.status === "completed" &&
+    timeline.turn.id !== activeCurrentTurnId &&
+    !hasImportedSourcePrimaryTimeline &&
+    expandedHistoricalTimelineKeys.has(primaryTimelineKey!);
   const shouldHoldStreamingOverlayAsProcess =
     Boolean(streamingTextOverlay?.content?.trim()) &&
     shouldHoldRunningWebRetrieval;
   const shouldHideAssistantTextWhileRunning =
     shouldHoldRunningWebRetrieval &&
+    !hasFinalAnswerTimelineItem &&
     (hasFinalAnswerAfterRunningWebRetrieval ||
       Boolean(streamingTextOverlay?.content?.trim()) ||
       Boolean(displayContent.trim()) ||
       !message.thinkingContent?.trim());
   const shouldHoldAssistantTextAsProcess =
-    shouldHoldRunningWebRetrieval && !shouldHideAssistantTextWhileRunning;
+    shouldHoldRunningWebRetrieval &&
+    !hasFinalAnswerTimelineItem &&
+    !shouldHideAssistantTextWhileRunning;
+  const isActiveProcessOnlyOutput =
+    message.role === "assistant" &&
+    isActiveAssistantOutput &&
+    !hasFinalAnswerTimelineItem &&
+    !displayContent.trim() &&
+    (hasCompletedOrRunningWebRetrievalTimelineProcess ||
+      hasRunningWebRetrievalPart);
   const timelineInlineContentParts =
-    message.role === "assistant"
+    message.role === "assistant" &&
+    !shouldPreferCompactHistoricalTimeline &&
+    !shouldKeepExpandedHistoricalTimelineInTimeline
       ? buildTimelineInlineContentParts({
           displayContent: shouldHoldStreamingOverlayAsProcess
             ? ""
@@ -942,7 +1012,9 @@ export function resolveMessageListItemProjection({
       hasActiveStreamingOverlay ||
       (message.id === lastAssistantMessageId &&
         hasActiveInteractiveRuntime &&
-        (isSending || hasPendingActionRequestForMessage)));
+        (isSending ||
+          hasPendingActionRequestForMessage ||
+          isActiveProcessOnlyOutput)));
   const shouldReadOnlyInteractiveContent =
     message.role === "assistant" && !isCurrentInteractiveAssistantMessage;
   const usesProcessSeparatedFinalText =
@@ -1167,11 +1239,6 @@ export function resolveMessageListItemProjection({
       shouldSuppressRendererProcessFlow,
     },
   );
-  const primaryTimelineKey = primaryTimeline
-    ? `leading:${primaryTimeline.turn.id}`
-    : null;
-  const hasImportedSourcePrimaryTimeline =
-    hasImportedSourceProcessItem(primaryTimeline?.items);
   const arePrimaryTimelineDetailsDeferred =
     Boolean(primaryTimeline) &&
     shouldDeferThreadItemsScan &&
@@ -1183,15 +1250,13 @@ export function resolveMessageListItemProjection({
     !focusedTimelineItemId &&
     primaryTimeline?.turn.status === "completed" &&
     primaryTimeline.turn.id !== activeCurrentTurnId &&
-    (arePrimaryTimelineDetailsDeferred ||
-      primaryTimeline.items.length >=
-        MESSAGE_LIST_HISTORICAL_TIMELINE_COMPACT_ITEM_THRESHOLD) &&
+    shouldPreferCompactHistoricalTimeline &&
     !hasImportedSourcePrimaryTimeline &&
     !expandedHistoricalTimelineKeys.has(primaryTimelineKey!);
   const shouldRenderPrimaryTimelineOutsideBubble =
     message.role === "assistant" &&
     Boolean(primaryTimeline) &&
-    hasVisibleAssistantText;
+    (hasVisibleAssistantText || !hasAssistantBodyContent);
   const shouldRenderProposedPlanBlocks = !primaryTimeline?.items.some(
     (item) => item.type === "plan",
   );
@@ -1219,6 +1284,7 @@ export function resolveMessageListItemProjection({
     imageWorkbenchRendererState,
     inlineProcessCoverage,
     installedSkillMessageLabel,
+    isActiveProcessOnlyOutput,
     isConversationTailAssistant,
     isCurrentInteractiveAssistantMessage,
     isUserCommandMessage,

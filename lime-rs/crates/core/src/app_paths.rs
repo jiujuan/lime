@@ -15,6 +15,8 @@ const DATABASE_FILE_NAME: &str = "lime.db";
 const LEGACY_DATABASE_FILE_NAME: &str = "proxycast.db";
 const MIGRATION_MARKER_FILE: &str = ".migration_completed";
 const USER_MEMORY_FILE_NAME: &str = "AGENTS.md";
+const CODEX_HOME_ENV: &str = "CODEX_HOME";
+const CODEX_HOME_DIR_NAME: &str = ".codex";
 const LEGACY_USER_MEMORY_FILE_NAMES: &[&str] = &["AGENTS.md", "AGENT.md", "instructions.md"];
 const WORKSPACE_RUNTIME_DIR_NAME: &str = ".lime";
 const WORKSPACE_LOCAL_RUNTIME_AGENTS_FILE_NAME: &str = "AGENTS.local.md";
@@ -160,6 +162,12 @@ pub fn resolve_lime_skill_roots() -> Result<Vec<PathBuf>, String> {
     }
     push_unique_root(&mut roots, resolve_skills_dir()?);
     Ok(roots)
+}
+
+pub fn resolve_codex_home_dir() -> Option<PathBuf> {
+    std::env::var_os(CODEX_HOME_ENV)
+        .map(PathBuf::from)
+        .or_else(|| dirs::home_dir().map(|home| home.join(CODEX_HOME_DIR_NAME)))
 }
 
 pub fn resolve_workspace_runtime_agents_path(working_dir: &Path) -> PathBuf {

@@ -45,6 +45,7 @@ import {
   isLikelyWebRetrievalDiagnosticNoise,
 } from "../utils/toolProcessSummary";
 import { resolveMemoryToolEvidence } from "../utils/memoryToolEvidence";
+import { shouldHideToolResultEnvelope } from "../utils/toolResultEnvelopeDisplay";
 import {
   extractStructuredToolDetailText,
   normalizeToolResultDetailText,
@@ -63,6 +64,7 @@ interface InlineToolProcessStepProps {
   toolCall: ToolCallState;
   grouped?: boolean;
   groupMarker?: string;
+  isActiveProcess?: boolean;
   isMessageStreaming?: boolean;
   onFileClick?: (fileName: string, content: string) => void;
   onOpenSavedSiteContent?: (target: SiteSavedContentTarget) => void;
@@ -344,6 +346,7 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
   toolCall,
   grouped = false,
   groupMarker = "•",
+  isActiveProcess,
   isMessageStreaming = false,
   onFileClick,
   onOpenSavedSiteContent,
@@ -351,6 +354,7 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
   urlPreviewToolCalls,
 }) => {
   const { t } = useTranslation("agent");
+  const shouldTreatAsActiveProcess = isActiveProcess ?? isMessageStreaming;
   const [expanded, setExpanded] = useState(false);
   const [skillContentExpanded, setSkillContentExpanded] = useState(false);
   const [fetchedSkillContent, setFetchedSkillContent] = useState<string | null>(
@@ -396,6 +400,14 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     const rawText = toolCall.result?.error || toolCall.result?.output || "";
     return extractLimeToolMetadataBlock(rawText).text.trim();
   }, [toolCall.result?.error, toolCall.result?.output]);
+  const shouldHideResultEnvelope = useMemo(
+    () =>
+      shouldHideToolResultEnvelope({
+        toolName: toolCall.name,
+        rawResultText,
+      }),
+    [rawResultText, toolCall.name],
+  );
   const limeTaskProtocolFailureText = useMemo(() => {
     if (toolCall.status !== "failed") {
       return null;
@@ -443,6 +455,12 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     [toolCall],
   );
   const resultText = useMemo(() => {
+    const fallbackSummary =
+      processNarrative.postSummary ||
+      processNarrative.summary ||
+      processNarrative.preSummary ||
+      "";
+
     if (importedSourcePresentation) {
       return t("agentChat.toolCall.importedCommandRecord.description");
     }
@@ -450,11 +468,12 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     if (isUnifiedWebFetchToolName(toolCall.name)) {
       return resolveWebFetchResultText({
         rawResultText,
-        fallbackSummary:
-          processNarrative.postSummary ||
-          processNarrative.summary ||
-          processNarrative.preSummary,
+        fallbackSummary,
       });
+    }
+
+    if (shouldHideResultEnvelope) {
+      return toolCall.status === "running" ? "" : fallbackSummary;
     }
 
     if (toolCall.status !== "failed") {
@@ -463,10 +482,7 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
           toolName: toolCall.name,
           outputText: rawResultText,
           metadata,
-          fallbackSummary:
-            processNarrative.postSummary ||
-            processNarrative.summary ||
-            processNarrative.preSummary,
+          fallbackSummary,
           copy: {
             taskNotFound: () =>
               t("agentChat.toolCall.taskBoard.notFound", "Task not found"),
@@ -495,6 +511,7 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     processNarrative.preSummary,
     processNarrative.summary,
     rawResultText,
+    shouldHideResultEnvelope,
     t,
     toolCall.name,
     toolCall.status,
@@ -697,14 +714,17 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
       (toolCall.status === "running" &&
         !isUnifiedWebSearchToolName(toolCall.name) &&
         !isUnifiedWebFetchToolName(toolCall.name)) ||
-      siteNoticeLines.length > 0
+      siteNoticeLines.length > 0 ||
+      (shouldTreatAsActiveProcess &&
+        (isUnifiedWebSearchToolName(toolCall.name) ||
+          isUnifiedWebFetchToolName(toolCall.name)))
     ) {
       setExpanded(true);
       return;
     }
 
     if (
-      isMessageStreaming &&
+      shouldTreatAsActiveProcess &&
       !toolSearchSummary &&
       !isUnifiedWebSearchToolName(toolCall.name) &&
       !isUnifiedWebFetchToolName(toolCall.name)
@@ -712,7 +732,7 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
       setExpanded(resultText.length <= LARGE_RESULT_AUTO_COLLAPSE_CHARS);
     }
   }, [
-    isMessageStreaming,
+    shouldTreatAsActiveProcess,
     resultText.length,
     siteNoticeLines.length,
     toolCall.status,

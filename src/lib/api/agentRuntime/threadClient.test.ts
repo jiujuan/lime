@@ -1195,6 +1195,94 @@ describe("agentRuntime threadClient", () => {
     unlisten();
   });
 
+  it("App Server submit 返回 item.updated reasoning notification 时应投递到请求里的前端 stream event", async () => {
+    const appServerClient = appServerClientMock();
+    vi.mocked(appServerClient.startTurn).mockResolvedValueOnce({
+      id: 1,
+      result: {
+        turn: {
+          turnId: "turn-1",
+          sessionId: "session-1",
+          threadId: "thread-1",
+          status: "accepted",
+        },
+      },
+      response: {
+        id: 1,
+        result: {
+          turn: {
+            turnId: "turn-1",
+            sessionId: "session-1",
+            threadId: "thread-1",
+            status: "accepted",
+          },
+        },
+      },
+      messages: [],
+      notifications: [
+        {
+          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+          params: {
+            event: {
+              eventId: "evt-reasoning-1",
+              sequence: 3,
+              sessionId: "session-1",
+              threadId: "thread-1",
+              turnId: "turn-1",
+              type: "item.updated",
+              timestamp: "2026-06-06T00:00:02.000Z",
+              payload: {
+                item: {
+                  id: "reasoning-1",
+                  type: "reasoning",
+                  text: "搜索后先筛掉低质量来源。",
+                  status: "in_progress",
+                  sequence: 3,
+                },
+              },
+            },
+          },
+        },
+      ],
+    });
+    const client = createThreadClient({
+      appServerClient,
+      invokeCommand: vi.fn() as unknown as AgentRuntimeCommandInvoke,
+      isAppServerTurnLifecycleAvailable: () => true,
+    });
+
+    const listener = vi.fn();
+    const unlisten = await listenAgentRuntimeEvent(
+      "aster_stream_reasoning-1",
+      listener,
+    );
+
+    await client.submitAgentRuntimeTurn({
+      message: "生成草稿",
+      session_id: "session-1",
+      event_name: "aster_stream_reasoning-1",
+    });
+
+    expect(listener).toHaveBeenCalledWith({
+      payload: expect.objectContaining({
+        type: "item_updated",
+        event_id: "evt-reasoning-1",
+        sequence: 3,
+        session_id: "session-1",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        item: expect.objectContaining({
+          id: "reasoning-1",
+          type: "reasoning",
+          text: "搜索后先筛掉低质量来源。",
+          status: "in_progress",
+          turn_id: "turn-1",
+        }),
+      }),
+    });
+    unlisten();
+  });
+
   it("App Server submit 返回乱序 notification 时应按 sequence 投递", async () => {
     const appServerClient = appServerClientMock();
     vi.mocked(appServerClient.startTurn).mockResolvedValueOnce({
@@ -1288,6 +1376,235 @@ describe("agentRuntime threadClient", () => {
     expect(listener.mock.calls.map(([event]) => event.payload.event_id)).toEqual(
       ["evt-ordered-1", "evt-ordered-2", "evt-ordered-3"],
     );
+    unlisten();
+  });
+
+  it("App Server WebSearch/WebFetch 中间 reasoning notification 不应被序列门控丢弃", async () => {
+    const appServerClient = appServerClientMock();
+    vi.mocked(appServerClient.startTurn).mockResolvedValueOnce({
+      id: 1,
+      result: {
+        turn: {
+          turnId: "turn-web-tools",
+          sessionId: "session-web-tools",
+          threadId: "thread-web-tools",
+          status: "accepted",
+        },
+      },
+      response: {
+        id: 1,
+        result: {
+          turn: {
+            turnId: "turn-web-tools",
+            sessionId: "session-web-tools",
+            threadId: "thread-web-tools",
+            status: "accepted",
+          },
+        },
+      },
+      messages: [],
+      notifications: [
+        {
+          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+          params: {
+            event: {
+              eventId: "evt-web-tools-1",
+              sequence: 1,
+              sessionId: "session-web-tools",
+              threadId: "thread-web-tools",
+              turnId: "turn-web-tools",
+              type: "message.delta",
+              timestamp: "2026-06-20T10:00:01.000Z",
+              payload: { text: "我先联网核实目标页面来源。\n" },
+            },
+          },
+        },
+        {
+          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+          params: {
+            event: {
+              eventId: "evt-web-tools-2",
+              sequence: 2,
+              sessionId: "session-web-tools",
+              threadId: "thread-web-tools",
+              turnId: "turn-web-tools",
+              type: "tool.started",
+              timestamp: "2026-06-20T10:00:02.000Z",
+              payload: {
+                toolCallId: "tool-web-search",
+                toolName: "WebSearch",
+                arguments: { query: "Lime WebSearch rendering" },
+              },
+            },
+          },
+        },
+        {
+          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+          params: {
+            event: {
+              eventId: "evt-web-tools-3",
+              sequence: 3,
+              sessionId: "session-web-tools",
+              threadId: "thread-web-tools",
+              turnId: "turn-web-tools",
+              type: "tool.result",
+              timestamp: "2026-06-20T10:00:03.000Z",
+              payload: {
+                toolCallId: "tool-web-search",
+                toolName: "WebSearch",
+                output: JSON.stringify({ results: [] }),
+                success: true,
+              },
+            },
+          },
+        },
+        {
+          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+          params: {
+            event: {
+              eventId: "evt-web-tools-4",
+              sequence: 4,
+              sessionId: "session-web-tools",
+              threadId: "thread-web-tools",
+              turnId: "turn-web-tools",
+              type: "item.updated",
+              timestamp: "2026-06-20T10:00:04.000Z",
+              payload: {
+                item: {
+                  id: "reasoning-web-tools",
+                  thread_id: "thread-web-tools",
+                  turn_id: "turn-web-tools",
+                  type: "reasoning",
+                  text: "搜索结果还需要继续筛掉广告软文，我先读取有效来源。",
+                  sequence: 3,
+                  status: "in_progress",
+                  started_at: "2026-06-20T10:00:04.000Z",
+                  updated_at: "2026-06-20T10:00:04.000Z",
+                },
+              },
+            },
+          },
+        },
+        {
+          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+          params: {
+            event: {
+              eventId: "evt-web-tools-5",
+              sequence: 5,
+              sessionId: "session-web-tools",
+              threadId: "thread-web-tools",
+              turnId: "turn-web-tools",
+              type: "tool.started",
+              timestamp: "2026-06-20T10:00:05.000Z",
+              payload: {
+                toolCallId: "tool-web-fetch",
+                toolName: "WebFetch",
+                arguments: {
+                  url: "https://example.com/lime-websearch-rendering",
+                },
+              },
+            },
+          },
+        },
+        {
+          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+          params: {
+            event: {
+              eventId: "evt-web-tools-6",
+              sequence: 6,
+              sessionId: "session-web-tools",
+              threadId: "thread-web-tools",
+              turnId: "turn-web-tools",
+              type: "tool.result",
+              timestamp: "2026-06-20T10:00:06.000Z",
+              payload: {
+                toolCallId: "tool-web-fetch",
+                toolName: "WebFetch",
+                output: "WebFetch 正文摘要。",
+                success: true,
+              },
+            },
+          },
+        },
+        {
+          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+          params: {
+            event: {
+              eventId: "evt-web-tools-7",
+              sequence: 7,
+              sessionId: "session-web-tools",
+              threadId: "thread-web-tools",
+              turnId: "turn-web-tools",
+              type: "item.completed",
+              timestamp: "2026-06-20T10:00:07.000Z",
+              payload: {
+                item: {
+                  id: "reasoning-web-tools",
+                  thread_id: "thread-web-tools",
+                  turn_id: "turn-web-tools",
+                  type: "reasoning",
+                  text: "搜索结果还需要继续筛掉广告软文，我先读取有效来源。",
+                  sequence: 3,
+                  status: "completed",
+                  started_at: "2026-06-20T10:00:04.000Z",
+                  completed_at: "2026-06-20T10:00:07.000Z",
+                  updated_at: "2026-06-20T10:00:07.000Z",
+                },
+              },
+            },
+          },
+        },
+        {
+          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+          params: {
+            event: {
+              eventId: "evt-web-tools-8",
+              sequence: 8,
+              sessionId: "session-web-tools",
+              threadId: "thread-web-tools",
+              turnId: "turn-web-tools",
+              type: "turn.completed",
+              timestamp: "2026-06-20T10:00:08.000Z",
+              payload: {},
+            },
+          },
+        },
+      ],
+    });
+    const client = createThreadClient({
+      appServerClient,
+      invokeCommand: vi.fn() as unknown as AgentRuntimeCommandInvoke,
+      isAppServerTurnLifecycleAvailable: () => true,
+    });
+
+    const listener = vi.fn();
+    const unlisten = await listenAgentRuntimeEvent(
+      "aster_stream_web_tools",
+      listener,
+    );
+
+    await client.submitAgentRuntimeTurn({
+      message: "验证网页搜索渲染",
+      session_id: "session-web-tools",
+      event_name: "aster_stream_web_tools",
+    });
+
+    expect(listener.mock.calls.map(([event]) => event.payload.type)).toEqual([
+      "text_delta",
+      "tool_start",
+      "tool_end",
+      "item_updated",
+      "tool_start",
+      "tool_end",
+      "item_completed",
+      "turn_completed",
+    ]);
+    expect(listener.mock.calls[3]?.[0].payload.item).toMatchObject({
+      id: "reasoning-web-tools",
+      type: "reasoning",
+      text: "搜索结果还需要继续筛掉广告软文，我先读取有效来源。",
+      turn_id: "turn-web-tools",
+    });
     unlisten();
   });
 

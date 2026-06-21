@@ -1,7 +1,7 @@
 //! MCP 客户端实现
 //!
 //! 实现 rmcp 的 ClientHandler trait，处理通知和回调。
-//! 使用 DynEmitter 替代 Tauri AppHandle 进行事件发射。
+//! 使用 DynEmitter 进行事件发射，与具体桌面宿主解耦。
 
 #![allow(dead_code)]
 
@@ -263,17 +263,28 @@ mod tests {
     #[test]
     fn test_client_wrapper_creation() {
         let config = super::super::types::McpServerConfig {
-            command: "test-command".to_string(),
-            args: vec!["--arg1".to_string()],
-            env: std::collections::HashMap::new(),
-            cwd: None,
-            timeout: 30,
+            transport: super::super::types::McpServerTransport::Stdio {
+                command: "test-command".to_string(),
+                args: vec!["--arg1".to_string()],
+                env: std::collections::HashMap::new(),
+                cwd: None,
+            },
+            enabled: true,
+            startup_timeout: 30,
+            tool_timeout: None,
+            enabled_tools: None,
+            disabled_tools: Vec::new(),
+            required: false,
+            supports_parallel_tool_calls: false,
+            scopes: None,
+            oauth: None,
+            oauth_resource: None,
         };
 
         let wrapper = McpClientWrapper::new("test-server".to_string(), config, None);
 
         assert_eq!(wrapper.server_name, "test-server");
-        assert_eq!(wrapper.config.command, "test-command");
+        assert_eq!(wrapper.config.command(), "test-command");
         assert!(wrapper.process.is_none());
         assert!(wrapper.server_info.is_none());
     }

@@ -34,13 +34,30 @@ function isMockToolUsePart(part: Record<string, unknown>): part is Record<
   string,
   unknown
 > & {
-  toolCall: { id?: string };
+  toolCall: { id?: string; name?: string; status?: string };
 } {
   return (
     part.type === "tool_use" &&
     Boolean(part.toolCall) &&
     typeof part.toolCall === "object"
   );
+}
+
+type StreamingRendererCallProps = {
+  content?: string;
+  contentParts?: Array<Record<string, unknown>>;
+  onOpenSavedSiteContent?: unknown;
+  toolCalls?: unknown[];
+};
+
+const WEB_TOOL_START_TIME = new Date("2026-06-20T14:49:11.000Z");
+
+function findStreamingRendererCallByContent(
+  content: string,
+): StreamingRendererCallProps | undefined {
+  return mockStreamingRenderer.mock.calls.find(
+    ([props]) => (props as StreamingRendererCallProps).content === content,
+  )?.[0] as StreamingRendererCallProps | undefined;
 }
 
 const mockUseConfiguredProviders = vi.fn((_options?: unknown) => ({
@@ -947,16 +964,10 @@ describe("MessageList", () => {
       await Promise.resolve();
     });
 
-    expect(mockAgentThreadTimeline).toHaveBeenCalled();
-    expect(mockAgentThreadTimeline).toHaveBeenCalledWith(
-      expect.objectContaining({
-        deferCompletedSingleDetails: true,
-        isCurrentTurn: false,
-      }),
-    );
     expect(
       container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
     ).toBeNull();
+    expect(mockAgentThreadTimeline).not.toHaveBeenCalled();
   });
 
   it("旧会话已分页窗口首帧应只挂载更小的尾部批次", () => {
@@ -1072,7 +1083,7 @@ describe("MessageList", () => {
       container.querySelector(
         '[data-testid="message-list-historical-timeline-preview:leading"]',
       ),
-    ).toBeNull();
+    ).not.toBeNull();
     expect(
       container.querySelector('[data-testid="inputbar-runtime-status-line"]'),
     ).toBeNull();
@@ -1086,7 +1097,7 @@ describe("MessageList", () => {
       container.querySelector(
         '[data-testid="message-list-historical-timeline-preview:leading"]',
       ),
-    ).toBeNull();
+    ).not.toBeNull();
 
     act(() => {
       vi.advanceTimersByTime(60);
@@ -2815,6 +2826,87 @@ describe("MessageList", () => {
         .querySelector('[data-testid="streaming-renderer"]')
         ?.getAttribute("data-is-streaming"),
     ).toBe("no");
+  });
+
+  it("搜索已完成但 turn 仍在整理最终答复时，应保持过程为活跃渲染", () => {
+    const now = new Date("2026-06-07T10:40:00.000Z");
+    const turn: AgentThreadTurn = {
+      id: "turn-live-web-synthesizing",
+      thread_id: "thread-live-web-synthesizing",
+      prompt_text: "该买哪种学习机，帮我找权威评测对比",
+      status: "running",
+      started_at: "2026-06-07T10:40:00.000Z",
+      created_at: "2026-06-07T10:40:00.000Z",
+      updated_at: "2026-06-07T10:40:09.000Z",
+    };
+    const messages: Message[] = [
+      {
+        id: "msg-user-live-web-synthesizing",
+        role: "user",
+        content: "该买哪种学习机，帮我找权威评测对比",
+        timestamp: now,
+      },
+      {
+        id: "msg-assistant-live-web-synthesizing",
+        role: "assistant",
+        runtimeTurnId: turn.id,
+        content: "",
+        contentParts: [],
+        timestamp: new Date("2026-06-07T10:40:09.000Z"),
+        isThinking: false,
+        runtimeStatus: {
+          phase: "synthesizing",
+          title: "正在整理最终答复",
+          detail: "搜索已经完成，正在组织最终回答。",
+        },
+      },
+    ];
+
+    const container = render(messages, {
+      currentTurnId: turn.id,
+      isSending: false,
+      turns: [turn],
+      threadItems: [
+        {
+          id: "web-search-synthesizing-completed",
+          type: "web_search",
+          turn_id: turn.id,
+          sequence: 1,
+          action: "search",
+          query: "学习机 权威评测 对比",
+          output: JSON.stringify({
+            results: [
+              {
+                title: "学习机权威评测",
+                url: "https://example.com/review",
+                snippet: "评测摘要",
+              },
+            ],
+          }),
+          status: "completed",
+          started_at: "2026-06-07T10:40:05.000Z",
+          completed_at: "2026-06-07T10:40:08.000Z",
+          updated_at: "2026-06-07T10:40:08.000Z",
+        } as never,
+      ],
+      threadRead: {
+        thread_id: "thread-live-web-synthesizing",
+        status: "running",
+        active_turn_id: turn.id,
+        pending_requests: [],
+      },
+    });
+
+    const renderer = container.querySelector(
+      '[data-testid="streaming-renderer"]',
+    );
+
+    expect(renderer?.getAttribute("data-is-streaming")).toBe("yes");
+    expect(renderer?.getAttribute("data-content-parts")).toBe("1");
+    expect(renderer?.textContent).toContain("<empty-assistant>");
+    expect(
+      container.querySelectorAll('[data-testid="timeline-process-item"]'),
+    ).toHaveLength(0);
   });
 
   it("read model 已完成且有最终正文时不应显示残留正在输出", () => {
@@ -5309,23 +5401,24 @@ describe("MessageList", () => {
       ],
     });
 
-    expect(mockStreamingRenderer).toHaveBeenCalledWith(
+    const rendererCall = findStreamingRendererCallByContent("最终说明");
+    expect(rendererCall).toMatchObject({
+      suppressProcessFlow: false,
+      thinkingContent: "这段思考应只留在执行轨迹中。",
+      toolCalls: undefined,
+    });
+    expect(rendererCall?.contentParts).toEqual([
+      { type: "thinking", text: "这段思考应只留在执行轨迹中。" },
       expect.objectContaining({
-        suppressProcessFlow: false,
-        thinkingContent: "这段思考应只留在执行轨迹中。",
-        toolCalls: [
-          expect.objectContaining({
-            id: "tool-process-suppressed-1",
-            status: "completed",
-          }),
-        ],
-        contentParts: [
-          { type: "thinking", text: "这段思考应只留在执行轨迹中。" },
-          expect.objectContaining({ type: "tool_use" }),
-          { type: "text", text: "最终说明" },
-        ],
+        type: "tool_use",
+        toolCall: expect.objectContaining({
+          id: "item-process-suppressed",
+          name: "functions.exec_command",
+          status: "completed",
+        }),
       }),
-    );
+      { type: "text", text: "最终说明" },
+    ]);
   });
 
   it("当前完成回合缺少持久化 reasoning 时应临时保留本地思考过程", () => {
@@ -5734,9 +5827,6 @@ describe("MessageList", () => {
     });
 
     expect(
-      container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
-    ).toBeNull();
-    expect(
       container
         .querySelector('[data-testid="agent-thread-timeline:leading"]')
         ?.getAttribute("data-turn-id"),
@@ -6030,9 +6120,6 @@ describe("MessageList", () => {
       ],
     });
 
-    expect(
-      container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
-    ).toBeNull();
     const leadingTimelineProps = mockAgentThreadTimeline.mock.calls.find(
       ([props]) => props?.placement === "leading",
     )?.[0] as { items?: AgentThreadItem[] } | undefined;
@@ -6709,24 +6796,26 @@ describe("MessageList", () => {
     });
 
     expect(mockAgentThreadTimeline).not.toHaveBeenCalled();
-    expect(mockStreamingRenderer).toHaveBeenCalledWith(
-      expect.objectContaining({
-        content: "已经修好消息顺序。",
-        suppressProcessFlow: false,
-        contentParts: [
-          { type: "thinking", text: "先定位历史恢复路径。" },
-          expect.objectContaining({ type: "tool_use" }),
-          { type: "text", text: "已经修好消息顺序。" },
-        ],
-        thinkingContent: "先定位历史恢复路径。",
-        toolCalls: [
-          expect.objectContaining({
-            id: "tool-restored-inline-process",
-            status: "completed",
-          }),
-        ],
-      }),
+    const rendererCall = findStreamingRendererCallByContent(
+      "已经修好消息顺序。",
     );
+    expect(rendererCall).toMatchObject({
+      suppressProcessFlow: false,
+      thinkingContent: "先定位历史恢复路径。",
+      toolCalls: undefined,
+    });
+    expect(rendererCall?.contentParts).toEqual([
+      { type: "thinking", text: "先定位历史恢复路径。" },
+      expect.objectContaining({
+        type: "tool_use",
+        toolCall: expect.objectContaining({
+          id: "tool-restored-inline-process",
+          name: "Bash",
+          status: "completed",
+        }),
+      }),
+      { type: "text", text: "已经修好消息顺序。" },
+    ]);
   });
 
   it("当前回合仍在运行时，即使 assistant 非 streaming 占位也应继续透传工具调用", () => {
@@ -6793,25 +6882,23 @@ describe("MessageList", () => {
       },
     });
 
-    expect(mockStreamingRenderer).toHaveBeenCalledWith(
-      expect.objectContaining({
-        toolCalls: [
-          expect.objectContaining({
-            id: "tool-active-turn-1",
-            status: "running",
-          }),
-        ],
-        contentParts: [
-          expect.objectContaining({
-            type: "tool_use",
-          }),
-          {
-            type: "text",
-            text: "正在分析依赖关系。",
-          },
-        ],
-      }),
+    const rendererCall = findStreamingRendererCallByContent(
+      "正在分析依赖关系。",
     );
+    expect(rendererCall).toMatchObject({ toolCalls: undefined });
+    expect(rendererCall?.contentParts).toEqual([
+      expect.objectContaining({
+        type: "tool_use",
+        toolCall: expect.objectContaining({
+          id: "tool-active-turn-1",
+          status: "running",
+        }),
+      }),
+      {
+        type: "text",
+        text: "正在分析依赖关系。",
+      },
+    ]);
   });
 
   it("当前运行回合已有内联过程时，应让 StreamingRenderer 承担穿插式过程", () => {
@@ -7061,7 +7148,7 @@ describe("MessageList", () => {
       },
     ];
 
-    const container = render(messages, {
+    render(messages, {
       currentTurnId: "turn-service-tool",
       turns: [
         {
@@ -7105,9 +7192,13 @@ describe("MessageList", () => {
       ],
     });
 
-    expect(
-      container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
-    ).not.toBeNull();
+    const rendererCall = findStreamingRendererCallByContent(
+      "文章已经保存到项目。",
+    );
+    const toolNames = (rendererCall?.contentParts || [])
+      .filter(isMockToolUsePart)
+      .map((part) => part.toolCall.name);
+    expect(toolNames).toEqual(["Read", "Write"]);
   });
 
   it("完成态 timeline 已有计划时应内联计划块并保留本地思考顺序", () => {
@@ -8595,23 +8686,22 @@ describe("MessageList", () => {
     const streaming = container.querySelector(
       '[data-testid="streaming-renderer"]',
     );
-    const leadingTimeline = container.querySelector(
-      '[data-testid="agent-thread-timeline:leading"]',
-    );
     const artifactButton = Array.from(
       container.querySelectorAll("button"),
     ).find((node) => node.textContent?.includes("publish.md"));
 
     expect(streaming).not.toBeNull();
     expect(artifactButton).toBeDefined();
-    expect(leadingTimeline).not.toBeNull();
     const streamingNode = streaming as Node;
-    const timelineNode = leadingTimeline as Node;
     const artifactButtonNode = artifactButton as Node;
     expect(
-      timelineNode.compareDocumentPosition(streamingNode) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+      findStreamingRendererCallByContent("已生成发布文案")?.contentParts,
+    ).toEqual([
+      expect.objectContaining({
+        type: "text",
+        text: expect.stringContaining("<proposed_plan>"),
+      }),
+    ]);
     expect(
       streamingNode.compareDocumentPosition(artifactButtonNode) &
         Node.DOCUMENT_POSITION_FOLLOWING,
@@ -8728,8 +8818,10 @@ describe("MessageList", () => {
       ],
     });
 
-    expect(mockAgentThreadTimeline).toHaveBeenCalledWith(
-      expect.objectContaining({ onOpenSavedSiteContent }),
+    expect(findStreamingRendererCallByContent("站点结果已沉淀。")).toMatchObject(
+      {
+        onOpenSavedSiteContent,
+      },
     );
   });
 
@@ -8746,6 +8838,7 @@ describe("MessageList", () => {
         role: "assistant",
         content: "先给出一段中间反馈。",
         timestamp: new Date("2026-03-15T09:00:05Z"),
+        runtimeTurnId: "turn-latest",
       },
       {
         id: "msg-user-latest",
@@ -8800,19 +8893,17 @@ describe("MessageList", () => {
     const streamingNodes = Array.from(
       container.querySelectorAll('[data-testid="streaming-renderer"]'),
     );
-    const timelineNodes = Array.from(
-      container.querySelectorAll(
-        '[data-testid="agent-thread-timeline:leading"]',
-      ),
-    );
 
     expect(streamingNodes).toHaveLength(1);
-    expect(timelineNodes).toHaveLength(1);
     expect(
-      (timelineNodes[0] as Node).compareDocumentPosition(
-        streamingNodes[0] as Node,
-      ) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+      findStreamingRendererCallByContent("先给出一段中间反馈。")
+        ?.contentParts,
+    ).toEqual([
+      expect.objectContaining({
+        type: "text",
+        text: expect.stringContaining("<proposed_plan>"),
+      }),
+    ]);
     expect(
       container.querySelector('[data-testid="assistant-message-meta-footer"]'),
     ).toBeNull();
@@ -8874,14 +8965,17 @@ describe("MessageList", () => {
       ],
     });
 
-    const timelineNodes = Array.from(
-      container.querySelectorAll('[data-testid^="agent-thread-timeline:"]'),
-    );
-
     expect(
       container.querySelector('[data-testid="agent-thread-reliability-panel"]'),
     ).toBeNull();
-    expect(timelineNodes).toHaveLength(1);
+    expect(
+      findStreamingRendererCallByContent("较早的中间反馈。")?.contentParts,
+    ).toEqual([
+      expect.objectContaining({
+        type: "text",
+        text: expect.stringContaining("<proposed_plan>"),
+      }),
+    ]);
   });
 
   it("继续回合的执行过程应挂在第二次对话组而不是第一次失败组", () => {
@@ -8971,23 +9065,19 @@ describe("MessageList", () => {
     const continueAssistant = Array.from(
       container.querySelectorAll('[data-testid="streaming-renderer"]'),
     ).find((node) => node.textContent?.includes("好的"));
-    const continueTimeline = container.querySelector(
-      '[data-testid^="agent-thread-timeline:"][data-turn-id="turn-continue"]',
-    );
 
     expect(firstAssistant).toBeTruthy();
     expect(continueAssistant).toBeTruthy();
-    expect(continueTimeline).toBeTruthy();
+    expect(findStreamingRendererCallByContent("好的")?.contentParts).toEqual([
+      expect.objectContaining({
+        type: "text",
+        text: expect.stringContaining("<proposed_plan>"),
+      }),
+    ]);
     expect(
-      (continueTimeline as Node).compareDocumentPosition(
-        continueAssistant as Node,
-      ) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      (continueTimeline as Node).compareDocumentPosition(
-        firstAssistant as Node,
-      ) & Node.DOCUMENT_POSITION_PRECEDING,
-    ).toBeTruthy();
+      findStreamingRendererCallByContent("执行失败：402 Payment Required")
+        ?.contentParts,
+    ).toBeUndefined();
   });
 
   it("失败回复已有时间线错误卡时不应在正文和底部重复长错误", async () => {
@@ -9062,5 +9152,371 @@ describe("MessageList", () => {
     expect(statusPill?.textContent).toContain("当前处理失败");
     expect(statusPill?.textContent).not.toContain(detail);
     expect(metaFooter?.textContent).not.toContain(detail);
+  });
+
+  it("完成态 App Server reasoning 应与 WebSearch/WebFetch 按 turn 顺序进入同一内联过程", () => {
+    const turnId = "turn-web-tools-reasoning";
+    const messages: Message[] = [
+      {
+        id: "msg-user-web-tools-reasoning",
+        role: "user",
+        content: "验证网页搜索渲染",
+        timestamp: new Date("2026-06-20T14:48:10.000Z"),
+      },
+      {
+        id: "msg-assistant-web-tools-reasoning",
+        role: "assistant",
+        content: "网页搜索渲染结论：最终正文继续输出。",
+        timestamp: new Date("2026-06-20T14:48:14.000Z"),
+        runtimeTurnId: turnId,
+      },
+    ];
+
+    render(messages, {
+      currentTurnId: turnId,
+      turns: [
+        {
+          id: turnId,
+          thread_id: "thread-web-tools",
+          prompt_text: "验证网页搜索渲染",
+          status: "completed",
+          started_at: "2026-06-20T14:48:10.000Z",
+          completed_at: "2026-06-20T14:48:14.000Z",
+          created_at: "2026-06-20T14:48:10.000Z",
+          updated_at: "2026-06-20T14:48:14.000Z",
+        },
+      ],
+      threadItems: [
+        {
+          id: "tool-web-search",
+          thread_id: "thread-web-tools",
+          turn_id: turnId,
+          sequence: 1,
+          type: "tool_call",
+          tool_name: "WebSearch",
+          arguments: { query: "Lime WebSearch rendering" },
+          output: JSON.stringify({
+            results: [
+              {
+                title: "Lime WebSearch Rendering Source",
+                url: "https://example.com/lime-websearch-rendering",
+                snippet: "Search source used to verify inline rendering",
+              },
+            ],
+          }),
+          success: true,
+          status: "completed",
+          started_at: "2026-06-20T14:48:11.000Z",
+          completed_at: "2026-06-20T14:48:11.200Z",
+          updated_at: "2026-06-20T14:48:11.200Z",
+        },
+        {
+          id: "reasoning-web-tools",
+          thread_id: "thread-web-tools",
+          turn_id: turnId,
+          sequence: 2,
+          type: "reasoning",
+          text: "搜索结果还需要继续筛掉广告软文，我先读取有效来源。",
+          status: "completed",
+          started_at: "2026-06-20T14:48:11.300Z",
+          completed_at: "2026-06-20T14:48:11.400Z",
+          updated_at: "2026-06-20T14:48:11.400Z",
+        },
+        {
+          id: "tool-web-fetch",
+          thread_id: "thread-web-tools",
+          turn_id: turnId,
+          sequence: 3,
+          type: "tool_call",
+          tool_name: "WebFetch",
+          arguments: { url: "https://example.com/lime-websearch-rendering" },
+          output: JSON.stringify({
+            bytes: 2048,
+            code: 200,
+            codeText: "OK",
+            result: "WebFetch 正文摘要。",
+          }),
+          success: true,
+          status: "completed",
+          started_at: "2026-06-20T14:48:11.500Z",
+          completed_at: "2026-06-20T14:48:11.700Z",
+          updated_at: "2026-06-20T14:48:11.700Z",
+        },
+        {
+          id: "assistant-web-tools-final",
+          thread_id: "thread-web-tools",
+          turn_id: turnId,
+          sequence: 4,
+          type: "agent_message",
+          phase: "final_answer",
+          text: "网页搜索渲染结论：最终正文继续输出。",
+          status: "completed",
+          started_at: "2026-06-20T14:48:12.000Z",
+          completed_at: "2026-06-20T14:48:14.000Z",
+          updated_at: "2026-06-20T14:48:14.000Z",
+        },
+      ],
+    });
+
+    const call = mockStreamingRenderer.mock.calls.at(-1)?.[0] as
+      | StreamingRendererCallProps
+      | undefined;
+
+    expect(call?.contentParts?.map((part) => part.type)).toEqual([
+      "tool_use",
+      "thinking",
+      "tool_use",
+      "text",
+    ]);
+    expect(call?.contentParts?.[1]).toMatchObject({
+      type: "thinking",
+      text: "搜索结果还需要继续筛掉广告软文，我先读取有效来源。",
+    });
+  });
+
+  it("实时 WebSearch/WebFetch 已在消息层时仍应显示 timeline 中间 reasoning", () => {
+    const turnId = "turn-realtime-web-tools-sparse-reasoning";
+    const finalText =
+      "网页搜索渲染结论：搜索来源已展开，读取页面已归入同一过程，最终正文继续输出。";
+    const messages: Message[] = [
+      {
+        id: "msg-assistant-realtime-web-tools",
+        role: "assistant",
+        content: finalText,
+        timestamp: new Date("2026-06-20T14:49:14.000Z"),
+        runtimeTurnId: turnId,
+        contentParts: [
+          {
+            type: "tool_use",
+            toolCall: {
+              id: "realtime-tool-web-search",
+              name: "WebSearch",
+              arguments: JSON.stringify({
+                query: "Lime WebSearch rendering",
+              }),
+              status: "completed",
+              startTime: WEB_TOOL_START_TIME,
+              result: {
+                success: true,
+                output: JSON.stringify({
+                  results: [
+                    {
+                      title: "Lime WebSearch Rendering Source",
+                      url: "https://example.com/lime-websearch-rendering",
+                      snippet: "Search source used to verify inline rendering",
+                    },
+                  ],
+                }),
+              },
+            },
+          },
+          {
+            type: "tool_use",
+            toolCall: {
+              id: "realtime-tool-web-fetch",
+              name: "WebFetch",
+              arguments: JSON.stringify({
+                url: "https://example.com/lime-websearch-rendering",
+              }),
+              status: "completed",
+              startTime: WEB_TOOL_START_TIME,
+              result: {
+                success: true,
+                output: JSON.stringify({
+                  bytes: 2048,
+                  code: 200,
+                  codeText: "OK",
+                  result: "WebFetch 正文摘要。",
+                }),
+              },
+            },
+          },
+          {
+            type: "text",
+            text: finalText,
+          },
+        ],
+      },
+    ];
+
+    render(messages, {
+      currentTurnId: turnId,
+      turns: [
+        {
+          id: turnId,
+          thread_id: "thread-realtime-web-tools",
+          prompt_text: "验证网页搜索渲染",
+          status: "completed",
+          started_at: "2026-06-20T14:49:10.000Z",
+          completed_at: "2026-06-20T14:49:14.000Z",
+          created_at: "2026-06-20T14:49:10.000Z",
+          updated_at: "2026-06-20T14:49:14.000Z",
+        },
+      ],
+      threadItems: [
+        {
+          id: "reasoning-realtime-web-tools",
+          thread_id: "thread-realtime-web-tools",
+          turn_id: turnId,
+          sequence: 3,
+          type: "reasoning",
+          text: "搜索结果还需要继续筛掉广告软文，我先读取有效来源。",
+          status: "completed",
+          started_at: "2026-06-20T14:49:11.300Z",
+          completed_at: "2026-06-20T14:49:11.400Z",
+          updated_at: "2026-06-20T14:49:11.400Z",
+        },
+        {
+          id: "summary-realtime-web-tools",
+          thread_id: "thread-realtime-web-tools",
+          turn_id: turnId,
+          sequence: 4,
+          type: "turn_summary",
+          text: "已搜索网页 1 次，读取网页 1 次",
+          status: "completed",
+          started_at: "2026-06-20T14:49:11.000Z",
+          completed_at: "2026-06-20T14:49:12.000Z",
+          updated_at: "2026-06-20T14:49:12.000Z",
+        },
+      ],
+    });
+
+    const call = mockStreamingRenderer.mock.calls.at(-1)?.[0] as
+      | StreamingRendererCallProps
+      | undefined;
+
+    expect(call?.contentParts?.map((part) => part.type)).toEqual([
+      "tool_use",
+      "thinking",
+      "tool_use",
+      "text",
+    ]);
+    expect(call?.contentParts?.[1]).toMatchObject({
+      type: "thinking",
+      text: "搜索结果还需要继续筛掉广告软文，我先读取有效来源。",
+    });
+  });
+
+  it("完成后 currentTurnId 已清空时仍应把 WebSearch/WebFetch 中间 reasoning 合入消息层过程", () => {
+    const turnId = "turn-completed-web-tools-sparse-reasoning";
+    const finalText =
+      "网页搜索渲染结论：搜索来源已展开，读取页面已归入同一过程，最终正文继续输出。";
+    const messages: Message[] = [
+      {
+        id: "msg-assistant-completed-web-tools",
+        role: "assistant",
+        content: finalText,
+        timestamp: new Date("2026-06-20T14:51:14.000Z"),
+        runtimeTurnId: turnId,
+        contentParts: [
+          {
+            type: "tool_use",
+            toolCall: {
+              id: "completed-tool-web-search",
+              name: "WebSearch",
+              arguments: JSON.stringify({
+                query: "Lime WebSearch rendering",
+              }),
+              status: "completed",
+              startTime: WEB_TOOL_START_TIME,
+              result: {
+                success: true,
+                output: JSON.stringify({
+                  results: [
+                    {
+                      title: "Lime WebSearch Rendering Source",
+                      url: "https://example.com/lime-websearch-rendering",
+                      snippet: "Search source used to verify inline rendering",
+                    },
+                  ],
+                }),
+              },
+            },
+          },
+          {
+            type: "tool_use",
+            toolCall: {
+              id: "completed-tool-web-fetch",
+              name: "WebFetch",
+              arguments: JSON.stringify({
+                url: "https://example.com/lime-websearch-rendering",
+              }),
+              status: "completed",
+              startTime: WEB_TOOL_START_TIME,
+              result: {
+                success: true,
+                output: JSON.stringify({
+                  bytes: 2048,
+                  code: 200,
+                  codeText: "OK",
+                  result: "WebFetch 正文摘要。",
+                }),
+              },
+            },
+          },
+          {
+            type: "text",
+            text: finalText,
+          },
+        ],
+      },
+    ];
+
+    render(messages, {
+      currentTurnId: null,
+      turns: [
+        {
+          id: turnId,
+          thread_id: "thread-completed-web-tools",
+          prompt_text: "验证网页搜索渲染",
+          status: "completed",
+          started_at: "2026-06-20T14:51:10.000Z",
+          completed_at: "2026-06-20T14:51:14.000Z",
+          created_at: "2026-06-20T14:51:10.000Z",
+          updated_at: "2026-06-20T14:51:14.000Z",
+        },
+      ],
+      threadItems: [
+        {
+          id: "reasoning-completed-web-tools",
+          thread_id: "thread-completed-web-tools",
+          turn_id: turnId,
+          sequence: 3,
+          type: "reasoning",
+          text: "搜索结果还需要继续筛掉广告软文，我先读取有效来源。",
+          status: "completed",
+          started_at: "2026-06-20T14:51:11.300Z",
+          completed_at: "2026-06-20T14:51:11.400Z",
+          updated_at: "2026-06-20T14:51:11.400Z",
+        },
+        {
+          id: "summary-completed-web-tools",
+          thread_id: "thread-completed-web-tools",
+          turn_id: turnId,
+          sequence: 4,
+          type: "turn_summary",
+          text: "已搜索网页 1 次，读取网页 1 次",
+          status: "completed",
+          started_at: "2026-06-20T14:51:11.000Z",
+          completed_at: "2026-06-20T14:51:12.000Z",
+          updated_at: "2026-06-20T14:51:12.000Z",
+        },
+      ],
+    });
+
+    const call = mockStreamingRenderer.mock.calls.at(-1)?.[0] as
+      | StreamingRendererCallProps
+      | undefined;
+
+    expect(call?.contentParts?.map((part) => part.type)).toEqual([
+      "tool_use",
+      "thinking",
+      "tool_use",
+      "text",
+    ]);
+    expect(call?.contentParts?.[1]).toMatchObject({
+      type: "thinking",
+      text: "搜索结果还需要继续筛掉广告软文，我先读取有效来源。",
+    });
   });
 });

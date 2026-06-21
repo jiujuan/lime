@@ -6,7 +6,24 @@ export const SOURCE_THREAD_ID = "local-history-click-through-thread";
 export const IMPORTED_USER_TEXT = "请运行测试并修复失败";
 export const IMPORTED_REASONING_TEXT =
   "I need to inspect the test failure first.";
-export const IMPORTED_ASSISTANT_TEXT = "已完成修复。";
+export const IMPORTED_ASSISTANT_SUMMARY_TEXT = "已完成修复。";
+export const IMPORTED_MARKDOWN_HEADING_TEXT = "导入选购指南";
+export const IMPORTED_ASSISTANT_MARKDOWN_TEXT = [
+  "导入选购指南###",
+  "####如果历史会话来自本地 CLI，优先保持工具过程和最终正文穿插。",
+  "**推荐 做法 **：继续沿用同一套过程渲染",
+  "**理由 **：导入态和实时态不应分裂成两套 UI。",
+  "对比表：",
+  "| 场景 | 过程 | 正文 |",
+  "| --- | --- | --- |",
+  "| 导入会话 | WebSearch 可见 | Markdown 正常渲染 |",
+].join("\n");
+export const IMPORTED_ASSISTANT_TEXT = `${IMPORTED_ASSISTANT_SUMMARY_TEXT}\n${IMPORTED_ASSISTANT_MARKDOWN_TEXT}`;
+export const IMPORTED_WEB_SEARCH_TITLE = "Lime Codex Import Rendering Source";
+export const IMPORTED_WEB_SEARCH_URL =
+  "https://example.com/lime-codex-import-rendering";
+export const IMPORTED_WEB_SEARCH_SOURCE_LABEL =
+  "example.com/lime-codex-import-rendering";
 export const IMPORTED_ATTACHMENT_DATA_URL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
 export const CONTINUE_USER_TEXT = "在这个导入会话里继续总结下一步";
@@ -620,7 +637,7 @@ function writeSourceRolloutFixture(rolloutPath, importedCwd) {
         id: "call_search",
         call_id: "call_search",
         action: "search_query",
-        query: "Lime history import",
+        query: "Lime history import rendering",
       },
     },
     {
@@ -630,7 +647,32 @@ function writeSourceRolloutFixture(rolloutPath, importedCwd) {
         type: "web_search_end",
         call_id: "call_search",
         action: "search_query",
-        query: "Lime history import",
+        query: "Lime history import rendering",
+        output: JSON.stringify({
+          results: [
+            {
+              title: "Help",
+              url: "https://help.yahoo.com/kb/search-for-desktop",
+              snippet: "Yahoo search help navigation",
+            },
+            {
+              title: "Sign In",
+              url: "https://login.yahoo.com/?src=search",
+              snippet: "Yahoo sign in navigation",
+            },
+            {
+              title: "Yahoo Scout",
+              url: "https://scout.yahoo.com/search?q=lime",
+              snippet: "Yahoo assistant navigation",
+            },
+            {
+              title: IMPORTED_WEB_SEARCH_TITLE,
+              url: IMPORTED_WEB_SEARCH_URL,
+              snippet:
+                "Imported Codex history source used to verify unified rendering",
+            },
+          ],
+        }),
       },
     },
     {

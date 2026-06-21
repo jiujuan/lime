@@ -127,10 +127,14 @@ describe("compileCommandCatalogProjection", () => {
           { mode: "mention", prefix: "@配音" },
           { mode: "slash", prefix: "/voice-runtime" },
         ],
-        binding: {
+        binding: expect.objectContaining({
           skillId: "voice-runtime-service",
+          skillLocator: {
+            source: "catalog",
+            name: "voice_runtime",
+          },
           executionKind: "agent_turn",
-        },
+        }),
         renderContract: expect.objectContaining({
           resultKind: "tool_timeline",
           detailKind: "scene_detail",
@@ -197,8 +201,12 @@ describe("compileCommandCatalogProjection", () => {
       expect.objectContaining({
         id: "command:poster_generate",
         commandKey: "poster_generate",
-        binding: {
+        binding: expect.objectContaining({
           skillId: "image_generate",
+          skillLocator: {
+            source: "catalog",
+            name: "poster_generate",
+          },
           executionKind: "task_queue",
           requestDefaults: {
             imageWorkbench: "true",
@@ -211,7 +219,7 @@ describe("compileCommandCatalogProjection", () => {
             systemPromptKey:
               "agentChat.inputIntent.imageGeneration.systemPrompt",
           },
-        },
+        }),
         renderContract: {
           resultKind: "image_gallery",
           detailKind: "media_detail",

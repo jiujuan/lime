@@ -249,17 +249,23 @@ fn web_search_query(payload: &Value) -> Option<String> {
 }
 
 fn web_search_action(payload: &Value) -> Option<String> {
-    let value = payload
-        .get("result")
-        .or_else(|| payload.get("action"))
-        .filter(|value| !value.is_null());
-    if let Some(value) = value {
-        return value
-            .as_str()
-            .map(str::to_string)
-            .or_else(|| Some(value.to_string()));
+    if let Some(value) = payload.get("action").filter(|value| !value.is_null()) {
+        if let Some(action) = value.as_str().map(str::to_string) {
+            return Some(action);
+        }
+        if let Some(action) = raw_string_field(value, &["type", "kind", "action"]) {
+            return Some(action);
+        }
     }
-    raw_string_field(payload, &["action", "sourceEventType", "source_event_type"])
+    if let Some(value) = payload.get("result").filter(|value| !value.is_null()) {
+        if let Some(action) = value.as_str().map(str::to_string) {
+            return Some(action);
+        }
+        if let Some(action) = raw_string_field(value, &["type", "kind", "action"]) {
+            return Some(action);
+        }
+    }
+    raw_string_field(payload, &["sourceEventType", "source_event_type"])
 }
 
 fn bool_field(payload: &Value, keys: &[&str]) -> Option<bool> {

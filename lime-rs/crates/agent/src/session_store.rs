@@ -276,10 +276,10 @@ pub fn count_session_messages_sync(db: &DbConnection, session_id: &str) -> Resul
     agent_session_repository::count_session_messages(&conn, session_id)
 }
 
-/// 获取会话 timeline 详情，但不读取/投影 messages。
+/// 获取迁移期 timeline 详情，但不读取/投影 messages。
 ///
-/// 文件 checkpoint、evidence 索引等只依赖 timeline item；走完整消息投影会触发
-/// 历史 tool I/O token 估算，既慢，也会把轻量命令耦合到 tokenizer 初始化。
+/// 旧 timeline projection 已退场时返回空 turns/items；该入口只保留轻量兼容读取语义，
+/// 避免 checkpoint / evidence 这类只读场景触发 legacy message 投影与 tokenizer 初始化。
 pub fn get_session_sync_with_full_timeline_without_messages(
     db: &DbConnection,
     session_id: &str,

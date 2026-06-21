@@ -2647,8 +2647,8 @@ async function main() {
       "live WebSearch/WebFetch turn 必须显式提交 web_search=true",
     );
     assert(
-      liveWebRequest.turn_config?.search_mode === "allowed",
-      'live WebSearch/WebFetch turn 必须显式提交 search_mode="allowed"',
+      liveWebRequest.turn_config?.search_mode === "required",
+      'live WebSearch/WebFetch turn 必须显式提交 search_mode="required"',
     );
 
     const liveWebCompleted = await waitForCondition(
@@ -3077,9 +3077,9 @@ async function main() {
         !longRequest.turn_config?.metadata?.harness?.fast_response_routing &&
         !followRequest.turn_config?.metadata?.harness?.fast_response_routing,
       liveWebFastResponseRoutingDisabled,
-      liveWebExplicitSearchAllowed:
+      liveWebExplicitSearchRequired:
         liveWebRequest.turn_config?.web_search === true &&
-        liveWebRequest.turn_config?.search_mode === "allowed",
+        liveWebRequest.turn_config?.search_mode === "required",
       noRuntimeMockFallbackSeen: runtimeMockLines.length === 0,
       noBlockingConsoleErrors: blockingConsoleErrors.length === 0,
     };
@@ -3152,7 +3152,7 @@ async function main() {
       summary.assertions.liveWebFetchCompleted &&
       summary.assertions.liveWebRequiredToolsCompleted &&
       summary.assertions.liveWebRequiredToolOutputsPresent &&
-      summary.assertions.liveWebExplicitSearchAllowed &&
+      summary.assertions.liveWebExplicitSearchRequired &&
       summary.assertions.fastResponseRoutingDisabled &&
       summary.assertions.liveWebFastResponseRoutingDisabled &&
       summary.assertions.noRuntimeMockFallbackSeen &&

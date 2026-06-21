@@ -18,6 +18,7 @@ async-trait.workspace = true
 tracing.workspace = true
 regex.workspace = true
 dirs.workspace = true
+urlencoding.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

@@ -1164,6 +1164,254 @@ describe("agentStreamTurnEventBinding", () => {
     expect(disposeListener).toHaveBeenCalledTimes(1);
   });
 
+  it("App Server WebSearch/WebFetch 中间 reasoning 应进入现有 GUI stream listener", async () => {
+    vi.useFakeTimers();
+
+    let messages: Message[] = [
+      {
+        id: "assistant-app-server-web-tools",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-06-20T10:00:00.000Z"),
+        isThinking: true,
+        contentParts: [],
+      },
+    ];
+    let threadItems: AgentThreadItem[] = [];
+    let streamActivated = false;
+    let streamHandler: ((event: { payload: unknown }) => void) | null = null;
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const setThreadItems = vi.fn(
+      (
+        value:
+          | AgentThreadItem[]
+          | ((prev: AgentThreadItem[]) => AgentThreadItem[]),
+      ) => {
+        threadItems =
+          typeof value === "function" ? value(threadItems) : value;
+      },
+    );
+    const clearActiveStreamIfMatch = vi.fn(() => true);
+    const disposeListener = vi.fn();
+    const runtime = {
+      listenToTurnEvents: vi.fn(async (_eventName, handler) => {
+        streamHandler = handler;
+        return vi.fn();
+      }),
+    } as unknown as AgentRuntimeAdapter;
+    const requestState: StreamRequestState = {
+      accumulatedContent: "",
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+      queuedTurnId: null,
+    };
+
+    await registerAgentStreamTurnEventBinding({
+      runtime,
+      eventName: "aster_stream_message-app-server-web-tools",
+      requestState,
+      skipUserMessage: false,
+      effectiveProviderType: "openai",
+      effectiveModel: "gpt-5.4",
+      effectiveExecutionStrategy: "react",
+      content: "验证网页搜索渲染",
+      expectingQueue: false,
+      activeSessionId: "session-app-server-web-tools",
+      resolvedWorkspaceId: "workspace-app-server",
+      assistantMsgId: "assistant-app-server-web-tools",
+      pendingTurnKey: "pending-turn-app-server-web-tools",
+      pendingItemKey: "pending-item-app-server-web-tools",
+      effectiveWaitingRuntimeStatus: {
+        phase: "preparing",
+        title: "处理中",
+        detail: "正在准备执行上下文",
+      },
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      callbacks: {
+        activateStream: () => {
+          streamActivated = true;
+        },
+        isStreamActivated: () => streamActivated,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener,
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch,
+        upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
+        removeQueuedTurnState: () => {},
+      },
+      sounds: {
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+      },
+      appendThinkingToParts: (parts, textDelta) => [
+        ...parts,
+        { type: "thinking" as const, text: textDelta },
+      ],
+      setMessages: setMessages as never,
+      setPendingActions: noopDispatch<ActionRequired[]>(),
+      getThreadItems: () => threadItems,
+      setThreadItems: setThreadItems as never,
+      setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
+      setCurrentTurnId: noopDispatch<string | null>(),
+      setExecutionRuntime: noopDispatch<AsterSessionExecutionRuntime | null>(),
+      setIsSending: noopDispatch<boolean>(),
+    });
+
+    if (!streamHandler) {
+      throw new Error("expected stream handler to be registered");
+    }
+
+    const activeStreamHandler = streamHandler as (event: {
+      payload: unknown;
+    }) => void;
+    const project = (
+      type: string,
+      sequence: number,
+      payload: Record<string, unknown>,
+    ) => {
+      const projected = projectAppServerAgentEventPayload({
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: `evt-web-tools-${sequence}`,
+            sequence,
+            sessionId: "session-app-server-web-tools",
+            threadId: "thread-app-server-web-tools",
+            turnId: "turn-app-server-web-tools",
+            type,
+            timestamp: `2026-06-20T10:00:0${sequence}.000Z`,
+            payload,
+          },
+        },
+      });
+      if (!projected) {
+        throw new Error(`expected App Server ${type} notification to project`);
+      }
+      activeStreamHandler({ payload: projected });
+    };
+
+    project("message.delta", 1, {
+      text: "我先联网核实目标页面来源。\n",
+    });
+    project("tool.started", 2, {
+      toolCallId: "tool-web-search",
+      toolName: "WebSearch",
+      arguments: { query: "Lime WebSearch rendering" },
+    });
+    project("tool.result", 3, {
+      toolCallId: "tool-web-search",
+      toolName: "WebSearch",
+      output: JSON.stringify({
+        results: [
+          {
+            title: "Lime WebSearch Rendering Source",
+            url: "https://example.com/lime-websearch-rendering",
+          },
+        ],
+      }),
+      success: true,
+    });
+    project("item.updated", 4, {
+      item: {
+        id: "reasoning-web-tools",
+        thread_id: "thread-app-server-web-tools",
+        turn_id: "turn-app-server-web-tools",
+        type: "reasoning",
+        text: "搜索结果还需要继续筛掉广告软文，我先读取有效来源。",
+        sequence: 4,
+        status: "in_progress",
+        started_at: "2026-06-20T10:00:04.000Z",
+        updated_at: "2026-06-20T10:00:04.000Z",
+      },
+    });
+    project("tool.started", 5, {
+      toolCallId: "tool-web-fetch",
+      toolName: "WebFetch",
+      arguments: { url: "https://example.com/lime-websearch-rendering" },
+    });
+    project("tool.result", 6, {
+      toolCallId: "tool-web-fetch",
+      toolName: "WebFetch",
+      output: JSON.stringify({
+        bytes: 2048,
+        code: 200,
+        codeText: "OK",
+        result: "WebFetch 正文摘要。",
+      }),
+      success: true,
+      metadata: {
+        url: "https://example.com/lime-websearch-rendering",
+      },
+    });
+    project("item.completed", 7, {
+      item: {
+        id: "reasoning-web-tools",
+        thread_id: "thread-app-server-web-tools",
+        turn_id: "turn-app-server-web-tools",
+        type: "reasoning",
+        text: "搜索结果还需要继续筛掉广告软文，我先读取有效来源。",
+        sequence: 4,
+        status: "completed",
+        started_at: "2026-06-20T10:00:04.000Z",
+        completed_at: "2026-06-20T10:00:07.000Z",
+        updated_at: "2026-06-20T10:00:07.000Z",
+      },
+    });
+    project("message.delta", 8, {
+      text: "网页搜索渲染结论：搜索来源已展开，读取页面已归入同一过程，最终正文继续输出。",
+    });
+    project("turn.completed", 9, {
+      turn: {
+        id: "turn-app-server-web-tools",
+        thread_id: "thread-app-server-web-tools",
+        prompt_text: "验证网页搜索渲染",
+        status: "completed",
+        started_at: "2026-06-20T10:00:00.000Z",
+        completed_at: "2026-06-20T10:00:09.000Z",
+        created_at: "2026-06-20T10:00:00.000Z",
+        updated_at: "2026-06-20T10:00:09.000Z",
+      },
+    });
+
+    expect(messages[0]?.isThinking).toBe(false);
+    expect(messages[0]?.content).toContain("网页搜索渲染结论");
+    expect(messages[0]?.contentParts?.map((part) => part.type)).toEqual([
+      "text",
+      "tool_use",
+      "thinking",
+      "tool_use",
+      "text",
+    ]);
+    expect(messages[0]?.contentParts?.[2]).toMatchObject({
+      type: "thinking",
+      text: "搜索结果还需要继续筛掉广告软文，我先读取有效来源。",
+      metadata: {
+        source: "thread_item_reasoning",
+        threadItemId: "reasoning-web-tools",
+        turnId: "turn-app-server-web-tools",
+      },
+    });
+    expect(threadItems.map((item) => item.type)).toEqual([
+      "tool_call",
+      "reasoning",
+      "tool_call",
+    ]);
+    expect(clearActiveStreamIfMatch).toHaveBeenCalledWith(
+      "aster_stream_message-app-server-web-tools",
+    );
+    expect(disposeListener).toHaveBeenCalledTimes(1);
+  });
+
   it("App Server 取消终态应驱动 GUI stream listener 立即收口为已停止", async () => {
     vi.useFakeTimers();
 

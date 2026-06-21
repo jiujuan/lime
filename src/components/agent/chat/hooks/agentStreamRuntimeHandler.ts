@@ -355,7 +355,13 @@ function isItemLifecycleToolItem(item: AgentThreadItem | undefined): boolean {
     item.metadata && typeof item.metadata === "object"
       ? (item.metadata as Record<string, unknown>)
       : null;
-  return metadata?.source !== "legacy_tool_event";
+  if (metadata?.source === "item_lifecycle") {
+    return true;
+  }
+  return (
+    metadata?.source !== "legacy_tool_event" &&
+    metadata?.runtime_event_source !== "legacy_tool_event"
+  );
 }
 
 function shouldLetLegacyToolEventUpdateMessageLayer(params: {
@@ -456,6 +462,23 @@ function mergeToolCallStateFromItem(
   };
 }
 
+function mergeThreadItemMetadataIntoToolUsePart(
+  part: Extract<NonNullable<Message["contentParts"]>[number], { type: "tool_use" }>,
+  item: Extract<AgentThreadItem, { type: "tool_call" }>,
+): Extract<NonNullable<Message["contentParts"]>[number], { type: "tool_use" }> {
+  const itemMetadata = metadataFromThreadItem(item);
+  const metadata = {
+    ...(itemMetadata ?? {}),
+    ...(part.metadata ?? {}),
+    sequence: item.sequence,
+    turnId: item.turn_id,
+  };
+  return {
+    ...part,
+    metadata,
+  };
+}
+
 function syncExistingMessageToolCallFromThreadItem(params: {
   assistantMsgId: string;
   item: AgentThreadItem;
@@ -464,6 +487,7 @@ function syncExistingMessageToolCallFromThreadItem(params: {
   if (params.item.type !== "tool_call") {
     return;
   }
+  const toolCallItem = params.item;
   params.setMessages((prev) =>
     prev.map((message) => {
       if (message.id !== params.assistantMsgId) {
@@ -485,21 +509,262 @@ function syncExistingMessageToolCallFromThreadItem(params: {
       const updateToolCall = (
         toolCall: MessageToolCallState,
       ): MessageToolCallState =>
-        toolCall.id === params.item.id && params.item.type === "tool_call"
-          ? mergeToolCallStateFromItem(toolCall, params.item)
+        toolCall.id === toolCallItem.id
+          ? mergeToolCallStateFromItem(toolCall, toolCallItem)
           : toolCall;
 
       return {
         ...message,
         toolCalls: message.toolCalls?.map(updateToolCall),
         contentParts: message.contentParts?.map((part) =>
-          part.type === "tool_use" && part.toolCall.id === params.item.id
+          part.type === "tool_use" && part.toolCall.id === toolCallItem.id
             ? {
-                ...part,
+                ...mergeThreadItemMetadataIntoToolUsePart(part, toolCallItem),
                 toolCall: updateToolCall(part.toolCall),
               }
             : part,
         ),
+      };
+    }),
+  );
+}
+
+function metadataFromThreadItem(
+  item: AgentThreadItem,
+): Record<string, unknown> | undefined {
+  return item.metadata && typeof item.metadata === "object"
+    ? (item.metadata as Record<string, unknown>)
+    : undefined;
+}
+
+function isReasoningPartForThreadItem(
+  part: NonNullable<Message["contentParts"]>[number],
+  itemId: string,
+): boolean {
+  return part.type === "thinking" && part.metadata?.threadItemId === itemId;
+}
+
+function isPersistedReasoningContentPart(
+  part: NonNullable<Message["contentParts"]>[number],
+): boolean {
+  return (
+    part.type === "thinking" &&
+    part.metadata?.source === "thread_item_reasoning" &&
+    Boolean(part.metadata.threadItemId)
+  );
+}
+
+function threadItemToolSequenceById(
+  items: readonly AgentThreadItem[],
+  turnId?: string | null,
+): Map<string, number> {
+  const sequenceById = new Map<string, number>();
+  const normalizedTurnId = turnId?.trim();
+  for (const item of items) {
+    if (item.type !== "tool_call") {
+      continue;
+    }
+    if (normalizedTurnId && item.turn_id !== normalizedTurnId) {
+      continue;
+    }
+    sequenceById.set(item.id, item.sequence);
+  }
+  return sequenceById;
+}
+
+function isComparableThreadItemSequence(sequence: unknown): sequence is number {
+  return (
+    typeof sequence === "number" &&
+    Number.isFinite(sequence) &&
+    sequence < Number.MAX_SAFE_INTEGER
+  );
+}
+
+function contentPartSequence(
+  part: NonNullable<Message["contentParts"]>[number],
+  sequenceByToolId: Map<string, number>,
+): number | null {
+  const sequence = part.metadata?.sequence;
+  if (isComparableThreadItemSequence(sequence)) {
+    return sequence;
+  }
+  if (part.type === "tool_use") {
+    const itemSequence = sequenceByToolId.get(part.toolCall.id);
+    return isComparableThreadItemSequence(itemSequence) ? itemSequence : null;
+  }
+  return null;
+}
+
+function upsertToolSequenceIntoContentParts(
+  parts: NonNullable<Message["contentParts"]>,
+  sequenceByToolId: Map<string, number>,
+): NonNullable<Message["contentParts"]> {
+  let changed = false;
+  const nextParts = parts.map((part) => {
+    if (part.type !== "tool_use") {
+      return part;
+    }
+    if (
+      isComparableThreadItemSequence(part.metadata?.sequence)
+    ) {
+      return part;
+    }
+    const sequence = sequenceByToolId.get(part.toolCall.id);
+    if (!isComparableThreadItemSequence(sequence)) {
+      return part;
+    }
+    changed = true;
+    return {
+      ...part,
+      metadata: {
+        ...(part.metadata ?? {}),
+        sequence,
+      },
+    };
+  });
+  return changed ? nextParts : parts;
+}
+
+function insertReasoningPartByContentSequence(params: {
+  parts: NonNullable<Message["contentParts"]>;
+  reasoningPart: NonNullable<Message["contentParts"]>[number];
+  reasoningSequence: number;
+  sequenceByToolId: Map<string, number>;
+}): NonNullable<Message["contentParts"]> {
+  let insertAfterIndex = -1;
+  for (let index = 0; index < params.parts.length; index += 1) {
+    const sequence = contentPartSequence(
+      params.parts[index]!,
+      params.sequenceByToolId,
+    );
+    if (sequence !== null && sequence <= params.reasoningSequence) {
+      insertAfterIndex = index;
+    }
+  }
+
+  if (insertAfterIndex >= 0) {
+    return [
+      ...params.parts.slice(0, insertAfterIndex + 1),
+      params.reasoningPart,
+      ...params.parts.slice(insertAfterIndex + 1),
+    ];
+  }
+
+  const firstTextIndex = params.parts.findIndex((part) => part.type === "text");
+  if (firstTextIndex >= 0) {
+    return [
+      ...params.parts.slice(0, firstTextIndex),
+      params.reasoningPart,
+      ...params.parts.slice(firstTextIndex),
+    ];
+  }
+
+  return [...params.parts, params.reasoningPart];
+}
+
+function hasComparableContentPartSequence(
+  parts: NonNullable<Message["contentParts"]>,
+  sequenceByToolId: Map<string, number>,
+): boolean {
+  return parts.some(
+    (part) => contentPartSequence(part, sequenceByToolId) !== null,
+  );
+}
+
+function syncAssistantReasoningContentPartFromThreadItem(params: {
+  assistantMsgId: string;
+  item: AgentThreadItem;
+  threadItems?: readonly AgentThreadItem[];
+  setMessages: Dispatch<SetStateAction<Message[]>>;
+}): void {
+  if (params.item.type !== "reasoning") {
+    return;
+  }
+
+  const text = params.item.text?.trim();
+  if (!text) {
+    return;
+  }
+
+  params.setMessages((prev) =>
+    prev.map((message) => {
+      if (message.id !== params.assistantMsgId) {
+        return message;
+      }
+
+      const metadata = {
+        ...(metadataFromThreadItem(params.item) ?? {}),
+        source: "thread_item_reasoning",
+        threadItemId: params.item.id,
+        sequence: params.item.sequence,
+        turnId: params.item.turn_id,
+      };
+      const sequenceByToolId = threadItemToolSequenceById(
+        params.threadItems ?? [],
+        params.item.turn_id,
+      );
+      const parts = upsertToolSequenceIntoContentParts(
+        message.contentParts || [],
+        sequenceByToolId,
+      );
+      const existingIndex = parts.findIndex((part) =>
+        isReasoningPartForThreadItem(part, params.item.id),
+      );
+      const nextPart: NonNullable<Message["contentParts"]>[number] = {
+        type: "thinking",
+        text,
+        metadata,
+      };
+
+      if (existingIndex >= 0) {
+        const existingPart = parts[existingIndex];
+        const remainingParts = [
+          ...parts.slice(0, existingIndex),
+          ...parts.slice(existingIndex + 1),
+        ];
+        if (!hasComparableContentPartSequence(remainingParts, sequenceByToolId)) {
+          const nextParts = [...parts];
+          nextParts[existingIndex] = nextPart;
+          if (
+            existingPart?.type === "thinking" &&
+            existingPart.text === text &&
+            existingPart.metadata?.turnId === params.item.turn_id
+          ) {
+            return message;
+          }
+          return {
+            ...message,
+            contentParts: nextParts,
+          };
+        }
+        const nextParts = insertReasoningPartByContentSequence({
+          parts: remainingParts,
+          reasoningPart: nextPart,
+          reasoningSequence: params.item.sequence,
+          sequenceByToolId,
+        });
+        if (
+          existingPart?.type === "thinking" &&
+          existingPart.text === text &&
+          existingPart.metadata?.turnId === params.item.turn_id &&
+          nextParts === parts
+        ) {
+          return message;
+        }
+        return {
+          ...message,
+          contentParts: nextParts,
+        };
+      }
+
+      return {
+        ...message,
+        contentParts: insertReasoningPartByContentSequence({
+          parts,
+          reasoningPart: nextPart,
+          reasoningSequence: params.item.sequence,
+          sequenceByToolId,
+        }),
       };
     }),
   );
@@ -920,7 +1185,9 @@ export function handleTurnStreamEvent({
               surfaceThinkingDeltas
                 ? msg.contentParts || []
                 : (msg.contentParts || []).filter(
-                    (part) => part.type !== "thinking",
+                    (part) =>
+                      part.type !== "thinking" ||
+                      isPersistedReasoningContentPart(part),
                   ),
               pendingText,
             ),
@@ -1400,7 +1667,9 @@ export function handleTurnStreamEvent({
                     surfaceThinkingDeltas
                       ? msg.contentParts || []
                       : (msg.contentParts || []).filter(
-                          (part) => part.type !== "thinking",
+                          (part) =>
+                            part.type !== "thinking" ||
+                            isPersistedReasoningContentPart(part),
                         ),
                     snapshotText,
                   ),
@@ -1494,22 +1763,34 @@ export function handleTurnStreamEvent({
         assistantMsgId,
         data.item.turn_id,
       );
-      setThreadItems((prev) =>
-        upsertThreadItemState(
-          data.item.type === "reasoning"
-            ? removeStreamedReasoningTimelineItems(
-                removeThreadItemState(prev, pendingItemKey),
-                data.item.turn_id,
-              )
-            : removeThreadItemState(prev, pendingItemKey),
-          data.item,
-        ),
-      );
-      syncExistingMessageToolCallFromThreadItem({
-        assistantMsgId,
-        item: data.item,
-        setMessages,
-      });
+      {
+        let nextThreadItemsForSync: readonly AgentThreadItem[] =
+          getThreadItems?.() ?? [];
+        setThreadItems((prev) => {
+          const nextItems = upsertThreadItemState(
+            data.item.type === "reasoning"
+              ? removeStreamedReasoningTimelineItems(
+                  removeThreadItemState(prev, pendingItemKey),
+                  data.item.turn_id,
+                )
+              : removeThreadItemState(prev, pendingItemKey),
+            data.item,
+          );
+          nextThreadItemsForSync = nextItems;
+          return nextItems;
+        });
+        syncExistingMessageToolCallFromThreadItem({
+          assistantMsgId,
+          item: data.item,
+          setMessages,
+        });
+        syncAssistantReasoningContentPartFromThreadItem({
+          assistantMsgId,
+          item: data.item,
+          threadItems: nextThreadItemsForSync,
+          setMessages,
+        });
+      }
       break;
 
     case "item_updated":
@@ -1526,22 +1807,34 @@ export function handleTurnStreamEvent({
       if (shouldDeferAgentStreamThreadItemUpdate(data.item)) {
         break;
       }
-      setThreadItems((prev) =>
-        upsertThreadItemState(
-          data.item.type === "reasoning"
-            ? removeStreamedReasoningTimelineItems(
-                removeThreadItemState(prev, pendingItemKey),
-                data.item.turn_id,
-              )
-            : removeThreadItemState(prev, pendingItemKey),
-          data.item,
-        ),
-      );
-      syncExistingMessageToolCallFromThreadItem({
-        assistantMsgId,
-        item: data.item,
-        setMessages,
-      });
+      {
+        let nextThreadItemsForSync: readonly AgentThreadItem[] =
+          getThreadItems?.() ?? [];
+        setThreadItems((prev) => {
+          const nextItems = upsertThreadItemState(
+            data.item.type === "reasoning"
+              ? removeStreamedReasoningTimelineItems(
+                  removeThreadItemState(prev, pendingItemKey),
+                  data.item.turn_id,
+                )
+              : removeThreadItemState(prev, pendingItemKey),
+            data.item,
+          );
+          nextThreadItemsForSync = nextItems;
+          return nextItems;
+        });
+        syncExistingMessageToolCallFromThreadItem({
+          assistantMsgId,
+          item: data.item,
+          setMessages,
+        });
+        syncAssistantReasoningContentPartFromThreadItem({
+          assistantMsgId,
+          item: data.item,
+          threadItems: nextThreadItemsForSync,
+          setMessages,
+        });
+      }
       break;
 
     case "turn_completed": {
@@ -1902,7 +2195,9 @@ export function handleTurnStreamEvent({
                     contentParts: isRetainedSkillProcessMessage(msg)
                       ? msg.contentParts
                       : (msg.contentParts || []).filter(
-                          (part) => part.type !== "thinking",
+                          (part) =>
+                            part.type !== "thinking" ||
+                            isPersistedReasoningContentPart(part),
                         ),
                   }
                 : msg,

@@ -8,7 +8,10 @@ import {
   resolveToolFilePath,
   type ToolCallArgumentValue,
 } from "./toolDisplayInfo";
-import { resolveSearchResultPreviewItemsFromText } from "./searchResultPreview";
+import {
+  formatSearchSourceLabelFromUrl,
+  resolveSearchResultPreviewItemsFromText,
+} from "./searchResultPreview";
 import {
   isUnifiedWebFetchToolName,
   isUnifiedWebSearchToolName,
@@ -101,6 +104,17 @@ function shorten(
   return `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
 }
 
+function formatShortSourceHint(value: string | null | undefined): string | null {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return null;
+  }
+  if (/^https?:\/\//i.test(normalized)) {
+    return shorten(formatSearchSourceLabelFromUrl(normalized), 56);
+  }
+  return shorten(normalized, 56);
+}
+
 function asRecord(value: unknown): Record<string, ToolCallArgumentValue> {
   if (!value) {
     return {};
@@ -142,6 +156,55 @@ function readString(
     }
   }
   return null;
+}
+
+function readFirstString(
+  record: Record<string, unknown>,
+  keys: string[],
+): string | null {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+    if (Array.isArray(value)) {
+      const first = value.find((item) => typeof item === "string" && item.trim());
+      if (typeof first === "string") {
+        return first.trim();
+      }
+    }
+  }
+  return null;
+}
+
+function nestedRecord(
+  record: Record<string, ToolCallArgumentValue>,
+  key: string,
+): Record<string, ToolCallArgumentValue> | null {
+  const value = record[key];
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, ToolCallArgumentValue>;
+}
+
+function resolveWebSearchActionDetail(
+  args: Record<string, ToolCallArgumentValue>,
+): string | null {
+  const action = nestedRecord(args, "action");
+  const actionQuery = action
+    ? readFirstString(action, ["query", "url", "pattern", "queries"])
+    : null;
+  const directQuery = readFirstString(args, [
+    "query",
+    "q",
+    "pattern",
+    "search",
+    "url",
+    "href",
+    "queries",
+  ]);
+  return actionQuery || directQuery;
 }
 
 function isRunningToolLikeStatus(status?: ToolLikeStatus): boolean {
@@ -282,8 +345,11 @@ function resolveLatestHint(
 ): string | null {
   const args = asRecord(descriptor.argumentsValue);
   if (operationKind === "search" || operationKind === "web_search") {
+    const webSearchDetail =
+      operationKind === "web_search" ? resolveWebSearchActionDetail(args) : null;
     return shorten(
       descriptor.query ||
+        webSearchDetail ||
         readString(args, [
           "query",
           "q",
@@ -300,10 +366,9 @@ function resolveLatestHint(
   }
 
   if (operationKind === "web_fetch") {
-    return shorten(
+    return formatShortSourceHint(
       descriptor.query ||
         readString(args, ["query", "q", "pattern", "search", "url", "href"]),
-      56,
     );
   }
 
@@ -513,12 +578,19 @@ function buildWebSearchDescriptor(
     supportingLines.push(`最新线索：${accumulator.latestWebSearchHint}`);
   }
 
+  const statusPrefix = hasRunningWebRetrieval ? "正在搜索网页" : "已搜索网页";
+  const title =
+    webSearchCount === 1 && webFetchCount === 0 && accumulator.latestWebSearchHint
+      ? hasRunningWebRetrieval
+        ? `${statusPrefix} ${accumulator.latestWebSearchHint}`
+        : `${statusPrefix}：${accumulator.latestWebSearchHint}`
+      : webFetchCount > 0
+        ? `${statusPrefix} ${webSearchCount} 次，读取网页 ${webFetchCount} 次`
+        : `${statusPrefix} ${webSearchCount} 次`;
+
   return {
     kind: "web_search",
-    title:
-      webFetchCount > 0
-        ? `${hasRunningWebRetrieval ? "正在搜索网页" : "已搜索网页"} ${webSearchCount} 次，读取网页 ${webFetchCount} 次`
-        : `${hasRunningWebRetrieval ? "正在搜索网页" : "已搜索网页"} ${webSearchCount} 次`,
+    title,
     supportingLines,
     supportingSections:
       supportingSections.length > 1 ? supportingSections : undefined,

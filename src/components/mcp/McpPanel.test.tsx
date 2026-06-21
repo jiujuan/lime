@@ -1,7 +1,10 @@
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import "@/i18n/config";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import type { UseMcpReturn } from "@/hooks/useMcp";
+import { openExternalUrlWithSystemBrowser } from "@/lib/api/externalUrl";
 import type {
   McpPromptDefinition,
   McpResourceDefinition,
@@ -11,9 +14,21 @@ import type {
 import { McpPanel } from "./McpPanel";
 
 const useMcpMock = vi.hoisted(() => vi.fn<() => UseMcpReturn>());
+const toastMock = vi.hoisted(() => ({
+  success: vi.fn(),
+  error: vi.fn(),
+}));
 
 vi.mock("@/hooks/useMcp", () => ({
   useMcp: useMcpMock,
+}));
+
+vi.mock("sonner", () => ({
+  toast: toastMock,
+}));
+
+vi.mock("@/lib/api/externalUrl", () => ({
+  openExternalUrlWithSystemBrowser: vi.fn(),
 }));
 
 interface RenderResult {
@@ -80,9 +95,14 @@ function createMcpState(overrides: Partial<UseMcpReturn> = {}): UseMcpReturn {
     loading: false,
     error: null,
     serverConnectionStates: {},
+    oauthCompletion: null,
     startServer: vi.fn(async () => undefined),
     stopServer: vi.fn(async () => undefined),
     reconnectServer: vi.fn(async () => undefined),
+    loginOAuthServer: vi.fn(async () => ({
+      authorizationUrl: "https://auth.example/authorize",
+      state: "state-1",
+    })),
     refreshServers: vi.fn(async () => undefined),
     refreshTools: vi.fn(async () => undefined),
     callTool: vi.fn(async () => ({ content: [], is_error: false })),
@@ -130,7 +150,10 @@ beforeEach(() => {
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
 
-  useMcpMock.mockReturnValue(createMcpState());
+  return changeLimeLocale("zh-CN").then(() => {
+    vi.mocked(openExternalUrlWithSystemBrowser).mockResolvedValue(undefined);
+    useMcpMock.mockReturnValue(createMcpState());
+  });
 });
 
 afterEach(() => {
@@ -145,6 +168,7 @@ afterEach(() => {
     mounted.container.remove();
   }
   vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
 
 describe("McpPanel", () => {
@@ -206,5 +230,181 @@ describe("McpPanel", () => {
     });
 
     expect(container.textContent).toContain("服务器状态");
+  });
+
+  it("OAuth 需要登录时应打开授权页并传递 scopes", async () => {
+    const loginOAuthServer = vi.fn(async () => ({
+      authorizationUrl: "https://auth.example/authorize",
+      state: "state-1",
+    }));
+    const windowOpen = vi.spyOn(window, "open").mockReturnValue(null);
+    useMcpMock.mockReturnValue(
+      createMcpState({
+        servers: [
+          createServer({
+            id: "server-remote-docs",
+            name: "remote-docs",
+            config: {
+              type: "streamable_http",
+              url: "https://example.com/mcp",
+              scopes: ["search.read"],
+            },
+            is_running: false,
+            server_info: undefined,
+            runtime_status: {
+              name: "remote-docs",
+              transport: "streamable_http",
+              enabled: true,
+              is_running: false,
+              required: false,
+              supports_parallel_tool_calls: false,
+              startup_timeout: 30,
+              tool_timeout: 30,
+              disabled_tools: [],
+              auth_status: {
+                mode: "oauth",
+                available: true,
+                reason_code: "oauth_login_required",
+                action_plan: {
+                  kind: "oauth_login",
+                  state: "login_required",
+                  required_runtime: "mcp_server_oauth_login",
+                  scopes: ["search.read"],
+                },
+              },
+            },
+          }),
+        ],
+        loginOAuthServer,
+      }),
+    );
+    const container = await renderPanel({ hideHeader: true });
+
+    expect(container.textContent).toContain("需要授权");
+
+    await act(async () => {
+      findButton(container, "登录").dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(loginOAuthServer).toHaveBeenCalledWith("remote-docs", {
+      scopes: ["search.read"],
+    });
+    expect(openExternalUrlWithSystemBrowser).toHaveBeenCalledWith(
+      "https://auth.example/authorize",
+    );
+    expect(windowOpen).not.toHaveBeenCalled();
+    expect(toastMock.success).toHaveBeenCalledWith(
+      "已打开 remote-docs 授权页，请在浏览器完成授权。",
+    );
+  });
+
+  it("OAuth 完成事件回流后应提示状态已刷新", async () => {
+    useMcpMock.mockReturnValue(
+      createMcpState({
+        oauthCompletion: {
+          serverName: "remote-docs",
+          completedAt: 1,
+        },
+      }),
+    );
+
+    await renderPanel({ hideHeader: true });
+
+    expect(toastMock.success).toHaveBeenCalledWith(
+      "remote-docs 授权已完成，状态已刷新。",
+    );
+  });
+
+  it("显式 OAuth 配置未接入运行时登录时应只显示不可用状态", async () => {
+    useMcpMock.mockReturnValue(
+      createMcpState({
+        servers: [
+          createServer({
+            id: "server-explicit-oauth",
+            name: "explicit-oauth",
+            config: {
+              type: "streamable_http",
+              url: "https://example.com/mcp",
+              oauth: { client_id: "lime-client" },
+              oauth_resource: "https://example.com",
+            },
+            is_running: false,
+            server_info: undefined,
+            runtime_status: {
+              name: "explicit-oauth",
+              transport: "streamable_http",
+              enabled: true,
+              is_running: false,
+              required: false,
+              supports_parallel_tool_calls: false,
+              startup_timeout: 30,
+              tool_timeout: 30,
+              disabled_tools: [],
+              auth_status: {
+                mode: "oauth",
+                available: false,
+                reason_code: "oauth_runtime_not_implemented",
+                action_plan: {
+                  kind: "oauth_login",
+                  state: "runtime_not_connected",
+                  required_runtime: "mcp_server_oauth_login",
+                  oauth_resource: "https://example.com",
+                  client_id: "lime-client",
+                },
+              },
+            },
+          }),
+        ],
+      }),
+    );
+    const container = await renderPanel({ hideHeader: true });
+
+    expect(container.textContent).toContain("OAuth 配置暂不支持登录");
+    expect(container.textContent).not.toContain("需要授权");
+    expect(
+      Array.from(container.querySelectorAll("button")).some(
+        (button) => button.textContent?.trim() === "登录",
+      ),
+    ).toBe(false);
+  });
+
+  it("OAuth 已授权时不应显示登录入口", async () => {
+    useMcpMock.mockReturnValue(
+      createMcpState({
+        servers: [
+          createServer({
+            id: "server-authorized",
+            name: "authorized",
+            config: {
+              type: "streamable_http",
+              url: "https://example.com/mcp",
+            },
+            runtime_status: {
+              name: "authorized",
+              transport: "streamable_http",
+              enabled: true,
+              is_running: true,
+              required: false,
+              supports_parallel_tool_calls: false,
+              startup_timeout: 30,
+              tool_timeout: 30,
+              disabled_tools: [],
+              auth_status: {
+                mode: "oauth",
+                available: true,
+              },
+            },
+          }),
+        ],
+      }),
+    );
+    const container = await renderPanel({ hideHeader: true });
+
+    expect(container.textContent).toContain("已授权");
+    expect(container.textContent).not.toContain("需要授权");
   });
 });

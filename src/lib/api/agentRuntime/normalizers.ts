@@ -16,6 +16,7 @@ import type {
   AgentRuntimeEvidenceLimeCorePolicyItem,
   AgentRuntimeEvidenceLimeCorePolicyValueHit,
   AgentRuntimeEvidencePack,
+  AgentRuntimeEvidenceSkillInvocation,
   AgentRuntimeEvidenceStatusCount,
   AgentRuntimeEvidenceTaskIndex,
   AgentRuntimeEvidenceTaskIndexItem,
@@ -1037,6 +1038,56 @@ function normalizeEvidenceVerificationSummary(value: unknown) {
   };
 }
 
+function normalizeEvidenceSkillInvocation(
+  value: unknown,
+): AgentRuntimeEvidenceSkillInvocation | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const skillName = readStringField(value, "skillName", "skill_name");
+  if (!skillName) {
+    return null;
+  }
+
+  return {
+    event: readStringField(value, "event") || "skill_invocation",
+    skill_name: skillName,
+    status: readStringField(value, "status"),
+    source_event_id: readStringField(
+      value,
+      "sourceEventId",
+      "source_event_id",
+    ),
+    source_event_type: readStringField(
+      value,
+      "sourceEventType",
+      "source_event_type",
+    ),
+    turn_id: readOptionalStringField(value, "turnId", "turn_id"),
+    tool_call_id: readOptionalStringField(
+      value,
+      "toolCallId",
+      "tool_call_id",
+    ),
+    workspace_skill_source: readRecordField(
+      value,
+      "workspaceSkillSource",
+      "workspace_skill_source",
+    ),
+    workspace_skill_runtime_enable: readRecordField(
+      value,
+      "workspaceSkillRuntimeEnable",
+      "workspace_skill_runtime_enable",
+    ),
+    modality_runtime_contract: readRecordField(
+      value,
+      "modalityRuntimeContract",
+      "modality_runtime_contract",
+    ),
+  };
+}
+
 function normalizeEvidenceObservabilitySummary(value: unknown) {
   if (!isRecord(value)) {
     return undefined;
@@ -1070,13 +1121,26 @@ function normalizeEvidenceObservabilitySummary(value: unknown) {
       "modality_runtime_contracts",
     ),
   );
+  const rawSkillInvocations = value.skillInvocations ?? value.skill_invocations;
+  const skillInvocations = Array.isArray(rawSkillInvocations)
+    ? rawSkillInvocations
+        .map((entry: unknown) => normalizeEvidenceSkillInvocation(entry))
+        .filter(
+          (
+            entry,
+          ): entry is NonNullable<
+            ReturnType<typeof normalizeEvidenceSkillInvocation>
+          > => entry !== null,
+        )
+    : [];
 
   if (
     !schemaVersion &&
     signalCoverage.length === 0 &&
     knownGaps.length === 0 &&
     !verificationSummary &&
-    !modalityRuntimeContracts
+    !modalityRuntimeContracts &&
+    skillInvocations.length === 0
   ) {
     return undefined;
   }
@@ -1087,6 +1151,7 @@ function normalizeEvidenceObservabilitySummary(value: unknown) {
     signal_coverage: signalCoverage,
     verification_summary: verificationSummary,
     modality_runtime_contracts: modalityRuntimeContracts,
+    skill_invocations: skillInvocations,
   };
 }
 

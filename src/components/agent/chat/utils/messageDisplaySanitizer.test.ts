@@ -390,6 +390,53 @@ describe("messageDisplaySanitizer", () => {
     ).toEqual(contentParts);
   });
 
+  it("应保留工具后带结论与松散 Markdown 标题的最终正文", () => {
+    const contentParts: ContentPart[] = [
+      {
+        type: "tool_use",
+        toolCall: {
+          id: "tool-web-search-rendering",
+          name: "WebSearch",
+          arguments: "{}",
+          status: "completed",
+          result: { success: true, output: "ok" },
+          startTime: new Date("2026-06-20T09:00:00.000Z"),
+        },
+      },
+      {
+        type: "tool_use",
+        toolCall: {
+          id: "tool-web-fetch-rendering",
+          name: "WebFetch",
+          arguments: "{}",
+          status: "completed",
+          result: { success: true, output: "ok" },
+          startTime: new Date("2026-06-20T09:00:01.000Z"),
+        },
+      },
+      {
+        type: "text",
+        text: [
+          "网页搜索渲染结论：搜索来源已展开，读取页面已归入同一过程，最终正文继续输出。",
+          "五年级选购指南###",
+          "####如果孩子基础一般，优先看护眼、内容和家长管理。",
+          "**推荐 型号 **：Lime 学习机 S30",
+          "**理由 **：系统清晰，适合五年级基础巩固。",
+          "对比表：",
+          "| 品牌 | 型号 | 场景 |",
+          "| --- | --- | --- |",
+          "| Lime | S30 | 五年级巩固 |",
+        ].join("\n"),
+      },
+    ];
+
+    expect(
+      sanitizeContentPartsForDisplay(contentParts, {
+        role: "assistant",
+      }),
+    ).toEqual(contentParts);
+  });
+
   it("带结论的正常说明不应被误删", () => {
     const contentParts: ContentPart[] = [
       {

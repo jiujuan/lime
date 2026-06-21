@@ -8,6 +8,7 @@ use app_server_protocol::{
     ConversationImportThreadStatus, ImportedThreadSummary,
 };
 use chrono::{SecondsFormat, Utc};
+use lime_core::app_paths;
 use serde_json::Value;
 use std::fs;
 use std::io::{BufRead, BufReader, Read};
@@ -726,10 +727,7 @@ pub(super) fn resolve_home(explicit_root: Option<&str>) -> Option<PathBuf> {
     if let Some(root) = normalize_filter(explicit_root) {
         return Some(PathBuf::from(root));
     }
-    if let Some(root) = std::env::var_os("CODEX_HOME") {
-        return Some(PathBuf::from(root));
-    }
-    dirs::home_dir().map(|home| home.join(".codex"))
+    app_paths::resolve_codex_home_dir()
 }
 
 pub(super) fn newest_state_db(source_root: &Path) -> Option<PathBuf> {

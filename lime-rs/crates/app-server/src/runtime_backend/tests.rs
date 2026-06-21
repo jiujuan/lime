@@ -758,6 +758,280 @@ fn session_config_appends_memory_context_to_system_prompt() {
 }
 
 #[test]
+fn session_config_appends_project_agent_skills_metadata_to_system_prompt() {
+    let workspace = TempDir::new().expect("workspace");
+    let skill_dir = workspace.path().join(".agents/skills/research");
+    std::fs::create_dir_all(&skill_dir).expect("skill dir");
+    std::fs::write(
+        skill_dir.join("SKILL.md"),
+        r#"---
+name: Research
+description: Use source-backed research.
+---
+
+# Research
+
+Full body should not be rendered.
+"#,
+    )
+    .expect("skill file");
+    let mut request = request_for_test(
+        "hello",
+        None,
+        Some(json!({
+            "harness": {
+                "workspace_root": workspace.path().to_string_lossy(),
+                "cwd": workspace.path().to_string_lossy()
+            }
+        })),
+    );
+    let options = request.runtime_options.as_mut().expect("runtime options");
+    options.provider_preference = Some("openai".to_string());
+    options.model_preference = Some("gpt-4.1".to_string());
+    let host_request = aster_chat_request_from_request(&request);
+    let scope = session_scope_from_request(&request).expect("session scope");
+    let selection = selection_from_explicit_preferences(&request).expect("selection");
+    let policy = request_tool_policy_from_request(host_request.as_ref());
+
+    let config = session_config_from_request(
+        &request,
+        host_request.as_ref(),
+        &scope,
+        &selection,
+        &policy,
+        None,
+    );
+
+    let prompt = config.system_prompt.expect("system prompt");
+    assert!(prompt.contains("## 可用 Agent Skills"));
+    assert!(prompt.contains("`research`"));
+    assert!(prompt.contains("Use source-backed research."));
+    assert!(prompt.contains("必须先读取对应 `SKILL.md`"));
+    assert!(!prompt.contains("Full body should not be rendered."));
+    assert!(!prompt.contains("allow_model_skills"));
+}
+
+#[test]
+fn session_config_appends_explicit_agent_skill_body_to_system_prompt() {
+    let workspace = TempDir::new().expect("workspace");
+    let skill_dir = workspace.path().join(".agents/skills/writer");
+    std::fs::create_dir_all(&skill_dir).expect("skill dir");
+    std::fs::write(
+        skill_dir.join("SKILL.md"),
+        r#"---
+name: Writer
+description: Write clearly.
+---
+
+# Writer Skill
+
+Use concise language.
+"#,
+    )
+    .expect("skill file");
+    let mut request = request_for_test(
+        "请用 $writer 改写这段话",
+        None,
+        Some(json!({
+            "harness": {
+                "workspace_root": workspace.path().to_string_lossy(),
+                "cwd": workspace.path().to_string_lossy()
+            }
+        })),
+    );
+    let options = request.runtime_options.as_mut().expect("runtime options");
+    options.provider_preference = Some("openai".to_string());
+    options.model_preference = Some("gpt-4.1".to_string());
+    let host_request = aster_chat_request_from_request(&request);
+    let scope = session_scope_from_request(&request).expect("session scope");
+    let selection = selection_from_explicit_preferences(&request).expect("selection");
+    let policy = request_tool_policy_from_request(host_request.as_ref());
+
+    let config = session_config_from_request(
+        &request,
+        host_request.as_ref(),
+        &scope,
+        &selection,
+        &policy,
+        None,
+    );
+
+    let prompt = config.system_prompt.expect("system prompt");
+    assert!(prompt.contains("<selected_skill_instructions>"));
+    assert!(prompt.contains("`writer`"));
+    assert!(prompt.contains("# Writer Skill"));
+    assert!(prompt.contains("Use concise language."));
+    assert!(prompt.contains("## 可用 Agent Skills"));
+    assert!(!prompt.contains("allow_model_skills"));
+}
+
+#[test]
+fn session_config_projects_selected_skill_allowed_tools_to_turn_scope() {
+    let workspace = TempDir::new().expect("workspace");
+    let skill_dir = workspace.path().join(".agents/skills/writer");
+    std::fs::create_dir_all(&skill_dir).expect("skill dir");
+    std::fs::write(
+        skill_dir.join("SKILL.md"),
+        r#"---
+name: Writer
+description: Write clearly.
+allowed_tools: Read Write
+---
+
+# Writer Skill
+
+Use concise language.
+"#,
+    )
+    .expect("skill file");
+    let mut request = request_for_test(
+        "帮我处理这段话",
+        None,
+        Some(json!({
+            "harness": {
+                "workspace_root": workspace.path().to_string_lossy(),
+                "cwd": workspace.path().to_string_lossy(),
+                "service_scene_launch": {
+                    "service_scene_run": {
+                        "skill_key": "local:writer"
+                    }
+                }
+            }
+        })),
+    );
+    let options = request.runtime_options.as_mut().expect("runtime options");
+    options.provider_preference = Some("openai".to_string());
+    options.model_preference = Some("gpt-4.1".to_string());
+    let host_request = aster_chat_request_from_request(&request);
+    let scope = session_scope_from_request(&request).expect("session scope");
+    let selection = selection_from_explicit_preferences(&request).expect("selection");
+    let policy = request_tool_policy_from_request(host_request.as_ref());
+
+    let config = session_config_from_request(
+        &request,
+        host_request.as_ref(),
+        &scope,
+        &selection,
+        &policy,
+        None,
+    );
+
+    let turn_context = config.turn_context.expect("turn context");
+    assert_eq!(
+        turn_context.metadata["tool_scope"]["allowed_tools"],
+        json!(["Read", "Write"])
+    );
+}
+
+#[test]
+fn session_config_does_not_project_tool_scope_for_unknown_skill_metadata() {
+    let workspace = TempDir::new().expect("workspace");
+    let skill_dir = workspace.path().join(".agents/skills/writer");
+    std::fs::create_dir_all(&skill_dir).expect("skill dir");
+    std::fs::write(
+        skill_dir.join("SKILL.md"),
+        r#"---
+name: Writer
+description: Write clearly.
+allowed_tools: Read Write
+---
+
+# Writer Skill
+
+Use concise language.
+"#,
+    )
+    .expect("skill file");
+    let mut request = request_for_test(
+        "帮我处理这段话",
+        None,
+        Some(json!({
+            "harness": {
+                "workspace_root": workspace.path().to_string_lossy(),
+                "cwd": workspace.path().to_string_lossy(),
+                "service_scene_launch": {
+                    "service_scene_run": {
+                        "skill_key": "missing"
+                    }
+                }
+            }
+        })),
+    );
+    let options = request.runtime_options.as_mut().expect("runtime options");
+    options.provider_preference = Some("openai".to_string());
+    options.model_preference = Some("gpt-4.1".to_string());
+    let host_request = aster_chat_request_from_request(&request);
+    let scope = session_scope_from_request(&request).expect("session scope");
+    let selection = selection_from_explicit_preferences(&request).expect("selection");
+    let policy = request_tool_policy_from_request(host_request.as_ref());
+
+    let config = session_config_from_request(
+        &request,
+        host_request.as_ref(),
+        &scope,
+        &selection,
+        &policy,
+        None,
+    );
+
+    let turn_context = config.turn_context.expect("turn context");
+    assert!(!turn_context.metadata.contains_key("tool_scope"));
+}
+
+#[test]
+fn session_config_does_not_append_skill_body_without_explicit_selection() {
+    let workspace = TempDir::new().expect("workspace");
+    let skill_dir = workspace.path().join(".agents/skills/writer");
+    std::fs::create_dir_all(&skill_dir).expect("skill dir");
+    std::fs::write(
+        skill_dir.join("SKILL.md"),
+        r#"---
+name: Writer
+description: Write clearly.
+---
+
+# Writer Skill
+
+Use concise language.
+"#,
+    )
+    .expect("skill file");
+    let mut request = request_for_test(
+        "帮我改写这段话",
+        None,
+        Some(json!({
+            "harness": {
+                "workspace_root": workspace.path().to_string_lossy(),
+                "cwd": workspace.path().to_string_lossy()
+            }
+        })),
+    );
+    let options = request.runtime_options.as_mut().expect("runtime options");
+    options.provider_preference = Some("openai".to_string());
+    options.model_preference = Some("gpt-4.1".to_string());
+    let host_request = aster_chat_request_from_request(&request);
+    let scope = session_scope_from_request(&request).expect("session scope");
+    let selection = selection_from_explicit_preferences(&request).expect("selection");
+    let policy = request_tool_policy_from_request(host_request.as_ref());
+
+    let config = session_config_from_request(
+        &request,
+        host_request.as_ref(),
+        &scope,
+        &selection,
+        &policy,
+        None,
+    );
+
+    let prompt = config.system_prompt.expect("system prompt");
+    assert!(prompt.contains("## 可用 Agent Skills"));
+    assert!(prompt.contains("`writer`"));
+    assert!(!prompt.contains("<selected_skill_instructions>"));
+    assert!(!prompt.contains("# Writer Skill"));
+    assert!(!prompt.contains("Use concise language."));
+}
+
+#[test]
 fn session_config_appends_soul_context_from_config_metadata() {
     let mut request = request_for_test("hello", None, None);
     let options = request.runtime_options.as_mut().expect("runtime options");
@@ -1243,6 +1517,43 @@ fn required_web_search_marks_turn_context_for_tool_permission() {
             .and_then(Value::as_bool),
         Some(true)
     );
+}
+
+#[test]
+fn research_skill_launch_requires_web_fetch_for_page_confirmation() {
+    let request = request_for_test(
+        "@搜索 关键词:联网工具验证",
+        Some(json!({
+            "asterChatRequest": {
+                "web_search": true,
+                "search_mode": "required",
+                "turn_config": {
+                    "web_search": true,
+                    "search_mode": "required",
+                    "metadata": {
+                        "harness": {
+                            "research_skill_launch": {
+                                "kind": "research_request",
+                                "research_request": {
+                                    "query": "联网工具验证",
+                                    "entry_source": "at_search_command"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        })),
+        None,
+    );
+    let host_request = aster_chat_request_from_request(&request);
+
+    let policy = request_tool_policy_from_request(host_request.as_ref());
+
+    assert_eq!(policy.search_mode, RequestToolPolicyMode::Required);
+    assert!(policy.matches_any_required_tool("WebSearch"));
+    assert!(policy.matches_any_required_tool("WebFetch"));
+    assert!(policy.matches_any_allowed_tool("WebFetch"));
 }
 
 #[test]

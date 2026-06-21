@@ -14,7 +14,10 @@ import {
 } from "@/components/ui/popover";
 import { formatNumber } from "@/i18n/format";
 import { cn } from "@/lib/utils";
-import type { SearchResultPreviewItem } from "../utils/searchResultPreview";
+import {
+  formatSearchResultSourceLabel,
+  type SearchResultPreviewItem,
+} from "../utils/searchResultPreview";
 
 function SearchResultHoverCard({
   item,
@@ -28,6 +31,10 @@ function SearchResultHoverCard({
   popoverAlign?: "start" | "center" | "end";
 }) {
   const { t } = useTranslation("agent");
+  const sourceLabel = useMemo(
+    () => formatSearchResultSourceLabel(item),
+    [item],
+  );
   const [open, setOpen] = useState(false);
   const closeTimerRef = useRef<number | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -132,7 +139,7 @@ function SearchResultHoverCard({
               </div>
               <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Globe className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">{item.hostname}</span>
+                <span className="truncate">{sourceLabel}</span>
               </div>
             </div>
             <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
@@ -161,7 +168,7 @@ function SearchResultHoverCard({
               </div>
               <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Globe className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">{item.hostname}</span>
+                <span className="truncate">{sourceLabel}</span>
               </div>
             </div>
           </div>
@@ -238,18 +245,22 @@ export function SearchResultPreviewList({
           <button
             key={item.id}
             type="button"
-            className="block w-full rounded-md px-1.5 py-0.5 text-left transition-colors hover:bg-slate-50"
+            className="block w-full rounded-md px-1.5 py-1 text-left transition-colors hover:bg-slate-50"
             onClick={() => void handleOpenItem(item)}
             aria-label={t("agentChat.searchResultPreview.previewAria", {
               title: item.title,
             })}
           >
-            <span className="block truncate text-xs leading-5 text-slate-600">
-              {item.title}
-            </span>
-            <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] leading-4 text-slate-400">
-              <Globe className="h-3 w-3 shrink-0" />
-              <span className="truncate">{item.url}</span>
+            <span className="flex min-w-0 items-start gap-2">
+              <Globe className="mt-1 h-3 w-3 shrink-0 text-slate-400" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-xs leading-5 text-slate-700">
+                  {item.title}
+                </span>
+                <span className="block truncate text-[11px] leading-4 text-slate-400">
+                  {formatSearchResultSourceLabel(item)}
+                </span>
+              </span>
             </span>
           </button>
         ) : (

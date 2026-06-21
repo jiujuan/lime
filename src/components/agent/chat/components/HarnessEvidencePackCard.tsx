@@ -147,6 +147,8 @@ function EvidencePackContent({
     evidencePack.observability_summary?.modality_runtime_contracts
       ?.snapshot_index;
   const browserActionIndex = snapshotIndex?.browser_action_index;
+  const skillInvocations =
+    evidencePack.observability_summary?.skill_invocations ?? [];
 
   return (
     <>
@@ -261,6 +263,29 @@ function EvidencePackContent({
                   : "无"}
               </span>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {skillInvocations.length > 0 ? (
+        <div className="rounded-xl border border-border bg-background p-3">
+          <div className="text-sm font-medium text-foreground">
+            {agentText(
+              "agentChat.harness.generated.085f91c13e",
+              "Skill ToolCall：",
+            )}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2 text-xs">
+            {skillInvocations.map((invocation, index) => (
+              <Badge
+                key={`${invocation.source_event_id || invocation.skill_name}-${index}`}
+                variant="outline"
+                className="font-mono"
+              >
+                {invocation.skill_name}
+                {invocation.status ? ` · ${invocation.status}` : ""}
+              </Badge>
+            ))}
           </div>
         </div>
       ) : null}

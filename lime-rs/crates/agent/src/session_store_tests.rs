@@ -79,39 +79,6 @@ fn create_test_legacy_agent_messages_table(
     Ok(())
 }
 
-fn create_test_legacy_timeline_tables(conn: &rusqlite::Connection) -> Result<(), rusqlite::Error> {
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS agent_thread_turns (
-            id TEXT PRIMARY KEY,
-            session_id TEXT NOT NULL,
-            prompt_text TEXT NOT NULL,
-            status TEXT NOT NULL,
-            started_at TEXT NOT NULL,
-            completed_at TEXT,
-            error_message TEXT,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        )",
-        [],
-    )?;
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS agent_thread_items (
-            id TEXT PRIMARY KEY,
-            session_id TEXT NOT NULL,
-            turn_id TEXT NOT NULL,
-            sequence INTEGER NOT NULL,
-            item_type TEXT NOT NULL,
-            status TEXT NOT NULL,
-            started_at TEXT NOT NULL,
-            completed_at TEXT,
-            updated_at TEXT NOT NULL,
-            payload_json TEXT NOT NULL
-        )",
-        [],
-    )?;
-    Ok(())
-}
-
 fn insert_test_workspace(db: &DbConnection, workspace_id: &str, root_path: &str) {
     let conn = db.lock().expect("lock db");
     conn.execute(
@@ -1440,12 +1407,7 @@ fn get_session_sync_should_resolve_workspace_id_from_working_dir() {
 }
 
 #[test]
-fn get_session_sync_with_full_timeline_without_messages_should_skip_messages() {
-    use lime_core::database::dao::agent_timeline::{
-        AgentThreadItem, AgentThreadItemPayload, AgentThreadItemStatus, AgentThreadTurn,
-        AgentThreadTurnStatus, AgentTimelineDao,
-    };
-
+fn get_session_sync_with_full_timeline_without_messages_should_skip_legacy_messages() {
     let db = create_test_db();
     insert_test_workspace(&db, "workspace-light", "/tmp/lime-workspace-light");
     insert_test_session_with_message(
@@ -1455,53 +1417,13 @@ fn get_session_sync_with_full_timeline_without_messages_should_skip_messages() {
         "这条消息不应被轻量 checkpoint 读取投影",
     );
 
-    {
-        let conn = db.lock().expect("lock db");
-        create_test_legacy_timeline_tables(&conn).expect("create test legacy timeline");
-        AgentTimelineDao::create_turn(
-            &conn,
-            &AgentThreadTurn {
-                id: "turn-light".to_string(),
-                thread_id: "session-light".to_string(),
-                prompt_text: "生成文件".to_string(),
-                status: AgentThreadTurnStatus::Completed,
-                started_at: "2026-06-02T10:00:00Z".to_string(),
-                completed_at: Some("2026-06-02T10:00:01Z".to_string()),
-                error_message: None,
-                created_at: "2026-06-02T10:00:00Z".to_string(),
-                updated_at: "2026-06-02T10:00:01Z".to_string(),
-            },
-        )
-        .expect("create turn");
-        AgentTimelineDao::upsert_item(
-            &conn,
-            &AgentThreadItem {
-                id: "artifact-light".to_string(),
-                thread_id: "session-light".to_string(),
-                turn_id: "turn-light".to_string(),
-                sequence: 1,
-                status: AgentThreadItemStatus::Completed,
-                started_at: "2026-06-02T10:00:00Z".to_string(),
-                completed_at: Some("2026-06-02T10:00:01Z".to_string()),
-                updated_at: "2026-06-02T10:00:01Z".to_string(),
-                payload: AgentThreadItemPayload::FileArtifact {
-                    path: ".lime/qc/code-runtime-fixture/src/greeting.ts".to_string(),
-                    source: "tool_result".to_string(),
-                    content: Some("export const ok = true;".to_string()),
-                    metadata: None,
-                },
-            },
-        )
-        .expect("upsert item");
-    }
-
     let detail = get_session_sync_with_full_timeline_without_messages(&db, "session-light")
         .expect("get lightweight detail");
 
     assert_eq!(detail.workspace_id.as_deref(), Some("workspace-light"));
     assert!(detail.messages.is_empty());
-    assert_eq!(detail.turns.len(), 1);
-    assert_eq!(detail.items.len(), 1);
+    assert!(detail.turns.is_empty());
+    assert!(detail.items.is_empty());
 }
 
 #[test]

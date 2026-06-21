@@ -9,14 +9,16 @@
 import { useState, type MouseEvent } from "react";
 import {
   AlertCircle,
+  LogIn,
   Play,
   RefreshCw,
   Server,
   Settings2,
   Square,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
-import type { McpServerInfo } from "@/lib/api/mcp";
+import type { McpServerInfo, McpServerOAuthLoginOptions } from "@/lib/api/mcp";
 import type { McpServerConnectionState } from "@/hooks/useMcp";
 
 interface McpServerListProps {
@@ -26,6 +28,10 @@ interface McpServerListProps {
   onStartServer: (name: string) => Promise<void>;
   onStopServer: (name: string) => Promise<void>;
   onReconnectServer: (name: string) => Promise<void>;
+  onLoginOAuthServer?: (
+    name: string,
+    options?: McpServerOAuthLoginOptions,
+  ) => Promise<void>;
   onRefresh: () => Promise<void>;
   onSelectServer?: (server: McpServerInfo) => void;
   selectedServerName?: string;
@@ -39,12 +45,15 @@ export function McpServerList({
   onStartServer,
   onStopServer,
   onReconnectServer,
+  onLoginOAuthServer,
   onRefresh,
   onSelectServer,
   selectedServerName,
   serverConnectionStates,
 }: McpServerListProps) {
+  const { t } = useTranslation("settings");
   const [operatingServer, setOperatingServer] = useState<string | null>(null);
+  const [oauthLoginServer, setOAuthLoginServer] = useState<string | null>(null);
 
   const handleStart = async (name: string, e: MouseEvent) => {
     e.stopPropagation();
@@ -76,12 +85,32 @@ export function McpServerList({
     }
   };
 
+  const handleOAuthLogin = async (server: McpServerInfo, e: MouseEvent) => {
+    e.stopPropagation();
+    if (!onLoginOAuthServer) {
+      return;
+    }
+    setOAuthLoginServer(server.name);
+    try {
+      await onLoginOAuthServer(server.name, {
+        scopes: server.runtime_status?.auth_status.action_plan?.scopes,
+      });
+    } finally {
+      setOAuthLoginServer(null);
+    }
+  };
+
   // 获取服务器状态文本
   const getStatusText = (server: McpServerInfo) => {
     if (server.is_running && server.server_info) {
-      return `运行中 - ${server.server_info.name} v${server.server_info.version}`;
+      return t("settings.mcpPage.runtime.serverList.status.runningVersion", {
+        name: server.server_info.name,
+        version: server.server_info.version,
+      });
     }
-    return server.is_running ? "运行中" : "已停止";
+    return server.is_running
+      ? t("settings.mcpPage.runtime.serverList.status.running")
+      : t("settings.mcpPage.runtime.serverList.status.stopped");
   };
 
   const hasInteractiveSelection = Boolean(onSelectServer);
@@ -95,10 +124,14 @@ export function McpServerList({
             <Server className="h-4 w-4" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-slate-900">服务器状态</p>
+            <p className="text-sm font-semibold text-slate-900">
+              {t("settings.mcpPage.runtime.serverList.title")}
+            </p>
             <p className="text-xs text-slate-500">
-              {servers.length} 个配置，
-              {servers.filter((server) => server.is_running).length} 个运行中
+              {t("settings.mcpPage.runtime.serverList.summary", {
+                total: servers.length,
+                running: servers.filter((server) => server.is_running).length,
+              })}
             </p>
           </div>
         </div>
@@ -107,8 +140,8 @@ export function McpServerList({
           onClick={() => onRefresh()}
           disabled={loading}
           className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
-          title="刷新状态"
-          aria-label="刷新 MCP 服务器状态"
+          title={t("settings.mcpPage.runtime.serverList.refreshTitle")}
+          aria-label={t("settings.mcpPage.runtime.serverList.refreshAria")}
         >
           <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
         </button>
@@ -130,7 +163,7 @@ export function McpServerList({
           <div className="flex min-h-[320px] items-center justify-center">
             <div className="flex flex-col items-center gap-3 text-sm text-slate-500">
               <RefreshCw className="h-5 w-5 animate-spin" />
-              正在读取 MCP 服务器状态
+              {t("settings.mcpPage.runtime.serverList.loading")}
             </div>
           </div>
         ) : servers.length === 0 ? (
@@ -141,10 +174,10 @@ export function McpServerList({
               </div>
               <div className="space-y-1">
                 <p className="text-sm font-semibold text-slate-900">
-                  还没有 MCP 服务器
+                  {t("settings.mcpPage.runtime.serverList.emptyTitle")}
                 </p>
                 <p className="text-sm leading-6 text-slate-500">
-                  去“配置管理”添加或导入服务器后，这里会显示运行状态。
+                  {t("settings.mcpPage.runtime.serverList.emptyDescription")}
                 </p>
               </div>
             </div>
@@ -154,6 +187,20 @@ export function McpServerList({
             {servers.map((server) => {
               const connectionState = serverConnectionStates[server.name];
               const isOperating = operatingServer === server.name;
+              const isOAuthOperating = oauthLoginServer === server.name;
+              const authStatus = server.runtime_status?.auth_status;
+              const authPlan = authStatus?.action_plan;
+              const needsOAuthLogin =
+                authStatus?.mode === "oauth" &&
+                authStatus.reason_code === "oauth_login_required" &&
+                authPlan?.kind === "oauth_login";
+              const oauthUnsupported =
+                authStatus?.mode === "oauth" &&
+                authStatus.reason_code === "oauth_runtime_not_implemented";
+              const oauthAuthorized =
+                authStatus?.mode === "oauth" &&
+                authStatus.available &&
+                !authStatus.reason_code;
 
               return (
                 <div
@@ -196,10 +243,16 @@ export function McpServerList({
                           <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-sky-100 bg-sky-50 px-2 py-0.5 text-xs text-sky-700">
                             <RefreshCw className="h-3 w-3 animate-spin" />
                             {connectionState.phase === "starting"
-                              ? "启动中"
+                              ? t(
+                                  "settings.mcpPage.runtime.serverList.connectionPhase.starting",
+                                )
                               : connectionState.phase === "stopping"
-                                ? "停止中"
-                                : "重连中"}
+                                ? t(
+                                    "settings.mcpPage.runtime.serverList.connectionPhase.stopping",
+                                  )
+                                : t(
+                                    "settings.mcpPage.runtime.serverList.connectionPhase.reconnecting",
+                                  )}
                           </span>
                         )}
                     </div>
@@ -211,8 +264,13 @@ export function McpServerList({
                         onClick={(e) => handleReconnect(server.name, e)}
                         disabled={isOperating}
                         className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-emerald-100 bg-emerald-50 text-emerald-700 transition hover:border-emerald-200 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
-                        title="重连服务器"
-                        aria-label={`重连 ${server.name}`}
+                        title={t(
+                          "settings.mcpPage.runtime.serverList.reconnectTitle",
+                        )}
+                        aria-label={t(
+                          "settings.mcpPage.runtime.serverList.reconnectAria",
+                          { name: server.name },
+                        )}
                       >
                         <RefreshCw
                           className={cn(
@@ -227,8 +285,13 @@ export function McpServerList({
                           onClick={(e) => handleStop(server.name, e)}
                           disabled={isOperating}
                           className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-rose-100 bg-rose-50 text-rose-700 transition hover:border-rose-200 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
-                          title="停止服务器"
-                          aria-label={`停止 ${server.name}`}
+                          title={t(
+                            "settings.mcpPage.runtime.serverList.stopTitle",
+                          )}
+                          aria-label={t(
+                            "settings.mcpPage.runtime.serverList.stopAria",
+                            { name: server.name },
+                          )}
                         >
                           {isOperating ? (
                             <RefreshCw className="h-4 w-4 animate-spin" />
@@ -242,8 +305,13 @@ export function McpServerList({
                           onClick={(e) => handleStart(server.name, e)}
                           disabled={isOperating}
                           className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-emerald-100 bg-emerald-50 text-emerald-700 transition hover:border-emerald-200 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
-                          title="启动服务器"
-                          aria-label={`启动 ${server.name}`}
+                          title={t(
+                            "settings.mcpPage.runtime.serverList.startTitle",
+                          )}
+                          aria-label={t(
+                            "settings.mcpPage.runtime.serverList.startAria",
+                            { name: server.name },
+                          )}
                         >
                           {isOperating ? (
                             <RefreshCw className="h-4 w-4 animate-spin" />
@@ -255,9 +323,74 @@ export function McpServerList({
                     </div>
                   </div>
 
+                  {(needsOAuthLogin || oauthUnsupported || oauthAuthorized) && (
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      {needsOAuthLogin && (
+                        <>
+                          <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
+                            <AlertCircle className="h-3.5 w-3.5" />
+                            {t(
+                              "settings.mcpPage.runtime.auth.oauthRequired",
+                              "需要授权",
+                            )}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => handleOAuthLogin(server, e)}
+                            disabled={isOAuthOperating || !onLoginOAuthServer}
+                            className="inline-flex h-8 items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3 text-xs font-semibold text-sky-700 transition hover:border-sky-300 hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
+                            title={t(
+                              "settings.mcpPage.runtime.auth.oauthLoginTitle",
+                              {
+                                name: server.name,
+                              },
+                            )}
+                            aria-label={t(
+                              "settings.mcpPage.runtime.auth.oauthLoginAria",
+                              {
+                                name: server.name,
+                              },
+                            )}
+                          >
+                            {isOAuthOperating ? (
+                              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <LogIn className="h-3.5 w-3.5" />
+                            )}
+                            {t(
+                              "settings.mcpPage.runtime.auth.oauthLoginAction",
+                            )}
+                          </button>
+                        </>
+                      )}
+                      {oauthUnsupported && (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700"
+                          title={t(
+                            "settings.mcpPage.runtime.auth.oauthUnsupportedTitle",
+                          )}
+                        >
+                          <AlertCircle className="h-3.5 w-3.5" />
+                          {t(
+                            "settings.mcpPage.runtime.auth.oauthUnsupported",
+                          )}
+                        </span>
+                      )}
+                      {oauthAuthorized && (
+                        <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
+                          {t(
+                            "settings.mcpPage.runtime.auth.oauthAuthorized",
+                          )}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
                   {connectionState?.error && (
                     <p className="mt-3 rounded-2xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs leading-5 text-rose-700">
-                      最近错误：{connectionState.error}
+                      {t("settings.mcpPage.runtime.serverList.latestError", {
+                        message: connectionState.error,
+                      })}
                     </p>
                   )}
 
@@ -266,17 +399,17 @@ export function McpServerList({
                     <div className="mt-3 flex flex-wrap gap-1.5">
                       {server.server_info.supports_tools && (
                         <span className="rounded-full border border-emerald-100 bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">
-                          工具
+                          {t("settings.mcpPage.runtime.serverList.tools")}
                         </span>
                       )}
                       {server.server_info.supports_prompts && (
                         <span className="rounded-full border border-sky-100 bg-sky-50 px-2 py-0.5 text-xs text-sky-700">
-                          提示词
+                          {t("settings.mcpPage.runtime.serverList.prompts")}
                         </span>
                       )}
                       {server.server_info.supports_resources && (
                         <span className="rounded-full border border-amber-100 bg-amber-50 px-2 py-0.5 text-xs text-amber-700">
-                          资源
+                          {t("settings.mcpPage.runtime.serverList.resources")}
                         </span>
                       )}
                     </div>

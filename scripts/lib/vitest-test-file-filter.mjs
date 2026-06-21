@@ -17,6 +17,9 @@ function readTestFileSource(filePath) {
 export function isVitestRunnableTestFile(filePath, source = undefined) {
   const normalized = String(filePath || "").replaceAll("\\", "/");
   const fileName = normalized.split("/").pop() ?? normalized;
+  if (normalized.startsWith(".lime/") || normalized.includes("/.lime/")) {
+    return false;
+  }
   if (TEST_FIXTURE_FILE_PATTERN.test(fileName)) {
     return false;
   }

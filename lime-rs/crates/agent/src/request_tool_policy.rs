@@ -255,30 +255,62 @@ impl WebSearchExecutionTracker {
             ));
         }
 
-        let required_attempts: Vec<&ToolAttemptRecord> = self
+        let all_attempts = self
             .ordered_tool_ids
             .iter()
             .filter_map(|tool_id| self.attempts_by_id.get(tool_id))
-            .filter(|record| policy.matches_any_required_tool(&record.tool_name))
-            .collect();
+            .collect::<Vec<_>>();
 
-        if required_attempts.is_empty() {
+        let missing_required_tools = policy
+            .required_tools
+            .iter()
+            .filter(|required_tool| {
+                !all_attempts
+                    .iter()
+                    .any(|record| is_same_tool(&record.tool_name, required_tool))
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+
+        if !missing_required_tools.is_empty() {
             return Err(format!(
                 "联网搜索已开启，但未检测到必需工具调用。必须先调用 {} 至少一次后再给出最终答复。\n尝试记录: {}",
-                policy.required_tools.join(", "),
+                missing_required_tools.join(", "),
                 self.format_attempts()
             ));
         }
 
-        if required_attempts
+        let failed_required_tools = policy
+            .required_tools
             .iter()
-            .any(|record| record.success.unwrap_or(false))
-        {
+            .filter(|required_tool| {
+                !all_attempts.iter().any(|record| {
+                    is_same_tool(&record.tool_name, required_tool)
+                        && record.success.unwrap_or(false)
+                })
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+
+        if failed_required_tools.is_empty() {
             return Ok(());
         }
 
+        if all_attempts
+            .iter()
+            .filter(|record| policy.matches_any_required_tool(&record.tool_name))
+            .any(|record| record.success.is_none())
+        {
+            return Err(format!(
+                "联网搜索已开启，但仍有必需工具未完成。未完成工具: {}。\n尝试记录: {}",
+                failed_required_tools.join(", "),
+                self.format_attempts()
+            ));
+        }
+
         Err(format!(
-            "联网搜索已开启，但必需工具调用全部失败，无法给出符合约束的最终答复。\n失败原因与尝试记录: {}",
+            "联网搜索已开启，但必需工具调用失败，无法给出符合约束的最终答复。失败工具: {}。\n失败原因与尝试记录: {}",
+            failed_required_tools.join(", "),
             self.format_attempts()
         ))
     }
@@ -327,14 +359,48 @@ impl WebSearchExecutionTracker {
     }
 
     fn has_successful_required_attempt(&self, policy: &RequestToolPolicy) -> bool {
-        self.ordered_tool_ids
-            .iter()
-            .filter_map(|tool_id| self.attempts_by_id.get(tool_id))
-            .any(|record| {
-                policy.matches_any_required_tool(&record.tool_name)
-                    && record.success.unwrap_or(false)
-            })
+        policy.required_tools.iter().all(|required_tool| {
+            self.ordered_tool_ids
+                .iter()
+                .filter_map(|tool_id| self.attempts_by_id.get(tool_id))
+                .any(|record| {
+                    is_same_tool(&record.tool_name, required_tool)
+                        && record.success.unwrap_or(false)
+                })
+        })
     }
+}
+
+pub fn request_tool_policy_with_additional_required_tools(
+    mut policy: RequestToolPolicy,
+    additional_required_tools: &[&str],
+) -> RequestToolPolicy {
+    if !policy.effective_web_search {
+        return policy;
+    }
+
+    for tool in additional_required_tools {
+        let tool = tool.trim();
+        if tool.is_empty() {
+            continue;
+        }
+        if !policy
+            .required_tools
+            .iter()
+            .any(|candidate| is_same_tool(candidate, tool))
+        {
+            policy.required_tools.push(tool.to_string());
+        }
+        if !policy
+            .allowed_tools
+            .iter()
+            .any(|candidate| is_same_tool(candidate, tool))
+        {
+            policy.allowed_tools.push(tool.to_string());
+        }
+    }
+
+    policy
 }
 
 #[derive(Debug, Clone)]
@@ -3396,6 +3462,29 @@ mod tests {
         let mut tracker = WebSearchExecutionTracker::default();
         tracker.record_tool_start(&policy, "tool-1", "WebSearch");
         tracker.record_tool_end(&policy, "tool-1", true, None);
+        assert!(tracker.validate_web_search_requirement(&policy).is_ok());
+    }
+
+    #[test]
+    fn tracker_requires_each_required_tool_to_succeed() {
+        let policy = request_tool_policy_with_additional_required_tools(
+            resolve_request_tool_policy_with_mode(
+                Some(true),
+                Some(RequestToolPolicyMode::Required),
+            ),
+            &["WebFetch"],
+        );
+        let mut tracker = WebSearchExecutionTracker::default();
+        tracker.record_tool_start(&policy, "tool-search", "WebSearch");
+        tracker.record_tool_end(&policy, "tool-search", true, None);
+
+        let err = tracker
+            .validate_web_search_requirement(&policy)
+            .expect_err("missing WebFetch should fail");
+        assert!(err.contains("WebFetch"));
+
+        tracker.record_tool_start(&policy, "tool-fetch", "WebFetch");
+        tracker.record_tool_end(&policy, "tool-fetch", true, None);
         assert!(tracker.validate_web_search_requirement(&policy).is_ok());
     }
 

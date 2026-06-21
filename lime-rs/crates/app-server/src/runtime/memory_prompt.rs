@@ -1,4 +1,5 @@
 use super::context_packet::{assemble_context_packets, ContextPacket, ContextScope};
+use super::output_refs::SIDECAR_REF_FIELD;
 use super::RuntimeCore;
 use app_server_protocol::{
     AgentSessionTurnStartParams, MemoryStoreReadParams, MemoryStoreRootParams, MemoryStoreScope,
@@ -255,7 +256,7 @@ fn session_compaction_prompt_context_from_event(payload: &Value) -> Option<Value
     copy_optional_value(payload, &mut context, "tailStartTurnId");
     copy_optional_value(payload, &mut context, "turnCount");
     copy_optional_value(payload, &mut context, "trigger");
-    copy_optional_value(payload, &mut context, "sidecarRef");
+    copy_optional_value(payload, &mut context, SIDECAR_REF_FIELD);
     context.insert("summary".to_string(), json!(summary));
     Some(Value::Object(context))
 }

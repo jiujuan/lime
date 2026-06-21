@@ -191,6 +191,7 @@ export const METHOD_MCP_SERVER_DELETE = "mcpServer/delete";
 export const METHOD_MCP_SERVER_ENABLED_SET = "mcpServer/enabled/set";
 export const METHOD_MCP_SERVER_IMPORT_FROM_APP = "mcpServer/importFromApp";
 export const METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE = "mcpServer/syncAllToLive";
+export const METHOD_MCP_SERVER_OAUTH_LOGIN = "mcpServer/oauth/login";
 export const METHOD_MCP_SERVER_START = "mcpServer/start";
 export const METHOD_MCP_SERVER_STOP = "mcpServer/stop";
 export const METHOD_MCP_TOOL_LIST = "mcpTool/list";
@@ -209,8 +210,7 @@ export const METHOD_MEMORY_STORE_SEARCH = "memoryStore/search";
 export const METHOD_MEMORY_STORE_ADD_NOTE = "memoryStore/addNote";
 export const METHOD_MEMORY_STORE_CONSOLIDATE = "memoryStore/consolidate";
 export const METHOD_MEMORY_STORE_REVIEW_LIST = "memoryStore/review/list";
-export const METHOD_MEMORY_STORE_REVIEW_RESOLVE =
-  "memoryStore/review/resolve";
+export const METHOD_MEMORY_STORE_REVIEW_RESOLVE = "memoryStore/review/resolve";
 export const METHOD_MEMORY_STORE_HEALTH = "memoryStore/health";
 export const METHOD_MEMORY_STORE_RESET = "memoryStore/reset";
 export const METHOD_MEMORY_STORE_INDEX_REBUILD = "memoryStore/index/rebuild";
@@ -358,8 +358,10 @@ export const METHOD_CONVERSATION_IMPORT_THREAD_COMMIT =
   "conversationImport/thread/commit";
 export const METHOD_CONVERSATION_IMPORT_THREAD_RUNTIME_EVENTS_READ =
   "conversationImport/thread/runtimeEvents/read";
-export const CONVERSATION_IMPORT_SOURCE_CLIENTS =
-  ["codex", "claude_code"] as const satisfies readonly GeneratedConversationImportSourceClient[];
+export const CONVERSATION_IMPORT_SOURCE_CLIENTS = [
+  "codex",
+  "claude_code",
+] as const satisfies readonly GeneratedConversationImportSourceClient[];
 export const CONVERSATION_IMPORT_SOURCE_STATUSES = [
   "ready",
   "missing",
@@ -543,6 +545,7 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_MCP_SERVER_ENABLED_SET, kind: "request" },
   { method: METHOD_MCP_SERVER_IMPORT_FROM_APP, kind: "request" },
   { method: METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE, kind: "request" },
+  { method: METHOD_MCP_SERVER_OAUTH_LOGIN, kind: "request" },
   { method: METHOD_MCP_SERVER_START, kind: "request" },
   { method: METHOD_MCP_SERVER_STOP, kind: "request" },
   { method: METHOD_MCP_TOOL_LIST, kind: "request" },
@@ -3162,6 +3165,17 @@ export type McpServerImportFromAppParams = {
 export type McpServerImportFromAppResponse = {
   importedCount: number;
   servers: unknown[];
+};
+
+export type McpServerOauthLoginParams = {
+  name: string;
+  scopes?: string[];
+  timeoutSecs?: number;
+};
+
+export type McpServerOauthLoginResponse = {
+  authorizationUrl: string;
+  state: string;
 };
 
 export type McpServerStartParams = {

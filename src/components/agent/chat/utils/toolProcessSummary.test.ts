@@ -514,9 +514,10 @@ describe("toolProcessSummary", () => {
     );
 
     expect(serviceSkillNarrative.preSummary).toBe(
-      "先走服务技能兼容执行 渠道预览",
+      "先执行服务技能 渠道预览",
     );
-    expect(serviceSkillNarrative.summary).toBe("先走服务技能兼容执行 渠道预览");
+    expect(serviceSkillNarrative.summary).toBe("先执行服务技能 渠道预览");
+    expect(serviceSkillNarrative.summary).not.toContain("兼容");
     expect(siteRecommendNarrative.preSummary).toBe(
       "先推荐适合 GitHub issue 搜索 的站点能力",
     );

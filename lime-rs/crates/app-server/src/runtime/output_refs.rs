@@ -9,6 +9,7 @@ use super::RuntimeCoreError;
 
 const MAX_INLINE_TOOL_OUTPUT_CHARS: usize = 8_000;
 const TOOL_OUTPUT_PREVIEW_CHARS: usize = 1_200;
+pub(super) const SIDECAR_REF_FIELD: &str = "sidecarRef";
 
 #[derive(Debug, Clone, PartialEq)]
 pub(super) struct OutputBlob {
@@ -277,7 +278,7 @@ pub(super) fn attach_output_snapshot_ref(payload: &mut Value, output: &OutputBlo
     }
     if let Some(sidecar_ref) = output.sidecar_ref.as_ref() {
         object.insert(
-            "sidecarRef".to_string(),
+            SIDECAR_REF_FIELD.to_string(),
             serde_json::to_value(sidecar_ref).unwrap_or_else(|_| json!({})),
         );
     }
@@ -462,7 +463,7 @@ fn output_snapshot_file_name(output_ref: &str) -> String {
 
 fn output_sidecar_ref_from_value(value: &Value) -> Option<SidecarRef> {
     value
-        .get("sidecarRef")
+        .get(SIDECAR_REF_FIELD)
         .or_else(|| value.get("sidecar_ref"))
         .cloned()
         .and_then(|value| serde_json::from_value(value).ok())

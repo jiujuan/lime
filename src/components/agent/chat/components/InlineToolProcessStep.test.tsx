@@ -600,6 +600,176 @@ describe("InlineToolProcessStep", () => {
     expect(container.textContent).not.toContain("skill_markdown_content");
   });
 
+  it("服务技能过程步骤不应暴露兼容文案或原始 JSON", () => {
+    const { container } = renderTool({
+      id: "tool-service-skill-1",
+      name: "lime_run_service_skill",
+      arguments: JSON.stringify({
+        skill_title: "渠道预览",
+        service_skill_id: "channel-preview",
+        slot_values: {
+          platform: "小红书",
+        },
+      }),
+      status: "running",
+      result: {
+        success: true,
+        output: JSON.stringify({
+          service_skill_id: "channel-preview",
+          slot_values: {
+            platform: "小红书",
+          },
+          status: "running",
+        }),
+      },
+      metadata: {
+        skill_title: "渠道预览",
+      },
+      startTime: new Date("2026-06-21T10:10:00.000Z"),
+    });
+
+    expect(container.textContent).toContain("执行服务技能中 渠道预览");
+    expect(container.textContent).toContain("先执行服务技能 渠道预览");
+    expect(container.textContent).not.toContain("实时输出");
+    expect(container.textContent).not.toContain("兼容");
+    expect(container.textContent).not.toContain("service_skill_id");
+    expect(container.textContent).not.toContain("slot_values");
+    expect(container.textContent).not.toContain("channel-preview");
+    expect(
+      container.querySelector(
+        '[data-testid="inline-tool-skill-content-panel"]',
+      ),
+    ).toBeNull();
+    expect(container.querySelector('button[title="查看 SKILL.md"]')).toBeNull();
+  });
+
+  it("服务技能完成态嵌套结果也不应暴露结构化 JSON 包络", () => {
+    const { container } = renderTool({
+      id: "tool-service-skill-completed-1",
+      name: "lime_run_service_skill",
+      arguments: JSON.stringify({
+        skill_title: "渠道预览",
+        service_skill_id: "channel-preview",
+      }),
+      status: "completed",
+      result: {
+        success: true,
+        output: JSON.stringify({
+          result: {
+            output: {
+              data: {
+                serviceSkillId: "channel-preview",
+                slotValues: {
+                  platform: "小红书",
+                },
+                status: "completed",
+              },
+            },
+          },
+        }),
+      },
+      metadata: {
+        skill_title: "渠道预览",
+      },
+      startTime: new Date("2026-06-21T10:10:00.000Z"),
+      endTime: new Date("2026-06-21T10:10:05.000Z"),
+    });
+
+    expect(container.textContent).toContain("已执行服务技能 渠道预览");
+    expect(container.textContent).toContain("已完成服务技能执行 渠道预览");
+    expect(container.textContent).not.toContain("serviceSkillId");
+    expect(container.textContent).not.toContain("slotValues");
+    expect(container.textContent).not.toContain("channel-preview");
+    expect(container.textContent).not.toContain("实时输出");
+    expect(container.textContent).not.toContain("兼容");
+    expect(container.querySelector('[data-testid="markdown-renderer"]')).toBeNull();
+  });
+
+  it("普通 SkillTool gate proof 不应渲染为 JSON 明细", () => {
+    const { container } = renderTool({
+      id: "tool-skill-gate-proof-1",
+      name: "SkillTool",
+      arguments: JSON.stringify({ skill: "capability-report" }),
+      status: "completed",
+      result: {
+        success: true,
+        output: JSON.stringify({
+          allow: {
+            phase: "skill_tool_gate_allow",
+            hasRequest: true,
+            hasDecision: true,
+            hasResult: true,
+            hasSourceMetadata: true,
+            request: {
+              toolName: "SkillTool",
+              sessionId: "skill-source-session",
+              skill: "capability-report",
+              authorizationScope: "session",
+            },
+            decision: {
+              action: "allow",
+              gate: "session_allowlist",
+              enabled: true,
+              allowlisted: true,
+              reason: "workspace_skill_runtime_enable_allowlist_matched",
+            },
+            result: {
+              status: "passed",
+              permissionBehavior: "Allow",
+              sourceMetadataAttached: true,
+              workspaceSkillRuntimeEnableAttached: true,
+            },
+          },
+          sourceMetadata: {
+            sourceDraftId: "capdraft-1",
+            sourceVerificationReportId: "capver-1",
+          },
+          summary:
+            "SkillTool allow/deny events both contain request, decision and result.",
+        }),
+      },
+      startTime: new Date("2026-06-21T10:20:00.000Z"),
+      endTime: new Date("2026-06-21T10:20:03.000Z"),
+    });
+
+    expect(container.textContent).toContain("已执行技能 capability-report");
+    expect(container.textContent).not.toContain("permissionBehavior");
+    expect(container.textContent).not.toContain(
+      "workspaceSkillRuntimeEnableAttached",
+    );
+    expect(container.textContent).not.toContain("sourceMetadata");
+    expect(container.textContent).not.toContain("skill-source-session");
+    expect(container.textContent).not.toContain("SkillTool allow/deny");
+    expect(container.querySelector('[data-testid="markdown-renderer"]')).toBeNull();
+  });
+
+  it("普通 SkillTool 正常输出不应被 gate 包络过滤误吞", () => {
+    const { container } = renderTool({
+      id: "tool-skill-output-1",
+      name: "SkillTool",
+      arguments: JSON.stringify({ skill: "capability-report" }),
+      status: "completed",
+      result: {
+        success: true,
+        output: JSON.stringify({
+          output: "已完成能力分析。",
+          sourceMetadata: {
+            sourceDraftId: "capdraft-1",
+          },
+          workspaceSkillRuntimeEnable: {
+            enabledSkillNames: ["capability-report"],
+          },
+        }),
+      },
+      startTime: new Date("2026-06-21T10:21:00.000Z"),
+      endTime: new Date("2026-06-21T10:21:03.000Z"),
+    });
+
+    expect(container.textContent).toContain("已完成能力分析。");
+    expect(container.textContent).not.toContain("sourceDraftId");
+    expect(container.textContent).not.toContain("workspaceSkillRuntimeEnable");
+  });
+
   it("ToolSearch 展开后应展示结构化工具摘要，而不是原始 JSON", () => {
     const { container } = renderTool({
       id: "tool-search-1",

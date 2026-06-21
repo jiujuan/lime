@@ -64,6 +64,13 @@ describe("codex import click-through Electron fixture smoke guard", () => {
     expect(content).toContain('type: "exec_approval_request"');
     expect(content).toContain("将保留工具、命令、补丁、确认与思考记录");
     expect(content).toContain("IMPORTED_REASONING_TEXT");
+    expect(content).toContain("IMPORTED_ASSISTANT_MARKDOWN_TEXT");
+    expect(content).toContain("IMPORTED_ASSISTANT_SUMMARY_TEXT");
+    expect(content).toContain("IMPORTED_MARKDOWN_HEADING_TEXT");
+    expect(content).toContain("导入选购指南###");
+    expect(content).toContain("####如果历史会话");
+    expect(content).toContain("**推荐 做法 **");
+    expect(content).toContain("| 场景 | 过程 | 正文 |");
     expect(content).toContain("bodyText.includes(importedReasoningText)");
     expect(content).toContain("hasReasoningItem");
     expect(content).toContain("hasReasoningVisible");
@@ -71,6 +78,12 @@ describe("codex import click-through Electron fixture smoke guard", () => {
     expect(content).toContain("hasCommandText");
     expect(content).toContain("hasPatchText");
     expect(content).toContain("hasSearchEvidence");
+    expect(content).toContain("IMPORTED_WEB_SEARCH_TITLE");
+    expect(content).toContain("IMPORTED_WEB_SEARCH_SOURCE_LABEL");
+    expect(content).toContain("IMPORTED_WEB_SEARCH_URL");
+    expect(content).toContain("Lime Codex Import Rendering Source");
+    expect(content).toContain("https://example.com/lime-codex-import-rendering");
+    expect(content).toContain("Yahoo Scout");
     expect(content).toContain("hasApprovalText");
     expect(content).toContain("IMPORTED_ATTACHMENT_DATA_URL");
     expect(content).toContain("inspectImportedAttachmentPreview");
@@ -103,6 +116,35 @@ describe("codex import click-through Electron fixture smoke guard", () => {
     expect(content).toContain("ppt/slides/slide1.xml");
     expect(content).toContain("ZIP/OpenXML 噪音");
     expect(content).toContain("summarizeImportedFilePreviewArtifacts");
+  });
+
+  it("asserts imported Markdown and WebSearch render like the live Claw path", () => {
+    const content = readSmokeSurface();
+
+    expect(content).toContain("inspectImportedMarkdownAndSearchRendering");
+    expect(content).toContain("importedMarkdownAndSearchRenderingSummary");
+    expect(content).toContain("expandImportedSearchProcessGroup");
+    expect(content).toContain("markdownHeadingVisible");
+    expect(content).toContain("markdownStrongVisible");
+    expect(content).toContain("markdownTableVisible");
+    expect(content).toContain("rawMarkdownVisible");
+    expect(content).toContain("hasImportedSearchResult");
+    expect(content).toContain("searchProcessGroupVisible");
+    expect(content).toContain("searchNoiseVisible");
+    expect(content).toContain("hasFullSearchUrlVisible");
+    expect(content).toContain("markdown-table-scroll");
+    expect(content).toContain("streaming-process-group");
+    expect(content).toContain("inline-tool-process-step");
+    expect(content).toContain("已搜索网页");
+    expect(content).toContain("正在搜索网页");
+    expect(content).toContain("导入 Markdown 标题未渲染为 heading");
+    expect(content).toContain("导入 Markdown 加粗未渲染为 strong");
+    expect(content).toContain("导入 Markdown 表格未渲染为 table");
+    expect(content).toContain("导入正文暴露了原始 Markdown 语法");
+    expect(content).toContain("导入搜索结果未展示有效来源");
+    expect(content).toContain("导入搜索过程未按过程组展示");
+    expect(content).toContain("导入搜索结果暴露了搜索导航噪音");
+    expect(content).toContain("导入搜索结果暴露了完整 URL");
   });
 
   it("continues the imported session through the GUI inputbar and external backend", () => {

@@ -154,7 +154,12 @@ const toToolDisplayDescriptor = (
           };
   const action =
     actionCopy.key && actionCopy.defaultValue
-      ? resolveContentWorkbenchToolCopy(actionCopy.key, actionCopy.defaultValue)
+      ? actionCopy.key.startsWith("toolCall.")
+        ? resolveRequiredAgentChatCopy(actionCopy.key)
+        : resolveContentWorkbenchToolCopy(
+            actionCopy.key,
+            actionCopy.defaultValue,
+          )
       : config.actions
         ? actionCopy.defaultValue
           ? resolveToolDisplayActionOverride(actionCopy.defaultValue)

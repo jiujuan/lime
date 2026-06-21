@@ -1008,6 +1008,148 @@ async fn export_evidence_reads_request_logs_from_telemetry_store() {
 }
 
 #[tokio::test]
+async fn export_evidence_records_skill_invocation_from_tool_metadata() {
+    let core = RuntimeCore::default();
+    core.start_session(AgentSessionStartParams {
+        session_id: Some("sess_skill_invocation_evidence".to_string()),
+        thread_id: Some("thread_skill_invocation_evidence".to_string()),
+        app_id: "agent-runtime".to_string(),
+        workspace_id: Some("workspace-main".to_string()),
+        business_object_ref: None,
+        locale: None,
+    })
+    .expect("session");
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: "sess_skill_invocation_evidence".to_string(),
+            turn_id: Some("turn_skill_invocation_evidence".to_string()),
+            input: AgentInput {
+                text: "用 $capability-report 生成报告".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: None,
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("turn");
+    core.append_external_runtime_events(
+        "sess_skill_invocation_evidence",
+        Some("turn_skill_invocation_evidence"),
+        vec![
+            RuntimeEvent::new(
+                "tool.started",
+                json!({
+                    "toolCallId": "skill-call-1",
+                    "toolName": "Skill",
+                    "arguments": {
+                        "skill": "project:capability-report"
+                    }
+                }),
+            ),
+            RuntimeEvent::new(
+                "tool.result",
+                json!({
+                    "toolCallId": "skill-call-1",
+                    "toolName": "Skill",
+                    "arguments": {
+                        "skill": "project:capability-report"
+                    },
+                    "outputPreview": "报告已生成",
+                    "success": true,
+                    "metadata": {
+                        "tool_family": "skill",
+                        "skill_name": "project:capability-report",
+                        "workspace_skill_source": {
+                            "workspaceRoot": "/tmp/workspace",
+                            "source": "manual_session_enable",
+                            "approval": "manual",
+                            "authorizationScope": "session",
+                            "directory": "capability-report",
+                            "registeredSkillDirectory": "capability-report",
+                            "skillName": "project:capability-report"
+                        },
+                        "workspace_skill_runtime_enable": {
+                            "source": "manual_session_enable",
+                            "approval": "manual",
+                            "authorization_scope": "session",
+                            "workspace_root": "/tmp/workspace",
+                            "directory": "capability-report",
+                            "skill": "project:capability-report"
+                        }
+                    }
+                }),
+            ),
+        ],
+    )
+    .expect("append skill invocation event");
+
+    let response = core
+        .export_evidence(EvidenceExportParams {
+            session_id: "sess_skill_invocation_evidence".to_string(),
+            turn_id: Some("turn_skill_invocation_evidence".to_string()),
+            include_events: Some(true),
+            include_artifacts: Some(true),
+            include_evidence_pack: Some(true),
+        })
+        .await
+        .expect("export evidence");
+
+    let evidence_pack = response.evidence_pack.expect("evidence pack");
+    let skill_invocations = evidence_pack
+        .observability_summary
+        .as_ref()
+        .and_then(|summary| summary.get("skill_invocations"))
+        .and_then(serde_json::Value::as_array)
+        .expect("skill invocations");
+    assert_eq!(skill_invocations.len(), 1);
+    assert_eq!(
+        skill_invocations[0]
+            .get("event")
+            .and_then(serde_json::Value::as_str),
+        Some("skill_invocation")
+    );
+    assert_eq!(
+        skill_invocations[0]
+            .get("skillName")
+            .and_then(serde_json::Value::as_str),
+        Some("project:capability-report")
+    );
+    assert_eq!(
+        skill_invocations[0]
+            .get("status")
+            .and_then(serde_json::Value::as_str),
+        Some("completed")
+    );
+    assert_eq!(
+        skill_invocations[0]
+            .get("workspaceSkillRuntimeEnable")
+            .and_then(|value| value.get("approval"))
+            .and_then(serde_json::Value::as_str),
+        Some("manual")
+    );
+    let audit = evidence_pack
+        .completion_audit_summary
+        .as_ref()
+        .expect("completion audit");
+    assert_eq!(
+        audit
+            .get("workspaceSkillToolCallCount")
+            .and_then(serde_json::Value::as_u64),
+        Some(1)
+    );
+    assert_eq!(
+        audit
+            .get("requiredEvidence")
+            .and_then(|value| value.get("workspaceSkillToolCall"))
+            .and_then(serde_json::Value::as_bool),
+        Some(true)
+    );
+}
+
+#[tokio::test]
 async fn export_evidence_can_skip_injected_evidence_pack_provider() {
     let provider = Arc::new(TestEvidenceExportProvider::default());
     let core = RuntimeCore::with_backend_capability_source_artifact_content_provider_and_evidence_export_provider(

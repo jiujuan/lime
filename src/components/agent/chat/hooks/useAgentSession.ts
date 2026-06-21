@@ -514,6 +514,10 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     threadItemsRef.current = nextThreadItems;
     setThreadItems(nextThreadItems);
   }, []);
+  const getThreadItems = useCallback(
+    () => threadItemsRef.current,
+    [],
+  );
 
   const persistSessionRestoreCandidate = useCallback(
     (nextSessionId: string | null) => {
@@ -2942,6 +2946,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     threadTurns,
     setThreadTurns: setThreadTurnsState,
     threadItems,
+    getThreadItems,
     setThreadItems: setThreadItemsState,
     currentTurnId,
     setCurrentTurnId,

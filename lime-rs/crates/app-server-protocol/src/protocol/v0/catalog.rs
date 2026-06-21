@@ -218,6 +218,7 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
     method!(METHOD_MCP_SERVER_ENABLED_SET, Request),
     method!(METHOD_MCP_SERVER_IMPORT_FROM_APP, Request),
     method!(METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE, Request),
+    method!(METHOD_MCP_SERVER_OAUTH_LOGIN, Request),
     method!(METHOD_MCP_SERVER_START, Request),
     method!(METHOD_MCP_SERVER_STOP, Request),
     method!(METHOD_MCP_TOOL_LIST, Request),

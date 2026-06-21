@@ -378,6 +378,41 @@ describe("MarkdownRenderer", () => {
     expect(container.textContent).not.toContain("| 发现 | 说明 |");
   });
 
+  it("应修复模型输出的松散 Markdown，避免标题、粗体和表格语法原样露出", () => {
+    const content = [
+      "五年级选购指南###",
+      "####如果孩子基础一般，优先选护眼和内容稳定的机型",
+      "**推荐 型号 **：学习机 S30",
+      "**理由 **：系统足够简单，家长管理清楚。",
+      "选购对比：",
+      "| 品牌 | 型号 | 适合场景 |",
+      "| --- | --- | --- |",
+      "| 星火 | S30 | 五年级基础巩固 |",
+    ].join("\n");
+
+    const container = render(content);
+
+    expect(
+      container.querySelector('h3[data-markdown-heading-level="3"]')
+        ?.textContent,
+    ).toBe("五年级选购指南");
+    expect(
+      container.querySelector("h4")?.textContent,
+    ).toBe("如果孩子基础一般，优先选护眼和内容稳定的机型");
+    expect(
+      Array.from(container.querySelectorAll("strong")).map(
+        (node) => node.textContent,
+      ),
+    ).toEqual(["推荐 型号", "理由"]);
+    expect(
+      container.querySelector('[data-testid="markdown-table-scroll"] table'),
+    ).not.toBeNull();
+    expect(container.textContent).not.toContain("五年级选购指南###");
+    expect(container.textContent).not.toContain("####如果孩子");
+    expect(container.textContent).not.toContain("**推荐 型号 **");
+    expect(container.textContent).not.toContain("| 品牌 | 型号 |");
+  });
+
   it("markdown 围栏里确实是表格时应拆掉围栏并渲染为表格", () => {
     const content = [
       "```markdown",

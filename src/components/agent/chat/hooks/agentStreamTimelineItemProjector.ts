@@ -16,6 +16,8 @@ interface ProjectTimelineItemContext {
   now: string;
 }
 
+const LEGACY_TOOL_EVENT_SOURCE = "legacy_tool_event";
+
 function normalizeRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -51,6 +53,18 @@ function normalizeToolArguments(value: unknown): unknown {
   } catch {
     return value;
   }
+}
+
+function legacyToolEventMetadata(
+  ...records: Array<Record<string, unknown> | undefined>
+): Record<string, unknown> {
+  return {
+    ...records.reduce<Record<string, unknown>>(
+      (merged, record) => (record ? { ...merged, ...record } : merged),
+      {},
+    ),
+    runtime_event_source: LEGACY_TOOL_EVENT_SOURCE,
+  };
 }
 
 function appendTextWithOverlap(base: string | undefined, delta: string): string {
@@ -161,6 +175,7 @@ function projectToolStart(
     type: "tool_call",
     tool_name: event.tool_name,
     arguments: normalizeToolArguments(event.arguments),
+    metadata: legacyToolEventMetadata(normalizeRecord(existing?.metadata)),
   };
 }
 
@@ -188,6 +203,7 @@ function projectToolInputDelta(
     type: "tool_call",
     tool_name: event.tool_name || current.tool_name || event.tool_id,
     arguments: normalizeToolArguments(accumulated),
+    metadata: legacyToolEventMetadata(normalizeRecord(current?.metadata)),
   };
 }
 
@@ -212,8 +228,7 @@ function projectToolOutputDelta(
     success: current?.success,
     error: current?.error,
     metadata: {
-      ...(normalizeRecord(current?.metadata) ?? {}),
-      ...(metadata ?? {}),
+      ...legacyToolEventMetadata(normalizeRecord(current?.metadata), metadata),
       ...(event.output_kind ? { output_kind: event.output_kind } : {}),
       streaming: true,
     },
@@ -242,10 +257,9 @@ function projectToolProgress(
     output: current?.output,
     success: current?.success,
     error: current?.error,
-    metadata: {
-      ...(normalizeRecord(current?.metadata) ?? {}),
+    metadata: legacyToolEventMetadata(normalizeRecord(current?.metadata), {
       progress: event.progress,
-    },
+    }),
   };
 }
 
@@ -268,10 +282,10 @@ function projectToolEnd(
     output: event.result.output || current?.output,
     success: event.result.success,
     error: event.result.error,
-    metadata: {
-      ...(normalizeRecord(current?.metadata) ?? {}),
-      ...(event.result.metadata ?? {}),
-    },
+    metadata: legacyToolEventMetadata(
+      normalizeRecord(current?.metadata),
+      event.result.metadata,
+    ),
   };
 }
 

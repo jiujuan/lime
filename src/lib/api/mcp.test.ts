@@ -59,6 +59,125 @@ describe("mcp", () => {
     expect(safeInvoke).not.toHaveBeenCalled();
   });
 
+  it("状态列表应保留 streamable HTTP 配置与 runtime status", async () => {
+    const server = {
+      id: "server-http",
+      name: "remote-docs",
+      description: "remote docs",
+      config: {
+        type: "streamable_http",
+        url: "https://example.com/mcp",
+        bearer_token_env_var: "MCP_TOKEN",
+        scopes: ["search.read"],
+        oauth: { client_id: "lime-client" },
+        oauth_resource: "https://example.com",
+        startup_timeout: 30,
+        tool_timeout: 15,
+        enabled_tools: ["search"],
+        disabled_tools: ["delete"],
+      },
+      is_running: true,
+      server_info: {
+        name: "remote-docs",
+        version: "1.0.0",
+        supports_tools: true,
+        supports_prompts: false,
+        supports_resources: true,
+      },
+      runtime_status: {
+        name: "remote-docs",
+        transport: "streamable_http",
+        enabled: true,
+        is_running: true,
+        required: false,
+        supports_parallel_tool_calls: true,
+        startup_timeout: 30,
+        tool_timeout: 15,
+        enabled_tools: ["search"],
+        disabled_tools: ["delete"],
+        auth_status: {
+          mode: "oauth",
+          available: false,
+          reason_code: "oauth_runtime_not_implemented",
+          action_plan: {
+            kind: "oauth_login",
+            state: "runtime_not_connected",
+            required_runtime: "mcp_server_oauth_login",
+            scopes: ["search.read"],
+            oauth_resource: "https://example.com",
+            client_id: "lime-client",
+          },
+        },
+        server_info: {
+          name: "remote-docs",
+          version: "1.0.0",
+          supports_tools: true,
+          supports_prompts: false,
+          supports_resources: true,
+        },
+      },
+      enabled_lime: true,
+      enabled_claude: false,
+      enabled_codex: true,
+      enabled_gemini: false,
+    };
+    mockAppServerResult({ servers: [server] });
+
+    await expect(mcpApi.listServersWithStatus()).resolves.toEqual([server]);
+    expect(appServerRequestMock).toHaveBeenLastCalledWith(
+      "mcpServerStatus/list",
+      {},
+    );
+    expect(safeInvoke).not.toHaveBeenCalled();
+  });
+
+  it("动态 OAuth 状态应指向 current 登录 runtime", async () => {
+    const server = {
+      id: "server-http-dynamic-oauth",
+      name: "remote-docs",
+      config: {
+        type: "streamable_http",
+        url: "https://example.com/mcp",
+        scopes: ["search.read"],
+      },
+      is_running: false,
+      runtime_status: {
+        name: "remote-docs",
+        transport: "streamable_http",
+        enabled: true,
+        is_running: false,
+        required: false,
+        supports_parallel_tool_calls: false,
+        startup_timeout: 30,
+        tool_timeout: 30,
+        disabled_tools: [],
+        auth_status: {
+          mode: "oauth",
+          available: true,
+          reason_code: "oauth_login_required",
+          action_plan: {
+            kind: "oauth_login",
+            state: "login_required",
+            required_runtime: "mcp_server_oauth_login",
+            scopes: ["search.read"],
+          },
+        },
+      },
+      enabled_lime: true,
+      enabled_claude: false,
+      enabled_codex: true,
+      enabled_gemini: false,
+    };
+    mockAppServerResult({ servers: [server] });
+
+    await expect(mcpApi.listServersWithStatus()).resolves.toEqual([server]);
+    expect(appServerRequestMock).toHaveBeenLastCalledWith(
+      "mcpServerStatus/list",
+      {},
+    );
+    expect(safeInvoke).not.toHaveBeenCalled();
+  });
+
   it("MCP runtime 使用命令应通过 App Server current method 传递参数", async () => {
     const tool = {
       name: "mcp__docs__search_docs",
@@ -158,9 +277,13 @@ describe("mcp", () => {
     expect(safeInvoke).not.toHaveBeenCalled();
   });
 
-  it("MCP lifecycle 应通过 App Server current method 传递参数", async () => {
+  it("MCP lifecycle / OAuth login 应通过 App Server current method 传递参数", async () => {
     mockAppServerResult({});
     mockAppServerResult({});
+    mockAppServerResult({
+      authorizationUrl: "http://127.0.0.1:49152/oauth/start",
+      state: "pending",
+    });
 
     await expect(mcpApi.startServer("docs")).resolves.toBeUndefined();
     expect(appServerRequestMock).toHaveBeenLastCalledWith("mcpServer/start", {
@@ -171,6 +294,24 @@ describe("mcp", () => {
     expect(appServerRequestMock).toHaveBeenLastCalledWith("mcpServer/stop", {
       name: "docs",
     });
+
+    await expect(
+      mcpApi.loginOAuthServer("remote-docs", {
+        scopes: ["search.read"],
+        timeoutSecs: 120,
+      }),
+    ).resolves.toEqual({
+      authorizationUrl: "http://127.0.0.1:49152/oauth/start",
+      state: "pending",
+    });
+    expect(appServerRequestMock).toHaveBeenLastCalledWith(
+      "mcpServer/oauth/login",
+      {
+        name: "remote-docs",
+        scopes: ["search.read"],
+        timeoutSecs: 120,
+      },
+    );
     expect(safeInvoke).not.toHaveBeenCalled();
   });
 

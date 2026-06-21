@@ -127,6 +127,7 @@ describe("mcp App Server current API fail-closed", () => {
     const cases: Array<[string, () => Promise<unknown>]> = [
       ["mcpServer/start", () => mcpApi.startServer("docs")],
       ["mcpServer/stop", () => mcpApi.stopServer("docs")],
+      ["mcpServer/oauth/login", () => mcpApi.loginOAuthServer("docs")],
       [
         "mcpTool/listForContext",
         () => mcpApi.listToolsForContext("assistant", true),
@@ -167,6 +168,21 @@ describe("mcp App Server current API fail-closed", () => {
     );
     await expect(mcpApi.stopServer("docs")).rejects.toThrow(
       "mcpServer/stop did not return empty lifecycle result",
+    );
+    expect(safeInvoke).not.toHaveBeenCalled();
+  });
+
+  it("MCP OAuth login 收到 malformed current 响应时应 fail closed", async () => {
+    mockAppServerResult({ authorization_url: "http://127.0.0.1/callback" });
+
+    await expect(mcpApi.loginOAuthServer("docs")).rejects.toThrow(
+      "mcpServer/oauth/login did not return OAuth login response",
+    );
+    expect(appServerRequestMock).toHaveBeenLastCalledWith(
+      "mcpServer/oauth/login",
+      {
+        name: "docs",
+      },
     );
     expect(safeInvoke).not.toHaveBeenCalled();
   });

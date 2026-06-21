@@ -1062,7 +1062,7 @@ function buildGenericPostSummary(params: {
   }
   if (normalizedName === "limerunserviceskill") {
     return resolveProcessSummaryCopy(
-      "toolCall.processSummary.serviceSkill.compatRun",
+      "toolCall.processSummary.serviceSkill.run",
       normalizedSubject,
     );
   }
@@ -1416,7 +1416,7 @@ function buildGenericPreSummary(params: {
 
   if (normalizedName === "limerunserviceskill") {
     return resolveProcessSummaryCopy(
-      "toolCall.processSummary.serviceSkill.compatRunFirst",
+      "toolCall.processSummary.serviceSkill.runFirst",
       normalizedSubject,
     );
   }

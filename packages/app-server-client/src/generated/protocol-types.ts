@@ -1924,6 +1924,17 @@ export interface McpServerListResponse {
   servers?: unknown[];
 }
 
+export interface McpServerOauthLoginParams {
+  name: string;
+  scopes?: string[] | null;
+  timeoutSecs?: number | null;
+}
+
+export interface McpServerOauthLoginResponse {
+  authorizationUrl: string;
+  state: string;
+}
+
 export interface McpServerStartParams {
   name: string;
 }

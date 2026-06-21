@@ -33,6 +33,21 @@ function evidenceExportResponse(
       knownGaps: ["gui_smoke_not_run"],
       observabilitySummary: {
         schema_version: "runtime-evidence-pack.v1",
+        skillInvocations: [
+          {
+            event: "skill_invocation",
+            skillName: "project:capability-report",
+            status: "completed",
+            sourceEventId: "evt-skill-1",
+            sourceEventType: "tool.result",
+            turnId: "turn-1",
+            toolCallId: "skill-call-1",
+            workspaceSkillRuntimeEnable: {
+              approval: "manual",
+              source: "manual_session_enable",
+            },
+          },
+        ],
       },
       completionAuditSummary: {
         source: "runtime_evidence_pack_completion_audit",
@@ -90,11 +105,28 @@ describe("appServerEvidenceExportProjection", () => {
       completion_audit_summary: expect.objectContaining({
         decision: "in_progress",
         owner_run_count: 1,
+        workspace_skill_tool_call_count: 1,
         required_evidence: expect.objectContaining({
           automation_owner: true,
           workspace_skill_tool_call: true,
           artifact_or_timeline: true,
         }),
+      }),
+      observability_summary: expect.objectContaining({
+        skill_invocations: [
+          expect.objectContaining({
+            event: "skill_invocation",
+            skill_name: "project:capability-report",
+            status: "completed",
+            source_event_id: "evt-skill-1",
+            source_event_type: "tool.result",
+            turn_id: "turn-1",
+            tool_call_id: "skill-call-1",
+            workspace_skill_runtime_enable: expect.objectContaining({
+              approval: "manual",
+            }),
+          }),
+        ],
       }),
       artifacts: [
         expect.objectContaining({

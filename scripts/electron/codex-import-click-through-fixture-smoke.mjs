@@ -8,6 +8,7 @@ import { _electron as electron } from "playwright";
 import {
   CONTINUE_ASSISTANT_TEXT,
   CONTINUE_USER_TEXT,
+  IMPORTED_ASSISTANT_SUMMARY_TEXT,
   IMPORTED_ASSISTANT_TEXT,
   IMPORTED_CWD,
   IMPORTED_REASONING_TEXT,
@@ -27,6 +28,7 @@ import {
   inspectImportedAttachmentPreview,
   inspectImportedFilePreviewArtifacts,
   inspectImportedHistoryBanner,
+  inspectImportedMarkdownAndSearchRendering,
   inspectSidebarImportDiscoverability,
   sendFollowUpFromGui,
   summarizeContinuationSnapshot,
@@ -463,7 +465,7 @@ async function extractClickThroughSummary(
       requiredMethods: REQUIRED_BACKEND_METHODS,
       sourceThreadId: SOURCE_THREAD_ID,
       importedUserText: IMPORTED_USER_TEXT,
-      importedAssistantText: IMPORTED_ASSISTANT_TEXT,
+      importedAssistantText: IMPORTED_ASSISTANT_SUMMARY_TEXT,
       importedReasoningText: IMPORTED_REASONING_TEXT,
       continueUserText: CONTINUE_USER_TEXT,
       continueAssistantText: CONTINUE_ASSISTANT_TEXT,
@@ -550,6 +552,7 @@ async function run() {
   let importedPageSnapshot = null;
   let importedDetailsSnapshot = null;
   let importedDetailsSummary = null;
+  let importedMarkdownAndSearchRenderingSummary = null;
   let importedHistoryBannerSummary = null;
   let importedAttachmentPreviewSummary = null;
   let importedFilePreviewArtifactsSummary = null;
@@ -637,6 +640,10 @@ async function run() {
       page,
       options,
     );
+
+    logStage("inspect-imported-markdown-and-search-rendering");
+    importedMarkdownAndSearchRenderingSummary =
+      await inspectImportedMarkdownAndSearchRendering(page, options);
 
     logStage("inspect-imported-history-banner");
     importedHistoryBannerSummary = await inspectImportedHistoryBanner(
@@ -817,6 +824,7 @@ async function run() {
     summary.clickThroughSummary = sanitizeJson({
       ...clickThroughSummary,
       importedDetailsSummary,
+      importedMarkdownAndSearchRenderingSummary,
       importedHistoryBannerSummary,
       importedAttachmentPreviewSummary,
       importedFilePreviewArtifactsSummary:
@@ -842,6 +850,7 @@ async function run() {
         importedPageSnapshot,
         importedDetailsSnapshot,
         importedDetailsSummary,
+        importedMarkdownAndSearchRenderingSummary,
         importedHistoryBannerSummary,
         importedAttachmentPreviewSummary,
         importedFilePreviewArtifactsSummary,
@@ -855,6 +864,7 @@ async function run() {
         clickThroughSummary: {
           ...clickThroughSummary,
           importedDetailsSummary,
+          importedMarkdownAndSearchRenderingSummary,
           importedHistoryBannerSummary,
           importedAttachmentPreviewSummary,
           importedFilePreviewArtifactsSummary:
@@ -894,6 +904,7 @@ async function run() {
         importedPageSnapshot,
         importedDetailsSnapshot,
         importedDetailsSummary,
+        importedMarkdownAndSearchRenderingSummary,
         importedHistoryBannerSummary,
         importedAttachmentPreviewSummary,
         importedFilePreviewArtifactsSummary,

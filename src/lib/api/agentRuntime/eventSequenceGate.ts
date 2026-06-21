@@ -292,6 +292,12 @@ function appServerEventTypeFromPublishedPayload(
     case "tool_complete":
     case "tool_completed":
       return "tool.completed";
+    case "item_started":
+      return "item.started";
+    case "item_updated":
+      return "item.updated";
+    case "item_completed":
+      return "item.completed";
     case "action_required":
       return "action.required";
     case "action_resolved":

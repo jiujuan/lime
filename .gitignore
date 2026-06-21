@@ -66,6 +66,7 @@ internal/exec-plans/*
 !internal/exec-plans/tauri-wrapper-command-inventory.md
 !internal/exec-plans/db-slimming-codex-alignment-plan.md
 !internal/exec-plans/models-runtime-unification-plan.md
+!internal/exec-plans/mcp-modernization-progress.md
 internal/roadmap/**
 !internal/roadmap/
 !internal/roadmap/db/

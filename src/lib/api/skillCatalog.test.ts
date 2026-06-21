@@ -67,6 +67,10 @@ describe("skillCatalog", () => {
         summary: "把文本生成线框图、配乐、剧本和短视频串成一条场景链。",
         aliases: ["story-video", "mv-pipeline"],
         linkedSkillId: "sceneapp-service",
+        skillLocator: {
+          source: "catalog",
+          name: "story-video-suite",
+        },
         executionKind: "agent_turn",
         surfaceScopes: ["mention", "workspace"],
       }),
@@ -86,6 +90,10 @@ describe("skillCatalog", () => {
         ],
         binding: {
           skillId: "sceneapp-service",
+          skillLocator: {
+            source: "catalog",
+            name: "voice_runtime",
+          },
           executionKind: "agent_turn",
           requestDefaults: {
             launch_hint: "voice_scene",
@@ -130,6 +138,10 @@ describe("skillCatalog", () => {
     expect(autoSceneEntry).toEqual(
       expect.objectContaining({
         linkedSkillId: "legacy-cloud-scene-skill",
+        skillLocator: {
+          source: "catalog",
+          name: "legacy-cloud-scene-skill",
+        },
         executionKind: "agent_turn",
       }),
     );

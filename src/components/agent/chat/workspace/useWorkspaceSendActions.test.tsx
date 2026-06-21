@@ -2868,7 +2868,7 @@ Extract it into the Agent Skills directory.`,
       );
       expect(mockSendMessage.mock.calls[0]?.[2]).toBe(true);
       expect(mockSendMessage.mock.calls[0]?.[8]).toMatchObject({
-        searchMode: "allowed",
+        searchMode: "required",
         explicitToolPreferences: true,
         requestMetadata: {
           harness: {
@@ -2945,7 +2945,7 @@ Extract it into the Agent Skills directory.`,
       );
       expect(mockSendMessage.mock.calls[0]?.[2]).toBe(true);
       expect(mockSendMessage.mock.calls[0]?.[8]).toMatchObject({
-        searchMode: "allowed",
+        searchMode: "required",
         explicitToolPreferences: true,
         requestMetadata: {
           harness: {

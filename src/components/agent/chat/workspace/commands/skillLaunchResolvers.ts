@@ -95,6 +95,10 @@ export async function resolveGrowthSkillLaunchRequestContext(params: {
         scene_key: "growth_runtime",
         command_prefix: params.parsedCommand.trigger,
         linked_skill_id: skill.id,
+        skill_locator: {
+          source: "catalog",
+          name: skill.skillKey || skill.id,
+        },
         skill_id: skill.id,
         skill_key: skill.skillKey || undefined,
         skill_title: skill.title,
@@ -186,6 +190,10 @@ export async function resolveVoiceSkillLaunchRequestContext(params: {
         scene_key: "voice_runtime",
         command_prefix: params.parsedCommand.trigger,
         linked_skill_id: skill.id,
+        skill_locator: {
+          source: "catalog",
+          name: skill.skillKey || skill.id,
+        },
         skill_id: skill.id,
         skill_key: skill.skillKey || undefined,
         skill_title: skill.title,

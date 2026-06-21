@@ -41,7 +41,10 @@ const ASSISTANT_TOOL_PROCESS_LEAD_IN_RE =
   /^(?:(?:我|我们)(?:会|将|来)?先?|让我|先|接下来|现在|正在)?\s*(?:联网|上网)?(?:搜索|检索|查询|查找|核实|确认|验证|获取|拉取|浏览|打开|访问|抓取|读取|联网|上网)/i;
 const ASSISTANT_USER_FACING_LEAD_IN_RE =
   /(?:再|然后|随后|并).*(?:整理|汇总|生成|输出|给出|形成|组织).*(?:简报|报告|摘要|结论|清单|要点|正文|回答)/i;
-const ASSISTANT_MARKDOWN_HEADING_RE = /#{1,6}\s+\S/;
+const ASSISTANT_MARKDOWN_HEADING_RE =
+  /(?:^|\n)\s{0,3}#{1,6}[ \t]+\S/;
+const ASSISTANT_LOOSE_MARKDOWN_HEADING_RE =
+  /(?:^|\n)\s{0,3}(?:#{1,6}(?=\S)|[^\n#|`*_]{2,72}#{2,6}\s*(?=\n|$))/;
 const ASSISTANT_MARKDOWN_BLOCK_START_RE =
   /(?:^|\n)(?:[-*+]\s+\S|\d+\.\s+\S|```|~~~|\|.*\|)/;
 const ASSISTANT_PHASE_SUMMARY_HEADING_RE = /^\s{0,3}#{1,6}\s*阶段结论\s*$/;
@@ -156,6 +159,13 @@ function shouldStripAssistantProcessPrefix(text: string): boolean {
     return false;
   }
 
+  if (
+    TOOL_NARRATION_RESULT_RE.test(normalized) ||
+    ASSISTANT_USER_FACING_LEAD_IN_RE.test(normalized)
+  ) {
+    return false;
+  }
+
   return (
     ASSISTANT_INCOMPLETE_PROCESS_LEAD_IN_RE.test(normalized) ||
     ASSISTANT_TOOL_PROCESS_LEAD_IN_RE.test(normalized) ||
@@ -163,12 +173,25 @@ function shouldStripAssistantProcessPrefix(text: string): boolean {
   );
 }
 
+function resolveStructuredBodyMatchIndex(
+  match: RegExpExecArray | null,
+): number | undefined {
+  if (!match || typeof match.index !== "number" || match.index < 0) {
+    return undefined;
+  }
+
+  return match[0].startsWith("\n") ? match.index + 1 : match.index;
+}
+
 function findStructuredBodyStartIndex(text: string): number | null {
   const headingMatch = ASSISTANT_MARKDOWN_HEADING_RE.exec(text);
+  const looseHeadingMatch = ASSISTANT_LOOSE_MARKDOWN_HEADING_RE.exec(text);
   const blockStartMatch = ASSISTANT_MARKDOWN_BLOCK_START_RE.exec(text);
-  const indexes = [headingMatch?.index, blockStartMatch?.index].filter(
-    (index): index is number => typeof index === "number" && index >= 0,
-  );
+  const indexes = [
+    resolveStructuredBodyMatchIndex(headingMatch),
+    resolveStructuredBodyMatchIndex(looseHeadingMatch),
+    resolveStructuredBodyMatchIndex(blockStartMatch),
+  ].filter((index): index is number => typeof index === "number");
 
   if (indexes.length === 0) {
     return null;

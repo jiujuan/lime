@@ -1,9 +1,12 @@
+mod agent_skills_context;
+mod agent_skills_telemetry;
 mod coding_events;
 mod memory_tools;
 mod model_registry_metadata;
 mod model_route_contract;
 mod model_route_resolver;
 mod model_routing;
+mod skill_runtime_enable;
 mod tool_events;
 mod tool_inventory;
 
@@ -95,6 +98,14 @@ impl RuntimeBackend {
         sink: &mut dyn RuntimeEventSink,
     ) -> Result<(), RuntimeCoreError> {
         let session_scope = session_scope_from_request(&request)?;
+        let _skill_runtime_enable_guard =
+            skill_runtime_enable::apply_workspace_skill_runtime_enable(
+                &request,
+                &session_scope.session_id,
+            );
+        for event in agent_skills_telemetry::runtime_status_events_for_agent_skills(&request) {
+            sink.emit(event)?;
+        }
         let host_request = aster_chat_request_from_request(&request);
         let db = initialize_runtime_database(self.db.as_ref())?;
         let requested_selection = resolve_runtime_model_selection(&request)?;

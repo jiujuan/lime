@@ -9,6 +9,7 @@ import {
   METHOD_MCP_SERVER_ENABLED_SET,
   METHOD_MCP_SERVER_IMPORT_FROM_APP,
   METHOD_MCP_SERVER_LIST,
+  METHOD_MCP_SERVER_OAUTH_LOGIN,
   METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE,
   METHOD_MCP_SERVER_START,
   METHOD_MCP_SERVER_STATUS_LIST,
@@ -26,6 +27,7 @@ import {
   type McpServerImportFromAppResponse as AppServerMcpServerImportFromAppResponse,
   type McpServerLifecycleResponse as AppServerMcpServerLifecycleResponse,
   type McpServerListResponse as AppServerMcpServerListResponse,
+  type McpServerOauthLoginResponse as AppServerMcpServerOauthLoginResponse,
   type McpServerStatusListResponse as AppServerMcpServerStatusListResponse,
   type McpToolCallResponse as AppServerMcpToolCallResponse,
   type McpToolListResponse as AppServerMcpToolListResponse,
@@ -38,19 +40,69 @@ import {
 export interface McpServer {
   id: string;
   name: string;
-  server_config: {
-    command: string;
-    args?: string[];
-    env?: Record<string, string>;
-    cwd?: string;
-    timeout?: number;
-  };
+  server_config: McpServerConfig;
   description?: string;
   enabled_lime: boolean;
   enabled_claude: boolean;
   enabled_codex: boolean;
   enabled_gemini: boolean;
   created_at?: number;
+}
+
+export type McpServerConfig =
+  | {
+      transport?: "stdio";
+      type?: "stdio";
+      command: string;
+      args?: string[];
+      env?: Record<string, string>;
+      cwd?: string;
+      timeout?: number;
+      startup_timeout?: number;
+      startupTimeout?: number;
+      tool_timeout?: number;
+      toolTimeout?: number;
+      enabled?: boolean;
+      enabled_tools?: string[];
+      enabledTools?: string[];
+      disabled_tools?: string[];
+      disabledTools?: string[];
+      required?: boolean;
+      supports_parallel_tool_calls?: boolean;
+      supportsParallelToolCalls?: boolean;
+    }
+  | {
+      transport?: "streamable_http" | "streamable-http" | "http";
+      type?: "streamable_http" | "streamable-http" | "http";
+      url: string;
+      bearer_token_env_var?: string;
+      bearerTokenEnvVar?: string;
+      http_headers?: Record<string, string>;
+      httpHeaders?: Record<string, string>;
+      env_http_headers?: Record<string, string>;
+      envHttpHeaders?: Record<string, string>;
+      timeout?: number;
+      startup_timeout?: number;
+      startupTimeout?: number;
+      tool_timeout?: number;
+      toolTimeout?: number;
+      enabled?: boolean;
+      enabled_tools?: string[];
+      enabledTools?: string[];
+      disabled_tools?: string[];
+      disabledTools?: string[];
+      required?: boolean;
+      supports_parallel_tool_calls?: boolean;
+      supportsParallelToolCalls?: boolean;
+      scopes?: string[];
+      oauth?: McpServerOAuthConfig;
+      oauth_resource?: string;
+      oauthResource?: string;
+    };
+
+export interface McpServerOAuthConfig {
+  client_id?: string;
+  clientId?: string;
 }
 
 /** MCP 服务器能力信息 */
@@ -67,13 +119,61 @@ export interface McpServerInfo {
   id: string;
   name: string;
   description?: string;
-  config: McpServer["server_config"];
+  config: McpServerConfig;
   is_running: boolean;
   server_info?: McpServerCapabilities;
+  runtime_status?: McpServerRuntimeStatus;
   enabled_lime: boolean;
   enabled_claude: boolean;
   enabled_codex: boolean;
   enabled_gemini: boolean;
+}
+
+export interface McpServerRuntimeStatus {
+  name: string;
+  transport: "stdio" | "streamable_http" | string;
+  enabled: boolean;
+  is_running: boolean;
+  required: boolean;
+  supports_parallel_tool_calls: boolean;
+  startup_timeout: number;
+  tool_timeout: number;
+  enabled_tools?: string[];
+  disabled_tools: string[];
+  server_info?: McpServerCapabilities;
+  auth_status: McpServerAuthStatus;
+}
+
+export interface McpServerAuthStatus {
+  mode: "none" | "static_headers" | "oauth" | string;
+  available: boolean;
+  reason_code?:
+    | "oauth_login_required"
+    | "oauth_runtime_not_implemented"
+    | string;
+  action_plan?: McpServerAuthActionPlan;
+}
+
+export interface McpServerAuthActionPlan {
+  kind: "oauth_login" | "oauth_elicitation" | string;
+  state: "login_required" | "runtime_not_connected" | string;
+  required_runtime?:
+    | "mcp_server_oauth_login"
+    | "mcp_elicitation_approval"
+    | string;
+  scopes?: string[];
+  oauth_resource?: string;
+  client_id?: string;
+}
+
+export interface McpServerOAuthLoginOptions {
+  scopes?: string[];
+  timeoutSecs?: number;
+}
+
+export interface McpServerOAuthLoginResponse {
+  authorizationUrl: string;
+  state: string;
 }
 
 // ============================================================================
@@ -175,6 +275,20 @@ function assertLifecycleResponse(method: string, response: unknown): void {
   }
 }
 
+function assertOAuthLoginResponse(
+  method: string,
+  response: unknown,
+): McpServerOAuthLoginResponse {
+  const record = assertRecord(method, response, "OAuth login response");
+  if (
+    typeof record.authorizationUrl !== "string" ||
+    typeof record.state !== "string"
+  ) {
+    throw new Error(`${method} did not return OAuth login response`);
+  }
+  return response as McpServerOAuthLoginResponse;
+}
+
 function isMcpContent(value: unknown): value is McpContent {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return false;
@@ -198,10 +312,7 @@ function isMcpContent(value: unknown): value is McpContent {
   return false;
 }
 
-function assertMcpToolResult(
-  method: string,
-  response: unknown,
-): McpToolResult {
+function assertMcpToolResult(method: string, response: unknown): McpToolResult {
   const record = assertRecord(method, response, "tool result");
   if (
     !Array.isArray(record.content) ||
@@ -425,6 +536,22 @@ export const mcpApi = {
       assertLifecycleResponse(METHOD_MCP_SERVER_STOP, response);
       return undefined;
     }),
+
+  /** 启动 streamable HTTP MCP OAuth 授权登录 */
+  loginOAuthServer: (
+    name: string,
+    options: McpServerOAuthLoginOptions = {},
+  ): Promise<McpServerOAuthLoginResponse> =>
+    requestMcpAppServer<AppServerMcpServerOauthLoginResponse>(
+      METHOD_MCP_SERVER_OAUTH_LOGIN,
+      {
+        name,
+        ...(options.scopes ? { scopes: options.scopes } : {}),
+        ...(options.timeoutSecs ? { timeoutSecs: options.timeoutSecs } : {}),
+      },
+    ).then((response) =>
+      assertOAuthLoginResponse(METHOD_MCP_SERVER_OAUTH_LOGIN, response),
+    ),
 
   // --------------------------------------------------------------------------
   // 工具管理 API

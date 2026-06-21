@@ -21,7 +21,7 @@ import {
   isImportedProcessMetadata,
   isImportedToolCall,
   shouldAutoExpandProcessEntries,
-  shouldSplitImportedProcessBeforeEntry,
+  shouldSplitProcessBeforeEntry,
   type StreamingProcessEntry,
 } from "./StreamingProcessGroupModel";
 import { ThinkingBlock } from "./ThinkingBlock";
@@ -63,6 +63,11 @@ import {
   FileChangesUndoError,
   restoreFileChangesFromCheckpoints,
 } from "../utils/fileChangesUndo";
+import {
+  resolveStreamingMarkdownDisplaySource,
+} from "./streamingMarkdownDisplaySource";
+import { orderStreamingContentPartsForDisplay } from "./streamingContentPartOrder";
+
 const STRUCTURED_CONTENT_HINT_RE = /<a2ui|```\s*a2ui|<write_file|<document/i;
 const STRUCTURED_PARSE_CACHE_LIMIT = 64;
 const STREAMING_STRUCTURED_PARSE_DEBOUNCE_MS = 48;
@@ -70,6 +75,52 @@ const STREAMING_TEXT_LARGE_BACKLOG_CHARS = 240;
 const STREAMING_TEXT_MEDIUM_BACKLOG_CHARS = 80;
 const STREAMING_TEXT_SMALL_BACKLOG_CHARS = 24;
 const STREAMING_TEXT_INITIAL_VISIBLE_CHARS = 12;
+
+const ACTIVE_RUNTIME_STATUS_PHASES = new Set<string>([
+  "preparing",
+  "routing",
+  "context",
+  "permission_review",
+  "retrying",
+  "continuing",
+  "synthesizing",
+  "final_answer",
+]);
+
+function resolveContentPartDebugSignature(
+  parts: ContentPart[] | undefined,
+): string {
+  if (!parts?.length) {
+    return "";
+  }
+
+  return parts
+    .map((part) => {
+      if (part.type === "tool_use") {
+        const sequence =
+          typeof part.metadata?.sequence === "number"
+            ? `#${part.metadata.sequence}`
+            : "";
+        return `tool:${part.toolCall.name}:${part.toolCall.status}${sequence}`;
+      }
+      if (part.type === "thinking") {
+        const sequence =
+          typeof part.metadata?.sequence === "number"
+            ? `#${part.metadata.sequence}`
+            : "";
+        return `thinking${sequence}`;
+      }
+      return part.type;
+    })
+    .join("|");
+}
+
+function isActiveRuntimeStatus(status?: AgentRuntimeStatus | null): boolean {
+  if (!status) {
+    return false;
+  }
+  return ACTIVE_RUNTIME_STATUS_PHASES.has(status.phase);
+}
 
 function resolveStreamingTextStepSize(
   pendingChars: number,
@@ -120,6 +171,23 @@ const StreamingCursor: React.FC = () => (
     style={{ animationDuration: "1s" }}
   />
 );
+
+const StreamingPendingMarkdownTail: React.FC<{ text: string }> = ({
+  text,
+}) => {
+  if (!text) {
+    return null;
+  }
+
+  return (
+    <span
+      data-testid="streaming-markdown-pending-tail"
+      className="whitespace-pre-wrap break-words"
+    >
+      {text}
+    </span>
+  );
+};
 
 const EMPTY_PARSE_RESULT: ParseResult = {
   parts: [],
@@ -351,13 +419,6 @@ const StreamingText: React.FC<StreamingTextProps> = memo(
       targetTextRef.current = text;
       // 如果不是流式输出，直接显示完整文本
       if (!isStreaming) {
-        // 调试：确认非流式时是否正确设置完整文本
-        if (text.includes("```a2ui")) {
-          console.log(
-            "[StreamingText] isStreaming=false, 包含 a2ui 代码块，长度:",
-            text.length,
-          );
-        }
         setDisplayText(text);
         displayIndexRef.current = text.length;
         prevTextRef.current = text;
@@ -486,19 +547,30 @@ const StreamingText: React.FC<StreamingTextProps> = memo(
     const renderContent = () => {
       // 如果没有 a2ui 内容，直接使用 MarkdownRenderer
       if (!parsedContent.hasA2UI && !parsedContent.hasPending) {
-        return renderPlanAwareMarkdown(displayText, "stream", {
-          onA2UISubmit,
-          renderA2UIInline,
-          renderProposedPlanBlocks,
-          collapseCodeBlocks,
-          shouldCollapseCodeBlock,
-          onCodeBlockClick,
+        const displaySource = resolveStreamingMarkdownDisplaySource(
+          displayText,
           isStreaming,
-          showBlockActions,
-          onQuoteContent,
-          markdownRenderMode,
-          readOnlyA2UI,
-        });
+        );
+        return (
+          <>
+            {displaySource.markdown.trim()
+              ? renderPlanAwareMarkdown(displaySource.markdown, "stream", {
+                  onA2UISubmit,
+                  renderA2UIInline,
+                  renderProposedPlanBlocks,
+                  collapseCodeBlocks,
+                  shouldCollapseCodeBlock,
+                  onCodeBlockClick,
+                  isStreaming,
+                  showBlockActions,
+                  onQuoteContent,
+                  markdownRenderMode,
+                  readOnlyA2UI,
+                })
+              : null}
+            <StreamingPendingMarkdownTail text={displaySource.pendingTail} />
+          </>
+        );
       }
 
       // 有 a2ui 内容，按部分渲染
@@ -720,6 +792,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
     onCodeBlockClick,
     promoteActionRequestsToA2UI = false,
     renderProposedPlanBlocks = true,
+    runtimeStatus,
     suppressedActionRequestId = null,
     suppressProcessFlow = false,
     showContentBlockActions = false,
@@ -753,12 +826,18 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
     );
     const interleavedContentParts = useMemo(
       () =>
-        sanitizeContentPartsForDisplay(contentParts, {
-          role: "assistant",
-        }) ?? [],
+        orderStreamingContentPartsForDisplay(
+          sanitizeContentPartsForDisplay(contentParts, {
+            role: "assistant",
+          }),
+        ) ?? [],
       [contentParts],
     );
     const useInterleavedMode = interleavedContentParts.length > 0;
+    const contentPartDebugSignature = useMemo(
+      () => resolveContentPartDebugSignature(interleavedContentParts),
+      [interleavedContentParts],
+    );
     const parseCacheRef = useRef<Map<string, ParseResult>>(new Map());
 
     // 解析思考内容（仅在非交错模式下使用）
@@ -902,6 +981,11 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
     const finalThinking = suppressProcessFlow
       ? null
       : externalThinking || thinkingText;
+    const processIsActive = isStreaming || isActiveRuntimeStatus(runtimeStatus);
+    const hasFinalRenderableContent =
+      displayContent.trim().length > 0 || shouldRenderRuntimePeerCards;
+    const shouldKeepProcessOpenForFinalAnswer =
+      processIsActive && !hasFinalRenderableContent;
     const visibleActionRequests = (actionRequests || []).filter(
       shouldRenderInlineActionRequest,
     );
@@ -1092,6 +1176,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
             <InlineToolProcessStep
               key={entry.id}
               toolCall={entry.toolCall}
+              isActiveProcess={shouldKeepProcessOpenForFinalAnswer}
               isMessageStreaming={isStreaming}
               onFileClick={onFileClick}
               onOpenSavedSiteContent={onOpenSavedSiteContent}
@@ -1123,6 +1208,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
         onFileClick,
         onOpenSavedSiteContent,
         onOpenUrlPreview,
+        shouldKeepProcessOpenForFinalAnswer,
         renderActionRequestNode,
       ],
     );
@@ -1164,7 +1250,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
               entries={processEntries}
               defaultExpanded={shouldAutoExpandProcessEntries(
                 processEntries,
-                isStreaming,
+                processIsActive,
                 { isTailProcessRun: options?.isTailProcessRun === true },
               )}
               onOpenUrlPreview={onOpenUrlPreview}
@@ -1179,7 +1265,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
           </React.Fragment>
         ));
       },
-      [isStreaming, onOpenUrlPreview, renderProcessEntry],
+      [onOpenUrlPreview, processIsActive, renderProcessEntry],
     );
 
     const renderParsedResultParts = React.useCallback(
@@ -1449,7 +1535,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
             id: part.toolCall.id,
             toolCall: part.toolCall,
           };
-          if (shouldSplitImportedProcessBeforeEntry(processBuffer, nextEntry)) {
+          if (shouldSplitProcessBeforeEntry(processBuffer, nextEntry)) {
             flushProcessBuffer(String(index));
           }
           processBuffer.push(nextEntry);
@@ -1514,7 +1600,12 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
       flushProcessBuffer("tail", { isTailProcessRun: true });
 
       return (
-        <div className="flex flex-col gap-2">
+        <div
+          className="flex flex-col gap-2"
+          data-testid="streaming-renderer"
+          data-content-part-types={contentPartDebugSignature}
+          data-render-mode="interleaved"
+        >
           {nodes}
 
           {/* 如果没有内容但正在流式输出，显示光标 */}
@@ -1556,9 +1647,16 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
     }
 
     return (
-      <div className="flex flex-col gap-2">
+      <div
+        className="flex flex-col gap-2"
+        data-testid="streaming-renderer"
+        data-content-part-types={contentPartDebugSignature}
+        data-render-mode="standard"
+      >
         {fallbackProcessEntries.length > 0
-          ? renderProcessRun(fallbackProcessEntries, "fallback-process")
+          ? renderProcessRun(fallbackProcessEntries, "fallback-process", {
+              isTailProcessRun: shouldKeepProcessOpenForFinalAnswer,
+            })
           : null}
 
         {/* 解析后的内容区域（包括 A2UI、write_file、普通文本） */}

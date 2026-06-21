@@ -39,6 +39,34 @@ function renderList() {
   return rendered;
 }
 
+function renderInlineList() {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+
+  act(() => {
+    root.render(
+      <SearchResultPreviewList
+        items={[
+          {
+            id: "long-url-result",
+            title: "Learning Tablet Guide",
+            url: "https://example.com/products/learning/tablet/fifth-grade/buying-guide?utm_source=yahoo",
+            hostname: "example.com",
+            snippet: "Guide summary",
+          },
+        ]}
+        onOpenUrl={vi.fn()}
+        variant="inline"
+      />,
+    );
+  });
+
+  const rendered = { container, root };
+  mountedRoots.push(rendered);
+  return rendered;
+}
+
 beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
@@ -125,5 +153,16 @@ describe("SearchResultPreviewList", () => {
     });
 
     expect(document.body.textContent).not.toContain("Summary 1");
+  });
+
+  it("renders inline sources as compact source labels instead of raw long URLs", () => {
+    const { container } = renderInlineList();
+
+    expect(container.textContent).toContain("Learning Tablet Guide");
+    expect(container.textContent).toContain(
+      "example.com/products/learning/tablet/fifth-g…",
+    );
+    expect(container.textContent).not.toContain("utm_source=yahoo");
+    expect(container.textContent).not.toContain("https://example.com");
   });
 });

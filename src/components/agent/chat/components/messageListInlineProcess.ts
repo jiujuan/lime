@@ -1,5 +1,7 @@
 import type { AgentThreadItem, AgentThreadTurn, Message } from "../types";
 import { isRetainedSkillProcessMessage } from "../utils/skillInlineProcessRetention";
+import { isUnifiedWebSearchToolName } from "../utils/searchResultPreview";
+import { isUnifiedWebFetchToolName } from "../utils/toolNameFamily";
 import {
   isRuntimeStatusDiagnosticsOnly,
   shouldHideTurnSummaryFromConversation,
@@ -181,6 +183,32 @@ function shouldSuppressAmbientStreamingReasoning(
   return true;
 }
 
+function hasCompletedOrRunningWebRetrievalProcess(
+  message: Message,
+  displayContent: string,
+): boolean {
+  if (displayContent.trim()) {
+    return false;
+  }
+
+  const isCompletedOrRunningWebRetrievalTool = (toolCall: {
+    name: string;
+    status: string;
+  }) =>
+    (toolCall.status === "running" || toolCall.status === "completed") &&
+    (isUnifiedWebSearchToolName(toolCall.name) ||
+      isUnifiedWebFetchToolName(toolCall.name));
+
+  return (
+    (message.toolCalls || []).some(isCompletedOrRunningWebRetrievalTool) ||
+    (message.contentParts || []).some(
+      (part) =>
+        part.type === "tool_use" &&
+        isCompletedOrRunningWebRetrievalTool(part.toolCall),
+    )
+  );
+}
+
 export function shouldKeepInlineProcessForActiveAssistant(
   message: Message,
   isConversationTailAssistant: boolean,
@@ -247,9 +275,11 @@ export function shouldKeepInlineProcessForActiveAssistant(
         part.type === "action_required" &&
         part.actionRequired.status !== "submitted",
     );
+  const hasActiveWebRetrievalProcess =
+    hasCompletedOrRunningWebRetrievalProcess(message, displayContent);
   const hasActiveRuntimeStatus =
     Boolean(message.runtimeStatus) &&
-    (message.isThinking || isSending) &&
+    (message.isThinking || isSending || hasActiveWebRetrievalProcess) &&
     message.runtimeStatus?.phase !== "failed" &&
     message.runtimeStatus?.phase !== "cancelled";
 

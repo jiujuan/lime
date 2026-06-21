@@ -16,3 +16,8 @@ thiserror.workspace = true
 glob.workspace = true
 rmcp.workspace = true
 dirs.workspace = true
+reqwest.workspace = true
+axum.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

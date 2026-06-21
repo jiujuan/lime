@@ -118,9 +118,11 @@ MCP current 使用链路 smoke 位于 `scripts/mcp/`。对外继续使用 `packa
 ```bash
 npm run smoke:mcp-current
 npm run smoke:mcp-current -- --allow-write-fixture
+npm run smoke:mcp-current -- --allow-oauth-fixture
 ```
 
 默认入口只通过 `app_server_handle_json_lines -> App Server JSON-RPC` 验证 `mcpServer/list`、`mcpServerStatus/list`、`mcpTool/list|listForContext|search`、`mcpPrompt/list`、`mcpResource/list` 读链，并禁止旧 `mcp_*` / `get_mcp_servers` Tauri facade 作为成功证据。`--allow-write-fixture` 会创建临时 stdio MCP server，覆盖 `mcpServer/create|start|stop|delete`、`mcpTool/call` 与 `mcpResource/read`，用于复验迁移后 MCP 获取和使用流程。
+`--allow-oauth-fixture` 会创建本地 OAuth provider，覆盖 `mcpServer/oauth/login`、Electron `open_external_url` 系统浏览器网关、callback token exchange 与 `runtime_status.auth_status` 授权回流，用于复验动态 OAuth current 链路；该模式不依赖真实外部账号或 live Provider。
 
 新增 MCP 脚本继续进入 `scripts/mcp/` 或复用现有 `smoke:mcp-current` npm script；共享实现仍放在 `scripts/lib/`。
 

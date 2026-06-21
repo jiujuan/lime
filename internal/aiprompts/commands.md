@@ -293,8 +293,8 @@ Skill Forge P3E tool_runtime authorization 第一刀仍继续走 App Server `age
 
 - 当前 enable metadata contract 为 `request_metadata.harness.workspace_skill_runtime_enable`，兼容读取 `workspaceSkillRuntimeEnable`
 - 前端裁剪入口继续收在 `src/components/agent/chat/utils/workspaceSkillBindingsMetadata.ts` 与 `buildHarnessRequestMetadata`；该 metadata 输出 `source=manual_session_enable`、`approval=manual`、`workspace_root` 和 ready binding 列表，但不写入 `allow_model_skills`
-- Rust gate 入口为 `runtime_skill_binding_service::resolve_workspace_skill_runtime_enable`；它必须校验当前 workspace root、P3C `ready_for_manual_enable`、registered skill directory 位于当前 workspace `.agents/skills` 下，以及 verification provenance
-- Runtime 只在当前 session scope 内加载 workspace-local skills，并把 `SkillTool` 裁剪到 `project:<directory>` / `<directory>` allowlist；未列入 allowlist 的 Skill 调用必须被拒绝
+- Runtime binding readiness owner 是 App Server `workspaceSkillBindings/list` 与 `lime-rs/crates/app-server/src/local_data_source/skills/workspace.rs`；它只投影 current workspace 的 `ready_for_manual_enable` 候选，并继续要求 registered skill directory 位于当前 workspace `.agents/skills` 下且带 verification provenance
+- SkillTool 授权 gate owner 是 `lime-rs/crates/agent/src/tools/skill_tool_gate.rs`；Runtime 只在当前 session scope 内加载 workspace-local skills，并把 `SkillTool` 裁剪到 `project:<directory>` / `<directory>` allowlist；未列入 allowlist 的 Skill 调用必须被拒绝
 - P3E 只表示“当前 session 显式启用并可调用”；不得把它扩写为长期 Agent、automation、scheduler、marketplace 或跨 workspace 共享
 - `workspace_skill_bindings` 仍是只读候选 metadata；只有 `workspace_skill_runtime_enable` 才能触发 session SkillTool enable 与授权裁剪
 

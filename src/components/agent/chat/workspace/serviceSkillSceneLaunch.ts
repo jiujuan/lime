@@ -242,6 +242,11 @@ function buildServiceSceneLaunchRequestContext(params: {
       scene_key: sceneEntry.sceneKey,
       command_prefix: sceneEntry.commandPrefix,
       linked_skill_id: sceneEntry.linkedSkillId ?? skill.id,
+      skill_locator:
+        sceneEntry.skillLocator ?? {
+          source: "catalog",
+          name: skill.skillKey ?? sceneEntry.linkedSkillId ?? skill.id,
+        },
       skill_id: skill.id,
       skill_key: skill.skillKey,
       skill_title: skill.title,

@@ -7,7 +7,8 @@
  * @module components/mcp/McpPanel
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Activity,
   AlertTriangle,
@@ -20,30 +21,61 @@ import {
   Wrench,
   type LucideIcon,
 } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useMcp } from "@/hooks/useMcp";
+import { openExternalUrlWithSystemBrowser } from "@/lib/api/externalUrl";
 import { McpPage } from "./McpPage";
 import { McpServerList } from "./McpServerList";
 import { McpToolsBrowser } from "./McpToolsBrowser";
 import { McpToolCaller } from "./McpToolCaller";
 import { McpPromptsBrowser } from "./McpPromptsBrowser";
 import { McpResourcesBrowser } from "./McpResourcesBrowser";
-import type { McpToolDefinition } from "@/lib/api/mcp";
+import type {
+  McpServerOAuthLoginOptions,
+  McpToolDefinition,
+} from "@/lib/api/mcp";
 
 type McpTab = "runtime" | "tools" | "prompts" | "resources" | "config";
+type McpTabLabelKey =
+  | "settings.mcpPage.runtime.tabs.runtime"
+  | "settings.mcpPage.runtime.tabs.tools"
+  | "settings.mcpPage.runtime.tabs.prompts"
+  | "settings.mcpPage.runtime.tabs.resources"
+  | "settings.mcpPage.runtime.tabs.config";
 
 interface McpTabDefinition {
   id: McpTab;
-  label: string;
+  labelKey: McpTabLabelKey;
   icon: LucideIcon;
 }
 
 const tabs: McpTabDefinition[] = [
-  { id: "runtime", label: "运行状态", icon: Server },
-  { id: "tools", label: "工具", icon: Wrench },
-  { id: "prompts", label: "提示词", icon: MessageSquareText },
-  { id: "resources", label: "资源", icon: FileText },
-  { id: "config", label: "配置管理", icon: Settings2 },
+  {
+    id: "runtime",
+    labelKey: "settings.mcpPage.runtime.tabs.runtime",
+    icon: Server,
+  },
+  {
+    id: "tools",
+    labelKey: "settings.mcpPage.runtime.tabs.tools",
+    icon: Wrench,
+  },
+  {
+    id: "prompts",
+    labelKey: "settings.mcpPage.runtime.tabs.prompts",
+    icon: MessageSquareText,
+  },
+  {
+    id: "resources",
+    labelKey: "settings.mcpPage.runtime.tabs.resources",
+    icon: FileText,
+  },
+  {
+    id: "config",
+    labelKey: "settings.mcpPage.runtime.tabs.config",
+    icon: Settings2,
+  },
 ];
 
 interface McpPanelProps {
@@ -51,6 +83,7 @@ interface McpPanelProps {
 }
 
 export function McpPanel({ hideHeader = false }: McpPanelProps) {
+  const { t } = useTranslation("settings");
   const [activeTab, setActiveTab] = useState<McpTab>("runtime");
   const [callingTool, setCallingTool] = useState<McpToolDefinition | null>(
     null,
@@ -64,9 +97,11 @@ export function McpPanel({ hideHeader = false }: McpPanelProps) {
     loading,
     error,
     serverConnectionStates,
+    oauthCompletion,
     startServer,
     stopServer,
     reconnectServer,
+    loginOAuthServer,
     refreshServers,
     refreshTools,
     callTool,
@@ -83,21 +118,21 @@ export function McpPanel({ hideHeader = false }: McpPanelProps) {
     tabs.find((tab) => tab.id === activeTab) ?? tabs[0];
   const statusMeta = error
     ? {
-        label: "异常",
-        detail: "连接状态需要处理",
+        label: t("settings.mcpPage.runtime.syncStatus.error.label"),
+        detail: t("settings.mcpPage.runtime.syncStatus.error.detail"),
         className: "border-rose-200 bg-rose-50 text-rose-700",
         icon: AlertTriangle,
       }
     : loading
       ? {
-          label: "同步中",
-          detail: "正在刷新 MCP 状态",
+          label: t("settings.mcpPage.runtime.syncStatus.loading.label"),
+          detail: t("settings.mcpPage.runtime.syncStatus.loading.detail"),
           className: "border-sky-200 bg-sky-50 text-sky-700",
           icon: Loader2,
         }
       : {
-          label: "已同步",
-          detail: "本机配置已载入",
+          label: t("settings.mcpPage.runtime.syncStatus.ready.label"),
+          detail: t("settings.mcpPage.runtime.syncStatus.ready.detail"),
           className: "border-emerald-200 bg-emerald-50 text-emerald-700",
           icon: CheckCircle2,
         };
@@ -116,6 +151,17 @@ export function McpPanel({ hideHeader = false }: McpPanelProps) {
         return servers.length;
     }
   };
+
+  useEffect(() => {
+    if (!oauthCompletion) {
+      return;
+    }
+    toast.success(
+      t("settings.mcpPage.runtime.auth.oauthCompleted", {
+        name: oauthCompletion.serverName,
+      }),
+    );
+  }, [oauthCompletion, t]);
 
   // 工具调用处理
   const handleCallTool = async (
@@ -136,6 +182,27 @@ export function McpPanel({ hideHeader = false }: McpPanelProps) {
     }
   };
 
+  const handleLoginOAuthServer = async (
+    serverName: string,
+    options?: McpServerOAuthLoginOptions,
+  ): Promise<void> => {
+    try {
+      const response = await loginOAuthServer(serverName, options);
+      await openExternalUrlWithSystemBrowser(response.authorizationUrl);
+      toast.success(
+        t("settings.mcpPage.runtime.auth.oauthOpened", {
+          name: serverName,
+        }),
+      );
+    } catch (error) {
+      toast.error(
+        t("settings.mcpPage.runtime.auth.oauthOpenFailed", {
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    }
+  };
+
   return (
     <div
       data-settings-embedded={hideHeader ? "true" : "false"}
@@ -147,34 +214,42 @@ export function McpPanel({ hideHeader = false }: McpPanelProps) {
           <div className="max-w-2xl space-y-3">
             <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white px-3 py-1 text-xs font-semibold text-emerald-700 shadow-sm shadow-emerald-950/5">
               <Activity className="h-3.5 w-3.5" />
-              Model Context Protocol
+              {t("settings.mcpPage.runtime.protocolLabel")}
             </div>
             <div className="space-y-2">
               <h2 className="text-2xl font-semibold tracking-[-0.02em] text-slate-950">
-                MCP 服务器
+                {t("settings.mcpPage.title")}
               </h2>
               <p className="text-sm leading-6 text-slate-600">
-                管理本机 MCP 服务器，统一查看运行状态、工具、提示词和资源。
+                {t("settings.mcpPage.runtime.description")}
               </p>
             </div>
           </div>
 
           <div className="grid gap-2 sm:grid-cols-3 xl:min-w-[420px]">
             <div className="rounded-[20px] border border-slate-200/80 bg-white px-4 py-3 shadow-sm shadow-slate-950/5">
-              <p className="text-xs font-medium text-slate-500">服务器</p>
+              <p className="text-xs font-medium text-slate-500">
+                {t("settings.mcpPage.runtime.metrics.servers")}
+              </p>
               <p className="mt-1 text-2xl font-semibold text-slate-950">
                 {servers.length}
               </p>
               <p className="mt-1 text-xs text-emerald-700">
-                {runningServerCount} 个运行中
+                {t("settings.mcpPage.runtime.metrics.runningServers", {
+                  count: runningServerCount,
+                })}
               </p>
             </div>
             <div className="rounded-[20px] border border-slate-200/80 bg-white px-4 py-3 shadow-sm shadow-slate-950/5">
-              <p className="text-xs font-medium text-slate-500">能力</p>
+              <p className="text-xs font-medium text-slate-500">
+                {t("settings.mcpPage.runtime.metrics.capabilities")}
+              </p>
               <p className="mt-1 text-2xl font-semibold text-slate-950">
                 {tools.length + prompts.length + resources.length}
               </p>
-              <p className="mt-1 text-xs text-sky-700">工具 / 提示词 / 资源</p>
+              <p className="mt-1 text-xs text-sky-700">
+                {t("settings.mcpPage.runtime.metrics.capabilityTypes")}
+              </p>
             </div>
             <div
               className={cn(
@@ -182,7 +257,9 @@ export function McpPanel({ hideHeader = false }: McpPanelProps) {
                 statusMeta.className,
               )}
             >
-              <p className="text-xs font-medium opacity-80">状态</p>
+              <p className="text-xs font-medium opacity-80">
+                {t("settings.mcpPage.runtime.metrics.status")}
+              </p>
               <div className="mt-1 flex items-center gap-2">
                 <statusMeta.icon
                   className={cn("h-4 w-4", loading && "animate-spin")}
@@ -212,7 +289,7 @@ export function McpPanel({ hideHeader = false }: McpPanelProps) {
             >
               <span className="flex items-center gap-2">
                 <tab.icon className="h-4 w-4" />
-                {tab.label}
+                {t(tab.labelKey)}
               </span>
               {getTabCount(tab.id) > 0 && (
                 <span
@@ -236,7 +313,7 @@ export function McpPanel({ hideHeader = false }: McpPanelProps) {
         <div className="border-b border-slate-200/80 bg-slate-50/80 px-5 py-4">
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
             <activeTabDefinition.icon className="h-4 w-4 text-sky-600" />
-            {activeTabDefinition.label}
+            {t(activeTabDefinition.labelKey)}
           </div>
         </div>
         <div className="min-h-[464px]">
@@ -251,6 +328,7 @@ export function McpPanel({ hideHeader = false }: McpPanelProps) {
                 onStartServer={startServer}
                 onStopServer={stopServer}
                 onReconnectServer={reconnectServer}
+                onLoginOAuthServer={handleLoginOAuthServer}
                 onRefresh={refreshServers}
               />
             </div>

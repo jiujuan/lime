@@ -102,12 +102,20 @@ export interface SkillCatalogCommandIntentConfirmation {
   systemPromptKey?: string;
 }
 
+export interface SkillCatalogSkillLocator {
+  source: "project" | "user" | "app" | "other" | "catalog";
+  name: string;
+  directory?: string;
+  skillFilePath?: string;
+}
+
 export interface SkillCatalogSkillEntry {
   id: string;
   kind: "skill";
   title: string;
   summary: string;
   skillId: string;
+  skillLocator?: SkillCatalogSkillLocator;
   groupKey: string;
   aliases?: string[];
   surfaceScopes?: ServiceSkillSurfaceScope[];
@@ -129,6 +137,7 @@ export interface SkillCatalogCommandEntry {
   triggers: SkillCatalogCommandTrigger[];
   binding?: {
     skillId?: string;
+    skillLocator?: SkillCatalogSkillLocator;
     executionKind?:
       | SkillCatalogExecutionKind
       | "task_queue"
@@ -152,6 +161,7 @@ export interface SkillCatalogSceneEntry {
   surfaceScopes?: ServiceSkillSurfaceScope[];
   homePresentation?: SkillCatalogHomePresentation;
   linkedSkillId?: string;
+  skillLocator?: SkillCatalogSkillLocator;
   executionKind?: SkillCatalogExecutionKind | "scene";
   requestDefaults?: Record<string, string>;
   placeholder?: string;
@@ -449,6 +459,7 @@ export function buildModelBoundImageCommandEntry(
     ],
     binding: {
       skillId: "image_generate",
+      skillLocator: createCatalogSkillLocator({ id: "image_generate" }),
       executionKind: "task_queue",
       requestDefaults,
     },
@@ -467,6 +478,26 @@ function normalizeText(value: unknown): string | null {
   }
   const normalized = value.trim();
   return normalized.length > 0 ? normalized : null;
+}
+
+export function createCatalogSkillLocator(input: {
+  id?: string | null;
+  skillKey?: string | null;
+}): SkillCatalogSkillLocator | undefined {
+  const name = normalizeText(input.skillKey) ?? normalizeText(input.id);
+  if (!name) {
+    return undefined;
+  }
+  return {
+    source: "catalog",
+    name,
+  };
+}
+
+function skillLocatorFromSkillId(
+  skillId?: string | null,
+): SkillCatalogSkillLocator | undefined {
+  return createCatalogSkillLocator({ id: skillId });
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -670,6 +701,7 @@ function buildSkillEntryFromCatalogItem(
     title: item.title,
     summary: item.summary,
     skillId: item.id,
+    skillLocator: createCatalogSkillLocator(item),
     groupKey: item.groupKey,
     aliases: item.aliases,
     surfaceScopes: item.surfaceScopes,
@@ -728,6 +760,7 @@ function buildSceneEntryFromCatalogItem(
         : item.aliases,
     surfaceScopes: item.surfaceScopes,
     linkedSkillId: item.id,
+    skillLocator: createCatalogSkillLocator(item),
     executionKind: normalizeCompatSkillCatalogExecutionKind(
       item.execution.kind,
     ),
@@ -1259,6 +1292,48 @@ function parseSkillCatalogHomePresentation(
   };
 }
 
+function parseSkillCatalogSkillLocator(
+  value: unknown,
+): SkillCatalogSkillLocator | undefined {
+  if (!isPlainRecord(value)) {
+    return undefined;
+  }
+
+  const source =
+    normalizeText(value.source) ?? normalizeText(value.scope) ?? "catalog";
+  if (
+    source !== "project" &&
+    source !== "user" &&
+    source !== "app" &&
+    source !== "other" &&
+    source !== "catalog"
+  ) {
+    return undefined;
+  }
+
+  const name =
+    normalizeText(value.name) ??
+    normalizeText(value.skillName) ??
+    normalizeText(value.skill_name);
+  if (!name) {
+    return undefined;
+  }
+
+  return {
+    source,
+    name,
+    directory:
+      normalizeText(value.directory) ??
+      normalizeText(value.skillDirectory) ??
+      normalizeText(value.skill_directory) ??
+      undefined,
+    skillFilePath:
+      normalizeText(value.skillFilePath) ??
+      normalizeText(value.skill_file_path) ??
+      undefined,
+  };
+}
+
 function parseSkillCatalogEntry(value: unknown): SkillCatalogEntry | null {
   if (!isPlainRecord(value)) {
     return null;
@@ -1292,6 +1367,10 @@ function parseSkillCatalogEntry(value: unknown): SkillCatalogEntry | null {
 
     const binding = isPlainRecord(value.binding)
       ? (() => {
+          const skillId =
+            normalizeText(value.binding.skillId) ??
+            normalizeText(value.binding.skill_id) ??
+            undefined;
           const requestDefaults =
             normalizeStringRecord(value.binding.requestDefaults) ??
             normalizeStringRecord(value.binding.request_defaults);
@@ -1300,10 +1379,10 @@ function parseSkillCatalogEntry(value: unknown): SkillCatalogEntry | null {
               value.binding.intent_confirmation,
           );
           return {
-            skillId:
-              normalizeText(value.binding.skillId) ??
-              normalizeText(value.binding.skill_id) ??
-              undefined,
+            skillId,
+            skillLocator: parseSkillCatalogSkillLocator(
+              value.binding.skillLocator ?? value.binding.skill_locator,
+            ) ?? skillLocatorFromSkillId(skillId),
             executionKind: parseCommandBindingExecutionKind(
               value.binding.executionKind ?? value.binding.execution_kind,
             ),
@@ -1339,6 +1418,7 @@ function parseSkillCatalogEntry(value: unknown): SkillCatalogEntry | null {
     const requestDefaults =
       normalizeStringRecord(value.requestDefaults) ??
       normalizeStringRecord(value.request_defaults);
+    const linkedSkillId = normalizeText(value.linkedSkillId) ?? undefined;
 
     return {
       id,
@@ -1351,7 +1431,10 @@ function parseSkillCatalogEntry(value: unknown): SkillCatalogEntry | null {
       aliases: normalizeSearchAliases(value.aliases),
       surfaceScopes: normalizeSurfaceScopes(value.surfaceScopes),
       homePresentation,
-      linkedSkillId: normalizeText(value.linkedSkillId) ?? undefined,
+      linkedSkillId,
+      skillLocator: parseSkillCatalogSkillLocator(
+        value.skillLocator ?? value.skill_locator,
+      ) ?? skillLocatorFromSkillId(linkedSkillId),
       executionKind: parseSceneExecutionKind(value.executionKind),
       ...(requestDefaults ? { requestDefaults } : {}),
       placeholder: normalizeText(value.placeholder) ?? undefined,
@@ -1374,6 +1457,10 @@ function parseSkillCatalogEntry(value: unknown): SkillCatalogEntry | null {
       title,
       summary,
       skillId,
+      skillLocator:
+        parseSkillCatalogSkillLocator(
+          value.skillLocator ?? value.skill_locator,
+        ) ?? skillLocatorFromSkillId(skillId),
       groupKey,
       aliases: normalizeSearchAliases(value.aliases),
       surfaceScopes: normalizeSurfaceScopes(value.surfaceScopes),

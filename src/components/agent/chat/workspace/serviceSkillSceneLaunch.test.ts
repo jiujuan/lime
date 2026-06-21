@@ -259,6 +259,10 @@ describe("serviceSkillSceneLaunch", () => {
           service_scene_run: {
             scene_key: "campaign-launch",
             skill_id: "cloud-video-dubbing",
+            skill_locator: {
+              source: "catalog",
+              name: "campaign-launch",
+            },
             project_id: "project-1",
             content_id: "content-1",
             user_input: "帮我做一版新品活动启动方案",

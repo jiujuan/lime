@@ -184,7 +184,19 @@ describe("toolDisplayInfo", () => {
       resolveToolDisplayLabel("lime_create_modal_resource_search_task"),
     ).toBe("素材检索");
     expect(resolveToolDisplayLabel("lime_run_service_skill")).toBe(
-      "服务技能兼容执行",
+      "服务技能执行",
+    );
+    expect(getToolDisplayInfo("lime_run_service_skill", "running").family).toBe(
+      "skill",
+    );
+    expect(getToolDisplayInfo("lime_run_service_skill", "running").action).toBe(
+      "执行服务技能中",
+    );
+    expect(
+      getToolDisplayInfo("lime_run_service_skill", "completed").action,
+    ).toBe("已执行服务技能");
+    expect(getToolDisplayInfo("lime_run_service_skill", "failed").action).toBe(
+      "服务技能执行失败",
     );
     expect(resolveToolDisplayLabel("social_generate_cover_image")).toBe(
       "封面图生成",
@@ -237,7 +249,7 @@ describe("toolDisplayInfo", () => {
     );
     expect(resolveUserFacingToolDisplayLabel("QueryDocs")).toBe("查看文档");
     expect(resolveUserFacingToolDisplayLabel("lime_run_service_skill")).toBe(
-      "运行兼容服务技能",
+      "运行服务技能",
     );
     expect(resolveUserFacingToolDisplayLabel("lime_site_recommend")).toBe(
       "推荐站点能力",

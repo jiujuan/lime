@@ -15113,6 +15113,53 @@
       "title": "McpServerListResponse",
       "type": "object"
     },
+    "McpServerOauthLoginParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "scopes": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "timeoutSecs": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "McpServerOauthLoginParams",
+      "type": "object"
+    },
+    "McpServerOauthLoginResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "authorizationUrl": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "authorizationUrl",
+        "state"
+      ],
+      "title": "McpServerOauthLoginResponse",
+      "type": "object"
+    },
     "McpServerStartParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -27258,6 +27305,7 @@
               "mcpServer/enabled/set",
               "mcpServer/importFromApp",
               "mcpServer/list",
+              "mcpServer/oauth/login",
               "mcpServer/start",
               "mcpServer/stop",
               "mcpServer/syncAllToLive",

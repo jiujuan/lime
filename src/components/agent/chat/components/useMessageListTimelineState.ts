@@ -13,6 +13,7 @@ import {
 } from "../projection/threadTimelineWindowProjection";
 import {
   buildCurrentTurnTimelineProjection,
+  buildDeferredTimelineByMessageIdProjection,
   buildMessageGroupsProjection,
   buildMessageRenderGroupsProjection,
   buildTimelineByMessageIdProjection,
@@ -178,7 +179,10 @@ export function useMessageListTimelineState({
     !focusedTimelineItemId &&
     !isSending &&
     !activeCurrentTurnId &&
-    expandedHistoricalTimelineKeys.size === 0 &&
+    canBuildHistoricalTimeline &&
+    !renderedTurns.some((turn) =>
+      expandedHistoricalTimelineKeys.has(`leading:${turn.id}`),
+    ) &&
     threadItems.length >= MESSAGE_LIST_TIMELINE_DEFER_ITEM_THRESHOLD;
   const shouldDeferThreadItemsScan =
     !activeCurrentTurnId &&
@@ -199,18 +203,24 @@ export function useMessageListTimelineState({
   const timelineByMessageIdMeasurement = useMemo(
     () =>
       measureMessageListComputation(() =>
-        buildTimelineByMessageIdProjection({
-          canBuildHistoricalTimeline,
-          renderedMessages,
-          renderedTurns,
-          renderedThreadItems,
-        }),
+        shouldDeferThreadItemsScan
+          ? buildDeferredTimelineByMessageIdProjection({
+              renderedMessages,
+              renderedTurns,
+            })
+          : buildTimelineByMessageIdProjection({
+              canBuildHistoricalTimeline,
+              renderedMessages,
+              renderedTurns,
+              renderedThreadItems,
+            }),
       ),
     [
       canBuildHistoricalTimeline,
       renderedMessages,
       renderedThreadItems,
       renderedTurns,
+      shouldDeferThreadItemsScan,
     ],
   );
   const timelineByMessageId = timelineByMessageIdMeasurement.value;

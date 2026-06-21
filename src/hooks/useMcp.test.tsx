@@ -18,6 +18,7 @@ const mcpApiMocks = vi.hoisted(() => ({
   listResources: vi.fn(),
   startServer: vi.fn(),
   stopServer: vi.fn(),
+  loginOAuthServer: vi.fn(),
   callTool: vi.fn(),
   getPrompt: vi.fn(),
   readResource: vi.fn(),
@@ -44,6 +45,8 @@ vi.mock("@/lib/api/mcp", async () => {
         mcpApiMocks.listResources(...args),
       startServer: (...args: unknown[]) => mcpApiMocks.startServer(...args),
       stopServer: (...args: unknown[]) => mcpApiMocks.stopServer(...args),
+      loginOAuthServer: (...args: unknown[]) =>
+        mcpApiMocks.loginOAuthServer(...args),
       callTool: (...args: unknown[]) => mcpApiMocks.callTool(...args),
       getPrompt: (...args: unknown[]) => mcpApiMocks.getPrompt(...args),
       readResource: (...args: unknown[]) => mcpApiMocks.readResource(...args),
@@ -111,6 +114,10 @@ describe("useMcp", () => {
     mcpApiMocks.listResources.mockResolvedValue([]);
     mcpApiMocks.startServer.mockResolvedValue(undefined);
     mcpApiMocks.stopServer.mockResolvedValue(undefined);
+    mcpApiMocks.loginOAuthServer.mockResolvedValue({
+      authorizationUrl: "https://auth.example/authorize",
+      state: "state-1",
+    });
     mcpApiMocks.callTool.mockResolvedValue({ content: [], is_error: false });
     mcpApiMocks.getPrompt.mockResolvedValue({ messages: [] });
     mcpApiMocks.readResource.mockResolvedValue({ uri: "docs://readme" });
@@ -163,5 +170,63 @@ describe("useMcp", () => {
     expect(getLatestValue().tools).toEqual([]);
     expect(getLatestValue().loading).toBe(false);
     expect(getLatestValue().error).toBeNull();
+  });
+
+  it("OAuth 完成事件应刷新服务器状态和工具列表", async () => {
+    const listeners = new Map<string, (event: { payload: unknown }) => void>();
+    bridgeMocks.safeListen.mockImplementation(
+      async (
+        eventName: string,
+        handler: (event: { payload: unknown }) => void,
+      ) => {
+        listeners.set(eventName, handler);
+        return () => listeners.delete(eventName);
+      },
+    );
+    mcpApiMocks.listServersWithStatus
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        createServer({
+          name: "remote-docs",
+          is_running: false,
+          runtime_status: {
+            name: "remote-docs",
+            transport: "streamable_http",
+            enabled: true,
+            is_running: false,
+            required: false,
+            supports_parallel_tool_calls: false,
+            startup_timeout: 30,
+            tool_timeout: 30,
+            disabled_tools: [],
+            auth_status: {
+              mode: "oauth",
+              available: true,
+            },
+          },
+        }),
+      ]);
+
+    await renderHook((value) => {
+      latestValue = value;
+    });
+    await flushEffects(4);
+
+    await act(async () => {
+      listeners.get("mcp:oauth_completed")?.({
+        payload: { server_name: "remote-docs" },
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await flushEffects(4);
+
+    expect(mcpApiMocks.listServersWithStatus).toHaveBeenCalledTimes(2);
+    expect(mcpApiMocks.listTools).toHaveBeenCalledTimes(2);
+    expect(getLatestValue().oauthCompletion?.serverName).toBe("remote-docs");
+    expect(getLatestValue().servers[0]?.runtime_status?.auth_status).toEqual({
+      mode: "oauth",
+      available: true,
+    });
   });
 });

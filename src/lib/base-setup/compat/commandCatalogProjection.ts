@@ -1,4 +1,7 @@
-import type { SkillCatalogCommandEntry } from "@/lib/api/skillCatalog";
+import type {
+  SkillCatalogCommandEntry,
+  SkillCatalogSkillLocator,
+} from "@/lib/api/skillCatalog";
 import type { ServiceSkillItem } from "@/lib/api/serviceSkills";
 import type {
   BaseSetupBindingProfile,
@@ -117,6 +120,14 @@ function resolveLinkedSkillId(
   );
 }
 
+function createCatalogSkillLocator(input: {
+  id?: string | null;
+  skillKey?: string | null;
+}): SkillCatalogSkillLocator | undefined {
+  const name = input.skillKey?.trim() || input.id?.trim();
+  return name ? { source: "catalog", name } : undefined;
+}
+
 function compileCommandTriggers(
   projection: BaseSetupCatalogProjection,
 ): SkillCatalogCommandEntry["triggers"] {
@@ -196,6 +207,10 @@ function compileCommandProjectionEntry(params: {
     triggers: compileCommandTriggers(projection),
     binding: {
       skillId: linkedSkillId,
+      skillLocator: createCatalogSkillLocator({
+        id: linkedSkillId,
+        skillKey: projection.skillKey,
+      }),
       executionKind,
       ...(requestDefaults ? { requestDefaults } : {}),
       ...(intentConfirmation ? { intentConfirmation } : {}),

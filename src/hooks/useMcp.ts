@@ -23,6 +23,8 @@ import {
   McpPromptResult,
   McpResourceContent,
   McpServerCapabilities,
+  McpServerOAuthLoginOptions,
+  McpServerOAuthLoginResponse,
 } from "@/lib/api/mcp";
 import { safeListen } from "@/lib/api/bridgeEvents";
 
@@ -48,6 +50,10 @@ interface McpToolsUpdatedPayload {
   tools: McpToolDefinition[];
 }
 
+interface McpOAuthCompletedPayload {
+  server_name: string;
+}
+
 // ============================================================================
 // Hook 返回类型
 // ============================================================================
@@ -56,6 +62,11 @@ export interface McpServerConnectionState {
   phase: "idle" | "starting" | "stopping" | "reconnecting";
   error: string | null;
   updatedAt: number | null;
+}
+
+export interface McpOAuthCompletionState {
+  serverName: string;
+  completedAt: number;
 }
 
 export interface UseMcpReturn {
@@ -67,11 +78,16 @@ export interface UseMcpReturn {
   loading: boolean;
   error: string | null;
   serverConnectionStates: Record<string, McpServerConnectionState>;
+  oauthCompletion: McpOAuthCompletionState | null;
 
   // 服务器操作
   startServer: (name: string) => Promise<void>;
   stopServer: (name: string) => Promise<void>;
   reconnectServer: (name: string) => Promise<void>;
+  loginOAuthServer: (
+    name: string,
+    options?: McpServerOAuthLoginOptions,
+  ) => Promise<McpServerOAuthLoginResponse>;
   refreshServers: () => Promise<void>;
 
   // 工具操作
@@ -105,6 +121,8 @@ export function useMcp(): UseMcpReturn {
   const [resources, setResources] = useState<McpResourceDefinition[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [oauthCompletion, setOAuthCompletion] =
+    useState<McpOAuthCompletionState | null>(null);
   const [serverConnectionStates, setServerConnectionStates] = useState<
     Record<string, McpServerConnectionState>
   >({});
@@ -258,6 +276,27 @@ export function useMcp(): UseMcpReturn {
     [refreshServers, refreshTools, servers, updateServerConnectionState],
   );
 
+  const loginOAuthServer = useCallback(
+    async (
+      name: string,
+      options: McpServerOAuthLoginOptions = {},
+    ): Promise<McpServerOAuthLoginResponse> => {
+      try {
+        setError(null);
+        return await mcpApi.loginOAuthServer(name, options);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        setError(msg);
+        updateServerConnectionState(name, {
+          phase: "idle",
+          error: msg,
+        });
+        throw e;
+      }
+    },
+    [updateServerConnectionState],
+  );
+
   // --------------------------------------------------------------------------
   // 工具操作
   // --------------------------------------------------------------------------
@@ -391,6 +430,29 @@ export function useMcp(): UseMcpReturn {
           },
         );
         unlisteners.push(unlistenTools);
+
+        const unlistenOAuthCompleted =
+          await safeListen<McpOAuthCompletedPayload>(
+            "mcp:oauth_completed",
+            (event) => {
+              console.log(
+                "[useMcp] OAuth 授权已完成:",
+                event.payload.server_name,
+              );
+              updateServerConnectionState(event.payload.server_name, {
+                phase: "idle",
+              });
+              if (mounted) {
+                setOAuthCompletion({
+                  serverName: event.payload.server_name,
+                  completedAt: Date.now(),
+                });
+              }
+              refreshServers();
+              refreshTools();
+            },
+          );
+        unlisteners.push(unlistenOAuthCompleted);
       } catch (error) {
         console.error("[useMcp] 注册 MCP 事件监听失败:", error);
       }
@@ -419,9 +481,11 @@ export function useMcp(): UseMcpReturn {
     loading,
     error,
     serverConnectionStates,
+    oauthCompletion,
     startServer,
     stopServer,
     reconnectServer,
+    loginOAuthServer,
     refreshServers,
     refreshTools,
     callTool,

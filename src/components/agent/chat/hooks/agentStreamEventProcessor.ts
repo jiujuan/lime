@@ -22,6 +22,7 @@ import {
 } from "@/lib/artifact-protocol";
 import type {
   ActionRequired,
+  ContentPart,
   Message,
   MessageImageWorkbenchPreview,
   WriteArtifactContext,
@@ -80,6 +81,60 @@ interface ToolTrackingContext {
   toolLogIdByToolId: Map<string, string>;
   toolStartedAtByToolId: Map<string, number>;
   toolNameByToolId: Map<string, string>;
+}
+
+function eventEnvelopeMetadata(
+  data: object,
+  existing?: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  const envelope = data as Partial<{
+    event_id: string;
+    sequence: number;
+    session_id: string;
+    thread_id: string;
+    timestamp: string;
+    turn_id: string;
+  }>;
+  const stableSequence =
+    typeof existing?.sequence === "number" && Number.isFinite(existing.sequence)
+      ? existing.sequence
+      : typeof envelope.sequence === "number" &&
+          Number.isFinite(envelope.sequence)
+        ? envelope.sequence
+        : undefined;
+  const metadata = {
+    ...(existing ?? {}),
+    ...(typeof envelope.event_id === "string"
+      ? { eventId: envelope.event_id }
+      : {}),
+    ...(stableSequence !== undefined ? { sequence: stableSequence } : {}),
+    ...(typeof envelope.session_id === "string"
+      ? { sessionId: envelope.session_id }
+      : {}),
+    ...(typeof envelope.thread_id === "string"
+      ? { threadId: envelope.thread_id }
+      : {}),
+    ...(typeof envelope.turn_id === "string"
+      ? { turnId: envelope.turn_id }
+      : {}),
+    ...(typeof envelope.timestamp === "string"
+      ? { timestamp: envelope.timestamp }
+      : {}),
+  };
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
+}
+
+function toolUseContentPart(
+  toolCall: AgentToolCallState,
+  data: object,
+  existing?: Extract<ContentPart, { type: "tool_use" }>,
+): Extract<ContentPart, { type: "tool_use" }> {
+  const metadata = eventEnvelopeMetadata(data, existing?.metadata);
+  return {
+    type: "tool_use",
+    toolCall,
+    ...(metadata ? { metadata } : {}),
+  };
 }
 
 function normalizeToolNameForFileMutation(value: string): string {
@@ -673,10 +728,7 @@ export function handleToolStartEvent({
           toolCalls: message.toolCalls?.map(updateToolCall),
           contentParts: message.contentParts?.map((part) =>
             part.type === "tool_use" && part.toolCall.id === data.tool_id
-              ? {
-                  ...part,
-                  toolCall: updateToolCall(part.toolCall),
-                }
+              ? toolUseContentPart(updateToolCall(part.toolCall), data, part)
               : part,
           ),
         };
@@ -687,7 +739,7 @@ export function handleToolStartEvent({
         toolCalls: [...(message.toolCalls || []), newToolCall],
         contentParts: [
           ...(message.contentParts || []),
-          { type: "tool_use" as const, toolCall: newToolCall },
+          toolUseContentPart(newToolCall, data),
         ],
       };
     }),
@@ -824,10 +876,7 @@ export function handleToolInputDeltaEvent({
           toolCalls: message.toolCalls?.map(updateToolCall),
           contentParts: message.contentParts?.map((part) =>
             part.type === "tool_use" && part.toolCall.id === data.tool_id
-              ? {
-                  ...part,
-                  toolCall: updateToolCall(part.toolCall),
-                }
+              ? toolUseContentPart(updateToolCall(part.toolCall), data, part)
               : part,
           ),
         };
@@ -855,7 +904,7 @@ export function handleToolInputDeltaEvent({
         toolCalls: [...(message.toolCalls || []), newToolCall],
         contentParts: [
           ...(message.contentParts || []),
-          { type: "tool_use" as const, toolCall: newToolCall },
+          toolUseContentPart(newToolCall, data),
         ],
       };
     }),
@@ -918,10 +967,7 @@ export function handleToolProgressEvent({
         toolCalls: message.toolCalls?.map(updateToolCall),
         contentParts: message.contentParts?.map((part) =>
           part.type === "tool_use" && part.toolCall.id === data.tool_id
-            ? {
-                ...part,
-                toolCall: updateToolCall(part.toolCall),
-              }
+            ? toolUseContentPart(updateToolCall(part.toolCall), data, part)
             : part,
         ),
       };
@@ -990,10 +1036,7 @@ export function handleToolOutputDeltaEvent({
         toolCalls: message.toolCalls?.map(updateToolCall),
         contentParts: message.contentParts?.map((part) =>
           part.type === "tool_use" && part.toolCall.id === data.tool_id
-            ? {
-                ...part,
-                toolCall: updateToolCall(part.toolCall),
-              }
+            ? toolUseContentPart(updateToolCall(part.toolCall), data, part)
             : part,
         ),
       };
@@ -1084,15 +1127,16 @@ export function handleToolEndEvent({
           return part;
         }
 
-        return {
-          ...part,
-          toolCall: {
+        return toolUseContentPart(
+          {
             ...part.toolCall,
             status: isSuccess ? ("completed" as const) : ("failed" as const),
             result: normalizedResult,
             endTime: new Date(),
           },
-        };
+          data,
+          part,
+        );
       });
 
       // 文件工具完成后，把所有 file mutation tool_use parts 收拢成一个 file_changes_batch

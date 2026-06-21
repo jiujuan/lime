@@ -31,6 +31,7 @@ interface MessageAssistantBodyProps {
   hasImageWorkbenchLeadContent: boolean;
   historicalAssistantPreviewContent: string;
   imageWorkbenchRendererState: ImageWorkbenchRendererState;
+  isActiveProcessOnlyOutput: boolean;
   isCurrentInteractiveAssistantMessage: boolean;
   message: Message;
   sessionId?: string | null;
@@ -87,6 +88,7 @@ export function MessageAssistantBody({
   hasImageWorkbenchLeadContent,
   historicalAssistantPreviewContent,
   imageWorkbenchRendererState,
+  isActiveProcessOnlyOutput,
   isCurrentInteractiveAssistantMessage,
   message,
   sessionId,
@@ -129,9 +131,12 @@ export function MessageAssistantBody({
     message.runtimeStatus?.phase === "failed" ||
     message.runtimeStatus?.phase === "cancelled";
   const isMessageStreaming = Boolean(
-    message.isThinking &&
+    (message.isThinking || isActiveProcessOnlyOutput) &&
       isCurrentInteractiveAssistantMessage &&
       !hasTerminalRuntimeStatus,
+  );
+  const shouldShowStreamingCursor = Boolean(
+    message.isThinking && isMessageStreaming,
   );
 
   return (
@@ -161,7 +166,7 @@ export function MessageAssistantBody({
             content={rendererContent}
             rawContent={rendererRawContent}
             isStreaming={isMessageStreaming}
-            showCursor={isMessageStreaming && !displayContent}
+            showCursor={shouldShowStreamingCursor && !displayContent}
             thinkingContent={imageWorkbenchRendererState.thinkingContent}
             contentParts={imageWorkbenchRendererState.contentParts}
             toolCalls={imageWorkbenchRendererState.toolCalls}
@@ -183,7 +188,7 @@ export function MessageAssistantBody({
           rawContent={rendererRawContent}
           isStreaming={isMessageStreaming}
           toolCalls={rendererToolCalls}
-          showCursor={isMessageStreaming && !displayContent}
+          showCursor={shouldShowStreamingCursor && !displayContent}
           thinkingContent={rendererThinkingContent}
           runtimeStatus={message.runtimeStatus}
           contentParts={rendererContentParts}

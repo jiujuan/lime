@@ -1,7 +1,7 @@
 # Turn / Tool 生命周期测试用例
 
 > 状态：已完成当前阶段
-> 更新时间：2026-06-19
+> 更新时间：2026-06-21
 > 作用：把 turn/item 重构转成可执行测试矩阵，避免只靠视觉判断或单点 smoke 宣称完成。
 
 ## 1. 测试目标
@@ -97,7 +97,7 @@ submit turn
 | TURN-FE-014 | running 工具后的 commentary 不作为最终正文 | `commentary -> web_search completed -> web_search in_progress -> commentary` | `rendererContentParts` 为 `thinking/tool_use/tool_use/thinking`，`actionContent` 与 `rendererRawContent` 为空 |
 | TURN-FE-015 | 用户上拉后流式追加不抢滚动 | scroll container 已离底部并收到 overlay 更新 | 不调用 `scrollIntoView`，保留用户阅读位置 |
 | TURN-FE-016 | 第二轮 overlay 不覆盖第一轮完整回复 | turn-1 completed 后 turn-2 assistant overlay | turn-1 的 text 与 `tool_use` 保留，turn-2 只显示自己的 overlay |
-| TURN-FE-017 | running 搜索后 final/overlay/content 都不得越序显示 | `web_search in_progress` 后 `final_answer`、overlay 或 `message.content` 已有正文 | `rendererContentParts` 只保留工具与 thinking/commentary，`actionContent / rendererRawContent` 为空 |
+| TURN-FE-017 | running 搜索后的临时正文不得越序显示 | `web_search in_progress` 后 overlay、`message.content` 或 commentary 已有正文 | `rendererContentParts` 只保留工具与 thinking/commentary，`actionContent / rendererRawContent` 为空 |
 | TURN-FE-018 | completed read model 清理“正在输出”残留 | thread read status=`completed` 且 assistant 有最终正文，本地 `runtimeStatus` 仍 running | 不渲染 `assistant-streaming-inline-indicator`，`StreamingRenderer.isStreaming=false` |
 | TURN-FE-019 | WebFetch 在混合搜索批次中显式可见 | `web_search completed + WebFetch completed/failed` | 批次标题和 `countLabel` 同时显示搜索次数与读取次数，展开态保留 URL / 快照，不暴露原始 payload |
 | TURN-FE-020 | plan item 内联渲染 | timeline 中存在 `type=plan` | `rendererContentParts` 含 `<proposed_plan>` text，`StreamingRenderer.renderProposedPlanBlocks=true`，外置 timeline 不重复展示 |
@@ -108,6 +108,10 @@ submit turn
 | TURN-FE-025 | history hydrate 禁用 thread_read 工具摘要重复注入 | `detail.items` 已有 process timeline item，同时 `thread_read.tool_calls` 也包含同一工具 | hydrate 后 assistant 只保留 timeline 生成的一份 `tool_use/toolCalls`，`thread_read.tool_calls` 不覆盖输出 |
 | TURN-FE-026 | history hydrate 保留 thread_read 兼容兜底 | 无 `detail.items` process timeline，但 `thread_read.tool_calls` 有工具摘要 | hydrate 后旧历史仍显示 `tool_use/toolCalls`，确保 legacy-only / read-model-only 会话可恢复 |
 | TURN-FE-027 | WebSearch / WebFetch 展开态分组 | 同一搜索批次含 WebSearch 结果和多个 WebFetch 读取 URL | 展开态显示 `搜索来源` 与 `读取页面` 两组；来源仍可点击预览，读取页面不暴露原始 payload / 失败诊断 |
+| TURN-FE-028 | final_answer 不被滞后的 running 搜索吞掉 | timeline 已有 `phase=final_answer`，但同 turn WebSearch / WebFetch 仍滞后为 running | 最终正文继续显示在搜索过程之后，避免 UI 卡在“正在整理最终答复” |
+| TURN-FE-029 | 搜索完成但最终正文未到时不提前折叠 | WebSearch/WebFetch 已 completed，assistant 正文为空，`runtimeStatus.phase=synthesizing` | 搜索过程保持展开并显示来源 / 读取页面；最终正文出现后才恢复默认轻量折叠 |
+| TURN-FE-030 | 流式 Markdown 不提前解析半行 | 流式正文包含未完成表格 / 标题 / 代码行 | 只把最后一个换行前的完整源码交给 Markdown renderer，未完成尾行按纯文本展示，完成后恢复完整 Markdown |
+| TURN-FE-031 | 搜索开始不更新前一个思考卡片 | `thinking -> web_search running` 连续到达 | 渲染为两张过程卡：第一张仍显示思考状态，第二张显示搜索进度；搜索 running 不改写上方思考摘要 |
 
 ## 6. Contract 用例
 
@@ -151,6 +155,9 @@ npm run test:contracts
 | TURN-GUI-007 | 用户上拉阅读不中断 | 输出中向上滚动 | 新 token 到达时页面不抢回底部 |
 | TURN-GUI-008 | 搜索仍运行时不提前显示最终正文 | WebSearch 仍 running 后出现 commentary | commentary 只显示为过程，最终正文区不越序出现答案 |
 | TURN-GUI-009 | 搜索工具完成后才显示最终答复 | WebSearch/WebFetch 真实完成并收到 final answer | 工具卡为完成态，最终答复显示在工具过程之后，不再显示“正在输出”残留 |
+| TURN-GUI-010 | 搜索过程默认轻量折叠 | WebSearch/WebFetch 完成且 final answer 已出现 | 默认只显示 `已搜索网页 N 次，读取网页 M 次` 摘要；点击展开后显示来源和读取页面 |
+| TURN-GUI-011 | 整理最终答复中保持搜索过程展开 | WebSearch/WebFetch 完成后，最终正文尚未出现，页面显示“正在整理最终答复” | 过程组 `aria-expanded=true`，显示来源和读取页面；不能只剩折叠摘要加 loading 文案 |
+| TURN-GUI-012 | Codex 流式 Markdown 不抖动 | Codex 导入或 live stream 正在输出表格 / 标题 | 未完成行不被提前渲染成破碎 Markdown；页面持续吐字，不出现长时间空白或 JSON 原文 |
 
 最低入口：
 
@@ -412,10 +419,204 @@ npm run smoke:claw-chat-current-fixture -- --scenario web-tools-rendering --time
 
 结果：
 
-- `claw-chat-current-fixture-smoke.test.mjs`：`10 passed`，新增守卫 `web-tools-rendering` 场景必须走真实 Electron Desktop Host + App Server JSON-RPC current 链路，并断言 WebSearch 默认展开、显示 inline sources、WebFetch 显示读取页面、最终正文继续穿插、传输层 JSON 包络隐藏。
+- `claw-chat-current-fixture-smoke.test.mjs`：`10 passed`，新增守卫 `web-tools-rendering` 场景必须走真实 Electron Desktop Host + App Server JSON-RPC current 链路，并断言 WebSearch 默认折叠为轻量摘要、展开后显示 sources、WebFetch 显示读取页面、最终正文继续穿插、传输层 JSON 包络隐藏。
 - `web-tools-rendering` 真实 Electron fixture：通过，summary `.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-web-tools-rendering-dev-pass-summary.json`，截图 `.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-web-tools-rendering-dev-pass-chat.png`。
 - 构建后默认 `dist/index.html` Electron fixture：通过，summary `.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-web-tools-rendering-dist-pass-summary.json`，截图 `.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-web-tools-rendering-dist-pass-chat.png`，证明不依赖 dev server，默认桌面端入口也不会回到旧折叠 / JSON 泄露行为。
 - 关键断言：`webProcessGroupExpanded=true`、`hasSearchSourceSection=true`、`hasFetchPageSection=true`、`hasFetchPageUrl=true`、`hasFinalTextAfterProcess=true`、`rawJsonEnvelopeVisible=false`、`forbiddenTransportHits=[]`、`noConsoleErrors=true`。
+
+2026-06-20 本轮追加 Markdown / WebSearch 渲染对齐修复后复测：
+
+```bash
+npx vitest run "src/components/agent/chat/utils/messageDisplaySanitizer.test.ts" "src/components/agent/chat/components/StreamingRenderer.test.tsx" "src/components/agent/chat/components/MarkdownRenderer.test.tsx" "src/components/agent/chat/utils/searchResultPreview.test.ts" "src/components/agent/chat/components/SearchResultPreviewList.test.tsx" "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs" --silent=passed-only --disableConsoleIntercept --testTimeout=30000
+node --check "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs"
+npx eslint "src/components/agent/chat/utils/messageDisplaySanitizer.ts" "src/components/agent/chat/utils/messageDisplaySanitizer.test.ts" "src/components/agent/chat/utils/markdownLooseSyntaxNormalizer.ts" "src/components/agent/chat/components/MarkdownRenderer.tsx" "src/components/agent/chat/components/MarkdownRenderer.test.tsx" "src/components/agent/chat/components/SearchResultPreviewList.tsx" "src/components/agent/chat/components/SearchResultPreviewList.test.tsx" "src/components/agent/chat/components/StreamingRenderer.test.tsx" "src/components/agent/chat/utils/searchResultPreview.ts" "src/components/agent/chat/utils/searchResultPreview.test.ts" "src/components/agent/chat/utils/toolBatchGrouping.ts" --max-warnings 0
+npm run electron:build
+npm run smoke:agent-runtime-current-fixture
+npm run smoke:claw-chat-current-fixture -- --scenario web-tools-rendering --timeout-ms 180000 --prefix claw-chat-current-fixture-web-tools-rendering-markdown-search-dist-pass
+```
+
+结果：
+
+- `messageDisplaySanitizer.test.ts` + `StreamingRenderer.test.tsx` + `MarkdownRenderer.test.tsx` + 搜索预览 / fixture 守卫：`160 passed`，新增覆盖 WebSearch + WebFetch 后带“网页搜索渲染结论”和松散 Markdown 标题的最终正文不再被过程过滤吞掉。
+- `node --check` 与 ESLint：上述相关脚本和前端文件通过。
+- `npm run electron:build`：通过，包含 renderer、Electron host/preload、`packages/app-server-client` build、Electron typecheck、App Server sidecar 准备。
+- `npm run smoke:agent-runtime-current-fixture`：通过，继续覆盖 history/cache、流式完成态、MessageList 终态 UI、Electron fixture guard、Coding Workbench Electron fixture、Claw cancel-then-continue Electron fixture；`liveProviderUsed=false`。
+- `web-tools-rendering` 构建后真实 Electron fixture：通过，summary `.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-web-tools-rendering-markdown-search-dist-pass-summary.json`。
+- 关键断言：`hasAssistantSummary=true`、`hasFinalTextAfterProcess=true`、`markdownHeadingVisible=true`、`markdownStrongVisible=true`、`markdownTableVisible=true`、`rawJsonEnvelopeVisible=false`、`searchNoiseVisible=false`、`rawMarkdownVisible=false`、`hasFullSearchUrlVisible=false`、`webProcessGroupExpanded=true`、`processGroupCount=1`、`consoleErrors=[]`。
+
+2026-06-20 本轮追加 Codex 默认折叠 / 卡住态修复后复测：
+
+```bash
+npx vitest run "src/components/agent/chat/components/messageListItemProjection.unit.test.ts" "src/components/agent/chat/components/StreamingRenderer.test.tsx"
+node --check "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs"
+npx vitest run "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs"
+npm run electron:build
+npm run smoke:claw-chat-current-fixture -- --scenario web-tools-rendering --timeout-ms 180000 --prefix claw-chat-current-fixture-web-tools-rendering-codex-default-collapsed-pass
+npm run test:contracts
+npx vitest run "src/components/agent/chat/components/messageListItemProjection.unit.test.ts" "src/components/agent/chat/components/StreamingRenderer.test.tsx" "src/components/agent/chat/components/MarkdownRenderer.test.tsx" "src/components/agent/chat/components/SearchResultPreviewList.test.tsx" "src/components/agent/chat/utils/messageDisplaySanitizer.test.ts" "src/components/agent/chat/utils/searchResultPreview.test.ts" "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs" "scripts/electron/codex-import-click-through-fixture-smoke.test.mjs" --silent=passed-only --disableConsoleIntercept --testTimeout=30000
+npm run smoke:claw-chat-current-fixture -- --scenario web-tools-rendering --timeout-ms 180000 --prefix claw-chat-current-fixture-web-tools-rendering-codex-default-collapsed-rerun
+npm run smoke:codex-import-click-through-electron-fixture -- --timeout-ms 180000 --prefix codex-import-click-through-markdown-search-rerun
+npm run smoke:claw-chat-current-fixture -- --scenario web-tools-rendering --timeout-ms 180000 --prefix claw-chat-current-fixture-web-tools-rendering-synthesizing-expanded-final
+```
+
+- `messageListItemProjection.unit.test.ts` + `StreamingRenderer.test.tsx`：`97 passed`，新增覆盖 timeline 已有 `final_answer` 但 WebSearch/WebFetch 状态滞后为 running 时，最终正文仍继续显示在过程之后；完成态搜索过程默认折叠，点击后可见来源。
+- `web-tools-rendering` 构建后真实 Electron fixture：通过，summary `.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-web-tools-rendering-codex-default-collapsed-pass-summary.json`。
+- 关键断言：`guiWebSearchProcessDefaultCollapsed=true`、`guiWebSearchProcessShowsSourcesAfterExpand=true`、`guiWebFetchProcessShowsReadPagesAfterExpand=true`、`guiWebSearchFinalTextInterleaved=true`、`guiNotStuckStreaming=true`、`guiInputRemainsReady=true`、`webProcessGroupExpanded=false`、`expandedDetails.webProcessGroupExpanded=true`、`expandedDetails.hasFullSearchUrlVisible=false`、`consoleErrors=[]`。
+- 追加复跑：`npm run test:contracts` 通过；渲染定向回归 `8 passed / 197 passed`；真实 Electron `web-tools-rendering` 复跑通过，summary `.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-web-tools-rendering-synthesizing-expanded-final-summary.json`，新增断言 `guiWebSearchProcessExpandedWhileSynthesizing=true`，证明“正在整理最终答复”阶段过程组仍展开；Codex 导入点击闭环复跑通过，summary `.lime/qc/gui-evidence/codex-import-click-through-fixture/codex-import-click-through-markdown-search-rerun-summary.json`。
+- 针对用户复现的顽固早折叠态再补父层回归：`messageListItemProjection.unit.test.ts` 新增 `搜索已完成但 active turn 仍在整理最终答复时，应保持过程活跃且不伪造正文`，`MessageList.test.tsx` 新增 `搜索已完成但 turn 仍在整理最终答复时，应保持过程为活跃渲染`，锁定 active turn + `runtimeStatus.phase=synthesizing` + WebSearch completed + assistant 正文为空时，消息仍按 active process 传给 `StreamingRenderer`。
+- 真实 Electron 复跑：`npm run smoke:claw-chat-current-fixture -- --scenario web-tools-rendering --timeout-ms 180000 --prefix claw-chat-current-fixture-web-tools-rendering-active-turn-expanded-final` 通过，summary `.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-web-tools-rendering-active-turn-expanded-final-summary.json`；关键断言 `guiWebSearchProcessExpandedWhileSynthesizing=true`、`guiWebSearchProcessDefaultCollapsed=true`、`guiWebSearchProcessShowsSourcesAfterExpand=true`、`guiWebFetchProcessShowsReadPagesAfterExpand=true`、`guiMarkdownRendered=true`、`noConsoleErrors=true`。
+- 最新真实 Electron rerun：`npm run smoke:claw-chat-current-fixture -- --scenario web-tools-rendering --timeout-ms 180000 --prefix claw-chat-current-fixture-web-tools-rendering-active-turn-expanded-final-rerun` 通过，summary `.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-web-tools-rendering-active-turn-expanded-final-rerun-summary.json`；已复核 `ok=true`、`guiWebSearchProcessExpandedWhileSynthesizing=true`、`guiWebSearchProcessDefaultCollapsed=true`、`guiWebSearchProcessShowsSourcesAfterExpand=true`、`guiWebFetchProcessShowsReadPagesAfterExpand=true`、`guiMarkdownRendered=true`、`noConsoleErrors=true`。
+- 最终人工收口复跑：`npm run smoke:claw-chat-current-fixture -- --scenario web-tools-rendering --timeout-ms 180000 --prefix claw-chat-current-fixture-web-tools-rendering-final-verification` 通过，summary `.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-web-tools-rendering-final-verification-summary.json`；已复核 `ok=true`、`guiWebSearchProcessExpandedWhileSynthesizing=true`、`guiWebSearchProcessDefaultCollapsed=true`、`guiWebSearchProcessShowsSourcesAfterExpand=true`、`guiWebFetchProcessShowsReadPagesAfterExpand=true`、`guiMarkdownRendered=true`、`noConsoleErrors=true`。
+- 已尝试复跑 `npm run typecheck`，但本地全量 `tsc --noEmit` 超过 6 分钟仍高 CPU 运行且未返回，已中断；本轮以定向 Vitest、ESLint、`test:contracts`、`electron:build` 中的 Electron/App Server client 类型检查和真实 Electron fixture 作为交付证据。
+
+2026-06-20 本轮追加 Codex 本地历史导入态 Markdown / WebSearch 渲染对齐后复测：
+
+```bash
+node --check "scripts/electron/codex-import-click-through-fixture-smoke.mjs"
+node --check "scripts/electron/lib/local-history-import-click-through-gui.mjs"
+node --check "scripts/electron/lib/local-history-import-click-through-fixture.mjs"
+npx vitest run "scripts/electron/codex-import-click-through-fixture-smoke.test.mjs" --silent=passed-only --disableConsoleIntercept --testTimeout=30000
+npx eslint "scripts/electron/codex-import-click-through-fixture-smoke.mjs" "scripts/electron/lib/local-history-import-click-through-fixture.mjs" "scripts/electron/lib/local-history-import-click-through-gui.mjs" "scripts/electron/codex-import-click-through-fixture-smoke.test.mjs" --max-warnings 0
+npx vitest run "src/components/agent/chat/components/MarkdownRenderer.test.tsx" "src/components/agent/chat/components/SearchResultPreviewList.test.tsx" "src/components/agent/chat/components/StreamingRenderer.test.tsx" "src/components/agent/chat/utils/messageDisplaySanitizer.test.ts" "src/components/agent/chat/utils/searchResultPreview.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000
+cargo fmt --all # cwd: lime-rs
+cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server commit_preserves_codex_tool_command_and_patch_timeline -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server read_session_projects_imported_web_search_tool_result_as_timeline_item -- --nocapture
+npm run electron:build
+npm run smoke:codex-import-click-through-electron-fixture -- --timeout-ms 180000 --prefix codex-import-click-through-markdown-search-pass
+npm run smoke:agent-runtime-current-fixture
+```
+
+结果：
+
+- 导入 fixture 守卫：`5 passed`，新增覆盖导入态松散 Markdown、Yahoo 搜索导航噪音、有效来源短标签、搜索过程组展开检查，以及完整 URL 不外露。
+- 前端渲染相关回归：`150 passed`，继续覆盖 Markdown loose syntax、搜索结果过滤 / 短来源展示、WebSearch / WebFetch 过程组、最终正文不被过程过滤吞掉。
+- Rust App Server 定向：`commit_preserves_codex_tool_command_and_patch_timeline` 与 `read_session_projects_imported_web_search_tool_result_as_timeline_item` 均通过；修复 Codex `web_search_end.output` 被导入规范化丢失，以及同一 legacy tool id 后续 `tool.result` 不能补全 output 的 read model 合并问题。
+- `npm run electron:build`：通过，重新构建 renderer、Electron host/preload、`packages/app-server-client`、Electron typecheck 和 App Server sidecar。
+- 真实 Electron 导入点击闭环：通过，summary `.lime/qc/gui-evidence/codex-import-click-through-fixture/codex-import-click-through-markdown-search-pass-summary.json`，主截图 `.lime/qc/gui-evidence/codex-import-click-through-fixture/codex-import-click-through-markdown-search-pass.png`，三视口截图位于 `.lime/qc/gui-evidence/codex-import-click-through-fixture/visual-audit/`。
+- 关键断言：`markdownHeadingVisible=true`、`markdownStrongVisible=true`、`markdownTableVisible=true`、`rawMarkdownVisible=false`、`hasImportedSearchResult=true`、`searchProcessGroupVisible=true`、`searchNoiseVisible=false`、`hasFullSearchUrlVisible=false`、`consoleErrors=[]`；`searchGroupExpansion.reason="clicked"` 证明完成态搜索组默认可折叠，展开后只显示有效来源 `Lime Codex Import Rendering Source` 与短标签 `example.com/lime-codex-import-rendering`。
+- `npm run smoke:agent-runtime-current-fixture`：通过，继续覆盖 history/cache、流式完成态、MessageList 终态 UI、Electron fixture guard、Coding Workbench Electron fixture、Claw cancel-then-continue Electron fixture；`liveProviderUsed=false`。
+- 追加真实 Electron 导入点击闭环复跑：`npm run smoke:codex-import-click-through-electron-fixture -- --timeout-ms 180000 --prefix codex-import-click-through-active-turn-regression` 通过，summary `.lime/qc/gui-evidence/codex-import-click-through-fixture/codex-import-click-through-active-turn-regression-summary.json`；三视口均确认 `markdownHeadingVisible=true`、`markdownStrongVisible=true`、`markdownTableVisible=true`、`rawMarkdownVisible=false`、`searchProcessGroupVisible=true`、`searchNoiseVisible=false`、`hasFullSearchUrlVisible=false`、`inputbarDisabled=false`、`consoleErrors=[]`，并覆盖导入后继续对话仍能显示用户消息与 assistant 回复。
+- 最新真实 Electron 导入点击 rerun：`npm run smoke:codex-import-click-through-electron-fixture -- --timeout-ms 180000 --prefix codex-import-click-through-active-turn-regression-rerun` 通过，summary `.lime/qc/gui-evidence/codex-import-click-through-fixture/codex-import-click-through-active-turn-regression-rerun-summary.json`；已复核 `ok=true`、`consoleErrors=[]`，三视口 `desktop / compact / narrow` 均确认 `markdownHeadingVisible=true`、`rawMarkdownVisible=false`、`searchProcessGroupVisible=true`、`hasFullSearchUrlVisible=false`。
+- 最终人工收口复跑：`npm run smoke:codex-import-click-through-electron-fixture -- --timeout-ms 180000 --prefix codex-import-click-through-final-verification` 通过，summary `.lime/qc/gui-evidence/codex-import-click-through-fixture/codex-import-click-through-final-verification-summary.json`；已复核 `ok=true`、`consoleErrors=[]`、`markdownHeadingVisible=true`、`markdownStrongVisible=true`、`markdownTableVisible=true`、`rawMarkdownVisible=false`、`hasImportedSearchResult=true`、`searchProcessGroupVisible=true`、`searchNoiseVisible=false`、`hasFullSearchUrlVisible=false`，并完成三视口 visual audit。
+
+2026-06-20 本轮追加显式 `@搜索` live WebSearch / WebFetch 强约束后复测：
+
+```bash
+npx vitest run "src/components/agent/chat/workspace/useWorkspaceSendActions.test.tsx" --testNamePattern "@搜索" --silent=passed-only --disableConsoleIntercept --testTimeout=30000
+npx vitest run "scripts/lib/live-provider-smoke-gate.test.mjs" --silent=passed-only --disableConsoleIntercept --testTimeout=30000
+cargo fmt --manifest-path "lime-rs/Cargo.toml" --all -- --check
+cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent tracker_requires_each_required_tool_to_succeed -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server research_skill_launch_requires_web_fetch_for_page_confirmation -- --nocapture
+npm run test:contracts
+npm run smoke:agent-runtime-current-fixture
+npm run verify:gui-smoke
+npm run smoke:claw-chat-ready-streaming -- --timeout-ms 180000
+```
+
+结果：
+
+- `@搜索` 前端发送边界：`6 passed, 131 skipped`，显式 `@搜索` 默认提交 `webSearch=true`、`searchMode="required"` 和 `research_skill_launch` metadata；普通自然语言新闻请求仍不要求 `searchMode=required`。
+- Rust policy：`lime-agent` 新增覆盖 `required_tools` 必须逐项成功；`app-server` 新增覆盖 `research_skill_launch` 只在显式 research metadata 下把 `WebFetch` 加入 required / allowed tools。
+- `npm run test:contracts`：通过，`app-server-client-contract` 增至 `281 checks`，live smoke contract 已同步 `search_mode="required"` 与 `liveWebExplicitSearchRequired`。
+- `npm run smoke:agent-runtime-current-fixture` 与 `npm run verify:gui-smoke`：均通过；GUI smoke 复核 `claw workbench shell ready`、`memory settings ready`。
+- 真实 live Provider E2E：`npm run smoke:claw-chat-ready-streaming -- --timeout-ms 180000` 通过，真实 provider `custom-cb381b4f-d2fa-4eff-ba22-c867c38ba8d3 / gpt-5.5`，session `sess_b17256e265054171891581cf44bc524e`，live web turn `b3b4743e-0ace-428b-a2bf-63a226c14eac`，`liveWebSearchMode="required"`。
+- live E2E 关键断言：`liveWebSearchToolEventsSeen=true`、`liveWebFetchToolEventsSeen=true`、`liveWebRequiredToolEventsSeen=true`、`liveWebRequiredToolEventOutputsPresent=true`、`liveWebRequiredToolEventOrderValid=true`、`liveWebSearchCompleted=true`、`liveWebFetchCompleted=true`、`liveWebExplicitSearchRequired=true`、`noRuntimeMockFallbackSeen=true`、`noBlockingConsoleErrors=true`。
+- live E2E evidence：`.lime/qc/gui-evidence/claw-chat-ready-streaming/claw-chat-ready-streaming-summary.json` 与 `.lime/qc/gui-evidence/claw-chat-ready-streaming/claw-chat-ready-streaming-05-live-web-tools-final.png`。
+
+2026-06-20 本轮追加 Codex 搜索活动单元轻量行后复测：
+
+```bash
+npx vitest run "src/components/agent/chat/components/StreamingRenderer.test.tsx"
+npx vitest run "src/components/agent/chat/components/SearchResultPreviewList.test.tsx" "src/components/agent/chat/utils/searchResultPreview.test.ts" "src/components/agent/chat/utils/toolBatchGrouping.test.ts"
+npx vitest run "src/components/agent/chat/components/MessageList.test.tsx" --testNamePattern "Codex|web|搜索|process|过程|Markdown"
+npx playwright test --config ".lime/qc/playwright-cli/playwright.config.mjs"
+npm run smoke:agent-runtime-current-fixture
+npm run verify:gui-smoke
+```
+
+结果：
+
+- `StreamingRenderer.test.tsx`：`71 passed`，新增锁定搜索过程组 `data-process-kind="web_search"`、Codex 式状态点、running 状态不更新前一个思考组，以及 WebSearch/WebFetch 展开态不再退回通用 `inline-tool-process-step` 小卡片。
+- 搜索预览与批次分组回归：`30 passed`，继续覆盖短来源标签、搜索结果过滤、WebSearch/WebFetch 摘要与 JSON 包络隐藏。
+- `MessageList.test.tsx` 搜索 / Markdown / process 定向：`26 passed, 123 skipped`，确认消息列表投影未因轻量行改动回流 legacy 工具卡。
+- Playwright CLI：`2 passed`，覆盖 Codex 对话渲染中的 WebSearch/WebFetch 折叠、展开、Markdown 渲染与导入后继续对话。
+- `npm run smoke:agent-runtime-current-fixture`：通过，继续覆盖 current Agent Runtime fixture、真实 Electron Coding Workbench fixture 与 Claw 停止后同会话继续输出；`liveProviderUsed=false`。
+- `npm run verify:gui-smoke`：通过，最终输出 `claw workbench shell ready` 与 `memory settings ready`。
+- 视觉 / 产品结论：搜索过程现在按 Codex `WebSearchCell` 语义作为独立活动单元展示，running 使用活动点，completed 使用弱状态点；展开态保留搜索 / 读取顺序与思考穿插，但 WebSearch/WebFetch 不再显示成额外工具小卡片。
+
+2026-06-20 本轮追加过程组 active runtime phase 白名单后复测：
+
+```bash
+npx vitest run "src/components/agent/chat/components/StreamingRenderer.test.tsx" --testNamePattern "搜索已完成|运行状态已经完成|联网搜索批次|消息仍在输出且搜索"
+npx vitest run "src/components/agent/chat/components/StreamingRenderer.test.tsx"
+```
+
+结果：
+
+- 定向回归：`5 passed, 67 skipped`，覆盖 `synthesizing` / 流式输出期间搜索完成但最终正文尚未出现时继续展开，避免“还没完成就折叠”的卡顿感。
+- 完整渲染回归：`72 passed`，新增确认 `completed` 这类终态 runtime status 不会把空正文搜索批次继续误判为 active 展开；完成态仍默认回到 Codex 式摘要折叠，展开后才显示来源。
+- 视觉 / 产品结论：过程组展开依据从“不是 failed/cancelled 就算活跃”收窄为明确 active phase，避免 `completed` / `idle` / 未知终态污染 WebSearch/WebFetch 折叠状态。
+
+2026-06-20 本轮拆分 StreamingRenderer WebSearch/Codex 回归测试后复测：
+
+```bash
+npx vitest run "src/components/agent/chat/components/StreamingRenderer.test.tsx"
+npx vitest run "src/components/agent/chat/components/StreamingRenderer.test.tsx" "src/components/agent/chat/components/StreamingRenderer.webSearch.test.tsx"
+npx playwright test --config ".lime/qc/playwright-cli/playwright.config.mjs"
+```
+
+结果：
+
+- 先修复测试 harness 拆分后的 mock 加载顺序：新增 `StreamingRenderer.testMocks.tsx` 专门承载 `vi.mock(...)`，`StreamingRenderer.testHarness.tsx` 只保留挂载 / cleanup / render helper，避免 `react-i18next`、`MarkdownRenderer`、`A2UITaskCard`、`AgentPlanBlock` mock 在生产组件加载后才注册。
+- `StreamingRenderer.test.tsx` 单文件恢复：`72 passed`。
+- WebSearch / Codex 专项拆分后：`StreamingRenderer.webSearch.test.tsx` `14 passed`，`StreamingRenderer.test.tsx` `58 passed`，合计仍为 `72 passed`；主文件从约 `3674` 行降到约 `2581` 行。
+- 迁移覆盖：本地历史导入中的 `web_search` 单独分组、纯导入 WebSearch/WebFetch 折叠/展开和快照预览、Codex `web_search action object` 不泄露 JSON、实时搜索不更新前一个思考组、搜索过程 streaming / synthesizing / completed 终态展开策略、WebFetch JSON 包络隐藏、搜索与思考穿插顺序、搜索失败诊断 JSON 折叠。
+- Playwright CLI：`2 passed`，继续覆盖 Codex 对话渲染中的 WebSearch/WebFetch 折叠、展开、Markdown 渲染一致，以及 Codex 导入态 Markdown / 搜索过程 / 继续对话。
+- 产品结论：本轮不改生产渲染逻辑，只把用户反馈最密集的 Codex WebSearch 渲染回归从巨型测试中独立出来，后续新增搜索折叠 / JSON 隐藏 / 思考穿插问题应进入 `StreamingRenderer.webSearch.test.tsx`。
+
+2026-06-20 本轮修复可点击搜索来源展开态 timeline 顺序后复测：
+
+```bash
+npx vitest run "src/components/agent/chat/components/StreamingRenderer.webSearch.test.tsx" --testNamePattern "可点击搜索来源展开态"
+npx vitest run "src/components/agent/chat/components/StreamingRenderer.webSearch.test.tsx"
+npx vitest run "src/components/agent/chat/components/StreamingRenderer.test.tsx" "src/components/agent/chat/utils/toolBatchGrouping.test.ts" "src/components/agent/chat/utils/searchResultPreview.test.ts"
+npx playwright test --config ".lime/qc/playwright-cli/playwright.config.mjs"
+npx eslint "src/components/agent/chat/components/StreamingProcessGroup.tsx" "src/components/agent/chat/components/StreamingRenderer.webSearch.test.tsx"
+npm run smoke:agent-runtime-current-fixture
+npm run verify:gui-smoke
+```
+
+结果：
+
+- 新增回归锁定 WebSearch 有可点击来源预览且中间穿插 thinking / WebFetch 时，展开态必须按原始 timeline 渲染：搜索来源 -> thinking -> 读取页面 -> 后续正文，避免把 `读取页面` 提前到 thinking 之前。
+- `StreamingProcessGroup` 的 WebSearch 展开分支新增 timeline 渲染：有 non-tool entries 时按 `entries` 原始顺序渲染可点击搜索预览、思考和 WebFetch 行；无 non-tool entries 时仍保留原有搜索来源 / 读取页面分组展示。
+- WebFetch 行摘要中的完整 `https://...` 已短标签化为 `host/path`，继续避免搜索过程展开态泄露完整 URL / 传输层 JSON。
+- 定向回归：`1 passed, 14 skipped`；WebSearch 专项：`15 passed`。
+- 主渲染 / helper 回归：`StreamingRenderer.test.tsx`、`toolBatchGrouping.test.ts`、`searchResultPreview.test.ts` 合计 `85 passed`。
+- Playwright CLI：`2 passed`，继续覆盖 WebSearch/WebFetch 折叠、展开、Markdown 渲染一致和 Codex 导入态继续对话。
+- ESLint：`StreamingProcessGroup.tsx` 与 `StreamingRenderer.webSearch.test.tsx` 通过。
+- `npm run smoke:agent-runtime-current-fixture`：通过，继续覆盖 history/cache hydration、流式完成态、Claw 终态 UI、真实 Electron Coding Workbench fixture 与 Claw 停止后同会话继续输出；`liveProviderUsed=false`。
+- `npm run verify:gui-smoke`：通过，Electron smoke 完成 renderer / host / app-server sidecar 构建，最终输出 `claw workbench shell ready` 与 `memory settings ready`。
+- 产品结论：搜索过程展开态现在更接近 Codex timeline 语义，不再因为有可点击来源预览而打乱搜索、思考、读取页面的穿插顺序。
+
+2026-06-20 本轮拆分 WebSearch timeline 子组件后复测：
+
+```bash
+npx eslint "src/components/agent/chat/components/StreamingProcessGroup.tsx" "src/components/agent/chat/components/StreamingWebSearchProcessTimeline.tsx" "src/components/agent/chat/components/StreamingRenderer.webSearch.test.tsx"
+npx vitest run "src/components/agent/chat/components/StreamingRenderer.webSearch.test.tsx" "src/components/agent/chat/components/StreamingRenderer.test.tsx"
+npx playwright test --config ".lime/qc/playwright-cli/playwright.config.mjs"
+npm run smoke:agent-runtime-current-fixture
+```
+
+结果：
+
+- `StreamingProcessGroup.tsx` 从约 `800` 行降到约 `421` 行，WebSearch 展开态 timeline、搜索来源预览、WebFetch 行和短 URL 标签化迁入 `StreamingWebSearchProcessTimeline.tsx`（约 `385` 行）。
+- 本轮是结构拆分，不改变 WebSearch / WebFetch 折叠展开行为；搜索来源可点击预览、thinking 穿插顺序、读取页面和 JSON / URL 隐藏继续由 `StreamingRenderer.webSearch.test.tsx` 保护。
+- ESLint：上述 3 个文件通过。
+- 渲染回归：`StreamingRenderer.webSearch.test.tsx` `15 passed`，`StreamingRenderer.test.tsx` `58 passed`，合计 `73 passed`。
+- Playwright CLI：`2 passed`，继续覆盖 WebSearch/WebFetch 过程流折叠、展开、Markdown 渲染一致，以及 Codex 导入态 Markdown / 搜索过程 / 继续对话。
+- `npm run smoke:agent-runtime-current-fixture`：通过，继续覆盖 current Agent Runtime fixture、Claw 终态 UI、真实 Electron Coding Workbench fixture 与 Claw 停止后同会话继续输出；`liveProviderUsed=false`。
+- 产品结论：WebSearch 渲染逻辑现在有独立子组件边界，后续继续对齐 Codex 细节时应优先修改 `StreamingWebSearchProcessTimeline.tsx`，避免把过程组壳重新撑大。
 
 2026-06-19 本轮追加 MessageList legacy `message.toolCalls` 回流 contract 守卫后复测：
 
@@ -461,3 +662,93 @@ git diff --check -- "lime-rs/crates/aster-rust/crates/aster/src/tools/web.rs" "l
 - `cargo fmt`：通过。
 - `aster-core web_fetch`：`11 passed`，WebFetch HTML 清洗、正文抽取、默认相关片段过滤和动态片段过滤测试已迁入 `web_fetch_content.rs`，redirect / permission / creation 测试继续留在 `web.rs`。
 - `git diff --check`：通过。
+
+2026-06-21 本轮追加 StreamingRenderer 显示层 sequence 排序后复测：
+
+```bash
+npx vitest run "src/components/agent/chat/components/StreamingRenderer.webSearch.test.tsx" --silent=passed-only --disableConsoleIntercept
+npx vitest run "src/components/agent/chat/hooks/agentSessionState.test.ts" "src/components/agent/chat/components/messageListTimelineContentParts.unit.test.ts" "src/components/agent/chat/components/messageListItemProjection.unit.test.ts" "src/components/agent/chat/projection/messageTimelineRenderProjection.test.ts" "src/components/agent/chat/components/StreamingRenderer.webSearch.test.tsx" "src/components/agent/chat/hooks/agentStreamRuntimeHandler.test.ts" "src/components/agent/chat/hooks/agentStreamTurnEventBinding.test.ts" "src/components/agent/chat/components/MessageList.test.tsx" "src/lib/api/agentRuntime/threadClient.test.ts" --silent=passed-only --disableConsoleIntercept
+npm run build:renderer:electron
+npx eslint "src/components/agent/chat/components/StreamingRenderer.tsx" "src/components/agent/chat/components/streamingContentPartOrder.ts" "src/components/agent/chat/components/StreamingRenderer.webSearch.test.tsx" --max-warnings 0
+node scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs --scenario web-tools-rendering --timeout-ms 180000 --evidence-dir ".lime/qc/gui-evidence/playwright-cli" --prefix "cli-web-tools-rendering"
+```
+
+结果：
+
+- `StreamingRenderer.webSearch.test.tsx`：`17 passed`，新增覆盖 `contentParts` 到达顺序为 `WebSearch#3 -> WebFetch#6 -> thinking#3` 时，显示层按 sequence 恢复为 `WebSearch -> thinking -> WebFetch`，并用 DOM 相对位置锁定展开态顺序。
+- 前端主链组合回归：`9 files passed, 310 tests passed`，覆盖 history hydrate、timeline content parts、message projection、stream handler、MessageList 与 thread client。
+- `npm run build:renderer:electron`：通过，renderer production build 完成。
+- ESLint 与 `git diff --check`：通过。
+- Playwright CLI 真实 Electron fixture：通过，summary `.lime/qc/gui-evidence/playwright-cli/cli-web-tools-rendering-summary.json`，截图 `.lime/qc/gui-evidence/playwright-cli/cli-web-tools-rendering-chat.png`。
+- 关键断言：`guiWebToolsTimelineOrderPreserved=true`、`guiWebSearchProcessDefaultCollapsed=true`、`guiWebSearchProcessShowsSourcesAfterExpand=true`、`guiWebFetchProcessShowsReadPagesAfterExpand=true`、`guiMarkdownRendered=true`、`guiWebFetchTransportEnvelopeHidden=true`、`noConsoleErrors=true`；展开态 `expandedDetails.hasTimelineOrderPreserved=true`，确认搜索、思考和读取页面不再越序。
+
+2026-06-21 本轮追加 ServiceSkill 展示卡片与 JSON 包络隐藏后复测：
+
+```bash
+cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-mcp oauth -- --test-threads=1
+node scripts/agent-runtime/service-skill-entry-smoke.mjs --timeout-ms 180000 --evidence-dir ".lime/qc/gui-evidence/service-skill" --prefix "service-skill-display"
+```
+
+结果：
+
+- `lime-mcp oauth`：`20 passed`，修复 MCP OAuth callback channel 类型后恢复 service-skill smoke 所需的 Rust 编译链路。
+- `service-skill-entry-smoke.mjs`：通过；前端 metadata / capability draft / inventory client 组合 `38 passed`，App Server workspace skills 定向 `4 passed`，`lime-agent` SkillTool gate 定向 `11 passed`，服务技能入口路由与挂起参数 `51 passed`，Agent 对话内 A2UI 挂起主链 `7 passed`。
+- 运行时 transcript evidence：`.lime/qc/skill-forge-runtime-transcript-current.json`，结果 `pass`，覆盖 `registered_skill_discovery`、`runtime_binding_projection`、`skill_tool_gate_allow`、`skill_tool_gate_deny`、allowlist scope 与 session enable/deny 事件。
+- 展示层结论：`lime_run_service_skill` 归类为 current `skill` 展示，不再显示“兼容”；结构化 `service_skill_id / slot_values` 运行包络在内联工具卡中隐藏，不再渲染成 raw JSON 或“实时输出”。
+- 注意：`service-skill-entry-smoke.mjs` 当前不消费 `--evidence-dir/--prefix` 生成截图；本轮截图型 GUI evidence 仍以 Playwright CLI 的 `.lime/qc/gui-evidence/playwright-cli/cli-web-tools-rendering-after-skill-*.json/png` 为准。
+
+2026-06-21 本轮追加 ServiceSkill 完成态 / 历史嵌套 JSON 包络隐藏后复测：
+
+```bash
+npx vitest run "src/components/agent/chat/utils/serviceSkillToolResultDisplay.test.ts" "src/components/agent/chat/components/InlineToolProcessStep.test.tsx" "src/components/agent/chat/components/StreamingRenderer.test.tsx" --silent=passed-only --disableConsoleIntercept --testTimeout=30000
+npx eslint "src/components/agent/chat/utils/serviceSkillToolResultDisplay.ts" "src/components/agent/chat/utils/serviceSkillToolResultDisplay.test.ts" "src/components/agent/chat/components/InlineToolProcessStep.test.tsx" "src/components/agent/chat/components/StreamingRenderer.test.tsx" --max-warnings 0
+node scripts/agent-runtime/service-skill-entry-smoke.mjs --timeout-ms 180000
+npx playwright test --config ".lime/qc/playwright-cli/playwright.config.mjs"
+```
+
+结果：
+
+- ServiceSkill 展示 helper / InlineToolProcessStep / StreamingRenderer 定向回归：`92 passed`，新增覆盖 `result/output/data`、数组容器和字符串化 inner JSON 中的 `service_skill_id / serviceSkillId / slot_values / slotValues` 包络隐藏。
+- 渲染层结论：服务技能运行态与完成态都不再把结构化运行包络渲染成 Markdown / raw JSON；完成态仍保留 “已完成服务技能执行 {{subject}}” 摘要和后续 assistant 正文。
+- ESLint 与 `git diff --check`：通过。
+- `service-skill-entry-smoke.mjs`：通过；前端 metadata `38 passed`，App Server workspace skills `4 passed`，`lime-agent` SkillTool gate `11 passed`，服务技能入口路由 `51 passed`，Agent 对话内 A2UI 挂起主链 `7 passed`。
+- Playwright CLI：`2 passed`，继续覆盖 Codex 对话 WebSearch/WebFetch 折叠、展开、Markdown 渲染，以及 Codex 导入态搜索过程和继续对话。
+
+2026-06-21 本轮追加 ServiceSkill 专用 action 标题后复测：
+
+```bash
+npx vitest run "src/components/agent/chat/utils/toolDisplayInfo.test.ts" "src/components/agent/chat/components/InlineToolProcessStep.test.tsx" "src/components/agent/chat/components/StreamingRenderer.test.tsx" "src/components/agent/chat/utils/serviceSkillToolResultDisplay.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000
+npx vitest run "src/i18n/__tests__/loadNamespace.test.ts" "src/i18n/__tests__/types.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000
+npx eslint "src/components/agent/chat/utils/toolDisplayConfig/content.ts" "src/components/agent/chat/utils/toolDisplayInfo.ts" "src/components/agent/chat/utils/toolDisplayInfo.test.ts" "src/components/agent/chat/components/InlineToolProcessStep.test.tsx" "src/components/agent/chat/components/StreamingRenderer.test.tsx" "src/components/agent/chat/utils/serviceSkillToolResultDisplay.ts" "src/components/agent/chat/utils/serviceSkillToolResultDisplay.test.ts" --max-warnings 0
+node scripts/agent-runtime/service-skill-entry-smoke.mjs --timeout-ms 180000
+npx playwright test --config ".lime/qc/playwright-cli/playwright.config.mjs"
+```
+
+结果：
+
+- ServiceSkill 展示 / 渲染回归：`110 passed`，`lime_run_service_skill` 运行态标题从通用“执行技能中”收口为“执行服务技能中”，完成态标题从通用“已执行技能”收口为“已执行服务技能”，失败态为“服务技能执行失败”。
+- i18n：`loadNamespace` + `types` 共 `8 passed`；新增 `toolCall.action.serviceSkillRun.*` 已覆盖 `zh-CN / zh-TW / en-US / ja-JP / ko-KR`。
+- ESLint 与 `git diff --check`：通过。
+- `service-skill-entry-smoke.mjs`：通过；继续覆盖前端 metadata、App Server workspace skills、`lime-agent` SkillTool gate、服务技能入口路由与 Agent 对话内 A2UI 挂起主链。
+- Playwright CLI：`2 passed`，继续覆盖 Codex WebSearch/WebFetch 与导入态渲染主链。
+- 残留搜索：`serviceSkillCompat / compatRun / 服务技能兼容` 未在 current `src/components/agent/chat` 与 i18n 资源中回流。
+
+2026-06-21 本轮追加普通 SkillTool gate proof JSON 包络隐藏后复测：
+
+```bash
+npx vitest run "src/components/agent/chat/utils/toolResultEnvelopeDisplay.test.ts" "src/components/agent/chat/utils/serviceSkillToolResultDisplay.test.ts" "src/components/agent/chat/components/InlineToolProcessStep.test.tsx" "src/components/agent/chat/components/StreamingRenderer.test.tsx"
+npx eslint "src/components/agent/chat/utils/toolResultEnvelopeDisplay.ts" "src/components/agent/chat/utils/toolResultEnvelopeDisplay.test.ts" "src/components/agent/chat/utils/serviceSkillToolResultDisplay.ts" "src/components/agent/chat/components/InlineToolProcessStep.tsx" "src/components/agent/chat/components/InlineToolProcessStep.test.tsx" "src/components/agent/chat/components/StreamingRenderer.test.tsx"
+node scripts/agent-runtime/service-skill-entry-smoke.mjs --timeout-ms 180000
+npm run smoke:agent-runtime-current-fixture
+npx playwright test --config ".lime/qc/playwright-cli/playwright.config.mjs"
+```
+
+结果：
+
+- 普通 SkillTool / ServiceSkill 结果包络 helper 与渲染回归：`98 passed`；新增覆盖 `SkillTool` gate proof 中的 `request / decision / result / sourceMetadata / permissionBehavior / workspaceSkillRuntimeEnableAttached` 不再渲染为 Markdown / raw JSON。
+- 正常 SkillTool 输出不被误吞：`output: "已完成能力分析。"` 仍进入 UI；只隐藏运行时证明包络字段如 `sourceDraftId / workspaceSkillRuntimeEnable`。
+- ESLint 与 `git diff --check`：通过。
+- `service-skill-entry-smoke.mjs`：通过；继续证明 SkillTool gate allow/deny、source metadata、服务技能入口路由与 A2UI 主链仍可用。
+- `npm run smoke:agent-runtime-current-fixture`：通过；覆盖 history/cache hydration、final_done 工具收尾、MessageList 终态 UI、Electron fixture guard、真实 GUI coding 输入到 Coding Workbench Electron fixture、Claw 停止后同会话继续输出 Electron fixture；`liveProviderUsed=false`。
+- Playwright CLI：`2 passed`，继续覆盖 Codex 对话 WebSearch/WebFetch 过程流折叠、展开、Markdown 渲染一致，以及 Codex 导入态 Markdown / 搜索过程 / 继续对话。
+- 产品结论：普通 `SkillTool` 的运行时 gate proof 与服务技能运行包络一样被视为协议证据，不再作为用户可读正文；搜索、思考、WebFetch 和 Codex 导入渲染主链未回退。

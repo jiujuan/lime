@@ -5,8 +5,11 @@ import {
   buildMessageGroupsProjection,
   buildMessageRenderGroupsProjection,
   buildTimelineByMessageIdProjection,
+  type CurrentTurnTimelineProjection,
   resolveLastAssistantMessage,
 } from "./messageTimelineRenderProjection";
+
+const TOOL_START_TIME = new Date("2026-06-20T12:00:00.000Z");
 
 function message(id: string, role: "user" | "assistant"): Message {
   return {
@@ -219,6 +222,104 @@ describe("messageTimelineRenderProjection", () => {
     });
   });
 
+  it("assistant 已有实时工具过程但 runtimeTurnId 未对齐时应按工具 ID 绑定持久化 timeline", () => {
+    const projection = buildTimelineByMessageIdProjection({
+      canBuildHistoricalTimeline: true,
+      renderedMessages: [
+        messageAt("user-web-tools", "user", "2026-06-20T12:00:00.000Z"),
+        {
+          ...messageAt(
+            "assistant-web-tools",
+            "assistant",
+            "2026-06-20T12:00:04.000Z",
+            "pending-turn-web-tools",
+          ),
+          content: "网页搜索渲染结论。",
+          contentParts: [
+            {
+              type: "tool_use",
+              toolCall: {
+                id: "tool-search-web-tools",
+                name: "WebSearch",
+                arguments: JSON.stringify({ query: "Lime WebSearch" }),
+                status: "completed",
+                startTime: TOOL_START_TIME,
+              },
+            },
+            {
+              type: "tool_use",
+              toolCall: {
+                id: "tool-fetch-web-tools",
+                name: "WebFetch",
+                arguments: JSON.stringify({
+                  url: "https://example.com/lime-websearch-rendering",
+                }),
+                status: "completed",
+                startTime: TOOL_START_TIME,
+              },
+            },
+            { type: "text", text: "网页搜索渲染结论。" },
+          ],
+        } satisfies Message,
+      ],
+      renderedTurns: [
+        {
+          ...turn("turn-web-tools"),
+          started_at: "2026-06-20T12:00:00.000Z",
+          completed_at: "2026-06-20T12:00:04.000Z",
+        },
+      ],
+      renderedThreadItems: [
+        {
+          id: "tool-search-web-tools",
+          thread_id: "thread-web-tools",
+          turn_id: "turn-web-tools",
+          sequence: 1,
+          status: "completed",
+          started_at: "2026-06-20T12:00:00.200Z",
+          completed_at: "2026-06-20T12:00:00.500Z",
+          updated_at: "2026-06-20T12:00:00.500Z",
+          type: "tool_call",
+          tool_name: "WebSearch",
+        },
+        {
+          id: "reasoning-web-tools",
+          thread_id: "thread-web-tools",
+          turn_id: "turn-web-tools",
+          sequence: 2,
+          status: "completed",
+          started_at: "2026-06-20T12:00:00.600Z",
+          completed_at: "2026-06-20T12:00:00.900Z",
+          updated_at: "2026-06-20T12:00:00.900Z",
+          type: "reasoning",
+          text: "搜索结果还需要继续筛掉广告软文，我先读取有效来源。",
+        },
+        {
+          id: "tool-fetch-web-tools",
+          thread_id: "thread-web-tools",
+          turn_id: "turn-web-tools",
+          sequence: 3,
+          status: "completed",
+          started_at: "2026-06-20T12:00:01.000Z",
+          completed_at: "2026-06-20T12:00:01.400Z",
+          updated_at: "2026-06-20T12:00:01.400Z",
+          type: "tool_call",
+          tool_name: "WebFetch",
+        },
+      ],
+    });
+
+    expect(projection.get("assistant-web-tools")).toMatchObject({
+      messageId: "assistant-web-tools",
+      turn: { id: "turn-web-tools" },
+      items: [
+        { id: "tool-search-web-tools" },
+        { id: "reasoning-web-tools", type: "reasoning" },
+        { id: "tool-fetch-web-tools" },
+      ],
+    });
+  });
+
   it("应为消息组补齐 timeline 与 active 标记", () => {
     const messages = [
       message("message-user", "user"),
@@ -244,11 +345,116 @@ describe("messageTimelineRenderProjection", () => {
     expect(renderGroups).toHaveLength(1);
     expect(renderGroups[0]).toMatchObject({
       lastAssistantId: "message-assistant",
+      timelineMessageId: "message-assistant",
       isActiveGroup: true,
       timeline: {
         messageId: "message-assistant",
         turn: { id: "turn-1" },
       },
     });
+  });
+
+  it("当前 turn 已显式映射到较早 assistant 时应挂回该消息所在组", () => {
+    const messages = [
+      messageAt("user-earlier", "user", "2026-05-05T00:00:00.000Z"),
+      messageAt(
+        "assistant-earlier",
+        "assistant",
+        "2026-05-05T00:00:01.000Z",
+        "turn-current",
+      ),
+      messageAt("assistant-latest", "assistant", "2026-05-05T00:00:02.000Z"),
+    ];
+    const groups = buildMessageGroupsProjection(messages);
+    const currentTurnTimeline = buildCurrentTurnTimelineProjection({
+      activeCurrentTurnId: "turn-current",
+      activeCurrentTurn: { ...turn("turn-current"), status: "running" },
+      lastAssistantMessageId: "assistant-latest",
+      timelineByMessageId: new Map(),
+      renderedMessages: messages,
+      renderedThreadItems: [item("item-current", "turn-current")],
+    });
+
+    const renderGroups = buildMessageRenderGroupsProjection({
+      messageGroups: groups,
+      timelineByMessageId: new Map(),
+      currentTurnTimeline,
+      lastAssistantMessageId: "assistant-latest",
+    });
+
+    expect(currentTurnTimeline).toMatchObject({
+      messageId: "assistant-earlier",
+      items: [{ id: "item-current" }],
+    });
+    expect(renderGroups).toHaveLength(1);
+    expect(renderGroups[0]).toMatchObject({
+      lastAssistantId: "assistant-latest",
+      timelineMessageId: "assistant-earlier",
+      timeline: {
+        messageId: "assistant-earlier",
+        turn: { id: "turn-current" },
+      },
+      isActiveGroup: true,
+    });
+  });
+
+  it("当前 turn 与历史映射指向同一消息时应优先保留完整持久化 timeline", () => {
+    const messages = [
+      messageAt("user-web-tools", "user", "2026-06-20T12:00:00.000Z"),
+      messageAt(
+        "assistant-web-tools",
+        "assistant",
+        "2026-06-20T12:00:04.000Z",
+        "pending-turn-web-tools",
+      ),
+    ];
+    const groups = buildMessageGroupsProjection(messages);
+    const persistedTimeline = {
+      messageId: "assistant-web-tools",
+      turn: {
+        ...turn("turn-web-tools"),
+        status: "completed",
+      } satisfies AgentThreadTurn,
+      items: [
+        item("tool-search-web-tools", "turn-web-tools"),
+        {
+          id: "reasoning-web-tools",
+          thread_id: "thread-web-tools",
+          turn_id: "turn-web-tools",
+          sequence: 2,
+          status: "completed",
+          started_at: "2026-06-20T12:00:00.600Z",
+          completed_at: "2026-06-20T12:00:00.900Z",
+          updated_at: "2026-06-20T12:00:00.900Z",
+          type: "reasoning",
+          text: "搜索结果还需要继续筛掉广告软文，我先读取有效来源。",
+        } as AgentThreadItem,
+        item("tool-fetch-web-tools", "turn-web-tools"),
+      ],
+    };
+    const currentTurnTimeline: CurrentTurnTimelineProjection = {
+      messageId: "assistant-web-tools",
+      turn: { ...turn("turn-web-tools"), status: "running" },
+      items: [
+        item("tool-search-web-tools", "turn-web-tools"),
+        item("tool-fetch-web-tools", "turn-web-tools"),
+      ],
+    };
+
+    const renderGroups = buildMessageRenderGroupsProjection({
+      messageGroups: groups,
+      timelineByMessageId: new Map([
+        ["assistant-web-tools", persistedTimeline],
+      ]),
+      currentTurnTimeline,
+      lastAssistantMessageId: "assistant-web-tools",
+    });
+
+    expect(renderGroups[0]?.timeline).toBe(persistedTimeline);
+    expect(renderGroups[0]?.timeline?.items.map((entry) => entry.id)).toEqual([
+      "tool-search-web-tools",
+      "reasoning-web-tools",
+      "tool-fetch-web-tools",
+    ]);
   });
 });

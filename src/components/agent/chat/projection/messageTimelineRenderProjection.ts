@@ -18,6 +18,7 @@ export interface CurrentTurnTimelineProjection {
 
 export interface MessageRenderGroupProjection extends MessageTurnGroup {
   lastAssistantId: string | null;
+  timelineMessageId: string | null;
   timeline: MessageTurnTimeline | CurrentTurnTimelineProjection | null;
   isActiveGroup: boolean;
 }
@@ -46,6 +47,17 @@ export function buildTimelineByMessageIdProjection(params: {
   });
 }
 
+export function buildDeferredTimelineByMessageIdProjection(params: {
+  renderedMessages: Message[];
+  renderedTurns: AgentThreadTurn[];
+}): Map<string, MessageTurnTimeline> {
+  return buildMessageTurnTimeline(
+    params.renderedMessages,
+    params.renderedTurns,
+    [],
+  );
+}
+
 function normalizeRuntimeTurnId(message: Message): string | null {
   const normalized = message.runtimeTurnId?.trim();
   return normalized || null;
@@ -55,6 +67,48 @@ function hasConversationProcessItem(items: AgentThreadItem[]): boolean {
   return items.some(
     (item) => item.type !== "user_message" && item.type !== "agent_message",
   );
+}
+
+function collectMessageToolIds(message: Message): Set<string> {
+  const ids = new Set<string>();
+  for (const toolCall of message.toolCalls || []) {
+    if (toolCall.id?.trim()) {
+      ids.add(toolCall.id.trim());
+    }
+  }
+  for (const part of message.contentParts || []) {
+    if (part.type === "tool_use" && part.toolCall.id?.trim()) {
+      ids.add(part.toolCall.id.trim());
+    }
+  }
+  return ids;
+}
+
+function collectThreadItemToolIds(items: AgentThreadItem[]): Set<string> {
+  const ids = new Set<string>();
+  for (const item of items) {
+    if (
+      item.type === "tool_call" ||
+      item.type === "command_execution" ||
+      item.type === "patch" ||
+      item.type === "web_search"
+    ) {
+      ids.add(item.id);
+    }
+  }
+  return ids;
+}
+
+function hasSharedToolId(
+  left: ReadonlySet<string>,
+  right: ReadonlySet<string>,
+): boolean {
+  for (const value of left) {
+    if (right.has(value)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function resolveFallbackTurnStatus(
@@ -125,6 +179,55 @@ function attachRuntimeTurnItemFallbackTimelines(params: {
   }
 
   let nextTimelineByMessageId = params.timelineByMessageId;
+  const candidateProcessTurns = [...itemsByTurnId.entries()]
+    .filter(([turnId, items]) => {
+      if (mappedTurnIds.has(turnId) || !hasConversationProcessItem(items)) {
+        return false;
+      }
+      return collectThreadItemToolIds(items).size > 0;
+    })
+    .map(([turnId, items]) => ({
+      turnId,
+      items,
+      toolIds: collectThreadItemToolIds(items),
+    }));
+
+  for (const message of params.renderedMessages) {
+    if (
+      message.role !== "assistant" ||
+      nextTimelineByMessageId.has(message.id)
+    ) {
+      continue;
+    }
+
+    const messageToolIds = collectMessageToolIds(message);
+    if (messageToolIds.size === 0) {
+      continue;
+    }
+
+    const matchingTurns = candidateProcessTurns.filter(
+      (entry) =>
+        !mappedTurnIds.has(entry.turnId) &&
+        hasSharedToolId(messageToolIds, entry.toolIds),
+    );
+    if (matchingTurns.length !== 1) {
+      continue;
+    }
+
+    const [{ turnId, items }] = matchingTurns;
+    if (nextTimelineByMessageId === params.timelineByMessageId) {
+      nextTimelineByMessageId = new Map(params.timelineByMessageId);
+    }
+    nextTimelineByMessageId.set(message.id, {
+      messageId: message.id,
+      turn:
+        turnById.get(turnId) ||
+        buildFallbackTurnFromItems(turnId, items, message),
+      items,
+    });
+    mappedTurnIds.add(turnId);
+  }
+
   for (const message of params.renderedMessages) {
     if (
       message.role !== "assistant" ||
@@ -244,19 +347,23 @@ export function buildMessageRenderGroupsProjection(params: {
         break;
       }
     }
-    const isCurrentTurnGroup =
-      Boolean(lastAssistantId) &&
-      params.currentTurnTimeline?.messageId === lastAssistantId;
+    const currentTurnMessageId = params.currentTurnTimeline?.messageId ?? null;
+    const isCurrentTurnGroup = Boolean(
+      currentTurnMessageId &&
+        group.assistantMessages.some(
+          (message) => message.id === currentTurnMessageId,
+        ),
+    );
     const isActiveGroup =
       Boolean(lastAssistantId) &&
       lastAssistantId === params.lastAssistantMessageId;
-    const timeline = isCurrentTurnGroup
-      ? params.currentTurnTimeline
-      : mappedTimeline;
+    const timeline =
+      mappedTimeline || (isCurrentTurnGroup ? params.currentTurnTimeline : null);
 
     return {
       ...group,
       lastAssistantId,
+      timelineMessageId: timeline?.messageId ?? null,
       timeline,
       isActiveGroup,
     };

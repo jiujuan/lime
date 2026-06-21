@@ -195,6 +195,7 @@ fn app_server_method_catalog_keeps_request_and_notification_methods_together() {
             METHOD_MCP_SERVER_ENABLED_SET,
             METHOD_MCP_SERVER_IMPORT_FROM_APP,
             METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE,
+            METHOD_MCP_SERVER_OAUTH_LOGIN,
             METHOD_MCP_SERVER_START,
             METHOD_MCP_SERVER_STOP,
             METHOD_MCP_TOOL_LIST,

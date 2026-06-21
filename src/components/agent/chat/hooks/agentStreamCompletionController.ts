@@ -192,6 +192,20 @@ function isProcessBoundaryContentPart(
   );
 }
 
+function shouldRetainPersistedThinkingContentPart(
+  part: NonNullable<Message["contentParts"]>[number],
+): boolean {
+  if (part.type !== "thinking") {
+    return false;
+  }
+  const metadata = part.metadata;
+  return (
+    Boolean(metadata?.threadItemId) &&
+    (metadata?.source === "thread_item_reasoning" ||
+      metadata?.source === "agent_thread_item")
+  );
+}
+
 function completeRunningToolCallOnFinalDone(
   toolCall: NonNullable<Message["toolCalls"]>[number],
   completedAt: Date,
@@ -246,7 +260,11 @@ export function reconcileAgentStreamFinalContentParts(params: {
 
   const visibleParts = params.surfaceThinkingDeltas
     ? params.parts
-    : params.parts.filter((part) => part.type !== "thinking");
+    : params.parts.filter(
+        (part) =>
+          part.type !== "thinking" ||
+          shouldRetainPersistedThinkingContentPart(part),
+      );
   if (visibleParts.length === 0) {
     return undefined;
   }

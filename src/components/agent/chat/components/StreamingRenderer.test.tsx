@@ -1,372 +1,66 @@
-import React from "react";
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { StreamingRenderer } from "./StreamingRenderer";
-import type {
-  AgentToolCallState,
-  AgentToolResultMetadata,
-} from "@/lib/api/agentProtocol";
-import type {
-  AgentRuntimeStatus,
-  ActionRequired,
-  ContentPart,
-  WriteArtifactContext,
-} from "../types";
+import { describe, expect, it, vi } from "vitest";
+import {
+  listAgentRuntimeFileCheckpointsMock,
+  mockMarkdownRenderer,
+  parseAIResponseMock,
+  restoreAgentRuntimeFileCheckpointMock,
+} from "./StreamingRenderer.testMocks";
+import { resolveStreamingMarkdownDisplaySource } from "./streamingMarkdownDisplaySource";
+import type { ContentPart } from "../types";
+import {
+  createSavedSiteMetadata,
+  installStreamingRendererTestHarness,
+  renderStreamingRendererHarness as renderHarness,
+} from "./StreamingRenderer.testHarness";
 
-const parseAIResponseMock = vi.fn();
-const listAgentRuntimeFileCheckpointsMock = vi.fn();
-const restoreAgentRuntimeFileCheckpointMock = vi.fn();
-const mockMarkdownRenderer = vi.fn(
-  ({
-    content,
-    showBlockActions,
-    onQuoteContent,
-    renderMode,
-  }: {
-    content: string;
-    showBlockActions?: boolean;
-    onQuoteContent?: (content: string) => void;
-    renderMode?: "standard" | "light";
-  }) => (
-    <div
-      data-testid="markdown-renderer"
-      data-show-block-actions={showBlockActions ? "yes" : "no"}
-      data-has-on-quote-content={onQuoteContent ? "yes" : "no"}
-      data-render-mode={renderMode || "standard"}
-    >
-      {content}
-    </div>
-  ),
-);
-
-vi.mock("@/components/workspace/a2ui/parser", () => ({
-  parseAIResponse: (...args: unknown[]) => parseAIResponseMock(...args),
-}));
-
-vi.mock("@/components/workspace/a2ui/taskCardPresets", () => ({
-  CHAT_A2UI_TASK_CARD_PRESET: {},
-  TIMELINE_A2UI_TASK_CARD_PRESET: {},
-}));
-
-vi.mock("@/lib/artifact/hooks/useDebouncedValue", () => ({
-  useDebouncedValue: <T,>(value: T) => value,
-}));
-
-vi.mock("@/lib/api/agentRuntime", () => ({
-  listAgentRuntimeFileCheckpoints: (...args: unknown[]) =>
-    listAgentRuntimeFileCheckpointsMock(...args),
-  restoreAgentRuntimeFileCheckpoint: (...args: unknown[]) =>
-    restoreAgentRuntimeFileCheckpointMock(...args),
-}));
-
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    i18n: { language: "zh-CN" },
-    t: (key: string, values?: Record<string, unknown>) => {
-      if (key === "agentChat.fileChangesSummary.summary") {
-        return `已编辑 ${values?.count ?? 0} 个文件`;
-      }
-      if (key === "agentChat.fileChangesSummary.review") {
-        return "审核";
-      }
-      if (key === "agentChat.fileChangesSummary.undo") {
-        return "撤销";
-      }
-      if (key === "agentChat.fileChangesSummary.undoUnavailable") {
-        return "没有可用的文件快照";
-      }
-      if (key === "agentChat.fileChangesSummary.undoConfirmTitle") {
-        return "撤销这些文件改动？";
-      }
-      if (key === "agentChat.fileChangesSummary.undoConfirmDescription") {
-        return `将从运行时文件快照恢复 ${values?.count ?? 0} 个文件，并保留当前文件备份。`;
-      }
-      if (key === "agentChat.fileChangesSummary.undoConfirmAction") {
-        return "确认撤销";
-      }
-      if (key === "agentChat.fileChangesSummary.undoCancel") {
-        return "取消";
-      }
-      if (key === "agentChat.fileChangesSummary.undoRestoring") {
-        return "正在撤销文件改动…";
-      }
-      if (key === "agentChat.fileChangesSummary.undoSuccess") {
-        return `已撤销 ${values?.count ?? 0} 个文件改动`;
-      }
-      if (key === "agentChat.fileChangesSummary.undoFailed") {
-        return `撤销失败：${values?.error ?? ""}`;
-      }
-      if (key.startsWith("agentChat.fileChangesSummary.undoError.")) {
-        return key;
-      }
-      if (key === "agentChat.fileChangesSummary.expandFiles") {
-        return `展开其余 ${values?.count ?? 0} 个文件`;
-      }
-      if (key === "agentChat.fileChangesSummary.collapseFiles") {
-        return "收起文件";
-      }
-      if (key === "agentChat.fileChangesSummary.writing") {
-        return "正在写入文件…";
-      }
-      if (key === "agentChat.fileChangesSummary.reviewCanvasTitle") {
-        return `${values?.path ?? ""} 的变更审阅`;
-      }
-      if (key === "agentChat.fileChangesSummary.reviewCanvasStatus") {
-        return `状态：${values?.status ?? ""}`;
-      }
-      if (key === "agentChat.fileChangesSummary.reviewStatus.modified") {
-        return "修改";
-      }
-      if (key === "agentChat.fileChangesSummary.reviewStatus.added") {
-        return "新增";
-      }
-      if (key === "agentChat.fileChangesSummary.reviewStatus.deleted") {
-        return "删除";
-      }
-      if (key === "agentChat.fileChangesSummary.reviewStatus.unknown") {
-        return "变更";
-      }
-      if (key === "agentChat.fileChangesSummary.reviewAdditions") {
-        return `+${values?.count ?? 0} 行`;
-      }
-      if (key === "agentChat.fileChangesSummary.reviewDeletions") {
-        return `-${values?.count ?? 0} 行`;
-      }
-      if (key === "agentChat.fileChangesSummary.reviewHunks") {
-        return `${values?.count ?? 0} 处变更`;
-      }
-      if (key === "agentChat.toolCall.importedCommandRecord.title") {
-        return "导入的命令记录";
-      }
-      if (key === "agentChat.toolCall.importedCommandRecord.groupTitle") {
-        return "导入的命令记录";
-      }
-      if (key === "agentChat.toolCall.importedCommandRecord.description") {
-        return "从本地历史导入的执行记录，仅用于还原当时的过程；不会重新执行，也不需要再次授权。";
-      }
-      if (key === "agentChat.processGroup.completedThinking") {
-        return "已完成思考";
-      }
-      if (key === "agentChat.processGroup.importedSteps") {
-        return `导入过程 ${values?.count ?? 0} 个步骤`;
-      }
-      if (key === "agentChat.processGroup.failedSteps") {
-        return `失败 ${values?.count ?? 0} 个步骤`;
-      }
-      if (key === "agentChat.processGroup.runningSteps") {
-        return `进行中 ${values?.count ?? 0} 个步骤`;
-      }
-      if (key === "agentChat.processGroup.completedSteps") {
-        return `已完成 ${values?.count ?? 0} 个步骤`;
-      }
-      if (key === "agentChat.processGroup.thinking") {
-        return "思考中";
-      }
-      if (key === "agentChat.processGroup.toolCalls") {
-        return `${values?.count ?? 0} 个工具调用`;
-      }
-      if (key === "agentChat.processGroup.processMessages") {
-        return `${values?.count ?? 0} 条过程消息`;
-      }
-      if (key === "agentChat.processGroup.thinkingNotes") {
-        return `${values?.count ?? 0} 条思路`;
-      }
-      if (key === "agentChat.processGroup.separator") {
-        return "，";
-      }
-      if (
-        key === "agentChat.processGroup.webSearch.section.webSearchSources"
-      ) {
-        return "搜索来源";
-      }
-      if (key === "agentChat.processGroup.webSearch.section.webFetchPages") {
-        return "读取页面";
-      }
-      if (key === "agentChat.searchResultPreview.previewAria") {
-        return `预览搜索结果：${values?.title ?? ""}`;
-      }
-      if (key === "agentChat.searchResultPreview.emptySnippet") {
-        return "暂无摘要";
-      }
-      if (key === "agentChat.toolCall.inline.expandDetails") {
-        return "展开过程详情";
-      }
-      if (key === "agentChat.toolCall.inline.collapseDetails") {
-        return "收起过程详情";
-      }
-      if (key === "agentChat.toolCall.siteResult.openMarkdownPreview") {
-        return "在下方预览导出 Markdown";
-      }
-      if (key === "agentChat.toolCall.siteResult.openSavedContent") {
-        return "打开已保存内容";
-      }
-      return key;
-    },
-  }),
-}));
-
-vi.mock("./MarkdownRenderer", () => ({
-  MarkdownRenderer: (props: {
-    content: string;
-    showBlockActions?: boolean;
-    onQuoteContent?: (content: string) => void;
-    renderMode?: "standard" | "light";
-  }) => mockMarkdownRenderer(props),
-}));
-
-vi.mock("./A2UITaskCard", () => ({
-  A2UITaskCard: ({
-    compact,
-    className,
-    preview,
-    onSubmit,
-  }: {
-    compact?: boolean;
-    className?: string;
-    preview?: boolean;
-    onSubmit?: unknown;
-  }) => (
-    <div
-      data-testid="a2ui-card"
-      data-compact={String(compact)}
-      data-preview={String(preview)}
-      data-has-on-submit={onSubmit ? "yes" : "no"}
-      className={className}
-    />
-  ),
-  A2UITaskLoadingCard: ({
-    compact,
-    className,
-  }: {
-    compact?: boolean;
-    className?: string;
-  }) => (
-    <div
-      data-testid="a2ui-loading-card"
-      data-compact={String(compact)}
-      className={className}
-    />
-  ),
-}));
-
-vi.mock("./DecisionPanel", () => ({
-  DecisionPanel: () => <div data-testid="decision-panel" />,
-}));
-
-vi.mock("./AgentPlanBlock", () => ({
-  AgentPlanBlock: ({
-    content,
-    isComplete,
-  }: {
-    content: string;
-    isComplete?: boolean;
-  }) => (
-    <div data-testid="agent-plan-block">
-      {isComplete === false ? "进行中:" : "完成:"}
-      {content}
-    </div>
-  ),
-}));
-
-interface MountedHarness {
-  container: HTMLDivElement;
-  root: Root;
-}
-
-const mountedRoots: MountedHarness[] = [];
-
-beforeEach(() => {
-  (
-    globalThis as typeof globalThis & {
-      IS_REACT_ACT_ENVIRONMENT?: boolean;
-    }
-  ).IS_REACT_ACT_ENVIRONMENT = true;
-  parseAIResponseMock.mockImplementation((content: string) => ({
-    parts: content.trim() ? [{ type: "text", content: content.trim() }] : [],
-    hasA2UI: false,
-    hasWriteFile: false,
-    hasPending: false,
-  }));
-});
-
-afterEach(() => {
-  while (mountedRoots.length > 0) {
-    const mounted = mountedRoots.pop();
-    if (!mounted) break;
-    act(() => {
-      mounted.root.unmount();
-    });
-    mounted.container.remove();
-  }
-  vi.useRealTimers();
-  vi.clearAllMocks();
-});
-
-function renderHarness(props: {
-  content: string;
-  isStreaming?: boolean;
-  thinkingContent?: string;
-  contentParts?: ContentPart[];
-  renderA2UIInline?: boolean;
-  runtimeStatus?: AgentRuntimeStatus;
-  showRuntimeStatusInline?: boolean;
-  toolCalls?: AgentToolCallState[];
-  actionRequests?: ActionRequired[];
-  promoteActionRequestsToA2UI?: boolean;
-  onPermissionResponse?: (payload: unknown) => void;
-  onWriteFile?: (
-    content: string,
-    fileName: string,
-    context?: WriteArtifactContext,
-  ) => void;
-  onFileClick?: (fileName: string, content: string) => void;
-  fileChangesUndoSessionId?: string | null;
-  onOpenSavedSiteContent?: (target: {
-    projectId: string;
-    contentId: string;
-    title?: string;
-  }) => void;
-  onOpenUrlPreview?: (item: unknown) => void;
-  suppressProcessFlow?: boolean;
-  showContentBlockActions?: boolean;
-  onQuoteContent?: (content: string) => void;
-  markdownRenderMode?: "standard" | "light";
-  readOnlyA2UI?: boolean;
-  readOnlyActionRequests?: boolean;
-}) {
-  const container = document.createElement("div");
-  document.body.appendChild(container);
-  const root = createRoot(container);
-
-  const rerender = (nextProps: typeof props) => {
-    act(() => {
-      root.render(<StreamingRenderer {...nextProps} />);
-    });
-  };
-
-  rerender(props);
-  mountedRoots.push({ container, root });
-
-  return { container, rerender };
-}
-
-function createSavedSiteMetadata(): AgentToolResultMetadata {
-  return {
-    tool_family: "site",
-    saved_project_id: "project-1",
-    saved_content: {
-      content_id: "content-1",
-      project_id: "project-1",
-      title: "Google Cloud Tech 文章导出",
-      markdown_relative_path: "saved/x-article-export/article.md",
-      images_relative_dir: "saved/x-article-export/images",
-      image_count: 2,
-    },
-  };
-}
+installStreamingRendererTestHarness();
 
 describe("StreamingRenderer", () => {
+  it("流式 Markdown 应只把完整换行前的源码交给 Markdown renderer", () => {
+    expect(
+      resolveStreamingMarkdownDisplaySource(
+        "| 来源 | 结论 |\n| --- | --- |\n| Codex",
+        true,
+      ),
+    ).toEqual({
+      markdown: "| 来源 | 结论 |\n| --- | --- |\n",
+      pendingTail: "| Codex",
+    });
+
+    expect(
+      resolveStreamingMarkdownDisplaySource("## 标题", true),
+    ).toEqual({
+      markdown: "",
+      pendingTail: "## 标题",
+    });
+
+    expect(
+      resolveStreamingMarkdownDisplaySource("## 标题", false),
+    ).toEqual({
+      markdown: "## 标题",
+      pendingTail: "",
+    });
+  });
+
+  it("流式 Markdown 未完成行应先按纯文本尾巴展示，避免半行表格提前解析", () => {
+    const fullText = "表格：\n| 来源";
+    const { container } = renderHarness({
+      content: fullText,
+      isStreaming: true,
+    });
+
+    const markdownContents = mockMarkdownRenderer.mock.calls.map(
+      ([props]) => props.content,
+    );
+    expect(markdownContents).not.toContain(fullText);
+    expect(markdownContents).toContain("表格：\n");
+    expect(container.textContent).toContain("| 来源");
+    expect(
+      container.querySelector('[data-testid="streaming-markdown-pending-tail"]'),
+    ).not.toBeNull();
+  });
+
   it("交错内容应隐藏紧邻工具调用的调度自述", () => {
     const { container } = renderHarness({
       content: "",
@@ -519,198 +213,6 @@ describe("StreamingRenderer", () => {
     );
     expect(container.textContent).not.toContain(
       "data:image/png;base64,ZGFzaGJvYXJk",
-    );
-  });
-
-  it("本地历史导入工具流应把网页检索从命令记录中分组展示", () => {
-    const { container } = renderHarness({
-      content: "",
-      contentParts: [
-        {
-          type: "tool_use",
-          toolCall: {
-            id: "local-history-import-command",
-            name: "Bash",
-            arguments: JSON.stringify({
-              command: "npm test",
-              cwd: "/workspace/imported-local-history",
-            }),
-            status: "completed",
-            result: {
-              success: true,
-              output: "Exit code: 0\nOutput:\nok",
-              metadata: {
-                imported: true,
-                source_client: "local_history",
-                exit_code: 0,
-              },
-            },
-            startTime: new Date("2026-06-02T09:00:00.000Z"),
-            endTime: new Date("2026-06-02T09:00:01.000Z"),
-          },
-        },
-        {
-          type: "tool_use",
-          toolCall: {
-            id: "local-history-import-search",
-            name: "web_search",
-            arguments: JSON.stringify({
-              action: "search_query",
-              query: "Lime history import",
-            }),
-            status: "completed",
-            result: {
-              success: true,
-              output: "search result summary",
-              metadata: {
-                imported: true,
-                source_client: "local_history",
-              },
-            },
-            startTime: new Date("2026-06-02T09:00:02.000Z"),
-            endTime: new Date("2026-06-02T09:00:03.000Z"),
-          },
-        },
-      ],
-    });
-
-    const processGroup = container.querySelector(
-      '[data-testid="streaming-process-group"]',
-    );
-    const processGroupButton = processGroup?.querySelector("button");
-    const processGroupButtons = container.querySelectorAll<HTMLButtonElement>(
-      '[data-testid="streaming-process-group"] > button',
-    );
-    const searchGroupButton = processGroupButtons.item(1) as
-      | HTMLButtonElement
-      | null;
-
-    expect(processGroupButtons).toHaveLength(2);
-    expect(processGroupButton?.getAttribute("aria-expanded")).toBe("true");
-    expect(container.textContent).toContain("导入的命令记录");
-    expect(searchGroupButton?.textContent).toContain("已搜索网页 1 次");
-    expect(searchGroupButton?.textContent).not.toContain(
-      "导入的命令记录",
-    );
-    expect(container.textContent).not.toContain("npm test");
-    expect(container.textContent).not.toContain("Output:");
-    expect(container.textContent).not.toContain("Lime history import");
-
-    act(() => {
-      searchGroupButton?.click();
-    });
-
-    expect(container.textContent).toContain("Lime history import");
-  });
-
-  it("纯导入网页检索批次应复用搜索与读取分段展示", () => {
-    const importedMetadata = {
-      imported: true,
-      imported_synthetic: true,
-      source_client: "local_history",
-    };
-    const onOpenUrlPreview = vi.fn();
-    const { container } = renderHarness({
-      content: "",
-      contentParts: [
-        {
-          type: "tool_use",
-          toolCall: {
-            id: "local-history-imported-web-search-only",
-            name: "web_search",
-            arguments: JSON.stringify({
-              action: "search_query",
-              query: "Lime renderer roadmap",
-            }),
-            status: "completed",
-            result: {
-              success: true,
-              output: JSON.stringify({
-                results: [
-                  {
-                    title: "Lime renderer roadmap",
-                    url: "https://example.com/lime-renderer-roadmap",
-                    snippet: "Renderer roadmap summary",
-                  },
-                ],
-              }),
-              metadata: importedMetadata,
-            },
-            startTime: new Date("2026-06-17T10:00:00.000Z"),
-            endTime: new Date("2026-06-17T10:00:01.000Z"),
-          },
-        },
-        {
-          type: "tool_use",
-          toolCall: {
-            id: "local-history-imported-web-fetch-only",
-            name: "WebFetch",
-            arguments: JSON.stringify({
-              url: "https://example.com/lime-renderer-roadmap",
-            }),
-            status: "completed",
-            result: {
-              success: true,
-              output: JSON.stringify({
-                title: "Renderer roadmap snapshot",
-                markdown: "# Renderer roadmap\n\nImported page content.",
-              }),
-              metadata: importedMetadata,
-            },
-            startTime: new Date("2026-06-17T10:00:02.000Z"),
-            endTime: new Date("2026-06-17T10:00:03.000Z"),
-          },
-        },
-      ],
-      isStreaming: false,
-      onOpenUrlPreview,
-    });
-
-    const processGroupButton = container.querySelector<HTMLButtonElement>(
-      '[data-testid="streaming-process-group"] button',
-    );
-    expect(processGroupButton?.getAttribute("aria-expanded")).toBe("false");
-    expect(processGroupButton?.textContent).toContain(
-      "已搜索网页 1 次，读取网页 1 次",
-    );
-    expect(container.textContent).not.toContain("搜索来源");
-    expect(container.textContent).not.toContain("读取页面");
-    expect(container.textContent).not.toContain("Lime renderer roadmap");
-    expect(container.textContent).not.toContain(
-      "https://example.com/lime-renderer-roadmap",
-    );
-
-    act(() => {
-      processGroupButton?.click();
-    });
-
-    expect(container.textContent).toContain("搜索来源");
-    expect(container.textContent).toContain("读取页面");
-    expect(container.textContent).toContain("Lime renderer roadmap");
-    expect(container.textContent).toContain(
-      "https://example.com/lime-renderer-roadmap",
-    );
-    expect(container.textContent).not.toContain("导入的命令记录");
-    expect(container.textContent).not.toContain("source_client");
-    expect(container.textContent).not.toContain("imported_synthetic");
-    expect(container.textContent).not.toContain("local_history");
-
-    act(() => {
-      const result = document.body.querySelector(
-        '[aria-label="预览搜索结果：Lime renderer roadmap"]',
-      ) as HTMLButtonElement | null;
-      result?.click();
-    });
-
-    expect(onOpenUrlPreview).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: "Lime renderer roadmap",
-        url: "https://example.com/lime-renderer-roadmap",
-        snippet: "Renderer roadmap summary",
-        snapshotTitle: "Renderer roadmap snapshot",
-        snapshotContent: "# Renderer roadmap\n\nImported page content.",
-        snapshotSource: "web_fetch",
-      }),
     );
   });
 
@@ -1411,7 +913,12 @@ describe("StreamingRenderer", () => {
           toolCall: {
             id: "local-history-imported-search-hydrated",
             name: "web_search",
-            arguments: JSON.stringify({ action: "search_query" }),
+            arguments: JSON.stringify({
+              action: {
+                type: "search_query",
+                query: "Lime history import",
+              },
+            }),
             status: "completed",
             result: {
               success: true,
@@ -1453,7 +960,9 @@ describe("StreamingRenderer", () => {
     expect(processGroupButton?.getAttribute("aria-expanded")).toBe("true");
     expect(container.textContent).toContain("导入的命令记录");
     expect(processGroupButton?.textContent).not.toContain("已完成 2 个步骤");
-    expect(processGroupButtons[1]?.textContent).toContain("已搜索网页 1 次");
+    expect(processGroupButtons[1]?.textContent).toContain(
+      "已搜索网页：Lime history import",
+    );
     expect(processGroupButtons[1]?.textContent).not.toContain(
       "导入的命令记录",
     );
@@ -1835,7 +1344,8 @@ describe("StreamingRenderer", () => {
     });
 
     expect(container.textContent).toContain("current sources");
-    expect(container.textContent).toContain("https://example.com/source");
+    expect(container.textContent).toContain("example.com/source");
+    expect(container.textContent).not.toContain("https://example.com/source");
     expect(container.textContent).not.toContain("Execution failed");
     expect(container.textContent).not.toContain("Fetching data issues");
   });
@@ -1895,639 +1405,6 @@ describe("StreamingRenderer", () => {
     expect(container.textContent).toContain("国际新闻简报");
     expect(container.textContent).not.toContain("raw html payload");
     expect(container.textContent).not.toContain("another raw payload");
-  });
-
-  it("消息仍在输出时，联网搜索批次应默认展开为轻量进度并保持正文穿插", () => {
-    const { container } = renderHarness({
-      content: "",
-      contentParts: [
-        {
-          type: "text",
-          text: "我先核实今天的国际新闻，再整理成简报。",
-        },
-        {
-          type: "tool_use",
-          toolCall: {
-            id: "tool-running-search-1",
-            name: "web_search",
-            arguments: JSON.stringify({ query: "today international news" }),
-            status: "running",
-            progress: { message: "正在搜索 Reuters 和 AP" },
-            result: {
-              success: true,
-              output: "raw search payload should stay hidden while running",
-            },
-            startTime: new Date("2026-06-02T09:00:00.000Z"),
-          },
-        },
-        {
-          type: "tool_use",
-          toolCall: {
-            id: "tool-running-fetch-1",
-            name: "WebFetch",
-            arguments: JSON.stringify({ url: "https://apnews.com/world" }),
-            status: "running",
-            result: {
-              success: true,
-              output: "raw fetch payload should stay hidden while running",
-            },
-            startTime: new Date("2026-06-02T09:00:01.000Z"),
-          },
-        },
-        {
-          type: "text",
-          text: "## 国际新闻简报\n\n- 正在整理已确认来源。",
-        },
-      ],
-      isStreaming: true,
-    });
-
-    const processGroup = container.querySelector<HTMLButtonElement>(
-      '[data-testid="streaming-process-group"] button',
-    );
-    const renderedText = container.textContent || "";
-    const introIndex = renderedText.indexOf("我先核实今天的国际新闻");
-    const processIndex = renderedText.indexOf(
-      "正在搜索网页 1 次，读取网页 1 次",
-    );
-    const queryIndex = renderedText.indexOf("today international news");
-    const briefingIndex = renderedText.indexOf("国际新闻简报");
-
-    expect(processGroup?.getAttribute("aria-expanded")).toBe("true");
-    expect(introIndex).toBeGreaterThanOrEqual(0);
-    expect(processIndex).toBeGreaterThan(introIndex);
-    expect(queryIndex).toBeGreaterThan(processIndex);
-    expect(briefingIndex).toBeGreaterThan(queryIndex);
-    expect(renderedText).toContain("https://apnews.com/world");
-    expect(renderedText).not.toContain("raw search payload");
-    expect(renderedText).not.toContain("raw fetch payload");
-  });
-
-  it("消息仍在输出且搜索后尚无最终正文时，应保持搜索过程展开", () => {
-    const { container } = renderHarness({
-      content: "",
-      contentParts: [
-        {
-          type: "text",
-          text: "我先核实学习机评测来源。",
-        },
-        {
-          type: "tool_use",
-          toolCall: {
-            id: "tool-completed-search-tail-streaming-1",
-            name: "web_search",
-            arguments: JSON.stringify({
-              query: "五年级 学习机 评测 对比",
-            }),
-            status: "completed",
-            result: {
-              success: true,
-              output: JSON.stringify({
-                results: [
-                  {
-                    title: "学习机评测汇总",
-                    url: "https://example.com/review",
-                    snippet: "评测摘要",
-                  },
-                ],
-              }),
-            },
-            startTime: new Date("2026-06-02T09:00:00.000Z"),
-            endTime: new Date("2026-06-02T09:00:01.000Z"),
-          },
-        },
-        {
-          type: "tool_use",
-          toolCall: {
-            id: "tool-completed-fetch-tail-streaming-1",
-            name: "WebFetch",
-            arguments: JSON.stringify({
-              url: "https://example.com/review",
-            }),
-            status: "completed",
-            result: {
-              success: true,
-              output: JSON.stringify({
-                bytes: 24022,
-                code: 200,
-                codeText: "OK",
-                result: "这是一篇学习机评测正文摘要。",
-              }),
-            },
-            startTime: new Date("2026-06-02T09:00:02.000Z"),
-            endTime: new Date("2026-06-02T09:00:03.000Z"),
-          },
-        },
-      ],
-      isStreaming: true,
-    });
-
-    const processGroup = container.querySelector<HTMLButtonElement>(
-      '[data-testid="streaming-process-group"] button',
-    );
-
-    expect(processGroup?.getAttribute("aria-expanded")).toBe("true");
-    expect(processGroup?.textContent).toContain(
-      "已搜索网页 1 次，读取网页 1 次",
-    );
-    expect(container.textContent).toContain("学习机评测汇总");
-    expect(container.textContent).toContain("https://example.com/review");
-    expect(container.textContent).not.toContain('"bytes"');
-    expect(container.textContent).not.toContain('"codeText"');
-    expect(container.textContent).not.toContain('"result"');
-  });
-
-  it("消息仍在输出且搜索后已有后续正文时，应保持来源展开并继续穿插正文", () => {
-    const onOpenUrlPreview = vi.fn();
-    const { container } = renderHarness({
-      content: "",
-      contentParts: [
-        {
-          type: "text",
-          text: "我先核实学习机评测来源。",
-        },
-        {
-          type: "tool_use",
-          toolCall: {
-            id: "tool-completed-search-while-streaming-1",
-            name: "web_search",
-            arguments: JSON.stringify({
-              query: "五年级 学习机 评测 对比",
-            }),
-            status: "completed",
-            result: {
-              success: true,
-              output: JSON.stringify({
-                results: [
-                  {
-                    title: "学习机横评来源",
-                    url: "https://example.com/review",
-                    snippet: "评测摘要",
-                  },
-                ],
-              }),
-            },
-            startTime: new Date("2026-06-02T09:00:00.000Z"),
-            endTime: new Date("2026-06-02T09:00:01.000Z"),
-          },
-        },
-        {
-          type: "thinking",
-          text: "搜索结果还需要继续筛掉广告软文。",
-        },
-        {
-          type: "tool_use",
-          toolCall: {
-            id: "tool-completed-fetch-while-streaming-1",
-            name: "WebFetch",
-            arguments: JSON.stringify({
-              url: "https://example.com/review",
-            }),
-            status: "completed",
-            result: {
-              success: true,
-              output: JSON.stringify({
-                bytes: 24022,
-                code: 200,
-                codeText: "OK",
-                result: "学习机横评正文摘要。",
-              }),
-            },
-            startTime: new Date("2026-06-02T09:00:02.000Z"),
-            endTime: new Date("2026-06-02T09:00:03.000Z"),
-          },
-        },
-        {
-          type: "text",
-          text: "我会继续整理结论。",
-        },
-      ],
-      isStreaming: true,
-      onOpenUrlPreview,
-    });
-
-    const processGroup = container.querySelector<HTMLButtonElement>(
-      '[data-testid="streaming-process-group"] button',
-    );
-
-    expect(processGroup?.getAttribute("aria-expanded")).toBe("true");
-    expect(processGroup?.textContent).toContain(
-      "已搜索网页 1 次，读取网页 1 次",
-    );
-    expect(container.textContent).toContain(
-      "搜索结果还需要继续筛掉广告软文。",
-    );
-    expect(container.textContent).toContain("学习机横评来源");
-    expect(container.textContent).toContain("https://example.com/review");
-    expect(container.textContent).not.toContain('"bytes"');
-    expect(container.textContent).not.toContain('"codeText"');
-    expect(container.textContent).not.toContain('"result"');
-    expect(container.textContent).toContain("我会继续整理结论。");
-  });
-
-  it("独立 WebFetch 展开态不应展示传输层 JSON 包络", () => {
-    const { container } = renderHarness({
-      content: "",
-      contentParts: [
-        {
-          type: "tool_use",
-          toolCall: {
-            id: "tool-fetch-json-envelope",
-            name: "WebFetch",
-            arguments: JSON.stringify({
-              url: "https://news.qq.com/rain/a/20251017A01ZK600",
-            }),
-            status: "completed",
-            result: {
-              success: true,
-              output: JSON.stringify({
-                bytes: 24022,
-                code: 200,
-                codeText: "OK",
-                result:
-                  "科大讯飞、学而思、作业帮学习机评测，正文里包含价格、功能和适用人群。",
-              }),
-            },
-            startTime: new Date("2026-06-02T09:00:00.000Z"),
-            endTime: new Date("2026-06-02T09:00:01.000Z"),
-          },
-        },
-      ],
-      isStreaming: true,
-    });
-
-    const toolStep = container.querySelector<HTMLButtonElement>(
-      '[data-testid="inline-tool-process-step"] button',
-    );
-    expect(toolStep?.getAttribute("aria-expanded")).toBe("false");
-
-    act(() => {
-      toolStep?.click();
-    });
-
-    expect(container.textContent).toContain(
-      "科大讯飞、学而思、作业帮学习机评测",
-    );
-    expect(container.textContent).not.toContain('"bytes"');
-    expect(container.textContent).not.toContain('"codeText"');
-    expect(container.textContent).not.toContain('"result"');
-  });
-
-  it("联网搜索之间穿插思考时，展开态应保留思考与工具顺序", () => {
-    const { container } = renderHarness({
-      content: "",
-      contentParts: [
-        {
-          type: "text",
-          text: "我先拆成几组来源核验。",
-        },
-        {
-          type: "tool_use",
-          toolCall: {
-            id: "tool-search-with-thinking-1",
-            name: "web_search",
-            arguments: JSON.stringify({
-              query: "official learning tablet review",
-            }),
-            status: "running",
-            result: undefined,
-            startTime: new Date("2026-06-02T09:00:00.000Z"),
-          },
-        },
-        {
-          type: "thinking",
-          text: "第一组结果偏新闻稿，需要继续找第三方评测。",
-        },
-        {
-          type: "tool_use",
-          toolCall: {
-            id: "tool-search-with-thinking-2",
-            name: "web_search",
-            arguments: JSON.stringify({
-              query: "third party learning tablet benchmark",
-            }),
-            status: "running",
-            result: undefined,
-            startTime: new Date("2026-06-02T09:00:01.000Z"),
-          },
-        },
-        {
-          type: "text",
-          text: "找到足够来源后我会再整理结论。",
-        },
-      ],
-      isStreaming: true,
-    });
-
-    const processGroup = container.querySelector<HTMLButtonElement>(
-      '[data-testid="streaming-process-group"] button',
-    );
-    const renderedText = container.textContent || "";
-    const introIndex = renderedText.indexOf("我先拆成几组来源核验");
-    const firstQueryIndex = renderedText.indexOf(
-      "official learning tablet review",
-    );
-    const thinkingIndex = renderedText.indexOf(
-      "第一组结果偏新闻稿，需要继续找第三方评测。",
-    );
-    const secondQueryIndex = renderedText.indexOf(
-      "third party learning tablet benchmark",
-    );
-    const finalTextIndex = renderedText.indexOf("找到足够来源后");
-
-    expect(processGroup?.getAttribute("aria-expanded")).toBe("true");
-    expect(firstQueryIndex).toBeGreaterThan(introIndex);
-    expect(thinkingIndex).toBeGreaterThan(firstQueryIndex);
-    expect(secondQueryIndex).toBeGreaterThan(thinkingIndex);
-    expect(finalTextIndex).toBeGreaterThan(secondQueryIndex);
-  });
-
-  it("交错网页搜索应作为同一条回复里的轻量过程块，不切断最终简报", () => {
-    const onOpenUrlPreview = vi.fn();
-    const { container } = renderHarness({
-      content: "",
-      contentParts: [
-        {
-          type: "text",
-          text: "我先联网核实今天的国际新闻，再整理成简报。",
-        },
-        {
-          type: "tool_use",
-          toolCall: {
-            id: "tool-news-search-1",
-            name: "web_search",
-            arguments: JSON.stringify({ query: "today international news" }),
-            status: "completed",
-            result: {
-              success: true,
-              output: JSON.stringify({
-                results: [
-                  {
-                    title: "Reuters World News",
-                    url: "https://www.reuters.com/world/",
-                  },
-                ],
-              }),
-            },
-            startTime: new Date("2026-06-02T09:00:00.000Z"),
-            endTime: new Date("2026-06-02T09:00:01.000Z"),
-          },
-        },
-        {
-          type: "tool_use",
-          toolCall: {
-            id: "tool-news-search-2",
-            name: "mcp__news__web_search",
-            arguments: JSON.stringify({ query: "global headlines" }),
-            status: "completed",
-            result: {
-              success: true,
-              output: "[AP World News](https://apnews.com/hub/world-news)",
-            },
-            startTime: new Date("2026-06-02T09:00:02.000Z"),
-            endTime: new Date("2026-06-02T09:00:03.000Z"),
-          },
-        },
-        {
-          type: "tool_use",
-          toolCall: {
-            id: "tool-news-search-3",
-            name: "WebSearchTool",
-            arguments: JSON.stringify({ query: "UN international news" }),
-            status: "completed",
-            result: {
-              success: true,
-              output: "https://news.un.org/en/",
-            },
-            startTime: new Date("2026-06-02T09:00:04.000Z"),
-            endTime: new Date("2026-06-02T09:00:05.000Z"),
-          },
-        },
-        {
-          type: "text",
-          text: "## 国际新闻简报\n\n- 多个来源已经交叉确认。\n- 以下按地区和影响排序。",
-        },
-      ],
-      isStreaming: false,
-      onOpenUrlPreview,
-    });
-
-    const renderedText = container.textContent || "";
-    const introIndex = renderedText.indexOf("我先联网核实今天的国际新闻");
-    const processIndex = renderedText.indexOf("已搜索网页 3 次");
-    const briefingIndex = renderedText.indexOf("国际新闻简报");
-    const processGroupButton = container.querySelector<HTMLButtonElement>(
-      '[data-testid="streaming-process-group"] button',
-    );
-
-    expect(introIndex).toBeGreaterThanOrEqual(0);
-    expect(processIndex).toBeGreaterThan(introIndex);
-    expect(briefingIndex).toBeGreaterThan(processIndex);
-    expect(processGroupButton?.getAttribute("aria-expanded")).toBe("true");
-    expect(renderedText).toContain("Reuters World News");
-    expect(renderedText).toContain("AP World News");
-    expect(renderedText).toContain("news.un.org");
-    expect(renderedText).toContain("多个来源已经交叉确认");
-    expect(renderedText).not.toContain('"results"');
-    expect(renderedText).toContain("https://apnews.com/hub/world-news");
-    expect(
-      container.querySelector('[data-testid="inline-tool-process-step"]'),
-    ).toBeNull();
-
-    const expandedText = container.textContent || "";
-    expect(expandedText).toContain("Reuters World News");
-    expect(expandedText).toContain("AP World News");
-    expect(expandedText).toContain("news.un.org");
-  });
-
-  it("网页搜索批次混入 WebFetch 时展开态应展示可点击来源并复用快照", () => {
-    const onOpenUrlPreview = vi.fn();
-    const { container } = renderHarness({
-      content: "",
-      contentParts: [
-        {
-          type: "text",
-          text: "我会先联网核实今天的主要国际新闻来源。",
-        },
-        {
-          type: "tool_use",
-          toolCall: {
-            id: "tool-news-mixed-search",
-            name: "web_search",
-            arguments: JSON.stringify({ query: "June 2 2026 world news" }),
-            status: "completed",
-            result: {
-              success: true,
-              output: JSON.stringify({
-                results: [
-                  {
-                    title: "Reuters World News",
-                    url: "https://www.reuters.com/world/",
-                    snippet: "搜索结果摘要",
-                  },
-                ],
-              }),
-            },
-            startTime: new Date("2026-06-02T09:00:00.000Z"),
-            endTime: new Date("2026-06-02T09:00:01.000Z"),
-          },
-        },
-        {
-          type: "tool_use",
-          toolCall: {
-            id: "tool-news-mixed-fetch-failed",
-            name: "WebFetch",
-            arguments: JSON.stringify({
-              url: "https://www.reuters.com/world/",
-            }),
-            status: "failed",
-            result: {
-              success: false,
-              output: "503 Service Unavailable",
-              error: "503 Service Unavailable",
-            },
-            startTime: new Date("2026-06-02T09:00:02.000Z"),
-            endTime: new Date("2026-06-02T09:00:03.000Z"),
-          },
-        },
-        {
-          type: "tool_use",
-          toolCall: {
-            id: "tool-news-mixed-fetch-ok",
-            name: "WebFetch",
-            arguments: JSON.stringify({
-              url: "https://www.reuters.com/world/",
-            }),
-            status: "completed",
-            result: {
-              success: true,
-              output: JSON.stringify({
-                title: "Reuters snapshot",
-                markdown: "# Reuters snapshot\n\n完整页面正文。",
-              }),
-            },
-            startTime: new Date("2026-06-02T09:00:04.000Z"),
-            endTime: new Date("2026-06-02T09:00:05.000Z"),
-          },
-        },
-        {
-          type: "text",
-          text: "## 今日国际新闻简报\n\n- 已按来源整理。",
-        },
-      ],
-      isStreaming: false,
-      onOpenUrlPreview,
-    });
-
-    const processGroupButton = container.querySelector<HTMLButtonElement>(
-      '[data-testid="streaming-process-group"] button',
-    );
-    expect(processGroupButton?.textContent).toContain(
-      "已搜索网页 1 次，读取网页 2 次",
-    );
-    expect(container.textContent).not.toContain("失败 3 个步骤");
-    expect(container.textContent).not.toContain("raw page payload");
-    expect(container.textContent).not.toContain("503 Service Unavailable");
-
-    expect(container.textContent).not.toContain("June 2 2026 world news");
-    expect(container.textContent).toContain("搜索来源");
-    expect(container.textContent).toContain("读取页面");
-    expect(container.textContent).toContain("Reuters World News");
-    expect(container.textContent).toContain("https://www.reuters.com/world/");
-    act(() => {
-      const result = document.body.querySelector(
-        '[aria-label="预览搜索结果：Reuters World News"]',
-      ) as HTMLButtonElement | null;
-      result?.click();
-    });
-
-    expect(onOpenUrlPreview).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: "Reuters World News",
-        url: "https://www.reuters.com/world/",
-        snippet: "搜索结果摘要",
-        snapshotTitle: "Reuters snapshot",
-        snapshotContent: "# Reuters snapshot\n\n完整页面正文。",
-        snapshotSource: "web_fetch",
-      }),
-    );
-    expect(container.textContent).not.toContain("raw page payload");
-    expect(container.textContent).not.toContain("503 Service Unavailable");
-    expect(
-      container.querySelector('[data-testid="inline-tool-process-step"]'),
-    ).toBeNull();
-  });
-
-  it("网页搜索失败批次应折叠诊断 JSON，避免错误详情铺满对话", () => {
-    const missingCredentialOutput = JSON.stringify({
-      metadata: {
-        durationSeconds: 0.12,
-        web_search: {
-          attempts: [
-            {
-              provider: "tavily",
-              error: "缺少环境变量 TAVILY_API_KEY",
-            },
-          ],
-        },
-      },
-      output: "缺少环境变量 TAVILY_API_KEY",
-    });
-    const failedSearchToolCalls = Array.from({ length: 4 }, (_, index) => ({
-      type: "tool_use" as const,
-      toolCall: {
-        id: `tool-news-failed-search-${index + 1}`,
-        name: "web_search",
-        arguments: JSON.stringify({
-          query: `international news source ${index + 1}`,
-        }),
-        status: "failed" as const,
-        result: {
-          success: false,
-          output: missingCredentialOutput,
-          error: missingCredentialOutput,
-        },
-        startTime: new Date(`2026-06-02T09:00:0${index}.000Z`),
-        endTime: new Date(`2026-06-02T09:00:0${index + 1}.000Z`),
-      },
-    }));
-    const { container } = renderHarness({
-      content: "",
-      contentParts: [
-        {
-          type: "text",
-          text: "我先联网核实今天的国际新闻。",
-        },
-        ...failedSearchToolCalls,
-        {
-          type: "text",
-          text: "## 国际新闻简报\n\n- 当前搜索链路缺少凭证，先基于已有上下文整理。",
-        },
-      ],
-      isStreaming: false,
-    });
-
-    const processGroupButton = container.querySelector<HTMLButtonElement>(
-      '[data-testid="streaming-process-group"] button',
-    );
-
-    expect(processGroupButton?.textContent).toContain("已搜索网页 4 次");
-    expect(container.textContent).toContain("国际新闻简报");
-    expect(container.textContent).not.toContain("international news source 4");
-    expect(container.textContent).not.toContain('"metadata"');
-    expect(container.textContent).not.toContain("TAVILY_API_KEY");
-    expect(
-      container.querySelector('[data-testid="inline-tool-process-step"]'),
-    ).toBeNull();
-
-    act(() => {
-      processGroupButton?.click();
-    });
-
-    expect(container.textContent).toContain("international news source 1");
-    expect(container.textContent).toContain("international news source 4");
-    expect(container.textContent).not.toContain('"metadata"');
-    expect(container.textContent).not.toContain("TAVILY_API_KEY");
   });
 
   it("交错工具之间的过程状态自述不应作为正文块显示", () => {
@@ -2819,6 +1696,123 @@ describe("StreamingRenderer", () => {
     expect(expandedText).not.toContain("task_list_id");
     expect(expandedText).not.toContain("updatedFields");
     expect(expandedText).not.toContain('"tasks"');
+  });
+
+  it("服务技能完成态应隐藏嵌套运行包络 JSON", () => {
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-service-skill-nested-envelope-1",
+            name: "lime_run_service_skill",
+            arguments: JSON.stringify({
+              skill_title: "渠道预览",
+              service_skill_id: "channel-preview",
+            }),
+            status: "completed",
+            result: {
+              success: true,
+              output: JSON.stringify({
+                result: {
+                  output: {
+                    data: {
+                      serviceSkillId: "channel-preview",
+                      slotValues: {
+                        platform: "小红书",
+                      },
+                      status: "completed",
+                    },
+                  },
+                },
+              }),
+            },
+            metadata: {
+              skill_title: "渠道预览",
+            },
+            startTime: new Date("2026-06-21T10:10:00.000Z"),
+            endTime: new Date("2026-06-21T10:10:05.000Z"),
+          },
+        },
+        {
+          type: "text",
+          text: "渠道预览已经完成。",
+        },
+      ],
+      isStreaming: false,
+    });
+
+    const renderedText = container.textContent || "";
+    expect(renderedText).toContain("渠道预览已经完成。");
+    expect(renderedText).not.toContain("serviceSkillId");
+    expect(renderedText).not.toContain("slotValues");
+    expect(renderedText).not.toContain("channel-preview");
+    expect(renderedText).not.toContain("实时输出");
+    expect(renderedText).not.toContain("兼容");
+  });
+
+  it("普通 SkillTool 完成态应隐藏 gate proof JSON 包络", () => {
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-skill-gate-proof-renderer-1",
+            name: "SkillTool",
+            arguments: JSON.stringify({ skill: "capability-report" }),
+            status: "completed",
+            result: {
+              success: true,
+              output: JSON.stringify({
+                allow: {
+                  phase: "skill_tool_gate_allow",
+                  request: {
+                    toolName: "SkillTool",
+                    sessionId: "skill-source-session",
+                    skill: "capability-report",
+                    authorizationScope: "session",
+                  },
+                  decision: {
+                    action: "allow",
+                    gate: "session_allowlist",
+                    reason: "workspace_skill_runtime_enable_allowlist_matched",
+                  },
+                  result: {
+                    status: "passed",
+                    permissionBehavior: "Allow",
+                    sourceMetadataAttached: true,
+                    workspaceSkillRuntimeEnableAttached: true,
+                  },
+                },
+                sourceMetadata: {
+                  sourceDraftId: "capdraft-1",
+                  sourceVerificationReportId: "capver-1",
+                },
+                summary:
+                  "SkillTool allow/deny events both contain request, decision and result.",
+              }),
+            },
+            startTime: new Date("2026-06-21T10:20:00.000Z"),
+            endTime: new Date("2026-06-21T10:20:03.000Z"),
+          },
+        },
+        {
+          type: "text",
+          text: "技能执行完成，继续整理结果。",
+        },
+      ],
+      isStreaming: false,
+    });
+
+    const renderedText = container.textContent || "";
+    expect(renderedText).toContain("已执行 1 项技能操作");
+    expect(renderedText).not.toContain("permissionBehavior");
+    expect(renderedText).not.toContain("workspaceSkillRuntimeEnableAttached");
+    expect(renderedText).not.toContain("sourceMetadata");
+    expect(renderedText).not.toContain("skill-source-session");
+    expect(renderedText).not.toContain("SkillTool allow/deny");
   });
 
   it("交错内容里只有思考时也应渲染为轻量折叠过程行", () => {

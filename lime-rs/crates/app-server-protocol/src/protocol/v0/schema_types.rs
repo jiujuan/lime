@@ -340,6 +340,8 @@ pub const V0_SCHEMA_TYPE_NAMES: &[&str] = &[
     "McpServerImportFromAppResponse",
     "McpServerStartParams",
     "McpServerStopParams",
+    "McpServerOauthLoginParams",
+    "McpServerOauthLoginResponse",
     "McpServerLifecycleResponse",
     "McpToolListForContextParams",
     "McpToolSearchParams",

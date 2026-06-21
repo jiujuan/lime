@@ -6,6 +6,8 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 
+import { runMcpOAuthFixtureSmoke } from "./oauth-fixture-smoke.mjs";
+
 const DEFAULTS = {
   healthUrl: "http://127.0.0.1:3030/health",
   invokeUrl: "http://127.0.0.1:3030/invoke",
@@ -20,6 +22,7 @@ const DEFAULTS = {
   ),
   prefix: "mcp-current",
   allowWriteFixture: false,
+  allowOAuthFixture: false,
   cleanupFixture: true,
 };
 
@@ -42,6 +45,12 @@ const FIXTURE_METHODS = [
   "mcpResource/list",
   "mcpResource/read",
   "mcpServer/stop",
+  "mcpServer/delete",
+];
+const OAUTH_FIXTURE_METHODS = [
+  "mcpServer/create",
+  "mcpServer/oauth/login",
+  "mcpServerStatus/list",
   "mcpServer/delete",
 ];
 const LEGACY_MCP_COMMANDS = [
@@ -77,6 +86,7 @@ MCP Current Smoke
 用法:
   npm run smoke:mcp-current
   npm run smoke:mcp-current -- --allow-write-fixture
+  npm run smoke:mcp-current -- --allow-oauth-fixture
 
 选项:
   --health-url <url>       DevBridge 健康检查地址，默认 http://127.0.0.1:3030/health
@@ -86,6 +96,7 @@ MCP Current Smoke
   --evidence-dir <path>    证据目录，默认 .lime/qc/gui-evidence/mcp-current
   --prefix <name>          证据文件前缀，默认 mcp-current
   --allow-write-fixture    创建临时 stdio MCP server，覆盖 start / tool call / resource read
+  --allow-oauth-fixture    创建本地 OAuth provider，覆盖 mcpServer/oauth/login 与系统浏览器网关
   --keep-fixture           保留本脚本创建的临时 fixture 目录
   -h, --help               显示帮助
 `);
@@ -122,6 +133,10 @@ function parseArgs(argv) {
     }
     if (arg === "--allow-write-fixture") {
       options.allowWriteFixture = true;
+      continue;
+    }
+    if (arg === "--allow-oauth-fixture") {
+      options.allowOAuthFixture = true;
       continue;
     }
     if (arg === "--keep-fixture") {
@@ -432,6 +447,9 @@ function summarizeInvokeEntries(entries) {
   const appServerHandleJsonLinesSeen = entries.some(
     (entry) => entry.cmd === APP_SERVER_HANDLE_JSON_LINES_COMMAND,
   );
+  const openExternalUrlSeen = entries.some(
+    (entry) => entry.cmd === "open_external_url",
+  );
   const responses = new Map();
   for (const request of appServerRequests) {
     responses.set(request.method, request.response);
@@ -439,12 +457,16 @@ function summarizeInvokeEntries(entries) {
 
   return {
     appServerHandleJsonLinesSeen,
+    openExternalUrlSeen,
     appServerMethodsSeen,
     legacyMcpCommandsSeen,
     missingReadMethods: REQUIRED_READ_METHODS.filter(
       (method) => !appServerMethodsSeen.includes(method),
     ),
     missingFixtureMethods: FIXTURE_METHODS.filter(
+      (method) => !appServerMethodsSeen.includes(method),
+    ),
+    missingOAuthFixtureMethods: OAUTH_FIXTURE_METHODS.filter(
       (method) => !appServerMethodsSeen.includes(method),
     ),
     mcpCounts: {
@@ -790,19 +812,29 @@ async function run() {
     healthUrl: options.healthUrl,
     invokeUrl: options.invokeUrl,
     smokeMode: options.allowWriteFixture
-      ? "direct-devbridge-app-server-json-rpc-with-stdio-fixture"
-      : "direct-devbridge-app-server-json-rpc-read-only",
+      ? options.allowOAuthFixture
+        ? "direct-devbridge-app-server-json-rpc-with-stdio-and-oauth-fixtures"
+        : "direct-devbridge-app-server-json-rpc-with-stdio-fixture"
+      : options.allowOAuthFixture
+        ? "direct-devbridge-app-server-json-rpc-with-oauth-fixture"
+        : "direct-devbridge-app-server-json-rpc-read-only",
     classification:
       "MCP current path must use app_server_handle_json_lines -> App Server JSON-RPC; legacy mcp_* Tauri facade is guard-only.",
     allowWriteFixture: options.allowWriteFixture,
+    allowOAuthFixture: options.allowOAuthFixture,
     cleanupFixture: options.cleanupFixture,
     health: null,
     fixture: null,
+    oauthFixture: null,
     appServerHandleJsonLinesSeen: false,
+    openExternalUrlSeen: false,
     appServerMethodsSeen: [],
     legacyMcpCommandsSeen: [],
     missingReadMethods: [...REQUIRED_READ_METHODS],
     missingFixtureMethods: options.allowWriteFixture ? [...FIXTURE_METHODS] : [],
+    missingOAuthFixtureMethods: options.allowOAuthFixture
+      ? [...OAUTH_FIXTURE_METHODS]
+      : [],
     mcpCounts: {
       servers: null,
       statusServers: null,
@@ -834,6 +866,15 @@ async function run() {
       );
     }
 
+    if (options.allowOAuthFixture) {
+      summary.oauthFixture = await runMcpOAuthFixtureSmoke({
+        options,
+        entries: invokeEntries,
+        invokeAppServerMethod,
+        invokeBridgeCommand,
+      });
+    }
+
     const observed = summarizeInvokeEntries(invokeEntries);
     Object.assign(summary, observed);
 
@@ -862,6 +903,18 @@ async function run() {
       assert(
         summary.fixture?.fixtureToolName,
         "未记录 fixture MCP tool name",
+      );
+    }
+    if (options.allowOAuthFixture) {
+      assert(
+        summary.missingOAuthFixtureMethods.length === 0,
+        `缺少 MCP OAuth fixture current methods: ${summary.missingOAuthFixtureMethods.join(", ")}`,
+      );
+      assert(summary.openExternalUrlSeen, "未观察到 open_external_url current 网关");
+      assert(
+        summary.oauthFixture?.authStatus?.mode === "oauth" &&
+          summary.oauthFixture?.authStatus?.available === true,
+        "MCP OAuth fixture 未记录已授权状态",
       );
     }
     assert(

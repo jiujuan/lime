@@ -9,7 +9,8 @@ import {
 import {
   CONTINUE_ASSISTANT_TEXT,
   CONTINUE_USER_TEXT,
-  IMPORTED_ASSISTANT_TEXT,
+  IMPORTED_ASSISTANT_SUMMARY_TEXT,
+  IMPORTED_MARKDOWN_HEADING_TEXT,
   IMPORTED_PREVIEW_DOCX_FILE,
   IMPORTED_PREVIEW_DOCX_TEXT,
   IMPORTED_PREVIEW_HTML_FILE,
@@ -24,6 +25,9 @@ import {
   IMPORTED_PREVIEW_XLSX_TEXT,
   IMPORTED_REASONING_TEXT,
   IMPORTED_USER_TEXT,
+  IMPORTED_WEB_SEARCH_SOURCE_LABEL,
+  IMPORTED_WEB_SEARCH_TITLE,
+  IMPORTED_WEB_SEARCH_URL,
   LEGACY_CONTINUATION_SENTINEL,
   SOURCE_THREAD_ID,
 } from "./local-history-import-click-through-fixture.mjs";
@@ -175,7 +179,7 @@ export async function waitForImportPreview(page, options) {
     snapshot.importConfirmDisabled === false &&
     snapshot.bodyText.includes("本地历史导入点击闭环") &&
     snapshot.bodyText.includes(IMPORTED_USER_TEXT) &&
-    snapshot.bodyText.includes(IMPORTED_ASSISTANT_TEXT) &&
+    snapshot.bodyText.includes(IMPORTED_ASSISTANT_SUMMARY_TEXT) &&
     snapshot.bodyText.includes("将保留工具、命令、补丁、确认与思考记录") &&
     snapshot.bodyText.includes("命令") &&
     snapshot.bodyText.includes("补丁");
@@ -226,7 +230,7 @@ export async function confirmImport(page, options) {
       !snapshot.dialogVisible &&
       snapshot.textareaVisible &&
       snapshot.bodyText.includes(IMPORTED_USER_TEXT) &&
-      snapshot.bodyText.includes(IMPORTED_ASSISTANT_TEXT),
+      snapshot.bodyText.includes(IMPORTED_ASSISTANT_SUMMARY_TEXT),
     "确认导入后未进入可继续对话的会话页",
   );
 }
@@ -253,7 +257,9 @@ export function summarizeImportedDetailsSnapshot(
   const bodyText = snapshot?.bodyText || "";
   return {
     hasImportedUserMessage: bodyText.includes(IMPORTED_USER_TEXT),
-    hasImportedAssistantMessage: bodyText.includes(IMPORTED_ASSISTANT_TEXT),
+    hasImportedAssistantMessage: bodyText.includes(
+      IMPORTED_ASSISTANT_SUMMARY_TEXT,
+    ),
     hasReasoningVisible: hasVisibleImportedReasoningText(bodyText),
     hasReasoningStatusVisible: bodyText.includes("已完成思考"),
     hasReasoningItem: readModelSummary?.hasReasoningItem === true,
@@ -315,7 +321,7 @@ export async function inspectEnvironmentPopoverImportBoundary(page, options) {
     (snapshot) =>
       snapshot.textareaVisible &&
       snapshot.bodyText.includes(IMPORTED_USER_TEXT) &&
-      snapshot.bodyText.includes(IMPORTED_ASSISTANT_TEXT),
+      snapshot.bodyText.includes(IMPORTED_ASSISTANT_SUMMARY_TEXT),
     "导入会话页未稳定，无法检查环境信息边界",
   );
   const forbiddenEnvironmentTexts = [
@@ -408,7 +414,7 @@ export async function inspectImportedHistoryBanner(page, options) {
     (snapshot) =>
       snapshot.textareaVisible &&
       snapshot.bodyText.includes(IMPORTED_USER_TEXT) &&
-      snapshot.bodyText.includes(IMPORTED_ASSISTANT_TEXT),
+      snapshot.bodyText.includes(IMPORTED_ASSISTANT_SUMMARY_TEXT),
     "导入会话页未稳定，无法检查本地历史摘要",
   );
 
@@ -432,7 +438,7 @@ export async function inspectSidebarImportDiscoverability(page, options) {
     (snapshot) =>
       snapshot.textareaVisible &&
       snapshot.bodyText.includes(IMPORTED_USER_TEXT) &&
-      snapshot.bodyText.includes(IMPORTED_ASSISTANT_TEXT),
+      snapshot.bodyText.includes(IMPORTED_ASSISTANT_SUMMARY_TEXT),
     "导入会话页未稳定，无法检查侧栏会话入口",
   );
 
@@ -473,7 +479,7 @@ export async function inspectImportedAttachmentPreview(page, options) {
     (snapshot) =>
       snapshot.textareaVisible &&
       snapshot.bodyText.includes(IMPORTED_USER_TEXT) &&
-      snapshot.bodyText.includes(IMPORTED_ASSISTANT_TEXT),
+      snapshot.bodyText.includes(IMPORTED_ASSISTANT_SUMMARY_TEXT),
     "导入会话页未稳定，无法检查导入图片附件",
   );
 
@@ -817,7 +823,7 @@ export async function inspectImportedFilePreviewArtifacts(page, options) {
     (snapshot) =>
       snapshot.textareaVisible &&
       snapshot.bodyText.includes(IMPORTED_USER_TEXT) &&
-      snapshot.bodyText.includes(IMPORTED_ASSISTANT_TEXT),
+      snapshot.bodyText.includes(IMPORTED_ASSISTANT_SUMMARY_TEXT),
     "导入会话页未稳定，无法检查导入文件预览",
   );
 
@@ -880,7 +886,7 @@ async function inspectImportedSessionVisualViewport(
       current.textareaVisible &&
       current.textareaDisabled === false &&
       bodyText.includes(IMPORTED_USER_TEXT) &&
-      bodyText.includes(IMPORTED_ASSISTANT_TEXT) &&
+      bodyText.includes(IMPORTED_ASSISTANT_SUMMARY_TEXT) &&
       bodyText.includes(CONTINUE_USER_TEXT) &&
       bodyText.includes(CONTINUE_ASSISTANT_TEXT) &&
       (bodyText.includes("导入的命令记录") ||
@@ -909,6 +915,10 @@ async function inspectImportedSessionVisualViewport(
     ({
       importedUserText,
       importedAssistantText,
+      importedMarkdownHeadingText,
+      importedWebSearchSourceLabel,
+      importedWebSearchTitle,
+      importedWebSearchUrl,
       importedReasoningText,
       continueUserText,
       continueAssistantText,
@@ -953,12 +963,67 @@ async function inspectImportedSessionVisualViewport(
         continueUserText,
         continueAssistantText,
       ];
+      const rawMarkdownTexts = [
+        `${importedMarkdownHeadingText}###`,
+        "####如果历史会话",
+        "**推荐 做法 **",
+        "| 场景 | 过程 |",
+      ];
+      const searchNoiseTexts = [
+        "Help",
+        "Sign In",
+        "Yahoo Scout",
+        "https://help.yahoo.com/kb/search-for-desktop",
+        "https://login.yahoo.com/",
+      ];
+      const headingVisible = Array.from(
+        document.querySelectorAll("h1,h2,h3,h4,h5,h6"),
+      ).some((node) => (node.textContent || "").includes(importedMarkdownHeadingText));
+      const strongTexts = Array.from(document.querySelectorAll("strong")).map(
+        (node) => node.textContent || "",
+      );
+      const processGroupTexts = Array.from(
+        document.querySelectorAll('[data-testid="streaming-process-group"]'),
+      ).map((node) => node.textContent || "");
+      const processGroupText = processGroupTexts.join("\n");
+      const searchProcessGroupText =
+        processGroupTexts.find(
+          (text) =>
+            text.includes("已搜索网页") ||
+            text.includes("正在搜索网页") ||
+            text.includes("Search") ||
+            text.includes("web search"),
+        ) || "";
+      const searchRegionText = searchProcessGroupText || bodyText;
       return {
         viewportWidth,
         viewportHeight,
         bodyTextLength: bodyText.length,
         hasImportedUserMessage: bodyText.includes(importedUserText),
         hasImportedAssistantMessage: bodyText.includes(importedAssistantText),
+        markdownHeadingVisible: headingVisible,
+        markdownStrongVisible:
+          strongTexts.some((text) => text.includes("推荐 做法")) &&
+          strongTexts.some((text) => text.includes("理由")),
+        markdownTableVisible: Boolean(
+          document.querySelector('[data-testid="markdown-table-scroll"] table'),
+        ),
+        rawMarkdownVisible: rawMarkdownTexts.some((text) =>
+          bodyText.includes(text),
+        ),
+        hasImportedSearchResult:
+          searchRegionText.includes(importedWebSearchTitle) ||
+          searchRegionText.includes(importedWebSearchSourceLabel),
+        searchProcessGroupVisible:
+          processGroupText.includes("搜索") ||
+          processGroupText.includes("Search") ||
+          processGroupText.includes("web search"),
+        searchNoiseVisible:
+          Boolean(searchRegionText) &&
+          searchNoiseTexts.some((text) => searchRegionText.includes(text)),
+        hasFullSearchUrlVisible:
+          Boolean(searchRegionText) &&
+          searchRegionText.includes(importedWebSearchUrl),
         hasContinueUserMessage: bodyText.includes(continueUserText),
         hasContinueAssistantMessage: bodyText.includes(continueAssistantText),
         hasReasoningVisible: bodyText.includes(importedReasoningText),
@@ -1013,7 +1078,11 @@ async function inspectImportedSessionVisualViewport(
     },
     {
       importedUserText: IMPORTED_USER_TEXT,
-      importedAssistantText: IMPORTED_ASSISTANT_TEXT,
+      importedAssistantText: IMPORTED_ASSISTANT_SUMMARY_TEXT,
+      importedMarkdownHeadingText: IMPORTED_MARKDOWN_HEADING_TEXT,
+      importedWebSearchSourceLabel: IMPORTED_WEB_SEARCH_SOURCE_LABEL,
+      importedWebSearchTitle: IMPORTED_WEB_SEARCH_TITLE,
+      importedWebSearchUrl: IMPORTED_WEB_SEARCH_URL,
       importedReasoningText: IMPORTED_REASONING_TEXT,
       continueUserText: CONTINUE_USER_TEXT,
       continueAssistantText: CONTINUE_ASSISTANT_TEXT,
@@ -1054,6 +1123,34 @@ export async function collectImportedSessionVisualAudit(
     assert(
       audit.hasImportedAssistantMessage,
       `${viewport.label} 视口缺少导入助手消息`,
+    );
+    assert(
+      audit.markdownHeadingVisible,
+      `${viewport.label} 视口未把导入 Markdown 标题渲染为 heading`,
+    );
+    assert(
+      audit.markdownStrongVisible,
+      `${viewport.label} 视口未把导入 Markdown 加粗渲染为 strong`,
+    );
+    assert(
+      audit.markdownTableVisible,
+      `${viewport.label} 视口未把导入 Markdown 表格渲染为 table`,
+    );
+    assert(
+      !audit.rawMarkdownVisible,
+      `${viewport.label} 视口暴露了导入原始 Markdown 语法`,
+    );
+    assert(
+      audit.searchProcessGroupVisible || audit.hasSearchEvidence,
+      `${viewport.label} 视口缺少导入搜索过程组`,
+    );
+    assert(
+      !audit.searchNoiseVisible,
+      `${viewport.label} 视口暴露了搜索导航噪音`,
+    );
+    assert(
+      !audit.hasFullSearchUrlVisible,
+      `${viewport.label} 视口暴露了完整搜索 URL`,
     );
     assert(
       audit.hasContinueUserMessage,
@@ -1097,6 +1194,227 @@ export async function collectImportedSessionVisualAudit(
     audits.push(audit);
   }
   return audits;
+}
+
+async function expandImportedSearchProcessGroup(page, options) {
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < Math.min(options.timeoutMs, 15_000)) {
+    lastSnapshot = await page.evaluate(() => {
+      const groups = Array.from(
+        document.querySelectorAll('[data-testid="streaming-process-group"]'),
+      ).map((group, index) => {
+        const buttons = Array.from(group.querySelectorAll("button")).map(
+          (button, buttonIndex) => ({
+            index: buttonIndex,
+            text: button.textContent || "",
+            ariaExpanded: button.getAttribute("aria-expanded"),
+          }),
+        );
+        return {
+          index,
+          text: group.textContent || "",
+          buttons,
+        };
+      });
+      return { groups };
+    });
+    const searchGroup = lastSnapshot.groups.find((group) =>
+      group.text.includes("已搜索网页") ||
+      group.text.includes("正在搜索网页") ||
+      group.text.includes("Search") ||
+      group.text.includes("web search"),
+    );
+    if (!searchGroup) {
+      await sleep(options.intervalMs);
+      continue;
+    }
+    const toggleButton = searchGroup.buttons.find(
+      (button) => button.ariaExpanded !== null,
+    );
+    if (!toggleButton) {
+      return {
+        expanded: false,
+        reason: "search-group-has-no-toggle",
+        groupIndex: searchGroup.index,
+        groupText: searchGroup.text,
+      };
+    }
+    if (toggleButton.ariaExpanded === "true") {
+      return {
+        expanded: true,
+        reason: "already-expanded",
+        groupIndex: searchGroup.index,
+        buttonIndex: toggleButton.index,
+        groupText: searchGroup.text,
+      };
+    }
+    await page
+      .locator('[data-testid="streaming-process-group"]')
+      .nth(searchGroup.index)
+      .locator("button")
+      .nth(toggleButton.index)
+      .click();
+    return {
+      expanded: true,
+      reason: "clicked",
+      groupIndex: searchGroup.index,
+      buttonIndex: toggleButton.index,
+      groupText: searchGroup.text,
+    };
+  }
+  throw new Error(
+    `未找到导入搜索过程组: ${JSON.stringify(sanitizeJson(lastSnapshot))}`,
+  );
+}
+
+export async function inspectImportedMarkdownAndSearchRendering(page, options) {
+  const snapshot = await waitForUiSnapshot(
+    page,
+    options,
+    (current) =>
+      current.textareaVisible &&
+      current.bodyText.includes(IMPORTED_USER_TEXT) &&
+      current.bodyText.includes(IMPORTED_ASSISTANT_SUMMARY_TEXT),
+    "导入会话页未稳定，无法检查 Markdown 与搜索渲染",
+  );
+  const searchGroupExpansion = await expandImportedSearchProcessGroup(
+    page,
+    options,
+  );
+
+  const rendering = await page.evaluate(
+    ({
+      importedMarkdownHeadingText,
+      importedWebSearchTitle,
+      importedWebSearchSourceLabel,
+      importedWebSearchUrl,
+    }) => {
+      const bodyText = document.body?.innerText || "";
+      const headings = Array.from(
+        document.querySelectorAll("h1,h2,h3,h4,h5,h6"),
+      ).map((node) => node.textContent || "");
+      const strongTexts = Array.from(document.querySelectorAll("strong")).map(
+        (node) => node.textContent || "",
+      );
+      const processGroupTexts = Array.from(
+        document.querySelectorAll('[data-testid="streaming-process-group"]'),
+      ).map((node) => node.textContent || "");
+      const processGroupText = processGroupTexts.join("\n");
+      const searchProcessGroupText =
+        processGroupTexts.find(
+          (text) =>
+            text.includes("已搜索网页") ||
+            text.includes("正在搜索网页") ||
+            text.includes("Search") ||
+            text.includes("web search"),
+        ) || "";
+      const inlineToolText = Array.from(
+        document.querySelectorAll('[data-testid="inline-tool-process-step"]'),
+      )
+        .map((node) => node.textContent || "")
+        .join("\n");
+      const rawMarkdownTexts = [
+        `${importedMarkdownHeadingText}###`,
+        "####如果历史会话",
+        "**推荐 做法 **",
+        "| 场景 | 过程 |",
+      ];
+      const searchNoiseTexts = [
+        "Help",
+        "Sign In",
+        "Yahoo Scout",
+        "https://help.yahoo.com/kb/search-for-desktop",
+        "https://login.yahoo.com/",
+      ];
+      return {
+        snapshotTextLength: bodyText.length,
+        headings,
+        strongTexts,
+        processGroupText,
+        inlineToolText,
+        markdownHeadingVisible: headings.some((text) =>
+          text.includes(importedMarkdownHeadingText),
+        ),
+        markdownStrongVisible:
+          strongTexts.some((text) => text.includes("推荐 做法")) &&
+          strongTexts.some((text) => text.includes("理由")),
+        markdownTableVisible: Boolean(
+          document.querySelector('[data-testid="markdown-table-scroll"] table'),
+        ),
+        rawMarkdownVisible: rawMarkdownTexts.some((text) =>
+          bodyText.includes(text),
+        ),
+        hasImportedSearchResult:
+          searchProcessGroupText.includes(importedWebSearchTitle) ||
+          searchProcessGroupText.includes(importedWebSearchSourceLabel),
+        searchProcessGroupVisible:
+          processGroupText.includes("搜索") ||
+          processGroupText.includes("Search") ||
+          processGroupText.includes("web search"),
+        searchNoiseVisible: searchNoiseTexts.some((text) =>
+          searchProcessGroupText.includes(text),
+        ),
+        hasFullSearchUrlVisible:
+          searchProcessGroupText.includes(importedWebSearchUrl),
+      };
+    },
+    {
+      importedMarkdownHeadingText: IMPORTED_MARKDOWN_HEADING_TEXT,
+      importedWebSearchTitle: IMPORTED_WEB_SEARCH_TITLE,
+      importedWebSearchSourceLabel: IMPORTED_WEB_SEARCH_SOURCE_LABEL,
+      importedWebSearchUrl: IMPORTED_WEB_SEARCH_URL,
+    },
+  );
+
+  assert(
+    rendering.markdownHeadingVisible,
+    `导入 Markdown 标题未渲染为 heading: ${JSON.stringify(
+      sanitizeJson(rendering),
+    )}`,
+  );
+  assert(
+    rendering.markdownStrongVisible,
+    `导入 Markdown 加粗未渲染为 strong: ${JSON.stringify(
+      sanitizeJson(rendering),
+    )}`,
+  );
+  assert(
+    rendering.markdownTableVisible,
+    `导入 Markdown 表格未渲染为 table: ${JSON.stringify(
+      sanitizeJson(rendering),
+    )}`,
+  );
+  assert(
+    !rendering.rawMarkdownVisible,
+    `导入正文暴露了原始 Markdown 语法: ${JSON.stringify(
+      sanitizeJson(rendering),
+    )}`,
+  );
+  assert(
+    rendering.hasImportedSearchResult,
+    `导入搜索结果未展示有效来源: ${JSON.stringify(sanitizeJson(rendering))}`,
+  );
+  assert(
+    rendering.searchProcessGroupVisible,
+    `导入搜索过程未按过程组展示: ${JSON.stringify(sanitizeJson(rendering))}`,
+  );
+  assert(
+    !rendering.searchNoiseVisible,
+    `导入搜索结果暴露了搜索导航噪音: ${JSON.stringify(
+      sanitizeJson(rendering),
+    )}`,
+  );
+  assert(
+    !rendering.hasFullSearchUrlVisible,
+    `导入搜索结果暴露了完整 URL: ${JSON.stringify(sanitizeJson(rendering))}`,
+  );
+
+  return {
+    ...rendering,
+    searchGroupExpansion,
+    snapshotUrl: snapshot.url,
+  };
 }
 
 export async function waitForImportedSessionDetails(page, options) {

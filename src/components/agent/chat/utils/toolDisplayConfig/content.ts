@@ -17,6 +17,11 @@ const DIRECT_CONTENT_GENERATION_ACTION_KEYS = {
   completed: "action.generate.completed",
   running: "action.generate.running",
 } as const;
+const SERVICE_SKILL_RUN_ACTION_KEYS = {
+  failed: "toolCall.action.serviceSkillRun.failed",
+  completed: "toolCall.action.serviceSkillRun.completed",
+  running: "toolCall.action.serviceSkillRun.running",
+} as const;
 
 export const CONTENT_EXACT_TOOL_CONFIGS = [
   [
@@ -431,17 +436,18 @@ export const CONTENT_EXACT_TOOL_CONFIGS = [
   [
     "limerunserviceskill",
     {
-      family: "generic",
-      label: "服务技能兼容执行",
+      family: "skill",
+      label: "服务技能执行",
       verb: "执行",
-      icon: Globe,
+      icon: Settings,
       groupTitle: "服务技能",
-      actionKey: "generic",
+      actionKey: "skill",
       actions: {
-        failed: "执行失败",
-        completed: "已执行",
-        running: "执行中",
+        failed: "服务技能执行失败",
+        completed: "已执行服务技能",
+        running: "执行服务技能中",
       },
+      actionKeys: SERVICE_SKILL_RUN_ACTION_KEYS,
     },
   ],
 ] as const satisfies ReadonlyArray<readonly [string, ToolDisplayConfig]>;

@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import i18n from "i18next";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   parseAgentEvent,
   type AgentEvent,
@@ -31,8 +32,16 @@ vi.mock("sonner", () => ({
 }));
 
 describe("agentStreamRuntimeHandler", () => {
+  beforeEach(async () => {
+    document.documentElement.lang = "zh-CN";
+    if (i18n.isInitialized) {
+      await i18n.changeLanguage("zh-CN");
+    }
+  });
+
   afterEach(() => {
     vi.useRealTimers();
+    document.documentElement.lang = "";
     mockToast.success.mockReset();
     mockToast.error.mockReset();
     mockToast.info.mockReset();
@@ -305,6 +314,140 @@ describe("agentStreamRuntimeHandler", () => {
         toolCallId: "tool-1",
       }),
     ]);
+  });
+
+  it("legacy 工具投影出的 thread item 不应阻止 tool_end 更新 message 层", () => {
+    let messages: Message[] = [
+      {
+        id: "assistant-legacy-tool",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-06-21T10:00:00.000Z"),
+        runtimeTurnId: "turn-legacy-tool",
+      },
+    ];
+    let threadItems: AgentThreadItem[] = [];
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const setThreadItems = vi.fn(
+      (
+        value:
+          | AgentThreadItem[]
+          | ((prev: AgentThreadItem[]) => AgentThreadItem[]),
+      ) => {
+        threadItems = typeof value === "function" ? value(threadItems) : value;
+      },
+    );
+    const requestState = {
+      accumulatedContent: "",
+      queuedTurnId: "turn-legacy-tool",
+      currentTurnId: "turn-legacy-tool",
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+    };
+    const baseOptions = {
+      requestState,
+      callbacks: {
+        activateStream: () => {},
+        isStreamActivated: () => true,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener: () => {},
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch: () => true,
+        upsertQueuedTurn: () => {},
+        removeQueuedTurnState: () => {},
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+        appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
+          parts,
+      },
+      eventName: "agent-runtime-legacy-tool-event-test",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-legacy-tool",
+      activeSessionId: "session-legacy-tool",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react" as const,
+      content: "",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      getThreadItems: () => threadItems,
+      setMessages: setMessages as never,
+      setPendingActions: vi.fn() as never,
+      setThreadItems: setThreadItems as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: vi.fn() as never,
+    };
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "tool_start",
+        tool_id: "tool-legacy-1",
+        tool_name: "web_search",
+        turn_id: "turn-legacy-tool",
+        arguments: JSON.stringify({ query: "Codex skills" }),
+      } as AgentEvent,
+    });
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "tool_end",
+        tool_id: "tool-legacy-1",
+        turn_id: "turn-legacy-tool",
+        result: {
+          success: true,
+          output: "搜索完成",
+          metadata: {
+            sourceLinks: [
+              {
+                url: "https://example.com/codex-skills",
+                title: "Codex Skills",
+              },
+            ],
+          },
+        },
+      } as AgentEvent,
+    });
+
+    expect(threadItems[0]).toMatchObject({
+      id: "tool-legacy-1",
+      type: "tool_call",
+      status: "completed",
+      metadata: expect.objectContaining({
+        runtime_event_source: "legacy_tool_event",
+      }),
+    });
+    expect(messages[0]?.toolCalls?.[0]).toMatchObject({
+      id: "tool-legacy-1",
+      status: "completed",
+      result: {
+        success: true,
+        output: "搜索完成",
+      },
+    });
+    expect(messages[0]?.contentParts?.[0]).toMatchObject({
+      type: "tool_use",
+      toolCall: {
+        id: "tool-legacy-1",
+        status: "completed",
+        result: {
+          success: true,
+          output: "搜索完成",
+        },
+      },
+    });
   });
 
   it("已有 item lifecycle 时 legacy 工具增量不应新建 message.toolCalls", () => {

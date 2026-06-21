@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -19,30 +18,75 @@ const runtimeTranscriptPath = path.join(
 );
 const cargoTargetDir = path.resolve(
   process.env.LIME_AGENT_SERVICE_SKILL_ENTRY_TARGET_DIR ||
-    path.join(os.tmpdir(), "lime-agent-service-skill-entry-target"),
+    path.join(rootDir, "lime-rs", "target"),
 );
 
-function runVitest(label, args) {
+function stripAnsi(value) {
+  return value.replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, "");
+}
+
+function assertVitestOutputRanTests(label, output) {
+  const normalizedOutput = stripAnsi(output);
+  const testFilesLine =
+    normalizedOutput.match(/Test Files\s+([^\n]+)/)?.[1] ?? "";
+  const testsLine = normalizedOutput.match(/Tests\s+([^\n]+)/)?.[1] ?? "";
+
+  if (!testFilesLine.includes("passed") || !testsLine.includes("passed")) {
+    const error = new Error(
+      `[smoke:agent-service-skill-entry] ${label} 未实际运行通过任何 Vitest 测试`,
+    );
+    error.exitCode = 1;
+    throw error;
+  }
+}
+
+function runCommandStreaming(command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      ...options,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout?.on("data", (chunk) => {
+      const text = chunk.toString();
+      stdout += text;
+      process.stdout.write(text);
+    });
+    child.stderr?.on("data", (chunk) => {
+      const text = chunk.toString();
+      stderr += text;
+      process.stderr.write(text);
+    });
+    child.on("error", reject);
+    child.on("close", (status, signal) => {
+      resolve({ status, signal, stdout, stderr });
+    });
+  });
+}
+
+async function runVitest(label, args) {
   console.log(`\n[smoke:agent-service-skill-entry] > ${label}`);
-  const result = spawnSync(
+  const result = await runCommandStreaming(
     npmCommand,
     ["exec", "--", "vitest", "run", ...args],
     {
       cwd: rootDir,
-      stdio: "inherit",
       env: process.env,
     },
   );
 
-  if (result.error) {
-    throw result.error;
-  }
-
-  if (typeof result.status === "number" && result.status !== 0) {
+  if (result.status !== 0) {
     const error = new Error(`[smoke:agent-service-skill-entry] ${label} 失败`);
-    error.exitCode = result.status;
+    error.exitCode = result.status ?? 1;
     throw error;
   }
+
+  assertVitestOutputRanTests(
+    label,
+    `${result.stdout ?? ""}\n${result.stderr ?? ""}`,
+  );
 }
 
 function escapeRegExp(value) {
@@ -64,9 +108,12 @@ function assertCargoOutputContainsTests(label, output, expectedTests) {
   }
 }
 
-function runCargoTestGroup(label, { packageName, testFilter, expectedTests }) {
+async function runCargoTestGroup(
+  label,
+  { packageName, testFilter, expectedTests },
+) {
   console.log(`\n[smoke:agent-service-skill-entry] > ${label}`);
-  const result = spawnSync(
+  const result = await runCommandStreaming(
     "cargo",
     [
       "test",
@@ -82,25 +129,13 @@ function runCargoTestGroup(label, { packageName, testFilter, expectedTests }) {
     ],
     {
       cwd: path.join(rootDir, "lime-rs"),
-      encoding: "utf8",
       env: process.env,
     },
   );
 
-  if (result.stdout) {
-    process.stdout.write(result.stdout);
-  }
-  if (result.stderr) {
-    process.stderr.write(result.stderr);
-  }
-
-  if (result.error) {
-    throw result.error;
-  }
-
-  if (typeof result.status === "number" && result.status !== 0) {
+  if (result.status !== 0) {
     const error = new Error(`[smoke:agent-service-skill-entry] ${label} 失败`);
-    error.exitCode = result.status;
+    error.exitCode = result.status ?? 1;
     throw error;
   }
 
@@ -114,30 +149,88 @@ function runCargoTestGroup(label, { packageName, testFilter, expectedTests }) {
   }));
 }
 
-function runtimePhaseForTest(testName) {
-  if (testName.includes("register_capability_draft")) {
-    return "capability_draft_registration";
+function assertCurrentRustTestSpecs(testSpecs) {
+  const retiredPatterns = [
+    {
+      label: 'packageName: "lime"',
+      matches: ({ packageName }) => packageName === "lime",
+    },
+    {
+      label: "services::capability_draft_service",
+      matches: ({ testFilter, expectedTests }) =>
+        [testFilter, ...expectedTests].some((value) =>
+          value.includes("services::capability_draft_service"),
+        ),
+    },
+    {
+      label: "services::runtime_skill_binding_service",
+      matches: ({ testFilter, expectedTests }) =>
+        [testFilter, ...expectedTests].some((value) =>
+          value.includes("services::runtime_skill_binding_service"),
+        ),
+    },
+    {
+      label: "commands::aster_agent_cmd::workspace_skill_binding_prompt",
+      matches: ({ testFilter, expectedTests }) =>
+        [testFilter, ...expectedTests].some((value) =>
+          value.includes("commands::aster_agent_cmd::workspace_skill_binding_prompt"),
+        ),
+    },
+  ];
+  const retiredMatches = testSpecs.flatMap((testSpec) =>
+    retiredPatterns
+      .filter((pattern) => pattern.matches(testSpec))
+      .map((pattern) => `${testSpec.testFilter} -> ${pattern.label}`),
+  );
+  if (retiredMatches.length > 0) {
+    const error = new Error(
+      `[smoke:agent-service-skill-entry] Rust 测试矩阵包含已删除旧 Skill 链路: ${retiredMatches.join("; ")}`,
+    );
+    error.exitCode = 1;
+    throw error;
   }
-  if (testName.includes("registered_skill_becomes_ready")) {
+}
+
+function runtimePhaseForTest(testName) {
+  if (
+    testName.includes(
+      "list_workspace_registered_skills_value_discovers_registered_skill",
+    )
+  ) {
+    return "registered_skill_discovery";
+  }
+  if (
+    testName.includes(
+      "list_workspace_registered_skills_value_ignores_standard_skill_without_registration",
+    )
+  ) {
+    return "registered_skill_discovery_provenance_gate";
+  }
+  if (
+    testName.includes(
+      "list_workspace_skill_bindings_value_projects_readiness_without_launch",
+    )
+  ) {
     return "runtime_binding_projection";
   }
-  if (testName.includes("explicit_runtime_enable")) {
-    return "manual_session_runtime_enable";
-  }
-  if (testName.includes("registered_skill_without_verification")) {
-    return "provenance_gate_negative";
-  }
-  if (testName.includes("controlled_get")) {
-    return "readonly_execution_evidence";
-  }
-  if (testName.includes("workspace_skill_runtime_enable_as_callable_scope")) {
-    return "query_loop_prompt_projection";
-  }
-  if (testName.includes("allowlisted_session")) {
+  if (
+    testName.includes(
+      "allowlisted_session_should_preserve_workspace_skill_source_metadata",
+    )
+  ) {
     return "skill_tool_gate_allow";
   }
-  if (testName.includes("disabled_session")) {
+  if (testName.includes("disabled_session_should_fail_execute")) {
     return "skill_tool_gate_deny";
+  }
+  if (testName.includes("allowlisted_session_should_allow_only_selected_skill")) {
+    return "skill_tool_gate_allowlist_scope";
+  }
+  if (testName.includes("enabled_session_should_allow_skill_tool")) {
+    return "skill_tool_gate_session_enable";
+  }
+  if (testName.includes("disabled_session_should_deny_skill_tool")) {
+    return "skill_tool_gate_permission_deny";
   }
   return "skill_forge_runtime_gate";
 }
@@ -319,12 +412,12 @@ function writeRuntimeTranscript(cargoResults) {
       }),
     },
     evidenceRequired: {
-      capabilityDraftEvidence:
-        "capability_draft_service exact tests created, verified, registered, and controlled read-only evidence without persisting sensitive inputs.",
-      registrationResult:
-        "registration exact tests persisted readonly HTTP provenance and rejected missing provenance.",
+      frontendSkillForgeGateway:
+        "frontend vitest covers Capability Draft API gateway, workspace Skill metadata builder and explicit runtime enable request metadata.",
+      registeredSkillsDiscovery:
+        "app-server exact tests discover only workspace-local registered Skill packages with provenance metadata.",
       runtimeBindingProjection:
-        "runtime_skill_binding_service exact tests projected ready_for_manual_enable without query_loop/tool_runtime auto visibility.",
+        "app-server exact test projects ready_for_manual_enable while query_loop_visible/tool_runtime_visible/launch_enabled remain false.",
       skillToolGateTranscript:
         "lime-agent SkillTool gate exact tests covered allowlisted session source metadata and disabled-session denial.",
     },
@@ -333,10 +426,10 @@ function writeRuntimeTranscript(cargoResults) {
         "excluded: ready binding remains query_loop_visible=false, tool_runtime_visible=false, launch_enabled=false until manual enable.",
       metadataAutoEnablesSkill:
         "excluded: workspace_skill_bindings prompt projection is read-only; only workspace_skill_runtime_enable creates session allowlist.",
-      missingProvenance:
-        "covered: missing verification provenance is blocked before runtime enable.",
-      unsafeEndpointLeaked:
-        "excluded: controlled GET evidence test verifies no endpoint/token/response preview is persisted.",
+      missingRegistrationProvenance:
+        "covered: unregistered workspace Skill packages are ignored by app-server registered discovery.",
+      retiredRustSurface:
+        "excluded: removed lime package, capability_draft_service, runtime_skill_binding_service and Aster command prompt tests are rejected by the smoke matrix guard.",
     },
   };
   assertRuntimeTranscriptHasSkillToolGateEvidence(transcript);
@@ -357,12 +450,12 @@ function writeRuntimeTranscript(cargoResults) {
   );
 }
 
-function main() {
+async function main() {
   console.log(
     `[smoke:agent-service-skill-entry] Cargo target: ${cargoTargetDir}`,
   );
 
-  runVitest("Skill Forge 前端 metadata 与工作台显式启用链路", [
+  await runVitest("Skill Forge 前端 metadata 与工作台显式启用链路", [
     "src/lib/api/capabilityDrafts.test.ts",
     "src/lib/api/agentRuntime/inventoryClient.test.ts",
     "src/components/agent/chat/utils/workspaceSkillBindingsMetadata.test.ts",
@@ -370,38 +463,14 @@ function main() {
     "src/features/capability-drafts/workspaceSkillAgentAutomationDraft.test.ts",
   ]);
 
-  const cargoResults = [
+  const rustTestSpecs = [
     {
-      packageName: "lime",
-      testFilter:
-        "services::capability_draft_service::tests::register_capability_draft_persists_readonly_http_preflight_provenance",
+      packageName: "app-server",
+      testFilter: "local_data_source::skills::workspace::tests::",
       expectedTests: [
-        "services::capability_draft_service::tests::register_capability_draft_persists_readonly_http_preflight_provenance",
-      ],
-    },
-    {
-      packageName: "lime",
-      testFilter: "services::runtime_skill_binding_service::tests::",
-      expectedTests: [
-        "services::runtime_skill_binding_service::tests::registered_skill_becomes_ready_for_manual_enable_binding_candidate",
-        "services::runtime_skill_binding_service::tests::explicit_runtime_enable_projects_ready_binding_allowlist",
-        "services::runtime_skill_binding_service::tests::registered_skill_without_verification_provenance_is_blocked",
-      ],
-    },
-    {
-      packageName: "lime",
-      testFilter:
-        "services::capability_draft_service::tests::execute_capability_draft_controlled_get_returns_evidence_without_persisting_inputs",
-      expectedTests: [
-        "services::capability_draft_service::tests::execute_capability_draft_controlled_get_returns_evidence_without_persisting_inputs",
-      ],
-    },
-    {
-      packageName: "lime",
-      testFilter:
-        "commands::aster_agent_cmd::workspace_skill_binding_prompt::tests::should_project_workspace_skill_runtime_enable_as_callable_scope",
-      expectedTests: [
-        "commands::aster_agent_cmd::workspace_skill_binding_prompt::tests::should_project_workspace_skill_runtime_enable_as_callable_scope",
+        "local_data_source::skills::workspace::tests::list_workspace_registered_skills_value_discovers_registered_skill",
+        "local_data_source::skills::workspace::tests::list_workspace_registered_skills_value_ignores_standard_skill_without_registration",
+        "local_data_source::skills::workspace::tests::list_workspace_skill_bindings_value_projects_readiness_without_launch",
       ],
     },
     {
@@ -410,31 +479,41 @@ function main() {
       expectedTests: [
         "tools::skill_tool_gate::tests::allowlisted_session_should_preserve_workspace_skill_source_metadata",
         "tools::skill_tool_gate::tests::disabled_session_should_fail_execute",
+        "tools::skill_tool_gate::tests::allowlisted_session_should_allow_only_selected_skill",
+        "tools::skill_tool_gate::tests::disabled_session_should_deny_skill_tool",
+        "tools::skill_tool_gate::tests::enabled_session_should_allow_skill_tool",
       ],
     },
-  ].flatMap((testSpec) =>
-    runCargoTestGroup(
-      `Skill Forge Rust 定向测试: ${testSpec.testFilter}`,
-      testSpec,
-    ),
-  );
+  ];
+  assertCurrentRustTestSpecs(rustTestSpecs);
+  const cargoResults = [];
+  for (const testSpec of rustTestSpecs) {
+    cargoResults.push(
+      ...(await runCargoTestGroup(
+        `Skill Forge Rust 定向测试: ${testSpec.testFilter}`,
+        testSpec,
+      )),
+    );
+  }
   writeRuntimeTranscript(cargoResults);
 
-  runVitest("服务技能入口路由与挂起参数", [
+  await runVitest("服务技能入口路由与挂起参数", [
     "src/components/skills/SkillsWorkspacePage.test.tsx",
     "src/components/agent/chat/workspace/useWorkspaceServiceSkillEntryActions.test.tsx",
     "src/components/agent/chat/index.shell-routing.test.tsx",
     "src/components/AppPageContent.test.tsx",
   ]);
 
-  runVitest("Agent 对话内 A2UI 挂起主链", [
-    "src/components/agent/chat/index.test.tsx",
+  await runVitest("Agent 对话内 A2UI 挂起主链", [
+    "src/components/agent/chat/index.serviceSkillA2ui.test.tsx",
+    "src/components/agent/chat/index.currentA2ui.test.tsx",
     "--hookTimeout=180000",
-    "-t",
-    "AgentChatPage 服务技能 A2UI|AgentChatPage 当前 A2UI 事实源",
   ]);
 
   console.log("\n[smoke:agent-service-skill-entry] 通过");
 }
 
-main();
+main().catch((error) => {
+  console.error(error?.message ?? error);
+  process.exit(error?.exitCode || 1);
+});

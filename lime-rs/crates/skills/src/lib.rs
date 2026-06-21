@@ -5,6 +5,11 @@
 
 #![allow(clippy::redundant_closure)]
 
+mod agent_body;
+mod agent_render;
+mod agent_search;
+mod agent_selection;
+mod agent_snapshot;
 mod execution_callback;
 mod lime_llm_provider;
 mod llm_provider;
@@ -14,6 +19,30 @@ mod skill_matcher;
 // 电商 Skill 模块
 pub mod ecommerce_review_reply;
 
+pub use agent_body::{
+    agent_skill_body_locator_from_metadata, read_agent_skill_body, AgentSkillBody,
+    AgentSkillBodyLocator,
+};
+pub use agent_render::{
+    contains_agent_skills_prompt, contains_selected_agent_skill_body_prompt,
+    render_available_agent_skills, render_selected_agent_skill_bodies, AgentSkillBodyRenderOptions,
+    AgentSkillRenderOptions, DEFAULT_AGENT_SKILL_BODY_RENDER_CHAR_BUDGET,
+    DEFAULT_AGENT_SKILL_RENDER_CHAR_BUDGET,
+};
+pub use agent_search::{
+    reorder_agent_skill_snapshot_for_query, search_agent_skills, AgentSkillSearchOptions,
+    AgentSkillSearchResult, DEFAULT_AGENT_SKILL_SEARCH_LIMIT,
+};
+pub use agent_selection::{
+    select_agent_skills_by_name_candidates, select_explicit_agent_skills,
+    select_implicit_agent_skills, AgentSkillSelection, AgentSkillSelectionTrigger,
+};
+pub use agent_snapshot::{
+    agent_skill_roots_for_workspace, build_agent_skill_snapshot,
+    build_agent_skill_snapshot_from_roots, build_agent_skill_snapshot_from_workspace,
+    default_agent_skill_roots, AgentSkillMetadata, AgentSkillRoot, AgentSkillScope,
+    AgentSkillSnapshot, AgentSkillSnapshotOptions,
+};
 pub use execution_callback::{
     events, ExecutionCallback, ExecutionCompletePayload, StepCompletePayload, StepErrorPayload,
     StepStartPayload,

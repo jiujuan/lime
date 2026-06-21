@@ -183,6 +183,7 @@ use app_server_protocol::METHOD_MCP_SERVER_DELETE;
 use app_server_protocol::METHOD_MCP_SERVER_ENABLED_SET;
 use app_server_protocol::METHOD_MCP_SERVER_IMPORT_FROM_APP;
 use app_server_protocol::METHOD_MCP_SERVER_LIST;
+use app_server_protocol::METHOD_MCP_SERVER_OAUTH_LOGIN;
 use app_server_protocol::METHOD_MCP_SERVER_START;
 use app_server_protocol::METHOD_MCP_SERVER_STATUS_LIST;
 use app_server_protocol::METHOD_MCP_SERVER_STOP;
@@ -816,6 +817,7 @@ impl RequestProcessor {
             METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE => {
                 self.handle_mcp_server_sync_all_to_live_impl().await
             }
+            METHOD_MCP_SERVER_OAUTH_LOGIN => self.handle_mcp_server_oauth_login_impl(params).await,
             METHOD_MCP_SERVER_START => self.handle_mcp_server_start_impl(params).await,
             METHOD_MCP_SERVER_STOP => self.handle_mcp_server_stop_impl(params).await,
             METHOD_MCP_TOOL_LIST => self.handle_mcp_tool_list_impl().await,

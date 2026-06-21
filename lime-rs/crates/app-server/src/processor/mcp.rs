@@ -4,8 +4,9 @@ use super::{dispatch_result, parse_params, to_jsonrpc_error, RequestProcessor, R
 use app_server_protocol::{
     JsonRpcError, McpPromptGetParams, McpResourceReadParams, McpServerCreateParams,
     McpServerDeleteParams, McpServerEnabledSetParams, McpServerImportFromAppParams,
-    McpServerStartParams, McpServerStopParams, McpServerUpdateParams, McpToolCallParams,
-    McpToolCallWithCallerParams, McpToolListForContextParams, McpToolSearchParams,
+    McpServerOauthLoginParams, McpServerStartParams, McpServerStopParams, McpServerUpdateParams,
+    McpToolCallParams, McpToolCallWithCallerParams, McpToolListForContextParams,
+    McpToolSearchParams,
 };
 
 impl RequestProcessor {
@@ -136,6 +137,20 @@ impl RequestProcessor {
         let response = self
             .runtime
             .stop_mcp_server(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_mcp_server_oauth_login_impl(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: McpServerOauthLoginParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .login_mcp_server_oauth(params)
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)

@@ -1,20 +1,32 @@
 //! Lime MCP Crate
 //!
 //! MCP（Model Context Protocol）集成模块，提供 MCP 协议的客户端实现。
-//! 使用 DynEmitter 替代 Tauri AppHandle 进行事件发射，实现与 Tauri 的解耦。
+//! 使用 DynEmitter 进行事件发射，与具体桌面宿主解耦。
 
+pub mod auth_status;
 pub mod client;
+pub mod events;
 pub mod manager;
+pub mod naming;
+pub mod oauth;
+pub mod oauth_store;
+mod streamable_http;
 pub mod tool_converter;
+pub mod tool_policy;
 pub mod types;
 
+pub use auth_status::{McpServerAuthActionPlan, McpServerAuthStatus};
 pub use client::{LimeMcpClient, McpClientWrapper};
+pub use events::{
+    McpOAuthCompletedPayload, McpServerErrorPayload, McpServerStartedPayload,
+    McpServerStoppedPayload, McpToolsUpdatedPayload,
+};
 pub use manager::McpClientManager;
+pub use oauth::{McpOAuthLoginParams, McpOAuthLoginResponse, McpOAuthRegistry};
 pub use tool_converter::ToolConverter;
 pub use types::{
     McpContent, McpError, McpManagerState, McpPromptArgument, McpPromptDefinition,
     McpPromptMessage, McpPromptResult, McpResourceContent, McpResourceDefinition,
-    McpServerCapabilities, McpServerConfig, McpServerErrorPayload, McpServerInfo,
-    McpServerStartedPayload, McpServerStoppedPayload, McpToolCall, McpToolDefinition,
-    McpToolResult, McpToolsUpdatedPayload,
+    McpServerCapabilities, McpServerConfig, McpServerInfo, McpServerRuntimeStatus,
+    McpServerTransport, McpToolCall, McpToolDefinition, McpToolResult,
 };

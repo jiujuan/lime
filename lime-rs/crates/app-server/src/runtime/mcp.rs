@@ -69,6 +69,13 @@ impl RuntimeCore {
         self.app_data_source.stop_mcp_server(params).await
     }
 
+    pub async fn login_mcp_server_oauth(
+        &self,
+        params: McpServerOauthLoginParams,
+    ) -> Result<McpServerOauthLoginResponse, RuntimeCoreError> {
+        self.app_data_source.login_mcp_server_oauth(params).await
+    }
+
     pub async fn list_mcp_tools(&self) -> Result<McpToolListResponse, RuntimeCoreError> {
         self.app_data_source.list_mcp_tools().await
     }

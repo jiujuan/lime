@@ -356,6 +356,59 @@ mod tests {
     }
 
     #[test]
+    fn list_workspace_skill_bindings_value_projects_readiness_without_launch() {
+        let temp = TempDir::new().expect("temp dir");
+        let skill_dir = write_registered_skill(temp.path(), "readonly-report");
+
+        let bindings = list_workspace_skill_bindings_value(WorkspaceSkillBindingsListParams {
+            workspace_root: temp.path().to_string_lossy().to_string(),
+            caller: Some("assistant".to_string()),
+            workbench: true,
+            browser_assist: false,
+        })
+        .expect("list workspace skill bindings");
+
+        assert_eq!(
+            bindings.pointer("/counts/registered_total"),
+            Some(&json!(1))
+        );
+        assert_eq!(
+            bindings.pointer("/counts/ready_for_manual_enable_total"),
+            Some(&json!(1))
+        );
+        assert_eq!(
+            bindings.pointer("/counts/query_loop_visible_total"),
+            Some(&json!(0))
+        );
+        assert_eq!(
+            bindings.pointer("/counts/tool_runtime_visible_total"),
+            Some(&json!(0))
+        );
+        assert_eq!(
+            bindings.pointer("/counts/launch_enabled_total"),
+            Some(&json!(0))
+        );
+        let binding = bindings
+            .pointer("/bindings/0")
+            .expect("binding should be present");
+        assert_eq!(
+            binding.get("registered_skill_directory"),
+            Some(&json!(skill_dir.to_string_lossy().to_string()))
+        );
+        assert_eq!(
+            binding.get("binding_status"),
+            Some(&json!("ready_for_manual_enable"))
+        );
+        assert_eq!(
+            binding.get("next_gate"),
+            Some(&json!("manual_runtime_enable"))
+        );
+        assert_eq!(binding.get("query_loop_visible"), Some(&json!(false)));
+        assert_eq!(binding.get("tool_runtime_visible"), Some(&json!(false)));
+        assert_eq!(binding.get("launch_enabled"), Some(&json!(false)));
+    }
+
+    #[test]
     fn list_workspace_registered_skills_value_ignores_standard_skill_without_registration() {
         let temp = TempDir::new().expect("temp dir");
         let skill_dir = temp

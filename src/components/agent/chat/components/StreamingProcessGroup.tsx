@@ -2,19 +2,14 @@ import React, { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { SearchResultPreviewList } from "./SearchResultPreviewList";
 import { resolveThinkingDisplayParts } from "./thinkingBlockDisplay";
+import { StreamingWebSearchProcessTimeline } from "./StreamingWebSearchProcessTimeline";
 import {
   summarizeStreamingToolBatch,
   type ToolBatchSummaryDescriptor,
   type ToolBatchSummarySectionKind,
 } from "../utils/toolBatchGrouping";
-import {
-  isUnifiedWebSearchToolName,
-  resolveSearchResultPreviewItemsFromText,
-  type SearchResultPreviewItem,
-} from "../utils/searchResultPreview";
-import { attachUrlPreviewSnapshotsToSearchResults } from "../utils/urlPreviewSnapshot";
+import type { SearchResultPreviewItem } from "../utils/searchResultPreview";
 import {
   buildToolGroupHeadline,
   getToolDisplayInfo,
@@ -240,51 +235,6 @@ export const GroupedProcessShell: React.FC<{
   </div>
 );
 
-function WebSearchSupportingSections({
-  descriptor,
-  resolveSectionTitle,
-}: {
-  descriptor: ToolBatchSummaryDescriptor;
-  resolveSectionTitle: (kind: ToolBatchSummarySectionKind) => string;
-}) {
-  const sections =
-    descriptor.supportingSections && descriptor.supportingSections.length > 0
-      ? descriptor.supportingSections
-      : [
-          {
-            kind: null,
-            lines: descriptor.supportingLines,
-          },
-        ];
-
-  return (
-    <div className="space-y-3">
-      {sections.map((section, sectionIndex) => (
-        <div
-          key={`${section.kind || "web-search-lines"}-${sectionIndex}`}
-          className="space-y-1.5"
-        >
-          {section.kind ? (
-            <div className="text-[11px] font-medium leading-5 text-slate-500">
-              {resolveSectionTitle(section.kind)}
-            </div>
-          ) : null}
-          <div className="space-y-1">
-            {section.lines.slice(0, 8).map((line, lineIndex) => (
-              <div
-                key={`${section.kind || "line"}-${lineIndex}-${line}`}
-                className="text-xs leading-5 text-slate-500"
-              >
-                {line}
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export const StreamingProcessGroup: React.FC<{
   entries: StreamingProcessEntry[];
   defaultExpanded?: boolean;
@@ -309,16 +259,6 @@ export const StreamingProcessGroup: React.FC<{
         });
   const [expanded, setExpanded] = useState(defaultExpanded);
   const previousDefaultExpandedRef = useRef(defaultExpanded);
-  const toolCalls = useMemo(
-    () =>
-      entries
-        .filter(
-          (entry): entry is Extract<StreamingProcessEntry, { kind: "tool" }> =>
-            entry.kind === "tool",
-        )
-        .map((entry) => entry.toolCall),
-    [entries],
-  );
   const { summaryText, descriptor, metaText } = useMemo(
     () =>
       buildStreamingProcessSummary(entries, {
@@ -368,28 +308,10 @@ export const StreamingProcessGroup: React.FC<{
       }),
     [entries, t],
   );
-  const webSearchPreviewItems = useMemo(() => {
-    const seenUrls = new Set<string>();
-    const items = toolCalls.flatMap((toolCall) => {
-      if (!isUnifiedWebSearchToolName(toolCall.name)) {
-        return [];
-      }
-      return resolveSearchResultPreviewItemsFromText(toolCall.result?.output);
-    });
-    const uniqueItems = items.filter((item) => {
-      if (seenUrls.has(item.url)) {
-        return false;
-      }
-      seenUrls.add(item.url);
-      return true;
-    });
-    return attachUrlPreviewSnapshotsToSearchResults({
-      items: uniqueItems,
-      toolCalls,
-    });
-  }, [toolCalls]);
   const nonToolEntries = entries.filter((entry) => entry.kind !== "tool");
   const hasNonToolEntries = nonToolEntries.length > 0;
+  const processKind = descriptor?.kind || "mixed";
+  const isWebSearchProcess = descriptor?.kind === "web_search";
 
   React.useEffect(() => {
     if (previousDefaultExpandedRef.current !== defaultExpanded) {
@@ -402,21 +324,45 @@ export const StreamingProcessGroup: React.FC<{
     <div
       className="py-0.5"
       data-testid="streaming-process-group"
-      data-visual-tone="neutral"
+      data-process-kind={processKind}
+      data-process-running={descriptor?.hasRunning ? "yes" : "no"}
+      data-visual-tone={isWebSearchProcess ? "codex-activity" : "neutral"}
     >
       <button
         type="button"
-        className="flex w-full items-start gap-2 rounded-lg py-1.5 text-left transition-colors hover:bg-slate-50/70"
+        className={cn(
+          "group flex w-full items-start gap-2 rounded-lg py-1.5 text-left transition-colors hover:bg-slate-50/70",
+          isWebSearchProcess && "pr-1",
+        )}
         onClick={() => setExpanded((current) => !current)}
         aria-expanded={expanded}
       >
-        <ChevronDown
+        {isWebSearchProcess ? (
+          <span
+            className={cn(
+              "mt-2 h-2 w-2 shrink-0 rounded-full",
+              descriptor?.hasRunning
+                ? "animate-pulse bg-sky-500 shadow-[0_0_0_4px_rgba(14,165,233,0.12)]"
+                : "bg-slate-300 shadow-[0_0_0_4px_rgba(148,163,184,0.12)]",
+            )}
+            data-testid="streaming-process-status-bullet"
+          />
+        ) : (
+          <ChevronDown
+            className={cn(
+              "mt-1 h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-200",
+              expanded && "rotate-180",
+            )}
+          />
+        )}
+        <span
           className={cn(
-            "mt-1 h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-200",
-            expanded && "rotate-180",
+            "min-w-0 flex-1 text-[13px] leading-6",
+            isWebSearchProcess
+              ? "font-medium text-slate-700"
+              : "font-normal text-slate-600",
           )}
-        />
-        <span className="min-w-0 flex-1 text-[13px] font-normal leading-6 text-slate-600">
+        >
           <span className="block break-words">{summaryText}</span>
           {metaText ? (
             <span className="mt-0.5 block text-xs font-normal leading-5 text-slate-500">
@@ -438,81 +384,28 @@ export const StreamingProcessGroup: React.FC<{
             </span>
           ) : null}
         </span>
+        {isWebSearchProcess ? (
+          <ChevronDown
+            className={cn(
+              "mt-1 h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-200",
+              expanded && "rotate-180",
+            )}
+          />
+        ) : null}
       </button>
       {expanded ? (
         <div className="ml-2">
           {descriptor?.kind === "web_search" &&
-          onOpenUrlPreview &&
-          webSearchPreviewItems.length > 0 ? (
+          descriptor.supportingLines.length > 0 ? (
             <GroupedProcessShell groupMarker="└">
-              <div className="space-y-3">
-                <div className="space-y-1.5">
-                  {descriptor.supportingSections?.[0] ? (
-                    <div className="text-[11px] font-medium leading-5 text-slate-500">
-                      {resolveWebSearchSectionTitle(
-                        descriptor.supportingSections[0].kind,
-                      )}
-                    </div>
-                  ) : null}
-                  <SearchResultPreviewList
-                    items={webSearchPreviewItems}
-                    onOpenItem={onOpenUrlPreview}
-                    popoverSide="bottom"
-                    popoverAlign="start"
-                    className="max-w-2xl"
-                    variant="inline"
-                  />
-                </div>
-                {descriptor.supportingSections
-                  ?.slice(1)
-                  .map((section, sectionIndex) => (
-                    <div
-                      key={`${section.kind}-${sectionIndex}`}
-                      className="space-y-1.5"
-                    >
-                      <div className="text-[11px] font-medium leading-5 text-slate-500">
-                        {resolveWebSearchSectionTitle(section.kind)}
-                      </div>
-                      <div className="space-y-1">
-                        {section.lines.slice(0, 8).map((line, lineIndex) => (
-                          <div
-                            key={`${section.kind}-${lineIndex}-${line}`}
-                            className="text-xs leading-5 text-slate-500"
-                          >
-                            {line}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                {hasNonToolEntries ? (
-                  <div className="space-y-1">
-                    {nonToolEntries.map((entry) => (
-                      <React.Fragment key={entry.id}>
-                        {renderEntry(entry, true, "·", entries)}
-                      </React.Fragment>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            </GroupedProcessShell>
-          ) : descriptor?.kind === "web_search" &&
-            descriptor.supportingLines.length > 0 ? (
-            <GroupedProcessShell groupMarker="└">
-              {hasNonToolEntries ? (
-                <div className="space-y-1">
-                  {entries.map((entry, index) => (
-                    <React.Fragment key={entry.id}>
-                      {renderEntry(entry, true, index === 0 ? "└" : "·", entries)}
-                    </React.Fragment>
-                  ))}
-                </div>
-              ) : (
-                <WebSearchSupportingSections
-                  descriptor={descriptor}
-                  resolveSectionTitle={resolveWebSearchSectionTitle}
-                />
-              )}
+              <StreamingWebSearchProcessTimeline
+                entries={entries}
+                descriptor={descriptor}
+                hasNonToolEntries={hasNonToolEntries}
+                onOpenUrlPreview={onOpenUrlPreview}
+                resolveSectionTitle={resolveWebSearchSectionTitle}
+                renderEntry={renderEntry}
+              />
             </GroupedProcessShell>
           ) : (
             entries.map((entry, index) => (

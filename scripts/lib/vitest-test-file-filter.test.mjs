@@ -14,6 +14,17 @@ describe("vitest-test-file-filter", () => {
     expect(isVitestRunnableTestFile("src/Foo.test_fixtures.ts")).toBe(false);
   });
 
+  it("应排除本地 .lime 证据目录里的外部测试产物", () => {
+    expect(
+      isVitestRunnableTestFile(".lime/qc/playwright-cli/codex-rendering.spec.mjs"),
+    ).toBe(false);
+    expect(
+      isVitestRunnableTestFile(
+        "/repo/.lime/qc/playwright-cli/codex-rendering.spec.mjs",
+      ),
+    ).toBe(false);
+  });
+
   it("应排除 node:test 专用 package 自测文件", () => {
     expect(
       isVitestRunnableTestFile(

@@ -232,10 +232,14 @@ describe("skillCatalogBootstrap", () => {
     ).toEqual(
       expect.objectContaining({
         title: "Bootstrap 配音入口",
-        binding: {
+        binding: expect.objectContaining({
           skillId: "bootstrap-service",
           executionKind: "agent_turn",
-        },
+          skillLocator: expect.objectContaining({
+            source: "catalog",
+            name: "voice_runtime",
+          }),
+        }),
       }),
     );
   });

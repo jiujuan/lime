@@ -13,6 +13,7 @@ pub(super) fn thread_items_from_events(stored: &StoredSession) -> Vec<Value> {
     let mut last_text_item_by_turn = std::collections::HashMap::<String, usize>::new();
     let mut command_items = HashMap::<String, Value>::new();
     let mut patch_items = HashMap::<String, Value>::new();
+    let mut reasoning_items = HashMap::<String, Value>::new();
     let mut approval_items = HashMap::<String, Value>::new();
     let mut context_compaction_items = HashMap::<String, Value>::new();
     let mut subagent_items = HashMap::<String, Value>::new();
@@ -39,6 +40,9 @@ pub(super) fn thread_items_from_events(stored: &StoredSession) -> Vec<Value> {
                 if let Some(item) = reasoning_item(stored, event) {
                     items.push(item);
                 }
+            }
+            "item.started" | "item.updated" | "item.completed" => {
+                upsert_reasoning_item(stored, event, &mut reasoning_items);
             }
             "plan.delta" | "plan.final" => {
                 if let Some(item) = plan::plan_item(stored, event) {
@@ -68,11 +72,63 @@ pub(super) fn thread_items_from_events(stored: &StoredSession) -> Vec<Value> {
 
     items.extend(command_items.into_values());
     items.extend(patch_items.into_values());
+    items.extend(reasoning_items.into_values());
     items.extend(approval_items.into_values());
     items.extend(context_compaction_items.into_values());
     items.extend(subagent_items.into_values());
     sort_thread_items(&mut items);
     items
+}
+
+fn upsert_reasoning_item(
+    stored: &StoredSession,
+    event: &AgentEvent,
+    items: &mut HashMap<String, Value>,
+) {
+    let Some(next) = reasoning_item_from_item_event(stored, event) else {
+        return;
+    };
+    let Some(item_id) = string_field(&next, &["id"]) else {
+        return;
+    };
+    if let Some(existing) = items.get_mut(&item_id) {
+        merge_reasoning_item(existing, &next);
+        return;
+    }
+    if next.get("text").and_then(Value::as_str).is_none() {
+        return;
+    }
+    items.insert(item_id, next);
+}
+
+fn merge_reasoning_item(existing: &mut Value, next: &Value) {
+    let Some(existing_object) = existing.as_object_mut() else {
+        return;
+    };
+    let existing_is_completed = existing_object
+        .get("status")
+        .and_then(Value::as_str)
+        .is_some_and(|status| status == "completed");
+    let next_status = string_field(next, &["status"]).unwrap_or_else(|| "in_progress".to_string());
+    if !existing_is_completed || next_status == "completed" {
+        existing_object.insert("status".to_string(), Value::String(next_status));
+    }
+    for key in ["text", "summary", "metadata"] {
+        if let Some(value) = next.get(key).cloned() {
+            existing_object.insert(key.to_string(), value);
+        }
+    }
+    if let Some(started_at) = next.get("started_at").cloned() {
+        existing_object
+            .entry("started_at".to_string())
+            .or_insert(started_at);
+    }
+    if let Some(updated_at) = next.get("updated_at").cloned() {
+        existing_object.insert("updated_at".to_string(), updated_at);
+    }
+    if let Some(completed_at) = next.get("completed_at").cloned() {
+        existing_object.insert("completed_at".to_string(), completed_at);
+    }
 }
 
 fn sort_thread_items(items: &mut [Value]) {
@@ -697,6 +753,95 @@ fn reasoning_item(stored: &StoredSession, event: &AgentEvent) -> Option<Value> {
             "metadata": event_metadata(event),
         }),
     ))
+}
+
+fn reasoning_item_from_item_event(stored: &StoredSession, event: &AgentEvent) -> Option<Value> {
+    let item = event.payload.get("item").unwrap_or(&event.payload);
+    let payload = item.get("payload").unwrap_or(item);
+    let item_type = string_field(payload, &["type", "kind"])
+        .or_else(|| string_field(item, &["type", "kind"]))?;
+    if item_type.trim().to_ascii_lowercase() != "reasoning" {
+        return None;
+    }
+    let text = raw_string_field(
+        payload,
+        &[
+            "text",
+            "delta",
+            "summary",
+            "content",
+            "message",
+            "outputText",
+            "output_text",
+        ],
+    )
+    .map(|value| value.trim().to_string())
+    .filter(|value| !value.is_empty());
+    let status = string_field(item, &["status"])
+        .or_else(|| string_field(payload, &["status"]))
+        .map(|status| normalize_reasoning_item_status(&status))
+        .unwrap_or_else(|| {
+            if event.event_type == "item.completed" {
+                "completed".to_string()
+            } else {
+                "in_progress".to_string()
+            }
+        });
+    if text.is_none() && event.event_type != "item.completed" {
+        return None;
+    }
+    let mut value = base_item(
+        stored,
+        event,
+        "reasoning",
+        &status,
+        compact_json(json!({
+            "text": text,
+            "summary": summary_list(payload),
+            "metadata": event_metadata(event),
+        })),
+    );
+    if let Some(object) = value.as_object_mut() {
+        if let Some(id) = string_field(item, &["id", "itemId", "item_id"])
+            .or_else(|| string_field(payload, &["id", "itemId", "item_id"]))
+        {
+            object.insert("id".to_string(), Value::String(id));
+        }
+        if let Some(thread_id) =
+            string_field(item, &["thread_id", "threadId"]).or_else(|| event.thread_id.clone())
+        {
+            object.insert("thread_id".to_string(), Value::String(thread_id));
+        }
+        if let Some(turn_id) =
+            string_field(item, &["turn_id", "turnId"]).or_else(|| event.turn_id.clone())
+        {
+            object.insert("turn_id".to_string(), Value::String(turn_id));
+        }
+        if let Some(sequence) = item.get("sequence").and_then(Value::as_u64) {
+            object.insert("sequence".to_string(), json!(sequence));
+        }
+        if let Some(started_at) = string_field(item, &["started_at", "startedAt"]) {
+            object.insert("started_at".to_string(), Value::String(started_at));
+        }
+        if let Some(updated_at) = string_field(item, &["updated_at", "updatedAt"]) {
+            object.insert("updated_at".to_string(), Value::String(updated_at));
+        }
+        if let Some(completed_at) = string_field(item, &["completed_at", "completedAt"]) {
+            object.insert("completed_at".to_string(), Value::String(completed_at));
+        }
+    }
+    Some(value)
+}
+
+fn normalize_reasoning_item_status(status: &str) -> String {
+    match status.trim() {
+        "running" | "pending" | "started" | "inProgress" | "in_progress" => {
+            "in_progress".to_string()
+        }
+        "completed" | "succeeded" | "success" => "completed".to_string(),
+        "failed" | "error" => "failed".to_string(),
+        _ => "in_progress".to_string(),
+    }
 }
 
 fn base_item(

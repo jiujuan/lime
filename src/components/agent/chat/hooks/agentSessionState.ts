@@ -15,6 +15,7 @@ import type { AgentSessionCachedSnapshot } from "./agentSessionScopedStorage";
 import { normalizeLegacyThreadItems } from "@/lib/api/agentTextNormalization";
 import {
   hydrateSessionDetailMessages,
+  mergeThreadItemReasoningIntoMessages,
   mergeHydratedMessagesWithLocalState,
   normalizeHistoricalTopicSnapshotMessages,
   shouldCompactCompletedSessionHistory,
@@ -453,13 +454,17 @@ export function buildHydratedAgentSessionSnapshot(
             hydratedMessages,
           )
         : hydratedMessages;
+  const nextMessagesWithThreadReasoning = mergeThreadItemReasoningIntoMessages(
+    nextMessages,
+    nextThreadItems,
+  );
 
   return {
     executionStrategy: normalizeExecutionStrategy(nextExecutionStrategy),
     snapshot: {
       sessionId: syncSessionId ? topicId : currentSessionId,
       workingDir: detail.working_dir?.trim() || null,
-      messages: nextMessages,
+      messages: nextMessagesWithThreadReasoning,
       threadTurns: nextThreadTurns,
       threadItems: nextThreadItems,
       currentTurnId: resolveCurrentTurnIdFromTimeline({

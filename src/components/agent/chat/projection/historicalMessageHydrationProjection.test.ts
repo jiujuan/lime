@@ -93,7 +93,7 @@ describe("historicalMessageHydrationProjection", () => {
         }),
         restoredState,
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       isHistoricalAssistantMessageHydrationCandidate(
         message("assistant-running-tool-use", {

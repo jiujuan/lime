@@ -258,16 +258,18 @@ fn response_item_web_search_event(payload: &Value) -> Option<ImportedRuntimeEven
     let call_id = call_id(payload)?;
     let action = payload.get("action").cloned();
     Some(ImportedRuntimeEvent::new(
-        "tool.result",
+        "tool.started",
         compact_json(json!({
             "toolCallId": call_id,
             "toolName": "web_search",
             "name": "web_search",
-            "status": string_field(payload, &["status"]).unwrap_or_else(|| "completed".to_string()),
-            "success": true,
-            "action": action.as_ref().and_then(Value::as_str),
-            "result": action,
-            "output": action.as_ref().map(Value::to_string),
+            "status": "in_progress",
+            "action": action.as_ref().and_then(web_search_action_label),
+            "arguments": action.as_ref().map(|action| json!({
+                "action": action,
+                "query": web_search_action_query(action),
+            })),
+            "query": action.as_ref().and_then(web_search_action_query),
             "sourceClient": "codex",
             "sourceEventType": "web_search_call",
         })),
@@ -505,6 +507,8 @@ fn image_generation_finished_event(payload: &Value) -> ImportedRuntimeEvent {
 
 fn web_search_end_event(payload: &Value) -> ImportedRuntimeEvent {
     let action = payload.get("action").cloned();
+    let output = response_item_output(payload).or_else(|| action.as_ref().map(Value::to_string));
+    let query = action.as_ref().and_then(web_search_action_query);
     ImportedRuntimeEvent::new(
         "tool.result",
         compact_json(json!({
@@ -513,9 +517,15 @@ fn web_search_end_event(payload: &Value) -> ImportedRuntimeEvent {
             "name": "web_search",
             "status": "completed",
             "success": true,
-            "action": action.as_ref().and_then(Value::as_str),
+            "action": action.as_ref().and_then(web_search_action_label),
+            "arguments": action.as_ref().map(|action| json!({
+                "action": action,
+                "query": query.clone(),
+            })),
+            "query": query,
             "result": action,
-            "output": action.as_ref().map(Value::to_string),
+            "output": output,
+            "outputPreview": output.as_deref().map(truncate_output_preview),
             "sourceClient": "codex",
             "sourceEventType": "web_search_end",
         })),
@@ -1043,6 +1053,25 @@ fn mcp_result_is_error(result: Option<&Value>) -> bool {
         .or_else(|| result.pointer("/ok/isError").and_then(Value::as_bool))
         .or_else(|| result.pointer("/Err").map(|_| true))
         .unwrap_or(false)
+}
+
+fn web_search_action_query(action: &Value) -> Option<String> {
+    string_field(action, &["query", "url", "pattern"]).or_else(|| {
+        action
+            .get("queries")
+            .and_then(Value::as_array)
+            .and_then(|queries| queries.first())
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .filter(|value| !value.trim().is_empty())
+    })
+}
+
+fn web_search_action_label(action: &Value) -> Option<String> {
+    action
+        .as_str()
+        .map(str::to_string)
+        .or_else(|| string_field(action, &["type", "kind", "action"]))
 }
 
 fn string_field(payload: &Value, keys: &[&str]) -> Option<String> {

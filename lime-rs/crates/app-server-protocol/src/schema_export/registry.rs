@@ -436,6 +436,8 @@ pub(super) fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<McpServerImportFromAppResponse>("McpServerImportFromAppResponse"),
         typed_schema::<McpServerStartParams>("McpServerStartParams"),
         typed_schema::<McpServerStopParams>("McpServerStopParams"),
+        typed_schema::<McpServerOauthLoginParams>("McpServerOauthLoginParams"),
+        typed_schema::<McpServerOauthLoginResponse>("McpServerOauthLoginResponse"),
         typed_schema::<McpServerLifecycleResponse>("McpServerLifecycleResponse"),
         typed_schema::<McpToolListForContextParams>("McpToolListForContextParams"),
         typed_schema::<McpToolSearchParams>("McpToolSearchParams"),

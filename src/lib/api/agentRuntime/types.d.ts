@@ -819,6 +819,19 @@ export interface AgentRuntimeEvidenceObservabilitySummary {
     signal_coverage: AgentRuntimeEvidenceSignalCoverageEntry[];
     verification_summary?: AgentRuntimeEvidenceVerificationSummary;
     modality_runtime_contracts?: AgentRuntimeEvidenceModalityRuntimeContracts;
+    skill_invocations: AgentRuntimeEvidenceSkillInvocation[];
+}
+export interface AgentRuntimeEvidenceSkillInvocation {
+    event: "skill_invocation" | string;
+    skill_name: string;
+    status: string;
+    source_event_id: string;
+    source_event_type: string;
+    turn_id?: string;
+    tool_call_id?: string;
+    workspace_skill_source?: Record<string, unknown>;
+    workspace_skill_runtime_enable?: Record<string, unknown>;
+    modality_runtime_contract?: Record<string, unknown>;
 }
 export interface AgentRuntimeCompletionAuditRequiredEvidence {
     automation_owner: boolean;

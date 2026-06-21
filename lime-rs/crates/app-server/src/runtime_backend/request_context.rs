@@ -6,7 +6,8 @@ use crate::RuntimeCoreError;
 use aster::session::{TurnContextOverride, TurnOutputSchemaSource};
 use lime_agent::{
     merge_system_prompt_with_request_tool_policy,
-    merge_system_prompt_with_runtime_agents_for_project, resolve_request_tool_policy_with_mode,
+    merge_system_prompt_with_runtime_agents_for_project,
+    request_tool_policy_with_additional_required_tools, resolve_request_tool_policy_with_mode,
     ProviderConfig, RequestToolPolicy, RequestToolPolicyMode, SessionConfigBuilder,
 };
 pub(super) use runtime_core::RuntimeModelSelection;
@@ -374,7 +375,12 @@ pub(super) fn request_tool_policy_from_request(
 ) -> RequestToolPolicy {
     let web_search = host_request.and_then(host_web_search);
     let search_mode = host_request.and_then(host_search_mode);
-    resolve_request_tool_policy_with_mode(web_search, search_mode)
+    let policy = resolve_request_tool_policy_with_mode(web_search, search_mode);
+    if host_request.is_some_and(host_requests_research_web_fetch) {
+        request_tool_policy_with_additional_required_tools(policy, &["WebFetch"])
+    } else {
+        policy
+    }
 }
 
 pub(super) fn session_config_from_request(
@@ -388,6 +394,13 @@ pub(super) fn session_config_from_request(
     let workspace_scope = request_workspace_scope(request, host_request);
     let system_prompt = merge_system_prompt_with_runtime_agents_for_project(
         Some(request_system_prompt(request)),
+        workspace_scope.working_dir.as_deref(),
+        workspace_scope.project_root.as_deref(),
+    );
+    let system_prompt = super::agent_skills_context::append_agent_skills_context_to_system_prompt(
+        system_prompt,
+        &request.input.text,
+        &super::skill_runtime_enable::request_metadata_values(request),
         workspace_scope.working_dir.as_deref(),
         workspace_scope.project_root.as_deref(),
     );
@@ -569,6 +582,21 @@ pub(super) fn turn_context_from_request(
     {
         metadata.insert("runtime_options".to_string(), runtime_metadata);
     }
+    let selected_skill_allowed_tools =
+        super::agent_skills_context::selected_agent_skill_allowed_tools_for_turn(
+            &request.input.text,
+            &super::skill_runtime_enable::request_metadata_values(request),
+            workspace_scope.working_dir.as_deref(),
+            workspace_scope.project_root.as_deref(),
+        );
+    if !selected_skill_allowed_tools.is_empty() {
+        metadata.insert(
+            "tool_scope".to_string(),
+            json!({
+                "allowed_tools": selected_skill_allowed_tools,
+            }),
+        );
+    }
     if let Some(config_metadata) = config_metadata {
         metadata.insert("config".to_string(), config_metadata);
     }
@@ -724,6 +752,14 @@ fn host_metadata_value(host: &AsterChatRequestSnapshot) -> Option<Value> {
     host_turn_config(host)
         .and_then(|turn_config| turn_config.metadata.clone())
         .or_else(|| host.metadata.clone())
+}
+
+fn host_requests_research_web_fetch(host: &AsterChatRequestSnapshot) -> bool {
+    host_metadata_value(host).is_some_and(|metadata| {
+        metadata
+            .pointer("/harness/research_skill_launch/research_request")
+            .is_some()
+    })
 }
 
 fn json_pointer_string(value: &Value, pointers: &[&str]) -> Option<String> {

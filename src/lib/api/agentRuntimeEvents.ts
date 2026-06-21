@@ -52,6 +52,7 @@ const localRuntimeEventListeners = new Map<
   Set<AgentRuntimeEventHandler>
 >();
 let bridgeSubscriptionSequence = 0;
+const PROCESSED_RUNTIME_EVENT_MARKER = "__lime_processed_agent_runtime_event";
 
 export function publishAgentRuntimeEvent<TPayload = AgentEvent | unknown>(
   eventName: string,
@@ -80,11 +81,17 @@ function publishAgentRuntimeEventToLocalListeners<
         "fail-closed",
         "published",
       )
-    : [payload];
+    : [markProcessedAgentRuntimePayload(payload)];
 
   for (const projectedPayload of projectedPayloads) {
     for (const handler of [...listeners]) {
-      handler({ payload: projectedPayload });
+      if (runSequenceGate) {
+        handler({ payload: projectedPayload });
+      } else {
+        handler({
+          payload: stripProcessedAgentRuntimePayloadMarker(projectedPayload),
+        });
+      }
     }
   }
 }
@@ -116,14 +123,18 @@ export function createAgentRuntimeEventListener({
   ): Promise<UnlistenFn> => {
     const bridgeGateScope = `bridge:${++bridgeSubscriptionSequence}`;
     const bridgeHandler: AgentRuntimeEventHandler<TPayload> = (event) => {
-      const projectedPayloads = projectAgentRuntimeSequenceGatePayloads(
-        eventName,
-        event.payload,
-        "fail-closed",
-        bridgeGateScope,
-      );
+      const projectedPayloads = isProcessedAgentRuntimePayload(event.payload)
+        ? [event.payload]
+        : projectAgentRuntimeSequenceGatePayloads(
+            eventName,
+            event.payload,
+            "fail-closed",
+            bridgeGateScope,
+          );
       for (const projectedPayload of projectedPayloads) {
-        handler({ payload: projectedPayload } as Parameters<typeof handler>[0]);
+        handler({
+          payload: stripProcessedAgentRuntimePayloadMarker(projectedPayload),
+        } as Parameters<typeof handler>[0]);
       }
     };
     const unlistenLocal = listenLocalAgentRuntimeEvent(
@@ -144,6 +155,41 @@ export function createAgentRuntimeEventListener({
       throw error;
     }
   };
+}
+
+function markProcessedAgentRuntimePayload<TPayload>(
+  payload: TPayload,
+): TPayload {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return payload;
+  }
+  return {
+    ...(payload as Record<string, unknown>),
+    [PROCESSED_RUNTIME_EVENT_MARKER]: true,
+  } as TPayload;
+}
+
+function isProcessedAgentRuntimePayload(payload: unknown): boolean {
+  return Boolean(
+    payload &&
+      typeof payload === "object" &&
+      !Array.isArray(payload) &&
+      (payload as Record<string, unknown>)[PROCESSED_RUNTIME_EVENT_MARKER] ===
+        true,
+  );
+}
+
+function stripProcessedAgentRuntimePayloadMarker<TPayload>(
+  payload: TPayload,
+): TPayload {
+  if (!isProcessedAgentRuntimePayload(payload)) {
+    return payload;
+  }
+  const {
+    [PROCESSED_RUNTIME_EVENT_MARKER]: _marker,
+    ...rest
+  } = payload as Record<string, unknown>;
+  return rest as TPayload;
 }
 
 export function createAgentRuntimeEventSource({

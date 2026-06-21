@@ -106,7 +106,7 @@ describe("AgentThreadTimelineViewModel", () => {
     ).toBe("default");
   });
 
-  it("应让历史完成单条 reasoning 默认 inline 展示，turn_summary 保持摘要壳", () => {
+  it("应让历史完成单条 reasoning 默认保留摘要壳，结构化预览继续 inline", () => {
     const reasoningBlock = block({
       items: [
         baseItem("reasoning-1", "reasoning", {
@@ -127,6 +127,19 @@ describe("AgentThreadTimelineViewModel", () => {
     ).toMatchObject({
       isThinkingOnlyBlock: true,
       shouldSummarizeSingleThinkingInline: false,
+      shouldRenderSingleItemInline: false,
+      shouldMaterializeDetailEntries: false,
+    });
+
+    expect(
+      buildTimelineBlockRenderPlan({
+        block: reasoningBlock,
+        isExpanded: false,
+        preferInlineDetails: false,
+        deferCompletedSingleDetails: true,
+        hasStructuredThinkingInlinePreview: hasStructuredPreview,
+      }),
+    ).toMatchObject({
       shouldRenderSingleItemInline: true,
       shouldMaterializeDetailEntries: false,
     });

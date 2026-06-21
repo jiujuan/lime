@@ -1,4 +1,7 @@
-import type { SkillCatalogSceneEntry } from "@/lib/api/skillCatalog";
+import type {
+  SkillCatalogSceneEntry,
+  SkillCatalogSkillLocator,
+} from "@/lib/api/skillCatalog";
 import type { ServiceSkillItem } from "@/lib/api/serviceSkills";
 import type {
   BaseSetupBindingProfile,
@@ -57,6 +60,14 @@ function resolveLinkedSkillId(
   );
 }
 
+function createCatalogSkillLocator(input: {
+  id?: string | null;
+  skillKey?: string | null;
+}): SkillCatalogSkillLocator | undefined {
+  const name = input.skillKey?.trim() || input.id?.trim();
+  return name ? { source: "catalog", name } : undefined;
+}
+
 function compileSceneProjectionEntry(params: {
   projection: BaseSetupCatalogProjection;
   bindingProfile: BaseSetupBindingProfile;
@@ -89,6 +100,10 @@ function compileSceneProjectionEntry(params: {
       ? [...policyProfile.surfaceScopes]
       : undefined,
     linkedSkillId,
+    skillLocator: createCatalogSkillLocator({
+      id: linkedSkillId,
+      skillKey: projection.skillKey,
+    }),
     executionKind: resolveSceneExecutionKind(bindingProfile, projection),
     renderContract: {
       resultKind: "tool_timeline",

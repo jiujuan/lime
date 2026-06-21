@@ -31,6 +31,36 @@ import type { MessageListRenderGroup } from "./MessageList.types";
 import { resolveMessageListItemProjection } from "./messageListItemProjection";
 import type { SearchResultPreviewItem } from "../utils/searchResultPreview";
 
+function contentPartDebugSignature(parts: Message["contentParts"]): string {
+  return (parts || [])
+    .map((part) => {
+      if (part.type === "tool_use") {
+        const sequence =
+          typeof part.metadata?.sequence === "number"
+            ? `#${part.metadata.sequence}`
+            : "";
+        return `tool:${part.toolCall.name}:${part.toolCall.status}${sequence}`;
+      }
+      if (part.type === "thinking") {
+        const sequence =
+          typeof part.metadata?.sequence === "number"
+            ? `#${part.metadata.sequence}`
+            : "";
+        return `thinking${sequence}`;
+      }
+      return part.type;
+    })
+    .join("|");
+}
+
+function timelineDebugSignature(
+  timeline: MessageListRenderGroup["timeline"],
+): string {
+  return (timeline?.items || [])
+    .map((item) => `${item.type}:${item.id}`)
+    .join("|");
+}
+
 export interface MessageListItemProps {
   msg: Message;
   group: MessageListRenderGroup;
@@ -184,6 +214,7 @@ export function MessageListItem({
     historicalAssistantPreviewContent,
     imageWorkbenchRendererState,
     installedSkillMessageLabel,
+    isActiveProcessOnlyOutput,
     isConversationTailAssistant,
     isCurrentInteractiveAssistantMessage,
     isUserCommandMessage,
@@ -408,6 +439,13 @@ export function MessageListItem({
               isUserCommandMessage ? "message-bubble-user-command" : undefined
             }
             data-message-role={msg.role}
+            data-message-content-part-types={contentPartDebugSignature(
+              msg.contentParts,
+            )}
+            data-renderer-content-part-types={contentPartDebugSignature(
+              rendererContentParts,
+            )}
+            data-timeline-items={timelineDebugSignature(group.timeline)}
             data-visual-tone={
               msg.role === "user" ? "neutral-user" : "neutral-assistant"
             }
@@ -430,6 +468,7 @@ export function MessageListItem({
                   historicalAssistantPreviewContent
                 }
                 imageWorkbenchRendererState={imageWorkbenchRendererState}
+                isActiveProcessOnlyOutput={isActiveProcessOnlyOutput}
                 isCurrentInteractiveAssistantMessage={
                   isCurrentInteractiveAssistantMessage
                 }

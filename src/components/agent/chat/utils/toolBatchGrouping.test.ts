@@ -166,12 +166,38 @@ describe("toolBatchGrouping", () => {
     expect(summary).toEqual(
       expect.objectContaining({
         kind: "web_search",
-        title: "已搜索网页 1 次",
+        title: "已搜索网页：Lime history import",
         countLabel: "1 次",
         rawDetailLabel: "展开查看搜索来源",
       }),
     );
     expect(summary?.supportingLines).toContain("Lime history import");
+  });
+
+  it("Codex web_search action object 应使用 query 作为搜索标题而不是渲染 JSON", () => {
+    const summary = summarizeStreamingToolBatch([
+      {
+        ...createToolCall("web_search", {
+          action: {
+            type: "search_query",
+            query: "codex desktop search rendering",
+          },
+        }),
+        status: "running",
+      },
+    ]);
+
+    expect(summary).toEqual(
+      expect.objectContaining({
+        kind: "web_search",
+        title: "正在搜索网页 codex desktop search rendering",
+      }),
+    );
+    expect(summary?.supportingLines.join("\n")).toContain(
+      "codex desktop search rendering",
+    );
+    expect(summary?.supportingLines.join("\n")).not.toContain("{");
+    expect(summary?.supportingLines.join("\n")).not.toContain("search_query");
   });
 
   it("全部 WebSearch 失败时仍应聚合为轻量网页搜索轨迹", () => {
@@ -256,7 +282,7 @@ describe("toolBatchGrouping", () => {
     expect(summary?.supportingLines).toEqual(
       expect.arrayContaining([
         "today world news Reuters",
-        "https://www.reuters.com/world/",
+        "reuters.com/world",
       ]),
     );
   });
@@ -446,8 +472,8 @@ describe("toolBatchGrouping", () => {
       expect.arrayContaining([
         "June 2 2026 world news",
         "Reuters World News",
-        "https://www.reuters.com/world/",
-        "https://news.un.org/en/",
+        "reuters.com/world",
+        "news.un.org/en",
       ]),
     );
     expect(summary?.supportingSections).toEqual([
@@ -457,7 +483,7 @@ describe("toolBatchGrouping", () => {
       },
       {
         kind: "web_fetch_pages",
-        lines: ["https://www.reuters.com/world/", "https://news.un.org/en/"],
+        lines: ["reuters.com/world", "news.un.org/en"],
       },
     ]);
   });

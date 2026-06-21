@@ -1254,7 +1254,7 @@ export function useWorkspaceSendActions({
           explicitToolPreferences: true,
         };
         effectiveWebSearch = true;
-        effectiveSearchMode = sendOptions.searchMode ?? "allowed";
+        effectiveSearchMode = sendOptions.searchMode ?? "required";
         markCompletedMentionCommand(
           "research",
           resolveMentionCommandReplayText(

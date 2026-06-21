@@ -520,6 +520,10 @@
     },
     {
       "kind": "request",
+      "method": "mcpServer/oauth/login"
+    },
+    {
+      "kind": "request",
       "method": "mcpServer/start"
     },
     {
@@ -1338,6 +1342,8 @@
       "McpServerImportFromAppResponse",
       "McpServerLifecycleResponse",
       "McpServerListResponse",
+      "McpServerOauthLoginParams",
+      "McpServerOauthLoginResponse",
       "McpServerStartParams",
       "McpServerStatusListResponse",
       "McpServerStopParams",

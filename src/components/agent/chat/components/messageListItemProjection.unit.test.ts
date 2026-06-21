@@ -329,7 +329,7 @@ describe("messageListItemProjection", () => {
     expect(JSON.stringify(parts)).not.toContain("今日 AI 新闻");
   });
 
-  it("网页搜索仍在运行时 final_answer item 不应提前显示成最终正文", () => {
+  it("网页搜索状态滞后为 running 时，已到达的 final_answer 应继续穿插显示", () => {
     const message: Message = {
       id: "assistant-running-search-final-item",
       role: "assistant",
@@ -372,17 +372,24 @@ describe("messageListItemProjection", () => {
     );
 
     const parts = projection.rendererContentParts || [];
-    expect(parts.map((part) => part.type)).toEqual(["tool_use"]);
-    expect(projection.actionContent).toBe("");
-    expect(projection.rendererContent).toBe("");
-    expect(projection.rendererRawContent).toBe("");
+    expect(parts.map((part) => part.type)).toEqual([
+      "tool_use",
+      "text",
+    ]);
+    expect(projection.actionContent).toBe("## 今日 AI 新闻\n\n- 第一条要闻。");
+    expect(projection.rendererContent).toBe("## 今日 AI 新闻\n\n- 第一条要闻。");
+    expect(projection.rendererRawContent).toBe(
+      "## 今日 AI 新闻\n\n- 第一条要闻。",
+    );
     expect(parts[0]?.type === "tool_use" ? parts[0].toolCall.status : "").toBe(
       "running",
     );
-    expect(JSON.stringify(parts)).not.toContain("今日 AI 新闻");
+    expect(parts[1]?.type === "text" ? parts[1].text : "").toContain(
+      "今日 AI 新闻",
+    );
   });
 
-  it("网页搜索状态为 running 时 final_answer item 也不应提前显示成最终正文", () => {
+  it("网页搜索 tool_call 状态滞后为 running 时，已到达的 final_answer 应继续穿插显示", () => {
     const message: Message = {
       id: "assistant-running-string-search-final-item",
       role: "assistant",
@@ -426,14 +433,21 @@ describe("messageListItemProjection", () => {
     );
 
     const parts = projection.rendererContentParts || [];
-    expect(parts.map((part) => part.type)).toEqual(["tool_use"]);
-    expect(projection.actionContent).toBe("");
-    expect(projection.rendererContent).toBe("");
-    expect(projection.rendererRawContent).toBe("");
+    expect(parts.map((part) => part.type)).toEqual([
+      "tool_use",
+      "text",
+    ]);
+    expect(projection.actionContent).toBe("## 今日 AI 新闻\n\n- 第一条要闻。");
+    expect(projection.rendererContent).toBe("## 今日 AI 新闻\n\n- 第一条要闻。");
+    expect(projection.rendererRawContent).toBe(
+      "## 今日 AI 新闻\n\n- 第一条要闻。",
+    );
     expect(parts[0]?.type === "tool_use" ? parts[0].toolCall.status : "").toBe(
       "running",
     );
-    expect(JSON.stringify(parts)).not.toContain("今日 AI 新闻");
+    expect(parts[1]?.type === "text" ? parts[1].text : "").toContain(
+      "今日 AI 新闻",
+    );
   });
 
   it("网页搜索仍在运行且 message.content 已有正文时也不应显示到工具下方", () => {
@@ -536,7 +550,7 @@ describe("messageListItemProjection", () => {
     );
   });
 
-  it("turn 暂标完成但发送态仍未释放时，running 网页搜索仍应 hold 最终正文", () => {
+  it("turn 暂标完成且发送态未释放时，final_answer 已到达也不应被 running 搜索残留吞掉", () => {
     const message: Message = {
       id: "assistant-running-search-final-item-still-sending",
       role: "assistant",
@@ -580,14 +594,21 @@ describe("messageListItemProjection", () => {
     );
 
     const parts = projection.rendererContentParts || [];
-    expect(parts.map((part) => part.type)).toEqual(["tool_use"]);
-    expect(projection.actionContent).toBe("");
-    expect(projection.rendererContent).toBe("");
-    expect(projection.rendererRawContent).toBe("");
+    expect(parts.map((part) => part.type)).toEqual([
+      "tool_use",
+      "text",
+    ]);
+    expect(projection.actionContent).toBe("## 今日 AI 新闻\n\n- 第一条要闻。");
+    expect(projection.rendererContent).toBe("## 今日 AI 新闻\n\n- 第一条要闻。");
+    expect(projection.rendererRawContent).toBe(
+      "## 今日 AI 新闻\n\n- 第一条要闻。",
+    );
     expect(parts[0]?.type === "tool_use" ? parts[0].toolCall.status : "").toBe(
       "running",
     );
-    expect(JSON.stringify(parts)).not.toContain("今日 AI 新闻");
+    expect(parts[1]?.type === "text" ? parts[1].text : "").toContain(
+      "今日 AI 新闻",
+    );
   });
 
   it("无 timeline 的完成态 contentParts running 搜索残留不应吞掉最终正文", () => {
@@ -1138,6 +1159,60 @@ describe("messageListItemProjection", () => {
     expect(projection.primaryTimeline?.items).toBeUndefined();
     expect(projection.shouldRenderCompactPrimaryTimeline).toBe(false);
     expect(projection.actionContent).toBe("已完成导入会话复盘。");
+  });
+
+  it("搜索已完成但 active turn 仍在整理最终答复时，应保持过程活跃且不伪造正文", () => {
+    const message: Message = {
+      id: "assistant-search-synthesizing",
+      role: "assistant",
+      content: "",
+      timestamp: new Date("2026-06-02T10:00:30.000Z"),
+      isThinking: false,
+      runtimeStatus: {
+        phase: "synthesizing",
+        title: "正在整理最终答复",
+        detail: "搜索已经完成，正在组织最终回答。",
+      },
+    };
+
+    const projection = buildProjection(
+      message,
+      [
+        {
+          id: "web-search-synthesizing-completed",
+          type: "web_search",
+          turn_id: "turn-legacy-unphased-final",
+          sequence: 1,
+          action: "search",
+          query: "学习机 权威评测 对比",
+          output: JSON.stringify({
+            results: [
+              {
+                title: "学习机权威评测",
+                url: "https://example.com/review",
+                snippet: "评测摘要",
+              },
+            ],
+          }),
+          status: "completed",
+          started_at: "2026-06-02T10:00:03.000Z",
+          completed_at: "2026-06-02T10:00:04.000Z",
+          updated_at: "2026-06-02T10:00:04.000Z",
+        },
+      ] as never,
+      {
+        isSending: false,
+        turnStatus: "running",
+      },
+    );
+
+    expect(projection.actionContent).toBe("");
+    expect(projection.rendererRawContent).toBe("");
+    expect(projection.isActiveProcessOnlyOutput).toBe(true);
+    expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
+      "tool_use",
+    ]);
+    expect(projection.primaryTimeline?.items).toBeUndefined();
   });
 
   it("running 搜索后的 commentary 不应越序成为最终正文", () => {
@@ -1751,6 +1826,113 @@ describe("messageListItemProjection", () => {
         (part) => part.type === "tool_use",
       ),
     ).toHaveLength(3);
+  });
+
+  it("网页检索工具已在消息内联时应把 timeline 中间 reasoning 合并进同一渲染过程", () => {
+    const message: Message = {
+      id: "assistant-web-tools-inline",
+      role: "assistant",
+      content:
+        "网页搜索渲染结论：搜索来源已展开，读取页面已归入同一过程，最终正文继续输出。",
+      timestamp: new Date("2026-06-20T10:00:00.000Z"),
+      isThinking: false,
+      runtimeTurnId: "turn-web-tools-inline",
+      contentParts: [
+        {
+          type: "tool_use",
+          metadata: { sequence: 2 },
+          toolCall: {
+            id: "tool-web-search-inline",
+            name: "WebSearch",
+            arguments: JSON.stringify({ query: "Lime WebSearch rendering" }),
+            status: "completed",
+            result: {
+              success: true,
+              output: JSON.stringify({
+                results: [
+                  {
+                    title: "Lime WebSearch Rendering Source",
+                    url: "https://example.com/lime-websearch-rendering",
+                    snippet: "Search source used to verify inline rendering",
+                  },
+                ],
+              }),
+            },
+          } as never,
+        },
+        {
+          type: "tool_use",
+          metadata: { sequence: 4 },
+          toolCall: {
+            id: "tool-web-fetch-inline",
+            name: "WebFetch",
+            arguments: JSON.stringify({
+              url: "https://example.com/lime-websearch-rendering",
+            }),
+            status: "completed",
+            result: {
+              success: true,
+              output: JSON.stringify({
+                bytes: 2048,
+                code: 200,
+                codeText: "OK",
+                result: "# 页面正文",
+              }),
+            },
+          } as never,
+        },
+        {
+          type: "text",
+          text: "网页搜索渲染结论：搜索来源已展开，读取页面已归入同一过程，最终正文继续输出。",
+        },
+      ],
+    };
+
+    const projection = buildProjection(
+      message,
+      [
+        {
+          id: "reasoning-web-tools-inline",
+          thread_id: "thread-web-tools-inline",
+          turn_id: "turn-web-tools-inline",
+          type: "reasoning",
+          sequence: 3,
+          status: "completed",
+          text: "搜索结果还需要继续筛掉广告软文，我先读取有效来源。",
+          started_at: "",
+          completed_at: "",
+          updated_at: "",
+        } as never,
+        {
+          id: "runtime-summary-web-tools-inline",
+          thread_id: "thread-web-tools-inline",
+          turn_id: "turn-web-tools-inline",
+          type: "turn_summary",
+          sequence: 5,
+          status: "completed",
+          text: "已搜索网页 1 次，读取网页 1 次",
+          started_at: "2026-06-20T10:00:00.000Z",
+          completed_at: "2026-06-20T10:00:01.000Z",
+          updated_at: "2026-06-20T10:00:01.000Z",
+        } as never,
+      ],
+      {
+        hasActiveInteractiveRuntime: false,
+        isSending: false,
+        turnStatus: "completed",
+      },
+    );
+
+    expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
+      "tool_use",
+      "thinking",
+      "tool_use",
+      "text",
+    ]);
+    expect(projection.rendererContentParts?.[1]).toMatchObject({
+      type: "thinking",
+      text: "搜索结果还需要继续筛掉广告软文，我先读取有效来源。",
+    });
   });
 
 });

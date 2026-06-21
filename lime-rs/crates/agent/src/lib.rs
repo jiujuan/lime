@@ -99,7 +99,8 @@ pub use provider_runtime_governor::{
 pub use queued_turn::QueuedTurnSnapshot;
 pub use request_tool_policy::{
     execute_web_search_preflight_if_needed, merge_system_prompt_with_request_tool_policy,
-    merge_system_prompt_with_web_search_preflight_context, resolve_request_tool_policy,
+    merge_system_prompt_with_web_search_preflight_context,
+    request_tool_policy_with_additional_required_tools, resolve_request_tool_policy,
     resolve_request_tool_policy_with_mode, stream_reply_with_policy, ReplyAttemptError,
     RequestToolPolicy, RequestToolPolicyMode, StreamReplyExecution, WebSearchExecutionTracker,
     WebSearchPreflightRequest, REQUEST_TOOL_POLICY_MARKER,

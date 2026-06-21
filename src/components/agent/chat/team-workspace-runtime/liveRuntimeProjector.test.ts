@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { changeLimeLocale, getLimeI18n } from "@/i18n/createI18n";
 import type { AgentEvent } from "@/lib/api/agentProtocol";
 import type { TeamWorkspaceRuntimeSessionSnapshot } from "../teamWorkspaceRuntime";
@@ -40,6 +40,10 @@ function createSessionSnapshot(
 }
 
 describe("liveRuntimeProjector", () => {
+  beforeEach(async () => {
+    await changeLimeLocale("zh-CN");
+  });
+
   it("team 状态切换应输出稳定的中文状态文案与 runtime patch", () => {
     const projection = buildStatusChangedProjection({
       sessionId: "child-1",
@@ -56,7 +60,7 @@ describe("liveRuntimeProjector", () => {
     });
   });
 
-  it("应支持注入英文 live runtime copy 且保留 runtime 工具名", async () => {
+  it("应支持注入英文 live runtime copy 并按当前语言展示工具名", async () => {
     const copy = await buildEnglishLiveRuntimeCopy();
     const statusProjection = buildStatusChangedProjection({
       sessionId: "child-1",
@@ -82,8 +86,10 @@ describe("liveRuntimeProjector", () => {
       } as AgentEvent,
     });
 
-    expect(toolProjection?.entry?.title).toBe("Processing · 页面截图");
-    expect(toolProjection?.entry?.detail).toBe("Working on 页面截图.");
+    expect(toolProjection?.entry?.title).toBe(
+      "Processing · Page screenshot",
+    );
+    expect(toolProjection?.entry?.detail).toBe("Working on Page screenshot.");
 
     const queueProjection = projectRuntimeStreamEvent({
       sessionId: "child-1",

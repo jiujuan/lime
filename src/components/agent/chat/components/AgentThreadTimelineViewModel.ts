@@ -86,8 +86,15 @@ export function buildTimelineBlockRenderPlan(params: {
       : null;
   const shouldRenderActiveSingleThinkingInline =
     Boolean(singleThinkingItem) && block.status === "in_progress";
-  const shouldRenderCompletedSingleReasoningInline =
-    Boolean(singleThinkingItem) && singleThinkingItem?.type === "reasoning";
+  const shouldRenderStructuredSingleThinkingInline =
+    Boolean(singleThinkingItem) &&
+    singleThinkingItem?.type === "reasoning" &&
+    hasStructuredThinkingInlinePreview(singleThinkingItem);
+  const shouldKeepCompletedSingleReasoningInShell =
+    Boolean(singleThinkingItem) &&
+    singleThinkingItem?.type === "reasoning" &&
+    block.status === "completed" &&
+    !shouldRenderStructuredSingleThinkingInline;
   const shouldSummarizeSingleThinkingInline =
     Boolean(singleThinkingItem) &&
     singleThinkingItem?.type === "turn_summary" &&
@@ -96,11 +103,13 @@ export function buildTimelineBlockRenderPlan(params: {
   const shouldRenderSingleItemInline =
     block.items.length === 1 &&
     !shouldSummarizeSingleThinkingInline &&
-    (!deferCompletedSingleDetails ||
-      shouldRenderCompletedSingleReasoningInline ||
-      preferInlineDetails ||
-      block.status !== "completed" ||
-      hasFocusedItem);
+    (shouldRenderActiveSingleThinkingInline ||
+      shouldRenderStructuredSingleThinkingInline ||
+      (!shouldKeepCompletedSingleReasoningInShell &&
+        (!deferCompletedSingleDetails ||
+          preferInlineDetails ||
+          block.status !== "completed" ||
+          hasFocusedItem)));
   const shouldRenderGroupedToolRows =
     block.kind === "process" && block.items.length > 1;
   const shouldMaterializeDetailEntries =

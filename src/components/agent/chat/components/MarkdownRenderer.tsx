@@ -27,6 +27,7 @@ import {
   parseMarkdownBundleImageOverrides,
   resolveMarkdownBundleMetaPath,
 } from "@/lib/markdown/markdownBundleMeta";
+import { normalizeLooseMarkdownSyntax } from "../utils/markdownLooseSyntaxNormalizer";
 import { ArtifactPlaceholder } from "./ArtifactPlaceholder";
 import { A2UITaskCard, A2UITaskLoadingCard } from "./A2UITaskCard";
 import { MarkdownImageWithFallback } from "./MarkdownImageWithFallback";
@@ -1544,8 +1545,10 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
       return {
         text: normalizeCompactPipeTables(
           normalizeMarkdownTableFences(
-            normalizeInlineFollowUpListMarkers(
-              normalizeCollapsedMarkdownBlocks(result),
+            normalizeLooseMarkdownSyntax(
+              normalizeInlineFollowUpListMarkers(
+                normalizeCollapsedMarkdownBlocks(result),
+              ),
             ),
           ),
         ),

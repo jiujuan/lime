@@ -272,10 +272,10 @@ impl ToolState {
         self.merge_status(event, &item.status, true);
         self.merge_current_fields(item);
         self.merge_event_metadata(event);
-        self.sequence = self.sequence.min(event.sequence);
     }
 
     fn merge_current_fields(&mut self, item: CurrentToolItem) {
+        self.sequence = item.sequence;
         self.tool_name = item.tool_name.or(self.tool_name.take());
         self.arguments = item.arguments.or(self.arguments.take());
         self.output = item.output.or(self.output.take());
@@ -300,13 +300,13 @@ impl ToolState {
         }
         merge_option_if_empty(&mut self.tool_name, tool_event.tool_name);
         merge_option_if_empty(&mut self.arguments, tool_event.arguments);
-        merge_option_if_empty(&mut self.output, tool_event.output);
-        merge_option_if_empty(&mut self.output_ref, tool_event.output_ref);
+        merge_option_if_present(&mut self.output, tool_event.output);
+        merge_option_if_present(&mut self.output_ref, tool_event.output_ref);
         merge_vec_unique(&mut self.ref_ids, tool_event.ref_ids);
-        self.output_truncated = self.output_truncated.or(tool_event.output_truncated);
-        self.output_bytes = self.output_bytes.or(tool_event.output_bytes);
-        self.success = self.success.or(tool_event.success);
-        merge_option_if_empty(&mut self.error, tool_event.error);
+        self.output_truncated = tool_event.output_truncated.or(self.output_truncated);
+        self.output_bytes = tool_event.output_bytes.or(self.output_bytes);
+        self.success = tool_event.success.or(self.success);
+        merge_option_if_present(&mut self.error, tool_event.error);
         self.query = tool_event.query.or(self.query.take());
         self.action = tool_event.action.or(self.action.take());
         self.updated_at = event.timestamp.clone();
@@ -479,6 +479,12 @@ fn same_turn(left: Option<&str>, right: Option<&str>) -> bool {
 
 fn merge_option_if_empty<T>(target: &mut Option<T>, value: Option<T>) {
     if target.is_none() {
+        *target = value;
+    }
+}
+
+fn merge_option_if_present<T>(target: &mut Option<T>, value: Option<T>) {
+    if value.is_some() {
         *target = value;
     }
 }

@@ -16,6 +16,8 @@ use app_server_protocol::McpServerImportFromAppParams;
 use app_server_protocol::McpServerImportFromAppResponse;
 use app_server_protocol::McpServerLifecycleResponse;
 use app_server_protocol::McpServerListResponse;
+use app_server_protocol::McpServerOauthLoginParams;
+use app_server_protocol::McpServerOauthLoginResponse;
 use app_server_protocol::McpServerStartParams;
 use app_server_protocol::McpServerStatusListResponse;
 use app_server_protocol::McpServerStopParams;
@@ -51,19 +53,18 @@ pub(crate) async fn list_mcp_servers_with_status(
     let manager = manager.lock().await;
     let mut result = Vec::with_capacity(servers.len());
     for server in servers {
-        let is_running = manager.is_server_running(&server.name).await;
-        let server_info = if is_running {
-            manager.get_client_capabilities(&server.name).await
-        } else {
-            None
-        };
+        let parsed_config = parse_mcp_server_config(&server.server_config);
+        let runtime_status = manager
+            .get_server_runtime_status(&server.name, Some(&parsed_config))
+            .await;
         result.push(json!({
             "id": server.id,
             "name": server.name,
             "description": server.description,
-            "config": server.parse_config(),
-            "is_running": is_running,
-            "server_info": server_info,
+            "config": parsed_config,
+            "is_running": runtime_status.is_running,
+            "server_info": runtime_status.server_info,
+            "runtime_status": runtime_status,
             "enabled_lime": server.enabled_lime,
             "enabled_claude": server.enabled_claude,
             "enabled_codex": server.enabled_codex,
@@ -155,6 +156,35 @@ pub(crate) async fn stop_mcp_server(
     let manager = manager.lock().await;
     manager.stop_server(&params.name).await.map_err(mcp_error)?;
     Ok(McpServerLifecycleResponse::default())
+}
+
+pub(crate) async fn login_mcp_server_oauth(
+    db: &DbConnection,
+    manager: &McpManagerState,
+    params: McpServerOauthLoginParams,
+) -> Result<McpServerOauthLoginResponse, RuntimeCoreError> {
+    let server = McpService::get_all(db)
+        .map_err(data_error)?
+        .into_iter()
+        .find(|server| server.name == params.name)
+        .ok_or_else(|| {
+            RuntimeCoreError::Backend(format!("MCP server not found: {}", params.name))
+        })?;
+    let config = parse_mcp_server_config(&server.server_config);
+    let manager = manager.lock().await;
+    manager
+        .start_oauth_login(
+            &params.name,
+            &config,
+            params.scopes.clone(),
+            params.timeout_secs,
+        )
+        .await
+        .map_err(mcp_error)
+        .map(|response| McpServerOauthLoginResponse {
+            authorization_url: response.authorization_url,
+            state: response.state,
+        })
 }
 
 pub(crate) async fn list_mcp_tools(
@@ -274,43 +304,7 @@ pub(crate) async fn read_mcp_resource(
 }
 
 fn parse_mcp_server_config(config_value: &Value) -> McpServerConfig {
-    serde_json::from_value(config_value.clone()).unwrap_or_else(|_| McpServerConfig {
-        command: config_value
-            .get("command")
-            .and_then(|value| value.as_str())
-            .unwrap_or("")
-            .to_string(),
-        args: config_value
-            .get("args")
-            .and_then(|value| value.as_array())
-            .map(|values| {
-                values
-                    .iter()
-                    .filter_map(|value| value.as_str().map(ToString::to_string))
-                    .collect()
-            })
-            .unwrap_or_default(),
-        env: config_value
-            .get("env")
-            .and_then(|value| value.as_object())
-            .map(|values| {
-                values
-                    .iter()
-                    .filter_map(|(key, value)| {
-                        value.as_str().map(|value| (key.clone(), value.to_string()))
-                    })
-                    .collect()
-            })
-            .unwrap_or_default(),
-        cwd: config_value
-            .get("cwd")
-            .and_then(|value| value.as_str())
-            .map(ToString::to_string),
-        timeout: config_value
-            .get("timeout")
-            .and_then(|value| value.as_u64())
-            .unwrap_or(30),
-    })
+    McpServerConfig::from_value(config_value.clone()).unwrap_or_default()
 }
 
 fn mcp_server_from_value(value: Value) -> Result<McpServer, RuntimeCoreError> {

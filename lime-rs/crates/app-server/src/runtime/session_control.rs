@@ -2,6 +2,8 @@ use super::status::{agent_turn_blocks_queue_resume, agent_turn_is_active};
 use super::*;
 use app_server_protocol::*;
 use serde_json::json;
+use serde_json::Map;
+use serde_json::Value;
 use std::collections::HashSet;
 
 fn validate_runtime_resume_contract(
@@ -84,6 +86,24 @@ impl RuntimeCore {
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .unwrap_or("agentSession/compact");
+        let mut completed_payload = Map::new();
+        completed_payload.insert("source".to_string(), json!("agentSession/compact"));
+        completed_payload.insert("eventName".to_string(), json!(event_name));
+        completed_payload.insert("compactionId".to_string(), json!(compaction.compaction_id));
+        completed_payload.insert("contextEpoch".to_string(), json!(compaction.context_epoch));
+        completed_payload.insert(
+            "tailStartTurnId".to_string(),
+            json!(compaction.tail_start_turn_id),
+        );
+        completed_payload.insert("turnCount".to_string(), json!(turns.len()));
+        completed_payload.insert("trigger".to_string(), json!("manual"));
+        completed_payload.insert("summary".to_string(), json!(compaction.summary));
+        completed_payload.insert("artifact".to_string(), json!(compaction.artifact));
+        completed_payload.insert(
+            output_refs::SIDECAR_REF_FIELD.to_string(),
+            json!(compaction.sidecar_ref),
+        );
+
         let events = self.append_runtime_events(
             &session.session_id,
             &session.thread_id,
@@ -103,18 +123,7 @@ impl RuntimeCore {
                 ),
                 RuntimeEvent::new(
                     "context.compaction.completed",
-                    json!({
-                        "source": "agentSession/compact",
-                        "eventName": event_name,
-                        "compactionId": compaction.compaction_id,
-                        "contextEpoch": compaction.context_epoch,
-                        "tailStartTurnId": compaction.tail_start_turn_id,
-                        "turnCount": turns.len(),
-                        "trigger": "manual",
-                        "summary": compaction.summary,
-                        "artifact": compaction.artifact,
-                        "sidecarRef": compaction.sidecar_ref,
-                    }),
+                    Value::Object(completed_payload),
                 ),
             ],
         )?;

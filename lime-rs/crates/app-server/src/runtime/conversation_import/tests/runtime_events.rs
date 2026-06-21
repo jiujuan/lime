@@ -46,7 +46,11 @@ fn commit_preserves_codex_tool_command_and_patch_timeline() {
             ),
             response_function_call_output("call_read_docx", "imported docx preview"),
             response_web_search_call("call_search", "search_query"),
-            event_web_search_end("call_search", "search_query"),
+            event_web_search_end(
+                "call_search",
+                "search_query",
+                Some("Imported Search Source"),
+            ),
             event_patch_apply_end("call_patch", true),
             event_agent_message("done"),
             event_user_message("run it"),
@@ -172,6 +176,10 @@ fn commit_preserves_codex_tool_command_and_patch_timeline() {
             && item["turn_id"] == first_turn_id
             && item["id"] == "call_search"
             && item["action"] == "search_query"
+            && item["query"] == "imported query"
+            && item["output"]
+                .as_str()
+                .is_some_and(|output| output.contains("Imported Search Source"))
             && item["status"] == "completed"
     }));
     assert!(items.iter().any(|item| {
@@ -1101,21 +1109,34 @@ fn response_web_search_call(call_id: &str, action: &str) -> String {
         "payload": {
             "type": "web_search_call",
             "id": call_id,
-            "status": "completed",
-            "action": action
+            "status": "in_progress",
+            "action": {
+                "type": action,
+                "query": "imported query"
+            }
         }
     })
     .to_string()
 }
 
-fn event_web_search_end(call_id: &str, action: &str) -> String {
+fn event_web_search_end(call_id: &str, action: &str, title: Option<&str>) -> String {
     serde_json::json!({
         "timestamp": "2026-06-16T00:00:01.360Z",
         "type": "event_msg",
         "payload": {
             "type": "web_search_end",
             "call_id": call_id,
-            "action": action
+            "action": {
+                "type": action,
+                "query": "imported query"
+            },
+            "output": serde_json::json!({
+                "results": [{
+                    "title": title.unwrap_or("Imported Search Result"),
+                    "url": "https://example.com/imported-search",
+                    "snippet": "Imported Codex search source"
+                }]
+            }).to_string()
         }
     })
     .to_string()

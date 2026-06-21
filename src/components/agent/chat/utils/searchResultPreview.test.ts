@@ -137,21 +137,7 @@ https://zhuanlan.zhihu.com/p/658835261
 
     expect(items).toEqual([
       {
-        id: "search-text-0-https://help.yahoo.com/kb/mail-for-desktop",
-        title: "help.yahoo.com",
-        url: "https://help.yahoo.com/kb/mail-for-desktop",
-        hostname: "help.yahoo.com",
-        snippet: undefined,
-      },
-      {
-        id: "search-text-1-https://login.yahoo.com/",
-        title: "login.yahoo.com",
-        url: "https://login.yahoo.com/",
-        hostname: "login.yahoo.com",
-        snippet: undefined,
-      },
-      {
-        id: "search-text-2-https://zhuanlan.zhihu.com/p/658835261",
+        id: "search-text-0-https://zhuanlan.zhihu.com/p/658835261",
         title: "知乎专栏 › p › 658835261",
         url: "https://zhuanlan.zhihu.com/p/658835261",
         hostname: "zhuanlan.zhihu.com",
@@ -185,6 +171,45 @@ https://zhuanlan.zhihu.com/p/658835261
         url: "https://www.reuters.com/world/",
         hostname: "reuters.com",
         snippet: "Latest world headlines",
+      },
+    ]);
+  });
+
+  it("应过滤 Yahoo 搜索页导航噪音，只保留用户真正需要的来源", () => {
+    const items = resolveSearchResultPreviewItemsFromText(
+      JSON.stringify({
+        results: [
+          {
+            title: "Help",
+            url: "https://help.yahoo.com/kb/search-for-desktop",
+            snippet: "Yahoo Search help page",
+          },
+          {
+            title: "Sign In",
+            url: "https://login.yahoo.com/?src=search",
+            snippet: "Sign in to Yahoo",
+          },
+          {
+            title: "Yahoo Scout",
+            url: "https://scout.yahoo.com/chat",
+            snippet: "Chat on Yahoo Scout",
+          },
+          {
+            title: "学生学习机选购指南",
+            url: "https://example.com/learning-tablet-guide",
+            snippet: "五年级学习机场景对比",
+          },
+        ],
+      }),
+    );
+
+    expect(items).toEqual([
+      {
+        id: "search-record-0-https://example.com/learning-tablet-guide",
+        title: "学生学习机选购指南",
+        url: "https://example.com/learning-tablet-guide",
+        hostname: "example.com",
+        snippet: "五年级学习机场景对比",
       },
     ]);
   });
