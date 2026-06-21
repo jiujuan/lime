@@ -242,6 +242,170 @@ describe("SkillsWorkspacePage", () => {
     }
   });
 
+  it("已保存技能点击试用一次应跳到 Agent 并携带 workspace runtime enable metadata", async () => {
+    const savedSkill: WorkspaceRegisteredSkillRecord = {
+      key: "workspace:capability-report",
+      name: "只读 CLI 报告",
+      description: "把本地只读 CLI 输出整理成 Markdown 报告。",
+      directory: "capability-report",
+      registeredSkillDirectory:
+        "/Users/demo/Lime/default-workspace/.agents/skills/capability-report",
+      registration: {
+        registrationId: "capreg-capability-report",
+        registeredAt: "2026-06-01T08:00:00.000Z",
+        skillDirectory: "capability-report",
+        registeredSkillDirectory:
+          "/Users/demo/Lime/default-workspace/.agents/skills/capability-report",
+        sourceDraftId: "capdraft-capability-report",
+        sourceVerificationReportId: "capver-capability-report",
+        generatedFileCount: 1,
+        permissionSummary: ["Level 0 只读发现"],
+        verificationGates: [],
+        approvalRequests: [],
+      },
+      permissionSummary: ["Level 0 只读发现"],
+      metadata: {},
+      allowedTools: [],
+      resourceSummary: {
+        hasScripts: true,
+        hasReferences: false,
+        hasAssets: false,
+      },
+      standardCompliance: {
+        isStandard: true,
+        validationErrors: [],
+        deprecatedFields: [],
+      },
+      launchEnabled: false,
+      runtimeGate: "等待手动启用",
+    };
+    vi.useFakeTimers();
+    mocks.listRegisteredSkills.mockResolvedValueOnce([savedSkill]);
+    mocks.listWorkspaceSkillBindings.mockResolvedValueOnce({
+      request: {
+        workspace_root: "/Users/demo/Lime/default-workspace",
+        caller: "assistant",
+        surface: {
+          workbench: true,
+          browser_assist: false,
+        },
+      },
+      warnings: [],
+      counts: {
+        registered_total: 1,
+        ready_for_manual_enable_total: 1,
+        blocked_total: 0,
+        query_loop_visible_total: 0,
+        tool_runtime_visible_total: 0,
+        launch_enabled_total: 0,
+      },
+      bindings: [
+        {
+          key: "workspace_skill:capability-report",
+          name: "只读 CLI 报告",
+          description: "把本地只读 CLI 输出整理成 Markdown 报告。",
+          directory: "capability-report",
+          registered_skill_directory:
+            "/Users/demo/Lime/default-workspace/.agents/skills/capability-report",
+          registration: {
+            registration_id: "capreg-capability-report",
+            registered_at: "2026-06-01T08:00:00.000Z",
+            skill_directory: "capability-report",
+            registered_skill_directory:
+              "/Users/demo/Lime/default-workspace/.agents/skills/capability-report",
+            source_draft_id: "capdraft-capability-report",
+            source_verification_report_id: "capver-capability-report",
+            generated_file_count: 1,
+            permission_summary: ["Level 0 只读发现"],
+          },
+          permission_summary: ["Level 0 只读发现"],
+          metadata: {},
+          allowed_tools: [],
+          resource_summary: {
+            has_scripts: true,
+            has_references: false,
+            has_assets: false,
+          },
+          standard_compliance: {
+            is_standard: true,
+            validation_errors: [],
+            deprecated_fields: [],
+          },
+          runtime_binding_target: "workspace_skill",
+          binding_status: "ready_for_manual_enable",
+          binding_status_reason: "已具备 runtime binding 候选资格。",
+          next_gate: "manual_runtime_enable",
+          query_loop_visible: false,
+          tool_runtime_visible: false,
+          launch_enabled: false,
+          runtime_gate: "等待 P3E 显式启用。",
+        },
+      ],
+    });
+    try {
+      const { container, onNavigate } = renderPage({
+        initialView: "installed",
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(300);
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      const enableButton = container.querySelector(
+        '[data-testid="workspace-registered-skill-enable-runtime"]',
+      ) as HTMLButtonElement | null;
+      expect(enableButton).toBeTruthy();
+      expect(enableButton?.disabled).toBe(false);
+
+      await act(async () => {
+        enableButton?.click();
+        await Promise.resolve();
+      });
+
+      expect(onNavigate).toHaveBeenCalledWith(
+        "agent",
+        expect.objectContaining({
+          agentEntry: "new-task",
+          projectId: "default-workspace",
+          autoRunInitialPromptOnMount: true,
+          initialUserPrompt: expect.stringContaining("只读 CLI 报告"),
+          initialRequestMetadata: {
+            harness: {
+              workspace_skill_runtime_enable: expect.objectContaining({
+                source: "manual_session_enable",
+                approval: "manual",
+                workspace_root: "/Users/demo/Lime/default-workspace",
+                bindings: [
+                  expect.objectContaining({
+                    directory: "capability-report",
+                    skill: "project:capability-report",
+                    registered_skill_directory:
+                      "/Users/demo/Lime/default-workspace/.agents/skills/capability-report",
+                    source_draft_id: "capdraft-capability-report",
+                    source_verification_report_id: "capver-capability-report",
+                  }),
+                ],
+              }),
+            },
+          },
+          initialAutoSendRequestMetadata: {
+            harness: {
+              workspace_skill_runtime_enable: expect.objectContaining({
+                source: "manual_session_enable",
+                approval: "manual",
+              }),
+            },
+          },
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("内置页点击详情应读取并展示对应 SKILL.md", async () => {
     const { container } = renderPage();
 

@@ -32,6 +32,7 @@ pub const TOOL_GUIDELINES: &str = r#"# 工具使用策略
 - **Glob**: 使用 glob 模式搜索文件路径
 - **Grep**: 使用正则表达式搜索文件内容
 - **ToolSearch**: 只用于搜索 deferred 的 extension / MCP 工具；使用精确工具名，例如 `select:Read,Edit,Grep` 或 `select:mcp__playwright__browser_click`。如果 Read / Write / Edit / Glob / Grep / Bash / WebFetch / WebSearch 已经在当前工具面中可见，不要再用 ToolSearch 去找它们，也不要把 `read_file`、`write_file`、`edit_file`、`system` 之类别名继续丢给 ToolSearch
+- **skill_search**: 搜索可用 Agent Skills 的轻量 metadata；结果只用于选择候选 skill，不读取 `SKILL.md` 正文、不授权 SkillTool、不扩大工具权限
 - **ListMcpResourcesTool / ReadMcpResourceTool**: 浏览和读取 MCP 资源
 
 ### 系统工具

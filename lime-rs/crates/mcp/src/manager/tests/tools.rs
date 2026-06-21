@@ -1,3 +1,4 @@
+use super::super::tools::{normalize_tool_input_schema, tool_result_output_schema};
 use super::common::*;
 use crate::manager::McpClientManager;
 use crate::types::{McpContent, McpError, McpToolDefinition};
@@ -27,6 +28,45 @@ fn test_extract_tool_metadata_from_schema_extension() {
         meta.tags.unwrap_or_default(),
         vec!["search".to_string(), "docs".to_string()]
     );
+}
+
+#[test]
+fn test_normalize_tool_input_schema_adds_missing_properties() {
+    let schema = normalize_tool_input_schema(serde_json::json!({
+        "type": "object"
+    }));
+
+    assert_eq!(schema["properties"], serde_json::json!({}));
+}
+
+#[test]
+fn test_normalize_tool_input_schema_replaces_null_properties() {
+    let schema = normalize_tool_input_schema(serde_json::json!({
+        "type": "object",
+        "properties": null
+    }));
+
+    assert_eq!(schema["properties"], serde_json::json!({}));
+}
+
+#[test]
+fn test_tool_result_output_schema_wraps_structured_content_schema() {
+    let structured_schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "answer": { "type": "string" }
+        },
+        "required": ["answer"]
+    });
+    let schema = tool_result_output_schema(structured_schema.clone());
+
+    assert_eq!(schema["type"], "object");
+    assert_eq!(schema["required"], serde_json::json!(["content"]));
+    assert_eq!(schema["additionalProperties"], false);
+    assert_eq!(schema["properties"]["structuredContent"], structured_schema);
+    assert_eq!(schema["properties"]["content"]["type"], "array");
+    assert_eq!(schema["properties"]["isError"]["type"], "boolean");
+    assert_eq!(schema["properties"]["_meta"]["type"], "object");
 }
 
 // ========================================================================
@@ -95,6 +135,7 @@ fn test_apply_default_loading_policy_auto_defers_large_server_tools() {
             name: format!("tool_{index}"),
             description: format!("tool {index}"),
             input_schema: serde_json::json!({}),
+            output_schema: None,
             server_name: "large-server".to_string(),
             deferred_loading: None,
             always_visible: if index == 0 { Some(true) } else { None },
@@ -168,6 +209,7 @@ fn test_apply_default_loading_policy_respects_threshold_boundary_and_explicit_va
             name: format!("threshold_{index}"),
             description: format!("threshold {index}"),
             input_schema: serde_json::json!({}),
+            output_schema: None,
             server_name: "threshold-server".to_string(),
             deferred_loading: None,
             always_visible: None,
@@ -182,6 +224,7 @@ fn test_apply_default_loading_policy_respects_threshold_boundary_and_explicit_va
             name: format!("auto_{index}"),
             description: format!("auto {index}"),
             input_schema: serde_json::json!({}),
+            output_schema: None,
             server_name: "large-server".to_string(),
             deferred_loading: None,
             always_visible: None,
@@ -195,6 +238,7 @@ fn test_apply_default_loading_policy_respects_threshold_boundary_and_explicit_va
         name: "explicit_false".to_string(),
         description: "explicit false".to_string(),
         input_schema: serde_json::json!({}),
+        output_schema: None,
         server_name: "large-server".to_string(),
         deferred_loading: Some(false),
         always_visible: None,
@@ -206,6 +250,7 @@ fn test_apply_default_loading_policy_respects_threshold_boundary_and_explicit_va
         name: "explicit_true".to_string(),
         description: "explicit true".to_string(),
         input_schema: serde_json::json!({}),
+        output_schema: None,
         server_name: "large-server".to_string(),
         deferred_loading: Some(true),
         always_visible: None,
@@ -274,6 +319,7 @@ async fn test_list_tools_for_context_filters_deferred_and_caller() {
                 name: "mcp__s1__hidden_tool".to_string(),
                 description: "hidden".to_string(),
                 input_schema: serde_json::json!({}),
+                output_schema: None,
                 server_name: "s1".to_string(),
                 deferred_loading: Some(true),
                 always_visible: Some(false),
@@ -285,6 +331,7 @@ async fn test_list_tools_for_context_filters_deferred_and_caller() {
                 name: "mcp__s1__visible_deferred".to_string(),
                 description: "visible deferred".to_string(),
                 input_schema: serde_json::json!({}),
+                output_schema: None,
                 server_name: "s1".to_string(),
                 deferred_loading: Some(true),
                 always_visible: Some(true),
@@ -327,6 +374,7 @@ async fn test_search_tools_prioritizes_exact_match() {
                 name: "mcp__s1__weather".to_string(),
                 description: "Get weather".to_string(),
                 input_schema: serde_json::json!({}),
+                output_schema: None,
                 server_name: "s1".to_string(),
                 deferred_loading: Some(true),
                 always_visible: Some(false),
@@ -338,6 +386,7 @@ async fn test_search_tools_prioritizes_exact_match() {
                 name: "mcp__s1__get_weather".to_string(),
                 description: "weather by city".to_string(),
                 input_schema: serde_json::json!({}),
+                output_schema: None,
                 server_name: "s1".to_string(),
                 deferred_loading: Some(true),
                 always_visible: Some(false),
@@ -365,6 +414,7 @@ async fn test_search_tools_empty_query_prioritizes_always_visible_then_name() {
                 name: "mcp__s1__alpha".to_string(),
                 description: "alpha".to_string(),
                 input_schema: serde_json::json!({}),
+                output_schema: None,
                 server_name: "s1".to_string(),
                 deferred_loading: Some(false),
                 always_visible: Some(false),
@@ -376,6 +426,7 @@ async fn test_search_tools_empty_query_prioritizes_always_visible_then_name() {
                 name: "mcp__s1__zeta".to_string(),
                 description: "zeta".to_string(),
                 input_schema: serde_json::json!({}),
+                output_schema: None,
                 server_name: "s1".to_string(),
                 deferred_loading: Some(true),
                 always_visible: Some(true),
@@ -387,6 +438,7 @@ async fn test_search_tools_empty_query_prioritizes_always_visible_then_name() {
                 name: "mcp__s1__beta".to_string(),
                 description: "beta".to_string(),
                 input_schema: serde_json::json!({}),
+                output_schema: None,
                 server_name: "s1".to_string(),
                 deferred_loading: Some(false),
                 always_visible: Some(true),
@@ -420,6 +472,7 @@ async fn test_call_tool_with_caller_rejects_unauthorized_caller() {
             name: "mcp__s1__restricted".to_string(),
             description: "Restricted tool".to_string(),
             input_schema: serde_json::json!({}),
+            output_schema: None,
             server_name: "s1".to_string(),
             deferred_loading: None,
             always_visible: None,
@@ -512,6 +565,36 @@ fn test_convert_content_text() {
         }
         _ => panic!("Expected Text content"),
     }
+}
+
+#[test]
+fn test_convert_call_tool_result_preserves_structured_content() {
+    let result = rmcp::model::CallToolResult {
+        content: vec![rmcp::model::Content::text("structured result")],
+        structured_content: Some(serde_json::json!({
+            "results": [
+                { "title": "MCP current" }
+            ]
+        })),
+        is_error: Some(false),
+        meta: None,
+    };
+
+    let mcp_result = McpClientManager::convert_call_tool_result(result);
+
+    assert_eq!(
+        mcp_result.structured_content,
+        Some(serde_json::json!({
+            "results": [
+                { "title": "MCP current" }
+            ]
+        }))
+    );
+    assert!(!mcp_result.is_error);
+    assert!(matches!(
+        mcp_result.content.as_slice(),
+        [McpContent::Text { text }] if text == "structured result"
+    ));
 }
 
 #[test]

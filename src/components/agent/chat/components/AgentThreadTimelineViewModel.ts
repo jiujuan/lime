@@ -1,8 +1,13 @@
+import { parseAIResponse } from "@/components/workspace/a2ui/parser";
 import type { AgentThreadItem } from "../types";
 import type { AgentThreadOrderedBlock } from "../utils/agentThreadGrouping";
 import { isHiddenConversationArtifactPath } from "../utils/internalArtifactVisibility";
 import { isRuntimePermissionConfirmationWaitMessage } from "../utils/runtimeActionConfirmation";
-import { isThinkingTimelineItem } from "./timeline-utils";
+import {
+  isThinkingTimelineItem,
+  resolveThinkingDisplayText,
+  resolveTurnSummaryDisplayText,
+} from "./timeline-utils";
 
 export type TimelineBlockEmphasis = "active" | "default" | "quiet";
 
@@ -51,6 +56,25 @@ export function resolveTimelineBlockEmphasis(params: {
     return "active";
   }
   return params.block.status === "completed" ? "quiet" : "default";
+}
+
+export function hasStructuredThinkingInlinePreview(
+  item: AgentThreadItem,
+): boolean {
+  if (item.type !== "reasoning" && item.type !== "turn_summary") {
+    return false;
+  }
+
+  const displayText =
+    item.type === "reasoning"
+      ? resolveThinkingDisplayText(item)
+      : resolveTurnSummaryDisplayText(item);
+  if (!displayText.trim()) {
+    return false;
+  }
+
+  const parsed = parseAIResponse(displayText, false);
+  return Boolean(parsed.hasA2UI || parsed.hasPending);
 }
 
 export function buildTimelineBlockRenderPlan(params: {

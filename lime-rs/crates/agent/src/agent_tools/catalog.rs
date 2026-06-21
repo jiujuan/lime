@@ -2,6 +2,7 @@ use crate::mcp::McpToolDefinition;
 use serde::{Deserialize, Serialize};
 
 pub const TOOL_SEARCH_TOOL_NAME: &str = "ToolSearch";
+pub const SKILL_SEARCH_TOOL_NAME: &str = "skill_search";
 pub const UPDATE_PLAN_TOOL_NAME: &str = "update_plan";
 pub const LIST_MCP_RESOURCES_TOOL_NAME: &str = "ListMcpResourcesTool";
 pub const READ_MCP_RESOURCE_TOOL_NAME: &str = "ReadMcpResourceTool";
@@ -478,6 +479,15 @@ static NATIVE_TOOL_CATALOG: &[ToolCatalogEntry] = &[
         workspace_default_allow: true,
     },
     ToolCatalogEntry {
+        name: SKILL_SEARCH_TOOL_NAME,
+        profiles: CORE_PROFILES,
+        capabilities: SKILL_CAP,
+        lifecycle: ToolLifecycle::Current,
+        source: ToolSourceKind::LimeInjected,
+        permission_plane: ToolPermissionPlane::SessionAllowlist,
+        workspace_default_allow: true,
+    },
+    ToolCatalogEntry {
         name: LIST_MCP_RESOURCES_TOOL_NAME,
         profiles: CORE_PROFILES,
         capabilities: SEARCH_CAP,
@@ -792,6 +802,7 @@ fn normalize_tool_catalog_alias(tool_name: &str) -> &str {
         "teamdeletetool" => "TeamDelete",
         "listpeerstool" => "ListPeers",
         "toolsearchtool" | "toolsearch" | "mcpsystemtoolsearch" => "ToolSearch",
+        "skillsearchtool" | "skillsearch" | "skillssearch" => SKILL_SEARCH_TOOL_NAME,
         "updateplan" | "updateplantool" | "updateplan_tool" | "update_plan" => {
             UPDATE_PLAN_TOOL_NAME
         }
@@ -993,6 +1004,7 @@ mod tests {
             name: name.to_string(),
             description: format!("desc for {name}"),
             input_schema: serde_json::json!({ "type": "object" }),
+            output_schema: None,
             server_name: "docs".to_string(),
             deferred_loading,
             always_visible,
@@ -1192,14 +1204,17 @@ mod tests {
             .iter()
             .filter(|entry| entry.profiles.contains(&ToolSurfaceProfile::BrowserAssist))
             .count();
-        assert_eq!(core.len(), 47);
+        assert_eq!(core.len(), 48);
         assert_eq!(
             core.iter()
                 .filter(|entry| entry.lifecycle == ToolLifecycle::Current)
                 .count(),
-            47
+            48
         );
         assert!(core.iter().any(|entry| entry.name == VIEW_IMAGE_TOOL_NAME));
+        assert!(core
+            .iter()
+            .any(|entry| entry.name == SKILL_SEARCH_TOOL_NAME));
         let apply_patch = core
             .iter()
             .find(|entry| entry.name == APPLY_PATCH_TOOL_NAME)

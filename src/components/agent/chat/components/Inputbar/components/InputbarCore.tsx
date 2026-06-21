@@ -552,6 +552,7 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
                   {!isLoading ? (
                     <SendButton
                       type="button"
+                      data-testid="send-btn"
                       onClick={onPrimaryAction}
                       disabled={isPrimaryDisabled}
                       aria-label={uiCopy.action.send}

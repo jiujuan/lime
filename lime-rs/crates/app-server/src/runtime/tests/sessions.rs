@@ -462,6 +462,133 @@ async fn queue_session_controls_use_current_runtime_core_read_model() {
 }
 
 #[tokio::test]
+async fn resume_queued_turn_preserves_runtime_options_for_backend() {
+    let backend = Arc::new(RecordingBackend::default());
+    let core = RuntimeCore::with_backend(backend.clone());
+    core.start_session(AgentSessionStartParams {
+        session_id: Some("sess_queue_runtime_options".to_string()),
+        thread_id: Some("thread_queue_runtime_options".to_string()),
+        app_id: "agent-chat".to_string(),
+        workspace_id: Some("workspace-current".to_string()),
+        business_object_ref: None,
+        locale: None,
+    })
+    .expect("session");
+
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: "sess_queue_runtime_options".to_string(),
+            turn_id: Some("turn_running".to_string()),
+            input: AgentInput {
+                text: "running".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: None,
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("running turn");
+
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: "sess_queue_runtime_options".to_string(),
+            turn_id: Some("turn_queued".to_string()),
+            input: AgentInput {
+                text: "queued".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: Some(RuntimeOptions {
+                provider_preference: Some("fixture-provider".to_string()),
+                model_preference: Some("fixture-model".to_string()),
+                metadata: Some(json!({
+                    "expert": {
+                        "expertId": "code-literature",
+                        "skillRefs": ["skill:code-review", "skill:local:capability-report"]
+                    }
+                })),
+                host_options: Some(json!({
+                    "asterChatRequest": {
+                        "metadata": {
+                            "expert": {
+                                "skillRefs": ["skill:code-review", "skill:local:capability-report"]
+                            }
+                        }
+                    }
+                })),
+                ..RuntimeOptions::default()
+            }),
+            queue_if_busy: true,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("queued turn");
+
+    core.append_external_runtime_events(
+        "sess_queue_runtime_options",
+        Some("turn_running"),
+        vec![RuntimeEvent::new("turn.completed", json!({}))],
+    )
+    .expect("complete running");
+
+    let resumed = core
+        .resume_agent_session_thread(
+            AgentSessionThreadResumeParams {
+                session_id: "sess_queue_runtime_options".to_string(),
+                resume_contract: None,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("resume queued");
+    assert!(resumed.response.resumed);
+
+    let requests = backend
+        .requests
+        .lock()
+        .expect("test backend requests mutex poisoned");
+    let resumed_request = requests
+        .iter()
+        .find(|request| request.turn.turn_id == "turn_queued")
+        .expect("resumed queued request");
+    assert_eq!(
+        resumed_request.provider_preference.as_deref(),
+        Some("fixture-provider")
+    );
+    assert_eq!(
+        resumed_request.model_preference.as_deref(),
+        Some("fixture-model")
+    );
+    assert_eq!(
+        resumed_request.queued_turn_id.as_deref(),
+        Some("turn_queued")
+    );
+    assert_eq!(
+        resumed_request
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.pointer("/expert/skillRefs/1"))
+            .and_then(serde_json::Value::as_str),
+        Some("skill:local:capability-report")
+    );
+    assert_eq!(
+        resumed_request
+            .runtime_options
+            .as_ref()
+            .and_then(|options| options.host_options.as_ref())
+            .and_then(|host_options| {
+                host_options.pointer("/asterChatRequest/metadata/expert/skillRefs/0")
+            })
+            .and_then(serde_json::Value::as_str),
+        Some("skill:code-review")
+    );
+}
+
+#[tokio::test]
 async fn list_agent_sessions_derives_placeholder_title_from_first_user_message() {
     let core = RuntimeCore::default();
     core.start_session(AgentSessionStartParams {

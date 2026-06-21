@@ -107,7 +107,6 @@ function assertI18nKeyTypes() {
     ns: "agent",
     count: 1024,
   });
-  i18n.t("agentChat.toolCall.logs.title", { ns: "agent" });
   i18n.t("agentChat.toolCall.commandSummary.title", { ns: "agent" });
   i18n.t("agentChat.toolCall.commandSummary.command", { ns: "agent" });
   i18n.t("agentChat.toolCall.commandSummary.cwd", { ns: "agent" });

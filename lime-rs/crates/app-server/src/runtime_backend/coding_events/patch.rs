@@ -226,6 +226,7 @@ mod tests {
             success: false,
             output: "target file not found".to_string(),
             error: None,
+            structured_content: None,
             images: None,
             metadata: None,
         };

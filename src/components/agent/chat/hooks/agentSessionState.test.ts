@@ -5,6 +5,7 @@ import type { AgentThreadItem, AgentThreadTurn, Message } from "../types";
 import {
   buildHydratedAgentSessionSnapshot,
   createEmptyAgentSessionSnapshot,
+  hasActiveRuntimeTurn,
   hasSessionHydrationActivity,
   resolveMissingSessionFromTopicsAction,
   resolveRestorableTopicSessionId,
@@ -225,6 +226,32 @@ describe("agentSessionState", () => {
         sessionId: "title-gen-session-1",
       }),
     ).toEqual({ kind: "clear_auxiliary" });
+  });
+
+  it("stale queued read model 不应单独阻塞下一轮用户提交", () => {
+    expect(
+      hasActiveRuntimeTurn({
+        queuedTurnsCount: 0,
+        threadReadStatus: "queued",
+        turns: [createTurn({ status: "completed" })],
+      }),
+    ).toBe(false);
+
+    expect(
+      hasActiveRuntimeTurn({
+        queuedTurnsCount: 1,
+        threadReadStatus: "queued",
+        turns: [createTurn({ status: "completed" })],
+      }),
+    ).toBe(true);
+
+    expect(
+      hasActiveRuntimeTurn({
+        queuedTurnsCount: 0,
+        threadReadStatus: "queued",
+        turns: [createTurn({ status: "running" })],
+      }),
+    ).toBe(true);
   });
 
   it("topics 未就绪、无 session 或 topic 已存在时不应处理缺失会话", () => {

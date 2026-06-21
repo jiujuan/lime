@@ -292,6 +292,7 @@ mod tests {
                 success: true,
                 output: "ok".to_string(),
                 error: None,
+                structured_content: None,
                 images: None,
                 metadata: None,
             },
@@ -305,6 +306,35 @@ mod tests {
     }
 
     #[test]
+    fn runtime_agent_tool_end_preserves_structured_content_in_result_payload() {
+        let events = runtime_events_from_agent_event(&RuntimeAgentEvent::ToolEnd {
+            tool_id: "tool-mcp-structured".to_string(),
+            result: AgentToolResult {
+                success: true,
+                output: "ok".to_string(),
+                error: None,
+                structured_content: Some(json!({
+                    "answer": "ok",
+                    "ids": ["doc-1"]
+                })),
+                images: None,
+                metadata: Some(HashMap::from([("source".to_string(), json!("mcp"))])),
+            },
+        })
+        .expect("tool end should emit");
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "tool.result");
+        assert_eq!(
+            events[0].payload["result"]["structuredContent"],
+            json!({
+                "answer": "ok",
+                "ids": ["doc-1"]
+            })
+        );
+    }
+
+    #[test]
     fn runtime_agent_failed_tool_end_emits_tool_failed() {
         let events = runtime_events_from_agent_event(&RuntimeAgentEvent::ToolEnd {
             tool_id: "tool-failed".to_string(),
@@ -312,6 +342,7 @@ mod tests {
                 success: false,
                 output: "test failed".to_string(),
                 error: Some("exit code 101".to_string()),
+                structured_content: None,
                 images: None,
                 metadata: Some(HashMap::from([
                     ("exit_code".to_string(), json!(101)),

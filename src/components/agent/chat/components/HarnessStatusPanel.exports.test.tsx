@@ -221,6 +221,19 @@ describe("HarnessStatusPanel exports", () => {
             },
           },
         ],
+        skill_searches: [
+          {
+            event: "skill_search",
+            query: "capability report",
+            result_count: 2,
+            snapshot_skill_count: 7,
+            status: "completed",
+            source_event_id: "evt-skill-search-1",
+            source_event_type: "tool.result",
+            turn_id: "turn-evidence-1",
+            tool_call_id: "skill-search-call-1",
+          },
+        ],
         modality_runtime_contracts: {
           snapshot_count: 2,
           snapshot_index: {
@@ -426,6 +439,10 @@ describe("HarnessStatusPanel exports", () => {
     expect(document.body.textContent).toContain("Skill ToolCall");
     expect(document.body.textContent).toContain(
       "project:capability-report · completed",
+    );
+    expect(document.body.textContent).toContain("Skill Search");
+    expect(document.body.textContent).toContain(
+      "capability report · 2/7 · completed",
     );
     expect(document.body.textContent).toContain("验证结果");
     expect(document.body.textContent).toContain("阻塞失败");

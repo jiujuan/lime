@@ -17,6 +17,8 @@ export interface AgentToolExecutionResult {
     error?: string;
     images?: AgentToolResultImage[];
     metadata?: AgentToolResultMetadata;
+    structuredContent?: unknown;
+    structured_content?: unknown;
 }
 export interface AgentMessageContentText {
     type: "text";

@@ -622,6 +622,8 @@
   "skills.workspace.featured.reuseResult": "沿用結果",
   "skills.workspace.feedback.refreshError": "重新整理 Skills 失敗：{{message}}",
   "skills.workspace.feedback.refreshSuccess": "Skills 已重新整理",
+  "skills.workspace.runtimeEnable.initialPrompt": "先試用一次「{{name}}」技能。請按需讀取它的 SKILL.md 和必要引用，說明會使用哪些能力，然後執行一次最小驗證。",
+  "skills.workspace.runtimeEnable.unavailable": "「{{name}}」暫時不能試用，請先處理執行綁定問題。",
   "skills.workspace.header.refresh": "重新整理",
   "skills.workspace.header.subtitle": "安裝和管理技能，需要時帶回首頁輸入框使用。",
   "skills.workspace.header.title": "技能",

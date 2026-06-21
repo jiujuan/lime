@@ -4,6 +4,7 @@ export interface AgentChatWorkspaceShellViewModelInput {
   contentId?: string | null;
   initialSessionId?: string | null;
   displayMessageCount: number;
+  threadItemCount?: number;
   isHomePendingPreviewActive: boolean;
   shouldSuppressTaskCenterDraftContent: boolean;
   hasCanvasWorkbenchContent: boolean;
@@ -28,6 +29,7 @@ export function resolveAgentChatWorkspaceShellViewModel({
   contentId,
   initialSessionId,
   displayMessageCount,
+  threadItemCount = 0,
   isHomePendingPreviewActive,
   shouldSuppressTaskCenterDraftContent,
   hasCanvasWorkbenchContent,
@@ -40,7 +42,9 @@ export function resolveAgentChatWorkspaceShellViewModel({
 }: AgentChatWorkspaceShellViewModelInput): AgentChatWorkspaceShellViewModel {
   const hasDisplayMessages =
     !shouldSuppressTaskCenterDraftContent &&
-    (displayMessageCount > 0 || isHomePendingPreviewActive);
+    (displayMessageCount > 0 ||
+      threadItemCount > 0 ||
+      isHomePendingPreviewActive);
   const effectiveShowChatPanel =
     showChatPanel ||
     (agentEntry === "claw" && Boolean(initialSessionId?.trim())) ||

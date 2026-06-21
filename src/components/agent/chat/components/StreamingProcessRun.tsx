@@ -1,0 +1,231 @@
+import React, { memo, useCallback } from "react";
+import { ActionRequestA2UIPreviewCard } from "./ActionRequestA2UIPreviewCard";
+import { DecisionPanel } from "./DecisionPanel";
+import { InlineToolProcessStep } from "./InlineToolProcessStep";
+import {
+  GroupedProcessShell,
+  StreamingProcessGroup,
+} from "./StreamingProcessGroup";
+import {
+  isImportedProcessMetadata,
+  isImportedToolCall,
+  shouldAutoExpandProcessEntries,
+  type StreamingProcessEntry,
+} from "./StreamingProcessGroupModel";
+import { ThinkingBlock } from "./ThinkingBlock";
+import type { AgentToolCallState as ToolCallState } from "@/lib/api/agentProtocol";
+import type {
+  ActionRequired,
+  ConfirmResponse,
+  SiteSavedContentTarget,
+} from "../types";
+import type { SearchResultPreviewItem } from "../utils/searchResultPreview";
+import {
+  buildActionRequestSubmissionPayload,
+  isActionRequestA2UICompatible,
+} from "../utils/actionRequestA2UI";
+
+interface StreamingProcessRunProps {
+  entries: StreamingProcessEntry[];
+  forceGroup?: boolean;
+  isTailProcessRun?: boolean;
+  isStreaming: boolean;
+  processIsActive: boolean;
+  shouldKeepProcessOpenForFinalAnswer: boolean;
+  promoteActionRequestsToA2UI: boolean;
+  readOnlyActionRequests: boolean;
+  onPermissionResponse?: (response: ConfirmResponse) => void;
+  onFileClick?: (fileName: string, content: string) => void;
+  onOpenSavedSiteContent?: (target: SiteSavedContentTarget) => void;
+  onOpenUrlPreview?: (item: SearchResultPreviewItem) => void;
+}
+
+export const StreamingProcessRun: React.FC<StreamingProcessRunProps> = memo(
+  ({
+    entries,
+    forceGroup = false,
+    isTailProcessRun = false,
+    isStreaming,
+    processIsActive,
+    shouldKeepProcessOpenForFinalAnswer,
+    promoteActionRequestsToA2UI,
+    readOnlyActionRequests,
+    onPermissionResponse,
+    onFileClick,
+    onOpenSavedSiteContent,
+    onOpenUrlPreview,
+  }) => {
+    const renderActionRequestNode = useCallback(
+      (request: ActionRequired) => {
+        const shouldRenderA2UICard =
+          isActionRequestA2UICompatible(request) &&
+          (readOnlyActionRequests ||
+            request.status === "submitted" ||
+            request.status === "queued" ||
+            (promoteActionRequestsToA2UI && request.status === "pending"));
+        if (shouldRenderA2UICard) {
+          const isReadOnly =
+            readOnlyActionRequests ||
+            request.status === "submitted" ||
+            request.status === "queued" ||
+            !onPermissionResponse;
+          return (
+            <ActionRequestA2UIPreviewCard
+              request={request}
+              compact={true}
+              context="chat"
+              readOnly={isReadOnly}
+              onSubmit={
+                isReadOnly
+                  ? undefined
+                  : (formData) => {
+                      const payload = buildActionRequestSubmissionPayload(
+                        request,
+                        formData,
+                      );
+                      onPermissionResponse({
+                        requestId: request.requestId,
+                        confirmed: true,
+                        actionType: request.actionType,
+                        response: payload.responseText,
+                        userData: payload.userData,
+                      });
+                    }
+              }
+            />
+          );
+        }
+        return (
+          <DecisionPanel
+            request={request}
+            onSubmit={onPermissionResponse || (() => {})}
+          />
+        );
+      },
+      [onPermissionResponse, promoteActionRequestsToA2UI, readOnlyActionRequests],
+    );
+
+    const renderProcessEntry = useCallback(
+      (
+        entry: StreamingProcessEntry,
+        grouped: boolean,
+        groupMarker: string,
+        processEntries: StreamingProcessEntry[],
+      ) => {
+        if (entry.kind === "thinking") {
+          const preserveThinkingSourceText =
+            entry.preserveSourceText ||
+            isImportedProcessMetadata(entry.metadata);
+          return (
+            <ThinkingBlock
+              key={entry.id}
+              content={entry.text}
+              defaultExpanded={Boolean(entry.defaultExpanded)}
+              grouped={grouped}
+              groupMarker={groupMarker}
+              hideSummary={grouped}
+              isStreaming={isStreaming && !preserveThinkingSourceText}
+              preserveSourceText={preserveThinkingSourceText}
+            />
+          );
+        }
+
+        if (entry.kind === "tool") {
+          const siblingToolCalls = processEntries
+            .filter(
+              (candidate): candidate is Extract<
+                StreamingProcessEntry,
+                { kind: "tool" }
+              > => candidate.kind === "tool",
+            )
+            .map((candidate) => candidate.toolCall);
+          return (
+            <InlineToolProcessStep
+              key={entry.id}
+              toolCall={entry.toolCall}
+              isActiveProcess={shouldKeepProcessOpenForFinalAnswer}
+              isMessageStreaming={isStreaming}
+              onFileClick={onFileClick}
+              onOpenSavedSiteContent={onOpenSavedSiteContent}
+              onOpenUrlPreview={onOpenUrlPreview}
+              urlPreviewToolCalls={siblingToolCalls}
+              grouped={grouped}
+              groupMarker={groupMarker}
+            />
+          );
+        }
+
+        const actionNode = renderActionRequestNode(entry.actionRequired);
+        if (!grouped) {
+          return <React.Fragment key={entry.id}>{actionNode}</React.Fragment>;
+        }
+
+        return (
+          <GroupedProcessShell key={entry.id} groupMarker={groupMarker}>
+            {actionNode}
+          </GroupedProcessShell>
+        );
+      },
+      [
+        isStreaming,
+        onFileClick,
+        onOpenSavedSiteContent,
+        onOpenUrlPreview,
+        renderActionRequestNode,
+        shouldKeepProcessOpenForFinalAnswer,
+      ],
+    );
+
+    if (entries.length === 0) {
+      return null;
+    }
+
+    const toolCount = entries.filter((entry) => entry.kind === "tool").length;
+    const hasImportedProcess = entries.some(
+      (entry) =>
+        (entry.kind === "thinking" &&
+          isImportedProcessMetadata(entry.metadata)) ||
+        (entry.kind === "tool" && isImportedToolCall(entry.toolCall)),
+    );
+    const processEntries = hasImportedProcess
+      ? entries.map((entry) =>
+          entry.kind === "thinking"
+            ? {
+                ...entry,
+                defaultExpanded: entry.defaultExpanded ?? true,
+                preserveSourceText: true,
+              }
+            : entry,
+        )
+      : entries;
+
+    if (forceGroup || (toolCount > 0 && entries.length > 1)) {
+      return (
+        <StreamingProcessGroup
+          entries={processEntries}
+          defaultExpanded={shouldAutoExpandProcessEntries(
+            processEntries,
+            processIsActive,
+            { isTailProcessRun },
+          )}
+          onOpenUrlPreview={onOpenUrlPreview}
+          renderEntry={renderProcessEntry}
+        />
+      );
+    }
+
+    return (
+      <>
+        {processEntries.map((entry) => (
+          <React.Fragment key={entry.id}>
+            {renderProcessEntry(entry, false, "•", processEntries)}
+          </React.Fragment>
+        ))}
+      </>
+    );
+  },
+);
+
+StreamingProcessRun.displayName = "StreamingProcessRun";
+
+export type { StreamingProcessEntry, ToolCallState };

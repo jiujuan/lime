@@ -14,10 +14,9 @@ import {
   sanitizeMessageTextForDisplay,
 } from "../utils/messageDisplaySanitizer";
 import { hasStructuredHistoricalContentHint } from "../projection/historicalMessageHydrationProjection";
-import { isRuntimeStatusDiagnosticsOnly } from "../utils/turnSummaryPresentation";
 import type { MessageListRenderGroup } from "./MessageList.types";
 import type { AgentStreamTextOverlaySnapshot } from "../hooks/agentStreamTextOverlayStore";
-import type { AgentThreadItem, Message, PendingA2UISource } from "../types";
+import type { Message, PendingA2UISource } from "../types";
 import { buildHistoricalMessagePreview } from "./messageListHistoricalPreviewText";
 import {
   parseLeadingUserCommandTag,
@@ -25,8 +24,6 @@ import {
 } from "./messageListUserContentState";
 import { resolveKnowledgeSourceFromArtifacts } from "./messageListKnowledgeSource";
 import { buildTimelineInlineContentParts } from "./messageListTimelineContentParts";
-import { isUnifiedWebSearchToolName } from "../utils/searchResultPreview";
-import { isUnifiedWebFetchToolName } from "../utils/toolNameFamily";
 import {
   resolveImageWorkbenchMessageDisplayState,
   resolveImageWorkbenchProcessDisplayState,
@@ -50,16 +47,34 @@ import { shouldRenderAssistantRuntimeStatusPill } from "./messageAssistantMetaFo
 import { resolveAgentRuntimeErrorPresentation } from "../utils/agentRuntimeErrorPresentation";
 import { hasImportedSourceProcessItem } from "../utils/importedSourceProcess";
 import {
-  isAgentMessageCommentaryPhase,
-  shouldUseAgentMessageAsFinalText,
-} from "../utils/agentMessagePhase";
-import {
   MESSAGE_LIST_COMPACT_HISTORICAL_ASSISTANT_PREVIEW_CHARS,
   MESSAGE_LIST_COMPACT_HISTORICAL_ASSISTANT_THRESHOLD,
   MESSAGE_LIST_HISTORICAL_TIMELINE_COMPACT_ITEM_THRESHOLD,
   MESSAGE_LIST_LONG_HISTORICAL_MESSAGE_PREVIEW_CHARS,
   MESSAGE_LIST_LONG_HISTORICAL_MESSAGE_THRESHOLD,
 } from "./messageListConstants";
+import {
+  collectFileChangeBatchPaths,
+  ensureInlineThinkingContentPart,
+  hasFinalTextAfterProcessBoundary,
+  hasInlineProcessContentParts,
+  hasInlineToolUseContentPart,
+  resolveAssistantActionContent,
+  resolveDeferredTextContentParts,
+  resolveProcessSeparatedContentParts,
+} from "./messageListProjectionContentParts";
+import {
+  hasCompletedOrRunningWebRetrievalTimelineItem,
+  hasFinalAnswerTextAfterRunningWebRetrieval,
+  hasFinalAnswerTextTimelineItem,
+  hasRunningWebRetrievalContentPart,
+  hasRunningWebRetrievalTimelineItem,
+  hideFinalAnswerContentPartsWhileRunning,
+  holdTextContentPartsAsProcessWhileRunning,
+  isActiveThreadTurnStatus,
+  normalizeInactiveRunningWebRetrievalContentParts,
+  normalizeInactiveRunningWebRetrievalTimelineItems,
+} from "./messageListProjectionWebRetrieval";
 
 function normalizeFailureContentForCompare(value?: string | null): string {
   return (value || "").trim().replace(/\s+/g, " ");
@@ -99,496 +114,6 @@ function isRuntimeFailureOnlyAssistantText(
     contentText === `执行失败：${detailText}` ||
     contentText === `当前处理失败 ${detailText}`
   );
-}
-
-function hasInlineProcessContentParts(
-  message: Message,
-  options: {
-    displayContent: string;
-    timelineItems?: AgentThreadItem[];
-  },
-): boolean {
-  const contentParts = message.contentParts || [];
-  const hasNonThinkingProcessPart = contentParts.some(
-    (part) =>
-      part.type === "tool_use" ||
-      part.type === "action_required" ||
-      part.type === "file_changes_batch",
-  );
-  if (hasNonThinkingProcessPart) {
-    return true;
-  }
-
-  const hasThinkingPart = contentParts.some(
-    (part) => part.type === "thinking" && part.text.trim().length > 0,
-  );
-  if (!hasThinkingPart) {
-    return false;
-  }
-
-  if (
-    message.isThinking &&
-    !options.displayContent.trim() &&
-    isRuntimeStatusDiagnosticsOnly(message.runtimeStatus)
-  ) {
-    return false;
-  }
-
-  return Boolean(
-    options.displayContent.trim() ||
-    options.timelineItems?.some((item) => item.type === "reasoning"),
-  );
-}
-
-type MessageContentPart = NonNullable<Message["contentParts"]>[number];
-
-function hasProcessBoundaryContentPart(
-  parts?: Message["contentParts"],
-): boolean {
-  return Boolean(
-    parts?.some(
-      (part) =>
-        part.type === "tool_use" ||
-        part.type === "action_required" ||
-        part.type === "file_changes_batch",
-    ),
-  );
-}
-
-function findLastProcessBoundaryIndex(parts: MessageContentPart[]): number {
-  for (let index = parts.length - 1; index >= 0; index -= 1) {
-    const part = parts[index];
-    if (
-      part?.type === "tool_use" ||
-      part?.type === "action_required" ||
-      part?.type === "file_changes_batch"
-    ) {
-      return index;
-    }
-  }
-  return -1;
-}
-
-function isLikelyCompleteThinkingSegment(text: string): boolean {
-  return /[.!?;:。！？；：]\s*$/.test(text.trim());
-}
-
-function collectFileChangeBatchPaths(
-  parts?: Message["contentParts"],
-): string[] {
-  return (parts || []).flatMap((part) =>
-    part.type === "file_changes_batch"
-      ? part.aggregate.files.map((file) => file.path)
-      : [],
-  );
-}
-
-function resolveFinalTextFromContentParts(
-  parts?: Message["contentParts"],
-): string {
-  const textParts =
-    parts?.filter(
-      (part): part is Extract<MessageContentPart, { type: "text" }> =>
-        part.type === "text" && part.text.trim().length > 0,
-    ) || [];
-
-  return textParts[textParts.length - 1]?.text.trim() || "";
-}
-
-function resolveDeferredTextContentParts(
-  parts?: Message["contentParts"],
-  options?: Parameters<typeof sanitizeMessageTextForDisplay>[1],
-): Message["contentParts"] | undefined {
-  const finalText = resolveFinalTextFromContentParts(parts);
-  const sanitizedText = options
-    ? sanitizeMessageTextForDisplay(finalText, options)
-    : finalText;
-  return sanitizedText ? [{ type: "text", text: sanitizedText }] : undefined;
-}
-
-function resolveAssistantActionContent(params: {
-  displayContent: string;
-  conversationContentParts?: Message["contentParts"];
-  useProcessSeparatedFinalText: boolean;
-}): string {
-  if (params.useProcessSeparatedFinalText) {
-    return resolveFinalTextFromContentParts(params.conversationContentParts);
-  }
-
-  return (
-    params.displayContent.trim() ||
-    resolveFinalTextFromContentParts(params.conversationContentParts)
-  );
-}
-
-function hasFinalTextAfterProcessBoundary(
-  parts?: Message["contentParts"],
-): boolean {
-  const normalizedParts = parts || [];
-  const firstProcessIndex = normalizedParts.findIndex(
-    (part) =>
-      part.type === "tool_use" ||
-      part.type === "action_required" ||
-      part.type === "file_changes_batch",
-  );
-  if (firstProcessIndex < 0) {
-    return false;
-  }
-
-  return normalizedParts.some(
-    (part, index) =>
-      index > firstProcessIndex &&
-      part.type === "text" &&
-      part.text.trim().length > 0,
-  );
-}
-
-function resolveProcessSeparatedContentParts(
-  parts?: Message["contentParts"],
-): Message["contentParts"] | undefined {
-  if (!hasProcessBoundaryContentPart(parts)) {
-    return parts;
-  }
-
-  const hasActionBoundary = Boolean(
-    parts?.some((part) => part.type === "action_required"),
-  );
-  if (hasActionBoundary) {
-    return parts;
-  }
-
-  const firstProcessIndex = (parts || []).findIndex(
-    (part) =>
-      part.type === "tool_use" ||
-      part.type === "action_required" ||
-      part.type === "file_changes_batch",
-  );
-  const lastTextIndex = (parts || []).reduce(
-    (lastIndex, part, index) =>
-      part.type === "text" && part.text.trim().length > 0 ? index : lastIndex,
-    -1,
-  );
-
-  const filtered = (parts || []).filter((part, index) => {
-    if (part.type !== "text") {
-      return true;
-    }
-    return index < firstProcessIndex || index === lastTextIndex;
-  });
-
-  return filtered.length > 0 ? filtered : undefined;
-}
-
-function hasInlineToolUseContentPart(parts?: Message["contentParts"]): boolean {
-  return Boolean(parts?.some((part) => part.type === "tool_use"));
-}
-
-function hasRunningWebRetrievalContentPart(
-  parts?: Message["contentParts"],
-): boolean {
-  return Boolean(
-    parts?.some((part) => {
-      return (
-        part.type === "tool_use" &&
-        part.toolCall.status === "running" &&
-        (isUnifiedWebSearchToolName(part.toolCall.name) ||
-          isUnifiedWebFetchToolName(part.toolCall.name))
-      );
-    }),
-  );
-}
-
-function isRunningThreadItemStatus(status?: string | null): boolean {
-  return status === "in_progress" || status === "running";
-}
-
-function isActiveThreadTurnStatus(status?: string | null): boolean {
-  return status === "running" || status === "queued" || status === "in_progress";
-}
-
-function isWebRetrievalThreadItem(item: AgentThreadItem): boolean {
-  return (
-    item.type === "web_search" ||
-    (item.type === "tool_call" &&
-      (isUnifiedWebSearchToolName(item.tool_name) ||
-        isUnifiedWebFetchToolName(item.tool_name)))
-  );
-}
-
-function hasRunningWebRetrievalTimelineItem(
-  items?: AgentThreadItem[],
-): boolean {
-  return Boolean(
-    items?.some(
-      (item) =>
-        isRunningThreadItemStatus(item.status) &&
-        isWebRetrievalThreadItem(item),
-    ),
-  );
-}
-
-function hasCompletedOrRunningWebRetrievalTimelineItem(
-  items?: AgentThreadItem[],
-): boolean {
-  return Boolean(
-    items?.some(
-      (item) =>
-        (item.status === "completed" ||
-          isRunningThreadItemStatus(item.status)) &&
-        isWebRetrievalThreadItem(item),
-    ),
-  );
-}
-
-function normalizeInactiveRunningWebRetrievalContentParts(
-  parts: Message["contentParts"] | undefined,
-  shouldNormalize: boolean,
-): Message["contentParts"] | undefined {
-  if (!shouldNormalize || !parts?.length) {
-    return parts;
-  }
-
-  let changed = false;
-  const nextParts = parts.map((part) => {
-    if (
-      part.type !== "tool_use" ||
-      part.toolCall.status !== "running" ||
-      (!isUnifiedWebSearchToolName(part.toolCall.name) &&
-        !isUnifiedWebFetchToolName(part.toolCall.name))
-    ) {
-      return part;
-    }
-
-    changed = true;
-    return {
-      ...part,
-      toolCall: {
-        ...part.toolCall,
-        status: "completed" as const,
-      },
-    };
-  });
-
-  return changed ? nextParts : parts;
-}
-
-function normalizeInactiveRunningWebRetrievalTimelineItems(
-  items: AgentThreadItem[] | undefined,
-  shouldNormalize: boolean,
-): AgentThreadItem[] | undefined {
-  if (!shouldNormalize || !items?.length) {
-    return items;
-  }
-
-  let changed = false;
-  const nextItems = items.map((item) => {
-    if (
-      !isRunningThreadItemStatus(item.status) ||
-      !isWebRetrievalThreadItem(item)
-    ) {
-      return item;
-    }
-
-    changed = true;
-    return {
-      ...item,
-      status: "completed" as const,
-      completed_at: item.completed_at || item.updated_at || item.started_at,
-    } as AgentThreadItem;
-  });
-
-  return changed ? nextItems : items;
-}
-
-function holdTextContentPartsAsProcessWhileRunning(
-  parts?: Message["contentParts"],
-  shouldHold?: boolean,
-): Message["contentParts"] | undefined {
-  if (!shouldHold || !parts?.length) {
-    return parts;
-  }
-
-  let changed = false;
-  const nextParts: NonNullable<Message["contentParts"]> = [];
-  for (const part of parts) {
-    if (part.type !== "text") {
-      nextParts.push(part);
-      continue;
-    }
-
-    changed = true;
-    const normalized = part.text.trim();
-    if (!normalized) {
-      continue;
-    }
-
-    const lastPart = nextParts[nextParts.length - 1];
-    if (lastPart?.type === "thinking") {
-      nextParts[nextParts.length - 1] = {
-        ...lastPart,
-        text: `${lastPart.text}\n\n${normalized}`,
-      };
-      continue;
-    }
-
-    nextParts.push({ type: "thinking", text: normalized });
-  }
-
-  return changed ? nextParts : parts;
-}
-
-function hideFinalAnswerContentPartsWhileRunning(
-  parts?: Message["contentParts"],
-  shouldHide?: boolean,
-): Message["contentParts"] | undefined {
-  if (!shouldHide || !parts?.length) {
-    return parts;
-  }
-
-  let changed = false;
-  const nextParts = parts.filter((part) => {
-    if (part.type !== "text") {
-      return true;
-    }
-    changed = true;
-    return false;
-  });
-
-  return changed ? nextParts : parts;
-}
-
-function hasFinalAnswerTextAfterRunningWebRetrieval(
-  items?: AgentThreadItem[],
-): boolean {
-  if (!items?.length) {
-    return false;
-  }
-
-  const orderedItems = [...items].sort((left, right) => {
-    const leftSequence = Number.isFinite(left.sequence)
-      ? Number(left.sequence)
-      : Number.MAX_SAFE_INTEGER;
-    const rightSequence = Number.isFinite(right.sequence)
-      ? Number(right.sequence)
-      : Number.MAX_SAFE_INTEGER;
-    if (leftSequence !== rightSequence) {
-      return leftSequence - rightSequence;
-    }
-    return left.id.localeCompare(right.id);
-  });
-
-  let sawRunningWebRetrieval = false;
-  for (const item of orderedItems) {
-    if (
-      isWebRetrievalThreadItem(item) &&
-      isRunningThreadItemStatus(item.status)
-    ) {
-      sawRunningWebRetrieval = true;
-      continue;
-    }
-
-    if (
-      sawRunningWebRetrieval &&
-      item.type === "agent_message" &&
-      !isAgentMessageCommentaryPhase(item.phase) &&
-      shouldUseAgentMessageAsFinalText(item.phase) &&
-      item.text.trim().length > 0
-    ) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-function hasFinalAnswerTextTimelineItem(items?: AgentThreadItem[]): boolean {
-  return Boolean(
-    items?.some(
-      (item) =>
-        item.type === "agent_message" &&
-        !isAgentMessageCommentaryPhase(item.phase) &&
-        shouldUseAgentMessageAsFinalText(item.phase) &&
-        item.text.trim().length > 0,
-    ),
-  );
-}
-
-function ensureInlineThinkingContentPart(params: {
-  parts?: Message["contentParts"];
-  thinkingContent?: string;
-  shouldEnsure: boolean;
-}): Message["contentParts"] | undefined {
-  const normalizedThinking = params.thinkingContent?.trim();
-  if (!params.shouldEnsure || !normalizedThinking) {
-    return params.parts;
-  }
-
-  const parts = params.parts || [];
-  const existingThinkingText = parts
-    .filter(
-      (part): part is Extract<MessageContentPart, { type: "thinking" }> =>
-        part.type === "thinking" && part.text.trim().length > 0,
-    )
-    .map((part) => part.text)
-    .join("");
-  const normalizedExistingThinking = existingThinkingText.trim();
-  const processBoundaryIndex = findLastProcessBoundaryIndex(parts);
-  const thinkingPartIndex = parts.findIndex(
-    (part) => part.type === "thinking" && part.text.trim().length > 0,
-  );
-  if (thinkingPartIndex >= 0) {
-    const existingPart = parts[thinkingPartIndex];
-    const missingThinkingTail =
-      normalizedExistingThinking &&
-      normalizedThinking.startsWith(normalizedExistingThinking)
-        ? normalizedThinking.slice(normalizedExistingThinking.length).trim()
-        : "";
-    if (
-      processBoundaryIndex >= 0 &&
-      missingThinkingTail &&
-      isLikelyCompleteThinkingSegment(normalizedExistingThinking)
-    ) {
-      const nextParts = [...parts];
-      const insertIndex = processBoundaryIndex + 1;
-      const existingThinkingAfterBoundaryIndex = nextParts.findIndex(
-        (part, index) =>
-          index > processBoundaryIndex &&
-          part.type === "thinking" &&
-          part.text.trim().length > 0,
-      );
-      const existingThinkingAfterBoundary =
-        existingThinkingAfterBoundaryIndex >= 0
-          ? nextParts[existingThinkingAfterBoundaryIndex]
-          : undefined;
-      if (existingThinkingAfterBoundary?.type === "thinking") {
-        nextParts[existingThinkingAfterBoundaryIndex] = {
-          ...existingThinkingAfterBoundary,
-          text: `${existingThinkingAfterBoundary.text}\n\n${missingThinkingTail}`,
-        };
-      } else {
-        nextParts.splice(insertIndex, 0, {
-          type: "thinking",
-          text: missingThinkingTail,
-        });
-      }
-      return nextParts;
-    }
-    if (
-      existingPart?.type === "thinking" &&
-      normalizedThinking.startsWith(existingPart.text.trim()) &&
-      normalizedThinking.length > existingPart.text.trim().length
-    ) {
-      const nextParts = [...parts];
-      nextParts[thinkingPartIndex] = {
-        ...existingPart,
-        text: normalizedThinking,
-      };
-      return nextParts;
-    }
-    return params.parts;
-  }
-
-  return [{ type: "thinking", text: normalizedThinking }, ...parts];
 }
 
 export interface ResolveMessageListItemProjectionOptions {

@@ -1,83 +1,8 @@
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { InlineToolProcessStep } from "./InlineToolProcessStep";
+import { describe, expect, it, vi } from "vitest";
 import type { AgentToolCallState as ToolCallState } from "@/lib/api/agentProtocol";
-import { openExternalUrlWithSystemBrowser } from "@/lib/api/externalUrl";
 import { changeLimeLocale } from "@/i18n/createI18n";
-import type { SearchResultPreviewItem } from "../utils/searchResultPreview";
-
-vi.mock("@/lib/api/externalUrl", () => ({
-  openExternalUrlWithSystemBrowser: vi.fn().mockResolvedValue(undefined),
-}));
-
-vi.mock("./MarkdownRenderer", () => ({
-  MarkdownRenderer: ({ content }: { content: string }) => (
-    <div data-testid="markdown-renderer">{content}</div>
-  ),
-}));
-
-interface RenderResult {
-  container: HTMLDivElement;
-  root: Root;
-}
-
-interface RenderOptions {
-  isMessageStreaming?: boolean;
-  onFileClick?: (fileName: string, content: string) => void;
-  onOpenSavedSiteContent?: (target: unknown) => void;
-  onOpenUrlPreview?: (item: SearchResultPreviewItem) => void;
-  urlPreviewToolCalls?: ToolCallState[];
-}
-
-const mountedRoots: RenderResult[] = [];
-
-function renderTool(
-  toolCall: ToolCallState,
-  options?: RenderOptions,
-): RenderResult {
-  const container = document.createElement("div");
-  document.body.appendChild(container);
-  const root = createRoot(container);
-
-  act(() => {
-    root.render(
-      <InlineToolProcessStep
-        toolCall={toolCall}
-        isMessageStreaming={options?.isMessageStreaming}
-        onFileClick={options?.onFileClick}
-        onOpenSavedSiteContent={options?.onOpenSavedSiteContent}
-        onOpenUrlPreview={options?.onOpenUrlPreview}
-        urlPreviewToolCalls={options?.urlPreviewToolCalls}
-      />,
-    );
-  });
-
-  const rendered = { container, root };
-  mountedRoots.push(rendered);
-  return rendered;
-}
-
-beforeEach(async () => {
-  (
-    globalThis as typeof globalThis & {
-      IS_REACT_ACT_ENVIRONMENT?: boolean;
-    }
-  ).IS_REACT_ACT_ENVIRONMENT = true;
-  await changeLimeLocale("zh-CN");
-});
-
-afterEach(() => {
-  while (mountedRoots.length > 0) {
-    const mounted = mountedRoots.pop();
-    if (!mounted) break;
-    act(() => {
-      mounted.root.unmount();
-    });
-    mounted.container.remove();
-  }
-  vi.clearAllMocks();
-});
+import { renderTool } from "./InlineToolProcessStep.testHarness";
 
 describe("InlineToolProcessStep", () => {
   it("运行中的读取工具应展示前置意图摘要", () => {
@@ -310,6 +235,37 @@ describe("InlineToolProcessStep", () => {
       container.querySelector('[data-testid="markdown-renderer"]'),
     ).toBeNull();
     expect(container.textContent).not.toContain('"tools"');
+  });
+
+  it("MCP 工具过程应从 structuredContent 展示正文而不是协议包络", () => {
+    const { container } = renderTool({
+      id: "tool-mcp-structured-process-1",
+      name: "mcp__docs__search_docs",
+      arguments: JSON.stringify({ query: "structured content" }),
+      status: "completed",
+      result: {
+        success: true,
+        output: JSON.stringify({
+          request_metadata: {
+            event: "agentSession/turn/start",
+            session_id: "session-process",
+          },
+          diagnostics: {
+            projection: "mcp_tool_result_projection",
+          },
+        }),
+        structuredContent: {
+          summary: "MCP 结构化过程摘要已可见",
+          ids: ["doc-2"],
+        },
+      },
+      startTime: new Date("2026-06-21T13:10:00.000Z"),
+      endTime: new Date("2026-06-21T13:10:01.000Z"),
+    });
+
+    expect(container.textContent).toContain("MCP 结构化过程摘要已可见");
+    expect(container.textContent).not.toContain("request_metadata");
+    expect(container.textContent).not.toContain("mcp_tool_result_projection");
   });
 
   it("超长工具结果在流式阶段应默认收起原始详情", () => {
@@ -770,6 +726,64 @@ describe("InlineToolProcessStep", () => {
     expect(container.textContent).not.toContain("workspaceSkillRuntimeEnable");
   });
 
+  it("非命令工具的协议诊断包络不应渲染为 JSON 明细", () => {
+    const { container } = renderTool({
+      id: "tool-runtime-diagnostic-envelope-1",
+      name: "mcp__runtime__diagnostic_probe",
+      arguments: JSON.stringify({ probe: "tool-result-projection" }),
+      status: "completed",
+      result: {
+        success: true,
+        output: JSON.stringify({
+          request_metadata: {
+            turnId: "turn-1",
+            route: "agentSession/turn/start",
+          },
+          diagnostics: {
+            source: "runtime",
+            code: "tool_result_projection",
+          },
+          metadata: {
+            durationMs: 12,
+          },
+        }),
+      },
+      startTime: new Date("2026-06-21T10:22:00.000Z"),
+      endTime: new Date("2026-06-21T10:22:03.000Z"),
+    });
+
+    expect(container.textContent).toContain("已完成");
+    expect(container.textContent).not.toContain("request_metadata");
+    expect(container.textContent).not.toContain("agentSession/turn/start");
+    expect(container.textContent).not.toContain("tool_result_projection");
+    expect(container.querySelector('[data-testid="markdown-renderer"]')).toBeNull();
+  });
+
+  it("命令工具的 JSON stdout 不应被协议包络过滤误吞", () => {
+    const { container } = renderTool({
+      id: "tool-command-json-stdout-1",
+      name: "Bash",
+      arguments: JSON.stringify({ command: "node inspect.js" }),
+      status: "completed",
+      result: {
+        success: true,
+        output: JSON.stringify({
+          metadata: {
+            durationMs: 12,
+          },
+          result: {
+            ok: true,
+          },
+        }),
+      },
+      startTime: new Date("2026-06-21T10:23:00.000Z"),
+      endTime: new Date("2026-06-21T10:23:03.000Z"),
+    });
+
+    expect(container.textContent).toContain('"durationMs"');
+    expect(container.textContent).toContain('"ok"');
+  });
+
   it("ToolSearch 展开后应展示结构化工具摘要，而不是原始 JSON", () => {
     const { container } = renderTool({
       id: "tool-search-1",
@@ -828,172 +842,6 @@ describe("InlineToolProcessStep", () => {
     expect(container.textContent).not.toContain("默认可见");
   });
 
-  it("WebSearch 展开后应优先展示搜索结果列表并打开 URL 预览", () => {
-    const onOpenUrlPreview = vi.fn();
-    const { container } = renderTool(
-      {
-        id: "tool-search-web-1",
-        name: "WebSearch",
-        arguments: JSON.stringify({ query: "AI Agent 最新热点" }),
-        status: "completed",
-        result: {
-          success: true,
-          output: [
-            "Xinhua world news summary at 0030 GMT, March 13",
-            "https://example.com/xinhua",
-            "全球要闻摘要，覆盖国际局势与市场动态。",
-            "",
-            "Friday morning news: March 13, 2026 | WORLD - wng.org",
-            "https://example.com/wng",
-            "补充国际动态与区域冲突更新。",
-          ].join("\n"),
-        },
-        startTime: new Date("2026-04-13T10:20:00.000Z"),
-        endTime: new Date("2026-04-13T10:20:01.000Z"),
-      },
-      { onOpenUrlPreview },
-    );
-
-    act(() => {
-      const toggle = container.querySelector(
-        'button[title="展开过程详情"]',
-      ) as HTMLButtonElement | null;
-      toggle?.click();
-    });
-
-    expect(
-      document.body.querySelector(
-        '[aria-label="预览搜索结果：Xinhua world news summary at 0030 GMT, March 13"]',
-      ),
-    ).not.toBeNull();
-    act(() => {
-      const firstResult = document.body.querySelector(
-        '[aria-label="预览搜索结果：Xinhua world news summary at 0030 GMT, March 13"]',
-      ) as HTMLButtonElement | null;
-      firstResult?.click();
-    });
-
-    expect(onOpenUrlPreview).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: "Xinhua world news summary at 0030 GMT, March 13",
-        url: "https://example.com/xinhua",
-        snippet: "全球要闻摘要，覆盖国际局势与市场动态。",
-      }),
-    );
-    expect(openExternalUrlWithSystemBrowser).not.toHaveBeenCalled();
-    expect(container.textContent).toContain(
-      "Friday morning news: March 13, 2026 | WORLD - wng.org",
-    );
-    expect(
-      container.querySelector('[data-testid="markdown-renderer"]'),
-    ).toBeNull();
-  });
-
-  it("WebSearch 点击 URL 预览时应复用同组 WebFetch 正文快照", () => {
-    const onOpenUrlPreview = vi.fn();
-    const { container } = renderTool(
-      {
-        id: "tool-search-web-with-fetch-1",
-        name: "WebSearch",
-        arguments: JSON.stringify({ query: "国际新闻" }),
-        status: "completed",
-        result: {
-          success: true,
-          output: JSON.stringify({
-            results: [
-              {
-                title: "Reuters World News",
-                url: "https://www.reuters.com/world/",
-                snippet: "搜索结果摘要",
-              },
-            ],
-          }),
-        },
-        startTime: new Date("2026-06-18T10:20:00.000Z"),
-        endTime: new Date("2026-06-18T10:20:01.000Z"),
-      },
-      {
-        onOpenUrlPreview,
-        urlPreviewToolCalls: [
-          {
-            id: "tool-fetch-reuters-1",
-            name: "WebFetch",
-            arguments: JSON.stringify({
-              url: "https://www.reuters.com/world/",
-            }),
-            status: "completed",
-            result: {
-              success: true,
-              output: JSON.stringify({
-                title: "Reuters snapshot",
-                markdown: "# Reuters snapshot\n\n正文来自 WebFetch。",
-              }),
-            },
-            startTime: new Date("2026-06-18T10:20:02.000Z"),
-            endTime: new Date("2026-06-18T10:20:03.000Z"),
-          },
-        ],
-      },
-    );
-
-    act(() => {
-      const toggle = container.querySelector(
-        'button[title="展开过程详情"]',
-      ) as HTMLButtonElement | null;
-      toggle?.click();
-    });
-    act(() => {
-      const result = document.body.querySelector(
-        '[aria-label="预览搜索结果：Reuters World News"]',
-      ) as HTMLButtonElement | null;
-      result?.click();
-    });
-
-    expect(onOpenUrlPreview).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: "Reuters World News",
-        url: "https://www.reuters.com/world/",
-        snippet: "搜索结果摘要",
-        snapshotTitle: "Reuters snapshot",
-        snapshotContent: "# Reuters snapshot\n\n正文来自 WebFetch。",
-        snapshotSource: "web_fetch",
-      }),
-    );
-  });
-
-  it("WebSearch 协议错误应展示可操作提示，并保留原始错误供排查", () => {
-    const { container } = renderTool({
-      id: "tool-search-web-failed-1",
-      name: "WebSearch",
-      arguments: JSON.stringify({
-        query: "AI Agent trends X Twitter April 2026",
-      }),
-      status: "failed",
-      result: {
-        success: false,
-        error: "-32603: -32002: WebSearch",
-        output: "",
-      },
-      startTime: new Date("2026-04-13T10:22:00.000Z"),
-      endTime: new Date("2026-04-13T10:22:01.000Z"),
-    });
-
-    expect(container.textContent).toContain("搜索结果暂时无法读取");
-    expect(container.textContent).toContain("搜索失败");
-    expect(container.textContent).not.toContain("执行失败");
-
-    act(() => {
-      const toggle = container.querySelector(
-        'button[title="展开过程详情"]',
-      ) as HTMLButtonElement | null;
-      toggle?.click();
-    });
-
-    expect(container.textContent).toContain(
-      "原始错误：-32603: -32002: WebSearch",
-    );
-  });
-
   it("Bash 协议错误折叠态应展示底层原因而不是内部错误码", () => {
     const { container } = renderTool({
       id: "tool-bash-failed-1",
@@ -1026,114 +874,6 @@ describe("InlineToolProcessStep", () => {
 
     expect(container.textContent).toContain(
       "原始错误：-32603: -32002: sandbox 执行失败: Operation not permitted",
-    );
-  });
-
-  it("WebFetch 获取失败应使用弱提示而不是执行失败", () => {
-    const { container } = renderTool({
-      id: "tool-fetch-failed-1",
-      name: "WebFetch",
-      arguments: JSON.stringify({
-        url: "https://example.com/unavailable",
-      }),
-      status: "failed",
-      result: {
-        success: false,
-        error: "404 Not Found",
-        output: "",
-      },
-      startTime: new Date("2026-04-13T10:23:00.000Z"),
-      endTime: new Date("2026-04-13T10:23:01.000Z"),
-    });
-
-    expect(container.textContent).toContain("来源暂时无法读取");
-    expect(container.textContent).toContain("获取失败");
-    expect(container.textContent).not.toContain("执行失败");
-  });
-
-  it("WebFetch 返回 RSS/XML 时应默认只展示弱摘要，不铺开原始 XML", () => {
-    const { container } = renderTool({
-      id: "tool-fetch-rss-1",
-      name: "WebFetch",
-      arguments: JSON.stringify({
-        url: "https://example.com/rss.xml",
-      }),
-      status: "completed",
-      result: {
-        success: true,
-        output:
-          '<?xml version="1.0"?><rss><channel><title>News</title></channel><item><title>World</title></item></rss>',
-      },
-      startTime: new Date("2026-04-13T10:23:00.000Z"),
-      endTime: new Date("2026-04-13T10:23:01.000Z"),
-    });
-
-    expect(container.textContent).toContain("来源暂时无法读取");
-    expect(container.textContent).not.toContain("<?xml");
-    expect(container.textContent).not.toContain("<rss>");
-    expect(
-      container.querySelector('[data-testid="markdown-renderer"]'),
-    ).toBeNull();
-  });
-
-  it("WebSearch 超时诊断应默认只展示弱摘要，不铺开原始错误", () => {
-    const { container } = renderTool({
-      id: "tool-search-timeout-1",
-      name: "WebSearch",
-      arguments: JSON.stringify({
-        query: "今日国际新闻",
-      }),
-      status: "completed",
-      result: {
-        success: true,
-        output: "Timeout while reading https://example.com/rss.xml",
-      },
-      startTime: new Date("2026-04-13T10:23:00.000Z"),
-      endTime: new Date("2026-04-13T10:23:01.000Z"),
-    });
-
-    expect(container.textContent).toContain("搜索结果暂时无法读取");
-    expect(container.textContent).not.toContain("Timeout while reading");
-    expect(
-      container.querySelector('[data-testid="markdown-renderer"]'),
-    ).toBeNull();
-  });
-
-  it("WebFetch 成功返回结构化 JSON 时应渲染正文而不是原始 JSON", () => {
-    const { container } = renderTool({
-      id: "tool-fetch-json-1",
-      name: "WebFetch",
-      arguments: JSON.stringify({
-        url: "https://example.com/article",
-      }),
-      status: "completed",
-      result: {
-        success: true,
-        output: JSON.stringify({
-          url: "https://example.com/article",
-          title: "Example Article",
-          markdown: "# 页面标题\n\n正文 **重点**。",
-        }),
-      },
-      startTime: new Date("2026-04-13T10:24:00.000Z"),
-      endTime: new Date("2026-04-13T10:24:01.000Z"),
-    });
-
-    act(() => {
-      const toggle = container.querySelector(
-        'button[title="展开过程详情"]',
-      ) as HTMLButtonElement | null;
-      toggle?.click();
-    });
-
-    const markdownRenderer = container.querySelector(
-      '[data-testid="markdown-renderer"]',
-    );
-    expect(markdownRenderer?.textContent).toContain("# 页面标题");
-    expect(markdownRenderer?.textContent).toContain("正文 **重点**。");
-    expect(markdownRenderer?.textContent).not.toContain('"markdown"');
-    expect(markdownRenderer?.textContent).not.toContain(
-      "https://example.com/article",
     );
   });
 
@@ -1236,110 +976,4 @@ describe("InlineToolProcessStep", () => {
     expect(container.textContent).not.toContain("Ask User Question");
   });
 
-  it("站点导出按钮副文案应优先展示短文件名", () => {
-    const onOpenSavedSiteContent = vi.fn();
-    const { container } = renderTool(
-      {
-        id: "tool-inline-site-run-1",
-        name: "lime_site_run",
-        arguments: JSON.stringify({
-          adapter_name: "x/article",
-          args: { url: "https://x.com/google/article/1" },
-        }),
-        status: "completed",
-        result: {
-          success: true,
-          output: "ok",
-          metadata: {
-            tool_family: "site",
-            saved_content: {
-              content_id: "content-inline-site-1",
-              project_id: "project-inline-site-1",
-              title: "Google Cloud 周报",
-              markdown_relative_path:
-                "exports/social-article/google-cloud/index.md",
-              image_count: 3,
-            },
-            saved_by: "context_project",
-          },
-        },
-        startTime: new Date("2026-04-13T10:40:00.000Z"),
-        endTime: new Date("2026-04-13T10:40:01.000Z"),
-      },
-      { onOpenSavedSiteContent },
-    );
-
-    expect(container.textContent).toContain(
-      "结果已自动保存到当前项目：Google Cloud 周报",
-    );
-    expect(container.textContent).toContain("已导出 Markdown 文稿");
-    expect(container.textContent).toContain("附带图片 3 张");
-
-    const openButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("在下方预览导出 Markdown"),
-    ) as HTMLButtonElement | undefined;
-
-    expect(openButton).toBeDefined();
-    expect(openButton?.textContent).toContain("index.md");
-    expect(openButton?.textContent).not.toContain(
-      "exports/social-article/google-cloud/index.md",
-    );
-
-    act(() => {
-      openButton?.click();
-    });
-
-    expect(onOpenSavedSiteContent).toHaveBeenCalledWith({
-      projectId: "project-inline-site-1",
-      contentId: "content-inline-site-1",
-      title: "Google Cloud 周报",
-      preferredTarget: "project_file",
-      projectFile: {
-        relativePath: "exports/social-article/google-cloud/index.md",
-      },
-    });
-  });
-
-  it("站点保存提示应随当前语言切换", async () => {
-    await changeLimeLocale("en-US");
-    const { container } = renderTool(
-      {
-        id: "tool-inline-site-run-i18n-1",
-        name: "lime_site_run",
-        arguments: JSON.stringify({
-          adapter_name: "x/article",
-          args: { url: "https://x.com/google/article/1" },
-        }),
-        status: "completed",
-        result: {
-          success: true,
-          output: "ok",
-          metadata: {
-            tool_family: "site",
-            saved_content: {
-              content_id: "content-inline-site-i18n-1",
-              project_id: "project-inline-site-i18n-1",
-              title: "Google Cloud weekly",
-              markdown_relative_path:
-                "exports/social-article/google-cloud/index.md",
-              image_count: 3,
-            },
-            saved_by: "context_project",
-          },
-        },
-        startTime: new Date("2026-04-13T10:40:00.000Z"),
-        endTime: new Date("2026-04-13T10:40:01.000Z"),
-      },
-      { onOpenSavedSiteContent: vi.fn() },
-    );
-
-    expect(container.textContent).toContain(
-      "Result saved to current project: Google Cloud weekly",
-    );
-    expect(container.textContent).toContain("Markdown draft exported");
-    expect(container.textContent).toContain("3 images attached");
-    expect(container.textContent).toContain("Preview exported Markdown below");
-    expect(container.textContent).not.toContain("已保存到当前项目");
-    expect(container.textContent).not.toContain("附带图片");
-  });
 });

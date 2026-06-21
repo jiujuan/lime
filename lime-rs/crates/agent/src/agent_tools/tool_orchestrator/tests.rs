@@ -947,6 +947,7 @@ fn rewrite_tool_terminal_event_updates_matching_terminal_event() {
             success: true,
             output: "old".to_string(),
             error: None,
+            structured_content: None,
             images: None,
             metadata: None,
         },

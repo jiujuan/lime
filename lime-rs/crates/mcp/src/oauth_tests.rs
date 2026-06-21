@@ -10,7 +10,7 @@ use lime_core::EventEmit;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex, Once};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 #[derive(Clone, Default)]
@@ -84,28 +84,6 @@ struct TestOAuthProvider {
     authorize_queries: Arc<Mutex<Vec<HashMap<String, String>>>>,
 }
 
-static LOOPBACK_NO_PROXY_INIT: Once = Once::new();
-
-fn ensure_loopback_no_proxy_for_oauth_fixture() {
-    LOOPBACK_NO_PROXY_INIT.call_once(|| {
-        for key in ["NO_PROXY", "no_proxy"] {
-            let current = std::env::var(key).unwrap_or_default();
-            let mut parts = current
-                .split(',')
-                .map(str::trim)
-                .filter(|part| !part.is_empty())
-                .map(ToString::to_string)
-                .collect::<Vec<_>>();
-            for host in ["127.0.0.1", "localhost", "::1"] {
-                if !parts.iter().any(|part| part == host) {
-                    parts.push(host.to_string());
-                }
-            }
-            std::env::set_var(key, parts.join(","));
-        }
-    });
-}
-
 async fn spawn_test_oauth_provider() -> TestOAuthProvider {
     spawn_test_oauth_provider_with_header(None).await
 }
@@ -113,7 +91,6 @@ async fn spawn_test_oauth_provider() -> TestOAuthProvider {
 async fn spawn_test_oauth_provider_with_header(
     required_header: Option<(String, String)>,
 ) -> TestOAuthProvider {
-    ensure_loopback_no_proxy_for_oauth_fixture();
     let listener = tokio::net::TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))
         .await
         .expect("bind OAuth provider");
@@ -299,6 +276,25 @@ fn resolve_login_scopes_uses_discovered_when_unconfigured() {
             ])
         ),
         vec!["search.read", "search.write"]
+    );
+}
+
+#[test]
+fn merge_loopback_no_proxy_hosts_preserves_existing_entries() {
+    let merged =
+        merge_loopback_no_proxy_hosts("example.com, localhost").expect("NO_PROXY should change");
+    let parts = merged.split(',').collect::<Vec<_>>();
+    assert!(parts.iter().any(|part| *part == "example.com"));
+    assert_eq!(parts.iter().filter(|part| **part == "localhost").count(), 1);
+    assert!(parts.iter().any(|part| *part == "127.0.0.1"));
+    assert!(parts.iter().any(|part| *part == "::1"));
+}
+
+#[test]
+fn merge_loopback_no_proxy_hosts_returns_none_when_complete() {
+    assert_eq!(
+        merge_loopback_no_proxy_hosts("127.0.0.1,localhost,::1"),
+        None
     );
 }
 

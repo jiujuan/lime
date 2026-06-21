@@ -199,18 +199,18 @@ impl RuntimeCore {
                     text: String::new(),
                     attachments: Vec::new(),
                 });
-            (index, turn, input)
+            let runtime_options = stored.turn_runtime_options.remove(&turn.turn_id);
+            (index, turn, input, runtime_options)
         };
+        let mut resumed_runtime_options = queued.3.clone().unwrap_or_default();
+        resumed_runtime_options.queued_turn_id = Some(queued.1.turn_id.clone());
         let output = match self
             .start_turn(
                 AgentSessionTurnStartParams {
                     session_id: session_id.clone(),
                     turn_id: Some(queued.1.turn_id.clone()),
                     input: queued.2.clone(),
-                    runtime_options: Some(app_server_protocol::RuntimeOptions {
-                        queued_turn_id: Some(queued.1.turn_id.clone()),
-                        ..app_server_protocol::RuntimeOptions::default()
-                    }),
+                    runtime_options: Some(resumed_runtime_options),
                     queue_if_busy: false,
                     skip_pre_submit_resume: true,
                 },
@@ -220,7 +220,13 @@ impl RuntimeCore {
         {
             Ok(output) => output,
             Err(error) => {
-                self.restore_queued_turn_if_missing(&session_id, queued.0, queued.1, queued.2);
+                self.restore_queued_turn_if_missing(
+                    &session_id,
+                    queued.0,
+                    queued.1,
+                    queued.2,
+                    queued.3,
+                );
                 return Err(error);
             }
         };

@@ -33,6 +33,44 @@ const ENVELOPE_NESTED_KEYS = [
   "deny",
 ] as const;
 
+const PROTOCOL_ENVELOPE_KEYS = [
+  "jsonrpc",
+  "request_metadata",
+  "requestMetadata",
+  "runtime_metadata",
+  "runtimeMetadata",
+  "diagnostics",
+  "metadata",
+  "debug",
+  "_meta",
+  "trace",
+  "telemetry",
+  "durationMs",
+  "duration_ms",
+  "elapsedMs",
+  "elapsed_ms",
+  "request",
+  "response",
+  "raw",
+] as const;
+
+const USER_DETAIL_KEYS = [
+  "markdown",
+  "markdownContent",
+  "markdown_content",
+  "contentMarkdown",
+  "content_markdown",
+  "bodyMarkdown",
+  "body_markdown",
+  "content",
+  "text",
+  "body",
+  "summary",
+  "description",
+  "output",
+  "message",
+] as const;
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -173,6 +211,104 @@ function hasUsefulSkillResultDetail(value: unknown): boolean {
   return Boolean(detail && !looksLikeSkillToolGateDetail(detail));
 }
 
+function hasUserFacingDetail(value: unknown, visited = new Set<unknown>()): boolean {
+  if (typeof value === "string") {
+    const parsed = parseStructuredToolResult(value);
+    return parsed ? hasUserFacingDetail(parsed, visited) : Boolean(value.trim());
+  }
+
+  if (Array.isArray(value)) {
+    if (visited.has(value)) {
+      return false;
+    }
+    visited.add(value);
+    return value.some((item) => hasUserFacingDetail(item, visited));
+  }
+
+  const record = asRecord(value);
+  if (!record || visited.has(record)) {
+    return false;
+  }
+  visited.add(record);
+
+  for (const key of USER_DETAIL_KEYS) {
+    const candidate = record[key];
+    if (typeof candidate === "string" && candidate.trim()) {
+      return true;
+    }
+  }
+
+  return ["result", "data", "payload", "document", "article", "page"].some(
+    (key) => hasUserFacingDetail(record[key], visited),
+  );
+}
+
+function hasProtocolEnvelopeKey(record: Record<string, unknown>): boolean {
+  return PROTOCOL_ENVELOPE_KEYS.some((key) => key in record);
+}
+
+function isCommandLikeToolName(toolName: string | undefined): boolean {
+  if (!toolName) {
+    return false;
+  }
+  const normalized = normalizeToolNameKey(toolName);
+  return (
+    normalized.includes("bash") ||
+    normalized.includes("shell") ||
+    normalized.includes("exec") ||
+    normalized.includes("command") ||
+    normalized === "powershell" ||
+    normalized === "repl"
+  );
+}
+
+function hasProtocolEnvelope(
+  value: unknown,
+  visited = new Set<unknown>(),
+): boolean {
+  if (typeof value === "string") {
+    const parsed = parseStructuredToolResult(value);
+    return parsed ? hasProtocolEnvelope(parsed, visited) : false;
+  }
+
+  if (Array.isArray(value)) {
+    if (visited.has(value)) {
+      return false;
+    }
+    visited.add(value);
+    return value.some((item) => hasProtocolEnvelope(item, visited));
+  }
+
+  const record = asRecord(value);
+  if (!record || visited.has(record)) {
+    return false;
+  }
+  visited.add(record);
+
+  if (hasProtocolEnvelopeKey(record)) {
+    return true;
+  }
+
+  return ENVELOPE_NESTED_KEYS.some((key) =>
+    hasProtocolEnvelope(record[key], visited),
+  );
+}
+
+export function shouldHideProtocolToolResultEnvelope(params: {
+  toolName?: string;
+  rawResultText: string;
+}): boolean {
+  const parsed = parseStructuredToolResult(params.rawResultText);
+  if (isCommandLikeToolName(params.toolName)) {
+    return false;
+  }
+  if (!parsed || !hasProtocolEnvelope(parsed) || hasUserFacingDetail(parsed)) {
+    return false;
+  }
+
+  return true;
+}
+
 export function shouldHideServiceSkillToolResultEnvelope(params: {
   toolName: string;
   rawResultText: string;
@@ -207,6 +343,7 @@ export function shouldHideToolResultEnvelope(params: {
 }): boolean {
   return (
     shouldHideServiceSkillToolResultEnvelope(params) ||
-    shouldHideSkillToolGateResultEnvelope(params)
+    shouldHideSkillToolGateResultEnvelope(params) ||
+    shouldHideProtocolToolResultEnvelope(params)
   );
 }

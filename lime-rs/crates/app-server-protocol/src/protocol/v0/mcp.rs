@@ -138,6 +138,12 @@ pub struct McpToolCallWithCallerParams {
 pub struct McpToolCallResponse {
     #[serde(default)]
     pub content: Vec<McpContent>,
+    #[serde(
+        default,
+        rename = "structuredContent",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub structured_content: Option<serde_json::Value>,
     pub is_error: bool,
 }
 
@@ -170,6 +176,8 @@ pub struct McpPromptGetResponse {
 pub struct McpResourceListResponse {
     #[serde(default)]
     pub resources: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub resource_templates: Vec<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

@@ -176,7 +176,7 @@ describe("generalWorkbenchExecLogData", () => {
     expect(entries.map((entry) => entry.typeLabel)).toEqual([
       "页面打开",
       "查看任务结果",
-      "用户确认",
+      "用户输入",
     ]);
   });
 

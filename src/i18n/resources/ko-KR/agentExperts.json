@@ -64,6 +64,10 @@
   "agentExperts.info.skills.source.remote": "마켓플레이스",
   "agentExperts.info.skills.source.service": "서비스 스킬",
   "agentExperts.info.skills.source.catalog": "스킬 카탈로그",
+  "agentExperts.info.skills.readiness.ready": "실행 가능",
+  "agentExperts.info.skills.readiness.needsMapping": "매핑 필요",
+  "agentExperts.info.skills.readiness.needsRegistration": "등록 필요",
+  "agentExperts.info.skills.readiness.blocked": "사용 불가",
   "agentExperts.actions.continue": "대화 계속",
   "agentExperts.actions.newThread": "새 대화"
 }

@@ -14965,6 +14965,11 @@
     "McpResourceListResponse": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
+        "resourceTemplates": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        },
         "resources": {
           "default": [],
           "items": true,
@@ -15306,7 +15311,8 @@
         },
         "is_error": {
           "type": "boolean"
-        }
+        },
+        "structuredContent": true
       },
       "required": [
         "is_error"

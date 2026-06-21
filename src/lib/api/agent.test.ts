@@ -1775,6 +1775,7 @@ describe("Agent API 治理护栏", () => {
             allowed_callers: ["assistant"],
             tags: [],
             input_examples_count: 0,
+            has_output_schema: false,
             caller_allowed: true,
             visible_in_context: true,
           },

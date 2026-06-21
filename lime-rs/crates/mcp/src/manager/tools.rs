@@ -71,7 +71,12 @@ impl McpClientManager {
                         "获取服务器工具列表成功"
                     );
                     for tool in tools {
-                        let input_schema = serde_json::Value::Object((*tool.input_schema).clone());
+                        let input_schema = normalize_tool_input_schema(serde_json::Value::Object(
+                            (*tool.input_schema).clone(),
+                        ));
+                        let output_schema = tool.output_schema.map(|schema| {
+                            tool_result_output_schema(serde_json::Value::Object((*schema).clone()))
+                        });
                         let metadata =
                             Self::extract_tool_metadata(tool.name.as_ref(), &input_schema);
                         all_tools.push(McpToolDefinition {
@@ -82,6 +87,7 @@ impl McpClientManager {
                                 .map(|s| s.to_string())
                                 .unwrap_or_default(),
                             input_schema,
+                            output_schema,
                             server_name: server_name.clone(),
                             deferred_loading: metadata.deferred_loading,
                             always_visible: metadata.always_visible,
@@ -385,7 +391,7 @@ impl McpClientManager {
     }
 
     /// 转换 rmcp CallToolResult 为 McpToolResult
-    fn convert_call_tool_result(result: rmcp::model::CallToolResult) -> McpToolResult {
+    pub(super) fn convert_call_tool_result(result: rmcp::model::CallToolResult) -> McpToolResult {
         let content: Vec<McpContent> = result
             .content
             .into_iter()
@@ -394,6 +400,7 @@ impl McpClientManager {
 
         McpToolResult {
             content,
+            structured_content: result.structured_content,
             is_error: result.is_error.unwrap_or(false),
         }
     }
@@ -434,4 +441,45 @@ impl McpClientManager {
             },
         }
     }
+}
+
+pub(crate) fn normalize_tool_input_schema(mut schema: serde_json::Value) -> serde_json::Value {
+    if let serde_json::Value::Object(object) = &mut schema {
+        if object
+            .get("properties")
+            .is_none_or(serde_json::Value::is_null)
+        {
+            object.insert(
+                "properties".to_string(),
+                serde_json::Value::Object(serde_json::Map::new()),
+            );
+        }
+    }
+
+    schema
+}
+
+pub(crate) fn tool_result_output_schema(
+    structured_content_schema: serde_json::Value,
+) -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "content": {
+                "type": "array",
+                "items": {
+                    "type": "object"
+                }
+            },
+            "structuredContent": structured_content_schema,
+            "isError": {
+                "type": "boolean"
+            },
+            "_meta": {
+                "type": "object"
+            }
+        },
+        "required": ["content"],
+        "additionalProperties": false
+    })
 }

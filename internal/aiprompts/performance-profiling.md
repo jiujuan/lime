@@ -41,18 +41,18 @@ Lime 的卡顿来源通常不是单点：
 
 `safeInvoke` 会在浏览器 Performance 面板中写入 `lime:safeInvoke:*` 的 User Timing 条目，便于把前端交互和 Electron IPC / App Server / legacy adapter 耗时对齐。
 
-### 4. 关键慢链路 Span
+### 4. 关键慢链路标识
 
 当前优先覆盖了以下链路：
 
 - `chat_send_message`
 - `send_message_with_aster`
 - `launch_browser_session_global`
-- `mcp_call_tool`
-- `mcp_start_server`
-- `mcp_list_tools`
+- `mcpTool/call`
+- `mcpServer/start`
+- `mcpTool/list`
 
-这些 span 适合回答“慢在哪一段”，而不是“哪一行代码最吃 CPU”。
+这些标识适合回答“慢在哪一段”，而不是“哪一行代码最吃 CPU”。MCP 排障只看 App Server JSON-RPC current method 与 `app_server_handle_json_lines` / `safeInvoke` timing，旧 `mcp_*` / `get_mcp_servers` Tauri facade 不再作为 profiling 目标。
 
 ## 推荐工作流
 
@@ -79,7 +79,7 @@ LIME_PROFILE=trace LIME_ELECTRON_OPEN_DEVTOOLS=1 APP_SERVER_BIN=/abs/path/to/app
 - `chat_send_message`
 - `send_message_with_aster`
 - `launch_browser_session_global`
-- `mcp_call_tool`
+- `mcpTool/call`
 
 ## B. 看 Tokio 异步任务阻塞
 

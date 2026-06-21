@@ -5,31 +5,19 @@
  * Requirements: 9.3, 9.4
  */
 
-import React, { memo, useMemo, useState, useEffect, useRef } from "react";
+import React, { memo, useMemo, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { ExternalLink, FileText, Loader2 } from "lucide-react";
 import { useDebouncedValue } from "@/lib/artifact/hooks/useDebouncedValue";
-import { MarkdownRenderer, type MarkdownRenderMode } from "./MarkdownRenderer";
+import type { MarkdownRenderMode } from "./MarkdownRenderer";
 import { A2UITaskCard, A2UITaskLoadingCard } from "./A2UITaskCard";
-import { ActionRequestA2UIPreviewCard } from "./ActionRequestA2UIPreviewCard";
-import { InlineToolProcessStep } from "./InlineToolProcessStep";
-import {
-  GroupedProcessShell,
-  StreamingProcessGroup,
-} from "./StreamingProcessGroup";
 import {
   isImportedProcessMetadata,
-  isImportedToolCall,
-  shouldAutoExpandProcessEntries,
   shouldSplitProcessBeforeEntry,
   type StreamingProcessEntry,
 } from "./StreamingProcessGroupModel";
-import { ThinkingBlock } from "./ThinkingBlock";
-import { DecisionPanel } from "./DecisionPanel";
-import { AgentPlanBlock } from "./AgentPlanBlock";
 import { RuntimePeerMessageCards } from "./RuntimePeerMessageCards";
 import { FileChangesSummaryCard } from "./FileChangesSummaryCard";
-import { parseAIResponse } from "@/components/workspace/a2ui/parser";
+import { StreamingProcessRun } from "./StreamingProcessRun";
 import type {
   A2UIFormData,
   ParseResult,
@@ -46,14 +34,6 @@ import type {
   WriteArtifactContext,
 } from "../types";
 import {
-  splitProposedPlanSegments,
-  stripProposedPlanBlocks,
-} from "../utils/proposedPlan";
-import {
-  buildActionRequestSubmissionPayload,
-  isActionRequestA2UICompatible,
-} from "../utils/actionRequestA2UI";
-import {
   sanitizeContentPartsForDisplay,
   sanitizeMessageTextForDisplay,
 } from "../utils/messageDisplaySanitizer";
@@ -63,629 +43,22 @@ import {
   FileChangesUndoError,
   restoreFileChangesFromCheckpoints,
 } from "../utils/fileChangesUndo";
-import {
-  resolveStreamingMarkdownDisplaySource,
-} from "./streamingMarkdownDisplaySource";
 import { orderStreamingContentPartsForDisplay } from "./streamingContentPartOrder";
-
-const STRUCTURED_CONTENT_HINT_RE = /<a2ui|```\s*a2ui|<write_file|<document/i;
-const STRUCTURED_PARSE_CACHE_LIMIT = 64;
-const STREAMING_STRUCTURED_PARSE_DEBOUNCE_MS = 48;
-const STREAMING_TEXT_LARGE_BACKLOG_CHARS = 240;
-const STREAMING_TEXT_MEDIUM_BACKLOG_CHARS = 80;
-const STREAMING_TEXT_SMALL_BACKLOG_CHARS = 24;
-const STREAMING_TEXT_INITIAL_VISIBLE_CHARS = 12;
-
-const ACTIVE_RUNTIME_STATUS_PHASES = new Set<string>([
-  "preparing",
-  "routing",
-  "context",
-  "permission_review",
-  "retrying",
-  "continuing",
-  "synthesizing",
-  "final_answer",
-]);
-
-function resolveContentPartDebugSignature(
-  parts: ContentPart[] | undefined,
-): string {
-  if (!parts?.length) {
-    return "";
-  }
-
-  return parts
-    .map((part) => {
-      if (part.type === "tool_use") {
-        const sequence =
-          typeof part.metadata?.sequence === "number"
-            ? `#${part.metadata.sequence}`
-            : "";
-        return `tool:${part.toolCall.name}:${part.toolCall.status}${sequence}`;
-      }
-      if (part.type === "thinking") {
-        const sequence =
-          typeof part.metadata?.sequence === "number"
-            ? `#${part.metadata.sequence}`
-            : "";
-        return `thinking${sequence}`;
-      }
-      return part.type;
-    })
-    .join("|");
-}
-
-function isActiveRuntimeStatus(status?: AgentRuntimeStatus | null): boolean {
-  if (!status) {
-    return false;
-  }
-  return ACTIVE_RUNTIME_STATUS_PHASES.has(status.phase);
-}
-
-function resolveStreamingTextStepSize(
-  pendingChars: number,
-  elapsedMs: number,
-  charInterval: number,
-): number {
-  const timedStep = Math.max(1, Math.floor(elapsedMs / charInterval));
-
-  if (pendingChars > STREAMING_TEXT_LARGE_BACKLOG_CHARS) {
-    return Math.max(timedStep, Math.ceil(pendingChars * 0.5));
-  }
-
-  if (pendingChars > STREAMING_TEXT_MEDIUM_BACKLOG_CHARS) {
-    return Math.max(timedStep, Math.ceil(pendingChars * 0.3));
-  }
-
-  if (pendingChars > STREAMING_TEXT_SMALL_BACKLOG_CHARS) {
-    return Math.max(timedStep, 8);
-  }
-
-  return timedStep;
-}
-
-function resolveInitialStreamingDisplayText(
-  text: string,
-  isStreaming: boolean,
-) {
-  if (!isStreaming || !text || hasStructuredContentHint(text)) {
-    return isStreaming ? "" : text;
-  }
-
-  return Array.from(text)
-    .slice(0, STREAMING_TEXT_INITIAL_VISIBLE_CHARS)
-    .join("");
-}
-
-// ============ 思考内容组件 ============
-
-type WriteFileMessagePart = ParsedMessageContent & {
-  type: "write_file" | "pending_write_file";
-};
-
-// ============ 流式光标 ============
-
-const StreamingCursor: React.FC = () => (
-  <span
-    className="inline-block w-0.5 h-[1em] bg-primary ml-0.5 align-text-bottom animate-pulse"
-    style={{ animationDuration: "1s" }}
-  />
-);
-
-const StreamingPendingMarkdownTail: React.FC<{ text: string }> = ({
-  text,
-}) => {
-  if (!text) {
-    return null;
-  }
-
-  return (
-    <span
-      data-testid="streaming-markdown-pending-tail"
-      className="whitespace-pre-wrap break-words"
-    >
-      {text}
-    </span>
-  );
-};
-
-const EMPTY_PARSE_RESULT: ParseResult = {
-  parts: [],
-  hasA2UI: false,
-  hasWriteFile: false,
-  hasPending: false,
-};
-
-function hasStructuredContentHint(text: string): boolean {
-  return STRUCTURED_CONTENT_HINT_RE.test(text);
-}
-
-function createPlainTextParts(text: string): ParsedMessageContent[] {
-  const trimmed = text.trim();
-  return trimmed ? [{ type: "text", content: trimmed }] : [];
-}
-
-function isWriteFileMessagePart(
-  part: ParsedMessageContent,
-): part is WriteFileMessagePart {
-  return part.type === "write_file" || part.type === "pending_write_file";
-}
-
-function parseStructuredContent(
-  text: string,
-  isStreaming: boolean,
-): ParseResult {
-  if (!text.trim()) {
-    return EMPTY_PARSE_RESULT;
-  }
-
-  if (!hasStructuredContentHint(text)) {
-    return {
-      parts: createPlainTextParts(text),
-      hasA2UI: false,
-      hasWriteFile: false,
-      hasPending: false,
-    };
-  }
-
-  return parseAIResponse(text, isStreaming);
-}
-
-function getCachedStructuredParse(
-  cacheRef: React.MutableRefObject<Map<string, ParseResult>>,
-  text: string,
-  isStreaming: boolean,
-): ParseResult {
-  const key = `${isStreaming ? "stream" : "static"}:${text}`;
-  const cached = cacheRef.current.get(key);
-  if (cached) {
-    return cached;
-  }
-
-  const parsed = parseStructuredContent(text, isStreaming);
-  if (cacheRef.current.size >= STRUCTURED_PARSE_CACHE_LIMIT) {
-    const oldestKey = cacheRef.current.keys().next().value;
-    if (oldestKey) {
-      cacheRef.current.delete(oldestKey);
-    }
-  }
-  cacheRef.current.set(key, parsed);
-  return parsed;
-}
-
-interface PlanAwareMarkdownOptions {
-  onA2UISubmit?: (formData: A2UIFormData) => void;
-  renderA2UIInline?: boolean;
-  collapseCodeBlocks?: boolean;
-  shouldCollapseCodeBlock?: (language: string, code: string) => boolean;
-  onCodeBlockClick?: (language: string, code: string) => void;
-  isStreaming?: boolean;
-  renderProposedPlanBlocks?: boolean;
-  showBlockActions?: boolean;
-  onQuoteContent?: (content: string) => void;
-  markdownRenderMode?: MarkdownRenderMode;
-  readOnlyA2UI?: boolean;
-}
-
-function renderPlanAwareMarkdown(
-  text: string,
-  keyPrefix: string,
-  {
-    onA2UISubmit,
-    renderA2UIInline,
-    collapseCodeBlocks,
-    shouldCollapseCodeBlock,
-    onCodeBlockClick,
-    isStreaming,
-    renderProposedPlanBlocks = true,
-    showBlockActions = false,
-    onQuoteContent,
-    markdownRenderMode = "standard",
-    readOnlyA2UI = false,
-  }: PlanAwareMarkdownOptions,
-) {
-  if (!renderProposedPlanBlocks) {
-    const visibleText = stripProposedPlanBlocks(text);
-    if (!visibleText.trim()) {
-      return null;
-    }
-    return (
-      <MarkdownRenderer
-        key={`${keyPrefix}-text-only`}
-        content={visibleText}
-        onA2UISubmit={onA2UISubmit}
-        renderA2UIInline={renderA2UIInline}
-        collapseCodeBlocks={collapseCodeBlocks}
-        shouldCollapseCodeBlock={shouldCollapseCodeBlock}
-        onCodeBlockClick={onCodeBlockClick}
-        isStreaming={isStreaming}
-        showBlockActions={showBlockActions}
-        onQuoteContent={onQuoteContent}
-        renderMode={markdownRenderMode}
-        readOnlyA2UI={readOnlyA2UI}
-      />
-    );
-  }
-
-  const segments = splitProposedPlanSegments(text);
-  if (segments.length === 0) {
-    return null;
-  }
-
-  return segments.map((segment, index) =>
-    segment.type === "plan" ? (
-      <AgentPlanBlock
-        key={`${keyPrefix}-plan-${index}`}
-        content={segment.content}
-        isComplete={segment.isComplete}
-      />
-    ) : (
-      <MarkdownRenderer
-        key={`${keyPrefix}-text-${index}`}
-        content={segment.content}
-        onA2UISubmit={onA2UISubmit}
-        renderA2UIInline={renderA2UIInline}
-        collapseCodeBlocks={collapseCodeBlocks}
-        shouldCollapseCodeBlock={shouldCollapseCodeBlock}
-        onCodeBlockClick={onCodeBlockClick}
-        isStreaming={isStreaming}
-        showBlockActions={showBlockActions}
-        onQuoteContent={onQuoteContent}
-        renderMode={markdownRenderMode}
-        readOnlyA2UI={readOnlyA2UI}
-      />
-    ),
-  );
-}
-
-// ============ 流式文本组件（逐字符动画） ============
-
-interface StreamingTextProps {
-  /** 目标文本（完整内容） */
-  text: string;
-  /** 是否正在流式输出 */
-  isStreaming: boolean;
-  /** 是否显示光标 */
-  showCursor?: boolean;
-  /** 每个字符的渲染间隔（毫秒），默认 12ms */
-  charInterval?: number;
-  /** A2UI 表单提交回调 */
-  onA2UISubmit?: (formData: A2UIFormData) => void;
-  /** A2UI 表单 ID（用于持久化） */
-  a2uiFormId?: string;
-  /** A2UI 初始表单数据（从数据库加载） */
-  a2uiInitialFormData?: A2UIFormData;
-  /** A2UI 表单数据变化回调（用于持久化） */
-  onA2UIFormChange?: (formId: string, formData: A2UIFormData) => void;
-  /** 是否渲染消息内联 A2UI */
-  renderA2UIInline?: boolean;
-  /** 是否内联渲染 proposed plan 块 */
-  renderProposedPlanBlocks?: boolean;
-  /** 是否折叠代码块 */
-  collapseCodeBlocks?: boolean;
-  /** 按代码块决定是否折叠 */
-  shouldCollapseCodeBlock?: (language: string, code: string) => boolean;
-  /** 代码块点击回调 */
-  onCodeBlockClick?: (language: string, code: string) => void;
-  /** 是否为正文块显示引用/复制按钮 */
-  showBlockActions?: boolean;
-  /** 引用当前正文块 */
-  onQuoteContent?: (content: string) => void;
-  /** Markdown 渲染模式；历史恢复可使用 light 降低首帧成本。 */
-  markdownRenderMode?: MarkdownRenderMode;
-  /** 历史消息中的 A2UI 只允许回显，不能再次提交。 */
-  readOnlyA2UI?: boolean;
-}
-
-/**
- * 流式文本组件
- *
- * 实现逐字符平滑显示效果，类似 ChatGPT/Claude 的打字机效果。
- * 当流式结束时，立即显示完整文本。
- */
-const StreamingText: React.FC<StreamingTextProps> = memo(
-  ({
-    text,
-    isStreaming,
-    showCursor = true,
-    charInterval = 12,
-    onA2UISubmit,
-    a2uiFormId,
-    a2uiInitialFormData,
-    onA2UIFormChange,
-    renderA2UIInline = true,
-    renderProposedPlanBlocks = true,
-    collapseCodeBlocks,
-    shouldCollapseCodeBlock,
-    onCodeBlockClick,
-    showBlockActions = false,
-    onQuoteContent,
-    markdownRenderMode = "standard",
-    readOnlyA2UI = false,
-  }) => {
-    const { t } = useTranslation("agent");
-    const initialDisplayText = resolveInitialStreamingDisplayText(
-      text,
-      isStreaming,
-    );
-    const [displayText, setDisplayText] = useState(() => initialDisplayText);
-    const displayIndexRef = useRef(initialDisplayText.length);
-    const animationRef = useRef<number | null>(null);
-    const prevTextRef = useRef(isStreaming ? "" : text);
-    const targetTextRef = useRef(text);
-    const parseCacheRef = useRef<Map<string, ParseResult>>(new Map());
-
-    useEffect(() => {
-      targetTextRef.current = text;
-      // 如果不是流式输出，直接显示完整文本
-      if (!isStreaming) {
-        setDisplayText(text);
-        displayIndexRef.current = text.length;
-        prevTextRef.current = text;
-        if (animationRef.current) {
-          cancelAnimationFrame(animationRef.current);
-          animationRef.current = null;
-        }
-        return;
-      }
-
-      if (
-        !text.startsWith(prevTextRef.current) ||
-        displayIndexRef.current > text.length
-      ) {
-        const seededText = resolveInitialStreamingDisplayText(
-          text,
-          isStreaming,
-        );
-        displayIndexRef.current = seededText.length;
-        prevTextRef.current = "";
-        setDisplayText(seededText);
-      }
-
-      // 检测文本是否有新增
-      if (text.length <= prevTextRef.current.length) {
-        prevTextRef.current = text;
-        return;
-      }
-
-      prevTextRef.current = text;
-
-      // 如果已经有动画在运行，让它继续
-      if (animationRef.current !== null) {
-        return;
-      }
-
-      let lastTime = 0;
-
-      const animate = (currentTime: number) => {
-        if (!lastTime) lastTime = currentTime;
-        const elapsed = currentTime - lastTime;
-
-        if (elapsed >= charInterval) {
-          const targetText = targetTextRef.current;
-          const pendingChars = Math.max(
-            0,
-            targetText.length - displayIndexRef.current,
-          );
-          const charsToAdd = resolveStreamingTextStepSize(
-            pendingChars,
-            elapsed,
-            charInterval,
-          );
-          const newIndex = Math.min(
-            displayIndexRef.current + charsToAdd,
-            targetText.length,
-          );
-
-          if (newIndex > displayIndexRef.current) {
-            displayIndexRef.current = newIndex;
-            setDisplayText(targetText.slice(0, newIndex));
-          }
-
-          lastTime = currentTime;
-        }
-
-        // 继续动画直到追上目标
-        if (displayIndexRef.current < targetTextRef.current.length) {
-          animationRef.current = requestAnimationFrame(animate);
-        } else {
-          animationRef.current = null;
-        }
-      };
-
-      animationRef.current = requestAnimationFrame(animate);
-
-      return () => {
-        if (animationRef.current) {
-          cancelAnimationFrame(animationRef.current);
-          animationRef.current = null;
-        }
-      };
-    }, [text, isStreaming, charInterval]);
-
-    // 组件卸载时清理
-    useEffect(() => {
-      return () => {
-        if (animationRef.current) {
-          cancelAnimationFrame(animationRef.current);
-        }
-      };
-    }, []);
-
-    const shouldShowCursor =
-      isStreaming && showCursor && displayIndexRef.current < text.length;
-    const containsStructuredContent = useMemo(
-      () => hasStructuredContentHint(displayText),
-      [displayText],
-    );
-    const debouncedStructuredText = useDebouncedValue(
-      displayText,
-      isStreaming && containsStructuredContent
-        ? STREAMING_STRUCTURED_PARSE_DEBOUNCE_MS
-        : 0,
-      {
-        maxWait:
-          isStreaming && containsStructuredContent
-            ? STREAMING_STRUCTURED_PARSE_DEBOUNCE_MS
-            : undefined,
-      },
-    );
-    const parsedSourceText =
-      isStreaming && containsStructuredContent
-        ? debouncedStructuredText
-        : displayText;
-
-    // 使用 parseAIResponse 解析内容，以正确处理 a2ui 代码块
-    // 这比依赖 MarkdownRenderer 的 pre 组件更可靠
-    const parsedContent = useMemo(
-      () =>
-        getCachedStructuredParse(parseCacheRef, parsedSourceText, isStreaming),
-      [parsedSourceText, isStreaming],
-    );
-
-    // 渲染解析后的内容
-    const renderContent = () => {
-      // 如果没有 a2ui 内容，直接使用 MarkdownRenderer
-      if (!parsedContent.hasA2UI && !parsedContent.hasPending) {
-        const displaySource = resolveStreamingMarkdownDisplaySource(
-          displayText,
-          isStreaming,
-        );
-        return (
-          <>
-            {displaySource.markdown.trim()
-              ? renderPlanAwareMarkdown(displaySource.markdown, "stream", {
-                  onA2UISubmit,
-                  renderA2UIInline,
-                  renderProposedPlanBlocks,
-                  collapseCodeBlocks,
-                  shouldCollapseCodeBlock,
-                  onCodeBlockClick,
-                  isStreaming,
-                  showBlockActions,
-                  onQuoteContent,
-                  markdownRenderMode,
-                  readOnlyA2UI,
-                })
-              : null}
-            <StreamingPendingMarkdownTail text={displaySource.pendingTail} />
-          </>
-        );
-      }
-
-      // 有 a2ui 内容，按部分渲染
-      return (
-        <>
-          {parsedContent.parts.map((part, index) => {
-            switch (part.type) {
-              case "a2ui":
-                if (!renderA2UIInline) {
-                  return null;
-                }
-                // 直接渲染 A2UI 表单
-                if (typeof part.content !== "string") {
-                  const response = readOnlyA2UI
-                    ? { ...part.content, submitAction: undefined }
-                    : part.content;
-                  return (
-                    <A2UITaskCard
-                      key={`a2ui-${index}`}
-                      response={response}
-                      onSubmit={readOnlyA2UI ? undefined : onA2UISubmit}
-                      formId={a2uiFormId}
-                      initialFormData={a2uiInitialFormData}
-                      onFormChange={onA2UIFormChange}
-                      preset={CHAT_A2UI_TASK_CARD_PRESET}
-                      compact={true}
-                      className="max-w-[432px]"
-                      preview={readOnlyA2UI}
-                    />
-                  );
-                }
-                return null;
-
-              case "pending_a2ui":
-                if (!renderA2UIInline) {
-                  return null;
-                }
-                // 显示加载状态
-                return (
-                  <A2UITaskLoadingCard
-                    key={`pending-${index}`}
-                    preset={CHAT_A2UI_TASK_CARD_PRESET}
-                    subtitle={t("agentChat.streamingRenderer.pendingA2ui")}
-                    compact={true}
-                    className="max-w-[432px]"
-                  />
-                );
-
-              case "text":
-              default: {
-                // 渲染普通文本
-                const textContent =
-                  typeof part.content === "string" ? part.content : "";
-                if (!textContent || textContent.trim() === "") return null;
-                return renderPlanAwareMarkdown(textContent, `text-${index}`, {
-                  onA2UISubmit,
-                  renderA2UIInline,
-                  renderProposedPlanBlocks,
-                  collapseCodeBlocks,
-                  shouldCollapseCodeBlock,
-                  onCodeBlockClick,
-                  isStreaming,
-                  showBlockActions,
-                  onQuoteContent,
-                  markdownRenderMode,
-                  readOnlyA2UI,
-                });
-              }
-            }
-          })}
-        </>
-      );
-    };
-
-    return (
-      <div className="relative">
-        {renderContent()}
-        {shouldShowCursor && <StreamingCursor />}
-      </div>
-    );
-  },
-);
-
-StreamingText.displayName = "StreamingText";
-
-// ============ 思考内容解析 ============
-
-interface ParsedContent {
-  visibleText: string;
-  thinkingText: string | null;
-}
-
-const parseThinkingContent = (text: string): ParsedContent => {
-  // 支持 <think>...</think> 和 <thinking>...</thinking> 标签
-  const thinkRegex = /<think(?:ing)?>([\s\S]*?)<\/think(?:ing)?>/gi;
-  let thinkingText: string | null = null;
-  let visibleText = text;
-
-  const matches = text.matchAll(thinkRegex);
-  const thinkingParts: string[] = [];
-
-  for (const match of matches) {
-    thinkingParts.push(match[1].trim());
-    visibleText = visibleText.replace(match[0], "");
-  }
-
-  if (thinkingParts.length > 0) {
-    thinkingText = thinkingParts.join("\n\n");
-  }
-
-  return {
-    visibleText: visibleText.trim(),
-    thinkingText,
-  };
-};
+import { StreamingCursor, StreamingText } from "./StreamingText";
+import { StreamingWriteFileCard } from "./StreamingWriteFileCard";
+import {
+  EMPTY_PARSE_RESULT,
+  getCachedStructuredParse,
+  hasStructuredContentHint,
+  isWriteFileMessagePart,
+  STREAMING_STRUCTURED_PARSE_DEBOUNCE_MS,
+  type WriteFileMessagePart,
+} from "./StreamingStructuredContent";
+import {
+  isActiveRuntimeStatus,
+  parseThinkingContent,
+  resolveContentPartDebugSignature,
+} from "./StreamingRendererViewModel";
 
 // ============ 主组件 ============
 
@@ -702,11 +75,7 @@ interface StreamingRendererProps {
   showCursor?: boolean;
   /** 思考内容（可选，如果不提供则从 content 中解析） */
   thinkingContent?: string;
-  /**
-   * 交错内容列表（按事件到达顺序排列）
-   * 如果存在且非空，按顺序渲染
-   * 否则回退到 content + toolCalls 渲染方式
-   */
+  /** 交错内容列表；存在时按事件顺序渲染，否则回退 content + toolCalls。 */
   contentParts?: ContentPart[];
   /** 权限确认请求列表（向后兼容） */
   actionRequests?: ActionRequired[];
@@ -728,7 +97,7 @@ interface StreamingRendererProps {
   ) => void;
   /** 文件点击回调 */
   onFileClick?: (fileName: string, content: string) => void;
-  /** 当前会话 ID；存在时文件变更摘要可用 runtime file checkpoint 执行撤销。 */
+  /** 当前会话 ID；存在时文件变更摘要可执行 checkpoint 撤销。 */
   fileChangesUndoSessionId?: string | null;
   onOpenSavedSiteContent?: (target: SiteSavedContentTarget) => void;
   onOpenUrlPreview?: (item: SearchResultPreviewItem) => void;
@@ -756,16 +125,6 @@ interface StreamingRendererProps {
   readOnlyActionRequests?: boolean;
 }
 
-/**
- * 流式消息渲染组件
- *
- * 支持：
- * - 思考内容折叠显示（<think> 或 <thinking> 标签）
- * - 工具调用状态和结果显示
- * - 实时 Markdown 渲染
- * - 流式光标
- * - **交错内容显示**（文本和工具调用按事件顺序交错）
- */
 export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
   ({
     content,
@@ -1005,212 +364,15 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
     const shouldShowCursor = isStreaming && showCursor && !hasRunningTools;
 
     const renderWriteFileIndicator = React.useCallback(
-      (part: WriteFileMessagePart, key: string) => {
-        const fileContent =
-          typeof part.content === "string" ? part.content : "";
-        const filePath = part.filePath || "文档.md";
-        const normalizedPath = filePath.replace(/\\/g, "/").trim();
-        const fileName =
-          normalizedPath.split("/").filter(Boolean).pop() || normalizedPath;
-        const previewText =
-          fileContent.trim().replace(/\s+/g, " ").slice(0, 160) ||
-          "正在准备文件内容，稍后会同步完整预览。";
-        const displayPreview =
-          previewText.length >= 160
-            ? `${previewText.slice(0, 159)}…`
-            : previewText;
-        const isPending = part.type === "pending_write_file" || isStreaming;
-
-        return (
-          <div
-            key={key}
-            data-testid="streaming-write-file-card"
-            className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-left shadow-sm shadow-slate-950/5 transition hover:border-sky-200 hover:bg-sky-50/40"
-            onClick={() =>
-              part.filePath && onFileClick?.(part.filePath, fileContent)
-            }
-          >
-            <div className="group flex w-full items-start gap-3 text-left">
-              <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-600">
-                {isPending ? (
-                  <Loader2 className="h-[18px] w-[18px] animate-spin text-sky-600" />
-                ) : (
-                  <FileText className="h-[18px] w-[18px]" />
-                )}
-              </div>
-
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="min-w-0 flex-1 text-sm font-medium leading-6 text-slate-900">
-                    <span className="line-clamp-1 break-all">
-                      {isPending ? `正在生成 ${fileName}` : fileName}
-                    </span>
-                  </div>
-                  <span className="inline-flex rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] leading-5 text-sky-700">
-                    {isPending ? "生成中" : "已写入"}
-                  </span>
-                </div>
-
-                <div className="mt-2 text-sm leading-6 text-slate-600">
-                  {displayPreview}
-                </div>
-
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <span
-                    title={filePath}
-                    className="inline-flex max-w-full rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-mono text-[11px] text-slate-500"
-                  >
-                    <span className="truncate">
-                      {normalizedPath || fileName}
-                    </span>
-                  </span>
-                  {part.filePath ? (
-                    <span className="inline-flex items-center gap-1 text-xs text-slate-400 transition group-hover:text-sky-700">
-                      <span>{t("agentChat.streamingRenderer.openCanvas")}</span>
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      },
-      [isStreaming, onFileClick, t],
-    );
-
-    const renderActionRequestNode = React.useCallback(
-      (request: ActionRequired) => {
-        if (!shouldRenderInlineActionRequest(request)) {
-          return null;
-        }
-
-        const shouldRenderA2UICard =
-          isActionRequestA2UICompatible(request) &&
-          (readOnlyActionRequests ||
-            request.status === "submitted" ||
-            request.status === "queued" ||
-            (promoteActionRequestsToA2UI && request.status === "pending"));
-        if (shouldRenderA2UICard) {
-          const isReadOnly =
-            readOnlyActionRequests ||
-            request.status === "submitted" ||
-            request.status === "queued" ||
-            !onPermissionResponse;
-          return (
-            <ActionRequestA2UIPreviewCard
-              request={request}
-              compact={true}
-              context="chat"
-              readOnly={isReadOnly}
-              onSubmit={
-                isReadOnly
-                  ? undefined
-                  : (formData) => {
-                      const payload = buildActionRequestSubmissionPayload(
-                        request,
-                        formData,
-                      );
-                      onPermissionResponse({
-                        requestId: request.requestId,
-                        confirmed: true,
-                        actionType: request.actionType,
-                        response: payload.responseText,
-                        userData: payload.userData,
-                      });
-                    }
-              }
-            />
-          );
-        }
-        return (
-          <DecisionPanel
-            request={request}
-            onSubmit={onPermissionResponse || (() => {})}
-          />
-        );
-      },
-      [
-        onPermissionResponse,
-        promoteActionRequestsToA2UI,
-        readOnlyActionRequests,
-        shouldRenderInlineActionRequest,
-      ],
-    );
-
-    const renderProcessEntry = React.useCallback(
-      (
-        entry: StreamingProcessEntry,
-        grouped: boolean,
-        groupMarker: string,
-        processEntries: StreamingProcessEntry[],
-      ) => {
-        if (entry.kind === "thinking") {
-          const preserveThinkingSourceText =
-            entry.preserveSourceText ||
-            isImportedProcessMetadata(entry.metadata);
-          return (
-            <ThinkingBlock
-              key={entry.id}
-              content={entry.text}
-              defaultExpanded={Boolean(entry.defaultExpanded)}
-              grouped={grouped}
-              groupMarker={groupMarker}
-              hideSummary={grouped}
-              isStreaming={isStreaming && !preserveThinkingSourceText}
-              preserveSourceText={preserveThinkingSourceText}
-            />
-          );
-        }
-
-        if (entry.kind === "tool") {
-          const siblingToolCalls = processEntries
-            .filter(
-              (candidate): candidate is Extract<
-                StreamingProcessEntry,
-                { kind: "tool" }
-              > => candidate.kind === "tool",
-            )
-            .map((candidate) => candidate.toolCall);
-          return (
-            <InlineToolProcessStep
-              key={entry.id}
-              toolCall={entry.toolCall}
-              isActiveProcess={shouldKeepProcessOpenForFinalAnswer}
-              isMessageStreaming={isStreaming}
-              onFileClick={onFileClick}
-              onOpenSavedSiteContent={onOpenSavedSiteContent}
-              onOpenUrlPreview={onOpenUrlPreview}
-              urlPreviewToolCalls={siblingToolCalls}
-              grouped={grouped}
-              groupMarker={groupMarker}
-            />
-          );
-        }
-
-        const actionNode = renderActionRequestNode(entry.actionRequired);
-        if (!actionNode) {
-          return null;
-        }
-
-        if (!grouped) {
-          return <React.Fragment key={entry.id}>{actionNode}</React.Fragment>;
-        }
-
-        return (
-          <GroupedProcessShell key={entry.id} groupMarker={groupMarker}>
-            {actionNode}
-          </GroupedProcessShell>
-        );
-      },
-      [
-        isStreaming,
-        onFileClick,
-        onOpenSavedSiteContent,
-        onOpenUrlPreview,
-        shouldKeepProcessOpenForFinalAnswer,
-        renderActionRequestNode,
-      ],
+      (part: WriteFileMessagePart, key: string) => (
+        <StreamingWriteFileCard
+          key={key}
+          part={part}
+          isStreaming={isStreaming}
+          onFileClick={onFileClick}
+        />
+      ),
+      [isStreaming, onFileClick],
     );
 
     const renderProcessRun = React.useCallback(
@@ -1218,54 +380,36 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
         entries: StreamingProcessEntry[],
         key: string,
         options?: { forceGroup?: boolean; isTailProcessRun?: boolean },
-      ) => {
-        if (entries.length === 0) {
-          return null;
-        }
-
-        const toolCount = entries.filter(
-          (entry) => entry.kind === "tool",
-        ).length;
-        const hasImportedProcess = entries.some(
-          (entry) =>
-            (entry.kind === "thinking" &&
-              isImportedProcessMetadata(entry.metadata)) ||
-            (entry.kind === "tool" && isImportedToolCall(entry.toolCall)),
-        );
-        const processEntries = hasImportedProcess
-          ? entries.map((entry) =>
-              entry.kind === "thinking"
-                ? {
-                    ...entry,
-                    defaultExpanded: entry.defaultExpanded ?? true,
-                    preserveSourceText: true,
-                  }
-                : entry,
-            )
-          : entries;
-        if (options?.forceGroup || (toolCount > 0 && entries.length > 1)) {
-          return (
-            <StreamingProcessGroup
-              key={key}
-              entries={processEntries}
-              defaultExpanded={shouldAutoExpandProcessEntries(
-                processEntries,
-                processIsActive,
-                { isTailProcessRun: options?.isTailProcessRun === true },
-              )}
-              onOpenUrlPreview={onOpenUrlPreview}
-              renderEntry={renderProcessEntry}
-            />
-          );
-        }
-
-        return processEntries.map((entry) => (
-          <React.Fragment key={entry.id}>
-            {renderProcessEntry(entry, false, "•", processEntries)}
-          </React.Fragment>
-        ));
-      },
-      [onOpenUrlPreview, processIsActive, renderProcessEntry],
+      ) => (
+        <StreamingProcessRun
+          key={key}
+          entries={entries}
+          forceGroup={options?.forceGroup}
+          isTailProcessRun={options?.isTailProcessRun}
+          isStreaming={isStreaming}
+          processIsActive={processIsActive}
+          shouldKeepProcessOpenForFinalAnswer={
+            shouldKeepProcessOpenForFinalAnswer
+          }
+          promoteActionRequestsToA2UI={promoteActionRequestsToA2UI}
+          readOnlyActionRequests={readOnlyActionRequests}
+          onPermissionResponse={onPermissionResponse}
+          onFileClick={onFileClick}
+          onOpenSavedSiteContent={onOpenSavedSiteContent}
+          onOpenUrlPreview={onOpenUrlPreview}
+        />
+      ),
+      [
+        isStreaming,
+        onFileClick,
+        onOpenSavedSiteContent,
+        onOpenUrlPreview,
+        onPermissionResponse,
+        processIsActive,
+        promoteActionRequestsToA2UI,
+        readOnlyActionRequests,
+        shouldKeepProcessOpenForFinalAnswer,
+      ],
     );
 
     const renderParsedResultParts = React.useCallback(
@@ -1484,11 +628,14 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
         if (processBuffer.length === 0) {
           return;
         }
+        const shouldForceGroup = processBuffer.some(
+          (entry) => entry.kind !== "action",
+        );
         const renderedRun = renderProcessRun(
           processBuffer,
           `interleaved-process-${keySuffix}`,
           {
-            forceGroup: true,
+            forceGroup: shouldForceGroup,
             isTailProcessRun: options?.isTailProcessRun === true,
           },
         );
@@ -1585,15 +732,12 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
         }
 
         if (!suppressProcessFlow) {
+          processBuffer.push({
+            kind: "action",
+            id: part.actionRequired.requestId,
+            actionRequired: part.actionRequired,
+          });
           flushProcessBuffer(String(index));
-          const actionNode = renderActionRequestNode(part.actionRequired);
-          if (actionNode) {
-            nodes.push(
-              <React.Fragment key={`action-${part.actionRequired.requestId}`}>
-                {actionNode}
-              </React.Fragment>,
-            );
-          }
         }
       });
 

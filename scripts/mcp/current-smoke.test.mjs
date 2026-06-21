@@ -19,6 +19,13 @@ describe("mcp current smoke guard", () => {
     expect(content).toContain('"mcpServer/oauth/login"');
     expect(content).toContain('"mcpTool/call"');
     expect(content).toContain('"mcpResource/read"');
+    expect(content).toContain('"resources/templates/list"');
+    expect(content).toContain("resourceTemplatesSeen");
+    expect(content).toContain("resourceTemplateUriTemplate");
+    expect(content).toContain("outputSchemaStructuredContentSeen");
+    expect(content).toContain("structuredContentEcho");
+    expect(content).toContain("structuredContent: {");
+    expect(content).toContain("outputSchema: {");
     expect(content).toContain("LEGACY_MCP_COMMANDS");
     expect(content).toContain("summary.legacyMcpCommandsSeen.length === 0");
   });

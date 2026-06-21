@@ -59,6 +59,48 @@ describe("mcp", () => {
     expect(safeInvoke).not.toHaveBeenCalled();
   });
 
+  it("资源列表应保留 current resource templates 投影", async () => {
+    const resource = {
+      uri: "docs://readme",
+      name: "README",
+      description: "Readme resource",
+      mime_type: "text/markdown",
+      server_name: "docs",
+    };
+    const resourceTemplate = {
+      uri_template: "docs://{path}",
+      name: "docs-path",
+      title: "Docs Path",
+      description: "Read a docs path",
+      mime_type: "text/markdown",
+      server_name: "docs",
+    };
+    mockAppServerResult({
+      resources: [resource],
+      resourceTemplates: [resourceTemplate],
+    });
+    mockAppServerResult({
+      resources: [resource],
+      resourceTemplates: [resourceTemplate],
+    });
+
+    await expect(mcpApi.listResources()).resolves.toEqual([resource]);
+    expect(appServerRequestMock).toHaveBeenLastCalledWith(
+      "mcpResource/list",
+      {},
+    );
+
+    await expect(mcpApi.listResourcesWithTemplates()).resolves.toEqual({
+      resources: [resource],
+      resourceTemplates: [resourceTemplate],
+    });
+    expect(appServerRequestMock).toHaveBeenLastCalledWith(
+      "mcpResource/list",
+      {},
+    );
+    expect(safeInvoke).not.toHaveBeenCalled();
+  });
+
   it("状态列表应保留 streamable HTTP 配置与 runtime status", async () => {
     const server = {
       id: "server-http",
@@ -184,15 +226,40 @@ describe("mcp", () => {
       server_name: "docs",
       description: "search",
       input_schema: {},
+      output_schema: {
+        type: "object",
+        properties: {
+          content: {
+            type: "array",
+            items: { type: "object" },
+          },
+          structuredContent: {
+            type: "object",
+            properties: {
+              results: { type: "array" },
+            },
+          },
+          isError: { type: "boolean" },
+          _meta: { type: "object" },
+        },
+        required: ["content"],
+        additionalProperties: false,
+      },
     };
     mockAppServerResult({ tools: [tool] });
     mockAppServerResult({ tools: [tool] });
     mockAppServerResult({
       content: [{ type: "text", text: "ok" }],
+      structuredContent: {
+        results: [{ title: "MCP current" }],
+      },
       is_error: false,
     });
     mockAppServerResult({
       content: [{ type: "text", text: "caller ok" }],
+      structuredContent: {
+        results: [{ title: "MCP caller current" }],
+      },
       is_error: false,
     });
     mockAppServerResult({
@@ -229,6 +296,9 @@ describe("mcp", () => {
       mcpApi.callTool("mcp__docs__search_docs", { q: "lime" }),
     ).resolves.toEqual({
       content: [{ type: "text", text: "ok" }],
+      structuredContent: {
+        results: [{ title: "MCP current" }],
+      },
       is_error: false,
     });
     expect(appServerRequestMock).toHaveBeenLastCalledWith("mcpTool/call", {
@@ -244,6 +314,9 @@ describe("mcp", () => {
       ),
     ).resolves.toEqual({
       content: [{ type: "text", text: "caller ok" }],
+      structuredContent: {
+        results: [{ title: "MCP caller current" }],
+      },
       is_error: false,
     });
     expect(appServerRequestMock).toHaveBeenLastCalledWith(

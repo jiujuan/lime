@@ -51,6 +51,7 @@ function createOAuthProviderServer() {
     authorizeQueries: [],
     tokenRequests: [],
     registrationRequests: [],
+    openedRequests: [],
   };
 
   const server = http.createServer(async (request, response) => {
@@ -82,6 +83,14 @@ function createOAuthProviderServer() {
           client_name: "Lime MCP Client",
           redirect_uris: [],
         });
+        return;
+      }
+
+      if (request.method === "GET" && url.pathname === "/opened") {
+        state.openedRequests.push({
+          userAgent: request.headers["user-agent"] || null,
+        });
+        textResponse(response, 200, "MCP OAuth fixture opened");
         return;
       }
 
@@ -198,6 +207,25 @@ async function waitForAuthorizedStatus({ options, entries, invokeAppServerMethod
   );
 }
 
+function summarizeProviderState(provider) {
+  const lastAuthorizeQuery = provider.state.authorizeQueries.at(-1) || null;
+  const lastTokenRequest = provider.state.tokenRequests.at(-1) || null;
+  return {
+    authorizeRequestCount: provider.state.authorizeQueries.length,
+    registrationRequestCount: provider.state.registrationRequests.length,
+    tokenRequestCount: provider.state.tokenRequests.length,
+    openedRequestCount: provider.state.openedRequests.length,
+    lastAuthorizeQuery,
+    lastTokenRequest: lastTokenRequest
+      ? {
+          grant_type: lastTokenRequest.grant_type,
+          code: lastTokenRequest.code ? "[present]" : undefined,
+          redirect_uri: lastTokenRequest.redirect_uri,
+        }
+      : null,
+  };
+}
+
 async function deleteFixtureServer({
   options,
   entries,
@@ -269,7 +297,7 @@ export async function runMcpOAuthFixtureSmoke({
     await invokeBridgeCommand(
       options,
       "open_external_url",
-      { url: login.authorizationUrl },
+      { url: `${provider.baseUrl}/opened` },
       entries,
     );
 
@@ -287,6 +315,11 @@ export async function runMcpOAuthFixtureSmoke({
       entries,
       invokeAppServerMethod,
       serverName,
+    }).catch((error) => {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `${detail}; provider=${JSON.stringify(summarizeProviderState(provider))}`,
+      );
     });
 
     const authorizeQuery = provider.state.authorizeQueries.at(-1) || {};

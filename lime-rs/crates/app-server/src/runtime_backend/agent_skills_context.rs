@@ -20,6 +20,7 @@ pub(super) fn append_agent_skills_context_to_system_prompt(
     let snapshot = build_agent_skill_snapshot_from_workspace(working_dir, project_root);
     let system_prompt =
         append_selected_agent_skill_bodies(system_prompt, user_input, metadata_values, &snapshot);
+    let system_prompt = append_expert_skill_hints(system_prompt, metadata_values, &snapshot);
 
     if system_prompt
         .as_deref()
@@ -179,6 +180,105 @@ fn catalog_bound_skill_candidates(metadata_values: &[&Value]) -> Vec<String> {
                 .get("skill_id")
                 .or_else(|| service_scene_run.get("skillId")),
         );
+    }
+    candidates
+}
+
+fn append_expert_skill_hints(
+    system_prompt: Option<String>,
+    metadata_values: &[&Value],
+    snapshot: &AgentSkillSnapshot,
+) -> Option<String> {
+    let refs = expert_skill_refs(metadata_values);
+    if refs.is_empty() {
+        return system_prompt;
+    }
+
+    let mut lines = Vec::new();
+    for skill_ref in refs {
+        let Some(skill) = find_skill_for_expert_ref(snapshot, &skill_ref) else {
+            lines.push(format!(
+                "- `{skill_ref}`: 未在当前 Agent Skills snapshot 中匹配到可读 `SKILL.md`。"
+            ));
+            continue;
+        };
+        lines.push(format!(
+            "- `{skill_ref}` -> `{}` scope={} path=`{}`",
+            skill.name,
+            skill.scope.as_label(),
+            skill.skill_file_path.display()
+        ));
+    }
+    if lines.is_empty() {
+        return system_prompt;
+    }
+
+    append_context_block(
+        system_prompt,
+        format!(
+            "<expert_skill_refs>\n## 专家绑定的 Agent Skill 候选\n这些 skillRefs 来自当前专家 metadata，只用于候选提示和后续 `skill_search` 排序线索；不要因此读取 `SKILL.md` 正文、默认调用 SkillTool、扩大工具权限或声称已经执行。\n{}\n</expert_skill_refs>",
+            lines.join("\n")
+        ),
+    )
+}
+
+fn expert_skill_refs(metadata_values: &[&Value]) -> Vec<String> {
+    let mut refs = Vec::new();
+    for metadata in metadata_values {
+        collect_string_array_candidates(&mut refs, metadata.pointer("/harness/expert/skill_refs"));
+        collect_string_array_candidates(&mut refs, metadata.pointer("/harness/expert/skillRefs"));
+        collect_string_array_candidates(&mut refs, metadata.pointer("/expert/skillRefs"));
+        collect_string_array_candidates(&mut refs, metadata.pointer("/expert/skill_refs"));
+    }
+    refs
+}
+
+fn collect_string_array_candidates(candidates: &mut Vec<String>, value: Option<&Value>) {
+    let Some(values) = value.and_then(Value::as_array) else {
+        return;
+    };
+    for value in values {
+        push_string_candidate(candidates, Some(value));
+    }
+}
+
+fn find_skill_for_expert_ref<'a>(
+    snapshot: &'a AgentSkillSnapshot,
+    skill_ref: &str,
+) -> Option<&'a lime_skills::AgentSkillMetadata> {
+    if skill_ref.trim().starts_with("service-skill:") {
+        return None;
+    }
+    let candidates = expert_ref_name_candidates(skill_ref);
+    snapshot.skills.iter().find(|skill| {
+        candidates.iter().any(|candidate| {
+            skill.name.eq_ignore_ascii_case(candidate)
+                || skill
+                    .directory
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|directory| directory.eq_ignore_ascii_case(candidate))
+                || skill
+                    .skill_file_path
+                    .to_string_lossy()
+                    .eq_ignore_ascii_case(candidate)
+        })
+    })
+}
+
+fn expert_ref_name_candidates(skill_ref: &str) -> Vec<String> {
+    let trimmed = skill_ref.trim();
+    let candidate = trimmed
+        .strip_prefix("skill:")
+        .or_else(|| trimmed.strip_prefix("workspace_skill:"))
+        .or_else(|| trimmed.strip_prefix("service-skill:"))
+        .unwrap_or(trimmed)
+        .trim();
+    let candidate = candidate.split('@').next().unwrap_or(candidate).trim();
+    let mut candidates = Vec::new();
+    push_unique_string(&mut candidates, candidate);
+    if let Some(stripped) = candidate.strip_prefix("project:") {
+        push_unique_string(&mut candidates, stripped);
     }
     candidates
 }
@@ -357,6 +457,48 @@ mod tests {
         assert!(prompt.contains("`writer`"));
         assert!(prompt.contains("# Body"));
         assert!(prompt.contains("## 可用 Agent Skills"));
+    }
+
+    #[test]
+    fn appends_expert_skill_refs_as_hints_without_selecting_or_enabling_skill() {
+        let workspace = TempDir::new().expect("workspace");
+        write_skill(&workspace, "writer", "Writer", "Write clearly.");
+        let metadata = serde_json::json!({
+            "harness": {
+                "expert": {
+                    "skill_refs": [
+                        "skill:writer",
+                        "service-skill:daily-trend-briefing",
+                        "skill:writer"
+                    ]
+                }
+            }
+        });
+
+        let prompt = append_agent_skills_context_to_system_prompt(
+            Some("base".to_string()),
+            "帮我处理这段话",
+            &[&metadata],
+            Some(workspace.path()),
+            Some(workspace.path()),
+        )
+        .expect("prompt");
+
+        assert!(prompt.contains("<expert_skill_refs>"));
+        assert!(prompt.contains("`skill:writer` -> `writer`"));
+        assert!(
+            prompt.contains("`service-skill:daily-trend-briefing`: 未在当前 Agent Skills snapshot")
+        );
+        assert!(!prompt.contains("<selected_skill_instructions>"));
+        assert!(!prompt.contains("# Body"));
+
+        let names = selected_agent_skill_names_for_turn(
+            "帮我处理这段话",
+            &[&metadata],
+            Some(workspace.path()),
+            Some(workspace.path()),
+        );
+        assert!(names.is_empty());
     }
 
     #[test]

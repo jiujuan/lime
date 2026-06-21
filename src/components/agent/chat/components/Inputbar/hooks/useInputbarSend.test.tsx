@@ -1,0 +1,293 @@
+import React, { useEffect } from "react";
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Skill } from "@/lib/api/skills";
+import type { MessagePathReference } from "../../../types";
+import type { InputCapabilitySelection } from "../../../skill-selection/inputCapabilitySelection";
+import type { InputbarSendHandler } from "../inputbarSendPayload";
+import { useInputbarSend } from "./useInputbarSend";
+
+const { setAgentRuntimeObjectiveMock } = vi.hoisted(() => ({
+  setAgentRuntimeObjectiveMock: vi.fn(),
+}));
+
+vi.mock("@/lib/api/agentRuntime", () => ({
+  setAgentRuntimeObjective: setAgentRuntimeObjectiveMock,
+}));
+
+interface MountedHarness {
+  container: HTMLDivElement;
+  root: Root;
+}
+
+interface HarnessProps {
+  activeCapability?: InputCapabilitySelection | null;
+  activeTools?: Record<string, boolean>;
+  input?: string;
+  onSend: InputbarSendHandler;
+  pathReferences?: MessagePathReference[];
+  projectId?: string | null;
+  sessionId?: string | null;
+}
+
+const mountedRoots: MountedHarness[] = [];
+let latestSend: (() => Promise<void>) | null = null;
+let clearPathReferencesMock: ReturnType<typeof vi.fn>;
+let clearActiveCapabilityMock: ReturnType<typeof vi.fn>;
+let clearPendingImagesMock: ReturnType<typeof vi.fn>;
+
+function Harness({
+  activeCapability = null,
+  activeTools = {},
+  input = "",
+  onSend,
+  pathReferences = [],
+  projectId = null,
+  sessionId = null,
+}: HarnessProps) {
+  const handleSend = useInputbarSend({
+    input,
+    pendingImages: [],
+    pathReferences,
+    activeCapability,
+    knowledgePackSelection: null,
+    activeTools,
+    projectId,
+    sessionId,
+    onSend,
+    clearPendingImages: clearPendingImagesMock,
+    clearPathReferences: clearPathReferencesMock,
+    clearActiveCapability: clearActiveCapabilityMock,
+  });
+
+  useEffect(() => {
+    latestSend = handleSend;
+    return () => {
+      if (latestSend === handleSend) {
+        latestSend = null;
+      }
+    };
+  }, [handleSend]);
+
+  return null;
+}
+
+function renderHarness(props: HarnessProps) {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  mountedRoots.push({ container, root });
+
+  act(() => {
+    root.render(<Harness {...props} />);
+  });
+}
+
+async function send() {
+  expect(latestSend).toBeTypeOf("function");
+  await act(async () => {
+    await latestSend?.();
+  });
+}
+
+function createPathReference(
+  overrides: Partial<MessagePathReference> = {},
+): MessagePathReference {
+  return {
+    id: "file:/tmp/report.md",
+    path: "/tmp/report.md",
+    name: "report.md",
+    isDir: false,
+    size: 128,
+    mimeType: "text/markdown",
+    source: "file_manager",
+    ...overrides,
+  };
+}
+
+function createInstalledSkillSelection(): InputCapabilitySelection {
+  const skill: Skill = {
+    key: "local:capability-report",
+    name: "Capability Report",
+    description: "生成能力报告",
+    directory: "capability-report",
+    installed: true,
+    sourceKind: "other",
+  };
+
+  return {
+    kind: "installed_skill",
+    skill,
+  };
+}
+
+describe("useInputbarSend", () => {
+  afterEach(() => {
+    for (const { root, container } of mountedRoots.splice(0)) {
+      act(() => {
+        root.unmount();
+      });
+      container.remove();
+    }
+    latestSend = null;
+    vi.clearAllMocks();
+  });
+
+  beforeEach(() => {
+    clearPathReferencesMock = vi.fn();
+    clearActiveCapabilityMock = vi.fn();
+    clearPendingImagesMock = vi.fn();
+    setAgentRuntimeObjectiveMock.mockResolvedValue(null);
+  });
+
+  it("普通文本发送应显式下传当前输入文本", async () => {
+    const onSend = vi.fn().mockResolvedValue(true);
+    renderHarness({
+      input: "继续优化 Skill runtime",
+      onSend,
+    });
+
+    await send();
+
+    expect(onSend).toHaveBeenCalledWith({
+      images: undefined,
+      textOverride: "继续优化 Skill runtime",
+      sendOptions: undefined,
+    });
+    expect(clearPendingImagesMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("只有路径引用时仍应发送路径占位文本并保留 metadata", async () => {
+    const onSend = vi.fn().mockResolvedValue(true);
+    renderHarness({
+      input: "   ",
+      onSend,
+      pathReferences: [createPathReference()],
+    });
+
+    await send();
+
+    expect(onSend).toHaveBeenCalledWith({
+      images: undefined,
+      textOverride: "请查看这些文件或文件夹。",
+      sendOptions: {
+        requestMetadata: {
+          path_references: [
+            {
+              path: "/tmp/report.md",
+              name: "report.md",
+              is_dir: false,
+              isDir: false,
+              size: 128,
+              mime_type: "text/markdown",
+              mimeType: "text/markdown",
+              source: "file_manager",
+            },
+          ],
+          harness: {
+            file_references: [
+              {
+                path: "/tmp/report.md",
+                name: "report.md",
+                is_dir: false,
+                isDir: false,
+                size: 128,
+                mime_type: "text/markdown",
+                mimeType: "text/markdown",
+                source: "file_manager",
+              },
+            ],
+            fileReferences: [
+              {
+                path: "/tmp/report.md",
+                name: "report.md",
+                is_dir: false,
+                isDir: false,
+                size: 128,
+                mime_type: "text/markdown",
+                mimeType: "text/markdown",
+                source: "file_manager",
+              },
+            ],
+          },
+        },
+      },
+    });
+    expect(clearPathReferencesMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("技能路由和计划模式 metadata 不应因显式文本发送丢失", async () => {
+    const onSend = vi.fn().mockResolvedValue(true);
+    renderHarness({
+      activeCapability: createInstalledSkillSelection(),
+      activeTools: {
+        task_mode: true,
+        subagent_mode: true,
+      },
+      input: "生成一份能力报告",
+      onSend,
+      sessionId: "thread-skill-runtime",
+    });
+
+    await send();
+
+    expect(onSend).toHaveBeenCalledWith({
+      images: undefined,
+      textOverride: "生成一份能力报告",
+      sendOptions: {
+        capabilityRoute: {
+          kind: "installed_skill",
+          skillKey: "capability-report",
+          skillName: "Capability Report",
+        },
+        displayContent: "生成一份能力报告",
+        requestMetadata: {
+          harness: {
+            task_mode_enabled: true,
+            collaboration_mode: {
+              mode: "plan",
+              source: "inputbar",
+            },
+            preferences: {
+              task: true,
+              task_mode: true,
+            },
+          },
+        },
+        toolPreferencesOverride: {
+          task: true,
+          subagent: true,
+        },
+      },
+    });
+    expect(clearActiveCapabilityMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("目标模式仍应先写入 objective 再发送同一文本", async () => {
+    const onSend = vi.fn().mockResolvedValue(true);
+    renderHarness({
+      activeTools: {
+        objective_mode: true,
+      },
+      input: "保持当前修复目标",
+      onSend,
+      projectId: "workspace-1",
+      sessionId: "thread-goal-1",
+    });
+
+    await send();
+
+    expect(setAgentRuntimeObjectiveMock).toHaveBeenCalledWith({
+      sessionId: "thread-goal-1",
+      workspaceId: "workspace-1",
+      objectiveText: "保持当前修复目标",
+      successCriteria: [],
+    });
+    expect(onSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        textOverride: "保持当前修复目标",
+      }),
+    );
+  });
+});

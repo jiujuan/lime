@@ -8,6 +8,51 @@ import electronPath from "electron";
 import { _electron as electron } from "playwright";
 import { resolveElectronAppServerRuntimeEnv } from "../lib/electron-app-server-assets.mjs";
 import { resolveDevAppServerBinary } from "../lib/electron-dev-sidecar.mjs";
+import {
+  buildExpertSkillsRuntimeCatalog,
+  buildExpertSkillsRuntimeMetadata,
+  createExplicitSkillsRuntimeFixtureScenario,
+  createExpertSkillsRuntimeFixtureScenario,
+  createExpertPanelSkillsRuntimeFixtureScenario,
+  createManualEnableSkillsRuntimeFixtureScenario,
+  createSkillsRuntimeFixtureScenario,
+  EXPERT_PANEL_SKILLS_RUNTIME_ASSERTION_KEYS,
+  EXPERT_SKILLS_RUNTIME_BASE_SKILL_REF,
+  EXPERT_PLAZA_SKILLS_RUNTIME_ASSERTION_KEYS,
+  EXPERT_SKILLS_RUNTIME_ASSERTION_KEYS,
+  EXPERT_SKILLS_RUNTIME_DONE_TEXT,
+  EXPERT_SKILLS_RUNTIME_ID,
+  EXPERT_SKILLS_RUNTIME_PANEL_DONE_TEXT,
+  EXPERT_SKILLS_RUNTIME_PANEL_PROMPT,
+  EXPERT_SKILLS_RUNTIME_PROMPT,
+  EXPERT_SKILLS_RUNTIME_SKILL_REF,
+  EXPERT_SKILLS_RUNTIME_TITLE,
+  renderSkillsRuntimeBackendEvents,
+  SKILLS_RUNTIME_ASSERTION_KEYS,
+  SKILLS_RUNTIME_DONE_TEXT,
+  SKILLS_RUNTIME_EXPLICIT_DONE_TEXT,
+  SKILLS_RUNTIME_EXPLICIT_PROMPT,
+  SKILLS_RUNTIME_MANUAL_ENABLE_DONE_TEXT,
+  SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT,
+  SKILLS_RUNTIME_PROMPT,
+  SKILLS_RUNTIME_QUERY,
+  SKILLS_RUNTIME_SKILL_NAME,
+  summarizeSkillsRuntimeEvidenceExport,
+} from "./skills-runtime-fixture-scenario.mjs";
+import {
+  sendPromptFromGui,
+  waitForInputReady,
+} from "./claw-chat-current-fixture-gui-actions.mjs";
+import {
+  addExpertSkillsRuntimeSkillFromInfoPanel,
+  EXPERT_PANEL_SKILLS_RUNTIME_UI_ADD_TEST_ID,
+  EXPERT_PANEL_SKILLS_RUNTIME_UI_CHIP_TEST_ID,
+  EXPERT_PANEL_SKILLS_RUNTIME_UI_SKILL_REF,
+  launchExpertSkillsRuntimeFromExpertPlaza,
+  reloadRendererAfterExpertPanelSkillCatalogInjection,
+  selectExpertPanelSkillsRuntimeSessionId,
+  summarizeExpertPanelSkillsRuntimeTurnStart,
+} from "./claw-chat-current-fixture-expert-actions.mjs";
 
 const DEFAULTS = {
   appUrl: "",
@@ -36,18 +81,22 @@ const APP_SERVER_METHOD_SESSION_UPDATE = "agentSession/update";
 const APP_SERVER_METHOD_SESSION_TURN_START = "agentSession/turn/start";
 const APP_SERVER_METHOD_SESSION_TURN_CANCEL = "agentSession/turn/cancel";
 const APP_SERVER_METHOD_SESSION_READ = "agentSession/read";
+const APP_SERVER_METHOD_SESSION_THREAD_RESUME = "agentSession/thread/resume";
 const APP_SERVER_METHOD_SESSION_LIST = "agentSession/list";
+const APP_SERVER_METHOD_EVIDENCE_EXPORT = "evidence/export";
 const APP_SERVER_METHOD_WORKSPACE_DEFAULT_ENSURE = "workspace/default/ensure";
 const NEWS_PROMPT = "整理今天的国际新闻";
 const CONTINUE_PROMPT = "继续输出";
 const PLAN_PROMPT = "先给我一个修复计划，不要直接改代码";
 const GOAL_PROMPT = "本周完成 Goal E2E 修复";
 const WEB_TOOLS_RENDERING_PROMPT = "验证网页搜索渲染";
+const MCP_STRUCTURED_CONTENT_PROMPT = "验证 MCP structuredContent 展示";
 const ASSISTANT_DONE_TEXT = "CLAW_NEWS_FIXTURE_DONE";
 const CONTINUE_DONE_TEXT = "CLAW_CONTINUE_FIXTURE_DONE";
 const PLAN_DONE_TEXT = "CLAW_PLAN_FIXTURE_DONE";
 const GOAL_DONE_TEXT = "CLAW_GOAL_FIXTURE_DONE";
 const WEB_TOOLS_RENDERING_DONE_TEXT = "CLAW_WEB_TOOLS_RENDERING_DONE";
+const MCP_STRUCTURED_CONTENT_DONE_TEXT = "CLAW_MCP_STRUCTURED_CONTENT_DONE";
 const WEB_TOOLS_SEARCH_TITLE = "Lime WebSearch Rendering Source";
 const WEB_TOOLS_SEARCH_URL = "https://example.com/lime-websearch-rendering";
 const WEB_TOOLS_SEARCH_SOURCE_LABEL = "example.com/lime-websearch-rendering";
@@ -82,6 +131,46 @@ const SESSION_TITLE = "Claw 新闻输入 Electron fixture";
 const WEB_TOOLS_SEARCH_TOOL_CALL_ID = `${SESSION_ID}:tool:websearch-rendering`;
 const WEB_TOOLS_REASONING_ITEM_ID = `${SESSION_ID}:reasoning:web-tools-rendering`;
 const WEB_TOOLS_FETCH_TOOL_CALL_ID = `${SESSION_ID}:tool:webfetch-rendering`;
+const MCP_STRUCTURED_CONTENT_TOOL_CALL_ID = `${SESSION_ID}:tool:mcp-structured-content`;
+const MCP_STRUCTURED_CONTENT_TOOL_NAME = "mcp__docs__diagnostic_probe";
+const MCP_STRUCTURED_CONTENT_TOOL_DISPLAY_LABEL = "docs / diagnostic probe";
+const MCP_STRUCTURED_CONTENT_ANSWER =
+  "MCP 结构化答案已进入 Agent Chat GUI";
+const MCP_STRUCTURED_CONTENT_REFERENCE_ID = "doc-structured-1";
+const MCP_STRUCTURED_CONTENT_PROTOCOL_OUTPUT = JSON.stringify({
+  request_metadata: {
+    projection: "mcp_tool_result_projection",
+    trace_id: "mcp-structured-content-fixture-trace",
+  },
+  diagnostics: {
+    elapsed_ms: 12,
+    raw_transport_payload: "doc-hidden-envelope",
+  },
+  content: [
+    {
+      type: "text",
+      text: "control-plane envelope only; user answer is stored in structuredContent",
+    },
+  ],
+});
+const MCP_STRUCTURED_CONTENT_RESULT = {
+  answer: MCP_STRUCTURED_CONTENT_ANSWER,
+  ids: [MCP_STRUCTURED_CONTENT_REFERENCE_ID],
+};
+const SKILLS_RUNTIME_SCENARIO =
+  createSkillsRuntimeFixtureScenario(SESSION_ID);
+const SKILLS_RUNTIME_EXPLICIT_SCENARIO =
+  createExplicitSkillsRuntimeFixtureScenario(SESSION_ID);
+const SKILLS_RUNTIME_MANUAL_ENABLE_SCENARIO =
+  createManualEnableSkillsRuntimeFixtureScenario(SESSION_ID);
+const EXPERT_SKILLS_RUNTIME_SCENARIO =
+  createExpertSkillsRuntimeFixtureScenario(SESSION_ID);
+const EXPERT_PANEL_SKILLS_RUNTIME_SCENARIO =
+  createExpertPanelSkillsRuntimeFixtureScenario(SESSION_ID);
+const EXPERT_SKILLS_RUNTIME_SESSION_ID = `${SESSION_ID}-expert-skills`;
+const EXPERT_SKILLS_RUNTIME_THREAD_ID = `${EXPERT_SKILLS_RUNTIME_SESSION_ID}-thread`;
+const EXPERT_SKILLS_RUNTIME_TURN_ID = `${EXPERT_SKILLS_RUNTIME_SESSION_ID}-turn`;
+const EXPERT_SKILLS_RUNTIME_SESSION_TITLE = "专家 Skills Runtime Fixture";
 const EVENT_READ_PROBE_PROMPT =
   "验证 agentSession/event 与 read model 同 turn 对齐。";
 const EVENT_READ_PROBE_TURN_ID = `${SESSION_ID}-event-read-probe`;
@@ -104,7 +193,14 @@ const WEB_TOOLS_RENDERING_ASSERTION_KEYS = [
   "guiWebFetchTransportEnvelopeHidden",
   "readModelWebToolsRenderingCompleted",
 ];
-
+const MCP_STRUCTURED_CONTENT_ASSERTION_KEYS = [
+  "mcpStructuredContentPromptReachedBackend",
+  "guiMcpStructuredContentInputSubmitted",
+  "guiMcpStructuredContentVisible",
+  "guiMcpStructuredContentEnvelopeHidden",
+  "readModelMcpStructuredContentCompleted",
+  "readModelMcpStructuredContentObserved",
+];
 function printHelp() {
   console.log(`
 Claw Chat Current Electron Fixture Smoke
@@ -126,7 +222,7 @@ Claw Chat Current Electron Fixture Smoke
   --app-url <url>        可选 renderer dev server，例如 http://127.0.0.1:1420/
   --evidence-dir <path>  证据目录
   --prefix <name>        证据文件前缀
-  --scenario <name>      complete | cancel | cancel-then-continue | plan | goal | web-tools-rendering，默认 complete
+  --scenario <name>      complete | cancel | cancel-then-continue | plan | goal | web-tools-rendering | mcp-structured-content | skills-runtime | expert-skills-runtime | expert-plaza-skills-runtime | expert-panel-skills-runtime，默认 complete
   --timeout-ms <ms>      总超时，默认 180000
   --interval-ms <ms>     轮询间隔，默认 500
   --keep-temp            保留临时目录便于调试
@@ -196,6 +292,11 @@ function parseArgs(argv) {
     "plan",
     "goal",
     "web-tools-rendering",
+    "mcp-structured-content",
+    "skills-runtime",
+    "expert-skills-runtime",
+    "expert-plaza-skills-runtime",
+    "expert-panel-skills-runtime",
   ];
   if (!allowedScenarios.includes(options.scenario)) {
     throw new Error(
@@ -360,6 +461,27 @@ function createTempRuntimeEnv() {
 function writeFixtureBackend(backendPath) {
   const proposedPlanFixtureText = `${PROPOSED_PLAN_BLOCK}\n计划已写入右侧计划轨，等待你确认后再执行。\n`;
   const webToolsRenderingFixtureText = `网页搜索渲染结论：搜索来源已展开，读取页面已归入同一过程，最终正文继续输出。\n${WEB_TOOLS_BROKEN_MARKDOWN_TEXT}\n`;
+  const skillsRuntimeBackendEvents = renderSkillsRuntimeBackendEvents(
+    SKILLS_RUNTIME_SCENARIO,
+  );
+  const explicitSkillsRuntimeBackendEvents = renderSkillsRuntimeBackendEvents({
+    ...SKILLS_RUNTIME_EXPLICIT_SCENARIO,
+    promptFlagName: "isExplicitSkillsRuntimePrompt",
+  });
+  const manualEnableSkillsRuntimeBackendEvents =
+    renderSkillsRuntimeBackendEvents({
+      ...SKILLS_RUNTIME_MANUAL_ENABLE_SCENARIO,
+      promptFlagName: "isManualEnableSkillsRuntimePrompt",
+    });
+  const expertSkillsRuntimeBackendEvents = renderSkillsRuntimeBackendEvents({
+    ...EXPERT_SKILLS_RUNTIME_SCENARIO,
+    promptFlagName: "isExpertSkillsRuntimePrompt",
+  });
+  const expertPanelSkillsRuntimeBackendEvents =
+    renderSkillsRuntimeBackendEvents({
+      ...EXPERT_PANEL_SKILLS_RUNTIME_SCENARIO,
+      promptFlagName: "isExpertPanelSkillsRuntimePrompt",
+    });
   fs.writeFileSync(
     backendPath,
     `#!/usr/bin/env node
@@ -447,6 +569,17 @@ if (input.kind === "turnStart") {
   const isPlanPrompt = inputText.includes("${PLAN_PROMPT}");
   const isGoalPrompt = inputText.includes("${GOAL_PROMPT}");
   const isWebToolsRenderingPrompt = inputText.includes("${WEB_TOOLS_RENDERING_PROMPT}");
+  const isMcpStructuredContentPrompt = inputText.includes("${MCP_STRUCTURED_CONTENT_PROMPT}");
+  const isManualEnableSkillsRuntimePrompt = inputText.includes("${SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT}");
+  const isExpertPanelSkillsRuntimePrompt = inputText.includes("${EXPERT_SKILLS_RUNTIME_PANEL_PROMPT}");
+  const isExpertSkillsRuntimePrompt =
+    inputText.includes("${EXPERT_SKILLS_RUNTIME_PROMPT}") &&
+    !isExpertPanelSkillsRuntimePrompt;
+  const isExplicitSkillsRuntimePrompt = inputText.includes("${SKILLS_RUNTIME_EXPLICIT_PROMPT}");
+  const isSkillsRuntimePrompt =
+    inputText.includes("${SKILLS_RUNTIME_PROMPT}") &&
+    !isExplicitSkillsRuntimePrompt &&
+    !isManualEnableSkillsRuntimePrompt;
   const assistantDoneText = isEventReadProbe
     ? "${EVENT_READ_PROBE_DONE_TEXT}"
     : isContinuePrompt
@@ -457,7 +590,19 @@ if (input.kind === "turnStart") {
           ? "${GOAL_DONE_TEXT}"
           : isWebToolsRenderingPrompt
             ? "${WEB_TOOLS_RENDERING_DONE_TEXT}"
-    : "${ASSISTANT_DONE_TEXT}";
+            : isMcpStructuredContentPrompt
+              ? "${MCP_STRUCTURED_CONTENT_DONE_TEXT}"
+              : isSkillsRuntimePrompt
+                ? "${SKILLS_RUNTIME_DONE_TEXT}"
+                : isExplicitSkillsRuntimePrompt
+                  ? "${SKILLS_RUNTIME_EXPLICIT_DONE_TEXT}"
+                  : isManualEnableSkillsRuntimePrompt
+                    ? "${SKILLS_RUNTIME_MANUAL_ENABLE_DONE_TEXT}"
+                    : isExpertSkillsRuntimePrompt
+                      ? "${EXPERT_SKILLS_RUNTIME_DONE_TEXT}"
+                      : isExpertPanelSkillsRuntimePrompt
+                        ? "${EXPERT_SKILLS_RUNTIME_PANEL_DONE_TEXT}"
+                        : "${ASSISTANT_DONE_TEXT}";
   const initialEvents = [
     {
       type: "message.delta",
@@ -472,6 +617,18 @@ if (input.kind === "turnStart") {
                 ? "追求目标已进入当前回合：\\n"
                 : isWebToolsRenderingPrompt
                   ? "我先联网核实目标页面来源。\\n"
+                  : isMcpStructuredContentPrompt
+                    ? "我先调用 MCP docs 诊断工具，并只把用户答案放在 structuredContent。\\n"
+                    : isSkillsRuntimePrompt
+                      ? "我先搜索 Skills metadata，再按需加载单个 SKILL.md。\\n"
+                      : isExplicitSkillsRuntimePrompt
+                        ? "我识别到显式 Skill 提及，仍先检索 metadata，再按需加载单个 SKILL.md。\\n"
+                        : isManualEnableSkillsRuntimePrompt
+                          ? "我识别到本轮手动启用的 workspace Skill，仍先核对 metadata，再按需加载单个 SKILL.md。\\n"
+                          : isExpertSkillsRuntimePrompt
+                            ? "我识别到专家绑定的 skillRefs，但仍先通过 skill_search 选择，再按需加载单个 SKILL.md。\\n"
+                            : isExpertPanelSkillsRuntimePrompt
+                              ? "我识别到右侧专家面板更新后的 skillRefs，并继续通过 skill_search 选择单个 Skill。\\n"
           : "以下是今日国际新闻简要整理：\\n"
       }
     }
@@ -484,6 +641,18 @@ if (input.kind === "turnStart") {
         ? "目标已绑定到本轮请求，后续会围绕 ${GOAL_PROMPT} 收口。\\n"
         : isWebToolsRenderingPrompt
           ? ${JSON.stringify(webToolsRenderingFixtureText)}
+          : isMcpStructuredContentPrompt
+            ? "MCP structuredContent 展示验证完成。\\n"
+            : isSkillsRuntimePrompt
+              ? ${JSON.stringify(SKILLS_RUNTIME_SCENARIO.fixtureText)}
+              : isExplicitSkillsRuntimePrompt
+                ? ${JSON.stringify(SKILLS_RUNTIME_EXPLICIT_SCENARIO.fixtureText)}
+                : isManualEnableSkillsRuntimePrompt
+                  ? ${JSON.stringify(SKILLS_RUNTIME_MANUAL_ENABLE_SCENARIO.fixtureText)}
+                  : isExpertSkillsRuntimePrompt
+                    ? ${JSON.stringify(EXPERT_SKILLS_RUNTIME_SCENARIO.fixtureText)}
+                    : isExpertPanelSkillsRuntimePrompt
+                      ? ${JSON.stringify(EXPERT_PANEL_SKILLS_RUNTIME_SCENARIO.fixtureText)}
         : "1. 多国外交议题持续升温，地区安全与经贸协商仍是焦点。\\n2. 全球市场继续关注能源、供应链和主要央行政策变化。\\n3. 国际组织呼吁在气候、粮食与人道援助议题上保持协调。\\n";
   const shouldWaitForCancel =
     (process.env.CLAW_CHAT_FIXTURE_SCENARIO === "cancel" ||
@@ -694,6 +863,219 @@ if (input.kind === "turnStart") {
     ]);
     await sleep(900);
   }
+  if (isMcpStructuredContentPrompt) {
+    emitEvents([
+      {
+        type: "tool.started",
+        payload: {
+          toolCallId: "${MCP_STRUCTURED_CONTENT_TOOL_CALL_ID}",
+          tool_call_id: "${MCP_STRUCTURED_CONTENT_TOOL_CALL_ID}",
+          toolId: "${MCP_STRUCTURED_CONTENT_TOOL_CALL_ID}",
+          tool_id: "${MCP_STRUCTURED_CONTENT_TOOL_CALL_ID}",
+          id: "${MCP_STRUCTURED_CONTENT_TOOL_CALL_ID}",
+          toolName: "${MCP_STRUCTURED_CONTENT_TOOL_NAME}",
+          tool_name: "${MCP_STRUCTURED_CONTENT_TOOL_NAME}",
+          name: "${MCP_STRUCTURED_CONTENT_TOOL_NAME}",
+          arguments: {
+            question: "structured content display",
+            server: "docs"
+          },
+          metadata: {
+            tool_family: "mcp",
+            mcp_server: "docs",
+            mcp_tool: "diagnostic_probe"
+          }
+        }
+      }
+    ]);
+    await sleep(80);
+    emitEvents([
+      {
+        type: "tool.result",
+        payload: {
+          toolCallId: "${MCP_STRUCTURED_CONTENT_TOOL_CALL_ID}",
+          tool_call_id: "${MCP_STRUCTURED_CONTENT_TOOL_CALL_ID}",
+          toolId: "${MCP_STRUCTURED_CONTENT_TOOL_CALL_ID}",
+          tool_id: "${MCP_STRUCTURED_CONTENT_TOOL_CALL_ID}",
+          id: "${MCP_STRUCTURED_CONTENT_TOOL_CALL_ID}",
+          toolName: "${MCP_STRUCTURED_CONTENT_TOOL_NAME}",
+          tool_name: "${MCP_STRUCTURED_CONTENT_TOOL_NAME}",
+          outputPreview: ${JSON.stringify(MCP_STRUCTURED_CONTENT_PROTOCOL_OUTPUT)},
+          output: ${JSON.stringify(MCP_STRUCTURED_CONTENT_PROTOCOL_OUTPUT)},
+          success: true,
+          structuredContent: ${JSON.stringify(MCP_STRUCTURED_CONTENT_RESULT)},
+          structured_content: ${JSON.stringify(MCP_STRUCTURED_CONTENT_RESULT)},
+          result: {
+            structuredContent: ${JSON.stringify(MCP_STRUCTURED_CONTENT_RESULT)},
+            structured_content: ${JSON.stringify(MCP_STRUCTURED_CONTENT_RESULT)}
+          },
+          metadata: {
+            tool_family: "mcp",
+            mcp_server: "docs",
+            mcp_tool: "diagnostic_probe"
+          }
+        }
+      }
+    ]);
+    await sleep(120);
+  }
+${skillsRuntimeBackendEvents}
+${explicitSkillsRuntimeBackendEvents}
+${manualEnableSkillsRuntimeBackendEvents}
+  if (isExpertSkillsRuntimePrompt) {
+    emitEvents([
+      {
+        type: "runtime.status",
+        payload: {
+          status: "declared",
+          text: "专家已声明 skillRefs，但声明不等于执行授权。",
+          metadata: {
+            expertSkillsRuntime: {
+              event: "expert_declared_skill_refs",
+              expertId: "${EXPERT_SKILLS_RUNTIME_ID}",
+              expertTitle: "${EXPERT_SKILLS_RUNTIME_TITLE}",
+              skillRefs: ["${EXPERT_SKILLS_RUNTIME_SKILL_REF}"]
+            },
+            expert_skills_runtime: {
+              event: "expert_declared_skill_refs",
+              expert_id: "${EXPERT_SKILLS_RUNTIME_ID}",
+              expert_title: "${EXPERT_SKILLS_RUNTIME_TITLE}",
+              skill_refs: ["${EXPERT_SKILLS_RUNTIME_SKILL_REF}"]
+            }
+          }
+        }
+      }
+    ]);
+    await sleep(80);
+  }
+  if (isExpertPanelSkillsRuntimePrompt) {
+    emitEvents([
+      {
+        type: "runtime.status",
+        payload: {
+          status: "declared",
+          text: "专家面板更新后的 skillRefs 已进入当前回合，但声明仍不等于执行授权。",
+          metadata: {
+            expertSkillsRuntime: {
+              event: "expert_declared_skill_refs",
+              expertId: "${EXPERT_SKILLS_RUNTIME_ID}",
+              expertTitle: "${EXPERT_SKILLS_RUNTIME_TITLE}",
+              skillRefs: [
+                "${EXPERT_SKILLS_RUNTIME_BASE_SKILL_REF}",
+                "${EXPERT_SKILLS_RUNTIME_SKILL_REF}"
+              ]
+            },
+            expert_skills_runtime: {
+              event: "expert_declared_skill_refs",
+              expert_id: "${EXPERT_SKILLS_RUNTIME_ID}",
+              expert_title: "${EXPERT_SKILLS_RUNTIME_TITLE}",
+              skill_refs: [
+                "${EXPERT_SKILLS_RUNTIME_BASE_SKILL_REF}",
+                "${EXPERT_SKILLS_RUNTIME_SKILL_REF}"
+              ]
+            }
+          }
+        }
+      }
+    ]);
+    await sleep(80);
+  }
+${expertSkillsRuntimeBackendEvents}
+${expertPanelSkillsRuntimeBackendEvents}
+  if (isExpertSkillsRuntimePrompt) {
+    emitEvents([
+      {
+        type: "runtime.status",
+        payload: {
+          status: "selected",
+          text: "专家本轮通过 selector 选择 capability-report。",
+          metadata: {
+            expertSkillsRuntime: {
+              event: "expert_selected_skill",
+              expertId: "${EXPERT_SKILLS_RUNTIME_ID}",
+              skillName: "${SKILLS_RUNTIME_SKILL_NAME}",
+              declaredSkillRef: "${EXPERT_SKILLS_RUNTIME_SKILL_REF}"
+            },
+            expert_skills_runtime: {
+              event: "expert_selected_skill",
+              expert_id: "${EXPERT_SKILLS_RUNTIME_ID}",
+              skill_name: "${SKILLS_RUNTIME_SKILL_NAME}",
+              declared_skill_ref: "${EXPERT_SKILLS_RUNTIME_SKILL_REF}"
+            }
+          }
+        }
+      },
+      {
+        type: "runtime.status",
+        payload: {
+          status: "invoked",
+          text: "专家本轮真实调用 Skill tool: capability-report。",
+          metadata: {
+            expertSkillsRuntime: {
+              event: "expert_invoked_skill",
+              expertId: "${EXPERT_SKILLS_RUNTIME_ID}",
+              skillName: "${SKILLS_RUNTIME_SKILL_NAME}",
+              toolCallId: "${EXPERT_SKILLS_RUNTIME_SCENARIO.skillToolCallId}"
+            },
+            expert_skills_runtime: {
+              event: "expert_invoked_skill",
+              expert_id: "${EXPERT_SKILLS_RUNTIME_ID}",
+              skill_name: "${SKILLS_RUNTIME_SKILL_NAME}",
+              tool_call_id: "${EXPERT_SKILLS_RUNTIME_SCENARIO.skillToolCallId}"
+            }
+          }
+        }
+      }
+    ]);
+    await sleep(80);
+  }
+  if (isExpertPanelSkillsRuntimePrompt) {
+    emitEvents([
+      {
+        type: "runtime.status",
+        payload: {
+          status: "selected",
+          text: "专家面板新增技能后的下一轮通过 selector 选择 capability-report。",
+          metadata: {
+            expertSkillsRuntime: {
+              event: "expert_selected_skill",
+              expertId: "${EXPERT_SKILLS_RUNTIME_ID}",
+              skillName: "${SKILLS_RUNTIME_SKILL_NAME}",
+              declaredSkillRef: "${EXPERT_SKILLS_RUNTIME_SKILL_REF}"
+            },
+            expert_skills_runtime: {
+              event: "expert_selected_skill",
+              expert_id: "${EXPERT_SKILLS_RUNTIME_ID}",
+              skill_name: "${SKILLS_RUNTIME_SKILL_NAME}",
+              declared_skill_ref: "${EXPERT_SKILLS_RUNTIME_SKILL_REF}"
+            }
+          }
+        }
+      },
+      {
+        type: "runtime.status",
+        payload: {
+          status: "invoked",
+          text: "专家面板新增技能后的下一轮真实调用 Skill tool: capability-report。",
+          metadata: {
+            expertSkillsRuntime: {
+              event: "expert_invoked_skill",
+              expertId: "${EXPERT_SKILLS_RUNTIME_ID}",
+              skillName: "${SKILLS_RUNTIME_SKILL_NAME}",
+              toolCallId: "${EXPERT_PANEL_SKILLS_RUNTIME_SCENARIO.skillToolCallId}"
+            },
+            expert_skills_runtime: {
+              event: "expert_invoked_skill",
+              expert_id: "${EXPERT_SKILLS_RUNTIME_ID}",
+              skill_name: "${SKILLS_RUNTIME_SKILL_NAME}",
+              tool_call_id: "${EXPERT_PANEL_SKILLS_RUNTIME_SCENARIO.skillToolCallId}"
+            }
+          }
+        }
+      }
+    ]);
+    await sleep(80);
+  }
   if (isEventReadProbe) {
     emitEvents([
       {
@@ -764,6 +1146,76 @@ function readJsonl(filePath) {
     .map((line) => JSON.parse(line));
 }
 
+function sanitizeBackendLedgerForEvidence(backendLedger) {
+  return backendLedger.map((entry) => {
+    if (entry?.kind === "turnStart") {
+      const runtimeHarness =
+        entry.runtimeOptions?.metadata?.harness ??
+        entry.asterChatRequest?.turn_config?.metadata?.harness ??
+        entry.asterChatRequest?.turnConfig?.metadata?.harness ??
+        {};
+      const expert =
+        entry.runtimeOptions?.metadata?.expert ??
+        entry.asterChatRequest?.turn_config?.metadata?.expert ??
+        entry.asterChatRequest?.turnConfig?.metadata?.expert ??
+        {};
+      const harnessExpert =
+        runtimeHarness?.expert && typeof runtimeHarness.expert === "object"
+          ? runtimeHarness.expert
+          : {};
+      const runtimeEnable =
+        runtimeHarness?.workspace_skill_runtime_enable ??
+        runtimeHarness?.workspaceSkillRuntimeEnable ??
+        null;
+      return sanitizeJson({
+        kind: entry.kind,
+        sessionId: entry.sessionId,
+        turnId: entry.turnId,
+        inputText: entry.inputText,
+        providerPreference: entry.providerPreference,
+        modelPreference: entry.modelPreference,
+        runtimeMetadataHarnessSource: runtimeHarness?.source ?? null,
+        workspaceSkillRuntimeEnable: runtimeEnable,
+        expert: {
+          expertId: expert?.expertId ?? expert?.expert_id ?? null,
+          title: expert?.title ?? null,
+          skillRefs: Array.isArray(expert?.skillRefs)
+            ? expert.skillRefs
+            : Array.isArray(expert?.skill_refs)
+              ? expert.skill_refs
+              : [],
+        },
+        harnessExpert: {
+          expertId: harnessExpert?.expert_id ?? harnessExpert?.expertId ?? null,
+          title: harnessExpert?.title ?? null,
+          skillRefs: Array.isArray(harnessExpert?.skill_refs)
+            ? harnessExpert.skill_refs
+            : Array.isArray(harnessExpert?.skillRefs)
+              ? harnessExpert.skillRefs
+              : [],
+        },
+        recordedAt: entry.recordedAt,
+      });
+    }
+    if (entry?.kind === "backendEmit") {
+      return sanitizeJson({
+        kind: entry.kind,
+        sessionId: entry.sessionId,
+        turnId: entry.turnId,
+        eventCount: entry.eventCount,
+        eventTypes: entry.eventTypes,
+        recordedAt: entry.recordedAt,
+      });
+    }
+    return sanitizeJson({
+      kind: entry?.kind ?? null,
+      sessionId: entry?.sessionId ?? null,
+      turnId: entry?.turnId ?? null,
+      recordedAt: entry?.recordedAt ?? null,
+    });
+  });
+}
+
 async function waitForBackendLedgerEntry(filePath, predicate, options) {
   const startedAt = Date.now();
   let lastLedger = [];
@@ -781,6 +1233,48 @@ async function waitForBackendLedgerEntry(filePath, predicate, options) {
       sanitizeJson(lastLedger),
     )}`,
   );
+}
+
+async function waitForBackendLedgerTurnStart(filePath, inputText, options) {
+  return waitForBackendLedgerEntry(
+    filePath,
+    (entry) => entry.kind === "turnStart" && entry.inputText === inputText,
+    options,
+  );
+}
+
+async function waitForBackendLedgerTurnStartContaining(
+  filePath,
+  inputText,
+  options,
+) {
+  return waitForBackendLedgerEntry(
+    filePath,
+    (entry) =>
+      entry.kind === "turnStart" &&
+      String(entry.inputText || "").includes(inputText),
+    options,
+  );
+}
+
+async function waitForBackendLedgerTurnStartOrNull(
+  filePath,
+  inputText,
+  options,
+) {
+  const startedAt = Date.now();
+  const timeoutMs = Math.min(options.timeoutMs, 10_000);
+  while (Date.now() - startedAt < timeoutMs) {
+    const ledger = readJsonl(filePath);
+    const matched = ledger.find(
+      (entry) => entry.kind === "turnStart" && entry.inputText === inputText,
+    );
+    if (matched) {
+      return { entry: matched, ledger };
+    }
+    await sleep(options.intervalMs);
+  }
+  return null;
 }
 
 function parseJsonRpcLine(line) {
@@ -819,6 +1313,22 @@ function readString(value, ...keys) {
     }
   }
   return null;
+}
+
+function readArray(value, ...keys) {
+  if (keys.length === 0) {
+    return Array.isArray(value) ? value : [];
+  }
+  const record = readRecord(value);
+  if (!record) {
+    return [];
+  }
+  for (const key of keys) {
+    if (Array.isArray(record[key])) {
+      return record[key];
+    }
+  }
+  return [];
 }
 
 function agentSessionEventFromMessage(message) {
@@ -1163,6 +1673,7 @@ async function bindGuiWorkspaceAndModelPreferences(page, workspaceId) {
         new Set([...openedProjectIds, workspaceId]),
       );
 
+      window.localStorage.setItem("lime:agent-debug", "1");
       window.localStorage.setItem(lastProjectKey, JSON.stringify(workspaceId));
       window.localStorage.setItem(
         openedProjectIdsKey,
@@ -1293,6 +1804,282 @@ async function createFixtureSession(page, workspace, requestLog) {
   };
 }
 
+async function createExpertSkillsRuntimeSession(page, workspace, requestLog) {
+  const { workspaceId, rootPath } = workspace;
+  assert(rootPath, "expert skills fixture 缺少 workspace rootPath");
+  const expertMetadata = buildExpertSkillsRuntimeMetadata();
+  const session = await invokeAppServerFromPage(
+    page,
+    APP_SERVER_METHOD_SESSION_START,
+    {
+      sessionId: EXPERT_SKILLS_RUNTIME_SESSION_ID,
+      threadId: EXPERT_SKILLS_RUNTIME_THREAD_ID,
+      appId: "desktop",
+      workspaceId,
+      workingDir: rootPath,
+      businessObjectRef: {
+        kind: "agent.session",
+        id: `agent-session:${workspaceId}:${EXPERT_SKILLS_RUNTIME_SESSION_ID}`,
+        title: EXPERT_SKILLS_RUNTIME_SESSION_TITLE,
+        metadata: {
+          title: EXPERT_SKILLS_RUNTIME_SESSION_TITLE,
+          workingDir: rootPath,
+          working_dir: rootPath,
+          executionStrategy: "react",
+          runStartHooks: false,
+          ...expertMetadata,
+        },
+      },
+    },
+    requestLog,
+  );
+  const update = await invokeAppServerFromPage(
+    page,
+    APP_SERVER_METHOD_SESSION_UPDATE,
+    {
+      sessionId: EXPERT_SKILLS_RUNTIME_SESSION_ID,
+      title: EXPERT_SKILLS_RUNTIME_SESSION_TITLE,
+      providerSelector: FIXTURE_PROVIDER,
+      providerName: FIXTURE_PROVIDER,
+      modelName: FIXTURE_MODEL,
+      executionStrategy: "react",
+      recentAccessMode: "full-access",
+      recentPreferences: {
+        searchMode: "allowed",
+      },
+    },
+    requestLog,
+  );
+
+  await page.evaluate(
+    ({ sessionId, workspaceId }) => {
+      window.dispatchEvent(
+        new CustomEvent("lime:agent-runtime-sessions-changed", {
+          detail: {
+            reason: "external",
+            sessionId,
+            workspaceId,
+          },
+        }),
+      );
+    },
+    {
+      sessionId: EXPERT_SKILLS_RUNTIME_SESSION_ID,
+      workspaceId,
+    },
+  );
+
+  return {
+    session: session.result,
+    update: update.result,
+    expertMetadata,
+  };
+}
+
+async function startExpertSkillsRuntimeTurn(page, workspace, requestLog) {
+  assert(workspace?.rootPath, "expert skills fixture 缺少 workspace rootPath");
+  const eventName = `agentSession/event/${EXPERT_SKILLS_RUNTIME_SESSION_ID}`;
+  const expertMetadata = buildExpertSkillsRuntimeMetadata();
+  const turnConfig = {
+    metadata: expertMetadata,
+    working_dir: workspace.rootPath,
+    workspace_root: workspace.rootPath,
+  };
+  const turnStart = await invokeAppServerFromPage(
+    page,
+    APP_SERVER_METHOD_SESSION_TURN_START,
+    {
+      sessionId: EXPERT_SKILLS_RUNTIME_SESSION_ID,
+      turnId: EXPERT_SKILLS_RUNTIME_TURN_ID,
+      input: {
+        text: EXPERT_SKILLS_RUNTIME_PROMPT,
+      },
+      runtimeOptions: {
+        stream: true,
+        eventName,
+        providerPreference: FIXTURE_PROVIDER,
+        modelPreference: FIXTURE_MODEL,
+        metadata: expertMetadata,
+        hostOptions: {
+          asterChatRequest: {
+            message: EXPERT_SKILLS_RUNTIME_PROMPT,
+            session_id: EXPERT_SKILLS_RUNTIME_SESSION_ID,
+            event_name: eventName,
+            provider_preference: FIXTURE_PROVIDER,
+            model_preference: FIXTURE_MODEL,
+            turn_id: EXPERT_SKILLS_RUNTIME_TURN_ID,
+            turn_config: turnConfig,
+          },
+        },
+      },
+      metadata: expertMetadata,
+      queueIfBusy: false,
+      skipPreSubmitResume: true,
+    },
+    requestLog,
+  );
+
+  const eventObservation = await waitForAgentSessionEventsForTurn(
+    page,
+    { timeoutMs: 30_000, intervalMs: 250 },
+    EXPERT_SKILLS_RUNTIME_TURN_ID,
+    turnStart.messages,
+  );
+
+  return sanitizeJson({
+    eventName,
+    turnStartResult: {
+      turnId:
+        turnStart.result?.turn?.turnId ??
+        turnStart.result?.turn?.turn_id ??
+        null,
+      status: turnStart.result?.turn?.status ?? null,
+      messageCount: turnStart.messages.length,
+      notificationCount: collectAgentSessionEvents(turnStart.messages).length,
+    },
+    events: eventObservation.summary,
+    expertMetadata,
+  });
+}
+
+async function injectExpertSkillsRuntimeCatalog(page, options = {}) {
+  const catalog = buildExpertSkillsRuntimeCatalog(options);
+  const workspaceSkillCatalog = options.workspaceSkill
+    ? buildExpertPanelWorkspaceSkillCatalog(options.workspaceSkill)
+    : null;
+  return await page.evaluate(
+    ({ catalog, workspaceSkillCatalog }) => {
+      const expertStorageKey = "lime:expert-catalog-cache:v1";
+      const skillCatalogStorageKey = "lime:skill-catalog:v1";
+      window.localStorage.setItem(expertStorageKey, JSON.stringify(catalog));
+      if (workspaceSkillCatalog) {
+        window.localStorage.setItem(
+          skillCatalogStorageKey,
+          JSON.stringify(workspaceSkillCatalog),
+        );
+      }
+      return {
+        storageKey: expertStorageKey,
+        expertStorageKey,
+        skillCatalogStorageKey: workspaceSkillCatalog
+          ? skillCatalogStorageKey
+          : null,
+        version: catalog.version,
+        tenantId: catalog.tenantId,
+        itemCount: catalog.items.length,
+        expertId: catalog.items[0]?.id ?? null,
+        skillRefs: catalog.items[0]?.release?.skillRefs ?? [],
+        promptStarter: catalog.items[0]?.promptStarters?.[0] ?? null,
+        workspaceSkillCatalog: workspaceSkillCatalog
+          ? {
+              version: workspaceSkillCatalog.version,
+              tenantId: workspaceSkillCatalog.tenantId,
+              itemCount: workspaceSkillCatalog.items.length,
+              entryCount: workspaceSkillCatalog.entries.length,
+              skillId: workspaceSkillCatalog.entries[0]?.skillId ?? null,
+              skillFilePath:
+                workspaceSkillCatalog.entries[0]?.skillLocator
+                  ?.skillFilePath ?? null,
+            }
+          : null,
+      };
+    },
+    { catalog, workspaceSkillCatalog },
+  );
+}
+function buildExpertPanelWorkspaceSkillCatalog(workspaceSkill) {
+  const skillFilePath = workspaceSkill?.skillFilePath;
+  assert(
+    skillFilePath,
+    "Expert Panel Skills Runtime fixture 缺少 workspace skillFilePath",
+  );
+  const syncedAt = "2026-06-21T00:00:00.000Z";
+  const title = "Capability Report";
+  const summary =
+    "Fixture skill for ExpertInfoPanel Skills runtime override evidence.";
+  return {
+    version: "fixture-skill-catalog-2026-06-21",
+    tenantId: "fixture-skills-runtime",
+    syncedAt,
+    groups: [
+      {
+        key: "engineering",
+        title: "工程技能",
+        summary: "用于专家面板技能选择 fixture 的工程技能。",
+        entryHint: "从专家信息面板加入后，在下一轮请求中继承 skillRefs。",
+        themeTarget: "general",
+        sort: 30,
+        itemCount: 1,
+      },
+    ],
+    items: [
+      {
+        id: "capability-report",
+        skillKey: "project:capability-report",
+        skillType: "service",
+        title,
+        summary,
+        entryHint: "用于验证 ExpertInfoPanel 技能选择后的下一轮继承。",
+        aliases: ["capability-report", "project:capability-report"],
+        category: "engineering",
+        outputHint: "输出专家技能继承证据摘要。",
+        triggerHints: ["capability-report"],
+        source: "local_custom",
+        runnerType: "instant",
+        defaultExecutorBinding: "native_skill",
+        executionLocation: "client_default",
+        defaultArtifactKind: "report",
+        readinessRequirements: { requiresModel: true, requiresProject: true },
+        usageGuidelines: [
+          "只用于 ExpertInfoPanel fixture 验证，不代表生产 fallback。",
+        ],
+        setupRequirements: [],
+        examples: ["使用 capability-report 生成专家技能继承证据。"],
+        outputDestination: "agent_chat",
+        slotSchema: [],
+        surfaceScopes: ["mention", "workspace"],
+        promptTemplateKey: "generic",
+        themeTarget: "general",
+        skillBundle: {
+          name: "project:capability-report",
+          description: summary,
+          resourceSummary: {
+            hasScripts: false,
+            hasReferences: false,
+            hasAssets: false,
+          },
+          standardCompliance: {
+            isStandard: true,
+            deprecatedFields: [],
+          },
+        },
+        version: "1.0.0",
+        groupKey: "engineering",
+        execution: { kind: "native_skill" },
+      },
+    ],
+    entries: [
+      {
+        id: "skill:capability-report",
+        kind: "skill",
+        title,
+        summary,
+        skillId: "capability-report",
+        groupKey: "engineering",
+        aliases: ["capability-report", "project:capability-report"],
+        surfaceScopes: ["mention", "workspace"],
+        skillLocator: {
+          source: "project",
+          name: "project:capability-report",
+          directory: "capability-report",
+          skillFilePath,
+        },
+        execution: { kind: "native_skill" },
+      },
+    ],
+  };
+}
+
 async function navigateGuiToWorkspaceScopedAgent(page, options, workspaceId) {
   const startedAt = Date.now();
   let lastSnapshot = null;
@@ -1364,7 +2151,11 @@ async function navigateGuiToWorkspaceScopedAgent(page, options, workspaceId) {
   );
 }
 
-async function waitForGuiSessionVisible(page, options) {
+async function waitForGuiSessionVisible(
+  page,
+  options,
+  title = SESSION_TITLE,
+) {
   const startedAt = Date.now();
   let lastRefreshAt = 0;
   let lastSnapshot = null;
@@ -1397,7 +2188,7 @@ async function waitForGuiSessionVisible(page, options) {
           bodyText: text,
         };
       },
-      { title: SESSION_TITLE },
+      { title },
     );
     if (!snapshot) {
       await sleep(options.intervalMs);
@@ -1423,6 +2214,18 @@ async function waitForGuiSessionVisible(page, options) {
 }
 
 async function openFixtureSessionFromSidebar(page, options, requestLog) {
+  return await openSessionFromSidebar(page, options, requestLog, {
+    sessionId: SESSION_ID,
+    title: SESSION_TITLE,
+  });
+}
+
+async function openSessionFromSidebar(
+  page,
+  options,
+  requestLog,
+  { sessionId, title },
+) {
   const startedAt = Date.now();
   let lastSnapshot = null;
   let lastClick = null;
@@ -1472,7 +2275,7 @@ async function openFixtureSessionFromSidebar(page, options, requestLog) {
             testId: button.getAttribute("data-testid") || "",
           };
         },
-        { title: SESSION_TITLE },
+        { title },
       );
     }
 
@@ -1481,7 +2284,7 @@ async function openFixtureSessionFromSidebar(page, options, requestLog) {
         page,
         APP_SERVER_METHOD_SESSION_READ,
         {
-          sessionId: SESSION_ID,
+          sessionId,
           historyLimit: 1,
         },
         requestLog,
@@ -1540,7 +2343,7 @@ async function openFixtureSessionFromSidebar(page, options, requestLog) {
             mainText,
           };
         },
-        { title: SESSION_TITLE },
+            { title },
       );
       lastSnapshot = {
         clicked: lastClick,
@@ -1567,7 +2370,7 @@ async function openFixtureSessionFromSidebar(page, options, requestLog) {
         inputReady?.hasInputbarCore &&
         inputReady?.textareaVisible &&
         inputReady?.textareaDisabled === false &&
-        readModelSessionId === SESSION_ID &&
+        readModelSessionId === sessionId &&
         !inputReady?.hasConversationMenu &&
         !inputReady?.hasRecentConversationsShell &&
         !inputReady?.isRestoringSessionShell &&
@@ -1581,126 +2384,10 @@ async function openFixtureSessionFromSidebar(page, options, requestLog) {
     await sleep(options.intervalMs);
   }
   throw new Error(
-    `侧栏未打开 Claw fixture 会话: ${SESSION_TITLE}; snapshot=${JSON.stringify(
+    `侧栏未打开 Claw fixture 会话: ${title}; snapshot=${JSON.stringify(
       sanitizeJson(lastSnapshot),
     )}`,
   );
-}
-
-async function waitForInputReady(page, options) {
-  const startedAt = Date.now();
-  let lastSnapshot = null;
-  while (Date.now() - startedAt < options.timeoutMs) {
-    const snapshot = await evaluatePageSnapshot(page, () => {
-      const textarea = document.querySelector(
-        'textarea[name="agent-chat-message"]',
-      );
-      const rect = textarea?.getBoundingClientRect();
-      const style = textarea ? window.getComputedStyle(textarea) : null;
-      const visible = Boolean(
-        textarea &&
-        rect &&
-        rect.width > 16 &&
-        rect.height > 16 &&
-        style?.visibility !== "hidden" &&
-        style?.display !== "none",
-      );
-      return {
-        url: window.location.href,
-        hasTextarea: Boolean(textarea),
-        textareaVisible: visible,
-        textareaDisabled:
-          textarea instanceof HTMLTextAreaElement ? textarea.disabled : null,
-        textareaValue:
-          textarea instanceof HTMLTextAreaElement ? textarea.value : null,
-        hasInputbarCore: Boolean(
-          document.querySelector('[data-testid="inputbar-core-container"]'),
-        ),
-        bodyText: document.body?.innerText || "",
-        mainText: document.querySelector("main")?.textContent || "",
-      };
-    });
-    if (!snapshot) {
-      await sleep(options.intervalMs);
-      continue;
-    }
-    lastSnapshot = snapshot;
-    if (
-      snapshot.hasTextarea &&
-      snapshot.hasInputbarCore &&
-      snapshot.textareaVisible &&
-      snapshot.textareaDisabled === false &&
-      !snapshot.mainText.includes("最近对话") &&
-      !snapshot.mainText.includes("正在恢复生成会话") &&
-      !isTaskCenterHomeText(snapshot.mainText || "") &&
-      !isTaskCenterHomeText(snapshot.bodyText || "")
-    ) {
-      return snapshot;
-    }
-    await sleep(options.intervalMs);
-  }
-  throw new Error(
-    `Claw 输入框未就绪: ${JSON.stringify(sanitizeJson(lastSnapshot))}`,
-  );
-}
-
-async function sendPromptFromGui(page, options, prompt) {
-  const before = await waitForInputReady(page, options);
-  const textarea = page.locator('textarea[name="agent-chat-message"]').first();
-  await textarea.fill(prompt);
-  const afterFill = await page.evaluate((prompt) => {
-    const input = document.querySelector('textarea[name="agent-chat-message"]');
-    return {
-      value: input instanceof HTMLTextAreaElement ? input.value : null,
-      promptVisibleInTextarea:
-        input instanceof HTMLTextAreaElement ? input.value === prompt : false,
-    };
-  }, prompt);
-  assert(
-    afterFill.promptVisibleInTextarea,
-    `输入框未保留用户输入: ${JSON.stringify(sanitizeJson(afterFill))}`,
-  );
-
-  const clicked = await page.evaluate(() => {
-    const buttons = Array.from(document.querySelectorAll("button"));
-    const sendButton = buttons.find((button) => {
-      const label = [
-        button.getAttribute("aria-label") || "",
-        button.getAttribute("title") || "",
-        button.textContent || "",
-      ].join("\n");
-      return (
-        (label.includes("发送") || /\bSend\b/i.test(label)) && !button.disabled
-      );
-    });
-    if (sendButton instanceof HTMLElement) {
-      sendButton.click();
-      return {
-        clicked: true,
-        label:
-          sendButton.getAttribute("aria-label") ||
-          sendButton.getAttribute("title") ||
-          sendButton.textContent ||
-          "send",
-      };
-    }
-    return {
-      clicked: false,
-      labels: buttons.map((button) =>
-        [
-          button.getAttribute("aria-label") || "",
-          button.getAttribute("title") || "",
-          button.textContent || "",
-        ].join(" / "),
-      ),
-    };
-  });
-  assert(clicked?.clicked, `未找到可点击发送按钮: ${JSON.stringify(clicked)}`);
-  return {
-    before,
-    afterFill,
-    clicked,
-  };
 }
 
 async function sendNewsPromptFromGui(page, options) {
@@ -2159,6 +2846,245 @@ async function waitForGuiWebToolsRenderingCompleted(page, options) {
   }
   throw new Error(
     `Claw GUI 未完成网页搜索渲染验收: ${JSON.stringify(
+      sanitizeJson(lastSnapshot),
+    )}`,
+  );
+}
+
+async function waitForGuiSkillsRuntimeCompleted(
+  page,
+  options,
+  scenario = SKILLS_RUNTIME_SCENARIO,
+) {
+  return await waitForGuiChatCompleted(page, options, {
+    prompt: scenario.prompt,
+    doneText: scenario.doneText,
+    summaryText: scenario.summaryText,
+  });
+}
+
+async function waitForGuiMcpStructuredContentCompleted(page, options) {
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const snapshot = await evaluatePageSnapshot(
+      page,
+      ({ prompt, doneText, answer, referenceId, toolName }) => {
+        const text = document.body?.innerText || "";
+        const textarea = document.querySelector(
+          'textarea[name="agent-chat-message"]',
+        );
+        const rect = textarea?.getBoundingClientRect();
+        const style = textarea ? window.getComputedStyle(textarea) : null;
+        const textareaVisible = Boolean(
+          textarea &&
+            rect &&
+            rect.width > 16 &&
+            rect.height > 16 &&
+            style?.visibility !== "hidden" &&
+            style?.display !== "none",
+        );
+        const buttons = Array.from(document.querySelectorAll("button")).map(
+          (button) => ({
+            title: button.getAttribute("title") || "",
+            text: button.textContent || "",
+            aria: button.getAttribute("aria-label") || "",
+            disabled: button.disabled,
+          }),
+        );
+        const stopButtonVisible = buttons.some((button) => {
+          const label = [button.title, button.text, button.aria].join("\n");
+          return (
+            !button.disabled &&
+            (label.includes("停止") ||
+              label.includes("终止") ||
+              /\bStop\b/i.test(label))
+          );
+        });
+        const forbiddenEnvelopeFragments = [
+          "request_metadata",
+          "mcp_tool_result_projection",
+          "diagnostics",
+          "raw_transport_payload",
+          "doc-hidden-envelope",
+          "control-plane envelope only",
+          '"request_metadata"',
+          '"diagnostics"',
+        ];
+        return {
+          url: window.location.href,
+          hasPrompt: text.includes(prompt),
+          hasAssistantSummary: text.includes("MCP structuredContent 展示验证完成"),
+          hasDoneText: text.includes(doneText),
+          hasStructuredAnswer: text.includes(answer),
+          hasReferenceId: text.includes(referenceId),
+          hasToolName: text.includes(toolName),
+          envelopeVisible: forbiddenEnvelopeFragments.some((value) =>
+            text.includes(value),
+          ),
+          forbiddenEnvelopeHits: forbiddenEnvelopeFragments.filter((value) =>
+            text.includes(value),
+          ),
+          textareaVisible,
+          textareaDisabled:
+            textarea instanceof HTMLTextAreaElement ? textarea.disabled : null,
+          textareaValue:
+            textarea instanceof HTMLTextAreaElement ? textarea.value : null,
+          stopButtonVisible,
+          hasMessageList: Boolean(
+            document.querySelector('[data-testid="message-list"]') ||
+              document.querySelector('[data-testid="message-list-frame"]'),
+          ),
+          bodyText: text,
+        };
+      },
+      {
+        prompt: MCP_STRUCTURED_CONTENT_PROMPT,
+        doneText: MCP_STRUCTURED_CONTENT_DONE_TEXT,
+        answer: MCP_STRUCTURED_CONTENT_ANSWER,
+        referenceId: MCP_STRUCTURED_CONTENT_REFERENCE_ID,
+        toolName: MCP_STRUCTURED_CONTENT_TOOL_NAME,
+        toolDisplayLabel: MCP_STRUCTURED_CONTENT_TOOL_DISPLAY_LABEL,
+      },
+    );
+    if (!snapshot) {
+      await sleep(options.intervalMs);
+      continue;
+    }
+    lastSnapshot = snapshot;
+    if (
+      snapshot.hasPrompt &&
+      (snapshot.hasAssistantSummary || snapshot.hasDoneText) &&
+      snapshot.envelopeVisible === false &&
+      snapshot.textareaVisible &&
+      snapshot.textareaDisabled === false &&
+      snapshot.stopButtonVisible === false
+    ) {
+      const expandedSnapshot =
+        snapshot.hasStructuredAnswer && snapshot.hasToolName
+          ? snapshot
+          : await expandAndInspectGuiMcpStructuredContentProcess(page, options);
+      if (
+        expandedSnapshot.hasStructuredAnswer &&
+        expandedSnapshot.envelopeVisible === false
+      ) {
+        return sanitizeJson({
+          ...snapshot,
+          hasStructuredAnswer:
+            snapshot.hasStructuredAnswer ||
+            expandedSnapshot.hasStructuredAnswer,
+          hasReferenceId:
+            snapshot.hasReferenceId || expandedSnapshot.hasReferenceId,
+          hasToolName: snapshot.hasToolName || expandedSnapshot.hasToolName,
+          expandedDetails: expandedSnapshot,
+        });
+      }
+    }
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `Claw GUI 未完成 MCP structuredContent 展示验收: ${JSON.stringify(
+      sanitizeJson(lastSnapshot),
+    )}`,
+  );
+}
+
+async function expandAndInspectGuiMcpStructuredContentProcess(page, options) {
+  await page.evaluate(() => {
+    const groups = Array.from(
+      document.querySelectorAll('[data-testid="streaming-process-group"]'),
+    );
+    const targetGroup =
+      groups.find((group) =>
+        (group.textContent || "").includes("已完成 1 个步骤"),
+      ) ?? groups[0];
+    const button = targetGroup?.querySelector("button");
+    if (
+      button instanceof HTMLButtonElement &&
+      button.getAttribute("aria-expanded") !== "true"
+    ) {
+      button.click();
+    }
+  });
+
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < Math.min(options.timeoutMs, 30000)) {
+    const snapshot = await evaluatePageSnapshot(
+      page,
+      ({ answer, referenceId, toolName, toolDisplayLabel }) => {
+        const text = document.body?.innerText || "";
+        const processGroups = Array.from(
+          document.querySelectorAll('[data-testid="streaming-process-group"]'),
+        ).map((group) => {
+          const button = group.querySelector("button");
+          return {
+            text: group.textContent || "",
+            buttonText: button?.textContent || "",
+            expanded: button?.getAttribute("aria-expanded") || "",
+          };
+        });
+        const mcpProcessGroup = processGroups.find(
+          (group) =>
+            group.text.includes(answer) ||
+            group.text.includes(toolName) ||
+            group.buttonText.includes("已完成 1 个步骤") ||
+            group.text.includes("已完成 1 个步骤"),
+        );
+        const processText = mcpProcessGroup?.text || "";
+        const forbiddenEnvelopeFragments = [
+          "request_metadata",
+          "mcp_tool_result_projection",
+          "diagnostics",
+          "raw_transport_payload",
+          "doc-hidden-envelope",
+          "control-plane envelope only",
+          '"request_metadata"',
+          '"diagnostics"',
+        ];
+        return {
+          mcpProcessGroupExpanded: mcpProcessGroup?.expanded === "true",
+          hasStructuredAnswer: processText.includes(answer),
+          hasReferenceId: processText.includes(referenceId),
+          hasToolName:
+            processText.includes(toolName) ||
+            text.includes(toolName) ||
+            processText.includes(toolDisplayLabel) ||
+            text.includes(toolDisplayLabel),
+          envelopeVisible: forbiddenEnvelopeFragments.some((value) =>
+            processText.includes(value),
+          ),
+          forbiddenEnvelopeHits: forbiddenEnvelopeFragments.filter((value) =>
+            processText.includes(value),
+          ),
+          processGroupCount: processGroups.length,
+          processGroupText: processText,
+          bodyText: text,
+        };
+      },
+      {
+        answer: MCP_STRUCTURED_CONTENT_ANSWER,
+        referenceId: MCP_STRUCTURED_CONTENT_REFERENCE_ID,
+        toolName: MCP_STRUCTURED_CONTENT_TOOL_NAME,
+        toolDisplayLabel: MCP_STRUCTURED_CONTENT_TOOL_DISPLAY_LABEL,
+      },
+    );
+    if (!snapshot) {
+      await sleep(options.intervalMs);
+      continue;
+    }
+    lastSnapshot = snapshot;
+    if (
+      snapshot.mcpProcessGroupExpanded &&
+      snapshot.hasStructuredAnswer &&
+      snapshot.envelopeVisible === false
+    ) {
+      return sanitizeJson(snapshot);
+    }
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `Claw GUI 未展开 MCP structuredContent 工具过程: ${JSON.stringify(
       sanitizeJson(lastSnapshot),
     )}`,
   );
@@ -2652,6 +3578,7 @@ async function waitForSessionReadCompleted(
   options,
   requestLog,
   {
+    sessionId = SESSION_ID,
     prompt = NEWS_PROMPT,
     doneText = ASSISTANT_DONE_TEXT,
     summaryText = "今日国际新闻简要整理",
@@ -2664,7 +3591,7 @@ async function waitForSessionReadCompleted(
       page,
       APP_SERVER_METHOD_SESSION_READ,
       {
-        sessionId: SESSION_ID,
+        sessionId,
         historyLimit: 100,
       },
       requestLog,
@@ -2684,6 +3611,483 @@ async function waitForSessionReadCompleted(
       sanitizeJson(lastRead),
     )}`,
   );
+}
+
+function readModelLatestTurnStatus(readModel) {
+  return (
+    readModel?.detail?.thread_read?.runtime_summary?.latestTurnStatus ??
+    readModel?.detail?.threadRead?.runtimeSummary?.latestTurnStatus ??
+    readModel?.detail?.thread_read?.status ??
+    readModel?.detail?.threadRead?.status ??
+    readModel?.detail?.status ??
+    null
+  );
+}
+
+function collectReadModelTurns(readModel) {
+  const detail = readRecord(readModel?.detail) ?? readRecord(readModel) ?? {};
+  const threadRead =
+    readRecord(detail.thread_read) ?? readRecord(detail.threadRead) ?? {};
+  return [
+    ...readArray(readModel, "turns"),
+    ...readArray(detail, "turns"),
+    ...readArray(threadRead, "turns"),
+  ]
+    .map((turn) => readRecord(turn))
+    .filter(Boolean);
+}
+
+function collectReadModelItems(readModel) {
+  const detail = readRecord(readModel?.detail) ?? readRecord(readModel) ?? {};
+  const threadRead =
+    readRecord(detail.thread_read) ?? readRecord(detail.threadRead) ?? {};
+  return [
+    ...readArray(readModel, "items"),
+    ...readArray(detail, "items"),
+    ...readArray(threadRead, "items"),
+  ]
+    .map((item) => readRecord(item))
+    .filter(Boolean);
+}
+
+function readModelQueuedTurns(readModel) {
+  const detail = readRecord(readModel?.detail) ?? readRecord(readModel) ?? {};
+  const threadRead =
+    readRecord(detail.thread_read) ?? readRecord(detail.threadRead) ?? {};
+  return [
+    ...readArray(readModel, "queued_turns", "queuedTurns"),
+    ...readArray(detail, "queued_turns", "queuedTurns"),
+    ...readArray(threadRead, "queued_turns", "queuedTurns"),
+  ]
+    .map((turn) => readRecord(turn))
+    .filter(Boolean);
+}
+
+function readModelQueuedTurnId(value) {
+  return readString(value, "queued_turn_id", "queuedTurnId", "turn_id", "turnId");
+}
+
+function readModelQueuedTurnText(value) {
+  return readString(
+    value,
+    "message_text",
+    "messageText",
+    "message_preview",
+    "messagePreview",
+    "text",
+  );
+}
+
+function findReadModelQueuedTurnForPrompt(readModel, prompt) {
+  return (
+    readModelQueuedTurns(readModel).find((queuedTurn) =>
+      readModelQueuedTurnText(queuedTurn)?.includes(prompt),
+    ) ??
+    collectReadModelTurns(readModel).find((turn) => {
+      const status = String(readModelTurnStatus(turn) ?? "").toLowerCase();
+      return status === "queued" && JSON.stringify(turn).includes(prompt);
+    }) ??
+    null
+  );
+}
+
+function readModelTurnId(value) {
+  return readString(value, "turn_id", "turnId", "runtimeTurnId", "id");
+}
+
+function readModelScopedTurnId(value) {
+  return readString(value, "turn_id", "turnId", "runtimeTurnId");
+}
+
+function readModelTurnStatus(value) {
+  return readString(value, "status", "native_status", "nativeStatus");
+}
+
+function isReadModelTerminalTurnStatus(status) {
+  return ["completed", "failed", "canceled", "cancelled"].includes(
+    String(status ?? "").trim().toLowerCase(),
+  );
+}
+
+function collectScenarioReadModelTurnIds(readModel, scenario) {
+  const turnIds = new Set();
+  for (const item of collectReadModelItems(readModel)) {
+    const serialized = JSON.stringify(item || {});
+    if (
+      serialized.includes(scenario.prompt) ||
+      serialized.includes(scenario.doneText) ||
+      serialized.includes(scenario.summaryText)
+    ) {
+      const turnId = readModelScopedTurnId(item);
+      if (turnId) {
+        turnIds.add(turnId);
+      }
+    }
+  }
+
+  for (const toolCall of collectReadModelToolCalls(readModel)) {
+    const toolCallId = String(
+      toolCall.id ??
+        toolCall.tool_call_id ??
+        toolCall.toolCallId ??
+        toolCall.toolId ??
+        "",
+    );
+    const toolName = String(
+      toolCall.tool_name ?? toolCall.toolName ?? toolCall.name ?? "",
+    );
+    if (
+      (toolCallId === scenario.searchToolCallId &&
+        toolName === "skill_search") ||
+      (toolCallId === scenario.skillToolCallId && toolName === "Skill")
+    ) {
+      const turnId = readModelScopedTurnId(toolCall);
+      if (turnId) {
+        turnIds.add(turnId);
+      }
+    }
+  }
+
+  return [...turnIds];
+}
+
+function summarizeSkillsRuntimeReadModel(readModel, scenario) {
+  const serialized = JSON.stringify(readModel || {});
+  const skillSearchToolCall = findReadModelToolCall(
+    readModel,
+    scenario.searchToolCallId,
+    "skill_search",
+  );
+  const skillToolCall = findReadModelToolCall(
+    readModel,
+    scenario.skillToolCallId,
+    "Skill",
+  );
+  const scenarioTurnIds = collectScenarioReadModelTurnIds(readModel, scenario);
+  const turns = collectReadModelTurns(readModel);
+  const matchedScenarioTurns = scenarioTurnIds
+    .map((turnId) => turns.find((turn) => readModelTurnId(turn) === turnId))
+    .filter(Boolean);
+  const matchedTerminalTurn = matchedScenarioTurns.find((turn) =>
+    isReadModelTerminalTurnStatus(readModelTurnStatus(turn)),
+  );
+  const latestTurnStatus = readModelLatestTurnStatus(readModel);
+  const readModelTurnTerminal =
+    Boolean(matchedTerminalTurn) ||
+    (scenarioTurnIds.length === 0 &&
+      isReadModelTerminalTurnStatus(latestTurnStatus));
+
+  return sanitizeJson({
+    detailItemCount: Array.isArray(readModel?.detail?.items)
+      ? readModel.detail.items.length
+      : null,
+    toolCallCount: collectReadModelToolCalls(readModel).length,
+    latestTurnStatus,
+    scenarioTurnIds,
+    matchedScenarioTurnStatuses: matchedScenarioTurns.map((turn) => ({
+      turnId: readModelTurnId(turn),
+      status: readModelTurnStatus(turn),
+    })),
+    matchedTerminalTurnStatus: matchedTerminalTurn
+      ? readModelTurnStatus(matchedTerminalTurn)
+      : null,
+    readModelTurnTerminal,
+    includesPrompt: serialized.includes(scenario.prompt),
+    includesAssistantDone: serialized.includes(scenario.doneText),
+    includesAssistantSummary: serialized.includes(scenario.summaryText),
+    includesSkillSearchTool: Boolean(skillSearchToolCall),
+    includesSkillTool: Boolean(skillToolCall),
+    includesSkillName: serialized.includes(SKILLS_RUNTIME_SKILL_NAME),
+    skillSearchToolStatus: skillSearchToolCall?.status ?? null,
+    skillToolStatus: skillToolCall?.status ?? null,
+  });
+}
+
+async function waitForSessionReadSkillsRuntimeCompleted(
+  page,
+  options,
+  requestLog,
+  scenario = SKILLS_RUNTIME_SCENARIO,
+  sessionId = SESSION_ID,
+) {
+  const startedAt = Date.now();
+  let lastRead = null;
+  let lastSummary = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const read = await invokeAppServerFromPage(
+      page,
+      APP_SERVER_METHOD_SESSION_READ,
+      {
+        sessionId,
+        historyLimit: 100,
+      },
+      requestLog,
+    );
+    lastRead = read.result;
+    lastSummary = summarizeSkillsRuntimeReadModel(lastRead, scenario);
+    if (
+      lastSummary.includesPrompt === true &&
+      (lastSummary.includesAssistantDone === true ||
+        lastSummary.includesAssistantSummary === true) &&
+      lastSummary.includesSkillSearchTool === true &&
+      lastSummary.includesSkillTool === true &&
+      lastSummary.readModelTurnTerminal === true
+    ) {
+      return {
+        readModel: lastRead,
+        summary: lastSummary,
+      };
+    }
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `App Server skills runtime read model 未完成 terminal turn 闭环: ${JSON.stringify(
+      sanitizeJson({
+        summary: lastSummary,
+        readModel: lastRead,
+      }),
+    )}`,
+  );
+}
+
+async function waitForExpertPanelSkillsRuntimeSessionReady(
+  page,
+  options,
+  expectedSessionId,
+) {
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const snapshot = await evaluatePageSnapshot(page, (sessionId) => {
+      const text = document.body?.innerText || "";
+      const textarea = Array.from(
+        document.querySelectorAll('textarea[name="agent-chat-message"]'),
+      ).find(
+        (node) =>
+          node instanceof HTMLTextAreaElement &&
+          (!sessionId || node.dataset.sessionId === sessionId),
+      );
+      return {
+        url: window.location.href,
+        expectedSessionId: sessionId,
+        hasExpertPrompt: text.includes(
+          "请以「代码文学专家」身份，使用绑定技能完成一次最小代码审查。",
+        ),
+        hasExpertPanel: text.includes("专家信息") && text.includes("代码文学专家"),
+        hasAddedSkill: text.includes("Capability Report"),
+        textareaSessionId:
+          textarea instanceof HTMLTextAreaElement
+            ? textarea.dataset.sessionId || null
+            : null,
+        textareaVisible:
+          textarea instanceof HTMLElement
+            ? textarea.offsetParent !== null
+            : Boolean(textarea),
+        textareaDisabled:
+          textarea instanceof HTMLTextAreaElement ? textarea.disabled : null,
+        bodyText: text,
+      };
+    }, expectedSessionId);
+    if (!snapshot) {
+      await sleep(options.intervalMs);
+      continue;
+    }
+    lastSnapshot = snapshot;
+    if (
+      snapshot.hasExpertPrompt &&
+      snapshot.hasExpertPanel &&
+      snapshot.hasAddedSkill &&
+      snapshot.textareaVisible &&
+      snapshot.textareaDisabled === false &&
+      (!expectedSessionId || snapshot.textareaSessionId === expectedSessionId)
+    ) {
+      return snapshot;
+    }
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `GUI 未恢复专家面板 Skills runtime 会话: ${JSON.stringify(
+      sanitizeJson(lastSnapshot),
+    )}`,
+  );
+}
+
+async function resumeQueuedTurnForPromptIfNeeded(
+  page,
+  options,
+  requestLog,
+  sessionId,
+  prompt,
+) {
+  const startedAt = Date.now();
+  const timeoutMs = Math.min(options.timeoutMs, 30_000);
+  let lastRead = null;
+  let lastQueuedTurn = null;
+  while (Date.now() - startedAt < timeoutMs) {
+    const read = await invokeAppServerFromPage(
+      page,
+      APP_SERVER_METHOD_SESSION_READ,
+      {
+        sessionId,
+        historyLimit: 100,
+      },
+      requestLog,
+    );
+    lastRead = read.result;
+    lastQueuedTurn = findReadModelQueuedTurnForPrompt(lastRead, prompt);
+    const queuedTurnId = lastQueuedTurn
+      ? readModelQueuedTurnId(lastQueuedTurn)
+      : null;
+    if (queuedTurnId) {
+      const resume = await invokeAppServerFromPage(
+        page,
+        APP_SERVER_METHOD_SESSION_THREAD_RESUME,
+        {
+          sessionId,
+        },
+        requestLog,
+      );
+      const resumed = resume.result?.resumed === true;
+      if (resumed) {
+        return sanitizeJson({
+          queuedTurnId,
+          queuedTurnText: readModelQueuedTurnText(lastQueuedTurn),
+          resumed,
+          turnCount: Array.isArray(resume.result?.turns)
+            ? resume.result.turns.length
+            : null,
+        });
+      }
+      lastQueuedTurn = {
+        queuedTurnId,
+        queuedTurnText: readModelQueuedTurnText(lastQueuedTurn),
+        resumed,
+        turnCount: Array.isArray(resume.result?.turns)
+          ? resume.result.turns.length
+          : null,
+      };
+    }
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `App Server read model 未出现可恢复 queued turn: ${JSON.stringify(
+      sanitizeJson({
+        prompt,
+        queuedTurn: lastQueuedTurn,
+        readModel: lastRead,
+      }),
+    )}`,
+  );
+}
+
+async function waitForBackendTurnStartWithCurrentQueueResume(
+  page,
+  options,
+  requestLog,
+  ledgerPath,
+  sessionId,
+  prompt,
+) {
+  const immediate = await waitForBackendLedgerTurnStartOrNull(
+    ledgerPath,
+    prompt,
+    options,
+  );
+  if (immediate) {
+    return {
+      backendTurn: immediate,
+      queueResume: null,
+    };
+  }
+  const queueResume = await resumeQueuedTurnForPromptIfNeeded(
+    page,
+    options,
+    requestLog,
+    sessionId,
+    prompt,
+  );
+  const backendTurn = await waitForBackendLedgerTurnStart(
+    ledgerPath,
+    prompt,
+    options,
+  );
+  return {
+    backendTurn,
+    queueResume,
+  };
+}
+
+async function waitForSessionReadMcpStructuredContentCompleted(
+  page,
+  options,
+  requestLog,
+) {
+  const readModel = await waitForSessionReadCompleted(
+    page,
+    options,
+    requestLog,
+    {
+      sessionId: SESSION_ID,
+      prompt: MCP_STRUCTURED_CONTENT_PROMPT,
+      doneText: MCP_STRUCTURED_CONTENT_DONE_TEXT,
+      summaryText: "MCP structuredContent 展示验证完成",
+    },
+  );
+  const serialized = JSON.stringify(readModel || {});
+  const toolCall = findReadModelToolCall(
+    readModel,
+    MCP_STRUCTURED_CONTENT_TOOL_CALL_ID,
+    MCP_STRUCTURED_CONTENT_TOOL_NAME,
+  );
+  const structuredContent =
+    toolCall?.structured_content ??
+    toolCall?.structuredContent ??
+    toolCall?.result?.structuredContent ??
+    toolCall?.result?.structured_content ??
+    null;
+  const structuredSerialized = JSON.stringify(structuredContent || {});
+  const outputText = String(
+    toolCall?.output_preview ??
+      toolCall?.outputPreview ??
+      toolCall?.output ??
+      "",
+  );
+
+  return {
+    readModel,
+    summary: sanitizeJson({
+      detailItemCount: Array.isArray(readModel?.detail?.items)
+        ? readModel.detail.items.length
+        : null,
+      toolCallCount: collectReadModelToolCalls(readModel).length,
+      latestTurnStatus:
+        readModel?.detail?.thread_read?.runtime_summary?.latestTurnStatus ??
+        readModel?.detail?.thread_read?.status ??
+        readModel?.detail?.status ??
+        null,
+      includesPrompt: serialized.includes(MCP_STRUCTURED_CONTENT_PROMPT),
+      includesAssistantDone: serialized.includes(
+        MCP_STRUCTURED_CONTENT_DONE_TEXT,
+      ),
+      includesAssistantSummary: serialized.includes(
+        "MCP structuredContent 展示验证完成",
+      ),
+      includesMcpTool: Boolean(toolCall),
+      toolName: toolCall?.tool_name ?? toolCall?.toolName ?? null,
+      toolStatus: toolCall?.status ?? null,
+      includesStructuredContent: Boolean(structuredContent),
+      structuredContentAnswerVisible: structuredSerialized.includes(
+        MCP_STRUCTURED_CONTENT_ANSWER,
+      ),
+      structuredContentReferenceVisible: structuredSerialized.includes(
+        MCP_STRUCTURED_CONTENT_REFERENCE_ID,
+      ),
+      outputContainsEnvelope:
+        outputText.includes("request_metadata") &&
+        outputText.includes("mcp_tool_result_projection") &&
+        outputText.includes("diagnostics"),
+    }),
+  };
 }
 
 async function waitForSessionReadPlanCompleted(page, options, requestLog) {
@@ -2778,6 +4182,34 @@ function findReadModelToolCall(readResult, toolCallId, toolName) {
     );
     return id === toolCallId && name === toolName;
   });
+}
+
+async function exportSkillsRuntimeEvidencePack(
+  page,
+  requestLog,
+  scenario = SKILLS_RUNTIME_SCENARIO,
+  sessionId = SESSION_ID,
+) {
+  const exportResult = await invokeAppServerFromPage(
+    page,
+    APP_SERVER_METHOD_EVIDENCE_EXPORT,
+    {
+      sessionId,
+      includeEvents: true,
+      includeArtifacts: true,
+      includeEvidencePack: true,
+    },
+    requestLog,
+  );
+  return {
+    result: exportResult.result,
+    summary: sanitizeJson(
+      summarizeSkillsRuntimeEvidenceExport(
+        exportResult.result,
+        scenario,
+      ),
+    ),
+  };
 }
 
 async function waitForAgentSessionEventsForTurn(
@@ -2927,6 +4359,146 @@ async function runEventReadProbe(page, options, requestLog) {
   });
 }
 
+function writeCapabilityReportSkillPackage(skillDirectory) {
+  const skillFilePath = path.join(skillDirectory, "SKILL.md");
+  fs.mkdirSync(skillDirectory, { recursive: true });
+  fs.writeFileSync(
+    skillFilePath,
+    [
+      "---",
+      "name: Capability Report",
+      "description: Fixture skill for Skills runtime manual enable evidence.",
+      "allowed-tools: Read",
+      "---",
+      "",
+      "# Capability Report",
+      "",
+      "Use this fixture skill only to prove workspace-local manual session enable.",
+      "",
+    ].join("\n"),
+  );
+  return { skillFilePath };
+}
+
+function ensureManualEnableWorkspaceSkill(workspaceRoot) {
+  const skillDirectory = path.join(
+    workspaceRoot,
+    ".agents",
+    "skills",
+    "capability-report",
+  );
+  const { skillFilePath } = writeCapabilityReportSkillPackage(skillDirectory);
+  const registrationDirectory = path.join(skillDirectory, ".lime");
+  const registrationFilePath = path.join(
+    registrationDirectory,
+    "registration.json",
+  );
+  fs.mkdirSync(registrationDirectory, { recursive: true });
+  writeJsonFile(registrationFilePath, {
+    registrationId: "capreg-fixture-capability-report",
+    registeredAt: "2026-06-21T00:00:00.000Z",
+    skillDirectory: "capability-report",
+    registeredSkillDirectory: skillDirectory,
+    sourceDraftId: "capdraft-fixture-capability-report",
+    sourceVerificationReportId: "capver-fixture-capability-report",
+    generatedFileCount: 1,
+    permissionSummary: ["Level 0 read-only fixture"],
+  });
+  return {
+    skillDirectory,
+    skillFilePath,
+    registrationFilePath,
+  };
+}
+
+function ensureUserVisibleCapabilityReportSkill(runtimeEnv) {
+  const home = runtimeEnv?.env?.HOME;
+  assert(home, "Expert Panel Skills Runtime fixture 缺少临时 HOME");
+  const skillDirectory = path.join(
+    home,
+    ".agents",
+    "skills",
+    "capability-report",
+  );
+  const { skillFilePath } = writeCapabilityReportSkillPackage(skillDirectory);
+  return {
+    skillDirectory,
+    skillFilePath,
+  };
+}
+
+async function launchSkillsRuntimeFromWorkspacePanel(
+  page,
+  options,
+  workspace,
+) {
+  assert(workspace?.rootPath, "workspace panel fixture 缺少 workspace rootPath");
+  const workspaceSkill = ensureManualEnableWorkspaceSkill(workspace.rootPath);
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+
+  await page.locator('[data-testid="app-sidebar-nav-skills"]').click();
+
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const snapshot = await evaluatePageSnapshot(page, () => {
+      const text = document.body?.innerText || "";
+      const installedView = document.querySelector(
+        '[data-testid="skills-installed-view"]',
+      );
+      const installedTab = Array.from(
+        document.querySelectorAll("button"),
+      ).find((button) => (button.textContent || "").includes("用户安装"));
+      if (!installedView && installedTab instanceof HTMLButtonElement) {
+        installedTab.click();
+      }
+      const panel = document.querySelector(
+        '[data-testid="workspace-registered-skills-panel"]',
+      );
+      const enableButton = document.querySelector(
+        '[data-testid="workspace-registered-skill-enable-runtime"]',
+      );
+      return {
+        text,
+        skillsPageVisible:
+          text.includes("Skills") ||
+          text.includes("技能广场") ||
+          text.includes("用户安装"),
+        installedViewVisible: Boolean(installedView),
+        registeredPanelVisible: Boolean(panel),
+        registeredSkillVisible: text.includes("Capability Report"),
+        enableButtonVisible: Boolean(enableButton),
+        enableButtonDisabled:
+          enableButton instanceof HTMLButtonElement
+            ? enableButton.disabled
+            : null,
+      };
+    });
+    lastSnapshot = snapshot;
+    if (
+      snapshot.registeredPanelVisible &&
+      snapshot.registeredSkillVisible &&
+      snapshot.enableButtonVisible &&
+      snapshot.enableButtonDisabled === false
+    ) {
+      await page.locator(
+        '[data-testid="workspace-registered-skill-enable-runtime"]',
+      ).click();
+      return sanitizeJson({
+        ...snapshot,
+        clicked: true,
+        workspaceSkill,
+      });
+    }
+    await sleep(options.intervalMs);
+  }
+
+  throw new Error(
+    `Skills 工作台未出现可试用的已保存技能: ${JSON.stringify(
+      sanitizeJson(lastSnapshot),
+    )}`,
+  );
+}
+
 async function waitForSessionReadCanceled(page, options, requestLog) {
   const startedAt = Date.now();
   let lastRead = null;
@@ -3035,6 +4607,15 @@ function readHarnessMetadataFromTurnStart(turnStart) {
   );
 }
 
+function readWorkspaceSkillRuntimeEnableFromTurnStart(turnStart) {
+  const harness = readHarnessMetadataFromTurnStart(turnStart);
+  return (
+    harness?.workspace_skill_runtime_enable ??
+    harness?.workspaceSkillRuntimeEnable ??
+    null
+  );
+}
+
 function readObjectiveTextFromHarness(harness) {
   return (
     harness?.thread_goal?.set?.objective ??
@@ -3130,12 +4711,35 @@ async function run() {
     guiGoalCompleted: null,
     webToolsRenderingInputSend: null,
     guiWebToolsRenderingCompleted: null,
+    skillsRuntimeInputSend: null,
+    guiSkillsRuntimeCompleted: null,
+    explicitSkillsRuntimeInputSend: null,
+    guiExplicitSkillsRuntimeCompleted: null,
+    manualEnableSkillsRuntimeTurnStart: null,
+    manualEnableSkillsRuntimeSkill: null,
+    guiManualEnableSkillsRuntimeCompleted: null,
     readModelCompleted: null,
     readModelCanceled: null,
     readModelContinueCompleted: null,
     readModelPlanCompleted: null,
     readModelGoalCompleted: null,
     readModelWebToolsRenderingCompleted: null,
+    readModelSkillsRuntimeCompleted: null,
+    readModelExplicitSkillsRuntimeCompleted: null,
+    readModelManualEnableSkillsRuntimeCompleted: null,
+    expertSkillsRuntimeSessionCreation: null,
+    expertSkillsRuntimeSkill: null,
+    expertSkillsRuntimeTurnStart: null,
+    expertPlazaSkillsRuntimeCatalog: null,
+    expertPlazaSkillsRuntimeLaunch: null,
+    guiExpertSkillsRuntimeSessionVisible: null,
+    guiExpertSkillsRuntimeSessionOpened: null,
+    guiExpertSkillsRuntimeCompleted: null,
+    readModelExpertSkillsRuntimeCompleted: null,
+    evidencePackSkillsRuntime: null,
+    evidencePackExplicitSkillsRuntime: null,
+    evidencePackManualEnableSkillsRuntime: null,
+    evidencePackExpertSkillsRuntime: null,
     eventReadProbe: null,
     assertions: {},
     summary: summaryPath,
@@ -3144,6 +4748,20 @@ async function run() {
   let app = null;
   let page = null;
   const consoleErrors = [];
+  const agentDebugLogs = [];
+  const pageLifecycleEvents = [];
+  const collectConsoleMessage = (message) => {
+    const text = sanitizeText(message.text());
+    if (text.includes("[AgentDebug]")) {
+      agentDebugLogs.push({
+        type: message.type(),
+        text,
+      });
+    }
+    if (message.type() === "error") {
+      consoleErrors.push(text);
+    }
+  };
 
   try {
     if (options.appUrl) {
@@ -3182,13 +4800,28 @@ async function run() {
       timeout: options.timeoutMs,
     });
 
-    app.on("console", (message) => {
-      if (message.type() === "error") {
-        consoleErrors.push(sanitizeText(message.text()));
-      }
+    app.on("console", collectConsoleMessage);
+    app.on("close", () => {
+      pageLifecycleEvents.push({
+        type: "electron-app-close",
+        timestamp: new Date().toISOString(),
+      });
     });
 
     page = await app.firstWindow({ timeout: options.timeoutMs });
+    page.on("console", collectConsoleMessage);
+    page.on("close", () => {
+      pageLifecycleEvents.push({
+        type: "page-close",
+        timestamp: new Date().toISOString(),
+      });
+    });
+    page.on("crash", () => {
+      pageLifecycleEvents.push({
+        type: "page-crash",
+        timestamp: new Date().toISOString(),
+      });
+    });
     page.setDefaultTimeout(options.timeoutMs);
     await page.setViewportSize({ width: 1440, height: 1000 });
 
@@ -3480,6 +5113,424 @@ async function run() {
           readModelWebToolsRenderingCompleted || {},
         ).includes(WEB_TOOLS_FETCH_TOOL_CALL_ID),
       });
+    } else if (options.scenario === "mcp-structured-content") {
+      logStage("send-mcp-structured-content-prompt-from-gui");
+      summary.mcpStructuredContentInputSend = sanitizeJson(
+        await sendPromptFromGui(
+          page,
+          options,
+          MCP_STRUCTURED_CONTENT_PROMPT,
+        ),
+      );
+
+      logStage("wait-gui-mcp-structured-content-completed");
+      summary.guiMcpStructuredContentCompleted = sanitizeJson(
+        await waitForGuiMcpStructuredContentCompleted(page, options),
+      );
+
+      logStage("wait-read-model-mcp-structured-content-completed");
+      const readModelMcpStructuredContentCompleted =
+        await waitForSessionReadMcpStructuredContentCompleted(
+          page,
+          options,
+          appServerRequests,
+        );
+      summary.readModelMcpStructuredContentCompleted =
+        readModelMcpStructuredContentCompleted.summary;
+    } else if (options.scenario === "skills-runtime") {
+      logStage("send-skills-runtime-prompt-from-gui");
+      summary.skillsRuntimeInputSend = sanitizeJson(
+        await sendPromptFromGui(page, options, SKILLS_RUNTIME_PROMPT),
+      );
+
+      logStage("wait-gui-skills-runtime-completed");
+      summary.guiSkillsRuntimeCompleted = sanitizeJson(
+        await waitForGuiSkillsRuntimeCompleted(page, options),
+      );
+
+      logStage("wait-read-model-skills-runtime-completed");
+      const readModelSkillsRuntimeCompleted =
+        await waitForSessionReadSkillsRuntimeCompleted(
+          page,
+          options,
+          appServerRequests,
+        );
+      summary.readModelSkillsRuntimeCompleted =
+        readModelSkillsRuntimeCompleted.summary;
+
+      logStage("export-skills-runtime-evidence-pack");
+      const evidencePackSkillsRuntime = await exportSkillsRuntimeEvidencePack(
+        page,
+        appServerRequests,
+        SKILLS_RUNTIME_SCENARIO,
+      );
+      summary.evidencePackSkillsRuntime =
+        evidencePackSkillsRuntime.summary;
+
+      logStage("send-explicit-skills-runtime-prompt-from-gui");
+      summary.explicitSkillsRuntimeInputSend = sanitizeJson(
+        await sendPromptFromGui(
+          page,
+          options,
+          SKILLS_RUNTIME_EXPLICIT_PROMPT,
+        ),
+      );
+
+      logStage("wait-gui-explicit-skills-runtime-completed");
+      summary.guiExplicitSkillsRuntimeCompleted = sanitizeJson(
+        await waitForGuiSkillsRuntimeCompleted(
+          page,
+          options,
+          SKILLS_RUNTIME_EXPLICIT_SCENARIO,
+        ),
+      );
+
+      logStage("wait-read-model-explicit-skills-runtime-completed");
+      const readModelExplicitSkillsRuntimeCompleted =
+        await waitForSessionReadSkillsRuntimeCompleted(
+          page,
+          options,
+          appServerRequests,
+          SKILLS_RUNTIME_EXPLICIT_SCENARIO,
+        );
+      summary.readModelExplicitSkillsRuntimeCompleted =
+        readModelExplicitSkillsRuntimeCompleted.summary;
+
+      logStage("export-explicit-skills-runtime-evidence-pack");
+      const evidencePackExplicitSkillsRuntime =
+        await exportSkillsRuntimeEvidencePack(
+          page,
+          appServerRequests,
+          SKILLS_RUNTIME_EXPLICIT_SCENARIO,
+        );
+      summary.evidencePackExplicitSkillsRuntime =
+        evidencePackExplicitSkillsRuntime.summary;
+
+      logStage("launch-manual-enable-skills-runtime-from-workspace-panel");
+      const manualEnableSkillsRuntimeLaunch =
+        await launchSkillsRuntimeFromWorkspacePanel(page, options, workspace);
+      summary.manualEnableSkillsRuntimeTurnStart = sanitizeJson({
+        launch: manualEnableSkillsRuntimeLaunch,
+      });
+      summary.manualEnableSkillsRuntimeSkill =
+        manualEnableSkillsRuntimeLaunch.workspaceSkill;
+
+      logStage("wait-manual-enable-skills-runtime-backend-turn-start");
+      const manualEnableSkillsRuntimeBackendTurn =
+        await waitForBackendLedgerTurnStart(
+          runtimeEnv.backendLedgerPath,
+          SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT,
+          options,
+        );
+      const manualEnableSkillsRuntimeSessionId =
+        manualEnableSkillsRuntimeBackendTurn.entry.sessionId ?? SESSION_ID;
+      summary.manualEnableSkillsRuntimeTurnStart = sanitizeJson({
+        ...summary.manualEnableSkillsRuntimeTurnStart,
+        backend: {
+          sessionId: manualEnableSkillsRuntimeSessionId,
+          turnId: manualEnableSkillsRuntimeBackendTurn.entry.turnId ?? null,
+          inputText:
+            manualEnableSkillsRuntimeBackendTurn.entry.inputText ?? null,
+        },
+      });
+
+      logStage("wait-gui-manual-enable-skills-runtime-completed");
+      summary.guiManualEnableSkillsRuntimeCompleted = sanitizeJson(
+        await waitForGuiSkillsRuntimeCompleted(
+          page,
+          options,
+          SKILLS_RUNTIME_MANUAL_ENABLE_SCENARIO,
+        ),
+      );
+
+      logStage("wait-read-model-manual-enable-skills-runtime-completed");
+      const readModelManualEnableSkillsRuntimeCompleted =
+        await waitForSessionReadSkillsRuntimeCompleted(
+          page,
+          options,
+          appServerRequests,
+          SKILLS_RUNTIME_MANUAL_ENABLE_SCENARIO,
+          manualEnableSkillsRuntimeSessionId,
+        );
+      summary.readModelManualEnableSkillsRuntimeCompleted =
+        readModelManualEnableSkillsRuntimeCompleted.summary;
+
+      logStage("export-manual-enable-skills-runtime-evidence-pack");
+      const evidencePackManualEnableSkillsRuntime =
+        await exportSkillsRuntimeEvidencePack(
+          page,
+          appServerRequests,
+          SKILLS_RUNTIME_MANUAL_ENABLE_SCENARIO,
+          manualEnableSkillsRuntimeSessionId,
+        );
+      summary.evidencePackManualEnableSkillsRuntime =
+        evidencePackManualEnableSkillsRuntime.summary;
+    } else if (options.scenario === "expert-skills-runtime") {
+      logStage("prepare-expert-skills-runtime-workspace-skill");
+      summary.expertSkillsRuntimeSkill = sanitizeJson(
+        ensureManualEnableWorkspaceSkill(workspace.rootPath),
+      );
+
+      logStage("create-expert-skills-runtime-session");
+      const expertSessionCreation = await createExpertSkillsRuntimeSession(
+        page,
+        workspace,
+        appServerRequests,
+      );
+      summary.expertSkillsRuntimeSessionCreation = sanitizeJson({
+        sessionId:
+          expertSessionCreation.session?.session?.sessionId ??
+          expertSessionCreation.session?.sessionId ??
+          null,
+        updatedSessionId:
+          expertSessionCreation.update?.session?.sessionId ??
+          expertSessionCreation.update?.sessionId ??
+          null,
+        expertId:
+          expertSessionCreation.expertMetadata?.expert?.expertId ?? null,
+        skillRefs:
+          expertSessionCreation.expertMetadata?.expert?.skillRefs ?? [],
+      });
+
+      logStage("start-expert-skills-runtime-turn");
+      summary.expertSkillsRuntimeTurnStart =
+        await startExpertSkillsRuntimeTurn(page, workspace, appServerRequests);
+
+      logStage("wait-read-model-expert-skills-runtime-completed");
+      const readModelExpertSkillsRuntimeCompleted =
+        await waitForSessionReadSkillsRuntimeCompleted(
+          page,
+          options,
+          appServerRequests,
+          EXPERT_SKILLS_RUNTIME_SCENARIO,
+          EXPERT_SKILLS_RUNTIME_SESSION_ID,
+        );
+      summary.readModelExpertSkillsRuntimeCompleted =
+        readModelExpertSkillsRuntimeCompleted.summary;
+
+      logStage("export-expert-skills-runtime-evidence-pack");
+      const evidencePackExpertSkillsRuntime =
+        await exportSkillsRuntimeEvidencePack(
+          page,
+          appServerRequests,
+          EXPERT_SKILLS_RUNTIME_SCENARIO,
+          EXPERT_SKILLS_RUNTIME_SESSION_ID,
+        );
+      summary.evidencePackExpertSkillsRuntime =
+        evidencePackExpertSkillsRuntime.summary;
+
+      logStage("open-expert-skills-runtime-session-from-sidebar");
+      summary.guiExpertSkillsRuntimeSessionVisible = sanitizeJson(
+        await waitForGuiSessionVisible(
+          page,
+          options,
+          EXPERT_SKILLS_RUNTIME_SESSION_TITLE,
+        ),
+      );
+      summary.guiExpertSkillsRuntimeSessionOpened = sanitizeJson(
+        await openSessionFromSidebar(page, options, appServerRequests, {
+          sessionId: EXPERT_SKILLS_RUNTIME_SESSION_ID,
+          title: EXPERT_SKILLS_RUNTIME_SESSION_TITLE,
+        }),
+      );
+
+      logStage("wait-gui-expert-skills-runtime-completed");
+      summary.guiExpertSkillsRuntimeCompleted = sanitizeJson(
+        await waitForGuiSkillsRuntimeCompleted(
+          page,
+          options,
+          EXPERT_SKILLS_RUNTIME_SCENARIO,
+        ),
+      );
+    } else if (
+      options.scenario === "expert-plaza-skills-runtime" ||
+      options.scenario === "expert-panel-skills-runtime"
+    ) {
+      const isExpertPanelSkillsRuntimeScenario =
+        options.scenario === "expert-panel-skills-runtime";
+      logStage(
+        isExpertPanelSkillsRuntimeScenario
+          ? "prepare-expert-panel-skills-runtime-workspace-skill"
+          : "prepare-expert-plaza-skills-runtime-workspace-skill",
+      );
+      const expertSkillsRuntimeSkill = ensureManualEnableWorkspaceSkill(
+        workspace.rootPath,
+      );
+      summary.expertSkillsRuntimeSkill = sanitizeJson(
+        expertSkillsRuntimeSkill,
+      );
+      if (isExpertPanelSkillsRuntimeScenario) {
+        summary.expertPanelSkillsRuntimeUserSkill = sanitizeJson(
+          ensureUserVisibleCapabilityReportSkill(runtimeEnv),
+        );
+      }
+
+      logStage(
+        isExpertPanelSkillsRuntimeScenario
+          ? "inject-expert-panel-skills-runtime-catalog"
+          : "inject-expert-plaza-skills-runtime-catalog",
+      );
+      summary.expertPlazaSkillsRuntimeCatalog = sanitizeJson(
+        await injectExpertSkillsRuntimeCatalog(
+          page,
+          isExpertPanelSkillsRuntimeScenario
+            ? {
+                releaseSkillRefs: [EXPERT_SKILLS_RUNTIME_BASE_SKILL_REF],
+                workspaceSkill: expertSkillsRuntimeSkill,
+              }
+            : undefined,
+        ),
+      );
+      if (isExpertPanelSkillsRuntimeScenario) {
+        logStage("reload-expert-panel-skills-runtime-catalog");
+        summary.expertPanelSkillsRuntimeCatalogReload = sanitizeJson(
+          await reloadRendererAfterExpertPanelSkillCatalogInjection(
+            page,
+            options,
+            waitForRendererReady,
+            clearInvokeBuffers,
+          ),
+        );
+      }
+
+      logStage("launch-expert-skills-runtime-from-expert-plaza");
+      summary.expertPlazaSkillsRuntimeLaunch = sanitizeJson(
+        await launchExpertSkillsRuntimeFromExpertPlaza(page, options),
+      );
+
+      logStage("wait-expert-plaza-skills-runtime-backend-turn-start");
+      const expertPlazaSkillsRuntimeBackendTurn =
+        await waitForBackendLedgerTurnStartContaining(
+          runtimeEnv.backendLedgerPath,
+          EXPERT_SKILLS_RUNTIME_PROMPT,
+          options,
+        );
+      const expertPlazaSkillsRuntimeSessionId =
+        expertPlazaSkillsRuntimeBackendTurn.entry.sessionId ??
+        EXPERT_SKILLS_RUNTIME_SESSION_ID;
+      summary.expertSkillsRuntimeTurnStart = sanitizeJson({
+        sessionId: expertPlazaSkillsRuntimeSessionId,
+        turnId: expertPlazaSkillsRuntimeBackendTurn.entry.turnId ?? null,
+        inputText:
+          expertPlazaSkillsRuntimeBackendTurn.entry.inputText ?? null,
+      });
+
+      logStage("wait-read-model-expert-plaza-skills-runtime-completed");
+      const readModelExpertSkillsRuntimeCompleted =
+        await waitForSessionReadSkillsRuntimeCompleted(
+          page,
+          options,
+          appServerRequests,
+          EXPERT_SKILLS_RUNTIME_SCENARIO,
+          expertPlazaSkillsRuntimeSessionId,
+        );
+      summary.readModelExpertSkillsRuntimeCompleted =
+        readModelExpertSkillsRuntimeCompleted.summary;
+
+      logStage("export-expert-plaza-skills-runtime-evidence-pack");
+      const evidencePackExpertSkillsRuntime =
+        await exportSkillsRuntimeEvidencePack(
+          page,
+          appServerRequests,
+          EXPERT_SKILLS_RUNTIME_SCENARIO,
+          expertPlazaSkillsRuntimeSessionId,
+        );
+      summary.evidencePackExpertSkillsRuntime =
+        evidencePackExpertSkillsRuntime.summary;
+
+      logStage("wait-gui-expert-plaza-skills-runtime-completed");
+      summary.guiExpertSkillsRuntimeCompleted = sanitizeJson(
+        await waitForGuiSkillsRuntimeCompleted(
+          page,
+          options,
+          EXPERT_SKILLS_RUNTIME_SCENARIO,
+        ),
+      );
+
+      if (isExpertPanelSkillsRuntimeScenario) {
+        logStage("add-expert-panel-skills-runtime-skill");
+        summary.expertPanelSkillsRuntimeAddSkill = sanitizeJson(
+          await addExpertSkillsRuntimeSkillFromInfoPanel(page, options),
+        );
+
+        logStage("wait-expert-panel-skills-runtime-session-ready");
+        summary.guiExpertPanelSkillsRuntimeSessionReady = sanitizeJson(
+          await waitForExpertPanelSkillsRuntimeSessionReady(
+            page,
+            options,
+            expertPlazaSkillsRuntimeSessionId,
+          ),
+        );
+
+        logStage("send-expert-panel-skills-runtime-followup");
+        summary.expertPanelSkillsRuntimeInputSend = sanitizeJson(
+          await sendPromptFromGui(
+            page,
+            options,
+            EXPERT_SKILLS_RUNTIME_PANEL_PROMPT,
+            { expectedSessionId: expertPlazaSkillsRuntimeSessionId },
+          ),
+        );
+
+        logStage("wait-expert-panel-skills-runtime-backend-turn-start");
+        const expertPanelSkillsRuntimeBackendStart =
+          await waitForBackendTurnStartWithCurrentQueueResume(
+            page,
+            options,
+            appServerRequests,
+            runtimeEnv.backendLedgerPath,
+            expertPlazaSkillsRuntimeSessionId,
+            EXPERT_SKILLS_RUNTIME_PANEL_PROMPT,
+          );
+        const expertPanelSkillsRuntimeBackendTurn =
+          expertPanelSkillsRuntimeBackendStart.backendTurn;
+        const expertPanelSkillsRuntimeSessionId =
+          selectExpertPanelSkillsRuntimeSessionId(
+            expertPanelSkillsRuntimeBackendTurn,
+            expertPlazaSkillsRuntimeSessionId,
+          );
+        summary.expertPanelSkillsRuntimeQueueResume = sanitizeJson(
+          expertPanelSkillsRuntimeBackendStart.queueResume,
+        );
+        summary.expertPanelSkillsRuntimeTurnStart =
+          summarizeExpertPanelSkillsRuntimeTurnStart(
+            expertPanelSkillsRuntimeBackendTurn,
+          );
+        summary.expertPanelSkillsRuntimeSessionId =
+          expertPanelSkillsRuntimeSessionId;
+
+        logStage("wait-read-model-expert-panel-skills-runtime-completed");
+        const readModelExpertPanelSkillsRuntimeCompleted =
+          await waitForSessionReadSkillsRuntimeCompleted(
+            page,
+            options,
+            appServerRequests,
+            EXPERT_PANEL_SKILLS_RUNTIME_SCENARIO,
+            expertPanelSkillsRuntimeSessionId,
+          );
+        summary.readModelExpertPanelSkillsRuntimeCompleted =
+          readModelExpertPanelSkillsRuntimeCompleted.summary;
+
+        logStage("export-expert-panel-skills-runtime-evidence-pack");
+        const evidencePackExpertPanelSkillsRuntime =
+          await exportSkillsRuntimeEvidencePack(
+            page,
+            appServerRequests,
+            EXPERT_PANEL_SKILLS_RUNTIME_SCENARIO,
+            expertPanelSkillsRuntimeSessionId,
+          );
+        summary.evidencePackExpertPanelSkillsRuntime =
+          evidencePackExpertPanelSkillsRuntime.summary;
+
+        logStage("wait-gui-expert-panel-skills-runtime-completed");
+        summary.guiExpertPanelSkillsRuntimeCompleted = sanitizeJson(
+          await waitForGuiSkillsRuntimeCompleted(
+            page,
+            options,
+            EXPERT_PANEL_SKILLS_RUNTIME_SCENARIO,
+          ),
+        );
+      }
     } else {
       logStage("send-news-prompt-from-gui");
       summary.inputSend = sanitizeJson(
@@ -3587,7 +5638,11 @@ async function run() {
     } else if (
       options.scenario !== "plan" &&
       options.scenario !== "goal" &&
-      options.scenario !== "web-tools-rendering"
+      options.scenario !== "web-tools-rendering" &&
+      options.scenario !== "mcp-structured-content" &&
+      options.scenario !== "skills-runtime" &&
+      options.scenario !== "expert-skills-runtime" &&
+      options.scenario !== "expert-plaza-skills-runtime"
     ) {
       logStage("wait-gui-completed");
       summary.guiCompleted = sanitizeJson(
@@ -3630,7 +5685,10 @@ async function run() {
     }
 
     const backendLedger = readJsonl(runtimeEnv.backendLedgerPath);
-    writeJsonFile(backendLedgerEvidencePath, backendLedger.map(sanitizeJson));
+    writeJsonFile(
+      backendLedgerEvidencePath,
+      sanitizeBackendLedgerForEvidence(backendLedger),
+    );
     const backendSummary = summarizeBackendLedger(backendLedger);
     const pageText = await page.evaluate(() => document.body?.innerText || "");
     const traceRaw = await page.evaluate(() =>
@@ -3669,6 +5727,35 @@ async function run() {
         entry.kind === "turnStart" &&
         entry.inputText === WEB_TOOLS_RENDERING_PROMPT,
     );
+    const mcpStructuredContentTurnStart = backendLedger.find(
+      (entry) =>
+        entry.kind === "turnStart" &&
+        entry.inputText === MCP_STRUCTURED_CONTENT_PROMPT,
+    );
+    const skillsRuntimeTurnStart = backendLedger.find(
+      (entry) =>
+        entry.kind === "turnStart" && entry.inputText === SKILLS_RUNTIME_PROMPT,
+    );
+    const explicitSkillsRuntimeTurnStart = backendLedger.find(
+      (entry) =>
+        entry.kind === "turnStart" &&
+        entry.inputText === SKILLS_RUNTIME_EXPLICIT_PROMPT,
+    );
+    const manualEnableSkillsRuntimeTurnStart = backendLedger.find(
+      (entry) =>
+        entry.kind === "turnStart" &&
+        entry.inputText === SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT,
+    );
+    const expertSkillsRuntimeTurnStart = backendLedger.find(
+      (entry) =>
+        entry.kind === "turnStart" &&
+        String(entry.inputText || "").includes(EXPERT_SKILLS_RUNTIME_PROMPT),
+    );
+    const expertPanelSkillsRuntimeTurnStart = backendLedger.find(
+      (entry) =>
+        entry.kind === "turnStart" &&
+        entry.inputText === EXPERT_SKILLS_RUNTIME_PANEL_PROMPT,
+    );
     const continueTurnStart = backendLedger.find(
       (entry) =>
         entry.kind === "turnStart" && entry.inputText === CONTINUE_PROMPT,
@@ -3683,6 +5770,23 @@ async function run() {
     const isGoalScenario = options.scenario === "goal";
     const isWebToolsRenderingScenario =
       options.scenario === "web-tools-rendering";
+    const isMcpStructuredContentScenario =
+      options.scenario === "mcp-structured-content";
+    const isSkillsRuntimeScenario = options.scenario === "skills-runtime";
+    const isExpertSkillsRuntimeScenario =
+      options.scenario === "expert-skills-runtime";
+    const isExpertPlazaSkillsRuntimeScenario =
+      options.scenario === "expert-plaza-skills-runtime";
+    const isExpertPanelSkillsRuntimeScenario =
+      options.scenario === "expert-panel-skills-runtime";
+    const isAnyExpertSkillsRuntimeScenario =
+      isExpertSkillsRuntimeScenario ||
+      isExpertPlazaSkillsRuntimeScenario ||
+      isExpertPanelSkillsRuntimeScenario;
+    const expertRuntimeTurnStartForAssertions =
+      isExpertPanelSkillsRuntimeScenario
+        ? expertPanelSkillsRuntimeTurnStart
+        : expertSkillsRuntimeTurnStart;
     const asterChatRequest =
       (isPlanScenario
         ? planTurnStart?.asterChatRequest
@@ -3690,10 +5794,49 @@ async function run() {
           ? goalTurnStart?.asterChatRequest
           : isWebToolsRenderingScenario
             ? webToolsRenderingTurnStart?.asterChatRequest
+            : isMcpStructuredContentScenario
+              ? mcpStructuredContentTurnStart?.asterChatRequest
+              : isSkillsRuntimeScenario
+                ? skillsRuntimeTurnStart?.asterChatRequest
+                : isAnyExpertSkillsRuntimeScenario
+                  ? expertRuntimeTurnStartForAssertions?.asterChatRequest
             : newsTurnStart?.asterChatRequest) ?? {};
     const hasCancelPhase = isCancelOnlyScenario || isCancelThenContinueScenario;
     const goalHarness = readHarnessMetadataFromTurnStart(goalTurnStart);
     const goalObjectiveText = readObjectiveTextFromHarness(goalHarness);
+    const manualEnableRuntimeMetadata =
+      readWorkspaceSkillRuntimeEnableFromTurnStart(
+        manualEnableSkillsRuntimeTurnStart,
+      );
+    const manualEnableRuntimeBinding = Array.isArray(
+      manualEnableRuntimeMetadata?.bindings,
+    )
+      ? manualEnableRuntimeMetadata.bindings[0]
+      : null;
+    const expertRuntimeMetadata =
+      expertRuntimeTurnStartForAssertions?.runtimeOptions?.metadata?.expert ??
+      expertRuntimeTurnStartForAssertions?.asterChatRequest?.turn_config?.metadata
+        ?.expert ??
+      expertRuntimeTurnStartForAssertions?.asterChatRequest?.turnConfig?.metadata
+        ?.expert ??
+      {};
+    const expertHarnessMetadata =
+      expertRuntimeTurnStartForAssertions?.runtimeOptions?.metadata?.harness?.expert ??
+      expertRuntimeTurnStartForAssertions?.asterChatRequest?.turn_config?.metadata
+        ?.harness?.expert ??
+      expertRuntimeTurnStartForAssertions?.asterChatRequest?.turnConfig?.metadata
+        ?.harness?.expert ??
+      {};
+    const rawExpertHarnessSkillRefs =
+      expertHarnessMetadata?.skill_refs ??
+      expertHarnessMetadata?.skillRefs ??
+      [];
+    const expertHarnessSkillRefs = Array.isArray(rawExpertHarnessSkillRefs)
+      ? rawExpertHarnessSkillRefs
+      : [];
+    const expectedExpertHarnessSkillRef = isExpertPanelSkillsRuntimeScenario
+      ? EXPERT_PANEL_SKILLS_RUNTIME_UI_SKILL_REF
+      : EXPERT_SKILLS_RUNTIME_SKILL_REF;
     const collaborationMode =
       asterChatRequest?.turn_config?.metadata?.harness?.collaboration_mode
         ?.mode ??
@@ -3706,11 +5849,27 @@ async function run() {
             ?.mode
         : null);
     const guiTurnStartReachedBackend = isPlanScenario
-      ? planTurnStart?.inputText === PLAN_PROMPT
-      : isGoalScenario
-        ? goalTurnStart?.inputText === GOAL_PROMPT
-        : isWebToolsRenderingScenario
-          ? webToolsRenderingTurnStart?.inputText === WEB_TOOLS_RENDERING_PROMPT
+        ? planTurnStart?.inputText === PLAN_PROMPT
+        : isGoalScenario
+          ? goalTurnStart?.inputText === GOAL_PROMPT
+          : isWebToolsRenderingScenario
+            ? webToolsRenderingTurnStart?.inputText === WEB_TOOLS_RENDERING_PROMPT
+            : isMcpStructuredContentScenario
+              ? mcpStructuredContentTurnStart?.inputText ===
+                MCP_STRUCTURED_CONTENT_PROMPT
+              : isSkillsRuntimeScenario
+                ? skillsRuntimeTurnStart?.inputText === SKILLS_RUNTIME_PROMPT &&
+                  explicitSkillsRuntimeTurnStart?.inputText ===
+                    SKILLS_RUNTIME_EXPLICIT_PROMPT &&
+                  manualEnableSkillsRuntimeTurnStart?.inputText ===
+                    SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT
+                : isAnyExpertSkillsRuntimeScenario
+                  ? isExpertPanelSkillsRuntimeScenario
+                    ? expertPanelSkillsRuntimeTurnStart?.inputText ===
+                      EXPERT_SKILLS_RUNTIME_PANEL_PROMPT
+                    : expertSkillsRuntimeTurnStart?.inputText?.includes(
+                      EXPERT_SKILLS_RUNTIME_PROMPT,
+                    ) === true
           : newsTurnStart?.inputText === NEWS_PROMPT;
     const commonAssertions = {
       electronPreloadBridge: rendererSnapshot.electron === true,
@@ -3757,6 +5916,19 @@ async function run() {
             ? summary.guiGoalCompleted?.hasPrompt === true
             : isWebToolsRenderingScenario
               ? summary.guiWebToolsRenderingCompleted?.hasPrompt === true
+              : isMcpStructuredContentScenario
+                ? summary.guiMcpStructuredContentCompleted?.hasPrompt === true
+                : isSkillsRuntimeScenario
+                  ? summary.guiSkillsRuntimeCompleted?.hasPrompt === true &&
+                    summary.guiExplicitSkillsRuntimeCompleted?.hasPrompt ===
+                      true &&
+                    summary.guiManualEnableSkillsRuntimeCompleted?.hasPrompt ===
+                      true
+                  : isAnyExpertSkillsRuntimeScenario
+                    ? isExpertPanelSkillsRuntimeScenario
+                      ? summary.guiExpertPanelSkillsRuntimeCompleted
+                        ?.hasPrompt === true
+                      : summary.guiExpertSkillsRuntimeCompleted?.hasPrompt === true
           : summary.guiCompleted?.hasPrompt === true,
       guiAssistantOutputVisible: isCancelOnlyScenario
         ? summary.guiCanceled?.hasStoppedCopy === true
@@ -3773,6 +5945,31 @@ async function run() {
                 ? summary.guiWebToolsRenderingCompleted?.hasAssistantSummary ===
                     true ||
                   summary.guiWebToolsRenderingCompleted?.hasDoneText === true
+                : isMcpStructuredContentScenario
+                  ? summary.guiMcpStructuredContentCompleted
+                    ?.hasStructuredAnswer === true
+                  : isSkillsRuntimeScenario
+                    ? summary.guiSkillsRuntimeCompleted?.hasAssistantSummary ===
+                        true ||
+                      summary.guiSkillsRuntimeCompleted?.hasDoneText === true ||
+                      summary.guiExplicitSkillsRuntimeCompleted
+                        ?.hasAssistantSummary === true ||
+                      summary.guiExplicitSkillsRuntimeCompleted?.hasDoneText ===
+                        true ||
+                      summary.guiManualEnableSkillsRuntimeCompleted
+                        ?.hasAssistantSummary === true ||
+                      summary.guiManualEnableSkillsRuntimeCompleted
+                        ?.hasDoneText === true
+                    : isAnyExpertSkillsRuntimeScenario
+                      ? isExpertPanelSkillsRuntimeScenario
+                        ? summary.guiExpertPanelSkillsRuntimeCompleted
+                          ?.hasAssistantSummary === true ||
+                        summary.guiExpertPanelSkillsRuntimeCompleted
+                          ?.hasDoneText === true
+                        : summary.guiExpertSkillsRuntimeCompleted
+                          ?.hasAssistantSummary === true ||
+                        summary.guiExpertSkillsRuntimeCompleted?.hasDoneText ===
+                          true
           : summary.guiCompleted?.hasAssistantSummary === true ||
             summary.guiCompleted?.hasDoneText === true,
       guiInputRemainsReady: isCancelOnlyScenario
@@ -3792,6 +5989,34 @@ async function run() {
                     true &&
                   summary.guiWebToolsRenderingCompleted?.textareaDisabled ===
                     false
+                : isMcpStructuredContentScenario
+                  ? summary.guiMcpStructuredContentCompleted
+                    ?.textareaVisible === true &&
+                    summary.guiMcpStructuredContentCompleted
+                      ?.textareaDisabled === false
+                  : isSkillsRuntimeScenario
+                    ? summary.guiSkillsRuntimeCompleted?.textareaVisible ===
+                        true &&
+                      summary.guiSkillsRuntimeCompleted?.textareaDisabled ===
+                        false &&
+                      summary.guiExplicitSkillsRuntimeCompleted
+                        ?.textareaVisible === true &&
+                      summary.guiExplicitSkillsRuntimeCompleted
+                        ?.textareaDisabled === false &&
+                      summary.guiManualEnableSkillsRuntimeCompleted
+                        ?.textareaVisible === true &&
+                      summary.guiManualEnableSkillsRuntimeCompleted
+                        ?.textareaDisabled === false
+                    : isAnyExpertSkillsRuntimeScenario
+                      ? isExpertPanelSkillsRuntimeScenario
+                        ? summary.guiExpertPanelSkillsRuntimeCompleted
+                          ?.textareaVisible === true &&
+                        summary.guiExpertPanelSkillsRuntimeCompleted
+                          ?.textareaDisabled === false
+                        : summary.guiExpertSkillsRuntimeCompleted
+                          ?.textareaVisible === true &&
+                        summary.guiExpertSkillsRuntimeCompleted
+                          ?.textareaDisabled === false
           : summary.guiCompleted?.textareaVisible === true &&
             summary.guiCompleted?.textareaDisabled === false,
       guiNotStuckStreaming: isCancelOnlyScenario
@@ -3805,6 +6030,22 @@ async function run() {
               : isWebToolsRenderingScenario
                 ? summary.guiWebToolsRenderingCompleted?.stopButtonVisible ===
                   false
+                : isMcpStructuredContentScenario
+                  ? summary.guiMcpStructuredContentCompleted
+                    ?.stopButtonVisible === false
+                  : isSkillsRuntimeScenario
+                    ? summary.guiSkillsRuntimeCompleted?.stopButtonVisible ===
+                        false &&
+                      summary.guiExplicitSkillsRuntimeCompleted
+                        ?.stopButtonVisible === false &&
+                      summary.guiManualEnableSkillsRuntimeCompleted
+                        ?.stopButtonVisible === false
+                    : isAnyExpertSkillsRuntimeScenario
+                      ? isExpertPanelSkillsRuntimeScenario
+                        ? summary.guiExpertPanelSkillsRuntimeCompleted
+                          ?.stopButtonVisible === false
+                        : summary.guiExpertSkillsRuntimeCompleted
+                          ?.stopButtonVisible === false
           : summary.guiCompleted?.stopButtonVisible === false,
       pageMentionsPromptAndAssistant: isCancelOnlyScenario
         ? pageText.includes(NEWS_PROMPT) &&
@@ -3834,6 +6075,47 @@ async function run() {
                     ?.expandedDetails?.hasSearchSourceLabel === true &&
                   summary.guiWebToolsRenderingCompleted
                     ?.hasAssistantSummary === true
+                : isMcpStructuredContentScenario
+                  ? summary.guiMcpStructuredContentCompleted?.hasPrompt ===
+                      true &&
+                    summary.guiMcpStructuredContentCompleted
+                      ?.hasStructuredAnswer === true &&
+                    summary.guiMcpStructuredContentCompleted
+                      ?.envelopeVisible === false
+                  : isSkillsRuntimeScenario
+                    ? summary.guiSkillsRuntimeCompleted?.hasPrompt === true &&
+                      (summary.guiSkillsRuntimeCompleted
+                        ?.hasAssistantSummary === true ||
+                        summary.guiSkillsRuntimeCompleted?.hasDoneText ===
+                          true) &&
+                      summary.guiExplicitSkillsRuntimeCompleted?.hasPrompt ===
+                        true &&
+                      (summary.guiExplicitSkillsRuntimeCompleted
+                        ?.hasAssistantSummary === true ||
+                        summary.guiExplicitSkillsRuntimeCompleted
+                          ?.hasDoneText === true) &&
+                      summary.guiManualEnableSkillsRuntimeCompleted
+                        ?.hasPrompt === true &&
+                      (summary.guiManualEnableSkillsRuntimeCompleted
+                        ?.hasAssistantSummary === true ||
+                        summary.guiManualEnableSkillsRuntimeCompleted
+                          ?.hasDoneText === true)
+                    : isAnyExpertSkillsRuntimeScenario
+                      ? isExpertPanelSkillsRuntimeScenario
+                        ? summary.guiExpertPanelSkillsRuntimeCompleted
+                          ?.hasPrompt === true &&
+                        (summary.guiExpertPanelSkillsRuntimeCompleted
+                          ?.hasAssistantSummary === true ||
+                          summary.guiExpertPanelSkillsRuntimeCompleted
+                            ?.hasDoneText === true) &&
+                        pageText.includes(EXPERT_SKILLS_RUNTIME_TITLE)
+                        : summary.guiExpertSkillsRuntimeCompleted?.hasPrompt ===
+                          true &&
+                        (summary.guiExpertSkillsRuntimeCompleted
+                          ?.hasAssistantSummary === true ||
+                          summary.guiExpertSkillsRuntimeCompleted
+                            ?.hasDoneText === true) &&
+                        pageText.includes(EXPERT_SKILLS_RUNTIME_TITLE)
           : pageText.includes(NEWS_PROMPT) &&
             (pageText.includes("今日国际新闻简要整理") ||
               pageText.includes(ASSISTANT_DONE_TEXT)),
@@ -3952,6 +6234,478 @@ async function run() {
               summary.readModelWebToolsRenderingCompleted
                 ?.includesWebFetchTool === true,
         }
+      : isMcpStructuredContentScenario
+        ? {
+            mcpStructuredContentPromptReachedBackend:
+              mcpStructuredContentTurnStart?.inputText ===
+              MCP_STRUCTURED_CONTENT_PROMPT,
+            guiMcpStructuredContentInputSubmitted:
+              summary.mcpStructuredContentInputSend?.afterFill
+                ?.promptVisibleInTextarea === true &&
+              summary.mcpStructuredContentInputSend?.clicked?.clicked === true,
+            guiMcpStructuredContentVisible:
+              summary.guiMcpStructuredContentCompleted?.hasPrompt === true &&
+              summary.guiMcpStructuredContentCompleted
+                ?.hasStructuredAnswer === true &&
+              (summary.guiMcpStructuredContentCompleted?.hasToolName === true ||
+                summary.guiMcpStructuredContentCompleted?.expandedDetails
+                  ?.hasToolName === true) &&
+              summary.guiMcpStructuredContentCompleted?.textareaVisible ===
+                true &&
+              summary.guiMcpStructuredContentCompleted?.textareaDisabled ===
+                false &&
+              summary.guiMcpStructuredContentCompleted?.stopButtonVisible ===
+                false,
+            guiMcpStructuredContentEnvelopeHidden:
+              summary.guiMcpStructuredContentCompleted?.envelopeVisible ===
+              false,
+            readModelMcpStructuredContentCompleted:
+              summary.readModelMcpStructuredContentCompleted?.includesPrompt ===
+                true &&
+              (summary.readModelMcpStructuredContentCompleted
+                ?.includesAssistantDone === true ||
+                summary.readModelMcpStructuredContentCompleted
+                  ?.includesAssistantSummary === true) &&
+              summary.readModelMcpStructuredContentCompleted
+                ?.includesMcpTool === true,
+            readModelMcpStructuredContentObserved:
+              summary.readModelMcpStructuredContentCompleted
+                ?.includesStructuredContent === true &&
+              summary.readModelMcpStructuredContentCompleted
+                ?.structuredContentAnswerVisible === true &&
+              summary.readModelMcpStructuredContentCompleted
+                ?.structuredContentReferenceVisible === true &&
+              summary.readModelMcpStructuredContentCompleted
+                ?.outputContainsEnvelope === true,
+        }
+      : isSkillsRuntimeScenario
+        ? {
+            skillsRuntimePromptReachedBackend:
+              skillsRuntimeTurnStart?.inputText === SKILLS_RUNTIME_PROMPT,
+            guiSkillsRuntimeInputSubmitted:
+              summary.skillsRuntimeInputSend?.afterFill
+                ?.promptVisibleInTextarea === true &&
+              summary.skillsRuntimeInputSend?.clicked?.clicked === true,
+            guiSkillsRuntimeCompleted:
+              summary.guiSkillsRuntimeCompleted?.hasPrompt === true &&
+              (summary.guiSkillsRuntimeCompleted?.hasAssistantSummary ===
+                true ||
+                summary.guiSkillsRuntimeCompleted?.hasDoneText === true) &&
+              summary.guiSkillsRuntimeCompleted?.textareaVisible === true &&
+              summary.guiSkillsRuntimeCompleted?.textareaDisabled === false &&
+              summary.guiSkillsRuntimeCompleted?.stopButtonVisible === false,
+            readModelSkillsRuntimeCompleted:
+              summary.readModelSkillsRuntimeCompleted?.includesPrompt ===
+                true &&
+              (summary.readModelSkillsRuntimeCompleted
+                ?.includesAssistantDone === true ||
+                summary.readModelSkillsRuntimeCompleted
+                  ?.includesAssistantSummary === true),
+            readModelSkillSearchObserved:
+              summary.readModelSkillsRuntimeCompleted
+                ?.includesSkillSearchTool === true,
+            readModelSkillInvocationObserved:
+              summary.readModelSkillsRuntimeCompleted?.includesSkillTool ===
+                true &&
+              summary.readModelSkillsRuntimeCompleted?.includesSkillName ===
+                true,
+            evidenceSkillBodyReadObserved:
+              summary.evidencePackSkillsRuntime?.skillBodyReadObserved === true,
+            evidenceSkillGateObserved:
+              summary.evidencePackSkillsRuntime?.skillGateObserved === true,
+            evidencePackSkillSearchObserved:
+              summary.evidencePackSkillsRuntime?.hasSkillSearchSummary === true &&
+              summary.evidencePackSkillsRuntime?.searchQuery ===
+                SKILLS_RUNTIME_QUERY,
+            evidencePackSkillInvocationObserved:
+              summary.evidencePackSkillsRuntime
+                ?.hasSkillInvocationSummary === true &&
+              summary.evidencePackSkillsRuntime?.invocationSkillName ===
+                SKILLS_RUNTIME_SKILL_NAME,
+            skillSearchBeforeSkillInvocation:
+              summary.evidencePackSkillsRuntime
+                ?.skillSearchBeforeSkillInvocation === true,
+            explicitSkillsRuntimePromptReachedBackend:
+              explicitSkillsRuntimeTurnStart?.inputText ===
+              SKILLS_RUNTIME_EXPLICIT_PROMPT,
+            guiExplicitSkillsRuntimeInputSubmitted:
+              summary.explicitSkillsRuntimeInputSend?.afterFill
+                ?.promptVisibleInTextarea === true &&
+              summary.explicitSkillsRuntimeInputSend?.clicked?.clicked === true,
+            guiExplicitSkillsRuntimeCompleted:
+              summary.guiExplicitSkillsRuntimeCompleted?.hasPrompt === true &&
+              (summary.guiExplicitSkillsRuntimeCompleted
+                ?.hasAssistantSummary === true ||
+                summary.guiExplicitSkillsRuntimeCompleted?.hasDoneText ===
+                  true) &&
+              summary.guiExplicitSkillsRuntimeCompleted?.textareaVisible ===
+                true &&
+              summary.guiExplicitSkillsRuntimeCompleted?.textareaDisabled ===
+                false &&
+              summary.guiExplicitSkillsRuntimeCompleted?.stopButtonVisible ===
+                false,
+            readModelExplicitSkillsRuntimeCompleted:
+              summary.readModelExplicitSkillsRuntimeCompleted
+                ?.includesPrompt === true &&
+              (summary.readModelExplicitSkillsRuntimeCompleted
+                ?.includesAssistantDone === true ||
+                summary.readModelExplicitSkillsRuntimeCompleted
+                  ?.includesAssistantSummary === true),
+            readModelExplicitSkillSearchObserved:
+              summary.readModelExplicitSkillsRuntimeCompleted
+                ?.includesSkillSearchTool === true,
+            readModelExplicitSkillInvocationObserved:
+              summary.readModelExplicitSkillsRuntimeCompleted
+                ?.includesSkillTool === true &&
+              summary.readModelExplicitSkillsRuntimeCompleted
+                ?.includesSkillName === true,
+            evidenceExplicitSkillBodyReadObserved:
+              summary.evidencePackExplicitSkillsRuntime
+                ?.skillBodyReadObserved === true,
+            evidenceExplicitSkillGateObserved:
+              summary.evidencePackExplicitSkillsRuntime?.skillGateObserved ===
+              true,
+            evidencePackExplicitSkillSearchObserved:
+              summary.evidencePackExplicitSkillsRuntime
+                ?.hasSkillSearchSummary === true &&
+              summary.evidencePackExplicitSkillsRuntime?.searchQuery ===
+                SKILLS_RUNTIME_QUERY,
+            evidencePackExplicitSkillInvocationObserved:
+              summary.evidencePackExplicitSkillsRuntime
+                ?.hasSkillInvocationSummary === true &&
+              summary.evidencePackExplicitSkillsRuntime?.invocationSkillName ===
+                SKILLS_RUNTIME_SKILL_NAME,
+            explicitSkillSearchBeforeSkillInvocation:
+              summary.evidencePackExplicitSkillsRuntime
+                ?.skillSearchBeforeSkillInvocation === true,
+            manualEnableSkillsRuntimePromptReachedBackend:
+              manualEnableSkillsRuntimeTurnStart?.inputText ===
+              SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT,
+            manualEnableSkillsRuntimeMetadataReachedBackend:
+              manualEnableRuntimeMetadata?.source ===
+                "manual_session_enable" &&
+              manualEnableRuntimeMetadata?.approval === "manual" &&
+              manualEnableRuntimeMetadata?.workspace_root ===
+                workspace.rootPath &&
+              manualEnableRuntimeBinding?.directory ===
+                "capability-report" &&
+              manualEnableRuntimeBinding?.skill ===
+                SKILLS_RUNTIME_SKILL_NAME &&
+              manualEnableRuntimeBinding?.registered_skill_directory ===
+                summary.manualEnableSkillsRuntimeSkill?.skillDirectory &&
+              manualEnableRuntimeBinding?.source_draft_id ===
+                "capdraft-fixture-capability-report" &&
+              manualEnableRuntimeBinding
+                ?.source_verification_report_id ===
+                "capver-fixture-capability-report",
+            manualEnableSkillsRuntimeLaunchedFromSkillsWorkspace:
+              summary.manualEnableSkillsRuntimeTurnStart?.launch?.clicked ===
+                true &&
+              summary.manualEnableSkillsRuntimeTurnStart?.launch
+                ?.registeredPanelVisible === true &&
+              summary.manualEnableSkillsRuntimeTurnStart?.launch
+                ?.enableButtonVisible === true &&
+              summary.manualEnableSkillsRuntimeTurnStart?.launch
+                ?.enableButtonDisabled === false,
+            manualEnableSkillsRuntimeOpenedAgentSession:
+              typeof summary.manualEnableSkillsRuntimeTurnStart?.backend
+                ?.sessionId === "string" &&
+              summary.manualEnableSkillsRuntimeTurnStart.backend.sessionId
+                .length > 0 &&
+              summary.manualEnableSkillsRuntimeTurnStart.backend.sessionId !==
+                SESSION_ID,
+            manualEnableSkillsRuntimeSkillDirectoryPrepared:
+              typeof summary.manualEnableSkillsRuntimeSkill?.skillFilePath ===
+                "string" &&
+              fs.existsSync(
+                summary.manualEnableSkillsRuntimeSkill.skillFilePath,
+              ),
+            guiManualEnableSkillsRuntimeCompleted:
+              summary.guiManualEnableSkillsRuntimeCompleted?.hasPrompt ===
+                true &&
+              (summary.guiManualEnableSkillsRuntimeCompleted
+                ?.hasAssistantSummary === true ||
+                summary.guiManualEnableSkillsRuntimeCompleted?.hasDoneText ===
+                  true) &&
+              summary.guiManualEnableSkillsRuntimeCompleted
+                ?.textareaVisible === true &&
+              summary.guiManualEnableSkillsRuntimeCompleted
+                ?.textareaDisabled === false &&
+              summary.guiManualEnableSkillsRuntimeCompleted
+                ?.stopButtonVisible === false,
+            readModelManualEnableSkillsRuntimeCompleted:
+              summary.readModelManualEnableSkillsRuntimeCompleted
+                ?.includesPrompt === true &&
+              (summary.readModelManualEnableSkillsRuntimeCompleted
+                ?.includesAssistantDone === true ||
+                summary.readModelManualEnableSkillsRuntimeCompleted
+                  ?.includesAssistantSummary === true),
+            readModelManualEnableSkillSearchObserved:
+              summary.readModelManualEnableSkillsRuntimeCompleted
+                ?.includesSkillSearchTool === true,
+            readModelManualEnableSkillInvocationObserved:
+              summary.readModelManualEnableSkillsRuntimeCompleted
+                ?.includesSkillTool === true &&
+              summary.readModelManualEnableSkillsRuntimeCompleted
+                ?.includesSkillName === true,
+            evidenceManualEnableSkillBodyReadObserved:
+              summary.evidencePackManualEnableSkillsRuntime
+                ?.skillBodyReadObserved === true,
+            evidenceManualEnableSkillGateObserved:
+              summary.evidencePackManualEnableSkillsRuntime
+                ?.skillGateObserved === true &&
+              summary.evidencePackManualEnableSkillsRuntime?.skillGateMode ===
+                "workspace_runtime_enable",
+            evidenceManualEnableWorkspaceRuntimeEnableObserved:
+              summary.evidencePackManualEnableSkillsRuntime
+                ?.skillGateWorkspaceRuntimeEnable === true &&
+              summary.evidencePackManualEnableSkillsRuntime
+                ?.skillGateSourceAllowlist?.includes(
+                  SKILLS_RUNTIME_SKILL_NAME,
+                ) === true,
+            evidencePackManualEnableSkillSearchObserved:
+              summary.evidencePackManualEnableSkillsRuntime
+                ?.hasSkillSearchSummary === true &&
+              summary.evidencePackManualEnableSkillsRuntime?.searchQuery ===
+                SKILLS_RUNTIME_QUERY,
+            evidencePackManualEnableSkillInvocationObserved:
+              summary.evidencePackManualEnableSkillsRuntime
+                ?.hasSkillInvocationSummary === true &&
+              summary.evidencePackManualEnableSkillsRuntime
+                ?.invocationSkillName === SKILLS_RUNTIME_SKILL_NAME,
+            manualEnableSkillSearchBeforeSkillInvocation:
+              summary.evidencePackManualEnableSkillsRuntime
+                ?.skillSearchBeforeSkillInvocation === true,
+        }
+      : isAnyExpertSkillsRuntimeScenario
+        ? {
+            expertSkillsRuntimePromptReachedBackend:
+              isExpertPanelSkillsRuntimeScenario
+                ? expertPanelSkillsRuntimeTurnStart?.inputText ===
+                  EXPERT_SKILLS_RUNTIME_PANEL_PROMPT
+                : expertSkillsRuntimeTurnStart?.inputText?.includes(
+                  EXPERT_SKILLS_RUNTIME_PROMPT,
+                ) === true,
+            expertSkillsRuntimeMetadataReachedBackend:
+              (expertRuntimeMetadata?.expertId ===
+                EXPERT_SKILLS_RUNTIME_ID ||
+                expertRuntimeMetadata?.expert_id ===
+                  EXPERT_SKILLS_RUNTIME_ID) &&
+              (expertHarnessMetadata?.expert_id ===
+                EXPERT_SKILLS_RUNTIME_ID ||
+                expertHarnessMetadata?.expertId ===
+                  EXPERT_SKILLS_RUNTIME_ID) &&
+              expertHarnessSkillRefs.includes(expectedExpertHarnessSkillRef) ===
+                true,
+            expertDeclaredSkillRefsObserved:
+              (isExpertPanelSkillsRuntimeScenario
+                ? summary.evidencePackExpertPanelSkillsRuntime
+                : summary.evidencePackExpertSkillsRuntime
+              )
+                ?.expertDeclaredObserved === true &&
+              (isExpertPanelSkillsRuntimeScenario
+                ? summary.evidencePackExpertPanelSkillsRuntime
+                : summary.evidencePackExpertSkillsRuntime
+              )
+                ?.expertDeclaredSkillRefs?.includes(
+                  EXPERT_SKILLS_RUNTIME_SKILL_REF,
+                ) === true,
+            expertSelectedSkillObserved:
+              (isExpertPanelSkillsRuntimeScenario
+                ? summary.evidencePackExpertPanelSkillsRuntime
+                : summary.evidencePackExpertSkillsRuntime
+              )
+                ?.expertSelectedObserved === true &&
+              (isExpertPanelSkillsRuntimeScenario
+                ? summary.evidencePackExpertPanelSkillsRuntime
+                : summary.evidencePackExpertSkillsRuntime
+              )?.expertSelectedSkill ===
+                SKILLS_RUNTIME_SKILL_NAME,
+            expertInvokedSkillObserved:
+              (isExpertPanelSkillsRuntimeScenario
+                ? summary.evidencePackExpertPanelSkillsRuntime
+                : summary.evidencePackExpertSkillsRuntime
+              )
+                ?.expertInvokedObserved === true &&
+              (isExpertPanelSkillsRuntimeScenario
+                ? summary.evidencePackExpertPanelSkillsRuntime
+                : summary.evidencePackExpertSkillsRuntime
+              )?.expertInvokedSkill ===
+                SKILLS_RUNTIME_SKILL_NAME,
+            guiExpertSkillsRuntimeSessionVisible:
+              summary.guiExpertSkillsRuntimeSessionVisible?.hasSessionTitle ===
+                true ||
+              summary.guiExpertSkillsRuntimeCompleted?.bodyText?.includes(
+                EXPERT_SKILLS_RUNTIME_SESSION_TITLE,
+              ) === true ||
+              summary.guiExpertSkillsRuntimeCompleted?.bodyText?.includes(
+                EXPERT_SKILLS_RUNTIME_TITLE,
+              ) === true,
+            readModelExpertSkillsRuntimeCompleted:
+              (isExpertPanelSkillsRuntimeScenario
+                ? summary.readModelExpertPanelSkillsRuntimeCompleted
+                : summary.readModelExpertSkillsRuntimeCompleted
+              )?.includesPrompt ===
+                true &&
+              ((isExpertPanelSkillsRuntimeScenario
+                ? summary.readModelExpertPanelSkillsRuntimeCompleted
+                : summary.readModelExpertSkillsRuntimeCompleted
+              )
+                ?.includesAssistantDone === true ||
+                (isExpertPanelSkillsRuntimeScenario
+                  ? summary.readModelExpertPanelSkillsRuntimeCompleted
+                  : summary.readModelExpertSkillsRuntimeCompleted
+                )
+                  ?.includesAssistantSummary === true),
+            readModelExpertSkillSearchObserved:
+              (isExpertPanelSkillsRuntimeScenario
+                ? summary.readModelExpertPanelSkillsRuntimeCompleted
+                : summary.readModelExpertSkillsRuntimeCompleted
+              )
+                ?.includesSkillSearchTool === true,
+            readModelExpertSkillInvocationObserved:
+              (isExpertPanelSkillsRuntimeScenario
+                ? summary.readModelExpertPanelSkillsRuntimeCompleted
+                : summary.readModelExpertSkillsRuntimeCompleted
+              )
+                ?.includesSkillTool === true &&
+              (isExpertPanelSkillsRuntimeScenario
+                ? summary.readModelExpertPanelSkillsRuntimeCompleted
+                : summary.readModelExpertSkillsRuntimeCompleted
+              )
+                ?.includesSkillName === true,
+            evidenceExpertSkillBodyReadObserved:
+              (isExpertPanelSkillsRuntimeScenario
+                ? summary.evidencePackExpertPanelSkillsRuntime
+                : summary.evidencePackExpertSkillsRuntime
+              )?.skillBodyReadObserved ===
+              true,
+            evidenceExpertSkillGateObserved:
+              (isExpertPanelSkillsRuntimeScenario
+                ? summary.evidencePackExpertPanelSkillsRuntime
+                : summary.evidencePackExpertSkillsRuntime
+              )?.skillGateObserved ===
+                true &&
+              (isExpertPanelSkillsRuntimeScenario
+                ? summary.evidencePackExpertPanelSkillsRuntime
+                : summary.evidencePackExpertSkillsRuntime
+              )?.skillGateMode ===
+                "selected_skills",
+            evidencePackExpertSkillSearchObserved:
+              (isExpertPanelSkillsRuntimeScenario
+                ? summary.evidencePackExpertPanelSkillsRuntime
+                : summary.evidencePackExpertSkillsRuntime
+              )
+                ?.hasSkillSearchSummary === true &&
+              (isExpertPanelSkillsRuntimeScenario
+                ? summary.evidencePackExpertPanelSkillsRuntime
+                : summary.evidencePackExpertSkillsRuntime
+              )?.searchQuery ===
+                SKILLS_RUNTIME_QUERY,
+            evidencePackExpertSkillInvocationObserved:
+              (isExpertPanelSkillsRuntimeScenario
+                ? summary.evidencePackExpertPanelSkillsRuntime
+                : summary.evidencePackExpertSkillsRuntime
+              )
+                ?.hasSkillInvocationSummary === true &&
+              (isExpertPanelSkillsRuntimeScenario
+                ? summary.evidencePackExpertPanelSkillsRuntime
+                : summary.evidencePackExpertSkillsRuntime
+              )?.invocationSkillName ===
+                SKILLS_RUNTIME_SKILL_NAME,
+            expertSkillSearchBeforeSkillInvocation:
+              (isExpertPanelSkillsRuntimeScenario
+                ? summary.evidencePackExpertPanelSkillsRuntime
+                : summary.evidencePackExpertSkillsRuntime
+              )
+                ?.skillSearchBeforeSkillInvocation === true,
+            ...(isExpertPlazaSkillsRuntimeScenario ||
+            isExpertPanelSkillsRuntimeScenario
+              ? {
+                  expertPlazaCatalogInjected:
+                    summary.expertPlazaSkillsRuntimeCatalog?.expertId ===
+                      EXPERT_SKILLS_RUNTIME_ID &&
+                    summary.expertPlazaSkillsRuntimeCatalog?.skillRefs?.includes(
+                      isExpertPanelSkillsRuntimeScenario
+                        ? EXPERT_SKILLS_RUNTIME_BASE_SKILL_REF
+                        : EXPERT_SKILLS_RUNTIME_SKILL_REF,
+                    ) === true &&
+                    summary.expertPlazaSkillsRuntimeCatalog?.promptStarter ===
+                      EXPERT_SKILLS_RUNTIME_PROMPT,
+                  expertPlazaCardClicked:
+                    summary.expertPlazaSkillsRuntimeLaunch?.clicked === true &&
+                    summary.expertPlazaSkillsRuntimeLaunch?.plazaVisible ===
+                      true &&
+                    summary.expertPlazaSkillsRuntimeLaunch?.cardVisible ===
+                      true &&
+                    summary.expertPlazaSkillsRuntimeLaunch
+                      ?.startButtonVisible === true,
+                  expertPlazaAutoSendTurnStarted:
+                    typeof summary.expertSkillsRuntimeTurnStart?.sessionId ===
+                      "string" &&
+                    summary.expertSkillsRuntimeTurnStart.sessionId.length > 0 &&
+                    summary.expertSkillsRuntimeTurnStart?.inputText?.includes(
+                      EXPERT_SKILLS_RUNTIME_PROMPT,
+                    ) === true,
+                }
+              : {}),
+            ...(isExpertPanelSkillsRuntimeScenario
+              ? {
+                  expertPanelSkillPickerOpened:
+                    summary.expertPanelSkillsRuntimeAddSkill?.pickerOpened
+                      ?.dialogVisible === true,
+                  expertPanelSkillAdded:
+                    summary.expertPanelSkillsRuntimeAddSkill?.candidate
+                      ?.addButtonVisible === true &&
+                    summary.expertPanelSkillsRuntimeAddSkill?.candidate
+                      ?.addButtonDisabled === false,
+                  expertPanelAddedSkillVisible:
+                    summary.expertPanelSkillsRuntimeAddSkill?.added
+                      ?.baseSkillVisible === true &&
+                    summary.expertPanelSkillsRuntimeAddSkill?.added
+                      ?.addedSkillVisible === true,
+                  expertPanelSecondTurnPromptReachedBackend:
+                    expertPanelSkillsRuntimeTurnStart?.inputText ===
+                    EXPERT_SKILLS_RUNTIME_PANEL_PROMPT,
+                  expertPanelSkillRefsOverrideReachedBackend:
+                    expertHarnessSkillRefs.includes(
+                      EXPERT_SKILLS_RUNTIME_BASE_SKILL_REF,
+                    ) ===
+                      true &&
+                    expertHarnessSkillRefs.includes(
+                      EXPERT_PANEL_SKILLS_RUNTIME_UI_SKILL_REF,
+                    ) === true,
+                  expertPanelReadModelCompleted:
+                    summary.readModelExpertPanelSkillsRuntimeCompleted
+                      ?.includesPrompt === true &&
+                    (summary.readModelExpertPanelSkillsRuntimeCompleted
+                      ?.includesAssistantDone === true ||
+                      summary.readModelExpertPanelSkillsRuntimeCompleted
+                        ?.includesAssistantSummary === true),
+                  expertPanelEvidenceSkillBodyReadObserved:
+                    summary.evidencePackExpertPanelSkillsRuntime
+                      ?.skillBodyReadObserved === true,
+                  expertPanelEvidenceSkillGateObserved:
+                    summary.evidencePackExpertPanelSkillsRuntime
+                      ?.skillGateObserved === true &&
+                    summary.evidencePackExpertPanelSkillsRuntime
+                      ?.skillGateMode === "selected_skills",
+                  expertPanelEvidenceSkillSearchObserved:
+                    summary.evidencePackExpertPanelSkillsRuntime
+                      ?.hasSkillSearchSummary === true &&
+                    summary.evidencePackExpertPanelSkillsRuntime?.searchQuery ===
+                      SKILLS_RUNTIME_QUERY,
+                  expertPanelEvidenceSkillInvocationObserved:
+                    summary.evidencePackExpertPanelSkillsRuntime
+                      ?.hasSkillInvocationSummary === true &&
+                    summary.evidencePackExpertPanelSkillsRuntime
+                      ?.invocationSkillName === SKILLS_RUNTIME_SKILL_NAME,
+                  expertPanelSkillSearchBeforeSkillInvocation:
+                    summary.evidencePackExpertPanelSkillsRuntime
+                      ?.skillSearchBeforeSkillInvocation === true,
+                }
+              : {}),
+        }
       : hasCancelPhase
         ? {
             usedCurrentTurnCancel: appServerRequestMethods.includes(
@@ -4025,7 +6779,7 @@ async function run() {
             summary.eventReadProbe?.readModel?.toolTurnId ===
               EVENT_READ_PROBE_TURN_ID,
         };
-    const notApplicableAssertions = isCancelOnlyScenario
+    const baseNotApplicableAssertions = isCancelOnlyScenario
       ? [
           "noEpochFallbackTitle",
           "readModelCompleted",
@@ -4052,6 +6806,8 @@ async function run() {
           "guiGoalCompleted",
           "readModelGoalCompleted",
           ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
+          ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
+          ...SKILLS_RUNTIME_ASSERTION_KEYS,
         ]
       : isCancelThenContinueScenario
         ? [
@@ -4075,6 +6831,8 @@ async function run() {
             "guiGoalCompleted",
             "readModelGoalCompleted",
             ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
+            ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
+            ...SKILLS_RUNTIME_ASSERTION_KEYS,
           ]
         : isPlanScenario
           ? [
@@ -4100,6 +6858,8 @@ async function run() {
               "guiGoalCompleted",
               "readModelGoalCompleted",
               ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
+              ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
+              ...SKILLS_RUNTIME_ASSERTION_KEYS,
             ]
           : isGoalScenario
             ? [
@@ -4127,6 +6887,8 @@ async function run() {
                 "readModelPlanCompleted",
                 "proposedPlanVisible",
                 ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
+                ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
+                ...SKILLS_RUNTIME_ASSERTION_KEYS,
               ]
             : isWebToolsRenderingScenario
               ? [
@@ -4159,7 +6921,76 @@ async function run() {
                   "goalManagedObjectiveReachedBackend",
                   "guiGoalCompleted",
                   "readModelGoalCompleted",
+                  ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
               ]
+              : isMcpStructuredContentScenario
+                ? [
+                    "usedCurrentTurnCancel",
+                    "externalFixtureCancelUsed",
+                    "fixtureCancelReachedBackend",
+                    "guiStopClicked",
+                    "readModelCanceled",
+                    "continuePromptReachedBackend",
+                    "guiContinueInputSubmitted",
+                    "guiContinueCompleted",
+                    "readModelContinueCompleted",
+                    "backendRecordedCancelThenContinue",
+                    "noEpochFallbackTitle",
+                    "readModelCompleted",
+                    "eventReadProbeObserved",
+                    "readModelEventReadAligned",
+                    "readModelToolCallAligned",
+                    "planModeEnabledInGui",
+                    "planPromptReachedBackend",
+                    "planCollaborationModeReachedBackend",
+                    "guiPlanRailVisible",
+                    "guiPlanStepsVisible",
+                    "guiPlanDecisionDrawerVisible",
+                    "readModelPlanCompleted",
+                    "proposedPlanVisible",
+                    "goalModeEnabledInGui",
+                    "goalPromptReachedBackend",
+                    "goalObjectiveTextReachedBackend",
+                    "goalManagedObjectiveReachedBackend",
+                    "guiGoalCompleted",
+                    "readModelGoalCompleted",
+                    ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
+                    ...SKILLS_RUNTIME_ASSERTION_KEYS,
+                  ]
+              : isSkillsRuntimeScenario
+                ? [
+                    "usedCurrentTurnCancel",
+                    "externalFixtureCancelUsed",
+                    "fixtureCancelReachedBackend",
+                    "guiStopClicked",
+                    "readModelCanceled",
+                    "continuePromptReachedBackend",
+                    "guiContinueInputSubmitted",
+                    "guiContinueCompleted",
+                    "readModelContinueCompleted",
+                    "backendRecordedCancelThenContinue",
+                    "noEpochFallbackTitle",
+                    "readModelCompleted",
+                    "eventReadProbeObserved",
+                    "readModelEventReadAligned",
+                    "readModelToolCallAligned",
+                    "planModeEnabledInGui",
+                    "planPromptReachedBackend",
+                    "planCollaborationModeReachedBackend",
+                    "guiPlanRailVisible",
+                    "guiPlanStepsVisible",
+                    "guiPlanDecisionDrawerVisible",
+                    "readModelPlanCompleted",
+                    "proposedPlanVisible",
+                    "goalModeEnabledInGui",
+                    "goalPromptReachedBackend",
+                    "goalObjectiveTextReachedBackend",
+                    "goalManagedObjectiveReachedBackend",
+                    "guiGoalCompleted",
+                    "readModelGoalCompleted",
+                    ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
+                    ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
+                  ]
         : [
             "usedCurrentTurnCancel",
             "externalFixtureCancelUsed",
@@ -4185,7 +7016,57 @@ async function run() {
             "guiGoalCompleted",
             "readModelGoalCompleted",
             ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
+            ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
+            ...SKILLS_RUNTIME_ASSERTION_KEYS,
           ];
+    const notApplicableAssertions = isAnyExpertSkillsRuntimeScenario
+      ? [
+          "usedCurrentTurnCancel",
+          "externalFixtureCancelUsed",
+          "fixtureCancelReachedBackend",
+          "guiStopClicked",
+          "readModelCanceled",
+          "continuePromptReachedBackend",
+          "guiContinueInputSubmitted",
+          "guiContinueCompleted",
+          "readModelContinueCompleted",
+          "backendRecordedCancelThenContinue",
+          "noEpochFallbackTitle",
+          "readModelCompleted",
+          "eventReadProbeObserved",
+          "readModelEventReadAligned",
+          "readModelToolCallAligned",
+          "planModeEnabledInGui",
+          "planPromptReachedBackend",
+          "planCollaborationModeReachedBackend",
+          "guiPlanRailVisible",
+          "guiPlanStepsVisible",
+          "guiPlanDecisionDrawerVisible",
+          "readModelPlanCompleted",
+          "proposedPlanVisible",
+          "goalModeEnabledInGui",
+          "goalPromptReachedBackend",
+          "goalObjectiveTextReachedBackend",
+          "goalManagedObjectiveReachedBackend",
+          "guiGoalCompleted",
+          "readModelGoalCompleted",
+          ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
+          ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
+          ...SKILLS_RUNTIME_ASSERTION_KEYS,
+          ...(isExpertPlazaSkillsRuntimeScenario ||
+          isExpertPanelSkillsRuntimeScenario
+            ? []
+            : EXPERT_PLAZA_SKILLS_RUNTIME_ASSERTION_KEYS),
+          ...(isExpertPanelSkillsRuntimeScenario
+            ? []
+            : EXPERT_PANEL_SKILLS_RUNTIME_ASSERTION_KEYS),
+        ]
+      : [
+          ...baseNotApplicableAssertions,
+          ...EXPERT_SKILLS_RUNTIME_ASSERTION_KEYS,
+          ...EXPERT_PLAZA_SKILLS_RUNTIME_ASSERTION_KEYS,
+          ...EXPERT_PANEL_SKILLS_RUNTIME_ASSERTION_KEYS,
+        ];
     const assertions = {
       ...commonAssertions,
       ...scenarioAssertions,
@@ -4198,6 +7079,8 @@ async function run() {
     await page.screenshot({ path: screenshotPath, fullPage: true });
     summary.screenshot = screenshotPath;
     summary.consoleErrors = consoleErrors;
+    summary.agentDebugLogs = agentDebugLogs.slice(-200);
+    summary.pageLifecycleEvents = pageLifecycleEvents;
     summary.appServerRequestMethods = appServerRequestMethods;
     summary.backend = sanitizeJson(backendSummary);
     summary.assertions = assertions;
@@ -4234,7 +7117,10 @@ async function run() {
     }
     try {
       const backendLedger = readJsonl(runtimeEnv.backendLedgerPath);
-      writeJsonFile(backendLedgerEvidencePath, backendLedger.map(sanitizeJson));
+      writeJsonFile(
+        backendLedgerEvidencePath,
+        sanitizeBackendLedgerForEvidence(backendLedger),
+      );
       summary.backend = sanitizeJson(summarizeBackendLedger(backendLedger));
     } catch (ledgerError) {
       summary.backendLedgerError = sanitizeText(ledgerError);
@@ -4243,6 +7129,8 @@ async function run() {
       error instanceof Error ? error.stack || error.message : String(error),
     );
     summary.consoleErrors = consoleErrors;
+    summary.agentDebugLogs = agentDebugLogs.slice(-200);
+    summary.pageLifecycleEvents = pageLifecycleEvents;
     try {
       if (page) {
         await page.screenshot({ path: failureScreenshotPath, fullPage: true });

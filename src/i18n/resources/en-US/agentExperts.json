@@ -64,6 +64,10 @@
   "agentExperts.info.skills.source.remote": "Marketplace",
   "agentExperts.info.skills.source.service": "Service skill",
   "agentExperts.info.skills.source.catalog": "Skill catalog",
+  "agentExperts.info.skills.readiness.ready": "Runnable",
+  "agentExperts.info.skills.readiness.needsMapping": "Needs mapping",
+  "agentExperts.info.skills.readiness.needsRegistration": "Needs registration",
+  "agentExperts.info.skills.readiness.blocked": "Unavailable",
   "agentExperts.actions.continue": "Continue Chat",
   "agentExperts.actions.newThread": "New Chat"
 }

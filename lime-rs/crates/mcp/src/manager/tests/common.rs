@@ -59,6 +59,7 @@ pub(super) fn create_test_tool(
         name: name.to_string(),
         description: description.to_string(),
         input_schema: serde_json::json!({}),
+        output_schema: None,
         server_name: server_name.to_string(),
         deferred_loading: None,
         always_visible: None,

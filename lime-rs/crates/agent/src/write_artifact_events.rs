@@ -977,6 +977,7 @@ mod tests {
                 success: true,
                 output: "写入完成".to_string(),
                 error: None,
+                structured_content: None,
                 images: None,
                 metadata: None,
             },
@@ -1039,6 +1040,7 @@ mod tests {
                 success: true,
                 output: "写入完成".to_string(),
                 error: None,
+                structured_content: None,
                 images: None,
                 metadata: None,
             },
@@ -1079,6 +1081,7 @@ mod tests {
                 success: true,
                 output: "写入完成".to_string(),
                 error: None,
+                structured_content: None,
                 images: None,
                 metadata: Some(HashMap::from([
                     (
@@ -1128,6 +1131,7 @@ mod tests {
                 success: true,
                 output: "写入完成".to_string(),
                 error: None,
+                structured_content: None,
                 images: None,
                 metadata: None,
             },

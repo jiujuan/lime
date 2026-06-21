@@ -25,6 +25,7 @@ struct ToolState {
     status: String,
     tool_name: Option<String>,
     arguments: Option<Value>,
+    structured_content: Option<Value>,
     output: Option<String>,
     output_ref: Option<String>,
     ref_ids: Vec<String>,
@@ -180,6 +181,7 @@ impl ToolState {
             status: item.status.clone(),
             tool_name: item.tool_name.clone(),
             arguments: item.arguments.clone(),
+            structured_content: item.structured_content.clone(),
             output: item.output.clone(),
             output_ref: item.output_ref.clone(),
             ref_ids: item.ref_ids.clone(),
@@ -234,6 +236,7 @@ impl ToolState {
             status: tool_event.status.clone(),
             tool_name: tool_event.tool_name.clone(),
             arguments: tool_event.arguments.clone(),
+            structured_content: tool_event.structured_content.clone(),
             output: tool_event.output.clone(),
             output_ref: tool_event.output_ref.clone(),
             ref_ids: tool_event.ref_ids.clone(),
@@ -278,6 +281,7 @@ impl ToolState {
         self.sequence = item.sequence;
         self.tool_name = item.tool_name.or(self.tool_name.take());
         self.arguments = item.arguments.or(self.arguments.take());
+        self.structured_content = item.structured_content.or(self.structured_content.take());
         self.output = item.output.or(self.output.take());
         self.output_ref = item.output_ref.or(self.output_ref.take());
         merge_vec_unique(&mut self.ref_ids, item.ref_ids);
@@ -300,6 +304,7 @@ impl ToolState {
         }
         merge_option_if_empty(&mut self.tool_name, tool_event.tool_name);
         merge_option_if_empty(&mut self.arguments, tool_event.arguments);
+        merge_option_if_present(&mut self.structured_content, tool_event.structured_content);
         merge_option_if_present(&mut self.output, tool_event.output);
         merge_option_if_present(&mut self.output_ref, tool_event.output_ref);
         merge_vec_unique(&mut self.ref_ids, tool_event.ref_ids);
@@ -418,6 +423,11 @@ impl ToolState {
             self.tool_name.clone().map(Value::String),
         );
         insert_optional(object, "arguments", self.arguments.clone());
+        insert_optional(
+            object,
+            "structured_content",
+            self.structured_content.clone(),
+        );
         insert_optional(object, "output", self.output.clone().map(Value::String));
         insert_optional(
             object,

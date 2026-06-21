@@ -64,6 +64,7 @@ async fn configure_lime_native_file_tools(agent: &mut Agent) {
         EditTool::new(shared_history).with_require_read_before_edit(false),
     ));
     registry.register(Box::new(crate::tools::ApplyPatchTool));
+    registry.register(Box::new(crate::tools::SkillSearchTool));
     // 覆盖默认 SkillTool，避免通用对话默认暴露全部本地 Skills。
     registry.register(Box::new(crate::tools::LimeSkillTool::new()));
 }

@@ -110,6 +110,11 @@ describe("ExpertInfoPanel", () => {
     expect(container.textContent).toContain(
       "全局 Soul 只影响沟通节奏；专家人格不会写回全局 Soul，也不会默认进入正式产物。",
     );
+    expect(
+      container.querySelector(
+        '[data-testid="expert-info-skill-readiness-service-skill-daily-trend-briefing"]',
+      )?.textContent,
+    ).toContain("待映射");
 
     const addButton = container.querySelector<HTMLButtonElement>(
       '[data-testid="expert-info-skills-add"]',
@@ -141,6 +146,11 @@ describe("ExpertInfoPanel", () => {
         '[data-testid="expert-info-skill-chip-skill-docx"]',
       ),
     ).not.toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid="expert-info-skill-readiness-skill-docx"]',
+      )?.textContent,
+    ).toContain("可运行");
     expect(onSkillRefsChange).toHaveBeenLastCalledWith([
       "service-skill:daily-trend-briefing",
       "skill:docx",

@@ -91,7 +91,7 @@ export function useInputbarSend({
       buildInputbarToolPreferencesOverride(inputbarModeState);
     const hasPathReferences = pathReferences.length > 0;
     const textOverride = input.trim()
-      ? undefined
+      ? input
       : hasPathReferences
         ? "请查看这些文件或文件夹。"
         : undefined;

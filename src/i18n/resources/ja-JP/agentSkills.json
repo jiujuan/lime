@@ -622,6 +622,8 @@
   "skills.workspace.featured.reuseResult": "結果を引き継ぐ",
   "skills.workspace.feedback.refreshError": "Skills の更新に失敗しました: {{message}}",
   "skills.workspace.feedback.refreshSuccess": "Skills を更新しました",
+  "skills.workspace.runtimeEnable.initialPrompt": "「{{name}}」スキルを一度試してください。必要に応じて SKILL.md と参照ファイルを読み、使う機能を説明してから最小検証を 1 回実行してください。",
+  "skills.workspace.runtimeEnable.unavailable": "「{{name}}」はまだ試せません。先にランタイムバインディングの問題を解消してください。",
   "skills.workspace.header.refresh": "更新",
   "skills.workspace.header.subtitle": "スキルをインストール・管理し、必要なときにホーム入力欄へ戻して使えます。",
   "skills.workspace.header.title": "スキル",

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  shouldHideProtocolToolResultEnvelope,
   shouldHideSkillToolGateResultEnvelope,
   shouldHideToolResultEnvelope,
 } from "./toolResultEnvelopeDisplay";
@@ -93,6 +94,57 @@ describe("toolResultEnvelopeDisplay", () => {
           workspaceSkillRuntimeEnable: {
             enabledSkillNames: ["capability-report"],
           },
+        }),
+      }),
+    ).toBe(false);
+  });
+
+  it("应隐藏非命令工具的纯协议诊断包络", () => {
+    const rawResultText = JSON.stringify({
+      request_metadata: {
+        turnId: "turn-1",
+        route: "agentSession/turn/start",
+      },
+      diagnostics: {
+        source: "runtime",
+        code: "tool_result_projection",
+      },
+      metadata: {
+        durationMs: 12,
+      },
+    });
+
+    expect(
+      shouldHideProtocolToolResultEnvelope({
+        toolName: "mcp__runtime__diagnostic_probe",
+        rawResultText,
+      }),
+    ).toBe(true);
+    expect(
+      shouldHideToolResultEnvelope({
+        toolName: "mcp__runtime__diagnostic_probe",
+        rawResultText,
+      }),
+    ).toBe(true);
+  });
+
+  it("不应隐藏带正文的协议包络或命令 stdout JSON", () => {
+    expect(
+      shouldHideProtocolToolResultEnvelope({
+        toolName: "mcp__runtime__diagnostic_probe",
+        rawResultText: JSON.stringify({
+          metadata: { durationMs: 12 },
+          output: "诊断已完成。",
+        }),
+      }),
+    ).toBe(false);
+
+    expect(
+      shouldHideProtocolToolResultEnvelope({
+        toolName: "Bash",
+        rawResultText: JSON.stringify({
+          metadata: { durationMs: 12 },
+          result: { ok: true },
         }),
       }),
     ).toBe(false);

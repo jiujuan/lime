@@ -1107,6 +1107,7 @@ fn runtime_agent_tool_events_are_mirrored_to_coding_facts() {
                 success: true,
                 output: "ok".to_string(),
                 error: None,
+                structured_content: None,
                 images: None,
                 metadata: Some(HashMap::from([
                     ("exit_code".to_string(), json!(0)),
@@ -1213,6 +1214,7 @@ fn runtime_agent_failed_shell_tool_is_mirrored_to_coding_facts() {
                 success: false,
                 output: "test failed".to_string(),
                 error: Some("exit code 101".to_string()),
+                structured_content: None,
                 images: None,
                 metadata: Some(HashMap::from([
                     ("exit_code".to_string(), json!(101)),
@@ -1290,6 +1292,7 @@ fn runtime_agent_permission_denied_fact_precedes_tool_failed_terminal() {
                 success: false,
                 output: String::new(),
                 error: Some("policy denied this command".to_string()),
+                structured_content: None,
                 images: None,
                 metadata: Some(HashMap::from([(
                     "reasonCode".to_string(),
@@ -1352,6 +1355,7 @@ fn runtime_agent_read_tool_result_is_mirrored_to_file_read() {
                 success: true,
                 output: "1 | export {}".to_string(),
                 error: None,
+                structured_content: None,
                 images: None,
                 metadata: Some(HashMap::from([("file_type".to_string(), json!("text"))])),
             },
@@ -1403,6 +1407,7 @@ fn runtime_agent_shell_apply_patch_is_mirrored_to_patch_lifecycle() {
                 success: true,
                 output: "ok".to_string(),
                 error: None,
+                structured_content: None,
                 images: None,
                 metadata: Some(HashMap::from([
                     ("exit_code".to_string(), json!(0)),

@@ -442,6 +442,8 @@ export const normalizeIncomingToolResult = <
     error?: string;
     images?: unknown;
     metadata?: unknown;
+    structuredContent?: unknown;
+    structured_content?: unknown;
   },
 >(
   result: T | null | undefined,
@@ -451,6 +453,8 @@ export const normalizeIncomingToolResult = <
       error?: string;
       images?: ToolResultImage[];
       metadata?: Record<string, unknown>;
+      structuredContent?: unknown;
+      structured_content?: unknown;
     })
   | undefined => {
   if (!result) return undefined;

@@ -163,6 +163,7 @@ mod tests {
             name: name.to_string(),
             description: name.to_string(),
             input_schema: serde_json::json!({}),
+            output_schema: None,
             server_name: "docs".to_string(),
             deferred_loading: None,
             always_visible: None,

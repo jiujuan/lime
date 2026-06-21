@@ -455,6 +455,7 @@ export interface AgentRuntimeThreadToolCallView {
     | null;
   output?: string | null;
   output_preview?: string | null;
+  structured_content?: unknown;
   success?: boolean | null;
   error?: string | null;
   evidence_refs?: string[];
@@ -1000,6 +1001,8 @@ export interface AgentRuntimeEvidenceObservabilitySummary {
   verification_summary?: AgentRuntimeEvidenceVerificationSummary;
   modality_runtime_contracts?: AgentRuntimeEvidenceModalityRuntimeContracts;
   skill_invocations: AgentRuntimeEvidenceSkillInvocation[];
+  skill_searches: AgentRuntimeEvidenceSkillSearch[];
+  mcp_tool_results: AgentRuntimeEvidenceMcpToolResult[];
 }
 
 export interface AgentRuntimeEvidenceSkillInvocation {
@@ -1013,6 +1016,30 @@ export interface AgentRuntimeEvidenceSkillInvocation {
   workspace_skill_source?: Record<string, unknown>;
   workspace_skill_runtime_enable?: Record<string, unknown>;
   modality_runtime_contract?: Record<string, unknown>;
+}
+
+export interface AgentRuntimeEvidenceSkillSearch {
+  event: "skill_search" | string;
+  query?: string;
+  result_count?: number;
+  snapshot_skill_count?: number;
+  status: string;
+  source_event_id: string;
+  source_event_type: string;
+  turn_id?: string;
+  tool_call_id?: string;
+}
+
+export interface AgentRuntimeEvidenceMcpToolResult {
+  event: "mcp_tool_result" | string;
+  tool_name: string;
+  status: string;
+  source_event_id: string;
+  source_event_type: string;
+  has_structured_content: boolean;
+  structured_content_keys?: string[];
+  turn_id?: string;
+  tool_call_id?: string;
 }
 
 export interface AgentRuntimeCompletionAuditRequiredEvidence {
@@ -2039,6 +2066,7 @@ export interface AgentRuntimeToolInventoryRegistryEntry {
   allowed_callers: string[];
   tags: string[];
   input_examples_count: number;
+  has_output_schema: boolean;
   caller_allowed: boolean;
   visible_in_context: boolean;
 }
@@ -2083,6 +2111,7 @@ export interface AgentRuntimeToolInventoryRuntimeEntry {
   allowed_callers: string[];
   tags: string[];
   input_examples_count: number;
+  has_output_schema: boolean;
   caller_allowed: boolean;
   visible_in_context: boolean;
 }
@@ -2096,6 +2125,7 @@ export interface AgentRuntimeToolInventoryMcpEntry {
   allowed_callers: string[];
   tags: string[];
   input_examples_count: number;
+  has_output_schema: boolean;
   caller_allowed: boolean;
   visible_in_context: boolean;
 }

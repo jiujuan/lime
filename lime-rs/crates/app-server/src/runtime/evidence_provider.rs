@@ -1,3 +1,8 @@
+mod observability;
+
+use self::observability::mcp_tool_results_summary;
+use self::observability::skill_invocations_summary;
+use self::observability::skill_searches_summary;
 use super::status::agent_session_status_label;
 use super::status::agent_turn_is_active;
 use super::status::agent_turn_status_label;
@@ -15,7 +20,6 @@ use lime_infra::telemetry::RequestStatus;
 use serde_json::json;
 use serde_json::Map;
 use serde_json::Value;
-use std::collections::HashSet;
 
 #[derive(Debug, Default)]
 pub struct NoopEvidenceExportProvider;
@@ -122,6 +126,8 @@ fn basic_evidence_pack_summary(request: &EvidencePackRequest) -> EvidencePackSum
     let evidence_artifacts = evidence_pack_artifacts(request);
     let coding_summary = coding_evidence_summary(&request.events);
     let skill_invocations = skill_invocations_summary(&request.events);
+    let skill_searches = skill_searches_summary(&request.events);
+    let mcp_tool_results = mcp_tool_results_summary(&request.events);
     let workspace_skill_tool_call_count = skill_invocations
         .as_array()
         .map(Vec::len)
@@ -151,6 +157,8 @@ fn basic_evidence_pack_summary(request: &EvidencePackRequest) -> EvidencePackSum
             "request_telemetry": request_telemetry_summary,
             "coding": coding_summary,
             "skill_invocations": skill_invocations,
+            "skill_searches": skill_searches,
+            "mcp_tool_results": mcp_tool_results,
         })),
         completion_audit_summary: Some(json!({
             "decision": completion_decision,
@@ -169,144 +177,6 @@ fn basic_evidence_pack_summary(request: &EvidencePackRequest) -> EvidencePackSum
             ],
         })),
         artifacts: evidence_artifacts,
-    }
-}
-
-fn skill_invocations_summary(events: &[AgentEvent]) -> Value {
-    let mut invocations = Vec::new();
-    let mut seen = HashSet::new();
-    for event in events {
-        let Some(metadata) = tool_result_metadata_from_event(event) else {
-            continue;
-        };
-        if !metadata_marks_skill_invocation(metadata) {
-            continue;
-        }
-        let skill_name = metadata_map_string(metadata, &["skill_name", "skillName"])
-            .or_else(|| tool_skill_name_from_event(event))
-            .unwrap_or_else(|| "unknown".to_string());
-        let tool_call_id = tool_call_id_from_event(event);
-        let dedupe_key = format!(
-            "{}:{}:{}",
-            event.turn_id.as_deref().unwrap_or_default(),
-            tool_call_id.as_deref().unwrap_or(event.event_id.as_str()),
-            skill_name
-        );
-        if !seen.insert(dedupe_key) {
-            continue;
-        }
-
-        let mut invocation = Map::new();
-        invocation.insert("event".to_string(), json!("skill_invocation"));
-        invocation.insert("skillName".to_string(), json!(skill_name));
-        invocation.insert("status".to_string(), json!(skill_invocation_status(event)));
-        invocation.insert("sourceEventId".to_string(), json!(event.event_id));
-        invocation.insert("sourceEventType".to_string(), json!(event.event_type));
-        if let Some(turn_id) = event.turn_id.as_deref() {
-            invocation.insert("turnId".to_string(), json!(turn_id));
-        }
-        if let Some(tool_call_id) = tool_call_id {
-            invocation.insert("toolCallId".to_string(), json!(tool_call_id));
-        }
-        if let Some(workspace_source) = metadata
-            .get("workspace_skill_source")
-            .or_else(|| metadata.get("workspaceSkillSource"))
-            .cloned()
-        {
-            invocation.insert("workspaceSkillSource".to_string(), workspace_source);
-        }
-        if let Some(runtime_enable) = metadata
-            .get("workspace_skill_runtime_enable")
-            .or_else(|| metadata.get("workspaceSkillRuntimeEnable"))
-            .cloned()
-        {
-            invocation.insert("workspaceSkillRuntimeEnable".to_string(), runtime_enable);
-        }
-        if let Some(contract) = metadata.get("modality_runtime_contract").cloned() {
-            invocation.insert("modalityRuntimeContract".to_string(), contract);
-        }
-        invocations.push(Value::Object(invocation));
-    }
-    Value::Array(invocations)
-}
-
-fn tool_result_metadata_from_event(event: &AgentEvent) -> Option<&Map<String, Value>> {
-    let payload = &event.payload;
-    let candidate = payload
-        .get("metadata")
-        .or_else(|| {
-            payload
-                .get("result")
-                .and_then(|result| result.get("metadata"))
-        })
-        .or_else(|| {
-            payload
-                .get("item")
-                .and_then(|item| item.get("payload").or(Some(item)))
-                .and_then(|item_payload| item_payload.get("metadata"))
-        });
-    candidate.and_then(Value::as_object)
-}
-
-fn metadata_map_string(metadata: &Map<String, Value>, keys: &[&str]) -> Option<String> {
-    keys.iter()
-        .filter_map(|key| metadata.get(*key))
-        .find_map(value_string)
-}
-
-fn metadata_marks_skill_invocation(metadata: &Map<String, Value>) -> bool {
-    metadata
-        .get("tool_family")
-        .or_else(|| metadata.get("toolFamily"))
-        .and_then(Value::as_str)
-        .is_some_and(|family| family == "skill")
-        || metadata.get("workspace_skill_source").is_some()
-        || metadata.get("workspaceSkillSource").is_some()
-        || metadata.get("workspace_skill_runtime_enable").is_some()
-        || metadata.get("workspaceSkillRuntimeEnable").is_some()
-}
-
-fn tool_skill_name_from_event(event: &AgentEvent) -> Option<String> {
-    event
-        .payload
-        .get("arguments")
-        .and_then(|arguments| {
-            metadata_string(Some(arguments), &["skill", "skill_name", "skillName"])
-        })
-        .or_else(|| {
-            event
-                .payload
-                .get("item")
-                .and_then(|item| item.get("payload").or(Some(item)))
-                .and_then(|payload| payload.get("arguments"))
-                .and_then(|arguments| {
-                    metadata_string(Some(arguments), &["skill", "skill_name", "skillName"])
-                })
-        })
-}
-
-fn tool_call_id_from_event(event: &AgentEvent) -> Option<String> {
-    metadata_string(
-        Some(&event.payload),
-        &["toolCallId", "tool_call_id", "toolId", "tool_id", "id"],
-    )
-    .or_else(|| {
-        event.payload.get("item").and_then(|item| {
-            metadata_string(Some(item), &["id", "itemId", "item_id"]).or_else(|| {
-                item.get("payload").and_then(|payload| {
-                    metadata_string(Some(payload), &["id", "itemId", "item_id"])
-                })
-            })
-        })
-    })
-}
-
-fn skill_invocation_status(event: &AgentEvent) -> &'static str {
-    match event.event_type.as_str() {
-        "tool.failed" => "failed",
-        "item.completed" | "tool.result" => "completed",
-        "item.started" | "item.updated" | "tool.started" => "started",
-        _ => "recorded",
     }
 }
 

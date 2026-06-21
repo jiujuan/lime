@@ -49,6 +49,7 @@ describe("agentChatWorkspaceShellViewModel", () => {
   it("new-task 有展示消息、预览或发送活动时应进入聊天面板", () => {
     for (const overrides of [
       { displayMessageCount: 1 },
+      { threadItemCount: 1 },
       { isHomePendingPreviewActive: true },
       { isSending: true },
       { queuedTurnCount: 1 },
@@ -57,16 +58,33 @@ describe("agentChatWorkspaceShellViewModel", () => {
       expect(resolve(overrides)).toMatchObject({
         hasDisplayMessages:
           Boolean(overrides.displayMessageCount) ||
+          Boolean(overrides.threadItemCount) ||
           Boolean(overrides.isHomePendingPreviewActive),
         effectiveShowChatPanel: true,
       });
     }
   });
 
+  it("App Server read model 已有 thread item 时不应按首页空态处理", () => {
+    expect(
+      resolve({
+        agentEntry: "claw",
+        displayMessageCount: 0,
+        threadItemCount: 2,
+      }),
+    ).toMatchObject({
+      hasDisplayMessages: true,
+      hasMessages: true,
+      effectiveShowChatPanel: false,
+      shouldRestoreImageTasksFromWorkspace: true,
+    });
+  });
+
   it("被任务中心草稿空态压制的消息不应计入展示消息", () => {
     expect(
       resolve({
         displayMessageCount: 2,
+        threadItemCount: 2,
         shouldSuppressTaskCenterDraftContent: true,
       }),
     ).toMatchObject({

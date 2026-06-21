@@ -742,6 +742,9 @@ describe("appServerSessionClient", () => {
               id: "tool-1",
               tool_name: "read_file",
               status: "completed",
+              structured_content: {
+                answer: "ok",
+              },
             },
           ],
         },
@@ -794,6 +797,9 @@ describe("appServerSessionClient", () => {
           expect.objectContaining({
             id: "tool-1",
             tool_name: "read_file",
+            structured_content: {
+              answer: "ok",
+            },
           }),
         ],
       }),

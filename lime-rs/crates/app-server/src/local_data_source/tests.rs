@@ -172,6 +172,14 @@ async fn mcp_current_jsonrpc_starts_real_stdio_server_and_reads_tool_resource() 
         resources.pointer("/result/resources/0/uri"),
         Some(&json!("fixture://status"))
     );
+    assert_eq!(
+        resources.pointer("/result/resourceTemplates/0/uri_template"),
+        Some(&json!("fixture://item/{id}"))
+    );
+    assert_eq!(
+        resources.pointer("/result/resourceTemplates/0/server_name"),
+        Some(&json!("fixture"))
+    );
 
     let resource = app_server_request(
         &server,
@@ -285,6 +293,21 @@ rl.on("line", (line) => {
           uri: "fixture://status",
           name: "status",
           description: "Current MCP fixture status",
+          mimeType: "text/plain",
+        },
+      ],
+    });
+    return;
+  }
+
+  if (method === "resources/templates/list") {
+    result(id, {
+      resourceTemplates: [
+        {
+          uriTemplate: "fixture://item/{id}",
+          name: "fixture-item",
+          title: "Fixture Item",
+          description: "Current MCP fixture resource template",
           mimeType: "text/plain",
         },
       ],

@@ -17,7 +17,7 @@ function resolveCurrentLocale(): string {
   const documentLocale =
     typeof document !== "undefined" ? document.documentElement.lang : "";
   return normalizeLocale(
-    i18n.isInitialized ? i18n.language : documentLocale || FALLBACK_LOCALE,
+    documentLocale || (i18n.isInitialized ? i18n.language : "") || FALLBACK_LOCALE,
   );
 }
 

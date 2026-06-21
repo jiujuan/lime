@@ -6,6 +6,7 @@ fn success_result(output: &str, metadata: HashMap<String, Value>) -> AgentToolRe
         success: true,
         output: output.to_string(),
         error: None,
+        structured_content: None,
         images: None,
         metadata: Some(metadata),
     }
@@ -269,6 +270,7 @@ fn apply_patch_tool_failure_emits_patch_failed_with_category() {
             success: false,
             output: "target file not found".to_string(),
             error: None,
+            structured_content: None,
             images: None,
             metadata: None,
         },
@@ -579,6 +581,7 @@ fn failed_edit_does_not_emit_file_changed() {
             success: false,
             output: "not found".to_string(),
             error: Some("not found".to_string()),
+            structured_content: None,
             images: None,
             metadata: Some(HashMap::from([("path".to_string(), json!("src/App.tsx"))])),
         },
@@ -602,6 +605,7 @@ fn failed_tool_result_emits_permission_denied_before_raw_terminal() {
             success: false,
             output: String::new(),
             error: Some("policy denied this command".to_string()),
+            structured_content: None,
             images: None,
             metadata: Some(HashMap::from([
                 ("reasonCode".to_string(), json!("dangerous_command")),
@@ -660,6 +664,7 @@ fn failed_tool_result_uses_policy_metadata_command_when_start_arguments_are_miss
             success: false,
             output: String::new(),
             error: Some("Permission denied: policy denied this command".to_string()),
+            structured_content: None,
             images: None,
             metadata: Some(HashMap::from([
                 ("eventClass".to_string(), json!("permission.denied")),
@@ -701,6 +706,7 @@ fn failed_tool_result_emits_sandbox_blocked_before_raw_terminal() {
             success: false,
             output: "sandbox blocked network access".to_string(),
             error: None,
+            structured_content: None,
             images: None,
             metadata: Some(HashMap::from([
                 (

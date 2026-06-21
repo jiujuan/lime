@@ -22,6 +22,8 @@ const SKILL_GATE_OWNER_FILES = new Set([
 
 const SKILL_TOOL_WRAPPER_OWNER =
   "lime-rs/crates/agent/src/tools/skill_tool_gate.rs";
+const SKILL_SEARCH_TOOL_OWNER =
+  "lime-rs/crates/agent/src/tools/skill_search_tool.rs";
 
 function collectRustFiles(dir: string): string[] {
   const files: string[] = [];
@@ -125,6 +127,16 @@ describe("agent skills runtime boundary", () => {
       .map(({ path }) => path);
 
     expect(offenders).toEqual([]);
+  });
+
+  it("skill_search 只能搜索 metadata，不能读取正文或写入执行 gate", () => {
+    const source = productionSource(join(REPO_ROOT, SKILL_SEARCH_TOOL_OWNER));
+
+    expect(source).toContain("search_agent_skills");
+    expect(source).toContain("build_agent_skill_snapshot_from_workspace");
+    expect(source).not.toContain("read_agent_skill_body");
+    expect(source).not.toContain("set_skill_tool_session_allowed_skills");
+    expect(source).not.toContain("set_skill_tool_session_allowed_skill_sources");
   });
 
   it("runtime backend 不应新增硬编码 Skill(name) 首刀绕过 selector", () => {

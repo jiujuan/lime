@@ -622,6 +622,8 @@
   "skills.workspace.featured.reuseResult": "Reuse Result",
   "skills.workspace.feedback.refreshError": "Failed to refresh Skills: {{message}}",
   "skills.workspace.feedback.refreshSuccess": "Skills refreshed",
+  "skills.workspace.runtimeEnable.initialPrompt": "Try the “{{name}}” skill once. Read its SKILL.md and required references only as needed, explain which capabilities will be used, then run one minimal validation.",
+  "skills.workspace.runtimeEnable.unavailable": "“{{name}}” cannot be tried yet. Resolve its runtime binding issue first.",
   "skills.workspace.header.refresh": "Refresh",
   "skills.workspace.header.subtitle": "Install and manage skills, then bring one back to the home input when needed.",
   "skills.workspace.header.title": "Skills",

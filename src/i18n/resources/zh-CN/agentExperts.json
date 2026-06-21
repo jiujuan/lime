@@ -64,6 +64,10 @@
   "agentExperts.info.skills.source.remote": "技能市场",
   "agentExperts.info.skills.source.service": "服务技能",
   "agentExperts.info.skills.source.catalog": "技能目录",
+  "agentExperts.info.skills.readiness.ready": "可运行",
+  "agentExperts.info.skills.readiness.needsMapping": "待映射",
+  "agentExperts.info.skills.readiness.needsRegistration": "待注册",
+  "agentExperts.info.skills.readiness.blocked": "不可用",
   "agentExperts.actions.continue": "继续对话",
   "agentExperts.actions.newThread": "新对话"
 }

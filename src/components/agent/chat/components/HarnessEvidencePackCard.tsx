@@ -149,6 +149,8 @@ function EvidencePackContent({
   const browserActionIndex = snapshotIndex?.browser_action_index;
   const skillInvocations =
     evidencePack.observability_summary?.skill_invocations ?? [];
+  const skillSearches =
+    evidencePack.observability_summary?.skill_searches ?? [];
 
   return (
     <>
@@ -284,6 +286,32 @@ function EvidencePackContent({
               >
                 {invocation.skill_name}
                 {invocation.status ? ` · ${invocation.status}` : ""}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {skillSearches.length > 0 ? (
+        <div className="rounded-xl border border-border bg-background p-3">
+          <div className="text-sm font-medium text-foreground">
+            {agentText(
+              "agentChat.harness.generated.1a4d9c05b2",
+              "Skill Search：",
+            )}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2 text-xs">
+            {skillSearches.map((search, index) => (
+              <Badge
+                key={`${search.source_event_id || search.query || "skill-search"}-${index}`}
+                variant="outline"
+                className="font-mono"
+              >
+                {search.query || "unknown"}
+                {typeof search.result_count === "number"
+                  ? ` · ${search.result_count}/${search.snapshot_skill_count ?? "-"}`
+                  : ""}
+                {search.status ? ` · ${search.status}` : ""}
               </Badge>
             ))}
           </div>

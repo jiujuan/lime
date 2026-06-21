@@ -539,6 +539,8 @@ pub struct McpToolDefinition {
     pub name: String,
     pub description: String,
     pub input_schema: serde_json::Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_schema: Option<serde_json::Value>,
     pub server_name: String,
     /// 是否延迟加载（不默认注入上下文）
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -568,6 +570,13 @@ pub struct McpToolCall {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpToolResult {
     pub content: Vec<McpContent>,
+    #[serde(
+        default,
+        rename = "structuredContent",
+        alias = "structured_content",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub structured_content: Option<serde_json::Value>,
     pub is_error: bool,
 }
 
@@ -631,6 +640,17 @@ pub struct McpPromptMessage {
 pub struct McpResourceDefinition {
     pub uri: String,
     pub name: String,
+    pub description: Option<String>,
+    pub mime_type: Option<String>,
+    pub server_name: String,
+}
+
+/// MCP 资源模板定义。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpResourceTemplateDefinition {
+    pub uri_template: String,
+    pub name: String,
+    pub title: Option<String>,
     pub description: Option<String>,
     pub mime_type: Option<String>,
     pub server_name: String,

@@ -1,54 +1,49 @@
-## Lime v1.75.0
+## Lime v1.76.0
 
 <sub>The Simplified Chinese release notes are the primary version. This English page is a companion for international readers.</sub>
 
 ### New Features
 
-- Upgraded the current MCP chain to support both `stdio` and `streamable_http` transports, including static headers, environment-backed headers, bearer-token environment variables, and Codex-aligned scope / OAuth field parsing.
-- Added the current App Server `mcpServer/oauth/login` method across the MCP settings UI, App Server JSON-RPC, RuntimeCore, the local callback server, and `lime-rs/crates/mcp`.
-- Added `runtime_status.auth_status` and `action_plan` projections for MCP authorization so the GUI can distinguish no-auth, static headers, OAuth login required, and unsupported explicit `client_id/oauth_resource` states.
-- Persisted MCP OAuth credentials under app data with a versioned envelope keyed by server name and URL, allowing authorized streamable HTTP servers to recover after app restart.
-- Added Agent Skill runtime support for workspace `.agents/skills` discovery, metadata ranking, explicit / catalog-bound selection, selected SKILL.md body injection, runtime allowlists, and evidence skill-invocation summaries.
-- Added `skill_locator` to Service Skill scenes and command bindings so Growth / Voice / catalog launches can carry local skill location metadata into Agent turn metadata.
-- Improved Agent chat timeline projections for reasoning items, WebSearch / WebFetch, Service Skill tool results, and tool-result envelopes so streaming and imported history both show richer process evidence.
+- Added MCP resource-template projection to the current control plane: `mcpResource/list` still returns resources and now also returns `resourceTemplates`; the frontend adds `listResourcesWithTemplates()` on the same App Server JSON-RPC chain.
+- Preserved MCP `outputSchema` / `structuredContent` end to end across `mcpTool/list`, `mcpTool/listForContext`, `mcpTool/search`, `mcpTool/call`, and the Agent Chat read model.
+- Added the Agent Skill runtime `skill_search` metadata tool. It returns names, scopes, locators, and match reasons without reading `SKILL.md` bodies by default or expanding tool permissions.
+- Connected expert and Skills Workspace flows to Agent Skill runtime metadata: expert `skillRefs` now become candidate hints, and the Skills Workspace can launch an Agent turn with workspace Skill enablement metadata.
+- Added evidence-export summaries for Skill searches, Skill invocations, and MCP structuredContent observations.
 
 ### Fixes
 
-- Closed MCP HTTP header false-support cases: missing env vars, invalid headers, duplicate headers, inline bearer tokens, OAuth on stdio servers, and authorization conflicts now fail closed.
-- Unified the header path for dynamic OAuth and normal MCP HTTP transport; metadata discovery, dynamic registration, credential restore, and authorized MCP requests share the same header construction.
-- Fixed MCP OAuth provider-error callbacks so failures are emitted immediately through `mcp:server_error` instead of waiting for timeout.
-- Routed MCP OAuth authorization opening through the current Desktop Host external URL gateway instead of `window.open`.
-- Fixed premature WebSearch / WebFetch collapse while the Agent is still synthesizing the final answer.
-- Fixed cases where delayed running tool states swallowed an already available final answer.
-- Fixed Codex import rendering for preserved `web_search_end.output`, search-result noise, full URL exposure, and loose streaming Markdown.
-- Fixed the App Server client contract regression in Agent chat active stream synchronization by restoring the `getThreadItems` closure over current session state.
+- Fixed MCP / Service Skill / SkillTool results leaking protocol envelopes such as `request_metadata`, `diagnostics`, and `metadata` into chat; the GUI now prefers user-facing structured result text.
+- Fixed MCP `structuredContent` loss across runtime events, read models, history hydration, full tool cards, and inline process cards.
+- Fixed MCP OAuth loopback fixture behavior under system proxies and bounded token exchange within the same login timeout window.
+- Fixed unknown runtime timeline items expanding raw JSON; unsupported items now render user-facing copy with all five current locales covered.
+- Closed App Server client contract gaps for MCP current smoke by adding structuredContent assertions and legacy MCP Desktop facade backflow guards.
 
 ### Improvements and Refactors
 
-- Split the MCP manager into lifecycle, tools, prompts, resources, and tests modules; `manager.rs` is now a connection-pool, cache, and event facade.
-- Split MCP authorization status, event payloads, HTTP transport construction, runtime naming, and tool policy into focused modules.
-- Moved expanded WebSearch timeline rendering into `StreamingWebSearchProcessTimeline`, preserving source / thinking / fetch order while hiding transport JSON and full URLs.
-- Split StreamingRenderer WebSearch / Codex regression coverage into dedicated harness and mock files.
-- Added Skill invocation audit details to evidence exports and included workspace Skill tool calls in completion-audit required evidence.
-- Added five-locale MCP settings copy for authorization states, login, completion refresh, and unsupported states.
+- Split oversized chat-rendering files by responsibility: `MessageList`, `MarkdownRenderer`, `StreamingRenderer`, `ToolCallDisplay`, `InlineToolProcessStep`, `AgentThreadTimeline`, and related projection / history / grouping helpers now live in smaller modules.
+- Split the Skills Workspace page into copy, content, view, visuals, default project, detail content, and runtime-launch parameter helpers.
+- Split App Server evidence observability so Skill invocation, Skill search, and MCP tool-result summaries are projected by focused functions.
+- Continued moving MCP manager logic into resources / tools modules, including resource-template conversion and tool-result schema handling.
+- Added protocol-envelope detection for tool results while preserving command-tool JSON stdout.
 
 ### Tests and Quality
 
-- Expanded MCP Rust coverage for streamable HTTP headers, OAuth fail-closed validation, local OAuth provider completion, persistent token storage, and the split manager modules.
-- Updated App Server protocol schemas, schema fixtures, generated npm client types, and app-server-client tests for `mcpServer/oauth/login`.
-- Expanded MCP frontend API, `useMcp`, `McpPanel`, and smoke-script tests for OAuth login, completion refresh, unsupported states, and the system-browser gateway.
-- Expanded Agent Skill runtime, Service Skill, evidence export, and thread read-model tests for skill selection, runtime enablement, tool invocation evidence, and history projection.
-- Expanded StreamingRenderer, MessageList, MarkdownRenderer, SearchResultPreview, tool grouping, Codex import, and Playwright CLI coverage for WebSearch / WebFetch collapse, expansion, Markdown, ordering, and JSON hiding.
-- Updated release version facts to `1.75.0` across the root app, Rust workspace, CLI npm package, App Server client package, Cargo lock, and Aster sub-workspace lock.
+- Updated App Server protocol schema fixtures, generated `packages/app-server-client` types, and MCP frontend API tests for `resourceTemplates` and `structuredContent`.
+- Expanded MCP current smoke and contract guards for `outputSchemaStructuredContentSeen`, `structuredContentEcho`, resource templates, and legacy MCP command backflow prevention.
+- Added real Electron fixture coverage for `smoke:claw-chat-current-fixture -- --scenario mcp-structured-content`, proving MCP structuredContent is visible in Agent Chat without leaking protocol envelopes.
+- Expanded Agent Skill runtime fixtures for standard Skills runtime, explicit Skill mention, manually enabled workspace Skill, expert Skill refs, and expert-panel Skill refs.
+- Expanded MarkdownRenderer, StreamingRenderer, MessageList, ToolCallDisplay, InlineToolProcessStep, AgentThreadTimeline, SkillsWorkspacePage, expert Skill runtime candidate, and i18n regressions.
+- Updated release version facts to `1.76.0` across the root app, Rust workspace, CLI npm package, App Server client package, Cargo lock, and Aster sub-workspace lock.
 
 ### Documentation
 
-- Added `internal/exec-plans/mcp-modernization-progress.md` with the current MCP chain, OAuth work, GUI login behavior, evidence, gaps, and follow-up live-gated items.
-- Updated the Turn / Tool lifecycle matrix with WebSearch / WebFetch collapse and expansion, synthesizing state, Codex Markdown, live WebSearch / WebFetch, and GUI fixture validation.
-- Updated command-boundary, execution-plan index, tech-debt tracking, MCP smoke script notes, and related governance docs.
+- Updated the MCP current control-plane boundary and documented `src/lib/api/mcp.ts -> AppServerClient.request(...) -> app_server_handle_json_lines -> App Server JSON-RPC -> lime-rs/crates/mcp` as the only current chain.
+- Updated the MCP modernization execution plan with structuredContent, resource templates, Electron fixture evidence, contract guards, and remaining live-gated gaps.
+- Updated the Turn / Tool lifecycle matrix with protocol-envelope hiding, rendering-chain splits, MessageList / projection splits, and GUI smoke evidence.
+- Updated performance profiling and script docs to use current App Server methods instead of old `mcp_*` / `get_mcp_servers` examples.
 
 ### Other
 
-- This release continues converging MCP, Agent Skill runtime, Service Skill scenes, chat process evidence, and GUI smoke validation onto the App Server JSON-RPC / RuntimeCore / Electron Desktop Host current chain. Old Tauri, legacy mock, and false OAuth support paths are not sources for new capabilities.
+- This release continues converging MCP, Agent Skill runtime, expert Skill binding, chat process evidence, and GUI smoke validation onto the App Server JSON-RPC / RuntimeCore / Electron Desktop Host current chain. Old MCP Desktop facades, legacy mocks, and protocol-envelope rendering are not sources for new capabilities.
 
-**Full changes**: `v1.74.0` -> `v1.75.0`
+**Full changes**: `v1.75.0` -> `v1.76.0`

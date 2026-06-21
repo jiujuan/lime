@@ -64,6 +64,10 @@
   "agentExperts.info.skills.source.remote": "マーケットプレイス",
   "agentExperts.info.skills.source.service": "サービススキル",
   "agentExperts.info.skills.source.catalog": "スキルカタログ",
+  "agentExperts.info.skills.readiness.ready": "実行可能",
+  "agentExperts.info.skills.readiness.needsMapping": "マッピング待ち",
+  "agentExperts.info.skills.readiness.needsRegistration": "登録待ち",
+  "agentExperts.info.skills.readiness.blocked": "利用不可",
   "agentExperts.actions.continue": "会話を続ける",
   "agentExperts.actions.newThread": "新しい会話"
 }

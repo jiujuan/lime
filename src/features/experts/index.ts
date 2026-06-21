@@ -15,6 +15,7 @@ export {
   buildExpertRuntimeMetadata,
   formatExpertRefList,
 } from "./expertRuntimeBinding";
+export { buildExpertSkillRuntimeCandidates } from "./expertSkillRuntimeCandidates";
 export {
   buildExpertAgentInstanceId,
   buildExpertAgentInstanceKey,
@@ -69,3 +70,9 @@ export type {
   BuildExpertRuntimeMetadataOptions,
   ExpertRuntimeMetadata,
 } from "./expertRuntimeBinding";
+export type {
+  BuildExpertSkillRuntimeCandidatesOptions,
+  ExpertSkillRuntimeCandidate,
+  ExpertSkillRuntimeCandidateKind,
+  ExpertSkillRuntimeCandidateReadiness,
+} from "./expertSkillRuntimeCandidates";

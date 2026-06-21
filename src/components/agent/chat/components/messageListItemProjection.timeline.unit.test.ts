@@ -1,34 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveMessageListItemProjection } from "./messageListItemProjection";
-import type { AgentThreadItem, Message } from "../types";
+import { buildProjection, type Message } from "./messageListItemProjection.testHarness";
+import type { AgentThreadItem } from "../types";
 
 function buildTimelineProjection(message: Message, timelineItems: AgentThreadItem[]) {
-  return resolveMessageListItemProjection({
-    activeCurrentTurnId: null,
-    activePendingA2UISource: null,
-    canOpenSavedSiteContent: false,
-    expandedHistoricalAssistantMessageIds: new Set(),
-    expandedHistoricalTimelineKeys: new Set(),
-    expandedLongHistoricalMessageIds: new Set(),
-    group: {
-      lastAssistantId: message.id,
-      timeline: {
-        turn: {
-          id: "turn-commentary-process-final",
-          status: "completed",
-        },
-        items: timelineItems,
-      },
-    } as never,
-    hasActiveInteractiveRuntime: true,
-    isRestoredHistoryWindow: false,
-    isSending: true,
-    lastAssistantMessageId: message.id,
-    message,
-    shouldDeferHistoricalAssistantMessageDetails: () => false,
-    shouldDeferThreadItemsScan: false,
-    streamingTextOverlay: null,
+  return buildProjection(message, timelineItems, {
+    turnId: "turn-commentary-process-final",
   });
 }
 

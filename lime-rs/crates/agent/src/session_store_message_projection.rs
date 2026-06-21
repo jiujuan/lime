@@ -232,6 +232,7 @@ fn convert_agent_message_with_options(
             success: true,
             output: offloaded.output,
             error: None,
+            structured_content: None,
             images: None,
             metadata: if offloaded.metadata.is_empty() {
                 None

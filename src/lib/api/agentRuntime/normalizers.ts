@@ -15,8 +15,10 @@ import type {
   AgentRuntimeEvidenceLimeCorePolicyInput,
   AgentRuntimeEvidenceLimeCorePolicyItem,
   AgentRuntimeEvidenceLimeCorePolicyValueHit,
+  AgentRuntimeEvidenceMcpToolResult,
   AgentRuntimeEvidencePack,
   AgentRuntimeEvidenceSkillInvocation,
+  AgentRuntimeEvidenceSkillSearch,
   AgentRuntimeEvidenceStatusCount,
   AgentRuntimeEvidenceTaskIndex,
   AgentRuntimeEvidenceTaskIndexItem,
@@ -1088,6 +1090,98 @@ function normalizeEvidenceSkillInvocation(
   };
 }
 
+function normalizeEvidenceSkillSearch(
+  value: unknown,
+): AgentRuntimeEvidenceSkillSearch | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const sourceEventId = readStringField(
+    value,
+    "sourceEventId",
+    "source_event_id",
+  );
+  if (!sourceEventId) {
+    return null;
+  }
+
+  return {
+    event: readStringField(value, "event") || "skill_search",
+    query: readOptionalStringField(value, "query"),
+    result_count: readOptionalNumberField(
+      value,
+      "resultCount",
+      "result_count",
+    ),
+    snapshot_skill_count: readOptionalNumberField(
+      value,
+      "snapshotSkillCount",
+      "snapshot_skill_count",
+    ),
+    status: readStringField(value, "status"),
+    source_event_id: sourceEventId,
+    source_event_type: readStringField(
+      value,
+      "sourceEventType",
+      "source_event_type",
+    ),
+    turn_id: readOptionalStringField(value, "turnId", "turn_id"),
+    tool_call_id: readOptionalStringField(
+      value,
+      "toolCallId",
+      "tool_call_id",
+    ),
+  };
+}
+
+function normalizeEvidenceMcpToolResult(
+  value: unknown,
+): AgentRuntimeEvidenceMcpToolResult | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const toolName = readStringField(value, "toolName", "tool_name");
+  const sourceEventId = readStringField(
+    value,
+    "sourceEventId",
+    "source_event_id",
+  );
+  if (!toolName || !sourceEventId) {
+    return null;
+  }
+
+  return {
+    event: readStringField(value, "event") || "mcp_tool_result",
+    tool_name: toolName,
+    status: readStringField(value, "status"),
+    source_event_id: sourceEventId,
+    source_event_type: readStringField(
+      value,
+      "sourceEventType",
+      "source_event_type",
+    ),
+    has_structured_content:
+      readOptionalBooleanField(
+        value,
+        "hasStructuredContent",
+        "has_structured_content",
+      ) ?? false,
+    structured_content_keys: readStringListField(
+      value,
+      "structuredContentKeys",
+      "structured_content_keys",
+    ),
+    turn_id: readOptionalStringField(value, "turnId", "turn_id"),
+    tool_call_id: readOptionalStringField(
+      value,
+      "toolCallId",
+      "tool_call_id",
+    ),
+  };
+}
+
 function normalizeEvidenceObservabilitySummary(value: unknown) {
   if (!isRecord(value)) {
     return undefined;
@@ -1133,6 +1227,30 @@ function normalizeEvidenceObservabilitySummary(value: unknown) {
           > => entry !== null,
         )
     : [];
+  const rawSkillSearches = value.skillSearches ?? value.skill_searches;
+  const skillSearches = Array.isArray(rawSkillSearches)
+    ? rawSkillSearches
+        .map((entry: unknown) => normalizeEvidenceSkillSearch(entry))
+        .filter(
+          (
+            entry,
+          ): entry is NonNullable<
+            ReturnType<typeof normalizeEvidenceSkillSearch>
+          > => entry !== null,
+        )
+    : [];
+  const rawMcpToolResults = value.mcpToolResults ?? value.mcp_tool_results;
+  const mcpToolResults = Array.isArray(rawMcpToolResults)
+    ? rawMcpToolResults
+        .map((entry: unknown) => normalizeEvidenceMcpToolResult(entry))
+        .filter(
+          (
+            entry,
+          ): entry is NonNullable<
+            ReturnType<typeof normalizeEvidenceMcpToolResult>
+          > => entry !== null,
+        )
+    : [];
 
   if (
     !schemaVersion &&
@@ -1140,7 +1258,9 @@ function normalizeEvidenceObservabilitySummary(value: unknown) {
     knownGaps.length === 0 &&
     !verificationSummary &&
     !modalityRuntimeContracts &&
-    skillInvocations.length === 0
+    skillInvocations.length === 0 &&
+    skillSearches.length === 0 &&
+    mcpToolResults.length === 0
   ) {
     return undefined;
   }
@@ -1152,6 +1272,8 @@ function normalizeEvidenceObservabilitySummary(value: unknown) {
     verification_summary: verificationSummary,
     modality_runtime_contracts: modalityRuntimeContracts,
     skill_invocations: skillInvocations,
+    skill_searches: skillSearches,
+    mcp_tool_results: mcpToolResults,
   };
 }
 

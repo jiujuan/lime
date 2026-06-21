@@ -118,6 +118,7 @@ pub async fn execute_planned_tool_batch(
                 success: outcome.success,
                 output: outcome.output.clone(),
                 error: outcome.error.clone(),
+                structured_content: None,
                 images: None,
                 metadata: outcome.metadata.clone(),
             },

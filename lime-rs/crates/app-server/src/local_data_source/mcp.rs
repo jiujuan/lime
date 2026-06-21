@@ -283,6 +283,9 @@ pub(crate) async fn list_mcp_resources(
         resources: values_from_serializable_vec(
             manager.list_resources().await.map_err(mcp_error)?,
         )?,
+        resource_templates: values_from_serializable_vec(
+            manager.list_resource_templates().await.map_err(mcp_error)?,
+        )?,
     })
 }
 
@@ -318,6 +321,7 @@ fn mcp_error(error: McpError) -> RuntimeCoreError {
 fn to_mcp_tool_call_response(result: lime_mcp::McpToolResult) -> McpToolCallResponse {
     McpToolCallResponse {
         content: result.content.into_iter().map(to_mcp_content).collect(),
+        structured_content: result.structured_content,
         is_error: result.is_error,
     }
 }
@@ -343,5 +347,41 @@ fn to_mcp_content(content: lime_mcp::McpContent) -> McpContent {
         lime_mcp::McpContent::Resource { uri, text, blob } => {
             McpContent::Resource { uri, text, blob }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn to_mcp_tool_call_response_preserves_structured_content() {
+        let response = to_mcp_tool_call_response(lime_mcp::McpToolResult {
+            content: vec![lime_mcp::McpContent::Text {
+                text: "ok".to_string(),
+            }],
+            structured_content: Some(json!({
+                "results": [
+                    { "title": "MCP current" }
+                ]
+            })),
+            is_error: false,
+        });
+
+        assert_eq!(
+            response.structured_content,
+            Some(json!({
+                "results": [
+                    { "title": "MCP current" }
+                ]
+            }))
+        );
+        assert_eq!(
+            response.content,
+            vec![McpContent::Text {
+                text: "ok".to_string(),
+            }]
+        );
+        assert!(!response.is_error);
     }
 }

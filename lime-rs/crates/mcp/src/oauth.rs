@@ -14,7 +14,7 @@ use std::net::SocketAddr;
 #[cfg(test)]
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::{oneshot, Mutex};
 
 const DEFAULT_OAUTH_TIMEOUT_SECS: u64 = 300;
@@ -98,6 +98,7 @@ impl McpOAuthRegistry {
             ));
         }
 
+        ensure_loopback_no_proxy_env(url.as_str());
         let client = oauth_http_client(
             Some(url.as_str()),
             None,
@@ -352,7 +353,9 @@ async fn complete_oauth_login(
     server_name: String,
     emitter: Option<DynEmitter>,
 ) -> Result<(), McpError> {
-    let params = tokio::time::timeout(Duration::from_secs(timeout_secs), callback_rx)
+    let login_timeout = Duration::from_secs(timeout_secs);
+    let started_at = Instant::now();
+    let params = tokio::time::timeout(login_timeout, callback_rx)
         .await
         .map_err(|_| McpError::Timeout)?
         .map_err(|error| {
@@ -370,24 +373,34 @@ async fn complete_oauth_login(
             )));
         }
     };
-    auth_state
-        .handle_callback(&code, &state)
-        .await
-        .map_err(oauth_error)?;
-    let (client_id, token_response) = auth_state.get_credentials().await.map_err(oauth_error)?;
-    store
-        .save(StoredCredentials {
-            client_id,
-            token_response,
-        })
-        .await
-        .map_err(oauth_error)?;
-    let mut manager = auth_state.into_authorization_manager().ok_or_else(|| {
-        McpError::ProtocolError(
-            "MCP OAuth flow completed without authorization manager".to_string(),
-        )
-    })?;
-    manager.set_credential_store(store);
+    let remaining = login_timeout
+        .checked_sub(started_at.elapsed())
+        .ok_or(McpError::Timeout)?;
+    tokio::time::timeout(remaining, async {
+        tracing::debug!(server_name = %server_name, "MCP OAuth callback received; exchanging token");
+        auth_state
+            .handle_callback(&code, &state)
+            .await
+            .map_err(oauth_error)?;
+        let (client_id, token_response) =
+            auth_state.get_credentials().await.map_err(oauth_error)?;
+        store
+            .save(StoredCredentials {
+                client_id,
+                token_response,
+            })
+            .await
+            .map_err(oauth_error)?;
+        let mut manager = auth_state.into_authorization_manager().ok_or_else(|| {
+            McpError::ProtocolError(
+                "MCP OAuth flow completed without authorization manager".to_string(),
+            )
+        })?;
+        manager.set_credential_store(store);
+        Ok::<(), McpError>(())
+    })
+    .await
+    .map_err(|_| McpError::Timeout)??;
     emit_oauth_completed(emitter, &server_name);
     Ok(())
 }
@@ -513,6 +526,35 @@ pub(crate) fn is_loopback_http_url(value: &str) -> bool {
             (is_http && is_loopback).then_some(())
         })
         .is_some()
+}
+
+fn ensure_loopback_no_proxy_env(base_url: &str) {
+    if !is_loopback_http_url(base_url) {
+        return;
+    }
+
+    for key in ["NO_PROXY", "no_proxy"] {
+        let current = std::env::var(key).unwrap_or_default();
+        if let Some(next) = merge_loopback_no_proxy_hosts(&current) {
+            std::env::set_var(key, next);
+        }
+    }
+}
+
+fn merge_loopback_no_proxy_hosts(current: &str) -> Option<String> {
+    let mut parts = current
+        .split(',')
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    let original_len = parts.len();
+    for host in ["127.0.0.1", "localhost", "::1"] {
+        if !parts.iter().any(|part| part == host) {
+            parts.push(host.to_string());
+        }
+    }
+    (parts.len() != original_len).then(|| parts.join(","))
 }
 
 pub(crate) fn oauth_error(error: impl std::fmt::Display) -> McpError {

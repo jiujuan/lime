@@ -622,6 +622,8 @@
   "skills.workspace.featured.reuseResult": "沿用结果",
   "skills.workspace.feedback.refreshError": "刷新 Skills 失败：{{message}}",
   "skills.workspace.feedback.refreshSuccess": "Skills 已刷新",
+  "skills.workspace.runtimeEnable.initialPrompt": "先试用一次「{{name}}」技能。请按需读取它的 SKILL.md 和必要引用，说明会使用哪些能力，然后执行一次最小验证。",
+  "skills.workspace.runtimeEnable.unavailable": "「{{name}}」暂时不能试用，请先处理运行绑定问题。",
   "skills.workspace.header.refresh": "刷新",
   "skills.workspace.header.subtitle": "安装和管理技能，需要时带回首页输入框使用。",
   "skills.workspace.header.title": "技能",

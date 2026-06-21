@@ -739,13 +739,7 @@ fn extract_tool_result_metadata<T: serde::Serialize>(
 
         let object = value.as_object()?;
 
-        for key in [
-            "metadata",
-            "meta",
-            "_meta",
-            "structured_content",
-            "structuredContent",
-        ] {
+        for key in ["metadata", "meta", "_meta"] {
             let Some(nested) = object.get(key) else {
                 continue;
             };
@@ -778,6 +772,38 @@ fn extract_tool_result_metadata<T: serde::Serialize>(
     serde_json::to_value(result)
         .ok()
         .and_then(|value| find_metadata(&value, 0))
+}
+
+fn extract_tool_result_structured_content<T: serde::Serialize>(
+    result: &T,
+) -> Option<serde_json::Value> {
+    fn find_structured_content(
+        value: &serde_json::Value,
+        depth: usize,
+    ) -> Option<serde_json::Value> {
+        if depth >= JSON_RECURSION_LIMIT {
+            return None;
+        }
+
+        let object = value.as_object()?;
+        for key in ["structuredContent", "structured_content"] {
+            if let Some(value) = object.get(key).filter(|value| !value.is_null()) {
+                return Some(value.clone());
+            }
+        }
+
+        for nested in object.values() {
+            if let Some(found) = find_structured_content(nested, depth + 1) {
+                return Some(found);
+            }
+        }
+
+        None
+    }
+
+    serde_json::to_value(result)
+        .ok()
+        .and_then(|value| find_structured_content(&value, 0))
 }
 
 fn legacy_message_tool_response_metadata(
@@ -1525,42 +1551,46 @@ fn convert_message(message: Message) -> Vec<TauriAgentEvent> {
                 }
             },
             MessageContent::ToolResponse(tool_response) => {
-                let (success, output, error, images, metadata) = match &tool_response.tool_result {
-                    Ok(result) => {
-                        let extracted = extract_tool_result_data(result);
-                        log_tool_result_diagnostics(&tool_response.id, &extracted.diagnostics);
-                        let offloaded = maybe_offload_tool_result_payload(
-                            &tool_response.id,
-                            &extracted.output,
-                            result,
-                            Some(legacy_message_tool_response_metadata(
-                                extract_tool_result_metadata(result),
-                            )),
-                        );
-                        (
-                            true,
-                            offloaded.output,
+                let (success, output, error, structured_content, images, metadata) =
+                    match &tool_response.tool_result {
+                        Ok(result) => {
+                            let extracted = extract_tool_result_data(result);
+                            let structured_content = extract_tool_result_structured_content(result);
+                            log_tool_result_diagnostics(&tool_response.id, &extracted.diagnostics);
+                            let offloaded = maybe_offload_tool_result_payload(
+                                &tool_response.id,
+                                &extracted.output,
+                                result,
+                                Some(legacy_message_tool_response_metadata(
+                                    extract_tool_result_metadata(result),
+                                )),
+                            );
+                            (
+                                true,
+                                offloaded.output,
+                                None,
+                                structured_content,
+                                if extracted.images.is_empty() {
+                                    None
+                                } else {
+                                    Some(extracted.images)
+                                },
+                                if offloaded.metadata.is_empty() {
+                                    None
+                                } else {
+                                    Some(offloaded.metadata)
+                                },
+                            )
+                        }
+                        Err(e) => (
+                            false,
+                            String::new(),
+                            Some(e.to_string()),
                             None,
-                            if extracted.images.is_empty() {
-                                None
-                            } else {
-                                Some(extracted.images)
-                            },
-                            if offloaded.metadata.is_empty() {
-                                None
-                            } else {
-                                Some(offloaded.metadata)
-                            },
-                        )
-                    }
-                    Err(e) => (
-                        false,
-                        String::new(),
-                        Some(e.to_string()),
-                        None,
-                        Some(legacy_message_tool_response_metadata(None)),
-                    ),
-                };
+                            None,
+                            Some(legacy_message_tool_response_metadata(None)),
+                        ),
+                    };
 
                 events.push(TauriAgentEvent::ToolEnd {
                     tool_id: tool_response.id.clone(),
@@ -1568,6 +1598,7 @@ fn convert_message(message: Message) -> Vec<TauriAgentEvent> {
                         success,
                         output,
                         error,
+                        structured_content,
                         images,
                         metadata,
                     },
@@ -1707,38 +1738,42 @@ fn convert_message_content(content: &MessageContent) -> Option<TauriMessageConte
             }
         }),
         MessageContent::ToolResponse(resp) => {
-            let (success, output, error, images, metadata) = match &resp.tool_result {
-                Ok(result) => {
-                    let extracted = extract_tool_result_data(result);
-                    let offloaded = maybe_offload_tool_result_payload(
-                        &resp.id,
-                        &extracted.output,
-                        result,
-                        extract_tool_result_metadata(result),
-                    );
-                    (
-                        true,
-                        offloaded.output,
-                        None,
-                        if extracted.images.is_empty() {
-                            None
-                        } else {
-                            Some(extracted.images)
-                        },
-                        if offloaded.metadata.is_empty() {
-                            None
-                        } else {
-                            Some(offloaded.metadata)
-                        },
-                    )
-                }
-                Err(e) => (false, String::new(), Some(e.to_string()), None, None),
-            };
+            let (success, output, error, structured_content, images, metadata) =
+                match &resp.tool_result {
+                    Ok(result) => {
+                        let extracted = extract_tool_result_data(result);
+                        let structured_content = extract_tool_result_structured_content(result);
+                        let offloaded = maybe_offload_tool_result_payload(
+                            &resp.id,
+                            &extracted.output,
+                            result,
+                            extract_tool_result_metadata(result),
+                        );
+                        (
+                            true,
+                            offloaded.output,
+                            None,
+                            structured_content,
+                            if extracted.images.is_empty() {
+                                None
+                            } else {
+                                Some(extracted.images)
+                            },
+                            if offloaded.metadata.is_empty() {
+                                None
+                            } else {
+                                Some(offloaded.metadata)
+                            },
+                        )
+                    }
+                    Err(e) => (false, String::new(), Some(e.to_string()), None, None, None),
+                };
             Some(TauriMessageContent::ToolResponse {
                 id: resp.id.clone(),
                 success,
                 output,
                 error,
+                structured_content,
                 images,
                 metadata,
             })
@@ -2831,6 +2866,71 @@ mod tests {
         assert_eq!(
             metadata.get("output_file"),
             Some(&serde_json::json!("/tmp/aster_tasks/task-1.log"))
+        );
+    }
+
+    #[test]
+    fn test_extract_tool_result_metadata_should_not_treat_structured_content_as_metadata() {
+        let payload = serde_json::json!({
+            "content": [
+                {
+                    "type": "text",
+                    "text": "任务已完成"
+                }
+            ],
+            "structuredContent": {
+                "answer": "ok"
+            }
+        });
+
+        assert!(extract_tool_result_metadata(&payload).is_none());
+        assert_eq!(
+            extract_tool_result_structured_content(&payload),
+            Some(serde_json::json!({ "answer": "ok" }))
+        );
+    }
+
+    #[test]
+    fn test_convert_message_tool_response_preserves_mcp_structured_content() {
+        let message = Message::assistant().with_tool_response(
+            "tool-mcp-structured",
+            Ok(rmcp::model::CallToolResult {
+                content: vec![rmcp::model::Content::text("任务已完成")],
+                structured_content: Some(serde_json::json!({
+                    "answer": "ok",
+                    "ids": ["doc-1"]
+                })),
+                meta: Some(rmcp::model::Meta(serde_json::Map::from_iter([(
+                    "source".to_string(),
+                    serde_json::json!("mcp"),
+                )]))),
+                is_error: None,
+            }),
+        );
+
+        let events = convert_message(message);
+
+        let tool_end = events
+            .iter()
+            .find_map(|event| match event {
+                TauriAgentEvent::ToolEnd { result, .. } => Some(result),
+                _ => None,
+            })
+            .expect("expected tool_end event");
+        assert_eq!(
+            tool_end.structured_content.as_ref(),
+            Some(&serde_json::json!({
+                "answer": "ok",
+                "ids": ["doc-1"]
+            }))
+        );
+        assert_eq!(
+            tool_end
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.get("source"))
+                .and_then(serde_json::Value::as_str),
+            Some("legacy_message_tool_response")
         );
     }
 

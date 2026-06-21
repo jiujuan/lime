@@ -405,7 +405,36 @@ function assertEmptyObject(method, result) {
   );
 }
 
-function assertToolResult(method, result, expectedText) {
+function assertToolOutputSchema(method, tool, expectedToolName) {
+  assert(
+    tool && typeof tool === "object" && tool.name === expectedToolName,
+    `${method} did not return expected fixture tool ${expectedToolName}`,
+  );
+  const outputSchema = tool.output_schema ?? tool.outputSchema;
+  assert(
+    outputSchema && typeof outputSchema === "object",
+    `${method} did not return output_schema for ${expectedToolName}`,
+  );
+  const structuredContentSchema =
+    outputSchema.properties?.structuredContent ??
+    outputSchema.properties?.structured_content;
+  assert(
+    structuredContentSchema && typeof structuredContentSchema === "object",
+    `${method} output_schema did not expose structuredContent`,
+  );
+  assert(
+    structuredContentSchema.properties?.echoedMessage?.type === "string",
+    `${method} structuredContent schema did not expose echoedMessage`,
+  );
+  return {
+    outputSchemaStructuredContentSeen: true,
+    structuredContentSchemaKeys: Object.keys(
+      structuredContentSchema.properties ?? {},
+    ).sort(),
+  };
+}
+
+function assertToolResult(method, result, expectedText, expectedStructuredContent) {
   assert(
     result && typeof result === "object" && Array.isArray(result.content),
     `${method} did not return content`,
@@ -417,6 +446,21 @@ function assertToolResult(method, result, expectedText) {
     ),
     `${method} did not return expected text ${expectedText}`,
   );
+  const structuredContent =
+    result.structuredContent ?? result.structured_content ?? null;
+  if (expectedStructuredContent) {
+    assert(
+      structuredContent && typeof structuredContent === "object",
+      `${method} did not return structuredContent`,
+    );
+    for (const [key, value] of Object.entries(expectedStructuredContent)) {
+      assert(
+        structuredContent[key] === value,
+        `${method} structuredContent.${key} drifted`,
+      );
+    }
+  }
+  return structuredContent;
 }
 
 function assertResourceResult(method, result, expectedText) {
@@ -425,6 +469,16 @@ function assertResourceResult(method, result, expectedText) {
     `${method} did not return fixture resource uri`,
   );
   assert(result.text === expectedText, `${method} did not return expected text`);
+}
+
+function assertResourceTemplate(method, templates, expectedUriTemplate) {
+  const template = templates.find(
+    (item) =>
+      item?.uri_template === expectedUriTemplate ||
+      item?.uriTemplate === expectedUriTemplate,
+  );
+  assert(template, `${method} did not return ${expectedUriTemplate}`);
+  return template;
 }
 
 function summarizeInvokeEntries(entries) {
@@ -489,6 +543,11 @@ function summarizeInvokeEntries(entries) {
       )
         ? responses.get("mcpResource/list").result.resources.length
         : null,
+      resourceTemplates: Array.isArray(
+        responses.get("mcpResource/list")?.result?.resourceTemplates,
+      )
+        ? responses.get("mcpResource/list").result.resourceTemplates.length
+        : null,
     },
   };
 }
@@ -551,6 +610,24 @@ rl.on("line", (line) => {
               message: { type: "string" },
             },
           },
+          outputSchema: {
+            type: "object",
+            properties: {
+              echoedMessage: { type: "string" },
+              messageLength: { type: "number" },
+              fixture: {
+                type: "object",
+                properties: {
+                  server: { type: "string" },
+                  tool: { type: "string" },
+                },
+                required: ["server", "tool"],
+                additionalProperties: false,
+              },
+            },
+            required: ["echoedMessage", "messageLength", "fixture"],
+            additionalProperties: false,
+          },
         },
       ],
     });
@@ -558,13 +635,22 @@ rl.on("line", (line) => {
   }
 
   if (method === "tools/call") {
+    const message = params?.arguments?.message ?? "";
     result(id, {
       content: [
         {
           type: "text",
-          text: \`echo: \${params?.arguments?.message ?? ""}\`,
+          text: \`echo: \${message}\`,
         },
       ],
+      structuredContent: {
+        echoedMessage: message,
+        messageLength: String(message).length,
+        fixture: {
+          server: "mcp-current-fixture",
+          tool: "echo",
+        },
+      },
       isError: false,
     });
     return;
@@ -577,6 +663,21 @@ rl.on("line", (line) => {
           uri: "fixture://status",
           name: "status",
           description: "Current MCP fixture status",
+          mimeType: "text/plain",
+        },
+      ],
+    });
+    return;
+  }
+
+  if (method === "resources/templates/list") {
+    result(id, {
+      resourceTemplates: [
+        {
+          uriTemplate: "fixture://item/{id}",
+          name: "fixture-item",
+          title: "Fixture Item",
+          description: "Current MCP fixture resource template",
           mimeType: "text/plain",
         },
       ],
@@ -646,11 +747,18 @@ async function runReadChecks(options, entries) {
     await invokeAppServerMethod(options, "mcpPrompt/list", {}, entries),
     "prompts",
   );
+  const resourceList = await invokeAppServerMethod(
+    options,
+    "mcpResource/list",
+    {},
+    entries,
+  );
   assertArrayField(
     "mcpResource/list",
-    await invokeAppServerMethod(options, "mcpResource/list", {}, entries),
+    resourceList,
     "resources",
   );
+  assertArrayField("mcpResource/list", resourceList, "resourceTemplates");
 }
 
 async function runFixtureChecks(options, entries, fixture) {
@@ -718,12 +826,48 @@ async function runFixtureChecks(options, entries, fixture) {
       "tools",
     );
     const fixtureToolName = `mcp__${serverName}__echo`;
+    const fixtureTool = tools.find((tool) => tool?.name === fixtureToolName);
     assert(
-      tools.some((tool) => tool?.name === fixtureToolName),
+      fixtureTool,
       `mcpTool/list did not return ${fixtureToolName}`,
     );
+    const outputSchemaEvidence = assertToolOutputSchema(
+      "mcpTool/list",
+      fixtureTool,
+      fixtureToolName,
+    );
+    const toolsForContext = assertArrayField(
+      "mcpTool/listForContext",
+      await invokeAppServerMethod(
+        options,
+        "mcpTool/listForContext",
+        { caller: "assistant", includeDeferred: true },
+        entries,
+      ),
+      "tools",
+    );
+    assertToolOutputSchema(
+      "mcpTool/listForContext",
+      toolsForContext.find((tool) => tool?.name === fixtureToolName),
+      fixtureToolName,
+    );
+    const searchedTools = assertArrayField(
+      "mcpTool/search",
+      await invokeAppServerMethod(
+        options,
+        "mcpTool/search",
+        { query: "echo", caller: "tool_search", limit: 5 },
+        entries,
+      ),
+      "tools",
+    );
+    assertToolOutputSchema(
+      "mcpTool/search",
+      searchedTools.find((tool) => tool?.name === fixtureToolName),
+      fixtureToolName,
+    );
 
-    assertToolResult(
+    const structuredContent = assertToolResult(
       "mcpTool/call",
       await invokeAppServerMethod(
         options,
@@ -735,16 +879,32 @@ async function runFixtureChecks(options, entries, fixture) {
         entries,
       ),
       "echo: hello current MCP",
+      {
+        echoedMessage: "hello current MCP",
+        messageLength: "hello current MCP".length,
+      },
     );
 
-    const resources = assertArrayField(
+    const resourceList = await invokeAppServerMethod(
+      options,
       "mcpResource/list",
-      await invokeAppServerMethod(options, "mcpResource/list", {}, entries),
-      "resources",
+      {},
+      entries,
+    );
+    const resources = assertArrayField("mcpResource/list", resourceList, "resources");
+    const resourceTemplates = assertArrayField(
+      "mcpResource/list",
+      resourceList,
+      "resourceTemplates",
     );
     assert(
       resources.some((resource) => resource?.uri === "fixture://status"),
       "mcpResource/list did not return fixture://status",
+    );
+    const fixtureResourceTemplate = assertResourceTemplate(
+      "mcpResource/list",
+      resourceTemplates,
+      "fixture://item/{id}",
     );
 
     assertResourceResult(
@@ -758,7 +918,17 @@ async function runFixtureChecks(options, entries, fixture) {
       "fixture resource ok",
     );
 
-    return { serverId, serverName, fixtureToolName };
+    return {
+      serverId,
+      serverName,
+      fixtureToolName,
+      ...outputSchemaEvidence,
+      structuredContentEcho: sanitizeJson(structuredContent),
+      structuredContentKeys: Object.keys(structuredContent ?? {}).sort(),
+      resourceTemplateUriTemplate:
+        fixtureResourceTemplate.uri_template ?? fixtureResourceTemplate.uriTemplate,
+      resourceTemplatesSeen: true,
+    };
   } finally {
     await invokeAppServerMethod(
       options,
@@ -841,6 +1011,7 @@ async function run() {
       tools: null,
       prompts: null,
       resources: null,
+      resourceTemplates: null,
     },
     network: networkPath,
     summary: summaryPath,
@@ -903,6 +1074,19 @@ async function run() {
       assert(
         summary.fixture?.fixtureToolName,
         "未记录 fixture MCP tool name",
+      );
+      assert(
+        summary.fixture?.outputSchemaStructuredContentSeen === true,
+        "未记录 fixture MCP tool output_schema structuredContent",
+      );
+      assert(
+        summary.fixture?.structuredContentEcho?.echoedMessage ===
+          "hello current MCP",
+        "未记录 fixture MCP tool structuredContent",
+      );
+      assert(
+        summary.fixture?.resourceTemplateUriTemplate === "fixture://item/{id}",
+        "未记录 fixture MCP resource template",
       );
     }
     if (options.allowOAuthFixture) {

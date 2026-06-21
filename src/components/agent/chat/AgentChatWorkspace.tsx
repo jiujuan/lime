@@ -3635,6 +3635,7 @@ export function AgentChatWorkspace({
     contentId,
     initialSessionId,
     displayMessageCount: displayMessages.length,
+    threadItemCount: effectiveThreadItems.length,
     isHomePendingPreviewActive,
     shouldSuppressTaskCenterDraftContent,
     hasCanvasWorkbenchContent,

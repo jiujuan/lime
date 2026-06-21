@@ -9,6 +9,7 @@ const STRUCTURED_DETAIL_TEXT_KEYS = [
   "content",
   "text",
   "body",
+  "answer",
   "summary",
   "description",
   "output",
@@ -91,4 +92,25 @@ export function normalizeToolResultDetailText(value: string): string {
   }
 
   return extractStructuredToolDetailText(parsed) || value;
+}
+
+export function resolveStructuredToolContentDetailText(
+  value: unknown,
+): string | null {
+  return extractStructuredToolDetailText(value);
+}
+
+export function resolveToolResultStructuredContent(
+  result:
+    | {
+        structuredContent?: unknown;
+        structured_content?: unknown;
+      }
+    | null
+    | undefined,
+): unknown {
+  if (!result) {
+    return undefined;
+  }
+  return result.structuredContent ?? result.structured_content;
 }

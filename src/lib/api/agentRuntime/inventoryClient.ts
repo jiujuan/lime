@@ -144,6 +144,7 @@ function isRegistryToolEntry(value: unknown): boolean {
     isStringArray(value.allowed_callers) &&
     isStringArray(value.tags) &&
     hasFiniteNumberField(value, "input_examples_count") &&
+    typeof value.has_output_schema === "boolean" &&
     typeof value.caller_allowed === "boolean" &&
     typeof value.visible_in_context === "boolean"
   );
@@ -197,6 +198,7 @@ function isRuntimeToolEntry(value: unknown): boolean {
     isStringArray(value.allowed_callers) &&
     isStringArray(value.tags) &&
     hasFiniteNumberField(value, "input_examples_count") &&
+    typeof value.has_output_schema === "boolean" &&
     typeof value.caller_allowed === "boolean" &&
     typeof value.visible_in_context === "boolean"
   );
@@ -213,6 +215,7 @@ function isMcpToolEntry(value: unknown): boolean {
     isStringArray(value.allowed_callers) &&
     isStringArray(value.tags) &&
     hasFiniteNumberField(value, "input_examples_count") &&
+    typeof value.has_output_schema === "boolean" &&
     typeof value.caller_allowed === "boolean" &&
     typeof value.visible_in_context === "boolean"
   );

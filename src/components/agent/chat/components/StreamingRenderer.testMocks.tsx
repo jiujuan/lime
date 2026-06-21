@@ -182,6 +182,9 @@ vi.mock("react-i18next", () => ({
       if (key === "agentChat.toolCall.inline.collapseDetails") {
         return "收起过程详情";
       }
+      if (key === "agentChat.toolCall.inline.progress") {
+        return `进度：${values?.message ?? ""}`;
+      }
       if (key === "agentChat.toolCall.siteResult.openMarkdownPreview") {
         return "在下方预览导出 Markdown";
       }

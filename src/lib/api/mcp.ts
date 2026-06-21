@@ -185,6 +185,7 @@ export interface McpToolDefinition {
   name: string;
   description: string;
   input_schema: Record<string, unknown>;
+  output_schema?: Record<string, unknown>;
   server_name: string;
   deferred_loading?: boolean;
   always_visible?: boolean;
@@ -202,6 +203,7 @@ export type McpContent =
 /** MCP 工具调用结果 */
 export interface McpToolResult {
   content: McpContent[];
+  structuredContent?: unknown;
   is_error: boolean;
 }
 
@@ -365,6 +367,26 @@ function assertMcpResourceContent(
   return response as McpResourceContent;
 }
 
+function assertMcpResourceListResponse(
+  method: string,
+  response: unknown,
+): McpResourceListResult {
+  const resources = assertArrayField<McpResourceDefinition>(
+    method,
+    response,
+    "resources",
+  );
+  const record = response as Record<string, unknown>;
+  const resourceTemplates = record.resourceTemplates;
+  if (resourceTemplates !== undefined && !Array.isArray(resourceTemplates)) {
+    throw new Error(`${method} did not return resourceTemplates`);
+  }
+  return {
+    resources,
+    resourceTemplates: (resourceTemplates ?? []) as McpResourceTemplateDefinition[],
+  };
+}
+
 // ============================================================================
 // 提示词类型
 // ============================================================================
@@ -407,6 +429,21 @@ export interface McpResourceDefinition {
   description?: string;
   mime_type?: string;
   server_name: string;
+}
+
+/** MCP 资源模板定义 */
+export interface McpResourceTemplateDefinition {
+  uri_template: string;
+  name: string;
+  title?: string;
+  description?: string;
+  mime_type?: string;
+  server_name: string;
+}
+
+export interface McpResourceListResult {
+  resources: McpResourceDefinition[];
+  resourceTemplates: McpResourceTemplateDefinition[];
 }
 
 /** MCP 资源内容 */
@@ -670,11 +707,15 @@ export const mcpApi = {
     requestMcpAppServer<AppServerMcpResourceListResponse>(
       METHOD_MCP_RESOURCE_LIST,
     ).then((response) =>
-      assertArrayField<McpResourceDefinition>(
-        METHOD_MCP_RESOURCE_LIST,
-        response,
-        "resources",
-      ),
+      assertMcpResourceListResponse(METHOD_MCP_RESOURCE_LIST, response),
+    ).then((response) => response.resources),
+
+  /** 获取所有可用资源及资源模板 */
+  listResourcesWithTemplates: (): Promise<McpResourceListResult> =>
+    requestMcpAppServer<AppServerMcpResourceListResponse>(
+      METHOD_MCP_RESOURCE_LIST,
+    ).then((response) =>
+      assertMcpResourceListResponse(METHOD_MCP_RESOURCE_LIST, response),
     ),
 
   /** 读取资源内容 */

@@ -166,6 +166,7 @@ pub struct RuntimeRegistryToolInventoryEntry {
     pub allowed_callers: Vec<String>,
     pub tags: Vec<String>,
     pub input_examples_count: usize,
+    pub has_output_schema: bool,
     pub caller_allowed: bool,
     pub visible_in_context: bool,
 }
@@ -198,6 +199,7 @@ pub struct RuntimeToolInventoryEntry {
     pub allowed_callers: Vec<String>,
     pub tags: Vec<String>,
     pub input_examples_count: usize,
+    pub has_output_schema: bool,
     pub caller_allowed: bool,
     pub visible_in_context: bool,
 }
@@ -252,6 +254,7 @@ pub struct McpToolInventoryEntry {
     pub allowed_callers: Vec<String>,
     pub tags: Vec<String>,
     pub input_examples_count: usize,
+    pub has_output_schema: bool,
     pub caller_allowed: bool,
     pub visible_in_context: bool,
 }
@@ -512,6 +515,7 @@ fn build_registry_inventory(
                 allowed_callers: metadata.allowed_callers.unwrap_or_default(),
                 tags: metadata.tags.unwrap_or_default(),
                 input_examples_count: metadata.input_examples.len(),
+                has_output_schema: false,
                 caller_allowed,
                 visible_in_context,
             }
@@ -632,6 +636,7 @@ fn build_mcp_inventory(tools: &[McpToolDefinition], caller: &str) -> Vec<McpTool
                 allowed_callers: metadata.allowed_callers.unwrap_or_default(),
                 tags: metadata.tags.unwrap_or_default(),
                 input_examples_count: metadata.input_examples.len(),
+                has_output_schema: tool.output_schema.is_some(),
                 caller_allowed,
                 visible_in_context,
             }
@@ -676,6 +681,11 @@ fn build_runtime_tool_inventory(
     mcp_tools: &[McpToolInventoryEntry],
 ) -> Vec<RuntimeToolInventoryEntry> {
     let mut result = Vec::new();
+    let mcp_output_schema_tool_names = mcp_tools
+        .iter()
+        .filter(|entry| entry.has_output_schema)
+        .map(|entry| entry.name.clone())
+        .collect::<HashSet<_>>();
 
     for entry in registry_tools {
         insert_runtime_tool_entry(
@@ -700,6 +710,7 @@ fn build_runtime_tool_inventory(
                 allowed_callers: entry.allowed_callers.clone(),
                 tags: entry.tags.clone(),
                 input_examples_count: entry.input_examples_count,
+                has_output_schema: entry.has_output_schema,
                 caller_allowed: entry.caller_allowed,
                 visible_in_context: entry.visible_in_context,
             },
@@ -708,6 +719,7 @@ fn build_runtime_tool_inventory(
 
     for entry in extension_tools {
         let catalog_entry = tool_catalog_entry(&entry.name);
+        let source_kind = entry.source_kind;
         insert_runtime_tool_entry(
             &mut result,
             RuntimeToolInventoryEntry {
@@ -727,6 +739,8 @@ fn build_runtime_tool_inventory(
                 allowed_callers: entry.allowed_caller.clone().into_iter().collect::<Vec<_>>(),
                 tags: Vec::new(),
                 input_examples_count: 0,
+                has_output_schema: source_kind == RuntimeExtensionSourceKind::McpBridge
+                    && mcp_output_schema_tool_names.contains(&entry.name),
                 caller_allowed: entry.caller_allowed,
                 visible_in_context: entry.visible_in_context,
             },
@@ -754,6 +768,7 @@ fn build_runtime_tool_inventory(
                 allowed_callers: entry.allowed_callers.clone(),
                 tags: entry.tags.clone(),
                 input_examples_count: entry.input_examples_count,
+                has_output_schema: entry.has_output_schema,
                 caller_allowed: entry.caller_allowed,
                 visible_in_context: entry.visible_in_context,
             },
@@ -899,7 +914,7 @@ mod tests {
     use super::*;
     use crate::agent_tools::catalog::{
         MEMORY_ADD_NOTE_TOOL_NAME, MEMORY_LIST_TOOL_NAME, MEMORY_READ_TOOL_NAME,
-        MEMORY_SEARCH_TOOL_NAME,
+        MEMORY_SEARCH_TOOL_NAME, SKILL_SEARCH_TOOL_NAME,
     };
     use lime_core::config::{
         ToolExecutionOverrideConfig as ConfigToolExecutionOverrideConfig,
@@ -964,6 +979,7 @@ mod tests {
                     "allowed_callers": allowed_callers
                 }
             }),
+            output_schema: None,
             deferred_loading: Some(deferred_loading),
             always_visible: Some(always_visible),
             allowed_callers: Some(
@@ -975,6 +991,36 @@ mod tests {
             input_examples: None,
             tags: None,
         }
+    }
+
+    fn mcp_tool_with_output_schema(
+        server_name: &str,
+        name: &str,
+        deferred_loading: bool,
+        always_visible: bool,
+        allowed_callers: Vec<&str>,
+    ) -> McpToolDefinition {
+        let mut tool = mcp_tool(
+            server_name,
+            name,
+            deferred_loading,
+            always_visible,
+            allowed_callers,
+        );
+        tool.output_schema = Some(json!({
+            "type": "object",
+            "properties": {
+                "content": { "type": "array" },
+                "structuredContent": {
+                    "type": "object",
+                    "properties": {
+                        "answer": { "type": "string" }
+                    }
+                }
+            },
+            "required": ["content"]
+        }));
+        tool
     }
 
     #[test]
@@ -1046,8 +1092,8 @@ mod tests {
             ],
         });
 
-        assert_eq!(inventory.counts.catalog_total, 47);
-        assert_eq!(inventory.counts.catalog_current_total, 47);
+        assert_eq!(inventory.counts.catalog_total, 48);
+        assert_eq!(inventory.counts.catalog_current_total, 48);
         assert_eq!(inventory.counts.catalog_compat_total, 0);
         assert_eq!(inventory.counts.registry_total, 4);
         assert_eq!(inventory.counts.registry_visible_total, 3);
@@ -1061,6 +1107,9 @@ mod tests {
         assert!(inventory
             .default_allowed_tools
             .contains(&"ToolSearch".to_string()));
+        assert!(inventory
+            .default_allowed_tools
+            .contains(&SKILL_SEARCH_TOOL_NAME.to_string()));
         for memory_tool_name in [
             MEMORY_LIST_TOOL_NAME,
             MEMORY_READ_TOOL_NAME,
@@ -1163,7 +1212,7 @@ mod tests {
             persisted_execution_policy: None,
             request_metadata: None,
             mcp_server_names: vec!["docs".to_string()],
-            mcp_tools: vec![mcp_tool(
+            mcp_tools: vec![mcp_tool_with_output_schema(
                 "docs",
                 "mcp__docs__search_docs",
                 true,
@@ -1219,6 +1268,13 @@ mod tests {
         );
         assert_eq!(docs_tool.source_label.as_deref(), Some("mcp__docs"));
         assert_eq!(docs_tool.status.as_deref(), Some("visible"));
+        assert!(docs_tool.has_output_schema);
+        let docs_mcp_tool = inventory
+            .mcp_tools
+            .iter()
+            .find(|entry| entry.name == "mcp__docs__search_docs")
+            .expect("docs MCP tool should exist");
+        assert!(docs_mcp_tool.has_output_schema);
         assert_eq!(
             inventory
                 .runtime_tools

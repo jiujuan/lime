@@ -1,9 +1,56 @@
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
+import {
+  createExpertSkillsRuntimeFixtureScenario,
+  createManualEnableSkillsRuntimeFixtureScenario,
+  createSkillsRuntimeFixtureScenario,
+  EXPERT_PANEL_SKILLS_RUNTIME_ASSERTION_KEYS,
+  EXPERT_PLAZA_SKILLS_RUNTIME_ASSERTION_KEYS,
+  EXPERT_SKILLS_RUNTIME_DONE_TEXT,
+  EXPERT_SKILLS_RUNTIME_PANEL_DONE_TEXT,
+  EXPERT_SKILLS_RUNTIME_PANEL_PROMPT,
+  EXPERT_SKILLS_RUNTIME_PROMPT,
+  EXPERT_SKILLS_RUNTIME_SKILL_REF,
+  SKILLS_RUNTIME_EXPLICIT_DONE_TEXT,
+  SKILLS_RUNTIME_EXPLICIT_PROMPT,
+  SKILLS_RUNTIME_MANUAL_ENABLE_DONE_TEXT,
+  SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT,
+  SKILLS_RUNTIME_QUERY,
+  SKILLS_RUNTIME_SKILL_NAME,
+  summarizeSkillsRuntimeEvidenceExport,
+} from "./skills-runtime-fixture-scenario.mjs";
 
 function readSmokeScript() {
   return fs.readFileSync(
     "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
+    "utf8",
+  );
+}
+
+function readCurrentFixtureRegressionSmokeScript() {
+  return fs.readFileSync(
+    "scripts/agent-runtime/current-fixture-regression-smoke.mjs",
+    "utf8",
+  );
+}
+
+function readSkillsRuntimeFixtureScenario() {
+  return fs.readFileSync(
+    "scripts/agent-runtime/skills-runtime-fixture-scenario.mjs",
+    "utf8",
+  );
+}
+
+function readExpertActionsScript() {
+  return fs.readFileSync(
+    "scripts/agent-runtime/claw-chat-current-fixture-expert-actions.mjs",
+    "utf8",
+  );
+}
+
+function readGuiActionsScript() {
+  return fs.readFileSync(
+    "scripts/agent-runtime/claw-chat-current-fixture-gui-actions.mjs",
     "utf8",
   );
 }
@@ -32,9 +79,11 @@ describe("claw chat current Electron fixture smoke guard", () => {
 
   it("uses GUI input to submit the news prompt instead of calling turn/start directly", () => {
     const content = readSmokeScript();
+    const guiActionsContent = readGuiActionsScript();
 
-    expect(content).toContain('textarea[name="agent-chat-message"]');
-    expect(content).toContain("waitForInputReady");
+    expect(guiActionsContent).toContain('textarea[name="agent-chat-message"]');
+    expect(content + guiActionsContent).toContain("waitForInputReady");
+    expect(guiActionsContent).toContain("waitForSendButtonReady");
     expect(content).toContain("sendNewsPromptFromGui");
     expect(content).toContain("整理今天的国际新闻");
     expect(content).toContain("promptVisibleInTextarea");
@@ -198,6 +247,626 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).not.toContain("agent_runtime_");
   });
 
+  it("covers MCP structuredContent rendering in the real Electron fixture", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain("mcp-structured-content");
+    expect(content).toContain("MCP_STRUCTURED_CONTENT_PROMPT");
+    expect(content).toContain("MCP_STRUCTURED_CONTENT_DONE_TEXT");
+    expect(content).toContain("MCP_STRUCTURED_CONTENT_TOOL_CALL_ID");
+    expect(content).toContain(
+      'const MCP_STRUCTURED_CONTENT_TOOL_NAME = "mcp__docs__diagnostic_probe"',
+    );
+    expect(content).toContain(
+      'const MCP_STRUCTURED_CONTENT_TOOL_DISPLAY_LABEL = "docs / diagnostic probe"',
+    );
+    expect(content).toContain("MCP_STRUCTURED_CONTENT_ANSWER");
+    expect(content).toContain("MCP_STRUCTURED_CONTENT_REFERENCE_ID");
+    expect(content).toContain("MCP_STRUCTURED_CONTENT_PROTOCOL_OUTPUT");
+    expect(content).toContain("MCP_STRUCTURED_CONTENT_RESULT");
+    expect(content).toContain('tool_family: "mcp"');
+    expect(content).toContain('mcp_server: "docs"');
+    expect(content).toContain('mcp_tool: "diagnostic_probe"');
+    expect(content).toContain("structuredContent:");
+    expect(content).toContain("structured_content:");
+    expect(content).toContain("result: {");
+    expect(content).toContain("waitForGuiMcpStructuredContentCompleted");
+    expect(content).toContain(
+      "waitForSessionReadMcpStructuredContentCompleted",
+    );
+    expect(content).toContain("forbiddenEnvelopeFragments");
+    expect(content).toContain("request_metadata");
+    expect(content).toContain("mcp_tool_result_projection");
+    expect(content).toContain("diagnostics");
+    expect(content).toContain("raw_transport_payload");
+    expect(content).toContain("doc-hidden-envelope");
+    expect(content).toContain("guiMcpStructuredContentEnvelopeHidden");
+    expect(content).toContain("guiMcpStructuredContentVisible");
+    expect(content).toContain("readModelMcpStructuredContentCompleted");
+    expect(content).toContain("readModelMcpStructuredContentObserved");
+    expect(content).toContain("MCP_STRUCTURED_CONTENT_ASSERTION_KEYS");
+    expect(content).not.toContain("server__diagnostic_probe");
+    expect(content).not.toContain("agent_runtime_");
+  });
+
+  it("covers Skills runtime search, on-demand body load, gate, and Evidence Pack in the real Electron fixture", () => {
+    const content = readSmokeScript();
+    const scenarioContent = readSkillsRuntimeFixtureScenario();
+    const expertActionsContent = readExpertActionsScript();
+    const guiActionsContent = readGuiActionsScript();
+    const expertRuntimeContent = `${content}\n${expertActionsContent}\n${guiActionsContent}`;
+
+    expect(content).toContain("skills-runtime");
+    expect(content).toContain("skills-runtime-fixture-scenario.mjs");
+    expect(content).toContain("createSkillsRuntimeFixtureScenario");
+    expect(content).toContain("renderSkillsRuntimeBackendEvents");
+    expect(content).toContain("SKILLS_RUNTIME_PROMPT");
+    expect(content).toContain("SKILLS_RUNTIME_DONE_TEXT");
+    expect(content).toContain("SKILLS_RUNTIME_EXPLICIT_PROMPT");
+    expect(content).toContain("SKILLS_RUNTIME_EXPLICIT_DONE_TEXT");
+    expect(content).toContain("SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT");
+    expect(content).toContain("SKILLS_RUNTIME_MANUAL_ENABLE_DONE_TEXT");
+    expect(content).toContain("expert-skills-runtime");
+    expect(content).toContain("expert-plaza-skills-runtime");
+    expect(content).toContain("expert-panel-skills-runtime");
+    expect(content).toContain("createExpertSkillsRuntimeFixtureScenario");
+    expect(content).toContain(
+      "createExpertPanelSkillsRuntimeFixtureScenario",
+    );
+    expect(content).toContain("buildExpertSkillsRuntimeMetadata");
+    expect(content).toContain("buildExpertSkillsRuntimeCatalog");
+    expect(content).toContain("EXPERT_SKILLS_RUNTIME_ASSERTION_KEYS");
+    expect(content).toContain(
+      "EXPERT_PLAZA_SKILLS_RUNTIME_ASSERTION_KEYS",
+    );
+    expect(content).toContain(
+      "EXPERT_PANEL_SKILLS_RUNTIME_ASSERTION_KEYS",
+    );
+    expect(content).toContain("EXPERT_SKILLS_RUNTIME_PROMPT");
+    expect(content).toContain("EXPERT_SKILLS_RUNTIME_PANEL_PROMPT");
+    expect(content).toContain("EXPERT_SKILLS_RUNTIME_DONE_TEXT");
+    expect(content).toContain("EXPERT_SKILLS_RUNTIME_PANEL_DONE_TEXT");
+    expect(content).toContain("EXPERT_SKILLS_RUNTIME_SKILL_REF");
+    expect(content).toContain("EXPERT_SKILLS_RUNTIME_BASE_SKILL_REF");
+    expect(content).toContain("injectExpertSkillsRuntimeCatalog");
+    expect(content).toContain("buildExpertPanelWorkspaceSkillCatalog");
+    expect(expertRuntimeContent).toContain(
+      "reloadRendererAfterExpertPanelSkillCatalogInjection",
+    );
+    expect(content).toContain("expertPanelSkillsRuntimeCatalogReload");
+    expect(content).toContain("reload-expert-panel-skills-runtime-catalog");
+    expect(expertRuntimeContent).toContain("lime:skill-catalog:v1");
+    expect(content).toContain("workspaceSkillCatalog");
+    expect(content).toContain("workspaceSkill: expertSkillsRuntimeSkill");
+    expect(content).toContain('"native_skill"');
+    expect(content).toContain('"skill:capability-report"');
+    expect(expertRuntimeContent).toContain(
+      "launchExpertSkillsRuntimeFromExpertPlaza",
+    );
+    expect(expertRuntimeContent).toContain(
+      "addExpertSkillsRuntimeSkillFromInfoPanel",
+    );
+    expect(expertActionsContent).toContain("waitForExpertSkillPickerState");
+    expect(expertActionsContent).toContain("waitForExpertPanelAddedSkill");
+    expect(expertActionsContent).toContain("app-sidebar-nav-experts");
+    expect(expertActionsContent).toContain(
+      "expert-start-${EXPERT_SKILLS_RUNTIME_ID}",
+    );
+    expect(expertActionsContent).toContain("expert-info-skills-add");
+    expect(expertRuntimeContent).toContain(
+      "EXPERT_PANEL_SKILLS_RUNTIME_UI_SKILL_REF",
+    );
+    expect(expertActionsContent).toContain("skill:local:capability-report");
+    expect(expertRuntimeContent).toContain(
+      "EXPERT_PANEL_SKILLS_RUNTIME_UI_ADD_TEST_ID",
+    );
+    expect(expertRuntimeContent).toContain(
+      "EXPERT_PANEL_SKILLS_RUNTIME_UI_CHIP_TEST_ID",
+    );
+    expect(content).toContain("selectExpertPanelSkillsRuntimeSessionId");
+    expect(content).toContain("summary.expertPanelSkillsRuntimeSessionId");
+    expect(content).toContain("expertPanelSkillsRuntimeSessionId");
+    expect(content).toContain("expectedSessionId");
+    expect(content).toContain(
+      "{ expectedSessionId: expertPlazaSkillsRuntimeSessionId }",
+    );
+    expect(expertRuntimeContent).toContain("data-session-id");
+    expect(expertRuntimeContent).toContain("textareaSessionId");
+    expect(content).toContain("expertPlazaCatalogInjected");
+    expect(content).toContain("expertPlazaCardClicked");
+    expect(content).toContain("expertPlazaAutoSendTurnStarted");
+    expect(content).toContain("expertPanelSkillPickerOpened");
+    expect(content).toContain("expertPanelSkillAdded");
+    expect(content).toContain("expertPanelAddedSkillVisible");
+    expect(content).toContain(
+      "expertPanelSkillRefsOverrideReachedBackend",
+    );
+    expect(content).toContain("waitForBackendLedgerTurnStartContaining");
+    expect(content).toContain("launchSkillsRuntimeFromWorkspacePanel");
+    expect(content).toContain("createExpertSkillsRuntimeSession");
+    expect(content).toContain("startExpertSkillsRuntimeTurn");
+    expect(content).toContain("{ title }");
+    expect(content).toContain("waitForBackendLedgerTurnStart");
+    expect(content).toContain("manualEnableSkillsRuntimeSessionId");
+    expect(content).not.toContain("async function runManualEnableSkillsRuntimeTurn");
+    expect(content).toContain("ensureManualEnableWorkspaceSkill");
+    expect(content).toContain('".lime"');
+    expect(content).toContain('"registration.json"');
+    expect(content).toContain("workspace-registered-skill-enable-runtime");
+    expect(content).toContain("app-sidebar-nav-skills");
+    expect(content).toContain("sanitizeBackendLedgerForEvidence");
+    expect(content).toContain("workspaceSkillRuntimeEnable");
+    expect(content).toContain("SKILLS_RUNTIME_QUERY");
+    expect(content).toContain("SKILLS_RUNTIME_SKILL_NAME");
+    expect(content).toContain('"evidence/export"');
+    expect(content).toContain("includeEvidencePack: true");
+    expect(content).toContain("waitForGuiSkillsRuntimeCompleted");
+    expect(content).toContain("waitForSessionReadSkillsRuntimeCompleted");
+    expect(content).toContain("summarizeSkillsRuntimeReadModel");
+    expect(content).toContain("readModelTurnTerminal");
+    expect(content).toContain("exportSkillsRuntimeEvidencePack");
+    expect(content).toContain("summarizeSkillsRuntimeEvidenceExport");
+    expect(content).toContain("skillsRuntimePromptReachedBackend");
+    expect(content).toContain("readModelSkillSearchObserved");
+    expect(content).toContain("readModelSkillInvocationObserved");
+    expect(content).toContain("evidenceSkillBodyReadObserved");
+    expect(content).toContain("evidenceSkillGateObserved");
+    expect(content).toContain("evidencePackSkillSearchObserved");
+    expect(content).toContain("evidencePackSkillInvocationObserved");
+    expect(content).toContain("skillSearchBeforeSkillInvocation");
+    expect(content).toContain("explicitSkillsRuntimePromptReachedBackend");
+    expect(content).toContain("guiExplicitSkillsRuntimeInputSubmitted");
+    expect(content).toContain("readModelExplicitSkillSearchObserved");
+    expect(content).toContain("evidenceExplicitSkillBodyReadObserved");
+    expect(content).toContain("explicitSkillSearchBeforeSkillInvocation");
+    expect(content).toContain(
+      "manualEnableSkillsRuntimePromptReachedBackend",
+    );
+    expect(content).toContain(
+      "manualEnableSkillsRuntimeMetadataReachedBackend",
+    );
+    expect(content).toContain(
+      "manualEnableSkillsRuntimeSkillDirectoryPrepared",
+    );
+    expect(content).toContain(
+      "manualEnableSkillsRuntimeLaunchedFromSkillsWorkspace",
+    );
+    expect(content).toContain(
+      "manualEnableSkillsRuntimeOpenedAgentSession",
+    );
+    expect(content).toContain("expertSkillsRuntimeMetadataReachedBackend");
+    expect(content).toContain("expert_declared_skill_refs");
+    expect(content).toContain("expert_selected_skill");
+    expect(content).toContain("expert_invoked_skill");
+    expect(content).toContain("expertDeclaredSkillRefsObserved");
+    expect(content).toContain("expertSelectedSkillObserved");
+    expect(content).toContain("expertInvokedSkillObserved");
+    expect(content).toContain("evidencePackExpertSkillSearchObserved");
+    expect(content).toContain("evidencePackExpertSkillInvocationObserved");
+    expect(content).toContain("expertSkillSearchBeforeSkillInvocation");
+    expect(content).toContain("guiManualEnableSkillsRuntimeCompleted");
+    expect(content).toContain("readModelManualEnableSkillSearchObserved");
+    expect(content).toContain(
+      "evidenceManualEnableWorkspaceRuntimeEnableObserved",
+    );
+    expect(content).toContain("manualEnableSkillSearchBeforeSkillInvocation");
+    expect(content).toContain("SKILLS_RUNTIME_ASSERTION_KEYS");
+    expect(scenarioContent).toContain("createExplicitSkillsRuntimeFixtureScenario");
+    expect(scenarioContent).toContain(
+      "createManualEnableSkillsRuntimeFixtureScenario",
+    );
+    expect(scenarioContent).toContain(
+      "buildManualEnableSkillsRuntimeMetadata",
+    );
+    expect(scenarioContent).toContain(
+      "createExpertSkillsRuntimeFixtureScenario",
+    );
+    expect(scenarioContent).toContain(
+      "createExpertPanelSkillsRuntimeFixtureScenario",
+    );
+    expect(scenarioContent).toContain("buildExpertSkillsRuntimeMetadata");
+    expect(scenarioContent).toContain("buildExpertSkillsRuntimeCatalog");
+    expect(scenarioContent).toContain(SKILLS_RUNTIME_EXPLICIT_PROMPT);
+    expect(scenarioContent).toContain(SKILLS_RUNTIME_EXPLICIT_DONE_TEXT);
+    expect(scenarioContent).toContain(SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT);
+    expect(scenarioContent).toContain(SKILLS_RUNTIME_MANUAL_ENABLE_DONE_TEXT);
+    expect(scenarioContent).toContain(EXPERT_SKILLS_RUNTIME_PROMPT);
+    expect(scenarioContent).toContain(EXPERT_SKILLS_RUNTIME_DONE_TEXT);
+    expect(scenarioContent).toContain(EXPERT_SKILLS_RUNTIME_PANEL_PROMPT);
+    expect(scenarioContent).toContain(EXPERT_SKILLS_RUNTIME_PANEL_DONE_TEXT);
+    expect(scenarioContent).toContain(EXPERT_SKILLS_RUNTIME_SKILL_REF);
+    expect(scenarioContent).toContain('trigger: "explicit"');
+    expect(scenarioContent).toContain("explicit skill mention");
+    expect(scenarioContent).toContain(
+      'trigger: "workspace_panel_manual_enable"',
+    );
+    expect(scenarioContent).toContain("launched from Skills workspace panel");
+    expect(scenarioContent).toContain('gateMode: "workspace_runtime_enable"');
+    expect(scenarioContent).toContain("sourceAllowlist");
+    expect(scenarioContent).toContain("searchToolCallId");
+    expect(scenarioContent).toContain("skillToolCallId");
+    expect(scenarioContent).toContain('toolName: "skill_search"');
+    expect(scenarioContent).toContain('tool_family: "skill_search"');
+    expect(scenarioContent).toContain("skill_search_query");
+    expect(scenarioContent).toContain("skill_search_snapshot_skill_count");
+    expect(scenarioContent).toContain("skill_search_result_count");
+    expect(scenarioContent).toContain("skillRuntime");
+    expect(scenarioContent).toContain("skill_body_read");
+    expect(scenarioContent).toContain("skill_gate_decision");
+    expect(scenarioContent).toContain('toolName: "Skill"');
+    expect(scenarioContent).toContain('tool_family: "skill"');
+    expect(scenarioContent).toContain("workspace_skill_runtime_enable");
+    expect(scenarioContent).toContain("expertSkillsRuntime");
+    expect(scenarioContent).toContain("expert_skills_runtime");
+    expect(scenarioContent).toContain("expert_declared_skill_refs");
+    expect(scenarioContent).toContain("expert_selected_skill");
+    expect(scenarioContent).toContain("expert_invoked_skill");
+    expect(scenarioContent).toContain("promptStarters");
+    expect(scenarioContent).toContain("EXPERT_PLAZA_SKILLS_RUNTIME_ASSERTION_KEYS");
+    for (const assertionKey of EXPERT_PLAZA_SKILLS_RUNTIME_ASSERTION_KEYS) {
+      expect(content).toContain(assertionKey);
+      expect(scenarioContent).toContain(assertionKey);
+    }
+    for (const assertionKey of EXPERT_PANEL_SKILLS_RUNTIME_ASSERTION_KEYS) {
+      expect(content).toContain(assertionKey);
+      expect(scenarioContent).toContain(assertionKey);
+    }
+    expect(scenarioContent).toContain("expertDeclaredObserved");
+    expect(scenarioContent).toContain("expertSelectedObserved");
+    expect(scenarioContent).toContain("expertInvokedObserved");
+    expect(scenarioContent).toContain(
+      "export function summarizeSkillsRuntimeEvidenceExport",
+    );
+    expect(content).not.toContain("agent_runtime_");
+    expect(scenarioContent).not.toContain("agent_runtime_");
+    expect(expertActionsContent).not.toContain("agent_runtime_");
+  });
+
+  it("summarizes Skills runtime evidence with mixed camelCase and snake_case fields", () => {
+    const scenario = createSkillsRuntimeFixtureScenario(
+      "skills-runtime-unit-session",
+    );
+    const evidenceExportResult = {
+      evidencePack: {
+        observability_summary: {
+          skillSearches: [
+            {
+              query: SKILLS_RUNTIME_QUERY,
+              tool_call_id: scenario.searchToolCallId,
+            },
+          ],
+          skill_invocations: [
+            {
+              skill_name: SKILLS_RUNTIME_SKILL_NAME,
+              toolCallId: scenario.skillToolCallId,
+              workspaceSkillRuntimeEnable: {
+                source: "manual_session_enable",
+                authorization_scope: "session",
+              },
+            },
+          ],
+        },
+      },
+      events: [
+        {
+          event_type: "tool.result",
+          payload: {
+            toolCallId: scenario.searchToolCallId,
+          },
+        },
+        {
+          type: "runtime.status",
+          payload: {
+            metadata: {
+              skillRuntime: {
+                event: "skill_body_read",
+              },
+            },
+          },
+        },
+        {
+          type: "runtime.status",
+          payload: {
+            metadata: {
+              skill_runtime: {
+                event: "skill_gate_decision",
+                mode: "selected_skills",
+              },
+            },
+          },
+        },
+        {
+          eventType: "tool.result",
+          payload: {
+            tool_call_id: scenario.skillToolCallId,
+          },
+        },
+      ],
+    };
+
+    expect(
+      summarizeSkillsRuntimeEvidenceExport(evidenceExportResult, scenario),
+    ).toMatchObject({
+      hasEvidencePack: true,
+      eventCount: 4,
+      skillSearchCount: 1,
+      skillInvocationCount: 1,
+      hasSkillSearchSummary: true,
+      hasSkillInvocationSummary: true,
+      skillBodyReadObserved: true,
+      skillGateObserved: true,
+      skillGateMode: "selected_skills",
+      skillGateWorkspaceRuntimeEnable: null,
+      skillGateSourceAllowlist: [],
+      skillSearchEventIndex: 0,
+      skillBodyReadEventIndex: 1,
+      skillGateEventIndex: 2,
+      skillInvocationEventIndex: 3,
+      skillSearchBeforeSkillInvocation: true,
+      searchQuery: SKILLS_RUNTIME_QUERY,
+      invocationSkillName: SKILLS_RUNTIME_SKILL_NAME,
+    });
+  });
+
+  it("ties Skills runtime body and gate evidence to the selected tool-call pair", () => {
+    const natural = createSkillsRuntimeFixtureScenario(
+      "skills-runtime-unit-session",
+    );
+    const explicit = createSkillsRuntimeFixtureScenario(
+      "skills-runtime-unit-session",
+      { variant: "explicit" },
+    );
+    const evidenceExportResult = {
+      evidencePack: {
+        observabilitySummary: {
+          skillSearches: [
+            {
+              query: SKILLS_RUNTIME_QUERY,
+              toolCallId: natural.searchToolCallId,
+            },
+            {
+              query: SKILLS_RUNTIME_QUERY,
+              toolCallId: explicit.searchToolCallId,
+            },
+          ],
+          skillInvocations: [
+            {
+              skillName: SKILLS_RUNTIME_SKILL_NAME,
+              toolCallId: natural.skillToolCallId,
+              workspaceSkillRuntimeEnable: { source: "manual_session_enable" },
+            },
+          ],
+        },
+      },
+      events: [
+        {
+          type: "tool.result",
+          payload: { toolCallId: natural.searchToolCallId },
+        },
+        {
+          type: "runtime.status",
+          payload: {
+            metadata: { skillRuntime: { event: "skill_body_read" } },
+          },
+        },
+        {
+          type: "runtime.status",
+          payload: {
+            metadata: { skillRuntime: { event: "skill_gate_decision" } },
+          },
+        },
+        {
+          type: "tool.result",
+          payload: { toolCallId: natural.skillToolCallId },
+        },
+        {
+          type: "tool.result",
+          payload: { toolCallId: explicit.searchToolCallId },
+        },
+        {
+          type: "tool.result",
+          payload: { toolCallId: explicit.skillToolCallId },
+        },
+      ],
+    };
+
+    expect(
+      summarizeSkillsRuntimeEvidenceExport(evidenceExportResult, natural),
+    ).toMatchObject({
+      skillBodyReadObserved: true,
+      skillGateObserved: true,
+      skillSearchBeforeSkillInvocation: true,
+    });
+    expect(
+      summarizeSkillsRuntimeEvidenceExport(evidenceExportResult, explicit),
+    ).toMatchObject({
+      hasSkillSearchSummary: true,
+      hasSkillInvocationSummary: false,
+      skillBodyReadObserved: false,
+      skillGateObserved: false,
+      skillSearchBeforeSkillInvocation: true,
+    });
+  });
+
+  it("summarizes the manual-enable Skills runtime gate mode and allowlist", () => {
+    const scenario = createManualEnableSkillsRuntimeFixtureScenario(
+      "skills-runtime-unit-session",
+    );
+    const evidenceExportResult = {
+      evidencePack: {
+        observabilitySummary: {
+          skillSearches: [
+            {
+              query: SKILLS_RUNTIME_QUERY,
+              toolCallId: scenario.searchToolCallId,
+            },
+          ],
+          skillInvocations: [
+            {
+              skillName: SKILLS_RUNTIME_SKILL_NAME,
+              toolCallId: scenario.skillToolCallId,
+              workspaceSkillRuntimeEnable: { source: "manual_session_enable" },
+            },
+          ],
+        },
+      },
+      events: [
+        {
+          type: "tool.result",
+          payload: { toolCallId: scenario.searchToolCallId },
+        },
+        {
+          type: "runtime.status",
+          payload: {
+            metadata: { skillRuntime: { event: "skill_body_read" } },
+          },
+        },
+        {
+          type: "runtime.status",
+          payload: {
+            metadata: {
+              skill_runtime: {
+                event: "skill_gate_decision",
+                mode: "workspace_runtime_enable",
+                workspace_runtime_enable: true,
+                source_allowlist: [SKILLS_RUNTIME_SKILL_NAME],
+              },
+            },
+          },
+        },
+        {
+          type: "tool.result",
+          payload: { toolCallId: scenario.skillToolCallId },
+        },
+      ],
+    };
+
+    expect(
+      summarizeSkillsRuntimeEvidenceExport(evidenceExportResult, scenario),
+    ).toMatchObject({
+      hasSkillSearchSummary: true,
+      hasSkillInvocationSummary: true,
+      skillBodyReadObserved: true,
+      skillGateObserved: true,
+      skillGateMode: "workspace_runtime_enable",
+      skillGateWorkspaceRuntimeEnable: true,
+      skillGateSourceAllowlist: [SKILLS_RUNTIME_SKILL_NAME],
+      skillSearchBeforeSkillInvocation: true,
+      searchQuery: SKILLS_RUNTIME_QUERY,
+      invocationSkillName: SKILLS_RUNTIME_SKILL_NAME,
+    });
+  });
+
+  it("summarizes expert Skills runtime declaration, selection, and invocation evidence", () => {
+    const scenario = createExpertSkillsRuntimeFixtureScenario(
+      "expert-skills-runtime-unit-session",
+    );
+    const evidenceExportResult = {
+      evidencePack: {
+        observability_summary: {
+          skill_searches: [
+            {
+              query: SKILLS_RUNTIME_QUERY,
+              toolCallId: scenario.searchToolCallId,
+            },
+          ],
+          skillInvocations: [
+            {
+              skill_name: SKILLS_RUNTIME_SKILL_NAME,
+              tool_call_id: scenario.skillToolCallId,
+              workspace_skill_runtime_enable: {
+                source: "manual_session_enable",
+              },
+            },
+          ],
+        },
+      },
+      events: [
+        {
+          type: "runtime.status",
+          payload: {
+            metadata: {
+              expertSkillsRuntime: {
+                event: "expert_declared_skill_refs",
+                skillRefs: [EXPERT_SKILLS_RUNTIME_SKILL_REF],
+              },
+            },
+          },
+        },
+        {
+          event_type: "tool.result",
+          payload: { tool_call_id: scenario.searchToolCallId },
+        },
+        {
+          type: "runtime.status",
+          payload: {
+            metadata: {
+              skillRuntime: { event: "skill_body_read" },
+            },
+          },
+        },
+        {
+          type: "runtime.status",
+          payload: {
+            metadata: {
+              skill_runtime: {
+                event: "skill_gate_decision",
+                mode: "selected_skills",
+              },
+            },
+          },
+        },
+        {
+          type: "runtime.status",
+          payload: {
+            metadata: {
+              expert_skills_runtime: {
+                event: "expert_selected_skill",
+                skill_name: SKILLS_RUNTIME_SKILL_NAME,
+              },
+            },
+          },
+        },
+        {
+          eventType: "tool.result",
+          payload: { toolCallId: scenario.skillToolCallId },
+        },
+        {
+          type: "runtime.status",
+          payload: {
+            metadata: {
+              expertSkillsRuntime: {
+                event: "expert_invoked_skill",
+                skillName: SKILLS_RUNTIME_SKILL_NAME,
+              },
+            },
+          },
+        },
+      ],
+    };
+
+    expect(
+      summarizeSkillsRuntimeEvidenceExport(evidenceExportResult, scenario),
+    ).toMatchObject({
+      hasEvidencePack: true,
+      eventCount: 7,
+      hasSkillSearchSummary: true,
+      hasSkillInvocationSummary: true,
+      skillBodyReadObserved: true,
+      skillGateObserved: true,
+      skillGateMode: "selected_skills",
+      expertDeclaredObserved: true,
+      expertSelectedObserved: true,
+      expertInvokedObserved: true,
+      expertDeclaredSkillRefs: [EXPERT_SKILLS_RUNTIME_SKILL_REF],
+      expertSelectedSkill: SKILLS_RUNTIME_SKILL_NAME,
+      expertInvokedSkill: SKILLS_RUNTIME_SKILL_NAME,
+      skillSearchBeforeSkillInvocation: true,
+      searchQuery: SKILLS_RUNTIME_QUERY,
+      invocationSkillName: SKILLS_RUNTIME_SKILL_NAME,
+    });
+  });
+
   it("does not use live providers, App Server mock backend, renderer mocks, or legacy commands", () => {
     const content = readSmokeScript();
 
@@ -213,5 +882,63 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).not.toContain("explicitMockFallback");
     expect(content).not.toContain("safeInvoke(");
     expect(content).not.toContain("agent_runtime_");
+  });
+
+  it("keeps the Skills runtime fixture in the current Agent Runtime regression smoke", () => {
+    const content = readCurrentFixtureRegressionSmokeScript();
+
+    expect(content).toContain(
+      "Claw Skills Runtime natural + explicit $skill + Skills workspace try Electron fixture",
+    );
+    expect(content).toContain("claw-chat-current-fixture-smoke.mjs");
+    expect(content).toContain('"skills-runtime"');
+    expect(content).toContain(
+      "claw-chat-current-fixture-skills-runtime-regression",
+    );
+    expect(content).toContain(
+      "Skills Runtime natural + 显式 $skill + 技能中心试用入口三入口按需加载 Electron fixture",
+    );
+    expect(content).toContain(
+      "Claw MCP structuredContent Agent Chat GUI Electron fixture",
+    );
+    expect(content).toContain('"mcp-structured-content"');
+    expect(content).toContain(
+      "claw-chat-current-fixture-mcp-structured-content-regression",
+    );
+    expect(content).toContain(
+      "MCP structuredContent 到 Agent Chat GUI 可见 Electron fixture",
+    );
+    expect(content).toContain(
+      "Claw Expert Skills Runtime declared + selected + invoked Electron fixture",
+    );
+    expect(content).toContain('"expert-skills-runtime"');
+    expect(content).toContain(
+      "claw-chat-current-fixture-expert-skills-runtime-regression",
+    );
+    expect(content).toContain(
+      "Expert Skills Runtime declared + selected + invoked Electron fixture",
+    );
+    expect(content).toContain(
+      "Claw Expert Plaza Skills Runtime click-through Electron fixture",
+    );
+    expect(content).toContain('"expert-plaza-skills-runtime"');
+    expect(content).toContain(
+      "claw-chat-current-fixture-expert-plaza-skills-runtime-regression",
+    );
+    expect(content).toContain(
+      "Expert Plaza 点击专家卡片进入同一 Skills Runtime 闭环 Electron fixture",
+    );
+    expect(content).toContain(
+      "Claw Expert Panel Skills Runtime override Electron fixture",
+    );
+    expect(content).toContain('"expert-panel-skills-runtime"');
+    expect(content).toContain(
+      "claw-chat-current-fixture-expert-panel-skills-runtime-regression",
+    );
+    expect(content).toContain(
+      "ExpertInfoPanel 调整 skillRefs 后下一轮继承同一 Skills Runtime 闭环 Electron fixture",
+    );
+    expect(content).toContain('LIME_ALLOW_LIVE_PROVIDER_SMOKE: "0"');
+    expect(content).toContain('LIME_REAL_API_TEST: "0"');
   });
 });

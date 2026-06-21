@@ -14,6 +14,7 @@ pub(super) struct CurrentToolItem {
     pub(super) status: String,
     pub(super) tool_name: Option<String>,
     pub(super) arguments: Option<Value>,
+    pub(super) structured_content: Option<Value>,
     pub(super) output: Option<String>,
     pub(super) output_ref: Option<String>,
     pub(super) ref_ids: Vec<String>,
@@ -35,6 +36,7 @@ pub(super) struct LegacyToolEvent {
     pub(super) tool_name: Option<String>,
     pub(super) status: String,
     pub(super) arguments: Option<Value>,
+    pub(super) structured_content: Option<Value>,
     pub(super) output: Option<String>,
     pub(super) output_ref: Option<String>,
     pub(super) ref_ids: Vec<String>,
@@ -82,6 +84,9 @@ pub(super) fn current_tool_item_from_event(event: &AgentEvent) -> Option<Current
         status: current_item_status(event, item),
         tool_name,
         arguments: payload.get("arguments").cloned(),
+        structured_content: tool_structured_content(payload)
+            .or_else(|| tool_structured_content(item))
+            .or_else(|| tool_structured_content(&event.payload)),
         output: tool_output(payload),
         output_ref: string_field(payload, &["outputRef", "output_ref"])
             .or_else(|| string_field(&event.payload, &["outputRef", "output_ref"])),
@@ -117,6 +122,7 @@ pub(super) fn legacy_tool_event_from_event(event: &AgentEvent) -> Option<LegacyT
         tool_name: string_field(payload, &["tool_name", "toolName", "name"]),
         status: status.to_string(),
         arguments: payload.get("arguments").cloned(),
+        structured_content: tool_structured_content(payload),
         output: tool_output(payload),
         output_ref: string_field(payload, &["outputRef", "output_ref"]),
         ref_ids: string_array_field(payload, &["refIds", "ref_ids"]),
@@ -231,6 +237,25 @@ fn tool_output(payload: &Value) -> Option<String> {
                     .unwrap_or_else(|| value.to_string())
             })
     })
+}
+
+fn tool_structured_content(payload: &Value) -> Option<Value> {
+    payload
+        .get("structuredContent")
+        .or_else(|| payload.get("structured_content"))
+        .filter(|value| !value.is_null())
+        .cloned()
+        .or_else(|| {
+            payload
+                .get("result")
+                .and_then(|result| {
+                    result
+                        .get("structuredContent")
+                        .or_else(|| result.get("structured_content"))
+                })
+                .filter(|value| !value.is_null())
+                .cloned()
+        })
 }
 
 fn web_search_query(payload: &Value) -> Option<String> {

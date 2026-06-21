@@ -1881,6 +1881,7 @@ export interface McpPromptMessage {
 }
 
 export interface McpResourceListResponse {
+  resourceTemplates?: unknown[];
   resources?: unknown[];
 }
 
@@ -1959,6 +1960,7 @@ export interface McpToolCallParams {
 export interface McpToolCallResponse {
   content?: McpContent[];
   is_error: boolean;
+  structuredContent?: unknown;
 }
 
 export interface McpToolCallWithCallerParams {

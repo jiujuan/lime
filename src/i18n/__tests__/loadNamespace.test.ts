@@ -63,7 +63,6 @@ describe("i18n namespace loader", () => {
         "agentChat.toolCall.skillContent.action.expandBody",
         "agentChat.toolCall.skillContent.action.collapseBody",
         "agentChat.toolCall.skillContent.meta.bytes",
-        "agentChat.toolCall.logs.title",
         "agentChat.toolCall.commandSummary.title",
         "agentChat.toolCall.commandSummary.command",
         "agentChat.toolCall.commandSummary.cwd",

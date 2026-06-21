@@ -607,6 +607,37 @@ async fn read_session_merges_tool_started_arguments_into_completed_tool_calls() 
                     "output": "导入会话 Markdown 预览内容"
                 }),
             ),
+            RuntimeEvent::new(
+                "tool.started",
+                json!({
+                    "toolCallId": "call_mcp_docs",
+                    "toolName": "mcp__docs__search_docs",
+                    "arguments": {
+                        "query": "mcp structured content"
+                    }
+                }),
+            ),
+            RuntimeEvent::new(
+                "tool.result",
+                json!({
+                    "toolCallId": "call_mcp_docs",
+                    "toolName": "mcp__docs__search_docs",
+                    "success": true,
+                    "result": {
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "docs found"
+                            }
+                        ],
+                        "structuredContent": {
+                            "answer": "ok",
+                            "ids": ["doc-1"]
+                        },
+                        "isError": false
+                    }
+                }),
+            ),
             RuntimeEvent::new("turn.completed", json!({})),
         ],
     )
@@ -637,6 +668,15 @@ async fn read_session_merges_tool_started_arguments_into_completed_tool_calls() 
         "/workspace/docs/imported-preview.md"
     );
     assert_eq!(read_file["output_preview"], "导入会话 Markdown 预览内容");
+    let mcp_docs = tool_calls
+        .iter()
+        .find(|call| call["id"] == "call_mcp_docs")
+        .expect("mcp docs call");
+    assert_eq!(mcp_docs["tool_name"], "mcp__docs__search_docs");
+    assert_eq!(mcp_docs["status"], "completed");
+    assert_eq!(mcp_docs["success"], true);
+    assert_eq!(mcp_docs["structured_content"]["answer"], "ok");
+    assert_eq!(mcp_docs["structured_content"]["ids"][0], "doc-1");
 }
 
 #[tokio::test]

@@ -472,8 +472,11 @@ describe("agentThreadGrouping", () => {
       "正在搜索网页 1 次，读取网页 1 次",
     );
     expect(model.orderedBlocks[0]?.previewLines[0]).toBe("today AI news");
-    expect(model.orderedBlocks[0]?.previewLines[1]).toMatch(
-      /^https:\/\/www\.reuters\.com\/technology\/artificial-intellige…$/,
+    expect(model.orderedBlocks[0]?.previewLines[1]).toBe(
+      "reuters.com/technology/artificial-intelligen…",
+    );
+    expect(model.orderedBlocks[0]?.previewLines[1]).not.toContain(
+      "https://www.reuters.com/",
     );
     expect(model.orderedBlocks[0]?.countLabel).toBe("搜 1 / 读 1");
     expect(model.orderedBlocks[0]?.rawDetailLabel).toBe(

@@ -72,6 +72,59 @@ describe("ToolCallDisplay site and media results", () => {
     expect(container.textContent).not.toContain("skill_markdown_content");
   });
 
+  it("完整 SkillTool 结果卡应隐藏 gate proof 协议包络", () => {
+    const { container } = renderTool({
+      id: "skill:gate-proof-1",
+      name: "Skill",
+      arguments: JSON.stringify({
+        skill: "analysis",
+        input: "分析当前问题",
+      }),
+      status: "completed",
+      result: {
+        success: true,
+        output: JSON.stringify({
+          phase: "skill_tool_gate.completed",
+          request: {
+            toolName: "SkillTool",
+            skillName: "analysis",
+          },
+          decision: {
+            action: "allow",
+            gate: "workspaceSkillRuntimeEnableAttached",
+          },
+          result: {
+            status: "allowed",
+          },
+          sourceMetadata: {
+            source: "skill-source-session",
+            permissionBehavior: "workspaceSkillRuntimeEnableAttached",
+          },
+        }),
+      },
+      startTime: new Date("2026-06-21T12:05:00.000Z"),
+      endTime: new Date("2026-06-21T12:05:01.000Z"),
+    });
+
+    act(() => {
+      const toggle = container.querySelector(
+        'button[title="查看结果"]',
+      ) as HTMLButtonElement | null;
+      toggle?.click();
+    });
+
+    expect(
+      container.querySelector('[data-testid="tool-call-rendered-result"]'),
+    ).not.toBeNull();
+    expect(container.textContent).toContain("已执行技能 analysis");
+    expect(container.textContent).not.toContain("permissionBehavior");
+    expect(container.textContent).not.toContain(
+      "workspaceSkillRuntimeEnableAttached",
+    );
+    expect(container.textContent).not.toContain("sourceMetadata");
+    expect(container.textContent).not.toContain("skill-source-session");
+  });
+
   it("站点能力工具结果应展示自动保存结果与脚本来源", () => {
     const { container } = renderTool({
       id: "tool-site-run-1",

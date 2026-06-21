@@ -208,6 +208,31 @@ export function hasSessionHydrationActivity(options: {
   );
 }
 
+export function hasActiveRuntimeTurn(options: {
+  currentTurnId?: string | null;
+  queuedTurnsCount: number;
+  threadReadStatus?: string | null;
+  turns: readonly AgentThreadTurn[];
+}): boolean {
+  if (options.queuedTurnsCount > 0) {
+    return true;
+  }
+
+  if (options.threadReadStatus === "running") {
+    return true;
+  }
+
+  if (
+    options.turns.some(
+      (turn) => turn.status === "running" || turn.status === "queued",
+    )
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 export function shouldDeferSessionDetailHydration(options: {
   currentSessionId: string | null;
   topicId: string;

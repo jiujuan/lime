@@ -752,3 +752,231 @@ npx playwright test --config ".lime/qc/playwright-cli/playwright.config.mjs"
 - `npm run smoke:agent-runtime-current-fixture`：通过；覆盖 history/cache hydration、final_done 工具收尾、MessageList 终态 UI、Electron fixture guard、真实 GUI coding 输入到 Coding Workbench Electron fixture、Claw 停止后同会话继续输出 Electron fixture；`liveProviderUsed=false`。
 - Playwright CLI：`2 passed`，继续覆盖 Codex 对话 WebSearch/WebFetch 过程流折叠、展开、Markdown 渲染一致，以及 Codex 导入态 Markdown / 搜索过程 / 继续对话。
 - 产品结论：普通 `SkillTool` 的运行时 gate proof 与服务技能运行包络一样被视为协议证据，不再作为用户可读正文；搜索、思考、WebFetch 和 Codex 导入渲染主链未回退。
+
+2026-06-21 本轮追加非命令工具协议诊断 JSON 包络隐藏后复测：
+
+```bash
+npx vitest run "src/components/agent/chat/utils/toolResultEnvelopeDisplay.test.ts" "src/components/agent/chat/utils/serviceSkillToolResultDisplay.test.ts" "src/components/agent/chat/components/InlineToolProcessStep.test.tsx" "src/components/agent/chat/components/StreamingRenderer.test.tsx"
+npx eslint "src/components/agent/chat/utils/toolResultEnvelopeDisplay.ts" "src/components/agent/chat/utils/toolResultEnvelopeDisplay.test.ts" "src/components/agent/chat/utils/serviceSkillToolResultDisplay.ts" "src/components/agent/chat/components/InlineToolProcessStep.tsx" "src/components/agent/chat/components/InlineToolProcessStep.test.tsx" "src/components/agent/chat/components/StreamingRenderer.test.tsx" --max-warnings 0
+node scripts/agent-runtime/service-skill-entry-smoke.mjs --timeout-ms 180000
+npm run smoke:agent-runtime-current-fixture
+npx playwright test --config ".lime/qc/playwright-cli/playwright.config.mjs"
+```
+
+结果：
+
+- 工具结果包络 helper / InlineToolProcessStep / StreamingRenderer 定向回归：`102 passed`；新增覆盖非命令工具 `request_metadata / diagnostics / metadata` 等纯协议诊断包络不再进入 Markdown / raw JSON 明细。
+- 误吞保护：命令类工具如 `Bash` 的 JSON stdout 不走通用协议包络隐藏，仍保留 `durationMs / result.ok` 等真实命令输出；带 `output` 正文的协议包络也不隐藏。
+- ESLint 与 `git diff --check`：通过。
+- `service-skill-entry-smoke.mjs`：通过；继续覆盖前端 metadata、App Server workspace skills、`lime-agent` SkillTool gate、服务技能入口路由与 Agent 对话内 A2UI 挂起主链。
+- `npm run smoke:agent-runtime-current-fixture`：通过；覆盖 history/cache hydration、final_done 工具收尾、MessageList 终态 UI、Electron fixture guard、真实 GUI coding 输入到 Coding Workbench Electron fixture、Claw 停止后同会话继续输出 Electron fixture；`liveProviderUsed=false`。
+- Playwright CLI：`2 passed`，继续覆盖 Codex 对话 WebSearch/WebFetch 过程流折叠、展开、Markdown 渲染一致，以及 Codex 导入态 Markdown / 搜索过程 / 继续对话。
+- 产品结论：工具结果展示现在区分“协议诊断证据”和“用户输出”；非命令工具的 metadata-only / diagnostics-only 包络不会再被当作用户正文，命令 stdout 与真实正文不被误吞。
+
+2026-06-21 本轮追加完整工具卡结果包络隐藏与超限文件拆分后复测：
+
+```bash
+npx eslint "src/components/agent/chat/components/ToolCallDisplay.tsx" "src/components/agent/chat/components/ToolCallDisplayResultPanel.tsx" "src/components/agent/chat/components/ToolCallSkillContentPanel.tsx" "src/components/agent/chat/components/ToolCallDisplayList.tsx"
+npx eslint "src/components/agent/chat/components/StreamingRenderer.tsx" "src/components/agent/chat/components/StreamingText.tsx" "src/components/agent/chat/components/StreamingStructuredContent.ts" "src/components/agent/chat/components/StreamingRendererViewModel.ts" "src/components/agent/chat/components/StreamingWriteFileCard.tsx" "src/components/agent/chat/components/InlineToolProcessStep.tsx" "src/components/agent/chat/components/InlineToolProcessStepViewModel.ts" "src/components/agent/chat/components/ToolCallDisplay.testFixtures.tsx"
+npx eslint "src/components/agent/chat/components/ToolCallDisplay.test.tsx" "src/components/agent/chat/components/ToolCallDisplay.siteMedia.test.tsx" "src/components/agent/chat/components/ToolCallDisplay.commandOutput.test.tsx" "src/components/agent/chat/components/InlineToolProcessStep.test.tsx" "src/components/agent/chat/components/StreamingRenderer.test.tsx" "src/components/agent/chat/utils/toolResultEnvelopeDisplay.test.ts"
+npx vitest run "src/components/agent/chat/components/ToolCallDisplay.test.tsx" "src/components/agent/chat/components/ToolCallDisplay.siteMedia.test.tsx" "src/components/agent/chat/components/ToolCallDisplay.commandOutput.test.tsx" "src/components/agent/chat/utils/toolResultEnvelopeDisplay.test.ts" "src/components/agent/chat/components/InlineToolProcessStep.test.tsx" "src/components/agent/chat/components/StreamingRenderer.test.tsx"
+node scripts/agent-runtime/service-skill-entry-smoke.mjs --timeout-ms 180000
+npm run smoke:agent-runtime-current-fixture
+npx playwright test --config ".lime/qc/playwright-cli/playwright.config.mjs"
+npm run verify:gui-smoke
+git diff --check
+wc -l "src/components/agent/chat/components/ToolCallDisplay.tsx" "src/components/agent/chat/components/InlineToolProcessStep.tsx" "src/components/agent/chat/components/StreamingRenderer.tsx"
+```
+
+结果：
+
+- 完整工具卡 `ToolCallDisplay` 已接入 `shouldHideToolResultEnvelope`；“查看结果”展开后不再把非命令工具 `request_metadata / diagnostics / metadata` 协议诊断包络、普通 `SkillTool` gate proof、`ServiceSkill` 运行包络渲染成 raw JSON。
+- 误吞保护继续成立：`Bash` / 命令工具 JSON stdout 即使包含 `metadata.durationMs`、`result.ok` 也不会被通用协议包络过滤吞掉。
+- 新增完整卡回归：`ToolCallDisplay.test.tsx` 覆盖非命令 MCP 协议包络隐藏，`ToolCallDisplay.siteMedia.test.tsx` 覆盖普通 `SkillTool` gate proof 隐藏，`ToolCallDisplay.commandOutput.test.tsx` 覆盖 Bash JSON stdout 保留。
+- 定向 Vitest：`6 files passed, 126 tests passed`，覆盖完整工具卡、内联工具过程、StreamingRenderer 与包络 helper。
+- ESLint：本轮新增 / 拆分实现文件与相关测试文件全部通过。
+- 超限拆分：`ToolCallDisplay.tsx` 从 `1830` 行拆到 `923` 行，`InlineToolProcessStep.tsx` 从 `1111` 行拆到 `849` 行，`StreamingRenderer.tsx` 从 `1687` 行拆到 `996` 行；拆出的职责文件均低于 `500` 行。
+- `service-skill-entry-smoke.mjs`：通过；继续覆盖前端 metadata、App Server workspace skills、`lime-agent` SkillTool gate、服务技能入口路由与 Agent 对话内 A2UI 挂起主链。
+- `npm run smoke:agent-runtime-current-fixture`：通过；继续覆盖 history/cache hydration、final_done 工具收尾、真实 GUI coding 输入到 Coding Workbench Electron fixture、Claw 停止后同会话继续输出 Electron fixture；`liveProviderUsed=false`。
+- Playwright CLI：`2 passed`，继续覆盖 Codex 对话 WebSearch/WebFetch 过程流折叠、展开、Markdown 渲染一致，以及 Codex 导入态 Markdown / 搜索过程 / 继续对话。
+- `npm run verify:gui-smoke`：通过；Electron renderer build、Electron host typecheck、app-server sidecar 与 claw workbench / memory settings smoke 均可启动。
+- `git diff --check`：通过。
+
+2026-06-21 本轮追加 Markdown / Timeline 超限拆分与未知 item JSON 隐藏后复测：
+
+```bash
+npx eslint "src/components/agent/chat/components/AgentThreadTimeline.tsx" "src/components/agent/chat/components/AgentThreadTimelineItemRenderers.tsx" "src/components/agent/chat/components/AgentThreadTimelineViewModel.ts" "src/components/agent/chat/components/AgentThreadTimeline.test.tsx" "src/components/agent/chat/components/MarkdownRenderer.tsx" "src/components/agent/chat/components/MarkdownRendererStyles.tsx" "src/components/agent/chat/components/MarkdownRendererMarkdownModel.ts" --max-warnings 0
+npx vitest run "src/i18n/__tests__/loadNamespace.test.ts" "src/i18n/__tests__/locales.test.ts"
+npx vitest run "src/components/agent/chat/components/MarkdownRenderer.test.tsx" "src/components/agent/chat/components/AgentThreadTimeline.test.tsx" "src/components/agent/chat/components/AgentThreadTimeline.process.test.tsx" "src/components/agent/chat/components/AgentThreadTimeline.reasoning.test.tsx" "src/components/agent/chat/components/AgentThreadTimelineViewModel.unit.test.ts" "src/components/agent/chat/components/ToolCallDisplay.test.tsx" "src/components/agent/chat/components/ToolCallDisplay.siteMedia.test.tsx" "src/components/agent/chat/components/ToolCallDisplay.commandOutput.test.tsx" "src/components/agent/chat/components/InlineToolProcessStep.test.tsx" "src/components/agent/chat/components/StreamingRenderer.test.tsx" "src/components/agent/chat/utils/toolResultEnvelopeDisplay.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000
+npx playwright test --config ".lime/qc/playwright-cli/playwright.config.mjs"
+wc -l "src/components/agent/chat/components/AgentThreadTimelineItemRenderers.tsx" "src/components/agent/chat/components/AgentThreadTimeline.tsx" "src/components/agent/chat/components/AgentThreadTimelineViewModel.ts" "src/components/agent/chat/components/MarkdownRenderer.tsx" "src/components/agent/chat/components/MarkdownRendererMarkdownModel.ts" "src/components/agent/chat/components/MarkdownRendererStyles.tsx"
+```
+
+结果：
+
+- `MarkdownRenderer.tsx` 已从 `2089` 行拆到 `916` 行，新增 `MarkdownRendererMarkdownModel.ts` `770` 行与 `MarkdownRendererStyles.tsx` `432` 行；Markdown 解析 / 样式职责从主渲染组件中拆出。
+- `AgentThreadTimeline.tsx` 已从 `1145` 行拆到 `512` 行，新增 `AgentThreadTimelineItemRenderers.tsx` `660` 行，`AgentThreadTimelineViewModel.ts` 当前 `154` 行；时间线壳、item 渲染和 view model 职责分开。
+- 未适配的历史 runtime item fallback 不再用 `<pre>{JSON}</pre>` 摊开原始协议对象，改为用户态提示；新增 `agentChat.threadTimeline.unsupportedItem.*` 五语言文案，覆盖 `zh-CN / zh-TW / en-US / ja-JP / ko-KR`。
+- ESLint：上述渲染链实现与测试文件通过；本轮修复了 `renderGroupItemDetails` 普通 helper 内调用 `useTranslation` 的 hook 违规，改为由 `TimelineItemDetails` 组件注入翻译函数。
+- i18n：`loadNamespace` + `locales` 共 `12 passed`，确认新增五语言资源可加载。
+- 渲染链定向回归：`11 files passed, 217 tests passed`，覆盖 MarkdownRenderer、AgentThreadTimeline、reasoning / process timeline、ToolCallDisplay、InlineToolProcessStep、StreamingRenderer 与工具结果包络隐藏。
+- Playwright CLI：`2 passed`，继续覆盖 Codex 对话 WebSearch/WebFetch 过程流折叠、展开和 Markdown 渲染一致，以及 Codex 导入态 Markdown、搜索过程和继续对话。
+- 本轮没有把全量 `npm run typecheck` 标记为通过：该命令在本地超过约 `12` 分钟仍无输出但进程仍运行，已用 `Ctrl-C` 中止，退出码 `130`；后续需要单独排查全量 tsc 卡住原因。
+
+2026-06-21 本轮追加渲染链测试超限拆分后复测：
+
+```bash
+npx eslint "src/components/agent/chat/components/InlineToolProcessStep.test.tsx" "src/components/agent/chat/components/InlineToolProcessStep.web.test.tsx" "src/components/agent/chat/components/InlineToolProcessStep.site.test.tsx" "src/components/agent/chat/components/InlineToolProcessStep.testHarness.tsx" "src/components/agent/chat/components/StreamingRenderer.test.tsx" "src/components/agent/chat/components/StreamingRenderer.fileChanges.test.tsx" "src/components/agent/chat/components/StreamingRenderer.importedHistory.test.tsx" "src/components/agent/chat/components/StreamingRenderer.processGroups.test.tsx" "src/components/agent/chat/components/StreamingRenderer.thinking.test.tsx" "src/components/agent/chat/components/StreamingRenderer.structuredContent.test.tsx" "src/components/agent/chat/components/StreamingRenderer.webSearch.test.tsx" "src/components/agent/chat/components/StreamingRenderer.webSearch.imported.test.tsx" "src/components/agent/chat/components/StreamingRenderer.webSearch.details.test.tsx" "src/components/agent/chat/components/MarkdownRenderer.test.tsx" "src/components/agent/chat/components/MarkdownRenderer.codeBlocks.test.tsx" "src/components/agent/chat/components/MarkdownRenderer.media.test.tsx" "src/components/agent/chat/components/MarkdownRenderer.normalization.test.tsx" "src/components/agent/chat/components/MarkdownRenderer.runtime.test.tsx" "src/components/agent/chat/components/MarkdownRenderer.testHarness.tsx" --max-warnings 0
+npx vitest run "src/components/agent/chat/components/InlineToolProcessStep.test.tsx" "src/components/agent/chat/components/InlineToolProcessStep.web.test.tsx" "src/components/agent/chat/components/InlineToolProcessStep.site.test.tsx" "src/components/agent/chat/components/StreamingRenderer.test.tsx" "src/components/agent/chat/components/StreamingRenderer.fileChanges.test.tsx" "src/components/agent/chat/components/StreamingRenderer.importedHistory.test.tsx" "src/components/agent/chat/components/StreamingRenderer.processGroups.test.tsx" "src/components/agent/chat/components/StreamingRenderer.thinking.test.tsx" "src/components/agent/chat/components/StreamingRenderer.structuredContent.test.tsx" "src/components/agent/chat/components/StreamingRenderer.webSearch.test.tsx" "src/components/agent/chat/components/StreamingRenderer.webSearch.imported.test.tsx" "src/components/agent/chat/components/StreamingRenderer.webSearch.details.test.tsx" "src/components/agent/chat/components/MarkdownRenderer.test.tsx" "src/components/agent/chat/components/MarkdownRenderer.codeBlocks.test.tsx" "src/components/agent/chat/components/MarkdownRenderer.media.test.tsx" "src/components/agent/chat/components/MarkdownRenderer.normalization.test.tsx" "src/components/agent/chat/components/MarkdownRenderer.runtime.test.tsx"
+npx playwright test --config ".lime/qc/playwright-cli/playwright.config.mjs"
+git diff --check
+find "src/components/agent/chat/components" -maxdepth 1 \( -name "MarkdownRenderer*.test.tsx" -o -name "MarkdownRenderer.testHarness.tsx" -o -name "StreamingRenderer*.test.tsx" -o -name "StreamingRenderer.testHarness.tsx" -o -name "InlineToolProcessStep*.test.tsx" -o -name "InlineToolProcessStep.testHarness.tsx" -o -name "MarkdownRenderer*.tsx" -o -name "MarkdownRenderer*.ts" -o -name "StreamingRenderer*.tsx" -o -name "StreamingRenderer*.ts" -o -name "AgentThreadTimeline*.tsx" -o -name "AgentThreadTimeline*.ts" \) -print0 | xargs -0 wc -l | sort -nr
+```
+
+结果：
+
+- `InlineToolProcessStep.test.tsx` 从 `1403` 行拆到 `948` 行，新增 `InlineToolProcessStep.testHarness.tsx` `80` 行、`InlineToolProcessStep.web.test.tsx` `285` 行、`InlineToolProcessStep.site.test.tsx` `114` 行。
+- `StreamingRenderer.test.tsx` 从 `2695` 行拆到 `832` 行，新增 `StreamingRenderer.fileChanges.test.tsx` `313` 行、`StreamingRenderer.importedHistory.test.tsx` `323` 行、`StreamingRenderer.processGroups.test.tsx` `426` 行、`StreamingRenderer.thinking.test.tsx` `548` 行、`StreamingRenderer.structuredContent.test.tsx` `310` 行。
+- `StreamingRenderer.webSearch.test.tsx` 从 `1412` 行拆到 `960` 行，新增 `StreamingRenderer.webSearch.imported.test.tsx` `264` 行与 `StreamingRenderer.webSearch.details.test.tsx` `212` 行。
+- `MarkdownRenderer.test.tsx` 从 `1389` 行拆到 `76` 行，新增 `MarkdownRenderer.testHarness.tsx` `242` 行、`MarkdownRenderer.codeBlocks.test.tsx` `224` 行、`MarkdownRenderer.media.test.tsx` `319` 行、`MarkdownRenderer.normalization.test.tsx` `382` 行、`MarkdownRenderer.runtime.test.tsx` `163` 行。
+- 当前触达的 Codex 渲染链实现 / 测试文件均低于 `1000` 行；`StreamingRenderer.tsx` 为 `996` 行，已贴近边界，后续不得继续向该文件追加新职责。
+- ESLint：上述 `InlineToolProcessStep` / `StreamingRenderer` / `MarkdownRenderer` 测试拆分文件通过。
+- 合并渲染链 Vitest：`17 files passed, 157 tests passed`，覆盖内联工具过程、WebSearch/WebFetch、Codex 导入态、结构化内容、流式 Markdown、图片 / 链接、A2UI 与代码块渲染。
+- Playwright CLI：`2 passed`，继续覆盖 Codex 对话 WebSearch/WebFetch 过程流折叠、展开和 Markdown 渲染一致，以及 Codex 导入态 Markdown、搜索过程和继续对话。
+- `git diff --check`：通过。
+
+2026-06-21 本轮追加 `MessageList.test.tsx` 超限拆分后复测：
+
+```bash
+npx eslint "src/components/agent/chat/components/MessageList*.test.tsx" "src/components/agent/chat/components/MessageList.testHarness.tsx" --max-warnings 0
+npx vitest run "src/components/agent/chat/components/MessageList.test.tsx" "src/components/agent/chat/components/MessageList.historyWindow.test.tsx" "src/components/agent/chat/components/MessageList.importedHistory.test.tsx" "src/components/agent/chat/components/MessageList.runtimeStatus.test.tsx" "src/components/agent/chat/components/MessageList.streamingTurns.test.tsx" "src/components/agent/chat/components/MessageList.imageTasks.test.tsx" "src/components/agent/chat/components/MessageList.mediaTasks.test.tsx" "src/components/agent/chat/components/MessageList.inlineActions.test.tsx" "src/components/agent/chat/components/MessageList.reasoningPersistence.test.tsx" "src/components/agent/chat/components/MessageList.reasoningFlow.test.tsx" "src/components/agent/chat/components/MessageList.webProcess.test.tsx" "src/components/agent/chat/components/MessageList.artifactsTimeline.test.tsx" "src/components/agent/chat/components/MessageList.messageActions.test.tsx" "src/components/agent/chat/components/MessageList.artifactFiltering.test.tsx" "src/components/agent/chat/components/MessageList.failureWebTools.test.tsx"
+git diff --check
+find "src/components/agent/chat/components" -maxdepth 1 \( -name "MessageList*.test.tsx" -o -name "MessageList.testHarness.tsx" -o -name "MarkdownRenderer*.test.tsx" -o -name "MarkdownRenderer.testHarness.tsx" -o -name "StreamingRenderer*.test.tsx" -o -name "InlineToolProcessStep*.test.tsx" \) -print0 | xargs -0 wc -l | sort -nr
+```
+
+结果：
+
+- `MessageList.test.tsx` 从 `9522` 行拆到 `513` 行，新增 `MessageList.testHarness.tsx` `399` 行承载共享 mock / render / helper。
+- 新增职责拆分测试文件：`MessageList.historyWindow.test.tsx` `818` 行、`MessageList.importedHistory.test.tsx` `834` 行、`MessageList.runtimeStatus.test.tsx` `754` 行、`MessageList.streamingTurns.test.tsx` `408` 行、`MessageList.imageTasks.test.tsx` `607` 行、`MessageList.mediaTasks.test.tsx` `931` 行、`MessageList.inlineActions.test.tsx` `293` 行、`MessageList.reasoningPersistence.test.tsx` `809` 行、`MessageList.reasoningFlow.test.tsx` `698` 行、`MessageList.webProcess.test.tsx` `393` 行、`MessageList.artifactsTimeline.test.tsx` `695` 行、`MessageList.messageActions.test.tsx` `459` 行、`MessageList.artifactFiltering.test.tsx` `685` 行、`MessageList.failureWebTools.test.tsx` `453` 行。
+- MessageList 拆分后所有相关测试文件均低于 `1000` 行；同一组扫描也确认 `InlineToolProcessStep`、`StreamingRenderer`、`MarkdownRenderer` 测试拆分文件仍低于 `1000` 行。
+- ESLint：`MessageList*.test.tsx` 与 `MessageList.testHarness.tsx` 通过；拆分期间误触的 `MessageListRuntimeStatus.test.tsx` 已恢复原状并纳入 ESLint 通过。
+- MessageList 定向 Vitest：`15 files passed, 152 tests passed`，覆盖布局滚动、旧会话 hydrate、导入历史、运行态、第二轮流式、图片 / 视频 / 音频 / 转写任务卡、内联 action、reasoning 持久化与穿插、WebSearch/WebFetch 过程流、artifact timeline、消息动作与失败回合。
+- `git diff --check`：通过。
+
+2026-06-21 本轮追加 `messageListItemProjection` 超限拆分后复测：
+
+```bash
+npx eslint "src/components/agent/chat/components/messageListItemProjection*.ts" "src/components/agent/chat/components/messageListProjection*.ts" --max-warnings 0
+npx vitest run "src/components/agent/chat/components/messageListItemProjection.unit.test.ts" "src/components/agent/chat/components/messageListItemProjection.contentParts.unit.test.ts" "src/components/agent/chat/components/messageListItemProjection.webRetrieval.unit.test.ts" "src/components/agent/chat/components/messageListItemProjection.legacyTools.unit.test.ts" "src/components/agent/chat/components/messageListItemProjection.timelineFlow.unit.test.ts" "src/components/agent/chat/components/messageListItemProjection.artifacts.unit.test.ts" "src/components/agent/chat/components/messageListItemProjection.imported.unit.test.ts" "src/components/agent/chat/components/messageListItemProjection.timeline.unit.test.ts"
+npx eslint "src/components/agent/chat/components/MarkdownRenderer*.test.tsx" "src/components/agent/chat/components/MarkdownRenderer.testHarness.tsx" "src/components/agent/chat/components/MessageList*.test.tsx" "src/components/agent/chat/components/MessageList.testHarness.tsx" --max-warnings 0
+npx vitest run "src/components/agent/chat/components/MarkdownRenderer.test.tsx" "src/components/agent/chat/components/MarkdownRenderer.codeBlocks.test.tsx" "src/components/agent/chat/components/MarkdownRenderer.media.test.tsx" "src/components/agent/chat/components/MarkdownRenderer.normalization.test.tsx" "src/components/agent/chat/components/MarkdownRenderer.runtime.test.tsx" "src/components/agent/chat/components/MessageList.test.tsx" "src/components/agent/chat/components/MessageList.historyWindow.test.tsx" "src/components/agent/chat/components/MessageList.importedHistory.test.tsx" "src/components/agent/chat/components/MessageList.runtimeStatus.test.tsx" "src/components/agent/chat/components/MessageList.streamingTurns.test.tsx" "src/components/agent/chat/components/MessageList.imageTasks.test.tsx" "src/components/agent/chat/components/MessageList.mediaTasks.test.tsx" "src/components/agent/chat/components/MessageList.inlineActions.test.tsx" "src/components/agent/chat/components/MessageList.reasoningPersistence.test.tsx" "src/components/agent/chat/components/MessageList.reasoningFlow.test.tsx" "src/components/agent/chat/components/MessageList.webProcess.test.tsx" "src/components/agent/chat/components/MessageList.artifactsTimeline.test.tsx" "src/components/agent/chat/components/MessageList.messageActions.test.tsx" "src/components/agent/chat/components/MessageList.artifactFiltering.test.tsx" "src/components/agent/chat/components/MessageList.failureWebTools.test.tsx"
+npm run smoke:agent-runtime-current-fixture
+npx playwright test --config ".lime/qc/playwright-cli/playwright.config.mjs"
+npm run verify:gui-smoke
+git diff --check
+wc -l "src/components/agent/chat/components/messageListItemProjection"*.ts "src/components/agent/chat/components/messageListProjection"*.ts
+```
+
+结果：
+
+- `messageListItemProjection.ts` 从 `1325` 行拆到 `850` 行，新增 `messageListProjectionContentParts.ts` `265` 行与 `messageListProjectionWebRetrieval.ts` `239` 行；主 projection 保留 current 投影决策流，内容片段 / WebSearch-WebFetch 运行态 helper 分离。
+- `messageListItemProjection.unit.test.ts` 从 `1938` 行拆到 `121` 行，新增共享 `messageListItemProjection.testHarness.ts` 与 `contentParts / webRetrieval / legacyTools / timelineFlow / artifacts` 专题单测；既有 `imported / timeline` 专题测试也收敛到同一 harness。
+- 当前 projection 相关文件均低于 `1000` 行；`messageListItemProjection.webRetrieval.unit.test.ts` 为 `761` 行，属于继续追加前要优先再拆的预警文件。
+- Projection ESLint：通过。
+- Projection 定向 Vitest：`8 files passed, 36 tests passed`，覆盖搜索 running 不提前显示最终正文、搜索完成后穿插 final answer、running 残留完成态归一、Codex 导入只读工具过程、legacy toolCalls 兜底边界、timeline 审批 / 图片 / 任务板穿插、文件 artifact 去重与失败正文去重。
+- MarkdownRenderer + MessageList 合并渲染回归：`20 files passed, 198 tests passed`，覆盖 Markdown 标题 / 表格 / 代码块、导入历史、搜索过程流、思考持久化、运行态完成、artifact timeline、媒体任务与失败 Web tools。
+- `npm run smoke:agent-runtime-current-fixture`：通过；继续覆盖 history/cache hydration、final_done 工具收尾、failed read model、Claw 终态 UI、Electron fixture guard、真实 GUI coding 输入到 Coding Workbench Electron fixture、Claw GUI current fixture guard、停止后同会话继续输出 Electron fixture、Skills Runtime natural + 显式 `$skill` + 技能中心试用入口三入口按需加载 Electron fixture；`liveProviderUsed=false`。
+- Playwright CLI：`2 passed`，继续覆盖 Codex 对话 WebSearch/WebFetch 过程流折叠、展开、Markdown 渲染一致，以及 Codex 导入态 Markdown、搜索过程和继续对话。
+- `npm run verify:gui-smoke`：通过；Electron renderer build、Electron host typecheck、App Server sidecar 初始化、Claw workbench shell 与 memory settings smoke 均通过。
+- `git diff --check`：通过。
+
+2026-06-21 本轮追加 `messageListTimelineContentParts` 测试超限拆分后复测：
+
+```bash
+npx eslint "src/components/agent/chat/components/messageListTimelineContentParts*.ts" --max-warnings 0
+npx vitest run "src/components/agent/chat/components/messageListTimelineContentParts.unit.test.ts" "src/components/agent/chat/components/messageListTimelineContentParts.imported.unit.test.ts" "src/components/agent/chat/components/messageListTimelineContentParts.reasoning.unit.test.ts"
+npx playwright test --config ".lime/qc/playwright-cli/playwright.config.mjs"
+find "src/components/agent/chat/components" -maxdepth 1 \( -name "messageListTimelineContentParts*.ts" -o -name "messageListTimelineContentParts*.tsx" \) -print0 | xargs -0 wc -l
+```
+
+结果：
+
+- `messageListTimelineContentParts.unit.test.ts` 从 `1014` 行拆到 `211` 行，新增 `messageListTimelineContentParts.testHarness.ts` `15` 行承载 `buildThreadItems` 与共享时间戳。
+- 新增专题测试：`messageListTimelineContentParts.imported.unit.test.ts` `380` 行覆盖 Codex 导入 reasoning / plan / command / search / patch / context compaction / subagent 过程；`messageListTimelineContentParts.reasoning.unit.test.ts` `428` 行覆盖已有工具过程中的稀疏 reasoning 合并、WebSearch/WebFetch sequence 插入和 turn_summary 忽略。
+- `messageListTimelineContentParts.ts` 仍为 `823` 行，处于预警区但未在本轮追加职责；相关测试与实现文件均低于 `1000` 行。
+- ESLint：`messageListTimelineContentParts*.ts` 通过。
+- 定向 Vitest：`3 files passed, 15 tests passed`，保留基础 timeline、Codex 导入态、WebSearch/WebFetch 中间 reasoning 穿插全部断言。
+- Playwright CLI：`2 passed`，继续覆盖 Codex 对话 WebSearch/WebFetch 过程流折叠、展开、Markdown 渲染一致，以及 Codex 导入态 Markdown、搜索过程和继续对话。
+
+2026-06-21 本轮追加 `agentThreadGrouping` 超限拆分后复测：
+
+```bash
+npx eslint "src/components/agent/chat/utils/agentThreadGrouping.ts" "src/components/agent/chat/utils/agentThreadGroupingItemSummary.ts" "src/components/agent/chat/utils/agentThreadGroupingTypes.ts" "src/components/agent/chat/utils/agentThreadGrouping.test.ts" --max-warnings 0
+npx vitest run "src/components/agent/chat/utils/agentThreadGrouping.test.ts" "src/components/agent/chat/utils/toolBatchGrouping.test.ts"
+npx eslint "src/components/agent/chat/components/AgentThreadTimeline.tsx" "src/components/agent/chat/components/AgentThreadTimelineItemRenderers.tsx" "src/components/agent/chat/components/AgentThreadTimelineViewModel.ts" "src/components/agent/chat/components/AgentThreadTimeline.test.tsx" "src/components/agent/chat/components/AgentThreadTimeline.process.test.tsx" "src/components/agent/chat/components/AgentThreadTimeline.reasoning.test.tsx" "src/components/agent/chat/components/AgentThreadTimelineViewModel.unit.test.ts" --max-warnings 0
+npx vitest run "src/components/agent/chat/components/AgentThreadTimeline.test.tsx" "src/components/agent/chat/components/AgentThreadTimeline.process.test.tsx" "src/components/agent/chat/components/AgentThreadTimeline.reasoning.test.tsx" "src/components/agent/chat/components/AgentThreadTimelineViewModel.unit.test.ts"
+npx playwright test --config ".lime/qc/playwright-cli/playwright.config.mjs"
+wc -l "src/components/agent/chat/utils/agentThreadGrouping.ts" "src/components/agent/chat/utils/agentThreadGroupingItemSummary.ts" "src/components/agent/chat/utils/agentThreadGroupingTypes.ts" "src/components/agent/chat/utils/agentThreadGrouping.test.ts" "src/components/agent/chat/utils/toolBatchGrouping.ts"
+```
+
+结果：
+
+- `agentThreadGrouping.ts` 从 `1211` 行拆到 `400` 行，保留 display model 编排、时间排序、状态合并和导入批摘要；新增 `agentThreadGroupingItemSummary.ts` `782` 行承载 item 分类 / preview 摘要 helper，新增 `agentThreadGroupingTypes.ts` `60` 行承载显示模型类型。
+- `agentThreadGrouping.test.ts` 当前 `801` 行，`toolBatchGrouping.ts` 当前 `801` 行，均低于 `1000` 行但处于拆分预警区；后续继续追加搜索 / WebFetch / grouping 职责前应优先再拆。
+- WebFetch running 摘要断言按现有短来源标签口径更新为 `reuters.com/technology/artificial-intelligen…`，并增加 `not.toContain("https://www.reuters.com/")`，与当前 `hasFullSearchUrlVisible=false` 的产品证据保持一致，避免完整 URL 回流。
+- `agentThreadGrouping` / `toolBatchGrouping` 定向 Vitest：`2 files passed, 41 tests passed`，覆盖 Codex 搜索 / 读取网页摘要、导入过程批次和工具过程聚合。
+- Timeline 调用方 ESLint 与定向 Vitest：`4 files passed, 45 tests passed`，确认分组 helper 拆分没有破坏 `AgentThreadTimeline` 的 process / reasoning 渲染。
+- Playwright CLI：`2 passed`，继续覆盖 Codex WebSearch/WebFetch 折叠、展开、Markdown 渲染，以及 Codex 导入态继续对话。
+
+2026-06-21 本轮追加 `toolProcessSummary` 超限拆分后复测：
+
+```bash
+wc -l "src/components/agent/chat/utils/toolProcessSummary.ts" "src/components/agent/chat/utils/toolProcessSummaryBuilders.ts" "src/components/agent/chat/utils/toolProcessGenericSummary.ts" "src/components/agent/chat/utils/toolProcessSummaryCopy.ts" "src/components/agent/chat/utils/toolProcessSummaryText.ts" "src/components/agent/chat/utils/toolProcessSummaryTypes.ts" "src/components/agent/chat/utils/toolProcessSummary.test.ts"
+npx eslint "src/components/agent/chat/utils/toolProcessSummary.ts" "src/components/agent/chat/utils/toolProcessSummaryBuilders.ts" "src/components/agent/chat/utils/toolProcessGenericSummary.ts" "src/components/agent/chat/utils/toolProcessSummaryCopy.ts" "src/components/agent/chat/utils/toolProcessSummaryText.ts" "src/components/agent/chat/utils/toolProcessSummaryTypes.ts" "src/components/agent/chat/utils/toolProcessSummary.test.ts" --max-warnings 0
+npx vitest run "src/components/agent/chat/utils/toolProcessSummary.test.ts"
+npx vitest run "src/components/agent/chat/components/StreamingRenderer.test.tsx" "src/components/agent/chat/components/StreamingRenderer.processGroups.test.tsx" "src/components/agent/chat/components/StreamingRenderer.webSearch.test.tsx" "src/components/agent/chat/components/StreamingRenderer.webSearch.imported.test.tsx" "src/components/agent/chat/components/StreamingRenderer.webSearch.details.test.tsx"
+npx vitest run "src/components/agent/chat/components/InlineToolProcessStep.test.tsx" "src/components/agent/chat/components/ToolCallDisplay.test.tsx" "src/components/agent/chat/components/ToolCallDisplay.siteMedia.test.tsx" "src/components/agent/chat/components/ToolCallDisplay.commandOutput.test.tsx"
+npx playwright test --config ".lime/qc/playwright-cli/playwright.config.mjs"
+git diff --check -- "src/components/agent/chat/utils/toolProcessSummary.ts" "src/components/agent/chat/utils/toolProcessSummaryBuilders.ts" "src/components/agent/chat/utils/toolProcessGenericSummary.ts" "src/components/agent/chat/utils/toolProcessSummaryCopy.ts" "src/components/agent/chat/utils/toolProcessSummaryText.ts" "src/components/agent/chat/utils/toolProcessSummaryTypes.ts" "src/components/agent/chat/utils/toolProcessSummary.test.ts" "internal/roadmap/turn/test-cases.md"
+```
+
+结果：
+
+- `toolProcessSummary.ts` 从 `1738` 行拆到 `292` 行，保留原 facade 导出与过程 narrative 装配；新增 `toolProcessSummaryBuilders.ts` `544` 行承载 ToolSearch / WebSearch / Site / Browser / Lime task 专项摘要 builder。
+- 新增 `toolProcessGenericSummary.ts` `677` 行承载通用 pre/post 工具族摘要，新增 `toolProcessSummaryCopy.ts` `52` 行承载共享 copy helper，新增 `toolProcessSummaryText.ts` `319` 行与 `toolProcessSummaryTypes.ts` `24` 行承载文本清洗和类型边界。
+- 当前触达实现文件均低于 `1000` 行；`toolProcessSummary.test.ts` 为 `873` 行，低于硬上限但处于拆分预警区，后续继续追加工具摘要断言前应优先按 WebSearch / browser / generic family 再拆。
+- 本轮不新增平行渲染器、不改 WebSearch / WebFetch 判断顺序、不新增 compat fallback；事实源仍是 Codex 工具过程摘要 current 前端主链，`toolProcessSummary.ts` 只做 facade，避免 JSON 噪音、搜索摘要和通用工具族逻辑继续塞回单个超限文件。
+- ESLint：`toolProcessSummary*.ts`、`toolProcessGenericSummary.ts` 与定向测试文件通过。
+- `toolProcessSummary` 定向 Vitest：`1 file passed, 23 tests passed`，覆盖外部信息、结构化数据、WebSearch/WebFetch 失败摘要、工具搜索摘要和通用工具过程文案。
+- StreamingRenderer WebSearch / 导入态 / process group 回归：`5 files passed, 44 tests passed`，覆盖 WebSearch/WebFetch 过程流、导入历史和思考 / 工具过程分组。
+- InlineToolProcessStep + ToolCallDisplay 回归：`4 files passed, 54 tests passed`，覆盖轻卡摘要本地化、WebSearch 结果、站点媒体和命令输出展示。
+- Playwright CLI：`2 passed`，覆盖 Codex 对话 WebSearch/WebFetch 过程流折叠、展开、Markdown 渲染一致，以及 Codex 导入态 Markdown、搜索过程和继续对话。
+
+2026-06-21 本轮追加 `agentChatHistory` 超限拆分后复测：
+
+```bash
+wc -l "src/components/agent/chat/hooks/agentChatHistory"*.ts "src/components/agent/chat/hooks/agentChatHistory"*.test.ts
+npx eslint "src/components/agent/chat/hooks/agentChatHistory*.ts" --max-warnings 0
+npx vitest run src/components/agent/chat/hooks/agentChatHistory.test.ts src/components/agent/chat/hooks/agentChatHistory.imported.test.ts src/components/agent/chat/hooks/agentChatHistory.timeline.test.ts src/components/agent/chat/hooks/agentChatHistory.missingUsers.test.ts src/components/agent/chat/hooks/agentChatHistory.compaction.test.ts src/components/agent/chat/hooks/agentChatHistory.localMerge.test.ts src/components/agent/chat/hooks/agentChatHistory.localTail.test.ts
+npx vitest run src/components/agent/chat/components/MessageList.importedHistory.test.tsx src/components/agent/chat/components/StreamingRenderer.importedHistory.test.tsx src/components/agent/chat/components/StreamingRenderer.webSearch.imported.test.tsx src/components/agent/chat/components/messageListItemProjection.imported.unit.test.ts src/components/agent/chat/components/messageListTimelineContentParts.imported.unit.test.ts src/components/agent/chat/components/messageListTimelineContentParts.reasoning.unit.test.ts
+npx vitest run src/components/agent/chat/components/StreamingRenderer.test.tsx src/components/agent/chat/components/StreamingRenderer.webSearch.test.tsx src/components/agent/chat/components/StreamingRenderer.webSearch.details.test.tsx src/components/agent/chat/components/StreamingRenderer.thinking.test.tsx src/components/agent/chat/components/InlineToolProcessStep.test.tsx src/components/agent/chat/components/InlineToolProcessStep.web.test.tsx src/components/agent/chat/components/ToolCallDisplay.test.tsx
+npm run smoke:agent-runtime-current-fixture
+npx playwright test --config ".lime/qc/playwright-cli/playwright.config.mjs"
+npm run verify:gui-smoke
+git diff --check
+```
+
+结果：
+
+- `agentChatHistory.ts` 从 `4224` 行拆到 `23` 行，保留原 API facade；新增 `agentChatHistoryPrimitives / Process / Normalize / Reasoning / ThreadItems / ReadModel / Artifacts / LocalMerge / Hydrate` 等职责模块，current 事实源仍是同一条历史 hydrate / local merge 主链，没有新增平行渲染器或 compat fallback。
+- `agentChatHistory.test.ts` 从 `4705` 行拆到 `788` 行，新增 `imported / timeline / missingUsers / compaction / localMerge / localTail` 专题测试；每个测试文件继续只从 `./agentChatHistory` facade 导入，避免绑定内部实现。
+- 当前触达的 `agentChatHistory` 实现和测试文件均低于 `1000` 行；`agentChatHistoryLocalMerge.ts` 为 `885` 行，属于预警区，后续继续追加本地合并策略前应优先再按 signature / retainable state / tail recovery 拆分。
+- ESLint：`agentChatHistory*.ts` 通过。
+- `agentChatHistory` 定向 Vitest：`7 files passed, 61 tests passed`，覆盖累计正文去重、Codex 导入 detail.items / reasoning / tool call、thread_read 工具摘要、失败 read model、历史压缩、图片 / 视频任务预览、token usage、本地消息图片和流式尾部保留。
+- Codex 导入 / 搜索渲染回归：`6 files passed, 35 tests passed`，覆盖 MessageList 导入历史、StreamingRenderer 导入态、WebSearch imported 和 timeline reasoning 合并。
+- StreamingRenderer / WebSearch / InlineToolProcessStep / ToolCallDisplay 回归：`7 files passed, 88 tests passed`，覆盖 WebSearch/WebFetch 运行中默认展开、搜索 / 思考 / 读取页面时间顺序、工具轻卡摘要与 Markdown 渲染。
+- `npm run smoke:agent-runtime-current-fixture`：通过；覆盖 history/cache hydration、final_done 工具收尾、failed read model、Claw 终态 UI、Electron fixture guard、真实 GUI coding 输入到 Coding Workbench、停止后同会话继续输出、Skills Runtime、MCP structuredContent、Expert Skills Runtime 和 Expert Plaza 技能闭环；`liveProviderUsed=false`。
+- Playwright CLI：`2 passed`，继续覆盖 Codex 对话 WebSearch/WebFetch 过程流折叠、展开、Markdown 渲染一致，以及 Codex 导入态 Markdown、搜索过程和继续对话。
+- `npm run verify:gui-smoke`：通过；Electron renderer build、Electron host typecheck、App Server sidecar 初始化、Claw workbench shell 与 memory settings smoke 均通过。
+- `git diff --check`：通过。
+- 全仓 `npx tsc --noEmit --project tsconfig.json --pretty false` 曾运行数分钟无输出，为避免后台进程悬挂已中断；本轮用更贴近风险边界的 ESLint、定向 Vitest、current fixture、Playwright CLI 与 GUI smoke 覆盖交付风险。

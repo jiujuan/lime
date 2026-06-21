@@ -35,6 +35,7 @@ import {
   isAutoTitlePlaceholder,
   shouldGenerateAutoTitle,
 } from "./agentChatAutoTitleViewModel";
+import { hasActiveRuntimeTurn } from "./agentSessionState";
 
 export type { Topic } from "./agentChatShared";
 
@@ -371,10 +372,11 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     setThreadTurns: session.setThreadTurns,
     setCurrentTurnId: session.setCurrentTurnId,
     setExecutionRuntime: session.setExecutionRuntime,
-    threadBusy:
-      session.threadRead?.status === "running" ||
-      session.threadRead?.status === "queued" ||
-      session.threadTurns.some((turn) => turn.status === "running"),
+    threadBusy: hasActiveRuntimeTurn({
+      queuedTurnsCount: session.queuedTurns.length,
+      threadReadStatus: session.threadRead?.status,
+      turns: session.threadTurns,
+    }),
     queuedTurns: session.queuedTurns,
     setQueuedTurns: session.setQueuedTurns,
     setPendingActions: tools.setPendingActions,

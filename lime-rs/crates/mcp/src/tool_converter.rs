@@ -231,6 +231,7 @@ mod tests {
                 "properties": { "query": { "type": "string" } },
                 "required": ["query"]
             }),
+            output_schema: None,
             server_name: "docs".to_string(),
             deferred_loading: Some(true),
             always_visible: Some(false),

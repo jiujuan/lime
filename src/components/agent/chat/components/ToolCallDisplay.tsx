@@ -12,21 +12,13 @@ import React, {
   useMemo,
   useCallback,
 } from "react";
-import {
-  ChevronDown,
-  ChevronRight,
-  Loader2,
-  ExternalLink,
-  FileText,
-  FolderTree,
-} from "lucide-react";
+import { ChevronRight, ExternalLink } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { openExternalUrlWithSystemBrowser } from "@/lib/api/externalUrl";
 import { cn } from "@/lib/utils";
 import { skillsApi } from "@/lib/api/skills";
 import type { AgentToolCallState as ToolCallState } from "@/lib/api/agentProtocol";
 import type { SiteSavedContentTarget } from "../types";
-import { MarkdownRenderer } from "./MarkdownRenderer";
 import { SearchResultPreviewList } from "./SearchResultPreviewList";
 import { ToolSearchSummaryPanel } from "./ToolSearchSummaryPanel";
 import {
@@ -48,11 +40,9 @@ import {
   resolveDiffReviewSummaryFromCandidates,
   type DiffReviewFile,
 } from "../utils/diffReview";
-import type { ToolCallArgumentValue } from "../utils/toolDisplayInfo";
 import {
   buildGroupedChildLine as buildGroupedChildLineFromInfo,
   buildToolHeadline as buildToolHeadlineFromInfo,
-  extractSearchQueryLabel as extractSearchQueryLabelFromInfo,
   getToolDisplayInfo as getToolDisplayInfoFromInfo,
   parseToolCallArguments as parseToolCallArgumentsFromInfo,
   resolveToolFilePath as resolveToolFilePathFromInfo,
@@ -68,9 +58,6 @@ import {
 } from "../utils/limeTaskProtocolNoise";
 import {
   buildRenderedToolResultContent,
-  buildToolCallDisplayGroups,
-  buildToolGroupHeadline,
-  buildToolGroupPreview,
   buildToolResultMetaNoticeKeys,
   formatCommandEncoding,
   isToolSearchToolName,
@@ -84,240 +71,16 @@ import {
   resolveToolResultPath,
   type ToolResultNotice,
 } from "./ToolCallDisplayViewModel";
-
-// ============ 可展开面板组件 ============
-
-interface ExpandablePanelProps {
-  label: React.ReactNode;
-  isStartExpanded?: boolean;
-  isForceExpand?: boolean;
-  children: React.ReactNode;
-  className?: string;
-}
-
-const ExpandablePanel: React.FC<ExpandablePanelProps> = ({
-  label,
-  isStartExpanded = false,
-  isForceExpand,
-  children,
-  className = "",
-}) => {
-  const [isExpandedState, setIsExpanded] = useState<boolean | null>(null);
-  const isExpanded =
-    isExpandedState === null ? isStartExpanded : isExpandedState;
-  const toggleExpand = () => setIsExpanded(!isExpanded);
-
-  useEffect(() => {
-    if (isForceExpand) setIsExpanded(true);
-  }, [isForceExpand]);
-
-  return (
-    <div className={className}>
-      <button
-        onClick={toggleExpand}
-        className="group w-full flex justify-between items-center pr-2 py-2 px-3 transition-colors rounded-none hover:bg-muted/50"
-      >
-        <span className="flex items-center text-sm truncate flex-1 min-w-0">
-          {label}
-        </span>
-        <ChevronRight
-          className={cn(
-            "w-4 h-4 text-muted-foreground group-hover:opacity-100 transition-transform opacity-70",
-            isExpanded && "rotate-90",
-          )}
-        />
-      </button>
-      {isExpanded && <div>{children}</div>}
-    </div>
-  );
-};
-
-// ============ 工具参数显示 ============
-
-interface ToolCallArgumentsProps {
-  args: Record<string, ToolCallArgumentValue>;
-}
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const ToolCallArguments: React.FC<ToolCallArgumentsProps> = ({ args }) => {
-  const [expandedKeys, setExpandedKeys] = useState<Record<string, boolean>>({});
-
-  const toggleKey = (key: string) => {
-    setExpandedKeys((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const renderValue = (key: string, value: ToolCallArgumentValue) => {
-    if (typeof value === "string") {
-      const needsExpansion = value.length > 60;
-      const isExpanded = expandedKeys[key];
-
-      if (!needsExpansion) {
-        return (
-          <div className="text-sm mb-2">
-            <div className="flex flex-row">
-              <span className="text-muted-foreground min-w-[120px] shrink-0">
-                {key}
-              </span>
-              <span className="text-foreground/70 break-all">{value}</span>
-            </div>
-          </div>
-        );
-      }
-
-      return (
-        <div className={cn("text-sm mb-2", !isExpanded && "truncate min-w-0")}>
-          <div
-            className={cn(
-              "flex flex-row items-start",
-              !isExpanded && "truncate min-w-0",
-            )}
-          >
-            <button
-              onClick={() => toggleKey(key)}
-              className="flex text-left text-muted-foreground min-w-[120px] shrink-0 hover:text-foreground"
-            >
-              {key}
-            </button>
-            <div className={cn("flex-1 min-w-0", !isExpanded && "truncate")}>
-              {isExpanded ? (
-                <MarkdownRenderer content={`\`\`\`\n${value}\n\`\`\``} />
-              ) : (
-                <button
-                  onClick={() => toggleKey(key)}
-                  className="text-left text-foreground/70 truncate w-full hover:text-foreground"
-                >
-                  {value}
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    // 处理非字符串值
-    const content = Array.isArray(value)
-      ? value
-          .map((item, index) => `${index + 1}. ${JSON.stringify(item)}`)
-          .join("\n")
-      : typeof value === "object" && value !== null
-        ? JSON.stringify(value, null, 2)
-        : String(value);
-
-    return (
-      <div className="mb-2">
-        <div className="flex flex-row text-sm">
-          <span className="text-muted-foreground min-w-[120px] shrink-0">
-            {key}
-          </span>
-          <pre className="whitespace-pre-wrap text-foreground/70 overflow-x-auto max-w-full font-mono text-xs">
-            {content}
-          </pre>
-        </div>
-      </div>
-    );
-  };
-
-  return (
-    <div className="py-2 px-4">
-      {Object.entries(args).map(([key, value]) => (
-        <div key={key}>{renderValue(key, value)}</div>
-      ))}
-    </div>
-  );
-};
-
-// ============ 工具日志显示 ============
-
-interface ToolLogsViewProps {
-  logs: string[];
-  working: boolean;
-  isStartExpanded?: boolean;
-}
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const ToolLogsView: React.FC<ToolLogsViewProps> = ({
-  logs,
-  working,
-  isStartExpanded = false,
-}) => {
-  const { t } = useTranslation("agent");
-  const boxRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (boxRef.current) {
-      boxRef.current.scrollTop = boxRef.current.scrollHeight;
-    }
-  }, [logs.length]);
-
-  return (
-    <ExpandablePanel
-      label={
-        <span className="pl-2 py-1 text-sm flex items-center gap-2">
-          <span>{t("agentChat.toolCall.logs.title")}</span>
-          {working && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
-        </span>
-      }
-      isStartExpanded={isStartExpanded}
-    >
-      <div
-        ref={boxRef}
-        className={cn(
-          "flex flex-col items-start space-y-1 overflow-y-auto p-3 font-mono text-xs",
-          working ? "max-h-16" : "max-h-80",
-        )}
-      >
-        {logs.map((log, i) => (
-          <span key={i} className="text-muted-foreground">
-            {log}
-          </span>
-        ))}
-      </div>
-    </ExpandablePanel>
-  );
-};
-
-// ============ 工具结果显示 ============
-
-interface ToolResultViewProps {
-  result: string;
-  isError?: boolean;
-  isStartExpanded?: boolean;
-}
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const ToolResultView: React.FC<ToolResultViewProps> = ({
-  result,
-  isError = false,
-  isStartExpanded = false,
-}) => {
-  const { t } = useTranslation("agent");
-  return (
-    <ExpandablePanel
-      label={
-        <span
-          className={cn("pl-2 py-1 text-sm", isError && "text-destructive")}
-        >
-          {isError
-            ? t("agentChat.toolCall.result.error")
-            : t("agentChat.toolCall.result.output")}
-        </span>
-      }
-      isStartExpanded={isStartExpanded}
-    >
-      <div className="p-3 max-h-80 overflow-y-auto">
-        <pre
-          className={cn(
-            "whitespace-pre-wrap font-mono text-xs break-all",
-            isError ? "text-destructive" : "text-foreground/80",
-          )}
-        >
-          {result || t("agentChat.toolCall.result.empty")}
-        </pre>
-      </div>
-    </ExpandablePanel>
-  );
-};
+import { shouldHideToolResultEnvelope } from "../utils/toolResultEnvelopeDisplay";
+import {
+  resolveStructuredToolContentDetailText,
+  resolveToolResultStructuredContent,
+} from "../utils/toolResultDetailText";
+import { ToolCallDisplayResultPanel } from "./ToolCallDisplayResultPanel";
+import {
+  ToolCallSkillContentButton,
+  ToolCallSkillContentPanel,
+} from "./ToolCallSkillContentPanel";
 
 // ============ 主组件 ============
 
@@ -441,6 +204,18 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
     const rawText = toolCall.result?.error || toolCall.result?.output || "";
     return extractLimeToolMetadataBlock(rawText).text;
   }, [toolCall.result?.error, toolCall.result?.output]);
+  const processNarrative = useMemo(
+    () => resolveToolProcessNarrative(toolCall),
+    [toolCall],
+  );
+  const shouldHideResultEnvelope = useMemo(
+    () =>
+      shouldHideToolResultEnvelope({
+        toolName: toolCall.name,
+        rawResultText,
+      }),
+    [rawResultText, toolCall.name],
+  );
   const limeTaskProtocolFailureText = useMemo(() => {
     if (!isFailed) {
       return null;
@@ -458,15 +233,40 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
   }, [isFailed, rawResultText, toolCall.name]);
   const resultText = useMemo(() => {
     const normalized = rawResultText;
+    const structuredContentDetail = resolveStructuredToolContentDetailText(
+      resolveToolResultStructuredContent(toolCall.result),
+    );
+    const fallbackSummary =
+      processNarrative.postSummary ||
+      processNarrative.summary ||
+      processNarrative.preSummary ||
+      emptyOutputLabel;
+
+    if (shouldHideResultEnvelope) {
+      return isRunning ? "" : structuredContentDetail || fallbackSummary;
+    }
+
     if (isFailed) {
       return (
         resolveToolErrorDetailText(toolCall.name, normalized) ||
         normalized ||
+        structuredContentDetail ||
         emptyOutputLabel
       );
     }
-    return normalized || emptyOutputLabel;
-  }, [emptyOutputLabel, isFailed, rawResultText, toolCall.name]);
+    return normalized || structuredContentDetail || emptyOutputLabel;
+  }, [
+    emptyOutputLabel,
+    isFailed,
+    isRunning,
+    processNarrative.postSummary,
+    processNarrative.preSummary,
+    processNarrative.summary,
+    rawResultText,
+    shouldHideResultEnvelope,
+    toolCall.result,
+    toolCall.name,
+  ]);
   const isResultFailure = useMemo(() => {
     if (!toolCall.result) return isFailed;
     return !isToolResultSuccessful({
@@ -680,10 +480,6 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
         toolName: toolCall.name,
       }),
     [fileName, limeTaskProtocolFailureText, toolCall.name, toolDisplay],
-  );
-  const processNarrative = useMemo(
-    () => resolveToolProcessNarrative(toolCall),
-    [toolCall],
   );
   const searchResultItems = useMemo(() => {
     if (!isUnifiedWebSearchToolName(toolCall.name)) {
@@ -912,29 +708,10 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
   ]);
 
   const skillContentButton = hasSkillContentAccess ? (
-    <button
-      type="button"
-      onClick={handleToggleSkillContent}
-      className={cn(
-        "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors",
-        isSkillContentExpanded
-          ? "bg-emerald-50 text-emerald-800"
-          : "text-slate-500 hover:bg-slate-100 hover:text-slate-800",
-      )}
-      title={
-        isSkillContentExpanded
-          ? t("agentChat.toolCall.skillContent.action.hide")
-          : t("agentChat.toolCall.skillContent.action.view")
-      }
-      aria-label={
-        isSkillContentExpanded
-          ? t("agentChat.toolCall.skillContent.action.hide")
-          : t("agentChat.toolCall.skillContent.action.view")
-      }
-    >
-      <FileText className="h-3.5 w-3.5" />
-      <span>{t("agentChat.toolCall.skillContent.action.viewShort")}</span>
-    </button>
+    <ToolCallSkillContentButton
+      isExpanded={isSkillContentExpanded}
+      onToggle={handleToggleSkillContent}
+    />
   ) : null;
 
   return (
@@ -1090,493 +867,47 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
       ) : null}
 
       {isSkillContentExpanded ? (
-        <div
-          className="mb-2 ml-6 mt-1.5 rounded-[14px] border border-emerald-100 bg-emerald-50/60 p-3"
-          data-testid="tool-call-skill-content-panel"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-900">
-                <FileText className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">{skillContentTitle}</span>
-              </div>
-              <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-emerald-700">
-                <span>{skillContentSourceLabel}</span>
-                {skillInvocationContentInfo.displayName ? (
-                  <span>{skillInvocationContentInfo.displayName}</span>
-                ) : null}
-                {skillInvocationContentInfo.markdownContentBytes !== null ? (
-                  <span>
-                    {t("agentChat.toolCall.skillContent.meta.bytes", {
-                      count: skillInvocationContentInfo.markdownContentBytes,
-                    })}
-                  </span>
-                ) : null}
-                {skillInvocationContentInfo.isSnapshotStandard === true ? (
-                  <span>
-                    {t("agentChat.toolCall.skillContent.meta.standard")}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            className="mt-3 flex w-full items-center justify-between rounded-[12px] border border-emerald-100 bg-white px-3 py-2 text-left text-xs font-medium text-emerald-900 transition-colors hover:border-emerald-200 hover:bg-emerald-50/60"
-            aria-expanded={skillMarkdownBodyExpanded}
-            aria-controls={`tool-call-skill-content-body-${toolCall.id}`}
-            onClick={() => setSkillMarkdownBodyExpanded((current) => !current)}
-          >
-            <span>
-              {skillMarkdownBodyExpanded
-                ? t("agentChat.toolCall.skillContent.action.collapseBody")
-                : t("agentChat.toolCall.skillContent.action.expandBody")}
-            </span>
-            <ChevronDown
-              className={cn(
-                "h-3.5 w-3.5 shrink-0 transition-transform",
-                skillMarkdownBodyExpanded && "rotate-180",
-              )}
-            />
-          </button>
-          {skillMarkdownBodyExpanded ? (
-            <div
-              id={`tool-call-skill-content-body-${toolCall.id}`}
-              className="mt-2 max-h-80 overflow-y-auto rounded-[12px] border border-slate-200 bg-white p-3"
-              data-testid="tool-call-skill-content-body"
-            >
-              {skillContentLoading ? (
-                <div className="flex items-center gap-2 text-sm text-slate-500">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  {t("agentChat.toolCall.skillContent.loading")}
-                </div>
-              ) : skillContentError ? (
-                <div className="text-sm text-rose-700">{skillContentError}</div>
-              ) : resolvedSkillContent.trim() ? (
-                <MarkdownRenderer content={resolvedSkillContent} />
-              ) : (
-                <div className="text-sm text-slate-500">
-                  {t("agentChat.toolCall.skillContent.empty")}
-                </div>
-              )}
-            </div>
-          ) : null}
-        </div>
+        <ToolCallSkillContentPanel
+          toolCallId={toolCall.id}
+          skillInvocationContentInfo={skillInvocationContentInfo}
+          sourceLabel={skillContentSourceLabel}
+          title={skillContentTitle}
+          bodyExpanded={skillMarkdownBodyExpanded}
+          onToggleBodyExpanded={() =>
+            setSkillMarkdownBodyExpanded((current) => !current)
+          }
+          loading={skillContentLoading}
+          error={skillContentError}
+          content={resolvedSkillContent}
+        />
       ) : null}
 
       {shouldRenderResultPanel && (
-        <div
-          className="mb-2 ml-6 mt-1.5 space-y-2"
-          data-testid="tool-call-result-panel"
-        >
-          {importedSourcePresentation ? (
-            <div
-              className="rounded-[12px] border border-slate-200 bg-slate-50 px-3 py-2"
-              data-testid="tool-call-imported-source-command-record"
-            >
-              <div className="text-[11px] font-semibold text-slate-700">
-                {t("agentChat.toolCall.importedCommandRecord.title")}
-              </div>
-              <p className="mt-1 text-[11px] leading-5 text-slate-600">
-                {t("agentChat.toolCall.importedCommandRecord.description")}
-              </p>
-            </div>
-          ) : null}
-          {commandSummary ? (
-            <div
-              className="rounded-[12px] border border-slate-200 bg-slate-50 px-3 py-2"
-              data-testid="tool-call-command-summary"
-            >
-              <div className="text-[11px] font-semibold text-slate-700">
-                {t("agentChat.toolCall.commandSummary.title")}
-              </div>
-              <div className="mt-1 space-y-1 text-[11px] text-slate-600">
-                {commandSummary.command ? (
-                  <div className="flex min-w-0 gap-1.5">
-                    <span className="shrink-0 text-slate-500">
-                      {t("agentChat.toolCall.commandSummary.command")}
-                    </span>
-                    <code className="min-w-0 break-all rounded bg-white px-1 py-0.5 font-mono text-[11px] text-slate-800">
-                      {commandSummary.command}
-                    </code>
-                  </div>
-                ) : null}
-                {commandSummary.cwd ? (
-                  <div className="flex min-w-0 gap-1.5">
-                    <span className="shrink-0 text-slate-500">
-                      {t("agentChat.toolCall.commandSummary.cwd")}
-                    </span>
-                    <span className="min-w-0 break-all text-slate-700">
-                      {commandSummary.cwd}
-                    </span>
-                  </div>
-                ) : null}
-                {commandSummary.shell ? (
-                  <div className="flex min-w-0 gap-1.5">
-                    <span className="shrink-0 text-slate-500">
-                      {t("agentChat.toolCall.commandSummary.shell")}
-                    </span>
-                    <code className="min-w-0 break-all rounded bg-white px-1 py-0.5 font-mono text-[11px] text-slate-800">
-                      {commandSummary.shell}
-                    </code>
-                  </div>
-                ) : null}
-                <div className="flex flex-wrap gap-x-3 gap-y-1">
-                  {commandSummary.exitCode !== null ? (
-                    <span>
-                      {t("agentChat.toolCall.commandSummary.exitCode", {
-                        value: commandSummary.exitCode,
-                      })}
-                    </span>
-                  ) : null}
-                  {commandSummary.stdoutLength !== null ? (
-                    <span>
-                      {t("agentChat.toolCall.commandSummary.stdout", {
-                        value: commandSummary.stdoutLength,
-                      })}
-                    </span>
-                  ) : null}
-                  {commandSummary.stderrLength !== null ? (
-                    <span>
-                      {t("agentChat.toolCall.commandSummary.stderr", {
-                        value: commandSummary.stderrLength,
-                      })}
-                    </span>
-                  ) : null}
-                  {commandSummary.sandboxed === true ? (
-                    <span>
-                      {commandSummary.sandboxType
-                        ? t(
-                            "agentChat.toolCall.commandSummary.sandboxEnabledWithType",
-                            { type: commandSummary.sandboxType },
-                          )
-                        : t("agentChat.toolCall.commandSummary.sandboxEnabled")}
-                    </span>
-                  ) : null}
-                  {commandSummary.sandboxed === false ? (
-                    <span>
-                      {t("agentChat.toolCall.commandSummary.sandboxDisabled")}
-                    </span>
-                  ) : null}
-                  {commandSummary.outputTruncated === true ? (
-                    <span>
-                      {t("agentChat.toolCall.commandSummary.truncated")}
-                    </span>
-                  ) : null}
-                  {commandSurfaceLabel ? (
-                    <span>{commandSurfaceLabel}</span>
-                  ) : null}
-                  {commandEncoding ? (
-                    <span>
-                      {t("agentChat.toolCall.commandSummary.encoding", {
-                        value: commandEncoding,
-                      })}
-                    </span>
-                  ) : null}
-                  {commandDecodedWithLabel ? (
-                    <span>{commandDecodedWithLabel}</span>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          ) : null}
-          {commandOutputStreams.length > 0 ? (
-            <div
-              className="rounded-[12px] border border-slate-200 bg-white"
-              data-testid="tool-call-command-output-streams"
-            >
-              <div className="border-b border-slate-100 px-3 py-2 text-[11px] font-semibold text-slate-700">
-                {t("agentChat.toolCall.commandOutput.title")}
-              </div>
-              <div className="divide-y divide-slate-100">
-                {commandOutputStreams.map((stream) => (
-                  <div
-                    key={stream.key}
-                    className="px-3 py-2"
-                    data-testid={`tool-call-command-output-${stream.key}`}
-                  >
-                    <div
-                      className={cn(
-                        "mb-1 text-[11px] font-semibold",
-                        stream.tone === "error"
-                          ? "text-rose-700"
-                          : "text-slate-600",
-                      )}
-                    >
-                      {t(`agentChat.toolCall.commandOutput.${stream.key}`)}
-                    </div>
-                    <pre
-                      className={cn(
-                        "max-h-48 overflow-y-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed",
-                        stream.tone === "error"
-                          ? "text-rose-800"
-                          : "text-slate-800",
-                      )}
-                    >
-                      {stream.content}
-                    </pre>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-          {diffReviewSummary ? (
-            <div
-              className="rounded-[12px] border border-slate-200 bg-white"
-              data-testid="tool-call-diff-review"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-3 py-2">
-                <div className="text-[11px] font-semibold text-slate-700">
-                  {t("agentChat.toolCall.diffReview.title")}
-                </div>
-                <div className="flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-slate-500">
-                  <span>
-                    {t("agentChat.toolCall.diffReview.files", {
-                      count: diffReviewSummary.files.length,
-                    })}
-                  </span>
-                  <span className="text-emerald-700">
-                    {t("agentChat.toolCall.diffReview.additions", {
-                      count: diffReviewSummary.additions,
-                    })}
-                  </span>
-                  <span className="text-rose-700">
-                    {t("agentChat.toolCall.diffReview.deletions", {
-                      count: diffReviewSummary.deletions,
-                    })}
-                  </span>
-                  <span>
-                    {t("agentChat.toolCall.diffReview.hunks", {
-                      count: diffReviewSummary.hunks,
-                    })}
-                  </span>
-                </div>
-              </div>
-              {diffReviewScopeItems.length > 0 ? (
-                <div
-                  className="border-b border-slate-100 bg-slate-50/70 px-3 py-2"
-                  data-testid="tool-call-diff-review-scope"
-                >
-                  <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-slate-700">
-                    <FolderTree className="h-3.5 w-3.5 text-slate-500" />
-                    <span>{t("agentChat.toolCall.diffReview.scopeTitle")}</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {diffReviewScopeItems.map((scope) => (
-                      <div
-                        key={scope.id}
-                        className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600"
-                        data-testid="tool-call-diff-review-scope-item"
-                      >
-                        <code className="max-w-56 truncate font-mono text-slate-800">
-                          {scope.label ||
-                            t("agentChat.toolCall.diffReview.scopeRoot")}
-                        </code>
-                        <span className="text-slate-500">
-                          {t("agentChat.toolCall.diffReview.files", {
-                            count: scope.fileCount,
-                          })}
-                        </span>
-                        <span className="text-emerald-700">
-                          +{scope.additions}
-                        </span>
-                        <span className="text-rose-700">
-                          -{scope.deletions}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-              <div className="divide-y divide-slate-100">
-                {diffReviewSummary.files.map((file) => {
-                  const isDiffFileExpanded = Boolean(
-                    expandedDiffFileIds[file.id],
-                  );
-                  const visibleLines = isDiffFileExpanded
-                    ? file.lines
-                    : file.previewLines;
-                  const hiddenLineCount = Math.max(
-                    file.lines.length - file.previewLines.length,
-                    0,
-                  );
-                  const diffLinesId = `tool-call-diff-lines-${toolCall.id}-${file.id}`;
-
-                  return (
-                    <div
-                      key={file.id}
-                      className="px-3 py-2"
-                      data-testid="tool-call-diff-review-file"
-                    >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span
-                          className={cn(
-                            "rounded border px-1.5 py-0.5 text-[10px] font-medium",
-                            file.status === "added" &&
-                              "border-emerald-200 bg-emerald-50 text-emerald-800",
-                            file.status === "deleted" &&
-                              "border-rose-200 bg-rose-50 text-rose-800",
-                            file.status === "modified" &&
-                              "border-sky-200 bg-sky-50 text-sky-800",
-                            file.status === "unknown" &&
-                              "border-slate-200 bg-slate-50 text-slate-700",
-                          )}
-                        >
-                          {t(
-                            `agentChat.toolCall.diffReview.status.${file.status}`,
-                          )}
-                        </span>
-                        <code className="min-w-0 break-all font-mono text-[11px] text-slate-800">
-                          {file.path}
-                        </code>
-                        <span className="text-[11px] text-emerald-700">
-                          +{file.additions}
-                        </span>
-                        <span className="text-[11px] text-rose-700">
-                          -{file.deletions}
-                        </span>
-                        {onFileClick ? (
-                          <button
-                            type="button"
-                            className="ml-auto inline-flex items-center justify-center rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900"
-                            title={t(
-                              "agentChat.toolCall.diffReview.openInCanvasWithTarget",
-                              { target: file.path },
-                            )}
-                            aria-label={t(
-                              "agentChat.toolCall.diffReview.openInCanvasWithTarget",
-                              { target: file.path },
-                            )}
-                            onClick={() => handleOpenDiffFileInCanvas(file)}
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" />
-                          </button>
-                        ) : null}
-                      </div>
-                      {visibleLines.length > 0 ? (
-                        <div
-                          id={diffLinesId}
-                          className={cn(
-                            "mt-2 overflow-y-auto rounded-[10px] border border-slate-100 bg-slate-50 font-mono text-[11px] leading-relaxed",
-                            isDiffFileExpanded ? "max-h-80" : "max-h-36",
-                          )}
-                          data-testid="tool-call-diff-review-file-lines"
-                        >
-                          {visibleLines.map((line, index) => (
-                            <div
-                              key={`${file.id}:${index}`}
-                              className={cn(
-                                "grid grid-cols-[24px_minmax(0,1fr)] gap-2 px-2 py-0.5",
-                                line.kind === "add" &&
-                                  "bg-emerald-50 text-emerald-900",
-                                line.kind === "remove" &&
-                                  "bg-rose-50 text-rose-900",
-                                line.kind === "hunk" &&
-                                  "bg-sky-50 text-sky-900",
-                                line.kind === "context" && "text-slate-700",
-                              )}
-                            >
-                              <span className="select-none text-right text-slate-400">
-                                {line.kind === "add"
-                                  ? "+"
-                                  : line.kind === "remove"
-                                    ? "-"
-                                    : line.kind === "hunk"
-                                      ? "@@"
-                                      : ""}
-                              </span>
-                              <span className="min-w-0 break-all">
-                                {line.text || " "}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : null}
-                      {hiddenLineCount > 0 ? (
-                        <button
-                          type="button"
-                          className="mt-2 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
-                          aria-expanded={isDiffFileExpanded}
-                          aria-controls={diffLinesId}
-                          onClick={() => handleToggleDiffFileExpanded(file.id)}
-                        >
-                          <span>
-                            {isDiffFileExpanded
-                              ? t("agentChat.toolCall.diffReview.collapseFile")
-                              : t("agentChat.toolCall.diffReview.expandFile", {
-                                  count: hiddenLineCount,
-                                })}
-                          </span>
-                          <ChevronDown
-                            className={cn(
-                              "h-3.5 w-3.5 transition-transform",
-                              isDiffFileExpanded && "rotate-180",
-                            )}
-                          />
-                        </button>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ) : null}
-          {resultMetaItems.length > 0 ? (
-            <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
-              {resultMetaItems.map((item) => (
-                <span key={item}>{item}</span>
-              ))}
-            </div>
-          ) : null}
-          {siteResultNotices.length > 0 ? (
-            <div className="space-y-1 text-[11px]">
-              {siteResultNotices.map((notice) => (
-                <div
-                  key={notice.key}
-                  className={cn(
-                    notice.tone === "success" && "text-emerald-700",
-                    notice.tone === "warning" && "text-amber-700",
-                    notice.tone === "error" && "text-rose-700",
-                    notice.tone === "neutral" && "text-slate-500",
-                  )}
-                >
-                  {notice.text}
-                </div>
-              ))}
-            </div>
-          ) : null}
-          {savedSiteContentTarget && onOpenSavedSiteContent ? (
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className="inline-flex items-center justify-center rounded-md border border-emerald-300 bg-white px-2.5 py-1.5 text-xs font-medium text-emerald-800 transition-colors hover:bg-emerald-50"
-                onClick={handleOpenSavedSiteContent}
-              >
-                {openSavedSiteContentLabel}
-              </button>
-            </div>
-          ) : null}
-          {resultPath ? (
-            <div
-              className="break-all text-[11px] text-slate-500"
-              title={resultPath.value}
-            >
-              {resultPath.label}: {resultPath.displayValue}
-            </div>
-          ) : null}
-          {commandOutputStreams.length === 0 ? (
-            <div
-              className={cn(
-                "max-h-64 overflow-y-auto rounded-[14px] border border-slate-200 bg-white p-3",
-                isResultFailure && "border-rose-200",
-              )}
-              data-testid="tool-call-rendered-result"
-            >
-              <MarkdownRenderer content={renderedResultContent} />
-            </div>
-          ) : null}
-        </div>
+        <ToolCallDisplayResultPanel
+          toolCallId={toolCall.id}
+          importedSourcePresentation={importedSourcePresentation}
+          commandSummary={commandSummary}
+          commandOutputStreams={commandOutputStreams}
+          commandSurfaceLabel={commandSurfaceLabel}
+          commandEncoding={commandEncoding}
+          commandDecodedWithLabel={commandDecodedWithLabel}
+          diffReviewSummary={diffReviewSummary}
+          diffReviewScopeItems={diffReviewScopeItems}
+          expandedDiffFileIds={expandedDiffFileIds}
+          onToggleDiffFileExpanded={handleToggleDiffFileExpanded}
+          onOpenDiffFileInCanvas={handleOpenDiffFileInCanvas}
+          canOpenDiffFileInCanvas={Boolean(onFileClick)}
+          resultMetaItems={resultMetaItems}
+          siteResultNotices={siteResultNotices}
+          showOpenSavedSiteContent={Boolean(
+            savedSiteContentTarget && onOpenSavedSiteContent,
+          )}
+          onOpenSavedSiteContent={handleOpenSavedSiteContent}
+          openSavedSiteContentLabel={openSavedSiteContentLabel}
+          resultPath={resultPath}
+          isResultFailure={isResultFailure}
+          renderedResultContent={renderedResultContent}
+        />
       )}
 
       {previewImageSrc && (
@@ -1596,235 +927,6 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
   );
 };
 
-// ============ 工具调用列表 ============
-
-interface ToolCallListProps {
-  toolCalls: ToolCallState[];
-  /** 当前 assistant 消息是否仍在流式输出 */
-  isMessageStreaming?: boolean;
-  /** 文件点击回调 - 用于打开右边栏显示文件内容 */
-  onFileClick?: (fileName: string, content: string) => void;
-  onOpenSavedSiteContent?: (target: SiteSavedContentTarget) => void;
-}
-
-export const ToolCallList: React.FC<ToolCallListProps> = ({
-  toolCalls,
-  isMessageStreaming = false,
-  onFileClick,
-  onOpenSavedSiteContent,
-}) => {
-  if (!toolCalls || toolCalls.length === 0) return null;
-
-  const groups = buildToolCallDisplayGroups(toolCalls);
-
-  return (
-    <div className="flex flex-col gap-1">
-      {groups.map((group) => {
-        if (group.type === "single") {
-          return (
-            <ToolCallDisplay
-              key={group.id}
-              toolCall={group.item}
-              isMessageStreaming={isMessageStreaming}
-              onFileClick={onFileClick}
-              onOpenSavedSiteContent={onOpenSavedSiteContent}
-            />
-          );
-        }
-
-        if (group.type === "work") {
-          if (group.items.length === 1) {
-            return (
-              <ToolCallDisplay
-                key={group.id}
-                toolCall={group.items[0]!}
-                isMessageStreaming={isMessageStreaming}
-                onFileClick={onFileClick}
-                onOpenSavedSiteContent={onOpenSavedSiteContent}
-              />
-            );
-          }
-
-          return (
-            <WorkToolCallGroup
-              key={group.id}
-              toolCalls={group.items}
-              isMessageStreaming={isMessageStreaming}
-              onFileClick={onFileClick}
-              onOpenSavedSiteContent={onOpenSavedSiteContent}
-            />
-          );
-        }
-
-        return (
-          <SearchToolCallGroup
-            key={group.id}
-            toolCalls={group.items}
-            isMessageStreaming={isMessageStreaming}
-            onFileClick={onFileClick}
-            onOpenSavedSiteContent={onOpenSavedSiteContent}
-          />
-        );
-      })}
-    </div>
-  );
-};
-
-function WorkToolCallGroup({
-  toolCalls,
-  isMessageStreaming,
-  onFileClick,
-  onOpenSavedSiteContent,
-}: {
-  toolCalls: ToolCallState[];
-  isMessageStreaming: boolean;
-  onFileClick?: (fileName: string, content: string) => void;
-  onOpenSavedSiteContent?: (target: SiteSavedContentTarget) => void;
-}) {
-  const { t } = useTranslation("agent");
-  const hasRunning = toolCalls.some((item) => item.status === "running");
-  const hasFailed = toolCalls.some((item) => item.status === "failed");
-  const [expanded, setExpanded] = useState(hasRunning || hasFailed);
-  const formatImportedSourceCommandRecord = (count?: number) =>
-    t("agentChat.toolCall.importedCommandRecord.groupTitle", { count });
-  const headline = buildToolGroupHeadline(
-    toolCalls,
-    formatImportedSourceCommandRecord,
-  );
-  const preview = buildToolGroupPreview(
-    toolCalls,
-    (count) => t("agentChat.toolCall.group.hiddenItems", { count }),
-    formatImportedSourceCommandRecord,
-  );
-
-  useEffect(() => {
-    if (hasRunning || hasFailed) {
-      setExpanded(true);
-    }
-  }, [hasFailed, hasRunning]);
-
-  return (
-    <div className="py-0.5" data-testid="tool-call-work-group">
-      <button
-        type="button"
-        className="flex w-full items-start gap-2.5 py-1.5 text-left transition-colors hover:bg-slate-50"
-        onClick={() => setExpanded((prev) => !prev)}
-        aria-label={
-          expanded
-            ? t("agentChat.toolCall.group.collapseWork")
-            : t("agentChat.toolCall.group.expandWork")
-        }
-      >
-        <span className="pt-0.5 text-sm text-slate-400">•</span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm text-slate-900">
-            {headline}
-          </span>
-          {!expanded && preview ? (
-            <span className="mt-0.5 block truncate text-xs text-slate-500">
-              {preview}
-            </span>
-          ) : null}
-        </span>
-        <ChevronDown
-          className={cn(
-            "mt-0.5 h-4 w-4 text-slate-500 transition-transform",
-            expanded && "rotate-180",
-          )}
-        />
-      </button>
-      {expanded ? (
-        <div className="ml-6 space-y-1">
-          {toolCalls.map((toolCall, index) => (
-            <ToolCallDisplay
-              key={toolCall.id}
-              toolCall={toolCall}
-              isMessageStreaming={isMessageStreaming}
-              onFileClick={onFileClick}
-              onOpenSavedSiteContent={onOpenSavedSiteContent}
-              grouped={true}
-              groupMarker={index === 0 ? "└" : "·"}
-            />
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function SearchToolCallGroup({
-  toolCalls,
-  isMessageStreaming,
-  onFileClick,
-  onOpenSavedSiteContent,
-}: {
-  toolCalls: ToolCallState[];
-  isMessageStreaming: boolean;
-  onFileClick?: (fileName: string, content: string) => void;
-  onOpenSavedSiteContent?: (target: SiteSavedContentTarget) => void;
-}) {
-  const { t } = useTranslation("agent");
-  const [expanded, setExpanded] = useState(true);
-  const headline = buildToolGroupHeadline(toolCalls);
-  const queryPreview = toolCalls
-    .slice(0, 2)
-    .map(extractSearchQueryLabelFromInfo)
-    .join(" · ");
-  const hiddenCount = Math.max(toolCalls.length - 2, 0);
-
-  return (
-    <div className="py-0.5">
-      <button
-        type="button"
-        className="flex w-full items-start gap-2.5 py-1.5 text-left transition-colors hover:bg-slate-50"
-        onClick={() => setExpanded((prev) => !prev)}
-        aria-label={
-          expanded
-            ? t("agentChat.toolCall.group.collapseSearch")
-            : t("agentChat.toolCall.group.expandSearch")
-        }
-      >
-        <span className="pt-0.5 text-sm text-slate-400">•</span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm text-slate-900">
-            {headline}
-          </span>
-          {!expanded ? (
-            <span className="mt-0.5 block truncate text-xs text-slate-500">
-              {queryPreview}
-              {hiddenCount > 0
-                ? t("agentChat.toolCall.group.hiddenSearchGroups", {
-                    count: hiddenCount,
-                  })
-                : ""}
-            </span>
-          ) : null}
-        </span>
-        <ChevronDown
-          className={cn(
-            "mt-0.5 h-4 w-4 text-slate-500 transition-transform",
-            expanded && "rotate-180",
-          )}
-        />
-      </button>
-      {expanded ? (
-        <div className="ml-6 space-y-1">
-          {toolCalls.map((toolCall, index) => (
-            <ToolCallDisplay
-              key={toolCall.id}
-              toolCall={toolCall}
-              isMessageStreaming={isMessageStreaming}
-              onFileClick={onFileClick}
-              onOpenSavedSiteContent={onOpenSavedSiteContent}
-              grouped={true}
-              groupMarker={index === 0 ? "└" : "·"}
-            />
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 // 导出别名，用于交错显示模式
 export const ToolCallItem = ToolCallDisplay;

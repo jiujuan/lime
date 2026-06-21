@@ -193,16 +193,20 @@ export function useAgentRuntimeSyncEffects(
     if (!sessionId || !isSending || !settleActiveRuntimeStream) {
       return;
     }
+    const hasTerminalTurnInReadModel = hasTerminalTurn(threadTurns);
     const hasTerminalReadModel =
       isExplicitTerminalRuntimeStatus(threadReadStatus) ||
-      hasTerminalTurn(threadTurns);
+      hasTerminalTurnInReadModel;
     if (!observedActiveRuntimeWorkRef.current && !hasTerminalReadModel) {
       return;
     }
     if (queuedTurnCount > 0 || hasRunningTurn(threadTurns)) {
       return;
     }
-    if (!isTerminalRuntimeStatus(threadReadStatus)) {
+    if (
+      !hasTerminalTurnInReadModel &&
+      !isTerminalRuntimeStatus(threadReadStatus)
+    ) {
       return;
     }
 

@@ -81,6 +81,41 @@ function hasOnlyWebRetrievalTools(
   );
 }
 
+function toolMetadata(toolCall: ToolCallState): Record<string, unknown> | null {
+  const metadata = (toolCall as { metadata?: unknown }).metadata;
+  if (metadata && typeof metadata === "object" && !Array.isArray(metadata)) {
+    return metadata as Record<string, unknown>;
+  }
+  return null;
+}
+
+function isSkillToolCall(toolCall: ToolCallState): boolean {
+  const normalizedName = toolCall.name.trim().toLowerCase();
+  if (
+    normalizedName === "skill" ||
+    normalizedName === "skilltool" ||
+    normalizedName === "lime_run_service_skill"
+  ) {
+    return true;
+  }
+
+  const metadata = toolMetadata(toolCall);
+  return (
+    metadata?.tool_family === "skill" ||
+    typeof metadata?.skill_name === "string" ||
+    typeof metadata?.skillName === "string"
+  );
+}
+
+function hasRunningSkillProcess(entries: StreamingProcessEntry[]): boolean {
+  return entries.some(
+    (entry) =>
+      entry.kind === "tool" &&
+      entry.toolCall.status === "running" &&
+      isSkillToolCall(entry.toolCall),
+  );
+}
+
 export function shouldSplitProcessBeforeEntry(
   currentEntries: StreamingProcessEntry[],
   nextEntry: StreamingProcessEntry,
@@ -165,7 +200,7 @@ export function shouldAutoExpandProcessEntries(
   if (
     options?.isTailProcessRun &&
     !hasImportedProcess &&
-    hasSuccessfulOrRunningWebRetrievalProcess(entries)
+    hasRunningSkillProcess(entries)
   ) {
     return true;
   }

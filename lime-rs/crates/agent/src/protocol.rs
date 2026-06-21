@@ -26,6 +26,12 @@ pub struct AgentToolResult {
     pub output: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    #[serde(
+        default,
+        rename = "structuredContent",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub structured_content: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub images: Option<Vec<AgentToolImage>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -231,6 +237,12 @@ pub enum AgentMessageContent {
         output: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
+        #[serde(
+            default,
+            rename = "structuredContent",
+            skip_serializing_if = "Option::is_none"
+        )]
+        structured_content: Option<Value>,
         #[serde(skip_serializing_if = "Option::is_none")]
         images: Option<Vec<AgentToolImage>>,
         #[serde(skip_serializing_if = "Option::is_none")]

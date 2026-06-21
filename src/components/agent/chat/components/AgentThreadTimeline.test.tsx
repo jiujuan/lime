@@ -292,6 +292,32 @@ describe("AgentThreadTimeline", () => {
     ).toBeNull();
     expect(container.textContent).not.toContain("task-image-1.json");
   });
+  it("未适配的历史运行记录不应在时间线摊开原始 JSON", () => {
+    const unsupportedItem = {
+      ...createBaseItem("unsupported-runtime-item", 1),
+      type: "runtime_protocol_diagnostic",
+      status: "completed",
+      metadata: {
+        request_metadata: {
+          query: "整理今天新闻",
+          diagnostics: { transport: "jsonrpc" },
+        },
+        raw_payload: {
+          jsonrpc: "2.0",
+          method: "agentSession/turn/start",
+        },
+      },
+    } as unknown as AgentThreadItem;
+
+    const container = renderTimeline([unsupportedItem]);
+
+    expect(container.textContent).toContain("记录了 runtime_protocol_diagnostic");
+    expect(container.textContent).toContain("已隐藏底层协议详情");
+    expect(container.textContent).not.toContain("request_metadata");
+    expect(container.textContent).not.toContain("raw_payload");
+    expect(container.textContent).not.toContain("jsonrpc");
+    expect(container.textContent).not.toContain("agentSession/turn/start");
+  });
   it("收到 timeline 聚焦请求时应自动展开并高亮目标项", () => {
     const container = renderTimeline(
       [

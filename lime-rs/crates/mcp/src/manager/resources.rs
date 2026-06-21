@@ -76,6 +76,59 @@ impl McpClientManager {
         Ok(all_resources)
     }
 
+    /// 获取所有资源模板。
+    pub async fn list_resource_templates(
+        &self,
+    ) -> Result<Vec<McpResourceTemplateDefinition>, McpError> {
+        info!("获取所有 MCP 资源模板");
+
+        let mut all_templates: Vec<McpResourceTemplateDefinition> = Vec::new();
+        let clients = self.clients.read().await;
+
+        for (server_name, wrapper) in clients.iter() {
+            if let Some(ref info) = wrapper.server_info {
+                if !info.supports_resources {
+                    debug!(server_name = %server_name, "服务器不支持资源，跳过资源模板");
+                    continue;
+                }
+            }
+
+            let service = match wrapper.running_service() {
+                Some(service) => service,
+                None => {
+                    warn!(server_name = %server_name, "服务器无运行服务，跳过资源模板");
+                    continue;
+                }
+            };
+
+            match service.list_all_resource_templates().await {
+                Ok(templates) => {
+                    debug!(
+                        server_name = %server_name,
+                        template_count = templates.len(),
+                        "获取服务器资源模板列表成功"
+                    );
+                    for template in templates {
+                        all_templates.push(Self::convert_resource_template_to_definition(
+                            template,
+                            server_name.clone(),
+                        ));
+                    }
+                }
+                Err(error) => {
+                    warn!(
+                        server_name = %server_name,
+                        error = %error,
+                        "获取服务器资源模板列表失败"
+                    );
+                }
+            }
+        }
+
+        info!(template_count = all_templates.len(), "资源模板列表已获取");
+        Ok(all_templates)
+    }
+
     /// 将 rmcp Resource 转换为 McpResourceDefinition
     pub(super) fn convert_resource_to_definition(
         resource: rmcp::model::Resource,
@@ -86,6 +139,21 @@ impl McpClientManager {
             name: resource.name.clone(),
             description: resource.description.clone(),
             mime_type: resource.mime_type.clone(),
+            server_name,
+        }
+    }
+
+    /// 将 rmcp ResourceTemplate 转换为 McpResourceTemplateDefinition
+    pub(super) fn convert_resource_template_to_definition(
+        template: rmcp::model::ResourceTemplate,
+        server_name: String,
+    ) -> McpResourceTemplateDefinition {
+        McpResourceTemplateDefinition {
+            uri_template: template.uri_template.clone(),
+            name: template.name.clone(),
+            title: template.title.clone(),
+            description: template.description.clone(),
+            mime_type: template.mime_type.clone(),
             server_name,
         }
     }

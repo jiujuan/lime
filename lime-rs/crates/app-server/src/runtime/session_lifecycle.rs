@@ -661,6 +661,7 @@ impl RuntimeCore {
         index: usize,
         turn: AgentTurn,
         input: AgentInput,
+        runtime_options: Option<RuntimeOptions>,
     ) {
         let mut state = self
             .state
@@ -680,7 +681,16 @@ impl RuntimeCore {
                 let insert_at = index.min(stored.turns.len());
                 stored.turns.insert(insert_at, turn.clone());
             }
-            stored.turn_inputs.insert(turn.turn_id, input);
+            let turn_id = turn.turn_id;
+            stored.turn_inputs.insert(turn_id.clone(), input);
+            match runtime_options {
+                Some(runtime_options) => {
+                    stored.turn_runtime_options.insert(turn_id, runtime_options);
+                }
+                None => {
+                    stored.turn_runtime_options.remove(&turn_id);
+                }
+            }
         }
     }
 }

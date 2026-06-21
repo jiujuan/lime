@@ -11,6 +11,15 @@ async fn test_list_resources_returns_empty_when_no_servers() {
 }
 
 #[tokio::test]
+async fn test_list_resource_templates_returns_empty_when_no_servers() {
+    let manager = McpClientManager::new(None);
+
+    // 没有运行的服务器时，应该返回空列表
+    let result = manager.list_resource_templates().await.unwrap();
+    assert!(result.is_empty());
+}
+
+#[tokio::test]
 async fn test_read_resource_not_found() {
     let manager = McpClientManager::new(None);
 
@@ -75,6 +84,33 @@ fn test_convert_resource_to_definition_minimal() {
     assert!(definition.description.is_none());
     assert!(definition.mime_type.is_none());
     assert_eq!(definition.server_name, "server1");
+}
+
+#[test]
+fn test_convert_resource_template_to_definition() {
+    use rmcp::model::{AnnotateAble, RawResourceTemplate};
+
+    let raw_template = RawResourceTemplate {
+        uri_template: "file:///{path}".to_string(),
+        name: "workspace-file".to_string(),
+        title: Some("Workspace File".to_string()),
+        description: Some("Read a workspace file by path".to_string()),
+        mime_type: Some("text/plain".to_string()),
+    };
+    let template = raw_template.no_annotation();
+
+    let definition =
+        McpClientManager::convert_resource_template_to_definition(template, "docs".to_string());
+
+    assert_eq!(definition.uri_template, "file:///{path}");
+    assert_eq!(definition.name, "workspace-file");
+    assert_eq!(definition.title, Some("Workspace File".to_string()));
+    assert_eq!(
+        definition.description,
+        Some("Read a workspace file by path".to_string())
+    );
+    assert_eq!(definition.mime_type, Some("text/plain".to_string()));
+    assert_eq!(definition.server_name, "docs");
 }
 
 #[test]

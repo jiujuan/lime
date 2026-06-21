@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveMessageListItemProjection } from "./messageListItemProjection";
-import type { Message } from "../types";
+import {
+  buildProjection,
+  type Message,
+  type ProjectionTimelineItems,
+} from "./messageListItemProjection.testHarness";
 
 function buildImportedProjection(
   message: Message,
-  timelineItems: NonNullable<
-    Parameters<typeof resolveMessageListItemProjection>[0]["group"]["timeline"]
-  >["items"] = [
+  timelineItems: ProjectionTimelineItems = [
     {
       id: "command-codex-import",
       type: "command_execution",
@@ -42,31 +43,8 @@ function buildImportedProjection(
     },
   ],
 ) {
-  return resolveMessageListItemProjection({
-    activeCurrentTurnId: null,
-    activePendingA2UISource: null,
-    canOpenSavedSiteContent: false,
-    expandedHistoricalAssistantMessageIds: new Set(),
-    expandedHistoricalTimelineKeys: new Set(),
-    expandedLongHistoricalMessageIds: new Set(),
-    group: {
-      lastAssistantId: message.id,
-      timeline: {
-        turn: {
-          id: "turn-imported-history",
-          status: "completed",
-        },
-        items: timelineItems,
-      },
-    } as never,
-    hasActiveInteractiveRuntime: true,
-    isRestoredHistoryWindow: false,
-    isSending: true,
-    lastAssistantMessageId: message.id,
-    message,
-    shouldDeferHistoricalAssistantMessageDetails: () => false,
-    shouldDeferThreadItemsScan: false,
-    streamingTextOverlay: null,
+  return buildProjection(message, timelineItems, {
+    turnId: "turn-imported-history",
   });
 }
 

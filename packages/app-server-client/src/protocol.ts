@@ -3219,6 +3219,7 @@ export type McpContent =
 
 export type McpToolCallResponse = {
   content: McpContent[];
+  structuredContent?: unknown;
   is_error: boolean;
 };
 
@@ -3243,6 +3244,7 @@ export type McpPromptGetResponse = {
 
 export type McpResourceListResponse = {
   resources: unknown[];
+  resourceTemplates?: unknown[];
 };
 
 export type McpResourceReadParams = {

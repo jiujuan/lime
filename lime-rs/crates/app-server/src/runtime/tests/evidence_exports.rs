@@ -1050,6 +1050,65 @@ async fn export_evidence_records_skill_invocation_from_tool_metadata() {
                 }),
             ),
             RuntimeEvent::new(
+                "tool.started",
+                json!({
+                    "toolCallId": "skill-search-call-1",
+                    "toolName": "skill_search",
+                    "arguments": {
+                        "query": "capability report"
+                    }
+                }),
+            ),
+            RuntimeEvent::new(
+                "tool.result",
+                json!({
+                    "toolCallId": "skill-search-call-1",
+                    "toolName": "skill_search",
+                    "arguments": {
+                        "query": "capability report"
+                    },
+                    "outputPreview": "{\"results\":[]}",
+                    "success": true,
+                    "metadata": {
+                        "tool_family": "skill_search",
+                        "skill_search_query": "capability report",
+                        "skill_search_snapshot_skill_count": 7,
+                        "skill_search_result_count": 2
+                    }
+                }),
+            ),
+            RuntimeEvent::new(
+                "tool.started",
+                json!({
+                    "toolCallId": "mcp-search-call-1",
+                    "toolName": "mcp__docs__search_docs",
+                    "arguments": {
+                        "query": "mcp structured content"
+                    }
+                }),
+            ),
+            RuntimeEvent::new(
+                "tool.result",
+                json!({
+                    "toolCallId": "mcp-search-call-1",
+                    "toolName": "mcp__docs__search_docs",
+                    "success": true,
+                    "result": {
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "docs found"
+                            }
+                        ],
+                        "structuredContent": {
+                            "answer": "ok",
+                            "ids": ["doc-1"]
+                        },
+                        "isError": false
+                    }
+                }),
+            ),
+            RuntimeEvent::new(
                 "tool.result",
                 json!({
                     "toolCallId": "skill-call-1",
@@ -1130,6 +1189,82 @@ async fn export_evidence_records_skill_invocation_from_tool_metadata() {
             .and_then(serde_json::Value::as_str),
         Some("manual")
     );
+    let skill_searches = evidence_pack
+        .observability_summary
+        .as_ref()
+        .and_then(|summary| summary.get("skill_searches"))
+        .and_then(serde_json::Value::as_array)
+        .expect("skill searches");
+    assert_eq!(skill_searches.len(), 1);
+    assert_eq!(
+        skill_searches[0]
+            .get("event")
+            .and_then(serde_json::Value::as_str),
+        Some("skill_search")
+    );
+    assert_eq!(
+        skill_searches[0]
+            .get("query")
+            .and_then(serde_json::Value::as_str),
+        Some("capability report")
+    );
+    assert_eq!(
+        skill_searches[0]
+            .get("resultCount")
+            .and_then(serde_json::Value::as_u64),
+        Some(2)
+    );
+    assert_eq!(
+        skill_searches[0]
+            .get("snapshotSkillCount")
+            .and_then(serde_json::Value::as_u64),
+        Some(7)
+    );
+    assert_eq!(
+        skill_searches[0]
+            .get("toolCallId")
+            .and_then(serde_json::Value::as_str),
+        Some("skill-search-call-1")
+    );
+    let mcp_tool_results = evidence_pack
+        .observability_summary
+        .as_ref()
+        .and_then(|summary| summary.get("mcp_tool_results"))
+        .and_then(serde_json::Value::as_array)
+        .expect("mcp tool results");
+    assert_eq!(mcp_tool_results.len(), 1);
+    assert_eq!(
+        mcp_tool_results[0]
+            .get("event")
+            .and_then(serde_json::Value::as_str),
+        Some("mcp_tool_result")
+    );
+    assert_eq!(
+        mcp_tool_results[0]
+            .get("toolName")
+            .and_then(serde_json::Value::as_str),
+        Some("mcp__docs__search_docs")
+    );
+    assert_eq!(
+        mcp_tool_results[0]
+            .get("hasStructuredContent")
+            .and_then(serde_json::Value::as_bool),
+        Some(true)
+    );
+    assert_eq!(
+        mcp_tool_results[0]
+            .get("structuredContentKeys")
+            .and_then(serde_json::Value::as_array)
+            .map(|keys| keys.len()),
+        Some(2)
+    );
+    assert_eq!(
+        mcp_tool_results[0]
+            .get("toolCallId")
+            .and_then(serde_json::Value::as_str),
+        Some("mcp-search-call-1")
+    );
+    assert!(mcp_tool_results[0].get("structuredContent").is_none());
     let audit = evidence_pack
         .completion_audit_summary
         .as_ref()
