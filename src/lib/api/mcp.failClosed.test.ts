@@ -145,6 +145,11 @@ describe("mcp App Server current API fail-closed", () => {
       ],
       ["mcpPrompt/get", () => mcpApi.getPrompt("summarize", {})],
       ["mcpResource/read", () => mcpApi.readResource("docs://readme")],
+      ["mcpResource/subscribe", () => mcpApi.subscribeResource("docs://readme")],
+      [
+        "mcpResource/unsubscribe",
+        () => mcpApi.unsubscribeResource("docs://readme"),
+      ],
     ];
 
     for (const [method, action] of cases) {
@@ -208,6 +213,16 @@ describe("mcp App Server current API fail-closed", () => {
         { mime_type: "text/plain", text: "README" },
         () => mcpApi.readResource("docs://readme"),
         "mcpResource/read did not return resource content",
+      ],
+      [
+        { ok: true },
+        () => mcpApi.subscribeResource("docs://readme"),
+        "mcpResource/subscribe did not return empty result",
+      ],
+      [
+        { ok: true },
+        () => mcpApi.unsubscribeResource("docs://readme"),
+        "mcpResource/unsubscribe did not return empty result",
       ],
     ];
 

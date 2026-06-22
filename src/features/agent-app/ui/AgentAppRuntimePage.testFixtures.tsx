@@ -320,6 +320,8 @@ export async function dispatchBridgeMessage(
 
 export function useAgentAppRuntimePageTestLifecycle() {
   beforeEach(() => {
+    document.documentElement.lang = "zh-CN";
+    document.documentElement.dir = "ltr";
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     let runtimeTaskCounter = 0;
     appServerClientMocks.createAppServerClient.mockReturnValue({

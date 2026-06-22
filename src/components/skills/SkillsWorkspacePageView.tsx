@@ -67,6 +67,7 @@ interface SkillsWorkspacePageViewProps {
   officialMarketplaceLoading: boolean;
   officialMarketplaceSkillCount: number;
   otherStoreItems: SkillStoreItem[];
+  registeredSkillsRefreshSignal: number;
   searchQuery: string;
   selectedStoreItem: SkillStoreItem | null;
   serviceSkillsError?: string | null;
@@ -453,6 +454,7 @@ export function SkillsWorkspacePageView(props: SkillsWorkspacePageViewProps) {
                   workspaceId={props.defaultProjectState.id}
                   projectPending={props.defaultProjectState.pending}
                   projectError={props.defaultProjectState.error}
+                  refreshSignal={props.registeredSkillsRefreshSignal}
                   onEnableRuntime={props.onEnableRegisteredSkillRuntime}
                   hideWhenEmpty
                 />

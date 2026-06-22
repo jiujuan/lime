@@ -50,7 +50,6 @@ function loadDefaultMocks(): Promise<Record<string, MockHandler>> {
       knowledge,
       layeredDesign,
       log,
-      mcp,
       mediaTask,
       memory,
       model,
@@ -68,7 +67,6 @@ function loadDefaultMocks(): Promise<Record<string, MockHandler>> {
       import("./knowledgeMocks"),
       import("./layeredDesignMocks"),
       import("./logMocks"),
-      import("./mcpMocks"),
       import("./mediaTaskMocks"),
       import("./memoryMocks"),
       import("./modelMocks"),
@@ -101,7 +99,6 @@ function loadDefaultMocks(): Promise<Record<string, MockHandler>> {
       ...sessionFile.sessionFileMocks,
       ...layeredDesign.layeredDesignMocks,
       ...model.modelMocks,
-      ...mcp.mcpMocks,
 
       ...fileSystem.fileSystemMocks,
       ...log.logMocks,

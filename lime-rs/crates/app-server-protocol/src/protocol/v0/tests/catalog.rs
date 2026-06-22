@@ -207,6 +207,8 @@ fn app_server_method_catalog_keeps_request_and_notification_methods_together() {
             METHOD_MCP_PROMPT_GET,
             METHOD_MCP_RESOURCE_LIST,
             METHOD_MCP_RESOURCE_READ,
+            METHOD_MCP_RESOURCE_SUBSCRIBE,
+            METHOD_MCP_RESOURCE_UNSUBSCRIBE,
             METHOD_PROJECT_MEMORY_READ,
             METHOD_MEMORY_STORE_LIST,
             METHOD_MEMORY_STORE_READ,

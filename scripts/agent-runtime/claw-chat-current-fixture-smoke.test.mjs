@@ -20,11 +20,32 @@ import {
   summarizeSkillsRuntimeEvidenceExport,
 } from "./skills-runtime-fixture-scenario.mjs";
 
+const fixtureSourceFiles = [
+  "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-constants.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-backend-file.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-backend-ledger.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-rpc.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-read-model-core.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-read-model-waits.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-session.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-gui-completion-waits.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-gui-input-modes.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-gui-tool-waits.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-gui-web-tools-waits.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-skills-workspace.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-scenario-flow.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-common-assertions.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-scenario-assertions.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-not-applicable-assertions.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-assertion-context.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-assertions.mjs",
+];
+
 function readSmokeScript() {
-  return fs.readFileSync(
-    "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
-    "utf8",
-  );
+  return fixtureSourceFiles
+    .map((filePath) => fs.readFileSync(filePath, "utf8"))
+    .join("\n");
 }
 
 function readCurrentFixtureRegressionSmokeScript() {
@@ -151,12 +172,14 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("const commonAssertions = {");
     expect(content).toContain("const scenarioAssertions =");
     expect(content).toContain("const notApplicableAssertions =");
-    expect(content).toContain("summary.commonAssertions = commonAssertions");
     expect(content).toContain(
-      "summary.scenarioAssertions = scenarioAssertions",
+      "summary.commonAssertions = assertionReport.commonAssertions",
     );
     expect(content).toContain(
-      "summary.notApplicableAssertions = notApplicableAssertions",
+      "summary.scenarioAssertions = assertionReport.scenarioAssertions",
+    );
+    expect(content).toContain(
+      "summary.notApplicableAssertions = assertionReport.notApplicableAssertions",
     );
     expect(content).toContain('"readModelCanceled"');
     expect(content).toContain('"eventReadProbeObserved"');
@@ -309,19 +332,16 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("expert-skills-runtime");
     expect(content).toContain("expert-plaza-skills-runtime");
     expect(content).toContain("expert-panel-skills-runtime");
-    expect(content).toContain("createExpertSkillsRuntimeFixtureScenario");
     expect(content).toContain(
-      "createExpertPanelSkillsRuntimeFixtureScenario",
+      'options.scenario !== "expert-panel-skills-runtime"',
     );
+    expect(content).toContain("createExpertSkillsRuntimeFixtureScenario");
+    expect(content).toContain("createExpertPanelSkillsRuntimeFixtureScenario");
     expect(content).toContain("buildExpertSkillsRuntimeMetadata");
     expect(content).toContain("buildExpertSkillsRuntimeCatalog");
     expect(content).toContain("EXPERT_SKILLS_RUNTIME_ASSERTION_KEYS");
-    expect(content).toContain(
-      "EXPERT_PLAZA_SKILLS_RUNTIME_ASSERTION_KEYS",
-    );
-    expect(content).toContain(
-      "EXPERT_PANEL_SKILLS_RUNTIME_ASSERTION_KEYS",
-    );
+    expect(content).toContain("EXPERT_PLAZA_SKILLS_RUNTIME_ASSERTION_KEYS");
+    expect(content).toContain("EXPERT_PANEL_SKILLS_RUNTIME_ASSERTION_KEYS");
     expect(content).toContain("EXPERT_SKILLS_RUNTIME_PROMPT");
     expect(content).toContain("EXPERT_SKILLS_RUNTIME_PANEL_PROMPT");
     expect(content).toContain("EXPERT_SKILLS_RUNTIME_DONE_TEXT");
@@ -347,7 +367,21 @@ describe("claw chat current Electron fixture smoke guard", () => {
       "addExpertSkillsRuntimeSkillFromInfoPanel",
     );
     expect(expertActionsContent).toContain("waitForExpertSkillPickerState");
+    expect(expertActionsContent).toContain("clickExpertSkillPickerTrigger");
     expect(expertActionsContent).toContain("waitForExpertPanelAddedSkill");
+    expect(expertActionsContent).toContain(
+      "exportExpertPanelEvidencePackFromHarnessPanel",
+    );
+    expect(expertActionsContent).toContain("waitForExpertPanelEvidenceSummary");
+    expect(expertActionsContent).toContain(
+      "expert-info-skills-evidence-summary",
+    );
+    expect(expertActionsContent).toContain("missing-visible-trigger");
+    expect(expertActionsContent).toContain(
+      "visibleElementSnapshot(candidate).visible",
+    );
+    expect(expertActionsContent).toContain("导出问题证据包");
+    expect(expertActionsContent).toContain("刷新证据包");
     expect(expertActionsContent).toContain("app-sidebar-nav-experts");
     expect(expertActionsContent).toContain(
       "expert-start-${EXPERT_SKILLS_RUNTIME_ID}",
@@ -378,9 +412,19 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("expertPanelSkillPickerOpened");
     expect(content).toContain("expertPanelSkillAdded");
     expect(content).toContain("expertPanelAddedSkillVisible");
+    expect(content).toContain("expertPanelEvidencePackGuiExport");
+    expect(content).toContain("expertPanelEvidenceSummary");
     expect(content).toContain(
-      "expertPanelSkillRefsOverrideReachedBackend",
+      "expertPanelEvidencePackExportedFromHarnessPanel",
     );
+    expect(content).toContain("expertPanelEvidenceSummaryVisible");
+    expect(content).toContain("expertPanelEvidenceSummarySkillCountsVisible");
+    expect(content).toContain("expertPanelEvidenceSummaryLatestSkillVisible");
+    expect(content).toContain("expertPanelEvidenceSummaryRuntimeEnableVisible");
+    expect(content).toContain(
+      "expertPanelEvidenceSummaryHidesRawRuntimeEnable",
+    );
+    expect(content).toContain("expertPanelSkillRefsOverrideReachedBackend");
     expect(content).toContain("waitForBackendLedgerTurnStartContaining");
     expect(content).toContain("launchSkillsRuntimeFromWorkspacePanel");
     expect(content).toContain("createExpertSkillsRuntimeSession");
@@ -388,19 +432,26 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("{ title }");
     expect(content).toContain("waitForBackendLedgerTurnStart");
     expect(content).toContain("manualEnableSkillsRuntimeSessionId");
-    expect(content).not.toContain("async function runManualEnableSkillsRuntimeTurn");
+    expect(content).not.toContain(
+      "async function runManualEnableSkillsRuntimeTurn",
+    );
     expect(content).toContain("ensureManualEnableWorkspaceSkill");
     expect(content).toContain('".lime"');
     expect(content).toContain('"registration.json"');
     expect(content).toContain("workspace-registered-skill-enable-runtime");
     expect(content).toContain("app-sidebar-nav-skills");
     expect(content).toContain("sanitizeBackendLedgerForEvidence");
+    expect(content).toContain("isIgnorableConsoleError");
+    expect(content).toContain("actionableConsoleErrors");
     expect(content).toContain("workspaceSkillRuntimeEnable");
     expect(content).toContain("SKILLS_RUNTIME_QUERY");
     expect(content).toContain("SKILLS_RUNTIME_SKILL_NAME");
     expect(content).toContain('"evidence/export"');
     expect(content).toContain("includeEvidencePack: true");
     expect(content).toContain("waitForGuiSkillsRuntimeCompleted");
+    expect(content).toContain(
+      "scenario.guiSummaryText ?? scenario.summaryText",
+    );
     expect(content).toContain("waitForSessionReadSkillsRuntimeCompleted");
     expect(content).toContain("summarizeSkillsRuntimeReadModel");
     expect(content).toContain("readModelTurnTerminal");
@@ -419,9 +470,7 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("readModelExplicitSkillSearchObserved");
     expect(content).toContain("evidenceExplicitSkillBodyReadObserved");
     expect(content).toContain("explicitSkillSearchBeforeSkillInvocation");
-    expect(content).toContain(
-      "manualEnableSkillsRuntimePromptReachedBackend",
-    );
+    expect(content).toContain("manualEnableSkillsRuntimePromptReachedBackend");
     expect(content).toContain(
       "manualEnableSkillsRuntimeMetadataReachedBackend",
     );
@@ -431,9 +480,7 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain(
       "manualEnableSkillsRuntimeLaunchedFromSkillsWorkspace",
     );
-    expect(content).toContain(
-      "manualEnableSkillsRuntimeOpenedAgentSession",
-    );
+    expect(content).toContain("manualEnableSkillsRuntimeOpenedAgentSession");
     expect(content).toContain("expertSkillsRuntimeMetadataReachedBackend");
     expect(content).toContain("expert_declared_skill_refs");
     expect(content).toContain("expert_selected_skill");
@@ -451,13 +498,13 @@ describe("claw chat current Electron fixture smoke guard", () => {
     );
     expect(content).toContain("manualEnableSkillSearchBeforeSkillInvocation");
     expect(content).toContain("SKILLS_RUNTIME_ASSERTION_KEYS");
-    expect(scenarioContent).toContain("createExplicitSkillsRuntimeFixtureScenario");
+    expect(scenarioContent).toContain(
+      "createExplicitSkillsRuntimeFixtureScenario",
+    );
     expect(scenarioContent).toContain(
       "createManualEnableSkillsRuntimeFixtureScenario",
     );
-    expect(scenarioContent).toContain(
-      "buildManualEnableSkillsRuntimeMetadata",
-    );
+    expect(scenarioContent).toContain("buildManualEnableSkillsRuntimeMetadata");
     expect(scenarioContent).toContain(
       "createExpertSkillsRuntimeFixtureScenario",
     );
@@ -498,11 +545,15 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(scenarioContent).toContain("workspace_skill_runtime_enable");
     expect(scenarioContent).toContain("expertSkillsRuntime");
     expect(scenarioContent).toContain("expert_skills_runtime");
+    expect(scenarioContent).toContain("guiSummaryText");
+    expect(scenarioContent).toContain("我识别到右侧专家面板更新后的 skillRefs");
     expect(scenarioContent).toContain("expert_declared_skill_refs");
     expect(scenarioContent).toContain("expert_selected_skill");
     expect(scenarioContent).toContain("expert_invoked_skill");
     expect(scenarioContent).toContain("promptStarters");
-    expect(scenarioContent).toContain("EXPERT_PLAZA_SKILLS_RUNTIME_ASSERTION_KEYS");
+    expect(scenarioContent).toContain(
+      "EXPERT_PLAZA_SKILLS_RUNTIME_ASSERTION_KEYS",
+    );
     for (const assertionKey of EXPERT_PLAZA_SKILLS_RUNTIME_ASSERTION_KEYS) {
       expect(content).toContain(assertionKey);
       expect(scenarioContent).toContain(assertionKey);
@@ -936,7 +987,7 @@ describe("claw chat current Electron fixture smoke guard", () => {
       "claw-chat-current-fixture-expert-panel-skills-runtime-regression",
     );
     expect(content).toContain(
-      "ExpertInfoPanel 调整 skillRefs 后下一轮继承同一 Skills Runtime 闭环 Electron fixture",
+      "ExpertInfoPanel 调整 skillRefs 后下一轮继承同一 Skills Runtime 闭环并展示 Evidence Pack 复盘 Electron fixture",
     );
     expect(content).toContain('LIME_ALLOW_LIVE_PROVIDER_SMOKE: "0"');
     expect(content).toContain('LIME_REAL_API_TEST: "0"');

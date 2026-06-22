@@ -1,47 +1,50 @@
-## Lime v1.76.0
+## Lime v1.77.0
 
 ### 新功能
 
-- MCP current 控制面新增 resource templates 投影：`mcpResource/list` 继续返回 resources，同时返回 `resourceTemplates`，前端新增 `listResourcesWithTemplates()` 读取同一 App Server JSON-RPC 主链。
-- MCP 工具结果新增 `outputSchema` / `structuredContent` 端到端保留：`mcpTool/list`、`mcpTool/listForContext`、`mcpTool/search`、`mcpTool/call` 与 Agent Chat read model 都能保留结构化结果事实。
-- Agent Skill runtime 新增 `skill_search` 元数据检索工具，只返回 Skill 名称、作用域、locator 与匹配理由，不默认读取 `SKILL.md` 正文或扩大工具权限。
-- 专家与 Skills 工作台新增 Agent Skill runtime 接线：专家 `skillRefs` 会进入候选提示和排序线索，Skills 工作台可把 workspace Skill 作为本轮运行时启用 metadata 发送到 Agent turn。
-- Evidence export 新增 Skill search、Skill invocation 与 MCP structuredContent 观测摘要，方便发布和回放证据包审计当前 runtime 行为。
+- MCP current 控制面继续扩展资源能力：新增 `mcpResource/subscribe` / `mcpResource/unsubscribe`，GUI 资源预览在打开、切换和关闭时自动订阅 / 退订标准 MCP resource subscription。
+- MCP streamable HTTP 与 OAuth 链路补齐 Context7 preset、系统浏览器授权、callback 完成事件、持久 token store、resource templates、resource updated 通知和 live-gated smoke 入口。
+- Agent Workspace 的 `agentSession/toolInventory/read` 接入 MCP current snapshot，动态 `mcp__<server>__<tool>` 工具、MCP server 状态和 resource helper 可进入 Agent runtime inventory。
+- Agent Skills Runtime 专家闭环完成 deterministic 主链：专家 `skillRefs` 可触发 selector、`SKILL.md` body read、turn-scoped `LimeSkillTool` allowlist、skill invocation 与 evidence pack 复盘。
+- Right Surface 统一承载骨架落地：专家信息、workbench、files、shell、harness、objectCanvas 候选进入统一 registry / controller / scheduler / intent queue / toolbar projection。
+- Skills 工作台新增项目级 scaffold 创建链路，会写 `.lime/registration.json` 并刷新 `workspaceSkillBindings/list` readiness，用于专家缺失技能的恢复入口。
 
 ### 修复
 
-- 修复 MCP / Service Skill / SkillTool 结果在聊天里暴露 `request_metadata`、`diagnostics`、`metadata` 等协议包络的问题，GUI 优先展示结构化结果中的用户正文。
-- 修复 MCP `structuredContent` 在 runtime event、read model、历史 hydrate、完整工具卡和内联过程卡之间丢失的问题。
-- 修复 MCP OAuth 本地 loopback 场景受系统代理影响的问题，并把 callback 后 token exchange 纳入同一登录超时窗口。
-- 修复历史 timeline 中未知 runtime item 直接展开原始 JSON 的问题，改为用户态 unsupported item 提示并补齐五语言文案。
-- 修复 App Server client contract 对 MCP current smoke 的覆盖缺口，把旧 MCP Desktop facade 回流和 structuredContent 断言纳入统一契约入口。
+- 修复专家信息面板与画布 / 抓夹入口并排出现的问题，专家信息迁入统一 Right Surface 后与当前右侧工作面互斥。
+- 修复 current tool item lifecycle 与 legacy tool terminal 冲突时可能把已完成成功结果覆盖为失败的问题，冲突现在进入诊断而不改写最终 success。
+- 修复拆分后的 Claw / Agent runtime fixture 漏导入问题，`cancel-then-continue`、Skills runtime 和 WebTools 渲染场景均重新跑通。
+- 修复 MCP 资源读取 evidence 只停留在后端摘要的问题，GUI Evidence Pack 现在展示 server、URI、mime、content refs 和读取状态摘要。
+- 修复 MCP 事件在浏览器模式下可能静默走 mock fallback 的风险，`mcp:` 事件前缀已进入禁止 mock event fallback 守卫。
 
 ### 优化与重构
 
-- 拆分聊天渲染链超大文件：`MessageList`、`MarkdownRenderer`、`StreamingRenderer`、`ToolCallDisplay`、`InlineToolProcessStep`、`AgentThreadTimeline` 与投影 / history / grouping helper 均按职责拆到更小模块。
-- 拆分 Skills 工作台页面，把 copy、content、view、visual、默认 project、detail content 与 runtime launch 参数构造分离，降低页面组件职责。
-- 拆分 App Server evidence provider observability 逻辑，Skill invocation / Skill search / MCP tool result 摘要各自收敛到独立投影函数。
-- MCP manager 继续按 resources / tools 子模块演进，resource templates 与 tool result schema 的转换逻辑不再回塞中心文件。
-- 前端工具结果展示增加协议包络识别 helper，同时保留命令类工具 JSON stdout，避免把真实命令输出误判为诊断包络。
+- 拆分 MCP GUI 设置页与运行面板：`McpPage`、`McpPanel`、server list、tools、prompts、resources 均下沉 view model / 子组件，减少单文件职责。
+- 拆分 MCP smoke 与 contract guard：`scripts/mcp/current-smoke.mjs`、`scripts/check-app-server-client-contract.mjs` 的 MCP 逻辑下沉到 `scripts/mcp/lib/**`。
+- 拆分 Agent Runtime / Claw fixture：大型 Electron fixture 入口拆到 assertion、GUI action、session、read model waits、tool waits 等职责模块。
+- 拆分 App Server runtime 测试大文件：`coding_events`、`external_events`、`evidence_exports`、`read_model` 改为 facade + 子模块目录。
+- 收口 MCP desktop-host 默认 mock：删除 `src/lib/desktop-host/mcpMocks.*`，并用命令契约守卫防止旧 MCP facade 和 mock loader 回流。
+- MCP 前端 API 网关拆出 `mcpTypes.ts` / `mcpResponseGuards.ts`，`mcp.ts` 继续保留兼容 re-export 与 current JSON-RPC API 方法。
 
 ### 测试与质量
 
-- 更新 App Server protocol schema fixtures、`packages/app-server-client` generated types 与 MCP 前端 API 测试，覆盖 `resourceTemplates` 和 `structuredContent`。
-- 扩展 MCP current smoke 与 contract guard，覆盖 `outputSchemaStructuredContentSeen`、`structuredContentEcho`、resource templates、legacy MCP command 禁回流。
-- 扩展真实 Electron fixture：`smoke:claw-chat-current-fixture -- --scenario mcp-structured-content` 验证 MCP structuredContent 在 Agent Chat GUI 可见且协议包络不外泄。
-- 扩展 Agent Skill runtime fixture，覆盖普通 Skills runtime、显式 Skill、手动启用 workspace Skill、专家 Skill refs 与专家面板 Skill refs。
-- 扩展 MarkdownRenderer、StreamingRenderer、MessageList、ToolCallDisplay、InlineToolProcessStep、AgentThreadTimeline、SkillsWorkspacePage、专家 Skill runtime 候选与 i18n 回归。
-- 本版发布事实源统一更新到 `1.76.0`：根应用、Rust workspace、CLI npm package、App Server client package、Cargo lock 与 Aster 子工作区 lock。
+- 新增 / 扩展 MCP resource subscription、resource preview、Context7 preset、OAuth、resource evidence、inventory snapshot、GUI event bridge 与 legacy facade 禁回流测试。
+- `smoke:agent-runtime-current-fixture` 聚合覆盖 history/cache hydration、流式完成控制器、Coding Workbench、停止后继续、Skills Runtime、MCP structuredContent、Expert Skills / Plaza / Panel。
+- `smoke:expert-skills-live-gate` 落地为专家 Skills 只读验收门禁：默认审计 deterministic evidence，缺 live summary 时明确返回 `pending_live_provider`。
+- App Server protocol schema fixtures、`packages/app-server-client` generated types、MCP API 测试和 contract guard 同步新增 resource subscribe / unsubscribe。
+- Right Surface 纯模型、toolbar projection、Workspace 透传、专家 full surface 和页面级工作台回归已补定向 Vitest。
+- 本版发布事实源统一更新到 `1.77.0`：根应用、Rust workspace、CLI npm package、App Server client package、Cargo lock 与 Aster 子工作区 lock。
 
 ### 文档
 
-- 更新 MCP current 控制面边界，明确 `src/lib/api/mcp.ts -> AppServerClient.request(...) -> app_server_handle_json_lines -> App Server JSON-RPC -> lime-rs/crates/mcp` 为唯一主链。
-- 更新 MCP modernization 执行计划，记录 structuredContent、resource templates、Electron fixture、contract guard 与剩余 live-gated 缺口。
-- 更新 Turn / Tool 生命周期测试矩阵，记录协议包络隐藏、渲染链拆分、MessageList / projection 拆分和 GUI smoke 证据。
-- 更新性能 profiling 与脚本文档，把旧 `mcp_*` / `get_mcp_servers` 示例收口为 current App Server method。
+- 更新 MCP current 文档，把 server / tools / prompts / resources / OAuth / subscriptions 全部收敛到 App Server JSON-RPC -> `lime-rs/crates/mcp` 主链。
+- 更新服务层导航，删除旧 `lime-rs/src/services/mcp_service.rs` 现役表述，MCP owner 指向 `lime-rs/crates/mcp` 与 App Server `mcp*` methods。
+- 新增 Right Surface 路线图与实施进度，记录专家栏统一承载、registry / controller / scheduler / intent queue 和剩余 App Server contract 缺口。
+- 更新 Agent Skills runtime 状态文档，明确 P0-P5 runtime 骨架已完成，后续重点转向 live Provider gated 验收。
+- 更新 MCP 现代化执行计划，记录 OAuth、resource subscription、resource preview、inventory snapshot、Evidence Pack、fixture 拆分与 GUI smoke 证据。
 
 ### 其他
 
-- 本版继续把 MCP、Agent Skill runtime、专家 Skill 绑定、聊天过程证据和 GUI 冒烟验证收敛到 App Server JSON-RPC / RuntimeCore / Electron Desktop Host current 主链；旧 MCP Desktop facade、legacy mock 与协议包络展示不作为新增能力入口。
+- 本版继续把 MCP、Agent Skills、Right Surface、聊天过程证据和 GUI 冒烟验证收敛到 App Server JSON-RPC / RuntimeCore / Electron Desktop Host current 主链；旧 MCP Desktop facade、desktop-host MCP mock、legacy runtime fallback 不作为新增能力入口。
 
-**完整变更**: `v1.75.0` -> `v1.76.0`
+**完整变更**: `v1.76.0` -> `v1.77.0`

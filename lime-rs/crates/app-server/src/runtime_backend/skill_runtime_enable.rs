@@ -544,6 +544,60 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn expert_bound_skill_ref_enables_selected_skill_for_turn() {
+        let workspace = TempDir::new().expect("workspace");
+        write_agent_skill(&workspace, "writer");
+        let session_id = "app-server-expert-bound-agent-skill-session";
+        let request = super::super::tests::request_for_test(
+            "帮我处理这段话",
+            None,
+            Some(json!({
+                "workspaceRoot": workspace.path().to_string_lossy().to_string(),
+                "harness": {
+                    "expert": {
+                        "skill_refs": ["skill:writer"]
+                    }
+                }
+            })),
+        );
+        let guard = apply_workspace_skill_runtime_enable(&request, session_id);
+        let tool = LimeSkillTool::new();
+
+        let allowed = tool
+            .check_permissions(
+                &json!({ "skill": "writer" }),
+                &permission_context(session_id),
+            )
+            .await;
+        let project_alias_allowed = tool
+            .check_permissions(
+                &json!({ "skill": "project:writer" }),
+                &permission_context(session_id),
+            )
+            .await;
+        let denied = tool
+            .check_permissions(
+                &json!({ "skill": "project:other" }),
+                &permission_context(session_id),
+            )
+            .await;
+
+        assert_eq!(allowed.behavior, PermissionBehavior::Allow);
+        assert_eq!(project_alias_allowed.behavior, PermissionBehavior::Allow);
+        assert_eq!(denied.behavior, PermissionBehavior::Deny);
+
+        drop(guard);
+
+        let after_drop = tool
+            .check_permissions(
+                &json!({ "skill": "writer" }),
+                &permission_context(session_id),
+            )
+            .await;
+        assert_eq!(after_drop.behavior, PermissionBehavior::Deny);
+    }
+
+    #[tokio::test]
     async fn unknown_catalog_bound_service_scene_metadata_keeps_skill_tool_fail_closed() {
         let workspace = TempDir::new().expect("workspace");
         write_agent_skill(&workspace, "writer");

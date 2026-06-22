@@ -1,5 +1,6 @@
 mod observability;
 
+use self::observability::mcp_resource_reads_summary;
 use self::observability::mcp_tool_results_summary;
 use self::observability::skill_invocations_summary;
 use self::observability::skill_searches_summary;
@@ -128,6 +129,7 @@ fn basic_evidence_pack_summary(request: &EvidencePackRequest) -> EvidencePackSum
     let skill_invocations = skill_invocations_summary(&request.events);
     let skill_searches = skill_searches_summary(&request.events);
     let mcp_tool_results = mcp_tool_results_summary(&request.events);
+    let mcp_resource_reads = mcp_resource_reads_summary(&request.events);
     let workspace_skill_tool_call_count = skill_invocations
         .as_array()
         .map(Vec::len)
@@ -159,6 +161,7 @@ fn basic_evidence_pack_summary(request: &EvidencePackRequest) -> EvidencePackSum
             "skill_invocations": skill_invocations,
             "skill_searches": skill_searches,
             "mcp_tool_results": mcp_tool_results,
+            "mcp_resource_reads": mcp_resource_reads,
         })),
         completion_audit_summary: Some(json!({
             "decision": completion_decision,

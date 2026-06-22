@@ -82,8 +82,10 @@ describe("messageListItemProjection timeline flow", () => {
       },
     ] as never);
 
-    expect(projection.actionContent).toBe("最终回答：已按你的选择继续。");
-    expect(projection.rendererRawContent).toBe("最终回答：已按你的选择继续。");
+    const expectedActionContent =
+      "我需要先确认是否允许联网。\n\n确认后我再询问输出格式。\n\n最终回答：已按你的选择继续。";
+    expect(projection.actionContent).toBe(expectedActionContent);
+    expect(projection.rendererRawContent).toBe(expectedActionContent);
     expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
       "text",
       "action_required",
@@ -163,10 +165,10 @@ describe("messageListItemProjection timeline flow", () => {
       },
     ] as never);
 
-    expect(projection.actionContent).toBe("最终观察：截图里有一个仪表盘。");
-    expect(projection.rendererRawContent).toBe(
-      "最终观察：截图里有一个仪表盘。",
-    );
+    const expectedActionContent =
+      "我先查看你给的截图。\n\n最终观察：截图里有一个仪表盘。";
+    expect(projection.actionContent).toBe(expectedActionContent);
+    expect(projection.rendererRawContent).toBe(expectedActionContent);
     expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
       "text",
       "tool_use",
@@ -305,8 +307,10 @@ describe("messageListItemProjection timeline flow", () => {
       },
     ] as never);
 
-    expect(projection.actionContent).toBe("最终结论：任务板已完成。");
-    expect(projection.rendererRawContent).toBe("最终结论：任务板已完成。");
+    const expectedActionContent =
+      "我先把工作拆成任务板。\n\n最终结论：任务板已完成。";
+    expect(projection.actionContent).toBe(expectedActionContent);
+    expect(projection.rendererRawContent).toBe(expectedActionContent);
     expect(projection.rendererRawContent).not.toContain("updatedFields");
     expect(projection.rendererRawContent).not.toContain("task_list_id");
     expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([

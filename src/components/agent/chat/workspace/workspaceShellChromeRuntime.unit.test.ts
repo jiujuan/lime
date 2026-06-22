@@ -1,0 +1,106 @@
+import { describe, expect, it } from "vitest";
+import {
+  TEAM_PRIMARY_CHAT_PANEL_MIN_WIDTH,
+  TEAM_PRIMARY_CHAT_PANEL_WIDTH,
+} from "./WorkspaceStyles";
+import { resolveWorkspaceShellChromeRuntime } from "./workspaceShellChromeRuntime";
+
+function baseInput(
+  overrides: Partial<
+    Parameters<typeof resolveWorkspaceShellChromeRuntime>[0]
+  > = {},
+): Parameters<typeof resolveWorkspaceShellChromeRuntime>[0] {
+  return {
+    activeTheme: "general",
+    agentEntry: "claw",
+    contextWorkspaceEnabled: false,
+    effectiveShowChatPanel: true,
+    gateStatus: "idle",
+    generalWorkbenchPanelCollapseEnabled: false,
+    generalWorkbenchSidebarCollapsed: false,
+    hasCanvasWorkbenchContent: false,
+    hasDisplayMessages: false,
+    hasHomeConversationActivity: false,
+    hasPendingA2UIForm: false,
+    hideTopBar: false,
+    isBootstrapDispatchPending: false,
+    isPreparingSend: false,
+    isSending: false,
+    isTaskCenterDraftSendPending: false,
+    isThemeWorkbench: false,
+    layoutMode: "chat",
+    normalizedInitialSessionId: null,
+    queuedTurnCount: 0,
+    sessionId: null,
+    shouldRenderTaskCenterEmbeddedHome: false,
+    shouldSuppressTaskCenterDraftContent: false,
+    shouldUseBrowserWorkspaceHomeChrome: false,
+    shouldUseCompactGeneralWorkbench: false,
+    showSidebar: true,
+    subagentsRuntimeVisible: false,
+    hasRuntimeSessions: false,
+    hasTeamDispatchPreview: false,
+    themeWorkbenchRunState: "idle",
+    topBarChrome: "full",
+    ...overrides,
+  };
+}
+
+describe("resolveWorkspaceShellChromeRuntime", () => {
+  it("Task Center 首页 surface 激活时应隐藏聊天布局但保留顶部 chrome", () => {
+    const runtime = resolveWorkspaceShellChromeRuntime(
+      baseInput({
+        shouldRenderTaskCenterEmbeddedHome: true,
+        shouldUseBrowserWorkspaceHomeChrome: true,
+      }),
+    );
+
+    expect(runtime.showChatLayout).toBe(false);
+    expect(runtime.shouldRenderTopBar).toBe(true);
+  });
+
+  it("Subagents runtime 可见时应切换主聊天面板宽度", () => {
+    const runtime = resolveWorkspaceShellChromeRuntime(
+      baseInput({
+        hasCanvasWorkbenchContent: true,
+        hasDisplayMessages: true,
+        hasRuntimeSessions: true,
+        isThemeWorkbench: true,
+        layoutMode: "chat-canvas",
+        sessionId: "session-1",
+        subagentsRuntimeVisible: true,
+      }),
+    );
+
+    expect(runtime.layoutTransitionChatPanelWidth).toBe(
+      TEAM_PRIMARY_CHAT_PANEL_WIDTH,
+    );
+    expect(runtime.layoutTransitionChatPanelMinWidth).toBe(
+      TEAM_PRIMARY_CHAT_PANEL_MIN_WIDTH,
+    );
+  });
+
+  it("General Workbench 左侧栏未折叠时显示侧栏并隐藏展开按钮", () => {
+    const runtime = resolveWorkspaceShellChromeRuntime(
+      baseInput({
+        isThemeWorkbench: true,
+      }),
+    );
+
+    expect(runtime.showGeneralWorkbenchSidebar).toBe(true);
+    expect(runtime.showGeneralWorkbenchLeftExpandButton).toBe(false);
+  });
+
+  it("General Workbench 左侧栏折叠时隐藏侧栏并显示展开按钮", () => {
+    const runtime = resolveWorkspaceShellChromeRuntime(
+      baseInput({
+        generalWorkbenchPanelCollapseEnabled: true,
+        generalWorkbenchSidebarCollapsed: true,
+        isThemeWorkbench: true,
+      }),
+    );
+
+    expect(runtime.showGeneralWorkbenchSidebar).toBe(false);
+    expect(runtime.showGeneralWorkbenchLeftExpandButton).toBe(true);
+  });
+});

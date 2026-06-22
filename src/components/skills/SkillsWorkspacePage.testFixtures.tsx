@@ -9,7 +9,7 @@ import type {
   SkillMarketplaceBundle,
   SkillMarketplaceItem,
 } from "@/lib/api/officialSkillMarketplace";
-import type { Skill } from "@/lib/api/skills";
+import type { CreateSkillScaffoldRequest, Skill } from "@/lib/api/skills";
 import { changeLimeLocale } from "@/i18n/createI18n";
 import type { SkillsPageParams } from "@/types/page";
 import { SkillsWorkspacePage } from "./SkillsWorkspacePage";
@@ -179,7 +179,42 @@ vi.mock("@/lib/api/automation", () => ({
 }));
 
 vi.mock("./SkillScaffoldDialog", () => ({
-  SkillScaffoldDialog: () => null,
+  SkillScaffoldDialog: ({
+    open,
+    initialValues,
+    onCreate,
+  }: {
+    open: boolean;
+    initialValues?: {
+      target?: "project" | "user";
+      directory?: string;
+      name?: string;
+      description?: string;
+    } | null;
+    onCreate?: (request: CreateSkillScaffoldRequest) => Promise<void>;
+  }) =>
+    open ? (
+      <div data-testid="skill-scaffold-dialog">
+        <span>{initialValues?.directory}</span>
+        <span>{initialValues?.name}</span>
+        <span>{initialValues?.description}</span>
+        <button
+          type="button"
+          data-testid="skill-scaffold-create"
+          onClick={() =>
+            void onCreate?.({
+              target: initialValues?.target ?? "user",
+              directory: initialValues?.directory ?? "project-report",
+              name: initialValues?.name ?? "项目报告",
+              description:
+                initialValues?.description ?? "沉淀为可注册的工作区技能。",
+            })
+          }
+        >
+          创建
+        </button>
+      </div>
+    ) : null,
 }));
 
 vi.mock("@/components/ui/dialog", () => ({

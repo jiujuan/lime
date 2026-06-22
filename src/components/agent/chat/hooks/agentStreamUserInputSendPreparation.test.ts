@@ -3,6 +3,7 @@ import type { MutableRefObject } from "react";
 import type { Message } from "../types";
 import {
   prepareAgentStreamUserInputSend,
+  resolvePreparedSendExpectingQueue,
   type AgentStreamUserInputSendPreparationEnv,
 } from "./agentStreamUserInputSendPreparation";
 import type { ActiveStreamState } from "./agentStreamSubmissionLifecycle";
@@ -70,6 +71,53 @@ describe("agentStreamUserInputSendPreparation", () => {
       ),
     };
   }
+
+  it("同一会话仅残留 active stream 且 read model 已无活跃工作时不应进入 queue 模式", () => {
+    expect(
+      resolvePreparedSendExpectingQueue({
+        activeStreamSessionId: "session-1",
+        currentSessionId: "session-1",
+        queuedTurnsCount: 0,
+        threadBusy: false,
+        pendingPreparedSubmit: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("跨会话 active stream、真实 queued turn、busy read model 或 pending submit 仍应进入 queue 模式", () => {
+    const base = {
+      activeStreamSessionId: "session-1",
+      currentSessionId: "session-1",
+      queuedTurnsCount: 0,
+      threadBusy: false,
+      pendingPreparedSubmit: false,
+    };
+
+    expect(
+      resolvePreparedSendExpectingQueue({
+        ...base,
+        activeStreamSessionId: "session-other",
+      }),
+    ).toBe(true);
+    expect(
+      resolvePreparedSendExpectingQueue({
+        ...base,
+        queuedTurnsCount: 1,
+      }),
+    ).toBe(true);
+    expect(
+      resolvePreparedSendExpectingQueue({
+        ...base,
+        threadBusy: true,
+      }),
+    ).toBe(true);
+    expect(
+      resolvePreparedSendExpectingQueue({
+        ...base,
+        pendingPreparedSubmit: true,
+      }),
+    ).toBe(true);
+  });
 
   it("应归一化发送参数并注入 draft", () => {
     vi.spyOn(crypto, "randomUUID")
@@ -161,7 +209,7 @@ describe("agentStreamUserInputSendPreparation", () => {
     expect(isSending).toBe(true);
   });
 
-  it("有 active stream 时应进入 queue 模式，归一 legacy 策略并允许 model override", () => {
+  it("跨会话 active stream 时应进入 queue 模式，归一 legacy 策略并允许 model override", () => {
     vi.spyOn(crypto, "randomUUID").mockReturnValueOnce(
       "00000000-0000-0000-0000-000000000003",
     );
@@ -170,7 +218,7 @@ describe("agentStreamUserInputSendPreparation", () => {
     let isSending = false;
     const env = {
       ...createEnv({
-        sessionId: null,
+        sessionId: "session-current",
         activeStream: {
           assistantMsgId: "assistant-queued",
           eventName: "event-queued",
@@ -217,6 +265,48 @@ describe("agentStreamUserInputSendPreparation", () => {
     expect(messages).toHaveLength(1);
     expect(messages[0]?.content).toBe("队列中");
     expect(isSending).toBe(false);
+  });
+
+  it("同一会话 stale active stream 不应让下一轮误入队列", () => {
+    vi.spyOn(crypto, "randomUUID")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000011")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000012");
+
+    let messages: Message[] = [];
+    let isSending = false;
+    const env = {
+      ...createEnv({
+        sessionId: "session-stale",
+        activeStream: {
+          assistantMsgId: "assistant-stale",
+          eventName: "event-stale",
+          sessionId: "session-stale",
+        },
+      }),
+      setMessages: createStateSetter(
+        () => messages,
+        (value) => {
+          messages = value;
+        },
+      ),
+      setIsSending: createStateSetter(
+        () => isSending,
+        (value) => {
+          isSending = value;
+        },
+      ),
+    };
+
+    const result = prepareAgentStreamUserInputSend({
+      content: "继续生成提纲",
+      images: [],
+      skipUserMessage: false,
+      env,
+    });
+
+    expect(result.expectingQueue).toBe(false);
+    expect(messages).toHaveLength(2);
+    expect(isSending).toBe(true);
   });
 
   it("应优先使用 options 里的 provider/model override", () => {

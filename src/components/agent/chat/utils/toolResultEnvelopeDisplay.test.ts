@@ -1,10 +1,23 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  formatWorkspaceSkillRuntimeEnableDisplay,
+  resolveWorkspaceSkillRuntimeEnableResultDisplay,
   shouldHideProtocolToolResultEnvelope,
   shouldHideSkillToolGateResultEnvelope,
   shouldHideToolResultEnvelope,
 } from "./toolResultEnvelopeDisplay";
+
+function translate(
+  _key: string,
+  defaultValue: string,
+  options?: Record<string, unknown>,
+): string {
+  return defaultValue.replace(/\{\{\s*([^}\s]+)\s*\}\}/g, (_, key) => {
+    const value = options?.[key];
+    return value === undefined || value === null ? "" : String(value);
+  });
+}
 
 describe("toolResultEnvelopeDisplay", () => {
   it("应隐藏 SkillTool gate proof 运行包络", () => {
@@ -99,6 +112,84 @@ describe("toolResultEnvelopeDisplay", () => {
     ).toBe(false);
   });
 
+  it("应格式化 workspace skill runtime enable 摘要", () => {
+    expect(
+      formatWorkspaceSkillRuntimeEnableDisplay(
+        {
+          workspace_skill_runtime_enable: {
+            source: "manual_session_enable",
+            approval: "manual",
+            bindings: [
+              { skill: "project:capability-report" },
+              { skill: "project:article-image" },
+            ],
+          },
+        },
+        translate,
+      ),
+    ).toBe("运行启用 · 手动会话 · 人工确认 · 2 个绑定");
+  });
+
+  it("不应把 legacy 或未知 runtime enable source 原样渲染给用户", () => {
+    const summary = formatWorkspaceSkillRuntimeEnableDisplay(
+      {
+        workspaceSkillRuntimeEnable: {
+          source: "legacy_tool_event",
+          approval: "runtime_probe",
+          bindings: [{ skill: "project:capability-report" }],
+        },
+      },
+      translate,
+    );
+
+    expect(summary).toBe("运行启用 · 1 个绑定");
+    expect(summary).not.toContain("legacy_tool_event");
+    expect(summary).not.toContain("runtime_probe");
+  });
+
+  it("应从 SkillTool gate proof 输出解析 runtime enable 摘要", () => {
+    expect(
+      resolveWorkspaceSkillRuntimeEnableResultDisplay({
+        toolName: "SkillTool",
+        rawResultText: JSON.stringify({
+          allow: {
+            phase: "skill_tool_gate_allow",
+            request: {
+              toolName: "SkillTool",
+              skill: "capability-report",
+            },
+            decision: {
+              action: "allow",
+              gate: "session_allowlist",
+              reason: "workspace_skill_runtime_enable_allowlist_matched",
+            },
+            result: {
+              status: "passed",
+              permissionBehavior: "Allow",
+              workspaceSkillRuntimeEnableAttached: true,
+            },
+          },
+        }),
+        translate,
+      }),
+    ).toBe("运行启用");
+  });
+
+  it("普通 SkillTool 输出中的非 gate runtime 字段不应误报为启用摘要", () => {
+    expect(
+      resolveWorkspaceSkillRuntimeEnableResultDisplay({
+        toolName: "SkillTool",
+        rawResultText: JSON.stringify({
+          output: "已完成能力分析。",
+          workspaceSkillRuntimeEnable: {
+            enabledSkillNames: ["capability-report"],
+          },
+        }),
+        translate,
+      }),
+    ).toBeNull();
+  });
+
   it("应隐藏非命令工具的纯协议诊断包络", () => {
     const rawResultText = JSON.stringify({
       request_metadata: {
@@ -124,6 +215,18 @@ describe("toolResultEnvelopeDisplay", () => {
       shouldHideToolResultEnvelope({
         toolName: "mcp__runtime__diagnostic_probe",
         rawResultText,
+      }),
+    ).toBe(true);
+  });
+
+  it("应隐藏 legacy tool event runtime enable payload", () => {
+    expect(
+      shouldHideToolResultEnvelope({
+        toolName: "Skill",
+        rawResultText: JSON.stringify({
+          runtime_enable_source: "legacy_tool_event",
+          internal_payload: "skill protocol payload should stay hidden",
+        }),
       }),
     ).toBe(true);
   });

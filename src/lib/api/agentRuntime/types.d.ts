@@ -823,6 +823,7 @@ export interface AgentRuntimeEvidenceObservabilitySummary {
     skill_invocations: AgentRuntimeEvidenceSkillInvocation[];
     skill_searches: AgentRuntimeEvidenceSkillSearch[];
     mcp_tool_results: AgentRuntimeEvidenceMcpToolResult[];
+    mcp_resource_reads: AgentRuntimeEvidenceMcpResourceRead[];
 }
 export interface AgentRuntimeEvidenceSkillInvocation {
     event: "skill_invocation" | string;
@@ -855,6 +856,28 @@ export interface AgentRuntimeEvidenceMcpToolResult {
     source_event_type: string;
     has_structured_content: boolean;
     structured_content_keys?: string[];
+    turn_id?: string;
+    tool_call_id?: string;
+}
+export interface AgentRuntimeEvidenceMcpResourceContentRef {
+    index: number;
+    type?: string;
+    uri?: string;
+    mime_type?: string;
+    text_char_count?: number;
+    blob_base64_bytes?: number;
+}
+export interface AgentRuntimeEvidenceMcpResourceRead {
+    event: "mcp_resource_read" | string;
+    tool_name: string;
+    uri: string;
+    server?: string;
+    status: string;
+    source_event_id: string;
+    source_event_type: string;
+    mime_types: string[];
+    content_count?: number;
+    content_refs: AgentRuntimeEvidenceMcpResourceContentRef[];
     turn_id?: string;
     tool_call_id?: string;
 }

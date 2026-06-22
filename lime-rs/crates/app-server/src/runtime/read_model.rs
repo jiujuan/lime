@@ -25,6 +25,7 @@ use serde_json::json;
 
 pub(super) fn runtime_session_read_detail(stored: &StoredSession) -> serde_json::Value {
     let thread_read = runtime_thread_read_from_stored_session(stored);
+    let queued_turns = queued_turn_snapshots(stored);
     let messages = runtime_session_messages(stored);
     let mut items = thread_item_projection::thread_items_from_events(stored);
     items.extend(tool_item_projection::tool_items_from_events(stored));
@@ -56,7 +57,7 @@ pub(super) fn runtime_session_read_detail(stored: &StoredSession) -> serde_json:
         "messages": messages,
         "turns": stored.turns,
         "items": items,
-        "queued_turns": [],
+        "queued_turns": queued_turns,
         "artifacts": artifact_projection::stored_artifact_summaries_for_turn(stored, None),
         "outputs": output_refs::read_model_outputs(stored.output_blobs.values(), None),
         "thread_read": thread_read,
@@ -337,10 +338,7 @@ fn runtime_thread_read_from_stored_session(stored: &StoredSession) -> serde_json
         "execution_strategy": session_execution_strategy(&stored.session),
         "turns": stored.turns,
         "pending_requests": coding_activity.pending_requests,
-        "queued_turns": stored.turns
-            .iter()
-            .filter(|turn| matches!(turn.status, AgentTurnStatus::Queued))
-            .collect::<Vec<_>>(),
+        "queued_turns": queued_turn_snapshots(stored),
         "active_turn_id": active_turn_id,
         "active_command_id": coding_activity.active_command_id,
         "active_test_run_id": coding_activity.active_test_run_id,
@@ -370,6 +368,72 @@ fn runtime_thread_read_from_stored_session(stored: &StoredSession) -> serde_json
                 .and_then(|routing| string_field(routing, &["decisionSource", "decision_source"])),
             "serviceModelSlot": service_model_slot,
         },
+    })
+}
+
+fn queued_turn_snapshots(stored: &StoredSession) -> Vec<serde_json::Value> {
+    stored
+        .turns
+        .iter()
+        .filter(|turn| matches!(turn.status, AgentTurnStatus::Queued))
+        .enumerate()
+        .map(|(index, turn)| queued_turn_snapshot(stored, turn, index))
+        .collect::<Vec<_>>()
+}
+
+fn queued_turn_snapshot(
+    stored: &StoredSession,
+    turn: &AgentTurn,
+    index: usize,
+) -> serde_json::Value {
+    let input = stored
+        .turn_inputs
+        .get(&turn.turn_id)
+        .cloned()
+        .or_else(|| turn_input_from_events(&stored.events, &turn.turn_id));
+    let message_text = input
+        .as_ref()
+        .map(|input| input.text.trim().to_string())
+        .filter(|text| !text.is_empty())
+        .unwrap_or_default();
+    let message_preview = if message_text.chars().count() > 80 {
+        let preview = message_text.chars().take(80).collect::<String>();
+        format!("{preview}...")
+    } else {
+        message_text.clone()
+    };
+    let image_count = input
+        .as_ref()
+        .map(|input| {
+            input
+                .attachments
+                .iter()
+                .filter(|attachment| attachment.kind == "image")
+                .count()
+        })
+        .unwrap_or(0);
+
+    json!({
+        "queued_turn_id": turn.turn_id,
+        "queuedTurnId": turn.turn_id,
+        "turn_id": turn.turn_id,
+        "turnId": turn.turn_id,
+        "session_id": turn.session_id,
+        "sessionId": turn.session_id,
+        "thread_id": turn.thread_id,
+        "threadId": turn.thread_id,
+        "status": agent_turn_status_label(turn.status),
+        "message_text": message_text,
+        "messageText": message_text,
+        "message_preview": message_preview,
+        "messagePreview": message_preview,
+        "image_count": image_count,
+        "imageCount": image_count,
+        "position": index,
+        "created_at": turn.started_at,
+        "createdAt": turn.started_at,
+        "started_at": turn.started_at,
+        "startedAt": turn.started_at,
     })
 }
 

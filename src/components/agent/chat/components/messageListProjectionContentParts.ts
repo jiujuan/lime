@@ -56,6 +56,15 @@ function hasProcessBoundaryContentPart(
   );
 }
 
+function findFirstProcessBoundaryIndex(parts: MessageContentPart[]): number {
+  return parts.findIndex(
+    (part) =>
+      part.type === "tool_use" ||
+      part.type === "action_required" ||
+      part.type === "file_changes_batch",
+  );
+}
+
 function findLastProcessBoundaryIndex(parts: MessageContentPart[]): number {
   for (let index = parts.length - 1; index >= 0; index -= 1) {
     const part = parts[index];
@@ -72,6 +81,45 @@ function findLastProcessBoundaryIndex(parts: MessageContentPart[]): number {
 
 function isLikelyCompleteThinkingSegment(text: string): boolean {
   return /[.!?;:。！？；：]\s*$/.test(text.trim());
+}
+
+function normalizeDuplicateTextSignature(text: string): string {
+  return text.replace(/\s+/g, "").trim();
+}
+
+function findDuplicateTextSignatureRange(
+  haystack: string,
+  needle: string,
+): { start: number; end: number } | null {
+  const needleSignature = normalizeDuplicateTextSignature(needle);
+  if (needleSignature.length < 12) {
+    return null;
+  }
+
+  const compactChars: string[] = [];
+  const originalIndexes: number[] = [];
+  for (let index = 0; index < haystack.length; index += 1) {
+    const char = haystack[index] || "";
+    if (/\s/.test(char)) {
+      continue;
+    }
+    compactChars.push(char);
+    originalIndexes.push(index);
+  }
+
+  const compactHaystack = compactChars.join("");
+  const matchIndex = compactHaystack.indexOf(needleSignature);
+  if (matchIndex < 0) {
+    return null;
+  }
+
+  const endSignatureIndex = matchIndex + needleSignature.length - 1;
+  const start = originalIndexes[matchIndex];
+  const end = originalIndexes[endSignatureIndex];
+  if (start === undefined || end === undefined) {
+    return null;
+  }
+  return { start, end: end + 1 };
 }
 
 export function collectFileChangeBatchPaths(
@@ -96,6 +144,150 @@ function resolveFinalTextFromContentParts(
   return textParts[textParts.length - 1]?.text.trim() || "";
 }
 
+function resolveVisibleTextFromContentParts(
+  parts?: Message["contentParts"],
+): string {
+  const textParts =
+    parts?.filter(
+      (part): part is Extract<MessageContentPart, { type: "text" }> =>
+        part.type === "text" && part.text.trim().length > 0,
+    ) || [];
+  const segments: string[] = [];
+
+  for (const part of textParts) {
+    const normalizedText = part.text.trim();
+    if (!normalizedText) {
+      continue;
+    }
+    const previous = segments[segments.length - 1];
+    if (previous) {
+      const normalizedPrevious = previous.trim();
+      if (
+        normalizedPrevious === normalizedText ||
+        normalizedPrevious.includes(normalizedText)
+      ) {
+        continue;
+      }
+      if (normalizedText.includes(normalizedPrevious)) {
+        segments[segments.length - 1] = normalizedText;
+        continue;
+      }
+    }
+    segments.push(normalizedText);
+  }
+
+  return segments.join("\n\n");
+}
+
+function trimDuplicatedFinalTextFromLeadingText(
+  leadingText: string,
+  finalText: string,
+): string {
+  const normalizedLeading = leadingText.trim();
+  const normalizedFinal = finalText.trim();
+  if (!normalizedLeading || !normalizedFinal) {
+    return normalizedLeading;
+  }
+
+  if (normalizedLeading === normalizedFinal) {
+    return "";
+  }
+
+  const finalTextIndex = normalizedLeading.indexOf(normalizedFinal);
+  const duplicateRange =
+    finalTextIndex >= 0
+      ? {
+          start: finalTextIndex,
+          end: finalTextIndex + normalizedFinal.length,
+        }
+      : findDuplicateTextSignatureRange(normalizedLeading, normalizedFinal);
+  if (!duplicateRange) {
+    return normalizedLeading;
+  }
+
+  const prefix = normalizedLeading.slice(0, duplicateRange.start).trim();
+  const suffix = normalizedLeading
+    .slice(duplicateRange.end)
+    .trim();
+  return [prefix, suffix].filter(Boolean).join("\n\n");
+}
+
+function normalizeDuplicatedLeadingTextBeforeProcess(
+  parts: MessageContentPart[],
+): MessageContentPart[] {
+  const firstProcessIndex = findFirstProcessBoundaryIndex(parts);
+  if (firstProcessIndex < 0) {
+    return parts;
+  }
+
+  const finalText = resolveFinalTextFromContentParts(parts);
+  if (!finalText) {
+    return parts;
+  }
+
+  let changed = false;
+  const normalizedParts = parts.flatMap((part, index) => {
+    if (
+      index >= firstProcessIndex ||
+      part.type !== "text" ||
+      part.text.trim().length === 0
+    ) {
+      return [part];
+    }
+
+    const nextText = trimDuplicatedFinalTextFromLeadingText(
+      part.text,
+      finalText,
+    );
+    if (nextText === part.text.trim()) {
+      return [part];
+    }
+
+    changed = true;
+    return nextText ? [{ ...part, text: nextText }] : [];
+  });
+
+  return changed ? normalizedParts : parts;
+}
+
+function restoreMissingLeadingTextFromDisplayContent(
+  parts: MessageContentPart[],
+  displayContent?: string,
+): MessageContentPart[] {
+  const firstProcessIndex = findFirstProcessBoundaryIndex(parts);
+  if (firstProcessIndex < 0) {
+    return parts;
+  }
+
+  const hasLeadingText = parts.some(
+    (part, index) =>
+      index < firstProcessIndex &&
+      part.type === "text" &&
+      part.text.trim().length > 0,
+  );
+  if (hasLeadingText) {
+    return parts;
+  }
+
+  const finalText = resolveFinalTextFromContentParts(parts);
+  const normalizedDisplayContent = displayContent?.trim();
+  if (!finalText || !normalizedDisplayContent) {
+    return parts;
+  }
+
+  const finalTextIndex = normalizedDisplayContent.indexOf(finalText);
+  if (finalTextIndex <= 0) {
+    return parts;
+  }
+
+  const leadingText = normalizedDisplayContent.slice(0, finalTextIndex).trim();
+  if (!leadingText) {
+    return parts;
+  }
+
+  return [{ type: "text", text: leadingText }, ...parts];
+}
+
 export function resolveDeferredTextContentParts(
   parts?: Message["contentParts"],
   options?: Parameters<typeof sanitizeMessageTextForDisplay>[1],
@@ -113,7 +305,7 @@ export function resolveAssistantActionContent(params: {
   useProcessSeparatedFinalText: boolean;
 }): string {
   if (params.useProcessSeparatedFinalText) {
-    return resolveFinalTextFromContentParts(params.conversationContentParts);
+    return resolveVisibleTextFromContentParts(params.conversationContentParts);
   }
 
   return (
@@ -146,31 +338,36 @@ export function hasFinalTextAfterProcessBoundary(
 
 export function resolveProcessSeparatedContentParts(
   parts?: Message["contentParts"],
+  options?: {
+    displayContent?: string;
+  },
 ): Message["contentParts"] | undefined {
   if (!hasProcessBoundaryContentPart(parts)) {
     return parts;
   }
 
+  const restoredParts = restoreMissingLeadingTextFromDisplayContent(
+    parts || [],
+    options?.displayContent,
+  );
+  const dedupedParts =
+    normalizeDuplicatedLeadingTextBeforeProcess(restoredParts);
+
   const hasActionBoundary = Boolean(
-    parts?.some((part) => part.type === "action_required"),
+    dedupedParts.some((part) => part.type === "action_required"),
   );
   if (hasActionBoundary) {
-    return parts;
+    return dedupedParts;
   }
 
-  const firstProcessIndex = (parts || []).findIndex(
-    (part) =>
-      part.type === "tool_use" ||
-      part.type === "action_required" ||
-      part.type === "file_changes_batch",
-  );
-  const lastTextIndex = (parts || []).reduce(
+  const firstProcessIndex = findFirstProcessBoundaryIndex(dedupedParts);
+  const lastTextIndex = dedupedParts.reduce(
     (lastIndex, part, index) =>
       part.type === "text" && part.text.trim().length > 0 ? index : lastIndex,
     -1,
   );
 
-  const filtered = (parts || []).filter((part, index) => {
+  const filtered = dedupedParts.filter((part, index) => {
     if (part.type !== "text") {
       return true;
     }

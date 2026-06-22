@@ -36,6 +36,28 @@ async fn test_read_resource_not_found() {
     }
 }
 
+#[tokio::test]
+async fn test_subscribe_resource_not_found() {
+    let manager = McpClientManager::new(None);
+
+    let result = manager
+        .subscribe_resource("file:///nonexistent/resource")
+        .await;
+
+    assert!(matches!(result, Err(McpError::ToolNotFound(_))));
+}
+
+#[tokio::test]
+async fn test_unsubscribe_resource_not_found() {
+    let manager = McpClientManager::new(None);
+
+    let result = manager
+        .unsubscribe_resource("file:///nonexistent/resource")
+        .await;
+
+    assert!(matches!(result, Err(McpError::ToolNotFound(_))));
+}
+
 #[test]
 fn test_convert_resource_to_definition() {
     use rmcp::model::{AnnotateAble, RawResource};

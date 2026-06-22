@@ -14,8 +14,8 @@ export const PageContainer = styled.div<{ $compact?: boolean }>`
   width: 100%;
   position: relative;
   min-height: 0;
-  gap: ${({ $compact }) => ($compact ? "8px" : "20px")};
-  padding: ${({ $compact }) => ($compact ? "4px 10px 10px" : "12px 20px 20px")};
+  gap: ${({ $compact }) => ($compact ? "8px" : "16px")};
+  padding: ${({ $compact }) => ($compact ? "4px 10px 10px" : "10px 16px 16px")};
   box-sizing: border-box;
   overflow: hidden;
   isolation: isolate;
@@ -24,6 +24,12 @@ export const PageContainer = styled.div<{ $compact?: boolean }>`
   > * {
     position: relative;
     z-index: 1;
+  }
+
+  @media (max-width: 1440px) {
+    gap: ${({ $compact }) => ($compact ? "8px" : "12px")};
+    padding: ${({ $compact }) =>
+      $compact ? "4px 10px 10px" : "8px 12px 12px"};
   }
 `;
 
@@ -203,25 +209,37 @@ export const ChatContainerInner = styled.div<{ $taskCenterSurface?: boolean }>`
 
 export const EntryBanner = styled.div`
   display: flex;
-  align-items: center;
+  min-width: 0;
+  align-items: flex-start;
+  flex-wrap: wrap;
   gap: 8px;
-  margin: 8px 12px 0;
-  padding: 10px 12px;
-  border-radius: 18px;
+  margin: 6px 10px 0;
+  padding: 8px 10px;
+  border-radius: 16px;
   border: 1px solid var(--lime-surface-border, rgba(226, 240, 226, 0.9));
   background: var(--lime-home-card-surface);
   color: var(--lime-text, #1a3b2b);
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1.45;
   box-shadow: 0 10px 22px -20px rgba(15, 23, 42, 0.16);
+
+  > span {
+    min-width: 0;
+    flex: 1 1 240px;
+    overflow-wrap: anywhere;
+  }
 `;
 
 export const EntryBannerClose = styled.button`
   margin-left: auto;
+  align-self: flex-start;
   border: none;
   background: transparent;
   color: var(--lime-text-muted, #6b826b);
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: nowrap;
 `;
 
 export const ChatContent = styled.div<{ $compact?: boolean }>`

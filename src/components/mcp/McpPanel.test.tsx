@@ -12,6 +12,7 @@ import type {
   McpToolDefinition,
 } from "@/lib/api/mcp";
 import { McpPanel } from "./McpPanel";
+import { MCP_RESOURCE_TEXT_PREVIEW_CHAR_LIMIT } from "./mcpResourcePreview";
 
 const useMcpMock = vi.hoisted(() => vi.fn<() => UseMcpReturn>());
 const toastMock = vi.hoisted(() => ({
@@ -110,6 +111,8 @@ function createMcpState(overrides: Partial<UseMcpReturn> = {}): UseMcpReturn {
     getPrompt: vi.fn(async () => ({ messages: [] })),
     refreshResources: vi.fn(async () => undefined),
     readResource: vi.fn(async () => ({ uri: "file://demo/readme.md" })),
+    subscribeResource: vi.fn(async () => undefined),
+    unsubscribeResource: vi.fn(async () => undefined),
     ...overrides,
   };
 }
@@ -141,6 +144,29 @@ function findButton(container: HTMLElement, text: string): HTMLButtonElement {
   }
 
   return button as HTMLButtonElement;
+}
+
+async function openResourcesTab(container: HTMLElement): Promise<void> {
+  await act(async () => {
+    findButton(container, "资源").dispatchEvent(
+      new MouseEvent("click", { bubbles: true }),
+    );
+    await Promise.resolve();
+  });
+  await act(async () => {
+    findButton(container, "demo").dispatchEvent(
+      new MouseEvent("click", { bubbles: true }),
+    );
+    await Promise.resolve();
+  });
+}
+
+function findResourcePreviewButtons(
+  container: HTMLElement,
+): HTMLButtonElement[] {
+  return Array.from(
+    container.querySelectorAll<HTMLButtonElement>('button[title="读取资源"]'),
+  );
 }
 
 beforeEach(() => {
@@ -406,5 +432,135 @@ describe("McpPanel", () => {
 
     expect(container.textContent).toContain("已授权");
     expect(container.textContent).not.toContain("需要授权");
+  });
+
+  it("资源预览打开、切换和关闭时应维护资源订阅生命周期", async () => {
+    const subscribeResource = vi.fn(async () => undefined);
+    const unsubscribeResource = vi.fn(async () => undefined);
+    const readResource = vi.fn(async (uri: string) => ({
+      uri,
+      text: uri.includes("readme") ? "README content" : "Guide content",
+      mime_type: "text/markdown",
+    }));
+    useMcpMock.mockReturnValue(
+      createMcpState({
+        resources: [
+          {
+            uri: "file://demo/readme.md",
+            name: "README",
+            description: "项目说明",
+            server_name: "demo",
+          },
+          {
+            uri: "file://demo/guide.md",
+            name: "GUIDE",
+            description: "使用指南",
+            server_name: "demo",
+          },
+        ],
+        readResource,
+        subscribeResource,
+        unsubscribeResource,
+      }),
+    );
+    const container = await renderPanel({ hideHeader: true });
+
+    await openResourcesTab(container);
+
+    await act(async () => {
+      findResourcePreviewButtons(container)[0]?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(subscribeResource).toHaveBeenCalledWith("file://demo/readme.md");
+    expect(readResource).toHaveBeenCalledWith("file://demo/readme.md");
+    expect(container.textContent).toContain("README content");
+
+    await act(async () => {
+      findResourcePreviewButtons(container)[1]?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(unsubscribeResource).toHaveBeenCalledWith("file://demo/readme.md");
+    expect(subscribeResource).toHaveBeenCalledWith("file://demo/guide.md");
+    expect(readResource).toHaveBeenCalledWith("file://demo/guide.md");
+    expect(container.textContent).toContain("Guide content");
+
+    await act(async () => {
+      findResourcePreviewButtons(container)[1]?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+    });
+
+    expect(unsubscribeResource).toHaveBeenCalledWith("file://demo/guide.md");
+  });
+
+  it("资源预览应截断超长文本，不渲染尾部内容", async () => {
+    const hiddenTail = "TAIL_SHOULD_NOT_RENDER";
+    const readResource = vi.fn(async () => ({
+      uri: "file://demo/readme.md",
+      text: "A".repeat(MCP_RESOURCE_TEXT_PREVIEW_CHAR_LIMIT) + hiddenTail,
+      mime_type: "text/plain",
+    }));
+    useMcpMock.mockReturnValue(
+      createMcpState({
+        readResource,
+      }),
+    );
+    const container = await renderPanel({ hideHeader: true });
+
+    await openResourcesTab(container);
+    await act(async () => {
+      findResourcePreviewButtons(container)[0]?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const preview = container.querySelector(
+      '[data-testid="mcp-resource-text-preview"]',
+    );
+    expect(preview?.textContent).toHaveLength(
+      MCP_RESOURCE_TEXT_PREVIEW_CHAR_LIMIT,
+    );
+    expect(container.textContent).toContain("已截断");
+    expect(container.textContent).not.toContain(hiddenTail);
+  });
+
+  it("资源预览应只显示二进制摘要，不渲染 blob 正文", async () => {
+    const readResource = vi.fn(async () => ({
+      uri: "file://demo/readme.md",
+      blob: "aGVsbG8=",
+      mime_type: "application/octet-stream",
+    }));
+    useMcpMock.mockReturnValue(
+      createMcpState({
+        readResource,
+      }),
+    );
+    const container = await renderPanel({ hideHeader: true });
+
+    await openResourcesTab(container);
+    await act(async () => {
+      findResourcePreviewButtons(container)[0]?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(
+      container.querySelector('[data-testid="mcp-resource-blob-summary"]'),
+    ).not.toBeNull();
+    expect(container.textContent).toContain("二进制数据，5 字节");
+    expect(container.textContent).not.toContain("aGVsbG8=");
   });
 });

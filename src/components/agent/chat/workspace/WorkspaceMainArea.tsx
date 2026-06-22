@@ -55,6 +55,7 @@ interface WorkspaceMainAreaProps {
   forceCanvasMode: boolean;
   chatContent: ReactNode;
   canvasContent: ReactNode;
+  rightSurfaceContent?: ReactNode;
   chatPanelWidth?: string;
   chatPanelMinWidth?: string;
   generalWorkbenchDialog: ReactNode;
@@ -77,6 +78,7 @@ export function WorkspaceMainArea({
   forceCanvasMode,
   chatContent,
   canvasContent,
+  rightSurfaceContent,
   chatPanelWidth,
   chatPanelMinWidth,
   generalWorkbenchDialog,
@@ -87,11 +89,17 @@ export function WorkspaceMainArea({
 }: WorkspaceMainAreaProps) {
   const { t } = useTranslation("agent");
   const [navbarOpen, setNavbarOpen] = useState(false);
+  const hasRightSurfaceContent = Children.count(rightSurfaceContent) > 0;
+  const effectiveCanvasContent = hasRightSurfaceContent
+    ? rightSurfaceContent
+    : canvasContent;
   const effectiveLayoutMode = hasPendingA2UIForm
     ? "chat"
-    : forceCanvasMode
-      ? "canvas"
-      : layoutMode;
+    : hasRightSurfaceContent
+      ? "chat-canvas"
+      : forceCanvasMode
+        ? "canvas"
+        : layoutMode;
   const shouldAutoHideNavbar =
     autoHideTaskCenterNavbar &&
     Boolean(navbarNode) &&
@@ -99,7 +107,7 @@ export function WorkspaceMainArea({
   const isAutoHideNavbarVisible = shouldAutoHideNavbar && navbarOpen;
   const shouldRenderRevealHandle =
     shouldAutoHideNavbar && !isAutoHideNavbarVisible;
-  const hasCanvasContent = Children.count(canvasContent) > 0;
+  const hasCanvasContent = Children.count(effectiveCanvasContent) > 0;
   const shouldRenderTaskCenterChrome =
     !taskCenterUtilityToolbarNode &&
     !shouldAutoHideNavbar &&
@@ -258,7 +266,7 @@ export function WorkspaceMainArea({
         <LayoutTransitionRenderGate
           mode={effectiveLayoutMode}
           chatContent={chatContent}
-          canvasContent={canvasContent}
+          canvasContent={effectiveCanvasContent}
           chatPanelWidth={chatPanelWidth}
           chatPanelMinWidth={chatPanelMinWidth}
           chatPanelTopInset={

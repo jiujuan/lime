@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/types";
 import {
   buildGeneralWorkbenchSendBoundaryState,
   buildGeneralWorkbenchResumePromptFromRunState,
@@ -144,6 +145,60 @@ describe("workspaceSendHelpers runtime team preview", () => {
         }),
       }),
     });
+  });
+
+  it("workspace skill runtime enable 应进入发送 metadata 且不打开 allow_model_skills", () => {
+    const metadata = buildWorkspaceRequestMetadata({
+      effectiveToolPreferences: {
+        task: true,
+        subagent: false,
+      },
+      mappedTheme: "general",
+      isThemeWorkbench: false,
+      currentGateKey: "default",
+      workspaceSkillRuntimeEnable: {
+        workspaceRoot: "/Users/demo/project",
+        bindings: [
+          {
+            key: "workspace_skill:capability-report",
+            name: "能力报告",
+            description: "把能力输出整理成报告。",
+            directory: "capability-report",
+            registered_skill_directory:
+              "/Users/demo/project/.agents/skills/capability-report",
+            registration: {},
+            permission_summary: ["Level 0 只读发现"],
+            metadata: {},
+            allowed_tools: ["read_file"],
+            resource_summary: {},
+            standard_compliance: {},
+            runtime_binding_target: "workspace_skill",
+            binding_status: "ready_for_manual_enable",
+            binding_status_reason: "ready",
+            next_gate: "manual_runtime_enable",
+            query_loop_visible: false,
+            tool_runtime_visible: false,
+            launch_enabled: false,
+            runtime_gate: "manual_runtime_enable",
+          } satisfies AgentRuntimeWorkspaceSkillBinding,
+        ],
+      },
+    });
+
+    expect(metadata.harness).toMatchObject({
+      workspace_skill_runtime_enable: {
+        source: "manual_session_enable",
+        approval: "manual",
+        workspace_root: "/Users/demo/project",
+        bindings: [
+          expect.objectContaining({
+            directory: "capability-report",
+            skill: "project:capability-report",
+          }),
+        ],
+      },
+    });
+    expect(metadata.allow_model_skills).toBeUndefined();
   });
 
   it("默认工作区 metadata 不应注入 Creator / Brand Voice", () => {

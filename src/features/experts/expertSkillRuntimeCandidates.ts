@@ -4,6 +4,8 @@ import type {
   SkillCatalogSkillLocator,
 } from "@/lib/api/skillCatalog";
 import { listSkillCatalogSkillEntries } from "@/lib/api/skillCatalog";
+import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/types";
+import type { ServiceSkillItem } from "@/lib/api/serviceSkills";
 import type { Skill } from "@/lib/api/skills";
 
 export type ExpertSkillRuntimeCandidateKind =
@@ -17,6 +19,7 @@ export type ExpertSkillRuntimeCandidateReadiness =
   | "ready"
   | "needs_mapping"
   | "needs_registration"
+  | "needs_enable"
   | "blocked";
 
 export interface ExpertSkillRuntimeCandidate {
@@ -34,6 +37,8 @@ export interface BuildExpertSkillRuntimeCandidatesOptions {
   source?: ExpertSkillRuntimeCandidate["source"];
   catalog?: SkillCatalog | null;
   localSkills?: Skill[] | null;
+  serviceSkills?: ServiceSkillItem[] | null;
+  workspaceSkillBindings?: AgentRuntimeWorkspaceSkillBinding[] | null;
 }
 
 function normalizeRef(ref: string): string {
@@ -82,6 +87,127 @@ function findLocalSkill(refName: string, localSkills?: Skill[] | null): Skill | 
       [skill.key, skill.name, skill.directory, skill.localDirectoryPath]
         .filter((value): value is string => Boolean(value))
         .some((value) => normalizeKey(value) === normalized),
+    ) ?? null
+  );
+}
+
+function serviceSkillMatchKeys(skill: ServiceSkillItem): string[] {
+  return [
+    skill.id,
+    skill.skillKey,
+    skill.sceneBinding?.sceneKey,
+    ...(skill.aliases ?? []),
+  ].filter((value): value is string => Boolean(value));
+}
+
+function findServiceSkill(
+  refName: string,
+  options: Pick<
+    BuildExpertSkillRuntimeCandidatesOptions,
+    "catalog" | "serviceSkills"
+  >,
+): ServiceSkillItem | null {
+  const normalized = normalizeKey(refName);
+  const candidates = [
+    ...(options.serviceSkills ?? []),
+    ...(options.catalog?.items ?? []),
+  ];
+  return (
+    candidates.find((skill) =>
+      serviceSkillMatchKeys(skill).some(
+        (value) => normalizeKey(value) === normalized,
+      ),
+    ) ?? null
+  );
+}
+
+function serviceSkillLocatorFallback(
+  name: string,
+  skill: ServiceSkillItem | null,
+): SkillCatalogSkillLocator | undefined {
+  const locatorName = skill?.skillKey?.trim() || skill?.id.trim() || name;
+  return locatorName
+    ? {
+        source: "catalog",
+        name: locatorName,
+      }
+    : undefined;
+}
+
+function nativeServiceSkillLocator(
+  skill: ServiceSkillItem,
+  options: Pick<
+    BuildExpertSkillRuntimeCandidatesOptions,
+    "catalog" | "localSkills"
+  >,
+):
+  | {
+      locator: SkillCatalogSkillLocator;
+      displayTitle: string;
+      reason: string;
+    }
+  | null {
+  if (skill.defaultExecutorBinding !== "native_skill") {
+    return null;
+  }
+  const names = [skill.skillKey, skill.id].filter(
+    (value): value is string => Boolean(value),
+  );
+  for (const name of names) {
+    const catalogEntry = findCatalogSkillEntry(name, options.catalog);
+    if (catalogEntry?.skillLocator) {
+      return {
+        locator: catalogEntry.skillLocator,
+        displayTitle: catalogEntry.title || skill.title,
+        reason: "service skill ref matched native SkillCatalog skillLocator",
+      };
+    }
+    const localSkill = findLocalSkill(name, options.localSkills);
+    if (localSkill) {
+      return {
+        locator: {
+          source: localSkill.catalogSource === "project" ? "project" : "user",
+          name: localSkill.key || localSkill.name || name,
+          directory: localSkill.directory || undefined,
+        },
+        displayTitle: localSkill.name || skill.title,
+        reason: "service skill ref matched installed native local Skill",
+      };
+    }
+  }
+  return null;
+}
+
+function workspaceSkillDirectoryFromRef(ref: string): string {
+  const raw = ref.slice("workspace_skill:".length).trim();
+  return raw.split("@")[0]?.trim() || raw;
+}
+
+function findWorkspaceSkillBinding(
+  directory: string,
+  bindings?: AgentRuntimeWorkspaceSkillBinding[] | null,
+): AgentRuntimeWorkspaceSkillBinding | null {
+  if (!bindings) {
+    return null;
+  }
+  const normalized = normalizeKey(directory);
+  return (
+    bindings.find((binding) =>
+      [
+        binding.key,
+        binding.directory,
+        binding.registered_skill_directory,
+        binding.name,
+      ]
+        .filter((value): value is string => Boolean(value))
+        .some((value) => {
+          const normalizedValue = normalizeKey(value);
+          return (
+            normalizedValue === normalized ||
+            normalizedValue === `workspace_skill:${normalized}` ||
+            normalizedValue.endsWith(`/${normalized}`)
+          );
+        }),
     ) ?? null
   );
 }
@@ -150,46 +276,72 @@ function buildSkillRefCandidate(
 
 function buildServiceSkillRefCandidate(
   ref: string,
-  options: Required<Pick<BuildExpertSkillRuntimeCandidatesOptions, "source">>,
+  options: Required<Pick<BuildExpertSkillRuntimeCandidatesOptions, "source">> &
+    Pick<
+      BuildExpertSkillRuntimeCandidatesOptions,
+      "catalog" | "localSkills" | "serviceSkills"
+    >,
 ): ExpertSkillRuntimeCandidate {
   const name = ref.slice("service-skill:".length);
+  const serviceSkill = findServiceSkill(name, options);
+  const nativeLocator = serviceSkill
+    ? nativeServiceSkillLocator(serviceSkill, options)
+    : null;
   return {
     ref,
     kind: "service_skill",
-    readiness: "needs_mapping",
-    reason:
-      "service skill ref must be resolved through service_scene_launch skillLocator",
-    displayTitle: titleFromRef(ref),
+    readiness: nativeLocator ? "ready" : "needs_mapping",
+    reason: nativeLocator
+      ? nativeLocator.reason
+      : serviceSkill?.defaultExecutorBinding === "native_skill"
+        ? "native service skill ref has no SkillCatalog or local Skill locator yet"
+        : "service skill ref must be resolved through service_scene_launch skillLocator",
+    displayTitle:
+      nativeLocator?.displayTitle ?? serviceSkill?.title ?? titleFromRef(ref),
     source: options.source,
-    riskLevel: "medium",
-    skillLocator: name
-      ? {
-          source: "catalog",
-          name,
-        }
-      : undefined,
+    riskLevel: nativeLocator ? "low" : "medium",
+    skillLocator:
+      nativeLocator?.locator ?? serviceSkillLocatorFallback(name, serviceSkill),
   };
 }
 
 function buildWorkspaceSkillRefCandidate(
   ref: string,
-  options: Required<Pick<BuildExpertSkillRuntimeCandidatesOptions, "source">>,
+  options: Required<Pick<BuildExpertSkillRuntimeCandidatesOptions, "source">> &
+    Pick<BuildExpertSkillRuntimeCandidatesOptions, "workspaceSkillBindings">,
 ): ExpertSkillRuntimeCandidate {
-  const directory = ref.slice("workspace_skill:".length);
+  const directory = workspaceSkillDirectoryFromRef(ref);
+  const binding = findWorkspaceSkillBinding(
+    directory,
+    options.workspaceSkillBindings,
+  );
+  const bindingReady =
+    binding?.binding_status === "ready_for_manual_enable" &&
+    Boolean(binding.directory || directory);
+  const bindingBlocked = binding?.binding_status === "blocked";
   return {
     ref,
     kind: "workspace_skill",
-    readiness: "needs_registration",
-    reason:
-      "workspace skill ref requires workspaceSkillBindings/list ready_for_manual_enable",
-    displayTitle: titleFromRef(ref),
+    readiness: bindingReady
+      ? "needs_enable"
+      : bindingBlocked
+        ? "blocked"
+        : "needs_registration",
+    reason: bindingReady
+      ? "workspace skill binding is ready_for_manual_enable and requires manual runtime enable"
+      : bindingBlocked
+        ? binding.binding_status_reason ||
+          "workspace skill binding is blocked by readiness requirements"
+        : "workspace skill ref requires workspaceSkillBindings/list ready_for_manual_enable",
+    displayTitle: binding?.name || titleFromRef(ref),
     source: options.source,
     riskLevel: "medium",
     skillLocator: directory
       ? {
           source: "project",
           name: `project:${directory}`,
-          directory,
+          directory: binding?.directory || directory,
+          skillFilePath: binding?.registered_skill_directory,
         }
       : undefined,
   };
@@ -243,10 +395,18 @@ export function buildExpertSkillRuntimeCandidates(
         });
       }
       if (ref.startsWith("service-skill:")) {
-        return buildServiceSkillRefCandidate(ref, { source });
+        return buildServiceSkillRefCandidate(ref, {
+          source,
+          catalog: options.catalog,
+          localSkills: options.localSkills,
+          serviceSkills: options.serviceSkills,
+        });
       }
       if (ref.startsWith("workspace_skill:")) {
-        return buildWorkspaceSkillRefCandidate(ref, { source });
+        return buildWorkspaceSkillRefCandidate(ref, {
+          source,
+          workspaceSkillBindings: options.workspaceSkillBindings,
+        });
       }
       return {
         ref,

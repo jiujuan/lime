@@ -589,6 +589,8 @@ export interface AgentRuntimeStatusMetadata {
   keepalive_kind?: string;
   keepalive_sequence?: number;
   keepalive_elapsed_ms?: number;
+  skillRuntime?: Record<string, unknown>;
+  skill_runtime?: Record<string, unknown>;
 }
 
 export interface AgentRuntimeStatusPayload {

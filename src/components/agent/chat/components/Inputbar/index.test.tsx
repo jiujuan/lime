@@ -1077,6 +1077,7 @@ describe("Inputbar", () => {
 
     expect(onSend).toHaveBeenCalledTimes(1);
     expectInputbarSend(onSend, {
+      textOverride: "整理最近发布计划",
       sendOptions: {
         capabilityRoute: {
           kind: "installed_skill",
@@ -1131,6 +1132,7 @@ describe("Inputbar", () => {
       successCriteria: [],
     });
     expectInputbarSend(onSend, {
+      textOverride: "继续执行当前任务",
       sendOptions: {
         displayContent: "继续执行当前任务",
         requestMetadata: {
@@ -1406,6 +1408,7 @@ describe("Inputbar", () => {
     });
 
     expectInputbarSend(onSend, {
+      textOverride: "整理最近发布计划",
       sendOptions: {
         capabilityRoute: {
           kind: "installed_skill",
@@ -1625,6 +1628,7 @@ describe("Inputbar", () => {
 
     expect(onSend).toHaveBeenCalledTimes(1);
     expectInputbarSend(onSend, {
+      textOverride: "整理最近发布计划",
       sendOptions: {
         capabilityRoute: {
           kind: "installed_skill",
@@ -1712,6 +1716,8 @@ describe("Inputbar", () => {
     });
 
     expectInputbarSend(onSend, {
+      textOverride:
+        "请先帮我起草一版内容首稿：明确目标受众、标题方向、正文结构、核心观点和可继续扩写的角度，并给我一版适合继续打磨的正文。",
       sendOptions: expect.objectContaining({
         capabilityRoute: {
           kind: "curated_task",
@@ -1991,6 +1997,7 @@ describe("Inputbar", () => {
     });
 
     expectInputbarSend(onSend, {
+      textOverride: initialPrompt,
       sendOptions: expect.objectContaining({
         capabilityRoute: {
           kind: "curated_task",
@@ -2186,6 +2193,7 @@ describe("Inputbar", () => {
     });
 
     expectInputbarSend(onSend, {
+      textOverride: expectedPrompt,
       sendOptions: expect.objectContaining({
         capabilityRoute: expect.objectContaining({
           kind: "curated_task",
@@ -2400,6 +2408,7 @@ describe("Inputbar", () => {
     });
 
     expectInputbarSend(onSend, {
+      textOverride: "请先给我做一版每日趋势摘要",
       sendOptions: expect.objectContaining({
         capabilityRoute: expect.objectContaining({
           kind: "curated_task",
@@ -2551,6 +2560,7 @@ describe("Inputbar", () => {
     });
 
     expectInputbarSend(onSend, {
+      textOverride: editedPrompt,
       sendOptions: expect.objectContaining({
         capabilityRoute: {
           kind: "curated_task",
@@ -2617,6 +2627,7 @@ describe("Inputbar", () => {
 
     expect(onSend).toHaveBeenCalledTimes(1);
     expectInputbarSend(onSend, {
+      textOverride: "整理最近发布计划",
       sendOptions: {
         capabilityRoute: {
           kind: "builtin_command",
@@ -2676,6 +2687,7 @@ describe("Inputbar", () => {
 
     expect(onSend).toHaveBeenCalledTimes(1);
     expectInputbarSend(onSend, {
+      textOverride: "帮我做一版新品活动启动方案",
       sendOptions: {
         capabilityRoute: {
           kind: "runtime_scene",
@@ -2752,6 +2764,7 @@ describe("Inputbar", () => {
 
     expect(onSend).toHaveBeenCalledTimes(1);
     expectInputbarSend(onSend, {
+      textOverride: "帮我做一版新品活动启动方案",
       sendOptions: {
         capabilityRoute: {
           kind: "runtime_scene",
@@ -2830,7 +2843,9 @@ describe("Inputbar", () => {
     });
 
     expect(onSend).toHaveBeenCalledTimes(1);
-    expectInputbarSend(onSend);
+    expectInputbarSend(onSend, {
+      textOverride: "整理最近发布计划",
+    });
   });
 
   it("应把任务文件与额外浮层控件放进同一条输入栏 overlay row", async () => {
@@ -3115,7 +3130,9 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
-    expectInputbarSend(onSend);
+    expectInputbarSend(onSend, {
+      textOverride: "请联网检查这个依赖变更并修复编译错误",
+    });
   });
 
   it("通用聊天态复杂任务不再主动显示 Subagents 建议", async () => {
@@ -3169,6 +3186,7 @@ describe("Inputbar", () => {
     });
 
     expectInputbarSend(onSend, {
+      textOverride: "基于项目资料写一段介绍",
       sendOptions: expect.objectContaining({
         requestMetadata: {
           knowledge_pack: {
@@ -3216,6 +3234,7 @@ describe("Inputbar", () => {
     });
 
     expectInputbarSend(onSend, {
+      textOverride: "基于运营资料写一段社群预热文案",
       sendOptions: expect.objectContaining({
         requestMetadata: {
           knowledge_pack: {
@@ -3335,6 +3354,7 @@ describe("Inputbar", () => {
     });
 
     expectInputbarSend(onSend, {
+      textOverride: "基于运营资料生成本周计划",
       sendOptions: expect.objectContaining({
         requestMetadata: {
           knowledge_pack: {
@@ -3684,6 +3704,7 @@ describe("Inputbar", () => {
     });
 
     expectInputbarSend(onSend, {
+      textOverride: "基于选中的项目资料写介绍",
       sendOptions: expect.objectContaining({
         requestMetadata: {
           knowledge_pack: {
@@ -3946,7 +3967,9 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
-    expectInputbarSend(onSend);
+    expectInputbarSend(onSend, {
+      textOverride: "写一篇春季上新种草文案",
+    });
   });
 
   it("社媒主题输入 slash 命令时不应重复注入默认 skill", async () => {
@@ -3972,7 +3995,9 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
-    expectInputbarSend(onSend);
+    expectInputbarSend(onSend, {
+      textOverride: "/custom_skill 写一篇品牌故事",
+    });
   });
 
   it("工作区工作流模式应使用 attach-only 浮动输入配置", async () => {

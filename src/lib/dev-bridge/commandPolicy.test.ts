@@ -528,6 +528,40 @@ describe("commandPolicy", () => {
         request: {
           lines: [
             JSON.stringify({
+              id: "mcp-status",
+              method: "mcpServerStatus/list",
+              params: {},
+            }),
+            JSON.stringify({
+              id: "mcp-start",
+              method: "mcpServer/start",
+              params: { name: "context7" },
+            }),
+          ],
+        },
+      }),
+    ).toBe("app-server-read");
+    expect(
+      resolveDevBridgeCommandTimeoutProfile("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
+              id: "mcp-tool-call",
+              method: "mcpTool/call",
+              params: {
+                toolName: "mcp__context7__query-docs",
+                arguments: { libraryId: "/openai/openai-agents-python" },
+              },
+            }),
+          ],
+        },
+      }),
+    ).toBe("app-server-read");
+    expect(
+      resolveDevBridgeCommandTimeoutProfile("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
               id: "knowledge",
               method: "knowledgePack/compile",
               params: {},

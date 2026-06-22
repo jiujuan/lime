@@ -4,12 +4,9 @@ use app_server_protocol::AgentSessionArchiveManyParams;
 use app_server_protocol::AgentSessionArchiveManyResponse;
 use app_server_protocol::AgentSessionListParams;
 use app_server_protocol::AgentSessionOverview;
-use app_server_protocol::AgentSessionStatus;
 use app_server_protocol::AgentSessionUpdateParams;
 use app_server_protocol::AgentSessionUpdateResponse;
 use app_server_protocol::AgentTurn;
-use app_server_protocol::AgentTurnStatus;
-use app_server_protocol::BusinessObjectRef;
 use rusqlite::params;
 use rusqlite::Connection;
 use rusqlite::OptionalExtension;
@@ -17,10 +14,15 @@ use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use super::projection_payload_summary::bounded_payload_summary;
+use super::projection_protocol::{
+    projected_import_reference_from_metadata, projected_import_session_to_protocol,
+    projected_session_to_protocol, projected_turn_to_protocol,
+};
+use super::projection_schema::create_schema;
+use super::projection_status::{session_status_from_event, turn_status_from_event};
 use super::session_list_scope::SessionListScope;
 use super::session_title;
-
-const IMPORTED_CONVERSATION_KIND: &str = "conversation.import";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectionStore {
@@ -239,7 +241,10 @@ impl ProjectionStore {
     }
 
     #[cfg(test)]
-    fn read_item_summary_for_test(&self, event_id: &str) -> Result<Option<String>, String> {
+    pub(super) fn read_item_summary_for_test(
+        &self,
+        event_id: &str,
+    ) -> Result<Option<String>, String> {
         let conn = Connection::open(&self.path)
             .map_err(|error| format!("无法打开 Projection DB {}: {error}", self.path.display()))?;
         conn.query_row(
@@ -253,127 +258,30 @@ impl ProjectionStore {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct ProjectedSessionRow {
-    session_id: String,
-    thread_id: String,
-    status: String,
-    created_at: Option<String>,
-    updated_at: String,
-    archived_at: Option<String>,
-    title: Option<String>,
-    model: Option<String>,
-    workspace_id: Option<String>,
-    working_dir: Option<String>,
-    execution_strategy: Option<String>,
-    metadata_json: Option<String>,
-    last_event_sequence: u64,
+pub(super) struct ProjectedSessionRow {
+    pub(super) session_id: String,
+    pub(super) thread_id: String,
+    pub(super) status: String,
+    pub(super) created_at: Option<String>,
+    pub(super) updated_at: String,
+    pub(super) archived_at: Option<String>,
+    pub(super) title: Option<String>,
+    pub(super) model: Option<String>,
+    pub(super) workspace_id: Option<String>,
+    pub(super) working_dir: Option<String>,
+    pub(super) execution_strategy: Option<String>,
+    pub(super) metadata_json: Option<String>,
+    pub(super) last_event_sequence: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct ProjectedTurnRow {
-    turn_id: String,
-    session_id: String,
-    thread_id: String,
-    status: String,
-    started_at: Option<String>,
-    completed_at: Option<String>,
-}
-
-fn create_schema(conn: &Connection) -> Result<(), String> {
-    conn.execute_batch(
-        r#"
-        PRAGMA user_version = 1;
-
-        CREATE TABLE IF NOT EXISTS projected_sessions (
-            session_id TEXT PRIMARY KEY,
-            thread_id TEXT NOT NULL,
-            status TEXT NOT NULL,
-            created_at TEXT,
-            updated_at TEXT NOT NULL,
-            archived_at TEXT,
-            title TEXT,
-            model TEXT,
-            workspace_id TEXT,
-            working_dir TEXT,
-            execution_strategy TEXT,
-            metadata_json TEXT,
-            last_event_sequence INTEGER NOT NULL DEFAULT 0,
-            last_event_id TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS projected_turns (
-            turn_id TEXT PRIMARY KEY,
-            session_id TEXT NOT NULL,
-            thread_id TEXT NOT NULL,
-            status TEXT NOT NULL,
-            started_at TEXT,
-            completed_at TEXT,
-            last_event_sequence INTEGER NOT NULL,
-            FOREIGN KEY(session_id) REFERENCES projected_sessions(session_id)
-        );
-
-        CREATE TABLE IF NOT EXISTS projected_items (
-            event_id TEXT PRIMARY KEY,
-            session_id TEXT NOT NULL,
-            thread_id TEXT NOT NULL,
-            turn_id TEXT,
-            sequence INTEGER NOT NULL,
-            item_type TEXT NOT NULL,
-            payload_summary_json TEXT NOT NULL DEFAULT '{}',
-            created_at TEXT NOT NULL,
-            FOREIGN KEY(session_id) REFERENCES projected_sessions(session_id)
-        );
-
-        CREATE TABLE IF NOT EXISTS projection_watermarks (
-            session_id TEXT PRIMARY KEY,
-            last_sequence INTEGER NOT NULL,
-            last_event_id TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_projected_sessions_updated
-            ON projected_sessions(updated_at DESC);
-
-        CREATE INDEX IF NOT EXISTS idx_projected_turns_session_sequence
-            ON projected_turns(session_id, last_event_sequence);
-
-        CREATE INDEX IF NOT EXISTS idx_projected_items_session_sequence
-            ON projected_items(session_id, sequence);
-        "#,
-    )
-    .map_err(|error| format!("无法初始化 Projection DB schema: {error}"))?;
-    add_projected_session_column_if_missing(conn, "archived_at", "TEXT")?;
-    add_projected_session_column_if_missing(conn, "title", "TEXT")?;
-    add_projected_session_column_if_missing(conn, "model", "TEXT")?;
-    add_projected_session_column_if_missing(conn, "workspace_id", "TEXT")?;
-    add_projected_session_column_if_missing(conn, "working_dir", "TEXT")?;
-    add_projected_session_column_if_missing(conn, "execution_strategy", "TEXT")?;
-    add_projected_session_column_if_missing(conn, "metadata_json", "TEXT")?;
-    Ok(())
-}
-
-fn add_projected_session_column_if_missing(
-    conn: &Connection,
-    column: &str,
-    column_type: &str,
-) -> Result<(), String> {
-    let mut stmt = conn
-        .prepare("PRAGMA table_info(projected_sessions)")
-        .map_err(|error| format!("无法检查 projected_sessions schema: {error}"))?;
-    let columns = stmt
-        .query_map([], |row| row.get::<_, String>(1))
-        .map_err(|error| format!("无法读取 projected_sessions schema: {error}"))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| format!("无法解析 projected_sessions schema: {error}"))?;
-    if columns.iter().any(|existing| existing == column) {
-        return Ok(());
-    }
-    conn.execute(
-        &format!("ALTER TABLE projected_sessions ADD COLUMN {column} {column_type}"),
-        [],
-    )
-    .map_err(|error| format!("无法迁移 projected_sessions.{column}: {error}"))?;
-    Ok(())
+pub(super) struct ProjectedTurnRow {
+    pub(super) turn_id: String,
+    pub(super) session_id: String,
+    pub(super) thread_id: String,
+    pub(super) status: String,
+    pub(super) started_at: Option<String>,
+    pub(super) completed_at: Option<String>,
 }
 
 fn query_projected_session(
@@ -720,145 +628,6 @@ fn query_projected_first_user_message(
         .and_then(|payload| session_title::first_user_message_from_runtime_payload(&payload)))
 }
 
-fn projected_session_to_protocol(
-    row: &ProjectedSessionRow,
-    first_user_message: Option<String>,
-) -> AgentSession {
-    let title = session_title::resolve_session_title(row.title.clone(), first_user_message);
-    let mut metadata = row
-        .metadata_json
-        .as_deref()
-        .and_then(|value| serde_json::from_str::<serde_json::Map<String, Value>>(value).ok())
-        .unwrap_or_default();
-    metadata.insert(
-        "projectionSource".to_string(),
-        Value::String("runtime.projection_1".to_string()),
-    );
-    metadata.insert(
-        "lastEventSequence".to_string(),
-        Value::Number(serde_json::Number::from(row.last_event_sequence)),
-    );
-    metadata.insert("title".to_string(), title.clone().into());
-    metadata.insert("model".to_string(), row.model.clone().into());
-    metadata.insert("workingDir".to_string(), row.working_dir.clone().into());
-    metadata.insert(
-        "executionStrategy".to_string(),
-        row.execution_strategy.clone().into(),
-    );
-    if let Some(archived_at) = row.archived_at.clone() {
-        metadata.insert("archivedAt".to_string(), archived_at.clone().into());
-        metadata.insert("archived_at".to_string(), archived_at.into());
-    }
-    let metadata = Value::Object(metadata);
-    let business_object_ref =
-        projected_import_reference_from_metadata_value(row, IMPORTED_CONVERSATION_KIND, &metadata)
-            .unwrap_or_else(|| BusinessObjectRef {
-                kind: "agent_session_projection".to_string(),
-                id: row.session_id.clone(),
-                title,
-                uri: None,
-                metadata: Some(metadata),
-            });
-    AgentSession {
-        session_id: row.session_id.clone(),
-        thread_id: row.thread_id.clone(),
-        app_id: "agent-runtime".to_string(),
-        workspace_id: row.workspace_id.clone(),
-        business_object_ref: Some(business_object_ref),
-        status: agent_session_status_from_projection(row.status.as_str()),
-        created_at: row
-            .created_at
-            .clone()
-            .unwrap_or_else(|| row.updated_at.clone()),
-        updated_at: row.updated_at.clone(),
-    }
-}
-
-fn projected_import_reference_from_metadata(
-    row: &ProjectedSessionRow,
-    source_kind: &str,
-    source_client: &str,
-    source_thread_id: &str,
-) -> Option<BusinessObjectRef> {
-    let metadata = row
-        .metadata_json
-        .as_deref()
-        .and_then(|value| serde_json::from_str::<Value>(value).ok())?;
-    let reference = projected_import_reference_from_metadata_value(row, source_kind, &metadata)?;
-    let source_client_value = metadata
-        .get("sourceClient")
-        .or_else(|| metadata.get("source_client"))
-        .and_then(Value::as_str)
-        .map(str::trim)?;
-    let source_thread_id_value = metadata
-        .get("sourceThreadId")
-        .or_else(|| metadata.get("source_thread_id"))
-        .and_then(Value::as_str)
-        .map(str::trim)?;
-    if source_client_value != source_client || source_thread_id_value != source_thread_id {
-        return None;
-    }
-    Some(reference)
-}
-
-fn projected_import_reference_from_metadata_value(
-    row: &ProjectedSessionRow,
-    source_kind: &str,
-    metadata: &Value,
-) -> Option<BusinessObjectRef> {
-    let source_thread_id = metadata
-        .get("sourceThreadId")
-        .or_else(|| metadata.get("source_thread_id"))
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())?;
-    metadata
-        .get("sourceClient")
-        .or_else(|| metadata.get("source_client"))
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())?;
-
-    Some(BusinessObjectRef {
-        kind: source_kind.to_string(),
-        id: source_thread_id.to_string(),
-        title: row.title.clone(),
-        uri: metadata
-            .get("sourcePath")
-            .or_else(|| metadata.get("source_path"))
-            .and_then(Value::as_str)
-            .map(str::to_string),
-        metadata: Some(metadata.clone()),
-    })
-}
-
-fn projected_import_session_to_protocol(
-    row: ProjectedSessionRow,
-    business_object_ref: BusinessObjectRef,
-) -> AgentSession {
-    AgentSession {
-        session_id: row.session_id,
-        thread_id: row.thread_id,
-        app_id: "agent-runtime".to_string(),
-        workspace_id: row.workspace_id,
-        business_object_ref: Some(business_object_ref),
-        status: agent_session_status_from_projection(row.status.as_str()),
-        created_at: row.created_at.unwrap_or_else(|| row.updated_at.clone()),
-        updated_at: row.updated_at,
-    }
-}
-
-fn projected_turn_to_protocol(row: ProjectedTurnRow) -> AgentTurn {
-    AgentTurn {
-        turn_id: row.turn_id,
-        session_id: row.session_id,
-        thread_id: row.thread_id,
-        status: agent_turn_status_from_projection(row.status.as_str()),
-        started_at: row.started_at,
-        completed_at: row.completed_at,
-    }
-}
-
 fn apply_event_in_tx(conn: &Connection, event: &AgentEvent) -> Result<(), String> {
     upsert_projected_session(conn, event)?;
     upsert_projected_turn(conn, event)?;
@@ -1152,250 +921,10 @@ fn upsert_watermark(conn: &Connection, event: &AgentEvent) -> Result<(), String>
     Ok(())
 }
 
-fn session_status_from_event(event_type: &str) -> &'static str {
-    match event_type {
-        "turn.completed" => "completed",
-        "turn.failed" => "failed",
-        "turn.canceled" => "canceled",
-        "turn.accepted" | "turn.started" | "message.created" | "message.delta" => "running",
-        _ => "active",
-    }
-}
-
-fn agent_session_status_from_projection(status: &str) -> AgentSessionStatus {
-    match status {
-        "running" | "active" => AgentSessionStatus::Running,
-        "failed" => AgentSessionStatus::Failed,
-        "canceled" => AgentSessionStatus::Canceled,
-        "completed" => AgentSessionStatus::Completed,
-        _ => AgentSessionStatus::Idle,
-    }
-}
-
-fn turn_status_from_event(event_type: &str) -> &'static str {
-    match event_type {
-        "turn.completed" => "completed",
-        "turn.failed" => "failed",
-        "turn.canceled" => "canceled",
-        "turn.accepted" => "accepted",
-        "turn.started" | "message.created" | "message.delta" => "running",
-        _ => "active",
-    }
-}
-
-fn agent_turn_status_from_projection(status: &str) -> AgentTurnStatus {
-    match status {
-        "accepted" => AgentTurnStatus::Accepted,
-        "running" | "active" => AgentTurnStatus::Running,
-        "waitingAction" | "waiting_action" => AgentTurnStatus::WaitingAction,
-        "completed" => AgentTurnStatus::Completed,
-        "failed" => AgentTurnStatus::Failed,
-        "canceled" | "aborted" => AgentTurnStatus::Canceled,
-        _ => AgentTurnStatus::Running,
-    }
-}
-
 fn turn_completed_at(event: &AgentEvent) -> Option<&str> {
     matches!(
         event.event_type.as_str(),
         "turn.completed" | "turn.failed" | "turn.canceled"
     )
     .then_some(event.timestamp.as_str())
-}
-
-const PAYLOAD_TEXT_SUMMARY_MAX_BYTES: usize = 512;
-
-fn bounded_payload_summary(payload: &serde_json::Value) -> String {
-    let mut value = payload.clone();
-    let truncated_text = value
-        .get("text")
-        .and_then(serde_json::Value::as_str)
-        .and_then(|text| truncate_text_summary(text, PAYLOAD_TEXT_SUMMARY_MAX_BYTES));
-    if let Some(truncated_text) = truncated_text {
-        value["text"] = serde_json::Value::String(truncated_text);
-    }
-    serde_json::to_string(&value).unwrap_or_else(|_| "{}".to_string())
-}
-
-fn truncate_text_summary(text: &str, max_bytes: usize) -> Option<String> {
-    if text.len() <= max_bytes {
-        return None;
-    }
-
-    let mut end = max_bytes.min(text.len());
-    while end > 0 && !text.is_char_boundary(end) {
-        end -= 1;
-    }
-    Some(format!("{}...", &text[..end]))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use app_server_protocol::AgentEvent;
-    use serde_json::json;
-
-    fn event(
-        sequence: u64,
-        event_type: &str,
-        session_id: &str,
-        thread_id: &str,
-        turn_id: Option<&str>,
-    ) -> AgentEvent {
-        AgentEvent {
-            event_id: format!("evt-{sequence}"),
-            sequence,
-            session_id: session_id.to_string(),
-            thread_id: Some(thread_id.to_string()),
-            turn_id: turn_id.map(str::to_string),
-            event_type: event_type.to_string(),
-            timestamp: "2026-06-14T00:00:00.000Z".to_string(),
-            payload: json!({ "text": format!("hello-{sequence}") }),
-        }
-    }
-
-    #[test]
-    fn apply_event_updates_session_turn_item_and_watermark() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let projection = ProjectionStore::initialize(temp.path().join("projection_1.sqlite"))
-            .expect("projection store");
-        let event = event(1, "turn.accepted", "sess_1", "thread_1", Some("turn_1"));
-
-        projection.apply_event(&event).expect("apply event");
-
-        let session = projection
-            .read_session("sess_1")
-            .expect("read projection")
-            .expect("session");
-        assert_eq!(session.session_id, "sess_1");
-        assert_eq!(session.thread_id, "thread_1");
-        assert_eq!(session.status, "running");
-        assert_eq!(session.last_event_sequence, 1);
-    }
-
-    #[test]
-    fn apply_events_updates_projection_in_one_batch() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let projection = ProjectionStore::initialize(temp.path().join("projection_1.sqlite"))
-            .expect("projection store");
-        let accepted = event(1, "turn.accepted", "sess_1", "thread_1", Some("turn_1"));
-        let message = event(2, "message.completed", "sess_1", "thread_1", Some("turn_1"));
-        let completed = event(3, "turn.completed", "sess_1", "thread_1", Some("turn_1"));
-
-        let count = projection
-            .apply_events(&[accepted, message, completed])
-            .expect("apply events");
-
-        assert_eq!(count, 3);
-        let session = projection
-            .read_session_projection("sess_1")
-            .expect("read projection")
-            .expect("session");
-        assert_eq!(session.session.session_id, "sess_1");
-        assert_eq!(session.session.status, AgentSessionStatus::Completed);
-        assert_eq!(session.turns.len(), 1);
-        assert_eq!(session.turns[0].status, AgentTurnStatus::Completed);
-        assert_eq!(session.item_count, 3);
-        assert_eq!(session.last_event_sequence, 3);
-        let watermark = projection
-            .read_watermark("sess_1")
-            .expect("read watermark")
-            .expect("watermark");
-        assert_eq!(watermark.last_sequence, 3);
-    }
-
-    #[test]
-    fn clear_session_removes_projected_rows() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let projection = ProjectionStore::initialize(temp.path().join("projection_1.sqlite"))
-            .expect("projection store");
-        let event = event(1, "turn.accepted", "sess_1", "thread_1", Some("turn_1"));
-
-        projection.apply_event(&event).expect("apply event");
-        assert!(projection
-            .read_session("sess_1")
-            .expect("read session")
-            .is_some());
-
-        projection.clear_session("sess_1").expect("clear session");
-        assert!(projection
-            .read_session("sess_1")
-            .expect("read session")
-            .is_none());
-    }
-
-    #[test]
-    fn repair_session_replays_events_after_clear() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let projection = ProjectionStore::initialize(temp.path().join("projection_1.sqlite"))
-            .expect("projection store");
-        let accepted = event(1, "turn.accepted", "sess_1", "thread_1", Some("turn_1"));
-        let completed = event(2, "turn.completed", "sess_1", "thread_1", Some("turn_1"));
-
-        projection.apply_event(&accepted).expect("apply accepted");
-        projection.clear_session("sess_1").expect("clear session");
-        projection
-            .repair_session("sess_1", &[accepted, completed])
-            .expect("repair session");
-
-        let session = projection
-            .read_session("sess_1")
-            .expect("read session")
-            .expect("session");
-        assert_eq!(session.status, "completed");
-        assert_eq!(session.last_event_sequence, 2);
-    }
-
-    #[test]
-    fn repair_session_with_empty_event_log_clears_stale_projection() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let projection = ProjectionStore::initialize(temp.path().join("projection_1.sqlite"))
-            .expect("projection store");
-        let event = event(1, "turn.accepted", "sess_1", "thread_1", Some("turn_1"));
-
-        projection.apply_event(&event).expect("apply event");
-        let count = projection
-            .repair_session("sess_1", &[])
-            .expect("repair empty session");
-
-        assert_eq!(count, 0);
-        assert!(projection
-            .read_session("sess_1")
-            .expect("read session")
-            .is_none());
-    }
-
-    #[test]
-    fn bounded_payload_summary_truncates_multibyte_text_on_char_boundary() {
-        let text = format!("{}服务流程", "a".repeat(PAYLOAD_TEXT_SUMMARY_MAX_BYTES - 1));
-        let summary = bounded_payload_summary(&json!({ "text": text }));
-        let value: serde_json::Value =
-            serde_json::from_str(&summary).expect("summary should stay valid JSON");
-        let truncated = value["text"].as_str().expect("truncated text");
-
-        assert!(truncated.ends_with("..."));
-        assert!(truncated.len() <= PAYLOAD_TEXT_SUMMARY_MAX_BYTES + 3);
-        assert!(!truncated.contains("服"));
-    }
-
-    #[test]
-    fn apply_event_stores_multibyte_long_text_summary_without_panic() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let projection = ProjectionStore::initialize(temp.path().join("projection_1.sqlite"))
-            .expect("projection store");
-        let mut event = event(1, "message.delta", "sess_1", "thread_1", Some("turn_1"));
-        event.payload = json!({
-            "text": format!("{}服务流程", "a".repeat(PAYLOAD_TEXT_SUMMARY_MAX_BYTES - 1)),
-        });
-
-        projection.apply_event(&event).expect("apply event");
-
-        let summary = projection
-            .read_item_summary_for_test("evt-1")
-            .expect("read item summary")
-            .expect("item summary");
-        let value: serde_json::Value =
-            serde_json::from_str(&summary).expect("summary should stay valid JSON");
-        assert!(value["text"].as_str().expect("text").ends_with("..."));
-    }
 }

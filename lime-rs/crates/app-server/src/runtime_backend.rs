@@ -92,6 +92,27 @@ impl RuntimeBackend {
         Ok(())
     }
 
+    async fn sync_mcp_bridges_if_available(&self) -> Result<(), RuntimeCoreError> {
+        if !self.agent_state.is_initialized().await {
+            return Ok(());
+        }
+        let app_data_source = self
+            .app_data_source
+            .read()
+            .map_err(|_| {
+                RuntimeCoreError::Backend("MCP bridge app data source lock poisoned".to_string())
+            })?
+            .clone();
+        let Some(app_data_source) = app_data_source else {
+            return Ok(());
+        };
+        let snapshots = app_data_source.list_mcp_bridge_snapshots().await?;
+        self.agent_state
+            .sync_mcp_bridges(snapshots)
+            .await
+            .map_err(backend_error)
+    }
+
     async fn handle_turn_start(
         &self,
         request: ExecutionRequest,
@@ -179,6 +200,7 @@ impl RuntimeBackend {
             .map_err(backend_error)?
         };
         self.register_memory_tools_if_available().await?;
+        self.sync_mcp_bridges_if_available().await?;
         let request_tool_policy = request_tool_policy_from_request(host_request.as_ref());
         let config_metadata = current_agent_runtime_config_metadata();
         let session_config = session_config_from_request(
@@ -331,10 +353,21 @@ impl ExecutionBackend for RuntimeBackend {
         request: ToolInventoryReadRequest,
     ) -> Result<Value, RuntimeCoreError> {
         self.register_memory_tools_if_available().await?;
+        self.sync_mcp_bridges_if_available().await?;
+        let app_data_source = self
+            .app_data_source
+            .read()
+            .map_err(|_| {
+                RuntimeCoreError::Backend(
+                    "tool inventory app data source lock poisoned".to_string(),
+                )
+            })?
+            .clone();
         tool_inventory::read_tool_inventory(
             &self.agent_state,
             request,
             current_agent_runtime_config_metadata(),
+            app_data_source,
         )
         .await
     }

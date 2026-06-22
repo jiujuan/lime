@@ -6,6 +6,8 @@ use app_server_protocol::METHOD_INITIALIZE;
 use app_server_protocol::METHOD_INITIALIZED;
 use app_server_protocol::METHOD_MCP_RESOURCE_LIST;
 use app_server_protocol::METHOD_MCP_RESOURCE_READ;
+use app_server_protocol::METHOD_MCP_RESOURCE_SUBSCRIBE;
+use app_server_protocol::METHOD_MCP_RESOURCE_UNSUBSCRIBE;
 use app_server_protocol::METHOD_MCP_SERVER_CREATE;
 use app_server_protocol::METHOD_MCP_SERVER_START;
 use app_server_protocol::METHOD_MCP_SERVER_STATUS_LIST;
@@ -199,9 +201,31 @@ async fn mcp_current_jsonrpc_starts_real_stdio_server_and_reads_tool_resource() 
         Some(&json!("fixture resource ok"))
     );
 
-    let stop = app_server_request(
+    let subscribe = app_server_request(
         &server,
         9,
+        METHOD_MCP_RESOURCE_SUBSCRIBE,
+        json!({
+            "uri": "fixture://status"
+        }),
+    )
+    .await;
+    assert_eq!(subscribe.pointer("/result"), Some(&json!({})));
+
+    let unsubscribe = app_server_request(
+        &server,
+        10,
+        METHOD_MCP_RESOURCE_UNSUBSCRIBE,
+        json!({
+            "uri": "fixture://status"
+        }),
+    )
+    .await;
+    assert_eq!(unsubscribe.pointer("/result"), Some(&json!({})));
+
+    let stop = app_server_request(
+        &server,
+        11,
         METHOD_MCP_SERVER_STOP,
         json!({ "name": "fixture" }),
     )
@@ -325,6 +349,11 @@ rl.on("line", (line) => {
         },
       ],
     });
+    return;
+  }
+
+  if (method === "resources/subscribe" || method === "resources/unsubscribe") {
+    result(id, {});
     return;
   }
 

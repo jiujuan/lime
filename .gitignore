@@ -60,6 +60,7 @@ internal/exec-plans/*
 !internal/exec-plans/app-server-implementation-plan.md
 !internal/exec-plans/production-command-current-migration-plan.md
 !internal/exec-plans/tech-debt-tracker.md
+!internal/exec-plans/right-surface-implementation-progress.md
 !internal/exec-plans/agent-app-uninstall-current-ui-progress.md
 !internal/exec-plans/p16-diagnostics-current-fail-closed-progress.md
 !internal/exec-plans/tauri-wrapper-quick-cleanup-queue.md
@@ -81,6 +82,9 @@ internal/roadmap/turn/**
 !internal/roadmap/agent-workspace/
 internal/roadmap/agent-workspace/**
 !internal/roadmap/agent-workspace/*.md
+!internal/roadmap/skills/
+internal/roadmap/skills/**
+!internal/roadmap/skills/*.md
 !internal/roadmap/appserver/
 internal/roadmap/appserver/**
 !internal/roadmap/appserver/*.md
@@ -91,6 +95,9 @@ internal/roadmap/codeximport/**
 !internal/roadmap/task/
 internal/roadmap/task/**
 !internal/roadmap/task/*.md
+!internal/roadmap/rightsurface/
+internal/roadmap/rightsurface/**
+!internal/roadmap/rightsurface/*.md
 !internal/roadmap/models/
 internal/roadmap/models/**
 !internal/roadmap/models/*.md

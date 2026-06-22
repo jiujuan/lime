@@ -107,11 +107,14 @@ function isSkillToolCall(toolCall: ToolCallState): boolean {
   );
 }
 
-function hasRunningSkillProcess(entries: StreamingProcessEntry[]): boolean {
+function hasSuccessfulOrRunningSkillProcess(
+  entries: StreamingProcessEntry[],
+): boolean {
   return entries.some(
     (entry) =>
       entry.kind === "tool" &&
-      entry.toolCall.status === "running" &&
+      (entry.toolCall.status === "running" ||
+        entry.toolCall.status === "completed") &&
       isSkillToolCall(entry.toolCall),
   );
 }
@@ -152,9 +155,6 @@ export function shouldSplitProcessBeforeEntry(
 export function shouldAutoExpandProcessEntries(
   entries: StreamingProcessEntry[],
   isMessageStreaming: boolean,
-  options?: {
-    isTailProcessRun?: boolean;
-  },
 ): boolean {
   const hasImportedThinking = entries.some(
     (entry) =>
@@ -198,9 +198,8 @@ export function shouldAutoExpandProcessEntries(
   }
 
   if (
-    options?.isTailProcessRun &&
     !hasImportedProcess &&
-    hasRunningSkillProcess(entries)
+    hasSuccessfulOrRunningSkillProcess(entries)
   ) {
     return true;
   }

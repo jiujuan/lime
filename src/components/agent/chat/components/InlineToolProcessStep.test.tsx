@@ -680,6 +680,11 @@ describe("InlineToolProcessStep", () => {
             sourceDraftId: "capdraft-1",
             sourceVerificationReportId: "capver-1",
           },
+          workspace_skill_runtime_enable: {
+            source: "manual_session_enable",
+            approval: "manual",
+            bindings: [{ skill: "project:capability-report" }],
+          },
           summary:
             "SkillTool allow/deny events both contain request, decision and result.",
         }),
@@ -689,10 +694,14 @@ describe("InlineToolProcessStep", () => {
     });
 
     expect(container.textContent).toContain("已执行技能 capability-report");
+    expect(container.textContent).toContain(
+      "运行启用 · 手动会话 · 人工确认 · 1 个绑定",
+    );
     expect(container.textContent).not.toContain("permissionBehavior");
     expect(container.textContent).not.toContain(
       "workspaceSkillRuntimeEnableAttached",
     );
+    expect(container.textContent).not.toContain("workspace_skill_runtime_enable");
     expect(container.textContent).not.toContain("sourceMetadata");
     expect(container.textContent).not.toContain("skill-source-session");
     expect(container.textContent).not.toContain("SkillTool allow/deny");
@@ -722,6 +731,7 @@ describe("InlineToolProcessStep", () => {
     });
 
     expect(container.textContent).toContain("已完成能力分析。");
+    expect(container.textContent).not.toContain("运行启用");
     expect(container.textContent).not.toContain("sourceDraftId");
     expect(container.textContent).not.toContain("workspaceSkillRuntimeEnable");
   });

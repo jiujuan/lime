@@ -1,7 +1,7 @@
 {
   "manifestVersion": "v1",
   "title": "Lime Agent QC GUI Flow Manifest",
-  "description": "Playwright MCP / GUI dogfood flows for P0 Agent QC scenarios. This manifest is a machine-readable runbook; it does not execute the browser by itself.",
+  "description": "Playwright MCP / GUI dogfood flows for P0/P1 Agent QC scenarios. This manifest is a machine-readable runbook; it does not execute the browser by itself.",
   "flows": [
     {
       "id": "gui-claw-chat-ready-streaming",
@@ -37,6 +37,49 @@
         "console summary",
         "network summary",
         "DevBridge health result"
+      ]
+    },
+    {
+      "id": "gui-expert-skills-runtime-evidence-pack",
+      "scenarioId": "expert-skills-runtime-evidence-pack",
+      "risk": "P1",
+      "surface": "desktop_gui_expert_panel",
+      "preflight": [
+        "Prefer the deterministic Electron fixture command from the scenario when no live Provider gate is explicitly approved.",
+        "Confirm DevBridge health and collect console / network summaries before interacting with Expert Plaza.",
+        "Record GUI session owner / isolation; do not run this flow concurrently with another GUI qcloop worker on the same Lime session."
+      ],
+      "steps": [
+        "Open or focus the Claw / Agent chat workspace with a prepared expert fixture session.",
+        "Navigate to Expert Plaza and start the code-literature expert card.",
+        "Confirm the first expert turn reaches a completed state and records expert declared / selected / invoked skill evidence.",
+        "Open ExpertInfoPanel, add or confirm the Capability Report skill is present, then send the follow-up expert prompt.",
+        "Open Harness, click Export Evidence Pack, then close the Harness panel.",
+        "Confirm ExpertInfoPanel shows the Evidence Pack recap for skill search count, invocation count, latest skill and runtime enable summary."
+      ],
+      "assertions": [
+        "Expert Plaza click-through starts the expert session through the current Agent Workspace path",
+        "expert.skillRefs is treated as declaration only and not as a SkillTool allowlist",
+        "skill_search occurs before Skill invocation",
+        "Skill body read and Skill gate evidence are present",
+        "Harness Evidence Pack export is triggered through the GUI",
+        "ExpertInfoPanel evidence summary is visible",
+        "raw workspace_skill_runtime_enable is not exposed in the expert summary",
+        "live Provider is not used unless an explicit live gate is recorded",
+        "no unexpected console error",
+        "no unexpected network error"
+      ],
+      "evidenceRequired": [
+        "Electron fixture or Playwright MCP action log",
+        "Expert Plaza start evidence",
+        "expert declared/selected/invoked summary",
+        "skill_search to Skill invocation ordering evidence",
+        "Harness GUI Evidence Pack export evidence",
+        "ExpertInfoPanel Evidence Pack recap screenshot or summary JSON",
+        "console summary",
+        "network summary",
+        "GUI session owner / isolation statement",
+        "liveProviderUsed=false or explicit live gate statement"
       ]
     },
     {

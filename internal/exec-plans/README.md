@@ -34,6 +34,7 @@
 - 旧 Tauri wrapper 机械 inventory：`internal/exec-plans/tauri-wrapper-command-inventory.md`
 - Provider 模型能力 taxonomy 进度日志：`internal/exec-plans/provider-model-taxonomy-progress.md`
 - MCP 现代化进度：`internal/exec-plans/mcp-modernization-progress.md`
+- Right Surface 统一承载实施进度：`internal/exec-plans/right-surface-implementation-progress.md`
 - Lime 多模态运行合同实施计划：`internal/exec-plans/multimodal-runtime-contract-plan.md`
 - 云端套餐与支付边界收口计划：`internal/exec-plans/cloud-commerce-user-center-boundary.md`
 - `@` 命令本地执行纠偏计划：`internal/exec-plans/at-command-local-execution-alignment-plan.md`

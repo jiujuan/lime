@@ -8,11 +8,13 @@ const {
   mockWorkspaceMainArea,
   mockWorkspacePendingA2UIPanel,
   mockMessageList,
+  mockTaskCenterUtilityToolbar,
 } = vi.hoisted(() => ({
-    mockWorkspaceMainArea: vi.fn(),
-    mockWorkspacePendingA2UIPanel: vi.fn(),
-    mockMessageList: vi.fn(),
-  }));
+  mockWorkspaceMainArea: vi.fn(),
+  mockWorkspacePendingA2UIPanel: vi.fn(),
+  mockMessageList: vi.fn(),
+  mockTaskCenterUtilityToolbar: vi.fn(),
+}));
 
 vi.mock("../components/CanvasWorkbenchLayout", () => ({
   CanvasWorkbenchLayout: (props: { topRightTools?: React.ReactNode }) => (
@@ -33,17 +35,97 @@ vi.mock("../components/ChatNavbar", () => ({
 vi.mock("../components/TaskCenterUtilityToolbar", () => ({
   TaskCenterUtilityToolbar: ({
     onToggleShellPanel,
+    onToggleFilesPanel,
+    showHarnessToggle,
+    harnessPanelVisible,
+    onToggleHarnessPanel,
+    showExpertInfoToggle,
+    expertInfoPanelVisible,
+    onToggleExpertInfoPanel,
+    rightSurfaceLaunchers,
   }: {
     onToggleShellPanel?: () => void;
-  }) => (
-    <button
-      type="button"
-      data-testid="task-center-utility-toolbar-stub"
-      onClick={onToggleShellPanel}
-    >
-      toolbar
-    </button>
-  ),
+    onToggleFilesPanel?: () => void;
+    showHarnessToggle?: boolean;
+    harnessPanelVisible?: boolean;
+    onToggleHarnessPanel?: () => void;
+    showExpertInfoToggle?: boolean;
+    expertInfoPanelVisible?: boolean;
+    onToggleExpertInfoPanel?: () => void;
+    rightSurfaceLaunchers?: Array<{
+      kind: string;
+      active: boolean;
+      disabled: boolean;
+      pendingCount: number;
+      collapseTarget: string;
+    }>;
+  }) => {
+    const props = {
+      onToggleShellPanel,
+      onToggleFilesPanel,
+      showHarnessToggle,
+      harnessPanelVisible,
+      onToggleHarnessPanel,
+      showExpertInfoToggle,
+      expertInfoPanelVisible,
+      onToggleExpertInfoPanel,
+      rightSurfaceLaunchers,
+    };
+    mockTaskCenterUtilityToolbar(props);
+    const harnessLauncher = rightSurfaceLaunchers?.find(
+      (launcher) => launcher.kind === "harness",
+    );
+    const filesLauncher = rightSurfaceLaunchers?.find(
+      (launcher) => launcher.kind === "files",
+    );
+    return (
+      <>
+        <button
+          type="button"
+          data-testid="task-center-utility-toolbar-stub"
+          onClick={onToggleShellPanel}
+        >
+          toolbar
+        </button>
+        {onToggleFilesPanel ? (
+          <button
+            type="button"
+            data-testid="task-center-files-toggle-stub"
+            data-expanded={filesLauncher?.active ? "true" : "false"}
+            data-disabled={filesLauncher?.disabled ? "true" : "false"}
+            data-pending-count={String(filesLauncher?.pendingCount ?? 0)}
+            onClick={onToggleFilesPanel}
+          >
+            files
+          </button>
+        ) : null}
+        {showHarnessToggle ? (
+          <button
+            type="button"
+            data-testid="task-center-harness-toggle-stub"
+            data-expanded={
+              harnessLauncher?.active || harnessPanelVisible ? "true" : "false"
+            }
+            data-disabled={harnessLauncher?.disabled ? "true" : "false"}
+            data-pending-count={String(harnessLauncher?.pendingCount ?? 0)}
+            onClick={onToggleHarnessPanel}
+          >
+            harness
+          </button>
+        ) : null}
+        {showExpertInfoToggle ? (
+          <button
+            type="button"
+            data-testid="task-center-expert-info-toggle-stub"
+            data-expanded={expertInfoPanelVisible ? "true" : "false"}
+            onClick={onToggleExpertInfoPanel}
+          >
+            expert
+          </button>
+        ) : null}
+      </>
+    );
+  },
 }));
 
 vi.mock("../components/TaskCenterShellPanel", () => ({
@@ -131,6 +213,7 @@ vi.mock("./WorkspaceMainArea", () => ({
     taskCenterShellPanelNode,
     chatContent,
     canvasContent,
+    rightSurfaceContent,
     ...rest
   }: {
     navbarNode?: React.ReactNode;
@@ -139,6 +222,7 @@ vi.mock("./WorkspaceMainArea", () => ({
     taskCenterShellPanelNode?: React.ReactNode;
     chatContent?: React.ReactNode;
     canvasContent?: React.ReactNode;
+    rightSurfaceContent?: React.ReactNode;
     [key: string]: unknown;
   }) => (
     <div
@@ -151,6 +235,7 @@ vi.mock("./WorkspaceMainArea", () => ({
           taskCenterShellPanelNode,
           chatContent,
           canvasContent,
+          rightSurfaceContent,
           ...rest,
         });
       }}
@@ -160,6 +245,7 @@ vi.mock("./WorkspaceMainArea", () => ({
       {taskCenterTabsNode}
       {chatContent}
       {canvasContent}
+      {rightSurfaceContent}
       {taskCenterShellPanelNode}
     </div>
   ),
@@ -349,6 +435,40 @@ afterEach(() => {
 });
 
 describe("WorkspaceConversationScene", () => {
+  it("入口提示条应把长文案和关闭按钮分开渲染", () => {
+    const onDismissEntryBanner = vi.fn();
+    const container = renderScene({
+      entryBannerVisible: true,
+      entryBannerMessage: "欢迎回来：继续处理上次的内容并保留当前上下文。",
+      onDismissEntryBanner,
+    });
+
+    const banner = container.querySelector(
+      '[data-testid="workspace-entry-banner"]',
+    );
+    const bannerText = container.querySelector(
+      '[data-testid="workspace-entry-banner-text"]',
+    );
+    const closeButton = banner?.querySelector<HTMLButtonElement>("button");
+
+    expect(banner).not.toBeNull();
+    expect(bannerText?.textContent).toContain("欢迎回来");
+    expect(closeButton).not.toBeNull();
+    expect(
+      [
+        "关闭",
+        "Close",
+        "agentChat.workspaceConversation.entryBanner.close",
+      ].includes(closeButton?.textContent || ""),
+    ).toBe(true);
+
+    act(() => {
+      closeButton?.click();
+    });
+
+    expect(onDismissEntryBanner).toHaveBeenCalledTimes(1);
+  });
+
   it("普通导入会话不应在主线消息列表前展示独立导入状态条", () => {
     const container = renderScene({
       messageListProps: {
@@ -467,6 +587,140 @@ describe("WorkspaceConversationScene", () => {
     expect(mockWorkspaceMainArea.mock.calls.at(-1)?.[0]?.shellBottomInset).toBe(
       "calc(0px + 236px)",
     );
+  });
+
+  it("任务中心场景应把专家信息按钮状态透传给统一工具栏", () => {
+    const onToggleExpertInfoPanel = vi.fn();
+    const container = renderScene({
+      navbarVisible: true,
+      navbarChrome: "workspace-compact",
+      navbarContextVariant: "task-center",
+      taskCenterTabsNode: <div data-testid="task-center-tabs-stub">tabs</div>,
+      showExpertInfoToggle: true,
+      expertInfoPanelVisible: false,
+      onToggleExpertInfoPanel,
+    });
+
+    expect(mockTaskCenterUtilityToolbar).toHaveBeenCalledWith(
+      expect.objectContaining({
+        showExpertInfoToggle: true,
+        expertInfoPanelVisible: false,
+        onToggleExpertInfoPanel,
+      }),
+    );
+
+    const expertToggle = container.querySelector<HTMLButtonElement>(
+      '[data-testid="task-center-expert-info-toggle-stub"]',
+    );
+    expect(expertToggle?.getAttribute("data-expanded")).toBe("false");
+
+    act(() => {
+      expertToggle?.click();
+    });
+
+    expect(onToggleExpertInfoPanel).toHaveBeenCalledTimes(1);
+  });
+
+  it("任务中心场景应把 Right Surface launcher 投影透传给统一工具栏", () => {
+    const onToggleHarnessPanel = vi.fn();
+    const rightSurfaceLaunchers = [
+      {
+        kind: "harness",
+        active: true,
+        disabled: false,
+        pendingCount: 2,
+        collapseTarget: "topToolbar",
+      },
+    ];
+    const container = renderScene({
+      navbarVisible: true,
+      navbarChrome: "workspace-compact",
+      navbarContextVariant: "task-center",
+      taskCenterTabsNode: <div data-testid="task-center-tabs-stub">tabs</div>,
+      showHarnessToggle: true,
+      harnessPanelVisible: false,
+      onToggleHarnessPanel,
+      rightSurfaceLaunchers,
+    });
+
+    expect(mockTaskCenterUtilityToolbar).toHaveBeenCalledWith(
+      expect.objectContaining({
+        showHarnessToggle: true,
+        harnessPanelVisible: false,
+        onToggleHarnessPanel,
+        rightSurfaceLaunchers,
+      }),
+    );
+
+    const harnessToggle = container.querySelector<HTMLButtonElement>(
+      '[data-testid="task-center-harness-toggle-stub"]',
+    );
+    expect(harnessToggle?.getAttribute("data-expanded")).toBe("true");
+    expect(harnessToggle?.getAttribute("data-disabled")).toBe("false");
+    expect(harnessToggle?.getAttribute("data-pending-count")).toBe("2");
+
+    act(() => {
+      harnessToggle?.click();
+    });
+
+    expect(onToggleHarnessPanel).toHaveBeenCalledTimes(1);
+  });
+
+  it("任务中心场景应把文件 surface 入口透传给统一工具栏", () => {
+    const onToggleRightSurfaceFiles = vi.fn();
+    const rightSurfaceLaunchers = [
+      {
+        kind: "files",
+        active: true,
+        disabled: false,
+        pendingCount: 1,
+        collapseTarget: "topToolbar",
+      },
+    ];
+    const container = renderScene({
+      navbarVisible: true,
+      navbarChrome: "workspace-compact",
+      navbarContextVariant: "task-center",
+      taskCenterTabsNode: <div data-testid="task-center-tabs-stub">tabs</div>,
+      rightSurfaceFilesOpen: true,
+      onToggleRightSurfaceFiles,
+      rightSurfaceLaunchers,
+    });
+
+    expect(mockTaskCenterUtilityToolbar).toHaveBeenCalledWith(
+      expect.objectContaining({
+        onToggleFilesPanel: onToggleRightSurfaceFiles,
+        rightSurfaceLaunchers,
+      }),
+    );
+
+    const filesToggle = container.querySelector<HTMLButtonElement>(
+      '[data-testid="task-center-files-toggle-stub"]',
+    );
+    expect(filesToggle?.getAttribute("data-expanded")).toBe("true");
+    expect(filesToggle?.getAttribute("data-disabled")).toBe("false");
+    expect(filesToggle?.getAttribute("data-pending-count")).toBe("1");
+
+    act(() => {
+      filesToggle?.click();
+    });
+
+    expect(onToggleRightSurfaceFiles).toHaveBeenCalledTimes(1);
+  });
+
+  it("右侧 Surface 内容应透传给主区域并由内层承载区渲染", () => {
+    const container = renderScene({
+      rightSurfaceContent: (
+        <div data-testid="workspace-right-surface-probe">expert</div>
+      ),
+    });
+
+    expect(
+      mockWorkspaceMainArea.mock.calls.at(-1)?.[0]?.rightSurfaceContent,
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-testid="workspace-right-surface-probe"]'),
+    ).not.toBeNull();
   });
 
   it("任务中心 Shell 调整高度后应同步避让工作台内容", () => {

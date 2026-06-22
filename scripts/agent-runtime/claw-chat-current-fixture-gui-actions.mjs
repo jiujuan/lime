@@ -337,6 +337,175 @@ async function clickInputbarSendButton(page, options, constraints = {}) {
   };
 }
 
+async function sampleInputbarSubmitState(page, prompt, expectedSessionId = null) {
+  return await evaluatePageSnapshot(
+    page,
+    ({ expectedPrompt, sessionId }) => {
+      const parseJsonArray = (raw) => {
+        try {
+          const parsed = JSON.parse(raw || "[]");
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      };
+      const decodeJsonRpcLines = (lines) => {
+        if (!Array.isArray(lines)) {
+          return [];
+        }
+        return lines
+          .map((line) => {
+            try {
+              return JSON.parse(String(line));
+            } catch {
+              return null;
+            }
+          })
+          .filter(Boolean);
+      };
+      const traceMessages = parseJsonArray(
+        window.localStorage.getItem("lime_invoke_trace_buffer_v1"),
+      );
+      const appServerTrace = traceMessages
+        .filter((entry) => entry?.command === "app_server_handle_json_lines")
+        .map((entry) => {
+          const messages = decodeJsonRpcLines(
+            entry?.args_preview?.request?.lines,
+          );
+          return {
+            timestamp: entry?.timestamp || null,
+            status: entry?.status || null,
+            durationMs: entry?.duration_ms ?? null,
+            error: entry?.error || null,
+            methods: messages.map((message) => message?.method).filter(Boolean),
+            turnStarts: messages
+              .filter((message) => message?.method === "agentSession/turn/start")
+              .map((message) => ({
+                id: message?.id || null,
+                sessionId: message?.params?.sessionId || null,
+                queueIfBusy: message?.params?.queueIfBusy ?? null,
+                text:
+                  message?.params?.input?.text ??
+                  message?.params?.input?.content ??
+                  message?.params?.input?.displayContent ??
+                  message?.params?.inputText ??
+                  null,
+              })),
+          };
+        });
+      const appServerTurnStartTrace = appServerTrace
+        .flatMap((entry) =>
+          entry.turnStarts.map((turnStart) => ({
+            ...turnStart,
+            timestamp: entry.timestamp,
+            status: entry.status,
+            durationMs: entry.durationMs,
+            error: entry.error,
+          })),
+        )
+        .slice(-20);
+      const matchingTurnStartTrace = appServerTurnStartTrace.find(
+        (entry) =>
+          (!sessionId || entry.sessionId === sessionId) &&
+          (!expectedPrompt || String(entry.text || "").includes(expectedPrompt)),
+      );
+      const inputs = Array.from(
+        document.querySelectorAll('textarea[name="agent-chat-message"]'),
+      ).filter(
+        (node) =>
+          node instanceof HTMLTextAreaElement &&
+          (!sessionId || node.dataset.sessionId === sessionId),
+      );
+      const input = inputs[0] ?? null;
+      const container = input?.closest(
+        '[data-testid="inputbar-core-container"]',
+      );
+      const sendButton = container?.querySelector('[data-testid="send-btn"]');
+      const bodyText = document.body?.innerText || "";
+      const mainText = document.querySelector("main")?.textContent || "";
+      const promptInBody = bodyText.includes(expectedPrompt);
+      const promptInMain = mainText.includes(expectedPrompt);
+      const pendingTexts = [
+        "正在发送",
+        "正在输出",
+        "正在生成",
+        "排队",
+        "继续以「代码文学专家」身份",
+      ].filter((text) => bodyText.includes(text));
+      return {
+        url: window.location.href,
+        expectedSessionId: sessionId,
+        textareaCount: inputs.length,
+        textareaSessionId:
+          input instanceof HTMLTextAreaElement
+            ? input.dataset.sessionId || null
+            : null,
+        textareaValue:
+          input instanceof HTMLTextAreaElement ? input.value : null,
+        textareaDisabled:
+          input instanceof HTMLTextAreaElement ? input.disabled : null,
+        sendButtonDisabled:
+          sendButton instanceof HTMLButtonElement ? sendButton.disabled : null,
+        promptInBody,
+        promptInMain,
+        promptOccurrencesInBody: expectedPrompt
+          ? bodyText.split(expectedPrompt).length - 1
+          : 0,
+        pendingTexts,
+        hasInputbarCore: Boolean(container),
+        hasWorkspaceInlineInputSlot: Boolean(
+          document.querySelector('[data-testid="workspace-inline-input-slot"]'),
+        ),
+        hasEmptyStateComposer: Boolean(
+          document.querySelector('[data-testid="empty-state-composer"]'),
+        ),
+        appServerTraceTail: appServerTrace.slice(-30),
+        appServerTurnStartTrace,
+        matchingTurnStartTrace: matchingTurnStartTrace || null,
+      };
+    },
+    { expectedPrompt: prompt, sessionId: expectedSessionId },
+  );
+}
+
+async function waitForInputbarSubmitEffect(
+  page,
+  prompt,
+  options,
+  expectedSessionId = null,
+) {
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  let firstSubmitEffectSnapshot = null;
+  while (Date.now() - startedAt < Math.min(options.timeoutMs, 10_000)) {
+    const snapshot = await sampleInputbarSubmitState(
+      page,
+      prompt,
+      expectedSessionId,
+    );
+    if (!snapshot) {
+      await sleep(options.intervalMs);
+      continue;
+    }
+    lastSnapshot = snapshot;
+    if (
+      !firstSubmitEffectSnapshot &&
+      (snapshot.textareaValue !== prompt ||
+        snapshot.promptOccurrencesInBody > 1 ||
+        snapshot.pendingTexts.length > 0)
+    ) {
+      firstSubmitEffectSnapshot = snapshot;
+    }
+    if (
+      snapshot.matchingTurnStartTrace
+    ) {
+      return snapshot;
+    }
+    await sleep(options.intervalMs);
+  }
+  return lastSnapshot ?? firstSubmitEffectSnapshot;
+}
+
 export async function sendPromptFromGui(page, options, prompt, constraints = {}) {
   const expectedSessionId = constraints.expectedSessionId ?? null;
   const before = await waitForInputReady(page, options, constraints);
@@ -385,10 +554,17 @@ export async function sendPromptFromGui(page, options, prompt, constraints = {})
     constraints,
   );
   const clicked = await clickInputbarSendButton(page, options, constraints);
+  const afterClick = await waitForInputbarSubmitEffect(
+    page,
+    prompt,
+    options,
+    expectedSessionId,
+  );
   return {
     before,
     afterFill,
     sendReady,
     clicked,
+    afterClick,
   };
 }

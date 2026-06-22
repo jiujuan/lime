@@ -178,6 +178,8 @@ use app_server_protocol::METHOD_MCP_PROMPT_GET;
 use app_server_protocol::METHOD_MCP_PROMPT_LIST;
 use app_server_protocol::METHOD_MCP_RESOURCE_LIST;
 use app_server_protocol::METHOD_MCP_RESOURCE_READ;
+use app_server_protocol::METHOD_MCP_RESOURCE_SUBSCRIBE;
+use app_server_protocol::METHOD_MCP_RESOURCE_UNSUBSCRIBE;
 use app_server_protocol::METHOD_MCP_SERVER_CREATE;
 use app_server_protocol::METHOD_MCP_SERVER_DELETE;
 use app_server_protocol::METHOD_MCP_SERVER_ENABLED_SET;
@@ -833,6 +835,10 @@ impl RequestProcessor {
             METHOD_MCP_PROMPT_GET => self.handle_mcp_prompt_get_impl(params).await,
             METHOD_MCP_RESOURCE_LIST => self.handle_mcp_resource_list_impl().await,
             METHOD_MCP_RESOURCE_READ => self.handle_mcp_resource_read_impl(params).await,
+            METHOD_MCP_RESOURCE_SUBSCRIBE => self.handle_mcp_resource_subscribe_impl(params).await,
+            METHOD_MCP_RESOURCE_UNSUBSCRIBE => {
+                self.handle_mcp_resource_unsubscribe_impl(params).await
+            }
             METHOD_PROJECT_MEMORY_READ => self.handle_project_memory_read_impl(params).await,
             METHOD_MEMORY_STORE_LIST => self.handle_memory_store_list_impl(params).await,
             METHOD_MEMORY_STORE_READ => self.handle_memory_store_read_impl(params).await,
@@ -2233,6 +2239,16 @@ mod tests {
             (
                 RequestId::Integer(14),
                 METHOD_MCP_RESOURCE_READ,
+                json!({ "uri": "docs://readme" }),
+            ),
+            (
+                RequestId::Integer(15),
+                METHOD_MCP_RESOURCE_SUBSCRIBE,
+                json!({ "uri": "docs://readme" }),
+            ),
+            (
+                RequestId::Integer(16),
+                METHOD_MCP_RESOURCE_UNSUBSCRIBE,
                 json!({ "uri": "docs://readme" }),
             ),
         ];

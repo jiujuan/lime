@@ -194,14 +194,15 @@ interface GeneralWorkbenchHarnessDialogSectionProps extends HarnessPanelBaseProp
   onSubmitCodeFixPrompt?: (prompt: string) => void | Promise<void>;
 }
 
-export function GeneralWorkbenchHarnessDialogSection({
-  enabled,
-  open,
-  onOpenChange,
-  teamMemorySnapshot = null,
+interface UseGeneralWorkbenchHarnessSurfaceParams {
+  panelBaseProps: HarnessPanelBaseProps;
+  onSubmitCodeFixPrompt?: (prompt: string) => void | Promise<void>;
+}
+
+function useGeneralWorkbenchHarnessSurface({
+  panelBaseProps,
   onSubmitCodeFixPrompt,
-  ...panelBaseProps
-}: GeneralWorkbenchHarnessDialogSectionProps) {
+}: UseGeneralWorkbenchHarnessSurfaceParams) {
   const [fileCheckpointDialogOpen, setFileCheckpointDialogOpen] =
     useState(false);
   const diagnosticSessionId =
@@ -244,6 +245,38 @@ export function GeneralWorkbenchHarnessDialogSection({
         )
       : undefined;
 
+  return {
+    diagnosticSessionId,
+    diagnosticWorkingDir,
+    fileCheckpointDialogOpen,
+    latestFileCheckpoint,
+    leadContent,
+    openFileCheckpoints,
+    setFileCheckpointDialogOpen,
+  };
+}
+
+export function GeneralWorkbenchHarnessDialogSection({
+  enabled,
+  open,
+  onOpenChange,
+  teamMemorySnapshot = null,
+  onSubmitCodeFixPrompt,
+  ...panelBaseProps
+}: GeneralWorkbenchHarnessDialogSectionProps) {
+  const {
+    diagnosticSessionId,
+    diagnosticWorkingDir,
+    fileCheckpointDialogOpen,
+    latestFileCheckpoint,
+    leadContent,
+    openFileCheckpoints,
+    setFileCheckpointDialogOpen,
+  } = useGeneralWorkbenchHarnessSurface({
+    panelBaseProps,
+    onSubmitCodeFixPrompt,
+  });
+
   if (!enabled) {
     return null;
   }
@@ -266,6 +299,64 @@ export function GeneralWorkbenchHarnessDialogSection({
           />
         </DialogContent>
       </Dialog>
+
+      {diagnosticSessionId ? (
+        <AgentThreadFileCheckpointDialog
+          open={fileCheckpointDialogOpen}
+          onOpenChange={setFileCheckpointDialogOpen}
+          sessionId={diagnosticSessionId}
+          workingDir={diagnosticWorkingDir || null}
+          defaultCheckpointId={latestFileCheckpoint?.checkpoint_id || null}
+        />
+      ) : null}
+    </>
+  );
+}
+
+interface GeneralWorkbenchHarnessSurfaceSectionProps
+  extends HarnessPanelBaseProps {
+  enabled: boolean;
+  teamMemorySnapshot?: TeamMemorySnapshot | null;
+  onSubmitCodeFixPrompt?: (prompt: string) => void | Promise<void>;
+}
+
+export function GeneralWorkbenchHarnessSurfaceSection({
+  enabled,
+  teamMemorySnapshot = null,
+  onSubmitCodeFixPrompt,
+  ...panelBaseProps
+}: GeneralWorkbenchHarnessSurfaceSectionProps) {
+  const {
+    diagnosticSessionId,
+    diagnosticWorkingDir,
+    fileCheckpointDialogOpen,
+    latestFileCheckpoint,
+    leadContent,
+    openFileCheckpoints,
+    setFileCheckpointDialogOpen,
+  } = useGeneralWorkbenchHarnessSurface({
+    panelBaseProps,
+    onSubmitCodeFixPrompt,
+  });
+
+  if (!enabled) {
+    return null;
+  }
+
+  return (
+    <>
+      <div
+        className="lime-workbench-theme-scope lime-workbench-surface-scope flex h-full min-h-0 flex-col overflow-hidden bg-[color:var(--lime-surface)] text-[color:var(--lime-text)]"
+        data-testid="general-workbench-harness-surface"
+      >
+        <HarnessStatusPanel
+          {...panelBaseProps}
+          layout="dialog"
+          teamMemorySnapshot={teamMemorySnapshot}
+          onOpenFileCheckpoints={openFileCheckpoints}
+          leadContent={leadContent}
+        />
+      </div>
 
       {diagnosticSessionId ? (
         <AgentThreadFileCheckpointDialog

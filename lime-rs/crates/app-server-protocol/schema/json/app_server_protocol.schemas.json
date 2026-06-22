@@ -15023,6 +15023,37 @@
       "title": "McpResourceReadResponse",
       "type": "object"
     },
+    "McpResourceSubscribeParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "uri": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "uri"
+      ],
+      "title": "McpResourceSubscribeParams",
+      "type": "object"
+    },
+    "McpResourceSubscriptionResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "McpResourceSubscriptionResponse",
+      "type": "object"
+    },
+    "McpResourceUnsubscribeParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "uri": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "uri"
+      ],
+      "title": "McpResourceUnsubscribeParams",
+      "type": "object"
+    },
     "McpServerCreateParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -27306,6 +27337,8 @@
               "mcpPrompt/list",
               "mcpResource/list",
               "mcpResource/read",
+              "mcpResource/subscribe",
+              "mcpResource/unsubscribe",
               "mcpServer/create",
               "mcpServer/delete",
               "mcpServer/enabled/set",

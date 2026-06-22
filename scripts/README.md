@@ -119,12 +119,18 @@ MCP current 使用链路 smoke 位于 `scripts/mcp/`。对外继续使用 `packa
 npm run smoke:mcp-current
 npm run smoke:mcp-current -- --allow-write-fixture
 npm run smoke:mcp-current -- --allow-oauth-fixture
+npm run smoke:mcp-config-electron-fixture
+npm run smoke:mcp-context7-live-electron-fixture
 ```
 
 默认入口只通过 `app_server_handle_json_lines -> App Server JSON-RPC` 验证 `mcpServer/list`、`mcpServerStatus/list`、`mcpTool/list|listForContext|search`、`mcpPrompt/list`、`mcpResource/list` 读链，并禁止旧 `mcp_*` / `get_mcp_servers` Tauri facade 作为成功证据。`--allow-write-fixture` 会创建临时 stdio MCP server，覆盖 `mcpServer/create|start|stop|delete`、`mcpTool/call` 与 `mcpResource/read`，并断言工具 `outputSchema` 暴露 `structuredContent`、调用结果保留 `structuredContent`，用于复验迁移后 MCP 获取和使用流程。
 `--allow-oauth-fixture` 会创建本地 OAuth provider，覆盖 `mcpServer/oauth/login`、Electron `open_external_url` 系统浏览器网关、callback token exchange 与 `runtime_status.auth_status` 授权回流，用于复验动态 OAuth current 链路；该模式不依赖真实外部账号或 live Provider。
 
-新增 MCP 脚本继续进入 `scripts/mcp/` 或复用现有 `smoke:mcp-current` npm script；共享实现仍放在 `scripts/lib/`。
+`npm run smoke:mcp-config-electron-fixture` 是真实 Electron 设置页配置闭环 fixture：从桌面壳侧栏进入设置页，切到 MCP 配置管理，选择 Context7 preset，编辑 streamable HTTP URL 与 `env_http_headers` 环境变量名并保存，再通过 preload `app_server_handle_json_lines -> mcpServer/list` 验证 App Server current read model。该入口不启动 Context7、不调用真实 provider、不读取或写入真实 key，不走 App Server mock backend、renderer mock fallback 或旧 `mcp_*` Desktop facade。
+
+`npm run smoke:mcp-context7-live-electron-fixture` 是真实 Electron + 远程 Context7 live fixture：复用设置页 GUI 创建 Context7 配置，经 `app_server_handle_json_lines` 启动 server、通过 `mcpTool/search` 找到 `resolve-library-id` / `query-docs`，再调用 `mcpTool/call` 查询 “AI Agent 是什么”。该入口会访问远程 Context7；summary 只记录 host、工具名、header 名、env var 名、content 类型 / 数量和 `isError`，不记录 key、header value 或工具正文。
+
+新增 MCP control-plane 脚本继续进入 `scripts/mcp/` 或复用现有 `smoke:mcp-current` npm script；涉及真实 Electron Desktop Host GUI 的 MCP fixture 进入 `scripts/electron/`。共享实现仍放在领域子目录或 `scripts/lib/`。
 
 ### Electron 脚本
 
@@ -149,6 +155,10 @@ Agent QC report、GUI flow、qcloop、evidence、release summary 与 owner/check
 Agent Runtime smoke 与 Service Skill 入口 smoke 已迁到 `scripts/agent-runtime/`。对外继续使用 `package.json` 里的 `smoke:agent-runtime-*` 与 `smoke:agent-service-skill-entry` npm scripts，不直接依赖根目录脚本路径。
 
 `npm run smoke:agent-runtime-current-fixture` 是 Claw / Agent Runtime current 主路径的离线 fixture 回归聚合入口，覆盖历史 / 缓存恢复、流式终态收尾、Claw 终态 UI、Electron session history / 代码产物工作台 fixture guard、真实 GUI coding 输入到 Coding Workbench Electron fixture、Claw GUI current fixture guard，以及真实 Electron `cancel-then-continue` 场景。它默认禁止 live Provider 和 mock backend，只能作为进入 Electron / Playwright 真实闭环前的快速回归门槛，不能替代完整 GUI E2E。
+
+`npm run smoke:expert-skills-live-gate` 是专家 Skills Runtime 的证据门禁：默认只读取 `.lime/qc` 中的确定性 Electron fixture summary，确认专家 declared / selected / invoked、`skill_search -> SKILL.md body read -> Skill gate -> Skill invocation`、Harness GUI Evidence Pack 导出与专家面板复盘证据完整；缺少显式 live Provider summary 时返回 `pending_live_provider`，不调用真实模型，也不把 deterministic fixture 误当完整 live 验收。
+
+`npm run smoke:expert-skills-live-runner` 是专家 Skills Runtime 的 live Provider 验收入口骨架：默认 fail-fast，必须显式传 `--allow-live-provider` 或设置 live Provider smoke 环境变量。它可用 `--live-summary <path>` 归一化已有 live evidence，也可在额外传 `--execute-live-runtime` 时通过 App Server current JSON-RPC 提交真实 Provider turn，并输出 `.lime/qc/expert-skills-live-runner-summary.json` 供 `smoke:expert-skills-live-gate -- --live-summary <path>` 审计。
 
 `npm run smoke:agent-session-history-electron-fixture` 是真实 Electron 历史恢复 fixture：通过 preload `app_server_handle_json_lines` 验证 App Server current `agentSession/start/read/update/list` 形状、最近对话可见和 hydrate detail 数组；它使用 `APP_SERVER_BACKEND_MODE=unavailable`，不触发 turn，也不调用模型后端。
 

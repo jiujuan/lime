@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type {
   AgentRuntimeToolInventoryCatalogEntry,
   AgentRuntimeToolInventoryRegistryEntry,
@@ -201,6 +201,11 @@ function buildRuntimeTool(
 }
 
 describe("harnessStatusPanelViewModel", () => {
+  beforeEach(() => {
+    document.documentElement.lang = "zh-CN";
+    document.documentElement.dir = "ltr";
+  });
+
   it("应解析子任务运行状态标签和 Badge 变体", () => {
     expect(resolveSubagentRuntimeStatusLabel("queued")).toBe("稍后开始");
     expect(resolveSubagentRuntimeStatusVariant("queued")).toBe("outline");

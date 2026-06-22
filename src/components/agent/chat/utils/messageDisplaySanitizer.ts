@@ -102,6 +102,34 @@ function hasNearbyProcessPart(parts: ContentPart[], index: number): boolean {
   return false;
 }
 
+function isBeforeFirstProcessPart(parts: ContentPart[], index: number): boolean {
+  return !parts.slice(0, index).some(isProcessContentPart);
+}
+
+function shouldKeepLeadingProcessIntro(text: string): boolean {
+  const normalized = collapseDisplayWhitespace(text);
+  if (!normalized || normalized.length < 8) {
+    return false;
+  }
+
+  if (
+    isInternalThinkingPreviewLine(normalized) ||
+    ASSISTANT_INCOMPLETE_PROCESS_LEAD_IN_RE.test(normalized) ||
+    TOOL_NARRATION_TOOL_NAME_RE.test(normalized) ||
+    TOOL_NARRATION_ITERATION_RE.test(normalized) ||
+    TOOL_NARRATION_RETRIEVAL_STATUS_RE.test(normalized) ||
+    TOOL_NARRATION_INTERNAL_RETRY_RE.test(normalized)
+  ) {
+    return false;
+  }
+
+  return (
+    /[。！？.!?]$/.test(normalized) &&
+    /^(?:我|我们)(?:会|将|来)?先/.test(normalized) &&
+    ASSISTANT_TOOL_PROCESS_LEAD_IN_RE.test(normalized)
+  );
+}
+
 function shouldStripAssistantProcessLeadIn(text: string): boolean {
   const normalized = collapseDisplayWhitespace(text);
   if (!normalized) {
@@ -484,6 +512,18 @@ export function sanitizeContentPartsForDisplay(
       options.role === "assistant" &&
       hasNearbyProcessPart(parts, index)
     ) {
+      if (
+        isBeforeFirstProcessPart(parts, index) &&
+        shouldKeepLeadingProcessIntro(sanitizedText)
+      ) {
+        return [
+          {
+            ...part,
+            text: sanitizedText,
+          },
+        ];
+      }
+
       const visibleText = stripAssistantProcessLeadInText(sanitizedText);
       if (!visibleText) {
         return [];

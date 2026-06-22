@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { buildProjection, type Message } from "./messageListItemProjection.testHarness";
 
 describe("messageListItemProjection legacy tool sources", () => {
-  it("旧 timeline 缺少 phase 时应只把最后一条 agent_message 当作最终正文", () => {
+  it("旧 timeline 缺少 phase 时应保留过程前导语并只把最后一条 agent_message 当作最终正文", () => {
     const message: Message = {
       id: "assistant-history",
       role: "assistant",
@@ -77,12 +77,11 @@ describe("messageListItemProjection legacy tool sources", () => {
     ] as never);
 
     expect(projection.actionContent).toBe(
-      "## 今日国际新闻简报\n\n- 第一条要闻。",
+      "我会先做几组中英文检索。\n\n## 今日国际新闻简报\n\n- 第一条要闻。",
     );
     expect(projection.rendererRawContent).toBe(
-      "## 今日国际新闻简报\n\n- 第一条要闻。",
+      "我会先做几组中英文检索。\n\n## 今日国际新闻简报\n\n- 第一条要闻。",
     );
-    expect(projection.rendererRawContent).not.toContain("中英文检索");
     expect(projection.rendererRawContent).not.toContain("交叉核对");
     expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
       "text",

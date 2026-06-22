@@ -109,11 +109,22 @@ where
     if let Some(env_http_headers) = env_http_headers {
         for (name, env_var) in env_http_headers {
             let env_var = clean_env_var_name(env_var)?;
-            let value = env_lookup(env_var).map_err(|_| {
-                McpError::ConfigError(format!(
-                    "streamable HTTP MCP header '{name}' 环境变量未设置: {env_var}"
-                ))
-            })?;
+            let Ok(value) = env_lookup(env_var) else {
+                tracing::warn!(
+                    header_name = %name,
+                    env_var = %env_var,
+                    "streamable HTTP MCP 环境变量 header 未设置，已跳过"
+                );
+                continue;
+            };
+            if value.trim().is_empty() {
+                tracing::warn!(
+                    header_name = %name,
+                    env_var = %env_var,
+                    "streamable HTTP MCP 环境变量 header 为空，已跳过"
+                );
+                continue;
+            }
             insert_header(&mut headers, name, &value, has_bearer_token)?;
         }
     }
@@ -172,6 +183,7 @@ mod tests {
         match name {
             "MCP_TRACE" => Ok("trace-1".to_string()),
             "MCP_AUTH" => Ok("Bearer env-token".to_string()),
+            "EMPTY_TRACE" => Ok("   ".to_string()),
             _ => Err(std::env::VarError::NotPresent),
         }
     }
@@ -189,12 +201,23 @@ mod tests {
     }
 
     #[test]
-    fn missing_env_header_fails_closed() {
+    fn missing_env_header_is_skipped_like_codex() {
         let env = HashMap::from([("X-Trace".to_string(), "MISSING_TRACE".to_string())]);
 
-        let error = build_default_headers(None, None, Some(&env), resolve_env).unwrap_err();
+        let headers = build_default_headers(None, None, Some(&env), resolve_env)
+            .expect("missing optional env header should be skipped");
 
-        assert!(error.to_string().contains("MISSING_TRACE"));
+        assert!(headers.is_empty());
+    }
+
+    #[test]
+    fn empty_env_header_is_skipped_like_codex() {
+        let env = HashMap::from([("X-Trace".to_string(), "EMPTY_TRACE".to_string())]);
+
+        let headers = build_default_headers(None, None, Some(&env), resolve_env)
+            .expect("empty optional env header should be skipped");
+
+        assert!(headers.is_empty());
     }
 
     #[test]

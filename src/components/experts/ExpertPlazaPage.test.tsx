@@ -190,6 +190,8 @@ describe("ExpertPlazaPage", () => {
         },
       }),
     );
+    const [, params] = onNavigate.mock.calls[0] || [];
+    expect(params).not.toHaveProperty("entryBannerMessage");
   });
 
   it("再次点击已有专家 Agent 时应恢复最近会话且不重复自动发送", async () => {
@@ -236,6 +238,7 @@ describe("ExpertPlazaPage", () => {
     const [, params] = onNavigate.mock.calls[0] || [];
     expect(params).not.toHaveProperty("initialUserPrompt");
     expect(params).not.toHaveProperty("newChatAt");
+    expect(params).not.toHaveProperty("entryBannerMessage");
   });
 
   it("点击添加应把专家写入本地 overlay", async () => {

@@ -3,12 +3,22 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
 import { extractInputbarManagedObjectiveText } from "../components/Inputbar/utils/inputbarModeRequestMetadata";
 import type { TaskCenterDraftSendRequest } from "../homePendingPreview";
-import { useTaskCenterDraftSendDispatchRuntime } from "./useTaskCenterDraftSendRuntime";
+import type { TaskCenterDraftTab } from "./agentChatWorkspaceHelpers";
+import {
+  useTaskCenterDraftSendDispatchRuntime,
+  useTaskCenterEmptyStateSendRuntime,
+} from "./useTaskCenterDraftSendRuntime";
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean })
-  .IS_REACT_ACT_ENVIRONMENT = true;
+vi.mock("@/lib/agentUiPerformanceMetrics", () => ({
+  recordAgentUiPerformanceMetric: vi.fn(),
+}));
+
+(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
@@ -77,10 +87,7 @@ function mountDraftSendRuntime({
         taskCenterDraftSendRequest,
         homePendingPreviewRequest,
       });
-    }, [
-      homePendingPreviewRequest,
-      taskCenterDraftSendRequest,
-    ]);
+    }, [homePendingPreviewRequest, taskCenterDraftSendRequest]);
 
     return null;
   }
@@ -91,6 +98,81 @@ function mountDraftSendRuntime({
   mountedRoots.push({ root, container });
 }
 
+function mountEmptyStateSendRuntime({
+  activeDraftTabId = null,
+  agentEntry = "claw",
+  displayMessagesLength = 0,
+  turnsLength = 0,
+  threadItemsLength = 0,
+  hasDisplayMessages = false,
+  input = "默认输入",
+  sessionId = null,
+}: {
+  activeDraftTabId?: string | null;
+  agentEntry?: string;
+  displayMessagesLength?: number;
+  turnsLength?: number;
+  threadItemsLength?: number;
+  hasDisplayMessages?: boolean;
+  input?: string;
+  sessionId?: string | null;
+} = {}) {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  const setInput = vi.fn();
+  const clearMessages = vi.fn();
+  const handleSend = vi.fn(async () => true);
+  const setTaskCenterDraftTabs = vi.fn();
+  const setTaskCenterDraftSendRequest = vi.fn();
+  const setHomePendingPreviewRequest = vi.fn();
+  let sendHandler: ReturnType<
+    typeof useTaskCenterEmptyStateSendRuntime
+  > | null = null;
+
+  function Harness() {
+    const activeDraftTabIdRef = useRef<string | null>(activeDraftTabId);
+    sendHandler = useTaskCenterEmptyStateSendRuntime({
+      agentEntry,
+      input,
+      setInput,
+      activeDraftTabIdRef,
+      clearMessages,
+      displayMessagesLength,
+      turnsLength,
+      threadItemsLength,
+      hasDisplayMessages,
+      handleSend,
+      sessionId,
+      taskCenterWorkspaceId: "workspace-test",
+      setTaskCenterDraftTabs,
+      setTaskCenterDraftSendRequest,
+      setHomePendingPreviewRequest,
+    });
+    return null;
+  }
+
+  act(() => {
+    root.render(createElement(Harness));
+  });
+  mountedRoots.push({ root, container });
+
+  return {
+    clearMessages,
+    handleSend,
+    setHomePendingPreviewRequest,
+    setInput,
+    setTaskCenterDraftSendRequest,
+    setTaskCenterDraftTabs,
+    send: (payload?: Parameters<NonNullable<typeof sendHandler>>[0]) => {
+      if (!sendHandler) {
+        throw new Error("send handler 尚未初始化");
+      }
+      return sendHandler(payload);
+    },
+  };
+}
+
 afterEach(() => {
   mountedRoots.splice(0).forEach(({ root, container }) => {
     act(() => {
@@ -98,6 +180,7 @@ afterEach(() => {
     });
     container.remove();
   });
+  vi.clearAllMocks();
 });
 
 describe("extractInputbarManagedObjectiveText", () => {
@@ -233,6 +316,138 @@ describe("useTaskCenterDraftSendDispatchRuntime", () => {
 
     expect(onNonMaterializedSessionReady).toHaveBeenCalledWith(
       "sess_ready_from_state",
+    );
+  });
+});
+
+describe("useTaskCenterEmptyStateSendRuntime", () => {
+  it("已有 draft tab 时应创建 materialized draft send request 并清理旧会话内容", () => {
+    const runtime = mountEmptyStateSendRuntime({
+      activeDraftTabId: "draft-a",
+      displayMessagesLength: 1,
+      hasDisplayMessages: true,
+    });
+
+    act(() => {
+      runtime.send({
+        textOverride: "生成一版项目复盘",
+        sendOptions: { displayContent: "展示文本" },
+      });
+    });
+
+    expect(runtime.setInput).toHaveBeenCalledWith("");
+    expect(runtime.clearMessages).toHaveBeenCalledWith({ showToast: false });
+    expect(runtime.setTaskCenterDraftSendRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        draftTabId: "draft-a",
+        materializeDraft: true,
+        source: "task-center-empty-state",
+        text: "生成一版项目复盘",
+      }),
+    );
+    expect(runtime.setHomePendingPreviewRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        draftTabId: "draft-a",
+        materializeDraft: true,
+      }),
+    );
+
+    const updateTabs = runtime.setTaskCenterDraftTabs.mock.calls[0]?.[0] as
+      | ((tabs: TaskCenterDraftTab[]) => TaskCenterDraftTab[])
+      | undefined;
+    const now = new Date("2026-06-22T00:00:00.000Z");
+    expect(
+      updateTabs?.([
+        {
+          id: "draft-a",
+          title: "新对话",
+          createdAt: now,
+          updatedAt: now,
+          status: "draft",
+        },
+      ]),
+    ).toEqual([
+      expect.objectContaining({
+        id: "draft-a",
+        title: "生成一版项目复盘",
+        status: "running",
+      }),
+    ]);
+    expect(runtime.handleSend).not.toHaveBeenCalled();
+    expect(recordAgentUiPerformanceMetric).toHaveBeenCalledWith(
+      "homeInput.submit",
+      expect.objectContaining({
+        hasDraftTab: true,
+        source: "task-center-empty-state",
+        workspaceId: "workspace-test",
+      }),
+    );
+  });
+
+  it("Task Center 首页无会话内容时应先排队 non-materialized request", () => {
+    const runtime = mountEmptyStateSendRuntime({
+      activeDraftTabId: null,
+      hasDisplayMessages: false,
+      sessionId: null,
+    });
+
+    act(() => {
+      runtime.send({ textOverride: "继续拆分 workspace" });
+    });
+
+    expect(runtime.handleSend).not.toHaveBeenCalled();
+    const request = runtime.setTaskCenterDraftSendRequest.mock.calls[0]?.[0] as
+      | TaskCenterDraftSendRequest
+      | undefined;
+    expect(request).toEqual(
+      expect.objectContaining({
+        materializeDraft: false,
+        source: "empty-state",
+        text: "继续拆分 workspace",
+      }),
+    );
+    expect(request?.draftTabId).toBe(request?.id);
+    expect(runtime.setHomePendingPreviewRequest).toHaveBeenCalledWith(request);
+  });
+
+  it("非 Task Center 首屏发送应直接回落到 handleSend", () => {
+    const runtime = mountEmptyStateSendRuntime({
+      agentEntry: "agent",
+      hasDisplayMessages: true,
+      sessionId: "session-a",
+    });
+    const image = {
+      data: "data:image/png;base64,AA==",
+      mediaType: "image/png",
+    };
+    const sendOptions = { displayContent: "展示文本" };
+
+    act(() => {
+      runtime.send({
+        images: [image],
+        textOverride: "普通发送",
+        sendOptions,
+      });
+    });
+
+    expect(runtime.setTaskCenterDraftSendRequest).not.toHaveBeenCalled();
+    expect(runtime.setHomePendingPreviewRequest).not.toHaveBeenCalled();
+    expect(runtime.handleSend).toHaveBeenCalledWith(
+      [image],
+      undefined,
+      undefined,
+      "普通发送",
+      undefined,
+      undefined,
+      sendOptions,
+    );
+    expect(recordAgentUiPerformanceMetric).toHaveBeenCalledWith(
+      "homeInput.submit",
+      expect.objectContaining({
+        hasDraftTab: false,
+        sessionId: "session-a",
+        source: "empty-state",
+      }),
     );
   });
 });

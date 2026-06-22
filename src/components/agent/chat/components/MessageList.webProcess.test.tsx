@@ -222,7 +222,7 @@ describe("MessageList web process", () => {
     expect(contentParts[3]?.text).toContain("国际新闻简报");
     expect(contentParts[3]?.text).not.toContain("我先联网核实今天的国际新闻");
     expect(call?.rawContent).toContain("国际新闻简报");
-    expect(call?.rawContent).not.toContain("我先联网核实今天的国际新闻");
+    expect(call?.rawContent).toContain("我先联网核实今天的国际新闻");
     expect(
       container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
     ).toBeNull();

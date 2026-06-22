@@ -63,6 +63,13 @@ fn test_tool_guidelines_do_not_unconditionally_reference_resource_helpers() {
 }
 
 #[test]
+fn test_tool_guidelines_do_not_suggest_native_tools_as_tool_search_targets() {
+    assert!(!TOOL_GUIDELINES.contains("select:Read"));
+    assert!(TOOL_GUIDELINES.contains("select:mcp__context7__query_docs"));
+    assert!(TOOL_GUIDELINES.contains("retry_allowed=false"));
+}
+
+#[test]
 fn test_prompt_cache_is_valid() {
     let mut cache = PromptCache::new(None, None);
 

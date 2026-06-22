@@ -379,13 +379,12 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
       (
         entries: StreamingProcessEntry[],
         key: string,
-        options?: { forceGroup?: boolean; isTailProcessRun?: boolean },
+        options?: { forceGroup?: boolean },
       ) => (
         <StreamingProcessRun
           key={key}
           entries={entries}
           forceGroup={options?.forceGroup}
-          isTailProcessRun={options?.isTailProcessRun}
           isStreaming={isStreaming}
           processIsActive={processIsActive}
           shouldKeepProcessOpenForFinalAnswer={
@@ -623,7 +622,6 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
 
       const flushProcessBuffer = (
         keySuffix: string,
-        options?: { isTailProcessRun?: boolean },
       ) => {
         if (processBuffer.length === 0) {
           return;
@@ -636,7 +634,6 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
           `interleaved-process-${keySuffix}`,
           {
             forceGroup: shouldForceGroup,
-            isTailProcessRun: options?.isTailProcessRun === true,
           },
         );
         if (renderedRun) {
@@ -741,7 +738,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
         }
       });
 
-      flushProcessBuffer("tail", { isTailProcessRun: true });
+      flushProcessBuffer("tail");
 
       return (
         <div
@@ -798,9 +795,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
         data-render-mode="standard"
       >
         {fallbackProcessEntries.length > 0
-          ? renderProcessRun(fallbackProcessEntries, "fallback-process", {
-              isTailProcessRun: shouldKeepProcessOpenForFinalAnswer,
-            })
+          ? renderProcessRun(fallbackProcessEntries, "fallback-process")
           : null}
 
         {/* 解析后的内容区域（包括 A2UI、write_file、普通文本） */}

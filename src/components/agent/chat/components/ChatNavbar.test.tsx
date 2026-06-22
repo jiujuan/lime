@@ -180,6 +180,10 @@ describe("ChatNavbar", () => {
     expect(button).not.toBeNull();
     expect(button?.textContent).toContain("Harness");
     expect(button?.textContent).toContain("2");
+    expect(
+      container.querySelector('[data-testid="chat-navbar-trailing-tools"]')
+        ?.className,
+    ).toContain("whitespace-nowrap");
 
     act(() => {
       button?.click();

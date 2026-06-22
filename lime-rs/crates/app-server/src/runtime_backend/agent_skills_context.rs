@@ -123,6 +123,7 @@ pub(super) fn selected_agent_skill_selections(
     snapshot: &AgentSkillSnapshot,
 ) -> Vec<AgentSkillSelection> {
     let mut selections = select_catalog_bound_agent_skills(metadata_values, snapshot);
+    selections.extend(select_expert_bound_agent_skills(metadata_values, snapshot));
     selections.extend(select_explicit_agent_skills(user_input, snapshot));
     let selections = dedupe_agent_skill_selections(selections);
     if !selections.is_empty() {
@@ -139,6 +140,17 @@ fn select_catalog_bound_agent_skills(
         catalog_bound_skill_candidates(metadata_values),
         snapshot,
         AgentSkillSelectionTrigger::CatalogBinding,
+    )
+}
+
+fn select_expert_bound_agent_skills(
+    metadata_values: &[&Value],
+    snapshot: &AgentSkillSnapshot,
+) -> Vec<AgentSkillSelection> {
+    select_agent_skills_by_name_candidates(
+        expert_bound_skill_candidates(metadata_values),
+        snapshot,
+        AgentSkillSelectionTrigger::ExpertBinding,
     )
 }
 
@@ -184,6 +196,19 @@ fn catalog_bound_skill_candidates(metadata_values: &[&Value]) -> Vec<String> {
     candidates
 }
 
+fn expert_bound_skill_candidates(metadata_values: &[&Value]) -> Vec<String> {
+    let mut candidates = Vec::new();
+    for skill_ref in expert_skill_refs(metadata_values) {
+        if skill_ref.trim().starts_with("service-skill:") {
+            continue;
+        }
+        for candidate in expert_ref_name_candidates(&skill_ref) {
+            push_unique_string(&mut candidates, &candidate);
+        }
+    }
+    candidates
+}
+
 fn append_expert_skill_hints(
     system_prompt: Option<String>,
     metadata_values: &[&Value],
@@ -216,7 +241,7 @@ fn append_expert_skill_hints(
     append_context_block(
         system_prompt,
         format!(
-            "<expert_skill_refs>\n## 专家绑定的 Agent Skill 候选\n这些 skillRefs 来自当前专家 metadata，只用于候选提示和后续 `skill_search` 排序线索；不要因此读取 `SKILL.md` 正文、默认调用 SkillTool、扩大工具权限或声称已经执行。\n{}\n</expert_skill_refs>",
+            "<expert_skill_refs>\n## 专家绑定的 Agent Skill 候选\n这些 skillRefs 来自当前专家 metadata；能唯一匹配 `AgentSkillSnapshot` 的条目会进入同一 selector / `SKILL.md` 按需读取 / gate / evidence 主链。不要因为候选存在就跳过授权或声称外部动作已经执行。\n{}\n</expert_skill_refs>",
             lines.join("\n")
         ),
     )
@@ -460,7 +485,7 @@ mod tests {
     }
 
     #[test]
-    fn appends_expert_skill_refs_as_hints_without_selecting_or_enabling_skill() {
+    fn appends_expert_skill_refs_through_selector_body_and_gate_candidates() {
         let workspace = TempDir::new().expect("workspace");
         write_skill(&workspace, "writer", "Writer", "Write clearly.");
         let metadata = serde_json::json!({
@@ -489,8 +514,9 @@ mod tests {
         assert!(
             prompt.contains("`service-skill:daily-trend-briefing`: 未在当前 Agent Skills snapshot")
         );
-        assert!(!prompt.contains("<selected_skill_instructions>"));
-        assert!(!prompt.contains("# Body"));
+        assert!(prompt.contains("<selected_skill_instructions>"));
+        assert!(prompt.contains("`writer`"));
+        assert!(prompt.contains("# Body"));
 
         let names = selected_agent_skill_names_for_turn(
             "帮我处理这段话",
@@ -498,7 +524,7 @@ mod tests {
             Some(workspace.path()),
             Some(workspace.path()),
         );
-        assert!(names.is_empty());
+        assert_eq!(names, vec!["writer".to_string()]);
     }
 
     #[test]

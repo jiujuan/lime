@@ -516,6 +516,9 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
       '[data-testid="expert-info-panel"]',
     );
     expect(expertPanel).not.toBeNull();
+    expect(expertPanel?.getAttribute("data-layout")).toBe(
+      "right-surface-full",
+    );
     expect(expertPanel?.textContent).toMatch(/专家信息|Expert Info/);
     expect(expertPanel?.textContent).toContain("营销策略专家");
     expect(
@@ -527,6 +530,52 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     expect(
       expertPanel?.querySelector('[data-testid="expert-info-workflow"]'),
     ).not.toBeNull();
+
+    const canvasToggle = await waitForElement(
+      container,
+      '[data-testid="toggle-canvas"]',
+      80,
+    );
+    expect(canvasToggle).not.toBeNull();
+    act(() => {
+      canvasToggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects(6);
+
+    expect(
+      container.querySelector('[data-testid="expert-info-panel"]'),
+    ).toBeNull();
+
+    act(() => {
+      canvasToggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects(6);
+
+    expect(
+      container.querySelector('[data-testid="expert-info-panel"]'),
+    ).toBeNull();
+    expect(
+      (
+        container.querySelector(
+          '[data-testid="task-center-utility-toolbar"]',
+        ) as HTMLElement | null
+      )?.dataset.expertInfoPanelVisible,
+    ).toBe("false");
+
+    const expertToggle = container.querySelector(
+      '[data-testid="task-center-expert-info-toggle"]',
+    );
+    expect(expertToggle).not.toBeNull();
+    act(() => {
+      expertToggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects(6);
+
+    const reopenedExpertPanel = container.querySelector(
+      '[data-testid="expert-info-panel"]',
+    );
+    expect(reopenedExpertPanel).not.toBeNull();
+    expect(reopenedExpertPanel?.textContent).toContain("营销策略专家");
 
     expect(sharedSendMessageMock).toHaveBeenCalledTimes(1);
     expect(sharedSendMessageMock.mock.calls[0]?.[0]).toBe(prompt);

@@ -106,6 +106,60 @@ describe("messageListTimelineContentParts reasoning merge", () => {
     });
   });
 
+  it("历史 final 只差空白且落在工具前时仍应保留过程后最终正文", () => {
+    const leadingFinalText =
+      "我识别到专家绑定的 skillRefs，但仍先通过 skill_search 选择，再按需加载单个 SKILL.md。专家 Skills runtime 证据已完成：专家声明 skillRefs 只作为候选提示，实际执行仍经过 skill_search、SKILL.md 按需读取、gate 和 Skill 调用。";
+    const finalText =
+      "我识别到专家绑定的 skillRefs，但仍先通过 skill_search 选择，再按需加载单个 SKILL.md。 专家 Skills runtime 证据已完成：专家声明 skillRefs 只作为候选提示，实际执行仍经过 skill_search、SKILL.md 按需读取、gate 和 Skill 调用。";
+    const existingContentParts: NonNullable<Message["contentParts"]> = [
+      {
+        type: "text",
+        text: leadingFinalText,
+      },
+      {
+        type: "tool_use",
+        toolCall: {
+          id: "tool-search",
+          name: "skill_search",
+          arguments: JSON.stringify({ query: "capability report" }),
+          status: "completed",
+          result: { success: true, output: "" },
+          startTime: TOOL_START_TIME,
+        },
+      },
+      {
+        type: "text",
+        text: finalText,
+      },
+    ];
+
+    const contentParts = buildTimelineInlineContentParts({
+      displayContent: finalText,
+      existingContentParts,
+      items: buildThreadItems([
+        {
+          id: "reasoning-skills-runtime-hydrate",
+          type: "reasoning",
+          turn_id: "turn-skills-runtime-hydrate",
+          sequence: 2,
+          text: "先确认专家绑定技能，再选择单个 Skill。",
+          status: "completed",
+          started_at: "2026-06-20T10:00:00.500Z",
+          completed_at: "2026-06-20T10:00:01.000Z",
+          updated_at: "2026-06-20T10:00:01.000Z",
+        },
+      ]),
+    });
+
+    expect(contentParts?.map((part) => part.type)).toEqual([
+      "text",
+      "thinking",
+      "tool_use",
+      "text",
+    ]);
+    expect(contentParts?.at(-1)).toEqual({ type: "text", text: finalText });
+  });
+
   it("实时工具过程缺少时间戳时应按 timeline sequence 插入稀疏 reasoning", () => {
     const existingContentParts: NonNullable<Message["contentParts"]> = [
       {

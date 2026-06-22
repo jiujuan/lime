@@ -158,6 +158,7 @@ npm run agent-qc:gui-flow:report
 | sandbox | policy、允许/拒绝边界、危险工具未暴露证据 |
 | streaming | first token、interrupt、resume、错误转态 |
 | Skill Forge | draft、verify、register、binding、session enable、SkillTool allowlist |
+| Expert Skills | expert declared / selected / invoked、skill_search 到 Skill invocation 顺序、Harness GUI Evidence Pack 导出、专家面板复盘摘要 |
 | Browser runtime | session、adapter、console/network、cleanup |
 
 失败后必须沉淀为至少一种长期资产：Vitest、Rust 定向测试、smoke、harness replay、qcloop scenario 或 Playwright MCP flow。

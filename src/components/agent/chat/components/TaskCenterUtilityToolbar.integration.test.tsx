@@ -284,6 +284,208 @@ function renderToolbar(
 }
 
 describe("TaskCenterUtilityToolbar", () => {
+  it("顶部工具栏按钮应保持单行图标布局，避免窄宽度下文字掉行", () => {
+    const container = renderToolbar({
+      isCanvasOpen: true,
+      harnessPendingCount: 3,
+    });
+
+    const toolbar = container.querySelector(
+      '[data-testid="task-center-utility-toolbar"]',
+    );
+    const panelGroup = container.querySelector(
+      '[data-testid="task-center-tool-group-panels"]',
+    );
+    const workbenchToggle = container.querySelector(
+      '[data-testid="task-center-workbench-toggle"]',
+    );
+
+    expect(toolbar?.className).toContain("flex-nowrap");
+    expect(toolbar?.className).toContain("whitespace-nowrap");
+    expect(panelGroup?.className).toContain("flex-nowrap");
+    expect(workbenchToggle?.className).toContain("shrink-0");
+    expect(workbenchToggle?.textContent?.trim()).toBe("");
+  });
+
+  it("专家信息按钮应在顶部工具列中以图标态展开和收起右栏", () => {
+    const onToggleExpertInfoPanel = vi.fn();
+    const container = renderToolbar({
+      showExpertInfoToggle: true,
+      expertInfoPanelVisible: false,
+      onToggleExpertInfoPanel,
+    });
+
+    const toggle = container.querySelector<HTMLButtonElement>(
+      '[data-testid="task-center-expert-info-toggle"]',
+    );
+    expect(toggle).not.toBeNull();
+    expect(toggle?.textContent?.trim()).toBe("");
+    expect(toggle?.getAttribute("aria-expanded")).toBe("false");
+    expect(toggle?.getAttribute("aria-label")).toBe("打开专家信息");
+    expect(toggle?.className).not.toContain(
+      "lime-chrome-tab-active-surface",
+    );
+
+    act(() => {
+      toggle?.click();
+    });
+
+    expect(onToggleExpertInfoPanel).toHaveBeenCalledTimes(1);
+
+    const visibleContainer = renderToolbar({
+      showExpertInfoToggle: true,
+      expertInfoPanelVisible: true,
+      onToggleExpertInfoPanel,
+    });
+    const visibleToggle = visibleContainer.querySelector<HTMLButtonElement>(
+      '[data-testid="task-center-expert-info-toggle"]',
+    );
+
+    expect(visibleToggle?.getAttribute("aria-expanded")).toBe("true");
+    expect(visibleToggle?.getAttribute("aria-label")).toBe("关闭专家信息");
+    expect(visibleToggle?.className).toContain(
+      "lime-chrome-tab-active-surface",
+    );
+  });
+
+  it("右侧 surface projection 应优先驱动专家和工作台按钮状态", () => {
+    const container = renderToolbar({
+      showExpertInfoToggle: true,
+      expertInfoPanelVisible: false,
+      isCanvasOpen: false,
+      rightSurfaceLaunchers: [
+        {
+          kind: "workbench",
+          active: false,
+          disabled: true,
+          pendingCount: 2,
+          collapseTarget: "topToolbar",
+        },
+        {
+          kind: "expertInfo",
+          active: true,
+          disabled: false,
+          pendingCount: 3,
+          collapseTarget: "topToolbar",
+        },
+      ],
+    });
+
+    const expertToggle = container.querySelector<HTMLButtonElement>(
+      '[data-testid="task-center-expert-info-toggle"]',
+    );
+    const workbenchToggle = container.querySelector<HTMLButtonElement>(
+      '[data-testid="task-center-workbench-toggle"]',
+    );
+
+    expect(expertToggle?.getAttribute("aria-expanded")).toBe("true");
+    expect(expertToggle?.getAttribute("aria-label")).toBe("关闭专家信息");
+    expect(expertToggle?.className).toContain(
+      "lime-chrome-tab-active-surface",
+    );
+    expect(expertToggle?.textContent).toContain("3");
+
+    expect(workbenchToggle?.disabled).toBe(true);
+    expect(workbenchToggle?.textContent).toContain("2");
+  });
+
+  it("右侧 surface projection 应能驱动 Harness pending badge", () => {
+    const container = renderToolbar({
+      harnessPendingCount: 0,
+      rightSurfaceLaunchers: [
+        {
+          kind: "harness",
+          active: false,
+          disabled: false,
+          pendingCount: 2,
+          collapseTarget: "topToolbar",
+        },
+      ],
+    });
+
+    const harnessToggle = container.querySelector<HTMLButtonElement>(
+      '[data-testid="task-center-harness-toggle"]',
+    );
+
+    expect(harnessToggle?.textContent).toContain("2");
+  });
+
+  it("右侧 surface projection 应能驱动 Harness 展开态和禁用态", () => {
+    const activeContainer = renderToolbar({
+      harnessPanelVisible: false,
+      rightSurfaceLaunchers: [
+        {
+          kind: "harness",
+          active: true,
+          disabled: false,
+          pendingCount: 0,
+          collapseTarget: "topToolbar",
+        },
+      ],
+    });
+
+    const activeToggle = activeContainer.querySelector<HTMLButtonElement>(
+      '[data-testid="task-center-harness-toggle"]',
+    );
+
+    expect(activeToggle?.getAttribute("aria-expanded")).toBe("true");
+    expect(activeToggle?.getAttribute("aria-label")).toBe("关闭Harness");
+    expect(activeToggle?.className).toContain("lime-chrome-tab-active-surface");
+
+    const disabledContainer = renderToolbar({
+      harnessPanelVisible: false,
+      rightSurfaceLaunchers: [
+        {
+          kind: "harness",
+          active: false,
+          disabled: true,
+          pendingCount: 4,
+          collapseTarget: "topToolbar",
+        },
+      ],
+    });
+
+    const disabledToggle = disabledContainer.querySelector<HTMLButtonElement>(
+      '[data-testid="task-center-harness-toggle"]',
+    );
+
+    expect(disabledToggle?.disabled).toBe(true);
+    expect(disabledToggle?.getAttribute("aria-expanded")).toBe("false");
+    expect(disabledToggle?.textContent).toContain("4");
+  });
+
+  it("右侧 surface projection 应能驱动文件入口展开态、badge 和点击回调", () => {
+    const onToggleFilesPanel = vi.fn();
+    const container = renderToolbar({
+      onToggleFilesPanel,
+      rightSurfaceLaunchers: [
+        {
+          kind: "files",
+          active: true,
+          disabled: false,
+          pendingCount: 1,
+          collapseTarget: "topToolbar",
+        },
+      ],
+    });
+
+    const filesToggle = container.querySelector<HTMLButtonElement>(
+      '[data-testid="task-center-files-toggle"]',
+    );
+
+    expect(filesToggle).not.toBeNull();
+    expect(filesToggle?.getAttribute("aria-expanded")).toBe("true");
+    expect(filesToggle?.getAttribute("aria-label")).toBe("打开文件");
+    expect(filesToggle?.className).toContain("lime-chrome-tab-active-surface");
+    expect(filesToggle?.textContent).toContain("1");
+
+    act(() => {
+      filesToggle?.click();
+    });
+
+    expect(onToggleFilesPanel).toHaveBeenCalledTimes(1);
+  });
+
   it("应用切换应通过文件壳网关打开指定工具", async () => {
     const container = renderToolbar();
     const trigger = container.querySelector(

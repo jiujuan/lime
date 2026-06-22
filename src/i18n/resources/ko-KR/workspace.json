@@ -832,6 +832,7 @@
   "workspace.browserAssistRenderer.migrated.configReady": "구성 {{config}}은(는) Browser Workspace에서 이어받을 수 있습니다.",
   "workspace.documentRenderer.view.preview": "미리 보기",
   "workspace.documentRenderer.view.source": "소스",
+  "workspace.documentRenderer.action.copyCode": "복사",
   "workspace.documentRenderer.status.generating": "생성 중...",
   "workspace.artifactDocument.kind.report": "보고서",
   "workspace.artifactDocument.kind.roadmap": "로드맵",

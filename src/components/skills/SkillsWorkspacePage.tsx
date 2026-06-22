@@ -109,6 +109,10 @@ export function SkillsWorkspacePage({
   const [scaffoldDialogDraft, setScaffoldDialogDraft] =
     useState<SkillScaffoldDraft | null>(null);
   const [scaffoldCreating, setScaffoldCreating] = useState(false);
+  const [
+    registeredSkillsRefreshSignal,
+    setRegisteredSkillsRefreshSignal,
+  ] = useState(0);
   const [localPackageDialogOpen, setLocalPackageDialogOpen] = useState(false);
   const [localPackageSourcePath, setLocalPackageSourcePath] = useState<
     string | null
@@ -135,6 +139,9 @@ export function SkillsWorkspacePage({
   const lastHandledSkillPackageRequestKeyRef = useRef<number | string | null>(
     null,
   );
+  const lastHandledInitialSearchRequestKeyRef = useRef<
+    number | string | null
+  >(null);
 
   const { defaultProjectState } = useSkillsWorkspaceDefaultProject({
     activeView,
@@ -253,6 +260,23 @@ export function SkillsWorkspacePage({
   }, [pageParams?.initialView]);
 
   useEffect(() => {
+    const initialSearchQuery = pageParams?.initialSearchQuery?.trim();
+    if (!initialSearchQuery) {
+      return;
+    }
+
+    const requestKey =
+      pageParams?.initialSearchRequestKey ?? initialSearchQuery;
+    if (lastHandledInitialSearchRequestKeyRef.current === requestKey) {
+      return;
+    }
+
+    lastHandledInitialSearchRequestKeyRef.current = requestKey;
+    setActiveView("installed");
+    setSearchQuery(initialSearchQuery);
+  }, [pageParams?.initialSearchQuery, pageParams?.initialSearchRequestKey]);
+
+  useEffect(() => {
     const requestKey = pageParams?.initialScaffoldRequestKey ?? null;
     if (
       !pageParams?.initialScaffoldDraft ||
@@ -263,6 +287,8 @@ export function SkillsWorkspacePage({
     }
 
     lastHandledScaffoldRequestKeyRef.current = requestKey;
+    setScaffoldDialogDraft(pageParams.initialScaffoldDraft);
+    setScaffoldDialogOpen(true);
     setActiveView("installed");
   }, [pageParams?.initialScaffoldDraft, pageParams?.initialScaffoldRequestKey]);
 
@@ -713,6 +739,9 @@ export function SkillsWorkspacePage({
       setSearchQuery("");
       setHighlightedInstalledSkillDirectory(skill.directory);
       setActiveView("installed");
+      if (skill.catalogSource === "project") {
+        setRegisteredSkillsRefreshSignal((value) => value + 1);
+      }
       setConsumedScaffoldRequestKey(
         pageParams?.initialScaffoldRequestKey ?? null,
       );
@@ -855,6 +884,7 @@ export function SkillsWorkspacePage({
         officialMarketplaceLoading={officialMarketplaceLoading}
         officialMarketplaceSkillCount={officialMarketplaceSkills.length}
         otherStoreItems={otherStoreItems}
+        registeredSkillsRefreshSignal={registeredSkillsRefreshSignal}
         renamingSkillDirectory={renamingSkillDirectory}
         replacingSkillDirectory={replacingSkillDirectory}
         resolveMarketplaceSkillActionState={resolveMarketplaceSkillActionState}

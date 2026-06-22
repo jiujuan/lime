@@ -1,0 +1,237 @@
+import {
+  MCP_STRUCTURED_CONTENT_ANSWER,
+  MCP_STRUCTURED_CONTENT_DONE_TEXT,
+  MCP_STRUCTURED_CONTENT_PROMPT,
+  MCP_STRUCTURED_CONTENT_REFERENCE_ID,
+  MCP_STRUCTURED_CONTENT_TOOL_DISPLAY_LABEL,
+  MCP_STRUCTURED_CONTENT_TOOL_NAME,
+} from "./claw-chat-current-fixture-constants.mjs";
+import { evaluatePageSnapshot } from "./claw-chat-current-fixture-rpc.mjs";
+import { sanitizeJson, sleep } from "./claw-chat-current-fixture-utils.mjs";
+
+export async function waitForGuiMcpStructuredContentCompleted(page, options) {
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const snapshot = await evaluatePageSnapshot(
+      page,
+      ({ prompt, doneText, answer, referenceId, toolName }) => {
+        const text = document.body?.innerText || "";
+        const textarea = document.querySelector(
+          'textarea[name="agent-chat-message"]',
+        );
+        const rect = textarea?.getBoundingClientRect();
+        const style = textarea ? window.getComputedStyle(textarea) : null;
+        const textareaVisible = Boolean(
+          textarea &&
+            rect &&
+            rect.width > 16 &&
+            rect.height > 16 &&
+            style?.visibility !== "hidden" &&
+            style?.display !== "none",
+        );
+        const buttons = Array.from(document.querySelectorAll("button")).map(
+          (button) => ({
+            title: button.getAttribute("title") || "",
+            text: button.textContent || "",
+            aria: button.getAttribute("aria-label") || "",
+            disabled: button.disabled,
+          }),
+        );
+        const stopButtonVisible = buttons.some((button) => {
+          const label = [button.title, button.text, button.aria].join("\n");
+          return (
+            !button.disabled &&
+            (label.includes("停止") ||
+              label.includes("终止") ||
+              /\bStop\b/i.test(label))
+          );
+        });
+        const forbiddenEnvelopeFragments = [
+          "request_metadata",
+          "mcp_tool_result_projection",
+          "diagnostics",
+          "raw_transport_payload",
+          "doc-hidden-envelope",
+          "control-plane envelope only",
+          '"request_metadata"',
+          '"diagnostics"',
+        ];
+        return {
+          url: window.location.href,
+          hasPrompt: text.includes(prompt),
+          hasAssistantSummary: text.includes("MCP structuredContent 展示验证完成"),
+          hasDoneText: text.includes(doneText),
+          hasStructuredAnswer: text.includes(answer),
+          hasReferenceId: text.includes(referenceId),
+          hasToolName: text.includes(toolName),
+          envelopeVisible: forbiddenEnvelopeFragments.some((value) =>
+            text.includes(value),
+          ),
+          forbiddenEnvelopeHits: forbiddenEnvelopeFragments.filter((value) =>
+            text.includes(value),
+          ),
+          textareaVisible,
+          textareaDisabled:
+            textarea instanceof HTMLTextAreaElement ? textarea.disabled : null,
+          textareaValue:
+            textarea instanceof HTMLTextAreaElement ? textarea.value : null,
+          stopButtonVisible,
+          hasMessageList: Boolean(
+            document.querySelector('[data-testid="message-list"]') ||
+              document.querySelector('[data-testid="message-list-frame"]'),
+          ),
+          bodyText: text,
+        };
+      },
+      {
+        prompt: MCP_STRUCTURED_CONTENT_PROMPT,
+        doneText: MCP_STRUCTURED_CONTENT_DONE_TEXT,
+        answer: MCP_STRUCTURED_CONTENT_ANSWER,
+        referenceId: MCP_STRUCTURED_CONTENT_REFERENCE_ID,
+        toolName: MCP_STRUCTURED_CONTENT_TOOL_NAME,
+        toolDisplayLabel: MCP_STRUCTURED_CONTENT_TOOL_DISPLAY_LABEL,
+      },
+    );
+    if (!snapshot) {
+      await sleep(options.intervalMs);
+      continue;
+    }
+    lastSnapshot = snapshot;
+    if (
+      snapshot.hasPrompt &&
+      (snapshot.hasAssistantSummary || snapshot.hasDoneText) &&
+      snapshot.envelopeVisible === false &&
+      snapshot.textareaVisible &&
+      snapshot.textareaDisabled === false &&
+      snapshot.stopButtonVisible === false
+    ) {
+      const expandedSnapshot =
+        snapshot.hasStructuredAnswer && snapshot.hasToolName
+          ? snapshot
+          : await expandAndInspectGuiMcpStructuredContentProcess(page, options);
+      if (
+        expandedSnapshot.hasStructuredAnswer &&
+        expandedSnapshot.envelopeVisible === false
+      ) {
+        return sanitizeJson({
+          ...snapshot,
+          hasStructuredAnswer:
+            snapshot.hasStructuredAnswer ||
+            expandedSnapshot.hasStructuredAnswer,
+          hasReferenceId:
+            snapshot.hasReferenceId || expandedSnapshot.hasReferenceId,
+          hasToolName: snapshot.hasToolName || expandedSnapshot.hasToolName,
+          expandedDetails: expandedSnapshot,
+        });
+      }
+    }
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `Claw GUI 未完成 MCP structuredContent 展示验收: ${JSON.stringify(
+      sanitizeJson(lastSnapshot),
+    )}`,
+  );
+}
+
+export async function expandAndInspectGuiMcpStructuredContentProcess(page, options) {
+  await page.evaluate(() => {
+    const groups = Array.from(
+      document.querySelectorAll('[data-testid="streaming-process-group"]'),
+    );
+    const targetGroup =
+      groups.find((group) =>
+        (group.textContent || "").includes("已完成 1 个步骤"),
+      ) ?? groups[0];
+    const button = targetGroup?.querySelector("button");
+    if (
+      button instanceof HTMLButtonElement &&
+      button.getAttribute("aria-expanded") !== "true"
+    ) {
+      button.click();
+    }
+  });
+
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < Math.min(options.timeoutMs, 30000)) {
+    const snapshot = await evaluatePageSnapshot(
+      page,
+      ({ answer, referenceId, toolName, toolDisplayLabel }) => {
+        const text = document.body?.innerText || "";
+        const processGroups = Array.from(
+          document.querySelectorAll('[data-testid="streaming-process-group"]'),
+        ).map((group) => {
+          const button = group.querySelector("button");
+          return {
+            text: group.textContent || "",
+            buttonText: button?.textContent || "",
+            expanded: button?.getAttribute("aria-expanded") || "",
+          };
+        });
+        const mcpProcessGroup = processGroups.find(
+          (group) =>
+            group.text.includes(answer) ||
+            group.text.includes(toolName) ||
+            group.buttonText.includes("已完成 1 个步骤") ||
+            group.text.includes("已完成 1 个步骤"),
+        );
+        const processText = mcpProcessGroup?.text || "";
+        const forbiddenEnvelopeFragments = [
+          "request_metadata",
+          "mcp_tool_result_projection",
+          "diagnostics",
+          "raw_transport_payload",
+          "doc-hidden-envelope",
+          "control-plane envelope only",
+          '"request_metadata"',
+          '"diagnostics"',
+        ];
+        return {
+          mcpProcessGroupExpanded: mcpProcessGroup?.expanded === "true",
+          hasStructuredAnswer: processText.includes(answer),
+          hasReferenceId: processText.includes(referenceId),
+          hasToolName:
+            processText.includes(toolName) ||
+            text.includes(toolName) ||
+            processText.includes(toolDisplayLabel) ||
+            text.includes(toolDisplayLabel),
+          envelopeVisible: forbiddenEnvelopeFragments.some((value) =>
+            processText.includes(value),
+          ),
+          forbiddenEnvelopeHits: forbiddenEnvelopeFragments.filter((value) =>
+            processText.includes(value),
+          ),
+          processGroupCount: processGroups.length,
+          processGroupText: processText,
+          bodyText: text,
+        };
+      },
+      {
+        answer: MCP_STRUCTURED_CONTENT_ANSWER,
+        referenceId: MCP_STRUCTURED_CONTENT_REFERENCE_ID,
+        toolName: MCP_STRUCTURED_CONTENT_TOOL_NAME,
+        toolDisplayLabel: MCP_STRUCTURED_CONTENT_TOOL_DISPLAY_LABEL,
+      },
+    );
+    if (!snapshot) {
+      await sleep(options.intervalMs);
+      continue;
+    }
+    lastSnapshot = snapshot;
+    if (
+      snapshot.mcpProcessGroupExpanded &&
+      snapshot.hasStructuredAnswer &&
+      snapshot.envelopeVisible === false
+    ) {
+      return sanitizeJson(snapshot);
+    }
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `Claw GUI 未展开 MCP structuredContent 工具过程: ${JSON.stringify(
+      sanitizeJson(lastSnapshot),
+    )}`,
+  );
+}

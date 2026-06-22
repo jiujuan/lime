@@ -24,6 +24,7 @@ pub enum AgentSkillSelectionTrigger {
     SkillUri,
     SkillFilePath,
     CatalogBinding,
+    ExpertBinding,
     ImplicitHighConfidence,
 }
 

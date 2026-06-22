@@ -16,11 +16,14 @@ use app_server_protocol::SkillRemoteInspectParams;
 use app_server_protocol::SkillRemoteInspectResponse;
 use app_server_protocol::SkillScaffoldCreateParams;
 use app_server_protocol::SkillScaffoldCreateResponse;
+use chrono::SecondsFormat;
+use chrono::Utc;
 use lime_agent::AsterAgentState;
 use lime_core::app_paths;
 use lime_services::skill_service::SkillService;
 use serde::Deserialize;
 use serde::Serialize;
+use serde_json::json;
 use std::fs;
 use std::path::Component;
 use std::path::Path;
@@ -136,6 +139,12 @@ struct SkillScaffoldSections {
     fallback_strategy: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SkillScaffoldRegistration {
+    None,
+    Workspace,
+}
+
 fn normalize_scaffold_items(items: &[String], fallback: &[&str]) -> Vec<String> {
     let normalized: Vec<String> = items
         .iter()
@@ -240,6 +249,7 @@ fn build_skill_scaffold_content(request: &CreateSkillScaffoldRequest) -> Result<
 fn create_skill_scaffold_in_root(
     skills_root: &Path,
     request: &CreateSkillScaffoldRequest,
+    registration: SkillScaffoldRegistration,
 ) -> Result<lime_core::models::skill_model::SkillPackageInspection, String> {
     let directory = request.directory.trim();
     validate_skill_package_directory(directory)?;
@@ -284,12 +294,50 @@ fn create_skill_scaffold_in_root(
     }
 
     match SkillService::inspect_skill_dir(&skill_dir) {
-        Ok(inspection) => Ok(inspection),
+        Ok(inspection) => {
+            if matches!(registration, SkillScaffoldRegistration::Workspace) {
+                if let Err(error) = write_skill_scaffold_registration(&skill_dir, directory) {
+                    let _ = fs::remove_dir_all(&skill_dir);
+                    return Err(error);
+                }
+            }
+            Ok(inspection)
+        }
         Err(error) => {
             let _ = fs::remove_dir_all(&skill_dir);
             Err(format!("Created scaffold failed inspection: {error}"))
         }
     }
+}
+
+fn write_skill_scaffold_registration(skill_dir: &Path, directory: &str) -> Result<(), String> {
+    let registration_dir = skill_dir.join(".lime");
+    fs::create_dir_all(&registration_dir).map_err(|error| {
+        format!(
+            "Failed to create skill registration directory {}: {error}",
+            registration_dir.display()
+        )
+    })?;
+
+    let registration = json!({
+        "registrationId": format!("skill-scaffold-{directory}"),
+        "registeredAt": Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+        "skillDirectory": directory,
+        "registeredSkillDirectory": skill_dir.to_string_lossy().to_string(),
+        "sourceDraftId": "skill-scaffold",
+        "sourceVerificationReportId": "skill-scaffold-create",
+        "generatedFileCount": 1,
+        "permissionSummary": [],
+    });
+    let content = serde_json::to_string_pretty(&registration)
+        .map_err(|error| format!("Failed to serialize skill registration: {error}"))?;
+    let registration_file = registration_dir.join("registration.json");
+    fs::write(&registration_file, format!("{content}\n")).map_err(|error| {
+        format!(
+            "Failed to write skill registration {}: {error}",
+            registration_file.display()
+        )
+    })
 }
 
 fn copy_skill_directory_recursive(source: &Path, destination: &Path) -> Result<(), String> {
@@ -463,7 +511,12 @@ pub(crate) fn create_skill_scaffold(
         .map_err(|error| format!("Invalid skill scaffold request: {error}"))?;
     let target = SkillScaffoldTarget::parse(&request.target)?;
     let skills_root = resolve_skill_scaffold_root(app, target)?;
-    let inspection = create_skill_scaffold_in_root(&skills_root, &request)?;
+    let registration = if matches!(target, SkillScaffoldTarget::Project) {
+        SkillScaffoldRegistration::Workspace
+    } else {
+        SkillScaffoldRegistration::None
+    };
+    let inspection = create_skill_scaffold_in_root(&skills_root, &request, registration)?;
     if matches!(app, SkillPackageApp::Lime) {
         AsterAgentState::reload_lime_skills();
     }
@@ -503,4 +556,84 @@ pub(crate) async fn inspect_remote_skill(
         inspection: serde_json::to_value(inspection)
             .map_err(|error| format!("Failed to serialize skill inspection: {error}"))?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use app_server_protocol::WorkspaceSkillBindingsListParams;
+    use tempfile::TempDir;
+
+    fn scaffold_request(target: &str, directory: &str) -> CreateSkillScaffoldRequest {
+        CreateSkillScaffoldRequest {
+            target: target.to_string(),
+            directory: directory.to_string(),
+            name: "专家复盘".to_string(),
+            description: "把专家对话沉淀成可复用流程。".to_string(),
+            when_to_use: Vec::new(),
+            inputs: Vec::new(),
+            outputs: Vec::new(),
+            steps: Vec::new(),
+            fallback_strategy: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn project_scaffold_registration_is_visible_as_workspace_binding() {
+        let temp = TempDir::new().expect("temp dir");
+        let skills_root = temp.path().join(".agents").join("skills");
+        let request = scaffold_request("project", "expert-review");
+
+        create_skill_scaffold_in_root(&skills_root, &request, SkillScaffoldRegistration::Workspace)
+            .expect("create project scaffold");
+
+        let registration_file = skills_root
+            .join("expert-review")
+            .join(".lime")
+            .join("registration.json");
+        let registration: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(registration_file).expect("read registration"),
+        )
+        .expect("parse registration");
+        assert_eq!(
+            registration["sourceVerificationReportId"],
+            json!("skill-scaffold-create")
+        );
+
+        let bindings =
+            crate::local_data_source::skills::workspace::list_workspace_skill_bindings_value(
+                WorkspaceSkillBindingsListParams {
+                    workspace_root: temp.path().to_string_lossy().to_string(),
+                    caller: Some("assistant".to_string()),
+                    workbench: true,
+                    browser_assist: false,
+                },
+            )
+            .expect("list workspace bindings");
+
+        assert_eq!(
+            bindings.pointer("/counts/ready_for_manual_enable_total"),
+            Some(&json!(1))
+        );
+        assert_eq!(
+            bindings.pointer("/bindings/0/binding_status"),
+            Some(&json!("ready_for_manual_enable"))
+        );
+    }
+
+    #[test]
+    fn user_scaffold_does_not_write_workspace_registration() {
+        let temp = TempDir::new().expect("temp dir");
+        let request = scaffold_request("user", "personal-review");
+
+        create_skill_scaffold_in_root(temp.path(), &request, SkillScaffoldRegistration::None)
+            .expect("create user scaffold");
+
+        assert!(!temp
+            .path()
+            .join("personal-review")
+            .join(".lime")
+            .join("registration.json")
+            .exists());
+    }
 }

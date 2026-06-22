@@ -5,7 +5,7 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import rehypeRaw from "rehype-raw";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import SyntaxHighlighter from "react-syntax-highlighter/dist/esm/prism";
 import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { Copy, Check, Quote } from "lucide-react";
 import { parseA2UIJson } from "@/components/workspace/a2ui/parser";

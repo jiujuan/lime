@@ -5,12 +5,13 @@ import { agentText } from "./harnessPanelText";
 import { ProjectShellSurface } from "./ProjectShellSurface";
 
 interface TaskCenterShellPanelProps {
-  heightPx: number;
-  maximized: boolean;
+  variant?: "bottom" | "surface";
+  heightPx?: number;
+  maximized?: boolean;
   projectRootPath?: string | null;
   onClose: () => void;
-  onHeightChange: (heightPx: number) => void;
-  onToggleMaximize: () => void;
+  onHeightChange?: (heightPx: number) => void;
+  onToggleMaximize?: () => void;
 }
 
 export const TASK_CENTER_SHELL_PANEL_MIN_HEIGHT_PX = 180;
@@ -21,8 +22,9 @@ export const TASK_CENTER_SHELL_PANEL_HEIGHT_PX =
 export const TASK_CENTER_SHELL_PANEL_HEIGHT = `${TASK_CENTER_SHELL_PANEL_DEFAULT_HEIGHT_PX}px`;
 
 export function TaskCenterShellPanel({
-  heightPx,
-  maximized,
+  variant = "bottom",
+  heightPx = TASK_CENTER_SHELL_PANEL_DEFAULT_HEIGHT_PX,
+  maximized = false,
   projectRootPath,
   onClose,
   onHeightChange,
@@ -78,7 +80,7 @@ export function TaskCenterShellPanel({
           dragState.startHeight + (dragState.startY - event.clientY),
         ),
       );
-      onHeightChange(nextHeight);
+      onHeightChange?.(nextHeight);
     },
     [onHeightChange],
   );
@@ -94,30 +96,33 @@ export function TaskCenterShellPanel({
     [handleResize],
   );
 
+  const canResizeBottomPanel = variant === "bottom";
   const shellToolbarControls = (
     <>
-      <button
-        type="button"
-        className="mr-1 inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-        aria-label={
-          maximized
-            ? agentText("agentChat.navbar.shell.restore", "还原 Shell")
-            : agentText("agentChat.navbar.shell.maximize", "最大化 Shell")
-        }
-        title={
-          maximized
-            ? agentText("agentChat.navbar.shell.restore", "还原 Shell")
-            : agentText("agentChat.navbar.shell.maximize", "最大化 Shell")
-        }
-        onClick={onToggleMaximize}
-        data-testid="task-center-shell-maximize"
-      >
-        {maximized ? (
-          <Minimize2 className="h-4 w-4" />
-        ) : (
-          <Maximize2 className="h-4 w-4" />
-        )}
-      </button>
+      {canResizeBottomPanel ? (
+        <button
+          type="button"
+          className="mr-1 inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+          aria-label={
+            maximized
+              ? agentText("agentChat.navbar.shell.restore", "还原 Shell")
+              : agentText("agentChat.navbar.shell.maximize", "最大化 Shell")
+          }
+          title={
+            maximized
+              ? agentText("agentChat.navbar.shell.restore", "还原 Shell")
+              : agentText("agentChat.navbar.shell.maximize", "最大化 Shell")
+          }
+          onClick={onToggleMaximize}
+          data-testid="task-center-shell-maximize"
+        >
+          {maximized ? (
+            <Minimize2 className="h-4 w-4" />
+          ) : (
+            <Maximize2 className="h-4 w-4" />
+          )}
+        </button>
+      ) : null}
       <button
         type="button"
         className="mr-1 inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
@@ -146,6 +151,23 @@ export function TaskCenterShellPanel({
       </button>
     </>
   );
+
+  if (variant === "surface") {
+    return (
+      <section
+        className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-white"
+        data-testid="task-center-right-surface-shell-panel"
+      >
+        <ProjectShellSurface
+          projectRootPath={projectRootPath}
+          onRequestResize={handleResize}
+          onCloseLastTab={onClose}
+          className="min-h-0 flex-1"
+          trailingToolbarContent={shellToolbarControls}
+        />
+      </section>
+    );
+  }
 
   return (
     <section

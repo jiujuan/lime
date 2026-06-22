@@ -27,6 +27,8 @@
 #![allow(dead_code)]
 
 use lime_core::DynEmitter;
+use rmcp::service::RunningService;
+use rmcp::RoleClient;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -101,6 +103,20 @@ pub struct McpClientManager {
     emitter: Option<DynEmitter>,
 
     oauth_registry: McpOAuthRegistry,
+}
+
+/// 当前运行中的 MCP bridge 快照。
+///
+/// 该类型只服务 App Server runtime 内部装配：Agent 复用已有
+/// `RunningService`，避免为 ToolSearch / tool call 再启动第二套 MCP 进程。
+#[derive(Clone)]
+pub struct McpBridgeSnapshot {
+    pub server_name: String,
+    pub description: String,
+    pub tools: Vec<McpToolDefinition>,
+    pub running_service: Arc<RunningService<RoleClient, crate::client::LimeMcpClient>>,
+    pub handler: Arc<crate::client::LimeMcpClient>,
+    pub server_info: Option<rmcp::model::InitializeResult>,
 }
 
 impl McpClientManager {
@@ -322,6 +338,48 @@ impl McpClientManager {
     pub async fn running_server_count(&self) -> usize {
         let clients = self.clients.read().await;
         clients.len()
+    }
+
+    pub async fn bridge_snapshots(&self) -> Result<Vec<McpBridgeSnapshot>, McpError> {
+        let tools = self.list_tools().await?;
+        let mut tools_by_server: HashMap<String, Vec<McpToolDefinition>> = HashMap::new();
+        for tool in tools {
+            tools_by_server
+                .entry(tool.server_name.clone())
+                .or_default()
+                .push(tool);
+        }
+
+        let clients = self.clients.read().await;
+        let mut snapshots = Vec::new();
+        for (server_name, wrapper) in clients.iter() {
+            let Some(running_service) = wrapper.running_service_arc() else {
+                continue;
+            };
+            let mut server_tools = tools_by_server.remove(server_name).unwrap_or_default();
+            if server_tools.is_empty() {
+                continue;
+            }
+            server_tools.sort_by(|left, right| left.name.cmp(&right.name));
+
+            let server_info = running_service.peer_info().cloned();
+            let description = server_info
+                .as_ref()
+                .and_then(|info| info.instructions.clone())
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| format!("MCP server {server_name} tools"));
+
+            snapshots.push(McpBridgeSnapshot {
+                server_name: server_name.clone(),
+                description,
+                tools: server_tools,
+                running_service,
+                handler: wrapper.handler(),
+                server_info,
+            });
+        }
+        snapshots.sort_by(|left, right| left.server_name.cmp(&right.server_name));
+        Ok(snapshots)
     }
 
     // ========================================================================

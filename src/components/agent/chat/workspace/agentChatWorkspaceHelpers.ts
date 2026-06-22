@@ -8,7 +8,6 @@ import {
 import type { TaskCenterTabItem } from "../components/TaskCenterTabStrip";
 import type { Message, MessagePreviewTarget } from "../types";
 import { isHiddenInternalArtifactPath } from "../utils/internalArtifactVisibility";
-import { asRecord } from "./browserAssistArtifact";
 import { shouldAutoSelectGeneralArtifact } from "./generalArtifactAutoSelection";
 import { doesWorkspaceFileCandidateMatch } from "./workspaceFilePathMatch";
 import { normalizeProjectId } from "../utils/topicProjectResolution";
@@ -97,39 +96,6 @@ export function areStringArraysEqual(
     return false;
   }
   return left.every((item, index) => item === right[index]);
-}
-
-export function mergeExpertSkillRefsIntoRequestMetadata(
-  metadata: Record<string, unknown> | null | undefined,
-  skillRefs: string[] | null,
-): Record<string, unknown> | null {
-  if (!metadata || !skillRefs) {
-    return metadata ?? null;
-  }
-
-  const root: Record<string, unknown> = { ...metadata };
-  const expert = asRecord(root.expert);
-  const harness = asRecord(root.harness);
-  const harnessExpert = asRecord(harness?.expert);
-
-  if (expert) {
-    root.expert = {
-      ...expert,
-      skillRefs: [...skillRefs],
-    };
-  }
-
-  if (harness || harnessExpert) {
-    root.harness = {
-      ...(harness ?? {}),
-      expert: {
-        ...(harnessExpert ?? {}),
-        skill_refs: [...skillRefs],
-      },
-    };
-  }
-
-  return root;
 }
 
 export function isTransientWorkspaceBridgeError(message: string): boolean {
@@ -271,8 +237,7 @@ export function resolveTaskCenterHomeSurfaceState({
     !shouldProtectInitialSessionRoute &&
     !hasConversationActivity &&
     !hasCurrentSessionActivity &&
-    (draftSurfaceActive ||
-      hasEmbeddedHomeSession),
+    (draftSurfaceActive || hasEmbeddedHomeSession),
   );
   const shouldHideCurrentSessionContent =
     sessionSwitchPending ||

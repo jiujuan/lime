@@ -149,6 +149,198 @@ describe("SkillsWorkspacePage", () => {
     ).toBeNull();
   });
 
+  it("初始搜索参数应进入用户安装页并过滤目标技能", () => {
+    const { container } = renderPage({
+      initialView: "installed",
+      initialSearchQuery: "writer",
+      initialSearchRequestKey: 1,
+    });
+    const searchInput = container.querySelector<HTMLInputElement>("input");
+
+    expect(searchInput?.value).toBe("writer");
+    expect(
+      container.querySelector('[data-testid="skills-installed-view"]'),
+    ).toBeTruthy();
+    expect(container.textContent).toContain("写作助手");
+    expect(container.textContent).not.toContain("ASP.NET Core");
+  });
+
+  it("初始脚手架草稿应进入用户安装页并打开创建对话框", () => {
+    const { container } = renderPage({
+      initialView: "installed",
+      initialScaffoldDraft: {
+        target: "project",
+        directory: "project-report",
+        name: "项目报告",
+        description: "沉淀为可注册的工作区技能。",
+        sourceExcerpt: "workspace_skill:project-report@1.0.0",
+      },
+      initialScaffoldRequestKey: 2,
+    });
+    const scaffoldDialog = container.querySelector(
+      '[data-testid="skill-scaffold-dialog"]',
+    );
+
+    expect(
+      container.querySelector('[data-testid="skills-installed-view"]'),
+    ).toBeTruthy();
+    expect(scaffoldDialog?.textContent).toContain("project-report");
+    expect(scaffoldDialog?.textContent).toContain("项目报告");
+    expect(scaffoldDialog?.textContent).toContain(
+      "沉淀为可注册的工作区技能。",
+    );
+  });
+
+  it("项目级脚手架创建后应刷新已保存技能和 workspace binding readiness", async () => {
+    const savedSkill: WorkspaceRegisteredSkillRecord = {
+      key: "workspace:project-report",
+      name: "项目报告",
+      description: "沉淀为可注册的工作区技能。",
+      directory: "project-report",
+      registeredSkillDirectory:
+        "/Users/demo/Lime/default-workspace/.agents/skills/project-report",
+      registration: {
+        registrationId: "skill-scaffold-project-report",
+        registeredAt: "2026-06-23T00:00:00.000Z",
+        skillDirectory: "project-report",
+        registeredSkillDirectory:
+          "/Users/demo/Lime/default-workspace/.agents/skills/project-report",
+        sourceDraftId: "skill-scaffold",
+        sourceVerificationReportId: "skill-scaffold-create",
+        generatedFileCount: 1,
+        permissionSummary: [],
+        verificationGates: [],
+        approvalRequests: [],
+      },
+      permissionSummary: [],
+      metadata: {},
+      allowedTools: [],
+      resourceSummary: {
+        hasScripts: false,
+        hasReferences: false,
+        hasAssets: false,
+      },
+      standardCompliance: {
+        isStandard: true,
+        validationErrors: [],
+        deprecatedFields: [],
+      },
+      launchEnabled: false,
+      runtimeGate: "等待手动启用",
+    };
+    vi.useFakeTimers();
+    mocks.listRegisteredSkills
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([savedSkill]);
+    mocks.listWorkspaceSkillBindings
+      .mockResolvedValueOnce({ bindings: [] })
+      .mockResolvedValueOnce({
+        bindings: [
+          {
+            key: "workspace_skill:project-report",
+            name: "项目报告",
+            description: "沉淀为可注册的工作区技能。",
+            directory: "project-report",
+            registered_skill_directory:
+              "/Users/demo/Lime/default-workspace/.agents/skills/project-report",
+            registration: {
+              sourceVerificationReportId: "skill-scaffold-create",
+            },
+            permission_summary: [],
+            metadata: {},
+            allowed_tools: [],
+            resource_summary: {
+              has_scripts: false,
+              has_references: false,
+              has_assets: false,
+            },
+            standard_compliance: {
+              is_standard: true,
+              validation_errors: [],
+              deprecated_fields: [],
+            },
+            runtime_binding_target: "workspace_skill",
+            binding_status: "ready_for_manual_enable",
+            binding_status_reason: "已具备 runtime binding 候选资格。",
+            next_gate: "manual_runtime_enable",
+            query_loop_visible: false,
+            tool_runtime_visible: false,
+            launch_enabled: false,
+            runtime_gate: "等待 P3E 显式启用。",
+          },
+        ],
+      });
+    mocks.createSkillScaffold.mockResolvedValueOnce({
+      content: "# 项目报告",
+      metadata: {},
+      allowedTools: [],
+      resourceSummary: {
+        hasScripts: false,
+        hasReferences: false,
+        hasAssets: false,
+      },
+      standardCompliance: {
+        isStandard: true,
+        validationErrors: [],
+        deprecatedFields: [],
+      },
+    });
+
+    try {
+      const { container } = renderPage({
+        initialView: "installed",
+        initialScaffoldDraft: {
+          target: "project",
+          directory: "project-report",
+          name: "项目报告",
+          description: "沉淀为可注册的工作区技能。",
+          sourceExcerpt: "workspace_skill:project-report@1.0.0",
+        },
+        initialScaffoldRequestKey: 3,
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(300);
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(mocks.listWorkspaceSkillBindings).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        container
+          .querySelector<HTMLButtonElement>(
+            '[data-testid="skill-scaffold-create"]',
+          )
+          ?.click();
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(mocks.createSkillScaffold).toHaveBeenCalledWith(
+        {
+          target: "project",
+          directory: "project-report",
+          name: "项目报告",
+          description: "沉淀为可注册的工作区技能。",
+        },
+        "lime",
+      );
+      expect(mocks.listRegisteredSkills).toHaveBeenCalledTimes(2);
+      expect(mocks.listWorkspaceSkillBindings).toHaveBeenCalledTimes(2);
+      expect(container.textContent).toContain("项目报告");
+      expect(
+        container.querySelector(
+          '[data-testid="workspace-registered-skill-enable-runtime"]',
+        ),
+      ).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("用户安装页没有已保存技能时不显示已保存技能空面板，但后台读取 workspace skill binding readiness", async () => {
     vi.useFakeTimers();
     try {

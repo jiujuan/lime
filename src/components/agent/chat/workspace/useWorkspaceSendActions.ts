@@ -6,6 +6,7 @@ import type {
   AgentRuntimeWebSearchMode,
   AutoContinueRequestPayload,
 } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/types";
 import { normalizeExecutionStrategyToReact } from "@/lib/api/agentRuntime/executionStrategyCompat";
 import type { ServiceModelsConfig } from "@/lib/api/appConfigTypes";
 import { logAgentDebug } from "@/lib/agentDebug";
@@ -107,6 +108,7 @@ import type {
   ServiceSkillSlotValues,
 } from "../service-skills/types";
 import type { ImageWorkbenchSkillRequest } from "./imageSkillLaunch";
+import type { WorkspaceSkillRuntimeEnableInput } from "../utils/workspaceSkillBindingsMetadata";
 import {
   attachSessionIdToRequestContext,
   attachSessionIdToScopedRequestContext,
@@ -259,6 +261,8 @@ interface UseWorkspaceSendActionsParams {
   selectedTeamLabel?: string;
   selectedTeamSummary?: string;
   teamMemoryShadowSnapshot?: TeamMemorySnapshot | null;
+  workspaceSkillBindings?: AgentRuntimeWorkspaceSkillBinding[] | null;
+  workspaceSkillRuntimeEnable?: WorkspaceSkillRuntimeEnableInput | null;
   currentGateKey: string;
   themeWorkbenchActiveQueueTitle?: string;
   contentId?: string | null;
@@ -390,6 +394,8 @@ export function useWorkspaceSendActions({
   selectedTeamLabel,
   selectedTeamSummary,
   teamMemoryShadowSnapshot,
+  workspaceSkillBindings,
+  workspaceSkillRuntimeEnable,
   currentGateKey,
   themeWorkbenchActiveQueueTitle,
   contentId,
@@ -2909,6 +2915,8 @@ export function useWorkspaceSendActions({
           selectedTeamLabel,
           selectedTeamSummary,
           teamMemoryShadowSnapshot,
+          workspaceSkillBindings,
+          workspaceSkillRuntimeEnable,
           agentResponseLanguage,
         });
         const serviceModelSendOverrides = resolveServiceModelSendOverrides({
@@ -3069,6 +3077,8 @@ export function useWorkspaceSendActions({
       serviceModels,
       sessionId,
       teamMemoryShadowSnapshot,
+      workspaceSkillBindings,
+      workspaceSkillRuntimeEnable,
       sendMessage,
       setInput,
       setMentionedCharacters,

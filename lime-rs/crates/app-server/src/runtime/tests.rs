@@ -26,6 +26,7 @@ mod gateway_runner;
 mod knowledge;
 mod memory_prompt;
 mod objectives;
+mod queue;
 mod read_model;
 mod session_list_projection;
 mod sessions;

@@ -3,6 +3,7 @@ use super::NoopAppDataSource;
 use super::RuntimeCoreError;
 use app_server_protocol::*;
 use async_trait::async_trait;
+use lime_mcp::McpBridgeSnapshot;
 
 #[async_trait]
 pub trait McpAppDataSource: Send + Sync {
@@ -82,6 +83,10 @@ pub trait McpAppDataSource: Send + Sync {
         Ok(McpToolListResponse::default())
     }
 
+    async fn list_mcp_bridge_snapshots(&self) -> Result<Vec<McpBridgeSnapshot>, RuntimeCoreError> {
+        Ok(Vec::new())
+    }
+
     async fn list_mcp_tools_for_context(
         &self,
         _params: McpToolListForContextParams,
@@ -130,6 +135,20 @@ pub trait McpAppDataSource: Send + Sync {
         _params: McpResourceReadParams,
     ) -> Result<McpResourceReadResponse, RuntimeCoreError> {
         Err(requires_current("mcpResource/read"))
+    }
+
+    async fn subscribe_mcp_resource(
+        &self,
+        _params: McpResourceSubscribeParams,
+    ) -> Result<McpResourceSubscriptionResponse, RuntimeCoreError> {
+        Err(requires_current("mcpResource/subscribe"))
+    }
+
+    async fn unsubscribe_mcp_resource(
+        &self,
+        _params: McpResourceUnsubscribeParams,
+    ) -> Result<McpResourceSubscriptionResponse, RuntimeCoreError> {
+        Err(requires_current("mcpResource/unsubscribe"))
     }
 }
 

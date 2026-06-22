@@ -571,10 +571,16 @@ current App Server method 固定为：
 - `mcpPrompt/get`
 - `mcpResource/list`
 - `mcpResource/read`
+- `mcpResource/subscribe`
+- `mcpResource/unsubscribe`
 
 旧 MCP Desktop facade 已统一归类为 `dead / retired guard-only`：`get_mcp_servers`、`mcp_list_servers_with_status`、`mcp_list_tools`、`mcp_list_tools_for_context`、`mcp_search_tools`、`mcp_call_tool`、`mcp_call_tool_with_caller`、`mcp_list_prompts`、`mcp_get_prompt`、`mcp_list_resources`、`mcp_read_resource`、`mcp_start_server`、`mcp_stop_server`、`add_mcp_server`、`update_mcp_server`、`delete_mcp_server`、`toggle_mcp_server`、`import_mcp_from_app`、`sync_all_mcp_to_live`。这些名字只允许停留在负向测试、retired guard、历史 evidence 或 contract forbidden snippet 中，不得回到 `src/lib/api/mcp.ts`、Electron Host、DevBridge truth、`mockPriorityCommands`、desktop-host 默认 mock、legacy Tauri `generate_handler` 或 Rust DevBridge dispatcher。
 
 MCP smoke 证据也必须沿这条 current 控制面：`smoke:mcp-current` 通过 `app_server_handle_json_lines` 观察 `mcpServer/*`、`mcpTool/*`、`mcpPrompt/*`、`mcpResource/*`，并断言未观察到旧 `mcp_*` / `get_mcp_servers` 命令。不能把旧命令的空 mock、diagnostic facade 或浏览器 fallback 当作 MCP 可用证据。
+
+真实第三方 MCP provider 证据只能通过 `smoke:mcp-current -- --allow-live-provider` 显式打开；缺少 `LIME_MCP_LIVE_SERVER_URL` 时必须在 DevBridge / App Server 调用前 fail closed。`LIME_MCP_LIVE_SERVER_URL` 只允许 `http/https` 且不得包含 username、password、query 或 hash；bearer token 和自定义 HTTP header 只能通过环境变量名引用，不允许 inline secret。live smoke summary 与 `network-invoke.json` 只能记录 provider host、env var 名、header 名、scope、tool/resource 标识、URL / URI 摘要和匹配布尔值，不得写入完整 provider URL、resource URI、token、header value、资源正文或 blob。
+
+MCP 运行时事件同样属于 current Desktop Host bridge truth。`mcp:server_started`、`mcp:server_stopped`、`mcp:server_error`、`mcp:tools_updated`、`mcp:resources_updated`、`mcp:resource_updated` 与 `mcp:oauth_completed` 只能来自真实 MCP manager / rmcp notification / OAuth registry，经 `DynEmitter -> Desktop Host event bridge -> safeListen` 投影给前端；浏览器模式不得静默退回 mock event fallback。
 
 ## MCP 工具命名主链
 

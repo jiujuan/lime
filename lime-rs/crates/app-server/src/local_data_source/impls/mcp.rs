@@ -80,6 +80,12 @@ impl McpAppDataSource for LocalAppDataSource {
         mcp::list_mcp_tools(&self.mcp_manager).await
     }
 
+    async fn list_mcp_bridge_snapshots(
+        &self,
+    ) -> Result<Vec<lime_mcp::McpBridgeSnapshot>, RuntimeCoreError> {
+        mcp::list_mcp_bridge_snapshots(&self.mcp_manager).await
+    }
+
     async fn list_mcp_tools_for_context(
         &self,
         params: McpToolListForContextParams,
@@ -128,5 +134,19 @@ impl McpAppDataSource for LocalAppDataSource {
         params: McpResourceReadParams,
     ) -> Result<McpResourceReadResponse, RuntimeCoreError> {
         mcp::read_mcp_resource(&self.mcp_manager, params).await
+    }
+
+    async fn subscribe_mcp_resource(
+        &self,
+        params: McpResourceSubscribeParams,
+    ) -> Result<McpResourceSubscriptionResponse, RuntimeCoreError> {
+        mcp::subscribe_mcp_resource(&self.mcp_manager, params).await
+    }
+
+    async fn unsubscribe_mcp_resource(
+        &self,
+        params: McpResourceUnsubscribeParams,
+    ) -> Result<McpResourceSubscriptionResponse, RuntimeCoreError> {
+        mcp::unsubscribe_mcp_resource(&self.mcp_manager, params).await
     }
 }

@@ -177,6 +177,31 @@ describe("WorkspaceMainArea", () => {
     ).not.toBeNull();
   });
 
+  it("Right Surface 内容应替换画布内容并打开右侧承载区", () => {
+    const { container } = mountHarness(
+      WorkspaceMainAreaHarness,
+      {
+        layoutMode: "chat",
+        rightSurfaceContent: (
+          <div data-testid="workspace-right-surface">expert</div>
+        ),
+      },
+      mountedRoots,
+    );
+
+    expect(
+      container.querySelector<HTMLElement>(
+        '[data-testid="layout-transition-root"]',
+      )?.dataset.effectiveMode,
+    ).toBe("chat-canvas");
+    expect(
+      container.querySelector('[data-testid="workspace-right-surface"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="workspace-canvas-content"]'),
+    ).toBeNull();
+  });
+
   it("待处理 A2UI 存在时应屏蔽主题工作台的强制画布态", () => {
     const { container } = mountHarness(
       WorkspaceMainAreaHarness,

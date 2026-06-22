@@ -7,6 +7,7 @@
  */
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Play, X, AlertCircle, CheckCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -15,6 +16,11 @@ import {
   McpToolResult,
   McpContent,
 } from "@/lib/api/mcp";
+import {
+  buildMcpToolFormArgs,
+  buildMcpToolJsonArgs,
+  extractMcpToolInputFields,
+} from "./mcpToolCallerModel";
 
 interface McpToolCallerProps {
   tool: McpToolDefinition;
@@ -25,25 +31,8 @@ interface McpToolCallerProps {
   onClose: () => void;
 }
 
-/** 从 JSON Schema 提取参数字段 */
-function extractFields(
-  schema: Record<string, unknown>,
-): { name: string; type: string; description: string; required: boolean }[] {
-  const properties = (schema.properties || {}) as Record<
-    string,
-    Record<string, unknown>
-  >;
-  const required = (schema.required || []) as string[];
-  return Object.entries(properties).map(([name, prop]) => ({
-    name,
-    type: (prop.type as string) || "string",
-    description: (prop.description as string) || "",
-    required: required.includes(name),
-  }));
-}
-
 /** 渲染 MCP 内容 */
-function renderContent(content: McpContent) {
+function renderContent(content: McpContent, imageAlt: string) {
   if (content.type === "text") {
     return (
       <pre className="text-xs font-mono whitespace-pre-wrap break-all">
@@ -55,7 +44,7 @@ function renderContent(content: McpContent) {
     return (
       <img
         src={`data:${content.mime_type};base64,${content.data}`}
-        alt="工具返回图片"
+        alt={imageAlt}
         className="max-w-full rounded"
       />
     );
@@ -80,8 +69,9 @@ export function McpToolCaller({
   onCallTool,
   onClose,
 }: McpToolCallerProps) {
+  const { t } = useTranslation("settings");
   const displayName = getMcpInnerToolName(tool.name, tool.server_name);
-  const fields = extractFields(tool.input_schema);
+  const fields = extractMcpToolInputFields(tool.input_schema);
   const [args, setArgs] = useState<Record<string, string>>({});
   const [jsonMode, setJsonMode] = useState(false);
   const [jsonInput, setJsonInput] = useState("{}");
@@ -94,23 +84,9 @@ export function McpToolCaller({
     setError(null);
     setResult(null);
     try {
-      let callArgs: Record<string, unknown>;
-      if (jsonMode) {
-        callArgs = JSON.parse(jsonInput);
-      } else {
-        callArgs = {};
-        fields.forEach((field) => {
-          const val = args[field.name];
-          if (val !== undefined && val !== "") {
-            // 尝试解析为 JSON 值（支持数字、布尔等）
-            try {
-              callArgs[field.name] = JSON.parse(val);
-            } catch {
-              callArgs[field.name] = val;
-            }
-          }
-        });
-      }
+      const callArgs = jsonMode
+        ? buildMcpToolJsonArgs(jsonInput)
+        : buildMcpToolFormArgs({ fields, args });
       const res = await onCallTool(tool.name, callArgs);
       setResult(res);
     } catch (e) {
@@ -154,7 +130,7 @@ export function McpToolCaller({
                 : "border-border bg-muted text-muted-foreground hover:bg-muted/80",
             )}
           >
-            表单模式
+            {t("settings.mcpPage.runtime.toolCaller.formMode")}
           </button>
           <button
             onClick={() => setJsonMode(true)}
@@ -165,7 +141,7 @@ export function McpToolCaller({
                 : "border-border bg-muted text-muted-foreground hover:bg-muted/80",
             )}
           >
-            JSON 模式
+            {t("settings.mcpPage.runtime.toolCaller.jsonMode")}
           </button>
         </div>
 
@@ -175,7 +151,9 @@ export function McpToolCaller({
             value={jsonInput}
             onChange={(e) => setJsonInput(e.target.value)}
             className="w-full h-32 px-3 py-2 rounded border bg-muted/50 font-mono text-sm resize-none focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
-            placeholder='{"key": "value"}'
+            placeholder={t(
+              "settings.mcpPage.runtime.toolCaller.jsonPlaceholder",
+            )}
           />
         ) : fields.length > 0 ? (
           <div className="space-y-2">
@@ -205,13 +183,20 @@ export function McpToolCaller({
                     }))
                   }
                   className="w-full px-2.5 py-1.5 rounded border bg-background text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
-                  placeholder={field.description || `输入 ${field.name}`}
+                  placeholder={
+                    field.description ||
+                    t("settings.mcpPage.runtime.toolCaller.argPlaceholder", {
+                      name: field.name,
+                    })
+                  }
                 />
               </div>
             ))}
           </div>
         ) : (
-          <p className="text-xs text-muted-foreground">此工具无需参数</p>
+          <p className="text-xs text-muted-foreground">
+            {t("settings.mcpPage.runtime.toolCaller.noArgs")}
+          </p>
         )}
 
         {/* 调用按钮 */}
@@ -220,7 +205,9 @@ export function McpToolCaller({
           disabled={calling}
           className="rounded border border-emerald-200 bg-[linear-gradient(135deg,#0ea5e9_0%,#14b8a6_52%,#10b981_100%)] px-3 py-1.5 text-sm text-white shadow-sm shadow-emerald-950/15 hover:opacity-95 disabled:opacity-50"
         >
-          {calling ? "调用中..." : "调用工具"}
+          {calling
+            ? t("settings.mcpPage.runtime.toolCaller.calling")
+            : t("settings.mcpPage.runtime.toolCaller.call")}
         </button>
 
         {/* 错误 */}
@@ -248,13 +235,18 @@ export function McpToolCaller({
                 <CheckCircle className="h-4 w-4 text-green-600" />
               )}
               <span className="text-xs font-medium">
-                {result.is_error ? "调用失败" : "调用成功"}
+                {result.is_error
+                  ? t("settings.mcpPage.runtime.toolCaller.failed")
+                  : t("settings.mcpPage.runtime.toolCaller.succeeded")}
               </span>
             </div>
             <div className="space-y-1">
               {result.content.map((c, i) => (
                 <div key={i} className="bg-background p-2 rounded border">
-                  {renderContent(c)}
+                  {renderContent(
+                    c,
+                    t("settings.mcpPage.runtime.toolCaller.resultImageAlt"),
+                  )}
                 </div>
               ))}
             </div>

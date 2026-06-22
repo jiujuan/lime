@@ -148,6 +148,32 @@ function resolveExistingFinalTextPart(
   return textParts[textParts.length - 1] || null;
 }
 
+function normalizeFinalTextSignature(text: string): string {
+  return text.replace(/\s+/g, "").trim();
+}
+
+function hasSameFinalTextContentPart(params: {
+  finalText: string;
+  parts: MessageContentPart[];
+}): boolean {
+  const finalTextSignature = normalizeFinalTextSignature(params.finalText);
+  const firstProcessIndex = params.parts.findIndex(isProcessContentPart);
+  return params.parts.some((part, index) => {
+    if (!isTextContentPart(part)) {
+      return false;
+    }
+    if (firstProcessIndex >= 0 && index <= firstProcessIndex) {
+      return false;
+    }
+    const text = part.text.trim();
+    return (
+      text === params.finalText ||
+      (finalTextSignature.length >= 12 &&
+        normalizeFinalTextSignature(text) === finalTextSignature)
+    );
+  });
+}
+
 function collectThinkingText(parts: MessageContentPart[]): string {
   return parts
     .filter(isThinkingContentPart)
@@ -207,9 +233,10 @@ function mergeExistingLeadAndFinalParts(params: {
     return merged;
   }
 
-  const hasSameFinalText = merged.some(
-    (part) => isTextContentPart(part) && part.text.trim() === finalText,
-  );
+  const hasSameFinalText = hasSameFinalTextContentPart({
+    finalText,
+    parts: merged,
+  });
   const planOnlyTextPart =
     merged.filter(isTextContentPart).length === 1 &&
     merged.some(

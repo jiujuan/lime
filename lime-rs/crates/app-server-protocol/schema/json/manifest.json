@@ -500,6 +500,14 @@
     },
     {
       "kind": "request",
+      "method": "mcpResource/subscribe"
+    },
+    {
+      "kind": "request",
+      "method": "mcpResource/unsubscribe"
+    },
+    {
+      "kind": "request",
       "method": "mcpServer/create"
     },
     {
@@ -1335,6 +1343,9 @@
       "McpResourceListResponse",
       "McpResourceReadParams",
       "McpResourceReadResponse",
+      "McpResourceSubscribeParams",
+      "McpResourceSubscriptionResponse",
+      "McpResourceUnsubscribeParams",
       "McpServerCreateParams",
       "McpServerDeleteParams",
       "McpServerEnabledSetParams",

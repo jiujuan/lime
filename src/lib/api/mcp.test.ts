@@ -347,6 +347,26 @@ describe("mcp", () => {
     expect(appServerRequestMock).toHaveBeenLastCalledWith("mcpResource/read", {
       uri: "docs://readme",
     });
+
+    mockAppServerResult({});
+    await expect(mcpApi.subscribeResource("docs://readme")).resolves.toBeUndefined();
+    expect(appServerRequestMock).toHaveBeenLastCalledWith(
+      "mcpResource/subscribe",
+      {
+        uri: "docs://readme",
+      },
+    );
+
+    mockAppServerResult({});
+    await expect(
+      mcpApi.unsubscribeResource("docs://readme"),
+    ).resolves.toBeUndefined();
+    expect(appServerRequestMock).toHaveBeenLastCalledWith(
+      "mcpResource/unsubscribe",
+      {
+        uri: "docs://readme",
+      },
+    );
     expect(safeInvoke).not.toHaveBeenCalled();
   });
 

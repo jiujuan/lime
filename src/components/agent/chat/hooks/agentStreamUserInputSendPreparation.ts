@@ -79,6 +79,30 @@ export interface PreparedAgentStreamUserInputSend {
   runtimeStatusPresentation?: AgentRuntimeStatusPresentation;
 }
 
+export function resolvePreparedSendExpectingQueue(options: {
+  activeStreamSessionId?: string | null;
+  currentSessionId?: string | null;
+  queuedTurnsCount: number;
+  threadBusy: boolean;
+  pendingPreparedSubmit: boolean;
+}): boolean {
+  if (options.queuedTurnsCount > 0) {
+    return true;
+  }
+
+  if (options.threadBusy || options.pendingPreparedSubmit) {
+    return true;
+  }
+
+  const activeStreamSessionId = options.activeStreamSessionId?.trim();
+  if (!activeStreamSessionId) {
+    return false;
+  }
+
+  const currentSessionId = options.currentSessionId?.trim();
+  return !currentSessionId || activeStreamSessionId !== currentSessionId;
+}
+
 export function prepareAgentStreamUserInputSend(
   options: PrepareAgentStreamUserInputSendOptions,
 ): PreparedAgentStreamUserInputSend {
@@ -127,11 +151,13 @@ export function prepareAgentStreamUserInputSend(
     sendOptions?.systemPromptOverride?.trim() || systemPrompt;
   const displayContent = sendOptions?.displayContent;
   const skillRequest = sendOptions?.skillRequest;
-  const expectingQueue =
-    Boolean(env.activeStreamRef.current) ||
-    env.getQueuedTurnsCount() > 0 ||
-    env.isThreadBusy() ||
-    env.hasPendingPreparedSubmit();
+  const expectingQueue = resolvePreparedSendExpectingQueue({
+    activeStreamSessionId: env.activeStreamRef.current?.sessionId,
+    currentSessionId,
+    queuedTurnsCount: env.getQueuedTurnsCount(),
+    threadBusy: env.isThreadBusy(),
+    pendingPreparedSubmit: env.hasPendingPreparedSubmit(),
+  });
   const assistantMsgId = crypto.randomUUID();
   const userMsgId = skipUserMessage ? null : crypto.randomUUID();
   const { assistantMsg, userMsg } = prepareAgentStreamSubmitDraft({

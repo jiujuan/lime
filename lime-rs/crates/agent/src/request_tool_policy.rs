@@ -465,6 +465,7 @@ struct StreamEventDiagnostics {
     max_context_trace_steps: usize,
     last_persisted_artifact_path: Option<String>,
     last_saved_markdown_path: Option<String>,
+    terminal_tool_search_no_retry: bool,
 }
 
 #[derive(Debug, Default)]
@@ -567,6 +568,9 @@ fn update_stream_event_diagnostics(
             diagnostics.tool_end_count += 1;
             let output_chars = result.output.chars().count();
             diagnostics.max_tool_output_chars = diagnostics.max_tool_output_chars.max(output_chars);
+            if tool_result_is_terminal_tool_search_no_retry(result) {
+                diagnostics.terminal_tool_search_no_retry = true;
+            }
             if tool_result_contains_saved_site_content(result) {
                 diagnostics.saved_site_content_count += 1;
                 if diagnostics.last_saved_markdown_path.is_none() {
@@ -618,6 +622,21 @@ fn update_stream_event_diagnostics(
         }
         _ => {}
     }
+}
+
+fn tool_result_is_terminal_tool_search_no_retry(result: &AgentToolResult) -> bool {
+    let Some(metadata) = result.metadata.as_ref() else {
+        return false;
+    };
+
+    metadata
+        .get("tool_search_retry_allowed")
+        .and_then(Value::as_bool)
+        == Some(false)
+        || metadata
+            .get("terminal_reason")
+            .and_then(Value::as_str)
+            .is_some_and(|reason| reason == "no_deferred_tool_match")
 }
 
 #[derive(Debug, Default)]
@@ -1629,6 +1648,9 @@ fn resolve_reply_retry_mode(
         && diagnostics.effective_tool_end_count() > 0
         && looks_like_incomplete_tool_batch_summary(trimmed_text_output)
     {
+        if diagnostics.terminal_tool_search_no_retry {
+            return ReplyRetryMode::None;
+        }
         return ReplyRetryMode::IntermediateConclusion;
     }
 
@@ -3317,6 +3339,57 @@ mod tests {
         );
 
         assert_eq!(mode, ReplyRetryMode::IntermediateConclusion);
+    }
+
+    #[test]
+    fn diagnostics_detect_terminal_tool_search_no_retry_metadata() {
+        let mut diagnostics = StreamEventDiagnostics::default();
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "tool_search_retry_allowed".to_string(),
+            serde_json::json!(false),
+        );
+        metadata.insert(
+            "terminal_reason".to_string(),
+            serde_json::json!("no_deferred_tool_match"),
+        );
+
+        update_stream_event_diagnostics(
+            &mut diagnostics,
+            &RuntimeAgentEvent::ToolEnd {
+                tool_id: "toolsearch-terminal".to_string(),
+                result: AgentToolResult {
+                    success: true,
+                    output: r#"{"matches":[],"retry_allowed":false}"#.to_string(),
+                    error: None,
+                    structured_content: None,
+                    images: None,
+                    metadata: Some(metadata),
+                },
+            },
+        );
+
+        assert!(diagnostics.terminal_tool_search_no_retry);
+    }
+
+    #[test]
+    fn does_not_retry_intermediate_conclusion_after_terminal_tool_search_no_retry() {
+        let diagnostics = StreamEventDiagnostics {
+            tool_start_count: 1,
+            tool_end_count: 1,
+            terminal_tool_search_no_retry: true,
+            ..StreamEventDiagnostics::default()
+        };
+
+        let mode = resolve_reply_retry_mode(
+            &PreflightToolExecution::none(),
+            "已确认可用工具 0 个。现在需要继续尝试 ToolSearch 才能找到 Context7 query docs 工具。",
+            &WebSearchExecutionTracker::default(),
+            &diagnostics,
+            &[],
+        );
+
+        assert_eq!(mode, ReplyRetryMode::None);
     }
 
     #[test]

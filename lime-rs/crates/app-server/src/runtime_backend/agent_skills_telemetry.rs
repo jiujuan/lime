@@ -213,6 +213,40 @@ mod tests {
     }
 
     #[test]
+    fn emits_expert_bound_skill_telemetry_from_expert_metadata() {
+        let workspace = TempDir::new().expect("workspace");
+        write_agent_skill(&workspace, "writer");
+        let request = super::super::tests::request_for_test(
+            "帮我处理这段话",
+            None,
+            Some(json!({
+                "workspaceRoot": workspace.path().to_string_lossy().to_string(),
+                "harness": {
+                    "expert": {
+                        "skill_refs": ["skill:writer"]
+                    }
+                }
+            })),
+        );
+
+        let events = runtime_status_events_for_agent_skills(&request);
+
+        assert_eq!(events.len(), 2);
+        assert_eq!(
+            events[0].payload["status"]["metadata"]["skillRuntime"]["event"],
+            json!("skill_body_read")
+        );
+        assert_eq!(
+            events[0].payload["status"]["metadata"]["skillRuntime"]["trigger"],
+            json!("expert_binding")
+        );
+        assert_eq!(
+            events[1].payload["status"]["metadata"]["skillRuntime"]["selectedSkills"],
+            json!(["writer"])
+        );
+    }
+
+    #[test]
     fn unknown_service_scene_metadata_emits_no_skill_telemetry() {
         let workspace = TempDir::new().expect("workspace");
         write_agent_skill(&workspace, "writer");

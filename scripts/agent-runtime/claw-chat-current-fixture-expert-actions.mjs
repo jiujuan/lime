@@ -17,14 +17,10 @@ export const EXPERT_PANEL_SKILLS_RUNTIME_UI_SKILL_REF =
   "skill:local:capability-report";
 export const EXPERT_PANEL_SKILLS_RUNTIME_UI_SKILL_TEST_ID =
   "skill-local-capability-report";
-export const EXPERT_PANEL_SKILLS_RUNTIME_UI_CANDIDATE_TEST_ID =
-  `expert-skill-candidate-${EXPERT_PANEL_SKILLS_RUNTIME_UI_SKILL_TEST_ID}`;
-export const EXPERT_PANEL_SKILLS_RUNTIME_UI_ADD_TEST_ID =
-  `expert-skill-add-${EXPERT_PANEL_SKILLS_RUNTIME_UI_SKILL_TEST_ID}`;
-export const EXPERT_PANEL_SKILLS_RUNTIME_UI_CHIP_TEST_ID =
-  `expert-info-skill-chip-${EXPERT_PANEL_SKILLS_RUNTIME_UI_SKILL_TEST_ID}`;
-export const EXPERT_PANEL_SKILLS_RUNTIME_UI_READINESS_TEST_ID =
-  `expert-info-skill-readiness-${EXPERT_PANEL_SKILLS_RUNTIME_UI_SKILL_TEST_ID}`;
+export const EXPERT_PANEL_SKILLS_RUNTIME_UI_CANDIDATE_TEST_ID = `expert-skill-candidate-${EXPERT_PANEL_SKILLS_RUNTIME_UI_SKILL_TEST_ID}`;
+export const EXPERT_PANEL_SKILLS_RUNTIME_UI_ADD_TEST_ID = `expert-skill-add-${EXPERT_PANEL_SKILLS_RUNTIME_UI_SKILL_TEST_ID}`;
+export const EXPERT_PANEL_SKILLS_RUNTIME_UI_CHIP_TEST_ID = `expert-info-skill-chip-${EXPERT_PANEL_SKILLS_RUNTIME_UI_SKILL_TEST_ID}`;
+export const EXPERT_PANEL_SKILLS_RUNTIME_UI_READINESS_TEST_ID = `expert-info-skill-readiness-${EXPERT_PANEL_SKILLS_RUNTIME_UI_SKILL_TEST_ID}`;
 
 export async function reloadRendererAfterExpertPanelSkillCatalogInjection(
   page,
@@ -63,7 +59,9 @@ export async function launchExpertSkillsRuntimeFromExpertPlaza(page, options) {
       page,
       ({ expertId, expertTitle, skillRef, prompt }) => {
         const text = document.body?.innerText || "";
-        const plaza = document.querySelector('[data-testid="expert-plaza-page"]');
+        const plaza = document.querySelector(
+          '[data-testid="expert-plaza-page"]',
+        );
         const card = document.querySelector(
           `[data-testid="expert-card-${expertId}"]`,
         );
@@ -131,29 +129,62 @@ export async function addExpertSkillsRuntimeSkillFromInfoPanel(page, options) {
         addedSkillRef,
         addedSkillUiRef,
         addedSkillChipTestId,
+        addedSkillReadinessTestId,
       }) => {
         const text = document.body?.innerText || "";
-        const panel = document.querySelector('[data-testid="expert-info-panel"]');
+        const visibleElementSnapshot = (element) => {
+          const rect = element?.getBoundingClientRect();
+          const style = element ? window.getComputedStyle(element) : null;
+          return {
+            visible: Boolean(
+              element &&
+              rect &&
+              rect.width > 8 &&
+              rect.height > 8 &&
+              style?.visibility !== "hidden" &&
+              style?.display !== "none",
+            ),
+            label:
+              element?.getAttribute?.("aria-label") ||
+              element?.getAttribute?.("title") ||
+              element?.textContent ||
+              "",
+          };
+        };
+        const panel = document.querySelector(
+          '[data-testid="expert-info-panel"]',
+        );
+        const panelText = panel?.textContent || "";
         const addButton = document.querySelector(
           '[data-testid="expert-info-skills-add"]',
         );
+        const addButtonSnapshot = visibleElementSnapshot(addButton);
         const baseChip = document.querySelector(
           '[data-testid="expert-info-skill-chip-skill-code-review"]',
         );
         const addedChip = document.querySelector(
           `[data-testid="${addedSkillChipTestId}"]`,
         );
+        const addedReadiness = document.querySelector(
+          `[data-testid="${addedSkillReadinessTestId}"]`,
+        );
         return {
           panelVisible: Boolean(panel),
           titleVisible: text.includes(expertTitle),
-          addButtonVisible: Boolean(addButton),
+          addButtonVisible: addButtonSnapshot.visible,
+          addButtonLabel: addButtonSnapshot.label,
           addButtonDisabled:
             addButton instanceof HTMLButtonElement ? addButton.disabled : null,
-          baseSkillVisible: text.includes(baseSkillRef) || Boolean(baseChip),
+          baseSkillVisible:
+            panelText.includes(baseSkillRef) || Boolean(baseChip),
           addedSkillVisible:
-            text.includes(addedSkillRef) ||
-            text.includes(addedSkillUiRef) ||
+            panelText.includes(addedSkillRef) ||
+            panelText.includes(addedSkillUiRef) ||
+            panelText.includes("Capability Report") ||
             Boolean(addedChip),
+          addedChipVisible: Boolean(addedChip),
+          addedReadinessVisible: Boolean(addedReadiness),
+          addedReadinessText: addedReadiness?.textContent || "",
           bodyText: text,
         };
       },
@@ -163,9 +194,26 @@ export async function addExpertSkillsRuntimeSkillFromInfoPanel(page, options) {
         addedSkillRef: EXPERT_SKILLS_RUNTIME_SKILL_REF,
         addedSkillUiRef: EXPERT_PANEL_SKILLS_RUNTIME_UI_SKILL_REF,
         addedSkillChipTestId: EXPERT_PANEL_SKILLS_RUNTIME_UI_CHIP_TEST_ID,
+        addedSkillReadinessTestId:
+          EXPERT_PANEL_SKILLS_RUNTIME_UI_READINESS_TEST_ID,
       },
     );
     lastSnapshot = ready;
+    if (
+      ready?.panelVisible &&
+      ready.titleVisible &&
+      ready.addedSkillVisible &&
+      (ready.addedChipVisible || ready.addedReadinessVisible)
+    ) {
+      return sanitizeJson({
+        ready,
+        alreadyAdded: true,
+        pickerOpened: null,
+        candidate: null,
+        added: ready,
+        pickerClosed: { skipped: true, reason: "skill already visible" },
+      });
+    }
     if (
       ready?.panelVisible &&
       ready.titleVisible &&
@@ -186,7 +234,13 @@ export async function addExpertSkillsRuntimeSkillFromInfoPanel(page, options) {
     )}`,
   );
 
-  await page.locator('[data-testid="expert-info-skills-add"]').click();
+  const pickerTrigger = await clickExpertSkillPickerTrigger(page);
+  assert(
+    pickerTrigger.clicked === true,
+    `专家技能选择器入口点击失败: ${JSON.stringify(
+      sanitizeJson(pickerTrigger),
+    )}`,
+  );
   const pickerOpened = await waitForExpertSkillPickerState(page, options, {
     expectCandidate: false,
   });
@@ -205,11 +259,151 @@ export async function addExpertSkillsRuntimeSkillFromInfoPanel(page, options) {
   );
   return sanitizeJson({
     ready: lastSnapshot,
+    pickerTrigger,
     pickerOpened,
     candidate,
     added,
     pickerClosed,
   });
+}
+
+async function clickExpertSkillPickerTrigger(page) {
+  return sanitizeJson(
+    await page.evaluate(() => {
+      const visibleElementSnapshot = (element) => {
+        const rect = element?.getBoundingClientRect();
+        const style = element ? window.getComputedStyle(element) : null;
+        return {
+          visible: Boolean(
+            element &&
+            rect &&
+            rect.width > 8 &&
+            rect.height > 8 &&
+            style?.visibility !== "hidden" &&
+            style?.display !== "none",
+          ),
+          label:
+            element?.getAttribute?.("aria-label") ||
+            element?.getAttribute?.("title") ||
+            element?.textContent ||
+            "",
+        };
+      };
+      const candidates = Array.from(
+        document.querySelectorAll('[data-testid="expert-info-skills-add"]'),
+      );
+      const button = candidates.find(
+        (candidate) => visibleElementSnapshot(candidate).visible,
+      );
+      if (!(button instanceof HTMLElement)) {
+        return {
+          clicked: false,
+          reason: "missing-visible-trigger",
+          triggerCount: candidates.length,
+          triggers: candidates.map((candidate) =>
+            visibleElementSnapshot(candidate),
+          ),
+        };
+      }
+      button.scrollIntoView({ block: "center", inline: "center" });
+      button.click();
+      const snapshot = visibleElementSnapshot(button);
+      return {
+        clicked: true,
+        label: snapshot.label,
+        triggerCount: candidates.length,
+      };
+    }),
+  );
+}
+
+export async function exportExpertPanelEvidencePackFromHarnessPanel(
+  page,
+  options,
+) {
+  const opened = await openHarnessPanelForEvidenceExport(page, options);
+  const ready = await waitForHarnessEvidenceExportButton(page, options);
+  const clicked = await clickHarnessEvidenceExportButton(page);
+  const exported = await waitForHarnessEvidencePackExported(page, options);
+  const closed = await closeHarnessPanelAfterEvidenceExport(page, options);
+  return sanitizeJson({
+    opened,
+    ready,
+    clicked,
+    exported,
+    closed,
+  });
+}
+
+export async function waitForExpertPanelEvidenceSummary(page, options) {
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const snapshot = await evaluatePageSnapshot(
+      page,
+      ({ skillName }) => {
+        const card = document.querySelector(
+          '[data-testid="expert-info-skills-evidence-summary"]',
+        );
+        const rect = card?.getBoundingClientRect();
+        const style = card ? window.getComputedStyle(card) : null;
+        const visible = Boolean(
+          card &&
+          rect &&
+          rect.width > 16 &&
+          rect.height > 16 &&
+          style?.visibility !== "hidden" &&
+          style?.display !== "none",
+        );
+        const text = card?.textContent || "";
+        const normalizedText = text.replace(/\s+/g, " ").trim();
+        return {
+          visible,
+          text: normalizedText,
+          hasTitle:
+            normalizedText.includes("证据包复盘") ||
+            normalizedText.includes("Evidence Pack"),
+          hasSkillCounts:
+            /检索\s*\d+\s*次\s*·\s*执行\s*\d+\s*次/.test(normalizedText) ||
+            /search/i.test(normalizedText),
+          hasLatestSkill: normalizedText.includes(skillName),
+          hasRuntimeEnable:
+            normalizedText.includes("运行启用") ||
+            normalizedText.includes("手动会话") ||
+            normalizedText.includes("manual session"),
+          hasExportedAt:
+            normalizedText.includes("最近导出") ||
+            /exported/i.test(normalizedText),
+          hasKnownGaps: normalizedText.includes("已知缺口"),
+          hidesRawRuntimeEnable: !normalizedText.includes(
+            "workspace_skill_runtime_enable",
+          ),
+          bodyText: document.body?.innerText || "",
+        };
+      },
+      {
+        skillName: "project:capability-report",
+      },
+    );
+    lastSnapshot = snapshot;
+    if (
+      snapshot?.visible &&
+      snapshot.hasTitle &&
+      snapshot.hasSkillCounts &&
+      snapshot.hasLatestSkill &&
+      snapshot.hasRuntimeEnable &&
+      snapshot.hidesRawRuntimeEnable
+    ) {
+      return sanitizeJson(snapshot);
+    }
+    await sleep(options.intervalMs);
+  }
+
+  throw new Error(
+    `专家面板未显示 Evidence Pack 复盘摘要: ${JSON.stringify(
+      sanitizeJson(lastSnapshot),
+    )}`,
+  );
 }
 
 async function waitForExpertSkillPickerState(
@@ -231,7 +425,9 @@ async function waitForExpertSkillPickerState(
         const candidate = document.querySelector(
           `[data-testid="${candidateTestId}"]`,
         );
-        const addButton = document.querySelector(`[data-testid="${addTestId}"]`);
+        const addButton = document.querySelector(
+          `[data-testid="${addTestId}"]`,
+        );
         return {
           dialogVisible: Boolean(dialog),
           candidateVisible: Boolean(candidate),
@@ -306,7 +502,9 @@ async function waitForExpertPanelAddedSkill(page, options) {
           addedChipVisible: Boolean(addedChip),
           readinessText: readiness?.textContent || "",
           dialogVisible: Boolean(
-            document.querySelector('[data-testid="expert-skill-picker-dialog"]'),
+            document.querySelector(
+              '[data-testid="expert-skill-picker-dialog"]',
+            ),
           ),
           bodyText: text,
         };
@@ -330,6 +528,361 @@ async function waitForExpertPanelAddedSkill(page, options) {
   throw new Error(
     `专家面板未显示新增技能: ${JSON.stringify(sanitizeJson(lastSnapshot))}`,
   );
+}
+
+async function openHarnessPanelForEvidenceExport(page, options) {
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const snapshot = await evaluatePageSnapshot(page, () => {
+      const visibleElementSnapshot = (element) => {
+        const rect = element?.getBoundingClientRect();
+        const style = element ? window.getComputedStyle(element) : null;
+        return {
+          visible: Boolean(
+            element &&
+            rect &&
+            rect.width > 8 &&
+            rect.height > 8 &&
+            style?.visibility !== "hidden" &&
+            style?.display !== "none",
+          ),
+          label:
+            element?.getAttribute?.("aria-label") ||
+            element?.getAttribute?.("title") ||
+            element?.textContent ||
+            "",
+        };
+      };
+      const findVisibleButtonByLabel = (match) =>
+        Array.from(document.querySelectorAll("button")).find((button) => {
+          const buttonSnapshot = visibleElementSnapshot(button);
+          return buttonSnapshot.visible && match(buttonSnapshot.label);
+        });
+      const evidenceButton = findVisibleButtonByLabel((label) =>
+        /导出问题证据包|刷新证据包|Evidence Pack|evidence pack/i.test(label),
+      );
+      const harnessPanel = document.querySelector(
+        '[data-testid="harness-status-panel"]',
+      );
+      const taskCenterHarnessToggle = document.querySelector(
+        '[data-testid="task-center-harness-toggle"]',
+      );
+      const harnessToggle = visibleElementSnapshot(taskCenterHarnessToggle)
+        .visible
+        ? taskCenterHarnessToggle
+        : findVisibleButtonByLabel((label) =>
+            /打开\s*Harness|关闭\s*Harness|\bHarness\b|处理工作台/i.test(label),
+          );
+      const harnessToggleSnapshot = visibleElementSnapshot(harnessToggle);
+      return {
+        evidenceButtonVisible: Boolean(evidenceButton),
+        harnessPanelVisible: Boolean(harnessPanel),
+        harnessToggleVisible: harnessToggleSnapshot.visible,
+        harnessToggleLabel: harnessToggleSnapshot.label,
+        bodyText: document.body?.innerText || "",
+      };
+    });
+    lastSnapshot = snapshot;
+    if (snapshot?.evidenceButtonVisible) {
+      return sanitizeJson({ ...snapshot, clickedToggle: false });
+    }
+    if (snapshot?.harnessToggleVisible) {
+      const clicked = await page.evaluate(() => {
+        const visibleElementSnapshot = (element) => {
+          const rect = element?.getBoundingClientRect();
+          const style = element ? window.getComputedStyle(element) : null;
+          return {
+            visible: Boolean(
+              element &&
+              rect &&
+              rect.width > 8 &&
+              rect.height > 8 &&
+              style?.visibility !== "hidden" &&
+              style?.display !== "none",
+            ),
+            label:
+              element?.getAttribute?.("aria-label") ||
+              element?.getAttribute?.("title") ||
+              element?.textContent ||
+              "",
+          };
+        };
+        const findVisibleButtonByLabel = (match) =>
+          Array.from(document.querySelectorAll("button")).find((button) => {
+            const buttonSnapshot = visibleElementSnapshot(button);
+            return buttonSnapshot.visible && match(buttonSnapshot.label);
+          });
+        const taskCenterHarnessToggle = document.querySelector(
+          '[data-testid="task-center-harness-toggle"]',
+        );
+        const harnessToggle = visibleElementSnapshot(taskCenterHarnessToggle)
+          .visible
+          ? taskCenterHarnessToggle
+          : findVisibleButtonByLabel((label) =>
+              /打开\s*Harness|关闭\s*Harness|\bHarness\b|处理工作台/i.test(
+                label,
+              ),
+            );
+        if (harnessToggle instanceof HTMLElement) {
+          const label = visibleElementSnapshot(harnessToggle).label;
+          harnessToggle.click();
+          return { clicked: true, label };
+        }
+        return { clicked: false, label: "" };
+      });
+      return sanitizeJson({ ...snapshot, clickedToggle: clicked });
+    }
+    await sleep(options.intervalMs);
+  }
+
+  throw new Error(
+    `未找到可打开 Harness 证据导出的入口: ${JSON.stringify(
+      sanitizeJson(lastSnapshot),
+    )}`,
+  );
+}
+
+async function waitForHarnessEvidenceExportButton(page, options) {
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const snapshot = await evaluatePageSnapshot(page, () => {
+      const visibleElementSnapshot = (element) => {
+        const rect = element?.getBoundingClientRect();
+        const style = element ? window.getComputedStyle(element) : null;
+        return {
+          visible: Boolean(
+            element &&
+            rect &&
+            rect.width > 8 &&
+            rect.height > 8 &&
+            style?.visibility !== "hidden" &&
+            style?.display !== "none",
+          ),
+          label:
+            element?.getAttribute?.("aria-label") ||
+            element?.getAttribute?.("title") ||
+            element?.textContent ||
+            "",
+        };
+      };
+      const findVisibleButtonByLabel = (match) =>
+        Array.from(document.querySelectorAll("button")).find((button) => {
+          const buttonSnapshot = visibleElementSnapshot(button);
+          return buttonSnapshot.visible && match(buttonSnapshot.label);
+        });
+      const button = findVisibleButtonByLabel((label) =>
+        /导出问题证据包|刷新证据包|Evidence Pack|evidence pack/i.test(label),
+      );
+      return {
+        buttonVisible: Boolean(button),
+        buttonDisabled:
+          button instanceof HTMLButtonElement ? button.disabled : null,
+        buttonLabel: visibleElementSnapshot(button).label,
+        harnessPanelVisible: Boolean(
+          document.querySelector('[data-testid="harness-status-panel"]'),
+        ),
+        bodyText: document.body?.innerText || "",
+      };
+    });
+    lastSnapshot = snapshot;
+    if (snapshot?.buttonVisible && snapshot.buttonDisabled !== true) {
+      return sanitizeJson(snapshot);
+    }
+    await sleep(options.intervalMs);
+  }
+
+  throw new Error(
+    `Harness 证据包导出按钮未就绪: ${JSON.stringify(
+      sanitizeJson(lastSnapshot),
+    )}`,
+  );
+}
+
+async function clickHarnessEvidenceExportButton(page) {
+  return sanitizeJson(
+    await page.evaluate(() => {
+      const visibleElementSnapshot = (element) => {
+        const rect = element?.getBoundingClientRect();
+        const style = element ? window.getComputedStyle(element) : null;
+        return {
+          visible: Boolean(
+            element &&
+            rect &&
+            rect.width > 8 &&
+            rect.height > 8 &&
+            style?.visibility !== "hidden" &&
+            style?.display !== "none",
+          ),
+          label:
+            element?.getAttribute?.("aria-label") ||
+            element?.getAttribute?.("title") ||
+            element?.textContent ||
+            "",
+        };
+      };
+      const findVisibleButtonByLabel = (match) =>
+        Array.from(document.querySelectorAll("button")).find((button) => {
+          const buttonSnapshot = visibleElementSnapshot(button);
+          return buttonSnapshot.visible && match(buttonSnapshot.label);
+        });
+      const button = findVisibleButtonByLabel((label) =>
+        /导出问题证据包|刷新证据包|Evidence Pack|evidence pack/i.test(label),
+      );
+      if (button instanceof HTMLElement) {
+        const label = visibleElementSnapshot(button).label;
+        button.click();
+        return { clicked: true, label };
+      }
+      return { clicked: false, label: "" };
+    }),
+  );
+}
+
+async function waitForHarnessEvidencePackExported(page, options) {
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const snapshot = await evaluatePageSnapshot(page, () => {
+      const visibleElementSnapshot = (element) => {
+        const rect = element?.getBoundingClientRect();
+        const style = element ? window.getComputedStyle(element) : null;
+        return {
+          visible: Boolean(
+            element &&
+            rect &&
+            rect.width > 8 &&
+            rect.height > 8 &&
+            style?.visibility !== "hidden" &&
+            style?.display !== "none",
+          ),
+          label:
+            element?.getAttribute?.("aria-label") ||
+            element?.getAttribute?.("title") ||
+            element?.textContent ||
+            "",
+        };
+      };
+      const findVisibleButtonByLabel = (match) =>
+        Array.from(document.querySelectorAll("button")).find((button) => {
+          const buttonSnapshot = visibleElementSnapshot(button);
+          return buttonSnapshot.visible && match(buttonSnapshot.label);
+        });
+      const panel = document.querySelector(
+        '[data-testid="harness-status-panel"]',
+      );
+      const text = panel?.textContent || document.body?.innerText || "";
+      const normalizedText = text.replace(/\s+/g, " ").trim();
+      const button = findVisibleButtonByLabel((label) =>
+        /刷新证据包|Refresh Evidence Pack|refresh evidence pack/i.test(label),
+      );
+      return {
+        panelVisible: Boolean(panel),
+        hasExportedPack:
+          normalizedText.includes("刷新证据包") ||
+          normalizedText.includes("打开问题证据目录") ||
+          normalizedText.includes(".lime/harness") ||
+          /Refresh Evidence Pack|evidence pack/i.test(normalizedText),
+        refreshButtonVisible: Boolean(button),
+        text: normalizedText,
+      };
+    });
+    lastSnapshot = snapshot;
+    if (snapshot?.panelVisible && snapshot.hasExportedPack) {
+      return sanitizeJson(snapshot);
+    }
+    await sleep(options.intervalMs);
+  }
+
+  throw new Error(
+    `Harness 证据包导出后未显示结果: ${JSON.stringify(
+      sanitizeJson(lastSnapshot),
+    )}`,
+  );
+}
+
+async function closeHarnessPanelAfterEvidenceExport(page, options) {
+  const before = await evaluatePageSnapshot(page, () => ({
+    dialogHarnessVisible: Boolean(
+      document.querySelector(
+        '[role="dialog"] [data-testid="harness-status-panel"]',
+      ),
+    ),
+    harnessPanelVisible: Boolean(
+      document.querySelector('[data-testid="harness-status-panel"]'),
+    ),
+  }));
+  if (!before?.dialogHarnessVisible) {
+    return sanitizeJson({
+      skipped: true,
+      reason: "harness panel is not a dialog",
+      before,
+    });
+  }
+
+  await page.keyboard.press("Escape");
+  const startedAt = Date.now();
+  let lastSnapshot = before;
+  while (Date.now() - startedAt < Math.min(options.timeoutMs, 10_000)) {
+    const snapshot = await evaluatePageSnapshot(page, () => ({
+      dialogHarnessVisible: Boolean(
+        document.querySelector(
+          '[role="dialog"] [data-testid="harness-status-panel"]',
+        ),
+      ),
+      expertPanelVisible: Boolean(
+        document.querySelector('[data-testid="expert-info-panel"]'),
+      ),
+    }));
+    lastSnapshot = snapshot;
+    if (snapshot?.dialogHarnessVisible === false) {
+      return sanitizeJson({ ...snapshot, closedWithEscape: true });
+    }
+    await sleep(options.intervalMs);
+  }
+
+  const clicked = await page.evaluate(() => {
+    const visibleElementSnapshot = (element) => {
+      const rect = element?.getBoundingClientRect();
+      const style = element ? window.getComputedStyle(element) : null;
+      return {
+        visible: Boolean(
+          element &&
+          rect &&
+          rect.width > 8 &&
+          rect.height > 8 &&
+          style?.visibility !== "hidden" &&
+          style?.display !== "none",
+        ),
+        label:
+          element?.getAttribute?.("aria-label") ||
+          element?.getAttribute?.("title") ||
+          element?.textContent ||
+          "",
+      };
+    };
+    const findVisibleButtonByLabel = (match) =>
+      Array.from(document.querySelectorAll("button")).find((button) => {
+        const buttonSnapshot = visibleElementSnapshot(button);
+        return buttonSnapshot.visible && match(buttonSnapshot.label);
+      });
+    const dialog = document.querySelector("[role='dialog']");
+    const closeButton =
+      dialog &&
+      findVisibleButtonByLabel((label) => /关闭|Close|close/.test(label));
+    if (closeButton instanceof HTMLElement) {
+      const label = visibleElementSnapshot(closeButton).label;
+      closeButton.click();
+      return { clicked: true, label };
+    }
+    return { clicked: false, label: "" };
+  });
+  return sanitizeJson({
+    closedWithEscape: false,
+    closeButton: clicked,
+    lastSnapshot,
+  });
 }
 
 async function closeExpertSkillPickerAfterSelection(page, options) {

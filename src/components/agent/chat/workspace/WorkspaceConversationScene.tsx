@@ -204,9 +204,11 @@ function renderWorkspaceChatContent({
     <ChatContainer>
       <ChatContainerInner $taskCenterSurface={taskCenterSurface}>
         {entryBannerVisible && entryBannerMessage ? (
-          <EntryBanner>
+          <EntryBanner data-testid="workspace-entry-banner">
             <Info className="h-4 w-4 shrink-0" />
-            <span>{entryBannerMessage}</span>
+            <span data-testid="workspace-entry-banner-text">
+              {entryBannerMessage}
+            </span>
             <EntryBannerClose
               type="button"
               onClick={onDismissEntryBanner}
@@ -475,6 +477,9 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
   onToggleHarnessPanel?: ComponentProps<
     typeof ChatNavbar
   >["onToggleHarnessPanel"];
+  showExpertInfoToggle?: boolean;
+  expertInfoPanelVisible?: boolean;
+  onToggleExpertInfoPanel?: () => void;
   harnessPendingCount: number;
   harnessAttentionLevel: ComponentProps<
     typeof ChatNavbar
@@ -492,6 +497,14 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
   syncStatus: SyncStatus;
   hasLiveCanvasPreviewContent: boolean;
   liveCanvasPreview: ReactNode;
+  rightSurfaceContent?: ReactNode;
+  rightSurfaceLaunchers?: ComponentProps<
+    typeof TaskCenterUtilityToolbar
+  >["rightSurfaceLaunchers"];
+  rightSurfaceFilesOpen?: boolean;
+  onToggleRightSurfaceFiles?: () => void;
+  rightSurfaceShellOpen?: boolean;
+  onToggleRightSurfaceShell?: () => void;
   currentImageWorkbenchActive: boolean;
   shouldShowCanvasLoadingState: boolean;
   canvasWorkbenchLayoutProps: CanvasWorkbenchLayoutProps;
@@ -611,6 +624,9 @@ export function WorkspaceConversationScene({
   showHarnessToggle,
   harnessPanelVisible,
   onToggleHarnessPanel,
+  showExpertInfoToggle,
+  expertInfoPanelVisible,
+  onToggleExpertInfoPanel,
   harnessPendingCount,
   harnessAttentionLevel,
   harnessToggleLabel,
@@ -620,6 +636,12 @@ export function WorkspaceConversationScene({
   syncStatus,
   hasLiveCanvasPreviewContent,
   liveCanvasPreview,
+  rightSurfaceContent,
+  rightSurfaceLaunchers,
+  rightSurfaceFilesOpen,
+  onToggleRightSurfaceFiles,
+  rightSurfaceShellOpen,
+  onToggleRightSurfaceShell,
   currentImageWorkbenchActive,
   shouldShowCanvasLoadingState,
   canvasWorkbenchLayoutProps,
@@ -744,15 +766,23 @@ export function WorkspaceConversationScene({
       workspaceDismissAria: text("workspaceAlert.dismissAria"),
     },
   });
-  const [shellPanelOpen, setShellPanelOpen] = useState(false);
+  const [localShellPanelOpen, setLocalShellPanelOpen] = useState(false);
   const [shellPanelHeightPx, setShellPanelHeightPx] = useState(
     TASK_CENTER_SHELL_PANEL_DEFAULT_HEIGHT_PX,
   );
   const [shellPanelMaximized, setShellPanelMaximized] = useState(false);
   const shouldUseTaskCenterUtilityToolbar =
     navbarContextVariant === "task-center" && Boolean(taskCenterTabsNode);
+  const shellManagedByRightSurface = Boolean(onToggleRightSurfaceShell);
+  const shellPanelOpen = shellManagedByRightSurface
+    ? Boolean(rightSurfaceShellOpen)
+    : localShellPanelOpen;
+  const bottomShellPanelOpen =
+    localShellPanelOpen &&
+    shouldUseTaskCenterUtilityToolbar &&
+    !shellManagedByRightSurface;
   const effectiveShellPanelHeightPx =
-    shellPanelOpen && shouldUseTaskCenterUtilityToolbar
+    bottomShellPanelOpen
       ? shellPanelMaximized && typeof window !== "undefined"
         ? Math.max(
             TASK_CENTER_SHELL_PANEL_DEFAULT_HEIGHT_PX,
@@ -763,7 +793,7 @@ export function WorkspaceConversationScene({
         : shellPanelHeightPx
       : 0;
   const effectiveShellBottomInset =
-    shellPanelOpen && shouldUseTaskCenterUtilityToolbar
+    bottomShellPanelOpen
       ? `calc(${shellBottomInset} + ${effectiveShellPanelHeightPx}px)`
       : shellBottomInset;
   const taskCenterUtilityToolbarNode = shouldUseTaskCenterUtilityToolbar ? (
@@ -777,12 +807,25 @@ export function WorkspaceConversationScene({
       showHarnessToggle={showHarnessToggle}
       harnessPanelVisible={harnessPanelVisible}
       onToggleHarnessPanel={onToggleHarnessPanel}
+      showExpertInfoToggle={showExpertInfoToggle}
+      expertInfoPanelVisible={expertInfoPanelVisible}
+      onToggleExpertInfoPanel={onToggleExpertInfoPanel}
       harnessPendingCount={harnessPendingCount}
       harnessAttentionLevel={harnessAttentionLevel ?? "idle"}
       harnessToggleLabel={harnessToggleLabel ?? "Harness"}
       shellPanelOpen={shellPanelOpen}
+      onToggleFilesPanel={
+        rightSurfaceFilesOpen || onToggleRightSurfaceFiles
+          ? onToggleRightSurfaceFiles
+          : undefined
+      }
+      rightSurfaceLaunchers={rightSurfaceLaunchers}
       onToggleShellPanel={() => {
-        setShellPanelOpen((current) => !current);
+        if (onToggleRightSurfaceShell) {
+          onToggleRightSurfaceShell();
+          return;
+        }
+        setLocalShellPanelOpen((current) => !current);
       }}
     />
   ) : null;
@@ -845,13 +888,13 @@ export function WorkspaceConversationScene({
       })()
     : null;
   const taskCenterShellPanelNode =
-    shellPanelOpen && shouldUseTaskCenterUtilityToolbar ? (
+    bottomShellPanelOpen ? (
       <TaskCenterShellPanel
         heightPx={effectiveShellPanelHeightPx}
         maximized={shellPanelMaximized}
         projectRootPath={projectRootPath}
         onClose={() => {
-          setShellPanelOpen(false);
+          setLocalShellPanelOpen(false);
         }}
         onHeightChange={(heightPx) => {
           setShellPanelMaximized(false);
@@ -890,6 +933,7 @@ export function WorkspaceConversationScene({
         forceCanvasMode={forceCanvasMode}
         chatContent={chatContent}
         canvasContent={canvasContent}
+        rightSurfaceContent={rightSurfaceContent}
         chatPanelWidth={chatPanelWidth}
         chatPanelMinWidth={chatPanelMinWidth}
         generalWorkbenchDialog={generalWorkbenchDialog}

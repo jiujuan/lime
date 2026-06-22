@@ -22,6 +22,8 @@ const mcpApiMocks = vi.hoisted(() => ({
   callTool: vi.fn(),
   getPrompt: vi.fn(),
   readResource: vi.fn(),
+  subscribeResource: vi.fn(),
+  unsubscribeResource: vi.fn(),
 }));
 
 const bridgeMocks = vi.hoisted(() => ({
@@ -50,6 +52,10 @@ vi.mock("@/lib/api/mcp", async () => {
       callTool: (...args: unknown[]) => mcpApiMocks.callTool(...args),
       getPrompt: (...args: unknown[]) => mcpApiMocks.getPrompt(...args),
       readResource: (...args: unknown[]) => mcpApiMocks.readResource(...args),
+      subscribeResource: (...args: unknown[]) =>
+        mcpApiMocks.subscribeResource(...args),
+      unsubscribeResource: (...args: unknown[]) =>
+        mcpApiMocks.unsubscribeResource(...args),
     },
   };
 });
@@ -94,6 +100,15 @@ function createServer(
   };
 }
 
+function createResource(name: string, serverName = "docs") {
+  return {
+    uri: `file:///${name}.md`,
+    name,
+    server_name: serverName,
+    mime_type: "text/markdown",
+  };
+}
+
 async function renderHook(onReady: (value: UseMcpReturn) => void) {
   mountHarness(HookHarness, { onReady }, mountedRoots);
   await flushEffects(8);
@@ -121,6 +136,8 @@ describe("useMcp", () => {
     mcpApiMocks.callTool.mockResolvedValue({ content: [], is_error: false });
     mcpApiMocks.getPrompt.mockResolvedValue({ messages: [] });
     mcpApiMocks.readResource.mockResolvedValue({ uri: "docs://readme" });
+    mcpApiMocks.subscribeResource.mockResolvedValue(undefined);
+    mcpApiMocks.unsubscribeResource.mockResolvedValue(undefined);
     bridgeMocks.safeListen.mockResolvedValue(() => undefined);
   });
 
@@ -228,5 +245,93 @@ describe("useMcp", () => {
       mode: "oauth",
       available: true,
     });
+  });
+
+  it("资源列表更新事件应刷新资源列表", async () => {
+    const listeners = new Map<string, (event: { payload: unknown }) => void>();
+    bridgeMocks.safeListen.mockImplementation(
+      async (
+        eventName: string,
+        handler: (event: { payload: unknown }) => void,
+      ) => {
+        listeners.set(eventName, handler);
+        return () => listeners.delete(eventName);
+      },
+    );
+    mcpApiMocks.listResources
+      .mockResolvedValueOnce([createResource("before")])
+      .mockResolvedValueOnce([createResource("after")]);
+
+    await renderHook((value) => {
+      latestValue = value;
+    });
+    await flushEffects(4);
+
+    expect(getLatestValue().resources).toEqual([createResource("before")]);
+
+    await act(async () => {
+      listeners.get("mcp:resources_updated")?.({
+        payload: { server_name: "docs" },
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await flushEffects(4);
+
+    expect(mcpApiMocks.listResources).toHaveBeenCalledTimes(2);
+    expect(getLatestValue().resources).toEqual([createResource("after")]);
+  });
+
+  it("单个资源更新事件也应刷新资源列表", async () => {
+    const listeners = new Map<string, (event: { payload: unknown }) => void>();
+    bridgeMocks.safeListen.mockImplementation(
+      async (
+        eventName: string,
+        handler: (event: { payload: unknown }) => void,
+      ) => {
+        listeners.set(eventName, handler);
+        return () => listeners.delete(eventName);
+      },
+    );
+    mcpApiMocks.listResources
+      .mockResolvedValueOnce([createResource("readme")])
+      .mockResolvedValueOnce([createResource("readme-updated")]);
+
+    await renderHook((value) => {
+      latestValue = value;
+    });
+    await flushEffects(4);
+
+    await act(async () => {
+      listeners.get("mcp:resource_updated")?.({
+        payload: { server_name: "docs", uri: "file:///readme.md" },
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await flushEffects(4);
+
+    expect(mcpApiMocks.listResources).toHaveBeenCalledTimes(2);
+    expect(getLatestValue().resources).toEqual([
+      createResource("readme-updated"),
+    ]);
+  });
+
+  it("资源订阅操作应通过 MCP current API fail closed 透传", async () => {
+    await renderHook((value) => {
+      latestValue = value;
+    });
+
+    await act(async () => {
+      await getLatestValue().subscribeResource("file:///readme.md");
+      await getLatestValue().unsubscribeResource("file:///readme.md");
+    });
+
+    expect(mcpApiMocks.subscribeResource).toHaveBeenCalledWith(
+      "file:///readme.md",
+    );
+    expect(mcpApiMocks.unsubscribeResource).toHaveBeenCalledWith(
+      "file:///readme.md",
+    );
   });
 });

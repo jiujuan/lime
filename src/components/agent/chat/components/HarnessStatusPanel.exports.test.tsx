@@ -234,6 +234,30 @@ describe("HarnessStatusPanel exports", () => {
             tool_call_id: "skill-search-call-1",
           },
         ],
+        mcp_resource_reads: [
+          {
+            event: "mcp_resource_read",
+            tool_name: "ReadMcpResourceTool",
+            server: "docs",
+            uri: "file:///docs/intro.md",
+            status: "completed",
+            source_event_id: "evt-mcp-resource-1",
+            source_event_type: "tool.result",
+            mime_types: ["text/markdown"],
+            content_count: 1,
+            content_refs: [
+              {
+                index: 0,
+                type: "text",
+                uri: "file:///docs/intro.md",
+                mime_type: "text/markdown",
+                text_char_count: 64,
+              },
+            ],
+            turn_id: "turn-evidence-1",
+            tool_call_id: "mcp-resource-call-1",
+          },
+        ],
         modality_runtime_contracts: {
           snapshot_count: 2,
           snapshot_index: {
@@ -440,9 +464,20 @@ describe("HarnessStatusPanel exports", () => {
     expect(document.body.textContent).toContain(
       "project:capability-report · completed",
     );
+    expect(document.body.textContent).toContain(
+      "运行启用 · 手动会话 · 人工确认",
+    );
     expect(document.body.textContent).toContain("Skill Search");
     expect(document.body.textContent).toContain(
       "capability report · 2/7 · completed",
+    );
+    expect(document.body.textContent).toContain("MCP Resource Reads");
+    expect(document.body.textContent).toContain("file:///docs/intro.md");
+    expect(document.body.textContent).toContain(
+      "server docs · completed · text/markdown · 1 个内容项",
+    );
+    expect(document.body.textContent).toContain(
+      "#0 · text · text/markdown · 64 chars",
     );
     expect(document.body.textContent).toContain("验证结果");
     expect(document.body.textContent).toContain("阻塞失败");

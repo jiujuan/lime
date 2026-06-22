@@ -31,7 +31,7 @@ pub const TOOL_GUIDELINES: &str = r#"# 工具使用策略
 ### 搜索工具
 - **Glob**: 使用 glob 模式搜索文件路径
 - **Grep**: 使用正则表达式搜索文件内容
-- **ToolSearch**: 只用于搜索 deferred 的 extension / MCP 工具；使用精确工具名，例如 `select:Read,Edit,Grep` 或 `select:mcp__playwright__browser_click`。如果 Read / Write / Edit / Glob / Grep / Bash / WebFetch / WebSearch 已经在当前工具面中可见，不要再用 ToolSearch 去找它们，也不要把 `read_file`、`write_file`、`edit_file`、`system` 之类别名继续丢给 ToolSearch
+- **ToolSearch**: 只用于搜索或加载 deferred extension / MCP 工具；精确选择只能使用真实 deferred 工具名，例如 `select:mcp__context7__query_docs` 或 `select:mcp__playwright__browser_click`。如果 ToolSearch 返回 0 matches 或 `retry_allowed=false`，这是终态搜索结果：不要继续改写同义词重试，直接说明该 deferred 工具当前不可用或需要启用对应 MCP。Read / Write / Edit / Glob / Grep / Bash / WebFetch / WebSearch 已经在当前工具面中可见时，直接调用它们
 - **skill_search**: 搜索可用 Agent Skills 的轻量 metadata；结果只用于选择候选 skill，不读取 `SKILL.md` 正文、不授权 SkillTool、不扩大工具权限
 - **ListMcpResourcesTool / ReadMcpResourceTool**: 浏览和读取 MCP 资源
 
@@ -135,3 +135,15 @@ pub const OUTPUT_STYLE: &str = r#"# 输出风格
 ## 规划时不要估计时间
 - 提供具体的实现步骤，但不要估计时间
 - 专注于需要做什么，而不是什么时候做"#;
+
+#[cfg(test)]
+mod tests {
+    use super::TOOL_GUIDELINES;
+
+    #[test]
+    fn tool_search_guidelines_do_not_suggest_native_tools_as_select_targets() {
+        assert!(!TOOL_GUIDELINES.contains("select:Read"));
+        assert!(TOOL_GUIDELINES.contains("select:mcp__context7__query_docs"));
+        assert!(TOOL_GUIDELINES.contains("retry_allowed=false"));
+    }
+}

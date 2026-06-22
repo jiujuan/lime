@@ -810,6 +810,35 @@ describe("http-client", () => {
         },
       }),
     ).toBe(30000);
+    expect(
+      resolveBridgeRequestTimeoutMs("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
+              id: "mcp-start",
+              method: "mcpServer/start",
+              params: { name: "context7" },
+            }),
+          ],
+        },
+      }),
+    ).toBe(30000);
+    expect(
+      resolveBridgeRequestTimeoutMs("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
+              id: "mcp-tool-call",
+              method: "mcpTool/call",
+              params: {
+                toolName: "mcp__context7__query-docs",
+                arguments: { libraryId: "/openai/openai-agents-python" },
+              },
+            }),
+          ],
+        },
+      }),
+    ).toBe(30000);
   });
 
   it("图层设计工程落盘命令应使用长请求窗口", async () => {

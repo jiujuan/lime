@@ -356,5 +356,8 @@ describe("mockPriorityCommands", () => {
         "embedded-browser-view-load-failed",
       ),
     ).toBe(true);
+    expect(
+      shouldDisallowMockEventFallbackInBrowser("mcp:resources_updated"),
+    ).toBe(true);
   });
 });

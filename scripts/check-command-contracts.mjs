@@ -1950,9 +1950,10 @@ function collectRetiredMcpDesktopFacadeSourceFailures() {
         "已迁到 App Server MCP current API 的旧 MCP 命令不能继续作为 mock priority command",
     },
     {
-      path: "src/lib/desktop-host/mcpMocks.ts",
+      path: "src/lib/desktop-host/core.ts",
       message:
-        "已迁到 App Server MCP current API 的旧 MCP 命令不能继续保留 desktop-host mock fixture",
+        "已迁到 App Server MCP current API 的旧 MCP mock 模块不能继续被 desktop-host 默认 mock loader 加载",
+      commands: ["mcpMocks"],
     },
     {
       path: "lime-rs/src/app/runner.rs",
@@ -1971,6 +1972,20 @@ function collectRetiredMcpDesktopFacadeSourceFailures() {
       commands: ["mcp_cmd"],
     },
   ];
+
+  for (const retiredMockModulePath of [
+    "src/lib/desktop-host/mcpMocks.ts",
+    "src/lib/desktop-host/mcpMocks.d.ts",
+  ]) {
+    if (fs.existsSync(path.join(repoRoot, retiredMockModulePath))) {
+      failures.push({
+        file: retiredMockModulePath,
+        message:
+          "MCP desktop-host 默认 mock 模块已退役；旧 MCP 命令只能停留在 retired guard / contract forbidden snippet 中",
+        token: retiredMockModulePath,
+      });
+    }
+  }
 
   for (const source of restrictedSources) {
     const paths = source.paths ?? [source.path];

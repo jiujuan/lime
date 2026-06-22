@@ -2,11 +2,11 @@
 
 use super::{dispatch_result, parse_params, to_jsonrpc_error, RequestProcessor, RpcDispatch};
 use app_server_protocol::{
-    JsonRpcError, McpPromptGetParams, McpResourceReadParams, McpServerCreateParams,
-    McpServerDeleteParams, McpServerEnabledSetParams, McpServerImportFromAppParams,
-    McpServerOauthLoginParams, McpServerStartParams, McpServerStopParams, McpServerUpdateParams,
-    McpToolCallParams, McpToolCallWithCallerParams, McpToolListForContextParams,
-    McpToolSearchParams,
+    JsonRpcError, McpPromptGetParams, McpResourceReadParams, McpResourceSubscribeParams,
+    McpResourceUnsubscribeParams, McpServerCreateParams, McpServerDeleteParams,
+    McpServerEnabledSetParams, McpServerImportFromAppParams, McpServerOauthLoginParams,
+    McpServerStartParams, McpServerStopParams, McpServerUpdateParams, McpToolCallParams,
+    McpToolCallWithCallerParams, McpToolListForContextParams, McpToolSearchParams,
 };
 
 impl RequestProcessor {
@@ -265,6 +265,34 @@ impl RequestProcessor {
         let response = self
             .runtime
             .read_mcp_resource(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_mcp_resource_subscribe_impl(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: McpResourceSubscribeParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .subscribe_mcp_resource(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_mcp_resource_unsubscribe_impl(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: McpResourceUnsubscribeParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .unsubscribe_mcp_resource(params)
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)

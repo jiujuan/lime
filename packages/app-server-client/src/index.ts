@@ -189,6 +189,8 @@ import {
   METHOD_MCP_PROMPT_GET,
   METHOD_MCP_RESOURCE_LIST,
   METHOD_MCP_RESOURCE_READ,
+  METHOD_MCP_RESOURCE_SUBSCRIBE,
+  METHOD_MCP_RESOURCE_UNSUBSCRIBE,
   METHOD_MCP_SERVER_CREATE,
   METHOD_MCP_SERVER_DELETE,
   METHOD_MCP_SERVER_ENABLED_SET,
@@ -562,6 +564,9 @@ import {
   type McpResourceListResponse,
   type McpResourceReadParams,
   type McpResourceReadResponse,
+  type McpResourceSubscribeParams,
+  type McpResourceSubscriptionResponse,
+  type McpResourceUnsubscribeParams,
   type McpServerCreateParams,
   type McpServerDeleteParams,
   type McpServerEnabledSetParams,
@@ -1471,6 +1476,14 @@ export class AppServerClient {
 
   readMcpResource(params: McpResourceReadParams): JsonRpcRequest {
     return this.request(METHOD_MCP_RESOURCE_READ, params);
+  }
+
+  subscribeMcpResource(params: McpResourceSubscribeParams): JsonRpcRequest {
+    return this.request(METHOD_MCP_RESOURCE_SUBSCRIBE, params);
+  }
+
+  unsubscribeMcpResource(params: McpResourceUnsubscribeParams): JsonRpcRequest {
+    return this.request(METHOD_MCP_RESOURCE_UNSUBSCRIBE, params);
   }
 
   readProjectMemory(params: ProjectMemoryReadParams): JsonRpcRequest {
@@ -3454,6 +3467,28 @@ export class AppServerConnection {
     return await this.request<McpResourceReadResponse>(
       this.client.readMcpResource(params),
       METHOD_MCP_RESOURCE_READ,
+      options,
+    );
+  }
+
+  async subscribeMcpResource(
+    params: McpResourceSubscribeParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<McpResourceSubscriptionResponse>> {
+    return await this.request<McpResourceSubscriptionResponse>(
+      this.client.subscribeMcpResource(params),
+      METHOD_MCP_RESOURCE_SUBSCRIBE,
+      options,
+    );
+  }
+
+  async unsubscribeMcpResource(
+    params: McpResourceUnsubscribeParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<McpResourceSubscriptionResponse>> {
+    return await this.request<McpResourceSubscriptionResponse>(
+      this.client.unsubscribeMcpResource(params),
+      METHOD_MCP_RESOURCE_UNSUBSCRIBE,
       options,
     );
   }

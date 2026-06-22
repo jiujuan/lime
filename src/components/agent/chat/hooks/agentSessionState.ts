@@ -222,11 +222,7 @@ export function hasActiveRuntimeTurn(options: {
     return true;
   }
 
-  if (
-    options.turns.some(
-      (turn) => turn.status === "running" || turn.status === "queued",
-    )
-  ) {
+  if (options.turns.some((turn) => turn.status === "running")) {
     return true;
   }
 

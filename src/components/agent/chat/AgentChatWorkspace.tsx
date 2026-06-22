@@ -13,20 +13,11 @@ import {
   useMemo,
   useEffect,
   useRef,
+  type ComponentProps,
 } from "react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { useAgentChatUnified } from "./hooks";
-import {
-  resolveRecentTopicActionLabel,
-  resolveRecentTopicCandidate,
-} from "./hooks/agentChatShared";
-import { buildEmptyStateProjectConversationGroups } from "./components/EmptyStateViewModel";
-import {
-  settleLiveArtifactAfterStreamStops,
-  useArtifactDisplayState,
-} from "./hooks/useArtifactDisplayState";
-import type { TopicBranchStatus } from "./hooks/useTopicBranchBoard";
 import { useFileManagerSidebar } from "./hooks/useFileManagerSidebar";
 import { useBrowserWorkspaceHomeHint } from "./hooks/useBrowserWorkspaceHomeHint";
 import { usePathReferences } from "./hooks/usePathReferences";
@@ -40,15 +31,11 @@ import { useSoulArtifactVoiceGenerationBrief } from "@/hooks/useSoulArtifactVoic
 import { useTrayModelShortcuts } from "./hooks/useTrayModelShortcuts";
 import { SettingsTabs } from "@/types/settings";
 import { type CanvasWorkbenchLayoutMode } from "./components/CanvasWorkbenchLayout";
+import { TaskCenterShellPanel } from "./components/TaskCenterShellPanel";
 import type { CreationMode } from "./components/types";
 import { type TaskFile } from "./components/TaskFiles";
 import { useWorkflow } from "@/components/workspace/hooks/useWorkflow";
-import {
-  createInitialCanvasState,
-  createInitialDocumentState,
-  createInitialVideoState,
-  type CanvasStateUnion,
-} from "@/components/workspace/canvas/canvasUtils";
+import { createInitialVideoState } from "@/components/workspace/canvas/canvasUtils";
 import {
   type CanvasState as GeneralCanvasState,
   DEFAULT_CANVAS_STATE,
@@ -64,40 +51,19 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { generateGeneralWorkbenchPrompt } from "@/lib/workspace/workbenchPrompt";
 import { generateProjectMemoryPrompt } from "@/lib/workspace/workbenchPrompt";
 import {
-  getProject,
-  getContent,
-  getGeneralWorkbenchDocumentState,
-  ensureWorkspaceReady,
-  type Project,
-} from "@/lib/api/project";
-import { executionRunGetGeneralWorkbenchState } from "@/lib/api/executionRun";
-import {
   cancelMediaTaskArtifact,
   createImageGenerationTaskArtifact,
   getMediaTaskArtifact,
 } from "@/lib/api/mediaTasks";
-import {
-  getProjectMemory,
-  type ProjectMemory,
-  type Character,
-} from "@/lib/api/projectMemory";
-import { logAgentDebug } from "@/lib/agentDebug";
-import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
-import { setActiveContentTarget } from "@/lib/activeContentTarget";
-import { recordWorkspaceRepair } from "@/lib/workspaceHealthTelemetry";
+import { type Character } from "@/lib/api/projectMemory";
 import { useImageGen } from "@/components/image-gen/useImageGen";
 import { resolveMediaGenerationPreference } from "@/lib/mediaGeneration";
-import { scheduleMinimumDelayIdleTask } from "@/lib/utils/scheduleMinimumDelayIdleTask";
-import {
-  buildTeamMemoryShadowRequestMetadata,
-  readTeamMemorySnapshot,
-} from "@/lib/teamMemorySync";
+import { readTeamMemorySnapshot } from "@/lib/teamMemorySync";
 import type { TaskCenterDraftSendRequest } from "./homePendingPreview";
 
 import type {
   ConfirmResponse,
   Message,
-  MessageImage,
   MessagePreviewTarget,
   SiteSavedContentTarget,
   WriteArtifactContext,
@@ -108,29 +74,15 @@ import {
   type LayoutMode,
   type ThemeType,
 } from "@/lib/workspace/workbenchContract";
-import {
-  isDefaultProjectIdAlias,
-  isLegacyDefaultProjectId,
-  normalizeProjectId,
-} from "./utils/topicProjectResolution";
-import { buildHarnessRequestMetadata } from "./utils/harnessRequestMetadata";
+import { normalizeProjectId } from "./utils/topicProjectResolution";
 import { deriveHarnessSessionState } from "./utils/harnessState";
-import { resolveWorkflowLayoutBottomSpacing } from "./utils/workflowLayout";
-import {
-  alignChatToolPreferencesWithExecutionStrategy,
-  loadChatToolPreferences,
-  shouldUseCompactGeneralPromptForPreferences,
-} from "./utils/chatToolPreferences";
-import { isWorkspacePathErrorMessage } from "./hooks/agentChatCoreUtils";
-import { mergeArtifacts } from "./utils/messageArtifacts";
-import { createChatToolPreferencesFromExecutionRuntime } from "./utils/sessionExecutionRuntime";
+import { shouldUseCompactGeneralPromptForPreferences } from "./utils/chatToolPreferences";
 import { buildRealSubagentTimelineItems } from "./utils/subagentTimeline";
 import {
   buildGeneralAgentSystemPrompt,
   resolveAgentChatMode,
 } from "./utils/generalAgentPrompt";
 import {
-  closeProjectOpened,
   loadPersistedProjectId,
   loadPersistedSessionWorkspaceId,
 } from "./hooks/agentProjectStorage";
@@ -140,9 +92,6 @@ import { useThemeScopedChatToolPreferences } from "./hooks/useThemeScopedChatToo
 import { useLimeSkills } from "./hooks/useLimeSkills";
 import { useServiceSkills } from "./service-skills/useServiceSkills";
 import { useWorkspaceProjectSelection } from "./hooks/useWorkspaceProjectSelection";
-import { useOpenedProjectSummaries } from "./hooks/useOpenedProjectSummaries";
-import type { HandleSendOptions } from "./hooks/handleSendTypes";
-import type { InputbarSendHandler } from "./components/Inputbar/inputbarSendPayload";
 import { useRuntimeTeamFormation } from "./hooks/useRuntimeTeamFormation";
 import { mergeThreadItems } from "./utils/threadTimelineView";
 import { openCanvasForReason } from "./workspace/canvasOpenPolicy";
@@ -150,8 +99,6 @@ import { useWorkbenchStore } from "@/stores/useWorkbenchStore";
 import {
   asRecord,
   GENERAL_BROWSER_ASSIST_ARTIFACT_ID,
-  mergeMessageArtifactsIntoStore,
-  readFirstString,
 } from "./workspace/browserAssistArtifact";
 import { SceneAppExecutionSummaryCard } from "./workspace/SceneAppExecutionSummaryCard";
 import { ServiceSkillExecutionCard } from "./workspace/ServiceSkillExecutionCard";
@@ -159,6 +106,7 @@ import { useWorkspaceBrowserAssistRuntime } from "./workspace/useWorkspaceBrowse
 import { useWorkspaceA2UISubmitActions } from "./workspace/useWorkspaceA2UISubmitActions";
 import { useWorkspaceContextHarnessRuntime } from "./workspace/useWorkspaceContextHarnessRuntime";
 import { useWorkspaceHarnessInventoryRuntime } from "./workspace/useWorkspaceHarnessInventoryRuntime";
+import { useExpertWorkspaceSkillRuntime } from "./workspace/useExpertWorkspaceSkillRuntime";
 import { useWorkspaceCanvasWorkflowActions } from "./workspace/useWorkspaceCanvasWorkflowActions";
 import { useWorkspaceCanvasSceneRuntime } from "./workspace/useWorkspaceCanvasSceneRuntime";
 import { useWorkspaceCanvasMessageSyncRuntime } from "./workspace/useWorkspaceCanvasMessageSyncRuntime";
@@ -173,13 +121,12 @@ import { useSessionRecentMetadataSyncRuntime } from "./workspace/useSessionRecen
 import { useTaskCenterTabSessionRuntime } from "./workspace/useTaskCenterTabSessionRuntime";
 import {
   useTaskCenterDraftSendDispatchRuntime,
+  useTaskCenterEmptyStateSendRuntime,
   useTaskCenterHomePendingPreviewRuntime,
 } from "./workspace/useTaskCenterDraftSendRuntime";
+import { useTaskCenterChromeNavigationRuntime } from "./workspace/useTaskCenterChromeNavigationRuntime";
 import { useTaskCenterDraftMaterializationRuntime } from "./workspace/useTaskCenterDraftMaterializationRuntime";
-import { useTaskCenterTabChrome } from "./workspace/useTaskCenterTabChrome";
-import { resolveTaskCenterTopicTitle } from "./workspace/taskCenterTabProjection";
 import { useTaskCenterTopicNavigationRuntime } from "./workspace/useTaskCenterTopicNavigationRuntime";
-import { markTaskCenterDraftTabRunning } from "./workspace/taskCenterDraftTabs";
 import { useWorkspaceCanvasTaskFileSync } from "./workspace/useWorkspaceCanvasTaskFileSync";
 import { useWorkspaceGeneralResourceSync } from "./workspace/useWorkspaceGeneralResourceSync";
 import { useWorkspaceArtifactWorkbenchActions } from "./workspace/useWorkspaceArtifactWorkbenchActions";
@@ -204,13 +151,9 @@ import { useWorkspaceSessionRestore } from "./workspace/useWorkspaceSessionResto
 import { useWorkspaceResetRuntime } from "./workspace/useWorkspaceResetRuntime";
 import { useWorkspaceSendActions } from "./workspace/useWorkspaceSendActions";
 import {
-  buildGeneralWorkbenchSendBoundaryState,
-  buildGeneralWorkbenchResumePromptFromRunState,
-  buildInitialDispatchKey,
-  type GeneralWorkbenchEntryPromptState,
-  type GeneralWorkbenchSendBoundaryState,
-  type InitialDispatchPreviewSnapshot,
-} from "./workspace/workspaceSendHelpers";
+  useGeneralWorkbenchInitialAutoGuideRuntime,
+  useGeneralWorkbenchInitialDispatchRuntime,
+} from "./workspace/useGeneralWorkbenchInitialDispatchRuntime";
 import { useWorkspaceTeamSessionControlRuntime } from "./workspace/useWorkspaceTeamSessionControlRuntime";
 import { useWorkspaceGeneralWorkbenchScaffoldRuntime } from "./workspace/useWorkspaceGeneralWorkbenchScaffoldRuntime";
 import { useWorkspaceTopicSwitch } from "./workspace/useWorkspaceTopicSwitch";
@@ -229,26 +172,29 @@ import { useWorkspaceServiceSkillEntryActions } from "./workspace/useWorkspaceSe
 import { useWorkspaceArtifactViewModeControl } from "./workspace/useWorkspaceArtifactViewModeControl";
 import { useWorkspaceInitialSessionNavigation } from "./workspace/useWorkspaceInitialSessionNavigation";
 import { useSceneAppReviewDecisionRuntime } from "./workspace/useSceneAppReviewDecisionRuntime";
-import { buildHomeAgentParams } from "@/lib/workspace/navigation";
+import { resolveImageWorkbenchPreferenceViewModel } from "./workspace/imageWorkbenchPreference";
+import { useWorkspaceOpenedProjectsRuntime } from "./workspace/useWorkspaceOpenedProjectsRuntime";
+import { useWorkspaceProjectContentRuntime } from "./workspace/useWorkspaceProjectContentRuntime";
+import { useWorkspaceHealthRuntime } from "./workspace/useWorkspaceHealthRuntime";
+import { useWorkspaceDefaultProjectAliasRuntime } from "./workspace/useWorkspaceDefaultProjectAliasRuntime";
 import { WorkspaceGeneralWorkbenchSidebar } from "./workspace/WorkspaceGeneralWorkbenchSidebar";
-import { GeneralWorkbenchHarnessDialogSection } from "./workspace/WorkspaceHarnessDialogs";
-import { WorkspaceShellScene } from "./workspace/WorkspaceShellScene";
-import { ExpertInfoPanel } from "./experts/ExpertInfoPanel";
 import {
-  syncExpertAgentInstanceToCloud,
-  updateExpertAgentInstanceSession,
-  updateExpertAgentInstanceSkillRefs,
-} from "@/features/experts";
+  GeneralWorkbenchHarnessDialogSection,
+  GeneralWorkbenchHarnessSurfaceSection,
+} from "./workspace/WorkspaceHarnessDialogs";
+import { WorkspaceFilesSurface } from "./workspace/WorkspaceFilesSurface";
+import { WorkspaceShellScene } from "./workspace/WorkspaceShellScene";
+import {
+  buildWorkspaceRightSurfaceDefinitions,
+  RightSurfaceHost,
+  resolveExpertInfoPanelCollapsedAfterLayoutChange,
+  resolveWorkspaceRightSurfaceState,
+  type WorkspaceRightSurfaceKind,
+} from "./workspace/right-surface";
+import { ExpertInfoPanel } from "./experts/ExpertInfoPanel";
 import { FileManagerSidebar } from "./components/FileManager/FileManagerSidebar";
-import { subscribeTaskCenterDraftTaskRequests } from "./taskCenterDraftTaskEvents";
 import type { GeneralWorkbenchFollowUpActionPayload } from "./components/generalWorkbenchSidebarContract";
 import { RuntimeReviewDecisionDialog } from "./components/RuntimeReviewDecisionDialog";
-import {
-  CODE_WORKBENCH_CHAT_PANEL_MIN_WIDTH,
-  CODE_WORKBENCH_CHAT_PANEL_WIDTH,
-  TEAM_PRIMARY_CHAT_PANEL_MIN_WIDTH,
-  TEAM_PRIMARY_CHAT_PANEL_WIDTH,
-} from "./workspace/WorkspaceStyles";
 import { hasNamedGeneralCanvasFilePreview } from "./workspace/generalCanvasPreviewState";
 import { resolvePreferredServiceSkillResultFileTarget } from "./workspace/serviceSkillResultFileTarget";
 import {
@@ -264,37 +210,20 @@ import {
 import { resolveSiteSavedContentTargetFromRunResult } from "./utils/siteToolResultSummary";
 import type { ArtifactDocumentV1 } from "@/lib/artifact-document";
 import type { ArtifactTimelineOpenTarget } from "./utils/artifactTimelineNavigation";
-import { getDefaultGuidePromptByTheme } from "./utils/defaultGuidePrompt";
-import { shouldShowChatLayout } from "./utils/chatLayoutVisibility";
-import {
-  isTaskCenterTopicSwitchPending,
-  resolveInitialTaskSessionSwitchOptions,
-  resolveTaskCenterFallbackRestorePlan,
-  resolveTaskCenterPreviewTopicId,
-} from "./utils/taskCenterTabs";
+import { resolveInitialTaskSessionSwitchOptions } from "./utils/taskCenterTabs";
 import { resolveImageWorkbenchStateForPreviewSelection } from "./workspace/imageWorkbenchPreviewSelection";
 import { buildImageWorkbenchPreviewResourceManagerInput } from "./workspace/imageWorkbenchResourceManager";
 import { openResourceManager } from "@/features/resource-manager";
-import {
-  SOCIAL_ARTICLE_SKILL_KEY,
-  GENERAL_WORKBENCH_HISTORY_PAGE_SIZE,
-  applyBackendGeneralWorkbenchDocumentState,
-  isCanvasStateEmpty,
-  isCorruptedGeneralWorkbenchDocumentContent,
-  isSyncContentEmpty,
-  readPersistedGeneralWorkbenchDocument,
-  serializeCanvasStateForSync,
-} from "./workspace/generalWorkbenchHelpers";
-import {
-  normalizeInitialTheme,
-  projectTypeToTheme,
-} from "./agentChatWorkspaceShared";
+import { GENERAL_WORKBENCH_HISTORY_PAGE_SIZE } from "./workspace/generalWorkbenchHelpers";
+import { normalizeInitialTheme } from "./agentChatWorkspaceShared";
 import type { AgentChatWorkspaceProps } from "./agentChatWorkspaceContract";
 import type {
   AgentInitialInputCapabilityParams,
   ExecutionPolicyFocusContext,
   ProviderSettingsFocusContext,
+  SkillScaffoldDraft,
 } from "@/types/page";
+import type { ExpertSkillsManageOptions } from "./experts/ExpertSkillsSection";
 import { extractCreationReplayMetadata } from "./utils/creationReplayMetadata";
 import { buildCreationReplaySurfaceModel } from "./utils/creationReplaySurface";
 import {
@@ -314,32 +243,63 @@ import {
 } from "./utils/sceneAppCuratedTaskReference";
 import { buildSkillsPageParamsFromMessage } from "./utils/skillScaffoldDraft";
 import { resolveAgentChatWorkspaceShellViewModel } from "./agentChatWorkspaceShellViewModel";
+import { resolveTaskCenterDraftSurfaceState } from "./workspace/taskCenterSurfaceState";
 import { AutomationJobDialog } from "@/components/settings-v2/system/automation/AutomationJobDialog";
+import { resolveWorkspaceShellChromeRuntime } from "./workspace/workspaceShellChromeRuntime";
+import { resolveWorkspaceEntryLoadDeferral } from "./workspace/workspaceEntryLoadDeferral";
+import { resolveWorkspaceSceneSessionProjection } from "./workspace/workspaceSceneSessionProjection";
+import { resolveWorkspaceBrowserAssistRequest } from "./workspace/workspaceBrowserAssistRequest";
 import {
-  BLANK_HOME_DEFERRED_LOAD_MS,
+  resolveBrowserRuntimeNavigationFromBrowserAssist,
+  resolveBrowserRuntimeNavigationFromSiteSkill,
+} from "./workspace/workspaceBrowserRuntimeNavigation";
+import {
+  resolveExpertPanelRequestMetadata,
+  resolveWorkspaceRequestMetadataWithExpertSkills,
+  shouldAllowDetachedInitialAutoSend,
+} from "./workspace/workspaceExpertMetadata";
+import {
+  buildWorkspaceRightSurfaceRuntimeLaunchers,
+  buildWorkspaceRightSurfaceRuntimePendingIntents,
+} from "./workspace/workspaceRightSurfaceRuntimeProjection";
+import {
+  createRestoredInteractiveMessageSnapshot,
+  resolveReadOnlyInteractiveMessageIds,
+} from "./workspace/workspaceRestoredInteractiveMessages";
+import { useWorkspaceWorkflowProgressRuntime } from "./workspace/useWorkspaceWorkflowProgressRuntime";
+import { useWorkspaceDebugRuntime } from "./workspace/useWorkspaceDebugRuntime";
+import { useWorkspaceClassicClawSidebarRuntime } from "./workspace/useWorkspaceClassicClawSidebarRuntime";
+import { useWorkspaceChatToolPreferencesRuntime } from "./workspace/useWorkspaceChatToolPreferencesRuntime";
+import { useWorkspaceExpertAgentLaunchSyncRuntime } from "./workspace/useWorkspaceExpertAgentLaunchSyncRuntime";
+import {
+  useWorkspaceArtifactStoreRuntime,
+  useWorkspaceGeneralArtifactUpsert,
+} from "./workspace/useWorkspaceArtifactStoreRuntime";
+import {
+  useWorkspaceActiveContentTargetRuntime,
+  useWorkspaceEntryStateRuntime,
+  useWorkspaceServiceSkillDirectoryToastRuntime,
+  useWorkspaceSoulArtifactVoiceTurnRuntime,
+  useWorkspaceTaskFilesRefSyncRuntime,
+} from "./workspace/useWorkspaceEntrySideEffectsRuntime";
+import { useWorkspaceHarnessRequestMetadataRuntime } from "./workspace/useWorkspaceHarnessRequestMetadataRuntime";
+import {
+  useWorkspaceCanvasContentSyncRuntime,
+  useWorkspaceDocumentVersionStatusSyncRuntime,
+} from "./workspace/useWorkspaceDocumentSyncRuntime";
+import { buildPendingServiceSkillLaunchSignature } from "./workspace/pendingServiceSkillLaunchSignature";
+import { useInitialPendingServiceSkillLaunchRuntime } from "./workspace/useInitialPendingServiceSkillLaunchRuntime";
+import {
   BROWSER_WORKSPACE_HOME_HINT_MESSAGE,
   GENERAL_BROWSER_ASSIST_PROFILE_KEY,
   NOOP_SET_CHAT_MESSAGES,
-  RECENT_CONVERSATIONS_IDLE_DEFERRED_LOAD_MS,
-  SESSION_ENTRY_AUXILIARY_DEFERRED_LOAD_MS,
-  SESSION_ENTRY_RUNTIME_WARMUP_DEFERRED_LOAD_MS,
-  areStringArraysEqual,
-  createTaskCenterDraftSendRequestId,
-  isTaskCenterDraftSendPendingForLayout,
-  isTaskCenterDraftTabId,
-  isTransientWorkspaceBridgeError,
   isUsableKnowledgeSourceText,
-  mergeExpertSkillRefsIntoRequestMetadata,
   normalizeVideoAspectRatio,
   normalizeVideoResolution,
   resolveDefaultSelectedArtifact,
   resolveRuntimeWorkspaceId,
-  resolveTaskCenterDraftSendTitle,
-  resolveTaskCenterHomeSurfaceState,
   resolveTaskPreviewArtifact,
   resolveVideoCanvasStatusFromPreview,
-  shouldAutoRecoverWorkspacePathMissing,
-  shouldSuppressTaskCenterDraftContentForLayout,
   type TaskCenterDraftTab,
 } from "./workspace/agentChatWorkspaceHelpers";
 import { SCENEAPP_QUICK_REVIEW_ACTIONS } from "@/lib/agent/legacySceneAppExecutionSummary";
@@ -348,13 +308,6 @@ export type {
   AgentChatWorkspaceProps,
   WorkflowProgressSnapshot,
 } from "./agentChatWorkspaceContract";
-
-interface PendingWorkspacePathRetry {
-  targetWorkspaceId: string;
-  content: string;
-  images: MessageImage[];
-  recoveryKey: string;
-}
 
 export function AgentChatWorkspace({
   onNavigate: _onNavigate,
@@ -443,6 +396,30 @@ export function AgentChatWorkspace({
     },
     [_onNavigate],
   );
+  const handleOpenSkillsManageFromExpertPanel = useCallback(
+    (options?: ExpertSkillsManageOptions) => {
+      const searchQuery = options?.searchQuery?.trim();
+      const scaffoldDraft: SkillScaffoldDraft | undefined =
+        options?.scaffoldDraft;
+      const requestKey = Date.now();
+      _onNavigate?.("skills", {
+        initialView: "installed",
+        ...(searchQuery
+          ? {
+              initialSearchQuery: searchQuery,
+              initialSearchRequestKey: requestKey,
+            }
+          : null),
+        ...(scaffoldDraft
+          ? {
+              initialScaffoldDraft: scaffoldDraft,
+              initialScaffoldRequestKey: requestKey,
+            }
+          : null),
+      });
+    },
+    [_onNavigate],
+  );
   const [runtimeInitialInputCapability, setRuntimeInitialInputCapability] =
     useState<AgentInitialInputCapabilityParams>();
   const [runtimeEntryBannerMessage, setRuntimeEntryBannerMessage] = useState<
@@ -471,7 +448,6 @@ export function AgentChatWorkspace({
     selectedTeamSessionSync,
     syncSessionRecentPreferences,
   } = useSessionRecentMetadataSyncRuntime();
-  const sessionRecentPreferencesBackfillKeyRef = useRef<string | null>(null);
   const {
     chatToolPreferences,
     setChatToolPreferences,
@@ -516,11 +492,31 @@ export function AgentChatWorkspace({
   const [layoutMode, setLayoutMode] = useState<LayoutMode>(
     shouldBootstrapCanvasOnEntry ? "canvas" : "chat",
   );
-  const shouldPreserveEntryThemeOnHome =
-    agentEntry === "new-task" && !contentId;
-  const shouldPreserveBlankHomeSurface =
-    shouldPreserveEntryThemeOnHome && normalizedEntryTheme === "general";
-  const shouldUseBrowserWorkspaceHomeChrome = shouldPreserveBlankHomeSurface;
+  const [expertInfoPanelCollapsed, setExpertInfoPanelCollapsed] = useState(
+    () => layoutMode !== "chat",
+  );
+  const {
+    shouldPreserveEntryThemeOnHome,
+    shouldPreserveBlankHomeSurface,
+    shouldUseBrowserWorkspaceHomeChrome,
+    shouldDeferWorkspaceAuxiliaryLoads,
+    shouldDeferInitialTopicsLoad,
+    shouldDeferInitialRuntimeWarmup,
+    deferredWorkspaceAuxiliaryLoadMs,
+    deferredInitialTopicsLoadMs,
+    deferredInitialRuntimeWarmupMs,
+  } = resolveWorkspaceEntryLoadDeferral({
+    agentEntry,
+    contentId,
+    normalizedEntryTheme,
+    normalizedInitialSessionId,
+    initialUserPrompt,
+    initialUserImages,
+    initialSiteSkillLaunch,
+    initialPendingServiceSkillLaunch,
+    initialInputCapability,
+    initialProjectFileOpenTarget,
+  });
   const {
     browserWorkspaceHintVisible,
     dismissBrowserWorkspaceHint: handleDismissBrowserWorkspaceHint,
@@ -529,235 +525,56 @@ export function AgentChatWorkspace({
     projectId: projectId ?? null,
     entryBannerMessage,
   });
-  const shouldPrioritizeInitialSessionEntry =
-    normalizedInitialSessionId !== null && !contentId;
-  const shouldPrioritizeInitialPromptEntry =
-    agentEntry === "claw" &&
-    !contentId &&
-    normalizedEntryTheme === "general" &&
-    Boolean(initialUserPrompt?.trim()) &&
-    !initialUserImages?.length &&
-    !initialSiteSkillLaunch &&
-    !initialPendingServiceSkillLaunch?.skillId?.trim() &&
-    !initialPendingServiceSkillLaunch?.skillKey?.trim() &&
-    !initialInputCapability?.capabilityRoute &&
-    !initialProjectFileOpenTarget?.relativePath?.trim();
-  const shouldDeferWorkspaceAuxiliaryLoads =
-    shouldPreserveBlankHomeSurface ||
-    shouldPrioritizeInitialSessionEntry ||
-    shouldPrioritizeInitialPromptEntry;
-  const shouldDeferInitialTopicsLoad =
-    shouldPreserveBlankHomeSurface ||
-    shouldPrioritizeInitialSessionEntry ||
-    shouldPrioritizeInitialPromptEntry;
-  const shouldDeferInitialRuntimeWarmup = shouldDeferInitialTopicsLoad;
-  const deferredWorkspaceAuxiliaryLoadMs = shouldPreserveBlankHomeSurface
-    ? BLANK_HOME_DEFERRED_LOAD_MS
-    : shouldPrioritizeInitialSessionEntry || shouldPrioritizeInitialPromptEntry
-      ? SESSION_ENTRY_AUXILIARY_DEFERRED_LOAD_MS
-      : undefined;
-  const deferredInitialTopicsLoadMs = shouldPreserveBlankHomeSurface
-    ? RECENT_CONVERSATIONS_IDLE_DEFERRED_LOAD_MS
-    : shouldPrioritizeInitialSessionEntry || shouldPrioritizeInitialPromptEntry
-      ? RECENT_CONVERSATIONS_IDLE_DEFERRED_LOAD_MS
-      : undefined;
-  const deferredInitialRuntimeWarmupMs = shouldPreserveBlankHomeSurface
-    ? BLANK_HOME_DEFERRED_LOAD_MS
-    : shouldPrioritizeInitialSessionEntry || shouldPrioritizeInitialPromptEntry
-      ? SESSION_ENTRY_RUNTIME_WARMUP_DEFERRED_LOAD_MS
-      : undefined;
-  const [isInitialContentLoading, setIsInitialContentLoading] = useState(
-    shouldBootstrapCanvasOnEntry,
-  );
-  const [initialContentLoadError, setInitialContentLoadError] = useState<
-    string | null
-  >(null);
-
-  useEffect(() => {
-    if (!initialTheme) return;
-    setActiveTheme(normalizeInitialTheme(initialTheme));
-  }, [initialTheme]);
-
-  useEffect(() => {
-    if (!initialCreationMode) return;
-    setCreationMode(initialCreationMode);
-  }, [initialCreationMode]);
-
-  useEffect(() => {
-    if (entryBannerMessage) {
-      setRuntimeEntryBannerMessage(null);
-    }
-  }, [entryBannerMessage]);
-
-  useEffect(() => {
-    setEntryBannerVisible(Boolean(effectiveEntryBannerMessage));
-  }, [effectiveEntryBannerMessage]);
-
-  const pageMountedAtRef = useRef(Date.now());
-
-  useEffect(() => {
-    const mountedAt = pageMountedAtRef.current;
-    logAgentDebug("AgentChatPage", "mount", {
-      agentEntry,
-      contentId: contentId ?? null,
-      externalProjectId: externalProjectId ?? null,
-      initialCreationMode: initialCreationMode ?? null,
-      initialTheme: initialTheme ?? null,
-      lockTheme,
-    });
-
-    return () => {
-      logAgentDebug(
-        "AgentChatPage",
-        "unmount",
-        {
-          contentId: contentId ?? null,
-          externalProjectId: externalProjectId ?? null,
-          lifetimeMs: Date.now() - mountedAt,
-        },
-        { consoleOnly: true },
-      );
-    };
-  }, [
-    agentEntry,
+  const {
+    project,
+    setProject,
+    projectMemory,
+    setProjectMemory,
+    isInitialContentLoading,
+    initialContentLoadError,
+    canvasState,
+    setCanvasState,
+    documentVersionStatusMap,
+    setDocumentVersionStatusMap,
+    contentMetadataRef,
+    persistedWorkbenchSnapshotRef,
+    lastCanvasSyncRequestRef,
+  } = useWorkspaceProjectContentRuntime({
+    projectId,
     contentId,
     externalProjectId,
+    lockTheme,
+    initialTheme,
+    normalizedEntryTheme,
+    shouldBootstrapCanvasOnEntry,
+    shouldDeferWorkspaceAuxiliaryLoads,
+    shouldPreserveEntryThemeOnHome,
+    deferredWorkspaceAuxiliaryLoadMs,
+    resetProjectSelection,
+    setActiveTheme,
+    setLayoutMode,
+  });
+
+  useWorkspaceEntryStateRuntime({
+    effectiveEntryBannerMessage,
+    entryBannerMessage,
     initialCreationMode,
     initialTheme,
-    lockTheme,
-  ]);
+    setActiveTheme,
+    setCreationMode,
+    setEntryBannerVisible,
+    setRuntimeEntryBannerMessage,
+  });
 
-  useEffect(() => {
-    const shouldResolveLegacyDefaultProject =
-      isDefaultProjectIdAlias(externalProjectId) ||
-      isLegacyDefaultProjectId(externalProjectId);
-    if (!shouldResolveLegacyDefaultProject || projectId) {
-      return;
-    }
-
-    let cancelled = false;
-    const startedAt = Date.now();
-    const perfT0 = performance.now();
-    logAgentDebug("AgentChatPage", "resolveDefaultProjectAlias.start", {
-      externalProjectId: externalProjectId ?? null,
-    });
-
-    void (async () => {
-      try {
-        const rememberedProjectId = getRememberedProjectId();
-        if (rememberedProjectId) {
-          const rememberedProject = await getProject(rememberedProjectId);
-          if (rememberedProject && !rememberedProject.isArchived) {
-            let resolvedRootPath = rememberedProject.rootPath;
-
-            try {
-              const ensuredWorkspace = await ensureWorkspaceReady(
-                rememberedProject.id,
-              );
-              resolvedRootPath = ensuredWorkspace.rootPath || resolvedRootPath;
-            } catch (error) {
-              logAgentDebug(
-                "AgentChatPage",
-                "resolveDefaultProjectAlias.ensureRememberedWorkspaceReadyError",
-                {
-                  error,
-                  projectId: rememberedProject.id,
-                },
-                { level: "warn" },
-              );
-            }
-
-            if (cancelled) {
-              return;
-            }
-
-            applyProjectSelection(rememberedProject.id);
-            setProject((current) =>
-              current?.id === rememberedProject.id &&
-              current.rootPath === resolvedRootPath
-                ? current
-                : {
-                    ...rememberedProject,
-                    rootPath: resolvedRootPath,
-                  },
-            );
-            logAgentDebug(
-              "AgentChatPage",
-              "resolveDefaultProjectAlias.fromRememberedProject",
-              {
-                durationMs: Date.now() - startedAt,
-                projectId: rememberedProject.id,
-                rootPath: resolvedRootPath,
-              },
-            );
-            return;
-          }
-        }
-
-        if (cancelled) {
-          return;
-        }
-
-        resetProjectSelection();
-        setProject(null);
-        logAgentDebug("AgentChatPage", "resolveDefaultProjectAlias.detached", {
-          durationMs: Date.now() - startedAt,
-        });
-        console.info(
-          `[PERF] resolveDefaultProjectAlias: ${(performance.now() - perfT0).toFixed(0)}ms`,
-        );
-      } catch (error) {
-        if (cancelled) {
-          return;
-        }
-
-        console.warn("[AgentChatPage] 默认工作区别名解析失败:", error);
-        logAgentDebug(
-          "AgentChatPage",
-          "resolveDefaultProjectAlias.error",
-          {
-            durationMs: Date.now() - startedAt,
-            error,
-            externalProjectId: externalProjectId ?? null,
-          },
-          { level: "warn" },
-        );
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
+  useWorkspaceDefaultProjectAliasRuntime({
     applyProjectSelection,
     externalProjectId,
     getRememberedProjectId,
     projectId,
     resetProjectSelection,
-  ]);
+    setProject,
+  });
 
-  // 画布状态（支持多种画布类型）
-  const [canvasState, setCanvasState] = useState<CanvasStateUnion | null>(
-    () => {
-      if (!shouldBootstrapCanvasOnEntry) {
-        return null;
-      }
-
-      return (
-        createInitialCanvasState(normalizedEntryTheme, "") ||
-        createInitialDocumentState("")
-      );
-    },
-  );
-  const [documentVersionStatusMap, setDocumentVersionStatusMap] = useState<
-    Record<string, TopicBranchStatus>
-  >({});
-  const contentMetadataRef = useRef<Record<string, unknown>>({});
-  const persistedWorkbenchSnapshotRef = useRef("");
-  const lastCanvasSyncRequestRef = useRef<{
-    contentId: string;
-    body: string;
-  } | null>(null);
   const handledInitialPendingServiceSkillLaunchSignatureRef = useRef("");
   const dismissedInitialPendingServiceSkillLaunchSignatureRef = useRef("");
   const handledInitialProjectFileOpenSignatureRef = useRef("");
@@ -770,18 +587,11 @@ export function AgentChatWorkspace({
     [initialCreationReplay],
   );
 
-  useEffect(() => {
-    setActiveContentTarget(projectId, contentId, canvasState?.type ?? null);
-  }, [canvasState?.type, contentId, projectId]);
-
-  useEffect(() => {
-    persistedWorkbenchSnapshotRef.current = "";
-    contentMetadataRef.current = {};
-    lastCanvasSyncRequestRef.current = null;
-    if (!contentId) {
-      setDocumentVersionStatusMap({});
-    }
-  }, [contentId]);
+  useWorkspaceActiveContentTargetRuntime({
+    canvasType: canvasState?.type ?? null,
+    contentId,
+    projectId,
+  });
 
   // General 主题专用画布状态
   const [generalCanvasState, setGeneralCanvasState] =
@@ -794,60 +604,14 @@ export function AgentChatWorkspace({
   const taskFilesRef = useRef<TaskFile[]>([]);
   const socialStageLogRef = useRef<Record<string, string>>({});
 
-  // 项目上下文状态
-  const [project, setProject] = useState<Project | null>(null);
-  const [projectMemory, setProjectMemory] = useState<ProjectMemory | null>(
-    null,
-  );
-  const pendingWorkspacePathRetryRef = useRef<PendingWorkspacePathRetry | null>(
-    null,
-  );
-  const workspacePathAutoRecoveryKeyRef = useRef<string | null>(null);
-  const currentOpenedProjectSummary =
-    normalizeProjectId(project?.id) === normalizeProjectId(projectId)
-      ? project
-      : null;
-  const openedProjects = useOpenedProjectSummaries(currentOpenedProjectSummary);
-  const handleCloseOpenedProject = useCallback(
-    (closingProjectId: string) => {
-      const normalizedClosingProjectId = normalizeProjectId(closingProjectId);
-      if (!normalizedClosingProjectId) {
-        return;
-      }
-
-      const remainingStoredProjectIds = closeProjectOpened(
-        normalizedClosingProjectId,
-      );
-      if (normalizeProjectId(projectId) !== normalizedClosingProjectId) {
-        return;
-      }
-
-      const fallbackProjectId =
-        openedProjects
-          .map((openedProject) => normalizeProjectId(openedProject.id))
-          .find(
-            (openedProjectId) =>
-              openedProjectId && openedProjectId !== normalizedClosingProjectId,
-          ) ??
-        remainingStoredProjectIds.find(
-          (openedProjectId) =>
-            normalizeProjectId(openedProjectId) !== normalizedClosingProjectId,
-        ) ??
-        null;
-
-      if (fallbackProjectId) {
-        setProject(null);
-        setProjectMemory(null);
-        applyProjectSelection(fallbackProjectId);
-        return;
-      }
-
-      applyProjectSelection(null);
-      setProject(null);
-      setProjectMemory(null);
-    },
-    [applyProjectSelection, openedProjects, projectId],
-  );
+  const { openedProjects, handleCloseOpenedProject } =
+    useWorkspaceOpenedProjectsRuntime({
+      project,
+      projectId,
+      applyProjectSelection,
+      setProject,
+      setProjectMemory,
+    });
   const validatedRuntimeProjectId =
     normalizeProjectId(project?.id) === normalizeProjectId(projectId)
       ? projectId
@@ -863,9 +627,10 @@ export function AgentChatWorkspace({
     useSoulArtifactVoiceGenerationBrief();
   const [soulArtifactVoiceEnabledForTurn, setSoulArtifactVoiceEnabledForTurn] =
     useState(true);
-  useEffect(() => {
-    setSoulArtifactVoiceEnabledForTurn(true);
-  }, [soulArtifactVoiceGenerationBrief]);
+  useWorkspaceSoulArtifactVoiceTurnRuntime({
+    generationBrief: soulArtifactVoiceGenerationBrief,
+    setSoulArtifactVoiceEnabledForTurn,
+  });
   const inputCompletionEnabled =
     serviceModels.input_completion?.enabled !== false;
   const effectiveImageWorkbenchPreference = useMemo(
@@ -900,87 +665,43 @@ export function AgentChatWorkspace({
     preferredProviderUnavailable: imageWorkbenchPreferredProviderUnavailable,
     saveImagesToResource: saveImageWorkbenchImagesToResource,
   } = imageWorkbenchGenerationRuntime;
-  const imageWorkbenchPreferenceSourceLabel = useMemo(() => {
-    switch (effectiveImageWorkbenchPreference.source) {
-      case "project":
-        return "项目图片设置";
-      case "global":
-        return "全局图片设置";
-      case "auto":
-      default:
-        return "自动选择";
-    }
-  }, [effectiveImageWorkbenchPreference.source]);
-  const imageWorkbenchPreferenceSummary = useMemo(() => {
-    const providerLabel =
-      imageWorkbenchSelectedProvider?.name?.trim() ||
-      imageWorkbenchSelectedProviderId ||
-      "自动匹配";
-    const modelLabel =
-      imageWorkbenchSelectedModel?.name?.trim() ||
-      imageWorkbenchSelectedModelId ||
-      "自动模型";
-    return `来源：${imageWorkbenchPreferenceSourceLabel} · ${providerLabel} / ${modelLabel}`;
-  }, [
-    imageWorkbenchPreferenceSourceLabel,
-    imageWorkbenchSelectedModel?.name,
-    imageWorkbenchSelectedModelId,
-    imageWorkbenchSelectedProvider?.name,
-    imageWorkbenchSelectedProviderId,
-  ]);
-  const imageWorkbenchPreferenceWarning = useMemo(() => {
-    if (
-      !imageWorkbenchPreferredProviderUnavailable ||
-      effectiveImageWorkbenchPreference.allowFallback
-    ) {
-      return null;
-    }
-    return `默认图片服务 ${effectiveImageWorkbenchPreference.preferredProviderId} 当前不可用，且已关闭自动回退。`;
-  }, [
-    effectiveImageWorkbenchPreference.allowFallback,
-    effectiveImageWorkbenchPreference.preferredProviderId,
-    imageWorkbenchPreferredProviderUnavailable,
-  ]);
-  const imageGenerationSelectionWarning = useMemo(() => {
-    if (
-      mediaDefaultsLoading ||
-      imageWorkbenchGenerationRuntime.providersLoading
-    ) {
-      return "图片服务设置加载中，请稍后生成图层资产。";
-    }
+  const imageWorkbenchPreferenceViewModel = useMemo(
+    () =>
+      resolveImageWorkbenchPreferenceViewModel({
+        preference: effectiveImageWorkbenchPreference,
+        selectedProvider: imageWorkbenchSelectedProvider,
+        selectedProviderId: imageWorkbenchSelectedProviderId,
+        selectedModel: imageWorkbenchSelectedModel,
+        selectedModelId: imageWorkbenchSelectedModelId,
+        preferredProviderUnavailable:
+          imageWorkbenchPreferredProviderUnavailable,
+        mediaDefaultsLoading,
+        providersLoading: imageWorkbenchGenerationRuntime.providersLoading,
+      }),
+    [
+      effectiveImageWorkbenchPreference,
+      imageWorkbenchGenerationRuntime.providersLoading,
+      imageWorkbenchPreferredProviderUnavailable,
+      imageWorkbenchSelectedModel,
+      imageWorkbenchSelectedModelId,
+      imageWorkbenchSelectedProvider,
+      imageWorkbenchSelectedProviderId,
+      mediaDefaultsLoading,
+    ],
+  );
+  const imageWorkbenchPreferenceSummary =
+    imageWorkbenchPreferenceViewModel.preferenceSummary;
+  const imageWorkbenchPreferenceWarning =
+    imageWorkbenchPreferenceViewModel.preferenceWarning;
+  const imageGenerationSelectionWarning =
+    imageWorkbenchPreferenceViewModel.selectionWarning;
+  const imageGenerationSelectionReady =
+    imageWorkbenchPreferenceViewModel.selectionReady;
 
-    if (
-      imageWorkbenchPreferredProviderUnavailable &&
-      !effectiveImageWorkbenchPreference.allowFallback
-    ) {
-      return imageWorkbenchPreferenceWarning;
-    }
-
-    if (
-      !imageWorkbenchGenerationRuntime.selectedProviderId ||
-      !imageWorkbenchGenerationRuntime.selectedModelId
-    ) {
-      return "图片服务尚未选定 Provider/模型，请先到媒体服务图片设置确认默认渠道。";
-    }
-
-    return null;
-  }, [
-    effectiveImageWorkbenchPreference.allowFallback,
-    imageWorkbenchGenerationRuntime.providersLoading,
-    imageWorkbenchGenerationRuntime.selectedModelId,
-    imageWorkbenchGenerationRuntime.selectedProviderId,
-    imageWorkbenchPreferenceWarning,
-    imageWorkbenchPreferredProviderUnavailable,
-    mediaDefaultsLoading,
-  ]);
-  const imageGenerationSelectionReady = !imageGenerationSelectionWarning;
-
-  useEffect(() => {
-    taskFilesRef.current = taskFiles;
-  }, [taskFiles]);
-
-  // 主动 workspace 健康检查失败标记（区别于 workspacePathMissing 发送失败场景）
-  const [workspaceHealthError, setWorkspaceHealthError] = useState(false);
+  useWorkspaceTaskFilesRefSyncRuntime({
+    taskFiles,
+    taskFilesRef,
+  });
 
   // 引用的角色列表（用于注入到消息中）
   const [mentionedCharacters, setMentionedCharacters] = useState<Character[]>(
@@ -1012,81 +733,56 @@ export function AgentChatWorkspace({
     deferredDelayMs: deferredWorkspaceAuxiliaryLoadMs,
   });
 
-  useEffect(() => {
-    if (activeTheme !== "general" || !serviceSkillsError) {
-      return;
-    }
-
-    toast.error(`加载技能目录失败：${serviceSkillsError}`);
-  }, [activeTheme, serviceSkillsError]);
+  useWorkspaceServiceSkillDirectoryToastRuntime({
+    activeTheme,
+    serviceSkillsError,
+  });
 
   const expertPanelRequestMetadata = useMemo(
-    () => initialAutoSendRequestMetadata ?? initialRequestMetadata ?? null,
+    () =>
+      resolveExpertPanelRequestMetadata({
+        initialAutoSendRequestMetadata,
+        initialRequestMetadata,
+      }),
     [initialAutoSendRequestMetadata, initialRequestMetadata],
   );
-  const [expertSkillRefsOverride, setExpertSkillRefsOverride] = useState<
-    string[] | null
-  >(null);
-  useEffect(() => {
-    setExpertSkillRefsOverride(null);
-  }, [expertPanelRequestMetadata]);
-  const handleExpertSkillRefsChange = useCallback(
-    (skillRefs: string[]) => {
-      setExpertSkillRefsOverride((current) =>
-        areStringArraysEqual(current, skillRefs) ? current : [...skillRefs],
-      );
-      if (!expertAgentLaunch) {
-        return;
-      }
-      const record = updateExpertAgentInstanceSkillRefs({
-        tenantId: expertAgentLaunch.tenantId,
-        expertId: expertAgentLaunch.expertId,
-        releaseId: expertAgentLaunch.releaseId,
-        catalogVersion: expertAgentLaunch.catalogVersion,
-        skillRefsOverride: skillRefs,
-      });
-      void syncExpertAgentInstanceToCloud(record).catch(() => undefined);
-    },
-    [expertAgentLaunch],
+  const expertWorkspaceSkillRuntime = useExpertWorkspaceSkillRuntime({
+    activeTheme,
+    requestMetadata: expertPanelRequestMetadata,
+    workspaceRoot: project?.rootPath,
+    deferredDelayMs: shouldDeferWorkspaceAuxiliaryLoads
+      ? deferredWorkspaceAuxiliaryLoadMs
+      : undefined,
+    onOpenSkillsManage: _onNavigate
+      ? handleOpenSkillsManageFromExpertPanel
+      : undefined,
+  });
+  const expertPanelRuntimeKey = expertWorkspaceSkillRuntime.runtimeKey;
+  const workspaceSkillBindingsRuntime =
+    expertWorkspaceSkillRuntime.bindingsRuntime;
+  const expertWorkspaceSkillRuntimeEnableRefs =
+    expertWorkspaceSkillRuntime.enabledRefs;
+  const expertWorkspaceSkillRuntimeEnableBindings =
+    expertWorkspaceSkillRuntime.enabledBindings;
+  const expertWorkspaceSkillRuntimeEnableInput =
+    expertWorkspaceSkillRuntime.enableInput;
+  const handleEnableExpertWorkspaceSkillRuntime =
+    expertWorkspaceSkillRuntime.handleEnableWorkspaceSkillRuntime;
+  const pruneExpertWorkspaceSkillRuntimeEnableRefs =
+    expertWorkspaceSkillRuntime.pruneEnabledRefsForSkillRefs;
+  const initialAutoSendAllowsDetachedSession = useMemo(
+    () => shouldAllowDetachedInitialAutoSend(initialAutoSendRequestMetadata),
+    [initialAutoSendRequestMetadata],
   );
-  const workspaceRequestMetadataWithExpertSkills = useMemo(() => {
-    const metadataWithExpertSkills = mergeExpertSkillRefsIntoRequestMetadata(
-      initialRequestMetadata ?? initialAutoSendRequestMetadata ?? null,
-      expertSkillRefsOverride,
-    );
-    return metadataWithExpertSkills &&
-      Object.keys(metadataWithExpertSkills).length > 0
-      ? metadataWithExpertSkills
-      : null;
-  }, [
-    expertSkillRefsOverride,
-    initialAutoSendRequestMetadata,
-    initialRequestMetadata,
-  ]);
-  const initialAutoSendAllowsDetachedSession = useMemo(() => {
-    const metadata = asRecord(initialAutoSendRequestMetadata);
-    const harness = asRecord(metadata?.harness);
-    return Boolean(asRecord(metadata?.expert) || asRecord(harness?.expert));
-  }, [initialAutoSendRequestMetadata]);
-  const initialPendingServiceSkillLaunchSignature = useMemo(() => {
-    const skillId = initialPendingServiceSkillLaunch?.skillId?.trim();
-    const skillKey = initialPendingServiceSkillLaunch?.skillKey?.trim();
-    if (!skillId && !skillKey) {
-      return "";
-    }
-
-    return JSON.stringify({
-      skillId,
-      skillKey,
-      requestKey: initialPendingServiceSkillLaunch?.requestKey ?? 0,
-      initialSlotValues:
-        initialPendingServiceSkillLaunch?.initialSlotValues ?? null,
-      prefillHint: initialPendingServiceSkillLaunch?.prefillHint ?? null,
-      launchUserInput:
-        initialPendingServiceSkillLaunch?.launchUserInput ?? null,
-    });
-  }, [initialPendingServiceSkillLaunch]);
-  const combinedSkillsLoading = skillsLoading || serviceSkillsLoading;
+  const initialPendingServiceSkillLaunchSignature = useMemo(
+    () =>
+      buildPendingServiceSkillLaunchSignature(initialPendingServiceSkillLaunch),
+    [initialPendingServiceSkillLaunch],
+  );
+  const combinedSkillsLoading =
+    skillsLoading ||
+    serviceSkillsLoading ||
+    workspaceSkillBindingsRuntime.loading;
 
   // Workbench Store（用于工作区右侧技能面板状态同步）
   const pendingSkillKey = useWorkbenchStore((state) => state.pendingSkillKey);
@@ -1138,14 +834,9 @@ export function AgentChatWorkspace({
   const selectedArtifact = useAtomValue(selectedArtifactAtom);
   const setArtifacts = useSetAtom(artifactsAtom);
   const setSelectedArtifactId = useSetAtom(selectedArtifactIdAtom);
-  const upsertGeneralArtifact = useCallback(
-    (artifact: Artifact) => {
-      setArtifacts((currentArtifacts) =>
-        mergeArtifacts([...currentArtifacts, artifact]),
-      );
-    },
-    [setArtifacts],
-  );
+  const upsertGeneralArtifact = useWorkspaceGeneralArtifactUpsert({
+    setArtifacts,
+  });
   const hasBrowserAssistArtifact = useMemo(
     () =>
       artifacts.some(
@@ -1177,6 +868,7 @@ export function AgentChatWorkspace({
     () => resolveDefaultSelectedArtifact(activeTheme, artifacts),
     [activeTheme, artifacts],
   );
+  const defaultSelectedArtifactId = defaultSelectedArtifact?.id ?? null;
   const preferGeneralCanvasFilePreview = useMemo(
     () =>
       activeTheme === "general" &&
@@ -1198,7 +890,6 @@ export function AgentChatWorkspace({
   const [canvasWorkbenchLayoutMode, setCanvasWorkbenchLayoutMode] =
     useState<CanvasWorkbenchLayoutMode>("split");
   const workbenchRequests = useWorkspaceWorkbenchRequests();
-  const autoCollapsedTopicSidebarRef = useRef(false);
 
   // 跳转到技能主页面
   const handleNavigateToSkillSettings = useCallback(() => {
@@ -1207,444 +898,6 @@ export function AgentChatWorkspace({
   const handleRefreshSkills = useCallback(async () => {
     await loadSkills(true);
   }, [loadSkills]);
-
-  // 加载项目、Memory 和内容
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadData = async () => {
-      const startedAt = Date.now();
-      logAgentDebug("AgentChatPage", "loadData.start", {
-        contentId: contentId ?? null,
-        lockTheme,
-        projectId: projectId ?? null,
-      });
-
-      if (contentId) {
-        setIsInitialContentLoading(true);
-        setInitialContentLoadError(null);
-      } else {
-        setIsInitialContentLoading(false);
-        setInitialContentLoadError(null);
-      }
-
-      if (!projectId) {
-        if (cancelled) {
-          return;
-        }
-        logAgentDebug("AgentChatPage", "loadData.noProject", {
-          contentId: contentId ?? null,
-          durationMs: Date.now() - startedAt,
-        });
-        setProject(null);
-        setProjectMemory(null);
-        setIsInitialContentLoading(false);
-        return;
-      }
-
-      try {
-        const p = await getProject(projectId);
-        if (!p) {
-          if (cancelled) {
-            return;
-          }
-          logAgentDebug(
-            "AgentChatPage",
-            "loadData.projectMissing",
-            {
-              contentId: contentId ?? null,
-              durationMs: Date.now() - startedAt,
-              projectId,
-            },
-            { level: "warn" },
-          );
-          setProject(null);
-          setProjectMemory(null);
-          if (!externalProjectId) {
-            resetProjectSelection();
-          }
-          if (contentId) {
-            setInitialContentLoadError("当前项目不存在或已被删除");
-          }
-          return;
-        }
-
-        if (cancelled) {
-          return;
-        }
-
-        setProject(p);
-        const theme = projectTypeToTheme(p.workspaceType);
-        logAgentDebug("AgentChatPage", "loadData.projectLoaded", {
-          durationMs: Date.now() - startedAt,
-          projectId: p.id,
-          theme,
-          workspaceType: p.workspaceType,
-        });
-        if (!shouldPreserveEntryThemeOnHome && (!lockTheme || !initialTheme)) {
-          setActiveTheme(theme);
-        }
-
-        if (!shouldDeferWorkspaceAuxiliaryLoads) {
-          const memory = await getProjectMemory(projectId);
-          if (cancelled) {
-            return;
-          }
-          setProjectMemory(memory);
-          logAgentDebug("AgentChatPage", "loadData.memoryLoaded", {
-            charactersCount: memory?.characters?.length ?? 0,
-            durationMs: Date.now() - startedAt,
-            hasOutline: Boolean(memory?.outline?.length),
-            projectId,
-          });
-        } else {
-          setProjectMemory(null);
-          logAgentDebug("AgentChatPage", "loadData.memoryDeferred", {
-            durationMs: Date.now() - startedAt,
-            projectId,
-          });
-        }
-
-        if (!contentId) {
-          logAgentDebug("AgentChatPage", "loadData.projectOnlyComplete", {
-            durationMs: Date.now() - startedAt,
-            projectId,
-          });
-          return;
-        }
-
-        const content = await getContent(contentId);
-        if (cancelled) {
-          return;
-        }
-
-        if (!content) {
-          logAgentDebug(
-            "AgentChatPage",
-            "loadData.contentMissing",
-            {
-              contentId,
-              durationMs: Date.now() - startedAt,
-              projectId,
-            },
-            { level: "warn" },
-          );
-          setInitialContentLoadError("文稿不存在或读取失败");
-          return;
-        }
-
-        logAgentDebug("AgentChatPage", "loadData.contentLoaded", {
-          bodyLength: content.body?.length ?? 0,
-          contentId: content.id,
-          durationMs: Date.now() - startedAt,
-          projectId,
-        });
-
-        contentMetadataRef.current = content.metadata || {};
-        const canvasTheme = (
-          lockTheme && initialTheme
-            ? normalizeInitialTheme(initialTheme)
-            : theme
-        ) as ThemeType;
-        const rawBody = content.body || "";
-        const sanitizedBody = isCorruptedGeneralWorkbenchDocumentContent(
-          rawBody,
-        )
-          ? ""
-          : rawBody;
-
-        if (rawBody && sanitizedBody !== rawBody) {
-          setInitialContentLoadError(
-            "当前文稿未生成有效主稿，请重新生成或稍后重试",
-          );
-        } else {
-          setInitialContentLoadError(null);
-        }
-
-        let initialState =
-          createInitialCanvasState(canvasTheme, sanitizedBody) ||
-          createInitialDocumentState(sanitizedBody);
-
-        if (initialState.type === "document") {
-          const backendDocumentState = await getGeneralWorkbenchDocumentState(
-            content.id,
-          ).catch((error) => {
-            console.warn(
-              "[AgentChatPage] 读取工作区文稿版本状态失败，降级为 metadata 解析:",
-              error,
-            );
-            logAgentDebug(
-              "AgentChatPage",
-              "loadData.documentStateError",
-              {
-                contentId: content.id,
-                durationMs: Date.now() - startedAt,
-                error,
-              },
-              { level: "warn" },
-            );
-            return null;
-          });
-          logAgentDebug("AgentChatPage", "loadData.documentStateLoaded", {
-            contentId: content.id,
-            durationMs: Date.now() - startedAt,
-            hasBackendDocumentState: Boolean(backendDocumentState),
-          });
-          const backendApplied = backendDocumentState
-            ? applyBackendGeneralWorkbenchDocumentState(
-                initialState,
-                backendDocumentState,
-                sanitizedBody,
-              )
-            : null;
-
-          if (backendApplied) {
-            initialState = backendApplied.state;
-            setDocumentVersionStatusMap(backendApplied.statusMap);
-          } else {
-            const persisted = readPersistedGeneralWorkbenchDocument(
-              content.metadata,
-            );
-            if (persisted) {
-              const restoredVersions = persisted.versions.map((version) =>
-                version.id === persisted.currentVersionId
-                  ? { ...version, content: sanitizedBody || version.content }
-                  : version,
-              );
-              const currentVersion =
-                restoredVersions.find(
-                  (version) => version.id === persisted.currentVersionId,
-                ) || restoredVersions[restoredVersions.length - 1];
-              initialState = {
-                ...initialState,
-                versions: restoredVersions,
-                currentVersionId: currentVersion.id,
-                content: currentVersion.content,
-              };
-              setDocumentVersionStatusMap(persisted.versionStatusMap);
-            } else {
-              setDocumentVersionStatusMap({});
-            }
-          }
-        } else {
-          setDocumentVersionStatusMap({});
-        }
-
-        lastCanvasSyncRequestRef.current = {
-          contentId: content.id,
-          body: serializeCanvasStateForSync(initialState),
-        };
-        setCanvasState(initialState);
-        setLayoutMode("canvas");
-        logAgentDebug("AgentChatPage", "loadData.complete", {
-          contentId: content.id,
-          durationMs: Date.now() - startedAt,
-          initialStateType: initialState.type,
-          projectId,
-        });
-      } catch (error) {
-        console.error("[AgentChatPage] 加载项目或文稿失败:", error);
-        logAgentDebug(
-          "AgentChatPage",
-          "loadData.error",
-          {
-            contentId: contentId ?? null,
-            durationMs: Date.now() - startedAt,
-            error,
-            projectId: projectId ?? null,
-          },
-          { level: "error" },
-        );
-        if (!cancelled && contentId) {
-          setInitialContentLoadError("文稿加载失败，请稍后重试");
-        }
-      } finally {
-        if (!cancelled) {
-          setIsInitialContentLoading(false);
-        }
-      }
-    };
-
-    void loadData();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    projectId,
-    contentId,
-    externalProjectId,
-    lockTheme,
-    initialTheme,
-    resetProjectSelection,
-    shouldDeferWorkspaceAuxiliaryLoads,
-    shouldPreserveEntryThemeOnHome,
-  ]);
-
-  useEffect(() => {
-    if (!shouldDeferWorkspaceAuxiliaryLoads) {
-      return;
-    }
-
-    const normalizedProjectId = normalizeProjectId(projectId);
-    if (!normalizedProjectId) {
-      setProjectMemory(null);
-      return;
-    }
-
-    let cancelled = false;
-    const cancelDeferredLoad = scheduleMinimumDelayIdleTask(
-      () => {
-        const startedAt = Date.now();
-        logAgentDebug("AgentChatPage", "loadDeferredMemory.start", {
-          projectId: normalizedProjectId,
-        });
-        void getProjectMemory(normalizedProjectId)
-          .then((memory) => {
-            if (cancelled) {
-              return;
-            }
-            setProjectMemory(memory);
-            logAgentDebug("AgentChatPage", "loadDeferredMemory.success", {
-              charactersCount: memory?.characters?.length ?? 0,
-              durationMs: Date.now() - startedAt,
-              hasOutline: Boolean(memory?.outline?.length),
-              projectId: normalizedProjectId,
-            });
-          })
-          .catch((error) => {
-            if (cancelled) {
-              return;
-            }
-            console.warn("[AgentChatPage] 延后加载项目 Memory 失败:", error);
-            logAgentDebug(
-              "AgentChatPage",
-              "loadDeferredMemory.error",
-              {
-                durationMs: Date.now() - startedAt,
-                error,
-                projectId: normalizedProjectId,
-              },
-              { level: "warn" },
-            );
-          });
-      },
-      {
-        minimumDelayMs:
-          deferredWorkspaceAuxiliaryLoadMs ??
-          SESSION_ENTRY_AUXILIARY_DEFERRED_LOAD_MS,
-        idleTimeoutMs: 1_500,
-      },
-    );
-
-    return () => {
-      cancelled = true;
-      cancelDeferredLoad();
-    };
-  }, [
-    deferredWorkspaceAuxiliaryLoadMs,
-    projectId,
-    shouldDeferWorkspaceAuxiliaryLoads,
-  ]);
-
-  useEffect(() => {
-    if (!shouldBootstrapCanvasOnEntry) {
-      return;
-    }
-
-    setLayoutMode("canvas");
-    setCanvasState((previous) => {
-      if (previous) {
-        return previous;
-      }
-
-      return (
-        createInitialCanvasState(normalizedEntryTheme, "") ||
-        createInitialDocumentState("")
-      );
-    });
-  }, [normalizedEntryTheme, shouldBootstrapCanvasOnEntry]);
-
-  // 当 projectId 变化时主动检查 workspace 目录健康状态
-  // 静默修复（auto-created）或显示 banner 提示用户重新选择
-  useEffect(() => {
-    setWorkspaceHealthError(false);
-    const normalizedId = normalizeProjectId(projectId);
-    if (!normalizedId) return;
-
-    let cancelled = false;
-    const runWorkspaceCheck = () => {
-      const startedAt = Date.now();
-      logAgentDebug("AgentChatPage", "workspaceCheck.start", {
-        projectId: normalizedId,
-      });
-      void ensureWorkspaceReady(normalizedId)
-        .then(({ repaired, rootPath }) => {
-          if (cancelled) {
-            return;
-          }
-          if (repaired) {
-            recordWorkspaceRepair({
-              workspaceId: normalizedId,
-              rootPath,
-              source: "agent_chat_page",
-            });
-            console.info("[AgentChatPage] workspace 目录已自动修复:", rootPath);
-          }
-          logAgentDebug("AgentChatPage", "workspaceCheck.success", {
-            durationMs: Date.now() - startedAt,
-            projectId: normalizedId,
-            repaired,
-            rootPath,
-          });
-        })
-        .catch((err: unknown) => {
-          if (cancelled) {
-            return;
-          }
-          const message = err instanceof Error ? err.message : String(err);
-          console.warn("[AgentChatPage] workspace 目录检查失败:", message);
-          logAgentDebug(
-            "AgentChatPage",
-            "workspaceCheck.error",
-            {
-              durationMs: Date.now() - startedAt,
-              error: err,
-              projectId: normalizedId,
-            },
-            { level: "warn" },
-          );
-          if (
-            isWorkspacePathErrorMessage(message) ||
-            !isTransientWorkspaceBridgeError(message)
-          ) {
-            setWorkspaceHealthError(true);
-          }
-        });
-    };
-
-    const cancelDeferredCheck = shouldDeferWorkspaceAuxiliaryLoads
-      ? scheduleMinimumDelayIdleTask(runWorkspaceCheck, {
-          minimumDelayMs:
-            deferredWorkspaceAuxiliaryLoadMs ??
-            SESSION_ENTRY_AUXILIARY_DEFERRED_LOAD_MS,
-          idleTimeoutMs: 1_500,
-        })
-      : null;
-
-    if (!cancelDeferredCheck) {
-      runWorkspaceCheck();
-    }
-
-    return () => {
-      cancelled = true;
-      cancelDeferredCheck?.();
-    };
-  }, [
-    deferredWorkspaceAuxiliaryLoadMs,
-    projectId,
-    shouldDeferWorkspaceAuxiliaryLoads,
-  ]);
 
   useEffect(() => {
     const normalizedProjectId = normalizeProjectId(projectId);
@@ -1785,77 +1038,49 @@ export function AgentChatWorkspace({
     getSyncedSessionRecentPreferences,
     onOpenSubagents: handleOpenSubagents,
   });
-  useEffect(() => {
-    const normalizedSessionId = sessionId?.trim();
-    if (!expertAgentLaunch || !normalizedSessionId) {
-      return;
-    }
-    const record = updateExpertAgentInstanceSession({
-      tenantId: expertAgentLaunch.tenantId,
-      expertId: expertAgentLaunch.expertId,
-      releaseId: expertAgentLaunch.releaseId,
-      catalogVersion: expertAgentLaunch.catalogVersion,
-      latestSessionId: normalizedSessionId,
-      skillRefsOverride:
-        expertSkillRefsOverride ?? expertAgentLaunch.skillRefsOverride,
+  const { workspaceHealthError, setWorkspaceHealthError } =
+    useWorkspaceHealthRuntime({
+      project,
+      projectId,
+      workspacePathMissing,
+      shouldDeferWorkspaceAuxiliaryLoads,
+      deferredWorkspaceAuxiliaryLoadMs,
     });
-    if (record) {
-      void syncExpertAgentInstanceToCloud(record).catch(() => undefined);
-    }
-  }, [expertAgentLaunch, expertSkillRefsOverride, sessionId]);
   const activeSessionKey = sessionId?.trim() || null;
-  const restoredInteractiveMessageSnapshotRef = useRef<{
-    sessionId: string | null;
-    ids: Set<string>;
-    capturedInitial: boolean;
-    pendingRestoreCapture: boolean;
-  }>({
-    sessionId: null,
-    ids: new Set<string>(),
-    capturedInitial: false,
-    pendingRestoreCapture: false,
-  });
+  const { expertSkillRefsOverride, handleExpertSkillRefsChange } =
+    useWorkspaceExpertAgentLaunchSyncRuntime({
+      expertAgentLaunch,
+      expertPanelRequestMetadata,
+      pruneWorkspaceSkillRuntimeEnableRefs:
+        pruneExpertWorkspaceSkillRuntimeEnableRefs,
+      sessionId,
+    });
+  const workspaceRequestMetadataWithExpertSkills = useMemo(
+    () =>
+      resolveWorkspaceRequestMetadataWithExpertSkills({
+        expertSkillRefsOverride,
+        initialAutoSendRequestMetadata,
+        initialRequestMetadata,
+      }),
+    [
+      expertSkillRefsOverride,
+      initialAutoSendRequestMetadata,
+      initialRequestMetadata,
+    ],
+  );
+  const restoredInteractiveMessageSnapshotRef = useRef(
+    createRestoredInteractiveMessageSnapshot(),
+  );
   const readOnlyInteractiveMessageIds = useMemo<ReadonlySet<string>>(() => {
-    const snapshot = restoredInteractiveMessageSnapshotRef.current;
-    if (!activeSessionKey) {
-      snapshot.sessionId = null;
-      snapshot.ids = new Set<string>();
-      snapshot.capturedInitial = false;
-      snapshot.pendingRestoreCapture = false;
-      return snapshot.ids;
-    }
-
-    if (snapshot.sessionId !== activeSessionKey) {
-      snapshot.sessionId = activeSessionKey;
-      snapshot.ids = new Set<string>();
-      snapshot.capturedInitial = false;
-      snapshot.pendingRestoreCapture = false;
-    }
-
-    if (isAutoRestoringSession || isSessionHydrating) {
-      snapshot.pendingRestoreCapture = true;
-    }
-
-    const shouldCaptureInitialSessionMessages =
-      normalizedInitialSessionId === activeSessionKey &&
-      !snapshot.capturedInitial &&
-      messages.length > 0;
-    const shouldCaptureRestoredMessages =
-      snapshot.pendingRestoreCapture ||
-      shouldCaptureInitialSessionMessages ||
-      sessionHistoryWindow?.isLoadingFull === true;
-    let didCaptureRestoredMessages = false;
-
-    if (shouldCaptureRestoredMessages && messages.length > 0) {
-      for (const message of messages) {
-        snapshot.ids.add(message.id);
-      }
-      snapshot.capturedInitial = true;
-      snapshot.pendingRestoreCapture = false;
-      didCaptureRestoredMessages = true;
-    }
-
-    return didCaptureRestoredMessages ? new Set(snapshot.ids) : snapshot.ids;
+    return resolveReadOnlyInteractiveMessageIds({
+      snapshot: restoredInteractiveMessageSnapshotRef.current,
+      activeSessionKey,
+      messages,
+      normalizedInitialSessionId,
+      isAutoRestoringSession,
+      isSessionHydrating,
+      isLoadingFullSessionHistory: sessionHistoryWindow?.isLoadingFull === true,
+    });
   }, [
     activeSessionKey,
     isAutoRestoringSession,
@@ -1869,24 +1094,16 @@ export function AgentChatWorkspace({
     [topics],
   );
   activeSessionIdRef.current = sessionId;
-  const clawSidebarEntryResetKey = shouldAutoCollapseClassicClawSidebar
-    ? JSON.stringify({
-        projectId: externalProjectId ?? null,
-        contentId: contentId ?? null,
-        sessionId: sessionId ?? null,
-        theme: normalizedEntryTheme,
-        newChatAt: newChatAt ?? null,
-      })
-    : null;
-
-  useEffect(() => {
-    if (!shouldAutoCollapseClassicClawSidebar) {
-      return;
-    }
-
-    autoCollapsedTopicSidebarRef.current = false;
-    setShowSidebar(false);
-  }, [clawSidebarEntryResetKey, shouldAutoCollapseClassicClawSidebar]);
+  const { autoCollapsedTopicSidebarRef } =
+    useWorkspaceClassicClawSidebarRuntime({
+      contentId,
+      externalProjectId,
+      newChatAt,
+      normalizedEntryTheme,
+      sessionId,
+      shouldAutoCollapseClassicClawSidebar,
+      setShowSidebar,
+    });
   const persistedTeamMemoryShadowSnapshot = useMemo(() => {
     const repoScope = project?.rootPath?.trim();
     if (!repoScope || typeof localStorage === "undefined") {
@@ -1927,72 +1144,16 @@ export function AgentChatWorkspace({
     },
     [deferSessionRecentMetadataSyncForNavigation, originalSwitchTopic],
   );
-  const runtimeChatToolPreferences = useMemo(
-    () => createChatToolPreferencesFromExecutionRuntime(executionRuntime),
-    [executionRuntime],
-  );
-  const effectiveChatToolPreferences = useMemo(
-    () =>
-      alignChatToolPreferencesWithExecutionStrategy(
-        chatToolPreferences,
-        executionStrategy,
-      ),
-    [chatToolPreferences, executionStrategy],
-  );
-
-  useEffect(() => {
-    syncChatToolPreferencesSource(activeTheme, runtimeChatToolPreferences);
-  }, [activeTheme, runtimeChatToolPreferences, syncChatToolPreferencesSource]);
-
-  useEffect(() => {
-    if (
-      chatToolPreferences.task === effectiveChatToolPreferences.task &&
-      chatToolPreferences.subagent === effectiveChatToolPreferences.subagent
-    ) {
-      return;
-    }
-
-    setChatToolPreferences(effectiveChatToolPreferences);
-  }, [
-    chatToolPreferences.subagent,
-    chatToolPreferences.task,
-    effectiveChatToolPreferences,
-    setChatToolPreferences,
-  ]);
-
-  useEffect(() => {
-    const trimmedSessionId = sessionId?.trim();
-    if (!trimmedSessionId || runtimeChatToolPreferences) {
-      return;
-    }
-
-    const fallbackPreferences = {
-      ...alignChatToolPreferencesWithExecutionStrategy(
-        loadChatToolPreferences(activeTheme),
-        executionStrategy,
-      ),
-    };
-    const backfillKey = `${trimmedSessionId}:${JSON.stringify([
-      fallbackPreferences.task,
-      fallbackPreferences.subagent,
-    ])}`;
-    if (sessionRecentPreferencesBackfillKeyRef.current === backfillKey) {
-      return;
-    }
-    sessionRecentPreferencesBackfillKeyRef.current = backfillKey;
-
-    void syncSessionRecentPreferences(trimmedSessionId, fallbackPreferences, {
-      priority: "background",
-    }).catch((error) => {
-      console.warn("[AgentChatPage] 回填会话 recent_preferences 失败:", error);
-    });
-  }, [
+  const effectiveChatToolPreferences = useWorkspaceChatToolPreferencesRuntime({
     activeTheme,
+    chatToolPreferences,
+    executionRuntime,
     executionStrategy,
-    runtimeChatToolPreferences,
     sessionId,
+    setChatToolPreferences,
+    syncChatToolPreferencesSource,
     syncSessionRecentPreferences,
-  ]);
+  });
 
   const {
     clearRuntimeTeamState: clearPreparedRuntimeTeamState,
@@ -2032,103 +1193,28 @@ export function AgentChatWorkspace({
     liveRuntimeBySessionId: teamSessionRuntime.liveRuntimeBySessionId,
     stopSending,
   });
-  useEffect(() => {
-    logAgentDebug(
-      "AgentChatPage",
-      "stateSnapshot",
-      {
-        activeTheme,
-        contentId: contentId ?? null,
-        initialContentLoadError: initialContentLoadError ?? null,
-        isInitialContentLoading,
-        isSending,
-        layoutMode,
-        messagesCount: messages.length,
-        projectId: projectId ?? null,
-        sessionId: sessionId ?? null,
-        skillsCount: skills.length,
-        skillsLoading: combinedSkillsLoading,
-        topicsCount: topics.length,
-        workspaceHealthError,
-      },
-      {
-        dedupeKey: JSON.stringify({
-          activeTheme,
-          contentId: contentId ?? null,
-          initialContentLoadError: initialContentLoadError ?? null,
-          isInitialContentLoading,
-          isSending,
-          layoutMode,
-          messagesCount: messages.length,
-          projectId: projectId ?? null,
-          sessionId: sessionId ?? null,
-          skillsCount: skills.length,
-          skillsLoading: combinedSkillsLoading,
-          topicsCount: topics.length,
-          workspaceHealthError,
-        }),
-        throttleMs: 800,
-      },
-    );
-  }, [
-    activeTheme,
+  useWorkspaceDebugRuntime({
+    agentEntry,
     contentId,
-    initialContentLoadError,
-    isInitialContentLoading,
-    isSending,
-    layoutMode,
-    messages.length,
-    projectId,
-    sessionId,
-    skills.length,
-    combinedSkillsLoading,
-    topics.length,
-    workspaceHealthError,
-  ]);
-  const settledLiveArtifact = useMemo(
-    () =>
-      settleLiveArtifactAfterStreamStops(liveArtifact, {
-        streamActive: isSending,
-      }),
-    [isSending, liveArtifact],
-  );
-  const settledWorkbenchArtifacts = useMemo(() => {
-    if (!settledLiveArtifact) {
-      return artifacts;
-    }
-
-    let updated = false;
-    const nextArtifacts = artifacts.map((artifact) => {
-      if (artifact.id !== settledLiveArtifact.id) {
-        return artifact;
-      }
-
-      updated = updated || artifact !== settledLiveArtifact;
-      return settledLiveArtifact;
-    });
-
-    return updated ? nextArtifacts : artifacts;
-  }, [artifacts, settledLiveArtifact]);
-  const artifactDisplayState = useArtifactDisplayState(
-    settledLiveArtifact,
-    artifacts,
-  );
-  const currentCanvasArtifact = artifactDisplayState.liveArtifact;
-  const displayedCanvasArtifact = artifactDisplayState.displayArtifact;
-  const activeArtifactViewTargetId =
-    displayedCanvasArtifact?.id ||
-    currentCanvasArtifact?.id ||
-    selectedArtifact?.id ||
-    liveArtifact?.id ||
-    null;
-  const {
-    artifactViewMode,
-    applyAutoArtifactViewMode,
-    handleArtifactViewModeChange,
-  } = useWorkspaceArtifactViewModeControl({
-    activeTheme,
-    displayedArtifact: displayedCanvasArtifact,
-    activeArtifactId: activeArtifactViewTargetId,
+    externalProjectId,
+    initialCreationMode,
+    initialTheme,
+    lockTheme,
+    stateSnapshot: {
+      activeTheme,
+      contentId: contentId ?? null,
+      initialContentLoadError: initialContentLoadError ?? null,
+      isInitialContentLoading,
+      isSending,
+      layoutMode,
+      messagesCount: messages.length,
+      projectId: projectId ?? null,
+      sessionId: sessionId ?? null,
+      skillsCount: skills.length,
+      skillsLoading: combinedSkillsLoading,
+      topicsCount: topics.length,
+      workspaceHealthError,
+    },
   });
   const {
     browserAssistLaunching,
@@ -2156,78 +1242,46 @@ export function AgentChatWorkspace({
     onBrowserWorkbenchOpenRequest:
       workbenchRequests.requestBrowserWorkbenchOpen,
   });
-  const initialHarnessBrowserAssist = useMemo(() => {
-    return asRecord(
-      asRecord(initialAutoSendRequestMetadata)?.harness
-        ? asRecord(asRecord(initialAutoSendRequestMetadata)?.harness)
-            ?.browser_assist
-        : undefined,
-    );
-  }, [initialAutoSendRequestMetadata]);
-  const initialHarnessPreferredBackend = useMemo(() => {
-    const value = readFirstString(
-      initialHarnessBrowserAssist ? [initialHarnessBrowserAssist] : [],
-      ["preferred_backend", "preferredBackend"],
-    );
-    return value === "lime_extension_bridge" || value === "cdp_direct"
-      ? value
-      : undefined;
-  }, [initialHarnessBrowserAssist]);
-  const initialHarnessAutoLaunch = useMemo(() => {
-    const rawValue =
-      initialHarnessBrowserAssist?.auto_launch ??
-      initialHarnessBrowserAssist?.autoLaunch;
-    return typeof rawValue === "boolean" ? rawValue : undefined;
-  }, [initialHarnessBrowserAssist]);
-  const browserAssistRequestProfileKey = useMemo(() => {
-    if (mappedTheme !== "general") {
-      return undefined;
-    }
-
-    return (
-      browserAssistSessionState?.profileKey?.trim() ||
-      initialSiteSkillLaunch?.profileKey?.trim() ||
-      GENERAL_BROWSER_ASSIST_PROFILE_KEY
-    );
-  }, [
-    browserAssistSessionState?.profileKey,
-    initialSiteSkillLaunch?.profileKey,
+  const {
+    activeArtifactViewTargetId,
+    artifactDisplayState,
+    currentCanvasArtifact,
+    displayedCanvasArtifact,
+    settledWorkbenchArtifacts,
+  } = useWorkspaceArtifactStoreRuntime({
+    activeTheme,
+    artifacts,
+    browserAssistScopeKey: currentBrowserAssistScopeKey,
+    defaultSelectedArtifactId,
+    isSending,
+    liveArtifact,
+    messages,
+    preferGeneralCanvasFilePreview,
+    selectedArtifact,
+    selectedArtifactId,
+    setArtifacts,
+    setSelectedArtifactId,
+    upsertGeneralArtifact,
+  });
+  const {
+    artifactViewMode,
+    applyAutoArtifactViewMode,
+    handleArtifactViewModeChange,
+  } = useWorkspaceArtifactViewModeControl({
+    activeTheme,
+    displayedArtifact: displayedCanvasArtifact,
+    activeArtifactId: activeArtifactViewTargetId,
+  });
+  const {
+    browserAssistRequestProfileKey,
+    browserAssistRequestPreferredBackend,
+    browserAssistRequestAutoLaunch,
+  } = resolveWorkspaceBrowserAssistRequest({
     mappedTheme,
-  ]);
-  const shouldPreferExistingSessionBridgeForClaw = useMemo(() => {
-    if (mappedTheme !== "general") {
-      return false;
-    }
-
-    return (
-      browserAssistSessionState?.transportKind === "existing_session" ||
-      initialHarnessPreferredBackend === "lime_extension_bridge" ||
-      initialHarnessAutoLaunch === false ||
-      Boolean(initialSiteSkillLaunch?.profileKey?.trim()) ||
-      Boolean(initialSiteSkillLaunch?.requireAttachedSession) ||
-      initialSiteSkillLaunch?.preferredBackend === "lime_extension_bridge" ||
-      initialSiteSkillLaunch?.autoLaunch === false
-    );
-  }, [
-    browserAssistSessionState?.transportKind,
-    initialHarnessAutoLaunch,
-    initialHarnessPreferredBackend,
-    initialSiteSkillLaunch?.autoLaunch,
-    initialSiteSkillLaunch?.profileKey,
-    initialSiteSkillLaunch?.preferredBackend,
-    initialSiteSkillLaunch?.requireAttachedSession,
-    mappedTheme,
-  ]);
-  const browserAssistRequestPreferredBackend =
-    initialSiteSkillLaunch?.preferredBackend ||
-    initialHarnessPreferredBackend ||
-    (shouldPreferExistingSessionBridgeForClaw
-      ? "lime_extension_bridge"
-      : undefined);
-  const browserAssistRequestAutoLaunch =
-    initialSiteSkillLaunch?.autoLaunch ??
-    initialHarnessAutoLaunch ??
-    (shouldPreferExistingSessionBridgeForClaw ? false : true);
+    initialAutoSendRequestMetadata,
+    initialSiteSkillLaunch,
+    browserAssistSessionState,
+  });
   const handleOpenBrowserRuntimeForBrowserAssist = useCallback(
     (artifact?: Artifact) => {
       if (!_onNavigate) {
@@ -2235,68 +1289,39 @@ export function AgentChatWorkspace({
         return;
       }
 
-      const artifactMeta = artifact ? asRecord(artifact.meta) : null;
-      _onNavigate("browser-runtime", {
-        projectId: projectId ?? undefined,
-        contentId: contentId ?? undefined,
-        initialProfileKey:
-          readFirstString(artifactMeta ? [artifactMeta] : [], [
-            "profileKey",
-            "profile_key",
-          ]) ||
-          browserAssistSessionState?.profileKey ||
-          GENERAL_BROWSER_ASSIST_PROFILE_KEY,
-        initialSessionId:
-          readFirstString(artifactMeta ? [artifactMeta] : [], [
-            "sessionId",
-            "session_id",
-          ]) ||
-          browserAssistSessionState?.sessionId ||
-          undefined,
-        initialTargetId:
-          readFirstString(artifactMeta ? [artifactMeta] : [], [
-            "targetId",
-            "target_id",
-          ]) ||
-          browserAssistSessionState?.targetId ||
-          undefined,
-      });
+      _onNavigate(
+        "browser-runtime",
+        resolveBrowserRuntimeNavigationFromBrowserAssist({
+          artifact,
+          browserAssistSessionState,
+          contentId,
+          generalBrowserAssistProfileKey: GENERAL_BROWSER_ASSIST_PROFILE_KEY,
+          projectId,
+        }),
+      );
     },
-    [
-      _onNavigate,
-      browserAssistSessionState?.profileKey,
-      browserAssistSessionState?.sessionId,
-      browserAssistSessionState?.targetId,
-      contentId,
-      projectId,
-    ],
+    [_onNavigate, browserAssistSessionState, contentId, projectId],
   );
   const handleOpenBrowserRuntimeForSiteSkillExecution = useCallback(() => {
     if (!_onNavigate || !initialSiteSkillLaunch?.adapterName?.trim()) {
       return;
     }
 
-    _onNavigate("browser-runtime", {
-      projectId: projectId ?? undefined,
-      contentId: contentId ?? undefined,
-      initialProfileKey:
-        siteSkillExecutionState?.profileKey ||
-        initialSiteSkillLaunch.profileKey,
-      initialTargetId:
-        siteSkillExecutionState?.targetId || initialSiteSkillLaunch.targetId,
-      initialAdapterName: initialSiteSkillLaunch.adapterName,
-      initialArgs: initialSiteSkillLaunch.args,
-      initialAutoRun: false,
-      initialRequireAttachedSession: true,
-      initialSaveTitle: initialSiteSkillLaunch.saveTitle,
-    });
+    _onNavigate(
+      "browser-runtime",
+      resolveBrowserRuntimeNavigationFromSiteSkill({
+        contentId,
+        initialSiteSkillLaunch,
+        projectId,
+        siteSkillExecutionState,
+      }),
+    );
   }, [
     contentId,
     initialSiteSkillLaunch,
     _onNavigate,
     projectId,
-    siteSkillExecutionState?.profileKey,
-    siteSkillExecutionState?.targetId,
+    siteSkillExecutionState,
   ]);
   const realSubagentTimelineItems = useMemo(
     () =>
@@ -2325,78 +1350,6 @@ export function AgentChatWorkspace({
     onSessionChange?.(sessionId ?? null);
   }, [onSessionChange, sessionId]);
 
-  useEffect(() => {
-    if (activeTheme !== "general") {
-      setArtifacts([]);
-      return;
-    }
-
-    const messageArtifacts = mergeArtifacts(
-      messages.flatMap((message) => message.artifacts || []),
-    );
-    setArtifacts((currentArtifacts) =>
-      mergeMessageArtifactsIntoStore(
-        messageArtifacts,
-        currentArtifacts,
-        currentBrowserAssistScopeKey,
-      ),
-    );
-  }, [activeTheme, currentBrowserAssistScopeKey, messages, setArtifacts]);
-
-  useEffect(() => {
-    if (activeTheme !== "general") {
-      if (selectedArtifactId !== null) {
-        setSelectedArtifactId(null);
-      }
-      return;
-    }
-
-    if (preferGeneralCanvasFilePreview) {
-      if (selectedArtifactId !== null) {
-        setSelectedArtifactId(null);
-      }
-      return;
-    }
-
-    if (artifacts.length === 0) {
-      if (selectedArtifactId !== null) {
-        setSelectedArtifactId(null);
-      }
-      return;
-    }
-
-    const fallbackArtifactId = defaultSelectedArtifact?.id || null;
-
-    if (!selectedArtifact) {
-      if (selectedArtifactId !== fallbackArtifactId) {
-        setSelectedArtifactId(fallbackArtifactId);
-      }
-      return;
-    }
-
-    if (selectedArtifact.type === "browser_assist") {
-      if (selectedArtifactId !== fallbackArtifactId) {
-        setSelectedArtifactId(fallbackArtifactId);
-      }
-      return;
-    }
-
-    const selectedStillExists = artifacts.some(
-      (artifact) => artifact.id === selectedArtifact.id,
-    );
-    if (!selectedStillExists && selectedArtifactId !== fallbackArtifactId) {
-      setSelectedArtifactId(fallbackArtifactId);
-    }
-  }, [
-    activeTheme,
-    artifacts,
-    defaultSelectedArtifact,
-    preferGeneralCanvasFilePreview,
-    selectedArtifact,
-    selectedArtifactId,
-    setSelectedArtifactId,
-  ]);
-
   const contextHarnessRuntime = useWorkspaceContextHarnessRuntime({
     enabled: workspaceHarnessEnabled || generalHarnessEntryEnabled,
     projectId,
@@ -2417,7 +1370,6 @@ export function AgentChatWorkspace({
     harnessPendingCount,
     showHarnessToggle,
     harnessAttentionLevel,
-    navbarHarnessPanelVisible,
     harnessToggleLabel,
   } = contextHarnessRuntime;
   const generalWorkbenchScaffoldRuntime =
@@ -2468,74 +1420,19 @@ export function AgentChatWorkspace({
     workspaceServiceSkillEntryActions.handlePendingServiceSkillLaunchSubmit;
   const clearPendingServiceSkillLaunch =
     workspaceServiceSkillEntryActions.clearPendingServiceSkillLaunch;
-  useEffect(() => {
-    if (!initialPendingServiceSkillLaunchSignature) {
-      handledInitialPendingServiceSkillLaunchSignatureRef.current = "";
-      dismissedInitialPendingServiceSkillLaunchSignatureRef.current = "";
-      return;
-    }
-
-    if (
-      dismissedInitialPendingServiceSkillLaunchSignatureRef.current ===
-      initialPendingServiceSkillLaunchSignature
-    ) {
-      return;
-    }
-
-    if (
-      activeTheme !== "general" ||
-      serviceSkillsLoading ||
-      serviceSkillsError
-    ) {
-      return;
-    }
-
-    if (
-      handledInitialPendingServiceSkillLaunchSignatureRef.current ===
-      initialPendingServiceSkillLaunchSignature
-    ) {
-      return;
-    }
-
-    const skillId = initialPendingServiceSkillLaunch?.skillId?.trim();
-    const skillKey = initialPendingServiceSkillLaunch?.skillKey?.trim();
-    if (!skillId && !skillKey) {
-      return;
-    }
-
-    const matchedSkill = serviceSkills.find(
-      (skill) =>
-        (skillId && skill.id === skillId) ||
-        (skillKey && skill.skillKey === skillKey),
-    );
-    if (!matchedSkill) {
-      if (serviceSkills.length === 0) {
-        return;
-      }
-
-      handledInitialPendingServiceSkillLaunchSignatureRef.current =
-        initialPendingServiceSkillLaunchSignature;
-      toast.error(`未找到技能：${skillId ?? skillKey}`);
-      return;
-    }
-
-    handledInitialPendingServiceSkillLaunchSignatureRef.current =
-      initialPendingServiceSkillLaunchSignature;
-    workspaceServiceSkillEntryActions.handleServiceSkillSelect(matchedSkill, {
-      requestKey: initialPendingServiceSkillLaunch?.requestKey,
-      initialSlotValues: initialPendingServiceSkillLaunch?.initialSlotValues,
-      prefillHint: initialPendingServiceSkillLaunch?.prefillHint,
-      launchUserInput: initialPendingServiceSkillLaunch?.launchUserInput,
-    });
-  }, [
+  useInitialPendingServiceSkillLaunchRuntime({
     activeTheme,
     initialPendingServiceSkillLaunch,
     initialPendingServiceSkillLaunchSignature,
+    handledSignatureRef: handledInitialPendingServiceSkillLaunchSignatureRef,
+    dismissedSignatureRef:
+      dismissedInitialPendingServiceSkillLaunchSignatureRef,
     serviceSkills,
     serviceSkillsError,
     serviceSkillsLoading,
-    workspaceServiceSkillEntryActions,
-  ]);
+    onSelectServiceSkill:
+      workspaceServiceSkillEntryActions.handleServiceSkillSelect,
+  });
 
   const {
     a2uiSubmissionNotice,
@@ -2664,55 +1561,25 @@ export function AgentChatWorkspace({
     [contextWorkspace, t],
   );
 
-  const harnessRequestMetadata = useMemo(
-    () =>
-      buildHarnessRequestMetadata({
-        theme: mappedTheme,
-        preferences: {
-          task: effectiveChatToolPreferences.task,
-          subagent: effectiveChatToolPreferences.subagent,
-        },
-        sessionMode: isThemeWorkbench ? "general_workbench" : "default",
-        gateKey: isThemeWorkbench ? currentGate.key : undefined,
-        runTitle: themeWorkbenchActiveQueueItem?.title?.trim() || undefined,
-        contentId: contentId || undefined,
-        browserAssistProfileKey: browserAssistRequestProfileKey,
-        browserAssistPreferredBackend: browserAssistRequestPreferredBackend,
-        browserAssistAutoLaunch: browserAssistRequestAutoLaunch,
-        preferredTeamPresetId,
-        selectedTeamId: selectedTeam?.id,
-        selectedTeamSource: selectedTeam?.source,
-        selectedTeamLabel,
-        selectedTeamDescription: selectedTeam?.description,
-        selectedTeamSummary,
-        selectedTeamRoles: selectedTeam?.roles,
-        teamMemoryShadow: buildTeamMemoryShadowRequestMetadata(
-          resolvedTeamMemoryShadowSnapshot,
-        ),
-        agentResponseLanguage,
-      }),
-    [
-      effectiveChatToolPreferences.subagent,
-      effectiveChatToolPreferences.task,
-      browserAssistRequestAutoLaunch,
-      browserAssistRequestPreferredBackend,
-      browserAssistRequestProfileKey,
-      contentId,
-      currentGate.key,
-      isThemeWorkbench,
-      mappedTheme,
-      preferredTeamPresetId,
-      selectedTeam?.id,
-      selectedTeam?.description,
-      selectedTeam?.roles,
-      selectedTeam?.source,
-      selectedTeamLabel,
-      selectedTeamSummary,
-      resolvedTeamMemoryShadowSnapshot,
-      agentResponseLanguage,
-      themeWorkbenchActiveQueueItem?.title,
-    ],
-  );
+  const harnessRequestMetadata = useWorkspaceHarnessRequestMetadataRuntime({
+    agentResponseLanguage,
+    browserAssistAutoLaunch: browserAssistRequestAutoLaunch,
+    browserAssistPreferredBackend: browserAssistRequestPreferredBackend,
+    browserAssistProfileKey: browserAssistRequestProfileKey,
+    contentId,
+    currentGateKey: currentGate.key,
+    effectiveChatToolPreferences,
+    isThemeWorkbench,
+    mappedTheme,
+    preferredTeamPresetId,
+    resolvedTeamMemoryShadowSnapshot,
+    selectedTeam,
+    selectedTeamLabel,
+    selectedTeamSummary,
+    themeWorkbenchActiveQueueTitle: themeWorkbenchActiveQueueItem?.title,
+    workspaceSkillBindings: workspaceSkillBindingsRuntime.bindings,
+    workspaceSkillRuntimeEnable: expertWorkspaceSkillRuntimeEnableInput,
+  });
   const harnessInventoryRuntime = useWorkspaceHarnessInventoryRuntime({
     enabled: workspaceHarnessEnabled,
     chatMode,
@@ -2727,51 +1594,14 @@ export function AgentChatWorkspace({
     harnessPendingCount,
   });
 
-  useEffect(() => {
-    if (!isThemeWorkbench || themeWorkbenchRunState !== "idle") {
-      return;
-    }
-    if (!canvasState || canvasState.type !== "document") {
-      return;
-    }
-
-    const latestTerminal =
-      themeWorkbenchBackendRunState?.latest_terminal ?? null;
-
-    setDocumentVersionStatusMap((previous) => {
-      if (latestTerminal) {
-        const terminalVersionId = latestTerminal.run_id;
-        const terminalVersionExists = canvasState.versions.some(
-          (version) => version.id === terminalVersionId,
-        );
-        if (terminalVersionExists) {
-          const terminalStatus: TopicBranchStatus =
-            latestTerminal.status === "success" ? "merged" : "candidate";
-          if (previous[terminalVersionId] !== terminalStatus) {
-            return {
-              ...previous,
-              [terminalVersionId]: terminalStatus,
-            };
-          }
-        }
-      }
-
-      const currentVersionId = canvasState.currentVersionId;
-      if (!currentVersionId || previous[currentVersionId] !== "in_progress") {
-        return previous;
-      }
-      return {
-        ...previous,
-        [currentVersionId]: "pending",
-      };
-    });
-  }, [
+  useWorkspaceDocumentVersionStatusSyncRuntime({
     canvasState,
     isThemeWorkbench,
     setDocumentVersionStatusMap,
-    themeWorkbenchBackendRunState?.latest_terminal,
+    themeWorkbenchLatestTerminal:
+      themeWorkbenchBackendRunState?.latest_terminal ?? null,
     themeWorkbenchRunState,
-  ]);
+  });
 
   // 会话文件持久化 hook
   const {
@@ -2793,332 +1623,44 @@ export function AgentChatWorkspace({
     projectRootPath: project?.rootPath || null,
   });
 
-  // 监听画布状态变化，自动同步到 Content
-  useEffect(() => {
-    if (!canvasState || !contentId) {
-      return;
-    }
+  useWorkspaceCanvasContentSyncRuntime({
+    canvasState,
+    contentId,
+    lastCanvasSyncRequestRef,
+    syncContent,
+  });
 
-    try {
-      const content = serializeCanvasStateForSync(canvasState);
-      if (isSyncContentEmpty(content)) {
-        return;
-      }
-
-      const previousRequest = lastCanvasSyncRequestRef.current;
-      if (
-        previousRequest?.contentId === contentId &&
-        previousRequest.body === content
-      ) {
-        return;
-      }
-
-      lastCanvasSyncRequestRef.current = { contentId, body: content };
-      syncContent(contentId, content);
-    } catch (error) {
-      console.error("提取画布内容失败:", error);
-    }
-  }, [canvasState, contentId, syncContent]);
-
-  // 用于追踪是否已触发过 AI 引导
-  const hasTriggeredGuide = useRef(false);
-  const consumedInitialPromptRef = useRef<string | null>(null);
-  const consumedInitialPromptKey = consumedInitialPromptRef.current;
-  const [bootstrapDispatchSnapshot, setBootstrapDispatchSnapshot] =
-    useState<InitialDispatchPreviewSnapshot | null>(null);
-  const [generalWorkbenchEntryPrompt, setGeneralWorkbenchEntryPrompt] =
-    useState<GeneralWorkbenchEntryPromptState | null>(null);
-  const [
+  const {
+    bootstrapDispatchPreview,
+    consumeInitialPrompt,
+    consumedInitialPromptRef,
+    dismissGeneralWorkbenchEntryPrompt,
+    finalizeAfterSendSuccess,
     generalWorkbenchEntryCheckPending,
-    setGeneralWorkbenchEntryCheckPending,
-  ] = useState(false);
-  const hydratedPromptSignatureRef = useRef<string | null>(null);
-  const dismissedPromptSignatureRef = useRef<string | null>(null);
-  const initialDispatchKey = useMemo(
-    () => buildInitialDispatchKey(initialUserPrompt, initialUserImages),
-    [initialUserImages, initialUserPrompt],
-  );
-
-  useEffect(() => {
-    if (!initialDispatchKey) {
-      return;
-    }
-
-    setBootstrapDispatchSnapshot({
-      key: initialDispatchKey,
-      prompt: initialUserPrompt,
-      images: initialUserImages || [],
-    });
-  }, [initialDispatchKey, initialUserImages, initialUserPrompt]);
-
-  useEffect(() => {
-    if (messages.length > 0) {
-      setBootstrapDispatchSnapshot(null);
-      return;
-    }
-
-    if (!initialDispatchKey && !isSending && queuedTurns.length === 0) {
-      setBootstrapDispatchSnapshot(null);
-    }
-  }, [initialDispatchKey, isSending, messages.length, queuedTurns.length]);
-
-  const activeBootstrapDispatch = useMemo(() => {
-    if (
-      initialDispatchKey &&
-      ((initialUserPrompt || "").trim() || (initialUserImages || []).length > 0)
-    ) {
-      return {
-        key: initialDispatchKey,
-        prompt: initialUserPrompt,
-        images: initialUserImages || [],
-      };
-    }
-
-    return bootstrapDispatchSnapshot;
-  }, [
-    bootstrapDispatchSnapshot,
+    generalWorkbenchEntryPrompt,
+    hasTriggeredGuideRef,
     initialDispatchKey,
-    initialUserImages,
-    initialUserPrompt,
-  ]);
-  const isBootstrapDispatchPending =
-    activeBootstrapDispatch !== null &&
-    consumedInitialPromptKey !== activeBootstrapDispatch.key;
-  const bootstrapDispatchPreview =
-    !shouldUseCompactGeneralWorkbench &&
-    activeBootstrapDispatch &&
-    messages.length === 0 &&
-    (isSending || queuedTurns.length > 0)
-      ? activeBootstrapDispatch
-      : null;
-  useEffect(() => {
-    hydratedPromptSignatureRef.current = null;
-    dismissedPromptSignatureRef.current = null;
-    setGeneralWorkbenchEntryPrompt(null);
-    setGeneralWorkbenchEntryCheckPending(false);
-  }, [activeTheme, contentId, initialDispatchKey]);
-
-  useEffect(() => {
-    if (shouldUseCompactGeneralWorkbench) {
-      return;
-    }
-
-    const pendingInitialPrompt = (initialUserPrompt || "").trim();
-    const pendingInitialImages = initialUserImages || [];
-    if (
-      !isThemeWorkbench ||
-      autoRunInitialPromptOnMount ||
-      !contentId ||
-      !initialDispatchKey ||
-      !pendingInitialPrompt ||
-      pendingInitialImages.length > 0 ||
-      messages.length > 0
-    ) {
-      return;
-    }
-
-    if (
-      consumedInitialPromptKey === initialDispatchKey ||
-      hydratedPromptSignatureRef.current === initialDispatchKey
-    ) {
-      return;
-    }
-
-    hydratedPromptSignatureRef.current = initialDispatchKey;
-    hasTriggeredGuide.current = true;
-    setInput((previous) => previous.trim() || pendingInitialPrompt);
-    setGeneralWorkbenchEntryPrompt({
-      kind: "initial_prompt",
-      signature: initialDispatchKey,
-      title: "已恢复待执行创作意图",
-      description: "进入页面后不会自动开始生成，确认后再继续。",
-      actionLabel: "继续生成",
-      prompt: pendingInitialPrompt,
-    });
-  }, [
+    isBootstrapDispatchPending,
+    resetGuideState,
+    resolveSendBoundary,
+    rollbackAfterSendFailure,
+  } = useGeneralWorkbenchInitialDispatchRuntime({
+    activeTheme,
     autoRunInitialPromptOnMount,
-    consumedInitialPromptKey,
     contentId,
-    initialDispatchKey,
-    initialUserImages,
     initialUserPrompt,
+    initialUserImages,
+    isSending,
     isThemeWorkbench,
-    messages.length,
-    setInput,
-    shouldUseCompactGeneralWorkbench,
-  ]);
-
-  useEffect(() => {
-    if (shouldUseCompactGeneralWorkbench) {
-      setGeneralWorkbenchEntryCheckPending(false);
-      return;
-    }
-
-    if (
-      !isThemeWorkbench ||
-      !contentId ||
-      !sessionId ||
-      messages.length > 0 ||
-      Boolean(initialDispatchKey)
-    ) {
-      setGeneralWorkbenchEntryCheckPending(false);
-      return;
-    }
-
-    let disposed = false;
-    setGeneralWorkbenchEntryCheckPending(true);
-    const perfT0 = performance.now();
-
-    void (async () => {
-      try {
-        const backendState = await executionRunGetGeneralWorkbenchState(
-          sessionId,
-          3,
-        ).catch(() => null);
-
-        console.info(
-          `[PERF] executionRunGetGeneralWorkbenchState: ${(performance.now() - perfT0).toFixed(0)}ms`,
-        );
-
-        if (disposed) {
-          return;
-        }
-
-        const nextPrompt =
-          buildGeneralWorkbenchResumePromptFromRunState(backendState);
-        if (!nextPrompt) {
-          setGeneralWorkbenchEntryPrompt((current) =>
-            current?.kind === "resume" ? null : current,
-          );
-          return;
-        }
-
-        if (dismissedPromptSignatureRef.current === nextPrompt.signature) {
-          return;
-        }
-
-        setGeneralWorkbenchEntryPrompt((current) =>
-          current?.kind === "initial_prompt" ? current : nextPrompt,
-        );
-      } finally {
-        if (!disposed) {
-          setGeneralWorkbenchEntryCheckPending(false);
-        }
-      }
-    })();
-
-    return () => {
-      disposed = true;
-    };
-  }, [
-    contentId,
-    initialDispatchKey,
-    isThemeWorkbench,
-    messages.length,
+    mappedTheme,
+    messagesLength: messages.length,
+    onInitialUserPromptConsumed,
+    queuedTurnsLength: queuedTurns.length,
     sessionId,
+    setInput,
+    setSoulArtifactVoiceEnabledForTurn,
     shouldUseCompactGeneralWorkbench,
-  ]);
-
-  const clearGeneralWorkbenchEntryPrompt = useCallback(() => {
-    setGeneralWorkbenchEntryPrompt(null);
-  }, []);
-
-  const dismissGeneralWorkbenchEntryPrompt = useCallback(
-    (options?: {
-      consumeInitialPrompt?: boolean;
-      onConsumeInitialPrompt?: () => void;
-    }) => {
-      setGeneralWorkbenchEntryPrompt((current) => {
-        if (!current) {
-          return current;
-        }
-
-        if (
-          current.kind === "initial_prompt" &&
-          options?.consumeInitialPrompt &&
-          initialDispatchKey
-        ) {
-          options.onConsumeInitialPrompt?.();
-        } else {
-          dismissedPromptSignatureRef.current = current.signature;
-        }
-
-        return null;
-      });
-    },
-    [initialDispatchKey],
-  );
-  const consumeInitialPrompt = useCallback(
-    (dispatchKey: string | null) => {
-      consumedInitialPromptRef.current = dispatchKey;
-      onInitialUserPromptConsumed?.();
-    },
-    [onInitialUserPromptConsumed],
-  );
-  const resetConsumedInitialPrompt = useCallback(() => {
-    consumedInitialPromptRef.current = null;
-  }, []);
-  const resetGuideState = useCallback(() => {
-    hasTriggeredGuide.current = false;
-    consumedInitialPromptRef.current = null;
-  }, []);
-  const resolveSendBoundary = useCallback(
-    ({
-      sourceText,
-      sendOptions,
-    }: {
-      sourceText: string;
-      sendOptions?: HandleSendOptions;
-    }): GeneralWorkbenchSendBoundaryState =>
-      buildGeneralWorkbenchSendBoundaryState({
-        isThemeWorkbench,
-        contentId,
-        initialDispatchKey,
-        consumedInitialPromptKey,
-        initialUserImages,
-        mappedTheme,
-        socialArticleSkillKey: SOCIAL_ARTICLE_SKILL_KEY,
-        sourceText,
-        sendOptions,
-      }),
-    [
-      contentId,
-      consumedInitialPromptKey,
-      initialDispatchKey,
-      initialUserImages,
-      isThemeWorkbench,
-      mappedTheme,
-    ],
-  );
-  const finalizeAfterSendSuccess = useCallback(
-    (boundary: GeneralWorkbenchSendBoundaryState) => {
-      if (
-        boundary.shouldConsumePendingGeneralWorkbenchInitialPrompt &&
-        initialDispatchKey
-      ) {
-        consumeInitialPrompt(initialDispatchKey);
-      }
-
-      if (boundary.shouldDismissGeneralWorkbenchEntryPrompt) {
-        clearGeneralWorkbenchEntryPrompt();
-      }
-      setSoulArtifactVoiceEnabledForTurn(true);
-    },
-    [
-      clearGeneralWorkbenchEntryPrompt,
-      consumeInitialPrompt,
-      initialDispatchKey,
-      setSoulArtifactVoiceEnabledForTurn,
-    ],
-  );
-  const rollbackAfterSendFailure = useCallback(
-    (boundary: GeneralWorkbenchSendBoundaryState) => {
-      if (boundary.shouldConsumePendingGeneralWorkbenchInitialPrompt) {
-        resetConsumedInitialPrompt();
-      }
-    },
-    [resetConsumedInitialPrompt],
-  );
+  });
   const { resetRestoredSessionState } = useWorkspaceSessionRestore({
     sessionId,
     sessionMeta,
@@ -3317,6 +1859,8 @@ export function AgentChatWorkspace({
     selectedTeamLabel,
     selectedTeamSummary,
     teamMemoryShadowSnapshot: resolvedTeamMemoryShadowSnapshot,
+    workspaceSkillBindings: workspaceSkillBindingsRuntime.bindings,
+    workspaceSkillRuntimeEnable: expertWorkspaceSkillRuntimeEnableInput,
     currentGateKey: currentGate.key,
     themeWorkbenchActiveQueueTitle: themeWorkbenchActiveQueueItem?.title,
     contentId,
@@ -3344,66 +1888,6 @@ export function AgentChatWorkspace({
     ensureSessionForCommandMetadata: ensureSession,
     resolveImageWorkbenchSkillRequest,
   });
-  useEffect(() => {
-    if (!workspacePathMissing || typeof workspacePathMissing === "boolean") {
-      return;
-    }
-    if (
-      !shouldAutoRecoverWorkspacePathMissing(project, workspacePathMissing) ||
-      pendingWorkspacePathRetryRef.current
-    ) {
-      return;
-    }
-
-    const sourceWorkspaceId = normalizeProjectId(project?.id);
-    if (!sourceWorkspaceId) {
-      return;
-    }
-
-    const recoveryKey = [
-      sourceWorkspaceId,
-      workspacePathMissing.content,
-      workspacePathMissing.images.length,
-    ].join(":");
-    if (workspacePathAutoRecoveryKeyRef.current === recoveryKey) {
-      return;
-    }
-    workspacePathAutoRecoveryKeyRef.current = recoveryKey;
-
-    workspacePathAutoRecoveryKeyRef.current = null;
-    logAgentDebug(
-      "AgentChatPage",
-      "workspacePathAutoRecovery.skippedNoDefaultProjectFallback",
-      {
-        projectId: sourceWorkspaceId,
-        recoveryKey,
-      },
-      { level: "warn" },
-    );
-  }, [project, workspacePathMissing]);
-  useEffect(() => {
-    const pendingRetry = pendingWorkspacePathRetryRef.current;
-    if (!pendingRetry) {
-      return;
-    }
-
-    const normalizedProjectId = normalizeProjectId(projectId);
-    if (normalizedProjectId !== pendingRetry.targetWorkspaceId) {
-      return;
-    }
-
-    pendingWorkspacePathRetryRef.current = null;
-    logAgentDebug("AgentChatPage", "workspacePathAutoRecovery.retrySend", {
-      projectId: normalizedProjectId,
-      recoveryKey: pendingRetry.recoveryKey,
-    });
-    void handleSendRef.current(
-      pendingRetry.images,
-      undefined,
-      undefined,
-      pendingRetry.content,
-    );
-  }, [handleSendRef, projectId]);
   useEffect(() => {
     sceneGateResumeHandlerRef.current = async ({ rawText, requestMetadata }) =>
       await handleSendRef.current(
@@ -3577,43 +2061,25 @@ export function AgentChatWorkspace({
         .find((message) => message.role === "assistant")?.id ?? null,
     [displayMessages],
   );
-  const activeTaskCenterDraftTab = useMemo(
-    () =>
-      activeTaskCenterDraftTabId
-        ? (taskCenterDraftTabs.find(
-            (tab) => tab.id === activeTaskCenterDraftTabId,
-          ) ?? null)
-        : null,
-    [activeTaskCenterDraftTabId, taskCenterDraftTabs],
-  );
-  const isTaskCenterDraftTabActive = Boolean(
-    isTaskCenterEntry && activeTaskCenterDraftTab,
-  );
-  const isTaskCenterDraftSurfaceActive = Boolean(
-    isTaskCenterEntry &&
-    (activeTaskCenterDraftTab || taskCenterDraftSurfaceActiveRef.current),
-  );
-  const isTaskCenterDraftSendInFlight = Boolean(
-    agentEntry === "claw" &&
-    taskCenterDraftSendRequest?.materializeDraft &&
-    (activeTaskCenterDraftTab
-      ? taskCenterDraftSendRequest.draftTabId === activeTaskCenterDraftTab.id
-      : taskCenterDraftSurfaceActiveRef.current),
-  );
-  const hasVisibleSessionActivityForDraftSurface =
-    !isTaskCenterDraftTabActive &&
-    (displayMessages.length > 0 ||
-      effectiveThreadItems.length > 0 ||
-      hasPendingA2UIForm ||
-      isPreparingSend ||
-      isSending ||
-      queuedTurns.length > 0);
-  const shouldSuppressTaskCenterDraftContent =
-    shouldSuppressTaskCenterDraftContentForLayout({
-      draftSurfaceActive: isTaskCenterDraftSurfaceActive,
-      draftSendInFlight: isTaskCenterDraftSendInFlight,
-      hasVisibleSessionActivity: hasVisibleSessionActivityForDraftSurface,
-    });
+  const taskCenterDraftSurfaceActive = taskCenterDraftSurfaceActiveRef.current;
+  const {
+    isTaskCenterDraftTabActive,
+    isTaskCenterDraftSurfaceActive,
+    shouldSuppressTaskCenterDraftContent,
+  } = resolveTaskCenterDraftSurfaceState({
+    agentEntry,
+    isTaskCenterEntry,
+    activeDraftTabId: activeTaskCenterDraftTabId,
+    draftTabs: taskCenterDraftTabs,
+    draftSurfaceActive: taskCenterDraftSurfaceActive,
+    draftSendRequest: taskCenterDraftSendRequest,
+    displayMessageCount: displayMessages.length,
+    threadItemCount: effectiveThreadItems.length,
+    hasPendingA2UIForm,
+    isPreparingSend,
+    isSending,
+    queuedTurnCount: queuedTurns.length,
+  });
   const { homePendingPreviewMessages, isHomePendingPreviewActive } =
     useTaskCenterHomePendingPreviewRuntime({
       homePendingPreviewRequest,
@@ -3706,19 +2172,6 @@ export function AgentChatWorkspace({
     setCanvasState,
   });
 
-  useEffect(() => {
-    if (
-      activeTheme !== "general" ||
-      !liveArtifact ||
-      !settledLiveArtifact ||
-      liveArtifact === settledLiveArtifact
-    ) {
-      return;
-    }
-
-    upsertGeneralArtifact(settledLiveArtifact);
-  }, [activeTheme, liveArtifact, settledLiveArtifact, upsertGeneralArtifact]);
-
   const {
     activeTaskCenterDraftTabIdRef,
     commitMaterializedTaskCenterDraftTab,
@@ -3792,336 +2245,79 @@ export function AgentChatWorkspace({
     markTaskCenterLocalSessionOverride,
   });
 
-  const handleRenameTaskTopic = useCallback(
-    async (topicId: string) => {
-      if (isTaskCenterDraftTabId(topicId) || typeof window === "undefined") {
-        return;
-      }
-
-      const topic = topicById.get(topicId);
-      if (!topic) {
-        return;
-      }
-
-      const currentTitle = resolveTaskCenterTopicTitle(
-        topic.title,
-        untitledTaskLabel,
-      );
-      const nextTitle = window
-        .prompt(taskCenterRenamePromptLabel, currentTitle)
-        ?.trim();
-      if (!nextTitle || nextTitle === currentTitle) {
-        return;
-      }
-
-      await renameTopic(topicId, nextTitle);
-    },
-    [renameTopic, taskCenterRenamePromptLabel, topicById, untitledTaskLabel],
-  );
-
-  const recentSessionTopic = useMemo(
-    () => resolveRecentTopicCandidate(topics, sessionId),
-    [sessionId, topics],
-  );
-  const recentSessionActionLabel = useMemo(
-    () =>
-      recentSessionTopic
-        ? resolveRecentTopicActionLabel(recentSessionTopic)
-        : "继续最近会话",
-    [recentSessionTopic],
-  );
-  const handleResumeRecentSession = useCallback(() => {
-    if (!recentSessionTopic) {
-      return;
-    }
-
-    void handleOpenTaskTopic(recentSessionTopic.id, {
-      preferResume: true,
-      forceRefresh: recentSessionTopic.statusReason === "workspace_error",
-    });
-  }, [handleOpenTaskTopic, recentSessionTopic]);
-  const projectConversationGroups = useMemo(
-    () =>
-      buildEmptyStateProjectConversationGroups({
-        topics,
-        currentProjectId: projectId,
-        currentSessionId: sessionId,
-        openedProjects,
-      }),
-    [openedProjects, projectId, sessionId, topics],
-  );
-  const handleOpenProjectConversation = useCallback(
-    (topicId: string, statusReason?: string) => {
-      void handleOpenTaskTopic(topicId, {
-        preferResume: true,
-        forceRefresh: statusReason === "workspace_error",
-      });
-    },
-    [handleOpenTaskTopic],
-  );
-  const handleOpenTaskCenterNewTaskPage = useCallback(
-    (requestedProjectId?: string | null) => {
-      if (agentEntry !== "claw" && agentEntry !== "new-task") {
-        return;
-      }
-
-      const normalizedRequestedProjectId =
-        requestedProjectId === undefined
-          ? normalizeProjectId(externalProjectId)
-          : normalizeProjectId(requestedProjectId);
-      const normalizedExternalProjectId = normalizeProjectId(externalProjectId);
-      if (
-        normalizedInitialSessionId &&
-        requestedProjectId !== undefined &&
-        normalizedRequestedProjectId !== normalizedExternalProjectId
-      ) {
-        logAgentDebug(
-          "AgentChatPage",
-          "taskCenter.draftRequestIgnoredForRouteSession",
-          {
-            agentEntry,
-            initialSessionId: normalizedInitialSessionId,
-            requestedProjectId: requestedProjectId ?? null,
-            externalProjectId: normalizedExternalProjectId,
-          },
-        );
-        return;
-      }
-
-      if (normalizedRequestedProjectId !== normalizedExternalProjectId) {
-        _onNavigate?.(
-          "agent",
-          buildHomeAgentParams({
-            projectId: normalizedRequestedProjectId ?? undefined,
-          }),
-        );
-        return;
-      }
-
-      if (normalizedRequestedProjectId) {
-        applyProjectSelection(normalizedRequestedProjectId);
-      } else {
-        resetProjectSelection();
-      }
-
-      openTaskCenterDraftTab();
-    },
-    [
-      _onNavigate,
-      agentEntry,
-      applyProjectSelection,
-      externalProjectId,
-      normalizedInitialSessionId,
-      openTaskCenterDraftTab,
-      resetProjectSelection,
-    ],
-  );
-  useEffect(() => {
-    if (agentEntry !== "claw" && agentEntry !== "new-task") {
-      return;
-    }
-
-    return subscribeTaskCenterDraftTaskRequests((detail) => {
-      handleOpenTaskCenterNewTaskPage(detail.projectId);
-    });
-  }, [agentEntry, handleOpenTaskCenterNewTaskPage]);
-  const taskCenterPreviewTopicId = useMemo(
-    () =>
-      resolveTaskCenterPreviewTopicId({
-        sessionId,
-        detachedTopicId: taskCenterDetachedTopicId,
-        switchingTopicId: taskCenterTransitionTopicId,
-      }),
-    [sessionId, taskCenterDetachedTopicId, taskCenterTransitionTopicId],
-  );
-  const taskCenterSessionSwitchPending = useMemo(
-    () =>
-      isTaskCenterTopicSwitchPending({
-        sessionId,
-        switchingTopicId: taskCenterTransitionTopicId,
-      }),
-    [sessionId, taskCenterTransitionTopicId],
-  );
-  const hasCurrentSessionActivity =
-    !isTaskCenterDraftTabActive &&
-    (displayMessages.length > 0 ||
-      effectiveThreadItems.length > 0 ||
-      hasPendingA2UIForm ||
-      isPreparingSend ||
-      isSending ||
-      isHomePendingPreviewActive ||
-      queuedTurns.length > 0);
-  const hasHomeConversationActivity =
-    !shouldSuppressTaskCenterDraftContent &&
-    (hasCurrentSessionActivity || Boolean(taskCenterDraftSendRequest));
-  const taskCenterHomeSurfaceState = resolveTaskCenterHomeSurfaceState({
-    agentEntry,
-    draftSurfaceActive: isTaskCenterDraftSurfaceActive,
-    shouldSuppressDraftContent: shouldSuppressTaskCenterDraftContent,
-    sessionSwitchPending: taskCenterSessionSwitchPending,
-    hasInitialSessionRoute: Boolean(normalizedInitialSessionId),
-    hasConversationActivity: hasHomeConversationActivity,
-    hasCurrentSessionActivity,
-    sessionId,
-    embeddedHomeSessionIds: taskCenterEmbeddedHomeSessionIds,
-    isAutoRestoringSession,
-    isSessionHydrating,
-  });
-  const isTaskCenterDraftSendPending = isTaskCenterDraftSendPendingForLayout({
-    hasDraftSendRequest: Boolean(taskCenterDraftSendRequest),
-    hasDisplayMessages:
-      displayMessages.length > 0 || effectiveThreadItems.length > 0,
-    isSending,
-    queuedTurnCount: queuedTurns.length,
-  });
-  const shouldRenderTaskCenterEmbeddedHome =
-    taskCenterHomeSurfaceState.shouldRenderEmbeddedHome;
-  useEffect(() => {
-    if (!sessionId || !taskCenterEmbeddedHomeSessionIds.has(sessionId)) {
-      return;
-    }
-
-    if (hasHomeConversationActivity) {
-      clearTaskCenterEmbeddedHomeSession(sessionId);
-    }
-  }, [
-    clearTaskCenterEmbeddedHomeSession,
-    hasHomeConversationActivity,
-    sessionId,
-    taskCenterEmbeddedHomeSessionIds,
-  ]);
-  const suppressHomeNavbarUtilityActions =
-    (shouldUseBrowserWorkspaceHomeChrome && !hasHomeConversationActivity) ||
-    shouldRenderTaskCenterEmbeddedHome;
-
-  useEffect(() => {
-    if (!suppressHomeNavbarUtilityActions || !harnessPanelVisible) {
-      return;
-    }
-
-    setHarnessPanelVisible(false);
-  }, [
-    harnessPanelVisible,
-    setHarnessPanelVisible,
-    suppressHomeNavbarUtilityActions,
-  ]);
   const {
-    shouldHideDetachedTaskCenterTabs,
-    taskCenterVisibleTabIds,
-    shouldRenderTaskCenterTabStrip,
-    taskCenterTabsNode,
     browserWorkspaceHomeTabsNode,
-  } = useTaskCenterTabChrome({
-    agentEntry,
-    sessionId,
-    normalizedInitialSessionId,
-    detachedTopicId: taskCenterDetachedTopicId,
-    openTabIds: taskCenterOpenTabIds,
-    topics,
-    previewTopicId: taskCenterPreviewTopicId,
-    draftTabs: taskCenterDraftTabs,
+    handleOpenProjectConversation,
+    handleResumeRecentSession,
+    hasHomeConversationActivity,
+    isTaskCenterDraftSendPending,
+    projectConversationGroups,
+    recentSessionActionLabel,
+    recentSessionTopic,
+    shouldRenderTaskCenterEmbeddedHome,
+    shouldRenderTaskCenterTabStrip,
+    suppressHomeNavbarUtilityActions,
+    taskCenterHomeSurfaceState,
+    taskCenterTabsNode,
+  } = useTaskCenterChromeNavigationRuntime({
     activeDraftTabId: activeTaskCenterDraftTabId,
-    isDraftTabActive: isTaskCenterDraftTabActive,
-    hasLocalSessionOverride: taskCenterLocalSessionOverride !== null,
-    topicById,
-    untitledTaskLabel,
-    shouldUseBrowserWorkspaceHomeChrome,
-    newConversationLabel,
-    newChatAt,
-    homeMountedAt: pageMountedAtRef.current,
-    isThemeWorkbench,
-    layoutMode,
-    onSwitchTaskTopic: handleSwitchTaskTopic,
-    onRenameTaskTopic: handleRenameTaskTopic,
-    onCloseTaskCenterTab: handleCloseTaskCenterTab,
-    onOpenTaskCenterNewTaskPage: handleOpenTaskCenterNewTaskPage,
-    onToggleWorkbench: handleToggleCanvas,
-  });
-  useEffect(() => {
-    const restorePlan = resolveTaskCenterFallbackRestorePlan({
-      agentEntry,
-      workspaceId: taskCenterWorkspaceId,
-      isAutoRestoringSession,
-      isSessionHydrating,
-      draftSurfaceActive: taskCenterDraftSurfaceActiveRef.current,
-      draftTabActive: isTaskCenterDraftTabActive,
-      initialPendingServiceSkillLaunchSignature,
-      initialDispatchKey,
-      isBootstrapDispatchPending,
-      messagesLength: messages.length,
-      isSending,
-      queuedTurnsLength: queuedTurns.length,
-      shouldHideDetachedTaskCenterTabs,
-      normalizedInitialSessionId,
-      sessionId,
-      currentSessionIsKnownTopic: Boolean(
-        sessionId && topicById.has(sessionId),
-      ),
-      hasDisplayMessages,
-      switchingTopicId: taskCenterTransitionTopicId,
-      openTabIds: taskCenterOpenTabIds,
-      topics,
-      previousRestore: taskCenterFallbackRestoreRef.current,
-      now: Date.now(),
-    });
-
-    if (restorePlan.action === "skip") {
-      if (restorePlan.reason !== "detached-session") {
-        return;
-      }
-      logAgentDebug(
-        "AgentChatPage",
-        "taskCenter.fallback.skipDetachedSession",
-        {
-          detachedTopicId: taskCenterDetachedTopicId,
-          initialSessionId: normalizedInitialSessionId,
-          openTabIds: taskCenterOpenTabIds,
-          sessionId,
-          visibleTabIds: taskCenterVisibleTabIds,
-        },
-        {
-          dedupeKey: `taskCenter.fallback.skipDetached:${sessionId ?? "none"}:${taskCenterDetachedTopicId ?? "none"}`,
-          throttleMs: 1000,
-        },
-      );
-      return;
-    }
-
-    taskCenterFallbackRestoreRef.current = restorePlan.nextRestore;
-    logAgentDebug("AgentChatPage", "taskCenter.fallback.restoreVisibleTask", {
-      fallbackId: restorePlan.fallbackTopicId,
-      openTabIds: taskCenterOpenTabIds,
-      sessionId,
-      transitionTopicId: taskCenterTransitionTopicId,
-      visibleTabIds: taskCenterVisibleTabIds,
-    });
-
-    void handleOpenTaskTopic(restorePlan.fallbackTopicId);
-  }, [
     agentEntry,
-    handleOpenTaskTopic,
+    applyProjectSelection,
+    clearEmbeddedHomeSession: clearTaskCenterEmbeddedHomeSession,
+    detachedTopicId: taskCenterDetachedTopicId,
+    displayMessageCount: displayMessages.length,
+    draftSendRequest: taskCenterDraftSendRequest,
+    draftSurfaceActive: taskCenterDraftSurfaceActiveRef.current,
+    draftTabActive: isTaskCenterDraftTabActive,
+    draftTabs: taskCenterDraftTabs,
+    embeddedHomeSessionIds: taskCenterEmbeddedHomeSessionIds,
+    externalProjectId,
+    fallbackRestoreRef: taskCenterFallbackRestoreRef,
     hasDisplayMessages,
+    hasLocalSessionOverride: taskCenterLocalSessionOverride !== null,
+    hasPendingA2UIForm,
+    harnessPanelVisible,
+    homeMountedAt: workspaceRenderT0.current,
     initialDispatchKey,
     initialPendingServiceSkillLaunchSignature,
-    isBootstrapDispatchPending,
     isAutoRestoringSession,
-    isSessionHydrating,
+    isBootstrapDispatchPending,
+    isHomePendingPreviewActive,
+    isPreparingSend,
     isSending,
+    isSessionHydrating,
+    isTaskCenterDraftSurfaceActive,
     isTaskCenterDraftTabActive,
-    messages.length,
+    isThemeWorkbench,
+    layoutMode,
+    messagesLength: messages.length,
+    newChatAt,
+    newConversationLabel,
     normalizedInitialSessionId,
-    queuedTurns.length,
+    onCloseTaskCenterTab: handleCloseTaskCenterTab,
+    onNavigate: _onNavigate,
+    onOpenTaskTopic: handleOpenTaskTopic,
+    onSwitchTaskTopic: handleSwitchTaskTopic,
+    onToggleWorkbench: handleToggleCanvas,
+    openDraftTab: openTaskCenterDraftTab,
+    openTabIds: taskCenterOpenTabIds,
+    openedProjects,
+    projectId,
+    queuedTurnsLength: queuedTurns.length,
+    renamePromptLabel: taskCenterRenamePromptLabel,
+    renameTopic,
+    resetProjectSelection,
     sessionId,
-    shouldHideDetachedTaskCenterTabs,
-    taskCenterDetachedTopicId,
-    taskCenterFallbackRestoreRef,
-    taskCenterOpenTabIds,
-    taskCenterTransitionTopicId,
-    taskCenterVisibleTabIds,
+    setHarnessPanelVisible,
+    shouldSuppressDraftContent: shouldSuppressTaskCenterDraftContent,
+    shouldUseBrowserWorkspaceHomeChrome,
     taskCenterWorkspaceId,
+    threadItemCount: effectiveThreadItems.length,
     topicById,
     topics,
-  ]);
+    transitionTopicId: taskCenterTransitionTopicId,
+    untitledTaskLabel,
+  });
   const handleWriteFile = useWorkspaceWriteFileAction({
     activeTheme,
     artifacts,
@@ -4964,219 +3160,34 @@ export function AgentChatWorkspace({
   );
   const triggerAIGuideRef = useRef(triggerAIGuide);
   triggerAIGuideRef.current = triggerAIGuide;
-
-  useEffect(() => {
-    if (shouldUseCompactGeneralWorkbench) {
-      return;
-    }
-
-    const canvasEmpty = isCanvasStateEmpty(canvasState);
-    const pendingInitialPrompt = (initialUserPrompt || "").trim();
-    const pendingInitialImages = initialUserImages || [];
-    const defaultGuidePrompt =
-      contentId && canvasEmpty && !isThemeWorkbench
-        ? getDefaultGuidePromptByTheme(mappedTheme)
-        : undefined;
-
-    if (
-      !contentId ||
-      messages.length > 0 ||
-      !project ||
-      !systemPrompt ||
-      isSending ||
-      !canvasEmpty
-    ) {
-      return;
-    }
-
-    if (!initialDispatchKey && generalWorkbenchEntryCheckPending) {
-      return;
-    }
-
-    if (initialDispatchKey) {
-      if (
-        isThemeWorkbench &&
-        pendingInitialImages.length === 0 &&
-        !autoRunInitialPromptOnMount
-      ) {
-        return;
-      }
-      if (consumedInitialPromptRef.current === initialDispatchKey) {
-        return;
-      }
-
-      let disposed = false;
-      consumedInitialPromptRef.current = initialDispatchKey;
-      hasTriggeredGuide.current = true;
-      if (import.meta.env.MODE !== "test") {
-        console.log("[AgentChatPage] 自动发送首条创作意图消息");
-      }
-
-      void (async () => {
-        const started = await handleSend(
-          pendingInitialImages,
-          undefined,
-          undefined,
-          pendingInitialPrompt,
-          undefined,
-          undefined,
-          initialAutoSendRequestMetadata
-            ? {
-                requestMetadata: initialAutoSendRequestMetadata,
-              }
-            : undefined,
-        );
-        if (disposed) {
-          return;
-        }
-        if (!started) {
-          consumedInitialPromptRef.current = null;
-          return;
-        }
-        onInitialUserPromptConsumed?.();
-      })();
-
-      return () => {
-        disposed = true;
-      };
-    }
-
-    if (hasTriggeredGuide.current) {
-      return;
-    }
-
-    if (generalWorkbenchEntryPrompt?.kind === "resume") {
-      return;
-    }
-
-    if (defaultGuidePrompt) {
-      hasTriggeredGuide.current = true;
-      setInput((previous) => previous.trim() || defaultGuidePrompt);
-      return;
-    }
-
-    if (isThemeWorkbench) {
-      if (shouldSkipGeneralWorkbenchAutoGuideWithoutPrompt) {
-        return;
-      }
-
-      hasTriggeredGuide.current = true;
-      if (import.meta.env.MODE !== "test") {
-        console.log("[AgentChatPage] 工作区上下文：触发 AI 引导");
-      }
-      triggerAIGuideRef.current();
-      return;
-    }
-
-    hasTriggeredGuide.current = true;
-    if (import.meta.env.MODE !== "test") {
-      console.log("[AgentChatPage] 自动触发 AI 创作引导");
-    }
-    triggerAIGuideRef.current();
-  }, [
+  useGeneralWorkbenchInitialAutoGuideRuntime({
     autoRunInitialPromptOnMount,
     canvasState,
     contentId,
+    consumedInitialPromptRef,
     generalWorkbenchEntryCheckPending,
     generalWorkbenchEntryPrompt,
     handleSend,
+    hasProject: Boolean(project),
+    hasTriggeredGuideRef,
+    initialAutoSendAllowsDetachedSession,
     initialAutoSendRequestMetadata,
     initialDispatchKey,
-    initialUserImages,
     initialUserPrompt,
+    initialUserImages,
     isSending,
     isThemeWorkbench,
     mappedTheme,
-    messages.length,
-    onInitialUserPromptConsumed,
-    project,
-    setInput,
-    shouldSkipGeneralWorkbenchAutoGuideWithoutPrompt,
-    shouldUseCompactGeneralWorkbench,
-    systemPrompt,
-  ]);
-
-  useEffect(() => {
-    const pendingInitialPrompt = (initialUserPrompt || "").trim();
-    const pendingInitialImages = initialUserImages || [];
-
-    if (
-      shouldUseCompactGeneralWorkbench ||
-      !initialDispatchKey ||
-      contentId ||
-      messages.length > 0 ||
-      isSending
-    ) {
-      return;
-    }
-
-    if (consumedInitialPromptRef.current === initialDispatchKey) {
-      return;
-    }
-
-    if (!autoRunInitialPromptOnMount) {
-      hasTriggeredGuide.current = true;
-      setInput((previous) => previous.trim() || pendingInitialPrompt);
-      return;
-    }
-
-    if (!projectId && !initialAutoSendAllowsDetachedSession) {
-      return;
-    }
-
-    let disposed = false;
-    consumedInitialPromptRef.current = initialDispatchKey;
-
-    void (async () => {
-      const started = await handleSend(
-        pendingInitialImages,
-        undefined,
-        undefined,
-        pendingInitialPrompt,
-        undefined,
-        undefined,
-        {
-          ...(initialAutoSendRequestMetadata
-            ? { requestMetadata: initialAutoSendRequestMetadata }
-            : {}),
-          skipSessionRestore: true,
-        },
-      );
-      if (disposed) {
-        return;
-      }
-      if (!started) {
-        consumedInitialPromptRef.current = null;
-        return;
-      }
-      onInitialUserPromptConsumed?.();
-    })();
-
-    return () => {
-      disposed = true;
-    };
-  }, [
-    autoRunInitialPromptOnMount,
-    contentId,
-    handleSend,
-    initialAutoSendRequestMetadata,
-    initialDispatchKey,
-    initialUserImages,
-    initialUserPrompt,
-    initialAutoSendAllowsDetachedSession,
-    isSending,
-    messages.length,
+    messagesLength: messages.length,
     onInitialUserPromptConsumed,
     projectId,
     sessionId,
     setInput,
+    shouldSkipGeneralWorkbenchAutoGuideWithoutPrompt,
     shouldUseCompactGeneralWorkbench,
-  ]);
-
-  useEffect(() => {
-    hasTriggeredGuide.current = false;
-    consumedInitialPromptRef.current = null;
-  }, [contentId]);
+    systemPrompt,
+    triggerAIGuideRef,
+  });
 
   useWorkspaceImageWorkbenchEventRuntime({
     canvasState,
@@ -5228,96 +3239,49 @@ export function AgentChatWorkspace({
   });
 
   const shellChromeRuntime = useMemo(() => {
-    const hasUnconsumedInitialDispatch =
-      !shouldUseCompactGeneralWorkbench && isBootstrapDispatchPending;
-    const shouldRenderTaskCenterHomeSurface =
-      shouldRenderTaskCenterEmbeddedHome ||
-      shouldSuppressTaskCenterDraftContent;
-    const isInitialSessionActive =
-      Boolean(normalizedInitialSessionId) &&
-      normalizedInitialSessionId === sessionId;
-    const hasConversationSessionForLayout =
-      (Boolean(sessionId) || isInitialSessionActive) &&
-      !shouldRenderTaskCenterHomeSurface &&
-      !(
-        agentEntry === "new-task" &&
-        shouldUseBrowserWorkspaceHomeChrome &&
-        !hasHomeConversationActivity &&
-        !normalizedInitialSessionId
-      );
-
-    const showChatLayout = shouldRenderTaskCenterHomeSurface
-      ? false
-      : shouldShowChatLayout({
-          agentEntry,
-          preferEmptyStateForFreshTaskCenterTab:
-            shouldRenderTaskCenterHomeSurface,
-          hasSession: hasConversationSessionForLayout,
-          hasDisplayMessages,
-          hasPendingA2UIForm,
-          hasCanvasContent: hasCanvasWorkbenchContent,
-          isThemeWorkbench,
-          hasUnconsumedInitialDispatch,
-          isPreparingSend: isPreparingSend || isTaskCenterDraftSendPending,
-          isSending,
-          queuedTurnCount: queuedTurns.length,
-        });
-
-    const shouldHideGeneralWorkbenchInputForTheme =
-      shouldUseCompactGeneralWorkbench;
-    const shouldShowGeneralWorkbenchFloatingInputOverlay =
-      isThemeWorkbench &&
-      showChatLayout &&
-      !shouldHideGeneralWorkbenchInputForTheme;
-    const isWorkspaceCompactChrome = topBarChrome === "workspace-compact";
-    const shouldRenderBrandedEmptyState =
-      !showChatLayout && !shouldRenderTaskCenterHomeSurface;
-    const shouldRenderTopBar =
-      !hideTopBar &&
-      (!shouldRenderBrandedEmptyState || shouldUseBrowserWorkspaceHomeChrome);
-    const shouldRenderInlineA2UI = true;
-
-    const shouldUseSubagentsPrimaryChatPanelWidth =
-      layoutMode === "chat-canvas" &&
-      teamSessionRuntime.subagentsRuntimeVisible &&
-      (teamSessionRuntime.hasRuntimeSessions ||
-        Boolean(teamDispatchPreviewState));
-    const shouldUseCodeWorkbenchChatPanelWidth =
-      layoutMode === "chat-canvas" &&
-      activeTheme === "general" &&
-      hasCanvasWorkbenchContent &&
-      !shouldUseSubagentsPrimaryChatPanelWidth;
-    return {
-      showChatLayout,
-      isWorkspaceCompactChrome,
-      workflowLayoutBottomSpacing: resolveWorkflowLayoutBottomSpacing({
-        contextWorkspaceEnabled: contextWorkspace.generalWorkbenchEnabled,
-        showFloatingInputOverlay:
-          shouldShowGeneralWorkbenchFloatingInputOverlay,
-        hasCanvasContent: layoutMode !== "chat",
-        workflowRunState: themeWorkbenchRunState,
-        gateStatus: currentGate.status,
-      }),
-      shouldHideGeneralWorkbenchInputForTheme,
-      shouldRenderTopBar,
-      layoutTransitionChatPanelWidth: shouldUseSubagentsPrimaryChatPanelWidth
-        ? TEAM_PRIMARY_CHAT_PANEL_WIDTH
-        : shouldUseCodeWorkbenchChatPanelWidth
-          ? CODE_WORKBENCH_CHAT_PANEL_WIDTH
-          : undefined,
-      layoutTransitionChatPanelMinWidth: shouldUseSubagentsPrimaryChatPanelWidth
-        ? TEAM_PRIMARY_CHAT_PANEL_MIN_WIDTH
-        : shouldUseCodeWorkbenchChatPanelWidth
-          ? CODE_WORKBENCH_CHAT_PANEL_MIN_WIDTH
-          : undefined,
-      shouldShowGeneralWorkbenchFloatingInputOverlay,
-      shouldRenderInlineA2UI,
-    };
+    return resolveWorkspaceShellChromeRuntime({
+      activeTheme,
+      agentEntry,
+      contextWorkspaceEnabled: contextWorkspace.generalWorkbenchEnabled,
+      effectiveShowChatPanel,
+      gateStatus: currentGate.status,
+      generalWorkbenchPanelCollapseEnabled:
+        generalWorkbenchScaffoldRuntime.enableGeneralWorkbenchPanelCollapse,
+      generalWorkbenchSidebarCollapsed:
+        generalWorkbenchScaffoldRuntime.generalWorkbenchSidebarCollapsed,
+      hasCanvasWorkbenchContent,
+      hasDisplayMessages,
+      hasHomeConversationActivity,
+      hasPendingA2UIForm,
+      hideTopBar,
+      isBootstrapDispatchPending,
+      isPreparingSend,
+      isSending,
+      isTaskCenterDraftSendPending,
+      isThemeWorkbench,
+      layoutMode,
+      normalizedInitialSessionId,
+      queuedTurnCount: queuedTurns.length,
+      sessionId,
+      shouldRenderTaskCenterEmbeddedHome,
+      shouldSuppressTaskCenterDraftContent,
+      shouldUseBrowserWorkspaceHomeChrome,
+      shouldUseCompactGeneralWorkbench,
+      showSidebar,
+      subagentsRuntimeVisible: teamSessionRuntime.subagentsRuntimeVisible,
+      hasRuntimeSessions: teamSessionRuntime.hasRuntimeSessions,
+      hasTeamDispatchPreview: Boolean(teamDispatchPreviewState),
+      themeWorkbenchRunState,
+      topBarChrome,
+    });
   }, [
     agentEntry,
     activeTheme,
     contextWorkspace.generalWorkbenchEnabled,
     currentGate.status,
+    effectiveShowChatPanel,
+    generalWorkbenchScaffoldRuntime.enableGeneralWorkbenchPanelCollapse,
+    generalWorkbenchScaffoldRuntime.generalWorkbenchSidebarCollapsed,
     hasDisplayMessages,
     hasHomeConversationActivity,
     hasCanvasWorkbenchContent,
@@ -5336,30 +3300,17 @@ export function AgentChatWorkspace({
     shouldSuppressTaskCenterDraftContent,
     shouldUseBrowserWorkspaceHomeChrome,
     shouldUseCompactGeneralWorkbench,
+    showSidebar,
     teamDispatchPreviewState,
     teamSessionRuntime.hasRuntimeSessions,
     teamSessionRuntime.subagentsRuntimeVisible,
     themeWorkbenchRunState,
     topBarChrome,
   ]);
-  const shouldShowGeneralWorkbenchSidebarForTheme =
-    !generalWorkbenchScaffoldRuntime.shouldUseCompactGeneralWorkbench;
   const showGeneralWorkbenchSidebar =
-    effectiveShowChatPanel &&
-    showSidebar &&
-    !hasPendingA2UIForm &&
-    isThemeWorkbench &&
-    shouldShowGeneralWorkbenchSidebarForTheme &&
-    (!generalWorkbenchScaffoldRuntime.enableGeneralWorkbenchPanelCollapse ||
-      !generalWorkbenchScaffoldRuntime.generalWorkbenchSidebarCollapsed);
+    shellChromeRuntime.showGeneralWorkbenchSidebar;
   const showGeneralWorkbenchLeftExpandButton =
-    effectiveShowChatPanel &&
-    showSidebar &&
-    !hasPendingA2UIForm &&
-    isThemeWorkbench &&
-    shouldShowGeneralWorkbenchSidebarForTheme &&
-    generalWorkbenchScaffoldRuntime.enableGeneralWorkbenchPanelCollapse &&
-    generalWorkbenchScaffoldRuntime.generalWorkbenchSidebarCollapsed;
+    shellChromeRuntime.showGeneralWorkbenchLeftExpandButton;
   const handleDeleteGeneralWorkbenchVersion = useCallback(() => undefined, []);
   const handleCollapseGeneralWorkbenchSidebar = useCallback(() => {
     generalWorkbenchScaffoldRuntime.setGeneralWorkbenchSidebarCollapsed(true);
@@ -5573,72 +3524,60 @@ export function AgentChatWorkspace({
       onDismiss={handleDismissLocalPlanImplementationDecision}
     />
   ) : undefined;
-  const generalWorkbenchHarnessDialog = (
-    <GeneralWorkbenchHarnessDialogSection
-      enabled={
-        !suppressHomeNavbarUtilityActions &&
-        contextHarnessRuntime.workbenchEnabled &&
-        contextHarnessRuntime.isThemeWorkbench
-      }
-      open={
-        !suppressHomeNavbarUtilityActions &&
-        contextHarnessRuntime.harnessPanelVisible
-      }
-      onOpenChange={contextHarnessRuntime.setHarnessPanelVisible}
-      harnessState={harnessState}
-      environment={contextHarnessRuntime.harnessEnvironment}
-      childSubagentSessions={childSubagentSessions}
-      selectedTeamLabel={selectedTeamLabel}
-      selectedTeamSummary={selectedTeamSummary}
-      selectedTeamRoles={selectedTeam?.roles}
-      teamMemorySnapshot={resolvedTeamMemoryShadowSnapshot}
-      threadRead={threadRead}
-      turns={turns}
-      threadItems={effectiveThreadItems}
-      currentTurnId={currentTurnId}
-      pendingActions={planComposerPendingActions}
-      submittedActionsInFlight={submittedActionsInFlight}
-      onRespondToAction={handlePermissionResponse}
-      queuedTurns={queuedTurns}
-      canInterrupt={isSending}
-      onInterruptCurrentTurn={stopSending}
-      onResumeThread={resumeThread}
-      onReplayPendingRequest={
-        latestAssistantMessageId && replayPendingAction
-          ? (requestId: string) =>
-              replayPendingAction(requestId, latestAssistantMessageId)
-          : undefined
-      }
-      onPromoteQueuedTurn={promoteQueuedTurn}
-      onObjectiveChanged={async () => {
-        await refreshSessionReadModel(sessionId || undefined);
-      }}
-      onManageProviders={handleManageProvidersFromHarness}
-      onOpenExecutionPolicySettings={
-        handleOpenExecutionPolicySettingsFromHarness
-      }
-      messages={displayMessages}
-      diagnosticRuntimeContext={{
-        sessionId: sessionId || null,
-        workspaceId: projectId,
-        workingDir: project?.rootPath || null,
-        providerType:
-          activeExecutionRuntime?.provider_selector || providerType || null,
-        model: activeExecutionRuntime?.model_name || model || null,
-        executionStrategy: executionStrategy || null,
-        activeTheme: activeTheme || null,
-        selectedTeamLabel,
-      }}
-      toolInventory={harnessInventoryRuntime.toolInventory}
-      toolInventoryLoading={harnessInventoryRuntime.toolInventoryLoading}
-      toolInventoryError={harnessInventoryRuntime.toolInventoryError}
-      onRefreshToolInventory={harnessInventoryRuntime.refreshToolInventory}
-      onOpenSubagentSession={handleOpenSubagentSession}
-      onLoadFilePreview={handleHarnessLoadFilePreview}
-      onOpenFile={handleWorkspaceFileClick}
-      onSubmitCodeFixPrompt={handleSubmitCodeFixPrompt}
-    />
-  );
+  const generalWorkbenchHarnessPanelProps = {
+    harnessState,
+    environment: contextHarnessRuntime.harnessEnvironment,
+    childSubagentSessions,
+    selectedTeamLabel,
+    selectedTeamSummary,
+    selectedTeamRoles: selectedTeam?.roles,
+    teamMemorySnapshot: resolvedTeamMemoryShadowSnapshot,
+    threadRead,
+    turns,
+    threadItems: effectiveThreadItems,
+    currentTurnId,
+    pendingActions: planComposerPendingActions,
+    submittedActionsInFlight,
+    onRespondToAction: handlePermissionResponse,
+    queuedTurns,
+    canInterrupt: isSending,
+    onInterruptCurrentTurn: stopSending,
+    onResumeThread: resumeThread,
+    onReplayPendingRequest:
+      latestAssistantMessageId && replayPendingAction
+        ? (requestId: string) =>
+            replayPendingAction(requestId, latestAssistantMessageId)
+        : undefined,
+    onPromoteQueuedTurn: promoteQueuedTurn,
+    onObjectiveChanged: async () => {
+      await refreshSessionReadModel(sessionId || undefined);
+    },
+    onManageProviders: handleManageProvidersFromHarness,
+    onOpenExecutionPolicySettings: handleOpenExecutionPolicySettingsFromHarness,
+    messages: displayMessages,
+    diagnosticRuntimeContext: {
+      sessionId: sessionId || null,
+      workspaceId: projectId,
+      workingDir: project?.rootPath || null,
+      providerType:
+        activeExecutionRuntime?.provider_selector || providerType || null,
+      model: activeExecutionRuntime?.model_name || model || null,
+      executionStrategy: executionStrategy || null,
+      activeTheme: activeTheme || null,
+      selectedTeamLabel,
+    },
+    toolInventory: harnessInventoryRuntime.toolInventory,
+    toolInventoryLoading: harnessInventoryRuntime.toolInventoryLoading,
+    toolInventoryError: harnessInventoryRuntime.toolInventoryError,
+    onRefreshToolInventory: harnessInventoryRuntime.refreshToolInventory,
+    onOpenSubagentSession: handleOpenSubagentSession,
+    onLoadFilePreview: handleHarnessLoadFilePreview,
+    onOpenFile: handleWorkspaceFileClick,
+    onSubmitCodeFixPrompt: handleSubmitCodeFixPrompt,
+  } satisfies Omit<
+    ComponentProps<typeof GeneralWorkbenchHarnessSurfaceSection>,
+    "enabled"
+  >;
   const generalWorkbenchSidebarNode = (
     <WorkspaceGeneralWorkbenchSidebar
       visible={showGeneralWorkbenchSidebar}
@@ -5690,58 +3629,13 @@ export function AgentChatWorkspace({
     />
   );
 
-  const workflowProgressEnabled =
-    isSpecializedThemeMode && hasMessages && steps.length > 0;
-  const workflowProgressSignature = useMemo(() => {
-    if (!workflowProgressEnabled) {
-      return "hidden";
-    }
-
-    const stepSignature = steps
-      .map((step) => `${step.id}:${step.status}:${step.title}`)
-      .join("|");
-    return `${currentStepIndex}:${stepSignature}`;
-  }, [currentStepIndex, steps, workflowProgressEnabled]);
-  const lastWorkflowProgressSignatureRef = useRef<string>("");
-
-  useEffect(() => {
-    if (!onWorkflowProgressChange) {
-      return;
-    }
-
-    if (
-      lastWorkflowProgressSignatureRef.current === workflowProgressSignature
-    ) {
-      return;
-    }
-    lastWorkflowProgressSignatureRef.current = workflowProgressSignature;
-
-    if (!workflowProgressEnabled) {
-      onWorkflowProgressChange(null);
-      return;
-    }
-
-    onWorkflowProgressChange({
-      currentIndex: currentStepIndex,
-      steps: steps.map((step) => ({
-        id: step.id,
-        title: step.title,
-        status: step.status,
-      })),
-    });
-  }, [
+  useWorkspaceWorkflowProgressRuntime({
     currentStepIndex,
+    hasMessages,
+    isSpecializedThemeMode,
     onWorkflowProgressChange,
     steps,
-    workflowProgressEnabled,
-    workflowProgressSignature,
-  ]);
-
-  useEffect(() => {
-    return () => {
-      onWorkflowProgressChange?.(null);
-    };
-  }, [onWorkflowProgressChange]);
+  });
   const navigationActions = useWorkspaceNavigationActions({
     applyProjectSelection,
     compactSession,
@@ -6001,132 +3895,23 @@ export function AgentChatWorkspace({
     preferContentReviewInRightRail,
   });
 
-  const handleSendFromEmptyState = useCallback<InputbarSendHandler>(
-    (payload = {}) => {
-      const text = payload.textOverride ?? input;
-      const images = payload.images ?? [];
-      const sendOptions = payload.sendOptions;
-      const normalizedText = text.trim();
-      setInput("");
-      const activeDraftTabId = activeTaskCenterDraftTabIdRef.current;
-      if (
-        (agentEntry === "claw" || agentEntry === "new-task") &&
-        activeDraftTabId
-      ) {
-        const submittedAt = Date.now();
-        const requestId = createTaskCenterDraftSendRequestId();
-        recordAgentUiPerformanceMetric("homeInput.submit", {
-          hasDraftTab: true,
-          inputLength: normalizedText.length,
-          requestId,
-          sessionId: activeDraftTabId,
-          source: "task-center-empty-state",
-          workspaceId: taskCenterWorkspaceId,
-        });
-        if (
-          displayMessages.length > 0 ||
-          turns.length > 0 ||
-          effectiveThreadItems.length > 0
-        ) {
-          clearMessages({ showToast: false });
-        }
-        setTaskCenterDraftTabs((current) =>
-          markTaskCenterDraftTabRunning({
-            current,
-            draftTabId: activeDraftTabId,
-            title: resolveTaskCenterDraftSendTitle(text),
-          }),
-        );
-        const request: TaskCenterDraftSendRequest = {
-          id: requestId,
-          draftTabId: activeDraftTabId,
-          text,
-          images,
-          sendOptions,
-          submittedAt,
-          materializeDraft: true,
-          source: "task-center-empty-state",
-        };
-        setTaskCenterDraftSendRequest(request);
-        setHomePendingPreviewRequest(request);
-        recordAgentUiPerformanceMetric("homeInput.pendingShellApplied", {
-          durationMs: Date.now() - submittedAt,
-          requestId,
-          sessionId: activeDraftTabId,
-          source: "task-center-empty-state",
-          workspaceId: taskCenterWorkspaceId,
-        });
-        return;
-      }
-
-      const shouldQueueHomeSend =
-        !hasDisplayMessages &&
-        (agentEntry === "claw" || agentEntry === "new-task");
-      if (shouldQueueHomeSend) {
-        const submittedAt = Date.now();
-        const requestId = createTaskCenterDraftSendRequestId();
-        const requestSessionKey = sessionId ?? requestId;
-        recordAgentUiPerformanceMetric("homeInput.submit", {
-          hasDraftTab: false,
-          inputLength: normalizedText.length,
-          requestId,
-          sessionId: requestSessionKey,
-          source: "empty-state",
-          workspaceId: taskCenterWorkspaceId,
-        });
-        const request: TaskCenterDraftSendRequest = {
-          id: requestId,
-          draftTabId: requestSessionKey,
-          text,
-          images,
-          sendOptions,
-          submittedAt,
-          materializeDraft: false,
-          source: "empty-state",
-        };
-        setTaskCenterDraftSendRequest(request);
-        setHomePendingPreviewRequest(request);
-        recordAgentUiPerformanceMetric("homeInput.pendingShellApplied", {
-          durationMs: Date.now() - submittedAt,
-          requestId,
-          sessionId: requestSessionKey,
-          source: "empty-state",
-          workspaceId: taskCenterWorkspaceId,
-        });
-        return;
-      }
-
-      recordAgentUiPerformanceMetric("homeInput.submit", {
-        hasDraftTab: false,
-        inputLength: normalizedText.length,
-        sessionId: sessionId ?? null,
-        source: "empty-state",
-        workspaceId: taskCenterWorkspaceId,
-      });
-      void handleSend(
-        images,
-        undefined,
-        undefined,
-        text,
-        undefined,
-        undefined,
-        sendOptions,
-      );
-    },
-    [
-      agentEntry,
-      clearMessages,
-      displayMessages.length,
-      effectiveThreadItems.length,
-      activeTaskCenterDraftTabIdRef,
-      handleSend,
-      hasDisplayMessages,
-      input,
-      sessionId,
-      taskCenterWorkspaceId,
-      turns.length,
-    ],
-  );
+  const handleSendFromEmptyState = useTaskCenterEmptyStateSendRuntime({
+    agentEntry,
+    input,
+    setInput,
+    activeDraftTabIdRef: activeTaskCenterDraftTabIdRef,
+    clearMessages,
+    displayMessagesLength: displayMessages.length,
+    turnsLength: turns.length,
+    threadItemsLength: effectiveThreadItems.length,
+    hasDisplayMessages,
+    handleSend,
+    sessionId,
+    taskCenterWorkspaceId,
+    setTaskCenterDraftTabs,
+    setTaskCenterDraftSendRequest,
+    setHomePendingPreviewRequest,
+  });
   const handleNonMaterializedTaskCenterSessionReady = useCallback(
     (readySessionId: string) => {
       taskCenterDraftSurfaceActiveRef.current = false;
@@ -6162,33 +3947,34 @@ export function AgentChatWorkspace({
   const shouldHideCurrentSessionContent =
     taskCenterHomeSurfaceState.shouldHideCurrentSessionContent;
   const sceneIsRestoringSession = taskCenterHomeSurfaceState.isRestoringSession;
-  const sceneDisplayMessages = shouldHideCurrentSessionContent
-    ? []
-    : displayMessages.length > 0
-      ? displayMessages
-      : homePendingPreviewMessages;
-  const sceneTurns = shouldHideCurrentSessionContent ? [] : turns;
-  const sceneThreadItems = shouldHideCurrentSessionContent
-    ? []
-    : effectiveThreadItems;
-  const sceneCurrentTurnId = shouldHideCurrentSessionContent
-    ? null
-    : currentTurnId;
-  const sceneThreadRead = shouldHideCurrentSessionContent ? null : threadRead;
-  const sceneExecutionRuntime = shouldHideCurrentSessionContent
-    ? null
-    : executionRuntime;
-  const scenePendingActions = shouldHideCurrentSessionContent
-    ? []
-    : planComposerPendingActions;
-  const sceneSubmittedActionsInFlight = shouldHideCurrentSessionContent
-    ? []
-    : submittedActionsInFlight;
-  const sceneQueuedTurns = shouldHideCurrentSessionContent ? [] : queuedTurns;
-  const sceneIsPreparingSend = shouldHideCurrentSessionContent
-    ? false
-    : isPreparingSend || isTaskCenterDraftSendPending;
-  const sceneIsSending = shouldHideCurrentSessionContent ? false : isSending;
+  const {
+    sceneDisplayMessages,
+    sceneTurns,
+    sceneThreadItems,
+    sceneCurrentTurnId,
+    sceneThreadRead,
+    sceneExecutionRuntime,
+    scenePendingActions,
+    sceneSubmittedActionsInFlight,
+    sceneQueuedTurns,
+    sceneIsPreparingSend,
+    sceneIsSending,
+  } = resolveWorkspaceSceneSessionProjection({
+    shouldHideCurrentSessionContent,
+    displayMessages,
+    homePendingPreviewMessages,
+    turns,
+    effectiveThreadItems,
+    currentTurnId,
+    threadRead,
+    executionRuntime,
+    planComposerPendingActions,
+    submittedActionsInFlight,
+    queuedTurns,
+    isPreparingSend,
+    isTaskCenterDraftSendPending,
+    isSending,
+  });
   const sceneSessionId = taskCenterHomeSurfaceState.sceneSessionId;
   const sceneMessageListEmptyStateVariant =
     agentEntry === "claw" &&
@@ -6200,8 +3986,214 @@ export function AgentChatWorkspace({
   const sceneLayoutMode = shouldRenderTaskCenterEmbeddedHome
     ? "chat"
     : layoutMode;
+  const hasExpertInfoPanel = Boolean(expertPanelRuntimeKey);
+  const previousExpertInfoPanelLayoutModeRef =
+    useRef<LayoutMode>(sceneLayoutMode);
+  useEffect(() => {
+    const previousLayoutMode = previousExpertInfoPanelLayoutModeRef.current;
+    if (previousLayoutMode !== sceneLayoutMode) {
+      setExpertInfoPanelCollapsed((currentCollapsed) =>
+        resolveExpertInfoPanelCollapsedAfterLayoutChange({
+          previousLayoutMode,
+          nextLayoutMode: sceneLayoutMode,
+          currentCollapsed,
+        }),
+      );
+    }
+    previousExpertInfoPanelLayoutModeRef.current = sceneLayoutMode;
+  }, [sceneLayoutMode]);
+  const expertInfoPanelVisible =
+    hasExpertInfoPanel &&
+    !expertInfoPanelCollapsed &&
+    sceneLayoutMode === "chat";
+  const [manualRightSurface, setManualRightSurface] =
+    useState<WorkspaceRightSurfaceKind | null>(null);
+  const handleToggleExpertInfoPanel = useCallback(() => {
+    setHarnessPanelVisible(false);
+    setManualRightSurface(null);
+    const shouldOpenExpertInfo =
+      expertInfoPanelCollapsed || sceneLayoutMode !== "chat";
+    if (shouldOpenExpertInfo) {
+      setLayoutMode("chat");
+    }
+    setExpertInfoPanelCollapsed(!shouldOpenExpertInfo);
+  }, [expertInfoPanelCollapsed, sceneLayoutMode, setHarnessPanelVisible]);
   const canvasWorkbenchRootPath =
     sessionWorkingDir?.trim() || project?.rootPath || null;
+  const shellRightSurfaceAvailable = Boolean(canvasWorkbenchRootPath);
+  const filesRightSurfaceAvailable = Boolean(
+    preferredServiceSkillResultFileTarget?.relativePath,
+  );
+  const rightSurfaceHarnessEnabled =
+    !suppressHomeNavbarUtilityActions &&
+    contextHarnessRuntime.workbenchEnabled &&
+    contextHarnessRuntime.isThemeWorkbench;
+  const handleToggleRightSurfaceFiles = useCallback(() => {
+    if (!filesRightSurfaceAvailable) {
+      return;
+    }
+    setHarnessPanelVisible(false);
+    setExpertInfoPanelCollapsed(true);
+    setManualRightSurface((current) => (current === "files" ? null : "files"));
+  }, [filesRightSurfaceAvailable, setHarnessPanelVisible]);
+  const handleToggleRightSurfaceShell = useCallback(() => {
+    setHarnessPanelVisible(false);
+    setExpertInfoPanelCollapsed(true);
+    setManualRightSurface((current) => (current === "shell" ? null : "shell"));
+  }, [setHarnessPanelVisible]);
+  const handleCloseRightSurfaceShell = useCallback(() => {
+    setManualRightSurface((current) => (current === "shell" ? null : current));
+  }, []);
+  const handleToggleRightSurfaceHarness = useCallback(() => {
+    if (!rightSurfaceHarnessEnabled) {
+      return;
+    }
+    setHarnessPanelVisible(false);
+    setExpertInfoPanelCollapsed(true);
+    setManualRightSurface((current) =>
+      current === "harness" ? null : "harness",
+    );
+  }, [rightSurfaceHarnessEnabled, setHarnessPanelVisible]);
+  useEffect(() => {
+    if (manualRightSurface === "harness" && !rightSurfaceHarnessEnabled) {
+      setManualRightSurface(null);
+    }
+    if (manualRightSurface === "files" && !filesRightSurfaceAvailable) {
+      setManualRightSurface(null);
+    }
+  }, [filesRightSurfaceAvailable, manualRightSurface, rightSurfaceHarnessEnabled]);
+  const handleToggleCanvasFromRightSurface = useCallback(() => {
+    if (manualRightSurface && sceneLayoutMode !== "chat") {
+      setManualRightSurface(null);
+      return;
+    }
+
+    setHarnessPanelVisible(false);
+    setManualRightSurface(null);
+    handleToggleCanvas();
+  }, [
+    handleToggleCanvas,
+    manualRightSurface,
+    sceneLayoutMode,
+    setHarnessPanelVisible,
+  ]);
+  const rightSurfaceState = resolveWorkspaceRightSurfaceState({
+    layoutMode: sceneLayoutMode,
+    hasExpertInfo: hasExpertInfoPanel,
+    expertInfoVisible: expertInfoPanelVisible,
+    requestedSurface: manualRightSurface ?? undefined,
+    source: manualRightSurface ? "user" : undefined,
+  });
+  const expertInfoPanelNode = (
+    <ExpertInfoPanel
+      requestMetadata={expertPanelRequestMetadata}
+      localSkills={skills}
+      serviceSkills={serviceSkills}
+      workspaceSkillBindings={workspaceSkillBindingsRuntime.bindings}
+      skillsLoading={combinedSkillsLoading}
+      threadItems={effectiveThreadItems}
+      skillRefsEdited={
+        expertSkillRefsOverride !== null ||
+        expertWorkspaceSkillRuntimeEnableRefs.length > 0
+      }
+      enabledWorkspaceSkillRuntimeCount={
+        expertWorkspaceSkillRuntimeEnableBindings.length
+      }
+      onSkillRefsChange={handleExpertSkillRefsChange}
+      onEnableWorkspaceSkillRuntime={handleEnableExpertWorkspaceSkillRuntime}
+      onOpenSkillsManage={
+        _onNavigate ? handleOpenSkillsManageFromExpertPanel : undefined
+      }
+    />
+  );
+  const rightSurfaceDefinitions = buildWorkspaceRightSurfaceDefinitions({
+    expertInfo: () => expertInfoPanelNode,
+    ...(filesRightSurfaceAvailable
+      ? {
+          files: () => (
+            <WorkspaceFilesSurface
+              target={preferredServiceSkillResultFileTarget}
+              onOpenResultFile={handleOpenServiceSkillResultFile}
+            />
+          ),
+        }
+      : {}),
+    ...(rightSurfaceHarnessEnabled
+      ? {
+          harness: () => (
+            <GeneralWorkbenchHarnessSurfaceSection
+              enabled={rightSurfaceHarnessEnabled}
+              {...generalWorkbenchHarnessPanelProps}
+            />
+          ),
+        }
+      : {}),
+    shell: () => (
+      <TaskCenterShellPanel
+        variant="surface"
+        projectRootPath={canvasWorkbenchRootPath}
+        onClose={handleCloseRightSurfaceShell}
+      />
+    ),
+  });
+  const hasActiveRightSurfaceDefinition = rightSurfaceDefinitions.some(
+    (definition) => definition.kind === rightSurfaceState.activeSurface,
+  );
+  const rightSurfaceContent =
+    rightSurfaceState.activeSurface && hasActiveRightSurfaceDefinition ? (
+      <RightSurfaceHost
+        activeSurface={rightSurfaceState.activeSurface}
+        definitions={rightSurfaceDefinitions}
+      />
+    ) : null;
+  const rightSurfaceRuntimePendingIntents = useMemo(() => {
+    return buildWorkspaceRightSurfaceRuntimePendingIntents({
+      createdAt: Date.now(),
+      harnessPendingCount,
+      objectCanvasCandidateId: browserAssistLaunching
+        ? currentBrowserAssistScopeKey ||
+          browserAssistSessionState?.sessionId ||
+          browserAssistSessionState?.targetId ||
+          browserAssistSessionState?.profileKey ||
+          "browser-assist-launching"
+        : null,
+      preferredServiceSkillResultFileTargetRelativePath:
+        preferredServiceSkillResultFileTarget?.relativePath,
+      showHarnessToggle,
+      suppressHomeNavbarUtilityActions,
+    });
+  }, [
+    browserAssistLaunching,
+    browserAssistSessionState?.profileKey,
+    browserAssistSessionState?.sessionId,
+    browserAssistSessionState?.targetId,
+    currentBrowserAssistScopeKey,
+    harnessPendingCount,
+    preferredServiceSkillResultFileTarget?.relativePath,
+    showHarnessToggle,
+    suppressHomeNavbarUtilityActions,
+  ]);
+  const rightSurfaceLaunchers = buildWorkspaceRightSurfaceRuntimeLaunchers({
+    surfaceState: rightSurfaceState,
+    pendingIntents: rightSurfaceRuntimePendingIntents,
+    filesAvailable: filesRightSurfaceAvailable,
+    hasExpertInfoPanel,
+    shellAvailable: shellRightSurfaceAvailable,
+    showHarnessToggle,
+    suppressHomeNavbarUtilityActions,
+  });
+  const generalWorkbenchHarnessDialog = (
+    <GeneralWorkbenchHarnessDialogSection
+      enabled={rightSurfaceHarnessEnabled}
+      open={
+        rightSurfaceHarnessEnabled &&
+        !rightSurfaceState.activeSurface &&
+        contextHarnessRuntime.harnessPanelVisible
+      }
+      onOpenChange={contextHarnessRuntime.setHarnessPanelVisible}
+      {...generalWorkbenchHarnessPanelProps}
+    />
+  );
 
   const conversationSceneRuntime = useWorkspaceConversationSceneRuntime({
     messageListEmptyStateVariant: sceneMessageListEmptyStateVariant,
@@ -6237,7 +4229,7 @@ export function AgentChatWorkspace({
     canvasWorkbenchRootPath,
     projectCharacters: projectMemory?.characters || [],
     generalCanvasContent: generalCanvasState.content,
-    handleToggleHarnessPanel: contextHarnessRuntime.handleToggleHarnessPanel,
+    handleToggleHarnessPanel: handleToggleRightSurfaceHarness,
     entryBannerVisible,
     entryBannerMessage: effectiveEntryBannerMessage,
     creationReplaySurface: initialCreationReplaySurface,
@@ -6306,9 +4298,19 @@ export function AgentChatWorkspace({
     onBackToProjectManagement,
     fromResources,
     handleBackHome,
+    rightSurfaceContent,
+    rightSurfaceLaunchers,
+    rightSurfaceFilesOpen: rightSurfaceState.activeSurface === "files",
+    onToggleRightSurfaceFiles: handleToggleRightSurfaceFiles,
+    rightSurfaceShellOpen: rightSurfaceState.activeSurface === "shell",
+    onToggleRightSurfaceShell: handleToggleRightSurfaceShell,
     showHarnessToggle: !suppressHomeNavbarUtilityActions && showHarnessToggle,
     navbarHarnessPanelVisible:
-      !suppressHomeNavbarUtilityActions && navbarHarnessPanelVisible,
+      !suppressHomeNavbarUtilityActions &&
+      rightSurfaceState.activeSurface === "harness",
+    showExpertInfoToggle: hasExpertInfoPanel,
+    expertInfoPanelVisible,
+    handleToggleExpertInfoPanel,
     harnessPendingCount: suppressHomeNavbarUtilityActions
       ? 0
       : harnessPendingCount,
@@ -6325,7 +4327,7 @@ export function AgentChatWorkspace({
     pendingA2UISource: effectivePendingA2UISource,
     a2uiSubmissionNotice,
     handlePendingA2UISubmit,
-    handleToggleCanvas,
+    handleToggleCanvas: handleToggleCanvasFromRightSurface,
     hideInlineStepProgress,
     isSpecializedThemeMode,
     hasMessages,
@@ -6402,16 +4404,6 @@ export function AgentChatWorkspace({
       initialDirectory={project?.rootPath || null}
     />
   ) : null;
-  const expertInfoPanelNode = (
-    <ExpertInfoPanel
-      requestMetadata={expertPanelRequestMetadata}
-      localSkills={skills}
-      serviceSkills={serviceSkills}
-      skillsLoading={combinedSkillsLoading}
-      onSkillRefsChange={handleExpertSkillRefsChange}
-    />
-  );
-
   return (
     <>
       <WorkspaceShellScene
@@ -6424,7 +4416,7 @@ export function AgentChatWorkspace({
         onExpandGeneralWorkbenchSidebar={handleExpandGeneralWorkbenchSidebar}
         fileManagerNode={fileManagerNode}
         mainAreaNode={conversationSceneRuntime.mainAreaNode}
-        rightRailNode={expertInfoPanelNode}
+        rightRailNode={null}
       />
       <AutomationJobDialog
         open={workspaceServiceSkillEntryActions.automationDialogOpen}

@@ -32,8 +32,14 @@ mod model_providers;
 mod objectives;
 mod output_refs;
 mod project_git;
+mod projection_payload_summary;
+mod projection_protocol;
 mod projection_repair;
+mod projection_schema;
+mod projection_status;
 mod projection_store;
+#[cfg(test)]
+mod projection_store_tests;
 mod read_model;
 mod service_projection;
 mod session_control;

@@ -15,6 +15,8 @@ import type {
   AgentRuntimeEvidenceLimeCorePolicyInput,
   AgentRuntimeEvidenceLimeCorePolicyItem,
   AgentRuntimeEvidenceLimeCorePolicyValueHit,
+  AgentRuntimeEvidenceMcpResourceContentRef,
+  AgentRuntimeEvidenceMcpResourceRead,
   AgentRuntimeEvidenceMcpToolResult,
   AgentRuntimeEvidencePack,
   AgentRuntimeEvidenceSkillInvocation,
@@ -1182,6 +1184,90 @@ function normalizeEvidenceMcpToolResult(
   };
 }
 
+function normalizeEvidenceMcpResourceContentRef(
+  value: unknown,
+): AgentRuntimeEvidenceMcpResourceContentRef | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    index: readNumberField(value, "index"),
+    type: readOptionalStringField(value, "type"),
+    uri: readOptionalStringField(value, "uri"),
+    mime_type: readOptionalStringField(value, "mimeType", "mime_type"),
+    text_char_count: readOptionalNumberField(
+      value,
+      "textCharCount",
+      "text_char_count",
+    ),
+    blob_base64_bytes: readOptionalNumberField(
+      value,
+      "blobBase64Bytes",
+      "blob_base64_bytes",
+    ),
+  };
+}
+
+function normalizeEvidenceMcpResourceRead(
+  value: unknown,
+): AgentRuntimeEvidenceMcpResourceRead | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const uri = readStringField(value, "uri");
+  const sourceEventId = readStringField(
+    value,
+    "sourceEventId",
+    "source_event_id",
+  );
+  if (!uri || !sourceEventId) {
+    return null;
+  }
+
+  const rawContentRefs = value.contentRefs ?? value.content_refs;
+  const contentRefs = Array.isArray(rawContentRefs)
+    ? rawContentRefs
+        .map((entry: unknown) => normalizeEvidenceMcpResourceContentRef(entry))
+        .filter(
+          (
+            entry,
+          ): entry is NonNullable<
+            ReturnType<typeof normalizeEvidenceMcpResourceContentRef>
+          > => entry !== null,
+        )
+    : [];
+
+  return {
+    event: readStringField(value, "event") || "mcp_resource_read",
+    tool_name:
+      readStringField(value, "toolName", "tool_name") || "ReadMcpResourceTool",
+    uri,
+    server: readOptionalStringField(value, "server"),
+    status: readStringField(value, "status"),
+    source_event_id: sourceEventId,
+    source_event_type: readStringField(
+      value,
+      "sourceEventType",
+      "source_event_type",
+    ),
+    mime_types: readStringListField(value, "mimeTypes", "mime_types"),
+    content_count: readOptionalNumberField(
+      value,
+      "contentCount",
+      "content_count",
+    ),
+    content_refs: contentRefs,
+    turn_id: readOptionalStringField(value, "turnId", "turn_id"),
+    tool_call_id: readOptionalStringField(
+      value,
+      "toolCallId",
+      "tool_call_id",
+    ),
+  };
+}
+
 function normalizeEvidenceObservabilitySummary(value: unknown) {
   if (!isRecord(value)) {
     return undefined;
@@ -1251,6 +1337,18 @@ function normalizeEvidenceObservabilitySummary(value: unknown) {
           > => entry !== null,
         )
     : [];
+  const rawMcpResourceReads = value.mcpResourceReads ?? value.mcp_resource_reads;
+  const mcpResourceReads = Array.isArray(rawMcpResourceReads)
+    ? rawMcpResourceReads
+        .map((entry: unknown) => normalizeEvidenceMcpResourceRead(entry))
+        .filter(
+          (
+            entry,
+          ): entry is NonNullable<
+            ReturnType<typeof normalizeEvidenceMcpResourceRead>
+          > => entry !== null,
+        )
+    : [];
 
   if (
     !schemaVersion &&
@@ -1260,7 +1358,8 @@ function normalizeEvidenceObservabilitySummary(value: unknown) {
     !modalityRuntimeContracts &&
     skillInvocations.length === 0 &&
     skillSearches.length === 0 &&
-    mcpToolResults.length === 0
+    mcpToolResults.length === 0 &&
+    mcpResourceReads.length === 0
   ) {
     return undefined;
   }
@@ -1274,6 +1373,7 @@ function normalizeEvidenceObservabilitySummary(value: unknown) {
     skill_invocations: skillInvocations,
     skill_searches: skillSearches,
     mcp_tool_results: mcpToolResults,
+    mcp_resource_reads: mcpResourceReads,
   };
 }
 

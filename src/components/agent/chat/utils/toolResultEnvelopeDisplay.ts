@@ -45,6 +45,10 @@ const PROTOCOL_ENVELOPE_KEYS = [
   "_meta",
   "trace",
   "telemetry",
+  "runtime_enable_source",
+  "runtimeEnableSource",
+  "internal_payload",
+  "internalPayload",
   "durationMs",
   "duration_ms",
   "elapsedMs",
@@ -70,6 +74,51 @@ const USER_DETAIL_KEYS = [
   "output",
   "message",
 ] as const;
+
+const WORKSPACE_SKILL_RUNTIME_ENABLE_KEYS = [
+  "workspace_skill_runtime_enable",
+  "workspaceSkillRuntimeEnable",
+] as const;
+
+const WORKSPACE_SKILL_RUNTIME_ENABLE_NESTED_KEYS = [
+  ...WORKSPACE_SKILL_RUNTIME_ENABLE_KEYS,
+  ...ENVELOPE_NESTED_KEYS,
+  "metadata",
+  "request_metadata",
+  "requestMetadata",
+  "harness",
+] as const;
+
+export type WorkspaceSkillRuntimeEnableDisplayTranslator = (
+  key: string,
+  defaultValue: string,
+  options?: Record<string, unknown>,
+) => string;
+
+function interpolateDefaultText(
+  defaultValue: string,
+  options?: Record<string, unknown>,
+): string {
+  if (!options) {
+    return defaultValue;
+  }
+  return defaultValue.replace(/\{\{\s*([^}\s]+)\s*\}\}/g, (_, key) => {
+    const value = options[key];
+    return value === undefined || value === null ? "" : String(value);
+  });
+}
+
+function translateRuntimeEnableText(
+  translate: WorkspaceSkillRuntimeEnableDisplayTranslator,
+  key: string,
+  defaultValue: string,
+  options?: Record<string, unknown>,
+): string {
+  const translated = translate(key, defaultValue, options);
+  return translated && translated !== key
+    ? translated
+    : interpolateDefaultText(defaultValue, options);
+}
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -155,6 +204,34 @@ function isSkillToolGateEvent(record: Record<string, unknown>): boolean {
   );
 }
 
+function readRuntimeEnableGateReason(
+  record: Record<string, unknown>,
+): string | null {
+  const decision = asRecord(record.decision);
+  const result = asRecord(record.result);
+  const reason = readString(decision, ["reason", "gate"]);
+  if (reason) {
+    return reason;
+  }
+  if (
+    result?.workspaceSkillRuntimeEnableAttached === true ||
+    result?.workspace_skill_runtime_enable_attached === true
+  ) {
+    return "workspace_skill_runtime_enable_attached";
+  }
+  return null;
+}
+
+function isWorkspaceSkillRuntimeEnableGateEvent(
+  record: Record<string, unknown>,
+): boolean {
+  if (!isSkillToolGateEvent(record)) {
+    return false;
+  }
+  const reason = readRuntimeEnableGateReason(record)?.toLowerCase();
+  return Boolean(reason?.includes("workspace_skill_runtime_enable"));
+}
+
 function hasSkillToolGateEnvelope(
   value: unknown,
   visited = new Set<unknown>(),
@@ -187,6 +264,42 @@ function hasSkillToolGateEnvelope(
   );
 }
 
+function hasWorkspaceSkillRuntimeEnableGateEnvelope(
+  value: unknown,
+  visited = new Set<unknown>(),
+): boolean {
+  if (typeof value === "string") {
+    const parsed = parseStructuredToolResult(value);
+    return parsed
+      ? hasWorkspaceSkillRuntimeEnableGateEnvelope(parsed, visited)
+      : false;
+  }
+
+  if (Array.isArray(value)) {
+    if (visited.has(value)) {
+      return false;
+    }
+    visited.add(value);
+    return value.some((item) =>
+      hasWorkspaceSkillRuntimeEnableGateEnvelope(item, visited),
+    );
+  }
+
+  const record = asRecord(value);
+  if (!record || visited.has(record)) {
+    return false;
+  }
+  visited.add(record);
+
+  if (isWorkspaceSkillRuntimeEnableGateEvent(record)) {
+    return true;
+  }
+
+  return ENVELOPE_NESTED_KEYS.some((key) =>
+    hasWorkspaceSkillRuntimeEnableGateEnvelope(record[key], visited),
+  );
+}
+
 function looksLikeSkillToolGateDetail(value: string): boolean {
   const parsed = parseStructuredToolResult(value);
   if (parsed && hasSkillToolGateEnvelope(parsed)) {
@@ -209,6 +322,156 @@ function looksLikeSkillToolGateDetail(value: string): boolean {
 function hasUsefulSkillResultDetail(value: unknown): boolean {
   const detail = extractStructuredToolDetailText(value);
   return Boolean(detail && !looksLikeSkillToolGateDetail(detail));
+}
+
+function isWorkspaceSkillRuntimeEnableRecord(
+  record: Record<string, unknown>,
+): boolean {
+  return Boolean(
+    readString(record, ["source", "approval"]) || Array.isArray(record.bindings),
+  );
+}
+
+function findWorkspaceSkillRuntimeEnableRecord(
+  value: unknown,
+  visited = new Set<unknown>(),
+): Record<string, unknown> | null {
+  if (typeof value === "string") {
+    const parsed = parseStructuredToolResult(value);
+    return parsed
+      ? findWorkspaceSkillRuntimeEnableRecord(parsed, visited)
+      : null;
+  }
+
+  if (Array.isArray(value)) {
+    if (visited.has(value)) {
+      return null;
+    }
+    visited.add(value);
+    for (const item of value) {
+      const found = findWorkspaceSkillRuntimeEnableRecord(item, visited);
+      if (found) {
+        return found;
+      }
+    }
+    return null;
+  }
+
+  const record = asRecord(value);
+  if (!record || visited.has(record)) {
+    return null;
+  }
+  visited.add(record);
+
+  if (isWorkspaceSkillRuntimeEnableRecord(record)) {
+    return record;
+  }
+
+  for (const key of WORKSPACE_SKILL_RUNTIME_ENABLE_NESTED_KEYS) {
+    const found = findWorkspaceSkillRuntimeEnableRecord(record[key], visited);
+    if (found) {
+      return found;
+    }
+  }
+
+  return null;
+}
+
+function formatRuntimeEnableSource(
+  source: string | null,
+  translate: WorkspaceSkillRuntimeEnableDisplayTranslator,
+): string | null {
+  if (!source) {
+    return null;
+  }
+  if (source === "manual_session_enable") {
+    return translateRuntimeEnableText(
+      translate,
+      "agentChat.harness.generated.9898e681b9",
+      "手动会话",
+    );
+  }
+  return null;
+}
+
+function formatRuntimeEnableApproval(
+  approval: string | null,
+  translate: WorkspaceSkillRuntimeEnableDisplayTranslator,
+): string | null {
+  if (!approval) {
+    return null;
+  }
+  if (approval === "manual") {
+    return translateRuntimeEnableText(
+      translate,
+      "agentChat.harness.generated.0ee2b78a17",
+      "人工确认",
+    );
+  }
+  return null;
+}
+
+function formatWorkspaceSkillRuntimeEnableRecord(
+  record: Record<string, unknown> | null,
+  translate: WorkspaceSkillRuntimeEnableDisplayTranslator,
+): string {
+  const bindings = Array.isArray(record?.bindings) ? record.bindings : [];
+  const parts = [
+    translateRuntimeEnableText(
+      translate,
+      "agentChat.harness.generated.407c71140b",
+      "运行启用",
+    ),
+    formatRuntimeEnableSource(readString(record, ["source"]), translate),
+    formatRuntimeEnableApproval(readString(record, ["approval"]), translate),
+    bindings.length > 0
+      ? translateRuntimeEnableText(
+          translate,
+          "agentChat.harness.generated.712985979a",
+          "{{count}} 个绑定",
+          { count: bindings.length },
+        )
+      : null,
+  ].filter(Boolean);
+  return parts.join(" · ");
+}
+
+export function formatWorkspaceSkillRuntimeEnableDisplay(
+  value: unknown,
+  translate: WorkspaceSkillRuntimeEnableDisplayTranslator,
+): string | null {
+  const record = findWorkspaceSkillRuntimeEnableRecord(value);
+  if (record) {
+    return formatWorkspaceSkillRuntimeEnableRecord(record, translate);
+  }
+  if (hasWorkspaceSkillRuntimeEnableGateEnvelope(value)) {
+    return formatWorkspaceSkillRuntimeEnableRecord(null, translate);
+  }
+  return null;
+}
+
+export function resolveWorkspaceSkillRuntimeEnableResultDisplay(params: {
+  toolName: string;
+  rawResultText: string;
+  metadata?: unknown;
+  translate: WorkspaceSkillRuntimeEnableDisplayTranslator;
+}): string | null {
+  const metadataDisplay = formatWorkspaceSkillRuntimeEnableDisplay(
+    params.metadata,
+    params.translate,
+  );
+  if (metadataDisplay) {
+    return metadataDisplay;
+  }
+
+  if (normalizeToolNameKey(params.toolName) !== "skill") {
+    return null;
+  }
+
+  return formatWorkspaceSkillRuntimeEnableDisplay(
+    params.rawResultText,
+    params.translate,
+  );
 }
 
 function hasUserFacingDetail(value: unknown, visited = new Set<unknown>()): boolean {

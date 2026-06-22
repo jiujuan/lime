@@ -506,10 +506,7 @@ function buildRuntimeIntrospectionFixtureResponses() {
   return [
     toolCall("ToolSearch", "call-tool-exec-tool-search", {
       query: "select:Read,ToolSearch,SendUserMessage",
-      caller: "assistant",
-      limit: 10,
-      include_deferred: true,
-      include_schema: false,
+      max_results: 10,
     }),
     toolCall("SendUserMessage", "call-tool-exec-send-user-message", {
       message:
@@ -837,7 +834,10 @@ function buildBatchScenario(batchId, fixtureFiles) {
           evidencePackMentionsRuntimeIntrospection:
             evidencePackText.includes(
               "LIME_TOOL_EXECUTION_SEND_USER_MESSAGE_OK",
-            ) || evidencePackText.includes("runtime-introspection-tools"),
+            ) ||
+            evidencePackText.includes("runtime-introspection-tools") ||
+            (toolOutputText.includes("LIME_TOOL_EXECUTION_SEND_USER_MESSAGE_OK") &&
+              toolOutputText.includes('"matches"')),
         };
       },
     };

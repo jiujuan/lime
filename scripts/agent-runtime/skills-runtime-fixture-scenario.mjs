@@ -96,6 +96,12 @@ export const EXPERT_PANEL_SKILLS_RUNTIME_ASSERTION_KEYS = [
   "expertPanelEvidenceSkillSearchObserved",
   "expertPanelEvidenceSkillInvocationObserved",
   "expertPanelSkillSearchBeforeSkillInvocation",
+  "expertPanelEvidencePackExportedFromHarnessPanel",
+  "expertPanelEvidenceSummaryVisible",
+  "expertPanelEvidenceSummarySkillCountsVisible",
+  "expertPanelEvidenceSummaryLatestSkillVisible",
+  "expertPanelEvidenceSummaryRuntimeEnableVisible",
+  "expertPanelEvidenceSummaryHidesRawRuntimeEnable",
 ];
 
 export function createSkillsRuntimeFixtureScenario(sessionId, options = {}) {
@@ -105,17 +111,21 @@ export function createSkillsRuntimeFixtureScenario(sessionId, options = {}) {
   const doneText = options.doneText ?? SKILLS_RUNTIME_DONE_TEXT;
   const summaryText =
     options.summaryText ?? "Skills runtime 证据已完成";
+  const guiSummaryText = options.guiSummaryText ?? summaryText;
   const trigger = options.trigger ?? "runtime_suggested";
   const selectionReason =
     options.selectionReason ?? "skill_search selected capability report";
   const gateMode = options.gateMode ?? "selected_skills";
   const workspaceRuntimeEnable = options.workspaceRuntimeEnable ?? null;
   const sourceAllowlist = options.sourceAllowlist ?? [];
+  const dedupeGuardTexts = options.dedupeGuardTexts ?? [];
   return {
     variant,
     prompt,
     doneText,
     summaryText,
+    guiSummaryText,
+    dedupeGuardTexts,
     trigger,
     selectionReason,
     gateMode,
@@ -193,6 +203,8 @@ export function createExpertPanelSkillsRuntimeFixtureScenario(sessionId) {
     prompt: EXPERT_SKILLS_RUNTIME_PANEL_PROMPT,
     doneText: EXPERT_SKILLS_RUNTIME_PANEL_DONE_TEXT,
     summaryText: "专家面板新增 Skill 后的下一轮 runtime 证据已完成",
+    guiSummaryText: "我识别到右侧专家面板更新后的 skillRefs",
+    dedupeGuardTexts: ["专家 Skills runtime 证据已完成"],
     trigger: "expert_panel_skill_refs_override",
     selectionReason:
       "ExpertInfoPanel added skill:capability-report; next turn inherited overridden expert skillRefs before skill_search and invocation",

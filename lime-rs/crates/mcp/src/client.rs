@@ -5,12 +5,14 @@
 
 #![allow(dead_code)]
 
+use crate::events::{McpResourceUpdatedPayload, McpResourcesUpdatedPayload};
 use lime_core::DynEmitter;
 use rmcp::{
     model::{
         ClientCapabilities, ClientInfo, Implementation, LoggingMessageNotification,
         LoggingMessageNotificationMethod, LoggingMessageNotificationParam, ProgressNotification,
-        ProgressNotificationMethod, ProgressNotificationParam, ProtocolVersion, ServerNotification,
+        ProgressNotificationMethod, ProgressNotificationParam, ProtocolVersion,
+        ResourceUpdatedNotificationParam, ServerNotification,
     },
     service::NotificationContext,
     ClientHandler, RoleClient,
@@ -168,6 +170,62 @@ impl ClientHandler for LimeMcpClient {
                 method: LoggingMessageNotificationMethod,
                 extensions: context.extensions.clone(),
             });
+
+        let handlers = self.notification_handlers.lock().await;
+        for handler in handlers.iter() {
+            let _ = handler.try_send(notification.clone());
+        }
+    }
+
+    async fn on_resource_updated(
+        &self,
+        params: ResourceUpdatedNotificationParam,
+        context: NotificationContext<RoleClient>,
+    ) {
+        debug!(
+            server_name = %self.server_name,
+            uri = %params.uri,
+            "收到 MCP 资源更新通知"
+        );
+
+        self.emit_event(
+            "mcp:resource_updated",
+            &McpResourceUpdatedPayload {
+                server_name: self.server_name.clone(),
+                uri: params.uri.clone(),
+            },
+        );
+
+        let notification = ServerNotification::ResourceUpdatedNotification(
+            rmcp::model::ResourceUpdatedNotification {
+                params: params.clone(),
+                method: rmcp::model::ResourceUpdatedNotificationMethod,
+                extensions: context.extensions.clone(),
+            },
+        );
+
+        let handlers = self.notification_handlers.lock().await;
+        for handler in handlers.iter() {
+            let _ = handler.try_send(notification.clone());
+        }
+    }
+
+    async fn on_resource_list_changed(&self, context: NotificationContext<RoleClient>) {
+        debug!(server_name = %self.server_name, "收到 MCP 资源列表更新通知");
+
+        self.emit_event(
+            "mcp:resources_updated",
+            &McpResourcesUpdatedPayload {
+                server_name: self.server_name.clone(),
+            },
+        );
+
+        let notification = ServerNotification::ResourceListChangedNotification(
+            rmcp::model::ResourceListChangedNotification {
+                method: rmcp::model::ResourceListChangedNotificationMethod,
+                extensions: context.extensions.clone(),
+            },
+        );
 
         let handlers = self.notification_handlers.lock().await;
         for handler in handlers.iter() {

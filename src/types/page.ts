@@ -177,6 +177,9 @@ export interface SkillsPageParams {
   initialSkillPackagePath?: string;
   initialSkillPackageName?: string;
   initialSkillPackageRequestKey?: number;
+  /** 进入技能工作台后预填搜索词，用于从专家技能恢复动作定位目标。 */
+  initialSearchQuery?: string;
+  initialSearchRequestKey?: number;
   creationProjectId?: string;
   highlightCapabilityDraftId?: string;
   initialView?: "store" | "builtin" | "installed" | "discover" | "manage";

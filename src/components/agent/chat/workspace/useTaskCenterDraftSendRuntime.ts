@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -14,9 +15,16 @@ import {
   type TaskCenterDraftSendRequest,
 } from "../homePendingPreview";
 import type { Message } from "../types";
+import type { InputbarSendHandler } from "../components/Inputbar/inputbarSendPayload";
 import type { WorkspaceHandleSend } from "./useWorkspaceSendActions";
-import { scheduleAfterNextPaint } from "./agentChatWorkspaceHelpers";
+import {
+  createTaskCenterDraftSendRequestId,
+  resolveTaskCenterDraftSendTitle,
+  scheduleAfterNextPaint,
+  type TaskCenterDraftTab,
+} from "./agentChatWorkspaceHelpers";
 import type { HandleSendOptions } from "../hooks/handleSendTypes";
+import { markTaskCenterDraftTabRunning } from "./taskCenterDraftTabs";
 
 type TaskCenterDraftSendExecutionStrategy = NonNullable<
   TaskCenterDraftSendRequest["sendExecutionStrategy"]
@@ -54,6 +62,28 @@ interface UseTaskCenterDraftSendDispatchRuntimeParams {
   onNonMaterializedSessionReady?: (sessionId: string) => void;
   sendRef: MutableRefObject<WorkspaceHandleSend>;
   workspaceId?: string | null;
+}
+
+interface UseTaskCenterEmptyStateSendRuntimeParams {
+  agentEntry: string;
+  input: string;
+  setInput: (value: string) => void;
+  activeDraftTabIdRef: MutableRefObject<string | null>;
+  clearMessages: (options?: { showToast?: boolean }) => void;
+  displayMessagesLength: number;
+  turnsLength: number;
+  threadItemsLength: number;
+  hasDisplayMessages: boolean;
+  handleSend: WorkspaceHandleSend;
+  sessionId?: string | null;
+  taskCenterWorkspaceId?: string | null;
+  setTaskCenterDraftTabs: Dispatch<SetStateAction<TaskCenterDraftTab[]>>;
+  setTaskCenterDraftSendRequest: Dispatch<
+    SetStateAction<TaskCenterDraftSendRequest | null>
+  >;
+  setHomePendingPreviewRequest: Dispatch<
+    SetStateAction<TaskCenterDraftSendRequest | null>
+  >;
 }
 
 export function useTaskCenterHomePendingPreviewRuntime({
@@ -115,6 +145,155 @@ export function useTaskCenterHomePendingPreviewRuntime({
     homePendingPreviewMessages,
     isHomePendingPreviewActive: homePendingPreviewMessages.length > 0,
   };
+}
+
+export function useTaskCenterEmptyStateSendRuntime({
+  agentEntry,
+  input,
+  setInput,
+  activeDraftTabIdRef,
+  clearMessages,
+  displayMessagesLength,
+  turnsLength,
+  threadItemsLength,
+  hasDisplayMessages,
+  handleSend,
+  sessionId,
+  taskCenterWorkspaceId,
+  setTaskCenterDraftTabs,
+  setTaskCenterDraftSendRequest,
+  setHomePendingPreviewRequest,
+}: UseTaskCenterEmptyStateSendRuntimeParams): InputbarSendHandler {
+  return useCallback<InputbarSendHandler>(
+    (payload = {}) => {
+      const text = payload.textOverride ?? input;
+      const images = payload.images ?? [];
+      const sendOptions = payload.sendOptions;
+      const normalizedText = text.trim();
+      setInput("");
+      const activeDraftTabId = activeDraftTabIdRef.current;
+      if (
+        (agentEntry === "claw" || agentEntry === "new-task") &&
+        activeDraftTabId
+      ) {
+        const submittedAt = Date.now();
+        const requestId = createTaskCenterDraftSendRequestId();
+        recordAgentUiPerformanceMetric("homeInput.submit", {
+          hasDraftTab: true,
+          inputLength: normalizedText.length,
+          requestId,
+          sessionId: activeDraftTabId,
+          source: "task-center-empty-state",
+          workspaceId: taskCenterWorkspaceId,
+        });
+        if (
+          displayMessagesLength > 0 ||
+          turnsLength > 0 ||
+          threadItemsLength > 0
+        ) {
+          clearMessages({ showToast: false });
+        }
+        setTaskCenterDraftTabs((current) =>
+          markTaskCenterDraftTabRunning({
+            current,
+            draftTabId: activeDraftTabId,
+            title: resolveTaskCenterDraftSendTitle(text),
+          }),
+        );
+        const request: TaskCenterDraftSendRequest = {
+          id: requestId,
+          draftTabId: activeDraftTabId,
+          text,
+          images,
+          sendOptions,
+          submittedAt,
+          materializeDraft: true,
+          source: "task-center-empty-state",
+        };
+        setTaskCenterDraftSendRequest(request);
+        setHomePendingPreviewRequest(request);
+        recordAgentUiPerformanceMetric("homeInput.pendingShellApplied", {
+          durationMs: Date.now() - submittedAt,
+          requestId,
+          sessionId: activeDraftTabId,
+          source: "task-center-empty-state",
+          workspaceId: taskCenterWorkspaceId,
+        });
+        return;
+      }
+
+      const shouldQueueHomeSend =
+        !hasDisplayMessages &&
+        (agentEntry === "claw" || agentEntry === "new-task");
+      if (shouldQueueHomeSend) {
+        const submittedAt = Date.now();
+        const requestId = createTaskCenterDraftSendRequestId();
+        const requestSessionKey = sessionId ?? requestId;
+        recordAgentUiPerformanceMetric("homeInput.submit", {
+          hasDraftTab: false,
+          inputLength: normalizedText.length,
+          requestId,
+          sessionId: requestSessionKey,
+          source: "empty-state",
+          workspaceId: taskCenterWorkspaceId,
+        });
+        const request: TaskCenterDraftSendRequest = {
+          id: requestId,
+          draftTabId: requestSessionKey,
+          text,
+          images,
+          sendOptions,
+          submittedAt,
+          materializeDraft: false,
+          source: "empty-state",
+        };
+        setTaskCenterDraftSendRequest(request);
+        setHomePendingPreviewRequest(request);
+        recordAgentUiPerformanceMetric("homeInput.pendingShellApplied", {
+          durationMs: Date.now() - submittedAt,
+          requestId,
+          sessionId: requestSessionKey,
+          source: "empty-state",
+          workspaceId: taskCenterWorkspaceId,
+        });
+        return;
+      }
+
+      recordAgentUiPerformanceMetric("homeInput.submit", {
+        hasDraftTab: false,
+        inputLength: normalizedText.length,
+        sessionId: sessionId ?? null,
+        source: "empty-state",
+        workspaceId: taskCenterWorkspaceId,
+      });
+      void handleSend(
+        images,
+        undefined,
+        undefined,
+        text,
+        undefined,
+        undefined,
+        sendOptions,
+      );
+    },
+    [
+      activeDraftTabIdRef,
+      agentEntry,
+      clearMessages,
+      displayMessagesLength,
+      handleSend,
+      hasDisplayMessages,
+      input,
+      sessionId,
+      setHomePendingPreviewRequest,
+      setInput,
+      setTaskCenterDraftSendRequest,
+      setTaskCenterDraftTabs,
+      taskCenterWorkspaceId,
+      threadItemsLength,
+      turnsLength,
+    ],
+  );
 }
 
 export function useTaskCenterDraftSendDispatchRuntime({

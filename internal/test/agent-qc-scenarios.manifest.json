@@ -200,6 +200,49 @@
       ]
     },
     {
+      "id": "expert-skills-runtime-evidence-pack",
+      "title": "专家 Skills Runtime 与 Evidence Pack 复盘",
+      "risk": "P1",
+      "executor": "mixed",
+      "lanes": [
+        "L2-agent-runtime",
+        "L3-product-surface",
+        "L4-behavior-eval"
+      ],
+      "commands": [
+        "node scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs --scenario expert-panel-skills-runtime --prefix claw-chat-current-fixture-expert-panel-skills-runtime-agent-qc --timeout-ms 180000"
+      ],
+      "goal": "验证专家声明 skillRefs 后仍经过 skill_search、SKILL.md body read、Skill gate 和 Skill invocation，并通过真实 Harness GUI 导出 Evidence Pack，让专家面板展示可读复盘。",
+      "verifier": "Electron fixture 必须成功；summary 必须证明 expert declared/selected/invoked、skill_search before Skill invocation、Harness GUI 导出 Evidence Pack、专家面板 Evidence Pack 复盘可见，并且不暴露 raw workspace_skill_runtime_enable。该场景使用 deterministic external fixture backend，不得冒充 live Provider 或发布级 P0 evidence。",
+      "evidenceRequired": [
+        "Electron fixture command log",
+        "expert declared/selected/invoked evidence",
+        "skill_search to Skill invocation ordering evidence",
+        "Harness GUI Evidence Pack export evidence",
+        "ExpertInfoPanel evidence summary assertion",
+        "summary artifact path under .lime/qc/gui-evidence",
+        "GUI session owner / isolation statement",
+        "liveProviderUsed=false statement"
+      ],
+      "evidenceLayers": [
+        "deterministic-smoke",
+        "gui-trace",
+        "runtime-transcript"
+      ],
+      "failureModes": [
+        "expert skillRefs treated as SkillTool allowlist",
+        "skill_search skipped",
+        "Skill body read missing",
+        "Skill gate missing",
+        "Skill invocation missing",
+        "Harness export bypasses GUI",
+        "expert evidence summary missing",
+        "raw workspace_skill_runtime_enable leaked",
+        "deterministic fixture mistaken as live Provider evidence",
+        "parallel GUI smoke interference"
+      ]
+    },
+    {
       "id": "browser-runtime-site-adapter",
       "title": "浏览器运行时与站点适配器",
       "risk": "P0",

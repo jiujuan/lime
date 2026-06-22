@@ -203,6 +203,8 @@ export const METHOD_MCP_PROMPT_LIST = "mcpPrompt/list";
 export const METHOD_MCP_PROMPT_GET = "mcpPrompt/get";
 export const METHOD_MCP_RESOURCE_LIST = "mcpResource/list";
 export const METHOD_MCP_RESOURCE_READ = "mcpResource/read";
+export const METHOD_MCP_RESOURCE_SUBSCRIBE = "mcpResource/subscribe";
+export const METHOD_MCP_RESOURCE_UNSUBSCRIBE = "mcpResource/unsubscribe";
 export const METHOD_PROJECT_MEMORY_READ = "projectMemory/read";
 export const METHOD_MEMORY_STORE_LIST = "memoryStore/list";
 export const METHOD_MEMORY_STORE_READ = "memoryStore/read";
@@ -557,6 +559,8 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_MCP_PROMPT_GET, kind: "request" },
   { method: METHOD_MCP_RESOURCE_LIST, kind: "request" },
   { method: METHOD_MCP_RESOURCE_READ, kind: "request" },
+  { method: METHOD_MCP_RESOURCE_SUBSCRIBE, kind: "request" },
+  { method: METHOD_MCP_RESOURCE_UNSUBSCRIBE, kind: "request" },
   { method: METHOD_PROJECT_MEMORY_READ, kind: "request" },
   { method: METHOD_MEMORY_STORE_LIST, kind: "request" },
   { method: METHOD_MEMORY_STORE_READ, kind: "request" },
@@ -3250,6 +3254,16 @@ export type McpResourceListResponse = {
 export type McpResourceReadParams = {
   uri: string;
 };
+
+export type McpResourceSubscribeParams = {
+  uri: string;
+};
+
+export type McpResourceUnsubscribeParams = {
+  uri: string;
+};
+
+export type McpResourceSubscriptionResponse = Record<string, never>;
 
 export type McpResourceReadResponse = {
   uri: string;

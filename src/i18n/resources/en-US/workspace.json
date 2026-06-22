@@ -832,6 +832,7 @@
   "workspace.browserAssistRenderer.migrated.configReady": "Configuration {{config}} is ready for Browser Workspace takeover.",
   "workspace.documentRenderer.view.preview": "Preview",
   "workspace.documentRenderer.view.source": "Source",
+  "workspace.documentRenderer.action.copyCode": "Copy",
   "workspace.documentRenderer.status.generating": "Generating...",
   "workspace.artifactDocument.kind.report": "Report",
   "workspace.artifactDocument.kind.roadmap": "Roadmap",

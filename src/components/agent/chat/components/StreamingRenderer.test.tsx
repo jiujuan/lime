@@ -763,6 +763,11 @@ describe("StreamingRenderer", () => {
                   sourceDraftId: "capdraft-1",
                   sourceVerificationReportId: "capver-1",
                 },
+                workspace_skill_runtime_enable: {
+                  source: "manual_session_enable",
+                  approval: "manual",
+                  bindings: [{ skill: "project:capability-report" }],
+                },
                 summary:
                   "SkillTool allow/deny events both contain request, decision and result.",
               }),
@@ -781,8 +786,12 @@ describe("StreamingRenderer", () => {
 
     const renderedText = container.textContent || "";
     expect(renderedText).toContain("已执行 1 项技能操作");
+    expect(renderedText).toContain(
+      "运行启用 · 手动会话 · 人工确认 · 1 个绑定",
+    );
     expect(renderedText).not.toContain("permissionBehavior");
     expect(renderedText).not.toContain("workspaceSkillRuntimeEnableAttached");
+    expect(renderedText).not.toContain("workspace_skill_runtime_enable");
     expect(renderedText).not.toContain("sourceMetadata");
     expect(renderedText).not.toContain("skill-source-session");
     expect(renderedText).not.toContain("SkillTool allow/deny");

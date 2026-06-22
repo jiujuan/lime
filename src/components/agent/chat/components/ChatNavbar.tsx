@@ -69,16 +69,16 @@ interface ChatNavbarOpenedProject {
 }
 
 const toolbarGroupClassName =
-  "flex items-center rounded-[20px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-subtle)] p-1.5 shadow-sm shadow-slate-950/5 backdrop-blur-sm";
+  "flex max-w-full flex-nowrap items-center overflow-hidden whitespace-nowrap rounded-[20px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-subtle)] p-1.5 shadow-sm shadow-slate-950/5 backdrop-blur-sm";
 
 const toolbarDividerClassName =
   "mx-1.5 h-6 w-px shrink-0 bg-[color:var(--lime-surface-border)]";
 
 const toolbarEmbeddedButtonClassName =
-  "h-9 rounded-2xl border border-transparent px-3.5 text-xs shadow-none";
+  "h-9 shrink-0 whitespace-nowrap rounded-2xl border border-transparent px-3.5 text-xs shadow-none";
 
 const toolbarGhostIconButtonClassName =
-  "h-9 w-9 rounded-2xl text-[color:var(--lime-text-muted)] hover:bg-[color:var(--lime-surface-hover)] hover:text-[color:var(--lime-text)]";
+  "h-9 w-9 shrink-0 rounded-2xl text-[color:var(--lime-text-muted)] hover:bg-[color:var(--lime-surface-hover)] hover:text-[color:var(--lime-text)]";
 
 const toolbarTextButtonClassName =
   "gap-1.5 text-[color:var(--lime-text)] hover:bg-[color:var(--lime-surface)] hover:text-[color:var(--lime-text-strong)]";
@@ -465,7 +465,10 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
 
   return (
     <Navbar $compact={isWorkspaceCompact} $collapsed={effectiveCollapseChrome}>
-      <div className="flex items-center gap-2">
+      <div
+        className="flex min-w-0 items-center gap-2 overflow-hidden"
+        data-testid="chat-navbar-leading-tools"
+      >
         {showNavigationTools ? (
           <div className={groupClassName}>
             {onBackHome && (
@@ -571,7 +574,10 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
 
       <div className="flex-1" />
 
-      <div className="flex items-center gap-2">
+      <div
+        className="flex min-w-0 shrink-0 flex-nowrap items-center gap-2 overflow-hidden whitespace-nowrap"
+        data-testid="chat-navbar-trailing-tools"
+      >
         {showProjectSelector ? (
           <div className={groupClassName}>
             <ProjectSelector

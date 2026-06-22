@@ -131,4 +131,18 @@ impl RuntimeCore {
     ) -> Result<McpResourceReadResponse, RuntimeCoreError> {
         self.app_data_source.read_mcp_resource(params).await
     }
+
+    pub async fn subscribe_mcp_resource(
+        &self,
+        params: McpResourceSubscribeParams,
+    ) -> Result<McpResourceSubscriptionResponse, RuntimeCoreError> {
+        self.app_data_source.subscribe_mcp_resource(params).await
+    }
+
+    pub async fn unsubscribe_mcp_resource(
+        &self,
+        params: McpResourceUnsubscribeParams,
+    ) -> Result<McpResourceSubscriptionResponse, RuntimeCoreError> {
+        self.app_data_source.unsubscribe_mcp_resource(params).await
+    }
 }

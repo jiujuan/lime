@@ -28,6 +28,12 @@ const TOOL_SEARCH_TRANSLATIONS: Record<string, Record<string, string>> = {
 };
 let currentLanguage = "zh-CN";
 
+function setCurrentLanguage(locale: "zh-CN" | "en-US") {
+  currentLanguage = locale;
+  document.documentElement.lang = locale;
+  document.documentElement.dir = "ltr";
+}
+
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     i18n: {
@@ -75,7 +81,7 @@ beforeEach(() => {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
-  currentLanguage = "zh-CN";
+  setCurrentLanguage("zh-CN");
 });
 
 afterEach(() => {
@@ -171,7 +177,7 @@ describe("ToolSearchSummaryPanel", () => {
   });
 
   it("英文界面不应把 deferred note 替换成中文", () => {
-    currentLanguage = "en-US";
+    setCurrentLanguage("en-US");
 
     const { container } = renderPanel({
       query: "tools",

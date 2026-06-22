@@ -87,6 +87,7 @@ Manifest 的职责：
 - Claw 首屏、聊天、流式与中断。
 - 工具调用、approval 与 sandbox。
 - Skill Forge 生成、校验、注册、绑定与显式启用。
+- 专家 Skills Runtime：专家声明、按需检索 / 加载 / gate / invocation、Harness GUI 导出 Evidence Pack 与专家面板复盘。
 - 浏览器运行时与站点适配器。
 - Knowledge 导入、检索与引用总结。
 - Workspace ready 与会话恢复。

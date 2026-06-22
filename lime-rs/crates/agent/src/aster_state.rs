@@ -48,7 +48,9 @@ use crate::provider_continuation_state::{
 #[cfg(test)]
 use crate::queued_turn::QueuedTurnSnapshot;
 use lime_core::database::DbConnection;
+use lime_mcp::McpBridgeSnapshot;
 use lime_services::aster_session_store::LimeSessionStore;
+use std::collections::HashSet;
 
 async fn configure_lime_native_file_tools(agent: &mut Agent) {
     agent.add_tool_inspector(Box::new(
@@ -171,6 +173,8 @@ pub struct AsterAgentState {
     initialized_cache: Arc<AtomicBool>,
     /// Provider 配置状态缓存（避免每次都获取锁）
     provider_configured_cache: Arc<AtomicBool>,
+    /// 已同步到 Aster extension manager 的 MCP bridge extension 名称。
+    registered_mcp_bridges: Arc<RwLock<HashSet<String>>>,
 }
 
 impl Clone for AsterAgentState {
@@ -183,6 +187,7 @@ impl Clone for AsterAgentState {
             credential_bridge: CredentialBridge::new(),
             initialized_cache: self.initialized_cache.clone(),
             provider_configured_cache: self.provider_configured_cache.clone(),
+            registered_mcp_bridges: self.registered_mcp_bridges.clone(),
         }
     }
 }
@@ -204,6 +209,7 @@ impl AsterAgentState {
             credential_bridge: CredentialBridge::new(),
             initialized_cache: Arc::new(AtomicBool::new(false)),
             provider_configured_cache: Arc::new(AtomicBool::new(false)),
+            registered_mcp_bridges: Arc::new(RwLock::new(HashSet::new())),
         }
     }
 
@@ -714,49 +720,82 @@ impl AsterAgentState {
         crate::build_project_system_prompt(db, project_id)
     }
 
-    /// 注册 MCP 桥接客户端
-    ///
-    /// 将 Lime 托管的 MCP 客户端注册到 Aster Agent 的 ExtensionManager，
-    /// 使 Agent 能够直接调用该 MCP 服务器提供的工具。
-    ///
-    /// # 参数
-    /// - `name`: 客户端名称
-    /// - `description`: 描述
-    /// - `client`: 实现 McpClientTrait 的客户端，必须包装在 Arc<Mutex<Box<...>>> 中
-    /// - `server_info`: MCP 服务器信息
-    pub async fn register_mcp_bridge(
-        &self,
-        name: String,
-        description: String,
-        client: Arc<tokio::sync::Mutex<Box<dyn aster::agents::mcp_client::McpClientTrait>>>,
-        server_info: Option<rmcp::model::ServerInfo>,
-    ) -> Result<(), String> {
+    pub async fn sync_mcp_bridges(&self, snapshots: Vec<McpBridgeSnapshot>) -> Result<(), String> {
         let agent_guard = self.agent.read().await;
-        if let Some(agent) = agent_guard.as_ref() {
-            // 创建 Extension 配置
+        let Some(agent) = agent_guard.as_ref() else {
+            return Ok(());
+        };
+
+        let mut active_bridge_names = HashSet::new();
+        for snapshot in snapshots {
+            let extension_name =
+                crate::agent_tools::catalog::mcp_extension_runtime_name(&snapshot.server_name);
+            let surface = crate::agent_tools::catalog::build_mcp_extension_surface(
+                &extension_name,
+                snapshot.description.clone(),
+                &snapshot.tools,
+            );
+            if !surface.has_tools() {
+                continue;
+            }
+            let bridge_name = surface.extension_name.clone();
+
+            let client: Arc<
+                tokio::sync::Mutex<Box<dyn aster::agents::mcp_client::McpClientTrait>>,
+            > = Arc::new(tokio::sync::Mutex::new(Box::new(
+                crate::mcp_bridge::McpBridgeClient::new(
+                    snapshot.server_name.clone(),
+                    snapshot.running_service,
+                    snapshot.handler,
+                    snapshot.server_info.clone(),
+                ),
+            )));
             let config = aster::agents::extension::ExtensionConfig::Builtin {
-                name: name.clone(),
-                display_name: Some(name.clone()),
-                description,
+                name: bridge_name.clone(),
+                display_name: Some(snapshot.server_name.clone()),
+                description: surface.description,
                 timeout: None,
                 bundled: Some(false),
-                available_tools: Vec::new(),
-                deferred_loading: false,
-                always_expose_tools: Vec::new(),
-                allowed_caller: None,
+                available_tools: surface.available_tools,
+                deferred_loading: surface.deferred_loading,
+                always_expose_tools: surface.always_expose_tools,
+                allowed_caller: surface.allowed_caller,
             };
-
-            // 注册到 ExtensionManager
             agent
                 .extension_manager
-                .add_client(name, config, client, server_info, None)
+                .add_client(
+                    bridge_name.clone(),
+                    config,
+                    client,
+                    snapshot.server_info,
+                    None,
+                )
                 .await;
-
-            tracing::info!("[AsterAgent] MCP 桥接注册成功");
-            Ok(())
-        } else {
-            Err("Agent 未初始化".to_string())
+            active_bridge_names.insert(bridge_name);
         }
+
+        let previous_bridge_names = self.registered_mcp_bridges.read().await.clone();
+        for stale_name in previous_bridge_names.difference(&active_bridge_names) {
+            if let Err(error) = agent.remove_extension(stale_name).await {
+                tracing::warn!(
+                    extension_name = %stale_name,
+                    error = %error,
+                    "[AsterAgent] 清理过期 MCP bridge 失败"
+                );
+            }
+        }
+
+        let bridge_count = active_bridge_names.len();
+        *self.registered_mcp_bridges.write().await = active_bridge_names;
+        tracing::info!(bridge_count, "[AsterAgent] MCP bridge 同步完成");
+        Ok(())
+    }
+
+    /// 注册 MCP 桥接客户端。
+    ///
+    /// 该入口保留给测试和未来单点注册场景；生产主链使用 `sync_mcp_bridges`。
+    pub async fn register_mcp_bridge(&self, snapshot: McpBridgeSnapshot) -> Result<(), String> {
+        self.sync_mcp_bridges(vec![snapshot]).await
     }
 
     /// 检查 Agent 是否已初始化

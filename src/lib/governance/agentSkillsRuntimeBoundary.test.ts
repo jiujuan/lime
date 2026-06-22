@@ -150,4 +150,35 @@ describe("agent skills runtime boundary", () => {
 
     expect(offenders).toEqual([]);
   });
+
+  it("专家 skillRefs 必须进入 selector、telemetry 和 SkillTool gate 主链", () => {
+    const contextSource = productionSource(
+      join(
+        REPO_ROOT,
+        "lime-rs/crates/app-server/src/runtime_backend/agent_skills_context.rs",
+      ),
+    );
+    const telemetrySource = productionSource(
+      join(
+        REPO_ROOT,
+        "lime-rs/crates/app-server/src/runtime_backend/agent_skills_telemetry.rs",
+      ),
+    );
+    const gateSource = productionSource(
+      join(
+        REPO_ROOT,
+        "lime-rs/crates/app-server/src/runtime_backend/skill_runtime_enable.rs",
+      ),
+    );
+
+    expect(contextSource).toContain("select_expert_bound_agent_skills");
+    expect(contextSource).toContain("AgentSkillSelectionTrigger::ExpertBinding");
+    expect(contextSource).toContain("expert_bound_skill_candidates");
+    expect(telemetrySource).toContain("runtime_status_events_for_agent_skills");
+    expect(telemetrySource).toContain("selection.trigger");
+    expect(telemetrySource).toContain("skill_body_read");
+    expect(telemetrySource).toContain("skill_gate_decision");
+    expect(gateSource).toContain("selected_agent_skill_names_from_request");
+    expect(gateSource).toContain("set_skill_tool_session_allowed_skills");
+  });
 });

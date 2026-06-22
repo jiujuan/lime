@@ -6,8 +6,8 @@ import { MarkdownPreview } from "./MarkdownPreview";
 
 const mockConvertLocalFileSrc = vi.fn((path: string) => `asset://${path}`);
 
-vi.mock("react-syntax-highlighter", () => ({
-  Prism: ({ children }: { children: React.ReactNode }) => (
+vi.mock("react-syntax-highlighter/dist/esm/prism", () => ({
+  default: ({ children }: { children: React.ReactNode }) => (
     <pre data-testid="syntax-highlighter">
       <code>{children}</code>
     </pre>

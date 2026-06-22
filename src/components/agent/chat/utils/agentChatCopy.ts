@@ -41,14 +41,8 @@ export function resolveAgentChatCopy(
 ): string {
   const fullKey = `agentChat.${key}`;
   const locale = resolveCurrentLocale();
-  const fallbackResource = loadNamespaceResource(locale, "agent");
-  const translated = i18n.isInitialized
-    ? (i18n.t(fullKey as never, {
-        ...values,
-        defaultValue,
-        ns: "agent",
-      } as never) as unknown)
-    : fallbackResource[fullKey as keyof typeof fallbackResource];
+  const localeResource = loadNamespaceResource(locale, "agent");
+  const translated = localeResource[fullKey as keyof typeof localeResource];
   const text = normalizeTranslatedCopy(translated, fullKey) ?? defaultValue;
   return interpolateCopy(text, values);
 }
@@ -66,13 +60,7 @@ export function resolveRequiredAgentChatCopy(
       : loadNamespaceResource(FALLBACK_LOCALE, "agent");
   const resourceFallback =
     localeResource[fullKey] ?? sourceResource[fullKey] ?? fullKey;
-  const translated = i18n.isInitialized
-    ? (i18n.t(fullKey as never, {
-        ...values,
-        defaultValue: resourceFallback,
-        ns: "agent",
-      } as never) as unknown)
-    : resourceFallback;
+  const translated = localeResource[fullKey] ?? resourceFallback;
   const text =
     normalizeTranslatedCopy(translated, fullKey) ??
     normalizeTranslatedCopy(resourceFallback, fullKey) ??

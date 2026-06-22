@@ -22,52 +22,20 @@ import {
   McpToolResult,
   McpPromptResult,
   McpResourceContent,
-  McpServerCapabilities,
   McpServerOAuthLoginOptions,
   McpServerOAuthLoginResponse,
 } from "@/lib/api/mcp";
-import { safeListen } from "@/lib/api/bridgeEvents";
-
-// ============================================================================
-// 事件 Payload 类型
-// ============================================================================
-
-interface McpServerStartedPayload {
-  server_name: string;
-  server_info?: McpServerCapabilities;
-}
-
-interface McpServerStoppedPayload {
-  server_name: string;
-}
-
-interface McpServerErrorPayload {
-  server_name: string;
-  error: string;
-}
-
-interface McpToolsUpdatedPayload {
-  tools: McpToolDefinition[];
-}
-
-interface McpOAuthCompletedPayload {
-  server_name: string;
-}
+import {
+  setupMcpEventListeners,
+  type McpOAuthCompletionState,
+  type McpServerConnectionState,
+} from "./useMcpEvents";
 
 // ============================================================================
 // Hook 返回类型
 // ============================================================================
 
-export interface McpServerConnectionState {
-  phase: "idle" | "starting" | "stopping" | "reconnecting";
-  error: string | null;
-  updatedAt: number | null;
-}
-
-export interface McpOAuthCompletionState {
-  serverName: string;
-  completedAt: number;
-}
+export type { McpOAuthCompletionState, McpServerConnectionState };
 
 export interface UseMcpReturn {
   // 状态
@@ -107,6 +75,8 @@ export interface UseMcpReturn {
   // 资源操作
   refreshResources: () => Promise<void>;
   readResource: (uri: string) => Promise<McpResourceContent>;
+  subscribeResource: (uri: string) => Promise<void>;
+  unsubscribeResource: (uri: string) => Promise<void>;
 }
 
 // ============================================================================
@@ -351,6 +321,24 @@ export function useMcp(): UseMcpReturn {
     [],
   );
 
+  const subscribeResource = useCallback(async (uri: string): Promise<void> => {
+    try {
+      await mcpApi.subscribeResource(uri);
+    } catch (e) {
+      console.error("[useMcp] 订阅资源失败:", e);
+      throw e;
+    }
+  }, []);
+
+  const unsubscribeResource = useCallback(async (uri: string): Promise<void> => {
+    try {
+      await mcpApi.unsubscribeResource(uri);
+    } catch (e) {
+      console.error("[useMcp] 取消订阅资源失败:", e);
+      throw e;
+    }
+  }, []);
+
   // --------------------------------------------------------------------------
   // 初始化和事件监听
   // --------------------------------------------------------------------------
@@ -375,84 +363,17 @@ export function useMcp(): UseMcpReturn {
 
     const setupListeners = async () => {
       try {
-        const unlistenStarted = await safeListen<McpServerStartedPayload>(
-          "mcp:server_started",
-          (event) => {
-            console.log("[useMcp] 服务器已启动:", event.payload.server_name);
-            updateServerConnectionState(event.payload.server_name, {
-              phase: "idle",
-            });
-            refreshServers();
-            refreshTools();
-          },
-        );
-        unlisteners.push(unlistenStarted);
-
-        const unlistenStopped = await safeListen<McpServerStoppedPayload>(
-          "mcp:server_stopped",
-          (event) => {
-            console.log("[useMcp] 服务器已停止:", event.payload.server_name);
-            updateServerConnectionState(event.payload.server_name, {
-              phase: "idle",
-            });
-            refreshServers();
-            refreshTools();
-          },
-        );
-        unlisteners.push(unlistenStopped);
-
-        const unlistenError = await safeListen<McpServerErrorPayload>(
-          "mcp:server_error",
-          (event) => {
-            console.error(
-              "[useMcp] 服务器错误:",
-              event.payload.server_name,
-              event.payload.error,
-            );
-            if (mounted) {
-              setError(`${event.payload.server_name}: ${event.payload.error}`);
-            }
-            updateServerConnectionState(event.payload.server_name, {
-              phase: "idle",
-              error: event.payload.error,
-            });
-          },
-        );
-        unlisteners.push(unlistenError);
-
-        const unlistenTools = await safeListen<McpToolsUpdatedPayload>(
-          "mcp:tools_updated",
-          (event) => {
-            console.log("[useMcp] 工具列表已更新:", event.payload.tools.length);
-            if (mounted) {
-              setTools(event.payload.tools);
-            }
-          },
-        );
-        unlisteners.push(unlistenTools);
-
-        const unlistenOAuthCompleted =
-          await safeListen<McpOAuthCompletedPayload>(
-            "mcp:oauth_completed",
-            (event) => {
-              console.log(
-                "[useMcp] OAuth 授权已完成:",
-                event.payload.server_name,
-              );
-              updateServerConnectionState(event.payload.server_name, {
-                phase: "idle",
-              });
-              if (mounted) {
-                setOAuthCompletion({
-                  serverName: event.payload.server_name,
-                  completedAt: Date.now(),
-                });
-              }
-              refreshServers();
-              refreshTools();
-            },
-          );
-        unlisteners.push(unlistenOAuthCompleted);
+        const registered = await setupMcpEventListeners({
+          isMounted: () => mounted,
+          updateServerConnectionState,
+          refreshServers,
+          refreshTools,
+          refreshResources,
+          setError,
+          setTools,
+          setOAuthCompletion,
+        });
+        unlisteners.push(...registered);
       } catch (error) {
         console.error("[useMcp] 注册 MCP 事件监听失败:", error);
       }
@@ -493,5 +414,7 @@ export function useMcp(): UseMcpReturn {
     getPrompt,
     refreshResources,
     readResource,
+    subscribeResource,
+    unsubscribeResource,
   };
 }

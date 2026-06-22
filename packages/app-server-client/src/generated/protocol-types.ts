@@ -1896,6 +1896,16 @@ export interface McpResourceReadResponse {
   uri: string;
 }
 
+export interface McpResourceSubscribeParams {
+  uri: string;
+}
+
+export type McpResourceSubscriptionResponse = Record<string, unknown>;
+
+export interface McpResourceUnsubscribeParams {
+  uri: string;
+}
+
 export interface McpServerCreateParams {
   server: unknown;
 }

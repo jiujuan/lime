@@ -48,12 +48,19 @@ struct ToolSearchInput {
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 struct ToolSearchOutput {
     matches: Vec<String>,
+    count: usize,
     query: String,
     total_deferred_tools: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     pending_mcp_servers: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     notes: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    retry_allowed: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    terminal_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    next_action: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -672,14 +679,56 @@ fn build_tool_search_notes(query: &str, matches: &[String]) -> Vec<String> {
     let mut notes = Vec::new();
     if parse_select_query(trimmed).is_some() {
         notes.push(
-            "未命中任何工具。不要继续用同义词反复重试；优先直接调用当前已可见的原生工具，如 Read / Write / Edit / Glob / Grep / Bash / WebFetch / WebSearch / StructuredOutput。".to_string(),
+            "未命中任何工具，这是终态搜索结果。不要继续用同义词反复重试；优先直接调用当前已可见的原生工具，如 Read / Write / Edit / Glob / Grep / Bash / WebFetch / WebSearch / StructuredOutput。".to_string(),
         );
     } else {
         notes.push(
-            "未命中任何 deferred 工具。若你需要文件、命令、网页或最终答复能力，请直接调用当前已可见的 Read / Write / Edit / Glob / Grep / Bash / WebFetch / WebSearch / StructuredOutput，而不是继续用 ToolSearch 改写同义词。".to_string(),
+            "未命中任何 deferred 工具，这是终态搜索结果。若你需要文件、命令、网页或最终答复能力，请直接调用当前已可见的 Read / Write / Edit / Glob / Grep / Bash / WebFetch / WebSearch / StructuredOutput，而不是继续用 ToolSearch 改写同义词。".to_string(),
         );
     }
     notes
+}
+
+fn build_tool_search_next_action(query: &str, matches: &[String]) -> Option<String> {
+    if !matches.is_empty() {
+        return None;
+    }
+
+    let trimmed = query.trim();
+    if parse_select_query(trimmed).is_some() {
+        Some("Stop calling ToolSearch for this selection. If the user explicitly requested this deferred tool, answer that it is unavailable in the current tool surface and ask them to enable or configure the corresponding MCP server.".to_string())
+    } else {
+        Some("Stop calling ToolSearch for this capability. Use already-visible native tools directly, or answer that no matching deferred extension/MCP tool is available.".to_string())
+    }
+}
+
+fn terminal_reason_for_tool_search(matches: &[String]) -> Option<String> {
+    matches
+        .is_empty()
+        .then(|| "no_deferred_tool_match".to_string())
+}
+
+fn retry_allowed_for_tool_search(matches: &[String]) -> Option<bool> {
+    matches.is_empty().then_some(false)
+}
+
+fn build_tool_search_output(
+    query: &str,
+    matches: Vec<String>,
+    total_deferred_tools: usize,
+    pending_mcp_servers: Option<Vec<String>>,
+) -> ToolSearchOutput {
+    ToolSearchOutput {
+        count: matches.len(),
+        notes: build_tool_search_notes(query, &matches),
+        retry_allowed: retry_allowed_for_tool_search(&matches),
+        terminal_reason: terminal_reason_for_tool_search(&matches),
+        next_action: build_tool_search_next_action(query, &matches),
+        matches,
+        query: query.to_string(),
+        total_deferred_tools,
+        pending_mcp_servers,
+    }
 }
 
 fn build_tool_search_result(
@@ -689,10 +738,15 @@ fn build_tool_search_result(
     let text = pretty_json(output)?;
     Ok(ToolResult::success(text)
         .with_metadata("matches", json!(&output.matches))
+        .with_metadata("count", json!(output.count))
         .with_metadata("query", json!(&output.query))
         .with_metadata("total_deferred_tools", json!(output.total_deferred_tools))
         .with_metadata("pending_mcp_servers", json!(&output.pending_mcp_servers))
         .with_metadata("notes", json!(&output.notes))
+        .with_metadata("tool_search_result_count", json!(output.count))
+        .with_metadata("tool_search_retry_allowed", json!(output.retry_allowed))
+        .with_metadata("terminal_reason", json!(&output.terminal_reason))
+        .with_metadata("next_action", json!(&output.next_action))
         .with_metadata(TOOL_SURFACE_UPDATED_KEY, json!(tool_surface_updated)))
 }
 
@@ -794,13 +848,12 @@ impl Tool for ToolSearchTool {
             let pending_mcp_servers =
                 pending_mcp_servers_for_empty_result(extension_manager.as_ref(), &matches).await;
             return build_tool_search_result(
-                &ToolSearchOutput {
-                    pending_mcp_servers,
-                    notes: build_tool_search_notes(query, &matches),
+                &build_tool_search_output(
+                    query,
                     matches,
-                    query: query.to_string(),
                     total_deferred_tools,
-                },
+                    pending_mcp_servers,
+                ),
                 tool_surface_updated,
             );
         }
@@ -814,13 +867,12 @@ impl Tool for ToolSearchTool {
             pending_mcp_servers_for_empty_result(extension_manager.as_ref(), &matches).await;
 
         build_tool_search_result(
-            &ToolSearchOutput {
-                pending_mcp_servers,
-                notes: build_tool_search_notes(query, &matches),
+            &build_tool_search_output(
+                query,
                 matches,
-                query: query.to_string(),
-                total_deferred_tools: state_before.deferred_tools.len(),
-            },
+                state_before.deferred_tools.len(),
+                pending_mcp_servers,
+            ),
             false,
         )
     }
@@ -1074,10 +1126,14 @@ mod tests {
     fn test_build_tool_search_result_sets_refresh_marker() {
         let output = ToolSearchOutput {
             matches: vec!["alpha__tool".to_string()],
+            count: 1,
             query: "select:alpha__tool".to_string(),
             total_deferred_tools: 3,
             pending_mcp_servers: None,
             notes: Vec::new(),
+            retry_allowed: None,
+            terminal_reason: None,
+            next_action: None,
         };
 
         let result = build_tool_search_result(&output, true).unwrap();
@@ -1092,10 +1148,14 @@ mod tests {
     fn test_build_tool_search_result_preserves_pending_mcp_servers() {
         let output = ToolSearchOutput {
             matches: Vec::new(),
+            count: 0,
             query: "browser".to_string(),
             total_deferred_tools: 2,
             pending_mcp_servers: Some(vec!["playwright".to_string(), "slack".to_string()]),
             notes: vec!["未命中任何 deferred 工具".to_string()],
+            retry_allowed: Some(false),
+            terminal_reason: Some("no_deferred_tool_match".to_string()),
+            next_action: Some("Stop calling ToolSearch for this capability.".to_string()),
         };
 
         let result = build_tool_search_result(&output, false).unwrap();
@@ -1127,6 +1187,37 @@ mod tests {
 
         assert_eq!(notes.len(), 1);
         assert!(notes[0].contains("不要继续用同义词反复重试"));
+        assert!(notes[0].contains("终态搜索结果"));
+    }
+
+    #[test]
+    fn test_build_tool_search_output_marks_empty_result_terminal_no_retry() {
+        let output =
+            build_tool_search_output("select:mcp__context7__query_docs", Vec::new(), 0, None);
+        let result = build_tool_search_result(&output, false).unwrap();
+        let result_text = result.output.as_deref().unwrap_or_default();
+
+        assert_eq!(output.count, 0);
+        assert_eq!(output.retry_allowed, Some(false));
+        assert_eq!(
+            output.terminal_reason.as_deref(),
+            Some("no_deferred_tool_match")
+        );
+        assert!(output
+            .next_action
+            .as_deref()
+            .unwrap_or_default()
+            .contains("Stop calling ToolSearch"));
+        assert!(result_text.contains("\"retry_allowed\": false"));
+        assert!(result_text.contains("\"terminal_reason\": \"no_deferred_tool_match\""));
+        assert_eq!(
+            result.metadata.get("tool_search_result_count"),
+            Some(&json!(0))
+        );
+        assert_eq!(
+            result.metadata.get("tool_search_retry_allowed"),
+            Some(&json!(false))
+        );
     }
 
     #[test]

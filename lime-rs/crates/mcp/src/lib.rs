@@ -18,10 +18,11 @@ pub mod types;
 pub use auth_status::{McpServerAuthActionPlan, McpServerAuthStatus};
 pub use client::{LimeMcpClient, McpClientWrapper};
 pub use events::{
-    McpOAuthCompletedPayload, McpServerErrorPayload, McpServerStartedPayload,
-    McpServerStoppedPayload, McpToolsUpdatedPayload,
+    McpOAuthCompletedPayload, McpResourceUpdatedPayload, McpResourcesUpdatedPayload,
+    McpServerErrorPayload, McpServerStartedPayload, McpServerStoppedPayload,
+    McpToolsUpdatedPayload,
 };
-pub use manager::McpClientManager;
+pub use manager::{McpBridgeSnapshot, McpClientManager};
 pub use oauth::{McpOAuthLoginParams, McpOAuthLoginResponse, McpOAuthRegistry};
 pub use tool_converter::ToolConverter;
 pub use types::{

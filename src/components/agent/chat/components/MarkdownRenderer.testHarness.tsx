@@ -22,8 +22,8 @@ export function getMarkdownRendererMocks() {
   return markdownRendererMocks;
 }
 
-vi.mock("react-syntax-highlighter", () => ({
-  Prism: ({
+vi.mock("react-syntax-highlighter/dist/esm/prism", () => ({
+  default: ({
     children,
     language,
     className,

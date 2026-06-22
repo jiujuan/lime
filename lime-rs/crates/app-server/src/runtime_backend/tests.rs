@@ -24,6 +24,8 @@ use lime_agent::{AgentEvent as RuntimeAgentEvent, AgentToolResult, RequestToolPo
 use std::collections::HashMap;
 use tempfile::TempDir;
 
+mod tool_inventory;
+
 #[derive(Default)]
 struct TestRuntimeEventSink {
     events: Vec<RuntimeEvent>,

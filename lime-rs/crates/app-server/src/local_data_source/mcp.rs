@@ -9,6 +9,9 @@ use app_server_protocol::McpPromptMessage;
 use app_server_protocol::McpResourceListResponse;
 use app_server_protocol::McpResourceReadParams;
 use app_server_protocol::McpResourceReadResponse;
+use app_server_protocol::McpResourceSubscribeParams;
+use app_server_protocol::McpResourceSubscriptionResponse;
+use app_server_protocol::McpResourceUnsubscribeParams;
 use app_server_protocol::McpServerCreateParams;
 use app_server_protocol::McpServerDeleteParams;
 use app_server_protocol::McpServerEnabledSetParams;
@@ -196,6 +199,13 @@ pub(crate) async fn list_mcp_tools(
     })
 }
 
+pub(crate) async fn list_mcp_bridge_snapshots(
+    manager: &McpManagerState,
+) -> Result<Vec<lime_mcp::McpBridgeSnapshot>, RuntimeCoreError> {
+    let manager = manager.lock().await;
+    manager.bridge_snapshots().await.map_err(mcp_error)
+}
+
 pub(crate) async fn list_mcp_tools_for_context(
     manager: &McpManagerState,
     params: McpToolListForContextParams,
@@ -304,6 +314,30 @@ pub(crate) async fn read_mcp_resource(
         text: result.text,
         blob: result.blob,
     })
+}
+
+pub(crate) async fn subscribe_mcp_resource(
+    manager: &McpManagerState,
+    params: McpResourceSubscribeParams,
+) -> Result<McpResourceSubscriptionResponse, RuntimeCoreError> {
+    let manager = manager.lock().await;
+    manager
+        .subscribe_resource(&params.uri)
+        .await
+        .map_err(mcp_error)?;
+    Ok(McpResourceSubscriptionResponse::default())
+}
+
+pub(crate) async fn unsubscribe_mcp_resource(
+    manager: &McpManagerState,
+    params: McpResourceUnsubscribeParams,
+) -> Result<McpResourceSubscriptionResponse, RuntimeCoreError> {
+    let manager = manager.lock().await;
+    manager
+        .unsubscribe_resource(&params.uri)
+        .await
+        .map_err(mcp_error)?;
+    Ok(McpResourceSubscriptionResponse::default())
 }
 
 fn parse_mcp_server_config(config_value: &Value) -> McpServerConfig {

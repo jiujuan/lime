@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown } from "lucide-react";
+import type { AgentToolCallState as ToolCallState } from "@/lib/api/agentProtocol";
 import { cn } from "@/lib/utils";
 import { resolveThinkingDisplayParts } from "./thinkingBlockDisplay";
 import { StreamingWebSearchProcessTimeline } from "./StreamingWebSearchProcessTimeline";
@@ -20,6 +21,7 @@ import {
   isImportedToolCall,
   type StreamingProcessEntry,
 } from "./StreamingProcessGroupModel";
+import { resolveWorkspaceSkillRuntimeEnableResultDisplay } from "../utils/toolResultEnvelopeDisplay";
 
 interface StreamingProcessSummaryCopy {
   formatImportedSourceCommandRecord: (count?: number) => string;
@@ -40,6 +42,24 @@ function joinSummaryParts(
   separator: string,
 ): string {
   return parts.filter(Boolean).join(separator);
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function resolveToolCallMetadata(toolCall: ToolCallState): Record<string, unknown> | null {
+  const merged = {
+    ...(asRecord(toolCall.metadata) || {}),
+    ...(asRecord(toolCall.result?.metadata) || {}),
+  };
+  return Object.keys(merged).length > 0 ? merged : null;
+}
+
+function resolveToolCallRawResultText(toolCall: ToolCallState): string {
+  return String(toolCall.result?.error || toolCall.result?.output || "");
 }
 
 function buildStreamingProcessSummary(
@@ -259,6 +279,7 @@ export const StreamingProcessGroup: React.FC<{
         });
   const [expanded, setExpanded] = useState(defaultExpanded);
   const previousDefaultExpandedRef = useRef(defaultExpanded);
+  const separator = t("agentChat.processGroup.separator", ", ");
   const { summaryText, descriptor, metaText } = useMemo(
     () =>
       buildStreamingProcessSummary(entries, {
@@ -304,9 +325,32 @@ export const StreamingProcessGroup: React.FC<{
             count,
             defaultValue: "{{count}} reasoning notes",
           }),
-        separator: () => t("agentChat.processGroup.separator", ", "),
+        separator: () => separator,
       }),
-    [entries, t],
+    [entries, separator, t],
+  );
+  const runtimeEnableMetaText = useMemo(() => {
+    const summaries: string[] = [];
+    for (const entry of entries) {
+      if (entry.kind !== "tool") {
+        continue;
+      }
+      const summary = resolveWorkspaceSkillRuntimeEnableResultDisplay({
+        toolName: entry.toolCall.name,
+        rawResultText: resolveToolCallRawResultText(entry.toolCall),
+        metadata: resolveToolCallMetadata(entry.toolCall),
+        translate: (key, defaultValue, options) =>
+          String(t(key, { defaultValue, ...options })),
+      });
+      if (summary && !summaries.includes(summary)) {
+        summaries.push(summary);
+      }
+    }
+    return summaries.length > 0 ? summaries.join(separator) : null;
+  }, [entries, separator, t]);
+  const combinedMetaText = joinSummaryParts(
+    [metaText, runtimeEnableMetaText],
+    separator,
   );
   const nonToolEntries = entries.filter((entry) => entry.kind !== "tool");
   const hasNonToolEntries = nonToolEntries.length > 0;
@@ -364,9 +408,9 @@ export const StreamingProcessGroup: React.FC<{
           )}
         >
           <span className="block break-words">{summaryText}</span>
-          {metaText ? (
+          {combinedMetaText ? (
             <span className="mt-0.5 block text-xs font-normal leading-5 text-slate-500">
-              {metaText}
+              {combinedMetaText}
             </span>
           ) : null}
           {!hasNonToolEntries &&

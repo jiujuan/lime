@@ -23,8 +23,8 @@ vi.mock("react-i18next", async () => {
   };
 });
 
-vi.mock("react-syntax-highlighter", () => ({
-  Prism: ({ children }: { children?: unknown }) =>
+vi.mock("react-syntax-highlighter/dist/esm/prism", () => ({
+  default: ({ children }: { children?: unknown }) =>
     React.createElement(
       "pre",
       { "data-testid": "syntax-highlighter-mock" },

@@ -206,6 +206,8 @@ const {
   METHOD_MCP_PROMPT_LIST,
   METHOD_MCP_RESOURCE_LIST,
   METHOD_MCP_RESOURCE_READ,
+  METHOD_MCP_RESOURCE_SUBSCRIBE,
+  METHOD_MCP_RESOURCE_UNSUBSCRIBE,
   METHOD_MCP_SERVER_CREATE,
   METHOD_MCP_SERVER_DELETE,
   METHOD_MCP_SERVER_ENABLED_SET,
@@ -973,6 +975,12 @@ test("builds app data surface requests with current methods", () => {
   const mcpResource = client.readMcpResource({
     uri: "file:///workspace/README.md",
   });
+  const mcpResourceSubscribe = client.subscribeMcpResource({
+    uri: "file:///workspace/README.md",
+  });
+  const mcpResourceUnsubscribe = client.unsubscribeMcpResource({
+    uri: "file:///workspace/README.md",
+  });
   const memory = client.readProjectMemory({
     projectId: "workspace-main",
   });
@@ -1377,6 +1385,14 @@ test("builds app data surface requests with current methods", () => {
   assert.deepEqual(mcpResources.params, {});
   assert.equal(mcpResource.method, METHOD_MCP_RESOURCE_READ);
   assert.deepEqual(mcpResource.params, {
+    uri: "file:///workspace/README.md",
+  });
+  assert.equal(mcpResourceSubscribe.method, METHOD_MCP_RESOURCE_SUBSCRIBE);
+  assert.deepEqual(mcpResourceSubscribe.params, {
+    uri: "file:///workspace/README.md",
+  });
+  assert.equal(mcpResourceUnsubscribe.method, METHOD_MCP_RESOURCE_UNSUBSCRIBE);
+  assert.deepEqual(mcpResourceUnsubscribe.params, {
     uri: "file:///workspace/README.md",
   });
   assert.equal(memory.method, METHOD_PROJECT_MEMORY_READ);
@@ -2354,6 +2370,8 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_MCP_PROMPT_GET, kind: "request" },
     { method: METHOD_MCP_RESOURCE_LIST, kind: "request" },
     { method: METHOD_MCP_RESOURCE_READ, kind: "request" },
+    { method: METHOD_MCP_RESOURCE_SUBSCRIBE, kind: "request" },
+    { method: METHOD_MCP_RESOURCE_UNSUBSCRIBE, kind: "request" },
     { method: METHOD_PROJECT_MEMORY_READ, kind: "request" },
     { method: METHOD_MEMORY_STORE_LIST, kind: "request" },
     { method: METHOD_MEMORY_STORE_READ, kind: "request" },
@@ -2703,6 +2721,11 @@ test("exports app-server method catalog with request and notification kinds", ()
   assert.equal(isAppServerRequestMethod(METHOD_MCP_PROMPT_GET), true);
   assert.equal(isAppServerRequestMethod(METHOD_MCP_RESOURCE_LIST), true);
   assert.equal(isAppServerRequestMethod(METHOD_MCP_RESOURCE_READ), true);
+  assert.equal(isAppServerRequestMethod(METHOD_MCP_RESOURCE_SUBSCRIBE), true);
+  assert.equal(
+    isAppServerRequestMethod(METHOD_MCP_RESOURCE_UNSUBSCRIBE),
+    true,
+  );
   assert.equal(isAppServerRequestMethod(METHOD_PROJECT_MEMORY_READ), true);
   assert.equal(
     isAppServerRequestMethod(METHOD_CONNECT_DEEP_LINK_RESOLVE),

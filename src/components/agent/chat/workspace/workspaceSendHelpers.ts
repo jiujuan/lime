@@ -14,6 +14,7 @@ import {
   type HarnessOemRoutingRequestMetadata,
   type HarnessTenantFeatureFlagsRequestMetadata,
 } from "../utils/harnessRequestMetadata";
+import type { WorkspaceSkillRuntimeEnableInput } from "../utils/workspaceSkillBindingsMetadata";
 import {
   hasGenerationBriefMetadata,
   mergeGenerationBriefIntoArtifactMetadata,
@@ -21,6 +22,7 @@ import {
   mergeSoulArtifactVoiceDiagnostics,
 } from "../utils/artifactGenerationBriefMetadata";
 import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/types";
 import type { AssistantDraftState } from "../hooks/agentChatShared";
 import type { HandleSendOptions } from "../hooks/handleSendTypes";
 import type { InputCapabilitySendRoute } from "../skill-selection/inputCapabilitySelection";
@@ -657,6 +659,8 @@ interface BuildWorkspaceRequestMetadataOptions {
   selectedTeamLabel?: string;
   selectedTeamSummary?: string;
   teamMemoryShadowSnapshot?: TeamMemorySnapshot | null;
+  workspaceSkillBindings?: AgentRuntimeWorkspaceSkillBinding[] | null;
+  workspaceSkillRuntimeEnable?: WorkspaceSkillRuntimeEnableInput | null;
   agentResponseLanguage?: string | null;
 }
 
@@ -947,6 +951,8 @@ export function buildWorkspaceRequestMetadata(
     selectedTeamLabel,
     selectedTeamSummary,
     teamMemoryShadowSnapshot,
+    workspaceSkillBindings,
+    workspaceSkillRuntimeEnable,
     agentResponseLanguage,
   } = options;
 
@@ -1028,6 +1034,8 @@ export function buildWorkspaceRequestMetadata(
     selectedTeamSummary: resolvedSelectedTeamSummary,
     selectedTeamRoles: resolvedSelectedTeamRoles,
     teamMemoryShadow: resolvedTeamMemoryShadow,
+    workspaceSkillBindings,
+    workspaceSkillRuntimeEnable,
     agentResponseLanguage,
     oemRouting: oemRoutingMatchesCurrentProvider
       ? resolvedOemRouting

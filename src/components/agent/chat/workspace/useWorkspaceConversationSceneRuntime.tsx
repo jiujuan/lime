@@ -268,9 +268,18 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   onBackToProjectManagement?: ConversationScenePresentationParams["scene"]["onBackToProjectManagement"];
   fromResources: boolean;
   handleBackHome: ConversationScenePresentationParams["scene"]["onBackHome"];
+  rightSurfaceContent?: ConversationScenePresentationParams["scene"]["rightSurfaceContent"];
+  rightSurfaceLaunchers?: ConversationScenePresentationParams["scene"]["rightSurfaceLaunchers"];
+  rightSurfaceFilesOpen?: ConversationScenePresentationParams["scene"]["rightSurfaceFilesOpen"];
+  onToggleRightSurfaceFiles?: ConversationScenePresentationParams["scene"]["onToggleRightSurfaceFiles"];
+  rightSurfaceShellOpen?: ConversationScenePresentationParams["scene"]["rightSurfaceShellOpen"];
+  onToggleRightSurfaceShell?: ConversationScenePresentationParams["scene"]["onToggleRightSurfaceShell"];
   showHarnessToggle: ConversationScenePresentationParams["scene"]["showHarnessToggle"];
   navbarHarnessPanelVisible: ConversationScenePresentationParams["scene"]["harnessPanelVisible"];
   handleToggleHarnessPanel: ConversationScenePresentationParams["scene"]["onToggleHarnessPanel"];
+  showExpertInfoToggle?: ConversationScenePresentationParams["scene"]["showExpertInfoToggle"];
+  expertInfoPanelVisible?: ConversationScenePresentationParams["scene"]["expertInfoPanelVisible"];
+  handleToggleExpertInfoPanel?: ConversationScenePresentationParams["scene"]["onToggleExpertInfoPanel"];
   harnessPendingCount: ConversationScenePresentationParams["scene"]["harnessPendingCount"];
   harnessAttentionLevel: ConversationScenePresentationParams["scene"]["harnessAttentionLevel"];
   harnessToggleLabel: ConversationScenePresentationParams["scene"]["harnessToggleLabel"];
@@ -432,9 +441,18 @@ export function useWorkspaceConversationSceneRuntime({
   onBackToProjectManagement,
   fromResources,
   handleBackHome,
+  rightSurfaceContent,
+  rightSurfaceLaunchers,
+  rightSurfaceFilesOpen,
+  onToggleRightSurfaceFiles,
+  rightSurfaceShellOpen,
+  onToggleRightSurfaceShell,
   showHarnessToggle,
   navbarHarnessPanelVisible,
   handleToggleHarnessPanel,
+  showExpertInfoToggle,
+  expertInfoPanelVisible,
+  handleToggleExpertInfoPanel,
   harnessPendingCount,
   harnessAttentionLevel,
   harnessToggleLabel,
@@ -809,11 +827,30 @@ export function useWorkspaceConversationSceneRuntime({
       layoutMode,
       onToggleCanvas: handleToggleCanvas,
       onBackHome: handleBackHome,
+      rightSurfaceContent,
+      rightSurfaceLaunchers,
+      rightSurfaceFilesOpen:
+        taskCenterUtilityActionsVisible && Boolean(rightSurfaceFilesOpen),
+      onToggleRightSurfaceFiles: taskCenterUtilityActionsVisible
+        ? onToggleRightSurfaceFiles
+        : undefined,
+      rightSurfaceShellOpen:
+        taskCenterUtilityActionsVisible && Boolean(rightSurfaceShellOpen),
+      onToggleRightSurfaceShell: taskCenterUtilityActionsVisible
+        ? onToggleRightSurfaceShell
+        : undefined,
       showHarnessToggle: taskCenterUtilityActionsVisible && showHarnessToggle,
       harnessPanelVisible:
         taskCenterUtilityActionsVisible && navbarHarnessPanelVisible,
       onToggleHarnessPanel: taskCenterUtilityActionsVisible
         ? handleToggleHarnessPanel
+        : undefined,
+      showExpertInfoToggle:
+        taskCenterUtilityActionsVisible && Boolean(showExpertInfoToggle),
+      expertInfoPanelVisible:
+        taskCenterUtilityActionsVisible && Boolean(expertInfoPanelVisible),
+      onToggleExpertInfoPanel: taskCenterUtilityActionsVisible
+        ? handleToggleExpertInfoPanel
         : undefined,
       harnessPendingCount: taskCenterUtilityActionsVisible
         ? harnessPendingCount

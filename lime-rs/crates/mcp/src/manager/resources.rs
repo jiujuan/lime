@@ -224,6 +224,70 @@ impl McpClientManager {
         Ok(mcp_result)
     }
 
+    /// 订阅资源更新。
+    pub async fn subscribe_resource(&self, uri: &str) -> Result<(), McpError> {
+        info!(uri = %uri, "订阅 MCP 资源");
+        let (server_name, _) = self.resolve_resource_target(uri).await?;
+
+        let clients = self.clients.read().await;
+        let wrapper = clients
+            .get(&server_name)
+            .ok_or_else(|| McpError::ServerNotRunning(server_name.clone()))?;
+        let service = wrapper
+            .running_service()
+            .ok_or_else(|| McpError::ServerNotRunning(server_name.clone()))?;
+
+        service
+            .subscribe(rmcp::model::SubscribeRequestParam {
+                uri: uri.to_string(),
+            })
+            .await
+            .map_err(|error| {
+                error!(
+                    uri = %uri,
+                    server_name = %server_name,
+                    error = %error,
+                    "订阅资源失败"
+                );
+                McpError::ToolCallFailed(format!("订阅资源失败: {error}"))
+            })?;
+
+        info!(uri = %uri, server_name = %server_name, "资源订阅完成");
+        Ok(())
+    }
+
+    /// 取消订阅资源更新。
+    pub async fn unsubscribe_resource(&self, uri: &str) -> Result<(), McpError> {
+        info!(uri = %uri, "取消订阅 MCP 资源");
+        let (server_name, _) = self.resolve_resource_target(uri).await?;
+
+        let clients = self.clients.read().await;
+        let wrapper = clients
+            .get(&server_name)
+            .ok_or_else(|| McpError::ServerNotRunning(server_name.clone()))?;
+        let service = wrapper
+            .running_service()
+            .ok_or_else(|| McpError::ServerNotRunning(server_name.clone()))?;
+
+        service
+            .unsubscribe(rmcp::model::UnsubscribeRequestParam {
+                uri: uri.to_string(),
+            })
+            .await
+            .map_err(|error| {
+                error!(
+                    uri = %uri,
+                    server_name = %server_name,
+                    error = %error,
+                    "取消订阅资源失败"
+                );
+                McpError::ToolCallFailed(format!("取消订阅资源失败: {error}"))
+            })?;
+
+        info!(uri = %uri, server_name = %server_name, "资源取消订阅完成");
+        Ok(())
+    }
+
     /// 解析资源目标（服务器名称）
     ///
     /// # Arguments

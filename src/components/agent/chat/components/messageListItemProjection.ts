@@ -546,14 +546,18 @@ export function resolveMessageListItemProjection({
     includeInlineProcessFlow &&
     hasFinalTextAfterProcessBoundary(conversationContentParts);
   const rendererConversationContentParts = usesProcessSeparatedFinalText
-    ? resolveProcessSeparatedContentParts(conversationContentParts)
+    ? resolveProcessSeparatedContentParts(conversationContentParts, {
+        displayContent,
+      })
     : conversationContentParts;
   const rawActionContent = resolveAssistantActionContent({
     displayContent:
       shouldHoldAssistantTextAsProcess || shouldHideAssistantTextWhileRunning
         ? ""
         : displayContent,
-    conversationContentParts,
+    conversationContentParts: usesProcessSeparatedFinalText
+      ? rendererConversationContentParts
+      : conversationContentParts,
     useProcessSeparatedFinalText: usesProcessSeparatedFinalText,
   });
   const shouldSuppressDuplicatedFailureText =

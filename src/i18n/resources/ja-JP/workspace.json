@@ -832,6 +832,7 @@
   "workspace.browserAssistRenderer.migrated.configReady": "設定 {{config}} は Browser Workspace で引き継げます。",
   "workspace.documentRenderer.view.preview": "プレビュー",
   "workspace.documentRenderer.view.source": "ソース",
+  "workspace.documentRenderer.action.copyCode": "コピー",
   "workspace.documentRenderer.status.generating": "生成中...",
   "workspace.artifactDocument.kind.report": "レポート",
   "workspace.artifactDocument.kind.roadmap": "ロードマップ",

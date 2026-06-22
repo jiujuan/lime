@@ -28,7 +28,6 @@ import {
 interface StreamingProcessRunProps {
   entries: StreamingProcessEntry[];
   forceGroup?: boolean;
-  isTailProcessRun?: boolean;
   isStreaming: boolean;
   processIsActive: boolean;
   shouldKeepProcessOpenForFinalAnswer: boolean;
@@ -44,7 +43,6 @@ export const StreamingProcessRun: React.FC<StreamingProcessRunProps> = memo(
   ({
     entries,
     forceGroup = false,
-    isTailProcessRun = false,
     isStreaming,
     processIsActive,
     shouldKeepProcessOpenForFinalAnswer,
@@ -206,7 +204,6 @@ export const StreamingProcessRun: React.FC<StreamingProcessRunProps> = memo(
           defaultExpanded={shouldAutoExpandProcessEntries(
             processEntries,
             processIsActive,
-            { isTailProcessRun },
           )}
           onOpenUrlPreview={onOpenUrlPreview}
           renderEntry={renderProcessEntry}

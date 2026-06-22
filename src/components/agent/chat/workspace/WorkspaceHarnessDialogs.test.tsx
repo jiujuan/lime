@@ -4,7 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { changeLimeLocale } from "@/i18n/createI18n";
 import type { HarnessSessionState } from "../utils/harnessState";
-import { GeneralWorkbenchDialogSection } from "./WorkspaceHarnessDialogs";
+import {
+  GeneralWorkbenchDialogSection,
+  GeneralWorkbenchHarnessSurfaceSection,
+} from "./WorkspaceHarnessDialogs";
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 let originalScrollIntoView:
@@ -116,6 +119,51 @@ function renderDialog(
   return { container, onSubmitCodeFixPrompt };
 }
 
+function renderSurface(
+  overrides: Partial<
+    ComponentProps<typeof GeneralWorkbenchHarnessSurfaceSection>
+  > = {},
+) {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+
+  act(() => {
+    root.render(
+      <GeneralWorkbenchHarnessSurfaceSection
+        enabled={true}
+        harnessState={createHarnessState()}
+        environment={{
+          skillsCount: 0,
+          skillNames: [],
+          memorySignals: [],
+          contextItemsCount: 0,
+          activeContextCount: 0,
+          contextItemNames: [],
+          contextEnabled: true,
+        }}
+        diagnosticRuntimeContext={{
+          sessionId: "session-surface",
+          workspaceId: "workspace-surface",
+          workingDir: "/tmp/workspace-surface",
+          providerType: "openai",
+          model: "gpt-5.4",
+          executionStrategy: "react",
+          activeTheme: "default",
+          selectedTeamLabel: null,
+        }}
+        threadRead={{
+          thread_id: "session-surface",
+        }}
+        {...overrides}
+      />,
+    );
+  });
+
+  mountedRoots.push({ root, container });
+  return container;
+}
+
 beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
@@ -147,6 +195,22 @@ afterEach(async () => {
 });
 
 describe("WorkspaceHarnessDialogs", () => {
+  it("运行时工作台 surface 应承载 dialog 形态的 Harness 面板", () => {
+    const container = renderSurface();
+
+    const surface = container.querySelector(
+      '[data-testid="general-workbench-harness-surface"]',
+    ) as HTMLElement | null;
+    const panel = container.querySelector(
+      '[data-testid="harness-status-panel"]',
+    ) as HTMLElement | null;
+
+    expect(surface).not.toBeNull();
+    expect(surface?.className).toContain("h-full");
+    expect(panel).not.toBeNull();
+    expect(panel?.getAttribute("data-layout")).toBe("dialog");
+  });
+
   it("运行时工作台弹窗应基于信号展示导轨并可跳到权限区块", () => {
     const scrollIntoView = vi.fn();
     HTMLElement.prototype.scrollIntoView = scrollIntoView;

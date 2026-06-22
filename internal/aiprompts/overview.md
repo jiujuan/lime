@@ -85,7 +85,7 @@ lime/
 | `终端能力（已移除）`                                                                | 不属于当前能力层；仅在治理文档中保留退役说明与历史检索语义                                                   |
 | `lime-rs/src/services/automation_service/` + `lime-rs/src/app/scheduler_service.rs` | 自动化任务、后台轮询与兼容调度触发壳                                                                         |
 | `lime-rs/src/plugin/`                                                               | 插件系统                                                                                                     |
-| `lime-rs/src/services/mcp_service.rs`                                               | MCP 服务器与工具管理                                                                                         |
+| `lime-rs/crates/mcp` + App Server `mcp*` JSON-RPC                                   | MCP 服务器、工具、提示词、资源、OAuth 与 runtime inventory current 主链                                      |
 | `gateway_channel_*` / `gateway_tunnel_*` 命令面                                     | 多渠道远程入口、Webhook/Tunnel 与渠道运行时；旧 `gateway_channel_cmd.rs` 只作为清理参考                      |
 | 浏览器连接器 / ChromeBridge 命令面                                                  | 浏览器连接器、ChromeBridge 与远程浏览器接入；旧 `browser_connector_cmd.rs` / `webview_cmd.rs` 只作为清理参考 |
 | `telegram_remote_cmd.rs` + `lime-rs/src/dev_bridge.rs`                              | 单通道旧入口与开发桥兼容支撑；只能迁移、收口或删除                                                           |

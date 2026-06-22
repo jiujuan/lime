@@ -298,51 +298,55 @@ impl ToolState {
     }
 
     fn merge_legacy_event(&mut self, event: &AgentEvent, tool_event: LegacyToolEvent) {
-        self.merge_status(event, &tool_event.status, false);
+        let status_applied = self.merge_status(event, &tool_event.status, false);
         if self.tool_call_id.is_none() {
             self.tool_call_id = tool_event.tool_call_id.clone();
         }
         merge_option_if_empty(&mut self.tool_name, tool_event.tool_name);
         merge_option_if_empty(&mut self.arguments, tool_event.arguments);
-        merge_option_if_present(&mut self.structured_content, tool_event.structured_content);
-        merge_option_if_present(&mut self.output, tool_event.output);
-        merge_option_if_present(&mut self.output_ref, tool_event.output_ref);
-        merge_vec_unique(&mut self.ref_ids, tool_event.ref_ids);
-        self.output_truncated = tool_event.output_truncated.or(self.output_truncated);
-        self.output_bytes = tool_event.output_bytes.or(self.output_bytes);
-        self.success = tool_event.success.or(self.success);
-        merge_option_if_present(&mut self.error, tool_event.error);
-        self.query = tool_event.query.or(self.query.take());
-        self.action = tool_event.action.or(self.action.take());
+        if status_applied || !self.has_current_item {
+            merge_option_if_present(&mut self.structured_content, tool_event.structured_content);
+            merge_option_if_present(&mut self.output, tool_event.output);
+            merge_option_if_present(&mut self.output_ref, tool_event.output_ref);
+            merge_vec_unique(&mut self.ref_ids, tool_event.ref_ids);
+            self.output_truncated = tool_event.output_truncated.or(self.output_truncated);
+            self.output_bytes = tool_event.output_bytes.or(self.output_bytes);
+            self.success = tool_event.success.or(self.success);
+            merge_option_if_present(&mut self.error, tool_event.error);
+            self.query = tool_event.query.or(self.query.take());
+            self.action = tool_event.action.or(self.action.take());
+        }
         self.updated_at = event.timestamp.clone();
         self.merge_event_metadata(event);
         self.sequence = self.sequence.min(event.sequence);
     }
 
-    fn merge_status(&mut self, event: &AgentEvent, next_status: &str, current_item: bool) {
+    fn merge_status(&mut self, event: &AgentEvent, next_status: &str, current_item: bool) -> bool {
         if current_item {
             if is_terminal_status(&self.status) && next_status == "in_progress" {
                 self.push_status_diagnostic(event, next_status);
-                return;
+                return false;
             }
             self.status = next_status.to_string();
             if is_terminal_status(next_status) {
                 self.completed_at = Some(event.timestamp.clone());
             }
-            return;
+            return true;
         }
 
         if self.has_current_item {
             if is_terminal_status(next_status) && self.status != next_status {
                 self.push_status_diagnostic(event, next_status);
+                return false;
             }
-            return;
+            return true;
         }
 
         self.status = next_status.to_string();
         if is_terminal_status(next_status) {
             self.completed_at = Some(event.timestamp.clone());
         }
+        true
     }
 
     fn push_status_diagnostic(&mut self, event: &AgentEvent, ignored_status: &str) {

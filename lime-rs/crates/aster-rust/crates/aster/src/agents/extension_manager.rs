@@ -653,8 +653,14 @@ impl ExtensionManager {
 
     /// Get aggregated usage statistics
     pub async fn remove_extension(&self, name: &str) -> ExtensionResult<()> {
+        let mut extensions = self.extensions.lock().await;
+        if extensions.remove(name).is_some() {
+            return Ok(());
+        }
         let sanitized_name = normalize(name.to_string());
-        self.extensions.lock().await.remove(&sanitized_name);
+        if sanitized_name != name {
+            extensions.remove(&sanitized_name);
+        }
         Ok(())
     }
 

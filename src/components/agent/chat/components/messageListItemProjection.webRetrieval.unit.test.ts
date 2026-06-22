@@ -56,8 +56,82 @@ describe("messageListItemProjection web retrieval", () => {
       "今日国际新闻简报",
     );
     expect(projection.actionContent).toBe(
-      "## 今日国际新闻简报\n\n- 第一条要闻。",
+      "我先联网核实今天的国际新闻，再整理成简报。\n\n## 今日国际新闻简报\n\n- 第一条要闻。",
     );
+  });
+
+  it("完成态 WebTools contentParts 缺首段 text 时应从完整 content 恢复导语", () => {
+    const message: Message = {
+      id: "assistant-completed-web-tools-missing-intro-part",
+      role: "assistant",
+      content:
+        "我先联网核实目标页面来源。\n\n网页搜索渲染结论：搜索来源已展开，读取页面已归入同一过程，最终正文继续输出。\n\n## 五年级选购指南\n\n- 第一条建议。",
+      timestamp: new Date("2026-06-22T01:00:00.000Z"),
+      isThinking: false,
+      contentParts: [
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "web-search-rendering",
+            name: "WebSearch",
+            arguments: '{"query":"Lime WebSearch rendering"}',
+            status: "completed",
+            startTime: new Date("2026-06-22T01:00:01.000Z"),
+            endTime: new Date("2026-06-22T01:00:02.000Z"),
+            result: {
+              success: true,
+              output: "Lime WebSearch Rendering Source",
+            },
+          } as never,
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "web-fetch-rendering",
+            name: "WebFetch",
+            arguments:
+              '{"url":"https://example.com/lime-websearch-rendering"}',
+            status: "completed",
+            startTime: new Date("2026-06-22T01:00:02.000Z"),
+            endTime: new Date("2026-06-22T01:00:03.000Z"),
+            result: {
+              success: true,
+              output: "Fetched page snapshot",
+            },
+          } as never,
+        },
+        {
+          type: "thinking",
+          text: "搜索结果还需要继续筛掉广告软文，我先读取有效来源。",
+          metadata: {
+            source: "thread_item_reasoning",
+            threadItemId: "web-reasoning-rendering",
+          },
+        },
+        {
+          type: "text",
+          text: "网页搜索渲染结论：搜索来源已展开，读取页面已归入同一过程，最终正文继续输出。\n\n## 五年级选购指南\n\n- 第一条建议。",
+        },
+      ],
+    };
+
+    const projection = buildProjection(message, null, {
+      isSending: false,
+    });
+
+    expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
+      "text",
+      "tool_use",
+      "tool_use",
+      "thinking",
+      "text",
+    ]);
+    expect(projection.rendererContentParts?.[0]).toMatchObject({
+      type: "text",
+      text: "我先联网核实目标页面来源。",
+    });
+    expect(projection.actionContent).toContain("我先联网核实目标页面来源。");
+    expect(projection.actionContent).toContain("网页搜索渲染结论");
   });
 
   it("网页搜索仍在运行时流式 overlay 不应提前显示成最终正文", () => {

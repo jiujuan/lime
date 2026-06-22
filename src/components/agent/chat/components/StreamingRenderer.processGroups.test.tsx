@@ -349,6 +349,55 @@ describe("StreamingRenderer process groups", () => {
     expect(container.textContent).not.toContain("partial skill protocol");
   });
 
+  it("消息仍在输出时，completed Skill 过程也应保持展开但隐藏协议 payload", () => {
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-completed-skill-before-final",
+            name: "skill",
+            arguments: JSON.stringify({
+              skill: "capability-report",
+              input: "生成能力报告",
+            }),
+            status: "completed",
+            result: {
+              success: true,
+              output: JSON.stringify({
+                runtime_enable_source: "legacy_tool_event",
+                internal_payload: "skill protocol payload should stay hidden",
+              }),
+            },
+            metadata: {
+              tool_family: "skill",
+              skill_name: "capability-report",
+            },
+            startTime: new Date("2026-06-02T09:00:00.000Z"),
+            endTime: new Date("2026-06-02T09:00:01.000Z"),
+          },
+        },
+        {
+          type: "text",
+          text: "我正在整理最终能力报告。",
+        },
+      ],
+      isStreaming: true,
+    });
+
+    const processGroup = container.querySelector<HTMLButtonElement>(
+      '[data-testid="streaming-process-group"] button',
+    );
+
+    expect(processGroup?.getAttribute("aria-expanded")).toBe("true");
+    expect(container.textContent).toContain("capability-report");
+    expect(container.textContent).toContain("我正在整理最终能力报告");
+    expect(container.textContent).not.toContain("legacy_tool_event");
+    expect(container.textContent).not.toContain("internal_payload");
+    expect(container.textContent).not.toContain("skill protocol payload");
+  });
+
   it("交错工具之间的过程状态自述不应作为正文块显示", () => {
     const { container } = renderHarness({
       content: "",

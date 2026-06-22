@@ -10,6 +10,7 @@ import { changeLimeLocale } from "@/i18n/createI18n";
 import { HarnessStatusPanel } from "./HarnessStatusPanel";
 import type { HarnessSessionState } from "../utils/harnessState";
 import { clearAgentUiProjectionEvents } from "../projection/conversationProjectionStore";
+import { clearHarnessEvidencePackStore } from "./harnessEvidencePackStore";
 
 const {
   exportAgentRuntimeAnalysisHandoffMock,
@@ -73,8 +74,8 @@ vi.mock("@/lib/api/externalUrl", () => ({
   openExternalUrlWithSystemBrowser: mockOpenExternalUrlWithSystemBrowser,
 }));
 
-vi.mock("react-syntax-highlighter", () => ({
-  Prism: ({ children }: { children?: unknown }) => (
+vi.mock("react-syntax-highlighter/dist/esm/prism", () => ({
+  default: ({ children }: { children?: unknown }) => (
     <pre data-testid="syntax-highlighter-mock">{String(children ?? "")}</pre>
   ),
 }));
@@ -723,5 +724,6 @@ afterEach(() => {
     value: originalWindowOpen,
   });
   clearAgentUiProjectionEvents();
+  clearHarnessEvidencePackStore();
   vi.clearAllMocks();
 });

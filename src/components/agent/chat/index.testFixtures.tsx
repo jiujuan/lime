@@ -617,6 +617,9 @@ vi.mock("./components/TaskCenterUtilityToolbar", () => ({
     harnessPanelVisible,
     onToggleHarnessPanel,
     harnessToggleLabel,
+    showExpertInfoToggle,
+    expertInfoPanelVisible,
+    onToggleExpertInfoPanel,
   }: {
     showCanvasToggle?: boolean;
     isCanvasOpen?: boolean;
@@ -625,6 +628,9 @@ vi.mock("./components/TaskCenterUtilityToolbar", () => ({
     harnessPanelVisible?: boolean;
     onToggleHarnessPanel?: () => void;
     harnessToggleLabel?: string;
+    showExpertInfoToggle?: boolean;
+    expertInfoPanelVisible?: boolean;
+    onToggleExpertInfoPanel?: () => void;
   }) => (
     <div
       data-testid="task-center-utility-toolbar"
@@ -633,6 +639,10 @@ vi.mock("./components/TaskCenterUtilityToolbar", () => ({
       data-show-harness-toggle={showHarnessToggle ? "true" : "false"}
       data-harness-panel-visible={harnessPanelVisible ? "true" : "false"}
       data-harness-toggle-label={harnessToggleLabel || "Harness"}
+      data-show-expert-info-toggle={showExpertInfoToggle ? "true" : "false"}
+      data-expert-info-panel-visible={
+        expertInfoPanelVisible ? "true" : "false"
+      }
     >
       {showCanvasToggle ? (
         <button
@@ -654,6 +664,17 @@ vi.mock("./components/TaskCenterUtilityToolbar", () => ({
           }}
         >
           切换 {harnessToggleLabel || "Harness"}
+        </button>
+      ) : null}
+      {showExpertInfoToggle ? (
+        <button
+          type="button"
+          data-testid="task-center-expert-info-toggle"
+          onClick={() => {
+            onToggleExpertInfoPanel?.();
+          }}
+        >
+          {expertInfoPanelVisible ? "关闭专家信息" : "打开专家信息"}
         </button>
       ) : null}
     </div>

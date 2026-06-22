@@ -187,26 +187,42 @@ impl RuntimeCore {
                 .find(|turn| agent_turn_is_active(turn.status))
                 .map(|turn| turn.turn_id.clone());
             if params.queue_if_busy && active_turn_id.is_some() {
-                let turn = AgentTurn {
-                    turn_id,
-                    session_id: stored.session.session_id.clone(),
-                    thread_id: stored.session.thread_id.clone(),
-                    status: AgentTurnStatus::Queued,
-                    started_at: Some(timestamp()),
-                    completed_at: None,
-                };
-                stored.session.status = AgentSessionStatus::Running;
-                stored.session.updated_at = timestamp();
-                stored
-                    .turn_inputs
-                    .insert(turn.turn_id.clone(), params.input.clone());
-                if let Some(runtime_options) = params.runtime_options.clone() {
+                if let Some(existing_turn) = stored
+                    .turns
+                    .iter()
+                    .find(|turn| {
+                        (agent_turn_is_active(turn.status)
+                            || matches!(turn.status, AgentTurnStatus::Queued))
+                            && stored
+                                .turn_inputs
+                                .get(&turn.turn_id)
+                                .is_some_and(|input| input == &params.input)
+                    })
+                    .cloned()
+                {
+                    Some((stored.session.clone(), existing_turn, false))
+                } else {
+                    let turn = AgentTurn {
+                        turn_id,
+                        session_id: stored.session.session_id.clone(),
+                        thread_id: stored.session.thread_id.clone(),
+                        status: AgentTurnStatus::Queued,
+                        started_at: Some(timestamp()),
+                        completed_at: None,
+                    };
+                    stored.session.status = AgentSessionStatus::Running;
+                    stored.session.updated_at = timestamp();
                     stored
-                        .turn_runtime_options
-                        .insert(turn.turn_id.clone(), runtime_options);
+                        .turn_inputs
+                        .insert(turn.turn_id.clone(), params.input.clone());
+                    if let Some(runtime_options) = params.runtime_options.clone() {
+                        stored
+                            .turn_runtime_options
+                            .insert(turn.turn_id.clone(), runtime_options);
+                    }
+                    stored.turns.push(turn.clone());
+                    Some((stored.session.clone(), turn, true))
                 }
-                stored.turns.push(turn.clone());
-                Some((stored.session.clone(), turn))
             } else {
                 if let Some(active_turn_id) = active_turn_id {
                     return Err(RuntimeCoreError::TurnAlreadyActive(active_turn_id));
@@ -214,7 +230,13 @@ impl RuntimeCore {
                 None
             }
         };
-        if let Some((session, turn)) = queued_turn {
+        if let Some((session, turn, append_queue_event)) = queued_turn {
+            if !append_queue_event {
+                return Ok(RuntimeCoreOutput {
+                    response: AgentSessionTurnStartResponse { turn },
+                    events: Vec::new(),
+                });
+            }
             let events = self.append_runtime_events(
                 &session.session_id,
                 &session.thread_id,

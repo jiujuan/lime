@@ -9,74 +9,31 @@
 
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  Activity,
-  AlertTriangle,
-  CheckCircle2,
-  FileText,
-  Loader2,
-  MessageSquareText,
-  Settings2,
-  Server,
-  Wrench,
-  type LucideIcon,
-} from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useMcp } from "@/hooks/useMcp";
 import { openExternalUrlWithSystemBrowser } from "@/lib/api/externalUrl";
 import { McpPage } from "./McpPage";
+import { McpPanelHeader } from "./McpPanelHeader";
+import { McpPanelTabs } from "./McpPanelTabs";
 import { McpServerList } from "./McpServerList";
 import { McpToolsBrowser } from "./McpToolsBrowser";
 import { McpToolCaller } from "./McpToolCaller";
 import { McpPromptsBrowser } from "./McpPromptsBrowser";
 import { McpResourcesBrowser } from "./McpResourcesBrowser";
+import {
+  getMcpCapabilityCount,
+  getMcpPanelStatusMeta,
+  getMcpTabCount,
+  getRunningMcpServerCount,
+  mcpPanelTabs,
+  type McpTab,
+  type McpPanelTabCounts,
+} from "./mcpPanelModel";
 import type {
   McpServerOAuthLoginOptions,
   McpToolDefinition,
 } from "@/lib/api/mcp";
-
-type McpTab = "runtime" | "tools" | "prompts" | "resources" | "config";
-type McpTabLabelKey =
-  | "settings.mcpPage.runtime.tabs.runtime"
-  | "settings.mcpPage.runtime.tabs.tools"
-  | "settings.mcpPage.runtime.tabs.prompts"
-  | "settings.mcpPage.runtime.tabs.resources"
-  | "settings.mcpPage.runtime.tabs.config";
-
-interface McpTabDefinition {
-  id: McpTab;
-  labelKey: McpTabLabelKey;
-  icon: LucideIcon;
-}
-
-const tabs: McpTabDefinition[] = [
-  {
-    id: "runtime",
-    labelKey: "settings.mcpPage.runtime.tabs.runtime",
-    icon: Server,
-  },
-  {
-    id: "tools",
-    labelKey: "settings.mcpPage.runtime.tabs.tools",
-    icon: Wrench,
-  },
-  {
-    id: "prompts",
-    labelKey: "settings.mcpPage.runtime.tabs.prompts",
-    icon: MessageSquareText,
-  },
-  {
-    id: "resources",
-    labelKey: "settings.mcpPage.runtime.tabs.resources",
-    icon: FileText,
-  },
-  {
-    id: "config",
-    labelKey: "settings.mcpPage.runtime.tabs.config",
-    icon: Settings2,
-  },
-];
 
 interface McpPanelProps {
   hideHeader?: boolean;
@@ -109,48 +66,27 @@ export function McpPanel({ hideHeader = false }: McpPanelProps) {
     getPrompt,
     refreshResources,
     readResource,
+    subscribeResource,
+    unsubscribeResource,
   } = useMcp();
 
-  const runningServerCount = servers.filter(
-    (server) => server.is_running,
-  ).length;
-  const activeTabDefinition =
-    tabs.find((tab) => tab.id === activeTab) ?? tabs[0];
-  const statusMeta = error
-    ? {
-        label: t("settings.mcpPage.runtime.syncStatus.error.label"),
-        detail: t("settings.mcpPage.runtime.syncStatus.error.detail"),
-        className: "border-rose-200 bg-rose-50 text-rose-700",
-        icon: AlertTriangle,
-      }
-    : loading
-      ? {
-          label: t("settings.mcpPage.runtime.syncStatus.loading.label"),
-          detail: t("settings.mcpPage.runtime.syncStatus.loading.detail"),
-          className: "border-sky-200 bg-sky-50 text-sky-700",
-          icon: Loader2,
-        }
-      : {
-          label: t("settings.mcpPage.runtime.syncStatus.ready.label"),
-          detail: t("settings.mcpPage.runtime.syncStatus.ready.detail"),
-          className: "border-emerald-200 bg-emerald-50 text-emerald-700",
-          icon: CheckCircle2,
-        };
-
-  const getTabCount = (tab: McpTab) => {
-    switch (tab) {
-      case "runtime":
-        return servers.length;
-      case "tools":
-        return tools.length;
-      case "prompts":
-        return prompts.length;
-      case "resources":
-        return resources.length;
-      case "config":
-        return servers.length;
-    }
+  const runningServerCount = getRunningMcpServerCount(servers);
+  const capabilityCount = getMcpCapabilityCount({
+    tools,
+    prompts,
+    resources,
+  });
+  const tabCounts: McpPanelTabCounts = {
+    servers: servers.length,
+    tools: tools.length,
+    prompts: prompts.length,
+    resources: resources.length,
   };
+  const activeTabDefinition =
+    mcpPanelTabs.find((tab) => tab.id === activeTab) ?? mcpPanelTabs[0];
+  const ActiveTabIcon = activeTabDefinition.icon;
+  const statusMeta = getMcpPanelStatusMeta({ loading, error });
+  const getTabCount = (tab: McpTab) => getMcpTabCount(tab, tabCounts);
 
   useEffect(() => {
     if (!oauthCompletion) {
@@ -208,111 +144,25 @@ export function McpPanel({ hideHeader = false }: McpPanelProps) {
       data-settings-embedded={hideHeader ? "true" : "false"}
       className="space-y-6 pb-20 text-slate-900"
     >
-      {/* 页面标题 */}
-      <section className="rounded-[30px] border border-slate-200/80 bg-[linear-gradient(135deg,rgba(244,251,248,0.98)_0%,rgba(248,250,252,0.98)_45%,rgba(241,246,255,0.96)_100%)] p-6 shadow-sm shadow-slate-950/5">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-          <div className="max-w-2xl space-y-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white px-3 py-1 text-xs font-semibold text-emerald-700 shadow-sm shadow-emerald-950/5">
-              <Activity className="h-3.5 w-3.5" />
-              {t("settings.mcpPage.runtime.protocolLabel")}
-            </div>
-            <div className="space-y-2">
-              <h2 className="text-2xl font-semibold tracking-[-0.02em] text-slate-950">
-                {t("settings.mcpPage.title")}
-              </h2>
-              <p className="text-sm leading-6 text-slate-600">
-                {t("settings.mcpPage.runtime.description")}
-              </p>
-            </div>
-          </div>
+      <McpPanelHeader
+        serverCount={servers.length}
+        runningServerCount={runningServerCount}
+        capabilityCount={capabilityCount}
+        statusMeta={statusMeta}
+      />
 
-          <div className="grid gap-2 sm:grid-cols-3 xl:min-w-[420px]">
-            <div className="rounded-[20px] border border-slate-200/80 bg-white px-4 py-3 shadow-sm shadow-slate-950/5">
-              <p className="text-xs font-medium text-slate-500">
-                {t("settings.mcpPage.runtime.metrics.servers")}
-              </p>
-              <p className="mt-1 text-2xl font-semibold text-slate-950">
-                {servers.length}
-              </p>
-              <p className="mt-1 text-xs text-emerald-700">
-                {t("settings.mcpPage.runtime.metrics.runningServers", {
-                  count: runningServerCount,
-                })}
-              </p>
-            </div>
-            <div className="rounded-[20px] border border-slate-200/80 bg-white px-4 py-3 shadow-sm shadow-slate-950/5">
-              <p className="text-xs font-medium text-slate-500">
-                {t("settings.mcpPage.runtime.metrics.capabilities")}
-              </p>
-              <p className="mt-1 text-2xl font-semibold text-slate-950">
-                {tools.length + prompts.length + resources.length}
-              </p>
-              <p className="mt-1 text-xs text-sky-700">
-                {t("settings.mcpPage.runtime.metrics.capabilityTypes")}
-              </p>
-            </div>
-            <div
-              className={cn(
-                "rounded-[20px] border px-4 py-3 shadow-sm shadow-slate-950/5",
-                statusMeta.className,
-              )}
-            >
-              <p className="text-xs font-medium opacity-80">
-                {t("settings.mcpPage.runtime.metrics.status")}
-              </p>
-              <div className="mt-1 flex items-center gap-2">
-                <statusMeta.icon
-                  className={cn("h-4 w-4", loading && "animate-spin")}
-                />
-                <p className="text-lg font-semibold">{statusMeta.label}</p>
-              </div>
-              <p className="mt-1 text-xs opacity-80">{statusMeta.detail}</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Tab 导航 */}
-      <div className="rounded-[26px] border border-slate-200/80 bg-white p-1.5 shadow-sm shadow-slate-950/5">
-        <div className="grid gap-1 sm:grid-cols-2 xl:grid-cols-5">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={cn(
-                "flex items-center justify-between gap-3 rounded-[20px] px-4 py-3 text-left text-sm font-medium transition",
-                activeTab === tab.id
-                  ? "bg-slate-950 text-white shadow-sm shadow-slate-950/15"
-                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-950",
-              )}
-            >
-              <span className="flex items-center gap-2">
-                <tab.icon className="h-4 w-4" />
-                {t(tab.labelKey)}
-              </span>
-              {getTabCount(tab.id) > 0 && (
-                <span
-                  className={cn(
-                    "rounded-full px-2 py-0.5 text-xs",
-                    activeTab === tab.id
-                      ? "bg-white/15 text-white"
-                      : "bg-slate-100 text-slate-500",
-                  )}
-                >
-                  {getTabCount(tab.id)}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-      </div>
+      <McpPanelTabs
+        tabs={mcpPanelTabs}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        getTabCount={getTabCount}
+      />
 
       {/* Tab 内容 */}
       <section className="min-h-[520px] overflow-hidden rounded-[26px] border border-slate-200/80 bg-white shadow-sm shadow-slate-950/5">
         <div className="border-b border-slate-200/80 bg-slate-50/80 px-5 py-4">
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-            <activeTabDefinition.icon className="h-4 w-4 text-sky-600" />
+            <ActiveTabIcon className="h-4 w-4 text-sky-600" />
             {t(activeTabDefinition.labelKey)}
           </div>
         </div>
@@ -389,6 +239,8 @@ export function McpPanel({ hideHeader = false }: McpPanelProps) {
                   loading={loading}
                   onRefresh={refreshResources}
                   onReadResource={readResource}
+                  onSubscribeResource={subscribeResource}
+                  onUnsubscribeResource={unsubscribeResource}
                 />
               </div>
             </div>

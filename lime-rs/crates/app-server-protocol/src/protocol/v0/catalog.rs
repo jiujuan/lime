@@ -230,6 +230,8 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
     method!(METHOD_MCP_PROMPT_GET, Request),
     method!(METHOD_MCP_RESOURCE_LIST, Request),
     method!(METHOD_MCP_RESOURCE_READ, Request),
+    method!(METHOD_MCP_RESOURCE_SUBSCRIBE, Request),
+    method!(METHOD_MCP_RESOURCE_UNSUBSCRIBE, Request),
     method!(METHOD_PROJECT_MEMORY_READ, Request),
     method!(METHOD_MEMORY_STORE_LIST, Request),
     method!(METHOD_MEMORY_STORE_READ, Request),

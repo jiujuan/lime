@@ -29,6 +29,7 @@ import {
   buildReplayTrendCommand,
   resolveReviewDecisionRegressionFacts,
 } from "./harnessStatusPanelViewModel";
+import { recordHarnessEvidencePack } from "./harnessEvidencePackStore";
 
 export function useHarnessHandoffExports(currentSessionId: string | null) {
   const [handoffBundle, setHandoffBundle] =
@@ -167,6 +168,7 @@ export function useHarnessHandoffExports(currentSessionId: string | null) {
     try {
       const pack = await exportAgentRuntimeEvidencePack(currentSessionId);
       setEvidencePack(pack);
+      recordHarnessEvidencePack(pack);
       recordAgentUiProjectionEvents([
         buildAgentUiEvidenceChangedEvent(
           {

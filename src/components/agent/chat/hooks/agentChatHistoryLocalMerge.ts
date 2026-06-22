@@ -215,6 +215,20 @@ function shouldPreserveLocalAssistantVisibleOutput(
     return true;
   }
 
+  const localHasActiveRuntimeIdentity = Boolean(
+    localMessage.runtimeTurnId?.trim() ||
+      localMessage.inlineProcessRetention ||
+      localMessage.isThinking ||
+      hasRetainableLocalAssistantProcessState(localMessage),
+  );
+  if (
+    localHasActiveRuntimeIdentity &&
+    remoteContent.length < localContent.length &&
+    localContent.startsWith(remoteContent)
+  ) {
+    return true;
+  }
+
   const localTimestampMs = resolveMessageTimestampMs(localMessage);
   const remoteTimestampMs = resolveMessageTimestampMs(remoteMessage);
   if (
@@ -226,6 +240,35 @@ function shouldPreserveLocalAssistantVisibleOutput(
   }
 
   return true;
+}
+
+function mergeAssistantVisibleOutput(params: {
+  localContent: string;
+  remoteContent: string;
+}): string {
+  const { localContent, remoteContent } = params;
+  const local = localContent.trim();
+  const remote = remoteContent.trim();
+  if (!local) {
+    return remoteContent;
+  }
+  if (!remote) {
+    return localContent;
+  }
+
+  const normalizedLocal = normalizeSignatureText(local);
+  const normalizedRemote = normalizeSignatureText(remote);
+  if (
+    normalizedLocal === normalizedRemote ||
+    normalizedLocal.includes(normalizedRemote)
+  ) {
+    return localContent;
+  }
+  if (normalizedRemote.includes(normalizedLocal)) {
+    return remoteContent;
+  }
+
+  return localContent;
 }
 
 function hasRetainableLocalMessageState(message: Message): boolean {
@@ -745,7 +788,12 @@ export const mergeHydratedMessagesWithLocalState = (
         ...message,
         id: localAssistantMessage?.id ?? message.id,
         content: shouldPreserveLocalVisibleOutput
-          ? localAssistantMessage?.content || message.content
+          ? mergeAssistantVisibleOutput(
+              {
+                localContent: localAssistantMessage?.content || "",
+                remoteContent: message.content,
+              },
+            )
           : message.content,
         usage: message.usage ?? localAssistantMessage?.usage,
         contentParts: resolvedFailedContentParts,

@@ -832,6 +832,7 @@
   "workspace.browserAssistRenderer.migrated.configReady": "目前配置 {{config}} 已可用於瀏覽器工作台接管。",
   "workspace.documentRenderer.view.preview": "預覽",
   "workspace.documentRenderer.view.source": "原始碼",
+  "workspace.documentRenderer.action.copyCode": "複製",
   "workspace.documentRenderer.status.generating": "生成中...",
   "workspace.artifactDocument.kind.report": "報告",
   "workspace.artifactDocument.kind.roadmap": "路線圖",

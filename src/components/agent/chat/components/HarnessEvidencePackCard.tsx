@@ -1,5 +1,7 @@
 import type {
   AgentRuntimeEvidenceBrowserActionIndex,
+  AgentRuntimeEvidenceMcpResourceContentRef,
+  AgentRuntimeEvidenceMcpResourceRead,
   AgentRuntimeEvidencePack,
 } from "@/lib/api/agentRuntime";
 import { FolderOpen, Loader2, ShieldAlert } from "lucide-react";
@@ -28,6 +30,7 @@ import {
   formatHandoffStatusLabel,
   formatIsoDateTime,
 } from "./harnessStatusPanelViewModel";
+import { formatWorkspaceSkillRuntimeEnableDisplay } from "../utils/toolResultEnvelopeDisplay";
 
 interface HarnessEvidencePackCardProps {
   evidencePack: AgentRuntimeEvidencePack | null;
@@ -129,6 +132,49 @@ interface EvidencePackContentProps {
   ) => void;
 }
 
+function formatMcpResourceContentRef(
+  ref: AgentRuntimeEvidenceMcpResourceContentRef,
+): string {
+  const parts = [`#${ref.index}`];
+  if (ref.type) {
+    parts.push(ref.type);
+  }
+  if (ref.mime_type) {
+    parts.push(ref.mime_type);
+  }
+  if (typeof ref.text_char_count === "number") {
+    parts.push(`${ref.text_char_count} chars`);
+  }
+  if (typeof ref.blob_base64_bytes === "number") {
+    parts.push(`${ref.blob_base64_bytes} bytes`);
+  }
+  return parts.join(" · ");
+}
+
+function formatMcpResourceReadMeta(
+  read: AgentRuntimeEvidenceMcpResourceRead,
+): string {
+  const parts = [
+    read.server
+      ? agentText(
+          "agentChat.harness.generated.7bb20d9718",
+          "server {{server}}",
+          { server: read.server },
+        )
+      : null,
+    read.status,
+    read.mime_types.length > 0 ? read.mime_types.join(", ") : null,
+    typeof read.content_count === "number"
+      ? agentText(
+          "agentChat.harness.generated.5f3a73a36a",
+          "{{count}} content item(s)",
+          { count: read.content_count },
+        )
+      : null,
+  ].filter(Boolean);
+  return parts.join(" · ");
+}
+
 function EvidencePackContent({
   evidencePack,
   handleOpenPathValue,
@@ -151,6 +197,8 @@ function EvidencePackContent({
     evidencePack.observability_summary?.skill_invocations ?? [];
   const skillSearches =
     evidencePack.observability_summary?.skill_searches ?? [];
+  const mcpResourceReads =
+    evidencePack.observability_summary?.mcp_resource_reads ?? [];
 
   return (
     <>
@@ -278,16 +326,28 @@ function EvidencePackContent({
             )}
           </div>
           <div className="mt-2 flex flex-wrap gap-2 text-xs">
-            {skillInvocations.map((invocation, index) => (
-              <Badge
-                key={`${invocation.source_event_id || invocation.skill_name}-${index}`}
-                variant="outline"
-                className="font-mono"
-              >
-                {invocation.skill_name}
-                {invocation.status ? ` · ${invocation.status}` : ""}
-              </Badge>
-            ))}
+            {skillInvocations.map((invocation, index) => {
+              const runtimeEnableMeta = formatWorkspaceSkillRuntimeEnableDisplay(
+                invocation.workspace_skill_runtime_enable,
+                agentText,
+              );
+              return (
+                <div
+                  key={`${invocation.source_event_id || invocation.skill_name}-${index}`}
+                  className="flex flex-wrap items-center gap-1.5"
+                >
+                  <Badge variant="outline" className="font-mono">
+                    {invocation.skill_name}
+                    {invocation.status ? ` · ${invocation.status}` : ""}
+                  </Badge>
+                  {runtimeEnableMeta ? (
+                    <Badge variant="secondary" className="font-mono">
+                      {runtimeEnableMeta}
+                    </Badge>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         </div>
       ) : null}
@@ -313,6 +373,45 @@ function EvidencePackContent({
                   : ""}
                 {search.status ? ` · ${search.status}` : ""}
               </Badge>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {mcpResourceReads.length > 0 ? (
+        <div className="rounded-xl border border-border bg-background p-3">
+          <div className="text-sm font-medium text-foreground">
+            {agentText(
+              "agentChat.harness.generated.a95ef38362",
+              "MCP Resource Reads:",
+            )}
+          </div>
+          <div className="mt-2 space-y-2">
+            {mcpResourceReads.map((read, index) => (
+              <div
+                key={`${read.source_event_id || read.uri}-${index}`}
+                className="rounded-lg border border-border/70 bg-muted/30 p-2 text-xs"
+              >
+                <div className="font-mono text-foreground break-all">
+                  {read.uri}
+                </div>
+                <div className="mt-1 text-muted-foreground">
+                  {formatMcpResourceReadMeta(read)}
+                </div>
+                {read.content_refs.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {read.content_refs.map((ref) => (
+                      <Badge
+                        key={`${read.source_event_id}-${ref.index}`}
+                        variant="outline"
+                        className="font-mono"
+                      >
+                        {formatMcpResourceContentRef(ref)}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             ))}
           </div>
         </div>

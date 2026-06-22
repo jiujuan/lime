@@ -240,7 +240,6 @@ function assertI18nKeyTypes() {
   i18n.t("agentExperts.title", { ns: "agent" });
   i18n.t("agentExperts.info.sections.workflow", { ns: "agent" });
   i18n.t("agentExperts.info.boundary.soul", { ns: "agent" });
-  i18n.t("agentExperts.chat.banner", { ns: "agent", title: "合同审阅" });
   i18n.t("agentExperts.chat.runtimePrompt", {
     ns: "agent",
     title: "合同审阅",

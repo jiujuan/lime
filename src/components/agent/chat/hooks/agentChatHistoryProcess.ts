@@ -199,6 +199,32 @@ export function mergeHydratedToolStateContentParts(
 
   const toolUseIndexById = new Map<string, number>();
   const actionRequiredIndexById = new Map<string, number>();
+  const thinkingIndexByKey = new Map<string, number>();
+  let lastOverlayAnchorIndex: number | null = null;
+
+  const shiftIndexesAfterInsert = (insertIndex: number) => {
+    const shiftMap = (map: Map<string, number>) => {
+      for (const [key, index] of map.entries()) {
+        if (index >= insertIndex) {
+          map.set(key, index + 1);
+        }
+      }
+    };
+    shiftMap(toolUseIndexById);
+    shiftMap(actionRequiredIndexById);
+    shiftMap(thinkingIndexByKey);
+  };
+
+  const insertOverlayPart = (part: ContentPart): number => {
+    const insertIndex =
+      lastOverlayAnchorIndex === null
+        ? base.length
+        : Math.min(lastOverlayAnchorIndex + 1, base.length);
+    shiftIndexesAfterInsert(insertIndex);
+    base.splice(insertIndex, 0, part);
+    lastOverlayAnchorIndex = insertIndex;
+    return insertIndex;
+  };
 
   base.forEach((part, index) => {
     if (part.type === "tool_use") {
@@ -207,6 +233,16 @@ export function mergeHydratedToolStateContentParts(
     }
     if (part.type === "action_required") {
       actionRequiredIndexById.set(part.actionRequired.requestId, index);
+      return;
+    }
+    if (part.type === "thinking") {
+      const key =
+        typeof part.metadata?.threadItemId === "string"
+          ? part.metadata.threadItemId
+          : normalizeSignatureText(part.text);
+      if (key) {
+        thinkingIndexByKey.set(key, index);
+      }
     }
   });
 
@@ -218,10 +254,10 @@ export function mergeHydratedToolStateContentParts(
         if (current?.type === "tool_use") {
           base[existingIndex] = mergeToolUseContentPart(current, part);
         }
+        lastOverlayAnchorIndex = existingIndex;
         continue;
       }
-      toolUseIndexById.set(part.toolCall.id, base.length);
-      base.push(part);
+      toolUseIndexById.set(part.toolCall.id, insertOverlayPart(part));
       continue;
     }
 
@@ -231,11 +267,32 @@ export function mergeHydratedToolStateContentParts(
       );
       if (existingIndex !== undefined) {
         base[existingIndex] = part;
+        lastOverlayAnchorIndex = existingIndex;
         continue;
       }
-      actionRequiredIndexById.set(part.actionRequired.requestId, base.length);
-      base.push(part);
+      actionRequiredIndexById.set(
+        part.actionRequired.requestId,
+        insertOverlayPart(part),
+      );
       continue;
+    }
+
+    if (part.type === "thinking") {
+      const key =
+        typeof part.metadata?.threadItemId === "string"
+          ? part.metadata.threadItemId
+          : normalizeSignatureText(part.text);
+      const existingIndex = key ? thinkingIndexByKey.get(key) : undefined;
+      if (existingIndex !== undefined) {
+        base[existingIndex] = part;
+        lastOverlayAnchorIndex = existingIndex;
+        continue;
+      }
+      if (key) {
+        thinkingIndexByKey.set(key, insertOverlayPart(part));
+      } else {
+        insertOverlayPart(part);
+      }
     }
   }
 
@@ -316,6 +373,7 @@ export function mergeHydratedContentParts(
     const merged: ContentPart[] = [...local];
     const toolUseIndexById = new Map<string, number>();
     const actionRequiredIndexById = new Map<string, number>();
+    let lastOverlayAnchorIndex: number | null = null;
     merged.forEach((part, index) => {
       if (part.type === "tool_use") {
         toolUseIndexById.set(part.toolCall.id, index);
@@ -326,6 +384,35 @@ export function mergeHydratedContentParts(
       }
     });
 
+    const shiftIndexesAfterInsert = (insertIndex: number) => {
+      for (const [key, index] of toolUseIndexById.entries()) {
+        if (index >= insertIndex) {
+          toolUseIndexById.set(key, index + 1);
+        }
+      }
+      for (const [key, index] of actionRequiredIndexById.entries()) {
+        if (index >= insertIndex) {
+          actionRequiredIndexById.set(key, index + 1);
+        }
+      }
+      if (
+        lastOverlayAnchorIndex !== null &&
+        lastOverlayAnchorIndex >= insertIndex
+      ) {
+        lastOverlayAnchorIndex += 1;
+      }
+    };
+    const insertProcessPart = (part: ContentPart): number => {
+      const insertIndex =
+        lastOverlayAnchorIndex === null
+          ? findInitialProcessInsertionIndex(merged, part)
+          : Math.min(lastOverlayAnchorIndex + 1, merged.length);
+      shiftIndexesAfterInsert(insertIndex);
+      merged.splice(insertIndex, 0, part);
+      lastOverlayAnchorIndex = insertIndex;
+      return insertIndex;
+    };
+
     for (const part of remote) {
       if (part.type === "tool_use") {
         const existingIndex = toolUseIndexById.get(part.toolCall.id);
@@ -334,10 +421,10 @@ export function mergeHydratedContentParts(
           if (current?.type === "tool_use") {
             merged[existingIndex] = mergeToolUseContentPart(current, part);
           }
+          lastOverlayAnchorIndex = existingIndex;
           continue;
         }
-        toolUseIndexById.set(part.toolCall.id, merged.length);
-        merged.push(part);
+        toolUseIndexById.set(part.toolCall.id, insertProcessPart(part));
         continue;
       }
 
@@ -347,13 +434,13 @@ export function mergeHydratedContentParts(
         );
         if (existingIndex !== undefined) {
           merged[existingIndex] = part;
+          lastOverlayAnchorIndex = existingIndex;
           continue;
         }
         actionRequiredIndexById.set(
           part.actionRequired.requestId,
-          merged.length,
+          insertProcessPart(part),
         );
-        merged.push(part);
         continue;
       }
 
@@ -364,12 +451,50 @@ export function mergeHydratedContentParts(
         continue;
       }
 
-      merged.push(part);
+      insertProcessPart(part);
     }
-    return sortProcessContentParts(merged);
+    return merged;
   }
 
   return remote;
+}
+
+function findInitialProcessInsertionIndex(
+  parts: ContentPart[],
+  nextPart: ContentPart,
+): number {
+  const nextSortKey = contentPartSortTime(nextPart);
+  if (nextSortKey === null) {
+    const firstProcessIndex = findFirstProcessPartIndex(parts);
+    if (firstProcessIndex >= 0) {
+      return firstProcessIndex;
+    }
+  }
+  const finalTextIndex = findLastTextPartIndex(parts);
+  const searchEndIndex = finalTextIndex >= 0 ? finalTextIndex : parts.length;
+  if (nextSortKey !== null) {
+    for (let index = 0; index < searchEndIndex; index += 1) {
+      const existingSortKey = contentPartSortTime(parts[index]!);
+      if (existingSortKey !== null && existingSortKey > nextSortKey) {
+        return index;
+      }
+    }
+  }
+  return searchEndIndex;
+}
+
+function findFirstProcessPartIndex(parts: ContentPart[]): number {
+  return parts.findIndex(contentPartContainsProcess);
+}
+
+function findLastTextPartIndex(parts: ContentPart[]): number {
+  for (let index = parts.length - 1; index >= 0; index -= 1) {
+    const part = parts[index];
+    if (part?.type === "text" && part.text.trim().length > 0) {
+      return index;
+    }
+  }
+  return -1;
 }
 
 function contentPartSortTime(part: ContentPart): number | null {

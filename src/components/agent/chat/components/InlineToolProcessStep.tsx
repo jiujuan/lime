@@ -41,7 +41,10 @@ import {
   isLikelyWebRetrievalDiagnosticNoise,
 } from "../utils/toolProcessSummary";
 import { resolveMemoryToolEvidence } from "../utils/memoryToolEvidence";
-import { shouldHideToolResultEnvelope } from "../utils/toolResultEnvelopeDisplay";
+import {
+  resolveWorkspaceSkillRuntimeEnableResultDisplay,
+  shouldHideToolResultEnvelope,
+} from "../utils/toolResultEnvelopeDisplay";
 import {
   normalizeToolResultDetailText,
   resolveStructuredToolContentDetailText,
@@ -159,6 +162,17 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
         rawResultText,
       }),
     [rawResultText, toolCall.name],
+  );
+  const workspaceSkillRuntimeEnableSummary = useMemo(
+    () =>
+      resolveWorkspaceSkillRuntimeEnableResultDisplay({
+        toolName: toolCall.name,
+        rawResultText,
+        metadata,
+        translate: (key, defaultValue, options) =>
+          String(t(key, { defaultValue, ...options })),
+      }),
+    [metadata, rawResultText, t, toolCall.name],
   );
   const limeTaskProtocolFailureText = useMemo(() => {
     if (toolCall.status !== "failed") {
@@ -576,6 +590,7 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     skillTitle && skillTitle !== subject
       ? t("agentChat.toolCall.inline.badge.skill", { title: skillTitle })
       : null,
+    workspaceSkillRuntimeEnableSummary,
     toolCall.status === "running" || toolCall.status === "failed"
       ? toolDisplay.action
       : null,

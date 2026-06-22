@@ -5,10 +5,11 @@
  */
 
 import React, { memo } from "react";
+import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import SyntaxHighlighter from "react-syntax-highlighter/dist/esm/prism";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import {
   CoverImagePlaceholder,
@@ -180,6 +181,8 @@ const CopyButton = styled.button`
  */
 export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
   ({ content }) => {
+    const { t } = useTranslation("workspace");
+
     const handleCopy = async (code: string) => {
       await navigator.clipboard.writeText(code);
     };
@@ -209,7 +212,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
                       {codeString}
                     </SyntaxHighlighter>
                     <CopyButton onClick={() => handleCopy(codeString)}>
-                      复制
+                      {t("workspace.documentRenderer.action.copyCode")}
                     </CopyButton>
                   </CodeBlockWrapper>
                 );

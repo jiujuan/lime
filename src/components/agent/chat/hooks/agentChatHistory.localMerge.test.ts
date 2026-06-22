@@ -555,6 +555,308 @@ describe("agentChatHistory local merge", () => {
     ]);
   });
 
+  it("刷新会话详情时远端短前缀不应截断当前 turn 的本地完整输出", () => {
+    const localMessages = [
+      {
+        id: "local-user-expert-panel",
+        role: "user" as const,
+        content:
+          "请继续以「代码文学专家」身份，使用刚添加的技能再做一次最小代码审查。",
+        timestamp: new Date("2026-06-21T18:42:38.000Z"),
+        runtimeTurnId: "turn-expert-panel",
+      },
+      {
+        id: "local-assistant-expert-panel",
+        role: "assistant" as const,
+        content:
+          "我识别到右侧专家面板更新后的 skillRefs，并继续通过 skill_search 选择单个 Skill。\n专家面板 Skills runtime 证据已完成：新增技能引用已进入本轮上下文，执行仍经过 skill_search、SKILL.md 按需读取、gate 和 Skill 调用。",
+        contentParts: [
+          {
+            type: "tool_use" as const,
+            toolCall: {
+              id: "skill-search-expert-panel",
+              name: "skill_search",
+              arguments: '{"query":"capability report"}',
+              status: "completed" as const,
+              startTime: new Date("2026-06-21T18:42:38.500Z"),
+              endTime: new Date("2026-06-21T18:42:39.000Z"),
+              result: {
+                success: true,
+                output: "capability-report",
+              },
+            },
+          },
+          {
+            type: "text" as const,
+            text: "我识别到右侧专家面板更新后的 skillRefs，并继续通过 skill_search 选择单个 Skill。\n专家面板 Skills runtime 证据已完成：新增技能引用已进入本轮上下文，执行仍经过 skill_search、SKILL.md 按需读取、gate 和 Skill 调用。",
+          },
+        ],
+        timestamp: new Date("2026-06-21T18:42:39.000Z"),
+        runtimeTurnId: "turn-expert-panel",
+      },
+    ];
+    const hydratedMessages = [
+      {
+        id: "history-user-expert-panel",
+        role: "user" as const,
+        content:
+          "请继续以「代码文学专家」身份，使用刚添加的技能再做一次最小代码审查。",
+        timestamp: new Date("2026-06-21T18:42:38.300Z"),
+        runtimeTurnId: "turn-expert-panel",
+      },
+      {
+        id: "history-assistant-expert-panel",
+        role: "assistant" as const,
+        content:
+          "我识别到右侧专家面板更新后的 skillRefs，并继续通过 skill_search 选择单个 Skill。",
+        contentParts: [
+          {
+            type: "text" as const,
+            text: "我识别到右侧专家面板更新后的 skillRefs，并继续通过 skill_search 选择单个 Skill。",
+          },
+        ],
+        timestamp: new Date("2026-06-21T18:42:45.000Z"),
+        runtimeTurnId: "turn-expert-panel",
+      },
+    ];
+
+    const mergedMessages = mergeHydratedMessagesWithLocalState(
+      localMessages,
+      hydratedMessages,
+    );
+
+    expect(mergedMessages[1]?.id).toBe("local-assistant-expert-panel");
+    expect(mergedMessages[1]?.content).toContain(
+      "专家面板 Skills runtime 证据已完成",
+    );
+    expect(mergedMessages[1]?.contentParts?.at(-1)).toMatchObject({
+      type: "text",
+      text: expect.stringContaining("新增技能引用已进入本轮上下文"),
+    });
+  });
+
+  it("刷新会话详情时远端 WebTools final 不应覆盖本地已流式输出的导语和搜索过程", () => {
+    const localMessages = [
+      {
+        id: "local-user-web-tools",
+        role: "user" as const,
+        content: "检查一下 WebSearch 渲染是否和 Codex 一致",
+        timestamp: new Date("2026-06-22T00:30:00.000Z"),
+        runtimeTurnId: "turn-web-tools-rendering",
+      },
+      {
+        id: "local-assistant-web-tools",
+        role: "assistant" as const,
+        content:
+          "我先联网核实目标页面来源。\n\n网页搜索渲染结论：搜索、抓取和最终 Markdown 应按事件顺序展示。",
+        contentParts: [
+          {
+            type: "text" as const,
+            text: "我先联网核实目标页面来源。",
+          },
+          {
+            type: "tool_use" as const,
+            toolCall: {
+              id: "web-search-rendering",
+              name: "WebSearch",
+              arguments: '{"query":"Lime WebSearch rendering"}',
+              status: "completed" as const,
+              startTime: new Date("2026-06-22T00:30:01.000Z"),
+              endTime: new Date("2026-06-22T00:30:02.000Z"),
+              result: {
+                success: true,
+                output: "Lime WebSearch Rendering Source",
+              },
+            },
+          },
+          {
+            type: "tool_use" as const,
+            toolCall: {
+              id: "web-fetch-rendering",
+              name: "WebFetch",
+              arguments:
+                '{"url":"https://example.com/lime-web-search-rendering"}',
+              status: "completed" as const,
+              startTime: new Date("2026-06-22T00:30:02.000Z"),
+              endTime: new Date("2026-06-22T00:30:03.000Z"),
+              result: {
+                success: true,
+                output: "Fetched page snapshot",
+              },
+            },
+          },
+          {
+            type: "text" as const,
+            text: "\n\n网页搜索渲染结论：搜索、抓取和最终 Markdown 应按事件顺序展示。",
+          },
+        ],
+        timestamp: new Date("2026-06-22T00:30:03.000Z"),
+        runtimeTurnId: "turn-web-tools-rendering",
+      },
+    ];
+    const hydratedMessages = [
+      {
+        id: "history-user-web-tools",
+        role: "user" as const,
+        content: "检查一下 WebSearch 渲染是否和 Codex 一致",
+        timestamp: new Date("2026-06-22T00:30:00.500Z"),
+        runtimeTurnId: "turn-web-tools-rendering",
+      },
+      {
+        id: "history-assistant-web-tools",
+        role: "assistant" as const,
+        content:
+          "网页搜索渲染结论：搜索、抓取和最终 Markdown 应按事件顺序展示。",
+        contentParts: [
+          {
+            type: "tool_use" as const,
+            toolCall: {
+              id: "web-search-rendering",
+              name: "WebSearch",
+              arguments: '{"query":"Lime WebSearch rendering"}',
+              status: "completed" as const,
+              startTime: new Date("2026-06-22T00:30:01.000Z"),
+              endTime: new Date("2026-06-22T00:30:02.000Z"),
+              result: {
+                success: true,
+                output: "Lime WebSearch Rendering Source",
+              },
+            },
+          },
+          {
+            type: "thinking" as const,
+            text: "搜索结果还需要继续筛掉广告软文，我先读取有效来源。",
+            metadata: {
+              source: "thread_item_reasoning",
+              threadItemId: "web-reasoning-rendering",
+            },
+          },
+          {
+            type: "tool_use" as const,
+            toolCall: {
+              id: "web-fetch-rendering",
+              name: "WebFetch",
+              arguments:
+                '{"url":"https://example.com/lime-web-search-rendering"}',
+              status: "completed" as const,
+              startTime: new Date("2026-06-22T00:30:02.000Z"),
+              endTime: new Date("2026-06-22T00:30:03.000Z"),
+              result: {
+                success: true,
+                output: "Fetched page snapshot",
+              },
+            },
+          },
+          {
+            type: "text" as const,
+            text: "网页搜索渲染结论：搜索、抓取和最终 Markdown 应按事件顺序展示。",
+          },
+        ],
+        timestamp: new Date("2026-06-22T00:30:06.000Z"),
+        runtimeTurnId: "turn-web-tools-rendering",
+      },
+    ];
+
+    const mergedMessages = mergeHydratedMessagesWithLocalState(
+      localMessages,
+      hydratedMessages,
+    );
+
+    expect(mergedMessages[1]?.id).toBe("local-assistant-web-tools");
+    expect(mergedMessages[1]?.content).toContain(
+      "我先联网核实目标页面来源。",
+    );
+    expect(mergedMessages[1]?.contentParts?.map((part) => part.type)).toEqual([
+      "text",
+      "tool_use",
+      "thinking",
+      "tool_use",
+      "text",
+    ]);
+    expect(mergedMessages[1]?.contentParts?.[0]).toMatchObject({
+      type: "text",
+      text: "我先联网核实目标页面来源。",
+    });
+    expect(mergedMessages[1]?.contentParts?.[1]).toMatchObject({
+      type: "tool_use",
+      toolCall: {
+        id: "web-search-rendering",
+        name: "WebSearch",
+        status: "completed",
+      },
+    });
+  });
+
+  it("刷新会话详情时远端 WebTools final 不应覆盖本地已流式输出的导语文本", () => {
+    const localMessages = [
+      {
+        id: "local-user-web-tools-text",
+        role: "user" as const,
+        content: "验证网页搜索渲染",
+        timestamp: new Date("2026-06-22T01:00:00.000Z"),
+        runtimeTurnId: "turn-web-tools-text",
+      },
+      {
+        id: "local-assistant-web-tools-text",
+        role: "assistant" as const,
+        content:
+          "我先联网核实目标页面来源。\n\n网页搜索渲染结论：搜索来源已展开，读取页面已归入同一过程，最终正文继续输出。",
+        contentParts: [
+          {
+            type: "text" as const,
+            text: "我先联网核实目标页面来源。",
+          },
+          {
+            type: "text" as const,
+            text: "\n\n网页搜索渲染结论：搜索来源已展开，读取页面已归入同一过程，最终正文继续输出。",
+          },
+        ],
+        timestamp: new Date("2026-06-22T01:00:02.000Z"),
+        runtimeTurnId: "turn-web-tools-text",
+      },
+    ];
+    const hydratedMessages = [
+      {
+        id: "history-user-web-tools-text",
+        role: "user" as const,
+        content: "验证网页搜索渲染",
+        timestamp: new Date("2026-06-22T01:00:00.500Z"),
+        runtimeTurnId: "turn-web-tools-text",
+      },
+      {
+        id: "history-assistant-web-tools-text",
+        role: "assistant" as const,
+        content:
+          "网页搜索渲染结论：搜索来源已展开，读取页面已归入同一过程，最终正文继续输出。",
+        contentParts: [
+          {
+            type: "text" as const,
+            text: "网页搜索渲染结论：搜索来源已展开，读取页面已归入同一过程，最终正文继续输出。",
+          },
+        ],
+        timestamp: new Date("2026-06-22T01:00:06.000Z"),
+        runtimeTurnId: "turn-web-tools-text",
+      },
+    ];
+
+    const mergedMessages = mergeHydratedMessagesWithLocalState(
+      localMessages,
+      hydratedMessages,
+    );
+
+    expect(mergedMessages[1]?.id).toBe("local-assistant-web-tools-text");
+    expect(mergedMessages[1]?.content).toContain(
+      "我先联网核实目标页面来源。",
+    );
+    expect(
+      mergedMessages[1]?.content.match(/网页搜索渲染结论/g),
+    ).toHaveLength(1);
+    expect(mergedMessages[1]?.contentParts?.[0]).toMatchObject({
+      type: "text",
+      text: "我先联网核实目标页面来源。",
+    });
+  });
+
   it("后端暂未返回历史时应保留本地消息，避免刷新后界面空白", () => {
     const localMessages = [
       {

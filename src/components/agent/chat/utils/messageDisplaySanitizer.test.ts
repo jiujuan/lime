@@ -173,6 +173,36 @@ describe("messageDisplaySanitizer", () => {
     ).toEqual(contentParts);
   });
 
+  it("应保留 Codex 风格工具过程前的短导语", () => {
+    const contentParts: ContentPart[] = [
+      {
+        type: "text",
+        text: "我先联网核实目标页面来源。",
+      },
+      {
+        type: "tool_use",
+        toolCall: {
+          id: "tool-web-rendering-intro",
+          name: "WebSearch",
+          arguments: "{}",
+          status: "completed",
+          result: { success: true, output: "ok" },
+          startTime: new Date("2026-06-22T09:02:00.000Z"),
+        },
+      },
+      {
+        type: "text",
+        text: "网页搜索渲染结论：搜索来源已展开。",
+      },
+    ];
+
+    expect(
+      sanitizeContentPartsForDisplay(contentParts, {
+        role: "assistant",
+      }),
+    ).toEqual(contentParts);
+  });
+
   it("应只剔除同段文本中的内部抓取重试状态，保留用户可见引导", () => {
     const contentParts: ContentPart[] = [
       {

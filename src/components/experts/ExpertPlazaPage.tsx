@@ -776,9 +776,6 @@ export function ExpertPlazaPage({ onNavigate }: ExpertPlazaPageProps) {
         ...(shouldResumeExisting ? {} : { initialUserPrompt }),
         initialSessionName: item.title,
         initialSessionId: existingInstance?.latestSessionId,
-        entryBannerMessage: t("agentExperts.chat.banner", {
-          title: item.title,
-        }),
         ...(shouldResumeExisting
           ? { autoRunInitialPromptOnMount: false }
           : {
