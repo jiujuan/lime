@@ -9,6 +9,50 @@ import {
 installStreamingRendererTestHarness();
 
 describe("StreamingRenderer process groups", () => {
+  it("流式纯思考 fallback 应直接展开输出", () => {
+    const { container } = renderHarness({
+      content: "",
+      thinkingContent: "先理解用户意图，再同步计划状态。",
+      isStreaming: true,
+    });
+
+    const thinkingBlock = container.querySelector<HTMLElement>(
+      '[data-testid="thinking-block"]',
+    );
+    const details = thinkingBlock?.querySelector<HTMLDetailsElement>("details");
+
+    expect(thinkingBlock).not.toBeNull();
+    expect(details?.open).toBe(true);
+    expect(container.textContent).toContain("思考中");
+    expect(container.textContent).toContain("先理解用户意图");
+  });
+
+  it("流式交错纯思考应直接展开输出", () => {
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "thinking",
+          text: "先确认最新计划，再准备实施。",
+        },
+      ],
+      isStreaming: true,
+    });
+
+    const thinkingBlock = container.querySelector<HTMLElement>(
+      '[data-testid="thinking-block"]',
+    );
+    const details = thinkingBlock?.querySelector<HTMLDetailsElement>("details");
+
+    expect(
+      container.querySelector('[data-testid="streaming-process-group"]'),
+    ).toBeNull();
+    expect(thinkingBlock).not.toBeNull();
+    expect(details?.open).toBe(true);
+    expect(container.textContent).toContain("思考中");
+    expect(container.textContent).toContain("先确认最新计划");
+  });
+
   it("非交错模式应将思考和工具收敛为同一执行过程组", () => {
     const { container } = renderHarness({
       content: "最终结论",

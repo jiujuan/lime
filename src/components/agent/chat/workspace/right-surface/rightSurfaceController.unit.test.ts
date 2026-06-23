@@ -25,6 +25,7 @@ describe("rightSurfaceController", () => {
     expect(next).toEqual({
       activeSurface: "files",
       previousSurface: "expertInfo",
+      openSurfaces: ["expertInfo", "files"],
       source: "runtime",
       layoutVariant: "expanded",
     });
@@ -47,8 +48,23 @@ describe("rightSurfaceController", () => {
     expect(closeWorkspaceRightSurface(current, { source: "user" })).toEqual({
       activeSurface: null,
       previousSurface: "shell",
+      openSurfaces: ["shell"],
       source: "user",
       layoutVariant: "docked",
     });
+  });
+
+  it("打开多个 surface 时应保留已打开 tab 集合", () => {
+    const first = openWorkspaceRightSurface(buildRightSurfaceState(null, "user"), {
+      kind: "productProfile",
+      source: "user",
+    });
+
+    const second = openWorkspaceRightSurface(first, {
+      kind: "files",
+      source: "runtime",
+    });
+
+    expect(second.openSurfaces).toEqual(["productProfile", "files"]);
   });
 });

@@ -10,6 +10,8 @@ pub(in crate::runtime::tests) struct TestSessionDataSource {
     objective: Mutex<Option<ManagedObjective>>,
     audit_updates: Mutex<Vec<ManagedObjectiveAuditUpdate>>,
     knowledge_compile_requests: Mutex<Vec<lime_knowledge::KnowledgeCompilePackRequest>>,
+    right_surface_pending: Mutex<Vec<WorkspaceRightSurfacePendingRequest>>,
+    object_canvas_snapshots: Mutex<Vec<WorkspaceObjectCanvasSnapshot>>,
 }
 
 impl TestSessionDataSource {
@@ -23,6 +25,8 @@ impl TestSessionDataSource {
             objective: Mutex::new(None),
             audit_updates: Mutex::new(Vec::new()),
             knowledge_compile_requests: Mutex::new(Vec::new()),
+            right_surface_pending: Mutex::new(Vec::new()),
+            object_canvas_snapshots: Mutex::new(Vec::new()),
         }
     }
 
@@ -91,6 +95,15 @@ impl TestSessionDataSource {
         self.memory_store_read_requests
             .lock()
             .expect("test memory requests mutex poisoned")
+            .clone()
+    }
+
+    pub(in crate::runtime::tests) fn object_canvas_snapshots(
+        &self,
+    ) -> Vec<WorkspaceObjectCanvasSnapshot> {
+        self.object_canvas_snapshots
+            .lock()
+            .expect("test object canvas snapshot mutex poisoned")
             .clone()
     }
 }
@@ -290,3 +303,136 @@ impl DiagnosticsAppDataSource for TestSessionDataSource {}
 impl UsageStatsAppDataSource for TestSessionDataSource {}
 impl ModelProviderAppDataSource for TestSessionDataSource {}
 impl ConnectAppDataSource for TestSessionDataSource {}
+
+#[async_trait]
+impl RightSurfaceAppDataSource for TestSessionDataSource {
+    fn workspace_right_surface_pending_persistence_enabled(&self) -> bool {
+        true
+    }
+
+    async fn save_workspace_right_surface_pending(
+        &self,
+        request: WorkspaceRightSurfacePendingRequest,
+    ) -> Result<(), RuntimeCoreError> {
+        let mut pending = self
+            .right_surface_pending
+            .lock()
+            .expect("test right surface pending mutex poisoned");
+        pending.retain(|item| item.request_id != request.request_id);
+        pending.push(request);
+        Ok(())
+    }
+
+    async fn list_workspace_right_surface_pending(
+        &self,
+        params: WorkspaceRightSurfacePendingListParams,
+    ) -> Result<Vec<WorkspaceRightSurfacePendingRequest>, RuntimeCoreError> {
+        let workspace_id = optional_trimmed(params.workspace_id);
+        let workspace_root = optional_trimmed(params.workspace_root);
+        let session_id = optional_trimmed(params.session_id);
+        let surface_kind = optional_trimmed(params.surface_kind);
+        let mut pending = self
+            .right_surface_pending
+            .lock()
+            .expect("test right surface pending mutex poisoned")
+            .iter()
+            .filter(|request| {
+                optional_filter_matches(&workspace_id, request.workspace_id.as_deref())
+            })
+            .filter(|request| {
+                optional_filter_matches(&workspace_root, request.workspace_root.as_deref())
+            })
+            .filter(|request| optional_filter_matches(&session_id, request.session_id.as_deref()))
+            .filter(|request| {
+                surface_kind
+                    .as_ref()
+                    .is_none_or(|value| request.surface_kind == *value)
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        if let Some(limit) = params.limit.map(|value| value as usize) {
+            pending.truncate(limit);
+        }
+        Ok(pending)
+    }
+
+    async fn delete_workspace_right_surface_pending(
+        &self,
+        request_ids: Vec<String>,
+    ) -> Result<Vec<String>, RuntimeCoreError> {
+        let mut deleted = Vec::new();
+        let mut pending = self
+            .right_surface_pending
+            .lock()
+            .expect("test right surface pending mutex poisoned");
+        pending.retain(|request| {
+            if request_ids.contains(&request.request_id) {
+                deleted.push(request.request_id.clone());
+                false
+            } else {
+                true
+            }
+        });
+        Ok(deleted)
+    }
+
+    async fn save_workspace_object_canvas_snapshot(
+        &self,
+        snapshot: WorkspaceObjectCanvasSnapshot,
+    ) -> Result<(), RuntimeCoreError> {
+        let mut snapshots = self
+            .object_canvas_snapshots
+            .lock()
+            .expect("test object canvas snapshot mutex poisoned");
+        snapshots.retain(|item| {
+            item.persistence_key != snapshot.persistence_key || item.revision != snapshot.revision
+        });
+        snapshots.push(snapshot);
+        Ok(())
+    }
+
+    async fn list_workspace_object_canvas_snapshots(
+        &self,
+        params: WorkspaceObjectCanvasSnapshotListParams,
+    ) -> Result<Vec<WorkspaceObjectCanvasSnapshot>, RuntimeCoreError> {
+        let workspace_id = optional_trimmed(params.workspace_id);
+        let workspace_root = optional_trimmed(params.workspace_root);
+        let session_id = optional_trimmed(params.session_id);
+        let board_id = optional_trimmed(params.board_id);
+        let persistence_key = optional_trimmed(params.persistence_key);
+        let mut snapshots = self
+            .object_canvas_snapshots
+            .lock()
+            .expect("test object canvas snapshot mutex poisoned")
+            .iter()
+            .filter(|snapshot| {
+                optional_filter_matches(&workspace_id, snapshot.workspace_id.as_deref())
+            })
+            .filter(|snapshot| {
+                optional_filter_matches(&workspace_root, snapshot.workspace_root.as_deref())
+            })
+            .filter(|snapshot| optional_filter_matches(&session_id, snapshot.session_id.as_deref()))
+            .filter(|snapshot| optional_filter_matches(&board_id, Some(snapshot.board_id.as_str())))
+            .filter(|snapshot| {
+                optional_filter_matches(&persistence_key, Some(snapshot.persistence_key.as_str()))
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        if let Some(limit) = params.limit.map(|value| value as usize) {
+            snapshots.truncate(limit);
+        }
+        Ok(snapshots)
+    }
+}
+
+fn optional_trimmed(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn optional_filter_matches(filter: &Option<String>, value: Option<&str>) -> bool {
+    filter
+        .as_ref()
+        .is_none_or(|filter| value == Some(filter.as_str()))
+}

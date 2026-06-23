@@ -4,6 +4,9 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  buildExpertSkillsLiveRuntimeMetadata,
+  buildLiveRuntimeSummary,
+  ensureExpertSkillsLiveWorkspaceSkill,
   normalizeLiveSummaryFromSource,
   parseArgs,
   runExpertSkillsLiveRunner,
@@ -116,16 +119,161 @@ describe("expert skills live runner", () => {
     const options = parseArgs([
       "--allow-live-provider",
       "--execute-live-runtime",
+      "--live-workspace-root",
+      ".lime/qc/live-test-workspace",
       "--provider-preference",
       "deepseek",
       "--model-preference",
       "deepseek-v4-flash",
+      "--completion-grace-ms",
+      "45000",
     ]);
 
     expect(options.allowLiveProvider).toBe(true);
     expect(options.executeLiveRuntime).toBe(true);
+    expect(options.liveWorkspaceRoot).toContain(
+      ".lime/qc/live-test-workspace",
+    );
     expect(options.providerPreference).toBe("deepseek");
     expect(options.modelPreference).toBe("deepseek-v4-flash");
+    expect(options.completionGraceMs).toBe(45000);
+  });
+
+  it("live runtime 执行前应准备 workspace-local skill 和 runtime enable metadata", () =>
+    withTempDir((dir) => {
+      const workspaceSkill = ensureExpertSkillsLiveWorkspaceSkill(dir);
+      const metadata = buildExpertSkillsLiveRuntimeMetadata(workspaceSkill);
+
+      expect(fs.existsSync(workspaceSkill.skillFilePath)).toBe(true);
+      expect(fs.existsSync(workspaceSkill.registrationFilePath)).toBe(true);
+      expect(metadata.expert.skillRefs).toContain("skill:capability-report");
+      expect(metadata.harness.expert.skill_refs).toContain(
+        "skill:capability-report",
+      );
+      expect(metadata.harness.workspace_skill_runtime_enable).toMatchObject({
+        source: "manual_session_enable",
+        approval: "manual",
+        workspace_root: dir,
+        bindings: [
+          {
+            directory: "capability-report",
+            skill: "project:capability-report",
+            registered_skill_directory: workspaceSkill.skillDirectory,
+            source_draft_id: "capdraft-live-capability-report",
+            source_verification_report_id:
+              "capver-live-capability-report",
+          },
+        ],
+      });
+    }));
+
+  it("live runtime summary 应产出专家 skill search before invocation 断言", () => {
+    const summary = buildLiveRuntimeSummary({
+      provider: "deepseek",
+      model: "deepseek-v4-flash",
+      sessionId: "session-live",
+      turnId: "turn-live",
+      threadRead: {
+        result: {
+          session: {
+            status: "completed",
+          },
+          turns: [
+            {
+              status: "completed",
+              events: [
+                {
+                  type: "tool.started",
+                  payload: {
+                    tool_name: "skill_search",
+                  },
+                },
+                {
+                  type: "tool.result",
+                  payload: {
+                    tool_name: "skill_search",
+                    output: "selected project:capability-report",
+                  },
+                },
+                {
+                  type: "tool.started",
+                  payload: {
+                    tool_name: "Skill",
+                    arguments: {
+                      skill: "capability-report",
+                    },
+                  },
+                },
+                {
+                  type: "tool.result",
+                  payload: {
+                    tool_name: "Skill",
+                    output: "skill_invocation capability-report completed",
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      },
+      evidencePack: {
+        artifacts: [
+          {
+            content:
+              "expert_binding skill:capability-report skill_body_read SKILL.md skill_gate_decision skill_search selected capability-report skill_invocation capability-report",
+          },
+        ],
+      },
+    });
+
+    expect(summary.assertions.expertSkillSearchBeforeSkillInvocation).toBe(
+      true,
+    );
+    expect(summary.evidencePackExpertSkillsRuntime).toMatchObject({
+      skillSearchBeforeSkillInvocation: true,
+      skillSearchCount: expect.any(Number),
+      skillInvocationCount: expect.any(Number),
+    });
+  });
+
+  it("live runtime summary 不应把 Provider 失败误判成完成或 Skill 调用", () => {
+    const summary = buildLiveRuntimeSummary({
+      provider: "deepseek",
+      model: "deepseek-v4-flash",
+      sessionId: "session-live",
+      turnId: "turn-live",
+      threadRead: {
+        status: "failed",
+        diagnostics: {
+          latest_turn_status: "failed",
+          latest_turn_error_message:
+            "execution backend error: Request failed with status 402 Payment Required",
+        },
+        turns: [{ status: "failed" }],
+        tool_calls: [],
+      },
+      evidencePack: {
+        completionAuditSummary: {
+          workspaceSkillToolCallCount: 0,
+        },
+        artifacts: [
+          {
+            content:
+              "free text mentioning skill_search and skill_invocation should not count as structured tool evidence",
+          },
+        ],
+      },
+    });
+
+    expect(summary.ok).toBe(false);
+    expect(summary.assertions.readModelExpertSkillsRuntimeCompleted).toBe(
+      false,
+    );
+    expect(summary.assertions.readModelExpertSkillSearchObserved).toBe(false);
+    expect(summary.assertions.readModelExpertSkillInvocationObserved).toBe(
+      false,
+    );
+    expect(summary.runtime.providerFailureMessage).toContain("402");
   });
 
   it("拒绝把 fixture summary 归一化成 live summary", () =>

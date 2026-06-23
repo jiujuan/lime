@@ -59,6 +59,7 @@ import {
   hasFinalTextAfterProcessBoundary,
   hasInlineProcessContentParts,
   hasInlineToolUseContentPart,
+  normalizeInlineThinkingContentParts,
   resolveAssistantActionContent,
   resolveDeferredTextContentParts,
   resolveProcessSeparatedContentParts,
@@ -228,8 +229,9 @@ export function resolveMessageListItemProjection({
   const hasCompletedOrRunningWebRetrievalTimelineProcess =
     timeline !== null &&
     hasCompletedOrRunningWebRetrievalTimelineItem(rawTimelineItems);
-  const hasRunningWebRetrievalPart =
-    hasRunningWebRetrievalContentPart(rawDisplayContentParts);
+  const hasRunningWebRetrievalPart = hasRunningWebRetrievalContentPart(
+    rawDisplayContentParts,
+  );
   const hasActiveTimelineTurn =
     timeline !== null && isActiveThreadTurnStatus(timeline.turn.status);
   const hasFinalAnswerAfterRunningWebRetrieval =
@@ -255,6 +257,9 @@ export function resolveMessageListItemProjection({
       rawTimelineItems,
       shouldNormalizeInactiveRunningWebRetrieval,
     );
+  const hasTimelinePlanItem = Boolean(
+    timelineItemsForDisplay?.some((item) => item.type === "plan"),
+  );
   const primaryTimelineKey = timeline ? `leading:${timeline.turn.id}` : null;
   const hasImportedSourcePrimaryTimeline = hasImportedSourceProcessItem(
     timelineItemsForDisplay,
@@ -334,7 +339,7 @@ export function resolveMessageListItemProjection({
         displayContent,
         timelineItems: timelineItemsForDisplay,
       }));
-  const conversationContentParts =
+  const ensuredConversationContentParts =
     message.role === "assistant"
       ? ensureInlineThinkingContentPart({
           parts: hideFinalAnswerContentPartsWhileRunning(
@@ -366,6 +371,10 @@ export function resolveMessageListItemProjection({
               !hasPersistedReasoningTimeline),
         })
       : displayContentParts;
+  const conversationContentParts =
+    message.role === "assistant"
+      ? normalizeInlineThinkingContentParts(ensuredConversationContentParts)
+      : ensuredConversationContentParts;
   const conversationThinkingContent =
     message.role === "assistant" && includeInlineProcessFlow
       ? message.thinkingContent
@@ -376,10 +385,9 @@ export function resolveMessageListItemProjection({
     message.role === "assistant" &&
     includeInlineProcessFlow &&
     !hasProcessTimelineItems;
-  const conversationToolCalls =
-    shouldAllowLegacyToolCallsProcess
-      ? message.toolCalls
-      : undefined;
+  const conversationToolCalls = shouldAllowLegacyToolCallsProcess
+    ? message.toolCalls
+    : undefined;
   const inlineProcessCoverage = resolveInlineProcessCoverage({
     contentParts: conversationContentParts,
     thinkingContent: conversationThinkingContent,
@@ -635,7 +643,8 @@ export function resolveMessageListItemProjection({
       : usesProcessSeparatedFinalText
         ? actionContent
         : actionContent ||
-          (shouldHoldAssistantTextAsProcess || shouldHideAssistantTextWhileRunning
+          (shouldHoldAssistantTextAsProcess ||
+          shouldHideAssistantTextWhileRunning
             ? ""
             : visibleRawDisplayContent);
   const rendererContentParts =
@@ -786,9 +795,7 @@ export function resolveMessageListItemProjection({
     message.role === "assistant" &&
     Boolean(primaryTimeline) &&
     (hasVisibleAssistantText || !hasAssistantBodyContent);
-  const shouldRenderProposedPlanBlocks = !primaryTimeline?.items.some(
-    (item) => item.type === "plan",
-  );
+  const shouldRenderProposedPlanBlocks = !hasTimelinePlanItem;
   const shouldRenderImageWorkbenchBareBubble =
     message.role === "assistant" &&
     Boolean(message.imageWorkbenchPreview) &&

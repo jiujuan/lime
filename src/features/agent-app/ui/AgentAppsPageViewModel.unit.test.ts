@@ -11,8 +11,10 @@ import type {
   HostCapabilityProfile,
   InstalledAgentAppState,
 } from "../types";
+import type { AgentAppHostLifecycleSnapshot } from "../host";
 import {
   buildAppCenterFilterCounts,
+  buildAppCenterHostLifecycleSummary,
   buildAppCenterItems,
   canOneClickUpdate,
   filterAppCenterItems,
@@ -111,6 +113,43 @@ function buildManifest(
   };
 }
 
+function buildHostLifecycleSnapshot(
+  overrides: Partial<AgentAppHostLifecycleSnapshot> = {},
+): AgentAppHostLifecycleSnapshot {
+  return {
+    appId: "content-factory-app",
+    displayName: "内容工厂",
+    profiles: ["workbench"],
+    appCenterStatus: "blocked",
+    readinessStatus: "ready",
+    rightSurface: {
+      dock: "right",
+      physicalDockCount: 1,
+      defaultActiveTab: "productProfile",
+      supportedTabs: ["productProfile", "file"],
+      productProfile: {
+        enabled: true,
+        objects: [],
+        panes: ["artifact"],
+        rendererKinds: ["host_builtin"],
+      },
+      historyRestore: {
+        enabled: true,
+        defaultTab: "productProfile",
+        defaultPane: "artifact",
+        restoreSelection: true,
+        restoreLayout: true,
+        fallback: "artifactPreview",
+      },
+    },
+    functions: [],
+    blockers: ["SERVER_HOST_GATE_BLOCKED"],
+    followUps: [],
+    generatedAt: FIXED_AT,
+    ...overrides,
+  };
+}
+
 describe("AgentAppsPageViewModel", () => {
   it("应把 installed 与 Cloud catalog 投影为排序稳定的 App Center items", () => {
     const installedUpdate = buildReadyState({
@@ -166,6 +205,15 @@ describe("AgentAppsPageViewModel", () => {
       "cloud",
       "cloud",
     ]);
+    expect(items[0]?.hostLifecycle).toEqual(
+      expect.objectContaining({
+        appId: "content-factory-app",
+        appCenterStatus: "needs-setup",
+      }),
+    );
+    expect(items[0]?.hostLifecycle?.rightSurface.supportedTabs).toContain(
+      "productProfile",
+    );
     expect(buildAppCenterFilterCounts(items)).toEqual({
       all: 4,
       installed: 2,
@@ -408,5 +456,113 @@ describe("AgentAppsPageViewModel", () => {
     );
     expect(isPrimaryActionDisabled(registrationItem, null)).toBe(true);
     expect(isCloudActionDisabled(registrationItem, null)).toBe(true);
+  });
+
+  it("Workbench installed app 应把产物 profile 暴露给 App Center item", () => {
+    const workbenchInstalled = buildReadyState({
+      manifest: buildManifest({
+        profiles: ["workbench"],
+        workbench: {
+          profile: "production",
+          productWorkspace: {
+            scope: "session",
+            primaryObjectKinds: ["articleDraft"],
+          },
+          productionObjects: [
+            {
+              kind: "articleDraft",
+              title: "文章草稿",
+              artifactKind: "markdown_document",
+              defaultSurface: "documentCanvas",
+              primary: true,
+            },
+          ],
+          objectSurfaces: [
+            {
+              objectKind: "articleDraft",
+              surfaceKind: "documentCanvas",
+              renderer: "host_builtin",
+            },
+          ],
+          historyRestore: {
+            defaultSurface: "selectedObject",
+            restoreSelection: true,
+            restoreLayout: true,
+          },
+        },
+      }),
+    });
+    const item = buildAppCenterItems({
+      installed: [workbenchInstalled],
+      cloudApps: [],
+      catalogSource: "seeded",
+    })[0]!;
+
+    expect(item.hostLifecycle?.profiles).toEqual(
+      expect.arrayContaining(["workbench"]),
+    );
+    expect(item.hostLifecycle?.rightSurface.defaultActiveTab).toBe(
+      "productProfile",
+    );
+    expect(item.hostLifecycle?.rightSurface.productProfile.objects).toEqual([
+      expect.objectContaining({
+        kind: "articleDraft",
+        defaultPane: "documentCanvas",
+        primary: true,
+      }),
+    ]);
+    expect(buildAppCenterHostLifecycleSummary(item)).toEqual(
+      expect.objectContaining({
+        status: "needs-setup",
+        labelKey: "agentApp.apps.center.host.status.needsSetup",
+        productProfileEnabled: true,
+        productObjectCount: 1,
+        supportedTabCount: 6,
+        defaultTab: "productProfile",
+      }),
+    );
+  });
+
+  it("服务端宿主 lifecycle snapshot 应优先于前端本地投影", () => {
+    const installed = buildReadyState();
+    const item = buildAppCenterItems({
+      installed: [installed],
+      cloudApps: [],
+      catalogSource: "seeded",
+      hostLifecycleSnapshots: [
+        buildHostLifecycleSnapshot({
+          appCenterStatus: "blocked",
+          blockers: ["SERVER_HOST_GATE_BLOCKED"],
+        }),
+      ],
+    })[0]!;
+
+    expect(item.hostLifecycle?.appCenterStatus).toBe("blocked");
+    expect(item.hostLifecycle?.blockers).toEqual([
+      "SERVER_HOST_GATE_BLOCKED",
+    ]);
+    expect(item.statusKind).toBe("partial");
+    expect(isPrimaryActionDisabled(item, null)).toBe(true);
+  });
+
+  it("旧 Tauri / iframe-only installed app 应进入宿主下架门禁并禁用主动作", () => {
+    const legacyInstalled = buildReadyState({
+      manifest: buildManifest({
+        name: "legacy-content-factory",
+        displayName: "旧内容工厂",
+        boundary: {
+          legacyRuntime: "requires src-tauri and iframe-only runtime",
+        },
+      }),
+    });
+    const item = buildAppCenterItems({
+      installed: [legacyInstalled],
+      cloudApps: [],
+      catalogSource: "seeded",
+    })[0]!;
+
+    expect(item.hostLifecycle?.appCenterStatus).toBe("delisted");
+    expect(item.statusKind).toBe("partial");
+    expect(isPrimaryActionDisabled(item, null)).toBe(true);
   });
 });

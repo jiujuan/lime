@@ -2,7 +2,7 @@
 
 ## 背景
 
-本批次覆盖前端展示层已经识别、但不属于 Rust fixed catalog 的外部信息工具。它们常见于 provider / MCP / hosted tool 结果：`SearchQuery`、`ImageQuery`、`finance`、`weather`、`sports`、`time`、`resolve_library_id`、`query_docs`。这些工具和 Batch 03 的 `WebSearch / WebFetch` 相邻，但语义不同：`SearchQuery / ImageQuery` 是外部搜索 API 形态；`finance/weather/sports/time` 是结构化数据查询；Context7 docs 工具是技术文档查询，不应被渲染成普通网页来源或内容任务。
+本批次覆盖前端展示层已经识别、但不属于 Rust fixed catalog 的外部信息工具。它们常见于 provider / MCP / hosted tool 结果：`SearchQuery`、`ImageQuery`、`finance`、`weather`、`sports`、`time`、`resolve-library-id`、`query-docs`。这些工具和 Batch 03 的 `WebSearch / WebFetch` 相邻，但语义不同：`SearchQuery / ImageQuery` 是外部搜索 API 形态；`finance/weather/sports/time` 是结构化数据查询；Context7 docs 工具是技术文档查询，不应被渲染成普通网页来源或内容任务。
 
 用户最早暴露的问题是“整理今天的国际新闻没有工具调用 / 没有获得新闻 / 输出和搜索过程错序”。因此本批次的重点不是启用真实外部服务，而是证明这些外部信息工具进入 timeline 时，Lime 能保持工具过程顺序、主体对象、结果摘要和来源定位，不靠某个硬编码 provider 或模型名。
 
@@ -21,8 +21,8 @@ current dynamic display surface：
 - `ImageQuery`
 - `search_query`
 - `image_query`
-- `resolve_library_id`
-- `query_docs`
+- `resolve-library-id`
+- `query-docs`
 
 external structured data tools：
 
@@ -50,7 +50,7 @@ external structured data tools：
   - provider 以 snake_case 输出的 `search_query / image_query`，通过 `normalizeToolNameKey` 归一化
 - `deprecated`
   - 把 `finance/weather/sports/time` 结果当普通网页搜索来源展示的路径
-  - 把 `resolve_library_id/query_docs` 当普通 `WebSearch` 的路径
+  - 把 `resolve-library-id/query-docs` 当普通 `WebSearch` 的路径
 - `dead`
   - 直接展示 provider raw JSON、`ref_id` 内部引用数组或 `search_query` 原始 payload 的路径
   - 结果先于工具过程显示、或工具过程统一被挪到最终正文之后的路径
@@ -66,8 +66,9 @@ external structured data tools：
 - `src/components/agent/chat/utils/toolBatchGrouping.test.ts`
 - `src/components/agent/chat/utils/toolDisplayInfo.test.ts`
 - `src/components/agent/chat/utils/toolProcessSummary.test.ts`
+- `scripts/agent-runtime/tool-execution-smoke.mjs`
 
-不会修改：Rust tool 注册、真实 provider 工具调用、Batch 01-12 文档、Inputbar、设置页、AppSidebar。
+不会修改：Rust tool 注册、Batch 01-12 文档、Inputbar、设置页、AppSidebar。
 
 ## 起始状态
 
@@ -86,7 +87,7 @@ external structured data tools：
 
 - `SearchQuery / ImageQuery` 保持 search family，但不等同于 `WebSearch` 的来源卡。
 - `finance/weather/sports/time` 保持 fetch family，主体对象优先来自结构化入参。
-- `resolve_library_id/query_docs` 保持技术文档查询语义，不作为普通网页搜索来源。
+- `resolve-library-id/query-docs` 保持技术文档查询语义，不作为普通网页搜索来源。
 - 新增或改动的用户可见 presentation 文案必须覆盖 `zh-CN / zh-TW / en-US / ja-JP / ko-KR`；本批次不新增产品文案，只补测试和文档。
 
 ## 验证计划
@@ -110,10 +111,19 @@ GUI / Playwright：
 - 本批次先用 deterministic helper tests 锁住 display / subject / summary。
 - 后续截图对齐 fixture 应包含 `text -> SearchQuery -> text -> finance/weather/time -> text`，并验证外部数据工具过程不会被挪到最终正文之后。
 
+Agent turn MCP current 验证：
+
+```bash
+npm run smoke:agent-runtime-tool-execution -- --batch mcp-context7-toolsearch --output ".lime/qc/agent-runtime-tool-execution-mcp-context7-toolsearch-20260623.json" --timeout-ms 240000
+```
+
+该 batch 通过 current App Server JSON-RPC `mcpServer/create` 创建临时 `enabled_lime=true` Context7 streamable HTTP server，但不手动调用 `mcpServer/start`。随后真实 `agentSession/turn/start` 应在 turn preflight 自动启动 MCP server，同一回合先调用 `ToolSearch select:mcp__<server>__query-docs`，再调用被暴露的 `mcp__<server>__query-docs`。失败判定固定为：ToolSearch 输出 `matches=[]`、`total_deferred_tools=0`、provider request 未暴露 `mcp__<server>__query-docs`，或 query-docs runtime tool call 未 completed。
+
 ## 进度日志
 
 - 2026-06-03：创建覆盖矩阵和 Batch 13 文档，登记外部信息工具 dynamic display surface。
 - 2026-06-03：补齐外部信息工具用户可见标签、fetch pre-summary 主体、Context7 批次折叠分类、SearchQuery 通用 process boundary 回归。
+- 2026-06-23：新增 `mcp-context7-toolsearch` Agent turn smoke。该 smoke 在 turn 前只创建临时 Context7 MCP 配置，不手动 start；通过真实 `agentSession/turn/start` 验证 RuntimeBackend 会自动启动 `enabled_lime` MCP server，`ToolSearch` 返回 `mcp__<server>__query-docs` 且 `total_deferred_tools > 0`，随后 query-docs 在同一回合 completed。
 
 ## 验证结果
 
@@ -126,7 +136,17 @@ npx eslint "src/components/agent/chat/utils/toolDisplayInfo.ts" "src/components/
 
 结果：`5` 个 test files / `60` tests passed，ESLint 无 warning。
 
+通过：
+
+```bash
+node --check "scripts/agent-runtime/tool-execution-smoke.mjs"
+npm run bridge:health -- --timeout-ms 120000
+npm run smoke:agent-runtime-tool-execution -- --batch mcp-context7-toolsearch --output ".lime/qc/agent-runtime-tool-execution-mcp-context7-toolsearch-20260623.json" --timeout-ms 240000
+```
+
+结果：新增 Agent turn Context7 ToolSearch smoke 通过。证据路径：`.lime/qc/agent-runtime-tool-execution-mcp-context7-toolsearch-20260623.json`，session `sess_0453fe55beae4c9f9d728aeb1a8959d8`，turn `tool-execution-1782207462426-75355`。关键断言均为 `true`：`usesCurrentMcpControlPlane`、`createdContext7WithoutManualStart`、`toolSearchSawContext7QueryDocs`、`providerExposedContext7QueryDocsAfterToolSearch`、`context7QueryDocsExecuted`、`agentTurnAutostartedContext7`。工具矩阵显示 `ToolSearch` 和 `mcp__Context7Agentmqqgb2v41m57__query-docs` 均 `completed success=true`。
+
 ## 剩余缺口
 
 - 尚未执行 GUI / Playwright 历史恢复截图对齐。
-- 尚未验证真实 provider tool stream；本批次只验证前端展示和摘要投影。
+- 尚未执行真实 Electron GUI 输入框点击版的用户路径；当前新增证据覆盖 App Server current `agentSession/turn/start` 原路径和真实远程 Context7 MCP tool call，但模型侧使用 localhost OpenAI-compatible fixture。

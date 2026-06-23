@@ -36,8 +36,11 @@ export function collectReadModelItems(readModel) {
     readRecord(detail.thread_read) ?? readRecord(detail.threadRead) ?? {};
   return [
     ...readArray(readModel, "items"),
+    ...readArray(readModel, "thread_items", "threadItems"),
     ...readArray(detail, "items"),
+    ...readArray(detail, "thread_items", "threadItems"),
     ...readArray(threadRead, "items"),
+    ...readArray(threadRead, "thread_items", "threadItems"),
   ]
     .map((item) => readRecord(item))
     .filter(Boolean);

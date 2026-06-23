@@ -162,6 +162,118 @@ pub struct AgentAppUninstallResponse {
     pub delete_evidence: Option<AgentAppDeleteDataExecutionEvidence>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppHostLifecycleListResponse {
+    #[serde(default)]
+    pub snapshots: Vec<AgentAppHostLifecycleSnapshot>,
+    #[serde(default)]
+    pub issues: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppHostLifecycleSnapshot {
+    pub app_id: String,
+    pub display_name: String,
+    #[serde(default)]
+    pub profiles: Vec<String>,
+    pub app_center_status: String,
+    pub readiness_status: String,
+    pub right_surface: AgentAppRightSurfaceContract,
+    pub task_runtime: AgentAppTaskRuntimeContract,
+    #[serde(default)]
+    pub functions: Vec<AgentAppHostFunctionState>,
+    #[serde(default)]
+    pub blockers: Vec<String>,
+    #[serde(default)]
+    pub follow_ups: Vec<String>,
+    pub generated_at: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppHostFunctionState {
+    pub key: String,
+    pub status: String,
+    pub current_owner: String,
+    #[serde(default)]
+    pub blockers: Vec<String>,
+    #[serde(default)]
+    pub follow_ups: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppRightSurfaceContract {
+    pub dock: String,
+    pub physical_dock_count: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_active_tab: Option<String>,
+    #[serde(default)]
+    pub supported_tabs: Vec<String>,
+    pub product_profile: AgentAppProductProfileContract,
+    pub history_restore: AgentAppHistoryRestoreContract,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppProductProfileContract {
+    pub enabled: bool,
+    #[serde(default)]
+    pub objects: Vec<AgentAppProductProfileObject>,
+    #[serde(default)]
+    pub panes: Vec<String>,
+    #[serde(default)]
+    pub renderer_kinds: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppProductProfileObject {
+    pub kind: String,
+    pub title: String,
+    pub default_pane: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifact_kind: Option<String>,
+    pub primary: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppHistoryRestoreContract {
+    pub enabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_tab: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_pane: Option<String>,
+    pub restore_selection: bool,
+    pub restore_layout: bool,
+    pub fallback: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppTaskRuntimeContract {
+    pub enabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worker_entrypoint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contract_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sample_request_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_artifact_kind: Option<String>,
+    #[serde(default)]
+    pub task_kinds: Vec<String>,
+    pub direct_provider_access: bool,
+    pub direct_filesystem_access: bool,
+    #[serde(default)]
+    pub blockers: Vec<String>,
+    #[serde(default)]
+    pub follow_ups: Vec<String>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentAppDeleteDataExecutionEvidence {
@@ -291,4 +403,6 @@ pub struct AgentAppUiRuntimeStatusResponse {
     pub entry_key: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub route: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_runtime: Option<AgentAppTaskRuntimeContract>,
 }

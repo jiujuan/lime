@@ -19,7 +19,7 @@ const snapshot: WorkspaceDebugStateSnapshot = {
   skillsCount: 4,
   skillsLoading: false,
   topicsCount: 2,
-  workspaceHealthError: null,
+  workspaceHealthError: false,
 };
 
 describe("workspaceDebugRuntime", () => {

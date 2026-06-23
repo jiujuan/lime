@@ -3,10 +3,94 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { checkMcpRuntimeCurrentContracts } from "./mcp/lib/contract-guards.mjs";
+import {
+  checkMcpRuntimeCurrentContracts,
+  checkWorkspaceRightSurfaceCurrentContracts,
+} from "./mcp/lib/contract-guards.mjs";
 
 const repoRoot = process.cwd();
-const normalizeContractSnippet = (value) => value.replace(/\s+/gu, "");
+function normalizeContractSnippet(value) {
+  return value
+    .replace(/\b(?:protocol|appServer|constants)\./gu, "")
+    .replace(
+      /(\w+)\s*:\s*([A-Za-z0-9_<>,\[\]\s|&]+)\s*=\s*\{\}/gu,
+      "$1?: $2",
+    )
+    .replace(/\basync\s+(?=[A-Za-z_$][\w$]*\()/gu, "")
+    .replace(/,\s*\)/gu, ")")
+    .replace(/\s+/gu, "");
+}
+
+function contractContentIncludes(content, snippet) {
+  if (content.includes(snippet)) {
+    return true;
+  }
+  const normalizedContent = normalizeContractSnippet(content);
+  const normalizedSnippet = normalizeContractSnippet(snippet);
+  if (normalizedContent.includes(normalizedSnippet)) {
+    return true;
+  }
+
+  const importedTypeSnippet = snippet.match(/^type\s+([A-Za-z0-9_]+),$/u);
+  if (importedTypeSnippet) {
+    return normalizedContent.includes(
+      normalizeContractSnippet(`protocol.${importedTypeSnippet[1]}`),
+    );
+  }
+
+  const dynamicClientCall = snippet.match(
+    /^this\.client\.([A-Za-z0-9_]+)\(params\)$/u,
+  );
+  if (dynamicClientCall) {
+    return (
+      content.includes(`clientMethod: "${dynamicClientCall[1]}"`) &&
+      content.includes("client[spec.clientMethod](...clientArgs)")
+    );
+  }
+
+  return false;
+}
+const appServerClientIndexFile = "packages/app-server-client/src/index.ts";
+const appServerClientSplitSourceFiles = [
+  appServerClientIndexFile,
+  "packages/app-server-client/src/request-client.ts",
+  "packages/app-server-client/src/request-client-methods.ts",
+  "packages/app-server-client/src/connection.ts",
+  "packages/app-server-client/src/connection-methods.ts",
+  "packages/app-server-client/src/sidecar.ts",
+  "packages/app-server-client/src/sidecar-types.ts",
+  "packages/app-server-client/src/sidecar-manifest.ts",
+  "packages/app-server-client/src/sidecar-process.ts",
+  "packages/app-server-client/src/sidecar-lifecycle.ts",
+  "packages/app-server-client/src/agent-runtime.ts",
+];
+const rendererAppServerIndexFile = "src/lib/api/appServer.ts";
+const rendererAppServerSplitSourceFiles = [
+  rendererAppServerIndexFile,
+  "src/lib/api/appServerConstants.ts",
+  "src/lib/api/appServerTypes.ts",
+  "src/lib/api/appServerTransport.ts",
+  "src/lib/api/appServerResponse.ts",
+  "src/lib/api/appServerClient.ts",
+  "src/lib/api/appServerClientMethods.ts",
+];
+
+function expandContractFiles(files) {
+  return [
+    ...new Set(
+      files.flatMap((file) => {
+        if (file === appServerClientIndexFile) {
+          return appServerClientSplitSourceFiles;
+        }
+        if (file === rendererAppServerIndexFile) {
+          return rendererAppServerSplitSourceFiles;
+        }
+        return [file];
+      }),
+    ),
+  ];
+}
+
 function collectRustFiles(relativeDir) {
   const absoluteDir = path.join(repoRoot, relativeDir);
   return fs
@@ -1020,6 +1104,7 @@ const checks = [
     files: rustProtocolFiles,
     snippets: [
       'pub const METHOD_AGENT_APP_INSTALLED_LIST: &str = "agentAppInstalled/list"',
+      'pub const METHOD_AGENT_APP_HOST_LIFECYCLE_LIST: &str = "agentAppHostLifecycle/list"',
       'pub const METHOD_AGENT_APP_SHELL_PREPARE: &str = "agentAppShell/prepare"',
       'pub const METHOD_AGENT_APP_UI_RUNTIME_START: &str = "agentAppUiRuntime/start"',
       'pub const METHOD_AGENT_APP_UI_RUNTIME_STATUS: &str = "agentAppUiRuntime/status"',
@@ -1496,6 +1581,7 @@ const checks = [
     ],
     snippets: [
       'export const METHOD_AGENT_APP_INSTALLED_LIST = "agentAppInstalled/list"',
+      'export const METHOD_AGENT_APP_HOST_LIFECYCLE_LIST =',
       'export const METHOD_AGENT_APP_SHELL_PREPARE = "agentAppShell/prepare"',
       'export const METHOD_AGENT_APP_UI_RUNTIME_START = "agentAppUiRuntime/start"',
       'export const METHOD_AGENT_APP_UI_RUNTIME_STATUS = "agentAppUiRuntime/status"',
@@ -1565,52 +1651,52 @@ const checks = [
       "export interface MemoryStoreReviewResolveResponse",
       "export interface MemoryStoreHealthResponse",
       "export interface MemoryStoreResetResponse",
-      "listAgentAppInstalled(): JsonRpcRequest",
-      "startAgentAppUiRuntime(params: AgentAppUiRuntimeStartParams): JsonRpcRequest",
+      "listAgentAppInstalled(): protocol.JsonRpcRequest",
+      "startAgentAppUiRuntime(params: protocol.AgentAppUiRuntimeStartParams): protocol.JsonRpcRequest",
       "getAgentAppUiRuntimeStatus(",
-      "stopAgentAppUiRuntime(params: AgentAppUiRuntimeStopParams): JsonRpcRequest",
-      "listKnowledgePacks(params: KnowledgeListPacksParams): JsonRpcRequest",
-      "readKnowledgePack(params: KnowledgeReadPackParams): JsonRpcRequest",
-      "importKnowledgeSource(params: KnowledgeImportSourceParams): JsonRpcRequest",
-      "compileKnowledgePack(params: KnowledgeCompilePackParams): JsonRpcRequest",
+      "stopAgentAppUiRuntime(params: protocol.AgentAppUiRuntimeStopParams): protocol.JsonRpcRequest",
+      "listKnowledgePacks(params: protocol.KnowledgeListPacksParams): protocol.JsonRpcRequest",
+      "readKnowledgePack(params: protocol.KnowledgeReadPackParams): protocol.JsonRpcRequest",
+      "importKnowledgeSource(params: protocol.KnowledgeImportSourceParams): protocol.JsonRpcRequest",
+      "compileKnowledgePack(params: protocol.KnowledgeCompilePackParams): protocol.JsonRpcRequest",
       "setDefaultKnowledgePack(",
       "updateKnowledgePackStatus(",
       "resolveKnowledgeContext(",
       "validateKnowledgeContextRun(",
-      "listAutomationJobs(): JsonRpcRequest",
-      "readProjectMemory(params: ProjectMemoryReadParams): JsonRpcRequest",
-      "listMemoryStore(params: MemoryStoreListParams): JsonRpcRequest",
-      "readMemoryStore(params: MemoryStoreReadParams): JsonRpcRequest",
-      "searchMemoryStore(params: MemoryStoreSearchParams): JsonRpcRequest",
-      "addMemoryStoreNote(params: MemoryStoreAddNoteParams): JsonRpcRequest",
-      "consolidateMemoryStore(params: MemoryStoreConsolidateParams): JsonRpcRequest",
+      "listAutomationJobs(): protocol.JsonRpcRequest",
+      "readProjectMemory(params: protocol.ProjectMemoryReadParams): protocol.JsonRpcRequest",
+      "listMemoryStore(params: protocol.MemoryStoreListParams): protocol.JsonRpcRequest",
+      "readMemoryStore(params: protocol.MemoryStoreReadParams): protocol.JsonRpcRequest",
+      "searchMemoryStore(params: protocol.MemoryStoreSearchParams): protocol.JsonRpcRequest",
+      "addMemoryStoreNote(params: protocol.MemoryStoreAddNoteParams): protocol.JsonRpcRequest",
+      "consolidateMemoryStore(params: protocol.MemoryStoreConsolidateParams): protocol.JsonRpcRequest",
       "listMemoryStoreReviewNotes(",
       "resolveMemoryStoreReviewNote(",
-      "healthMemoryStore(params: MemoryStoreRootParams): JsonRpcRequest",
-      "resetMemoryStore(params: MemoryStoreResetParams): JsonRpcRequest",
-      "async listAgentAppInstalled(",
-      "async startAgentAppUiRuntime(",
-      "async getAgentAppUiRuntimeStatus(",
-      "async stopAgentAppUiRuntime(",
-      "async listKnowledgePacks(",
-      "async readKnowledgePack(",
-      "async importKnowledgeSource(",
-      "async compileKnowledgePack(",
-      "async setDefaultKnowledgePack(",
-      "async updateKnowledgePackStatus(",
-      "async resolveKnowledgeContext(",
-      "async validateKnowledgeContextRun(",
-      "async listAutomationJobs(",
-      "async readProjectMemory(",
-      "async listMemoryStore(",
-      "async readMemoryStore(",
-      "async searchMemoryStore(",
-      "async addMemoryStoreNote(",
-      "async consolidateMemoryStore(",
-      "async listMemoryStoreReviewNotes(",
-      "async resolveMemoryStoreReviewNote(",
-      "async healthMemoryStore(",
-      "async resetMemoryStore(",
+      "healthMemoryStore(params: protocol.MemoryStoreRootParams): protocol.JsonRpcRequest",
+      "resetMemoryStore(params: protocol.MemoryStoreResetParams): protocol.JsonRpcRequest",
+      '{ name: "listAgentAppInstalled", clientMethod: "listAgentAppInstalled", method: protocol.METHOD_AGENT_APP_INSTALLED_LIST',
+      '{ name: "startAgentAppUiRuntime", clientMethod: "startAgentAppUiRuntime", method: protocol.METHOD_AGENT_APP_UI_RUNTIME_START',
+      '{ name: "getAgentAppUiRuntimeStatus", clientMethod: "getAgentAppUiRuntimeStatus", method: protocol.METHOD_AGENT_APP_UI_RUNTIME_STATUS',
+      '{ name: "stopAgentAppUiRuntime", clientMethod: "stopAgentAppUiRuntime", method: protocol.METHOD_AGENT_APP_UI_RUNTIME_STOP',
+      '{ name: "listKnowledgePacks", clientMethod: "listKnowledgePacks", method: protocol.METHOD_KNOWLEDGE_PACK_LIST',
+      '{ name: "readKnowledgePack", clientMethod: "readKnowledgePack", method: protocol.METHOD_KNOWLEDGE_PACK_READ',
+      '{ name: "importKnowledgeSource", clientMethod: "importKnowledgeSource", method: protocol.METHOD_KNOWLEDGE_SOURCE_IMPORT',
+      '{ name: "compileKnowledgePack", clientMethod: "compileKnowledgePack", method: protocol.METHOD_KNOWLEDGE_PACK_COMPILE',
+      '{ name: "setDefaultKnowledgePack", clientMethod: "setDefaultKnowledgePack", method: protocol.METHOD_KNOWLEDGE_PACK_DEFAULT_SET',
+      '{ name: "updateKnowledgePackStatus", clientMethod: "updateKnowledgePackStatus", method: protocol.METHOD_KNOWLEDGE_PACK_STATUS_UPDATE',
+      '{ name: "resolveKnowledgeContext", clientMethod: "resolveKnowledgeContext", method: protocol.METHOD_KNOWLEDGE_CONTEXT_RESOLVE',
+      '{ name: "validateKnowledgeContextRun", clientMethod: "validateKnowledgeContextRun", method: protocol.METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE',
+      '{ name: "listAutomationJobs", clientMethod: "listAutomationJobs", method: protocol.METHOD_AUTOMATION_JOB_LIST',
+      '{ name: "readProjectMemory", clientMethod: "readProjectMemory", method: protocol.METHOD_PROJECT_MEMORY_READ',
+      '{ name: "listMemoryStore", clientMethod: "listMemoryStore", method: protocol.METHOD_MEMORY_STORE_LIST',
+      '{ name: "readMemoryStore", clientMethod: "readMemoryStore", method: protocol.METHOD_MEMORY_STORE_READ',
+      '{ name: "searchMemoryStore", clientMethod: "searchMemoryStore", method: protocol.METHOD_MEMORY_STORE_SEARCH',
+      '{ name: "addMemoryStoreNote", clientMethod: "addMemoryStoreNote", method: protocol.METHOD_MEMORY_STORE_ADD_NOTE',
+      '{ name: "consolidateMemoryStore", clientMethod: "consolidateMemoryStore", method: protocol.METHOD_MEMORY_STORE_CONSOLIDATE',
+      '{ name: "listMemoryStoreReviewNotes", clientMethod: "listMemoryStoreReviewNotes", method: protocol.METHOD_MEMORY_STORE_REVIEW_LIST',
+      '{ name: "resolveMemoryStoreReviewNote", clientMethod: "resolveMemoryStoreReviewNote", method: protocol.METHOD_MEMORY_STORE_REVIEW_RESOLVE',
+      '{ name: "healthMemoryStore", clientMethod: "healthMemoryStore", method: protocol.METHOD_MEMORY_STORE_HEALTH',
+      '{ name: "resetMemoryStore", clientMethod: "resetMemoryStore", method: protocol.METHOD_MEMORY_STORE_RESET',
       "builds app data surface requests with current methods",
       "assert.equal(installed.method, METHOD_AGENT_APP_INSTALLED_LIST)",
       "assert.equal(runtimeStart.method, METHOD_AGENT_APP_UI_RUNTIME_START)",
@@ -1687,6 +1773,105 @@ const checks = [
       "App Server 未返回项目上下文时不应返回空对象",
       "projectId is required to read App Server project memory",
       "App Server projectMemory/read did not return project memory",
+    ],
+  },
+  {
+    name: "Workspace Right Surface uses App Server current JSON-RPC contract",
+    files: [
+      ...rustProtocolFiles,
+      ...appServerRuntimeFiles,
+      ...appServerProcessorFiles,
+      "lime-rs/crates/app-server-client/src/lib.rs",
+      "packages/app-server-client/src/protocol.ts",
+      "packages/app-server-client/src/generated/protocol-types.ts",
+      "packages/app-server-client/src/index.ts",
+      "packages/app-server-client/tests/client.test.mjs",
+      "src/lib/api/appServer.ts",
+      "src/lib/api/appServer.test.ts",
+      "src/lib/api/workspaceRightSurface.ts",
+      "src/lib/api/workspaceRightSurface.test.ts",
+      "src/lib/governance/agentCommandCatalog.json",
+    ],
+    snippets: [
+      'pub const METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST: &str = "workspaceRightSurface/request"',
+      '"workspaceRightSurface/pending/list"',
+      '"workspaceRightSurface/pending/consume"',
+      '"workspaceRightSurface/pending/dismiss"',
+      '"workspaceRightSurface/pendingChanged"',
+      "pub struct WorkspaceRightSurfaceRequestParams",
+      "pub struct WorkspaceRightSurfacePendingListParams",
+      "pub struct WorkspaceRightSurfacePendingConsumeParams",
+      "pub struct WorkspaceRightSurfacePendingDismissParams",
+      "pub struct WorkspaceRightSurfacePendingRequest",
+      "pub struct WorkspaceRightSurfaceRequestResponse",
+      "pub struct WorkspaceRightSurfacePendingListResponse",
+      "pub struct WorkspaceRightSurfacePendingConsumeResponse",
+      "pub struct WorkspaceRightSurfacePendingDismissResponse",
+      "pub struct WorkspaceRightSurfacePendingChangedParams",
+      "method!(METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST, Request)",
+      "method!(METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_LIST, Request)",
+      "method!(METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CONSUME, Request)",
+      "method!(METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS, Request)",
+      "method!(METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED, Notification)",
+      "request_workspace_right_surface(",
+      "list_workspace_right_surface_pending(",
+      "consume_workspace_right_surface_pending(",
+      "dismiss_workspace_right_surface_pending(",
+      "METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST =>",
+      "METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_LIST =>",
+      "METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CONSUME =>",
+      "METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS =>",
+      "handle_workspace_right_surface_request_impl",
+      "handle_workspace_right_surface_pending_list_impl",
+      "handle_workspace_right_surface_pending_consume_impl",
+      "handle_workspace_right_surface_pending_dismiss_impl",
+      "pub use app_server_protocol::WorkspaceRightSurfaceRequestParams",
+      "pub use app_server_protocol::WorkspaceRightSurfacePendingConsumeParams",
+      "pub use app_server_protocol::WorkspaceRightSurfacePendingDismissParams",
+      "pub use app_server_protocol::WorkspaceRightSurfacePendingChangedParams",
+      "pub use app_server_protocol::METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST",
+      "pub use app_server_protocol::METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CONSUME",
+      "pub use app_server_protocol::METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS",
+      "pub use app_server_protocol::METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED",
+      'export const METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST =',
+      "METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CONSUME",
+      "METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS",
+      "METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED",
+      "export interface WorkspaceRightSurfaceRequestParams",
+      "export interface WorkspaceRightSurfacePendingListResponse",
+      "export interface WorkspaceRightSurfacePendingConsumeResponse",
+      "export interface WorkspaceRightSurfacePendingDismissResponse",
+      "export interface WorkspaceRightSurfacePendingChangedParams",
+      "workspaceRightSurfacePendingChangedNotification(",
+      "requestWorkspaceRightSurface(",
+      "listWorkspaceRightSurfacePending(",
+      "consumeWorkspaceRightSurfacePending(",
+      "dismissWorkspaceRightSurfacePending(",
+      "APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST",
+      "APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CONSUME",
+      "APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS",
+      "APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED",
+      'import { AppServerClient } from "@/lib/api/appServer"',
+      "export type WorkspaceRightSurfaceAppServerClient = Pick<",
+      "App Server workspaceRightSurface/request did not return a valid pending request",
+      "App Server workspaceRightSurface/pending/list did not return valid pending requests",
+      "App Server workspaceRightSurface/pending/consume did not return consumed request ids",
+      "App Server workspaceRightSurface/pending/dismiss did not return dismissed request ids",
+      "workspaceRightSurface methods 应通过 App Server JSON-RPC 调度右侧 surface",
+      "Right Surface 请求应走 App Server current method",
+      '"appServerWorkspaceRightSurfaceMethods"',
+      '"workspaceRightSurface/request"',
+      '"workspaceRightSurface/pending/list"',
+      '"workspaceRightSurface/pending/consume"',
+      '"workspaceRightSurface/pending/dismiss"',
+      '"workspaceRightSurface/pendingChanged"',
+    ],
+    absentSnippets: [
+      '"agent_runtime_request_right_surface"',
+      '"right_surface_request"',
+      "invokeMockOnly",
+      "defaultMocks",
+      "mockPriorityCommands",
     ],
   },
   {
@@ -2198,6 +2383,7 @@ const checks = [
       '"agentAppInstalled/disabled/set"',
       '"agentAppInstalled/uninstall/rehearsal"',
       '"agentAppInstalled/uninstall"',
+      '"agentAppHostLifecycle/list"',
       '"agentAppShell/prepare"',
       '"agentAppUiRuntime/start"',
       '"agentAppUiRuntime/status"',
@@ -2550,7 +2736,8 @@ const checks = [
       "let detail = read_model::runtime_session_read_detail(stored);",
       "detail: Some(detail)",
       "pub(super) fn runtime_session_read_detail(stored: &StoredSession) -> serde_json::Value",
-      "fn runtime_thread_read_from_stored_session(stored: &StoredSession) -> serde_json::Value",
+      "fn runtime_thread_read_from_stored_session(",
+      "product_workspace: Option<serde_json::Value>",
       '"thread_read": thread_read',
       '"tool_calls": tool_item_projection::tool_calls_from_events(&stored.events)',
       "items.extend(tool_item_projection::tool_items_from_events(stored))",
@@ -4224,66 +4411,48 @@ const checks = [
     name: "Renderer-safe App Server helper aliases capability/list protocol types",
     file: "src/lib/api/appServer.ts",
     snippets: [
-      "METHOD_CAPABILITY_LIST,",
-      "type CapabilityListParams,",
-      "type CapabilityListResponse,",
-      "export const APP_SERVER_METHOD_CAPABILITY_LIST = METHOD_CAPABILITY_LIST;",
-      "export type AppServerCapabilityListParams = CapabilityListParams;",
-      "export type AppServerCapabilityListResponse = CapabilityListResponse;",
-      "async listCapabilities(",
-      "APP_SERVER_METHOD_CAPABILITY_LIST",
+      "APP_SERVER_METHOD_CAPABILITY_LIST = protocol.METHOD_CAPABILITY_LIST",
+      "export type AppServerCapabilityListParams = protocol.CapabilityListParams;",
+      "export type AppServerCapabilityListResponse = protocol.CapabilityListResponse;",
+      "listCapabilities(params?: appServer.AppServerCapabilityListParams)",
+      '{ name: "listCapabilities", method: constants.APP_SERVER_METHOD_CAPABILITY_LIST',
     ],
   },
   {
     name: "Renderer-safe App Server helper aliases fileSystem protocol types",
     file: "src/lib/api/appServer.ts",
     snippets: [
-      "METHOD_FILE_SYSTEM_LIST_DIRECTORY,",
-      "METHOD_FILE_SYSTEM_READ_FILE_PREVIEW,",
-      "METHOD_FILE_SYSTEM_CREATE_FILE,",
-      "METHOD_FILE_SYSTEM_CREATE_DIRECTORY,",
-      "METHOD_FILE_SYSTEM_RENAME_FILE,",
-      "METHOD_FILE_SYSTEM_DELETE_FILE,",
-      "type FileSystemListDirectoryParams,",
-      "type FileSystemReadFilePreviewParams,",
-      "type FileSystemCreateFileParams,",
-      "type FileSystemCreateDirectoryParams,",
-      "type FileSystemRenameFileParams,",
-      "type FileSystemDeleteFileParams,",
-      "type FileSystemMutationResponse,",
-      "type FileSystemDirectoryListing,",
-      "type FileSystemFilePreview,",
       "export const APP_SERVER_METHOD_FILE_SYSTEM_LIST_DIRECTORY =",
-      "METHOD_FILE_SYSTEM_LIST_DIRECTORY;",
+      "protocol.METHOD_FILE_SYSTEM_LIST_DIRECTORY;",
       "export const APP_SERVER_METHOD_FILE_SYSTEM_READ_FILE_PREVIEW =",
-      "METHOD_FILE_SYSTEM_READ_FILE_PREVIEW;",
+      "protocol.METHOD_FILE_SYSTEM_READ_FILE_PREVIEW;",
       "export const APP_SERVER_METHOD_FILE_SYSTEM_CREATE_FILE =",
-      "METHOD_FILE_SYSTEM_CREATE_FILE;",
+      "protocol.METHOD_FILE_SYSTEM_CREATE_FILE;",
       "export const APP_SERVER_METHOD_FILE_SYSTEM_CREATE_DIRECTORY =",
-      "METHOD_FILE_SYSTEM_CREATE_DIRECTORY;",
+      "protocol.METHOD_FILE_SYSTEM_CREATE_DIRECTORY;",
       "export const APP_SERVER_METHOD_FILE_SYSTEM_RENAME_FILE =",
-      "METHOD_FILE_SYSTEM_RENAME_FILE;",
+      "protocol.METHOD_FILE_SYSTEM_RENAME_FILE;",
       "export const APP_SERVER_METHOD_FILE_SYSTEM_DELETE_FILE =",
-      "METHOD_FILE_SYSTEM_DELETE_FILE;",
-      "export type AppServerFileSystemListDirectoryParams =",
-      "export type AppServerFileSystemReadFilePreviewParams =",
-      "export type AppServerFileSystemCreateFileParams =",
-      "export type AppServerFileSystemCreateDirectoryParams =",
-      "export type AppServerFileSystemRenameFileParams =",
-      "export type AppServerFileSystemDeleteFileParams =",
-      "export type AppServerFileSystemMutationResponse =",
-      "async listDirectory(",
-      "APP_SERVER_METHOD_FILE_SYSTEM_LIST_DIRECTORY",
-      "async readFilePreview(",
-      "APP_SERVER_METHOD_FILE_SYSTEM_READ_FILE_PREVIEW",
-      "async createFile(",
-      "APP_SERVER_METHOD_FILE_SYSTEM_CREATE_FILE",
-      "async createDirectory(",
-      "APP_SERVER_METHOD_FILE_SYSTEM_CREATE_DIRECTORY",
-      "async renameFile(",
-      "APP_SERVER_METHOD_FILE_SYSTEM_RENAME_FILE",
-      "async deleteFile(",
-      "APP_SERVER_METHOD_FILE_SYSTEM_DELETE_FILE",
+      "protocol.METHOD_FILE_SYSTEM_DELETE_FILE;",
+      "export type AppServerFileSystemListDirectoryParams =\n  protocol.FileSystemListDirectoryParams;",
+      "export type AppServerFileSystemReadFilePreviewParams =\n  protocol.FileSystemReadFilePreviewParams;",
+      "export type AppServerFileSystemCreateFileParams = protocol.FileSystemCreateFileParams;",
+      "export type AppServerFileSystemCreateDirectoryParams =\n  protocol.FileSystemCreateDirectoryParams;",
+      "export type AppServerFileSystemRenameFileParams = protocol.FileSystemRenameFileParams;",
+      "export type AppServerFileSystemDeleteFileParams = protocol.FileSystemDeleteFileParams;",
+      "export type AppServerFileSystemMutationResponse = protocol.FileSystemMutationResponse;",
+      "listDirectory(params: appServer.AppServerFileSystemListDirectoryParams)",
+      '{ name: "listDirectory", method: constants.APP_SERVER_METHOD_FILE_SYSTEM_LIST_DIRECTORY',
+      "readFilePreview(params: appServer.AppServerFileSystemReadFilePreviewParams)",
+      '{ name: "readFilePreview", method: constants.APP_SERVER_METHOD_FILE_SYSTEM_READ_FILE_PREVIEW',
+      "createFile(params: appServer.AppServerFileSystemCreateFileParams)",
+      '{ name: "createFile", method: constants.APP_SERVER_METHOD_FILE_SYSTEM_CREATE_FILE',
+      "createDirectory(params: appServer.AppServerFileSystemCreateDirectoryParams)",
+      '{ name: "createDirectory", method: constants.APP_SERVER_METHOD_FILE_SYSTEM_CREATE_DIRECTORY',
+      "renameFile(params: appServer.AppServerFileSystemRenameFileParams)",
+      '{ name: "renameFile", method: constants.APP_SERVER_METHOD_FILE_SYSTEM_RENAME_FILE',
+      "deleteFile(params: appServer.AppServerFileSystemDeleteFileParams)",
+      '{ name: "deleteFile", method: constants.APP_SERVER_METHOD_FILE_SYSTEM_DELETE_FILE',
     ],
   },
   {
@@ -4309,14 +4478,12 @@ const checks = [
     file: "src/lib/api/appServer.ts",
     snippets: [
       "export const APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND =",
-      "METHOD_AGENT_SESSION_ACTION_RESPOND;",
-      "type AgentSessionActionRespondParams,",
-      "type AgentSessionActionRespondResponse,",
-      "export type AppServerAgentSessionActionType = AgentSessionActionType;",
+      "protocol.METHOD_AGENT_SESSION_ACTION_RESPOND;",
+      "export type AppServerAgentSessionActionType = protocol.AgentSessionActionType;",
       "export type AppServerAgentSessionActionRespondParams =\n  AgentSessionActionRespondParams;",
-      "export type AppServerAgentSessionActionRespondResponse =\n  AgentSessionActionRespondResponse;",
-      "async respondAction(",
-      "APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND",
+      "export type AppServerAgentSessionActionRespondResponse =\n  protocol.AgentSessionActionRespondResponse;",
+      "respondAction(params: appServer.AppServerAgentSessionActionRespondParams)",
+      '{ name: "respondAction", method: constants.APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND',
     ],
   },
   {
@@ -4324,13 +4491,11 @@ const checks = [
     file: "src/lib/api/appServer.ts",
     snippets: [
       "export const APP_SERVER_METHOD_AGENT_SESSION_ACTION_REPLAY =",
-      "METHOD_AGENT_SESSION_ACTION_REPLAY;",
-      "type AgentSessionActionReplayParams,",
-      "type AgentSessionActionReplayResponse,",
-      "export type AppServerAgentSessionActionReplayParams =\n  AgentSessionActionReplayParams;",
-      "export type AppServerAgentSessionActionReplayResponse =\n  AgentSessionActionReplayResponse;",
-      "async replayAction(",
-      "APP_SERVER_METHOD_AGENT_SESSION_ACTION_REPLAY",
+      "protocol.METHOD_AGENT_SESSION_ACTION_REPLAY;",
+      "export type AppServerAgentSessionActionReplayParams =\n  protocol.AgentSessionActionReplayParams;",
+      "export type AppServerAgentSessionActionReplayResponse =\n  protocol.AgentSessionActionReplayResponse;",
+      "replayAction(params: appServer.AppServerAgentSessionActionReplayParams)",
+      '{ name: "replayAction", method: constants.APP_SERVER_METHOD_AGENT_SESSION_ACTION_REPLAY',
     ],
   },
   {
@@ -4338,13 +4503,11 @@ const checks = [
     file: "src/lib/api/appServer.ts",
     snippets: [
       "export const APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL =",
-      "METHOD_AGENT_SESSION_TURN_CANCEL;",
-      "type AgentSessionTurnCancelParams,",
-      "type AgentSessionTurnCancelResponse,",
-      "export type AppServerAgentSessionTurnCancelParams =\n  AgentSessionTurnCancelParams;",
-      "export type AppServerAgentSessionTurnCancelResponse =\n  AgentSessionTurnCancelResponse;",
-      "async cancelTurn(",
-      "APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL",
+      "protocol.METHOD_AGENT_SESSION_TURN_CANCEL;",
+      "export type AppServerAgentSessionTurnCancelParams =\n  protocol.AgentSessionTurnCancelParams;",
+      "export type AppServerAgentSessionTurnCancelResponse =\n  protocol.AgentSessionTurnCancelResponse;",
+      "cancelTurn(params: appServer.AppServerAgentSessionTurnCancelParams)",
+      '{ name: "cancelTurn", method: constants.APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL',
     ],
   },
   {
@@ -7833,7 +7996,7 @@ const checks = [
 const failures = [];
 
 for (const check of checks) {
-  const files = check.files ?? [check.file];
+  const files = expandContractFiles(check.files ?? [check.file]);
   const location = files.join(", ");
   const existingFiles = files.filter((file) =>
     fs.existsSync(path.join(repoRoot, file)),
@@ -7852,7 +8015,7 @@ for (const check of checks) {
     .map((file) => fs.readFileSync(path.join(repoRoot, file), "utf8"))
     .join("\n");
   for (const snippet of check.snippets) {
-    if (!content.includes(snippet)) {
+    if (!contractContentIncludes(content, snippet)) {
       failures.push(
         `${check.name}: missing ${JSON.stringify(snippet)} in ${location}`,
       );
@@ -7902,6 +8065,7 @@ checkRetiredAgentRuntimeRespondActionFacadeSurface();
 checkActiveAipromptsDoNotPromoteRetiredAgentRuntimeCommands();
 checkScriptsDoNotCallRetiredAgentRuntimeCommands();
 checkMcpRuntimeCurrentContracts({ repoRoot, failures });
+checkWorkspaceRightSurfaceCurrentContracts({ repoRoot, failures });
 checkKnowledgeBuilderRuntimeCurrentContracts();
 checkRetiredAppServerAgentBackendCrate();
 checkAgentUiPackageCanonicalNaming();

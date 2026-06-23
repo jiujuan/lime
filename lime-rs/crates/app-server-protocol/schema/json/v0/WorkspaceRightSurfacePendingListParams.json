@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "limit": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "sessionId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "surfaceKind": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "workspaceId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "workspaceRoot": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "title": "WorkspaceRightSurfacePendingListParams",
+  "type": "object"
+}

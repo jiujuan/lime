@@ -32,6 +32,7 @@ import {
   NEWS_PROMPT,
   PLAN_DONE_TEXT,
   PLAN_PROMPT,
+  PLAN_STEPS,
   PROPOSED_PLAN_BLOCK,
   renderSkillsRuntimeBackendEvents,
   SKILLS_RUNTIME_DONE_TEXT,
@@ -49,7 +50,12 @@ import {
   WEB_TOOLS_FETCH_MARKDOWN,
   WEB_TOOLS_FETCH_TOOL_CALL_ID,
   WEB_TOOLS_MID_THINKING_TEXT,
+  WEB_TOOLS_REASONING_FINAL_ID,
+  WEB_TOOLS_REASONING_FINAL_SIGNATURE,
   WEB_TOOLS_REASONING_ITEM_ID,
+  WEB_TOOLS_REASONING_ITEM_SIGNATURE,
+  WEB_TOOLS_REASONING_NATIVE_ITEM_ID,
+  WEB_TOOLS_REASONING_PROVIDER_BACKEND,
   WEB_TOOLS_RENDERING_DONE_TEXT,
   WEB_TOOLS_RENDERING_PROMPT,
   WEB_TOOLS_SEARCH_SNIPPET,
@@ -105,6 +111,9 @@ export function createTempRuntimeEnv() {
 
 export function writeFixtureBackend(backendPath) {
   const proposedPlanFixtureText = `${PROPOSED_PLAN_BLOCK}\n计划已写入右侧计划轨，等待你确认后再执行。\n`;
+  const proposedPlanThreadItemText = PLAN_STEPS.map(
+    (step) => `- ${step.step}`,
+  ).join("\n");
   const webToolsRenderingFixtureText = `网页搜索渲染结论：搜索来源已展开，读取页面已归入同一过程，最终正文继续输出。\n${WEB_TOOLS_BROKEN_MARKDOWN_TEXT}\n`;
   const skillsRuntimeBackendEvents = renderSkillsRuntimeBackendEvents(
     SKILLS_RUNTIME_SCENARIO,
@@ -411,6 +420,25 @@ if (input.kind === "turnStart") {
     const webToolsReasoningStartedAt = new Date().toISOString();
     emitEvents([
       {
+        type: "reasoning.final",
+        payload: {
+          reasoningId: "${WEB_TOOLS_REASONING_FINAL_ID}",
+          reasoning_id: "${WEB_TOOLS_REASONING_FINAL_ID}",
+          text: "${WEB_TOOLS_MID_THINKING_TEXT}",
+          providerMetadata: {
+            backend: "${WEB_TOOLS_REASONING_PROVIDER_BACKEND}",
+            signature: "${WEB_TOOLS_REASONING_FINAL_SIGNATURE}"
+          },
+          provider_metadata: {
+            backend: "${WEB_TOOLS_REASONING_PROVIDER_BACKEND}",
+            signature: "${WEB_TOOLS_REASONING_FINAL_SIGNATURE}"
+          }
+        }
+      }
+    ]);
+    await sleep(40);
+    emitEvents([
+      {
         type: "item.updated",
         payload: {
           item: {
@@ -426,7 +454,14 @@ if (input.kind === "turnStart") {
             started_at: webToolsReasoningStartedAt,
             startedAt: webToolsReasoningStartedAt,
             updated_at: webToolsReasoningStartedAt,
-            updatedAt: webToolsReasoningStartedAt
+            updatedAt: webToolsReasoningStartedAt,
+            metadata: {
+              native_reasoning_item_id: "${WEB_TOOLS_REASONING_NATIVE_ITEM_ID}",
+              provider_metadata: {
+                backend: "${WEB_TOOLS_REASONING_PROVIDER_BACKEND}",
+                signature: "${WEB_TOOLS_REASONING_ITEM_SIGNATURE}"
+              }
+            }
           }
         }
       }
@@ -501,7 +536,14 @@ if (input.kind === "turnStart") {
             completed_at: new Date().toISOString(),
             completedAt: new Date().toISOString(),
             updated_at: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
+            updatedAt: new Date().toISOString(),
+            metadata: {
+              native_reasoning_item_id: "${WEB_TOOLS_REASONING_NATIVE_ITEM_ID}",
+              provider_metadata: {
+                backend: "${WEB_TOOLS_REASONING_PROVIDER_BACKEND}",
+                signature: "${WEB_TOOLS_REASONING_ITEM_SIGNATURE}"
+              }
+            }
           }
         }
       }
@@ -761,6 +803,20 @@ ${expertPanelSkillsRuntimeBackendEvents}
     }
   ]);
   await sleep(120);
+  if (isPlanPrompt) {
+    emitEvents([
+      {
+        type: "plan.final",
+        payload: {
+          text: ${JSON.stringify(proposedPlanThreadItemText)},
+          revisionId: "proposed_plan:fixture-1",
+          source: "proposed_plan",
+          plan: ${JSON.stringify(PLAN_STEPS)}
+        }
+      }
+    ]);
+    await sleep(80);
+  }
   emitEvents([
     {
       type: "turn.completed",

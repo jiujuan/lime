@@ -1,8 +1,15 @@
-import type { AgentAppCloudCatalogResult } from "@/lib/api/agentApps";
+import {
+  buildAgentAppHostLifecycleForInstalledState,
+  type AgentAppCloudCatalogResult,
+} from "@/lib/api/agentApps";
 import {
   buildCloudAgentAppSourceState,
   type AgentAppSourceState,
 } from "../install/installReview";
+import type {
+  AgentAppHostFunctionStatus,
+  AgentAppHostLifecycleSnapshot,
+} from "../host";
 import type {
   CloudBootstrapApp,
   InstalledAgentAppState,
@@ -48,8 +55,26 @@ export interface AppCenterItem {
   cloudVersion?: string;
   entries: ProjectedEntry[];
   sourceState?: AgentAppSourceState;
+  hostLifecycle?: AgentAppHostLifecycleSnapshot;
   registrationBlocked: boolean;
   canReviewCloud: boolean;
+}
+
+export type AppCenterHostLifecycleTone =
+  | "emerald"
+  | "amber"
+  | "rose"
+  | "slate";
+
+export interface AppCenterHostLifecycleSummary {
+  status: AgentAppHostFunctionStatus;
+  labelKey: string;
+  tone: AppCenterHostLifecycleTone;
+  blockerCount: number;
+  productObjectCount: number;
+  productProfileEnabled: boolean;
+  supportedTabCount: number;
+  defaultTab: string | null;
 }
 
 export interface AppCenterFilterCounts {
@@ -292,11 +317,21 @@ function getStatusKind(params: {
   installedState?: InstalledAgentAppState;
   cloudApp?: CloudBootstrapApp;
   sourceState?: AgentAppSourceState;
+  hostLifecycle?: AgentAppHostLifecycleSnapshot;
   registrationBlocked: boolean;
 }): AppCenterStatusKind {
-  const { installedState, cloudApp, sourceState, registrationBlocked } = params;
+  const {
+    installedState,
+    cloudApp,
+    sourceState,
+    hostLifecycle,
+    registrationBlocked,
+  } = params;
   if (installedState?.disabled) {
     return "disabled";
+  }
+  if (hostLifecycle?.appCenterStatus === "delisted") {
+    return "partial";
   }
   if (registrationBlocked) {
     return "registration";
@@ -304,9 +339,12 @@ function getStatusKind(params: {
   if (
     installedState &&
     cloudApp &&
-    cloudApp.version !== installedState.identity.appVersion
+      cloudApp.version !== installedState.identity.appVersion
   ) {
     return "update";
+  }
+  if (hostLifecycle?.appCenterStatus === "blocked") {
+    return "partial";
   }
   if (
     installedState &&
@@ -328,9 +366,16 @@ export function buildAppCenterItems(params: {
   cloudApps: CloudBootstrapApp[];
   catalogSource: AgentAppCloudCatalogResult["source"] | "seeded";
   convertLocalFileSrc?: ConvertLocalFileSrc;
+  hostLifecycleSnapshots?: AgentAppHostLifecycleSnapshot[];
 }): AppCenterItem[] {
   const installedById = new Map(
     params.installed.map((state) => [state.appId, state] as const),
+  );
+  const hostLifecycleByAppId = new Map(
+    (params.hostLifecycleSnapshots ?? []).map((snapshot) => [
+      snapshot.appId,
+      snapshot,
+    ]),
   );
   const cloudById = new Map<string, CloudBootstrapApp>();
   for (const app of params.cloudApps) {
@@ -355,6 +400,11 @@ export function buildAppCenterItems(params: {
             installed: params.installed,
           })
         : undefined;
+      const hostLifecycle =
+        hostLifecycleByAppId.get(appId) ??
+        (params.hostLifecycleSnapshots === undefined && installedState
+          ? buildAgentAppHostLifecycleForInstalledState(installedState)
+          : undefined);
       const registrationBlocked = Boolean(
         cloudApp?.registrationRequired &&
           cloudApp.registrationState !== "active",
@@ -363,6 +413,7 @@ export function buildAppCenterItems(params: {
         installedState,
         cloudApp,
         sourceState,
+        hostLifecycle,
         registrationBlocked,
       });
       const title = getAppTitle(installedState, cloudApp, appId);
@@ -385,6 +436,7 @@ export function buildAppCenterItems(params: {
         cloudVersion: cloudApp?.version,
         entries: installedState?.projection.entries ?? [],
         sourceState,
+        hostLifecycle,
         registrationBlocked,
         canReviewCloud: Boolean(sourceState?.canReview),
       } satisfies AppCenterItem;
@@ -563,6 +615,9 @@ export function isPrimaryActionDisabled(
   if (busyAction) {
     return true;
   }
+  if (item.hostLifecycle?.appCenterStatus === "delisted") {
+    return true;
+  }
   if (item.installedState) {
     if (item.statusKind === "disabled") {
       return false;
@@ -572,6 +627,9 @@ export function isPrimaryActionDisabled(
     }
     if (canOneClickUpdate(item)) {
       return !item.canReviewCloud;
+    }
+    if (item.hostLifecycle?.appCenterStatus === "blocked") {
+      return true;
     }
     return !getDefaultEntry(item);
   }
@@ -601,4 +659,45 @@ export function isCloudActionDisabled(
     return true;
   }
   return !item.canReviewCloud;
+}
+
+const HOST_LIFECYCLE_STATUS_LABEL_KEYS: Record<
+  AgentAppHostFunctionStatus,
+  string
+> = {
+  ready: "agentApp.apps.center.host.status.ready",
+  "needs-setup": "agentApp.apps.center.host.status.needsSetup",
+  blocked: "agentApp.apps.center.host.status.blocked",
+  delisted: "agentApp.apps.center.host.status.delisted",
+  planned: "agentApp.apps.center.host.status.planned",
+};
+
+const HOST_LIFECYCLE_TONES: Record<
+  AgentAppHostFunctionStatus,
+  AppCenterHostLifecycleTone
+> = {
+  ready: "emerald",
+  "needs-setup": "amber",
+  blocked: "rose",
+  delisted: "rose",
+  planned: "slate",
+};
+
+export function buildAppCenterHostLifecycleSummary(
+  item: Pick<AppCenterItem, "hostLifecycle">,
+): AppCenterHostLifecycleSummary | null {
+  const lifecycle = item.hostLifecycle;
+  if (!lifecycle) {
+    return null;
+  }
+  return {
+    status: lifecycle.appCenterStatus,
+    labelKey: HOST_LIFECYCLE_STATUS_LABEL_KEYS[lifecycle.appCenterStatus],
+    tone: HOST_LIFECYCLE_TONES[lifecycle.appCenterStatus],
+    blockerCount: lifecycle.blockers.length,
+    productObjectCount: lifecycle.rightSurface.productProfile.objects.length,
+    productProfileEnabled: lifecycle.rightSurface.productProfile.enabled,
+    supportedTabCount: lifecycle.rightSurface.supportedTabs.length,
+    defaultTab: lifecycle.rightSurface.defaultActiveTab,
+  };
 }

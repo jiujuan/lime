@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "candidateId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "metadata": true,
+    "origin": {
+      "type": "string"
+    },
+    "priority": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "reason": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "sessionId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "surfaceKind": {
+      "type": "string"
+    },
+    "ttlMs": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "workspaceId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "workspaceRoot": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "origin",
+    "surfaceKind"
+  ],
+  "title": "WorkspaceRightSurfaceRequestParams",
+  "type": "object"
+}

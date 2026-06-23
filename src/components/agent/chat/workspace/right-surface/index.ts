@@ -14,6 +14,7 @@ export {
   WORKSPACE_RIGHT_SURFACE_SPECS,
 } from "./rightSurfaceRegistry";
 export {
+  buildWorkspaceRightSurfaceAppServerPendingIntents,
   buildWorkspaceRightSurfaceFilePreviewIntents,
   buildWorkspaceRightSurfaceHarnessPendingIntents,
   buildWorkspaceRightSurfaceMcpShellOutputIntents,

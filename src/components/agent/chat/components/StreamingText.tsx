@@ -4,10 +4,16 @@ import { useDebouncedValue } from "@/lib/artifact/hooks/useDebouncedValue";
 import { MarkdownRenderer, type MarkdownRenderMode } from "./MarkdownRenderer";
 import { A2UITaskCard, A2UITaskLoadingCard } from "./A2UITaskCard";
 import { AgentPlanBlock } from "./AgentPlanBlock";
-import type { A2UIFormData, ParseResult } from "@/components/workspace/a2ui/types";
+import type {
+  A2UIFormData,
+  ParseResult,
+} from "@/components/workspace/a2ui/types";
 import { CHAT_A2UI_TASK_CARD_PRESET } from "@/components/workspace/a2ui/taskCardPresets";
-import { splitProposedPlanSegments, stripProposedPlanBlocks } from "../utils/proposedPlan";
-import { resolveStreamingMarkdownDisplaySource } from "./streamingMarkdownDisplaySource";
+import {
+  splitProposedPlanSegments,
+  stripProposedPlanBlocks,
+} from "../utils/proposedPlan";
+import { StreamingMarkdownContent } from "./StreamingMarkdownContent";
 import {
   getCachedStructuredParse,
   hasStructuredContentHint,
@@ -62,23 +68,6 @@ export const StreamingCursor: React.FC = () => (
     style={{ animationDuration: "1s" }}
   />
 );
-
-const StreamingPendingMarkdownTail: React.FC<{ text: string }> = ({
-  text,
-}) => {
-  if (!text) {
-    return null;
-  }
-
-  return (
-    <span
-      data-testid="streaming-markdown-pending-tail"
-      className="whitespace-pre-wrap break-words"
-    >
-      {text}
-    </span>
-  );
-};
 
 interface PlanAwareMarkdownOptions {
   onA2UISubmit?: (formData: A2UIFormData) => void;
@@ -374,29 +363,26 @@ export const StreamingText: React.FC<StreamingTextProps> = memo(
     const renderContent = () => {
       // 如果没有 a2ui 内容，直接使用 MarkdownRenderer
       if (!parsedContent.hasA2UI && !parsedContent.hasPending) {
-        const displaySource = resolveStreamingMarkdownDisplaySource(
-          displayText,
-          isStreaming,
-        );
         return (
-          <>
-            {displaySource.markdown.trim()
-              ? renderPlanAwareMarkdown(displaySource.markdown, "stream", {
-                  onA2UISubmit,
-                  renderA2UIInline,
-                  renderProposedPlanBlocks,
-                  collapseCodeBlocks,
-                  shouldCollapseCodeBlock,
-                  onCodeBlockClick,
-                  isStreaming,
-                  showBlockActions,
-                  onQuoteContent,
-                  markdownRenderMode,
-                  readOnlyA2UI,
-                })
-              : null}
-            <StreamingPendingMarkdownTail text={displaySource.pendingTail} />
-          </>
+          <StreamingMarkdownContent
+            content={displayText}
+            isStreaming={isStreaming}
+            renderMarkdown={(markdown) =>
+              renderPlanAwareMarkdown(markdown, "stream", {
+                onA2UISubmit,
+                renderA2UIInline,
+                renderProposedPlanBlocks,
+                collapseCodeBlocks,
+                shouldCollapseCodeBlock,
+                onCodeBlockClick,
+                isStreaming,
+                showBlockActions,
+                onQuoteContent,
+                markdownRenderMode,
+                readOnlyA2UI,
+              })
+            }
+          />
         );
       }
 

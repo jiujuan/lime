@@ -196,7 +196,6 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   canvasScene: CanvasScene;
   handleSendFromEmptyState: InputbarSendHandler;
   shellChromeRuntime: ShellChromeRuntime;
-  generalWorkbenchHarnessDialog: ConversationScenePresentationParams["scene"]["generalWorkbenchHarnessDialog"];
   entryBannerVisible: ConversationScenePresentationParams["scene"]["entryBannerVisible"];
   entryBannerMessage: ConversationScenePresentationParams["scene"]["entryBannerMessage"];
   creationReplaySurface?: CreationReplaySurfaceModel | null;
@@ -270,6 +269,8 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   handleBackHome: ConversationScenePresentationParams["scene"]["onBackHome"];
   rightSurfaceContent?: ConversationScenePresentationParams["scene"]["rightSurfaceContent"];
   rightSurfaceLaunchers?: ConversationScenePresentationParams["scene"]["rightSurfaceLaunchers"];
+  rightSurfaceObjectCanvasOpen?: ConversationScenePresentationParams["scene"]["rightSurfaceObjectCanvasOpen"];
+  onToggleRightSurfaceObjectCanvas?: ConversationScenePresentationParams["scene"]["onToggleRightSurfaceObjectCanvas"];
   rightSurfaceFilesOpen?: ConversationScenePresentationParams["scene"]["rightSurfaceFilesOpen"];
   onToggleRightSurfaceFiles?: ConversationScenePresentationParams["scene"]["onToggleRightSurfaceFiles"];
   rightSurfaceShellOpen?: ConversationScenePresentationParams["scene"]["rightSurfaceShellOpen"];
@@ -370,7 +371,6 @@ export function useWorkspaceConversationSceneRuntime({
   canvasScene,
   handleSendFromEmptyState,
   shellChromeRuntime,
-  generalWorkbenchHarnessDialog,
   entryBannerVisible,
   entryBannerMessage,
   creationReplaySurface,
@@ -443,6 +443,8 @@ export function useWorkspaceConversationSceneRuntime({
   handleBackHome,
   rightSurfaceContent,
   rightSurfaceLaunchers,
+  rightSurfaceObjectCanvasOpen,
+  onToggleRightSurfaceObjectCanvas,
   rightSurfaceFilesOpen,
   onToggleRightSurfaceFiles,
   rightSurfaceShellOpen,
@@ -829,6 +831,11 @@ export function useWorkspaceConversationSceneRuntime({
       onBackHome: handleBackHome,
       rightSurfaceContent,
       rightSurfaceLaunchers,
+      rightSurfaceObjectCanvasOpen:
+        taskCenterUtilityActionsVisible && Boolean(rightSurfaceObjectCanvasOpen),
+      onToggleRightSurfaceObjectCanvas: taskCenterUtilityActionsVisible
+        ? onToggleRightSurfaceObjectCanvas
+        : undefined,
       rightSurfaceFilesOpen:
         taskCenterUtilityActionsVisible && Boolean(rightSurfaceFilesOpen),
       onToggleRightSurfaceFiles: taskCenterUtilityActionsVisible
@@ -880,7 +887,6 @@ export function useWorkspaceConversationSceneRuntime({
       chatPanelWidth: shellChromeRuntime.layoutTransitionChatPanelWidth,
       chatPanelMinWidth: shellChromeRuntime.layoutTransitionChatPanelMinWidth,
       generalWorkbenchDialog: inputbarScene.generalWorkbenchDialog,
-      generalWorkbenchHarnessDialog,
       showFloatingInputOverlay:
         shellChromeRuntime.shouldShowGeneralWorkbenchFloatingInputOverlay,
       hasPendingA2UIForm: Boolean(pendingA2UIForm),

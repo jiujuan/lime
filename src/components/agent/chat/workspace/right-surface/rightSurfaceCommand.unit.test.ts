@@ -28,6 +28,7 @@ describe("rightSurfaceCommand", () => {
     expect(next).toEqual({
       activeSurface: "files",
       previousSurface: null,
+      openSurfaces: ["files"],
       source: "runtime",
       layoutVariant: "expanded",
     });

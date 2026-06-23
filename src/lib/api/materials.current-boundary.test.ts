@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { cwd } from "node:process";
 import { describe, expect, it } from "vitest";
+import { readAppServerApiSources } from "../../test/appServerApiSources";
 
 const FRONTEND_MATERIAL_FACADE_COMMANDS = [
   "list_materials",
@@ -69,7 +70,7 @@ describe("Materials current App Server boundary", () => {
 
   it("App Server protocol / client 应声明 projectMaterial current 方法", () => {
     const appServerSources = [
-      readRepoFile("src/lib/api/appServer.ts"),
+      readAppServerApiSources(),
       readRepoFile("packages/app-server-client/src/protocol.ts"),
       readRepoFile("packages/app-server-client/src/index.ts"),
       readRepoFile(

@@ -19,6 +19,7 @@ import type {
   SettingsPageParams,
   SkillsPageParams,
 } from "@/types/page";
+import type { AgentAppRightSurfaceLaunchTarget } from "@/features/agent-app/ui/agentAppRightSurfaceLaunch";
 import { AutomationPage } from "./automation";
 import { ImConfigPage } from "./channels/ImConfigPage";
 import { AgentChatPage } from "./agent/chat";
@@ -170,6 +171,10 @@ interface AppPageContentProps {
   navigationRequestId?: number;
   onNavigate: (page: Page, params?: PageParams) => void;
   onAgentHasMessagesChange: (hasMessages: boolean) => void;
+  activeAgentSessionTarget?: AgentAppRightSurfaceLaunchTarget | null;
+  onAgentSessionTargetChange?: (
+    target: AgentAppRightSurfaceLaunchTarget | null,
+  ) => void;
 }
 
 export function AppPageContent({
@@ -179,6 +184,8 @@ export function AppPageContent({
   requestedPageParams,
   onNavigate,
   onAgentHasMessagesChange,
+  activeAgentSessionTarget,
+  onAgentSessionTargetChange,
 }: AppPageContentProps) {
   const activePage = requestedPage ?? currentPage;
   const activePageParams = requestedPageParams ?? pageParams;
@@ -259,6 +266,17 @@ export function AppPageContent({
           newChatAt={agentPageParams.newChatAt}
           expertAgentLaunch={agentPageParams.expertAgentLaunch}
           onHasMessagesChange={onAgentHasMessagesChange}
+          onSessionChange={(sessionId) => {
+            const normalizedSessionId = sessionId?.trim();
+            onAgentSessionTargetChange?.(
+              normalizedSessionId
+                ? {
+                    sessionId: normalizedSessionId,
+                    workspaceId: agentPageParams.projectId ?? null,
+                  }
+                : null,
+            );
+          }}
         />
       </div>
     );
@@ -335,6 +353,7 @@ export function AppPageContent({
         <AgentAppsPage
           onNavigate={onNavigate}
           pageParams={activePageParams as AgentAppsPageParams}
+          rightSurfaceTarget={activeAgentSessionTarget}
         />
       </div>
     );

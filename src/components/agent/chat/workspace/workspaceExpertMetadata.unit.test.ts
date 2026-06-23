@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   mergeExpertSkillRefsIntoRequestMetadata,
   resolveExpertPanelRequestMetadata,
+  resolveSessionExpertRequestMetadata,
   resolveWorkspaceRequestMetadataWithExpertSkills,
   shouldAllowDetachedInitialAutoSend,
 } from "./workspaceExpertMetadata";
@@ -62,6 +63,74 @@ describe("workspaceExpertMetadata", () => {
         id: "manual-expert",
         skillRefs: ["workspace_skill:research"],
       },
+    });
+  });
+
+  it("workspace 请求 metadata 应能从 session metadata 恢复专家配置", () => {
+    expect(
+      resolveWorkspaceRequestMetadataWithExpertSkills({
+        sessionRequestMetadata: {
+          title: "代码文学专家",
+          expert: { expertId: "code-literature" },
+          harness: {
+            expert: { expert_id: "code-literature" },
+          },
+        },
+        expertSkillRefsOverride: ["skill:capability-report"],
+      }),
+    ).toEqual({
+      title: "代码文学专家",
+      expert: {
+        expertId: "code-literature",
+        skillRefs: ["skill:capability-report"],
+      },
+      harness: {
+        expert: {
+          expert_id: "code-literature",
+          skill_refs: ["skill:capability-report"],
+        },
+      },
+    });
+  });
+
+  it("initial metadata 应优先于 session metadata", () => {
+    expect(
+      resolveWorkspaceRequestMetadataWithExpertSkills({
+        initialRequestMetadata: {
+          expert: { expertId: "initial-expert" },
+        },
+        sessionRequestMetadata: {
+          expert: { expertId: "session-expert" },
+        },
+        expertSkillRefsOverride: null,
+      }),
+    ).toEqual({
+      expert: { expertId: "initial-expert" },
+    });
+  });
+
+  it("应只从专家 session metadata 恢复请求 metadata", () => {
+    expect(
+      resolveSessionExpertRequestMetadata({
+        session_business_object_ref_metadata: {
+          title: "普通会话",
+          harness: {
+            browser_assist: { url: "https://example.com" },
+          },
+        },
+      }),
+    ).toBeNull();
+
+    expect(
+      resolveSessionExpertRequestMetadata({
+        session_business_object_ref_metadata: {
+          title: "代码文学专家",
+          expert: { expertId: "code-literature" },
+        },
+      }),
+    ).toEqual({
+      title: "代码文学专家",
+      expert: { expertId: "code-literature" },
     });
   });
 

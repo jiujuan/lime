@@ -69,7 +69,7 @@ Lime Agent Chat 最近暴露的核心问题是：工具过程与最终正文在�
 | 10   | `internal/exec-plans/agent-tools-test-batches/batch-10-content-workbench-tools.md`             | `lime_create_*_task / social_generate_cover_image / GenerateImage / media task artifact metadata`                              |
 | 11   | `internal/exec-plans/agent-tools-test-batches/batch-11-browser-assist-site-tools.md`           | `lime_site_* / lime_search_web_images / compat lime_run_service_skill`                                                         |
 | 12   | `internal/exec-plans/agent-tools-test-batches/batch-12-structured-output-final-reply-tools.md` | `StructuredOutput / SyntheticOutputTool / final reply protocol residue`                                                        |
-| 13   | `internal/exec-plans/agent-tools-test-batches/batch-13-external-info-utility-data-tools.md`    | `SearchQuery / ImageQuery / finance / weather / sports / time / resolve_library_id / query_docs`                               |
+| 13   | `internal/exec-plans/agent-tools-test-batches/batch-13-external-info-utility-data-tools.md`    | `SearchQuery / ImageQuery / finance / weather / sports / time / resolve-library-id / query-docs`                               |
 | 14   | `internal/exec-plans/agent-tools-test-batches/batch-14-compat-dynamic-aliases.md`              | `MCPTool / McpAuthTool / REPLTool / ListSkills / LoadSkill / WaitAgent / ResumeAgent / CloseAgent`                             |
 | 15   | `internal/exec-plans/agent-tools-test-batches/batch-15-runtime-empty-final-error-recovery.md`  | `empty final reply / provider stream failure / soft completion and failure split`                                              |
 

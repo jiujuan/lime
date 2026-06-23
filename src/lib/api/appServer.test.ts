@@ -52,6 +52,10 @@ import {
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE,
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_LIST,
   APP_SERVER_METHOD_WECHAT_CHANNEL_RUNTIME_MODEL_SET,
+  APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CONSUME,
+  APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS,
+  APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_LIST,
+  APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST,
   APP_SERVER_PROTOCOL_VERSION,
   AppServerClient,
   AppServerRpcError,
@@ -199,6 +203,184 @@ describe("App Server API", () => {
         ],
       },
     });
+  });
+
+  it("workspaceRightSurface methods 应通过 App Server JSON-RPC 调度右侧 surface", async () => {
+    const pending = {
+      requestId: "right-surface:req-1",
+      workspaceId: "workspace-1",
+      workspaceRoot: "/workspace/project",
+      sessionId: "session-1",
+      surfaceKind: "objectCanvas",
+      origin: "mcpTool",
+      priority: "normal",
+      status: "pending",
+      requestedAt: "2026-06-23T00:00:00.000Z",
+    };
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({
+        lines: [
+          line({
+            id: 4,
+            result: {
+              status: "pending",
+              requestId: pending.requestId,
+              pending,
+            },
+          }),
+        ],
+      })
+      .mockResolvedValueOnce({
+        lines: [
+          line({
+            id: 5,
+            result: {
+              pending: [pending],
+            },
+          }),
+        ],
+      })
+      .mockResolvedValueOnce({
+        lines: [
+          line({
+            id: 6,
+            result: {
+              status: "consumed",
+              consumedRequestIds: [pending.requestId],
+              missingRequestIds: ["right-surface:missing"],
+            },
+          }),
+        ],
+      })
+      .mockResolvedValueOnce({
+        lines: [
+          line({
+            id: 7,
+            result: {
+              status: "dismissed",
+              dismissedRequestIds: [pending.requestId],
+              missingRequestIds: ["right-surface:gone"],
+            },
+          }),
+        ],
+      });
+
+    const client = new AppServerClient({ initialRequestId: 4 });
+    const requestResult = await client.requestWorkspaceRightSurface({
+      workspaceId: "workspace-1",
+      workspaceRoot: "/workspace/project",
+      sessionId: "session-1",
+      surfaceKind: "objectCanvas",
+      origin: "mcpTool",
+      reason: "browser assist candidate",
+    });
+    const listResult = await client.listWorkspaceRightSurfacePending({
+      workspaceId: "workspace-1",
+      surfaceKind: "objectCanvas",
+    });
+    const consumeResult = await client.consumeWorkspaceRightSurfacePending({
+      requestId: pending.requestId,
+      requestIds: ["right-surface:missing"],
+    });
+    const dismissResult = await client.dismissWorkspaceRightSurfacePending({
+      requestId: pending.requestId,
+      requestIds: ["right-surface:gone"],
+      reason: "user_closed_surface",
+    });
+
+    expect(requestResult.result.requestId).toBe("right-surface:req-1");
+    expect(listResult.result.pending).toHaveLength(1);
+    expect(consumeResult.result.consumedRequestIds).toEqual([
+      "right-surface:req-1",
+    ]);
+    expect(consumeResult.result.missingRequestIds).toEqual([
+      "right-surface:missing",
+    ]);
+    expect(dismissResult.result.dismissedRequestIds).toEqual([
+      "right-surface:req-1",
+    ]);
+    expect(dismissResult.result.missingRequestIds).toEqual([
+      "right-surface:gone",
+    ]);
+    expect(safeInvoke).toHaveBeenNthCalledWith(
+      1,
+      "app_server_handle_json_lines",
+      {
+        request: {
+          lines: [
+            line({
+              id: 4,
+              method: APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST,
+              params: {
+                workspaceId: "workspace-1",
+                workspaceRoot: "/workspace/project",
+                sessionId: "session-1",
+                surfaceKind: "objectCanvas",
+                origin: "mcpTool",
+                reason: "browser assist candidate",
+              },
+            }),
+          ],
+        },
+      },
+    );
+    expect(safeInvoke).toHaveBeenNthCalledWith(
+      2,
+      "app_server_handle_json_lines",
+      {
+        request: {
+          lines: [
+            line({
+              id: 5,
+              method: APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_LIST,
+              params: {
+                workspaceId: "workspace-1",
+                surfaceKind: "objectCanvas",
+              },
+            }),
+          ],
+        },
+      },
+    );
+    expect(safeInvoke).toHaveBeenNthCalledWith(
+      3,
+      "app_server_handle_json_lines",
+      {
+        request: {
+          lines: [
+            line({
+              id: 6,
+              method:
+                APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CONSUME,
+              params: {
+                requestId: pending.requestId,
+                requestIds: ["right-surface:missing"],
+              },
+            }),
+          ],
+        },
+      },
+    );
+    expect(safeInvoke).toHaveBeenNthCalledWith(
+      4,
+      "app_server_handle_json_lines",
+      {
+        request: {
+          lines: [
+            line({
+              id: 7,
+              method:
+                APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS,
+              params: {
+                requestId: pending.requestId,
+                requestIds: ["right-surface:gone"],
+                reason: "user_closed_surface",
+              },
+            }),
+          ],
+        },
+      },
+    );
   });
 
   it("listSessions 应通过 App Server JSON-RPC agentSession/list", async () => {

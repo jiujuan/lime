@@ -95,6 +95,13 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
   const canReviewFileCheckpoints =
     fileCheckpointCount > 0 &&
     Boolean(onOpenFileCheckpoints);
+  const reasoningStatus = harnessState.reasoning?.reasoning;
+  const reasoningRunStatus = reasoningStatus?.status;
+  const hasReasoningSignal =
+    reasoningStatus?.supported === true &&
+    ((typeof reasoningRunStatus === "string" &&
+      reasoningRunStatus !== "idle") ||
+      Boolean(reasoningStatus.text?.trim()));
 
   const capabilities = useMemo<CapabilityItem[]>(
     () => [
@@ -177,6 +184,14 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
           runtimeStatusTitle ||
           translate("agentChat.runtimeStrip.status.preparing"),
         tone: "secondary",
+      });
+    }
+
+    if (hasReasoningSignal) {
+      nextItems.push({
+        key: "reasoning",
+        label: translate("agentChat.runtimeStrip.capability.thinking"),
+        tone: reasoningRunStatus === "running" ? "secondary" : "outline",
       });
     }
 
@@ -327,8 +342,10 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
     fileCheckpointCount,
     harnessState,
     hasRuntimeWorkbenchSignals,
+    hasReasoningSignal,
     isExecutionRuntimeActive,
     isSending,
+    reasoningRunStatus,
     runtimeToolAvailability,
     runtimeStatusTitle,
     translate,

@@ -26,6 +26,10 @@ export function fallbackTranslate(key: string, options?: Record<string, unknown>
       return "发送任务后，这里会显示进度和输出。";
     case "generalWorkbench.taskRail.planOverflow":
       return `另有 ${count ?? 0} 步`;
+    case "generalWorkbench.taskRail.planRevision":
+      return `计划 ${options?.revision ?? ""}`;
+    case "generalWorkbench.taskRail.planRevisionTitle":
+      return `当前计划版本：${options?.revision ?? ""}`;
     case "generalWorkbench.taskRail.activityOverflow":
       return `另有 ${count ?? 0} 项执行`;
     case "generalWorkbench.taskRail.approval.askTitle":

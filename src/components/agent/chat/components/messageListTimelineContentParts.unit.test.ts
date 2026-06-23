@@ -30,6 +30,96 @@ describe("messageListTimelineContentParts", () => {
     ).toBe("running");
   });
 
+  it("只有 update_plan 工具项时不应生成旧工具过程", () => {
+    const contentParts = buildTimelineInlineContentParts({
+      displayContent: "",
+      items: buildThreadItems([
+        {
+          id: "tool-update-plan-only",
+          type: "tool_call",
+          turn_id: "turn-update-plan-only",
+          sequence: 1,
+          tool_name: "update_plan",
+          arguments: {
+            plan: [{ step: "整理计划", status: "in_progress" }],
+          },
+          output: "ok",
+          success: true,
+          status: "completed",
+          started_at: "2026-06-18T10:00:00.000Z",
+          completed_at: "2026-06-18T10:00:01.000Z",
+          updated_at: "2026-06-18T10:00:01.000Z",
+        },
+      ]),
+    });
+
+    expect(contentParts).toBeUndefined();
+  });
+
+  it("标准 plan item 存在时不应重复展示 update_plan 工具卡", () => {
+    const contentParts = buildTimelineInlineContentParts({
+      displayContent: "计划已更新。",
+      items: buildThreadItems([
+        {
+          id: "plan-from-update-plan",
+          type: "plan",
+          turn_id: "turn-update-plan",
+          sequence: 1,
+          text: "- [x] 整理计划\n- [ ] 执行修改",
+          status: "completed",
+          started_at: "2026-06-18T10:00:00.000Z",
+          completed_at: "2026-06-18T10:00:01.000Z",
+          updated_at: "2026-06-18T10:00:01.000Z",
+          metadata: {
+            revisionId: "update_plan:tool-update-plan",
+            source: "update_plan",
+            tool_call_id: "tool-update-plan",
+          },
+        },
+        {
+          id: "tool-update-plan",
+          type: "tool_call",
+          turn_id: "turn-update-plan",
+          sequence: 2,
+          tool_name: "UpdatePlanTool",
+          arguments: {
+            plan: [
+              { step: "整理计划", status: "completed" },
+              { step: "执行修改", status: "in_progress" },
+            ],
+          },
+          output: "ok",
+          success: true,
+          status: "completed",
+          started_at: "2026-06-18T10:00:02.000Z",
+          completed_at: "2026-06-18T10:00:03.000Z",
+          updated_at: "2026-06-18T10:00:03.000Z",
+        },
+        {
+          id: "assistant-update-plan-final",
+          type: "agent_message",
+          turn_id: "turn-update-plan",
+          sequence: 3,
+          phase: "final_answer",
+          text: "计划已更新。",
+          status: "completed",
+          started_at: "2026-06-18T10:00:04.000Z",
+          completed_at: "2026-06-18T10:00:05.000Z",
+          updated_at: "2026-06-18T10:00:05.000Z",
+        },
+      ]),
+    });
+
+    expect(contentParts?.some((part) => part.type === "tool_use")).toBe(false);
+    expect(contentParts?.map((part) => part.type)).toEqual(["text"]);
+    expect(
+      contentParts?.[0]?.type === "text" ? contentParts[0].text : "",
+    ).toContain("<proposed_plan>");
+    expect(
+      contentParts?.[0]?.type === "text" ? contentParts[0].text : "",
+    ).toContain("计划已更新。");
+  });
+
   it("只有 timeline 工具过程但已有最终正文时应把正文接在工具后", () => {
     const contentParts = buildTimelineInlineContentParts({
       displayContent: "第一轮已经完成。\n\n## 第一轮结论",

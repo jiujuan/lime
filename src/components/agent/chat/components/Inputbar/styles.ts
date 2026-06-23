@@ -637,6 +637,35 @@ export const ModeStatusLabel = styled.span`
   line-height: 1;
 `;
 
+export const PlanModeContext = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  max-width: min(360px, 100%);
+  min-width: 0;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(20, 184, 166, 0.24);
+  background: rgba(240, 253, 250, 0.9);
+  color: #0f766e;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+`;
+
+export const PlanModeContextSegment = styled.span`
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+`;
+
+export const PlanModeContextSeparator = styled.span`
+  color: rgba(15, 118, 110, 0.48);
+`;
+
 export const ActionButtonGroup = styled.div`
   display: flex;
   align-items: center;

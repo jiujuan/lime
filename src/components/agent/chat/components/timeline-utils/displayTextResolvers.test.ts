@@ -21,7 +21,7 @@ function reasoningItem(
 }
 
 describe("resolveReasoningDisplayText", () => {
-  it("timeline reasoning 应过滤内部英文工具调查句", () => {
+  it("timeline reasoning 应保留来源文本，不再按内部短语猜测过滤", () => {
     const text = resolveThinkingDisplayText(
       reasoningItem({
         summary: ["Finding latest news.", "正在核对来源可信度。"],
@@ -29,13 +29,13 @@ describe("resolveReasoningDisplayText", () => {
       }),
     );
 
+    expect(text).toContain("Finding latest news");
     expect(text).toContain("正在核对来源可信度。");
+    expect(text).toContain("Investigating tool calls");
     expect(text).toContain("已整理可用来源。");
-    expect(text).not.toContain("Finding latest news");
-    expect(text).not.toContain("Investigating tool calls");
   });
 
-  it("内部诊断全部被过滤时应返回空文本", () => {
+  it("英文诊断也应作为 reasoning 来源文本保留", () => {
     const text = resolveThinkingDisplayText(
       reasoningItem({
         summary: ["Finding latest news."],
@@ -43,6 +43,7 @@ describe("resolveReasoningDisplayText", () => {
       }),
     );
 
-    expect(text).toBe("");
+    expect(text).toContain("Finding latest news.");
+    expect(text).toContain("I'm thinking about available tools.");
   });
 });

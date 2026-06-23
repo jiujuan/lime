@@ -37,6 +37,9 @@ const t = ((key: string, values?: Record<string, unknown>) => {
     "generalWorkbench.taskRail.approval.status.rejected": "已拒绝",
     "generalWorkbench.taskRail.approval.status.resolved": "已处理",
     "generalWorkbench.taskRail.planOverflow": "另有 {{count}} 步",
+    "generalWorkbench.taskRail.planRevision": "计划 {{revision}}",
+    "generalWorkbench.taskRail.planRevisionTitle":
+      "当前计划版本：{{revision}}",
     "generalWorkbench.taskRail.context.access.current": "按需确认",
     "generalWorkbench.taskRail.context.access.fullAccess": "完全访问",
     "generalWorkbench.taskRail.context.access.readOnly": "只读",
@@ -435,7 +438,7 @@ describe("buildGeneralWorkbenchTaskRailProjection", () => {
     expect(projection.planOverflowCount).toBe(1);
   });
 
-  it("workflowSteps 为空时应从历史 plan thread item 恢复计划清单", () => {
+  it("无 revision 的历史 plan thread item 不应再驱动计划轨", () => {
     const projection = buildGeneralWorkbenchTaskRailProjection({
       workflowSteps: [],
       completedSteps: 0,
@@ -482,27 +485,66 @@ describe("buildGeneralWorkbenchTaskRailProjection", () => {
       t,
     });
 
+    expect(projection.planItems).toEqual([]);
+    expect(projection.planRevision).toBeNull();
+    expect(projection.totalCount).toBe(0);
+  });
+
+  it("标准 PlanState 带 revision 时应优先解析 plan 文本步骤", () => {
+    const projection = buildGeneralWorkbenchTaskRailProjection({
+      workflowSteps: [],
+      completedSteps: 0,
+      progressPercent: 0,
+      messages: [],
+      groupedActivityLogs: [],
+      groupedCreationTaskEvents: [],
+      threadItems: [
+        {
+          id: "legacy-plan-step",
+          type: "plan",
+          thread_id: "thread-1",
+          turn_id: "turn-1",
+          sequence: 1,
+          status: "completed",
+          text: "旧单步计划",
+          started_at: "2026-06-16T10:00:00.000Z",
+          completed_at: "2026-06-16T10:00:01.000Z",
+          updated_at: "2026-06-16T10:00:01.000Z",
+        },
+        {
+          id: "standard-plan",
+          type: "plan",
+          thread_id: "thread-1",
+          turn_id: "turn-2",
+          sequence: 2,
+          status: "completed",
+          text: "- [ ] 接入标准 PlanState",
+          metadata: {
+            revisionId: "proposed_plan:2",
+          },
+          started_at: "2026-06-16T10:00:02.000Z",
+          completed_at: "2026-06-16T10:00:03.000Z",
+          updated_at: "2026-06-16T10:00:03.000Z",
+        },
+      ],
+      t,
+    });
+
     expect(projection.planItems).toEqual([
       {
-        id: "plan-read",
-        title: "读取当前任务区域实现",
-        status: "completed",
+        id: "standard-plan:0:接入标准 PlanState",
+        title: "接入标准 PlanState",
+        status: "running",
         meta: "步骤 1",
       },
-      {
-        id: "plan-restore",
-        title: "恢复历史计划清单",
-        status: "running",
-        meta: "步骤 2",
-      },
-      {
-        id: "plan-verify",
-        title: "补充回归验证",
-        status: "failed",
-        meta: "步骤 3",
-      },
     ]);
-    expect(projection.totalCount).toBe(0);
+    expect(projection.planRevision).toEqual({
+      revisionId: "proposed_plan:2",
+      label: "计划 proposed_plan:2",
+      title: "当前计划版本：proposed_plan:2",
+      source: "thread_item",
+      turnId: "turn-2",
+    });
   });
 
   it("workflowSteps 和 plan thread item 为空时应从 todo items 恢复计划清单", () => {
@@ -553,7 +595,7 @@ describe("buildGeneralWorkbenchTaskRailProjection", () => {
     ]);
   });
 
-  it("历史 plan thread item 带结构化 metadata 时应恢复多步骤计划", () => {
+  it("无 revision 的历史 plan metadata 不应再驱动计划轨", () => {
     const projection = buildGeneralWorkbenchTaskRailProjection({
       workflowSteps: [],
       completedSteps: 0,
@@ -585,26 +627,8 @@ describe("buildGeneralWorkbenchTaskRailProjection", () => {
       t,
     });
 
-    expect(projection.planItems).toEqual([
-      {
-        id: "plan-update:0:读取导入事件",
-        title: "读取导入事件",
-        status: "completed",
-        meta: "步骤 1",
-      },
-      {
-        id: "plan-update:1:展示计划块",
-        title: "展示计划块",
-        status: "running",
-        meta: "步骤 2",
-      },
-      {
-        id: "plan-update:2:补充验证",
-        title: "补充验证",
-        status: "pending",
-        meta: "步骤 3",
-      },
-    ]);
+    expect(projection.planItems).toEqual([]);
+    expect(projection.planRevision).toBeNull();
   });
 
   it("workflowSteps 存在时应优先使用当前步骤而不是历史 todo", () => {
@@ -988,7 +1012,7 @@ describe("buildGeneralWorkbenchTaskRailProjection", () => {
     ]);
   });
 
-  it("workflowSteps 为空时应从 update_plan 工具结果恢复结构化计划", () => {
+  it("message toolCall update_plan 结果不应直接驱动计划轨", () => {
     const projection = buildGeneralWorkbenchTaskRailProjection({
       workflowSteps: [],
       completedSteps: 0,
@@ -1020,26 +1044,8 @@ describe("buildGeneralWorkbenchTaskRailProjection", () => {
       t,
     });
 
-    expect(projection.planItems).toEqual([
-      {
-        id: "message-tool-plan:tool-plan:0:读取计划工具",
-        title: "读取计划工具",
-        status: "completed",
-        meta: "步骤 1",
-      },
-      {
-        id: "message-tool-plan:tool-plan:1:接入 Lime 工具面",
-        title: "接入 Lime 工具面",
-        status: "running",
-        meta: "步骤 2",
-      },
-      {
-        id: "message-tool-plan:tool-plan:2:验证前端计划显示",
-        title: "验证前端计划显示",
-        status: "pending",
-        meta: "步骤 3",
-      },
-    ]);
+    expect(projection.planItems).toEqual([]);
+    expect(projection.planRevision).toBeNull();
     expect(projection.activityItems).toEqual([]);
   });
 
@@ -1084,7 +1090,7 @@ describe("buildGeneralWorkbenchTaskRailProjection", () => {
     ]);
   });
 
-  it("历史 thread item 应从 update_plan metadata 恢复结构化计划且不重复展示工具活动", () => {
+  it("历史 update_plan tool_call 只作为去重过滤且不驱动计划轨", () => {
     const projection = buildGeneralWorkbenchTaskRailProjection({
       workflowSteps: [],
       completedSteps: 0,
@@ -1117,20 +1123,8 @@ describe("buildGeneralWorkbenchTaskRailProjection", () => {
       t,
     });
 
-    expect(projection.planItems).toEqual([
-      {
-        id: "thread-tool-plan:thread-update-plan:0:恢复历史计划",
-        title: "恢复历史计划",
-        status: "completed",
-        meta: "步骤 1",
-      },
-      {
-        id: "thread-tool-plan:thread-update-plan:1:展示环境浮层",
-        title: "展示环境浮层",
-        status: "running",
-        meta: "步骤 2",
-      },
-    ]);
+    expect(projection.planItems).toEqual([]);
+    expect(projection.planRevision).toBeNull();
     expect(projection.items).toEqual([]);
   });
 

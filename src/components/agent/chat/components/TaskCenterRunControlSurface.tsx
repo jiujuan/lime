@@ -15,6 +15,7 @@ import type {
   GeneralWorkbenchTaskRailItem,
   GeneralWorkbenchTaskRailItemStatus,
   GeneralWorkbenchTaskRailPlanItem,
+  GeneralWorkbenchTaskRailPlanRevision,
   GeneralWorkbenchTaskRailActivityItem,
 } from "./generalWorkbenchTaskRailViewModel";
 import {
@@ -238,10 +239,12 @@ function SurfaceSection({
 
 function PlanList({
   items,
+  revision,
   overflowCount,
   t,
 }: {
   items: readonly GeneralWorkbenchTaskRailPlanItem[];
+  revision?: GeneralWorkbenchTaskRailPlanRevision | null;
   overflowCount: number;
   t?: TaskRailTranslate;
 }) {
@@ -251,6 +254,18 @@ function PlanList({
 
   return (
     <div className="space-y-1">
+      {revision ? (
+        <div
+          className="inline-flex max-w-full items-center rounded-full border border-emerald-100 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium leading-5 text-emerald-700"
+          data-testid="task-center-run-control-plan-revision"
+          data-plan-revision-id={revision.revisionId}
+          data-plan-source={revision.source}
+          data-plan-turn-id={revision.turnId}
+          title={revision.title}
+        >
+          <span className="min-w-0 truncate">{revision.label}</span>
+        </div>
+      ) : null}
       {items.map((item) => (
         <div
           key={item.id}
@@ -509,6 +524,7 @@ export function TaskCenterRunControlSurface({
       >
         <PlanList
           items={projection.planItems}
+          revision={projection.planRevision}
           overflowCount={projection.planOverflowCount}
           t={t}
         />

@@ -1193,7 +1193,7 @@ mod tests {
     #[test]
     fn test_build_tool_search_output_marks_empty_result_terminal_no_retry() {
         let output =
-            build_tool_search_output("select:mcp__context7__query_docs", Vec::new(), 0, None);
+            build_tool_search_output("select:mcp__context7__query-docs", Vec::new(), 0, None);
         let result = build_tool_search_result(&output, false).unwrap();
         let result_text = result.output.as_deref().unwrap_or_default();
 

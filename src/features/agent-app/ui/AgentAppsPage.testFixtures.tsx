@@ -9,6 +9,7 @@ import { buildInstalledAppPreview } from "../install/installedAppPreview";
 import { buildAgentAppLabResolvedSetupState } from "../install/labInstallFlow";
 import { buildPackageIdentity } from "../install/packageIdentity";
 import { buildWorkflowRuntimeCapabilityProfile } from "../runtime/workflowRuntimeCapabilityProfile";
+import { buildAgentAppHostLifecycleSnapshot } from "../host";
 import type {
   AppManifest,
   CloudBootstrapApp,
@@ -38,12 +39,14 @@ const hoistedMocks = vi.hoisted(() => ({
     installCloudAgentAppRelease: vi.fn(),
     installLocalAgentAppPackage: vi.fn(),
     launchAgentAppShell: vi.fn(),
+    listAgentAppHostLifecycleSnapshots: vi.fn(),
     listInstalledAgentApps: vi.fn(),
     selectLocalAgentAppDirectory: vi.fn(),
     reviewCloudAgentAppRelease: vi.fn(),
     reviewLocalAgentAppPackage: vi.fn(),
     saveInstalledAgentAppState: vi.fn(),
     previewAgentAppUninstall: vi.fn(),
+    requestWorkspaceRightSurface: vi.fn(),
     setAgentAppDisabled: vi.fn(),
     submitAgentAppRegistrationCode: vi.fn(),
     uninstallAgentApp: vi.fn(),
@@ -105,21 +108,57 @@ vi.mock("@/lib/api/agentApps", () => ({
   installLocalAgentAppPackage:
     hoistedMocks.apiMocks.installLocalAgentAppPackage,
   launchAgentAppShell: hoistedMocks.apiMocks.launchAgentAppShell,
+  listAgentAppHostLifecycleSnapshots:
+    hoistedMocks.apiMocks.listAgentAppHostLifecycleSnapshots,
   listInstalledAgentApps: hoistedMocks.apiMocks.listInstalledAgentApps,
-  previewAgentAppUninstall:
-    hoistedMocks.apiMocks.previewAgentAppUninstall,
-  reviewCloudAgentAppRelease:
-    hoistedMocks.apiMocks.reviewCloudAgentAppRelease,
-  reviewLocalAgentAppPackage:
-    hoistedMocks.apiMocks.reviewLocalAgentAppPackage,
-  saveInstalledAgentAppState:
-    hoistedMocks.apiMocks.saveInstalledAgentAppState,
+  previewAgentAppUninstall: hoistedMocks.apiMocks.previewAgentAppUninstall,
+  reviewCloudAgentAppRelease: hoistedMocks.apiMocks.reviewCloudAgentAppRelease,
+  reviewLocalAgentAppPackage: hoistedMocks.apiMocks.reviewLocalAgentAppPackage,
+  saveInstalledAgentAppState: hoistedMocks.apiMocks.saveInstalledAgentAppState,
   selectLocalAgentAppDirectory:
     hoistedMocks.apiMocks.selectLocalAgentAppDirectory,
   setAgentAppDisabled: hoistedMocks.apiMocks.setAgentAppDisabled,
   submitAgentAppRegistrationCode:
     hoistedMocks.apiMocks.submitAgentAppRegistrationCode,
   uninstallAgentApp: hoistedMocks.apiMocks.uninstallAgentApp,
+  buildAgentAppHostLifecycleForInstalledState: (
+    state: InstalledAgentAppState,
+  ) => ({
+    appId: state.appId,
+    displayName: state.projection.app.displayName ?? state.appId,
+    profiles: state.manifest.profiles ?? [],
+    appCenterStatus: state.readiness.status,
+    readinessStatus: state.readiness.status,
+    rightSurface: {
+      dock: "right",
+      physicalDockCount: 1,
+      defaultActiveTab: null,
+      supportedTabs: [],
+      productProfile: {
+        enabled: false,
+        objects: [],
+        panes: [],
+        rendererKinds: [],
+      },
+      historyRestore: {
+        enabled: false,
+        defaultTab: null,
+        defaultPane: null,
+        restoreSelection: false,
+        restoreLayout: false,
+        fallback: "artifactPreview",
+      },
+    },
+    functions: [],
+    blockers: [],
+    followUps: [],
+    generatedAt: state.updatedAt,
+  }),
+}));
+
+vi.mock("@/lib/api/workspaceRightSurface", () => ({
+  requestWorkspaceRightSurface:
+    hoistedMocks.apiMocks.requestWorkspaceRightSurface,
 }));
 
 vi.mock("@/lib/api/fileSystem", () => ({
@@ -179,6 +218,15 @@ export function buildReadyState(
   });
 }
 
+function buildHostLifecycleSnapshotForTest(state: InstalledAgentAppState) {
+  return buildAgentAppHostLifecycleSnapshot({
+    manifest: state.manifest,
+    readiness: state.readiness,
+    installedState: state,
+    generatedAt: state.updatedAt,
+  });
+}
+
 export function buildStandaloneState(): InstalledAgentAppState {
   return buildReadyState({
     installMode: "standalone",
@@ -217,6 +265,9 @@ export async function renderPage(
     launchRequestKey?: number;
   },
   onNavigate?: Parameters<typeof AgentAppsPage>[0]["onNavigate"],
+  rightSurfaceTarget?: Parameters<
+    typeof AgentAppsPage
+  >[0]["rightSurfaceTarget"],
 ) {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -224,7 +275,11 @@ export async function renderPage(
 
   await act(async () => {
     root.render(
-      <AgentAppsPage onNavigate={onNavigate} pageParams={pageParams} />,
+      <AgentAppsPage
+        onNavigate={onNavigate}
+        pageParams={pageParams}
+        rightSurfaceTarget={rightSurfaceTarget}
+      />,
     );
     await Promise.resolve();
     await Promise.resolve();
@@ -359,6 +414,12 @@ function setupDefaultApiMocks() {
     states: installedStates.map((state) => structuredClone(state)),
     issues: [],
   }));
+  apiMocks.listAgentAppHostLifecycleSnapshots.mockImplementation(async () => ({
+    snapshots: installedStates.map((state) =>
+      structuredClone(buildHostLifecycleSnapshotForTest(state)),
+    ),
+    issues: [],
+  }));
   apiMocks.launchAgentAppShell.mockResolvedValue({
     appId: "content-factory-app",
     status: "launched",
@@ -375,6 +436,23 @@ function setupDefaultApiMocks() {
       entryKey: "dashboard",
       route: "/dashboard",
     },
+    surface: {
+      activeStrategy: "controlledBrowserWindow",
+      supportedStrategies: ["controlledBrowserWindow", "webContentsView"],
+      entryUrl: "http://127.0.0.1:4199/dashboard",
+      containerId: "agent-app-shell-content-factory-app-standalone",
+      embedding: {
+        standaloneWindow: true,
+        rightSurfaceDock: true,
+        iframe: false,
+        browserView: false,
+      },
+      isolation: {
+        contextIsolation: true,
+        sandbox: true,
+        nodeIntegration: false,
+      },
+    },
     shellWindow: {
       label: "agent-app-shell-content-factory-app-standalone",
       title: "内容工厂",
@@ -382,6 +460,23 @@ function setupDefaultApiMocks() {
       reused: false,
     },
     launchedAt: "2026-05-15T00:00:00.000Z",
+  });
+  apiMocks.requestWorkspaceRightSurface.mockResolvedValue({
+    status: "queued",
+    requestId: "right_surface_app_1",
+    pending: {
+      requestId: "right_surface_app_1",
+      workspaceId: "workspace-main",
+      sessionId: "session-main",
+      surfaceKind: "appSurface",
+      origin: "agent_app_center",
+      priority: "foreground",
+      status: "pending",
+      requestedAt: "2026-05-15T00:00:00.000Z",
+      reason: "agent_app_shell_surface_ready",
+      candidateId: "content-factory-app",
+      metadata: {},
+    },
   });
   apiMocks.selectLocalAgentAppDirectory.mockResolvedValue(LOCAL_APP_DIR);
   apiMocks.reviewLocalAgentAppPackage.mockImplementation(async () =>

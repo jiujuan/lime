@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildWorkspaceRightSurfaceAppServerPendingIntents,
   buildWorkspaceRightSurfaceFilePreviewIntents,
   buildWorkspaceRightSurfaceHarnessPendingIntents,
   buildWorkspaceRightSurfaceMcpShellOutputIntents,
   buildWorkspaceRightSurfaceObjectCanvasCandidateIntents,
   buildWorkspaceRightSurfaceRuntimeOpenIntents,
 } from "./rightSurfaceRuntimeAdapter";
+import type { WorkspaceRightSurfacePendingRequest } from "@/lib/api/workspaceRightSurface";
 
 describe("rightSurfaceRuntimeAdapter", () => {
   it("应把 runtime / skill / MCP 打开信号转换为统一 surface intent", () => {
@@ -49,6 +51,132 @@ describe("rightSurfaceRuntimeAdapter", () => {
         origin: "mcpTool",
       },
     });
+  });
+
+  it("应把 App Server pending request 投影到统一 surface intent", () => {
+    const pending: WorkspaceRightSurfacePendingRequest[] = [
+      {
+        requestId: "right_surface_1",
+        surfaceKind: "objectCanvas",
+        origin: "mcpTool",
+        priority: "foreground",
+        status: "pending",
+        reason: "browser_assist_candidate",
+        requestedAt: "2026-06-23T00:00:00.000Z",
+        ttlMs: 30_000,
+      },
+      {
+        requestId: "right_surface_product_profile",
+        surfaceKind: "productProfile",
+        origin: "runtime",
+        priority: "foreground",
+        status: "pending",
+        reason: "agent_app_product_profile_ready",
+        requestedAt: "2026-06-23T00:00:01.000Z",
+      },
+      {
+        requestId: "right_surface_agent_app",
+        surfaceKind: "appSurface",
+        origin: "runtime",
+        priority: "foreground",
+        status: "pending",
+        reason: "agent_app_surface_ready",
+        requestedAt: "2026-06-23T00:00:02.000Z",
+      },
+      {
+        requestId: "right_surface_2",
+        surfaceKind: "files",
+        origin: "skill",
+        priority: "normal",
+        status: "pending",
+        requestedAt: "not-a-date",
+      },
+    ];
+
+    const intents = buildWorkspaceRightSurfaceAppServerPendingIntents(
+      pending,
+      200,
+    );
+
+    expect(intents).toEqual([
+      expect.objectContaining({
+        id: "app-server:right_surface_1",
+        priority: "foreground",
+        createdAt: Date.parse("2026-06-23T00:00:00.000Z"),
+        ttlMs: 30_000,
+        command: expect.objectContaining({
+          action: "open",
+          kind: "objectCanvas",
+          origin: "mcpTool",
+          reason: "browser_assist_candidate",
+        }),
+      }),
+      expect.objectContaining({
+        id: "app-server:right_surface_product_profile",
+        priority: "foreground",
+        createdAt: Date.parse("2026-06-23T00:00:01.000Z"),
+        command: expect.objectContaining({
+          action: "open",
+          kind: "productProfile",
+          origin: "runtime",
+          reason: "agent_app_product_profile_ready",
+        }),
+      }),
+      expect.objectContaining({
+        id: "app-server:right_surface_agent_app",
+        priority: "foreground",
+        createdAt: Date.parse("2026-06-23T00:00:02.000Z"),
+        command: expect.objectContaining({
+          action: "open",
+          kind: "appSurface",
+          origin: "runtime",
+          reason: "agent_app_surface_ready",
+        }),
+      }),
+      expect.objectContaining({
+        id: "app-server:right_surface_2",
+        priority: "background",
+        createdAt: 200,
+        command: expect.objectContaining({
+          action: "open",
+          kind: "files",
+          origin: "skill",
+        }),
+      }),
+    ]);
+  });
+
+  it("App Server pending request 非 pending 或未知 surface/origin 时不应生成 intent", () => {
+    const pending: WorkspaceRightSurfacePendingRequest[] = [
+      {
+        requestId: "right_surface_1",
+        surfaceKind: "unknown",
+        origin: "mcpTool",
+        priority: "foreground",
+        status: "pending",
+        requestedAt: "2026-06-23T00:00:00.000Z",
+      },
+      {
+        requestId: "right_surface_2",
+        surfaceKind: "files",
+        origin: "legacy",
+        priority: "foreground",
+        status: "pending",
+        requestedAt: "2026-06-23T00:00:00.000Z",
+      },
+      {
+        requestId: "right_surface_3",
+        surfaceKind: "files",
+        origin: "skill",
+        priority: "foreground",
+        status: "consumed",
+        requestedAt: "2026-06-23T00:00:00.000Z",
+      },
+    ];
+
+    expect(buildWorkspaceRightSurfaceAppServerPendingIntents(pending, 200)).toEqual(
+      [],
+    );
   });
 
   it("应把 Harness pending 数量投影为右侧 surface badge intent", () => {

@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { cwd } from "node:process";
 import { describe, expect, it } from "vitest";
+import { readAppServerApiSources } from "../../test/appServerApiSources";
 
 const RETIRED_MEDIA_TASK_FACADE_COMMANDS = [
   "create_image_generation_task_artifact",
@@ -106,7 +107,7 @@ describe("mediaTasks current App Server boundary", () => {
   });
 
   it("App Server protocol / client 应记录 mediaTaskArtifact current 方法", () => {
-    const appServerSource = readRepoFile("src/lib/api/appServer.ts");
+    const appServerSource = readAppServerApiSources();
     const clientProtocolSource = readRepoFile(
       "packages/app-server-client/src/protocol.ts",
     );
@@ -123,7 +124,7 @@ describe("mediaTasks current App Server boundary", () => {
       expect(appServerSource).toContain(methodConstant);
     }
     for (const helper of CURRENT_MEDIA_TASK_CLIENT_HELPERS) {
-      expect(appServerSource).toContain(`async ${helper}(`);
+      expect(appServerSource).toContain(`${helper}(`);
     }
     for (const method of CURRENT_MEDIA_TASK_METHODS) {
       expect(clientProtocolSource).toContain(`"${method}"`);

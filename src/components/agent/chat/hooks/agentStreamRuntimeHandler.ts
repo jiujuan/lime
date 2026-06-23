@@ -51,6 +51,7 @@ import {
   shouldWatchAgentStreamQueuedDraftCleanupForCleared,
 } from "./agentStreamQueueController";
 import { buildAgentStreamToolEndPreApplyPlan } from "./agentStreamToolEventController";
+import { buildAgentStreamPlanThreadItem } from "./agentStreamPlanEventController";
 import {
   buildAgentStreamActionRequiredPreApplyPlan,
   buildAgentStreamArtifactSnapshotPreApplyPlan,
@@ -451,12 +452,17 @@ export function handleTurnStreamEvent({
       break;
 
     case "thinking_delta":
+    case "reasoning_delta":
       {
+        const reasoningText =
+          data.type === "reasoning_delta"
+            ? data.text || data.delta || ""
+            : data.text;
         if (!requestState.firstThinkingDeltaAt) {
           const now = Date.now();
           requestState.firstThinkingDeltaAt = now;
           const context = {
-            deltaChars: data.text.length,
+            deltaChars: reasoningText.length,
             elapsedMs: Math.max(0, now - requestState.requestStartedAt),
             eventName,
             firstEventDeltaMs: requestState.firstEventReceivedAt
@@ -498,7 +504,7 @@ export function handleTurnStreamEvent({
               ...buildAgentStreamThinkingDeltaMessagePatch({
                 appendThinkingToParts,
                 contentParts: msg.contentParts,
-                textDelta: data.text,
+                textDelta: reasoningText,
                 thinkingContent: msg.thinkingContent,
               }),
             };
@@ -507,7 +513,7 @@ export function handleTurnStreamEvent({
         if (thinkingPlan.shouldApplyThinkingDelta) {
           requestState.streamedReasoningText = appendTextWithOverlapFallback(
             requestState.streamedReasoningText || "",
-            data.text,
+            reasoningText,
           );
           const nowIso = new Date().toISOString();
           const streamedReasoningItem = buildStreamedReasoningItem({
@@ -527,6 +533,37 @@ export function handleTurnStreamEvent({
         }
       }
       break;
+
+    case "reasoning_started":
+    case "reasoning_final":
+    case "reasoning_ended":
+      activateStream();
+      break;
+
+    case "plan_delta":
+    case "plan_final": {
+      activateStream();
+      clearOptimisticItem();
+      commitRenderedTextBeforeProcessPart();
+      const now = new Date().toISOString();
+      const planItem = buildAgentStreamPlanThreadItem({
+        activeSessionId,
+        event: data,
+        fallbackTurnId: requestState.currentTurnId || requestState.queuedTurnId,
+        now,
+        pendingItemKey,
+        sequence: sequenceFromAgentEvent(data),
+      });
+      if (planItem) {
+        setThreadItems((prev) =>
+          upsertThreadItemState(
+            removeThreadItemState(prev, pendingItemKey),
+            planItem,
+          ),
+        );
+      }
+      break;
+    }
 
     case "text_delta":
     case "text_delta_batch": {

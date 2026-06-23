@@ -204,7 +204,7 @@ describe("AgentThreadTimeline", () => {
     ).not.toBeNull();
     expect(container.textContent).toContain("随后补齐自动续提。");
   });
-  it("reasoning 展开后应压平被切碎成多行的过程 prose", () => {
+  it("reasoning 展开后应保留被切碎的来源行，不再压平成 prose", () => {
     const items: AgentThreadItem[] = [
       {
         ...createBaseItem("reasoning-1", 1),
@@ -245,8 +245,9 @@ describe("AgentThreadTimeline", () => {
     const markdownBlocks = container.querySelectorAll(
       '[data-testid="markdown-renderer"]',
     );
-    expect(markdownBlocks[0]?.textContent).toBe(
-      "目录也不存在。可能整个 .lime 目录都不存在。",
+    expect(markdownBlocks[0]?.textContent).toContain("目录\n\n也\n\n不存在。");
+    expect(markdownBlocks[0]?.textContent).toContain(
+      "可能\n\n整个\n\n.lime\n\n目录",
     );
   });
   it("reasoning 缺少正文时应回退显示 summary", () => {

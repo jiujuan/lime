@@ -71,7 +71,11 @@ function supportsRequestedRange(
       hostVersion.startsWith("0.3.") ||
       hostVersion.startsWith("0.5.") ||
       hostVersion.startsWith("0.6.") ||
-      hostVersion.startsWith("0.7.")
+      hostVersion.startsWith("0.7.") ||
+      hostVersion.startsWith("0.8.") ||
+      hostVersion.startsWith("0.9.") ||
+      hostVersion.startsWith("0.10.") ||
+      hostVersion.startsWith("0.11.")
     );
   }
   if (normalized.includes(">=0.2.0") && normalized.includes("<1.0.0")) {

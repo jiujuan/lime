@@ -155,6 +155,11 @@ fn app_server_method_catalog_keeps_request_and_notification_methods_together() {
             METHOD_VOICE_MODEL_TEST_TRANSCRIBE_FILE,
             METHOD_WORKSPACE_SKILL_BINDINGS_LIST,
             METHOD_WORKSPACE_REGISTERED_SKILLS_LIST,
+            METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST,
+            METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_LIST,
+            METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CONSUME,
+            METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS,
+            METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED,
             METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT,
             METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD,
             METHOD_AGENT_APP_INSTALLED_SAVE,
@@ -162,6 +167,7 @@ fn app_server_method_catalog_keeps_request_and_notification_methods_together() {
             METHOD_AGENT_APP_INSTALLED_DISABLED_SET,
             METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL,
             METHOD_AGENT_APP_INSTALLED_UNINSTALL,
+            METHOD_AGENT_APP_HOST_LIFECYCLE_LIST,
             METHOD_AGENT_APP_SHELL_PREPARE,
             METHOD_AGENT_APP_UI_RUNTIME_START,
             METHOD_AGENT_APP_UI_RUNTIME_STATUS,
@@ -310,6 +316,12 @@ fn app_server_method_catalog_keeps_request_and_notification_methods_together() {
     assert!(is_app_server_notification_method(METHOD_INITIALIZED));
     assert!(is_app_server_notification_method(
         METHOD_AGENT_SESSION_EVENT
+    ));
+    assert!(is_app_server_notification_method(
+        METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED
+    ));
+    assert!(!is_app_server_request_method(
+        METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED
     ));
     assert!(!is_app_server_notification_method(
         METHOD_AGENT_SESSION_START

@@ -8,7 +8,11 @@ import {
   getGeneralWorkbenchDocumentState,
   getProject,
 } from "@/lib/api/project";
-import { getProjectMemory, type ProjectMemory } from "@/lib/api/projectMemory";
+import {
+  getProjectMemory,
+  type OutlineNode,
+  type ProjectMemory,
+} from "@/lib/api/projectMemory";
 import { scheduleMinimumDelayIdleTask } from "@/lib/utils/scheduleMinimumDelayIdleTask";
 import { useWorkspaceProjectContentRuntime } from "./useWorkspaceProjectContentRuntime";
 
@@ -67,14 +71,29 @@ function createContent(overrides: Partial<ContentDetail> = {}): ContentDetail {
   };
 }
 
+function createOutlineNode(
+  overrides: Partial<OutlineNode> = {},
+): OutlineNode {
+  return {
+    id: "outline-1",
+    project_id: "project-1",
+    title: "主线",
+    order: 1,
+    expanded: true,
+    created_at: "2026-01-01T00:00:00.000Z",
+    updated_at: "2026-01-01T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
 function createProjectMemory(
   overrides: Partial<ProjectMemory> = {},
 ): ProjectMemory {
   return {
-    outline: ["主线"],
+    outline: [createOutlineNode()],
     characters: [],
     ...overrides,
-  } as ProjectMemory;
+  };
 }
 
 function renderHook(props?: Partial<HookProps>) {
@@ -196,7 +215,7 @@ describe("useWorkspaceProjectContentRuntime", () => {
 
   it("加载内容时应写入 canvas、同步快照和版本状态容器", async () => {
     const projectMemory = createProjectMemory({
-      outline: ["第一章"],
+      outline: [createOutlineNode({ id: "outline-2", title: "第一章" })],
     });
     const setLayoutMode = vi.fn();
     vi.mocked(getProjectMemory).mockResolvedValueOnce(projectMemory);
@@ -226,7 +245,7 @@ describe("useWorkspaceProjectContentRuntime", () => {
 
   it("延后加载开启时应调度 Memory 读取而不是阻塞项目加载", async () => {
     const projectMemory = createProjectMemory({
-      outline: ["延后主线"],
+      outline: [createOutlineNode({ id: "outline-3", title: "延后主线" })],
     });
     vi.mocked(getProjectMemory).mockResolvedValueOnce(projectMemory);
     const { render, getValue } = renderHook({

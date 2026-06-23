@@ -201,6 +201,7 @@
     "agentAppInstalled/disabled/set",
     "agentAppInstalled/uninstall/rehearsal",
     "agentAppInstalled/uninstall",
+    "agentAppHostLifecycle/list",
     "agentAppShell/prepare",
     "agentAppUiRuntime/start",
     "agentAppUiRuntime/status",
@@ -219,5 +220,12 @@
     "skillLocal/scaffold/create",
     "skillLocal/import",
     "skillRemote/inspect"
+  ],
+  "appServerWorkspaceRightSurfaceMethods": [
+    "workspaceRightSurface/request",
+    "workspaceRightSurface/pending/list",
+    "workspaceRightSurface/pending/consume",
+    "workspaceRightSurface/pending/dismiss",
+    "workspaceRightSurface/pendingChanged"
   ]
 }

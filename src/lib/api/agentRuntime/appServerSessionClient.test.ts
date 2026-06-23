@@ -684,6 +684,89 @@ describe("appServerSessionClient", () => {
     });
   });
 
+  it("get 有 detail.thread_read 时仍应合入 session business object metadata", async () => {
+    const appServerClient = appServerClientMock();
+    const readSessionResult = {
+      session: {
+        sessionId: "session-expert",
+        threadId: "thread-expert",
+        appId: "desktop",
+        workspaceId: "workspace-expert",
+        status: "running" as const,
+        createdAt: "2026-06-08T10:00:00.000Z",
+        updatedAt: "2026-06-08T10:00:06.000Z",
+        businessObjectRef: {
+          kind: "agent.session",
+          id: "agent-session:workspace-expert:session-expert",
+          metadata: {
+            title: "代码文学专家",
+            expert: { expertId: "code-literature" },
+            harness: {
+              expert: { expert_id: "code-literature" },
+            },
+          },
+        },
+      },
+      turns: [
+        {
+          turnId: "turn-expert",
+          sessionId: "session-expert",
+          threadId: "thread-expert",
+          status: "running" as const,
+          startedAt: "2026-06-08T10:00:00.000Z",
+        },
+      ],
+      detail: {
+        id: "session-expert",
+        thread_id: "thread-expert",
+        thread_read: {
+          thread_id: "thread-expert",
+          status: "running",
+          active_turn_id: "turn-expert",
+          tool_calls: [
+            {
+              id: "tool-1",
+              tool_name: "skill_search",
+              status: "completed",
+            },
+          ],
+        },
+      },
+    };
+    vi.mocked(appServerClient.readSession).mockResolvedValueOnce({
+      id: 3,
+      result: readSessionResult,
+      response: { id: 3, result: readSessionResult },
+      notifications: [],
+      messages: [],
+    });
+    const client = createAppServerSessionClient({ appServerClient });
+
+    await expect(
+      client.getAgentRuntimeSession("session-expert"),
+    ).resolves.toMatchObject({
+      thread_read: {
+        thread_id: "thread-expert",
+        status: "running",
+        active_turn_id: "turn-expert",
+        tool_calls: [
+          {
+            id: "tool-1",
+            tool_name: "skill_search",
+            status: "completed",
+          },
+        ],
+        session_business_object_ref_metadata: {
+          title: "代码文学专家",
+          expert: { expertId: "code-literature" },
+          harness: {
+            expert: { expert_id: "code-literature" },
+          },
+        },
+      },
+    });
+  });
+
   it("get 应兼容历史 snake_case session/turn 并保留 detail.thread_read", async () => {
     const appServerClient = appServerClientMock();
     const readSessionResult = {
@@ -942,6 +1025,12 @@ describe("appServerSessionClient", () => {
         recent_team_selection: {
           disabled: true,
         },
+        product_workspace_selected_object_ref: {
+          appId: "content-factory-app",
+          sessionId: "session-1",
+          kind: "imageGenerationSet",
+          id: "image-set-1",
+        },
       }),
     ).resolves.toBeUndefined();
 
@@ -960,6 +1049,12 @@ describe("appServerSessionClient", () => {
       },
       recentTeamSelection: {
         disabled: true,
+      },
+      productWorkspaceSelectedObjectRef: {
+        appId: "content-factory-app",
+        sessionId: "session-1",
+        kind: "imageGenerationSet",
+        id: "image-set-1",
       },
     });
   });

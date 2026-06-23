@@ -15,6 +15,7 @@ export interface ResolveWorkspaceRightSurfaceStateInput {
   expertInfoVisible: boolean;
   hasExpertInfo: boolean;
   currentState?: WorkspaceRightSurfaceState;
+  openSurfaces?: readonly WorkspaceRightSurfaceKind[];
   requestedSurface?: WorkspaceRightSurfaceKind | null;
   source?: WorkspaceRightSurfaceSource;
 }
@@ -30,10 +31,12 @@ export function resolveWorkspaceRightSurfaceState({
   expertInfoVisible,
   hasExpertInfo,
   currentState,
+  openSurfaces,
   requestedSurface,
   source = "user",
 }: ResolveWorkspaceRightSurfaceStateInput): WorkspaceRightSurfaceState {
-  const current = currentState ?? buildRightSurfaceState(null, source);
+  const current =
+    currentState ?? buildRightSurfaceState(null, source, "docked", openSurfaces);
   const layoutVariant = resolveWorkspaceRightSurfaceLayoutVariant(layoutMode);
 
   if (requestedSurface !== undefined) {
@@ -73,10 +76,12 @@ export function buildRightSurfaceState(
   activeSurface: WorkspaceRightSurfaceKind | null,
   source: WorkspaceRightSurfaceSource,
   layoutVariant: WorkspaceRightSurfaceLayoutVariant = "docked",
+  openSurfaces: readonly WorkspaceRightSurfaceKind[] = [],
 ): WorkspaceRightSurfaceState {
   return {
     activeSurface,
     previousSurface: null,
+    openSurfaces: normalizeOpenSurfaces(openSurfaces, activeSurface),
     source,
     layoutVariant,
   };
@@ -92,6 +97,17 @@ export function resolveWorkspaceRightSurfaceLayoutVariant(
   layoutMode: LayoutMode,
 ): WorkspaceRightSurfaceLayoutVariant {
   return layoutMode === "canvas" ? "canvasFirst" : "docked";
+}
+
+function normalizeOpenSurfaces(
+  openSurfaces: readonly WorkspaceRightSurfaceKind[],
+  activeSurface: WorkspaceRightSurfaceKind | null,
+): readonly WorkspaceRightSurfaceKind[] {
+  const next = [...openSurfaces];
+  if (activeSurface && !next.includes(activeSurface)) {
+    next.push(activeSurface);
+  }
+  return next;
 }
 
 export function resolveExpertInfoPanelCollapsedAfterLayoutChange({

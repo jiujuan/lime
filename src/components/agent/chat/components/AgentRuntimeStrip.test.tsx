@@ -277,4 +277,51 @@ describe("AgentRuntimeStrip", () => {
       ),
     ).toBeTruthy();
   });
+
+  it("应消费标准 ReasoningState 并显示运行时思考状态", () => {
+    const container = renderStrip({
+      runtimeToolAvailability: CODE_RUNTIME_TOOL_AVAILABILITY,
+      harnessState: createHarnessState({
+        reasoning: {
+          reasoning: {
+            supported: true,
+            status: "running",
+            reasoningId: "reasoning-1",
+            text: "先理解目标。",
+          },
+        },
+      }),
+    });
+
+    expect(
+      container.querySelector(
+        '[data-testid="agent-runtime-strip-status-reasoning"][data-status-key="reasoning"]',
+      )?.textContent,
+    ).toContain("深度思考");
+  });
+
+  it("仅有 model.effective 能力快照时不应显示运行时思考状态", () => {
+    const container = renderStrip({
+      runtimeToolAvailability: CODE_RUNTIME_TOOL_AVAILABILITY,
+      harnessState: createHarnessState({
+        reasoning: {
+          model: {
+            providerId: "openai",
+            modelId: "gpt-codex",
+          },
+          reasoning: {
+            supported: true,
+            requestedLevel: "high",
+            effectiveLevel: "high",
+          },
+        },
+      }),
+    });
+
+    expect(
+      container.querySelector(
+        '[data-testid="agent-runtime-strip-status-reasoning"]',
+      ),
+    ).toBeNull();
+  });
 });

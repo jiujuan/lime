@@ -425,8 +425,35 @@ mod tests {
     use tokio::task::yield_now;
     use tokio::time::{timeout, Duration};
 
+    async fn lock_test_governor() -> tokio::sync::MutexGuard<'static, ()> {
+        static TEST_LOCK: std::sync::OnceLock<tokio::sync::Mutex<()>> = std::sync::OnceLock::new();
+        TEST_LOCK
+            .get_or_init(|| tokio::sync::Mutex::new(()))
+            .lock()
+            .await
+    }
+
+    async fn wait_for_session_phase(
+        session_id: &str,
+        expected_phase: &str,
+    ) -> TeamRuntimeGovernorSnapshot {
+        timeout(Duration::from_secs(1), async {
+            loop {
+                if let Some(snapshot) = snapshot_team_runtime_session(session_id).await {
+                    if snapshot.team_phase == expected_phase {
+                        return snapshot;
+                    }
+                }
+                yield_now().await;
+            }
+        })
+        .await
+        .expect("snapshot should exist while waiting")
+    }
+
     #[tokio::test]
     async fn high_risk_provider_should_wait_for_next_slot() {
+        let _guard = lock_test_governor().await;
         reset_team_runtime_governor().await;
 
         let permit_1 = acquire_team_runtime_permit("session-1", "parent-1", "glm-4.7").await;
@@ -435,11 +462,7 @@ mod tests {
             acquire_team_runtime_permit("session-2", "parent-1", "zhipuai").await
         });
 
-        yield_now().await;
-
-        let snapshot = snapshot_team_runtime_session("session-2")
-            .await
-            .expect("snapshot should exist while waiting");
+        let snapshot = wait_for_session_phase("session-2", "queued").await;
         assert_eq!(snapshot.team_phase, "queued");
         assert_eq!(snapshot.provider_concurrency_group, "zhipuai");
         assert_eq!(snapshot.provider_parallel_budget, 1);
@@ -456,6 +479,7 @@ mod tests {
 
     #[tokio::test]
     async fn regular_provider_should_allow_two_parallel_members() {
+        let _guard = lock_test_governor().await;
         reset_team_runtime_governor().await;
 
         let permit_1 = acquire_team_runtime_permit("session-a", "parent-main", "openai").await;
@@ -465,11 +489,7 @@ mod tests {
             acquire_team_runtime_permit("session-c", "parent-main", "openai").await
         });
 
-        yield_now().await;
-
-        let snapshot = snapshot_team_runtime_session("session-c")
-            .await
-            .expect("third session should be queued");
+        let snapshot = wait_for_session_phase("session-c", "queued").await;
         assert_eq!(snapshot.team_phase, "queued");
         assert_eq!(snapshot.team_active_count, 2);
         assert!(!waiter.is_finished());

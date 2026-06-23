@@ -144,6 +144,9 @@ pub enum ItemRuntimePayload {
         text: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         summary: Option<Vec<String>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schema(value_type = Object)]
+        metadata: Option<Value>,
     },
     ToolCall {
         tool_name: String,

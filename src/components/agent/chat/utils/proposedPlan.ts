@@ -105,6 +105,42 @@ function stripPlanMarker(line: string): string {
     .trim();
 }
 
+function readPlanItemStatus(
+  line: string,
+): ProposedPlanItem["status"] | undefined {
+  const withoutListMarker = line.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, "");
+  const checkboxMatch = withoutListMarker.match(/^\s*\[([ xX-])\]\s+/);
+  if (!checkboxMatch) {
+    return undefined;
+  }
+
+  const marker = checkboxMatch[1];
+  if (marker === "x" || marker === "X") {
+    return "completed";
+  }
+  if (marker === "-") {
+    return "in_progress";
+  }
+  return "pending";
+}
+
+function promoteNextPendingPlanItem(
+  items: ProposedPlanItem[],
+): ProposedPlanItem[] {
+  if (items.some((item) => item.status === "in_progress")) {
+    return items;
+  }
+
+  const nextPendingIndex = items.findIndex((item) => item.status === "pending");
+  if (nextPendingIndex < 0) {
+    return items;
+  }
+
+  return items.map((item, index) =>
+    index === nextPendingIndex ? { ...item, status: "in_progress" } : item,
+  );
+}
+
 export function parseProposedPlanItems(content: string): ProposedPlanItem[] {
   const normalized = normalizePlanText(content);
   const rawLines = normalized
@@ -120,13 +156,14 @@ export function parseProposedPlanItems(content: string): ProposedPlanItem[] {
       ? candidateLines
       : rawLines;
 
-  return lines
-    .map(stripPlanMarker)
-    .filter((text) => text.length > 0)
-    .map((text, index) => ({
-      text,
-      status: index === 0 ? "in_progress" : "pending",
-    }));
+  const items = lines
+    .map((line) => ({
+      text: stripPlanMarker(line),
+      status: readPlanItemStatus(line) ?? "pending",
+    }))
+    .filter((item) => item.text.length > 0);
+
+  return promoteNextPendingPlanItem(items);
 }
 
 export function extractLatestProposedPlanItems(

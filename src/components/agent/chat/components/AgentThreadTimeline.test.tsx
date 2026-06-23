@@ -9,7 +9,7 @@ import {
 } from "./AgentThreadTimeline.testFixtures";
 
 describe("AgentThreadTimeline", () => {
-  it("已完成的单条 reasoning 只显示安全思考入口，不暴露内部正文预览", () => {
+  it("已完成的单条 reasoning 应保留来源摘要，不再按短语隐藏", () => {
     const container = renderTimeline([
       {
         ...createBaseItem("reasoning-safe-summary", 1),
@@ -19,15 +19,14 @@ describe("AgentThreadTimeline", () => {
       },
     ]);
 
-    expect(container.textContent).toContain("已完成思考");
-    expect(container.textContent).not.toContain("我们被要求先分析");
+    expect(container.textContent).toContain("我们被要求先分析");
     expect(
       container.querySelector(
         '[data-testid="agent-thread-block:1:process:details"]',
       ),
     ).toBeNull();
   });
-  it("已完成 reasoning 不应把模型自述型思考作为摘要露出", () => {
+  it("已完成 reasoning 不再用模型自述短语黑名单改写摘要", () => {
     const container = renderTimeline([
       {
         ...createBaseItem("reasoning-provider-summary", 1),
@@ -39,9 +38,8 @@ describe("AgentThreadTimeline", () => {
       },
     ]);
 
-    expect(container.textContent).toContain("已完成思考");
-    expect(container.textContent).not.toContain("用户问的是");
-    expect(container.textContent).not.toContain("我需要用");
+    expect(container.textContent).toContain("用户问的是");
+    expect(container.textContent).toContain("我需要用");
   });
   it("默认直接渲染内联时间线，不再显示旧摘要壳", () => {
     const items: AgentThreadItem[] = [
@@ -159,33 +157,36 @@ describe("AgentThreadTimeline", () => {
   });
   it("多个 file_artifact 应聚合成一个文件变更框", async () => {
     const onOpenArtifactFromTimeline = vi.fn();
-    const container = renderTimeline([
-      createFileArtifactItem({
-        path: "workspace/index.md",
-        content: "# Index\n\n主文档内容",
-        metadata: {
-          file_change: {
-            path: "workspace/index.md",
-            kind: "update",
-            lines_added: 4,
-            lines_removed: 2,
+    const container = renderTimeline(
+      [
+        createFileArtifactItem({
+          path: "workspace/index.md",
+          content: "# Index\n\n主文档内容",
+          metadata: {
+            file_change: {
+              path: "workspace/index.md",
+              kind: "update",
+              lines_added: 4,
+              lines_removed: 2,
+            },
           },
-        },
-      }),
-      createFileArtifactItem({
-        ...createBaseItem("artifact-2", 2),
-        path: "workspace/Agents.md",
-        content: "# Agents\n\n协作说明",
-        metadata: {
-          file_change: {
-            path: "workspace/Agents.md",
-            kind: "add",
-            lines_added: 3,
-            lines_removed: 0,
+        }),
+        createFileArtifactItem({
+          ...createBaseItem("artifact-2", 2),
+          path: "workspace/Agents.md",
+          content: "# Agents\n\n协作说明",
+          metadata: {
+            file_change: {
+              path: "workspace/Agents.md",
+              kind: "add",
+              lines_added: 3,
+              lines_removed: 0,
+            },
           },
-        },
-      }),
-    ], { onOpenArtifactFromTimeline });
+        }),
+      ],
+      { onOpenArtifactFromTimeline },
+    );
 
     expect(
       container.querySelector('[data-testid="agent-thread-block:1:artifact"]'),
@@ -311,7 +312,9 @@ describe("AgentThreadTimeline", () => {
 
     const container = renderTimeline([unsupportedItem]);
 
-    expect(container.textContent).toContain("记录了 runtime_protocol_diagnostic");
+    expect(container.textContent).toContain(
+      "记录了 runtime_protocol_diagnostic",
+    );
     expect(container.textContent).toContain("已隐藏底层协议详情");
     expect(container.textContent).not.toContain("request_metadata");
     expect(container.textContent).not.toContain("raw_payload");

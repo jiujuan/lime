@@ -39,7 +39,7 @@ export function hasInlineProcessContentParts(
 
   return Boolean(
     options.displayContent.trim() ||
-      options.timelineItems?.some((item) => item.type === "reasoning"),
+    options.timelineItems?.some((item) => item.type === "reasoning"),
   );
 }
 
@@ -65,26 +65,18 @@ function findFirstProcessBoundaryIndex(parts: MessageContentPart[]): number {
   );
 }
 
-function findLastProcessBoundaryIndex(parts: MessageContentPart[]): number {
-  for (let index = parts.length - 1; index >= 0; index -= 1) {
-    const part = parts[index];
-    if (
-      part?.type === "tool_use" ||
-      part?.type === "action_required" ||
-      part?.type === "file_changes_batch"
-    ) {
-      return index;
+function normalizeDuplicateTextSignature(text: string): string {
+  let signature = "";
+  for (const char of text.trim()) {
+    if (!isWhitespaceChar(char)) {
+      signature += char;
     }
   }
-  return -1;
+  return signature;
 }
 
-function isLikelyCompleteThinkingSegment(text: string): boolean {
-  return /[.!?;:。！？；：]\s*$/.test(text.trim());
-}
-
-function normalizeDuplicateTextSignature(text: string): string {
-  return text.replace(/\s+/g, "").trim();
+function isWhitespaceChar(char: string): boolean {
+  return char.trim() === "";
 }
 
 function findDuplicateTextSignatureRange(
@@ -100,7 +92,7 @@ function findDuplicateTextSignatureRange(
   const originalIndexes: number[] = [];
   for (let index = 0; index < haystack.length; index += 1) {
     const char = haystack[index] || "";
-    if (/\s/.test(char)) {
+    if (isWhitespaceChar(char)) {
       continue;
     }
     compactChars.push(char);
@@ -206,9 +198,7 @@ function trimDuplicatedFinalTextFromLeadingText(
   }
 
   const prefix = normalizedLeading.slice(0, duplicateRange.start).trim();
-  const suffix = normalizedLeading
-    .slice(duplicateRange.end)
-    .trim();
+  const suffix = normalizedLeading.slice(duplicateRange.end).trim();
   return [prefix, suffix].filter(Boolean).join("\n\n");
 }
 
@@ -245,6 +235,70 @@ function normalizeDuplicatedLeadingTextBeforeProcess(
 
     changed = true;
     return nextText ? [{ ...part, text: nextText }] : [];
+  });
+
+  return changed ? normalizedParts : parts;
+}
+
+function isInlineProcessContentPart(part: MessageContentPart): boolean {
+  return (
+    part.type === "thinking" ||
+    part.type === "tool_use" ||
+    part.type === "action_required" ||
+    part.type === "file_changes_batch"
+  );
+}
+
+function endsWithThinkingSegmentBoundary(text: string): boolean {
+  return /[.!?;:。！？；：]$/.test(text.trim());
+}
+
+function removeTextPartsCoveredByThinking(
+  parts?: Message["contentParts"],
+): Message["contentParts"] | undefined {
+  if (!parts || parts.length < 2) {
+    return parts;
+  }
+
+  const thinkingSignatures = parts
+    .filter(
+      (part): part is Extract<MessageContentPart, { type: "thinking" }> =>
+        part.type === "thinking" && part.text.trim().length > 0,
+    )
+    .map((part) => normalizeDuplicateTextSignature(part.text))
+    .filter((signature) => signature.length >= 12);
+
+  if (thinkingSignatures.length === 0) {
+    return parts;
+  }
+
+  let changed = false;
+  const normalizedParts = parts.filter((part, index) => {
+    if (part.type !== "text" || part.text.trim().length === 0) {
+      return true;
+    }
+
+    const hasLaterProcessPart = parts
+      .slice(index + 1)
+      .some(isInlineProcessContentPart);
+    if (!hasLaterProcessPart) {
+      return true;
+    }
+
+    const textSignature = normalizeDuplicateTextSignature(part.text);
+    const isCoveredByThinking =
+      textSignature.length >= 12 &&
+      thinkingSignatures.some(
+        (thinkingSignature) =>
+          thinkingSignature === textSignature ||
+          thinkingSignature.includes(textSignature),
+      );
+    if (!isCoveredByThinking) {
+      return true;
+    }
+
+    changed = true;
+    return false;
   });
 
   return changed ? normalizedParts : parts;
@@ -350,8 +404,9 @@ export function resolveProcessSeparatedContentParts(
     parts || [],
     options?.displayContent,
   );
-  const dedupedParts =
-    normalizeDuplicatedLeadingTextBeforeProcess(restoredParts);
+  const dedupedParts = removeTextPartsCoveredByThinking(
+    normalizeDuplicatedLeadingTextBeforeProcess(restoredParts),
+  ) || [];
 
   const hasActionBoundary = Boolean(
     dedupedParts.some((part) => part.type === "action_required"),
@@ -394,60 +449,52 @@ export function ensureInlineThinkingContentPart(params: {
   }
 
   const parts = params.parts || [];
-  const existingThinkingText = parts
-    .filter(
-      (part): part is Extract<MessageContentPart, { type: "thinking" }> =>
-        part.type === "thinking" && part.text.trim().length > 0,
-    )
-    .map((part) => part.text)
-    .join("");
-  const normalizedExistingThinking = existingThinkingText.trim();
-  const processBoundaryIndex = findLastProcessBoundaryIndex(parts);
   const thinkingPartIndex = parts.findIndex(
     (part) => part.type === "thinking" && part.text.trim().length > 0,
   );
   if (thinkingPartIndex >= 0) {
     const existingPart = parts[thinkingPartIndex];
-    const missingThinkingTail =
-      normalizedExistingThinking &&
-      normalizedThinking.startsWith(normalizedExistingThinking)
-        ? normalizedThinking.slice(normalizedExistingThinking.length).trim()
-        : "";
-    if (
-      processBoundaryIndex >= 0 &&
-      missingThinkingTail &&
-      isLikelyCompleteThinkingSegment(normalizedExistingThinking)
-    ) {
-      const nextParts = [...parts];
-      const insertIndex = processBoundaryIndex + 1;
-      const existingThinkingAfterBoundaryIndex = nextParts.findIndex(
-        (part, index) =>
-          index > processBoundaryIndex &&
-          part.type === "thinking" &&
-          part.text.trim().length > 0,
-      );
-      const existingThinkingAfterBoundary =
-        existingThinkingAfterBoundaryIndex >= 0
-          ? nextParts[existingThinkingAfterBoundaryIndex]
-          : undefined;
-      if (existingThinkingAfterBoundary?.type === "thinking") {
-        nextParts[existingThinkingAfterBoundaryIndex] = {
-          ...existingThinkingAfterBoundary,
-          text: `${existingThinkingAfterBoundary.text}\n\n${missingThinkingTail}`,
-        };
-      } else {
-        nextParts.splice(insertIndex, 0, {
-          type: "thinking",
-          text: missingThinkingTail,
-        });
-      }
-      return nextParts;
-    }
     if (
       existingPart?.type === "thinking" &&
       normalizedThinking.startsWith(existingPart.text.trim()) &&
       normalizedThinking.length > existingPart.text.trim().length
     ) {
+      const existingThinkingText = existingPart.text.trim();
+      const trailingThinking = normalizedThinking
+        .slice(existingThinkingText.length)
+        .trim();
+      const hasProcessAfterExistingThinking = hasProcessBoundaryContentPart(
+        parts.slice(thinkingPartIndex + 1),
+      );
+      if (
+        hasProcessAfterExistingThinking &&
+        trailingThinking &&
+        endsWithThinkingSegmentBoundary(existingThinkingText)
+      ) {
+        const trailingSignature = normalizeDuplicateTextSignature(
+          trailingThinking,
+        );
+        const hasTrailingThinking = parts
+          .slice(thinkingPartIndex + 1)
+          .some(
+            (part) =>
+              part.type === "thinking" &&
+              normalizeDuplicateTextSignature(part.text) ===
+                trailingSignature,
+          );
+        if (hasTrailingThinking) {
+          return params.parts;
+        }
+
+        return [
+          ...parts,
+          {
+            type: "thinking",
+            text: trailingThinking,
+          },
+        ];
+      }
+
       const nextParts = [...parts];
       nextParts[thinkingPartIndex] = {
         ...existingPart,
@@ -459,4 +506,10 @@ export function ensureInlineThinkingContentPart(params: {
   }
 
   return [{ type: "thinking", text: normalizedThinking }, ...parts];
+}
+
+export function normalizeInlineThinkingContentParts(
+  parts?: Message["contentParts"],
+): Message["contentParts"] | undefined {
+  return removeTextPartsCoveredByThinking(parts);
 }

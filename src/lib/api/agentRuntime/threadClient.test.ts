@@ -1,10 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   APP_SERVER_METHOD_AGENT_SESSION_EVENT,
   AppServerRpcError,
   type AppServerRequestResult,
 } from "@/lib/api/appServer";
 import { isAppServerBridgeAvailable } from "@/lib/api/appServerBridgeAvailability";
+import { resetDefaultAppServerEventBusForTests } from "@/lib/api/appServerEventBus";
 import { parseAgentEvent } from "@/lib/api/agentProtocol";
 import { safeListen } from "@/lib/dev-bridge";
 import { listenAgentRuntimeEvent } from "../agentRuntimeEvents";
@@ -422,10 +423,16 @@ function malformedAppServerResult<T>(
 
 describe("agentRuntime threadClient", () => {
   beforeEach(() => {
+    resetDefaultAppServerEventBusForTests();
     vi.clearAllMocks();
     resetAgentRuntimeEventSequenceGatesForTests();
     vi.mocked(isAppServerBridgeAvailable).mockReturnValue(false);
     vi.mocked(safeListen).mockResolvedValue(vi.fn());
+  });
+
+  afterEach(() => {
+    resetDefaultAppServerEventBusForTests();
+    vi.useRealTimers();
   });
 
   it("replay request 应走 App Server current action/replay 且不调用 legacy command gateway", async () => {
@@ -3138,6 +3145,207 @@ describe("agentRuntime threadClient", () => {
       },
       event_id: "evt-turn-started",
       session_id: "session-1",
+      turn_id: "turn-1",
+    });
+
+    expect(
+      projectAppServerAgentEventPayload({
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: "evt-plan-final",
+            sequence: 10,
+            sessionId: "session-1",
+            threadId: "thread-1",
+            turnId: "turn-1",
+            type: "plan.final",
+            timestamp: "2026-06-06T00:00:08.000Z",
+            payload: {
+              text: "- [x] 读现状",
+              revisionId: "update_plan:tool-plan",
+              toolCallId: "tool-plan",
+              source: "update_plan",
+              plan: [{ step: "读现状", status: "completed" }],
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      type: "plan_final",
+      text: "- [x] 读现状",
+      revisionId: "update_plan:tool-plan",
+      toolCallId: "tool-plan",
+      source: "update_plan",
+      event_id: "evt-plan-final",
+      sequence: 10,
+      session_id: "session-1",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+    });
+
+    expect(
+      projectAppServerAgentEventPayload({
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: "evt-reasoning",
+            sequence: 11,
+            sessionId: "session-1",
+            threadId: "thread-1",
+            turnId: "turn-1",
+            type: "reasoning.delta",
+            timestamp: "2026-06-06T00:00:09.000Z",
+            payload: {
+              reasoningId: "runtime-thinking",
+              delta: "先理解目标",
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      type: "reasoning_delta",
+      reasoningId: "runtime-thinking",
+      text: "先理解目标",
+      delta: "先理解目标",
+      event_id: "evt-reasoning",
+      sequence: 11,
+      session_id: "session-1",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+    });
+
+    expect(
+      projectAppServerAgentEventPayload({
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: "evt-reasoning-started",
+            sequence: 12,
+            sessionId: "session-1",
+            threadId: "thread-1",
+            turnId: "turn-1",
+            type: "reasoning.started",
+            timestamp: "2026-06-06T00:00:09.100Z",
+            payload: {
+              reasoningId: "runtime-thinking",
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      type: "reasoning_started",
+      reasoningId: "runtime-thinking",
+      event_id: "evt-reasoning-started",
+      sequence: 12,
+      session_id: "session-1",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+    });
+
+    expect(
+      projectAppServerAgentEventPayload({
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: "evt-reasoning-final",
+            sequence: 13,
+            sessionId: "session-1",
+            threadId: "thread-1",
+            turnId: "turn-1",
+            type: "reasoning.final",
+            timestamp: "2026-06-06T00:00:09.200Z",
+            payload: {
+              reasoningId: "runtime-thinking",
+              text: "先理解目标",
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      type: "reasoning_final",
+      reasoningId: "runtime-thinking",
+      text: "先理解目标",
+      event_id: "evt-reasoning-final",
+      sequence: 13,
+      session_id: "session-1",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+    });
+
+    expect(
+      projectAppServerAgentEventPayload({
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: "evt-reasoning-ended",
+            sequence: 14,
+            sessionId: "session-1",
+            threadId: "thread-1",
+            turnId: "turn-1",
+            type: "reasoning.ended",
+            timestamp: "2026-06-06T00:00:09.300Z",
+            payload: {
+              reasoningId: "runtime-thinking",
+              status: "completed",
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      type: "reasoning_ended",
+      reasoningId: "runtime-thinking",
+      status: "completed",
+      event_id: "evt-reasoning-ended",
+      sequence: 14,
+      session_id: "session-1",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+    });
+
+    expect(
+      projectAppServerAgentEventPayload({
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: "evt-model-effective",
+            sequence: 15,
+            sessionId: "session-1",
+            threadId: "thread-1",
+            turnId: "turn-1",
+            type: "model.effective",
+            timestamp: "2026-06-06T00:00:10.000Z",
+            payload: {
+              model: { providerId: "openai", modelId: "gpt-codex" },
+              provider: "openai",
+              modelName: "gpt-codex",
+              source: "runtime_options",
+              serviceModelSlot: "coding",
+              requestedReasoningEffort: "high",
+              reasoning: {
+                supported: true,
+                requestedLevel: "high",
+                effectiveLevel: "high",
+              },
+              toolCalling: {
+                supported: true,
+                streaming: true,
+              },
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      type: "model_effective",
+      model: { providerId: "openai", modelId: "gpt-codex" },
+      provider: "openai",
+      modelName: "gpt-codex",
+      source: "runtime_options",
+      serviceModelSlot: "coding",
+      requestedReasoningEffort: "high",
+      event_id: "evt-model-effective",
+      sequence: 15,
+      session_id: "session-1",
+      thread_id: "thread-1",
       turn_id: "turn-1",
     });
 

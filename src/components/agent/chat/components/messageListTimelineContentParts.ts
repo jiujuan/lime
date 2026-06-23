@@ -17,6 +17,7 @@ import {
   toToolCallState,
 } from "./timeline-utils/itemConverters";
 import {
+  isUpdatePlanToolName,
   isUnifiedWebFetchToolName,
   isUnifiedWebSearchToolName,
 } from "../utils/toolNameFamily";
@@ -280,6 +281,10 @@ function metadataRecord(value: unknown): Record<string, unknown> | undefined {
 function buildTimelineToolContentPart(
   item: AgentThreadItem,
 ): MessageContentPart | null {
+  if (item.type === "tool_call" && isUpdatePlanToolName(item.tool_name)) {
+    return null;
+  }
+
   if (
     item.type === "tool_call" ||
     item.type === "command_execution" ||
@@ -733,7 +738,7 @@ export function buildTimelineInlineContentParts(params: {
   );
   const toolLikeCount = items.filter(
     (item) =>
-      item.type === "tool_call" ||
+      (item.type === "tool_call" && !isUpdatePlanToolName(item.tool_name)) ||
       item.type === "command_execution" ||
       item.type === "patch" ||
       item.type === "web_search" ||

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AgentToolCallState } from "@/lib/api/agentProtocol";
 import {
+  coalesceAdjacentThinkingProcessEntries,
   shouldAutoExpandProcessEntries,
   type StreamingProcessEntry,
 } from "./StreamingProcessGroupModel";
@@ -27,6 +28,75 @@ function toolEntry(tool: AgentToolCallState): StreamingProcessEntry {
 }
 
 describe("StreamingProcessGroupModel", () => {
+  it("相邻 thinking 过程项应合并为同一条过程说明，工具仍作为边界", () => {
+    const searchTool = toolEntry(
+      toolCall({
+        id: "tool-search-boundary",
+        name: "web_search",
+      }),
+    );
+    const fetchTool = toolEntry(
+      toolCall({
+        id: "tool-fetch-boundary",
+        name: "WebFetch",
+      }),
+    );
+    const entries: StreamingProcessEntry[] = [
+      searchTool,
+      {
+        kind: "thinking",
+        id: "thinking-1",
+        text: "用户想",
+        defaultExpanded: true,
+      },
+      {
+        kind: "thinking",
+        id: "thinking-2",
+        text: "了解今天的国际新闻",
+        autoCollapseEligible: true,
+      },
+      fetchTool,
+    ];
+
+    expect(coalesceAdjacentThinkingProcessEntries(entries)).toEqual([
+      searchTool,
+      {
+        kind: "thinking",
+        id: "thinking-1",
+        text: "用户想了解今天的国际新闻",
+        defaultExpanded: true,
+        isActive: undefined,
+        autoCollapseEligible: true,
+        preserveSourceText: undefined,
+        metadata: undefined,
+      },
+      fetchTool,
+    ]);
+  });
+
+  it("没有相邻 thinking 过程项时保持原数组引用", () => {
+    const entries: StreamingProcessEntry[] = [
+      {
+        kind: "thinking",
+        id: "thinking-1",
+        text: "先搜索来源。",
+      },
+      toolEntry(
+        toolCall({
+          id: "tool-search-boundary",
+          name: "web_search",
+        }),
+      ),
+      {
+        kind: "thinking",
+        id: "thinking-2",
+        text: "再读取页面。",
+      },
+    ];
+
+    expect(coalesceAdjacentThinkingProcessEntries(entries)).toBe(entries);
+  });
+
   it("消息仍在输出时，completed Skill 过程不应提前折叠", () => {
     expect(
       shouldAutoExpandProcessEntries(
@@ -103,6 +173,40 @@ describe("StreamingProcessGroupModel", () => {
               },
             }),
           ),
+        ],
+        true,
+      ),
+    ).toBe(false);
+  });
+
+  it("仍在输出的 thinking 过程应保持展开", () => {
+    expect(
+      shouldAutoExpandProcessEntries(
+        [
+          {
+            kind: "thinking",
+            id: "thinking-1",
+            text: "先拆解用户意图，再更新计划。",
+            defaultExpanded: true,
+            isActive: true,
+          },
+        ],
+        true,
+      ),
+    ).toBe(true);
+  });
+
+  it("已有后续内容的 thinking 过程不强制过程组展开", () => {
+    expect(
+      shouldAutoExpandProcessEntries(
+        [
+          {
+            kind: "thinking",
+            id: "thinking-1",
+            text: "先拆解用户意图，再更新计划。",
+            defaultExpanded: true,
+            autoCollapseEligible: true,
+          },
         ],
         true,
       ),

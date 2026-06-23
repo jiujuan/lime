@@ -281,8 +281,21 @@ function appServerEventTypeFromPublishedPayload(
     case "text_delta_batch":
       return "message.delta_batch";
     case "thinking_delta":
-    case "reasoning_delta":
       return "thinking.delta";
+    case "reasoning_started":
+      return "reasoning.started";
+    case "reasoning_delta":
+      return "reasoning.delta";
+    case "reasoning_final":
+      return "reasoning.final";
+    case "reasoning_ended":
+      return "reasoning.ended";
+    case "plan_delta":
+      return "plan.delta";
+    case "plan_final":
+      return "plan.final";
+    case "model_effective":
+      return "model.effective";
     case "tool_start":
     case "tool_started":
       return "tool.started";

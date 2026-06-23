@@ -53,6 +53,16 @@ describe("proposedPlan", () => {
     ]);
   });
 
+  it("应按 markdown checklist 恢复计划项状态", () => {
+    expect(
+      parseProposedPlanItems("- [x] 读取任务区域\n- [ ] 恢复运行计划\n- [-] 执行验证"),
+    ).toEqual([
+      { text: "读取任务区域", status: "completed" },
+      { text: "恢复运行计划", status: "pending" },
+      { text: "执行验证", status: "in_progress" },
+    ]);
+  });
+
   it("应兼容历史 fixture 中的字面换行", () => {
     expect(
       extractLatestProposedPlanItems(

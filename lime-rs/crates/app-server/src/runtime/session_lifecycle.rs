@@ -162,6 +162,12 @@ fn update_session_business_object_metadata(
     if let Some(value) = params.recent_team_selection.as_ref() {
         updates.insert("recentTeamSelection".to_string(), value.clone());
     }
+    if let Some(value) = params.product_workspace_selected_object_ref.as_ref() {
+        updates.insert(
+            "productWorkspaceSelectedObjectRef".to_string(),
+            value.clone(),
+        );
+    }
     if updates.is_empty() {
         return;
     }
@@ -413,6 +419,9 @@ impl RuntimeCore {
                         recent_access_mode: params.recent_access_mode.clone(),
                         recent_preferences: params.recent_preferences.clone(),
                         recent_team_selection: params.recent_team_selection.clone(),
+                        product_workspace_selected_object_ref: params
+                            .product_workspace_selected_object_ref
+                            .clone(),
                     },
                     timestamp().as_str(),
                 )

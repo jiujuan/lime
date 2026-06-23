@@ -35,10 +35,12 @@ import {
 } from "./generalWorkbenchTaskRailText";
 import {
   buildProposedPlanItemsFromMessages,
-  buildUpdatePlanItemsFromMessageToolCalls,
-  buildUpdatePlanItemsFromThreadItems,
   isUpdatePlanToolName,
 } from "./planToolProjection";
+import {
+  hydrateAgentPlanState,
+  type AgentPlanState,
+} from "../utils/planState";
 
 export type {
   GeneralWorkbenchTaskRailContextInput,
@@ -77,6 +79,14 @@ export interface GeneralWorkbenchTaskRailPlanItem {
   meta: string;
 }
 
+export interface GeneralWorkbenchTaskRailPlanRevision {
+  revisionId: string;
+  label: string;
+  title: string;
+  source?: AgentPlanState["source"];
+  turnId?: string;
+}
+
 export interface GeneralWorkbenchTaskRailActivityItem {
   id: string;
   title: string;
@@ -113,6 +123,7 @@ export interface GeneralWorkbenchTaskRailProjection {
   outputItems: GeneralWorkbenchTaskRailItem[];
   contextItems: GeneralWorkbenchTaskRailContextItem[];
   planItems: GeneralWorkbenchTaskRailPlanItem[];
+  planRevision: GeneralWorkbenchTaskRailPlanRevision | null;
   planOverflowCount: number;
   activityItems: GeneralWorkbenchTaskRailActivityItem[];
   activityOverflowCount: number;
@@ -186,6 +197,42 @@ function truncateText(value: string, maxLength = 120): string {
   return `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
 }
 
+function compactPlanRevisionId(value: string, maxLength = 24): string {
+  const normalized = value.trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  return `…${normalized.slice(-maxLength + 1)}`;
+}
+
+function buildPlanRevisionProjection(
+  planState: AgentPlanState,
+  t: MinimalTranslate,
+): GeneralWorkbenchTaskRailPlanRevision | null {
+  const revisionId = planState.revisionId?.trim();
+  if (!revisionId) {
+    return null;
+  }
+  const compactRevision = compactPlanRevisionId(revisionId);
+  return {
+    revisionId,
+    label: translateTaskRailText(
+      t,
+      "generalWorkbench.taskRail.planRevision",
+      "计划 {{revision}}",
+      { revision: compactRevision },
+    ),
+    title: translateTaskRailText(
+      t,
+      "generalWorkbench.taskRail.planRevisionTitle",
+      "当前计划版本：{{revision}}",
+      { revision: revisionId },
+    ),
+    source: planState.source,
+    turnId: planState.turnId,
+  };
+}
+
 function formatToolArgs(value: string | undefined): string | null {
   if (!value?.trim()) {
     return null;
@@ -244,18 +291,6 @@ function buildPlanItems(
   }));
 }
 
-function normalizeThreadPlanStatus(
-  status: AgentThreadItem["status"],
-): GeneralWorkbenchTaskRailItemStatus {
-  if (status === "failed") {
-    return "failed";
-  }
-  if (status === "in_progress") {
-    return "running";
-  }
-  return "completed";
-}
-
 function normalizeTodoStatus(
   status: AsterTodoItem["status"],
 ): GeneralWorkbenchTaskRailItemStatus {
@@ -268,102 +303,44 @@ function normalizeTodoStatus(
   return "pending";
 }
 
-function buildThreadPlanItems(
-  threadItems: readonly AgentThreadItem[] | undefined,
-  t: MinimalTranslate,
-): GeneralWorkbenchTaskRailPlanItem[] {
-  const planItems = (threadItems ?? []).filter(
-    (item): item is Extract<AgentThreadItem, { type: "plan" }> =>
-      item.type === "plan" && item.text.trim().length > 0,
-  );
-  const structuredPlanItems = buildStructuredThreadPlanItems(planItems, t);
-  if (structuredPlanItems.length > 0) {
-    return structuredPlanItems;
-  }
-
-  return planItems
-    .filter((item) => item.text.trim().length > 0)
-    .map((item, index) => ({
-      id: item.id,
-      title: item.text.trim(),
-      status: normalizeThreadPlanStatus(item.status),
-      meta: translateTaskRailText(
-        t,
-        "generalWorkbench.taskRail.stepMeta",
-        "步骤 {{index}}",
-        {
-          index: index + 1,
-        },
-      ),
-    }));
-}
-
-function buildStructuredThreadPlanItems(
-  planItems: readonly Extract<AgentThreadItem, { type: "plan" }>[],
-  t: MinimalTranslate,
-): GeneralWorkbenchTaskRailPlanItem[] {
-  for (const item of [...planItems].reverse()) {
-    const steps = readStructuredPlanSteps(item.metadata);
-    if (steps.length === 0) {
-      continue;
-    }
-    return steps.map((step, index) => ({
-      id: `${item.id}:${index}:${step.step}`,
-      title: step.step,
-      status: normalizeStructuredPlanStatus(step.status),
-      meta: translateTaskRailText(
-        t,
-        "generalWorkbench.taskRail.stepMeta",
-        "步骤 {{index}}",
-        {
-          index: index + 1,
-        },
-      ),
-    }));
-  }
-  return [];
-}
-
-function readStructuredPlanSteps(
-  metadata: unknown,
-): Array<{ step: string; status: string }> {
-  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
-    return [];
-  }
-  const plan = (metadata as { plan?: unknown }).plan;
-  if (!Array.isArray(plan)) {
-    return [];
-  }
-  return plan.flatMap((item) => {
-    if (!item || typeof item !== "object" || Array.isArray(item)) {
-      return [];
-    }
-    const record = item as { step?: unknown; status?: unknown };
-    const step = typeof record.step === "string" ? record.step.trim() : "";
-    const status =
-      typeof record.status === "string" ? record.status.trim() : "";
-    if (!step || !status) {
-      return [];
-    }
-    return [{ step, status }];
-  });
-}
-
-function normalizeStructuredPlanStatus(
-  status: string,
+function normalizePlanStateStepStatus(
+  status: AgentPlanState["steps"][number]["status"],
 ): GeneralWorkbenchTaskRailItemStatus {
-  switch (status) {
-    case "completed":
-      return "completed";
-    case "in_progress":
-    case "inProgress":
-    case "in-progress":
-      return "running";
-    case "failed":
-      return "failed";
-    default:
-      return "pending";
+  if (status === "completed") {
+    return "completed";
   }
+  if (status === "in_progress") {
+    return "running";
+  }
+  return "pending";
+}
+
+function buildPlanStatePlanItems(
+  planState: AgentPlanState | undefined,
+  t: MinimalTranslate,
+): GeneralWorkbenchTaskRailPlanItem[] {
+  if (!planState || planState.phase === "idle" || planState.steps.length === 0) {
+    return [];
+  }
+  if (planState.source === "thread_item" && !planState.revisionId) {
+    return [];
+  }
+  const idPrefix =
+    planState.itemId ||
+    `plan-state:${planState.revisionId || planState.turnId || planState.source || "current"}`;
+  return planState.steps.map((step, index) => ({
+    id: `${idPrefix}:${index}:${step.text}`,
+    title: step.text,
+    status: normalizePlanStateStepStatus(step.status),
+    meta: translateTaskRailText(
+      t,
+      "generalWorkbench.taskRail.stepMeta",
+      "步骤 {{index}}",
+      {
+        index: index + 1,
+      },
+    ),
+  }));
 }
 
 function buildTodoPlanItems(
@@ -390,13 +367,13 @@ function buildTodoPlanItems(
 function buildRecoveredPlanItems({
   workflowSteps,
   messages,
-  threadItems,
+  planState,
   todoItems,
   t,
 }: {
   workflowSteps: GeneralWorkbenchWorkflowStepInput[];
   messages: Message[];
-  threadItems?: readonly AgentThreadItem[];
+  planState?: AgentPlanState;
   todoItems?: readonly AsterTodoItem[];
   t: MinimalTranslate;
 }): GeneralWorkbenchTaskRailPlanItem[] {
@@ -405,31 +382,14 @@ function buildRecoveredPlanItems({
     return workflowPlanItems;
   }
 
+  const planStateItems = buildPlanStatePlanItems(planState, t);
+  if (planStateItems.length > 0) {
+    return planStateItems;
+  }
+
   const proposedPlanItems = buildProposedPlanItemsFromMessages(messages, t);
   if (proposedPlanItems.length > 0) {
     return proposedPlanItems;
-  }
-
-  const messageUpdatePlanItems = [...messages]
-    .reverse()
-    .flatMap((message) =>
-      buildUpdatePlanItemsFromMessageToolCalls(message.toolCalls, t),
-    );
-  if (messageUpdatePlanItems.length > 0) {
-    return messageUpdatePlanItems;
-  }
-
-  const threadUpdatePlanItems = buildUpdatePlanItemsFromThreadItems(
-    threadItems,
-    t,
-  );
-  if (threadUpdatePlanItems.length > 0) {
-    return threadUpdatePlanItems;
-  }
-
-  const threadPlanItems = buildThreadPlanItems(threadItems, t);
-  if (threadPlanItems.length > 0) {
-    return threadPlanItems;
   }
 
   return buildTodoPlanItems(todoItems, t);
@@ -846,10 +806,13 @@ export function buildGeneralWorkbenchTaskRailProjection({
     ...buildCreationTaskItems(groupedCreationTaskEvents),
   ]);
   const outputItems = buildOutputItems(items);
+  const planState = hydrateAgentPlanState({
+    threadItems,
+  });
   const planItems = buildRecoveredPlanItems({
     workflowSteps,
     messages,
-    threadItems,
+    planState,
     todoItems,
     t,
   });
@@ -883,6 +846,7 @@ export function buildGeneralWorkbenchTaskRailProjection({
     outputItems,
     contextItems: buildGeneralWorkbenchTaskRailContextItems(mergedContext, t),
     planItems: planItems.slice(0, 3),
+    planRevision: buildPlanRevisionProjection(planState, t),
     planOverflowCount: Math.max(planItems.length - 3, 0),
     activityItems: activityItems.slice(0, 3),
     activityOverflowCount: Math.max(activityItems.length - 3, 0),

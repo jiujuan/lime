@@ -310,7 +310,7 @@ describe("MessageList web process", () => {
     expect(toolNames).toEqual(["Read", "Write"]);
   });
 
-  it("完成态 timeline 已有计划时应内联计划块并保留本地思考顺序", () => {
+  it("完成态 timeline 已有计划时应内联计划文本但不重复渲染计划卡", () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -369,7 +369,7 @@ describe("MessageList web process", () => {
     ).toBeNull();
     expect(mockStreamingRenderer).toHaveBeenCalledWith(
       expect.objectContaining({
-        renderProposedPlanBlocks: true,
+        renderProposedPlanBlocks: false,
         thinkingContent: undefined,
         contentParts: [
           {
@@ -386,6 +386,29 @@ describe("MessageList web process", () => {
           },
           { type: "text", text: "已经整理完执行思路。" },
         ],
+      }),
+    );
+  });
+
+  it("没有 timeline 计划事实时应保留 proposed_plan 计划卡 fallback", () => {
+    const now = new Date();
+    const messages: Message[] = [
+      {
+        id: "msg-assistant-proposed-plan-fallback",
+        role: "assistant",
+        content:
+          "先列计划\n<proposed_plan>\n1. 核对输入\n2. 执行修改\n</proposed_plan>\n再继续。",
+        timestamp: now,
+      },
+    ];
+
+    render(messages);
+
+    expect(mockStreamingRenderer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        renderProposedPlanBlocks: true,
+        content:
+          "先列计划\n<proposed_plan>\n1. 核对输入\n2. 执行修改\n</proposed_plan>\n再继续。",
       }),
     );
   });

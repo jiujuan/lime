@@ -186,6 +186,146 @@ describe("appServerReadModelProjection", () => {
     });
   });
 
+  it("应保留 detail.thread_read 的 plan/reasoning thread_items metadata", () => {
+    const result = projectAppServerSessionReadToThreadReadModel(
+      sessionRead({
+        detail: {
+          thread_read: {
+            thread_id: "thread-1",
+            status: "completed",
+            thread_items: [
+              {
+                id: "reasoning-1",
+                thread_id: "thread-1",
+                turn_id: "turn-1",
+                sequence: 1,
+                status: "completed",
+                started_at: "2026-06-23T00:00:00.000Z",
+                completed_at: "2026-06-23T00:00:01.000Z",
+                updated_at: "2026-06-23T00:00:01.000Z",
+                type: "reasoning",
+                text: "先理解目标。",
+                metadata: {
+                  provider_metadata: {
+                    backend: "codex",
+                    signature: "thinking-signature",
+                  },
+                },
+              },
+              {
+                id: "plan-1",
+                thread_id: "thread-1",
+                turn_id: "turn-1",
+                sequence: 2,
+                status: "completed",
+                started_at: "2026-06-23T00:00:02.000Z",
+                completed_at: "2026-06-23T00:00:03.000Z",
+                updated_at: "2026-06-23T00:00:03.000Z",
+                type: "plan",
+                text: "- [ ] 验证历史恢复",
+                metadata: {
+                  revisionId: "plan:history",
+                  plan: [{ step: "验证历史恢复", status: "pending" }],
+                },
+              },
+            ],
+          },
+        },
+      }),
+    );
+
+    expect(result.thread_items).toEqual([
+      expect.objectContaining({
+        id: "reasoning-1",
+        type: "reasoning",
+        metadata: {
+          provider_metadata: {
+            backend: "codex",
+            signature: "thinking-signature",
+          },
+        },
+      }),
+      expect.objectContaining({
+        id: "plan-1",
+        type: "plan",
+        metadata: {
+          revisionId: "plan:history",
+          plan: [{ step: "验证历史恢复", status: "pending" }],
+        },
+      }),
+    ]);
+  });
+
+  it("应把 session business object metadata 投影到 thread read model", () => {
+    const result = projectAppServerSessionReadToThreadReadModel(
+      sessionRead({
+        session: {
+          sessionId: "session-1",
+          threadId: "thread-1",
+          appId: "agent-chat",
+          workspaceId: "workspace-1",
+          status: "running",
+          createdAt: "2026-06-06T00:00:00.000Z",
+          updatedAt: "2026-06-06T00:00:03.000Z",
+          businessObjectRef: {
+            kind: "agent.session",
+            id: "agent-session:workspace-1:session-1",
+            metadata: {
+              title: "代码文学专家",
+              expert: { expertId: "code-literature" },
+              harness: {
+                expert: { expert_id: "code-literature" },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    expect(result.session_business_object_ref_metadata).toEqual({
+      title: "代码文学专家",
+      expert: { expertId: "code-literature" },
+      harness: {
+        expert: { expert_id: "code-literature" },
+      },
+    });
+  });
+
+  it("detail.thread_read 的 session metadata 应优先于 session business object metadata", () => {
+    const result = projectAppServerSessionReadToThreadReadModel(
+      sessionRead({
+        session: {
+          sessionId: "session-1",
+          threadId: "thread-1",
+          appId: "agent-chat",
+          workspaceId: "workspace-1",
+          status: "running",
+          createdAt: "2026-06-06T00:00:00.000Z",
+          updatedAt: "2026-06-06T00:00:03.000Z",
+          businessObjectRef: {
+            kind: "agent.session",
+            id: "agent-session:workspace-1:session-1",
+            metadata: {
+              expert: { expertId: "session-expert" },
+            },
+          },
+        },
+        detail: {
+          thread_read: {
+            thread_id: "thread-1",
+            session_business_object_ref_metadata: {
+              expert: { expertId: "detail-expert" },
+            },
+          },
+        },
+      }),
+    );
+
+    expect(result.session_business_object_ref_metadata).toEqual({
+      expert: { expertId: "detail-expert" },
+    });
+  });
+
   it("应把 App Server canceled 状态归一为前端 cancelled", () => {
     const result = projectAppServerSessionReadToThreadReadModel(
       sessionRead({

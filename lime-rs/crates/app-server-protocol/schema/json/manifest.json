@@ -12,6 +12,10 @@
   "methods": [
     {
       "kind": "request",
+      "method": "agentAppHostLifecycle/list"
+    },
+    {
+      "kind": "request",
       "method": "agentAppInstalled/disabled/set"
     },
     {
@@ -1068,6 +1072,26 @@
     },
     {
       "kind": "request",
+      "method": "workspaceRightSurface/pending/consume"
+    },
+    {
+      "kind": "request",
+      "method": "workspaceRightSurface/pending/dismiss"
+    },
+    {
+      "kind": "request",
+      "method": "workspaceRightSurface/pending/list"
+    },
+    {
+      "kind": "notification",
+      "method": "workspaceRightSurface/pendingChanged"
+    },
+    {
+      "kind": "request",
+      "method": "workspaceRightSurface/request"
+    },
+    {
+      "kind": "request",
       "method": "workspaceSkillBindings/list"
     }
   ],
@@ -1088,6 +1112,10 @@
       "AgentAppDeleteDataPostDeleteResidualAudit",
       "AgentAppDeleteDataTargetEvidence",
       "AgentAppFetchCloudPackageParams",
+      "AgentAppHistoryRestoreContract",
+      "AgentAppHostFunctionState",
+      "AgentAppHostLifecycleListResponse",
+      "AgentAppHostLifecycleSnapshot",
       "AgentAppInstalledDisabledSetParams",
       "AgentAppInstalledListResponse",
       "AgentAppInstalledSaveParams",
@@ -1095,9 +1123,13 @@
       "AgentAppLocalPackageInspectResponse",
       "AgentAppPackageCacheEntry",
       "AgentAppPackageIdentity",
+      "AgentAppProductProfileContract",
+      "AgentAppProductProfileObject",
+      "AgentAppRightSurfaceContract",
       "AgentAppShellPackageMount",
       "AgentAppShellPrepareParams",
       "AgentAppShellPrepareResponse",
+      "AgentAppTaskRuntimeContract",
       "AgentAppUiRuntimeStartParams",
       "AgentAppUiRuntimeStatusParams",
       "AgentAppUiRuntimeStatusResponse",
@@ -1614,6 +1646,16 @@
       "WorkspaceReadResponse",
       "WorkspaceRegisteredSkillsListParams",
       "WorkspaceRegisteredSkillsListResponse",
+      "WorkspaceRightSurfacePendingChangedParams",
+      "WorkspaceRightSurfacePendingConsumeParams",
+      "WorkspaceRightSurfacePendingConsumeResponse",
+      "WorkspaceRightSurfacePendingDismissParams",
+      "WorkspaceRightSurfacePendingDismissResponse",
+      "WorkspaceRightSurfacePendingListParams",
+      "WorkspaceRightSurfacePendingListResponse",
+      "WorkspaceRightSurfacePendingRequest",
+      "WorkspaceRightSurfaceRequestParams",
+      "WorkspaceRightSurfaceRequestResponse",
       "WorkspaceSkillBindingsListParams",
       "WorkspaceSkillBindingsListResponse",
       "WorkspaceUpdateParams",

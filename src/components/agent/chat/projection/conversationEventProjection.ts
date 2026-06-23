@@ -3,6 +3,8 @@ import type {
   AgentEventTextDelta,
   AgentEventTextDeltaBatch,
   AgentEventThinkingDelta,
+  AgentEventReasoningDelta,
+  AgentEventReasoningFinal,
 } from "@/lib/api/agentProtocol";
 import type {
   AgentUiProjectionContext,
@@ -45,13 +47,21 @@ export function buildTextDeltaEvent(
 }
 
 export function buildThinkingDeltaEvent(
-  event: AgentEventThinkingDelta,
+  event:
+    | AgentEventThinkingDelta
+    | AgentEventReasoningDelta
+    | AgentEventReasoningFinal,
   context: AgentUiProjectionContext,
 ): AgentUiProjectionEvent {
   return buildAgentUiReasoningDeltaEvent(
     {
       sourceType: event.type,
-      text: event.text,
+      text:
+        event.type === "reasoning_delta"
+          ? event.text || event.delta || ""
+          : event.type === "reasoning_final"
+            ? event.text
+          : event.text,
     },
     context,
   );

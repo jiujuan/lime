@@ -16,6 +16,14 @@ import {
   resolveArtifactPreviewText,
   resolveArtifactWritePhase,
 } from "./messageArtifacts";
+import {
+  hydrateAgentPlanState,
+  type AgentPlanState,
+} from "./planState";
+import {
+  hydrateAgentReasoningState,
+  type AgentModelReasoningState,
+} from "./modelReasoningState";
 
 export type HarnessTodoStatus = "pending" | "in_progress" | "completed";
 export type HarnessPlanPhase = "idle" | "planning" | "ready";
@@ -37,6 +45,9 @@ export interface HarnessPlanState {
   items: HarnessTodoItem[];
   sourceToolCallId?: string;
   summaryText?: string;
+  revisionId?: string;
+  turnId?: string;
+  source?: AgentPlanState["source"];
 }
 
 export interface HarnessToolActivity {
@@ -128,6 +139,7 @@ export interface HarnessSessionState {
   pendingApprovals: ActionRequired[];
   latestContextTrace: ContextTraceStep[];
   plan: HarnessPlanState;
+  reasoning?: AgentModelReasoningState;
   activity: HarnessToolActivity;
   delegatedTasks: HarnessDelegatedTask[];
   outputSignals: HarnessOutputSignal[];
@@ -1088,21 +1100,44 @@ function extractDelegatedTask(toolCall: ToolCallState): HarnessDelegatedTask {
   };
 }
 
-function parsePlanTextToTodoItems(text: string): HarnessTodoItem[] {
-  return text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .filter((line) => /^(\d+\.\s+|[-*]\s+|\[[ xX]\]\s+)/.test(line))
-    .map((line, index) => {
-      const completed = /^\[[xX]\]/.test(line);
-      return {
-        id: `plan-${index + 1}`,
-        content: line.replace(/^(\d+\.\s+|[-*]\s+|\[[ xX]\]\s+)/, "").trim(),
-        status: completed ? "completed" : "pending",
-      } as HarnessTodoItem;
-    })
-    .filter((item) => item.content.length > 0);
+function shouldUseStandardPlanState(planState: AgentPlanState): boolean {
+  if (planState.phase === "idle" || planState.steps.length === 0) {
+    return false;
+  }
+  return planState.source !== "thread_item" || Boolean(planState.revisionId);
+}
+
+function normalizePlanStateTodoStatus(
+  status: AgentPlanState["steps"][number]["status"],
+): HarnessTodoStatus {
+  if (status === "completed") {
+    return "completed";
+  }
+  if (status === "in_progress") {
+    return "in_progress";
+  }
+  return "pending";
+}
+
+function planStateToTodoItems(planState: AgentPlanState): HarnessTodoItem[] {
+  if (!shouldUseStandardPlanState(planState)) {
+    return [];
+  }
+  return planState.steps.map((step, index) => ({
+    id: `${planState.itemId || planState.revisionId || "plan-state"}:${index + 1}`,
+    content: step.text,
+    status: normalizePlanStateTodoStatus(step.status),
+  }));
+}
+
+function planStateToHarnessPhase(planState: AgentPlanState): HarnessPlanPhase {
+  if (planState.phase === "ready" || planState.phase === "completed") {
+    return "ready";
+  }
+  if (planState.phase === "planning" || planState.phase === "executing") {
+    return "planning";
+  }
+  return "idle";
 }
 
 function itemTimestamp(item: AgentThreadItem): number {
@@ -1202,7 +1237,6 @@ function deriveHarnessSessionStateFromItems(
   const outputSignals: HarnessOutputSignal[] = [];
   const recentFileEvents: HarnessFileEvent[] = [];
   const derivedApprovalMap = new Map<string, ActionRequired>();
-  let latestPlanItem: AgentThreadItem | null = null;
   let latestTurnSummaryItem: Extract<
     AgentThreadItem,
     { type: "turn_summary" }
@@ -1211,8 +1245,6 @@ function deriveHarnessSessionStateFromItems(
   for (const item of sortedItems) {
     switch (item.type) {
       case "plan":
-        activity.planning += 1;
-        latestPlanItem = item;
         break;
       case "file_artifact": {
         activity.filesystem += 1;
@@ -1357,12 +1389,27 @@ function deriveHarnessSessionStateFromItems(
     }
   }
 
-  const derivedPlanItems =
-    latestPlanItem && latestPlanItem.type === "plan"
-      ? parsePlanTextToTodoItems(latestPlanItem.text)
-      : [];
+  const standardPlanState = hydrateAgentPlanState({
+    threadItems: sortedItems,
+  });
+  const reasoningState = hydrateAgentReasoningState({
+    threadItems: sortedItems,
+  });
+  const reasoningRunStatus = reasoningState.reasoning.status;
+  const hasReasoningSignal =
+    reasoningState.reasoning.supported &&
+    ((typeof reasoningRunStatus === "string" &&
+      reasoningRunStatus !== "idle") ||
+      Boolean(reasoningState.reasoning.text?.trim()));
+  const useStandardPlanState = shouldUseStandardPlanState(standardPlanState);
+  if (useStandardPlanState) {
+    activity.planning += 1;
+  }
+  const planStateTodoItems = planStateToTodoItems(standardPlanState);
   const planItems =
-    derivedPlanItems.length > 0 ? derivedPlanItems : persistedTodoItems;
+    planStateTodoItems.length > 0
+      ? planStateTodoItems
+      : persistedTodoItems;
   const planSummaryText =
     planItems.length > 0
       ? undefined
@@ -1374,18 +1421,20 @@ function deriveHarnessSessionStateFromItems(
     }
   }
 
-  const planPhase: HarnessPlanPhase = !latestPlanItem
-    ? planSummaryText
-      ? "ready"
-      : "idle"
-    : latestPlanItem.status === "completed"
-      ? "ready"
-      : "planning";
+  const planPhase: HarnessPlanPhase =
+    planStateTodoItems.length > 0
+      ? planStateToHarnessPhase(standardPlanState)
+      : planItems.length > 0
+        ? "planning"
+        : planSummaryText
+          ? "ready"
+          : "idle";
   const hasSignals =
     runtimeStatus !== null ||
     mergedApprovals.length > 0 ||
     latestContextTrace.length > 0 ||
     planItems.length > 0 ||
+    hasReasoningSignal ||
     delegatedTasks.length > 0 ||
     outputSignals.length > 0 ||
     activeFileWrites.length > 0 ||
@@ -1399,9 +1448,16 @@ function deriveHarnessSessionStateFromItems(
     plan: {
       phase: planPhase,
       items: planItems,
-      sourceToolCallId: latestPlanItem?.id || latestTurnSummaryItem?.id,
+      sourceToolCallId:
+        (planStateTodoItems.length > 0
+          ? standardPlanState.itemId || standardPlanState.revisionId
+          : undefined) || latestTurnSummaryItem?.id,
       summaryText: planSummaryText,
+      revisionId: useStandardPlanState ? standardPlanState.revisionId : undefined,
+      turnId: useStandardPlanState ? standardPlanState.turnId : undefined,
+      source: useStandardPlanState ? standardPlanState.source : undefined,
     },
+    reasoning: reasoningState,
     activity,
     delegatedTasks: delegatedTasks.slice(-5).reverse(),
     outputSignals: outputSignals.slice(-HARNESS_OUTPUT_SIGNAL_LIMIT).reverse(),
@@ -1426,6 +1482,7 @@ function deriveHarnessSessionStateFromMessages(
     ? pendingApprovals
     : [];
   const runtimeStatus = extractLatestRuntimeStatus(messages);
+  const reasoningState = hydrateAgentReasoningState({});
   const activeFileWrites = extractActiveFileWrites(messages);
   const toolCalls = collectToolCalls(messages);
   const activity: HarnessToolActivity = {
@@ -1582,6 +1639,7 @@ function deriveHarnessSessionStateFromMessages(
       summaryText:
         latestTodoItems.length === 0 ? latestDecisionSummaryText : undefined,
     },
+    reasoning: reasoningState,
     activity,
     delegatedTasks: delegatedTasks.slice(-5).reverse(),
     outputSignals: outputSignals.slice(-HARNESS_OUTPUT_SIGNAL_LIMIT).reverse(),

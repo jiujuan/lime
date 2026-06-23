@@ -18,6 +18,11 @@ import {
   buildInstalledAgentAppState,
   type InstalledAgentAppStateListResult,
 } from "../../features/agent-app/install/installedAppState";
+import {
+  buildAgentAppHostLifecycleSnapshot,
+  type AgentAppHostLifecycleSnapshot,
+  type AgentAppTaskRuntimeContract,
+} from "../../features/agent-app/host";
 import type { ShellDescriptor } from "../../features/agent-app/shell";
 import { buildInstalledAppPreview } from "../../features/agent-app/install/installedAppPreview";
 import { buildPackageIdentity } from "../../features/agent-app/install/packageIdentity";
@@ -43,6 +48,7 @@ import type {
 } from "../../features/agent-app/types";
 import {
   METHOD_AGENT_APP_INSTALLED_DISABLED_SET,
+  METHOD_AGENT_APP_HOST_LIFECYCLE_LIST,
   METHOD_AGENT_APP_INSTALLED_LIST,
   METHOD_AGENT_APP_INSTALLED_SAVE,
   METHOD_AGENT_APP_INSTALLED_UNINSTALL,
@@ -242,6 +248,7 @@ export interface AgentAppUiRuntimeStatus {
   message?: string;
   entryKey?: string;
   route?: string;
+  taskRuntime?: AgentAppTaskRuntimeContract;
 }
 
 export interface AgentAppShellPackageMount {
@@ -268,6 +275,28 @@ export interface AgentAppShellWindowInfo {
   };
 }
 
+export type AgentAppShellSurfaceStrategy =
+  | "controlledBrowserWindow"
+  | "webContentsView";
+
+export interface AgentAppShellSurfaceInfo {
+  activeStrategy: AgentAppShellSurfaceStrategy;
+  supportedStrategies: AgentAppShellSurfaceStrategy[];
+  entryUrl: string;
+  containerId: string;
+  embedding: {
+    standaloneWindow: boolean;
+    rightSurfaceDock: boolean;
+    iframe: false;
+    browserView: false;
+  };
+  isolation: {
+    contextIsolation: true;
+    sandbox: true;
+    nodeIntegration: false;
+  };
+}
+
 export interface AgentAppShellLaunchResult {
   appId?: string;
   status: "launched" | "blocked";
@@ -279,6 +308,7 @@ export interface AgentAppShellLaunchResult {
   message?: string;
   packageMount?: AgentAppShellPackageMount;
   runtimeStatus?: AgentAppUiRuntimeStatus;
+  surface?: AgentAppShellSurfaceInfo;
   shellWindow?: AgentAppShellWindowInfo;
   launchedAt?: string;
 }
@@ -286,6 +316,11 @@ export interface AgentAppShellLaunchResult {
 export interface AgentAppCloudCatalogResult {
   payload: CloudBootstrapPayload;
   source: "remote" | "bootstrap" | "seeded";
+}
+
+export interface AgentAppHostLifecycleListResult {
+  snapshots: AgentAppHostLifecycleSnapshot[];
+  issues: unknown[];
 }
 
 export class AgentAppRegistrationRequiredError extends Error {
@@ -512,6 +547,30 @@ function assertAgentAppShellLaunchResult(
   assertArrayField(command, result, "blockerCodes");
   if (result.status === "launched") {
     assertNonEmptyStringField(command, result, "launchedAt");
+    assertAgentAppShellSurfaceInfo(command, result.surface);
+  }
+}
+
+function assertAgentAppShellSurfaceInfo(command: string, value: unknown): void {
+  if (!value || typeof value !== "object") {
+    throw new Error(`${command} did not return shell surface`);
+  }
+  const record = value as Record<string, unknown>;
+  assertNonEmptyStringField(command, record, "activeStrategy");
+  if (
+    record.activeStrategy !== "controlledBrowserWindow" &&
+    record.activeStrategy !== "webContentsView"
+  ) {
+    throw new Error(`${command} returned unsupported shell surface strategy`);
+  }
+  assertArrayField(command, record, "supportedStrategies");
+  assertNonEmptyStringField(command, record, "entryUrl");
+  assertNonEmptyStringField(command, record, "containerId");
+  if (!record.embedding || typeof record.embedding !== "object") {
+    throw new Error(`${command} did not return shell surface embedding`);
+  }
+  if (!record.isolation || typeof record.isolation !== "object") {
+    throw new Error(`${command} did not return shell surface isolation`);
   }
 }
 
@@ -758,6 +817,48 @@ export async function selectLocalAgentAppDirectory(
 
 export async function listInstalledAgentApps(): Promise<InstalledAgentAppStateListResult> {
   return requestAgentAppInstalledListAppServer();
+}
+
+export function buildAgentAppHostLifecycleForInstalledState(
+  state: InstalledAgentAppState,
+  generatedAt?: string,
+): AgentAppHostLifecycleSnapshot {
+  return buildAgentAppHostLifecycleSnapshot({
+    manifest: state.manifest,
+    readiness: state.readiness,
+    installedState: state,
+    generatedAt: generatedAt ?? state.updatedAt,
+  });
+}
+
+function normalizeAgentAppHostLifecycleListResponse(
+  response: unknown,
+): AgentAppHostLifecycleListResult {
+  if (!isRecord(response) || !Array.isArray(response.snapshots)) {
+    throw new Error(
+      "App Server agentAppHostLifecycle/list did not return snapshots",
+    );
+  }
+  if (!Array.isArray(response.issues)) {
+    throw new Error(
+      "App Server agentAppHostLifecycle/list did not return issues",
+    );
+  }
+  return {
+    snapshots: response.snapshots as AgentAppHostLifecycleSnapshot[],
+    issues: response.issues,
+  };
+}
+
+export async function listAgentAppHostLifecycleSnapshots(
+  appServerClient?: AgentAppLifecycleAppServerClient,
+): Promise<AgentAppHostLifecycleListResult> {
+  const result = await requestAgentAppAppServer<unknown>(
+    METHOD_AGENT_APP_HOST_LIFECYCLE_LIST,
+    {},
+    appServerClient,
+  );
+  return normalizeAgentAppHostLifecycleListResponse(result);
 }
 
 export async function saveInstalledAgentAppState(

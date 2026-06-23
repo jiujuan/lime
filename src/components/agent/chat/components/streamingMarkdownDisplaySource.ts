@@ -3,8 +3,11 @@ export interface StreamingMarkdownDisplaySource {
   pendingTail: string;
 }
 
-const STRUCTURED_CONTENT_HINT_RE =
-  /<a2ui|```\s*a2ui|<write_file|<document/i;
+export interface StreamingMarkdownDisplaySourceOptions {
+  deferMarkdownUntilComplete?: boolean;
+}
+
+const STRUCTURED_CONTENT_HINT_RE = /<a2ui|```\s*a2ui|<write_file|<document/i;
 
 function hasStructuredContentHint(text: string): boolean {
   return STRUCTURED_CONTENT_HINT_RE.test(text);
@@ -13,8 +16,17 @@ function hasStructuredContentHint(text: string): boolean {
 export function resolveStreamingMarkdownDisplaySource(
   text: string,
   isStreaming: boolean,
+  options: StreamingMarkdownDisplaySourceOptions = {},
 ): StreamingMarkdownDisplaySource {
-  if (!isStreaming || hasStructuredContentHint(text)) {
+  if (!isStreaming) {
+    return { markdown: text, pendingTail: "" };
+  }
+
+  if (options.deferMarkdownUntilComplete) {
+    return { markdown: "", pendingTail: text };
+  }
+
+  if (hasStructuredContentHint(text)) {
     return { markdown: text, pendingTail: "" };
   }
 

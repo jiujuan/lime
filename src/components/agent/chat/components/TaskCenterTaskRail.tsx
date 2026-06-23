@@ -567,6 +567,20 @@ export function TaskCenterTaskRail({
           className="mt-2 space-y-1.5"
           data-testid="task-center-task-rail-plan"
         >
+          {projection.planRevision ? (
+            <div
+              className="inline-flex max-w-full items-center rounded-full border border-emerald-100 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium leading-5 text-emerald-700"
+              data-testid="task-center-task-rail-plan-revision"
+              data-plan-revision-id={projection.planRevision.revisionId}
+              data-plan-source={projection.planRevision.source}
+              data-plan-turn-id={projection.planRevision.turnId}
+              title={projection.planRevision.title}
+            >
+              <span className="min-w-0 truncate">
+                {projection.planRevision.label}
+              </span>
+            </div>
+          ) : null}
           {planItems.map((item) => (
             <TaskRailPlanItem key={item.id} item={item} t={t} />
           ))}

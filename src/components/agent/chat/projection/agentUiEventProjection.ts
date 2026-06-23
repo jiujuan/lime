@@ -31,6 +31,7 @@ import {
 } from "./queueProjection";
 import { buildRoutingProjectionEvent } from "./routingProjection";
 import {
+  buildModelEffectiveEvent,
   buildModelChangeEvent,
   buildRunCanceledEvent,
   buildRunFailedEvent,
@@ -136,7 +137,12 @@ export function buildAgentUiProjectionEvents(
       case "text_delta_batch":
         return [buildTextDeltaEvent(event, context)];
       case "thinking_delta":
+      case "reasoning_delta":
+      case "reasoning_final":
         return [buildThinkingDeltaEvent(event, context)];
+      case "reasoning_started":
+      case "reasoning_ended":
+        return [];
       case "runtime_status":
         return buildRuntimeStatusEvents(event, context);
       case "tool_start":
@@ -172,6 +178,8 @@ export function buildAgentUiProjectionEvents(
         return buildSubagentStatusChangedEvents(event, context);
       case "model_change":
         return [buildModelChangeEvent(event, context)];
+      case "model_effective":
+        return [buildModelEffectiveEvent(event, context)];
       case "task_profile_resolved":
         return [buildTaskProfileResolvedEvent(event, context)];
       case "warning":

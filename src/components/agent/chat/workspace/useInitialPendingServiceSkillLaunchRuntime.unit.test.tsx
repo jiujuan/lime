@@ -40,7 +40,7 @@ function createSkill(
     outputHint: "Markdown",
     source: "cloud_catalog",
     runnerType: "instant",
-    defaultExecutorBinding: "agent_skill",
+    defaultExecutorBinding: "agent_turn",
     executionLocation: "client_default",
     slotSchema: [],
     version: "1.0.0",
@@ -137,10 +137,13 @@ describe("useInitialPendingServiceSkillLaunchRuntime", () => {
       launchUserInput: "生成报告",
     };
     const signature = buildPendingServiceSkillLaunchSignature(launch);
-    const onSelectServiceSkill = vi.fn<
-      [ServiceSkillHomeItem, ServiceSkillSelectionOptions?],
-      void
-    >();
+    const onSelectServiceSkill =
+      vi.fn<
+        (
+          skill: ServiceSkillHomeItem,
+          options?: ServiceSkillSelectionOptions,
+        ) => void
+      >();
 
     const { render, getRefs } = renderHook({
       activeTheme: "general",
@@ -186,7 +189,7 @@ describe("useInitialPendingServiceSkillLaunchRuntime", () => {
   });
 
   it("技能列表已加载但找不到目标技能时应提示并标记 handled", async () => {
-    const launch = { skillKey: "missing-skill" };
+    const launch = { skillId: "missing-skill", skillKey: "missing-skill" };
     const signature = buildPendingServiceSkillLaunchSignature(launch);
     const onSelectServiceSkill = vi.fn();
 

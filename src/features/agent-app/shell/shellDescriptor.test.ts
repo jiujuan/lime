@@ -25,12 +25,17 @@ function buildProjection() {
     name: "content-factory-app",
     displayName: "内容工厂",
     version: "0.8.0",
-    entries: [{ key: "dashboard", kind: "page", title: "首页", route: "/dashboard" }],
+    entries: [
+      { key: "dashboard", kind: "page", title: "首页", route: "/dashboard" },
+    ],
     storage: { namespace: "content-factory-app" },
     install: {
       modes: ["in_lime", "standalone", "runtime_backed"],
       runtime: { minVersion: "0.8.0" },
-      standalone: { shell: "lime-app-shell", bundleId: "ai.limecloud.contentfactory" },
+      standalone: {
+        shell: "lime-app-shell",
+        bundleId: "ai.limecloud.contentfactory",
+      },
       runtimeBacked: { requires: "lime-runtime", minVersion: "0.8.0" },
       branding: { name: "Content Factory", windowTitle: "Content Factory" },
     },
@@ -50,7 +55,10 @@ describe("Agent App v2 shell descriptor", () => {
       installMode: "standalone",
       hostProfile: p0HostCapabilityProfile,
     });
-    const descriptor = buildStandaloneShellDescriptor({ projection, runtimeProfile });
+    const descriptor = buildStandaloneShellDescriptor({
+      projection,
+      runtimeProfile,
+    });
 
     expect(descriptor).toMatchObject({
       descriptorVersion: 1,
@@ -85,7 +93,9 @@ describe("Agent App v2 shell descriptor", () => {
       hostProfile: p0HostCapabilityProfile,
     });
 
-    expect(buildRuntimeBackedDescriptor({ projection, runtimeProfile })).toMatchObject({
+    expect(
+      buildRuntimeBackedDescriptor({ projection, runtimeProfile }),
+    ).toMatchObject({
       installMode: "runtime_backed",
       runtimeProfile: {
         shellKind: "runtime_backed",
@@ -98,7 +108,10 @@ describe("Agent App v2 shell descriptor", () => {
       hostProfile: p0HostCapabilityProfile,
     });
     expect(() =>
-      buildRuntimeBackedDescriptor({ projection, runtimeProfile: standaloneProfile }),
+      buildRuntimeBackedDescriptor({
+        projection,
+        runtimeProfile: standaloneProfile,
+      }),
     ).toThrow(/does not match shell descriptor/);
   });
 
@@ -119,7 +132,10 @@ describe("Agent App v2 shell descriptor", () => {
       installMode: "standalone",
       hostProfile: p0HostCapabilityProfile,
     });
-    const descriptor = buildStandaloneShellDescriptor({ projection, runtimeProfile });
+    const descriptor = buildStandaloneShellDescriptor({
+      projection,
+      runtimeProfile,
+    });
     const port = new InMemoryShellLaunchPort();
 
     await expect(port.canLaunch(descriptor)).resolves.toEqual({
@@ -129,6 +145,16 @@ describe("Agent App v2 shell descriptor", () => {
     await expect(port.launch(descriptor)).resolves.toMatchObject({
       status: "launched",
       blockerCodes: [],
+      surface: {
+        activeStrategy: "controlledBrowserWindow",
+        supportedStrategies: ["controlledBrowserWindow", "webContentsView"],
+        embedding: {
+          standaloneWindow: true,
+          rightSurfaceDock: true,
+          iframe: false,
+          browserView: false,
+        },
+      },
       descriptor: {
         appId: "content-factory-app",
         installMode: "standalone",
@@ -198,7 +224,10 @@ describe("Agent App v2 shell descriptor", () => {
       installMode: "standalone",
       hostProfile: p0HostCapabilityProfile,
     });
-    const descriptor = buildStandaloneShellDescriptor({ projection, runtimeProfile });
+    const descriptor = buildStandaloneShellDescriptor({
+      projection,
+      runtimeProfile,
+    });
     const chrome = buildShellChromeDescriptor(descriptor);
 
     expect(chrome).toMatchObject({

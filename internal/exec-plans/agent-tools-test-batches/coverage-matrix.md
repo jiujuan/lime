@@ -39,7 +39,7 @@
 | ----------------------------------------------------------------- | ---------------------------- | ---- | ------- | ------------------------------------------------- |
 | `SearchQuery / ImageQuery`                                        | provider / external tool     | 13   | covered | 已覆盖展示标签、主体对象、过程摘要与批次折叠      |
 | `finance / weather / sports / time`                               | provider / external data     | 13   | covered | 已证明结果摘要和主体对象不丢，且不混成 WebSearch  |
-| `resolve_library_id / query_docs`                                 | Context7 docs tool           | 13   | covered | 已归入探索摘要，不作为普通网页来源                |
+| `resolve-library-id / query-docs`                                 | Context7 docs tool           | 13   | covered | 已归入探索摘要，不作为普通网页来源                |
 | `MCPTool / McpAuthTool / REPLTool / ListSkills / LoadSkill`       | compat / dynamic display     | 14   | covered | 已覆盖展示标签、过程摘要和辅助步骤批次吸收        |
 | `WaitAgent / ResumeAgent / CloseAgent`                            | compat / subagent display    | 14   | covered | 已覆盖子任务控制语义、主体对象和历史预览相邻测试  |
 | unknown dynamic tools matched by family keywords                  | frontend fallback classifier | 15   | covered | 已覆盖动态 MCP read/list/search/browser/mutation  |

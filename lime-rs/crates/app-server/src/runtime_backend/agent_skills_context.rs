@@ -60,7 +60,8 @@ pub(super) fn selected_agent_skill_allowed_tools_for_turn(
     project_root: Option<&Path>,
 ) -> Vec<String> {
     let snapshot = build_agent_skill_snapshot_from_workspace(working_dir, project_root);
-    let selections = selected_agent_skill_selections(user_input, metadata_values, &snapshot);
+    let selections =
+        selected_agent_skill_body_selections_for_prompt(user_input, metadata_values, &snapshot);
     let mut allowed_tools = Vec::new();
     for selection in selections {
         let Some(skill) = snapshot.skills.iter().find(|skill| {
@@ -89,7 +90,8 @@ fn append_selected_agent_skill_bodies(
         return system_prompt;
     }
 
-    let selections = selected_agent_skill_selections(user_input, metadata_values, snapshot);
+    let selections =
+        selected_agent_skill_body_selections_for_prompt(user_input, metadata_values, snapshot);
     if selections.is_empty() {
         return system_prompt;
     }
@@ -128,6 +130,24 @@ pub(super) fn selected_agent_skill_selections(
     let selections = dedupe_agent_skill_selections(selections);
     if !selections.is_empty() {
         return selections;
+    }
+    select_implicit_agent_skills(user_input, snapshot)
+}
+
+pub(super) fn selected_agent_skill_body_selections_for_prompt(
+    user_input: &str,
+    metadata_values: &[&Value],
+    snapshot: &AgentSkillSnapshot,
+) -> Vec<AgentSkillSelection> {
+    let mut selections = select_catalog_bound_agent_skills(metadata_values, snapshot);
+    selections.extend(select_explicit_agent_skills(user_input, snapshot));
+    let selections = dedupe_agent_skill_selections(selections);
+    if !selections.is_empty() {
+        return selections;
+    }
+    if has_expert_skill_refs(metadata_values) || has_workspace_skill_runtime_enable(metadata_values)
+    {
+        return Vec::new();
     }
     select_implicit_agent_skills(user_input, snapshot)
 }
@@ -209,6 +229,21 @@ fn expert_bound_skill_candidates(metadata_values: &[&Value]) -> Vec<String> {
     candidates
 }
 
+fn has_expert_skill_refs(metadata_values: &[&Value]) -> bool {
+    !expert_skill_refs(metadata_values).is_empty()
+}
+
+fn has_workspace_skill_runtime_enable(metadata_values: &[&Value]) -> bool {
+    metadata_values.iter().any(|metadata| {
+        metadata
+            .pointer("/harness/workspace_skill_runtime_enable")
+            .or_else(|| metadata.pointer("/harness/workspaceSkillRuntimeEnable"))
+            .or_else(|| metadata.get("workspace_skill_runtime_enable"))
+            .or_else(|| metadata.get("workspaceSkillRuntimeEnable"))
+            .is_some()
+    })
+}
+
 fn append_expert_skill_hints(
     system_prompt: Option<String>,
     metadata_values: &[&Value],
@@ -241,7 +276,7 @@ fn append_expert_skill_hints(
     append_context_block(
         system_prompt,
         format!(
-            "<expert_skill_refs>\n## 专家绑定的 Agent Skill 候选\n这些 skillRefs 来自当前专家 metadata；能唯一匹配 `AgentSkillSnapshot` 的条目会进入同一 selector / `SKILL.md` 按需读取 / gate / evidence 主链。不要因为候选存在就跳过授权或声称外部动作已经执行。\n{}\n</expert_skill_refs>",
+            "<expert_skill_refs>\n## 专家绑定的 Agent Skill 候选\n这些 skillRefs 来自当前专家 metadata；它们只是候选，不是已执行的技能。需要使用候选 skill 时，首个相关工具调用必须先调用 `skill_search` 搜索并确认候选，再调用 `Skill` 读取 `SKILL.md` 并执行；不要因为候选存在就跳过 selector、授权或声称外部动作已经执行。\n{}\n</expert_skill_refs>",
             lines.join("\n")
         ),
     )
@@ -485,7 +520,7 @@ mod tests {
     }
 
     #[test]
-    fn appends_expert_skill_refs_through_selector_body_and_gate_candidates() {
+    fn appends_expert_skill_refs_as_selector_candidates_without_body() {
         let workspace = TempDir::new().expect("workspace");
         write_skill(&workspace, "writer", "Writer", "Write clearly.");
         let metadata = serde_json::json!({
@@ -514,9 +549,9 @@ mod tests {
         assert!(
             prompt.contains("`service-skill:daily-trend-briefing`: 未在当前 Agent Skills snapshot")
         );
-        assert!(prompt.contains("<selected_skill_instructions>"));
-        assert!(prompt.contains("`writer`"));
-        assert!(prompt.contains("# Body"));
+        assert!(prompt.contains("首个相关工具调用必须先调用 `skill_search`"));
+        assert!(!prompt.contains("<selected_skill_instructions>"));
+        assert!(!prompt.contains("# Body"));
 
         let names = selected_agent_skill_names_for_turn(
             "帮我处理这段话",
@@ -525,6 +560,61 @@ mod tests {
             Some(workspace.path()),
         );
         assert_eq!(names, vec!["writer".to_string()]);
+    }
+
+    #[test]
+    fn workspace_runtime_enable_should_not_implicitly_inject_skill_body() {
+        let workspace = TempDir::new().expect("workspace");
+        let skill_dir = workspace.path().join(".agents/skills/capability-report");
+        std::fs::create_dir_all(&skill_dir).expect("skill dir");
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: Capability Report\ndescription: Capability report live review.\nallowed_tools: Read\n---\n\n# Body\n",
+        )
+        .expect("skill");
+        let metadata = serde_json::json!({
+            "harness": {
+                "workspace_skill_runtime_enable": {
+                    "source": "manual_session_enable",
+                    "approval": "manual",
+                    "workspace_root": workspace.path().to_string_lossy(),
+                    "bindings": [
+                        {
+                            "directory": "capability-report",
+                            "registered_skill_directory": workspace
+                                .path()
+                                .join(".agents/skills/capability-report")
+                                .to_string_lossy()
+                        }
+                    ]
+                },
+                "expert": {
+                    "skill_refs": ["skill:capability-report"]
+                }
+            }
+        });
+
+        let prompt = append_agent_skills_context_to_system_prompt(
+            Some("base".to_string()),
+            "请先搜索 capability-report 后再执行",
+            &[&metadata],
+            Some(workspace.path()),
+            Some(workspace.path()),
+        )
+        .expect("prompt");
+
+        assert!(prompt.contains("<expert_skill_refs>"));
+        assert!(prompt.contains("`skill:capability-report` -> `capability-report`"));
+        assert!(!prompt.contains("<selected_skill_instructions>"));
+        assert!(!prompt.contains("# Body"));
+
+        let allowed_tools = selected_agent_skill_allowed_tools_for_turn(
+            "请先搜索 capability-report 后再执行",
+            &[&metadata],
+            Some(workspace.path()),
+            Some(workspace.path()),
+        );
+        assert!(allowed_tools.is_empty());
     }
 
     #[test]

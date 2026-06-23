@@ -6,7 +6,7 @@ import {
   createMockThemeContextWorkspaceState,
   createProject,
   flushEffects,
-  GENERAL_ASSISTANT_TITLE,
+  GENERAL_CONTEXT_HINT,
   getIndexTestMocks,
   getSendMessageCall,
   installMockAgentChatUnifiedState,
@@ -402,13 +402,13 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     expect(toolbar?.dataset.showHarnessToggle).toBe("true");
     expect(toolbar?.dataset.harnessToggleLabel).toBe("Harness");
     expect(document.body.textContent).not.toContain(WORKSPACE_HARNESS_TITLE);
-    expect(document.body.textContent).not.toContain(GENERAL_ASSISTANT_TITLE);
+    expect(document.body.textContent).not.toContain(GENERAL_CONTEXT_HINT);
 
     clickButton(container, "toggle-harness");
     await flushEffects();
 
     expect(document.body.textContent).toContain(WORKSPACE_HARNESS_TITLE);
-    expect(document.body.textContent).toContain(GENERAL_ASSISTANT_TITLE);
+    expect(document.body.textContent).toContain(GENERAL_CONTEXT_HINT);
   });
 
   it("通用模式有处理活动时应通过顶部 Harness 按钮打开弹窗，而不是常驻右侧占位", async () => {
@@ -430,13 +430,13 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     expect(toolbar?.dataset.showHarnessToggle).toBe("true");
     expect(toolbar?.dataset.harnessToggleLabel).toBe("Harness");
     expect(document.body.textContent).not.toContain(WORKSPACE_HARNESS_TITLE);
-    expect(document.body.textContent).not.toContain(GENERAL_ASSISTANT_TITLE);
+    expect(document.body.textContent).not.toContain(GENERAL_CONTEXT_HINT);
 
     clickButton(container, "toggle-harness");
     await flushEffects();
 
     expect(document.body.textContent).toContain(WORKSPACE_HARNESS_TITLE);
-    expect(document.body.textContent).toContain(GENERAL_ASSISTANT_TITLE);
+    expect(document.body.textContent).toContain(GENERAL_CONTEXT_HINT);
     expect(document.body.textContent).toContain(WORKSPACE_HARNESS_DESCRIPTION);
   });
 

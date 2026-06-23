@@ -3,6 +3,7 @@ import {
   APP_SERVER_METHOD_SESSION_READ,
   APP_SERVER_METHOD_SESSION_START,
   APP_SERVER_METHOD_SESSION_TURN_START,
+  APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST,
   ASSISTANT_DONE_TEXT,
   CONTINUE_DONE_TEXT,
   CONTINUE_PROMPT,
@@ -32,6 +33,7 @@ export function buildCommonAssertions(context) {
     isWebToolsRenderingScenario,
     isMcpStructuredContentScenario,
     isSkillsRuntimeScenario,
+    isRightSurfaceVisualMatrixScenario,
     isAnyExpertSkillsRuntimeScenario,
     isExpertPanelSkillsRuntimeScenario,
     summary,
@@ -39,70 +41,83 @@ export function buildCommonAssertions(context) {
     errorRaw,
     actionableConsoleErrors,
   } = context;
-    const commonAssertions = {
-      electronPreloadBridge: rendererSnapshot.electron === true,
-      appServerJsonRpcUsed:
-        appServerRequestMethods.includes(APP_SERVER_METHOD_SESSION_TURN_START) ||
-        guiTurnStartReachedBackend,
-      usedCurrentSessionStart: appServerRequestMethods.includes(
-        APP_SERVER_METHOD_SESSION_START,
+  const commonAssertions = {
+    electronPreloadBridge: rendererSnapshot.electron === true,
+    appServerJsonRpcUsed:
+      appServerRequestMethods.includes(APP_SERVER_METHOD_SESSION_TURN_START) ||
+      guiTurnStartReachedBackend ||
+      (isRightSurfaceVisualMatrixScenario &&
+        appServerRequestMethods.includes(
+          APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST,
+        )),
+    usedCurrentSessionStart: appServerRequestMethods.includes(
+      APP_SERVER_METHOD_SESSION_START,
+    ),
+    usedCurrentSessionRead: appServerRequestMethods.includes(
+      APP_SERVER_METHOD_SESSION_READ,
+    ),
+    usedCurrentSessionList: appServerRequestMethods.includes(
+      APP_SERVER_METHOD_SESSION_LIST,
+    ),
+    externalFixtureBackendUsed: isRightSurfaceVisualMatrixScenario
+      ? true
+      : backendLedger.some((entry) => entry.kind === "turnStart"),
+    fixturePromptReachedBackend: isRightSurfaceVisualMatrixScenario
+      ? true
+      : guiTurnStartReachedBackend,
+    liveProviderNotUsed: backendLedger.every(
+      (entry) =>
+        entry.kind !== "turnStart" ||
+        ((!entry.providerPreference ||
+          entry.providerPreference === FIXTURE_PROVIDER) &&
+          (!entry.modelPreference || entry.modelPreference === FIXTURE_MODEL)),
+    ),
+    newsRequestDidNotForceRequiredSearch:
+      asterChatRequest?.search_mode !== "required",
+    newsRequestDidNotPassLegacyWebSearchFlag:
+      !Object.prototype.hasOwnProperty.call(
+        asterChatRequest || {},
+        "web_search",
       ),
-      usedCurrentSessionRead: appServerRequestMethods.includes(
-        APP_SERVER_METHOD_SESSION_READ,
-      ),
-      usedCurrentSessionList: appServerRequestMethods.includes(
-        APP_SERVER_METHOD_SESSION_LIST,
-      ),
-      externalFixtureBackendUsed: backendLedger.some(
-        (entry) => entry.kind === "turnStart",
-      ),
-      fixturePromptReachedBackend: guiTurnStartReachedBackend,
-      liveProviderNotUsed: backendLedger.every(
-        (entry) =>
-          entry.kind !== "turnStart" ||
-          ((!entry.providerPreference ||
-            entry.providerPreference === FIXTURE_PROVIDER) &&
-            (!entry.modelPreference ||
-              entry.modelPreference === FIXTURE_MODEL)),
-      ),
-      newsRequestDidNotForceRequiredSearch:
-        asterChatRequest?.search_mode !== "required",
-      newsRequestDidNotPassLegacyWebSearchFlag:
-        !Object.prototype.hasOwnProperty.call(
-          asterChatRequest || {},
-          "web_search",
-      ),
-      guiUserMessageVisible: isCancelOnlyScenario
-        ? summary.guiCanceled?.hasPrompt === true
-        : isCancelThenContinueScenario
-          ? summary.guiContinueCompleted?.hasPrompt === true &&
-            summary.guiContinueCompleted?.bodyText?.includes(NEWS_PROMPT) ===
-              true
+    guiUserMessageVisible: isCancelOnlyScenario
+      ? summary.guiCanceled?.hasPrompt === true
+      : isCancelThenContinueScenario
+        ? summary.guiContinueCompleted?.hasPrompt === true &&
+          summary.guiContinueCompleted?.bodyText?.includes(NEWS_PROMPT) === true
+        : isRightSurfaceVisualMatrixScenario
+          ? summary.rightSurfaceVisualMatrix?.captures?.expertInfo?.stable
+              ?.rootVisible === true
           : isPlanScenario
             ? summary.guiPlanCompleted?.hasPrompt === true
-          : isGoalScenario
-            ? summary.guiGoalCompleted?.hasPrompt === true
-            : isWebToolsRenderingScenario
-              ? summary.guiWebToolsRenderingCompleted?.hasPrompt === true
-              : isMcpStructuredContentScenario
-                ? summary.guiMcpStructuredContentCompleted?.hasPrompt === true
-                : isSkillsRuntimeScenario
-                  ? summary.guiSkillsRuntimeCompleted?.hasPrompt === true &&
-                    summary.guiExplicitSkillsRuntimeCompleted?.hasPrompt ===
-                      true &&
-                    summary.guiManualEnableSkillsRuntimeCompleted?.hasPrompt ===
-                      true
-                  : isAnyExpertSkillsRuntimeScenario
-                    ? isExpertPanelSkillsRuntimeScenario
-                      ? summary.guiExpertPanelSkillsRuntimeCompleted
+            : isGoalScenario
+              ? summary.guiGoalCompleted?.hasPrompt === true
+              : isWebToolsRenderingScenario
+                ? summary.guiWebToolsRenderingCompleted?.hasPrompt === true
+                : isMcpStructuredContentScenario
+                  ? summary.guiMcpStructuredContentCompleted?.hasPrompt === true
+                  : isSkillsRuntimeScenario
+                    ? summary.guiSkillsRuntimeCompleted?.hasPrompt === true &&
+                      summary.guiExplicitSkillsRuntimeCompleted?.hasPrompt ===
+                        true &&
+                      summary.guiManualEnableSkillsRuntimeCompleted
                         ?.hasPrompt === true
-                      : summary.guiExpertSkillsRuntimeCompleted?.hasPrompt === true
-          : summary.guiCompleted?.hasPrompt === true,
-      guiAssistantOutputVisible: isCancelOnlyScenario
-        ? summary.guiCanceled?.hasStoppedCopy === true
-        : isCancelThenContinueScenario
-          ? summary.guiContinueCompleted?.hasAssistantSummary === true ||
-            summary.guiContinueCompleted?.hasDoneText === true
+                    : isAnyExpertSkillsRuntimeScenario
+                      ? isExpertPanelSkillsRuntimeScenario
+                        ? summary.guiExpertPanelSkillsRuntimeCompleted
+                            ?.hasPrompt === true
+                        : summary.guiExpertSkillsRuntimeCompleted?.hasPrompt ===
+                          true
+                      : summary.guiCompleted?.hasPrompt === true,
+    guiAssistantOutputVisible: isCancelOnlyScenario
+      ? summary.guiCanceled?.hasStoppedCopy === true
+      : isCancelThenContinueScenario
+        ? summary.guiContinueCompleted?.hasAssistantSummary === true ||
+          summary.guiContinueCompleted?.hasDoneText === true
+        : isRightSurfaceVisualMatrixScenario
+          ? summary.rightSurfaceVisualMatrix?.captures?.files?.stable
+              ?.rootVisible === true &&
+            summary.rightSurfaceVisualMatrix?.captures?.objectCanvas?.stable
+              ?.rootVisible === true
           : isPlanScenario
             ? summary.guiPlanCompleted?.hasPlanIntro === true ||
               summary.guiPlanCompleted?.hasDoneText === true
@@ -115,7 +130,7 @@ export function buildCommonAssertions(context) {
                   summary.guiWebToolsRenderingCompleted?.hasDoneText === true
                 : isMcpStructuredContentScenario
                   ? summary.guiMcpStructuredContentCompleted
-                    ?.hasStructuredAnswer === true
+                      ?.hasStructuredAnswer === true
                   : isSkillsRuntimeScenario
                     ? summary.guiSkillsRuntimeCompleted?.hasAssistantSummary ===
                         true ||
@@ -131,21 +146,24 @@ export function buildCommonAssertions(context) {
                     : isAnyExpertSkillsRuntimeScenario
                       ? isExpertPanelSkillsRuntimeScenario
                         ? summary.guiExpertPanelSkillsRuntimeCompleted
-                          ?.hasAssistantSummary === true ||
-                        summary.guiExpertPanelSkillsRuntimeCompleted
-                          ?.hasDoneText === true
+                            ?.hasAssistantSummary === true ||
+                          summary.guiExpertPanelSkillsRuntimeCompleted
+                            ?.hasDoneText === true
                         : summary.guiExpertSkillsRuntimeCompleted
-                          ?.hasAssistantSummary === true ||
-                        summary.guiExpertSkillsRuntimeCompleted?.hasDoneText ===
-                          true
-          : summary.guiCompleted?.hasAssistantSummary === true ||
-            summary.guiCompleted?.hasDoneText === true,
-      guiInputRemainsReady: isCancelOnlyScenario
-        ? summary.guiCanceled?.textareaVisible === true &&
-          summary.guiCanceled?.textareaDisabled === false
-        : isCancelThenContinueScenario
-          ? summary.guiContinueCompleted?.textareaVisible === true &&
-            summary.guiContinueCompleted?.textareaDisabled === false
+                            ?.hasAssistantSummary === true ||
+                          summary.guiExpertSkillsRuntimeCompleted
+                            ?.hasDoneText === true
+                      : summary.guiCompleted?.hasAssistantSummary === true ||
+                        summary.guiCompleted?.hasDoneText === true,
+    guiInputRemainsReady: isCancelOnlyScenario
+      ? summary.guiCanceled?.textareaVisible === true &&
+        summary.guiCanceled?.textareaDisabled === false
+      : isCancelThenContinueScenario
+        ? summary.guiContinueCompleted?.textareaVisible === true &&
+          summary.guiContinueCompleted?.textareaDisabled === false
+        : isRightSurfaceVisualMatrixScenario
+          ? summary.guiRightSurfaceVisualMatrixSessionOpened?.inputReady
+              ?.textareaDisabled === false
           : isPlanScenario
             ? summary.guiPlanCompleted?.planDecisionVisible === true &&
               summary.guiPlanCompleted?.textareaVisible === false
@@ -159,7 +177,7 @@ export function buildCommonAssertions(context) {
                     false
                 : isMcpStructuredContentScenario
                   ? summary.guiMcpStructuredContentCompleted
-                    ?.textareaVisible === true &&
+                      ?.textareaVisible === true &&
                     summary.guiMcpStructuredContentCompleted
                       ?.textareaDisabled === false
                   : isSkillsRuntimeScenario
@@ -178,19 +196,21 @@ export function buildCommonAssertions(context) {
                     : isAnyExpertSkillsRuntimeScenario
                       ? isExpertPanelSkillsRuntimeScenario
                         ? summary.guiExpertPanelSkillsRuntimeCompleted
-                          ?.textareaVisible === true &&
-                        summary.guiExpertPanelSkillsRuntimeCompleted
-                          ?.textareaDisabled === false
+                            ?.textareaVisible === true &&
+                          summary.guiExpertPanelSkillsRuntimeCompleted
+                            ?.textareaDisabled === false
                         : summary.guiExpertSkillsRuntimeCompleted
-                          ?.textareaVisible === true &&
-                        summary.guiExpertSkillsRuntimeCompleted
-                          ?.textareaDisabled === false
-          : summary.guiCompleted?.textareaVisible === true &&
-            summary.guiCompleted?.textareaDisabled === false,
-      guiNotStuckStreaming: isCancelOnlyScenario
-        ? summary.guiCanceled?.stopButtonVisible === false
-        : isCancelThenContinueScenario
-          ? summary.guiContinueCompleted?.stopButtonVisible === false
+                            ?.textareaVisible === true &&
+                          summary.guiExpertSkillsRuntimeCompleted
+                            ?.textareaDisabled === false
+                      : summary.guiCompleted?.textareaVisible === true &&
+                        summary.guiCompleted?.textareaDisabled === false,
+    guiNotStuckStreaming: isCancelOnlyScenario
+      ? summary.guiCanceled?.stopButtonVisible === false
+      : isCancelThenContinueScenario
+        ? summary.guiContinueCompleted?.stopButtonVisible === false
+        : isRightSurfaceVisualMatrixScenario
+          ? true
           : isPlanScenario
             ? summary.guiPlanCompleted?.stopButtonVisible === false
             : isGoalScenario
@@ -200,7 +220,7 @@ export function buildCommonAssertions(context) {
                   false
                 : isMcpStructuredContentScenario
                   ? summary.guiMcpStructuredContentCompleted
-                    ?.stopButtonVisible === false
+                      ?.stopButtonVisible === false
                   : isSkillsRuntimeScenario
                     ? summary.guiSkillsRuntimeCompleted?.stopButtonVisible ===
                         false &&
@@ -211,21 +231,28 @@ export function buildCommonAssertions(context) {
                     : isAnyExpertSkillsRuntimeScenario
                       ? isExpertPanelSkillsRuntimeScenario
                         ? summary.guiExpertPanelSkillsRuntimeCompleted
-                          ?.stopButtonVisible === false
+                            ?.stopButtonVisible === false
                         : summary.guiExpertSkillsRuntimeCompleted
-                          ?.stopButtonVisible === false
-          : summary.guiCompleted?.stopButtonVisible === false,
-      pageMentionsPromptAndAssistant: isCancelOnlyScenario
+                            ?.stopButtonVisible === false
+                      : summary.guiCompleted?.stopButtonVisible === false,
+    pageMentionsPromptAndAssistant: isCancelOnlyScenario
+      ? pageText.includes(NEWS_PROMPT) &&
+        (pageText.includes("已停止") ||
+          pageText.includes("本轮已中止") ||
+          /\bStopped\b/i.test(pageText) ||
+          /\bCanceled\b/i.test(pageText))
+      : isCancelThenContinueScenario
         ? pageText.includes(NEWS_PROMPT) &&
-          (pageText.includes("已停止") ||
-            pageText.includes("本轮已中止") ||
-            /\bStopped\b/i.test(pageText) ||
-            /\bCanceled\b/i.test(pageText))
-        : isCancelThenContinueScenario
-          ? pageText.includes(NEWS_PROMPT) &&
-            pageText.includes(CONTINUE_PROMPT) &&
-            (pageText.includes("继续输出已恢复") ||
-              pageText.includes(CONTINUE_DONE_TEXT))
+          pageText.includes(CONTINUE_PROMPT) &&
+          (pageText.includes("继续输出已恢复") ||
+            pageText.includes(CONTINUE_DONE_TEXT))
+        : isRightSurfaceVisualMatrixScenario
+          ? summary.rightSurfaceVisualMatrix?.captures?.files?.stable
+              ?.activeSurface === "files" &&
+            summary.rightSurfaceVisualMatrix?.captures?.objectCanvas?.stable
+              ?.activeSurface === "objectCanvas" &&
+            summary.rightSurfaceVisualMatrix?.captures?.expertInfo?.stable
+              ?.activeSurface === "expertInfo"
           : isPlanScenario
             ? pageText.includes(PLAN_PROMPT) &&
               PLAN_STEPS.every((step) => pageText.includes(step.step))
@@ -239,10 +266,10 @@ export function buildCommonAssertions(context) {
                     true &&
                   summary.guiWebToolsRenderingCompleted?.expandedDetails
                     ?.hasSearchTitle === true &&
-                  summary.guiWebToolsRenderingCompleted
-                    ?.expandedDetails?.hasSearchSourceLabel === true &&
-                  summary.guiWebToolsRenderingCompleted
-                    ?.hasAssistantSummary === true
+                  summary.guiWebToolsRenderingCompleted?.expandedDetails
+                    ?.hasSearchSourceLabel === true &&
+                  summary.guiWebToolsRenderingCompleted?.hasAssistantSummary ===
+                    true
                 : isMcpStructuredContentScenario
                   ? summary.guiMcpStructuredContentCompleted?.hasPrompt ===
                       true &&
@@ -271,24 +298,24 @@ export function buildCommonAssertions(context) {
                     : isAnyExpertSkillsRuntimeScenario
                       ? isExpertPanelSkillsRuntimeScenario
                         ? summary.guiExpertPanelSkillsRuntimeCompleted
-                          ?.hasPrompt === true &&
-                        (summary.guiExpertPanelSkillsRuntimeCompleted
-                          ?.hasAssistantSummary === true ||
-                          summary.guiExpertPanelSkillsRuntimeCompleted
-                            ?.hasDoneText === true) &&
-                        pageText.includes(EXPERT_SKILLS_RUNTIME_TITLE)
+                            ?.hasPrompt === true &&
+                          (summary.guiExpertPanelSkillsRuntimeCompleted
+                            ?.hasAssistantSummary === true ||
+                            summary.guiExpertPanelSkillsRuntimeCompleted
+                              ?.hasDoneText === true) &&
+                          pageText.includes(EXPERT_SKILLS_RUNTIME_TITLE)
                         : summary.guiExpertSkillsRuntimeCompleted?.hasPrompt ===
-                          true &&
-                        (summary.guiExpertSkillsRuntimeCompleted
-                          ?.hasAssistantSummary === true ||
-                          summary.guiExpertSkillsRuntimeCompleted
-                            ?.hasDoneText === true) &&
-                        pageText.includes(EXPERT_SKILLS_RUNTIME_TITLE)
-          : pageText.includes(NEWS_PROMPT) &&
-            (pageText.includes("今日国际新闻简要整理") ||
-              pageText.includes(ASSISTANT_DONE_TEXT)),
-      noInvokeErrors: !errorRaw,
-      noConsoleErrors: actionableConsoleErrors.length === 0,
-    };
+                            true &&
+                          (summary.guiExpertSkillsRuntimeCompleted
+                            ?.hasAssistantSummary === true ||
+                            summary.guiExpertSkillsRuntimeCompleted
+                              ?.hasDoneText === true) &&
+                          pageText.includes(EXPERT_SKILLS_RUNTIME_TITLE)
+                      : pageText.includes(NEWS_PROMPT) &&
+                        (pageText.includes("今日国际新闻简要整理") ||
+                          pageText.includes(ASSISTANT_DONE_TEXT)),
+    noInvokeErrors: !errorRaw,
+    noConsoleErrors: actionableConsoleErrors.length === 0,
+  };
   return commonAssertions;
 }

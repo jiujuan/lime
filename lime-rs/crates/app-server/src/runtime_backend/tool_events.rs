@@ -1,6 +1,6 @@
+use super::plan_events;
 use crate::RuntimeCoreError;
 use crate::RuntimeEvent;
-use crate::RuntimeEventSink;
 use lime_agent::{AgentEvent as RuntimeAgentEvent, AgentToolResult};
 #[cfg(test)]
 use runtime_core::runtime_event_from_llm_event as runtime_core_event_from_llm_event;
@@ -10,16 +10,6 @@ use serde_json::{json, Value};
 pub(super) fn runtime_event_from_llm_event(event: &runtime_core::LlmEvent) -> RuntimeEvent {
     let mapped = runtime_core_event_from_llm_event(event);
     RuntimeEvent::new(mapped.event_type, mapped.payload)
-}
-
-pub(super) fn emit_runtime_agent_event(
-    event: &RuntimeAgentEvent,
-    sink: &mut dyn RuntimeEventSink,
-) -> Result<(), RuntimeCoreError> {
-    for runtime_event in runtime_events_from_agent_event(event)? {
-        sink.emit(runtime_event)?;
-    }
-    Ok(())
 }
 
 pub(super) fn runtime_events_from_agent_event(
@@ -40,6 +30,7 @@ pub(super) fn runtime_events_from_agent_event(
         payload_object.insert("backend".to_string(), Value::String("runtime".to_string()));
         payload_object.insert("runtimeEvent".to_string(), runtime_event);
         enrich_tool_terminal_payload(event, payload_object);
+        enrich_reasoning_payload(event, payload_object);
     }
     let mut events = vec![RuntimeEvent::new(
         runtime_event_type_for_agent_event(event, &raw_type),
@@ -61,6 +52,9 @@ pub(super) fn runtime_events_from_agent_event(
             ));
         }
     }
+    if let Some(plan_event) = update_plan_event_from_tool_end(event) {
+        events.push(plan_event);
+    }
     Ok(events)
 }
 
@@ -75,7 +69,7 @@ pub(super) fn runtime_event_type_from_raw(raw_type: &str) -> &'static str {
         "item_completed" => "item.completed",
         "text_delta" => "message.delta",
         "text_delta_batch" => "message.delta_batch",
-        "thinking_delta" => "thinking.delta",
+        "thinking_delta" => "reasoning.delta",
         "tool_start" => "tool.started",
         "tool_end" => "tool.result",
         "tool_progress" => "tool.progress",
@@ -112,6 +106,34 @@ pub(super) fn runtime_event_type_from_raw(raw_type: &str) -> &'static str {
         "message" => "message",
         _ => "runtime.event",
     }
+}
+
+fn enrich_reasoning_payload(
+    event: &RuntimeAgentEvent,
+    payload_object: &mut serde_json::Map<String, Value>,
+) {
+    let RuntimeAgentEvent::ThinkingDelta { text } = event else {
+        return;
+    };
+    payload_object.insert("delta".to_string(), Value::String(text.clone()));
+    payload_object.insert(
+        "reasoningId".to_string(),
+        Value::String("runtime-thinking".to_string()),
+    );
+}
+
+fn update_plan_event_from_tool_end(event: &RuntimeAgentEvent) -> Option<RuntimeEvent> {
+    let RuntimeAgentEvent::ToolEnd { tool_id, result } = event else {
+        return None;
+    };
+    if !result.success {
+        return None;
+    }
+    plan_events::plan_final_event_from_update_plan_result(
+        tool_id,
+        &result.output,
+        result.metadata.as_ref(),
+    )
 }
 
 fn runtime_event_type_for_agent_event(event: &RuntimeAgentEvent, raw_type: &str) -> &'static str {
@@ -195,6 +217,20 @@ mod tests {
     #[test]
     fn final_done_raw_runtime_event_does_not_map_to_current_terminal_event() {
         assert_eq!(runtime_event_type_from_raw("final_done"), "runtime.event");
+    }
+
+    #[test]
+    fn thinking_delta_maps_to_standard_reasoning_delta_event() {
+        let events = runtime_events_from_agent_event(&RuntimeAgentEvent::ThinkingDelta {
+            text: "先理解目标".to_string(),
+        })
+        .expect("thinking delta should emit");
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "reasoning.delta");
+        assert_eq!(events[0].payload["delta"], "先理解目标");
+        assert_eq!(events[0].payload["text"], "先理解目标");
+        assert_eq!(events[0].payload["reasoningId"], "runtime-thinking");
     }
 
     #[test]
@@ -303,6 +339,44 @@ mod tests {
         assert_eq!(events[0].event_type, "tool.result");
         assert_eq!(events[0].payload["toolCallId"].as_str(), Some("tool-ok"));
         assert_eq!(events[0].payload["status"].as_str(), Some("completed"));
+    }
+
+    #[test]
+    fn runtime_agent_update_plan_tool_end_emits_plan_final_fact() {
+        let events = runtime_events_from_agent_event(&RuntimeAgentEvent::ToolEnd {
+            tool_id: "tool-plan".to_string(),
+            result: AgentToolResult {
+                success: true,
+                output: "Plan updated".to_string(),
+                error: None,
+                structured_content: None,
+                images: None,
+                metadata: Some(HashMap::from([
+                    (
+                        "plan".to_string(),
+                        json!([
+                            { "step": "读现状", "status": "completed" },
+                            { "step": "打通主链", "status": "in_progress" }
+                        ]),
+                    ),
+                    ("explanation".to_string(), json!("开始实现")),
+                ])),
+            },
+        })
+        .expect("update_plan tool end should emit");
+
+        assert_eq!(
+            events
+                .iter()
+                .map(|event| event.event_type.as_str())
+                .collect::<Vec<_>>(),
+            vec!["tool.result", "plan.final"]
+        );
+        let plan_event = &events[1];
+        assert_eq!(plan_event.payload["source"], "update_plan");
+        assert_eq!(plan_event.payload["toolCallId"], "tool-plan");
+        assert_eq!(plan_event.payload["revisionId"], "update_plan:tool-plan");
+        assert_eq!(plan_event.payload["text"], "- [x] 读现状\n- [ ] 打通主链");
     }
 
     #[test]

@@ -1,10 +1,13 @@
 import {
   APP_SERVER_METHOD_AGENT_SESSION_EVENT,
   AppServerRpcError,
-  isAppServerJsonRpcNotification,
   type AppServerAgentEvent,
   type AppServerJsonRpcNotification,
 } from "@/lib/api/appServer";
+import {
+  getDefaultAppServerEventBus,
+  type AppServerEventBus,
+} from "@/lib/api/appServerEventBus";
 import { publishProcessedAgentRuntimeEvent } from "../agentRuntimeEvents";
 import { projectAgentRuntimeSequenceGateNotifications } from "./eventSequenceGate";
 
@@ -17,6 +20,7 @@ const APP_SERVER_EVENT_ROUTE_TTL_MS = 30 * 60 * 1000;
 type AppServerEventDrainClient = {
   drainEvents: (limit?: number) => Promise<unknown[]> | unknown[];
 };
+type AppServerEventBusLike = Pick<AppServerEventBus, "subscribe">;
 
 export type AppServerAgentSessionEventRouteParams = {
   eventName?: string;
@@ -34,13 +38,18 @@ type AppServerAgentSessionEventRoute = {
 };
 
 export class AppServerAgentSessionEventDrainRouter {
-  readonly #appServerClient: AppServerEventDrainClient;
   readonly #closedRouteKeys = new Set<string>();
+  readonly #eventBus: AppServerEventBusLike;
   readonly #routes = new Map<string, AppServerAgentSessionEventRoute>();
-  #draining = false;
+  #unsubscribeFromEventBus: (() => void) | null = null;
 
-  constructor(appServerClient: AppServerEventDrainClient) {
-    this.#appServerClient = appServerClient;
+  constructor(
+    appServerClient: AppServerEventDrainClient,
+    eventBus: AppServerEventBusLike = getDefaultAppServerEventBus(
+      appServerClient,
+    ),
+  ) {
+    this.#eventBus = eventBus;
   }
 
   register(params: AppServerAgentSessionEventRouteParams): {
@@ -63,7 +72,7 @@ export class AppServerAgentSessionEventDrainRouter {
     const key = routeKey(route);
     this.#closedRouteKeys.delete(key);
     this.#routes.set(key, route);
-    this.#startDrainLoop();
+    this.#ensureEventBusSubscription();
 
     return {
       publish: (notifications) => {
@@ -85,56 +94,32 @@ export class AppServerAgentSessionEventDrainRouter {
     )) {
       this.#routeNotification(notification, fallbackEventName);
     }
+    this.#stopEventBusSubscriptionIfIdle();
   }
 
-  async #drainLoop(): Promise<void> {
-    if (this.#draining) {
+  #ensureEventBusSubscription(): void {
+    if (this.#unsubscribeFromEventBus) {
       return;
     }
 
-    this.#draining = true;
-    try {
-      while (this.#routes.size > 0) {
+    this.#unsubscribeFromEventBus = this.#eventBus.subscribe({
+      getDrainOptions: () => {
         this.#pruneExpiredRoutes();
-        if (this.#routes.size === 0) {
-          break;
+        if (this.#hasRouteWaitingForFirstEvent()) {
+          return {
+            intervalMs: APP_SERVER_EVENT_DRAIN_FAST_FIRST_INTERVAL_MS,
+            limit: APP_SERVER_EVENT_DRAIN_FAST_FIRST_LIMIT,
+          };
         }
-
-        const hasRouteWaitingForFirstEvent = this.#hasRouteWaitingForFirstEvent();
-        const drainedMessages = await Promise.resolve(
-          this.#appServerClient.drainEvents(
-            hasRouteWaitingForFirstEvent
-              ? APP_SERVER_EVENT_DRAIN_FAST_FIRST_LIMIT
-              : APP_SERVER_EVENT_DRAIN_LIMIT,
-          ),
-        ).catch(() => []);
-        const messages = Array.isArray(drainedMessages) ? drainedMessages : [];
-        const notifications: AppServerJsonRpcNotification[] = [];
-        for (const message of messages) {
-          if (isAppServerJsonRpcNotification(message)) {
-            notifications.push(message);
-          }
-        }
+        return {
+          intervalMs: APP_SERVER_EVENT_DRAIN_INTERVAL_MS,
+          limit: APP_SERVER_EVENT_DRAIN_LIMIT,
+        };
+      },
+      onNotifications: (notifications) => {
         this.routeNotifications(notifications);
-
-        if (this.#routes.size > 0) {
-          if (this.#hasRouteWaitingForFirstEvent()) {
-            await waitForAppServerFastFirstEventDrainInterval();
-          } else {
-            await waitForAppServerEventDrainInterval();
-          }
-        }
-      }
-    } finally {
-      this.#draining = false;
-    }
-  }
-
-  #startDrainLoop(): void {
-    if (this.#draining) {
-      return;
-    }
-    void this.#drainLoop();
+      },
+    });
   }
 
   #routeNotification(
@@ -233,6 +218,15 @@ export class AppServerAgentSessionEventDrainRouter {
         this.#routes.delete(key);
       }
     }
+    this.#stopEventBusSubscriptionIfIdle();
+  }
+
+  #stopEventBusSubscriptionIfIdle(): void {
+    if (this.#routes.size > 0 || !this.#unsubscribeFromEventBus) {
+      return;
+    }
+    this.#unsubscribeFromEventBus();
+    this.#unsubscribeFromEventBus = null;
   }
 }
 
@@ -321,28 +315,6 @@ export function sortAppServerAgentSessionNotifications(
       return left.index - right.index;
     })
     .map(({ notification }) => notification);
-}
-
-async function waitForAppServerEventDrainInterval(): Promise<void> {
-  await waitForAppServerEventDrainIntervalMs(APP_SERVER_EVENT_DRAIN_INTERVAL_MS);
-}
-
-async function waitForAppServerFastFirstEventDrainInterval(): Promise<void> {
-  await waitForAppServerEventDrainIntervalMs(
-    APP_SERVER_EVENT_DRAIN_FAST_FIRST_INTERVAL_MS,
-  );
-}
-
-async function waitForAppServerEventDrainIntervalMs(
-  intervalMs: number,
-): Promise<void> {
-  await new Promise<void>((resolve) => {
-    const timer = setTimeout(resolve, intervalMs);
-    const maybeUnref = (timer as { unref?: () => void } | undefined)?.unref;
-    if (maybeUnref) {
-      maybeUnref.call(timer);
-    }
-  });
 }
 
 export function publishAppServerAgentSessionNotifications(
@@ -475,11 +447,98 @@ export function projectAppServerAgentEventPayload(
         item,
       };
     }
+    case "reasoning.delta":
+      return {
+        ...basePayload,
+        type: "reasoning_delta",
+        reasoningId: readString(payload, "reasoningId", "reasoning_id", "id"),
+        text: readString(payload, "text", "delta", "message") ?? "",
+        delta: readString(payload, "delta", "text", "message") ?? "",
+        model: normalizeRecord(payload.model),
+        providerMetadata:
+          normalizeRecord(payload.providerMetadata) ??
+          normalizeRecord(payload.provider_metadata),
+      };
+    case "reasoning.started":
+      return {
+        ...basePayload,
+        type: "reasoning_started",
+        reasoningId: readString(payload, "reasoningId", "reasoning_id", "id"),
+        model: normalizeRecord(payload.model),
+        providerMetadata:
+          normalizeRecord(payload.providerMetadata) ??
+          normalizeRecord(payload.provider_metadata),
+      };
+    case "reasoning.final":
+      return {
+        ...basePayload,
+        type: "reasoning_final",
+        reasoningId: readString(payload, "reasoningId", "reasoning_id", "id"),
+        text: readString(payload, "text", "delta", "message") ?? "",
+        model: normalizeRecord(payload.model),
+        providerMetadata:
+          normalizeRecord(payload.providerMetadata) ??
+          normalizeRecord(payload.provider_metadata),
+      };
+    case "reasoning.ended":
+      return {
+        ...basePayload,
+        type: "reasoning_ended",
+        reasoningId: readString(payload, "reasoningId", "reasoning_id", "id"),
+        status: readString(payload, "status"),
+        model: normalizeRecord(payload.model),
+        providerMetadata:
+          normalizeRecord(payload.providerMetadata) ??
+          normalizeRecord(payload.provider_metadata),
+      };
     case "thinking.delta":
       return {
         ...basePayload,
         type: "thinking_delta",
         text: readString(payload, "text", "delta", "message") ?? "",
+      };
+    case "plan.delta":
+    case "plan.final":
+      return {
+        ...basePayload,
+        type: event.type === "plan.final" ? "plan_final" : "plan_delta",
+        text: readString(payload, "text", "delta", "message", "content") ?? "",
+        delta: readString(payload, "delta", "text", "message", "content"),
+        plan: payload.plan,
+        explanation: readString(payload, "explanation"),
+        sourceItemId: readString(payload, "sourceItemId", "source_item_id"),
+        toolCallId: readString(payload, "toolCallId", "tool_call_id"),
+        revisionId: readString(payload, "revisionId", "revision_id"),
+        source: readString(payload, "source"),
+      };
+    case "model.effective":
+      return {
+        ...basePayload,
+        type: "model_effective",
+        model: payload.model,
+        modelRef: payload.modelRef ?? payload.model_ref,
+        provider: readString(payload, "provider", "providerId", "provider_id"),
+        modelName: readString(
+          payload,
+          "modelName",
+          "model_name",
+          "modelId",
+          "model_id",
+        ),
+        source: readString(payload, "source"),
+        serviceModelSlot: readString(
+          payload,
+          "serviceModelSlot",
+          "service_model_slot",
+        ),
+        reasoning: payload.reasoning,
+        capability: payload.capability,
+        toolCalling: payload.toolCalling ?? payload.tool_calling,
+        requestedReasoningEffort: readString(
+          payload,
+          "requestedReasoningEffort",
+          "requested_reasoning_effort",
+        ),
       };
     case "tool.started":
       return {

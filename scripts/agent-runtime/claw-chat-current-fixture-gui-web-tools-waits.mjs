@@ -1,4 +1,5 @@
 import {
+  PLAN_STEPS,
   WEB_TOOLS_FETCH_MARKDOWN,
   WEB_TOOLS_MID_THINKING_TEXT,
   WEB_TOOLS_RENDERING_DONE_TEXT,
@@ -29,6 +30,7 @@ function webToolsSnapshotFromDom({
   introText,
   finalSummary,
   markdownHeadingText,
+  planSteps,
 }) {
   const text = document.body?.innerText || "";
   const textarea = document.querySelector(
@@ -143,6 +145,28 @@ function webToolsSnapshotFromDom({
     !processText.includes(markdownHeadingText) &&
     !processText.includes("推荐 型号") &&
     !processText.includes("| 品牌 | 型号 |");
+  const taskRailText =
+    document
+      .querySelector('[data-testid="task-center-run-control-surface"]')
+      ?.textContent ||
+    document.querySelector('[data-testid="task-center-task-rail"]')
+      ?.textContent ||
+    "";
+  const planDecisionPanel = document.querySelector(
+    '[data-testid="plan-composer-decision-panel"][data-layout="composer-drawer"]',
+  );
+  const planDecisionRect = planDecisionPanel?.getBoundingClientRect();
+  const planDecisionStyle = planDecisionPanel
+    ? window.getComputedStyle(planDecisionPanel)
+    : null;
+  const planDecisionVisible = Boolean(
+    planDecisionPanel &&
+      planDecisionRect &&
+      planDecisionRect.width > 320 &&
+      planDecisionRect.height > 48 &&
+      planDecisionStyle?.visibility !== "hidden" &&
+      planDecisionStyle?.display !== "none",
+  );
 
   return {
     url: window.location.href,
@@ -210,6 +234,9 @@ function webToolsSnapshotFromDom({
       markdownStrongTexts.includes("推荐 型号") &&
       markdownStrongTexts.includes("理由"),
     markdownTableVisible,
+    hasPlanSection: taskRailText.includes("计划"),
+    hasAllPlanSteps: planSteps.every((step) => taskRailText.includes(step.step)),
+    planDecisionVisible,
     textareaVisible,
     textareaDisabled:
       textarea instanceof HTMLTextAreaElement ? textarea.disabled : null,
@@ -238,6 +265,7 @@ async function evaluateWebToolsSnapshot(page) {
     introText: WEB_TOOLS_INTRO_TEXT,
     finalSummary: WEB_TOOLS_FINAL_SUMMARY,
     markdownHeadingText: WEB_TOOLS_MARKDOWN_HEADING,
+    planSteps: PLAN_STEPS,
   });
 }
 

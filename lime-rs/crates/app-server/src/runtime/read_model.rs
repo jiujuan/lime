@@ -3,6 +3,8 @@ use super::coding_activity_projection;
 use super::event_request_id;
 use super::file_checkpoint_projection;
 use super::output_refs;
+use super::product_profile_action_projection;
+use super::product_workspace_projection;
 use super::raw_string_field;
 use super::status::agent_session_status_label;
 use super::status::agent_turn_is_active;
@@ -24,7 +26,26 @@ use app_server_protocol::AgentTurnStatus;
 use serde_json::json;
 
 pub(super) fn runtime_session_read_detail(stored: &StoredSession) -> serde_json::Value {
-    let thread_read = runtime_thread_read_from_stored_session(stored);
+    let product_workspace = product_workspace_projection::product_workspace_from_events(
+        &stored.session,
+        &stored.events,
+    );
+    let product_profile_actions =
+        product_profile_action_projection::product_profile_actions_from_turn_runtime_options(
+            stored,
+        );
+    let product_workspace =
+        product_workspace_projection::apply_session_selection(product_workspace, &stored.session);
+    let product_workspace =
+        product_profile_action_projection::apply_action_history_to_product_workspace(
+            product_workspace,
+            &product_profile_actions,
+        );
+    let thread_read = runtime_thread_read_from_stored_session(
+        stored,
+        product_workspace.clone(),
+        product_profile_actions.clone(),
+    );
     let queued_turns = queued_turn_snapshots(stored);
     let messages = runtime_session_messages(stored);
     let mut items = thread_item_projection::thread_items_from_events(stored);
@@ -35,7 +56,7 @@ pub(super) fn runtime_session_read_detail(stored: &StoredSession) -> serde_json:
     items.extend(runtime_error_items_from_events(stored));
     sort_read_detail_items(&mut items);
     let messages_count = messages.len();
-    json!({
+    let mut detail = json!({
         "id": stored.session.session_id,
         "session_id": stored.session.session_id,
         "thread_id": stored.session.thread_id,
@@ -61,7 +82,14 @@ pub(super) fn runtime_session_read_detail(stored: &StoredSession) -> serde_json:
         "artifacts": artifact_projection::stored_artifact_summaries_for_turn(stored, None),
         "outputs": output_refs::read_model_outputs(stored.output_blobs.values(), None),
         "thread_read": thread_read,
-    })
+    });
+    if let Some(product_workspace) = product_workspace {
+        if let Some(detail_object) = detail.as_object_mut() {
+            detail_object.insert("product_workspace".to_string(), product_workspace.clone());
+            detail_object.insert("productWorkspace".to_string(), product_workspace);
+        }
+    }
+    detail
 }
 
 fn session_archived_at(session: &AgentSession) -> Option<String> {
@@ -298,7 +326,11 @@ fn latest_turn_error_message(stored: &StoredSession, turn_id: Option<&str>) -> O
         .find_map(runtime_error_message_from_event)
 }
 
-fn runtime_thread_read_from_stored_session(stored: &StoredSession) -> serde_json::Value {
+fn runtime_thread_read_from_stored_session(
+    stored: &StoredSession,
+    product_workspace: Option<serde_json::Value>,
+    product_profile_actions: Vec<serde_json::Value>,
+) -> serde_json::Value {
     let coding_activity = coding_activity_projection::coding_activity_from_events(stored);
     let model_routing = latest_model_routing_from_events(&stored.events);
     let service_model_slot = model_routing
@@ -331,7 +363,7 @@ fn runtime_thread_read_from_stored_session(stored: &StoredSession) -> serde_json
         .and_then(|summary| summary.get("patch_count"))
         .and_then(serde_json::Value::as_u64)
         .unwrap_or(0);
-    json!({
+    let mut thread_read = json!({
         "session_id": stored.session.session_id,
         "thread_id": stored.session.thread_id,
         "status": agent_session_status_label(stored.session.status),
@@ -368,7 +400,26 @@ fn runtime_thread_read_from_stored_session(stored: &StoredSession) -> serde_json
                 .and_then(|routing| string_field(routing, &["decisionSource", "decision_source"])),
             "serviceModelSlot": service_model_slot,
         },
-    })
+    });
+    if let Some(product_workspace) = product_workspace {
+        if let Some(thread_read_object) = thread_read.as_object_mut() {
+            thread_read_object.insert("product_workspace".to_string(), product_workspace.clone());
+            thread_read_object.insert("productWorkspace".to_string(), product_workspace);
+        }
+    }
+    if !product_profile_actions.is_empty() {
+        if let Some(thread_read_object) = thread_read.as_object_mut() {
+            thread_read_object.insert(
+                "product_profile_actions".to_string(),
+                serde_json::Value::Array(product_profile_actions.clone()),
+            );
+            thread_read_object.insert(
+                "productProfileActions".to_string(),
+                serde_json::Value::Array(product_profile_actions),
+            );
+        }
+    }
+    thread_read
 }
 
 fn queued_turn_snapshots(stored: &StoredSession) -> Vec<serde_json::Value> {

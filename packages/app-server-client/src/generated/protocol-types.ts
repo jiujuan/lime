@@ -53,6 +53,42 @@ export interface AgentAppFetchCloudPackageParams {
   descriptor: AgentAppCloudReleaseDescriptor;
 }
 
+export interface AgentAppHistoryRestoreContract {
+  defaultPane?: null | string;
+  defaultTab?: null | string;
+  enabled: boolean;
+  fallback: string;
+  restoreLayout: boolean;
+  restoreSelection: boolean;
+}
+
+export interface AgentAppHostFunctionState {
+  blockers?: string[];
+  currentOwner: string;
+  followUps?: string[];
+  key: string;
+  status: string;
+}
+
+export interface AgentAppHostLifecycleListResponse {
+  issues?: unknown[];
+  snapshots?: AgentAppHostLifecycleSnapshot[];
+}
+
+export interface AgentAppHostLifecycleSnapshot {
+  appCenterStatus: string;
+  appId: string;
+  blockers?: string[];
+  displayName: string;
+  followUps?: string[];
+  functions?: AgentAppHostFunctionState[];
+  generatedAt: string;
+  profiles?: string[];
+  readinessStatus: string;
+  rightSurface: AgentAppRightSurfaceContract;
+  taskRuntime: AgentAppTaskRuntimeContract;
+}
+
 export interface AgentAppInstalledDisabledSetParams {
   appId: string;
   disabled: boolean;
@@ -108,6 +144,30 @@ export interface AgentAppPackageIdentity {
   tenantId?: null | string;
 }
 
+export interface AgentAppProductProfileContract {
+  enabled: boolean;
+  objects?: AgentAppProductProfileObject[];
+  panes?: string[];
+  rendererKinds?: string[];
+}
+
+export interface AgentAppProductProfileObject {
+  artifactKind?: null | string;
+  defaultPane: string;
+  kind: string;
+  primary: boolean;
+  title: string;
+}
+
+export interface AgentAppRightSurfaceContract {
+  defaultActiveTab?: null | string;
+  dock: string;
+  historyRestore: AgentAppHistoryRestoreContract;
+  physicalDockCount: number;
+  productProfile: AgentAppProductProfileContract;
+  supportedTabs?: string[];
+}
+
 export interface AgentAppShellPackageMount {
   kind: string;
   manifestHash: string;
@@ -135,6 +195,19 @@ export interface AgentAppShellPrepareResponse {
   windowTitle?: null | string;
 }
 
+export interface AgentAppTaskRuntimeContract {
+  blockers?: string[];
+  contractPath?: null | string;
+  directFilesystemAccess: boolean;
+  directProviderAccess: boolean;
+  enabled: boolean;
+  followUps?: string[];
+  outputArtifactKind?: null | string;
+  sampleRequestPath?: null | string;
+  taskKinds?: string[];
+  workerEntrypoint?: null | string;
+}
+
 export interface AgentAppUiRuntimeStartParams {
   appId: string;
   entryKey?: null | string;
@@ -154,6 +227,7 @@ export interface AgentAppUiRuntimeStatusResponse {
   port?: number | null;
   route?: null | string;
   status: string;
+  taskRuntime?: AgentAppTaskRuntimeContract | null;
 }
 
 export interface AgentAppUiRuntimeStopParams {
@@ -730,6 +804,7 @@ export interface AgentSessionUpdateParams {
   archived?: boolean | null;
   executionStrategy?: null | string;
   modelName?: null | string;
+  productWorkspaceSelectedObjectRef?: unknown;
   providerName?: null | string;
   providerSelector?: null | string;
   recentAccessMode?: null | string;
@@ -3685,6 +3760,90 @@ export interface WorkspaceRegisteredSkillsListParams {
 
 export interface WorkspaceRegisteredSkillsListResponse {
   skills?: unknown[];
+}
+
+export interface WorkspaceRightSurfacePendingChangedParams {
+  changeType: string;
+  consumedRequestIds?: string[];
+  dismissedRequestIds?: string[];
+  missingRequestIds?: string[];
+  pending?: WorkspaceRightSurfacePendingRequest[];
+  requestIds?: string[];
+  sessionId?: null | string;
+  surfaceKind?: null | string;
+  workspaceId?: null | string;
+  workspaceRoot?: null | string;
+}
+
+export interface WorkspaceRightSurfacePendingConsumeParams {
+  requestId?: null | string;
+  requestIds?: string[];
+}
+
+export interface WorkspaceRightSurfacePendingConsumeResponse {
+  consumedRequestIds?: string[];
+  missingRequestIds?: string[];
+  status: string;
+}
+
+export interface WorkspaceRightSurfacePendingDismissParams {
+  reason?: null | string;
+  requestId?: null | string;
+  requestIds?: string[];
+}
+
+export interface WorkspaceRightSurfacePendingDismissResponse {
+  dismissedRequestIds?: string[];
+  missingRequestIds?: string[];
+  status: string;
+}
+
+export interface WorkspaceRightSurfacePendingListParams {
+  limit?: number | null;
+  sessionId?: null | string;
+  surfaceKind?: null | string;
+  workspaceId?: null | string;
+  workspaceRoot?: null | string;
+}
+
+export interface WorkspaceRightSurfacePendingListResponse {
+  pending?: WorkspaceRightSurfacePendingRequest[];
+}
+
+export interface WorkspaceRightSurfacePendingRequest {
+  candidateId?: null | string;
+  expiresAt?: null | string;
+  metadata?: unknown;
+  origin: string;
+  priority: string;
+  reason?: null | string;
+  requestId: string;
+  requestedAt: string;
+  sessionId?: null | string;
+  status: string;
+  surfaceKind: string;
+  ttlMs?: number | null;
+  workspaceId?: null | string;
+  workspaceRoot?: null | string;
+}
+
+export interface WorkspaceRightSurfaceRequestParams {
+  candidateId?: null | string;
+  metadata?: unknown;
+  origin: string;
+  priority?: null | string;
+  reason?: null | string;
+  sessionId?: null | string;
+  surfaceKind: string;
+  ttlMs?: number | null;
+  workspaceId?: null | string;
+  workspaceRoot?: null | string;
+}
+
+export interface WorkspaceRightSurfaceRequestResponse {
+  pending: WorkspaceRightSurfacePendingRequest;
+  requestId: string;
+  status: string;
 }
 
 export interface WorkspaceSkillBindingsListParams {

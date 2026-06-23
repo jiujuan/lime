@@ -58,6 +58,10 @@ const NOTEBOOK_RELATIVE_PATH = `${FIXTURE_ROOT}/notebooks/sample.ipynb`;
 const LSP_RELATIVE_PATH = `${FIXTURE_ROOT}/code/lsp-target.ts`;
 const AUDIO_RELATIVE_PATH = `${FIXTURE_ROOT}/media/sample-audio.txt`;
 const DEFAULT_BATCH_ID = "safe-core-tools";
+const CONTEXT7_LIVE_URL = "https://mcp.context7.com/mcp";
+const CONTEXT7_HEADER_NAME = "CONTEXT7_API_KEY";
+const CONTEXT7_ENV_VAR_NAME = "CONTEXT7_API_KEY";
+const CONTEXT7_LIBRARY_ID = "/openai/openai-agents-python";
 const SAFE_FILE_TOOLS = ["Read", "Edit", "Write", "Glob", "Grep"];
 const MEDIA_NOTEBOOK_SHELL_TOOLS = ["view_image", "NotebookEdit", "Bash"];
 const TASK_BOARD_TOOLS = ["TaskCreate", "TaskGet", "TaskUpdate", "TaskList"];
@@ -90,6 +94,7 @@ const CREATION_TASK_TOOLS = [
 ];
 const MCP_RESOURCE_TOOLS = ["ListMcpResourcesTool", "ReadMcpResourceTool"];
 const SKILL_TOOLS = ["Skill"];
+const MCP_CONTEXT7_TOOLSEARCH_BATCH_ID = "mcp-context7-toolsearch";
 const BATCH_TARGET_TOOLS = {
   [DEFAULT_BATCH_ID]: SAFE_FILE_TOOLS,
   "media-notebook-shell-tools": MEDIA_NOTEBOOK_SHELL_TOOLS,
@@ -103,6 +108,7 @@ const BATCH_TARGET_TOOLS = {
   "creation-task-tools": CREATION_TASK_TOOLS,
   "mcp-resource-tools": MCP_RESOURCE_TOOLS,
   "skill-tools": SKILL_TOOLS,
+  [MCP_CONTEXT7_TOOLSEARCH_BATCH_ID]: ["ToolSearch"],
 };
 const SUPPORTED_BATCH_IDS = Object.keys(BATCH_TARGET_TOOLS);
 const OPTIONAL_RUNTIME_COVERAGE_TOOLS = [
@@ -732,7 +738,202 @@ function buildSkillFixtureResponses() {
   ];
 }
 
+function makeContext7AgentTurnServerName() {
+  return `Context7Agent${Date.now().toString(36)}${process.pid.toString(36)}`;
+}
+
+function mcpRuntimeToolName(serverName, toolName) {
+  return `mcp__${serverName}__${toolName}`;
+}
+
+function buildContext7ToolSearchFixtureResponses({ queryDocsToolName }) {
+  return [
+    toolCall("ToolSearch", "call-tool-exec-context7-tool-search", {
+      query: `select:${queryDocsToolName}`,
+      max_results: 10,
+    }),
+    toolCall(queryDocsToolName, "call-tool-exec-context7-query-docs", {
+      libraryId: CONTEXT7_LIBRARY_ID,
+      query: "AI Agent 是什么",
+    }),
+    {
+      type: "text",
+      content: "AGENT_RUNTIME_MCP_CONTEXT7_TOOLSEARCH_DONE",
+    },
+  ];
+}
+
+async function createContext7AgentTurnServer(options, serverName) {
+  const serverId = `mcp-context7-agent-turn-${Date.now()}-${process.pid}`;
+  const result = await invokeAppServerMethod(
+    options,
+    "mcpServer/create",
+    {
+      server: {
+        id: serverId,
+        name: serverName,
+        description: "Agent turn Context7 ToolSearch smoke",
+        server_config: {
+          transport: "streamable_http",
+          url: CONTEXT7_LIVE_URL,
+          timeout: 10,
+          env_http_headers: {
+            [CONTEXT7_HEADER_NAME]: CONTEXT7_ENV_VAR_NAME,
+          },
+        },
+        enabled_lime: true,
+        enabled_claude: false,
+        enabled_codex: false,
+        enabled_gemini: false,
+        created_at: Date.now(),
+      },
+    },
+    30_000,
+  );
+  const createdServer = Array.isArray(result?.servers)
+    ? result.servers.find(
+        (server) => server?.id === serverId || server?.name === serverName,
+      )
+    : null;
+  return {
+    serverId,
+    serverName,
+    serverCreated: Boolean(createdServer),
+    serverCreateReturnedServers: Array.isArray(result?.servers),
+    urlHost: new URL(CONTEXT7_LIVE_URL).host,
+    envHttpHeaderNames: [CONTEXT7_HEADER_NAME],
+    envHttpHeaderEnvVars: [CONTEXT7_ENV_VAR_NAME],
+    context7ApiKeyEnvPresent: Boolean(process.env.CONTEXT7_API_KEY),
+  };
+}
+
+async function cleanupContext7AgentTurnServer(options, context) {
+  if (!context?.serverName && !context?.serverId) {
+    return;
+  }
+  if (context.serverName) {
+    await invokeAppServerMethod(
+      options,
+      "mcpServer/stop",
+      { name: context.serverName },
+      30_000,
+    ).catch((error) => {
+      console.warn(
+        `${LOG_PREFIX} context7 stop failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    });
+  }
+  if (context.serverId) {
+    await invokeAppServerMethod(
+      options,
+      "mcpServer/delete",
+      { id: context.serverId },
+      30_000,
+    ).catch((error) => {
+      console.warn(
+        `${LOG_PREFIX} context7 delete failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    });
+  }
+}
+
 function buildBatchScenario(batchId, fixtureFiles) {
+  if (batchId === MCP_CONTEXT7_TOOLSEARCH_BATCH_ID) {
+    const serverName = makeContext7AgentTurnServerName();
+    const queryDocsToolName = mcpRuntimeToolName(serverName, "query-docs");
+    return {
+      id: MCP_CONTEXT7_TOOLSEARCH_BATCH_ID,
+      prompt:
+        "请从普通输入框自然语言触发 Context7 MCP 工具验收：先用 ToolSearch 精确选择 Context7 query-docs 工具，再调用 query-docs 查询 AI Agent 是什么。不要使用命令入口。",
+      promptNeedle: "Context7 MCP 工具验收",
+      targetTools: ["ToolSearch", queryDocsToolName],
+      initialInventoryTargetTools: ["ToolSearch"],
+      requiresTargetToolsInInitialInventory: false,
+      requiresEvidenceToolPresence: false,
+      deferScriptedToolCallsUntilAvailable: true,
+      expectedFixtureRequestCount: 3,
+      turnMetadata: {
+        harness: {
+          skip_mcp_prewarm: false,
+        },
+      },
+      scriptedResponses: buildContext7ToolSearchFixtureResponses({
+        queryDocsToolName,
+      }),
+      async prepareAfterInventory(options) {
+        const context = await createContext7AgentTurnServer(
+          options,
+          serverName,
+        );
+        return {
+          ...context,
+          queryDocsToolName,
+          resolveLibraryToolName: mcpRuntimeToolName(
+            serverName,
+            "resolve-library-id",
+          ),
+          createdContext7WithoutManualStart: true,
+        };
+      },
+      async cleanup(options, context) {
+        await cleanupContext7AgentTurnServer(options, context);
+      },
+      buildAssertions({
+        evidencePackText,
+        providerRequests,
+        runtimeContext,
+        toolOutputText,
+      }) {
+        const toolSearchOutput =
+          toolOutputText
+            .split("\n")
+            .find((line) => line.startsWith("ToolSearch:")) || "";
+        const normalizedToolSearchOutput = toolSearchOutput
+          .replace(/\\"/g, '"')
+          .replace(/\\n/g, "\n");
+        const toolSearchReturnedEmptyMatches = /"matches"\s*:\s*\[\s*\]/.test(
+          normalizedToolSearchOutput,
+        );
+        const toolSearchReturnedZeroDeferred =
+          /"total_deferred_tools"\s*:\s*0\b/.test(normalizedToolSearchOutput);
+        const queryDocsProviderRequestSeen = providerRequests.some((request) =>
+          request.toolNames.includes(queryDocsToolName),
+        );
+        return {
+          usesCurrentMcpControlPlane: Boolean(runtimeContext?.serverCreated),
+          createdContext7WithoutManualStart:
+            runtimeContext?.createdContext7WithoutManualStart === true,
+          toolSearchSawContext7QueryDocs:
+            normalizedToolSearchOutput.includes('"matches"') &&
+            normalizedToolSearchOutput.includes(queryDocsToolName) &&
+            normalizedToolSearchOutput.includes('"total_deferred_tools"') &&
+            !toolSearchReturnedEmptyMatches &&
+            !toolSearchReturnedZeroDeferred,
+          providerExposedContext7QueryDocsAfterToolSearch:
+            queryDocsProviderRequestSeen,
+          context7QueryDocsExecuted:
+            toolOutputText.includes(queryDocsToolName) &&
+            !toolOutputText.includes('"isError":true') &&
+            !toolOutputText.includes('"is_error":true'),
+          evidencePackMentionsContext7ToolSearch:
+            evidencePackText.includes(queryDocsToolName) ||
+            toolOutputText.includes(queryDocsToolName) ||
+            evidencePackText.includes(
+              "AGENT_RUNTIME_MCP_CONTEXT7_TOOLSEARCH_DONE",
+            ),
+          agentTurnAutostartedContext7:
+            runtimeContext?.createdContext7WithoutManualStart === true &&
+            queryDocsProviderRequestSeen &&
+            normalizedToolSearchOutput.includes(queryDocsToolName),
+        };
+      },
+    };
+  }
+
   if (batchId === "media-notebook-shell-tools") {
     return {
       id: "media-notebook-shell-tools",
@@ -836,7 +1037,9 @@ function buildBatchScenario(batchId, fixtureFiles) {
               "LIME_TOOL_EXECUTION_SEND_USER_MESSAGE_OK",
             ) ||
             evidencePackText.includes("runtime-introspection-tools") ||
-            (toolOutputText.includes("LIME_TOOL_EXECUTION_SEND_USER_MESSAGE_OK") &&
+            (toolOutputText.includes(
+              "LIME_TOOL_EXECUTION_SEND_USER_MESSAGE_OK",
+            ) &&
               toolOutputText.includes('"matches"')),
         };
       },
@@ -1227,6 +1430,7 @@ function buildToolStageMatrix({
   providerToolPresence,
   matrix,
   evidenceToolPresence,
+  evidenceToolPresenceRequired = true,
 }) {
   return targetTools.map((tool) => {
     const runtimeToolVisible =
@@ -1239,9 +1443,11 @@ function buildToolStageMatrix({
       Boolean(runtime) &&
       runtime.status === "completed" &&
       runtime.success !== false;
-    const evidenceReturned = evidenceToolPresence?.[tool] === true;
+    const evidenceReturned =
+      evidenceToolPresenceRequired !== true ||
+      evidenceToolPresence?.[tool] === true;
     let failureStage = null;
-    if (!runtimeToolPresent || !runtimeToolVisible) {
+    if ((!runtimeToolPresent || !runtimeToolVisible) && !runtimeCompleted) {
       failureStage = "runtime_inventory";
     } else if (!providerRequestPresent) {
       failureStage = "provider_request";
@@ -1536,7 +1742,7 @@ function mergeScenarioTurnMetadata(scenario, targetTools) {
     harness: {
       ...scenarioHarness,
       access_mode: "full-access",
-      skip_mcp_prewarm: true,
+      skip_mcp_prewarm: scenarioHarness.skip_mcp_prewarm ?? true,
       runtime_tool_execution: {
         scenario_id: scenario.id,
         source: "smoke:agent-runtime-tool-execution",
@@ -1711,10 +1917,21 @@ async function runSmoke(options) {
       summarizeInventory(inventory),
     ]),
   );
+  let runtimeContext = null;
+  if (typeof scenario.prepareAfterInventory === "function") {
+    console.log(`${LOG_PREFIX} stage=scenario-prepare`);
+    runtimeContext = await scenario.prepareAfterInventory(options, {
+      workspaceId,
+      workspaceRoot,
+      turnMetadata,
+    });
+  }
 
   console.log(`${LOG_PREFIX} stage=fixture-provider`);
   const fixture = await startOpenAiCompatibleFixtureServer({
-    deferScriptedToolCallsUntilAvailable: options.batch === "web-tools",
+    deferScriptedToolCallsUntilAvailable:
+      scenario.deferScriptedToolCallsUntilAvailable === true ||
+      options.batch === "web-tools",
     scriptedResponses,
   });
   console.log(
@@ -1768,7 +1985,7 @@ async function runSmoke(options) {
       options,
       sessionId,
       fixture,
-      scriptedResponses.length,
+      scenario.expectedFixtureRequestCount || scriptedResponses.length,
       targetTools,
       eventName,
       turnId,
@@ -1787,10 +2004,15 @@ async function runSmoke(options) {
       targetTools,
     );
     const completedTools = allTargetToolsCompleted(matrix);
+    const inventoryTargetTools = Array.isArray(
+      scenario.initialInventoryTargetTools,
+    )
+      ? scenario.initialInventoryTargetTools
+      : targetTools;
     const inventoryCoverage = buildInventoryCoverage(
       inventories,
       matrix,
-      targetTools,
+      inventoryTargetTools,
     );
     const firstUserRequestText = requestUserMessagesText(
       fixture.requests[0]?.body,
@@ -1807,6 +2029,8 @@ async function runSmoke(options) {
       providerToolPresence,
       matrix,
       evidenceToolPresence,
+      evidenceToolPresenceRequired:
+        scenario.requiresEvidenceToolPresence !== false,
     });
     const toolOutputText = matrix
       .map((entry) => `${entry.tool}:${entry.outputPreview}`)
@@ -1814,6 +2038,8 @@ async function runSmoke(options) {
     const scenarioAssertions = scenario.buildAssertions({
       evidencePackText,
       fixtureFiles,
+      providerRequests,
+      runtimeContext,
       toolOutputText,
     });
     const assertions = {
@@ -1826,6 +2052,7 @@ async function runSmoke(options) {
       allTargetToolsPresentInProviderRequests:
         Object.values(providerToolPresence).every(Boolean),
       allTargetToolsPresentInRuntimeInventory:
+        scenario.requiresTargetToolsInInitialInventory === false ||
         inventoryCoverage.missingTargetToolsInInventory.length === 0,
       allTargetToolsCompleted: Object.values(completedTools).every(Boolean),
       sessionDefaultedToReact:
@@ -1860,6 +2087,7 @@ async function runSmoke(options) {
         usesAppServerEvidenceExportCurrent: true,
         batchId: scenario.id,
         targetTools,
+        initialInventoryTargetTools: inventoryTargetTools,
         allScenarioTargetTools: inventoryCoverage.allScenarioTargetTools,
         coveredVisibleRuntimeTools:
           inventoryCoverage.coveredVisibleRuntimeTools,
@@ -1894,6 +2122,7 @@ async function runSmoke(options) {
         summaries: inventorySummaries,
         coverage: inventoryCoverage,
       },
+      scenarioRuntimeContext: runtimeContext,
       runtime: {
         sessionId,
         turnId,
@@ -1929,6 +2158,15 @@ async function runSmoke(options) {
     console.log(`${LOG_PREFIX} pass session=${sessionId}`);
     return evidence;
   } finally {
+    if (typeof scenario.cleanup === "function") {
+      await scenario.cleanup(options, runtimeContext).catch((error) => {
+        console.warn(
+          `${LOG_PREFIX} scenario cleanup failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      });
+    }
     await fixture.close();
   }
 }

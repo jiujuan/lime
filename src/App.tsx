@@ -61,6 +61,7 @@ import {
   listenOpenVoiceModelSettingsRequest,
   persistVoiceModelSettingsFocusRequest,
 } from "./lib/voiceModelSettingsNavigation";
+import type { AgentAppRightSurfaceLaunchTarget } from "./features/agent-app/ui/agentAppRightSurfaceLaunch";
 
 const AppContainer = styled.div`
   display: flex;
@@ -81,6 +82,7 @@ const MainContent = styled.main<{ $withSidebarGap?: boolean }>`
 `;
 
 const WINDOW_DRAG_TOP_HEIGHT = 30;
+const WINDOW_DRAG_TOP_HANDLE_WIDTH = 360;
 const WINDOW_DRAG_EDGE_WIDTH = 8;
 const WINDOW_DRAG_DEFAULT_SAFE_LEFT = 160;
 const WINDOW_DRAG_MAC_SAFE_LEFT = 92;
@@ -99,7 +101,7 @@ const WindowTopDragRegion = styled.div<{ $reserveMacWindowControls?: boolean }>`
     $reserveMacWindowControls
       ? `${WINDOW_DRAG_MAC_SAFE_LEFT}px`
       : `${WINDOW_DRAG_DEFAULT_SAFE_LEFT}px`};
-  right: 0;
+  width: ${WINDOW_DRAG_TOP_HANDLE_WIDTH}px;
   height: ${WINDOW_DRAG_TOP_HEIGHT}px;
   pointer-events: auto;
   user-select: none;
@@ -151,6 +153,8 @@ function AppContent() {
     handleNavigate,
   } = useAppNavigation();
   const [agentHasMessages, setAgentHasMessages] = useState(false);
+  const [activeAgentSessionTarget, setActiveAgentSessionTarget] =
+    useState<AgentAppRightSurfaceLaunchTarget | null>(null);
 
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
   const [pendingRecommendation, setPendingRecommendation] = useState<{
@@ -411,6 +415,12 @@ function AppContent() {
     },
     [],
   );
+  const handleAgentSessionTargetChange = useCallback(
+    (target: AgentAppRightSurfaceLaunchTarget | null) => {
+      setActiveAgentSessionTarget(target?.sessionId ? target : null);
+    },
+    [],
+  );
 
   if (showSplash) {
     startupTracker.mark("AppContent: showing splash");
@@ -471,6 +481,8 @@ function AppContent() {
                 navigationRequestId={navigationRequestId}
                 onNavigate={handleNavigate}
                 onAgentHasMessagesChange={setAgentHasMessages}
+                activeAgentSessionTarget={activeAgentSessionTarget}
+                onAgentSessionTargetChange={handleAgentSessionTargetChange}
               />
             </Suspense>
           </MainContent>

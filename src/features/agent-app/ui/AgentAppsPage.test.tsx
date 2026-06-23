@@ -6,6 +6,7 @@ import {
   apiMocks,
   buildReadyState,
   buildReviewResult,
+  buildStandaloneState,
   cleanupAgentAppsPageTest,
   contentFactoryFixture,
   expectInstallReviewDialog,
@@ -40,6 +41,9 @@ describe("AgentAppsPage", () => {
         '[data-testid="agent-apps-list-row-content-factory-app"]',
       ),
     ).not.toBeNull();
+    expect(apiMocks.listAgentAppHostLifecycleSnapshots).toHaveBeenCalledTimes(
+      1,
+    );
     const fallbackIcon = container.querySelector(
       '[data-testid="agent-apps-icon-content-factory-app"] img',
     ) as HTMLImageElement | null;
@@ -170,6 +174,70 @@ describe("AgentAppsPage", () => {
     expect(detailIcon?.getAttribute("src")).toBe(
       `asset://${LOCAL_APP_DIR}/assets/icon.svg`,
     );
+  });
+
+  it("应用中心应展示 Agent App 宿主状态和 Right Surface 合同", async () => {
+    installedStates.push(
+      buildReadyState({
+        manifest: {
+          ...(contentFactoryFixture as AppManifest),
+          status: "ready",
+          profiles: ["workbench"],
+          workbench: {
+            profile: "production",
+            productWorkspace: {
+              scope: "session",
+              primaryObjectKinds: ["articleDraft"],
+            },
+            productionObjects: [
+              {
+                kind: "articleDraft",
+                title: "文章草稿",
+                artifactKind: "markdown_document",
+                defaultSurface: "documentCanvas",
+                primary: true,
+              },
+            ],
+            objectSurfaces: [
+              {
+                objectKind: "articleDraft",
+                surfaceKind: "documentCanvas",
+                renderer: "host_builtin",
+              },
+            ],
+            historyRestore: {
+              defaultSurface: "selectedObject",
+              restoreSelection: true,
+              restoreLayout: true,
+            },
+          },
+        },
+      }),
+    );
+    const container = await renderPage();
+    await flush();
+
+    expect(
+      container.querySelector(
+        '[data-testid="agent-apps-host-status-content-factory-app"]',
+      )?.textContent,
+    ).toContain("agentApp.apps.center.host.status.");
+    expect(
+      container.querySelector(
+        '[data-testid="agent-apps-host-product-profile-content-factory-app"]',
+      )?.textContent,
+    ).toContain("agentApp.apps.center.host.productProfile");
+
+    await openAppDetail(container);
+
+    const detail = container.querySelector(
+      '[data-testid="agent-apps-host-lifecycle"]',
+    );
+    expect(detail?.textContent).toContain("agentApp.apps.center.host.title");
+    expect(detail?.textContent).toContain(
+      "agentApp.apps.center.host.rightSurface",
+    );
+    expect(detail?.textContent).toContain("agentApp.apps.center.host.blockers");
   });
 
   it("安装确认弹层应展示待安装 App 的 manifest 图标", async () => {
@@ -905,5 +973,113 @@ describe("AgentAppsPage", () => {
       container.querySelector('[data-testid="agent-apps-launch-summary"]')
         ?.textContent,
     ).toContain("agentApp.apps.uninstall.completed");
+  });
+
+  it("standalone App 默认只打开独立窗口，不投递当前 Claw Right Surface", async () => {
+    installedStates.push(buildStandaloneState());
+    const container = await renderPage(undefined, undefined, {
+      workspaceId: "workspace-main",
+      sessionId: "session-main",
+    });
+    await flush();
+
+    await openAppDetail(container);
+
+    const launchButton = container.querySelector(
+      '[data-testid="agent-apps-launch-entry-dashboard"]',
+    ) as HTMLButtonElement | null;
+    await act(async () => {
+      launchButton?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(apiMocks.launchAgentAppShell).toHaveBeenCalledTimes(1);
+    expect(apiMocks.requestWorkspaceRightSurface).not.toHaveBeenCalled();
+    expect(
+      container.querySelector('[data-testid="agent-apps-launch-summary"]')
+        ?.textContent,
+    ).toContain("shell:项目首页:http://127.0.0.1:4199/dashboard");
+  });
+
+  it("选择当前 Claw 右侧后才把 standalone App surface 投递到 Right Surface", async () => {
+    installedStates.push(buildStandaloneState());
+    const container = await renderPage(undefined, undefined, {
+      workspaceId: "workspace-main",
+      sessionId: "session-main",
+    });
+    await flush();
+
+    const rightSurfaceButton = container.querySelector(
+      '[data-testid="agent-apps-launch-target-right-surface"]',
+    ) as HTMLButtonElement | null;
+    expect(rightSurfaceButton?.disabled).toBe(false);
+    await act(async () => {
+      rightSurfaceButton?.click();
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(rightSurfaceButton?.getAttribute("aria-pressed")).toBe("true");
+
+    await openAppDetail(container);
+
+    const launchButton = container.querySelector(
+      '[data-testid="agent-apps-launch-entry-dashboard"]',
+    ) as HTMLButtonElement | null;
+    await act(async () => {
+      launchButton?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(apiMocks.launchAgentAppShell).toHaveBeenCalledTimes(1);
+    expect(apiMocks.requestWorkspaceRightSurface).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "workspace-main",
+        surfaceKind: "appSurface",
+        origin: "agent_app_center",
+        reason: "agent_app_shell_surface_ready",
+        priority: "foreground",
+        candidateId: "content-factory-app",
+        metadata: expect.objectContaining({
+          appId: "content-factory-app",
+          title: "内容工厂",
+          surface: expect.objectContaining({
+            entryUrl: "http://127.0.0.1:4199/dashboard",
+            containerId: "agent-app-shell-content-factory-app-standalone",
+            supportedStrategies: ["controlledBrowserWindow", "webContentsView"],
+            embedding: expect.objectContaining({
+              rightSurfaceDock: true,
+              iframe: false,
+              browserView: false,
+            }),
+          }),
+        }),
+      }),
+      {},
+    );
+    expect(
+      container.querySelector('[data-testid="agent-apps-launch-summary"]')
+        ?.textContent,
+    ).toContain("shell:项目首页:http://127.0.0.1:4199/dashboard");
+  });
+
+  it("没有 Claw target 时应禁用右侧打开选项", async () => {
+    const container = await renderPage();
+    await flush();
+
+    const rightSurfaceButton = container.querySelector(
+      '[data-testid="agent-apps-launch-target-right-surface"]',
+    ) as HTMLButtonElement | null;
+    expect(rightSurfaceButton?.disabled).toBe(true);
+    expect(rightSurfaceButton?.getAttribute("aria-pressed")).toBe("false");
+    expect(
+      container.querySelector(
+        '[data-testid="agent-apps-launch-target-unavailable"]',
+      )?.textContent,
+    ).toContain("agentApp.apps.launchTarget.rightSurfaceUnavailable");
   });
 });

@@ -8,66 +8,40 @@ import {
 } from "./parseManifest";
 
 describe("Agent App manifest P0", () => {
-  it("应解析并归一化 内容工厂 v0.3 fixture", () => {
+  it("应解析并归一化 内容工厂 v3 fixture", () => {
     const manifest = parseManifest(contentFactoryFixture);
     const normalized = normalizeManifest(manifest);
 
     expect(normalized).toMatchObject({
-      manifestVersion: "0.3",
+      manifestVersion: "0.11",
       appId: "content-factory-app",
       displayName: "内容工厂",
-      version: "0.3.0",
+      version: "2.0.0",
       runtimeTargets: ["local"],
       storage: {
         namespace: "content-factory-app",
       },
     });
     expect(normalized.entries.map((entry) => entry.kind)).toEqual([
-      "page",
-      "page",
       "workflow",
-      "page",
-      "expert-chat",
     ]);
     expect(normalized.entries.map((entry) => entry.key)).toEqual([
-      "dashboard",
-      "knowledge",
-      "content_scenario_planning",
       "content_factory",
-      "content_strategist",
     ]);
-    expect(normalized.services.map((service) => service.key)).toEqual([
-      "content_worker",
-    ]);
-    expect(normalized.workflows.map((workflow) => workflow.key)).toEqual([
-      "content_scenario_planning",
-    ]);
-    expect(normalized.toolRefs.map((tool) => tool.key)).toEqual([
-      "document_parser",
-      "competitor_research",
-      "creative_capability_search",
-    ]);
-    expect(
-      normalized.toolRefs.find(
-        (tool) => tool.key === "creative_capability_search",
-      )?.capabilities,
-    ).toEqual([
-      "lime.capability.image.generate",
-      "lime.capability.cover.generate",
-      "lime.capability.research.search",
-      "lime.capability.report.generate",
-      "lime.capability.pdf.read",
-      "lime.capability.summary.generate",
-    ]);
-    expect(normalized.evals.map((evalRule) => evalRule.key)).toEqual([
-      "fact_grounding",
-      "publish_readiness",
-    ]);
-    expect(normalized.secrets.map((secret) => secret.key)).toEqual([
-      "publishing_workspace_token",
-    ]);
-    expect(normalized.overlayTemplates.map((overlay) => overlay.key)).toEqual([
-      "workspace_content_rules",
+    expect(normalized.runtimePackage.worker).toMatchObject({
+      entrypoint: "./src/runtime/content-factory-worker.mjs",
+      contract: "./app.runtime.yaml",
+      sampleRequest: "./examples/runtime-request.sample.json",
+      outputArtifactKind: "content_factory.workspace_patch",
+    });
+    expect(normalized.profiles).toEqual(["workbench"]);
+    expect(normalized.workbench?.productionObjects?.map((object) => object.kind)).toEqual([
+      "contentBrief",
+      "articleDraft",
+      "imageGenerationSet",
+      "videoScript",
+      "videoStoryboard",
+      "deliveryChecklist",
     ]);
   });
 
@@ -237,6 +211,65 @@ describe("Agent App manifest P0", () => {
       "lime.terminal": "*",
     });
     expect(normalized.install.runtime.minVersion).toBe("0.10.0");
+    expect(normalized.install.supportedModes).toEqual([
+      "in_lime",
+      "standalone",
+      "runtime_backed",
+    ]);
+  });
+
+  it("应接受 v0.11 manifest 并保留当前安装契约", () => {
+    const normalized = normalizeManifest(
+      parseManifest({
+        manifestVersion: "0.11.0",
+        name: "Content Factory App",
+        displayName: "内容工厂",
+        version: "0.11.0",
+        requires: {
+          sdk: "@lime/app-sdk@^0.11.0",
+          capabilities: [
+            "lime.agent",
+            "lime.connectors",
+            "lime.terminal",
+          ],
+        },
+        entries: [{ key: "dashboard", kind: "page" }],
+        install: {
+          modes: ["in_lime", "standalone", "runtime_backed"],
+          runtime: {
+            minVersion: "0.11.0",
+            distribution: {
+              standalone: {
+                embedRuntime: true,
+                shell: "lime-app-shell",
+              },
+              runtimeBacked: {
+                requires: "lime-runtime",
+                minVersion: "0.11.0",
+              },
+            },
+          },
+          standalone: {
+            shell: "lime-app-shell",
+            bundleId: "ai.limecloud.contentfactory",
+            platforms: ["macos", "windows"],
+          },
+          runtimeBacked: {
+            requires: "lime-runtime",
+            minVersion: "0.11.0",
+          },
+        },
+      }),
+    );
+
+    expect(normalized.manifestVersion).toBe("0.11");
+    expect(normalized.requires.sdk).toBe("@lime/app-sdk@^0.11.0");
+    expect(normalized.requires.capabilities).toMatchObject({
+      "lime.agent": "*",
+      "lime.connectors": "*",
+      "lime.terminal": "*",
+    });
+    expect(normalized.install.runtime.minVersion).toBe("0.11.0");
     expect(normalized.install.supportedModes).toEqual([
       "in_lime",
       "standalone",

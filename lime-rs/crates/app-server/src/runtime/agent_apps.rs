@@ -1,5 +1,6 @@
 use super::json_string;
 use super::timestamp;
+use super::agent_app_task_runtime::build_agent_app_task_runtime_contract;
 use super::RuntimeCore;
 use super::RuntimeCoreError;
 use app_server_protocol::AgentAppFetchCloudPackageParams;
@@ -12,6 +13,7 @@ use app_server_protocol::AgentAppPackageCacheEntry;
 use app_server_protocol::AgentAppShellPackageMount;
 use app_server_protocol::AgentAppShellPrepareParams;
 use app_server_protocol::AgentAppShellPrepareResponse;
+use app_server_protocol::AgentAppTaskRuntimeContract;
 use app_server_protocol::AgentAppUiRuntimeStartParams;
 use app_server_protocol::AgentAppUiRuntimeStatusParams;
 use app_server_protocol::AgentAppUiRuntimeStatusResponse;
@@ -43,6 +45,7 @@ pub(super) struct AgentAppUiRuntimeProcess {
     entry_key: String,
     route: String,
     started_at: String,
+    task_runtime: AgentAppTaskRuntimeContract,
 }
 
 #[derive(Debug, Clone)]
@@ -214,6 +217,7 @@ impl RuntimeCore {
 
         let app_dir = resolve_agent_app_runtime_dir(&state)?;
         ensure_agent_app_runtime_folder(&app_dir)?;
+        let task_runtime = build_agent_app_task_runtime_contract(&state, Some(&app_dir));
         let port = reserve_local_port()?;
         let base_url = format!("http://127.0.0.1:{port}");
         let mut child = spawn_agent_app_ui_process(&app_dir, port)?;
@@ -227,6 +231,7 @@ impl RuntimeCore {
             entry_key: entry.entry_key.clone(),
             route: entry.route.clone(),
             started_at: timestamp(),
+            task_runtime: task_runtime.clone(),
         };
         self.state
             .lock()
@@ -244,6 +249,7 @@ impl RuntimeCore {
             message: None,
             entry_key: Some(entry.entry_key),
             route: Some(entry.route),
+            task_runtime: Some(task_runtime),
         })
     }
 
@@ -258,9 +264,15 @@ impl RuntimeCore {
         {
             return Ok(status);
         }
+        let task_runtime = self
+            .find_agent_app_installed_state(&params.app_id)
+            .await
+            .ok()
+            .map(|state| build_agent_app_task_runtime_contract(&state, None));
         Ok(stopped_agent_app_ui_runtime_status(
             params.app_id,
             "Agent App UI runtime 未启动。",
+            task_runtime,
         ))
     }
 
@@ -279,6 +291,7 @@ impl RuntimeCore {
             return Ok(stopped_agent_app_ui_runtime_status(
                 params.app_id,
                 "Agent App UI runtime 未启动。",
+                None,
             ));
         };
         let pid = process.child.id();
@@ -294,6 +307,7 @@ impl RuntimeCore {
             message: Some("Agent App UI runtime 已停止。".to_string()),
             entry_key: Some(process.entry_key),
             route: Some(process.route),
+            task_runtime: Some(process.task_runtime),
         })
     }
 }
@@ -369,6 +383,7 @@ impl RuntimeCore {
                     )),
                     entry_key: Some(process.entry_key.clone()),
                     route: Some(route),
+                    task_runtime: Some(process.task_runtime.clone()),
                 }
             }
             Ok(Some(status)) => {
@@ -383,6 +398,7 @@ impl RuntimeCore {
                     message: Some(format!("Agent App UI runtime 已退出: {status}")),
                     entry_key: None,
                     route: None,
+                    task_runtime: Some(process.task_runtime.clone()),
                 }
             }
             Err(error) => {
@@ -397,6 +413,7 @@ impl RuntimeCore {
                     message: Some(format!("读取 Agent App UI runtime 状态失败: {error}")),
                     entry_key: None,
                     route: None,
+                    task_runtime: Some(process.task_runtime.clone()),
                 }
             }
         };
@@ -857,6 +874,7 @@ async fn terminate_agent_app_ui_process(child: &mut Child) {
 fn stopped_agent_app_ui_runtime_status(
     app_id: String,
     message: &str,
+    task_runtime: Option<AgentAppTaskRuntimeContract>,
 ) -> AgentAppUiRuntimeStatusResponse {
     AgentAppUiRuntimeStatusResponse {
         app_id,
@@ -868,6 +886,7 @@ fn stopped_agent_app_ui_runtime_status(
         message: Some(message.to_string()),
         entry_key: None,
         route: None,
+        task_runtime,
     }
 }
 

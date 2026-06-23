@@ -1,6 +1,6 @@
 import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
-import "./StreamingRenderer.testMocks";
+import { mockMarkdownRenderer } from "./StreamingRenderer.testMocks";
 import {
   installStreamingRendererTestHarness,
   renderStreamingRendererHarness as renderHarness,
@@ -79,13 +79,10 @@ describe("StreamingRenderer WebSearch sequence rendering", () => {
     });
 
     const renderedText = container.textContent || "";
-    const processIndex = renderedText.indexOf(
-      "已搜索网页 1 次，读取网页 1 次",
-    );
+    const processIndex = renderedText.indexOf("已搜索网页 1 次，读取网页 1 次");
     const searchSourceIndex = renderedText.indexOf("学习机横评来源");
-    const thinkingIndex = renderedText.indexOf(
-      "搜索结果还需要继续筛掉广告软文。",
-    );
+    const thinkingIndex =
+      renderedText.indexOf("搜索结果还需要继续筛掉广告软文。");
     const readPageIndex = renderedText.indexOf("example.com/read-page");
     const finalTextIndex = renderedText.indexOf("我会继续整理结论。");
 
@@ -298,9 +295,7 @@ describe("StreamingRenderer WebSearch sequence rendering", () => {
     });
 
     const expandedText = container.textContent || "";
-    const processIndex = expandedText.indexOf(
-      "已搜索网页 1 次，读取网页 1 次",
-    );
+    const processIndex = expandedText.indexOf("已搜索网页 1 次，读取网页 1 次");
     const searchIndex = expandedText.indexOf("web search rendering parity");
     const thinkingIndex = expandedText.indexOf(
       "中间思考：搜索之后需要读取页面确认正文。",
@@ -308,9 +303,8 @@ describe("StreamingRenderer WebSearch sequence rendering", () => {
     const fetchIndex = expandedText.indexOf(
       "example.com/lime-websearch-rendering",
     );
-    const finalIndex = expandedText.indexOf(
-      "网页搜索渲染结论：最终正文继续输出。",
-    );
+    const finalIndex =
+      expandedText.indexOf("网页搜索渲染结论：最终正文继续输出。");
 
     expect(searchIndex).toBeGreaterThan(processIndex);
     expect(thinkingIndex).toBeGreaterThan(searchIndex);
@@ -321,5 +315,212 @@ describe("StreamingRenderer WebSearch sequence rendering", () => {
     );
     expect(expandedText).not.toContain('"bytes"');
     expect(expandedText).not.toContain('"codeText"');
+  });
+
+  it("网页检索过程中的相邻思考碎片应合并成一个展开块", () => {
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "text",
+          text: "我先核实今天的国际新闻。",
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-search-fragmented-thinking-1",
+            name: "web_search",
+            arguments: JSON.stringify({
+              query: "2026-06-24 international news",
+            }),
+            status: "completed",
+            result: {
+              success: true,
+              output: JSON.stringify({
+                results: [
+                  {
+                    title: "BBC News 中文",
+                    url: "https://example.com/bbc-zhongwen",
+                    snippet: "国际新闻摘要",
+                  },
+                ],
+              }),
+            },
+            startTime: new Date("2026-06-24T09:00:00.000Z"),
+            endTime: new Date("2026-06-24T09:00:01.000Z"),
+          },
+        },
+        {
+          type: "thinking",
+          text: "用户想",
+        },
+        {
+          type: "thinking",
+          text: "了解今天的国际新闻",
+        },
+        {
+          type: "thinking",
+          text: "，需要搜索并读取可靠来源。",
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-fetch-fragmented-thinking-1",
+            name: "WebFetch",
+            arguments: JSON.stringify({
+              url: "https://example.com/bbc-zhongwen",
+            }),
+            status: "completed",
+            result: {
+              success: true,
+              output: JSON.stringify({
+                title: "BBC News 中文",
+                markdown: "国际新闻正文摘要。",
+              }),
+            },
+            startTime: new Date("2026-06-24T09:00:02.000Z"),
+            endTime: new Date("2026-06-24T09:00:03.000Z"),
+          },
+        },
+        {
+          type: "text",
+          text: "## 今日国际新闻\n\n已整理主要事件。",
+        },
+      ],
+      isStreaming: false,
+    });
+
+    const processGroupButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="streaming-process-group"] button',
+    );
+    expect(processGroupButton?.getAttribute("aria-expanded")).toBe("false");
+
+    act(() => {
+      processGroupButton?.click();
+    });
+
+    const thinkingBlocks = container.querySelectorAll<HTMLElement>(
+      '[data-testid="thinking-block"]',
+    );
+    const expandedText = container.textContent || "";
+    const searchIndex = expandedText.indexOf("2026-06-24 international news");
+    const thinkingIndex = expandedText.indexOf(
+      "用户想了解今天的国际新闻，需要搜索并读取可靠来源。",
+    );
+    const fetchIndex = expandedText.indexOf("example.com/bbc-zhongwen");
+    const finalIndex = expandedText.indexOf("今日国际新闻");
+
+    expect(thinkingBlocks).toHaveLength(1);
+    expect(searchIndex).toBeGreaterThanOrEqual(0);
+    expect(thinkingIndex).toBeGreaterThan(searchIndex);
+    expect(fetchIndex).toBeGreaterThan(thinkingIndex);
+    expect(finalIndex).toBeGreaterThan(fetchIndex);
+    expect(expandedText).not.toContain("·用户想·了解今天");
+  });
+
+  it("网页检索过程中的单条思考内容不应把短碎片段落渲染成竖排", () => {
+    const fragmentedThinking = [
+      "搜索",
+      "",
+      "结果",
+      "",
+      "还是没有",
+      "",
+      "直接显示",
+      "",
+      "今天的",
+      "",
+      "新闻",
+      "",
+      "内容",
+      "",
+      "。我看到",
+      "",
+      "有一个",
+      "",
+      "“新闻 早餐（2026 年 6 月 24 日）”的链接，这是一个",
+      "",
+      "微信",
+      "",
+      "公众号",
+      "",
+      "文章",
+    ].join("\n");
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-search-single-fragmented-thinking-1",
+            name: "web_search",
+            arguments: JSON.stringify({
+              query: "国际新闻 今天 2026年6月24日",
+            }),
+            status: "completed",
+            result: {
+              success: true,
+              output: JSON.stringify({
+                results: [
+                  {
+                    title: "BBC News 中文",
+                    url: "https://example.com/bbc-zhongwen",
+                    snippet: "国际新闻摘要",
+                  },
+                ],
+              }),
+            },
+            startTime: new Date("2026-06-24T09:00:00.000Z"),
+            endTime: new Date("2026-06-24T09:00:01.000Z"),
+          },
+        },
+        {
+          type: "thinking",
+          text: fragmentedThinking,
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-fetch-single-fragmented-thinking-1",
+            name: "WebFetch",
+            arguments: JSON.stringify({
+              url: "https://example.com/bbc-zhongwen",
+            }),
+            status: "completed",
+            result: {
+              success: true,
+              output: JSON.stringify({
+                markdown: "国际新闻正文摘要。",
+              }),
+            },
+            startTime: new Date("2026-06-24T09:00:02.000Z"),
+            endTime: new Date("2026-06-24T09:00:03.000Z"),
+          },
+        },
+        {
+          type: "text",
+          text: "## 今日国际新闻\n\n已整理主要事件。",
+        },
+      ],
+      isStreaming: false,
+    });
+
+    const processGroupButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="streaming-process-group"] button',
+    );
+
+    act(() => {
+      processGroupButton?.click();
+    });
+
+    const markdownSources = mockMarkdownRenderer.mock.calls.map(
+      ([props]) => props.content,
+    );
+    expect(markdownSources).toContain(
+      "搜索结果还是没有直接显示今天的新闻内容。我看到有一个“新闻 早餐（2026 年 6 月 24 日）”的链接，这是一个微信公众号文章",
+    );
+    expect(
+      markdownSources.some((source) => source.includes("搜索\n\n结果")),
+    ).toBe(false);
   });
 });

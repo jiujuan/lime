@@ -20,7 +20,10 @@ export interface BuildWorkspaceRightSurfaceRuntimePendingIntentsParams {
 
 export interface BuildWorkspaceRightSurfaceRuntimeLaunchersParams {
   filesAvailable: boolean;
+  appSurfaceAvailable?: boolean;
   hasExpertInfoPanel: boolean;
+  objectCanvasAvailable: boolean;
+  productProfileAvailable?: boolean;
   pendingIntents: WorkspaceRightSurfaceIntent[];
   shellAvailable: boolean;
   showHarnessToggle: boolean;
@@ -57,21 +60,36 @@ export function buildWorkspaceRightSurfaceRuntimePendingIntents({
 
 export function buildWorkspaceRightSurfaceRuntimeAvailableSurfaces({
   filesAvailable,
+  appSurfaceAvailable = false,
   hasExpertInfoPanel,
+  objectCanvasAvailable,
+  productProfileAvailable = objectCanvasAvailable,
   shellAvailable,
   showHarnessToggle,
   suppressHomeNavbarUtilityActions,
 }: Pick<
   BuildWorkspaceRightSurfaceRuntimeLaunchersParams,
   | "hasExpertInfoPanel"
+  | "appSurfaceAvailable"
   | "filesAvailable"
+  | "objectCanvasAvailable"
+  | "productProfileAvailable"
   | "shellAvailable"
   | "showHarnessToggle"
   | "suppressHomeNavbarUtilityActions"
 >): ReadonlySet<WorkspaceRightSurfaceKind> {
   const surfaces: WorkspaceRightSurfaceKind[] = ["workbench"];
+  if (appSurfaceAvailable) {
+    surfaces.push("appSurface");
+  }
+  if (productProfileAvailable) {
+    surfaces.push("productProfile");
+  }
   if (hasExpertInfoPanel) {
     surfaces.push("expertInfo");
+  }
+  if (objectCanvasAvailable) {
+    surfaces.push("objectCanvas");
   }
   if (filesAvailable) {
     surfaces.push("files");
@@ -87,7 +105,10 @@ export function buildWorkspaceRightSurfaceRuntimeAvailableSurfaces({
 
 export function buildWorkspaceRightSurfaceRuntimeLaunchers({
   filesAvailable,
+  appSurfaceAvailable,
   hasExpertInfoPanel,
+  objectCanvasAvailable,
+  productProfileAvailable,
   pendingIntents,
   shellAvailable,
   showHarnessToggle,
@@ -99,7 +120,10 @@ export function buildWorkspaceRightSurfaceRuntimeLaunchers({
     pendingIntents,
     availableSurfaces: buildWorkspaceRightSurfaceRuntimeAvailableSurfaces({
       filesAvailable,
+      appSurfaceAvailable,
       hasExpertInfoPanel,
+      objectCanvasAvailable,
+      productProfileAvailable,
       shellAvailable,
       showHarnessToggle,
       suppressHomeNavbarUtilityActions,

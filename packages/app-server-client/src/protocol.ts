@@ -4,6 +4,7 @@ import type {
   ConversationImportSourceClient as GeneratedConversationImportSourceClient,
   ConversationImportSourceStatus as GeneratedConversationImportSourceStatus,
   ConversationImportThreadStatus as GeneratedConversationImportThreadStatus,
+  WorkspaceRightSurfacePendingChangedParams as GeneratedWorkspaceRightSurfacePendingChangedParams,
 } from "./generated/protocol-types.js";
 export * from "./generated/protocol-types.js";
 export type {
@@ -113,6 +114,16 @@ export const METHOD_WORKSPACE_PROJECTS_ROOT_READ =
 export const METHOD_WORKSPACE_PROJECT_PATH_RESOLVE =
   "workspace/projectPath/resolve";
 export const METHOD_WORKSPACE_ENSURE_READY = "workspace/ensureReady";
+export const METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST =
+  "workspaceRightSurface/request";
+export const METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_LIST =
+  "workspaceRightSurface/pending/list";
+export const METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CONSUME =
+  "workspaceRightSurface/pending/consume";
+export const METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS =
+  "workspaceRightSurface/pending/dismiss";
+export const METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED =
+  "workspaceRightSurface/pendingChanged";
 export const METHOD_SKILL_LIST = "skill/list";
 export const METHOD_SKILL_READ = "skill/read";
 export const METHOD_SKILL_MANAGEMENT_LIST = "skillManagement/list";
@@ -153,6 +164,8 @@ export const METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL =
   "agentAppInstalled/uninstall/rehearsal";
 export const METHOD_AGENT_APP_INSTALLED_UNINSTALL =
   "agentAppInstalled/uninstall";
+export const METHOD_AGENT_APP_HOST_LIFECYCLE_LIST =
+  "agentAppHostLifecycle/list";
 export const METHOD_AGENT_APP_SHELL_PREPARE = "agentAppShell/prepare";
 export const METHOD_AGENT_APP_UI_RUNTIME_START = "agentAppUiRuntime/start";
 export const METHOD_AGENT_APP_UI_RUNTIME_STATUS = "agentAppUiRuntime/status";
@@ -459,6 +472,14 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_WORKSPACE_PROJECTS_ROOT_READ, kind: "request" },
   { method: METHOD_WORKSPACE_PROJECT_PATH_RESOLVE, kind: "request" },
   { method: METHOD_WORKSPACE_ENSURE_READY, kind: "request" },
+  { method: METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST, kind: "request" },
+  { method: METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_LIST, kind: "request" },
+  { method: METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CONSUME, kind: "request" },
+  { method: METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS, kind: "request" },
+  {
+    method: METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED,
+    kind: "notification",
+  },
   { method: METHOD_SKILL_LIST, kind: "request" },
   { method: METHOD_SKILL_READ, kind: "request" },
   { method: METHOD_SKILL_MANAGEMENT_LIST, kind: "request" },
@@ -514,6 +535,7 @@ export const APP_SERVER_METHODS = [
     kind: "request",
   },
   { method: METHOD_AGENT_APP_INSTALLED_UNINSTALL, kind: "request" },
+  { method: METHOD_AGENT_APP_HOST_LIFECYCLE_LIST, kind: "request" },
   { method: METHOD_AGENT_APP_SHELL_PREPARE, kind: "request" },
   { method: METHOD_AGENT_APP_UI_RUNTIME_START, kind: "request" },
   { method: METHOD_AGENT_APP_UI_RUNTIME_STATUS, kind: "request" },
@@ -1367,6 +1389,7 @@ export type AgentSessionUpdateParams = {
   recentAccessMode?: string;
   recentPreferences?: unknown;
   recentTeamSelection?: unknown;
+  productWorkspaceSelectedObjectRef?: unknown;
 };
 
 export type AgentSessionUpdateResponse = {
@@ -3344,6 +3367,15 @@ export type AgentSessionEventNotification = JsonRpcNotification & {
   params: AgentSessionEventParams;
 };
 
+export type WorkspaceRightSurfacePendingChangedParams =
+  GeneratedWorkspaceRightSurfacePendingChangedParams;
+
+export type WorkspaceRightSurfacePendingChangedNotification =
+  JsonRpcNotification & {
+    method: typeof METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED;
+    params: WorkspaceRightSurfacePendingChangedParams;
+  };
+
 export type ConnectDeepLinkResolveParams = {
   url: string;
 };
@@ -3683,6 +3715,30 @@ export function agentSessionEventNotification(
     return undefined;
   }
   return message as AgentSessionEventNotification;
+}
+
+export function isWorkspaceRightSurfacePendingChangedNotification(
+  message: JsonRpcMessage,
+): message is WorkspaceRightSurfacePendingChangedNotification {
+  return Boolean(workspaceRightSurfacePendingChangedNotification(message));
+}
+
+export function workspaceRightSurfacePendingChangedNotification(
+  message: JsonRpcMessage,
+): WorkspaceRightSurfacePendingChangedNotification | undefined {
+  if (
+    !isJsonRpcNotification(message) ||
+    message.method !== METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED
+  ) {
+    return undefined;
+  }
+  const params = message.params as
+    | Partial<WorkspaceRightSurfacePendingChangedParams>
+    | undefined;
+  if (!params || typeof params.changeType !== "string") {
+    return undefined;
+  }
+  return message as WorkspaceRightSurfacePendingChangedNotification;
 }
 
 export function isJsonRpcResponse<T = RpcResult>(

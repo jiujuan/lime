@@ -56,11 +56,3 @@ export function isInternalThinkingPreviewLine(line: string): boolean {
         )))
   );
 }
-
-export function sanitizeThinkingDisplayText(value: string): string {
-  const lines = value.split(/\r?\n/);
-  const visibleLines = lines.filter(
-    (line) => !isInternalThinkingPreviewLine(line),
-  );
-  return visibleLines.join("\n").trim();
-}

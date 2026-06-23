@@ -38,6 +38,7 @@ export function openWorkspaceRightSurface(
       current.activeSurface === request.kind
         ? current.previousSurface
         : current.activeSurface,
+    openSurfaces: appendOpenSurface(current.openSurfaces, request.kind),
     source: request.source,
     layoutVariant: request.layoutVariant ?? current.layoutVariant,
   };
@@ -50,7 +51,15 @@ export function closeWorkspaceRightSurface(
   return {
     activeSurface: null,
     previousSurface: current.activeSurface,
+    openSurfaces: current.openSurfaces,
     source: request.source,
     layoutVariant: current.layoutVariant,
   };
+}
+
+function appendOpenSurface(
+  current: readonly WorkspaceRightSurfaceKind[],
+  kind: WorkspaceRightSurfaceKind,
+): readonly WorkspaceRightSurfaceKind[] {
+  return current.includes(kind) ? current : [...current, kind];
 }

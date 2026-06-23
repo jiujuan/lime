@@ -10,6 +10,7 @@ import { useTranslation } from "react-i18next";
 import {
   ArrowDown,
   ArrowUp,
+  CheckCircle2,
   CornerDownLeft,
   Loader2,
   PencilLine,
@@ -25,6 +26,13 @@ interface PlanComposerDecisionPanelProps {
 
 interface SubmissionState {
   kind: "submit" | "ignore";
+}
+
+interface PlanRevisionStatus {
+  revisionId: string;
+  sourceItemId?: string;
+  turnId?: string;
+  source?: string;
 }
 
 const USER_ACTIVATION_WINDOW_MS = 5_000;
@@ -73,6 +81,46 @@ function normalizeQuestionOptions(rawOptions: unknown): QuestionOption[] {
     });
   }
   return normalized;
+}
+
+function readStringField(
+  record: Record<string, unknown> | null | undefined,
+  ...keys: string[]
+): string | undefined {
+  if (!record) {
+    return undefined;
+  }
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return undefined;
+}
+
+function resolvePlanRevisionStatus(
+  request: ActionRequired,
+): PlanRevisionStatus | null {
+  const args =
+    request.arguments && typeof request.arguments === "object"
+      ? request.arguments
+      : null;
+  const revisionId = readStringField(
+    args,
+    "plan_revision_id",
+    "planRevisionId",
+  );
+  if (!revisionId) {
+    return null;
+  }
+
+  return {
+    revisionId,
+    sourceItemId: readStringField(args, "source_item_id", "sourceItemId"),
+    turnId: readStringField(args, "turn_id", "turnId"),
+    source: readStringField(args, "plan_source", "source"),
+  };
 }
 
 function fallbackPlanOptions(t: (key: string) => string): QuestionOption[] {
@@ -126,10 +174,15 @@ export function PlanComposerDecisionPanel({
 }: PlanComposerDecisionPanelProps) {
   const { t } = useTranslation("agent");
   const translatePlanDecision = useCallback(
-    (key: string): string => String(t(key as never)),
+    (key: string, values?: Record<string, number | string>): string =>
+      String(t(key as never, values ?? {})),
     [t],
   );
   const question = resolvePrimaryQuestion(request, translatePlanDecision);
+  const revisionStatus = useMemo(
+    () => resolvePlanRevisionStatus(request),
+    [request],
+  );
   const options = useMemo(
     () => resolvePrimaryOptions(request, translatePlanDecision),
     [request, translatePlanDecision],
@@ -243,6 +296,24 @@ export function PlanComposerDecisionPanel({
       <div className="px-1 pb-2 text-sm font-semibold leading-5 text-slate-950">
         {question}
       </div>
+      {revisionStatus ? (
+        <div
+          className="mb-2 flex min-w-0 items-center gap-1.5 rounded-lg border border-emerald-100 bg-emerald-50 px-2 py-1.5 text-xs font-medium text-emerald-800"
+          data-testid="plan-composer-revision-status"
+          data-plan-revision-id={revisionStatus.revisionId}
+          data-plan-source-item-id={revisionStatus.sourceItemId}
+          data-plan-turn-id={revisionStatus.turnId}
+          data-plan-source={revisionStatus.source}
+        >
+          <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span className="min-w-0 truncate">
+            {translatePlanDecision(
+              "agentChat.planComposerDecision.revision.bound",
+              { revision: revisionStatus.revisionId },
+            )}
+          </span>
+        </div>
+      ) : null}
       <div className="space-y-1">
         {options.map((option, index) => {
           const selected = option.label === selectedLabel;

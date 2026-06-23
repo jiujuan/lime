@@ -24,12 +24,14 @@ import {
 import { resolveWorkspaceSkillRuntimeEnableResultDisplay } from "../utils/toolResultEnvelopeDisplay";
 
 interface StreamingProcessSummaryCopy {
-  formatImportedSourceCommandRecord: (count?: number) => string;
   completedThinking: () => string;
+  formatImportedSourceCommandRecord: (count?: number) => string;
   importedSteps: (count: number) => string;
   failedSteps: (count: number) => string;
   runningSteps: (count: number) => string;
   completedSteps: (count: number) => string;
+  runningThinking: () => string;
+  structuredThinking: () => string;
   thinking: () => string;
   toolCalls: (count: number) => string;
   processMessages: (count: number) => string;
@@ -50,12 +52,27 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function resolveToolCallMetadata(toolCall: ToolCallState): Record<string, unknown> | null {
+function resolveToolCallMetadata(
+  toolCall: ToolCallState,
+): Record<string, unknown> | null {
   const merged = {
     ...(asRecord(toolCall.metadata) || {}),
     ...(asRecord(toolCall.result?.metadata) || {}),
   };
   return Object.keys(merged).length > 0 ? merged : null;
+}
+
+function resolveProcessThinkingDisplay(
+  entry: Extract<StreamingProcessEntry, { kind: "thinking" }>,
+  copy: StreamingProcessSummaryCopy,
+) {
+  return resolveThinkingDisplayParts(entry.text, entry.isActive === true, {
+    labels: {
+      completed: copy.completedThinking(),
+      running: copy.runningThinking(),
+      structuredFallback: copy.structuredThinking(),
+    },
+  });
 }
 
 function resolveToolCallRawResultText(toolCall: ToolCallState): string {
@@ -154,12 +171,9 @@ function buildStreamingProcessSummary(
   const primarySummary = (() => {
     for (const entry of entries) {
       if (entry.kind === "thinking") {
-        const preview = resolveThinkingDisplayParts(
-          entry.text,
-          entry.defaultExpanded === true,
-        ).preview;
-        if (preview) {
-          return preview;
+        const thinkingDisplay = resolveProcessThinkingDisplay(entry, copy);
+        if (thinkingDisplay.preview) {
+          return thinkingDisplay.preview;
         }
         continue;
       }
@@ -182,6 +196,19 @@ function buildStreamingProcessSummary(
 
     return null;
   })();
+
+  if (!primarySummary && toolCount === 0 && thinkingCount > 0) {
+    const firstThinking = entries.find((entry) => entry.kind === "thinking");
+    const thinkingDisplay =
+      firstThinking?.kind === "thinking"
+        ? resolveProcessThinkingDisplay(firstThinking, copy)
+        : null;
+    return {
+      summaryText: thinkingDisplay?.statusLabel || copy.thinking(),
+      descriptor: null,
+      metaText: thinkingCount > 1 ? copy.thinkingNotes(thinkingCount) : null,
+    };
+  }
 
   if (!primarySummary) {
     const summaryParts: string[] = [];
@@ -206,10 +233,7 @@ function buildStreamingProcessSummary(
       const firstThinking = entries.find((entry) => entry.kind === "thinking");
       const thinkingDisplay =
         firstThinking?.kind === "thinking"
-          ? resolveThinkingDisplayParts(
-              firstThinking.text,
-              firstThinking.defaultExpanded === true,
-            )
+          ? resolveProcessThinkingDisplay(firstThinking, copy)
           : null;
       const summaryText =
         hasImportedThinking && thinkingDisplay?.preview
@@ -267,9 +291,7 @@ export const StreamingProcessGroup: React.FC<{
   ) => React.ReactNode;
 }> = ({ entries, defaultExpanded = false, onOpenUrlPreview, renderEntry }) => {
   const { t } = useTranslation("agent");
-  const resolveWebSearchSectionTitle = (
-    kind: ToolBatchSummarySectionKind,
-  ) =>
+  const resolveWebSearchSectionTitle = (kind: ToolBatchSummarySectionKind) =>
     kind === "web_fetch_pages"
       ? t("agentChat.processGroup.webSearch.section.webFetchPages", {
           defaultValue: "Read pages",
@@ -288,7 +310,17 @@ export const StreamingProcessGroup: React.FC<{
             count,
           }),
         completedThinking: () =>
-          t("agentChat.processGroup.completedThinking", "Reasoning completed"),
+          t("agentChat.thinkingBlock.status.completed", {
+            defaultValue: "已完成思考",
+          }),
+        runningThinking: () =>
+          t("agentChat.thinkingBlock.status.running", {
+            defaultValue: "思考中",
+          }),
+        structuredThinking: () =>
+          t("agentChat.thinkingBlock.preview.structured", {
+            defaultValue: "在整理结构化内容",
+          }),
         importedSteps: (count: number) =>
           t("agentChat.processGroup.importedSteps", {
             count,

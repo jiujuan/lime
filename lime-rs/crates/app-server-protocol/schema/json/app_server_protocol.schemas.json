@@ -433,6 +433,691 @@
       "title": "AgentAppFetchCloudPackageParams",
       "type": "object"
     },
+    "AgentAppHistoryRestoreContract": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "defaultPane": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "defaultTab": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "fallback": {
+          "type": "string"
+        },
+        "restoreLayout": {
+          "type": "boolean"
+        },
+        "restoreSelection": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "enabled",
+        "fallback",
+        "restoreLayout",
+        "restoreSelection"
+      ],
+      "title": "AgentAppHistoryRestoreContract",
+      "type": "object"
+    },
+    "AgentAppHostFunctionState": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "blockers": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "currentOwner": {
+          "type": "string"
+        },
+        "followUps": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "key": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "currentOwner",
+        "key",
+        "status"
+      ],
+      "title": "AgentAppHostFunctionState",
+      "type": "object"
+    },
+    "AgentAppHostLifecycleListResponse": {
+      "$defs": {
+        "AgentAppHistoryRestoreContract": {
+          "properties": {
+            "defaultPane": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "defaultTab": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "fallback": {
+              "type": "string"
+            },
+            "restoreLayout": {
+              "type": "boolean"
+            },
+            "restoreSelection": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "enabled",
+            "fallback",
+            "restoreLayout",
+            "restoreSelection"
+          ],
+          "type": "object"
+        },
+        "AgentAppHostFunctionState": {
+          "properties": {
+            "blockers": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "currentOwner": {
+              "type": "string"
+            },
+            "followUps": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "key": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "currentOwner",
+            "key",
+            "status"
+          ],
+          "type": "object"
+        },
+        "AgentAppHostLifecycleSnapshot": {
+          "properties": {
+            "appCenterStatus": {
+              "type": "string"
+            },
+            "appId": {
+              "type": "string"
+            },
+            "blockers": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "displayName": {
+              "type": "string"
+            },
+            "followUps": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "functions": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/AgentAppHostFunctionState"
+              },
+              "type": "array"
+            },
+            "generatedAt": {
+              "type": "string"
+            },
+            "profiles": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "readinessStatus": {
+              "type": "string"
+            },
+            "rightSurface": {
+              "$ref": "#/$defs/AgentAppRightSurfaceContract"
+            },
+            "taskRuntime": {
+              "$ref": "#/$defs/AgentAppTaskRuntimeContract"
+            }
+          },
+          "required": [
+            "appCenterStatus",
+            "appId",
+            "displayName",
+            "generatedAt",
+            "readinessStatus",
+            "rightSurface",
+            "taskRuntime"
+          ],
+          "type": "object"
+        },
+        "AgentAppProductProfileContract": {
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "objects": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/AgentAppProductProfileObject"
+              },
+              "type": "array"
+            },
+            "panes": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "rendererKinds": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "enabled"
+          ],
+          "type": "object"
+        },
+        "AgentAppProductProfileObject": {
+          "properties": {
+            "artifactKind": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "defaultPane": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "primary": {
+              "type": "boolean"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "defaultPane",
+            "kind",
+            "primary",
+            "title"
+          ],
+          "type": "object"
+        },
+        "AgentAppRightSurfaceContract": {
+          "properties": {
+            "defaultActiveTab": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "dock": {
+              "type": "string"
+            },
+            "historyRestore": {
+              "$ref": "#/$defs/AgentAppHistoryRestoreContract"
+            },
+            "physicalDockCount": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "productProfile": {
+              "$ref": "#/$defs/AgentAppProductProfileContract"
+            },
+            "supportedTabs": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "dock",
+            "historyRestore",
+            "physicalDockCount",
+            "productProfile"
+          ],
+          "type": "object"
+        },
+        "AgentAppTaskRuntimeContract": {
+          "properties": {
+            "blockers": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "contractPath": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "directFilesystemAccess": {
+              "type": "boolean"
+            },
+            "directProviderAccess": {
+              "type": "boolean"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "followUps": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "outputArtifactKind": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "sampleRequestPath": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "taskKinds": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "workerEntrypoint": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "directFilesystemAccess",
+            "directProviderAccess",
+            "enabled"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "issues": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        },
+        "snapshots": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentAppHostLifecycleSnapshot"
+          },
+          "type": "array"
+        }
+      },
+      "title": "AgentAppHostLifecycleListResponse",
+      "type": "object"
+    },
+    "AgentAppHostLifecycleSnapshot": {
+      "$defs": {
+        "AgentAppHistoryRestoreContract": {
+          "properties": {
+            "defaultPane": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "defaultTab": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "fallback": {
+              "type": "string"
+            },
+            "restoreLayout": {
+              "type": "boolean"
+            },
+            "restoreSelection": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "enabled",
+            "fallback",
+            "restoreLayout",
+            "restoreSelection"
+          ],
+          "type": "object"
+        },
+        "AgentAppHostFunctionState": {
+          "properties": {
+            "blockers": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "currentOwner": {
+              "type": "string"
+            },
+            "followUps": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "key": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "currentOwner",
+            "key",
+            "status"
+          ],
+          "type": "object"
+        },
+        "AgentAppProductProfileContract": {
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "objects": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/AgentAppProductProfileObject"
+              },
+              "type": "array"
+            },
+            "panes": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "rendererKinds": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "enabled"
+          ],
+          "type": "object"
+        },
+        "AgentAppProductProfileObject": {
+          "properties": {
+            "artifactKind": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "defaultPane": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "primary": {
+              "type": "boolean"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "defaultPane",
+            "kind",
+            "primary",
+            "title"
+          ],
+          "type": "object"
+        },
+        "AgentAppRightSurfaceContract": {
+          "properties": {
+            "defaultActiveTab": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "dock": {
+              "type": "string"
+            },
+            "historyRestore": {
+              "$ref": "#/$defs/AgentAppHistoryRestoreContract"
+            },
+            "physicalDockCount": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "productProfile": {
+              "$ref": "#/$defs/AgentAppProductProfileContract"
+            },
+            "supportedTabs": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "dock",
+            "historyRestore",
+            "physicalDockCount",
+            "productProfile"
+          ],
+          "type": "object"
+        },
+        "AgentAppTaskRuntimeContract": {
+          "properties": {
+            "blockers": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "contractPath": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "directFilesystemAccess": {
+              "type": "boolean"
+            },
+            "directProviderAccess": {
+              "type": "boolean"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "followUps": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "outputArtifactKind": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "sampleRequestPath": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "taskKinds": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "workerEntrypoint": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "directFilesystemAccess",
+            "directProviderAccess",
+            "enabled"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appCenterStatus": {
+          "type": "string"
+        },
+        "appId": {
+          "type": "string"
+        },
+        "blockers": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "followUps": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "functions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentAppHostFunctionState"
+          },
+          "type": "array"
+        },
+        "generatedAt": {
+          "type": "string"
+        },
+        "profiles": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "readinessStatus": {
+          "type": "string"
+        },
+        "rightSurface": {
+          "$ref": "#/$defs/AgentAppRightSurfaceContract"
+        },
+        "taskRuntime": {
+          "$ref": "#/$defs/AgentAppTaskRuntimeContract"
+        }
+      },
+      "required": [
+        "appCenterStatus",
+        "appId",
+        "displayName",
+        "generatedAt",
+        "readinessStatus",
+        "rightSurface",
+        "taskRuntime"
+      ],
+      "title": "AgentAppHostLifecycleSnapshot",
+      "type": "object"
+    },
     "AgentAppInstalledDisabledSetParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -705,6 +1390,240 @@
       "title": "AgentAppPackageIdentity",
       "type": "object"
     },
+    "AgentAppProductProfileContract": {
+      "$defs": {
+        "AgentAppProductProfileObject": {
+          "properties": {
+            "artifactKind": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "defaultPane": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "primary": {
+              "type": "boolean"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "defaultPane",
+            "kind",
+            "primary",
+            "title"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "objects": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentAppProductProfileObject"
+          },
+          "type": "array"
+        },
+        "panes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "rendererKinds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "enabled"
+      ],
+      "title": "AgentAppProductProfileContract",
+      "type": "object"
+    },
+    "AgentAppProductProfileObject": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "artifactKind": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "defaultPane": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "primary": {
+          "type": "boolean"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "defaultPane",
+        "kind",
+        "primary",
+        "title"
+      ],
+      "title": "AgentAppProductProfileObject",
+      "type": "object"
+    },
+    "AgentAppRightSurfaceContract": {
+      "$defs": {
+        "AgentAppHistoryRestoreContract": {
+          "properties": {
+            "defaultPane": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "defaultTab": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "fallback": {
+              "type": "string"
+            },
+            "restoreLayout": {
+              "type": "boolean"
+            },
+            "restoreSelection": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "enabled",
+            "fallback",
+            "restoreLayout",
+            "restoreSelection"
+          ],
+          "type": "object"
+        },
+        "AgentAppProductProfileContract": {
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "objects": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/AgentAppProductProfileObject"
+              },
+              "type": "array"
+            },
+            "panes": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "rendererKinds": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "enabled"
+          ],
+          "type": "object"
+        },
+        "AgentAppProductProfileObject": {
+          "properties": {
+            "artifactKind": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "defaultPane": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "primary": {
+              "type": "boolean"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "defaultPane",
+            "kind",
+            "primary",
+            "title"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "defaultActiveTab": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "dock": {
+          "type": "string"
+        },
+        "historyRestore": {
+          "$ref": "#/$defs/AgentAppHistoryRestoreContract"
+        },
+        "physicalDockCount": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "productProfile": {
+          "$ref": "#/$defs/AgentAppProductProfileContract"
+        },
+        "supportedTabs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "dock",
+        "historyRestore",
+        "physicalDockCount",
+        "productProfile"
+      ],
+      "title": "AgentAppRightSurfaceContract",
+      "type": "object"
+    },
     "AgentAppShellPackageMount": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -856,6 +1775,72 @@
       "title": "AgentAppShellPrepareResponse",
       "type": "object"
     },
+    "AgentAppTaskRuntimeContract": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "blockers": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "contractPath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "directFilesystemAccess": {
+          "type": "boolean"
+        },
+        "directProviderAccess": {
+          "type": "boolean"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "followUps": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "outputArtifactKind": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sampleRequestPath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "taskKinds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "workerEntrypoint": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "directFilesystemAccess",
+        "directProviderAccess",
+        "enabled"
+      ],
+      "title": "AgentAppTaskRuntimeContract",
+      "type": "object"
+    },
     "AgentAppUiRuntimeStartParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -889,6 +1874,72 @@
       "type": "object"
     },
     "AgentAppUiRuntimeStatusResponse": {
+      "$defs": {
+        "AgentAppTaskRuntimeContract": {
+          "properties": {
+            "blockers": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "contractPath": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "directFilesystemAccess": {
+              "type": "boolean"
+            },
+            "directProviderAccess": {
+              "type": "boolean"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "followUps": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "outputArtifactKind": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "sampleRequestPath": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "taskKinds": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "workerEntrypoint": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "directFilesystemAccess",
+            "directProviderAccess",
+            "enabled"
+          ],
+          "type": "object"
+        }
+      },
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "appId": {
@@ -943,6 +1994,16 @@
         },
         "status": {
           "type": "string"
+        },
+        "taskRuntime": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentAppTaskRuntimeContract"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -6112,6 +7173,7 @@
             "string"
           ]
         },
+        "productWorkspaceSelectedObjectRef": true,
         "providerName": {
           "type": [
             "null",
@@ -27014,6 +28076,619 @@
       "title": "WorkspaceRegisteredSkillsListResponse",
       "type": "object"
     },
+    "WorkspaceRightSurfacePendingChangedParams": {
+      "$defs": {
+        "WorkspaceRightSurfacePendingRequest": {
+          "properties": {
+            "candidateId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "expiresAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "metadata": true,
+            "origin": {
+              "type": "string"
+            },
+            "priority": {
+              "type": "string"
+            },
+            "reason": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "requestId": {
+              "type": "string"
+            },
+            "requestedAt": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "status": {
+              "type": "string"
+            },
+            "surfaceKind": {
+              "type": "string"
+            },
+            "ttlMs": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "workspaceId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "workspaceRoot": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "origin",
+            "priority",
+            "requestId",
+            "requestedAt",
+            "status",
+            "surfaceKind"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "changeType": {
+          "type": "string"
+        },
+        "consumedRequestIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "dismissedRequestIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "missingRequestIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "pending": {
+          "items": {
+            "$ref": "#/$defs/WorkspaceRightSurfacePendingRequest"
+          },
+          "type": "array"
+        },
+        "requestIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "sessionId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "surfaceKind": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "workspaceId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "workspaceRoot": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "changeType"
+      ],
+      "title": "WorkspaceRightSurfacePendingChangedParams",
+      "type": "object"
+    },
+    "WorkspaceRightSurfacePendingConsumeParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "requestId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "requestIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "title": "WorkspaceRightSurfacePendingConsumeParams",
+      "type": "object"
+    },
+    "WorkspaceRightSurfacePendingConsumeResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "consumedRequestIds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "missingRequestIds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "WorkspaceRightSurfacePendingConsumeResponse",
+      "type": "object"
+    },
+    "WorkspaceRightSurfacePendingDismissParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "reason": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "requestId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "requestIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "title": "WorkspaceRightSurfacePendingDismissParams",
+      "type": "object"
+    },
+    "WorkspaceRightSurfacePendingDismissResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "dismissedRequestIds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "missingRequestIds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "WorkspaceRightSurfacePendingDismissResponse",
+      "type": "object"
+    },
+    "WorkspaceRightSurfacePendingListParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "limit": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "sessionId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "surfaceKind": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "workspaceId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "workspaceRoot": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "title": "WorkspaceRightSurfacePendingListParams",
+      "type": "object"
+    },
+    "WorkspaceRightSurfacePendingListResponse": {
+      "$defs": {
+        "WorkspaceRightSurfacePendingRequest": {
+          "properties": {
+            "candidateId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "expiresAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "metadata": true,
+            "origin": {
+              "type": "string"
+            },
+            "priority": {
+              "type": "string"
+            },
+            "reason": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "requestId": {
+              "type": "string"
+            },
+            "requestedAt": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "status": {
+              "type": "string"
+            },
+            "surfaceKind": {
+              "type": "string"
+            },
+            "ttlMs": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "workspaceId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "workspaceRoot": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "origin",
+            "priority",
+            "requestId",
+            "requestedAt",
+            "status",
+            "surfaceKind"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "pending": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/WorkspaceRightSurfacePendingRequest"
+          },
+          "type": "array"
+        }
+      },
+      "title": "WorkspaceRightSurfacePendingListResponse",
+      "type": "object"
+    },
+    "WorkspaceRightSurfacePendingRequest": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "candidateId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "expiresAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "metadata": true,
+        "origin": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "string"
+        },
+        "reason": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "requestedAt": {
+          "type": "string"
+        },
+        "sessionId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "status": {
+          "type": "string"
+        },
+        "surfaceKind": {
+          "type": "string"
+        },
+        "ttlMs": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "workspaceId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "workspaceRoot": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "origin",
+        "priority",
+        "requestId",
+        "requestedAt",
+        "status",
+        "surfaceKind"
+      ],
+      "title": "WorkspaceRightSurfacePendingRequest",
+      "type": "object"
+    },
+    "WorkspaceRightSurfaceRequestParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "candidateId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "metadata": true,
+        "origin": {
+          "type": "string"
+        },
+        "priority": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "reason": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sessionId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "surfaceKind": {
+          "type": "string"
+        },
+        "ttlMs": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "workspaceId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "workspaceRoot": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "origin",
+        "surfaceKind"
+      ],
+      "title": "WorkspaceRightSurfaceRequestParams",
+      "type": "object"
+    },
+    "WorkspaceRightSurfaceRequestResponse": {
+      "$defs": {
+        "WorkspaceRightSurfacePendingRequest": {
+          "properties": {
+            "candidateId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "expiresAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "metadata": true,
+            "origin": {
+              "type": "string"
+            },
+            "priority": {
+              "type": "string"
+            },
+            "reason": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "requestId": {
+              "type": "string"
+            },
+            "requestedAt": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "status": {
+              "type": "string"
+            },
+            "surfaceKind": {
+              "type": "string"
+            },
+            "ttlMs": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "workspaceId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "workspaceRoot": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "origin",
+            "priority",
+            "requestId",
+            "requestedAt",
+            "status",
+            "surfaceKind"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "pending": {
+          "$ref": "#/$defs/WorkspaceRightSurfacePendingRequest"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "pending",
+        "requestId",
+        "status"
+      ],
+      "title": "WorkspaceRightSurfaceRequestResponse",
+      "type": "object"
+    },
     "WorkspaceSkillBindingsListParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -27209,7 +28884,8 @@
           "items": {
             "enum": [
               "agentSession/event",
-              "initialized"
+              "initialized",
+              "workspaceRightSurface/pendingChanged"
             ]
           },
           "type": "array"
@@ -27217,6 +28893,7 @@
         "requests": {
           "items": {
             "enum": [
+              "agentAppHostLifecycle/list",
               "agentAppInstalled/disabled/set",
               "agentAppInstalled/list",
               "agentAppInstalled/save",
@@ -27479,6 +29156,10 @@
               "workspace/read",
               "workspace/update",
               "workspaceRegisteredSkills/list",
+              "workspaceRightSurface/pending/consume",
+              "workspaceRightSurface/pending/dismiss",
+              "workspaceRightSurface/pending/list",
+              "workspaceRightSurface/request",
               "workspaceSkillBindings/list"
             ]
           },

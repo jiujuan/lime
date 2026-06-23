@@ -50,6 +50,7 @@ describe("resolveWorkspaceRightSurfaceState", () => {
     ).toMatchObject({
       activeSurface: "shell",
       previousSurface: null,
+      openSurfaces: ["shell"],
       source: "runtime",
       layoutVariant: "docked",
     });
@@ -83,7 +84,25 @@ describe("resolveWorkspaceRightSurfaceState", () => {
     ).toMatchObject({
       activeSurface: null,
       previousSurface: "expertInfo",
+      openSurfaces: ["expertInfo"],
       source: "user",
+    });
+  });
+
+  it("历史恢复可带入已打开的右侧 surface tab 集合", () => {
+    expect(
+      resolveWorkspaceRightSurfaceState({
+        layoutMode: "chat",
+        hasExpertInfo: false,
+        expertInfoVisible: false,
+        openSurfaces: ["productProfile", "files", "shell"],
+        requestedSurface: "productProfile",
+        source: "route",
+      }),
+    ).toMatchObject({
+      activeSurface: "productProfile",
+      openSurfaces: ["productProfile", "files", "shell"],
+      source: "route",
     });
   });
 });

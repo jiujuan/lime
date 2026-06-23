@@ -1,7 +1,6 @@
 export {
   isInternalThinkingPreviewLine,
   normalizeComparableThinkingText,
-  sanitizeThinkingDisplayText,
 } from "../../utils/internalThinkingText";
 
 export function shortenInlineText(

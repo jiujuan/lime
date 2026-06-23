@@ -70,6 +70,13 @@ export function normalizeToolNameFamilyKey(value: string): string {
   return compactToolNameKey(normalizeLegacyToolSurfaceName(value) || value);
 }
 
+export function isUpdatePlanToolName(
+  value: string | null | undefined,
+): boolean {
+  const normalized = normalizeToolNameFamilyKey(value || "");
+  return normalized === "updateplan" || normalized === "updateplantool";
+}
+
 export function parseMcpToolName(toolName: string): ParsedMcpToolName | null {
   const normalized = toolName.trim();
   if (!normalized.toLowerCase().startsWith("mcp__")) {

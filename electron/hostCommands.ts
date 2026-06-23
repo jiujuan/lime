@@ -142,6 +142,26 @@ type AgentAppShellPrepareFields = {
   entryKey: string;
   windowTitle: string;
 };
+type AgentAppShellSurfaceStrategy =
+  | "controlledBrowserWindow"
+  | "webContentsView";
+type AgentAppShellSurfaceInfo = {
+  activeStrategy: AgentAppShellSurfaceStrategy;
+  supportedStrategies: AgentAppShellSurfaceStrategy[];
+  entryUrl: string;
+  containerId: string;
+  embedding: {
+    standaloneWindow: boolean;
+    rightSurfaceDock: boolean;
+    iframe: false;
+    browserView: false;
+  };
+  isolation: {
+    contextIsolation: true;
+    sandbox: true;
+    nodeIntegration: false;
+  };
+};
 type AgentAppShellLaunchResult = {
   appId?: string;
   status: "launched" | "blocked";
@@ -159,6 +179,7 @@ type AgentAppShellLaunchResult = {
     manifestHash: string;
   };
   runtimeStatus?: AgentAppUiRuntimeStatusResponse;
+  surface?: AgentAppShellSurfaceInfo;
   shellWindow?: {
     label: string;
     title: string;
@@ -1136,6 +1157,10 @@ export class ElectronHostCommands {
       fields,
       runtimeStatus.entryUrl,
     );
+    const surface = buildAgentAppShellSurfaceInfo({
+      containerId: shellWindow.label,
+      entryUrl: runtimeStatus.entryUrl,
+    });
     return buildAgentAppShellLaunchResult({
       fields,
       status: "launched",
@@ -1143,6 +1168,7 @@ export class ElectronHostCommands {
       message: "Agent App dev shell 已复用 current UI runtime 并打开独立窗口。",
       packageMount,
       runtimeStatus,
+      surface,
       shellWindow,
       launchedAt,
     });
@@ -2267,6 +2293,32 @@ function openAgentAppShellBrowserWindow(
   };
 }
 
+function buildAgentAppShellSurfaceInfo({
+  containerId,
+  entryUrl,
+}: {
+  containerId: string;
+  entryUrl: string;
+}): AgentAppShellSurfaceInfo {
+  return {
+    activeStrategy: "controlledBrowserWindow",
+    supportedStrategies: ["controlledBrowserWindow", "webContentsView"],
+    entryUrl,
+    containerId,
+    embedding: {
+      standaloneWindow: true,
+      rightSurfaceDock: true,
+      iframe: false,
+      browserView: false,
+    },
+    isolation: {
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+    },
+  };
+}
+
 function openFilePreviewBrowserWindow(
   url: string,
   title: string,
@@ -2358,6 +2410,7 @@ function buildAgentAppShellLaunchResult(params: {
   message?: string;
   packageMount?: AgentAppShellLaunchResult["packageMount"];
   runtimeStatus?: AgentAppUiRuntimeStatusResponse;
+  surface?: AgentAppShellLaunchResult["surface"];
   shellWindow?: AgentAppShellLaunchResult["shellWindow"];
   launchedAt: string;
 }): AgentAppShellLaunchResult {
@@ -2372,6 +2425,7 @@ function buildAgentAppShellLaunchResult(params: {
     message: params.message,
     packageMount: params.packageMount,
     runtimeStatus: params.runtimeStatus,
+    surface: params.surface,
     shellWindow: params.shellWindow,
     launchedAt: params.launchedAt,
   };

@@ -3,6 +3,7 @@ import type { AgentThreadItem, Message } from "../types";
 import {
   createInlineCoverageMatcher,
   hasPersistedReasoningTimelineItem,
+  hasTimelineProcessItems,
   mergeStreamingOverlayContentParts,
   resolveInlineProcessCoverage,
   shouldKeepInlineProcessForActiveAssistant,
@@ -218,6 +219,32 @@ describe("messageListInlineProcess", () => {
         text: "- 核对计划\n- 复测 E2E",
       } satisfies AgentThreadItem),
     ).toBe(true);
+  });
+
+  it("update_plan 工具项不应触发外置过程流", () => {
+    const item: AgentThreadItem = {
+      id: "timeline-update-plan-1",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+      sequence: 1,
+      status: "completed",
+      started_at: "2026-05-30T09:10:00.000Z",
+      completed_at: "2026-05-30T09:10:01.000Z",
+      updated_at: "2026-05-30T09:10:01.000Z",
+      type: "tool_call",
+      tool_name: "update_plan",
+      arguments: {
+        plan: [{ step: "整理计划", status: "in_progress" }],
+      },
+      output: "ok",
+      success: true,
+    };
+
+    const coverage = resolveInlineProcessCoverage({});
+    const isCovered = createInlineCoverageMatcher(coverage);
+
+    expect(hasTimelineProcessItems([item])).toBe(false);
+    expect(isCovered(item)).toBe(true);
   });
 
   it("已有持久化 reasoning 时不应继续保留 message thinking 兜底", () => {

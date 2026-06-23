@@ -47,7 +47,11 @@ export interface RuntimePackageDeclaration {
     hash?: string;
   };
   worker?: {
-    path: string;
+    path?: string;
+    entrypoint?: string;
+    contract?: string;
+    sampleRequest?: string;
+    outputArtifactKind?: string;
     hash?: string;
   };
   storage?: {
@@ -346,6 +350,69 @@ export interface AgentAppPresentation {
   [key: string]: unknown;
 }
 
+export type AgentAppProfile = "classic" | "workbench";
+
+export interface AgentAppDistributionDeclaration {
+  primaryInstallSurface?: "lime-app-center" | "standalone" | string;
+  channel?: string;
+  visibility?: string;
+  publishFlow?: string;
+  [key: string]: unknown;
+}
+
+export interface WorkbenchProductWorkspaceDeclaration {
+  scope?: "session" | "workspace" | string;
+  primaryObjectKinds?: string[];
+  snapshotPolicy?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface WorkbenchProductionObjectDeclaration {
+  kind: string;
+  title?: string;
+  artifactKind?: string;
+  defaultSurface?: string;
+  versioning?: string;
+  primary?: boolean;
+  [key: string]: unknown;
+}
+
+export interface WorkbenchTaskDeclaration {
+  kind: string;
+  title?: string;
+  expectedObjects?: string[];
+  requiredCapabilities?: string[];
+  defaultSurface?: string;
+  [key: string]: unknown;
+}
+
+export interface WorkbenchObjectSurfaceDeclaration {
+  objectKind: string;
+  surfaceKind: string;
+  renderer?: "host_builtin" | "app_surface" | string;
+  layout?: string;
+  actions?: unknown[];
+  [key: string]: unknown;
+}
+
+export interface WorkbenchHistoryRestoreDeclaration {
+  defaultSurface?: string;
+  restoreSelection?: boolean;
+  restoreLayout?: boolean;
+  fallback?: string;
+  [key: string]: unknown;
+}
+
+export interface WorkbenchDeclaration {
+  profile?: "production" | string;
+  productWorkspace?: WorkbenchProductWorkspaceDeclaration;
+  productionObjects?: WorkbenchProductionObjectDeclaration[];
+  workbenchTasks?: WorkbenchTaskDeclaration[];
+  objectSurfaces?: WorkbenchObjectSurfaceDeclaration[];
+  historyRestore?: WorkbenchHistoryRestoreDeclaration;
+  [key: string]: unknown;
+}
+
 export interface AppManifest {
   manifestVersion: string;
   name: string;
@@ -377,6 +444,9 @@ export interface AppManifest {
   ui?: UiDeclaration;
   lifecycle?: LifecycleDeclaration;
   install?: unknown;
+  profiles?: AgentAppProfile[] | string[];
+  workbench?: WorkbenchDeclaration;
+  distribution?: AgentAppDistributionDeclaration;
   presentation?: AgentAppPresentation;
   agentRuntime?: unknown;
   requirements?: unknown;
@@ -397,7 +467,11 @@ export interface NormalizedRuntimePackage {
     hash?: string;
   };
   worker?: {
-    path: string;
+    path?: string;
+    entrypoint?: string;
+    contract?: string;
+    sampleRequest?: string;
+    outputArtifactKind?: string;
     hash?: string;
   };
   storage?: {
@@ -436,7 +510,8 @@ export interface NormalizedAppManifest {
     | "0.7"
     | "0.8"
     | "0.9"
-    | "0.10";
+    | "0.10"
+    | "0.11";
   appId: string;
   displayName: string;
   version: string;
@@ -463,6 +538,9 @@ export interface NormalizedAppManifest {
   ui?: UiDeclaration;
   lifecycle: LifecycleDeclaration;
   install: NormalizedAgentAppInstallContract;
+  profiles: AgentAppProfile[];
+  workbench?: WorkbenchDeclaration;
+  distribution?: AgentAppDistributionDeclaration;
   presentation?: AgentAppPresentation;
   agentRuntime?: unknown;
   requirements?: unknown;

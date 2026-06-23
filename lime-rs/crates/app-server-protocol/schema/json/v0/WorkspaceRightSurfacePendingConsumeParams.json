@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "requestId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "requestIds": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "title": "WorkspaceRightSurfacePendingConsumeParams",
+  "type": "object"
+}

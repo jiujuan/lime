@@ -26,7 +26,7 @@ function resolveInitialHarnessBrowserAssist(
   metadata?: Record<string, unknown> | null,
 ): Record<string, unknown> | undefined {
   const harness = asRecord(asRecord(metadata)?.harness);
-  return harness ? asRecord(harness.browser_assist) : undefined;
+  return harness ? (asRecord(harness.browser_assist) ?? undefined) : undefined;
 }
 
 function resolveInitialHarnessPreferredBackend(

@@ -3710,6 +3710,7 @@ describe("legacySurfaceCatalog", () => {
       "agentAppInstalled/disabled/set",
       "agentAppInstalled/uninstall/rehearsal",
       "agentAppInstalled/uninstall",
+      "agentAppHostLifecycle/list",
       "agentAppShell/prepare",
       "agentAppUiRuntime/start",
       "agentAppUiRuntime/status",

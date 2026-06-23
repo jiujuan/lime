@@ -252,6 +252,12 @@ describe("Electron current package entrypoints", () => {
       '[data-testid="settings-sidebar-tab-memory"]',
     );
     expect(memorySmokeContent).toContain(
+      '[data-testid="settings-floating-nav-button"]',
+    );
+    expect(memorySmokeContent).toContain(
+      '[data-testid="settings-floating-tab-memory"]',
+    );
+    expect(memorySmokeContent).toContain(
       '[data-testid="settings-memory-store-panel"]',
     );
     expect(memorySmokeContent).toContain(

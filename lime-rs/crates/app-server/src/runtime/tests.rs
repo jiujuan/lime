@@ -28,6 +28,7 @@ mod memory_prompt;
 mod objectives;
 mod queue;
 mod read_model;
+mod right_surface;
 mod session_list_projection;
 mod sessions;
 mod support;

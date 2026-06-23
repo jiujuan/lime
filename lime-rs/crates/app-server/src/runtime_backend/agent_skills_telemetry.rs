@@ -20,12 +20,18 @@ pub(super) fn runtime_status_events_for_agent_skills(
         &metadata_values,
         &snapshot,
     );
+    let body_selections =
+        super::agent_skills_context::selected_agent_skill_body_selections_for_prompt(
+            &request.input.text,
+            &metadata_values,
+            &snapshot,
+        );
     let runtime_enable_sources =
         super::skill_runtime_enable::workspace_skill_runtime_enable_sources(request);
 
     let mut events = Vec::new();
-    if !selections.is_empty() {
-        events.extend(skill_body_read_events(&selections));
+    if !body_selections.is_empty() {
+        events.extend(skill_body_read_events(&body_selections));
     }
     if !runtime_enable_sources.is_empty() || !selections.is_empty() {
         events.push(skill_gate_decision_event(
@@ -231,17 +237,13 @@ mod tests {
 
         let events = runtime_status_events_for_agent_skills(&request);
 
-        assert_eq!(events.len(), 2);
+        assert_eq!(events.len(), 1);
         assert_eq!(
             events[0].payload["status"]["metadata"]["skillRuntime"]["event"],
-            json!("skill_body_read")
+            json!("skill_gate_decision")
         );
         assert_eq!(
-            events[0].payload["status"]["metadata"]["skillRuntime"]["trigger"],
-            json!("expert_binding")
-        );
-        assert_eq!(
-            events[1].payload["status"]["metadata"]["skillRuntime"]["selectedSkills"],
+            events[0].payload["status"]["metadata"]["skillRuntime"]["selectedSkills"],
             json!(["writer"])
         );
     }

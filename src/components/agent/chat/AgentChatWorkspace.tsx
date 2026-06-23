@@ -55,6 +55,7 @@ import {
   createImageGenerationTaskArtifact,
   getMediaTaskArtifact,
 } from "@/lib/api/mediaTasks";
+import { updateAgentRuntimeSession } from "@/lib/api/agentRuntime";
 import { type Character } from "@/lib/api/projectMemory";
 import { useImageGen } from "@/components/image-gen/useImageGen";
 import { resolveMediaGenerationPreference } from "@/lib/mediaGeneration";
@@ -163,7 +164,10 @@ import {
   filterPlanComposerDecisionFromPendingActions,
   selectLatestPlanComposerDecision,
 } from "./workspace/planComposerDecision";
-import { selectProposedPlanImplementationDecision } from "./workspace/planImplementationDecision";
+import {
+  buildPlanImplementationHarnessMetadata,
+  selectProposedPlanImplementationDecision,
+} from "./workspace/planImplementationDecision";
 import { useWorkspaceGeneralWorkbenchSidebarRuntime } from "./workspace/useWorkspaceGeneralWorkbenchSidebarRuntime";
 import { useWorkspaceGeneralWorkbenchRuntime } from "./workspace/useWorkspaceGeneralWorkbenchRuntime";
 import { useWorkspaceTeamSessionRuntime } from "./workspace/useWorkspaceTeamSessionRuntime";
@@ -178,11 +182,32 @@ import { useWorkspaceProjectContentRuntime } from "./workspace/useWorkspaceProje
 import { useWorkspaceHealthRuntime } from "./workspace/useWorkspaceHealthRuntime";
 import { useWorkspaceDefaultProjectAliasRuntime } from "./workspace/useWorkspaceDefaultProjectAliasRuntime";
 import { WorkspaceGeneralWorkbenchSidebar } from "./workspace/WorkspaceGeneralWorkbenchSidebar";
+import { GeneralWorkbenchHarnessSurfaceSection } from "./workspace/WorkspaceHarnessDialogs";
 import {
-  GeneralWorkbenchHarnessDialogSection,
-  GeneralWorkbenchHarnessSurfaceSection,
-} from "./workspace/WorkspaceHarnessDialogs";
-import { WorkspaceFilesSurface } from "./workspace/WorkspaceFilesSurface";
+  WorkspaceFilesSurface,
+  type WorkspaceFilesSurfaceTarget,
+} from "./workspace/WorkspaceFilesSurface";
+import { WorkspaceAgentAppSurface } from "./workspace/WorkspaceAgentAppSurface";
+import {
+  closeWorkspaceAgentAppSurfaceDescriptor,
+  mergeWorkspaceAgentAppSurfaceDescriptors,
+  resolveWorkspaceAgentAppSurfaceActiveContainerId,
+  selectWorkspaceAgentAppSurfaceDescriptor,
+  type WorkspaceAgentAppSurfaceDescriptor,
+} from "./workspace/workspaceAgentAppSurfaceModel";
+import { WorkspaceObjectCanvasSurface } from "./workspace/WorkspaceObjectCanvasSurface";
+import type { WorkspaceObjectCanvasCandidate } from "./workspace/workspaceObjectCanvasModel";
+import { WorkspaceProductProfileSurface } from "./workspace/WorkspaceProductProfileSurface";
+import { submitWorkspaceProductProfileActionIntent } from "./workspace/workspaceProductProfileActionDispatch";
+import {
+  buildWorkspaceProductProfileFromThreadRead,
+  type WorkspaceProductProfileActionIntent,
+  type WorkspaceProductProfile,
+} from "./workspace/workspaceProductProfileModel";
+import {
+  buildWorkspaceProductProfileSelectionUpdateRequest,
+  type WorkspaceProductProfileSelectionChange,
+} from "./workspace/workspaceProductProfileSelectionWriteback";
 import { WorkspaceShellScene } from "./workspace/WorkspaceShellScene";
 import {
   buildWorkspaceRightSurfaceDefinitions,
@@ -255,6 +280,7 @@ import {
 } from "./workspace/workspaceBrowserRuntimeNavigation";
 import {
   resolveExpertPanelRequestMetadata,
+  resolveSessionExpertRequestMetadata,
   resolveWorkspaceRequestMetadataWithExpertSkills,
   shouldAllowDetachedInitialAutoSend,
 } from "./workspace/workspaceExpertMetadata";
@@ -262,6 +288,7 @@ import {
   buildWorkspaceRightSurfaceRuntimeLaunchers,
   buildWorkspaceRightSurfaceRuntimePendingIntents,
 } from "./workspace/workspaceRightSurfaceRuntimeProjection";
+import { useWorkspaceRightSurfacePendingRuntime } from "./workspace/useWorkspaceRightSurfacePendingRuntime";
 import {
   createRestoredInteractiveMessageSnapshot,
   resolveReadOnlyInteractiveMessageIds,
@@ -1055,17 +1082,23 @@ export function AgentChatWorkspace({
         pruneExpertWorkspaceSkillRuntimeEnableRefs,
       sessionId,
     });
+  const sessionExpertRequestMetadata = useMemo(
+    () => resolveSessionExpertRequestMetadata(threadRead),
+    [threadRead],
+  );
   const workspaceRequestMetadataWithExpertSkills = useMemo(
     () =>
       resolveWorkspaceRequestMetadataWithExpertSkills({
         expertSkillRefsOverride,
         initialAutoSendRequestMetadata,
         initialRequestMetadata,
+        sessionRequestMetadata: sessionExpertRequestMetadata,
       }),
     [
       expertSkillRefsOverride,
       initialAutoSendRequestMetadata,
       initialRequestMetadata,
+      sessionExpertRequestMetadata,
     ],
   );
   const restoredInteractiveMessageSnapshotRef = useRef(
@@ -3446,51 +3479,68 @@ export function AgentChatWorkspace({
         (typeof userData?.answer === "string" ? userData.answer.trim() : "") ||
         (typeof response.response === "string" ? response.response.trim() : "");
       const acceptedLabel = t("agentChat.planComposerDecision.option.accept");
-      const sendResult =
-        adjustment && adjustment !== acceptedLabel
-          ? await handleSendRef.current(
-              [],
-              undefined,
-              undefined,
-              adjustment,
-              "react",
-              undefined,
-              {
-                requestMetadata: {
-                  harness: {
-                    collaboration_mode: {
-                      mode: "plan",
-                      source: "plan_implementation_adjustment",
-                    },
-                    preferences: {
-                      task: true,
-                      task_mode: true,
-                    },
-                    task_mode_enabled: true,
+      const isAdjustment = Boolean(adjustment && adjustment !== acceptedLabel);
+      const planImplementationMetadata = buildPlanImplementationHarnessMetadata(
+        {
+          requestArguments: localPlanImplementationDecision?.action.arguments,
+          requestId,
+          decision: isAdjustment ? "adjustment" : "accepted",
+        },
+      );
+      const sendResult = isAdjustment
+        ? await handleSendRef.current(
+            [],
+            undefined,
+            undefined,
+            adjustment,
+            "react",
+            undefined,
+            {
+              requestMetadata: {
+                harness: {
+                  ...planImplementationMetadata,
+                  collaboration_mode: {
+                    mode: "plan",
+                    source: "plan_implementation_adjustment",
+                  },
+                  preferences: {
+                    task: true,
+                    task_mode: true,
+                  },
+                  task_mode_enabled: true,
+                },
+              },
+              skipSceneCommandRouting: true,
+              toolPreferencesOverride: {
+                ...effectiveChatToolPreferences,
+                task: true,
+              },
+            },
+          )
+        : await handleSendRef.current(
+            [],
+            undefined,
+            undefined,
+            "Implement the plan.",
+            "react",
+            undefined,
+            {
+              requestMetadata: {
+                harness: {
+                  ...planImplementationMetadata,
+                  collaboration_mode: {
+                    mode: "implement",
+                    source: "plan_implementation_accept",
                   },
                 },
-                skipSceneCommandRouting: true,
-                toolPreferencesOverride: {
-                  ...effectiveChatToolPreferences,
-                  task: true,
-                },
               },
-            )
-          : await handleSendRef.current(
-              [],
-              undefined,
-              undefined,
-              "Implement the plan.",
-              "react",
-              undefined,
-              {
-                skipSceneCommandRouting: true,
-                toolPreferencesOverride: {
-                  ...effectiveChatToolPreferences,
-                  task: false,
-                },
+              skipSceneCommandRouting: true,
+              toolPreferencesOverride: {
+                ...effectiveChatToolPreferences,
+                task: false,
               },
-            );
+            },
+          );
 
       if (!sendResult) {
         return;
@@ -3509,6 +3559,7 @@ export function AgentChatWorkspace({
       effectiveChatToolPreferences,
       handleDismissLocalPlanImplementationDecision,
       handleSendRef,
+      localPlanImplementationDecision?.action.arguments,
       t,
     ],
   );
@@ -3578,57 +3629,6 @@ export function AgentChatWorkspace({
     ComponentProps<typeof GeneralWorkbenchHarnessSurfaceSection>,
     "enabled"
   >;
-  const generalWorkbenchSidebarNode = (
-    <WorkspaceGeneralWorkbenchSidebar
-      visible={showGeneralWorkbenchSidebar}
-      isThemeWorkbench={isThemeWorkbench}
-      enablePanelCollapse={
-        generalWorkbenchScaffoldRuntime.enableGeneralWorkbenchPanelCollapse
-      }
-      onRequestCollapse={handleCollapseGeneralWorkbenchSidebar}
-      generalWorkbenchHarnessSummary={
-        harnessInventoryRuntime.generalWorkbenchHarnessSummary
-      }
-      harnessPanelVisible={contextHarnessRuntime.harnessPanelVisible}
-      onToggleHarnessPanel={contextHarnessRuntime.handleToggleHarnessPanel}
-      workflow={{
-        projectId,
-        sessionId,
-        branchItems: generalWorkbenchScaffoldRuntime.branchItems,
-        onCreateVersionSnapshot: handleCreateVersionSnapshot,
-        onSwitchBranchVersion: handleSwitchBranchVersion,
-        onDeleteTopic: handleDeleteGeneralWorkbenchVersion,
-        onSetBranchStatus: handleSetBranchStatus,
-        workflowSteps:
-          generalWorkbenchSidebarRuntime.generalWorkbenchWorkflowSteps,
-        onAddImage: handleAddImage,
-        onImportDocument: handleImportDocument,
-        onApplyFollowUpAction: handleApplyGeneralWorkbenchFollowUpAction,
-        activityLogs:
-          generalWorkbenchSidebarRuntime.generalWorkbenchActivityLogs,
-        creationTaskEvents:
-          generalWorkbenchScaffoldRuntime.generalWorkbenchCreationTaskEvents,
-        onViewRunDetail:
-          generalWorkbenchSidebarRuntime.handleViewGeneralWorkbenchRunDetail,
-        activeRunDetail:
-          generalWorkbenchSidebarRuntime.selectedGeneralWorkbenchRunDetail,
-        activeRunDetailLoading:
-          generalWorkbenchSidebarRuntime.generalWorkbenchRunDetailLoading,
-      }}
-      contextWorkspace={contextHarnessRuntime.contextWorkspace}
-      onViewContextDetail={handleViewContextDetail}
-      history={{
-        hasMore: generalWorkbenchSidebarRuntime.generalWorkbenchHistoryHasMore,
-        loading: generalWorkbenchSidebarRuntime.generalWorkbenchHistoryLoading,
-        onLoadMore:
-          generalWorkbenchSidebarRuntime.handleLoadMoreGeneralWorkbenchHistory,
-        skillDetailMap:
-          generalWorkbenchSidebarRuntime.generalWorkbenchSkillDetailMap,
-        messages,
-      }}
-    />
-  );
-
   useWorkspaceWorkflowProgressRuntime({
     currentStepIndex,
     hasMessages,
@@ -4008,82 +4008,524 @@ export function AgentChatWorkspace({
     sceneLayoutMode === "chat";
   const [manualRightSurface, setManualRightSurface] =
     useState<WorkspaceRightSurfaceKind | null>(null);
+  const [activeFilesRightSurfaceTarget, setActiveFilesRightSurfaceTarget] =
+    useState<WorkspaceFilesSurfaceTarget | null>(null);
+  const [activeAgentAppSurfaces, setActiveAgentAppSurfaces] = useState<
+    WorkspaceAgentAppSurfaceDescriptor[]
+  >([]);
+  const [
+    activeAgentAppSurfaceContainerId,
+    setActiveAgentAppSurfaceContainerId,
+  ] = useState<string | null>(null);
+  const [
+    activeObjectCanvasRightSurfaceCandidate,
+    setActiveObjectCanvasRightSurfaceCandidate,
+  ] = useState<WorkspaceObjectCanvasCandidate | null>(null);
+  const [activeProductProfile, setActiveProductProfile] =
+    useState<WorkspaceProductProfile | null>(null);
+  const canvasWorkbenchRootPath =
+    sessionWorkingDir?.trim() || project?.rootPath || null;
+  const shellRightSurfaceAvailable = Boolean(canvasWorkbenchRootPath);
+  const rightSurfaceAppServerPendingRuntime =
+    useWorkspaceRightSurfacePendingRuntime({
+      enabled: true,
+      workspaceId: runtimeWorkspaceId,
+      workspaceRoot: canvasWorkbenchRootPath,
+      sessionId: sessionId || sceneSessionId,
+    });
+  const { consumePendingRequestsForSurface, dismissPendingRequestsForSurface } =
+    rightSurfaceAppServerPendingRuntime;
+  const productProfileFromThreadRead = useMemo(
+    () => buildWorkspaceProductProfileFromThreadRead(sceneThreadRead),
+    [sceneThreadRead],
+  );
   const handleToggleExpertInfoPanel = useCallback(() => {
     setHarnessPanelVisible(false);
     setManualRightSurface(null);
+    setActiveFilesRightSurfaceTarget(null);
+    setActiveObjectCanvasRightSurfaceCandidate(null);
+    setActiveProductProfile(null);
     const shouldOpenExpertInfo =
       expertInfoPanelCollapsed || sceneLayoutMode !== "chat";
     if (shouldOpenExpertInfo) {
       setLayoutMode("chat");
+      void consumePendingRequestsForSurface("expertInfo");
+    } else {
+      void dismissPendingRequestsForSurface(
+        "expertInfo",
+        "user_closed_surface",
+      );
     }
     setExpertInfoPanelCollapsed(!shouldOpenExpertInfo);
-  }, [expertInfoPanelCollapsed, sceneLayoutMode, setHarnessPanelVisible]);
-  const canvasWorkbenchRootPath =
-    sessionWorkingDir?.trim() || project?.rootPath || null;
-  const shellRightSurfaceAvailable = Boolean(canvasWorkbenchRootPath);
-  const filesRightSurfaceAvailable = Boolean(
-    preferredServiceSkillResultFileTarget?.relativePath,
+  }, [
+    consumePendingRequestsForSurface,
+    dismissPendingRequestsForSurface,
+    expertInfoPanelCollapsed,
+    sceneLayoutMode,
+    setHarnessPanelVisible,
+  ]);
+  const liveFilesRightSurfaceTarget: WorkspaceFilesSurfaceTarget | null =
+    preferredServiceSkillResultFileTarget ??
+    rightSurfaceAppServerPendingRuntime.pendingFileTarget;
+  const agentAppSurfaceRightSurfaces =
+    activeAgentAppSurfaces.length > 0
+      ? activeAgentAppSurfaces
+      : rightSurfaceAppServerPendingRuntime.pendingAgentAppSurfaces;
+  const agentAppSurfaceRightSurface = selectWorkspaceAgentAppSurfaceDescriptor(
+    agentAppSurfaceRightSurfaces,
+    activeAgentAppSurfaceContainerId,
   );
+  const agentAppSurfaceRightSurfaceAvailable =
+    agentAppSurfaceRightSurfaces.length > 0;
+  const filesRightSurfaceTarget: WorkspaceFilesSurfaceTarget | null =
+    activeFilesRightSurfaceTarget ?? liveFilesRightSurfaceTarget;
+  const filesRightSurfaceAvailable = Boolean(
+    filesRightSurfaceTarget?.relativePath,
+  );
+  const browserAssistObjectCanvasCandidateId = browserAssistLaunching
+    ? currentBrowserAssistScopeKey ||
+      browserAssistSessionState?.sessionId ||
+      browserAssistSessionState?.targetId ||
+      browserAssistSessionState?.profileKey ||
+      browserAssistSessionState?.url ||
+      "browser-assist-launching"
+    : browserAssistSessionState?.sessionId ||
+      browserAssistSessionState?.targetId ||
+      browserAssistSessionState?.profileKey ||
+      browserAssistSessionState?.url ||
+      null;
+  const browserAssistObjectCanvasCandidate: WorkspaceObjectCanvasCandidate | null =
+    browserAssistObjectCanvasCandidateId
+      ? {
+          candidateId: browserAssistObjectCanvasCandidateId || "browser-assist",
+          title: browserAssistSessionState?.title,
+          url: browserAssistSessionState?.url,
+          sessionId: browserAssistSessionState?.sessionId,
+          profileKey: browserAssistSessionState?.profileKey,
+          targetId: browserAssistSessionState?.targetId,
+          lifecycleState: browserAssistSessionState?.lifecycleState,
+          controlMode: browserAssistSessionState?.controlMode,
+          transportKind: browserAssistSessionState?.transportKind,
+          launching: browserAssistLaunching,
+          sourceKind: "browserAssist",
+        }
+      : null;
+  const objectCanvasRightSurfaceCandidate =
+    activeObjectCanvasRightSurfaceCandidate ??
+    browserAssistObjectCanvasCandidate ??
+    rightSurfaceAppServerPendingRuntime.pendingObjectCanvasCandidate;
+  const objectCanvasCandidateId =
+    objectCanvasRightSurfaceCandidate?.candidateId ?? null;
+  const objectCanvasRightSurfaceAvailable = Boolean(objectCanvasCandidateId);
+  const productProfileRightSurface =
+    activeProductProfile ??
+    rightSurfaceAppServerPendingRuntime.pendingProductProfile ??
+    productProfileFromThreadRead;
+  const productProfileRightSurfaceAvailable = Boolean(
+    productProfileRightSurface || objectCanvasRightSurfaceAvailable,
+  );
+  useEffect(() => {
+    const pendingAgentAppSurfaces =
+      rightSurfaceAppServerPendingRuntime.pendingAgentAppSurfaces;
+    if (pendingAgentAppSurfaces.length === 0) {
+      return;
+    }
+
+    setActiveAgentAppSurfaces((current) =>
+      mergeWorkspaceAgentAppSurfaceDescriptors(
+        current,
+        pendingAgentAppSurfaces,
+      ),
+    );
+    setActiveAgentAppSurfaceContainerId((current) =>
+      resolveWorkspaceAgentAppSurfaceActiveContainerId({
+        activeContainerId: current,
+        preferredContainerId:
+          pendingAgentAppSurfaces[pendingAgentAppSurfaces.length - 1]
+            ?.containerId,
+        surfaces: mergeWorkspaceAgentAppSurfaceDescriptors(
+          activeAgentAppSurfaces,
+          pendingAgentAppSurfaces,
+        ),
+      }),
+    );
+    setHarnessPanelVisible(false);
+    setExpertInfoPanelCollapsed(true);
+    setManualRightSurface(
+      (current) =>
+        current ?? (sceneLayoutMode === "chat" ? "appSurface" : current),
+    );
+    void consumePendingRequestsForSurface("appSurface");
+  }, [
+    activeAgentAppSurfaces,
+    consumePendingRequestsForSurface,
+    rightSurfaceAppServerPendingRuntime.pendingAgentAppSurfaces,
+    sceneLayoutMode,
+    setHarnessPanelVisible,
+  ]);
   const rightSurfaceHarnessEnabled =
-    !suppressHomeNavbarUtilityActions &&
-    contextHarnessRuntime.workbenchEnabled &&
-    contextHarnessRuntime.isThemeWorkbench;
+    !suppressHomeNavbarUtilityActions && showHarnessToggle;
   const handleToggleRightSurfaceFiles = useCallback(() => {
     if (!filesRightSurfaceAvailable) {
       return;
     }
+    const shouldOpenFiles = manualRightSurface !== "files";
     setHarnessPanelVisible(false);
     setExpertInfoPanelCollapsed(true);
-    setManualRightSurface((current) => (current === "files" ? null : "files"));
-  }, [filesRightSurfaceAvailable, setHarnessPanelVisible]);
+    setActiveObjectCanvasRightSurfaceCandidate(null);
+    setActiveProductProfile(null);
+    setActiveFilesRightSurfaceTarget(
+      shouldOpenFiles ? filesRightSurfaceTarget : null,
+    );
+    setManualRightSurface(shouldOpenFiles ? "files" : null);
+    if (shouldOpenFiles) {
+      void consumePendingRequestsForSurface("files");
+    } else {
+      void dismissPendingRequestsForSurface("files", "user_closed_surface");
+    }
+  }, [
+    consumePendingRequestsForSurface,
+    dismissPendingRequestsForSurface,
+    filesRightSurfaceAvailable,
+    filesRightSurfaceTarget,
+    manualRightSurface,
+    setHarnessPanelVisible,
+  ]);
   const handleToggleRightSurfaceShell = useCallback(() => {
+    const shouldOpenShell = manualRightSurface !== "shell";
     setHarnessPanelVisible(false);
     setExpertInfoPanelCollapsed(true);
-    setManualRightSurface((current) => (current === "shell" ? null : "shell"));
-  }, [setHarnessPanelVisible]);
+    setActiveFilesRightSurfaceTarget(null);
+    setActiveObjectCanvasRightSurfaceCandidate(null);
+    setActiveProductProfile(null);
+    setManualRightSurface(shouldOpenShell ? "shell" : null);
+    if (shouldOpenShell) {
+      void consumePendingRequestsForSurface("shell");
+    } else {
+      void dismissPendingRequestsForSurface("shell", "user_closed_surface");
+    }
+  }, [
+    consumePendingRequestsForSurface,
+    dismissPendingRequestsForSurface,
+    manualRightSurface,
+    setHarnessPanelVisible,
+  ]);
   const handleCloseRightSurfaceShell = useCallback(() => {
     setManualRightSurface((current) => (current === "shell" ? null : current));
-  }, []);
+    void dismissPendingRequestsForSurface("shell", "user_closed_surface");
+  }, [dismissPendingRequestsForSurface]);
+  const handleToggleRightSurfaceObjectCanvas = useCallback(() => {
+    if (
+      !objectCanvasRightSurfaceAvailable &&
+      !productProfileRightSurfaceAvailable
+    ) {
+      return;
+    }
+    const targetSurface = productProfileRightSurfaceAvailable
+      ? "productProfile"
+      : "objectCanvas";
+    const shouldOpenObjectCanvas = manualRightSurface !== targetSurface;
+    setHarnessPanelVisible(false);
+    setExpertInfoPanelCollapsed(true);
+    setActiveFilesRightSurfaceTarget(null);
+    setActiveObjectCanvasRightSurfaceCandidate(
+      shouldOpenObjectCanvas ? objectCanvasRightSurfaceCandidate : null,
+    );
+    setActiveProductProfile(
+      shouldOpenObjectCanvas && productProfileRightSurface
+        ? productProfileRightSurface
+        : null,
+    );
+    setManualRightSurface(shouldOpenObjectCanvas ? targetSurface : null);
+    if (shouldOpenObjectCanvas) {
+      void consumePendingRequestsForSurface(targetSurface);
+      if (targetSurface !== "objectCanvas") {
+        void consumePendingRequestsForSurface("objectCanvas");
+      }
+    } else {
+      void dismissPendingRequestsForSurface(
+        targetSurface,
+        "user_closed_surface",
+      );
+      if (targetSurface !== "objectCanvas") {
+        void dismissPendingRequestsForSurface(
+          "objectCanvas",
+          "user_closed_surface",
+        );
+      }
+    }
+  }, [
+    consumePendingRequestsForSurface,
+    dismissPendingRequestsForSurface,
+    manualRightSurface,
+    objectCanvasRightSurfaceAvailable,
+    objectCanvasRightSurfaceCandidate,
+    productProfileRightSurface,
+    productProfileRightSurfaceAvailable,
+    setHarnessPanelVisible,
+  ]);
   const handleToggleRightSurfaceHarness = useCallback(() => {
     if (!rightSurfaceHarnessEnabled) {
       return;
     }
+    const shouldOpenHarness = manualRightSurface !== "harness";
     setHarnessPanelVisible(false);
     setExpertInfoPanelCollapsed(true);
-    setManualRightSurface((current) =>
-      current === "harness" ? null : "harness",
-    );
-  }, [rightSurfaceHarnessEnabled, setHarnessPanelVisible]);
+    setActiveFilesRightSurfaceTarget(null);
+    setActiveObjectCanvasRightSurfaceCandidate(null);
+    setActiveProductProfile(null);
+    setManualRightSurface(shouldOpenHarness ? "harness" : null);
+    if (shouldOpenHarness) {
+      void consumePendingRequestsForSurface("harness");
+    } else {
+      void dismissPendingRequestsForSurface("harness", "user_closed_surface");
+    }
+  }, [
+    consumePendingRequestsForSurface,
+    dismissPendingRequestsForSurface,
+    manualRightSurface,
+    rightSurfaceHarnessEnabled,
+    setHarnessPanelVisible,
+  ]);
   useEffect(() => {
     if (manualRightSurface === "harness" && !rightSurfaceHarnessEnabled) {
       setManualRightSurface(null);
     }
     if (manualRightSurface === "files" && !filesRightSurfaceAvailable) {
       setManualRightSurface(null);
+      setActiveFilesRightSurfaceTarget(null);
     }
-  }, [filesRightSurfaceAvailable, manualRightSurface, rightSurfaceHarnessEnabled]);
+    if (
+      manualRightSurface === "appSurface" &&
+      !agentAppSurfaceRightSurfaceAvailable
+    ) {
+      setManualRightSurface(null);
+      setActiveAgentAppSurfaces([]);
+      setActiveAgentAppSurfaceContainerId(null);
+    }
+    if (
+      manualRightSurface === "objectCanvas" &&
+      !objectCanvasRightSurfaceAvailable
+    ) {
+      setManualRightSurface(null);
+      setActiveObjectCanvasRightSurfaceCandidate(null);
+    }
+    if (
+      manualRightSurface === "productProfile" &&
+      !productProfileRightSurfaceAvailable
+    ) {
+      setManualRightSurface(null);
+      setActiveObjectCanvasRightSurfaceCandidate(null);
+      setActiveProductProfile(null);
+    }
+  }, [
+    agentAppSurfaceRightSurfaceAvailable,
+    filesRightSurfaceAvailable,
+    manualRightSurface,
+    objectCanvasRightSurfaceAvailable,
+    productProfileRightSurfaceAvailable,
+    rightSurfaceHarnessEnabled,
+  ]);
   const handleToggleCanvasFromRightSurface = useCallback(() => {
     if (manualRightSurface && sceneLayoutMode !== "chat") {
+      void dismissPendingRequestsForSurface(
+        manualRightSurface,
+        "user_switched_surface",
+      );
       setManualRightSurface(null);
+      setActiveFilesRightSurfaceTarget(null);
+      setActiveObjectCanvasRightSurfaceCandidate(null);
+      setActiveProductProfile(null);
       return;
     }
 
     setHarnessPanelVisible(false);
+    if (manualRightSurface) {
+      void dismissPendingRequestsForSurface(
+        manualRightSurface,
+        "user_switched_surface",
+      );
+    }
+    setActiveFilesRightSurfaceTarget(null);
+    setActiveObjectCanvasRightSurfaceCandidate(null);
+    setActiveProductProfile(null);
     setManualRightSurface(null);
     handleToggleCanvas();
   }, [
+    dismissPendingRequestsForSurface,
     handleToggleCanvas,
     manualRightSurface,
     sceneLayoutMode,
     setHarnessPanelVisible,
   ]);
+  const rightSurfaceOpenSurfaces = useMemo(() => {
+    const next: WorkspaceRightSurfaceKind[] = [];
+    const add = (kind: WorkspaceRightSurfaceKind, enabled: boolean) => {
+      if (enabled && !next.includes(kind)) {
+        next.push(kind);
+      }
+    };
+
+    add("workbench", sceneLayoutMode !== "chat");
+    add("appSurface", agentAppSurfaceRightSurfaceAvailable);
+    add("productProfile", productProfileRightSurfaceAvailable);
+    add(
+      "objectCanvas",
+      objectCanvasRightSurfaceAvailable && !productProfileRightSurfaceAvailable,
+    );
+    add("expertInfo", hasExpertInfoPanel);
+    add("files", filesRightSurfaceAvailable);
+    add("shell", shellRightSurfaceAvailable);
+    add("harness", rightSurfaceHarnessEnabled);
+    add("objectCanvas", manualRightSurface === "objectCanvas");
+    add("productProfile", manualRightSurface === "productProfile");
+    add("files", manualRightSurface === "files");
+    add("shell", manualRightSurface === "shell");
+    add("harness", manualRightSurface === "harness");
+    add("appSurface", manualRightSurface === "appSurface");
+    add("expertInfo", manualRightSurface === "expertInfo");
+    return next;
+  }, [
+    agentAppSurfaceRightSurfaceAvailable,
+    filesRightSurfaceAvailable,
+    hasExpertInfoPanel,
+    manualRightSurface,
+    objectCanvasRightSurfaceAvailable,
+    productProfileRightSurfaceAvailable,
+    rightSurfaceHarnessEnabled,
+    sceneLayoutMode,
+    shellRightSurfaceAvailable,
+  ]);
   const rightSurfaceState = resolveWorkspaceRightSurfaceState({
     layoutMode: sceneLayoutMode,
     hasExpertInfo: hasExpertInfoPanel,
     expertInfoVisible: expertInfoPanelVisible,
+    openSurfaces: rightSurfaceOpenSurfaces,
     requestedSurface: manualRightSurface ?? undefined,
     source: manualRightSurface ? "user" : undefined,
   });
+  const handleSelectRightSurfaceTab = useCallback(
+    (kind: WorkspaceRightSurfaceKind) => {
+      if (kind === rightSurfaceState.activeSurface) {
+        return;
+      }
+
+      setHarnessPanelVisible(false);
+      setExpertInfoPanelCollapsed(kind !== "expertInfo");
+      setActiveFilesRightSurfaceTarget(
+        kind === "files" ? filesRightSurfaceTarget : null,
+      );
+      if (kind === "appSurface" && agentAppSurfaceRightSurface) {
+        setActiveAgentAppSurfaces((current) =>
+          mergeWorkspaceAgentAppSurfaceDescriptors(current, [
+            agentAppSurfaceRightSurface,
+          ]),
+        );
+        setActiveAgentAppSurfaceContainerId(
+          agentAppSurfaceRightSurface.containerId,
+        );
+      }
+      setActiveObjectCanvasRightSurfaceCandidate(
+        kind === "productProfile" || kind === "objectCanvas"
+          ? objectCanvasRightSurfaceCandidate
+          : null,
+      );
+      setActiveProductProfile(
+        kind === "productProfile" && productProfileRightSurface
+          ? productProfileRightSurface
+          : null,
+      );
+      setManualRightSurface(kind === "workbench" ? null : kind);
+      void consumePendingRequestsForSurface(kind);
+      if (kind === "productProfile") {
+        void consumePendingRequestsForSurface("objectCanvas");
+      }
+    },
+    [
+      consumePendingRequestsForSurface,
+      agentAppSurfaceRightSurface,
+      filesRightSurfaceTarget,
+      objectCanvasRightSurfaceCandidate,
+      productProfileRightSurface,
+      rightSurfaceState.activeSurface,
+      setHarnessPanelVisible,
+    ],
+  );
+  const handleSelectAgentAppSurface = useCallback(
+    (surface: WorkspaceAgentAppSurfaceDescriptor) => {
+      setHarnessPanelVisible(false);
+      setExpertInfoPanelCollapsed(true);
+      setActiveAgentAppSurfaceContainerId(surface.containerId);
+      setManualRightSurface("appSurface");
+    },
+    [setHarnessPanelVisible],
+  );
+  const handleCloseAgentAppSurface = useCallback(
+    (surface: WorkspaceAgentAppSurfaceDescriptor) => {
+      const result = closeWorkspaceAgentAppSurfaceDescriptor({
+        activeContainerId: activeAgentAppSurfaceContainerId,
+        containerId: surface.containerId,
+        surfaces: agentAppSurfaceRightSurfaces,
+      });
+      setActiveAgentAppSurfaces(result.surfaces);
+      setActiveAgentAppSurfaceContainerId(result.activeContainerId);
+      if (result.surfaces.length === 0 && manualRightSurface === "appSurface") {
+        setManualRightSurface(null);
+        void dismissPendingRequestsForSurface(
+          "appSurface",
+          "user_closed_surface",
+        );
+      }
+    },
+    [
+      activeAgentAppSurfaceContainerId,
+      agentAppSurfaceRightSurfaces,
+      dismissPendingRequestsForSurface,
+      manualRightSurface,
+    ],
+  );
+  const handleProductProfileActionIntent = useCallback(
+    async (intent: WorkspaceProductProfileActionIntent) => {
+      setLayoutMode("chat");
+      await submitWorkspaceProductProfileActionIntent({
+        intent,
+        restoreInput: setInput,
+        submit: async (prompt, options) =>
+          await handleSendRef.current(
+            [],
+            undefined,
+            undefined,
+            prompt,
+            "react",
+            undefined,
+            options,
+          ),
+      });
+    },
+    [handleSendRef, setInput],
+  );
+  const handleProductProfileSelectedObjectChange = useCallback(
+    (change: WorkspaceProductProfileSelectionChange) => {
+      const request =
+        buildWorkspaceProductProfileSelectionUpdateRequest(change);
+      if (!request) {
+        return;
+      }
+      void updateAgentRuntimeSession(request).catch((error) => {
+        console.warn(
+          "[AgentChatWorkspace] Product Profile selection 写回失败:",
+          error,
+        );
+      });
+    },
+    [],
+  );
+  const handleProductProfilePreviewArtifactOpen = useCallback(
+    (artifact: Artifact) => {
+      handleWorkspaceArtifactClick(artifact);
+    },
+    [handleWorkspaceArtifactClick],
+  );
   const expertInfoPanelNode = (
     <ExpertInfoPanel
       requestMetadata={expertPanelRequestMetadata}
@@ -4108,12 +4550,64 @@ export function AgentChatWorkspace({
   );
   const rightSurfaceDefinitions = buildWorkspaceRightSurfaceDefinitions({
     expertInfo: () => expertInfoPanelNode,
+    ...(agentAppSurfaceRightSurface
+      ? {
+          appSurface: () => (
+            <WorkspaceAgentAppSurface
+              activeContainerId={activeAgentAppSurfaceContainerId}
+              surfaces={agentAppSurfaceRightSurfaces}
+              surface={agentAppSurfaceRightSurface}
+              onCloseSurface={handleCloseAgentAppSurface}
+              onSelectSurface={handleSelectAgentAppSurface}
+            />
+          ),
+        }
+      : {}),
+    ...(productProfileRightSurface || objectCanvasRightSurfaceAvailable
+      ? {
+          productProfile: () =>
+            productProfileRightSurface ? (
+              <WorkspaceProductProfileSurface
+                actionsDisabled={sceneIsSending || sceneIsPreparingSend}
+                profile={productProfileRightSurface}
+                onActionIntent={handleProductProfileActionIntent}
+                onOpenPreviewArtifact={handleProductProfilePreviewArtifactOpen}
+                onSelectedObjectChange={
+                  handleProductProfileSelectedObjectChange
+                }
+              />
+            ) : (
+              <WorkspaceObjectCanvasSurface
+                candidate={objectCanvasRightSurfaceCandidate}
+                onOpenBrowserRuntime={
+                  browserAssistObjectCanvasCandidate
+                    ? handleOpenBrowserRuntimeForBrowserAssist
+                    : undefined
+                }
+              />
+            ),
+          objectCanvas: () => (
+            <WorkspaceObjectCanvasSurface
+              candidate={objectCanvasRightSurfaceCandidate}
+              onOpenBrowserRuntime={
+                browserAssistObjectCanvasCandidate
+                  ? handleOpenBrowserRuntimeForBrowserAssist
+                  : undefined
+              }
+            />
+          ),
+        }
+      : {}),
     ...(filesRightSurfaceAvailable
       ? {
           files: () => (
             <WorkspaceFilesSurface
-              target={preferredServiceSkillResultFileTarget}
-              onOpenResultFile={handleOpenServiceSkillResultFile}
+              target={filesRightSurfaceTarget}
+              onOpenResultFile={
+                preferredServiceSkillResultFileTarget
+                  ? handleOpenServiceSkillResultFile
+                  : undefined
+              }
             />
           ),
         }
@@ -4144,57 +4638,99 @@ export function AgentChatWorkspace({
       <RightSurfaceHost
         activeSurface={rightSurfaceState.activeSurface}
         definitions={rightSurfaceDefinitions}
+        openSurfaces={rightSurfaceState.openSurfaces}
+        onSelectSurface={handleSelectRightSurfaceTab}
       />
     ) : null;
+  const generalWorkbenchSidebarNode = (
+    <WorkspaceGeneralWorkbenchSidebar
+      visible={showGeneralWorkbenchSidebar}
+      isThemeWorkbench={isThemeWorkbench}
+      enablePanelCollapse={
+        generalWorkbenchScaffoldRuntime.enableGeneralWorkbenchPanelCollapse
+      }
+      onRequestCollapse={handleCollapseGeneralWorkbenchSidebar}
+      generalWorkbenchHarnessSummary={
+        harnessInventoryRuntime.generalWorkbenchHarnessSummary
+      }
+      harnessPanelVisible={rightSurfaceState.activeSurface === "harness"}
+      onToggleHarnessPanel={handleToggleRightSurfaceHarness}
+      workflow={{
+        projectId,
+        sessionId,
+        branchItems: generalWorkbenchScaffoldRuntime.branchItems,
+        onCreateVersionSnapshot: handleCreateVersionSnapshot,
+        onSwitchBranchVersion: handleSwitchBranchVersion,
+        onDeleteTopic: handleDeleteGeneralWorkbenchVersion,
+        onSetBranchStatus: handleSetBranchStatus,
+        workflowSteps:
+          generalWorkbenchSidebarRuntime.generalWorkbenchWorkflowSteps,
+        onAddImage: handleAddImage,
+        onImportDocument: handleImportDocument,
+        onApplyFollowUpAction: handleApplyGeneralWorkbenchFollowUpAction,
+        activityLogs:
+          generalWorkbenchSidebarRuntime.generalWorkbenchActivityLogs,
+        creationTaskEvents:
+          generalWorkbenchScaffoldRuntime.generalWorkbenchCreationTaskEvents,
+        onViewRunDetail:
+          generalWorkbenchSidebarRuntime.handleViewGeneralWorkbenchRunDetail,
+        activeRunDetail:
+          generalWorkbenchSidebarRuntime.selectedGeneralWorkbenchRunDetail,
+        activeRunDetailLoading:
+          generalWorkbenchSidebarRuntime.generalWorkbenchRunDetailLoading,
+      }}
+      contextWorkspace={contextHarnessRuntime.contextWorkspace}
+      onViewContextDetail={handleViewContextDetail}
+      history={{
+        hasMore: generalWorkbenchSidebarRuntime.generalWorkbenchHistoryHasMore,
+        loading: generalWorkbenchSidebarRuntime.generalWorkbenchHistoryLoading,
+        onLoadMore:
+          generalWorkbenchSidebarRuntime.handleLoadMoreGeneralWorkbenchHistory,
+        skillDetailMap:
+          generalWorkbenchSidebarRuntime.generalWorkbenchSkillDetailMap,
+        messages,
+      }}
+    />
+  );
   const rightSurfaceRuntimePendingIntents = useMemo(() => {
     return buildWorkspaceRightSurfaceRuntimePendingIntents({
       createdAt: Date.now(),
       harnessPendingCount,
-      objectCanvasCandidateId: browserAssistLaunching
-        ? currentBrowserAssistScopeKey ||
-          browserAssistSessionState?.sessionId ||
-          browserAssistSessionState?.targetId ||
-          browserAssistSessionState?.profileKey ||
-          "browser-assist-launching"
-        : null,
+      objectCanvasCandidateId: browserAssistObjectCanvasCandidateId,
       preferredServiceSkillResultFileTargetRelativePath:
         preferredServiceSkillResultFileTarget?.relativePath,
       showHarnessToggle,
       suppressHomeNavbarUtilityActions,
     });
   }, [
-    browserAssistLaunching,
-    browserAssistSessionState?.profileKey,
-    browserAssistSessionState?.sessionId,
-    browserAssistSessionState?.targetId,
-    currentBrowserAssistScopeKey,
+    browserAssistObjectCanvasCandidateId,
     harnessPendingCount,
     preferredServiceSkillResultFileTarget?.relativePath,
     showHarnessToggle,
     suppressHomeNavbarUtilityActions,
   ]);
+  const rightSurfacePendingIntents = useMemo(
+    () => [
+      ...rightSurfaceRuntimePendingIntents,
+      ...rightSurfaceAppServerPendingRuntime.pendingIntents,
+    ],
+    [
+      rightSurfaceAppServerPendingRuntime.pendingIntents,
+      rightSurfaceRuntimePendingIntents,
+    ],
+  );
   const rightSurfaceLaunchers = buildWorkspaceRightSurfaceRuntimeLaunchers({
     surfaceState: rightSurfaceState,
-    pendingIntents: rightSurfaceRuntimePendingIntents,
+    pendingIntents: rightSurfacePendingIntents,
     filesAvailable: filesRightSurfaceAvailable,
+    appSurfaceAvailable: agentAppSurfaceRightSurfaceAvailable,
     hasExpertInfoPanel,
+    objectCanvasAvailable: objectCanvasRightSurfaceAvailable,
+    productProfileAvailable: productProfileRightSurfaceAvailable,
     shellAvailable: shellRightSurfaceAvailable,
     showHarnessToggle,
     suppressHomeNavbarUtilityActions,
   });
-  const generalWorkbenchHarnessDialog = (
-    <GeneralWorkbenchHarnessDialogSection
-      enabled={rightSurfaceHarnessEnabled}
-      open={
-        rightSurfaceHarnessEnabled &&
-        !rightSurfaceState.activeSurface &&
-        contextHarnessRuntime.harnessPanelVisible
-      }
-      onOpenChange={contextHarnessRuntime.setHarnessPanelVisible}
-      {...generalWorkbenchHarnessPanelProps}
-    />
-  );
-
   const conversationSceneRuntime = useWorkspaceConversationSceneRuntime({
     messageListEmptyStateVariant: sceneMessageListEmptyStateVariant,
     navbarContextVariant:
@@ -4206,7 +4742,6 @@ export function AgentChatWorkspace({
     canvasScene,
     handleSendFromEmptyState,
     shellChromeRuntime,
-    generalWorkbenchHarnessDialog,
     currentImageWorkbenchActive: currentImageWorkbenchState.active,
     browserWorkbenchOpenRequest: workbenchRequests.browserWorkbenchOpenRequest,
     onBrowserWorkbenchOpenRequestHandled:
@@ -4300,6 +4835,10 @@ export function AgentChatWorkspace({
     handleBackHome,
     rightSurfaceContent,
     rightSurfaceLaunchers,
+    rightSurfaceObjectCanvasOpen:
+      rightSurfaceState.activeSurface === "objectCanvas" ||
+      rightSurfaceState.activeSurface === "productProfile",
+    onToggleRightSurfaceObjectCanvas: handleToggleRightSurfaceObjectCanvas,
     rightSurfaceFilesOpen: rightSurfaceState.activeSurface === "files",
     onToggleRightSurfaceFiles: handleToggleRightSurfaceFiles,
     rightSurfaceShellOpen: rightSurfaceState.activeSurface === "shell",

@@ -1,7 +1,10 @@
 import type { AgentThreadItem, AgentThreadTurn, Message } from "../types";
 import { isRetainedSkillProcessMessage } from "../utils/skillInlineProcessRetention";
 import { isUnifiedWebSearchToolName } from "../utils/searchResultPreview";
-import { isUnifiedWebFetchToolName } from "../utils/toolNameFamily";
+import {
+  isUpdatePlanToolName,
+  isUnifiedWebFetchToolName,
+} from "../utils/toolNameFamily";
 import {
   isRuntimeStatusDiagnosticsOnly,
   shouldHideTurnSummaryFromConversation,
@@ -99,7 +102,7 @@ export function hasTimelineProcessItems(items?: AgentThreadItem[]): boolean {
       (item) =>
         item.type === "plan" ||
         item.type === "reasoning" ||
-        item.type === "tool_call" ||
+        (item.type === "tool_call" && !isUpdatePlanToolName(item.tool_name)) ||
         item.type === "command_execution" ||
         item.type === "patch" ||
         item.type === "web_search" ||
@@ -394,6 +397,9 @@ export function createInlineCoverageMatcher(coverage: InlineProcessCoverage) {
       case "reasoning":
         return coverage.thinking;
       case "tool_call":
+        if (isUpdatePlanToolName(item.tool_name)) {
+          return true;
+        }
         return consumeInlineCoverageCount(
           remainingToolNameCounts,
           normalizeInlineCoverageKey(item.tool_name),

@@ -10,6 +10,7 @@ use crate::McpAppDataSource;
 use crate::MediaAppDataSource;
 use crate::MemoryAppDataSource;
 use crate::ModelProviderAppDataSource;
+use crate::RightSurfaceAppDataSource;
 use crate::SessionAppDataSource;
 use crate::SkillAppDataSource;
 use crate::UsageStatsAppDataSource;
@@ -65,6 +66,7 @@ impl DiagnosticsAppDataSource for TestMcpInventoryDataSource {}
 impl UsageStatsAppDataSource for TestMcpInventoryDataSource {}
 impl ModelProviderAppDataSource for TestMcpInventoryDataSource {}
 impl ConnectAppDataSource for TestMcpInventoryDataSource {}
+impl RightSurfaceAppDataSource for TestMcpInventoryDataSource {}
 
 #[async_trait]
 impl McpAppDataSource for TestMcpInventoryDataSource {

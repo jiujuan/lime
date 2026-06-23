@@ -105,6 +105,18 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
+    pub(super) async fn handle_agent_app_host_lifecycle_list_impl(
+        &self,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self
+            .runtime
+            .list_agent_app_host_lifecycle()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
     pub(super) async fn handle_agent_app_shell_prepare_impl(
         &self,
         params: Option<serde_json::Value>,

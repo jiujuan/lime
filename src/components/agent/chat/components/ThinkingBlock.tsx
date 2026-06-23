@@ -1,8 +1,13 @@
 import React, { useMemo } from "react";
 import { ChevronDown } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { MarkdownRenderer } from "./MarkdownRenderer";
+import { StreamingMarkdownContent } from "./StreamingMarkdownContent";
 import { resolveThinkingDisplayParts } from "./thinkingBlockDisplay";
+
+const DEFAULT_AUTO_COLLAPSE_VIEWPORT_RATIO = 0.35;
+const DEFAULT_AUTO_COLLAPSE_MIN_HEIGHT = 280;
 
 interface ThinkingBlockProps {
   content: string;
@@ -12,6 +17,10 @@ interface ThinkingBlockProps {
   isStreaming?: boolean;
   hideSummary?: boolean;
   preserveSourceText?: boolean;
+  autoCollapseEligible?: boolean;
+  autoCollapseWhenOverflow?: boolean;
+  autoCollapseViewportRatio?: number;
+  autoCollapseMinHeight?: number;
 }
 
 export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
@@ -22,24 +31,147 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
   isStreaming = false,
   hideSummary = false,
   preserveSourceText = false,
+  autoCollapseEligible = false,
+  autoCollapseWhenOverflow = false,
+  autoCollapseViewportRatio = DEFAULT_AUTO_COLLAPSE_VIEWPORT_RATIO,
+  autoCollapseMinHeight = DEFAULT_AUTO_COLLAPSE_MIN_HEIGHT,
 }) => {
+  const { t } = useTranslation("agent");
   const [expanded, setExpanded] = React.useState(defaultExpanded);
+  const bodyRef = React.useRef<HTMLDivElement | null>(null);
+  const userToggledRef = React.useRef(false);
   const previousDefaultExpandedRef = React.useRef(defaultExpanded);
+  const previousStreamingRef = React.useRef(isStreaming);
   const thinkingDisplay = useMemo(
     () =>
       resolveThinkingDisplayParts(content, isStreaming, {
         preserveSourceText,
+        labels: {
+          completed: t("agentChat.thinkingBlock.status.completed", {
+            defaultValue: "已完成思考",
+          }),
+          running: t("agentChat.thinkingBlock.status.running", {
+            defaultValue: "思考中",
+          }),
+          structuredFallback: t("agentChat.thinkingBlock.preview.structured", {
+            defaultValue: "在整理结构化内容",
+          }),
+        },
       }),
-    [content, isStreaming, preserveSourceText],
+    [content, isStreaming, preserveSourceText, t],
   );
   const hasBody = thinkingDisplay.body.length > 0;
+  const shouldDeferMarkdown = isStreaming && !preserveSourceText;
+
+  const renderThinkingBody = React.useCallback(
+    () => (
+      <StreamingMarkdownContent
+        content={thinkingDisplay.body}
+        isStreaming={isStreaming}
+        deferMarkdownUntilComplete={shouldDeferMarkdown}
+        pendingTailClassName="block text-sm leading-6 text-slate-700"
+        renderMarkdown={(markdown) => (
+          <MarkdownRenderer content={markdown} isStreaming={isStreaming} />
+        )}
+      />
+    ),
+    [isStreaming, shouldDeferMarkdown, thinkingDisplay.body],
+  );
 
   React.useEffect(() => {
     if (previousDefaultExpandedRef.current !== defaultExpanded) {
+      const isStreamingCompletionCollapse =
+        !defaultExpanded && !isStreaming && previousStreamingRef.current;
       previousDefaultExpandedRef.current = defaultExpanded;
+      if (isStreamingCompletionCollapse) {
+        return;
+      }
+      userToggledRef.current = false;
       setExpanded(defaultExpanded);
     }
-  }, [defaultExpanded]);
+  }, [defaultExpanded, isStreaming]);
+
+  React.useEffect(() => {
+    if (previousStreamingRef.current === isStreaming) {
+      return;
+    }
+
+    previousStreamingRef.current = isStreaming;
+    if (isStreaming) {
+      userToggledRef.current = false;
+      setExpanded(true);
+    }
+  }, [isStreaming]);
+
+  const collapseIfOverflowing = React.useCallback(() => {
+    if (
+      !autoCollapseEligible ||
+      !autoCollapseWhenOverflow ||
+      !expanded ||
+      userToggledRef.current
+    ) {
+      return;
+    }
+
+    const body = bodyRef.current;
+    if (!body) {
+      return;
+    }
+
+    const viewportHeight =
+      typeof window !== "undefined"
+        ? window.innerHeight || document.documentElement.clientHeight || 0
+        : 0;
+    const threshold = Math.max(
+      autoCollapseMinHeight,
+      viewportHeight * autoCollapseViewportRatio,
+    );
+    const bodyHeight = Math.max(
+      body.getBoundingClientRect().height,
+      body.scrollHeight,
+    );
+
+    if (bodyHeight > threshold) {
+      setExpanded(false);
+    }
+  }, [
+    autoCollapseEligible,
+    autoCollapseMinHeight,
+    autoCollapseViewportRatio,
+    autoCollapseWhenOverflow,
+    expanded,
+  ]);
+
+  React.useEffect(() => {
+    if (!expanded || hideSummary) {
+      return;
+    }
+
+    collapseIfOverflowing();
+
+    const body = bodyRef.current;
+    if (!body) {
+      return;
+    }
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(() => collapseIfOverflowing());
+      observer.observe(body);
+    }
+
+    const timeoutId =
+      typeof window !== "undefined"
+        ? window.setTimeout(collapseIfOverflowing, 0)
+        : undefined;
+
+    return () => {
+      observer?.disconnect();
+      if (typeof timeoutId === "number" && typeof window !== "undefined") {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [collapseIfOverflowing, expanded, hideSummary, thinkingDisplay.body]);
 
   if (!content) return null;
 
@@ -56,7 +188,7 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
       ) : null}
       {hideSummary ? (
         <div className="min-w-0 flex-1">
-          {hasBody ? <MarkdownRenderer content={thinkingDisplay.body} /> : null}
+          {hasBody ? renderThinkingBody() : null}
         </div>
       ) : (
         <details
@@ -80,7 +212,9 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
             onClick={(event) => {
               if (!hasBody) {
                 event.preventDefault();
+                return;
               }
+              userToggledRef.current = true;
             }}
           >
             <div
@@ -127,14 +261,13 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
           </summary>
           {hasBody && expanded ? (
             <div
+              ref={bodyRef}
               className={cn(
                 "min-w-0",
                 grouped ? "mt-1.5 pl-[18px]" : "mt-2.5 pl-[22px]",
               )}
             >
-              <div className="min-w-0">
-                <MarkdownRenderer content={thinkingDisplay.body} />
-              </div>
+              <div className="min-w-0">{renderThinkingBody()}</div>
             </div>
           ) : null}
         </details>

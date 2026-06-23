@@ -12,6 +12,9 @@ export interface PlanImplementationState {
   items: readonly PlanImplementationStateItem[];
   sourceToolCallId?: string;
   summaryText?: string;
+  revisionId?: string;
+  turnId?: string;
+  source?: string;
 }
 
 export interface ProposedPlanImplementationDecision {
@@ -24,7 +27,11 @@ interface LatestProposedPlanCandidate {
   completedAt: number;
   planText: string;
   sequence: number;
-  source: "message" | "thread_item";
+  source: "message" | "thread_item" | "plan_state";
+  planRevisionId?: string;
+  sourceItemId?: string;
+  turnId?: string;
+  planSource?: string;
 }
 
 interface SelectProposedPlanImplementationDecisionOptions {
@@ -37,6 +44,41 @@ interface SelectProposedPlanImplementationDecisionOptions {
 
 function normalizePlanText(value: string | null | undefined): string {
   return (value || "").trim();
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function readStringField(
+  record: Record<string, unknown> | null | undefined,
+  ...keys: string[]
+): string | undefined {
+  if (!record) {
+    return undefined;
+  }
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return undefined;
+}
+
+function compactRecord(
+  record: Record<string, unknown>,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(record).filter(([, value]) => value !== undefined),
+  );
+}
+
+function readPlanRevisionId(metadata: unknown): string | undefined {
+  const record = asRecord(metadata);
+  return readStringField(record, "revisionId", "revision_id");
 }
 
 function stablePlanFingerprint(planText: string): string {
@@ -99,6 +141,7 @@ function collectMessagePlanCandidates(
           planText,
           sequence: messageIndex * 1000 + textIndex * 100 + segmentIndex,
           source: "message",
+          sourceItemId: message.id,
         });
       });
     });
@@ -134,6 +177,10 @@ function collectThreadItemPlanCandidates(
         planText,
         sequence: item.sequence,
         source: "thread_item" as const,
+        planRevisionId: readPlanRevisionId(item.metadata),
+        sourceItemId: item.id,
+        turnId: item.turn_id,
+        planSource: "thread_item",
       };
     });
 }
@@ -161,14 +208,18 @@ function collectPlanStateCandidates(
     {
       id: [
         "plan-state",
-        planState.sourceToolCallId || "ready",
+        planState.revisionId || planState.sourceToolCallId || "ready",
         itemLines.length,
         stablePlanFingerprint(planText),
       ].join(":"),
       completedAt: 0,
       planText,
       sequence: Number.MAX_SAFE_INTEGER,
-      source: "thread_item",
+      source: "plan_state",
+      planRevisionId: planState.revisionId,
+      sourceItemId: planState.sourceToolCallId,
+      turnId: planState.turnId,
+      planSource: planState.source,
     },
   ];
 }
@@ -236,11 +287,57 @@ export function selectProposedPlanImplementationDecision({
       requestId,
       actionType: "ask_user",
       status: "pending",
-      arguments: {
+      arguments: compactRecord({
         proposed_plan: latestCandidate.planText,
         plan_approval_request: true,
         source: latestCandidate.source,
-      },
+        plan_revision_id: latestCandidate.planRevisionId,
+        planRevisionId: latestCandidate.planRevisionId,
+        source_item_id: latestCandidate.sourceItemId,
+        sourceItemId: latestCandidate.sourceItemId,
+        turn_id: latestCandidate.turnId,
+        turnId: latestCandidate.turnId,
+        plan_source: latestCandidate.planSource,
+      }),
     },
   };
+}
+
+export function buildPlanImplementationHarnessMetadata(params: {
+  requestArguments?: unknown;
+  requestId: string;
+  decision: "accepted" | "adjustment";
+}): Record<string, unknown> {
+  const args = asRecord(params.requestArguments);
+  const planRevisionId = readStringField(
+    args,
+    "plan_revision_id",
+    "planRevisionId",
+  );
+  const sourceItemId = readStringField(args, "source_item_id", "sourceItemId");
+  const turnId = readStringField(args, "turn_id", "turnId");
+  const source = readStringField(args, "plan_source", "source");
+  const proposedPlan = readStringField(args, "proposed_plan", "proposedPlan");
+  const latestPlanRevision = compactRecord({
+    revision_id: planRevisionId,
+    source_item_id: sourceItemId,
+    turn_id: turnId,
+    source,
+  });
+
+  return compactRecord({
+    plan_implementation_decision: compactRecord({
+      request_id: params.requestId,
+      decision: params.decision,
+      plan_revision_id: planRevisionId,
+      source_item_id: sourceItemId,
+      turn_id: turnId,
+      source,
+      proposed_plan: proposedPlan,
+    }),
+    latest_plan_revision:
+      Object.keys(latestPlanRevision).length > 0
+        ? latestPlanRevision
+        : undefined,
+  });
 }

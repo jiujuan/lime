@@ -1,6 +1,52 @@
 import fs from "node:fs";
 import path from "node:path";
 
+const appServerClientIndexFile = "packages/app-server-client/src/index.ts";
+const appServerClientSplitSourceFiles = [
+  appServerClientIndexFile,
+  "packages/app-server-client/src/request-client.ts",
+  "packages/app-server-client/src/request-client-methods.ts",
+  "packages/app-server-client/src/connection.ts",
+  "packages/app-server-client/src/connection-methods.ts",
+  "packages/app-server-client/src/sidecar.ts",
+  "packages/app-server-client/src/sidecar-types.ts",
+  "packages/app-server-client/src/sidecar-manifest.ts",
+  "packages/app-server-client/src/sidecar-process.ts",
+  "packages/app-server-client/src/sidecar-lifecycle.ts",
+  "packages/app-server-client/src/agent-runtime.ts",
+];
+
+function normalizeContractSnippet(value) {
+  return value
+    .replace(/\b(?:protocol|appServer|constants)\./gu, "")
+    .replace(
+      /(\w+)\s*:\s*([A-Za-z0-9_<>,\[\]\s|&]+)\s*=\s*\{\}/gu,
+      "$1?: $2",
+    )
+    .replace(/\basync\s+(?=[A-Za-z_$][\w$]*\()/gu, "")
+    .replace(/,\s*\)/gu, ")")
+    .replace(/\s+/gu, "");
+}
+
+function contractContentIncludes(content, snippet) {
+  if (content.includes(snippet)) {
+    return true;
+  }
+  return normalizeContractSnippet(content).includes(
+    normalizeContractSnippet(snippet),
+  );
+}
+
+function expandContractFiles(files) {
+  return [
+    ...new Set(
+      files.flatMap((file) =>
+        file === appServerClientIndexFile ? appServerClientSplitSourceFiles : [file],
+      ),
+    ),
+  ];
+}
+
 export function checkMcpRuntimeCurrentContracts({ repoRoot, failures }) {
   const requiredByFile = new Map([
     [
@@ -424,13 +470,15 @@ export function checkMcpRuntimeCurrentContracts({ repoRoot, failures }) {
   ]);
 
   for (const [relativePath, snippets] of requiredByFile.entries()) {
-    const paths = Array.isArray(relativePath) ? relativePath : [relativePath];
+    const paths = expandContractFiles(
+      Array.isArray(relativePath) ? relativePath : [relativePath],
+    );
     const content = paths
       .map((item) => fs.readFileSync(path.join(repoRoot, item), "utf8"))
       .join("\n");
     const location = paths.join(", ");
     for (const snippet of snippets) {
-      if (!content.includes(snippet)) {
+      if (!contractContentIncludes(content, snippet)) {
         failures.push(
           `MCP runtime current contract: missing ${JSON.stringify(
             snippet,
@@ -514,6 +562,64 @@ export function checkMcpRuntimeCurrentContracts({ repoRoot, failures }) {
           snippet,
         )}`,
       );
+    }
+  }
+}
+
+export function checkWorkspaceRightSurfaceCurrentContracts({ repoRoot, failures }) {
+  const requiredByFile = new Map([
+    [
+      [
+        "lime-rs/crates/app-server-protocol/src/protocol/v0/right_surface.rs",
+        "lime-rs/crates/app-server-protocol/src/protocol/v0/method_names.rs",
+        "lime-rs/crates/app-server-protocol/src/protocol/v0/catalog.rs",
+        "lime-rs/crates/app-server/src/runtime/right_surface.rs",
+        "lime-rs/crates/app-server/src/processor/right_surface.rs",
+        "lime-rs/crates/app-server-client/src/lib.rs",
+        "packages/app-server-client/src/protocol.ts",
+        "packages/app-server-client/src/request-client.ts",
+        "packages/app-server-client/src/request-client-methods.ts",
+        "packages/app-server-client/src/connection-methods.ts",
+        "src/lib/api/workspaceRightSurface.ts",
+        "src/lib/api/appServerClientMethods.ts",
+        "src/components/agent/chat/workspace/useWorkspaceRightSurfacePendingRuntime.ts",
+        "src/lib/governance/agentCommandCatalog.json",
+      ],
+      [
+        '"workspaceRightSurface/request"',
+        '"workspaceRightSurface/pending/list"',
+        '"workspaceRightSurface/pending/consume"',
+        '"workspaceRightSurface/pending/dismiss"',
+        '"workspaceRightSurface/pendingChanged"',
+        "WorkspaceRightSurfacePendingDismissParams",
+        "WorkspaceRightSurfacePendingDismissResponse",
+        "WorkspaceRightSurfacePendingChangedParams",
+        "workspaceRightSurfacePendingChangedNotification(",
+        "dismiss_workspace_right_surface_pending(",
+        "dismissWorkspaceRightSurfacePending(",
+        "dismissPendingRequestsForSurface",
+        "dismissedRequestIds",
+        "App Server workspaceRightSurface/pending/dismiss did not return dismissed request ids",
+      ],
+    ],
+  ]);
+
+  for (const [relativePath, snippets] of requiredByFile.entries()) {
+    const paths = expandContractFiles(
+      Array.isArray(relativePath) ? relativePath : [relativePath],
+    );
+    const content = paths
+      .map((item) => fs.readFileSync(path.join(repoRoot, item), "utf8"))
+      .join("\n");
+    const location = paths.join(", ");
+    for (const snippet of snippets) {
+      if (!contractContentIncludes(content, snippet)) {
+        failures.push(
+          `Workspace Right Surface current contract: missing ${JSON.stringify(
+            snippet,
+          )} in ${location}`,
+        );
+      }
     }
   }
 }

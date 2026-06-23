@@ -231,6 +231,16 @@ pub use app_server_protocol::WorkspaceProjectPathResolveResponse;
 pub use app_server_protocol::WorkspaceProjectsRootReadResponse;
 pub use app_server_protocol::WorkspaceReadParams;
 pub use app_server_protocol::WorkspaceReadResponse;
+pub use app_server_protocol::WorkspaceRightSurfacePendingChangedParams;
+pub use app_server_protocol::WorkspaceRightSurfacePendingConsumeParams;
+pub use app_server_protocol::WorkspaceRightSurfacePendingConsumeResponse;
+pub use app_server_protocol::WorkspaceRightSurfacePendingDismissParams;
+pub use app_server_protocol::WorkspaceRightSurfacePendingDismissResponse;
+pub use app_server_protocol::WorkspaceRightSurfacePendingListParams;
+pub use app_server_protocol::WorkspaceRightSurfacePendingListResponse;
+pub use app_server_protocol::WorkspaceRightSurfacePendingRequest;
+pub use app_server_protocol::WorkspaceRightSurfaceRequestParams;
+pub use app_server_protocol::WorkspaceRightSurfaceRequestResponse;
 pub use app_server_protocol::WorkspaceSkillBindingsListParams;
 pub use app_server_protocol::WorkspaceSkillBindingsListResponse;
 pub use app_server_protocol::APP_SERVER_METHODS;
@@ -386,6 +396,11 @@ pub use app_server_protocol::METHOD_WORKSPACE_LIST;
 pub use app_server_protocol::METHOD_WORKSPACE_PROJECTS_ROOT_READ;
 pub use app_server_protocol::METHOD_WORKSPACE_PROJECT_PATH_RESOLVE;
 pub use app_server_protocol::METHOD_WORKSPACE_READ;
+pub use app_server_protocol::METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED;
+pub use app_server_protocol::METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CONSUME;
+pub use app_server_protocol::METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS;
+pub use app_server_protocol::METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_LIST;
+pub use app_server_protocol::METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST;
 pub use app_server_protocol::METHOD_WORKSPACE_SKILL_BINDINGS_LIST;
 use app_server_transport::encode_message;
 use serde::Serialize;
@@ -581,6 +596,34 @@ impl AppServerClient {
         params: WorkspaceEnsureParams,
     ) -> Result<JsonRpcRequest, ClientError> {
         self.typed_request(typed::ensure_workspace_ready(params))
+    }
+
+    pub fn request_workspace_right_surface(
+        &mut self,
+        params: WorkspaceRightSurfaceRequestParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::request_workspace_right_surface(params))
+    }
+
+    pub fn list_workspace_right_surface_pending(
+        &mut self,
+        params: WorkspaceRightSurfacePendingListParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::list_workspace_right_surface_pending(params))
+    }
+
+    pub fn consume_workspace_right_surface_pending(
+        &mut self,
+        params: WorkspaceRightSurfacePendingConsumeParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::consume_workspace_right_surface_pending(params))
+    }
+
+    pub fn dismiss_workspace_right_surface_pending(
+        &mut self,
+        params: WorkspaceRightSurfacePendingDismissParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::dismiss_workspace_right_surface_pending(params))
     }
 
     pub fn list_skills(&mut self) -> Result<JsonRpcRequest, ClientError> {
@@ -1491,6 +1534,30 @@ pub mod typed {
         params: WorkspaceEnsureParams,
     ) -> TypedRequest<WorkspaceEnsureParams> {
         TypedRequest::new(METHOD_WORKSPACE_ENSURE_READY, params)
+    }
+
+    pub fn request_workspace_right_surface(
+        params: WorkspaceRightSurfaceRequestParams,
+    ) -> TypedRequest<WorkspaceRightSurfaceRequestParams> {
+        TypedRequest::new(METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST, params)
+    }
+
+    pub fn list_workspace_right_surface_pending(
+        params: WorkspaceRightSurfacePendingListParams,
+    ) -> TypedRequest<WorkspaceRightSurfacePendingListParams> {
+        TypedRequest::new(METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_LIST, params)
+    }
+
+    pub fn consume_workspace_right_surface_pending(
+        params: WorkspaceRightSurfacePendingConsumeParams,
+    ) -> TypedRequest<WorkspaceRightSurfacePendingConsumeParams> {
+        TypedRequest::new(METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CONSUME, params)
+    }
+
+    pub fn dismiss_workspace_right_surface_pending(
+        params: WorkspaceRightSurfacePendingDismissParams,
+    ) -> TypedRequest<WorkspaceRightSurfacePendingDismissParams> {
+        TypedRequest::new(METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS, params)
     }
 
     pub fn list_skills() -> TypedRequest<serde_json::Value> {
@@ -2607,6 +2674,42 @@ mod tests {
                 id: "workspace-main".to_string(),
             })
             .expect("ready");
+        let right_surface_request = client
+            .request_workspace_right_surface(WorkspaceRightSurfaceRequestParams {
+                workspace_id: Some("workspace-main".to_string()),
+                workspace_root: Some("/workspace/project".to_string()),
+                session_id: Some("sess-main".to_string()),
+                surface_kind: "objectCanvas".to_string(),
+                origin: "mcp:browser".to_string(),
+                reason: Some("Browser candidate".to_string()),
+                priority: Some("high".to_string()),
+                candidate_id: Some("candidate-1".to_string()),
+                ttl_ms: Some(60_000),
+                metadata: Some(json!({ "source": "browser-assist" })),
+            })
+            .expect("right surface request");
+        let right_surface_pending = client
+            .list_workspace_right_surface_pending(WorkspaceRightSurfacePendingListParams {
+                workspace_id: Some("workspace-main".to_string()),
+                workspace_root: Some("/workspace/project".to_string()),
+                session_id: Some("sess-main".to_string()),
+                surface_kind: Some("objectCanvas".to_string()),
+                limit: Some(10),
+            })
+            .expect("right surface pending");
+        let right_surface_consume = client
+            .consume_workspace_right_surface_pending(WorkspaceRightSurfacePendingConsumeParams {
+                request_id: Some("right-surface:req-1".to_string()),
+                request_ids: vec!["right-surface:req-2".to_string()],
+            })
+            .expect("right surface consume");
+        let right_surface_dismiss = client
+            .dismiss_workspace_right_surface_pending(WorkspaceRightSurfacePendingDismissParams {
+                request_id: Some("right-surface:req-3".to_string()),
+                request_ids: vec!["right-surface:req-4".to_string()],
+                reason: Some("user_closed_surface".to_string()),
+            })
+            .expect("right surface dismiss");
 
         assert_eq!(workspaces.method, METHOD_WORKSPACE_LIST);
         assert_eq!(workspaces.params.expect("params"), json!({}));
@@ -2644,6 +2747,62 @@ mod tests {
         assert_eq!(
             ready.params.expect("params"),
             json!({ "id": "workspace-main" })
+        );
+        assert_eq!(
+            right_surface_request.method,
+            METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST
+        );
+        assert_eq!(
+            right_surface_request.params.expect("params"),
+            json!({
+                "workspaceId": "workspace-main",
+                "workspaceRoot": "/workspace/project",
+                "sessionId": "sess-main",
+                "surfaceKind": "objectCanvas",
+                "origin": "mcp:browser",
+                "reason": "Browser candidate",
+                "priority": "high",
+                "candidateId": "candidate-1",
+                "ttlMs": 60000,
+                "metadata": { "source": "browser-assist" },
+            })
+        );
+        assert_eq!(
+            right_surface_pending.method,
+            METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_LIST
+        );
+        assert_eq!(
+            right_surface_pending.params.expect("params"),
+            json!({
+                "workspaceId": "workspace-main",
+                "workspaceRoot": "/workspace/project",
+                "sessionId": "sess-main",
+                "surfaceKind": "objectCanvas",
+                "limit": 10,
+            })
+        );
+        assert_eq!(
+            right_surface_consume.method,
+            METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CONSUME
+        );
+        assert_eq!(
+            right_surface_consume.params.expect("params"),
+            json!({
+                "requestId": "right-surface:req-1",
+                "requestIds": ["right-surface:req-2"],
+            })
+        );
+        assert_eq!(
+            right_surface_dismiss.method,
+            METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS
+        );
+        assert_eq!(
+            right_surface_dismiss.params.expect("params"),
+            json!({
+                "requestId": "right-surface:req-3",
+                "requestIds": ["right-surface:req-4"],
+                "reason": "user_closed_surface",
+            })
         );
     }
 
@@ -3814,6 +3973,11 @@ mod tests {
         assert!(methods.contains(&METHOD_WORKSPACE_PROJECTS_ROOT_READ));
         assert!(methods.contains(&METHOD_WORKSPACE_PROJECT_PATH_RESOLVE));
         assert!(methods.contains(&METHOD_WORKSPACE_ENSURE_READY));
+        assert!(methods.contains(&METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST));
+        assert!(methods.contains(&METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_LIST));
+        assert!(methods.contains(&METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CONSUME));
+        assert!(methods.contains(&METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS));
+        assert!(methods.contains(&METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED));
         assert!(methods.contains(&METHOD_SKILL_LIST));
         assert!(methods.contains(&METHOD_SKILL_READ));
         assert!(methods.contains(&METHOD_SKILL_PACKAGE_LOCAL_INSPECT));
@@ -3854,6 +4018,21 @@ mod tests {
         assert!(is_app_server_request_method(METHOD_FILE_SYSTEM_DELETE_FILE));
         assert!(is_app_server_request_method(METHOD_EVIDENCE_EXPORT));
         assert!(is_app_server_request_method(METHOD_WORKSPACE_LIST));
+        assert!(is_app_server_request_method(
+            METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST
+        ));
+        assert!(is_app_server_request_method(
+            METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_LIST
+        ));
+        assert!(is_app_server_request_method(
+            METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CONSUME
+        ));
+        assert!(is_app_server_request_method(
+            METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS
+        ));
+        assert!(!is_app_server_request_method(
+            METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED
+        ));
         assert!(is_app_server_request_method(METHOD_SKILL_LIST));
         assert!(is_app_server_request_method(
             METHOD_AGENT_APP_INSTALLED_LIST
@@ -3882,6 +4061,9 @@ mod tests {
         assert!(is_app_server_notification_method(METHOD_INITIALIZED));
         assert!(is_app_server_notification_method(
             METHOD_AGENT_SESSION_EVENT
+        ));
+        assert!(is_app_server_notification_method(
+            METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED
         ));
     }
 }

@@ -1383,6 +1383,7 @@ impl TurnItemRuntimeProjector {
             ItemRuntimePayload::Reasoning {
                 text: next_text,
                 summary,
+                metadata: Self::reasoning_metadata_value(thinking_content),
             },
         ))
     }
@@ -1551,6 +1552,19 @@ impl TurnItemRuntimeProjector {
 
     fn metadata_value(metadata: Option<&ProviderMetadata>) -> Option<Value> {
         metadata.map(|metadata| Value::Object(metadata.clone()))
+    }
+
+    fn reasoning_metadata_value(thinking_content: &ThinkingContent) -> Option<Value> {
+        let signature = thinking_content.signature.trim();
+        if signature.is_empty() {
+            return None;
+        }
+
+        Some(serde_json::json!({
+            "provider_metadata": {
+                "signature": signature,
+            },
+        }))
     }
 
     fn finalize_open_items(&mut self, turn_status: TurnStatus) -> Vec<AgentEvent> {
@@ -5564,7 +5578,7 @@ mod tests {
         let mut projector = TurnItemRuntimeProjector::new(&turn);
         let message = Message::assistant()
             .with_id("assistant-msg-1")
-            .with_thinking("先判断任务类型\n\n再决定是否联网", "");
+            .with_thinking("先判断任务类型\n\n再决定是否联网", "sig-anthropic");
 
         let events = projector.project_agent_event(&AgentEvent::Message(message));
 
@@ -5575,13 +5589,17 @@ mod tests {
                     if item.id == "reasoning:assistant-msg-1"
                         && matches!(
                             &item.payload,
-                            ItemRuntimePayload::Reasoning { text, summary }
+                            ItemRuntimePayload::Reasoning { text, summary, metadata }
                                 if text == "先判断任务类型\n\n再决定是否联网"
                                     && summary.as_ref()
                                         == Some(&vec![
                                             "先判断任务类型".to_string(),
                                             "再决定是否联网".to_string(),
                                         ])
+                                    && metadata.as_ref()
+                                        .and_then(|metadata| metadata.get("provider_metadata"))
+                                        .and_then(|metadata| metadata.get("signature"))
+                                        == Some(&serde_json::json!("sig-anthropic"))
                         )
             )),
             "应保留 reasoning summary 分段"

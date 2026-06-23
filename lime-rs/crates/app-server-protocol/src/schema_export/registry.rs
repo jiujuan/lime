@@ -358,6 +358,32 @@ pub(super) fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<WorkspaceRegisteredSkillsListResponse>(
             "WorkspaceRegisteredSkillsListResponse",
         ),
+        typed_schema::<WorkspaceRightSurfaceRequestParams>("WorkspaceRightSurfaceRequestParams"),
+        typed_schema::<WorkspaceRightSurfacePendingListParams>(
+            "WorkspaceRightSurfacePendingListParams",
+        ),
+        typed_schema::<WorkspaceRightSurfacePendingConsumeParams>(
+            "WorkspaceRightSurfacePendingConsumeParams",
+        ),
+        typed_schema::<WorkspaceRightSurfacePendingDismissParams>(
+            "WorkspaceRightSurfacePendingDismissParams",
+        ),
+        typed_schema::<WorkspaceRightSurfacePendingRequest>("WorkspaceRightSurfacePendingRequest"),
+        typed_schema::<WorkspaceRightSurfaceRequestResponse>(
+            "WorkspaceRightSurfaceRequestResponse",
+        ),
+        typed_schema::<WorkspaceRightSurfacePendingListResponse>(
+            "WorkspaceRightSurfacePendingListResponse",
+        ),
+        typed_schema::<WorkspaceRightSurfacePendingConsumeResponse>(
+            "WorkspaceRightSurfacePendingConsumeResponse",
+        ),
+        typed_schema::<WorkspaceRightSurfacePendingDismissResponse>(
+            "WorkspaceRightSurfacePendingDismissResponse",
+        ),
+        typed_schema::<WorkspaceRightSurfacePendingChangedParams>(
+            "WorkspaceRightSurfacePendingChangedParams",
+        ),
         typed_schema::<AgentAppLocalPackageInspectParams>("AgentAppLocalPackageInspectParams"),
         typed_schema::<AgentAppLocalPackageInspectResponse>("AgentAppLocalPackageInspectResponse"),
         typed_schema::<AgentAppFetchCloudPackageParams>("AgentAppFetchCloudPackageParams"),
@@ -372,6 +398,14 @@ pub(super) fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<AgentAppUninstallRehearsalTarget>("AgentAppUninstallRehearsalTarget"),
         typed_schema::<AgentAppUninstallParams>("AgentAppUninstallParams"),
         typed_schema::<AgentAppUninstallResponse>("AgentAppUninstallResponse"),
+        typed_schema::<AgentAppHostLifecycleListResponse>("AgentAppHostLifecycleListResponse"),
+        typed_schema::<AgentAppHostLifecycleSnapshot>("AgentAppHostLifecycleSnapshot"),
+        typed_schema::<AgentAppHostFunctionState>("AgentAppHostFunctionState"),
+        typed_schema::<AgentAppRightSurfaceContract>("AgentAppRightSurfaceContract"),
+        typed_schema::<AgentAppProductProfileContract>("AgentAppProductProfileContract"),
+        typed_schema::<AgentAppProductProfileObject>("AgentAppProductProfileObject"),
+        typed_schema::<AgentAppHistoryRestoreContract>("AgentAppHistoryRestoreContract"),
+        typed_schema::<AgentAppTaskRuntimeContract>("AgentAppTaskRuntimeContract"),
         typed_schema::<AgentAppDeleteDataExecutionEvidence>("AgentAppDeleteDataExecutionEvidence"),
         typed_schema::<AgentAppDeleteDataTargetEvidence>("AgentAppDeleteDataTargetEvidence"),
         typed_schema::<AgentAppDeleteDataPostDeleteResidualAudit>(

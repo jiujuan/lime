@@ -14,6 +14,7 @@ import {
   FIXTURE_PROVIDER,
   LOG_PREFIX,
   NEWS_PROMPT,
+  RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO,
   SESSION_ID,
   THREAD_ID,
 } from "./claw-chat-current-fixture-constants.mjs";
@@ -71,7 +72,7 @@ Claw Chat Current Electron Fixture Smoke
   --app-url <url>        可选 renderer dev server，例如 http://127.0.0.1:1420/
   --evidence-dir <path>  证据目录
   --prefix <name>        证据文件前缀
-  --scenario <name>      complete | cancel | cancel-then-continue | plan | goal | web-tools-rendering | mcp-structured-content | skills-runtime | expert-skills-runtime | expert-plaza-skills-runtime | expert-panel-skills-runtime，默认 complete
+  --scenario <name>      complete | cancel | cancel-then-continue | plan | goal | web-tools-rendering | mcp-structured-content | skills-runtime | expert-skills-runtime | expert-plaza-skills-runtime | expert-panel-skills-runtime | right-surface-visual-matrix，默认 complete
   --timeout-ms <ms>      总超时，默认 180000
   --interval-ms <ms>     轮询间隔，默认 500
   --keep-temp            保留临时目录便于调试
@@ -146,11 +147,10 @@ function parseArgs(argv) {
     "expert-skills-runtime",
     "expert-plaza-skills-runtime",
     "expert-panel-skills-runtime",
+    RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO,
   ];
   if (!allowedScenarios.includes(options.scenario)) {
-    throw new Error(
-      `--scenario 只能是 ${allowedScenarios.join("、")}`,
-    );
+    throw new Error(`--scenario 只能是 ${allowedScenarios.join("、")}`);
   }
   return options;
 }
@@ -159,12 +159,18 @@ async function run() {
   const options = parseArgs(process.argv.slice(2));
   fs.mkdirSync(options.evidenceDir, { recursive: true });
 
-  const summaryPath = path.join(options.evidenceDir, options.prefix + "-summary.json");
+  const summaryPath = path.join(
+    options.evidenceDir,
+    options.prefix + "-summary.json",
+  );
   const backendLedgerEvidencePath = path.join(
     options.evidenceDir,
     options.prefix + "-backend-ledger.json",
   );
-  const screenshotPath = path.join(options.evidenceDir, options.prefix + "-chat.png");
+  const screenshotPath = path.join(
+    options.evidenceDir,
+    options.prefix + "-chat.png",
+  );
   const failureScreenshotPath = path.join(
     options.evidenceDir,
     options.prefix + "-failure.png",
@@ -196,7 +202,9 @@ async function run() {
     appUrl: options.appUrl || null,
     checkedAt: new Date().toISOString(),
     tempRoot: options.keepTemp ? runtimeEnv.tempRoot : null,
-    electronUserDataDir: options.keepTemp ? runtimeEnv.electronUserDataDir : null,
+    electronUserDataDir: options.keepTemp
+      ? runtimeEnv.electronUserDataDir
+      : null,
     backendPath: options.keepTemp ? runtimeEnv.backendPath : null,
     backendLedgerPath: options.keepTemp ? runtimeEnv.backendLedgerPath : null,
     backendLedger: backendLedgerEvidencePath,
@@ -240,6 +248,10 @@ async function run() {
     readModelExplicitSkillsRuntimeCompleted: null,
     readModelManualEnableSkillsRuntimeCompleted: null,
     expertSkillsRuntimeSessionCreation: null,
+    rightSurfaceVisualMatrixSessionCreation: null,
+    guiRightSurfaceVisualMatrixSessionVisible: null,
+    guiRightSurfaceVisualMatrixSessionOpened: null,
+    rightSurfaceVisualMatrix: null,
     expertSkillsRuntimeSkill: null,
     expertSkillsRuntimeTurnStart: null,
     expertPlazaSkillsRuntimeCatalog: null,
@@ -279,7 +291,9 @@ async function run() {
   try {
     if (options.appUrl) {
       logStage("wait-app-url");
-      summary.rendererDevServer = sanitizeJson(await waitForAppUrlReady(options));
+      summary.rendererDevServer = sanitizeJson(
+        await waitForAppUrlReady(options),
+      );
     }
 
     logStage("launch-electron");
@@ -337,14 +351,20 @@ async function run() {
     await page.setViewportSize({ width: 1440, height: 1000 });
 
     logStage("wait-renderer");
-    const rendererSnapshot = await waitForRendererReady(page, options, (snapshot) => {
-      summary.rendererSnapshot = sanitizeJson(snapshot);
-    });
+    const rendererSnapshot = await waitForRendererReady(
+      page,
+      options,
+      (snapshot) => {
+        summary.rendererSnapshot = sanitizeJson(snapshot);
+      },
+    );
     summary.rendererSnapshot = sanitizeJson(rendererSnapshot);
     await clearInvokeBuffers(page);
 
     logStage("initialize-app-server");
-    summary.initialize = sanitizeJson(await initializeAppServer(page, appServerRequests));
+    summary.initialize = sanitizeJson(
+      await initializeAppServer(page, appServerRequests),
+    );
 
     logStage("ensure-default-workspace");
     const workspace = await ensureDefaultWorkspace(page, appServerRequests);
@@ -357,7 +377,11 @@ async function run() {
     );
 
     logStage("create-fixture-session");
-    const sessionCreation = await createFixtureSession(page, workspace, appServerRequests);
+    const sessionCreation = await createFixtureSession(
+      page,
+      workspace,
+      appServerRequests,
+    );
     summary.sessionCreation = sanitizeJson({
       sessionId:
         sessionCreation.session?.session?.sessionId ??
@@ -392,11 +416,17 @@ async function run() {
 
     logStage("navigate-gui-workspace");
     summary.guiWorkspaceNavigation = sanitizeJson(
-      await navigateGuiToWorkspaceScopedAgent(page, options, workspace.workspaceId),
+      await navigateGuiToWorkspaceScopedAgent(
+        page,
+        options,
+        workspace.workspaceId,
+      ),
     );
 
     logStage("open-session-from-sidebar");
-    summary.guiSessionVisible = sanitizeJson(await waitForGuiSessionVisible(page, options));
+    summary.guiSessionVisible = sanitizeJson(
+      await waitForGuiSessionVisible(page, options),
+    );
     summary.guiSessionOpened = sanitizeJson(
       await openFixtureSessionFromSidebar(page, options, appServerRequests),
     );
@@ -436,8 +466,16 @@ async function run() {
       options,
     });
 
-    await page.screenshot({ path: screenshotPath, fullPage: true });
-    summary.screenshot = screenshotPath;
+    try {
+      await page.screenshot({
+        path: screenshotPath,
+        fullPage: true,
+        timeout: 15_000,
+      });
+      summary.screenshot = screenshotPath;
+    } catch (screenshotError) {
+      summary.screenshotError = sanitizeText(screenshotError);
+    }
     summary.consoleErrors = consoleErrors;
     summary.actionableConsoleErrors = actionableConsoleErrors;
     summary.agentDebugLogs = agentDebugLogs.slice(-200);
@@ -495,7 +533,11 @@ async function run() {
     summary.pageLifecycleEvents = pageLifecycleEvents;
     try {
       if (page) {
-        await page.screenshot({ path: failureScreenshotPath, fullPage: true });
+        await page.screenshot({
+          path: failureScreenshotPath,
+          fullPage: true,
+          timeout: 15_000,
+        });
         summary.screenshot = failureScreenshotPath;
       }
     } catch (screenshotError) {

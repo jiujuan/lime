@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { cwd } from "node:process";
 import { beforeAll, describe, expect, it } from "vitest";
+import { readAppServerApiSources } from "../../test/appServerApiSources";
 
 const RETIRED_AUDIO_DEVICE_FACADE_COMMAND = "list_audio_devices";
 const RETIRED_VOICE_INPUT_CONFIG_FACADE_COMMANDS = [
@@ -253,7 +254,7 @@ function readAppServerAsrCredentialSources(): string {
   return [
     readRepoFile("packages/app-server-client/src/protocol.ts"),
     readRepoFile("packages/app-server-client/src/index.ts"),
-    readRepoFile("src/lib/api/appServer.ts"),
+    readAppServerApiSources(),
     readRepoFile(
       "lime-rs/crates/app-server-protocol/src/protocol/v0/method_names.rs",
     ),
@@ -271,7 +272,7 @@ function readAppServerVoiceInstructionSources(): string {
   return [
     readRepoFile("packages/app-server-client/src/protocol.ts"),
     readRepoFile("packages/app-server-client/src/index.ts"),
-    readRepoFile("src/lib/api/appServer.ts"),
+    readAppServerApiSources(),
     readRepoFile(
       "lime-rs/crates/app-server-protocol/src/protocol/v0/method_names.rs",
     ),

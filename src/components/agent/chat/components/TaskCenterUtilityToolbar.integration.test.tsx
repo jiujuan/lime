@@ -486,6 +486,108 @@ describe("TaskCenterUtilityToolbar", () => {
     expect(onToggleFilesPanel).toHaveBeenCalledTimes(1);
   });
 
+  it("右侧 surface projection 应能驱动对象画布入口展开态、badge 和点击回调", () => {
+    const onToggleObjectCanvasPanel = vi.fn();
+    const container = renderToolbar({
+      onToggleObjectCanvasPanel,
+      rightSurfaceLaunchers: [
+        {
+          kind: "objectCanvas",
+          active: true,
+          disabled: false,
+          pendingCount: 2,
+          collapseTarget: "topToolbar",
+        },
+      ],
+    });
+
+    const objectCanvasToggle = container.querySelector<HTMLButtonElement>(
+      '[data-testid="task-center-object-canvas-toggle"]',
+    );
+
+    expect(objectCanvasToggle).not.toBeNull();
+    expect(objectCanvasToggle?.getAttribute("aria-expanded")).toBe("true");
+    expect(objectCanvasToggle?.getAttribute("aria-label")).toBe("关闭对象画布");
+    expect(objectCanvasToggle?.getAttribute("title")).toBe("对象画布");
+    expect(objectCanvasToggle?.className).toContain(
+      "lime-chrome-tab-active-surface",
+    );
+    expect(objectCanvasToggle?.textContent).toContain("2");
+
+    act(() => {
+      objectCanvasToggle?.click();
+    });
+
+    expect(onToggleObjectCanvasPanel).toHaveBeenCalledTimes(1);
+  });
+
+  it("右侧 productProfile projection 应复用对象入口并显示产物 Profile 语义", () => {
+    const onToggleObjectCanvasPanel = vi.fn();
+    const container = renderToolbar({
+      onToggleObjectCanvasPanel,
+      rightSurfaceLaunchers: [
+        {
+          kind: "productProfile",
+          active: true,
+          disabled: false,
+          pendingCount: 1,
+          collapseTarget: "topToolbar",
+        },
+        {
+          kind: "objectCanvas",
+          active: false,
+          disabled: false,
+          pendingCount: 2,
+          collapseTarget: "topToolbar",
+        },
+      ],
+    });
+
+    const productProfileToggle = container.querySelector<HTMLButtonElement>(
+      '[data-testid="task-center-object-canvas-toggle"]',
+    );
+
+    expect(productProfileToggle).not.toBeNull();
+    expect(productProfileToggle?.getAttribute("aria-expanded")).toBe("true");
+    expect(productProfileToggle?.getAttribute("aria-label")).toBe(
+      "关闭产物 Profile",
+    );
+    expect(productProfileToggle?.getAttribute("title")).toBe("产物 Profile");
+    expect(productProfileToggle?.textContent).toContain("3");
+
+    act(() => {
+      productProfileToggle?.click();
+    });
+
+    expect(onToggleObjectCanvasPanel).toHaveBeenCalledTimes(1);
+  });
+
+  it("对象画布只有 pending 但不可用时应保留禁用入口与 badge", () => {
+    const onToggleObjectCanvasPanel = vi.fn();
+    const container = renderToolbar({
+      onToggleObjectCanvasPanel,
+      rightSurfaceLaunchers: [
+        {
+          kind: "objectCanvas",
+          active: false,
+          disabled: true,
+          pendingCount: 1,
+          collapseTarget: "topToolbar",
+        },
+      ],
+    });
+
+    const objectCanvasToggle = container.querySelector<HTMLButtonElement>(
+      '[data-testid="task-center-object-canvas-toggle"]',
+    );
+
+    expect(objectCanvasToggle).not.toBeNull();
+    expect(objectCanvasToggle?.disabled).toBe(true);
+    expect(objectCanvasToggle?.getAttribute("aria-expanded")).toBe("false");
+    expect(objectCanvasToggle?.getAttribute("aria-label")).toBe("打开对象画布");
+    expect(objectCanvasToggle?.textContent).toContain("1");
+  });
+
   it("应用切换应通过文件壳网关打开指定工具", async () => {
     const container = renderToolbar();
     const trigger = container.querySelector(
@@ -1469,7 +1571,10 @@ describe("TaskCenterUtilityToolbar", () => {
             turn_id: "turn-1",
             sequence: 2,
             status: "in_progress",
-            text: "恢复运行计划",
+            text: "- [x] 读取任务区域\n- [ ] 恢复运行计划",
+            metadata: {
+              revisionId: "proposed_plan:task-rail-2",
+            },
             started_at: "2026-06-16T10:00:02.000Z",
             updated_at: "2026-06-16T10:00:03.000Z",
           },
@@ -1488,6 +1593,9 @@ describe("TaskCenterUtilityToolbar", () => {
     const planSection = document.body.querySelector(
       '[data-testid="task-center-run-control-plan"]',
     );
+    const planRevision = document.body.querySelector(
+      '[data-testid="task-center-run-control-plan-revision"]',
+    );
     const planItems = Array.from(
       document.body.querySelectorAll(
         '[data-testid="task-center-run-control-plan-item"]',
@@ -1495,6 +1603,17 @@ describe("TaskCenterUtilityToolbar", () => {
     );
 
     expect(planSection?.textContent).toContain("计划");
+    expect(planRevision?.textContent).toContain("计划");
+    expect(planRevision?.getAttribute("title")).toBe(
+      "当前计划版本：proposed_plan:task-rail-2",
+    );
+    expect(planRevision?.getAttribute("data-plan-revision-id")).toBe(
+      "proposed_plan:task-rail-2",
+    );
+    expect(planRevision?.getAttribute("data-plan-source")).toBe(
+      "thread_item",
+    );
+    expect(planRevision?.getAttribute("data-plan-turn-id")).toBe("turn-1");
     expect(planSection?.textContent).toContain("读取任务区域");
     expect(planSection?.textContent).toContain("恢复运行计划");
     expect(planItems.map((item) => item.getAttribute("data-status"))).toEqual([

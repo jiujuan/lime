@@ -244,6 +244,10 @@ export async function addExpertSkillsRuntimeSkillFromInfoPanel(page, options) {
   const pickerOpened = await waitForExpertSkillPickerState(page, options, {
     expectCandidate: false,
   });
+  const pickerSearch = await setExpertSkillPickerQuery(
+    page,
+    "capability-report",
+  );
 
   const candidate = await waitForExpertSkillPickerState(page, options, {
     expectCandidate: true,
@@ -261,6 +265,7 @@ export async function addExpertSkillsRuntimeSkillFromInfoPanel(page, options) {
     ready: lastSnapshot,
     pickerTrigger,
     pickerOpened,
+    pickerSearch,
     candidate,
     added,
     pickerClosed,
@@ -289,11 +294,15 @@ async function clickExpertSkillPickerTrigger(page) {
             "",
         };
       };
-      const candidates = Array.from(
+      const mappingAction = document.querySelector(
+        '[data-testid="expert-info-skills-runtime-action-skill-code-review"]',
+      );
+      const addButtons = Array.from(
         document.querySelectorAll('[data-testid="expert-info-skills-add"]'),
       );
-      const button = candidates.find(
-        (candidate) => visibleElementSnapshot(candidate).visible,
+      const candidates = [mappingAction, ...addButtons].filter(Boolean);
+      const button = candidates.find((candidate) =>
+        visibleElementSnapshot(candidate).visible,
       );
       if (!(button instanceof HTMLElement)) {
         return {
@@ -311,9 +320,45 @@ async function clickExpertSkillPickerTrigger(page) {
       return {
         clicked: true,
         label: snapshot.label,
+        triggerKind:
+          button.getAttribute("data-testid") ===
+          "expert-info-skills-runtime-action-skill-code-review"
+            ? "mapping-action"
+            : "add-button",
         triggerCount: candidates.length,
       };
     }),
+  );
+}
+
+async function setExpertSkillPickerQuery(page, query) {
+  return sanitizeJson(
+    await page.evaluate((nextQuery) => {
+      const input = document.querySelector(
+        '[data-testid="expert-skill-picker-dialog"] input',
+      );
+      if (!(input instanceof HTMLInputElement)) {
+        return { updated: false, reason: "missing-skill-picker-input" };
+      }
+      const previousValue = input.value;
+      input.focus();
+      const valueSetter = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )?.set;
+      if (valueSetter) {
+        valueSetter.call(input, nextQuery);
+      } else {
+        input.value = nextQuery;
+      }
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      return {
+        updated: true,
+        previousValue,
+        nextValue: input.value,
+      };
+    }, query),
   );
 }
 
@@ -533,6 +578,7 @@ async function waitForExpertPanelAddedSkill(page, options) {
 async function openHarnessPanelForEvidenceExport(page, options) {
   const startedAt = Date.now();
   let lastSnapshot = null;
+  let clickedHarnessToggle = null;
   while (Date.now() - startedAt < options.timeoutMs) {
     const snapshot = await evaluatePageSnapshot(page, () => {
       const visibleElementSnapshot = (element) => {
@@ -585,53 +631,31 @@ async function openHarnessPanelForEvidenceExport(page, options) {
     });
     lastSnapshot = snapshot;
     if (snapshot?.evidenceButtonVisible) {
-      return sanitizeJson({ ...snapshot, clickedToggle: false });
+      return sanitizeJson({ ...snapshot, clickedToggle: clickedHarnessToggle });
+    }
+    if (snapshot?.harnessPanelVisible) {
+      return sanitizeJson({ ...snapshot, clickedToggle: clickedHarnessToggle });
+    }
+    if (clickedHarnessToggle) {
+      await sleep(options.intervalMs);
+      continue;
     }
     if (snapshot?.harnessToggleVisible) {
-      const clicked = await page.evaluate(() => {
-        const visibleElementSnapshot = (element) => {
-          const rect = element?.getBoundingClientRect();
-          const style = element ? window.getComputedStyle(element) : null;
-          return {
-            visible: Boolean(
-              element &&
-              rect &&
-              rect.width > 8 &&
-              rect.height > 8 &&
-              style?.visibility !== "hidden" &&
-              style?.display !== "none",
-            ),
-            label:
-              element?.getAttribute?.("aria-label") ||
-              element?.getAttribute?.("title") ||
-              element?.textContent ||
-              "",
-          };
-        };
-        const findVisibleButtonByLabel = (match) =>
-          Array.from(document.querySelectorAll("button")).find((button) => {
-            const buttonSnapshot = visibleElementSnapshot(button);
-            return buttonSnapshot.visible && match(buttonSnapshot.label);
-          });
-        const taskCenterHarnessToggle = document.querySelector(
-          '[data-testid="task-center-harness-toggle"]',
-        );
-        const harnessToggle = visibleElementSnapshot(taskCenterHarnessToggle)
-          .visible
-          ? taskCenterHarnessToggle
-          : findVisibleButtonByLabel((label) =>
-              /打开\s*Harness|关闭\s*Harness|\bHarness\b|处理工作台/i.test(
-                label,
-              ),
-            );
-        if (harnessToggle instanceof HTMLElement) {
-          const label = visibleElementSnapshot(harnessToggle).label;
-          harnessToggle.click();
-          return { clicked: true, label };
-        }
-        return { clicked: false, label: "" };
-      });
-      return sanitizeJson({ ...snapshot, clickedToggle: clicked });
+      const clicked = await clickHarnessToggleForEvidenceExport(
+        page,
+        snapshot.harnessToggleLabel,
+        options,
+      );
+      clickedHarnessToggle = clicked;
+      if (clickedHarnessToggle.clicked) {
+        await sleep(options.intervalMs);
+        lastSnapshot = sanitizeJson({
+          ...snapshot,
+          clickedToggle: clickedHarnessToggle,
+        });
+        continue;
+      }
+      return sanitizeJson({ ...snapshot, clickedToggle: clickedHarnessToggle });
     }
     await sleep(options.intervalMs);
   }
@@ -641,6 +665,62 @@ async function openHarnessPanelForEvidenceExport(page, options) {
       sanitizeJson(lastSnapshot),
     )}`,
   );
+}
+
+async function clickHarnessToggleForEvidenceExport(page, label, options) {
+  const taskCenterToggle = page
+    .locator('[data-testid="task-center-harness-toggle"]')
+    .first();
+  if (await taskCenterToggle.isVisible().catch(() => false)) {
+    await taskCenterToggle.click({ timeout: options.timeoutMs });
+    return {
+      clicked: true,
+      label,
+      selector: '[data-testid="task-center-harness-toggle"]',
+    };
+  }
+
+  return await page.evaluate(() => {
+    const visibleElementSnapshot = (element) => {
+      const rect = element?.getBoundingClientRect();
+      const style = element ? window.getComputedStyle(element) : null;
+      return {
+        visible: Boolean(
+          element &&
+            rect &&
+            rect.width > 8 &&
+            rect.height > 8 &&
+            style?.visibility !== "hidden" &&
+            style?.display !== "none",
+        ),
+        label:
+          element?.getAttribute?.("aria-label") ||
+          element?.getAttribute?.("title") ||
+          element?.textContent ||
+          "",
+      };
+    };
+    const findVisibleButtonByLabel = (match) =>
+      Array.from(document.querySelectorAll("button")).find((button) => {
+        const buttonSnapshot = visibleElementSnapshot(button);
+        return buttonSnapshot.visible && match(buttonSnapshot.label);
+      });
+    const harnessToggle = findVisibleButtonByLabel((buttonLabel) =>
+      /打开\s*Harness|关闭\s*Harness|\bHarness\b|处理工作台/i.test(
+        buttonLabel,
+      ),
+    );
+    if (harnessToggle instanceof HTMLElement) {
+      const fallbackLabel = visibleElementSnapshot(harnessToggle).label;
+      harnessToggle.click();
+      return {
+        clicked: true,
+        label: fallbackLabel,
+        selector: "label-fallback",
+      };
+    }
+    return { clicked: false, label: "", selector: "label-fallback" };
+  });
 }
 
 async function waitForHarnessEvidenceExportButton(page, options) {
@@ -812,7 +892,31 @@ async function closeHarnessPanelAfterEvidenceExport(page, options) {
     harnessPanelVisible: Boolean(
       document.querySelector('[data-testid="harness-status-panel"]'),
     ),
+    rightSurfaceHarnessVisible: Boolean(
+      document.querySelector(
+        '[data-testid="workspace-right-surface-host"][data-surface="harness"]',
+      ),
+    ),
+    expertToggleVisible: Boolean(
+      document.querySelector('[data-testid="task-center-expert-info-toggle"]'),
+    ),
   }));
+  if (before?.rightSurfaceHarnessVisible) {
+    const clickedExpertToggle = await clickExpertInfoToggleFromRightSurface(
+      page,
+    );
+    const restoredExpertPanel = await waitForExpertPanelVisibleAfterSurfaceSwitch(
+      page,
+      options,
+    );
+    return sanitizeJson({
+      switchedToExpertSurface: true,
+      before,
+      clickedExpertToggle,
+      restoredExpertPanel,
+    });
+  }
+
   if (!before?.dialogHarnessVisible) {
     return sanitizeJson({
       skipped: true,
@@ -883,6 +987,80 @@ async function closeHarnessPanelAfterEvidenceExport(page, options) {
     closeButton: clicked,
     lastSnapshot,
   });
+}
+
+async function clickExpertInfoToggleFromRightSurface(page) {
+  return sanitizeJson(
+    await page.evaluate(() => {
+      const visibleElementSnapshot = (element) => {
+        const rect = element?.getBoundingClientRect();
+        const style = element ? window.getComputedStyle(element) : null;
+        return {
+          visible: Boolean(
+            element &&
+              rect &&
+              rect.width > 8 &&
+              rect.height > 8 &&
+              style?.visibility !== "hidden" &&
+              style?.display !== "none",
+          ),
+          label:
+            element?.getAttribute?.("aria-label") ||
+            element?.getAttribute?.("title") ||
+            element?.textContent ||
+            "",
+        };
+      };
+      const toggle = document.querySelector(
+        '[data-testid="task-center-expert-info-toggle"]',
+      );
+      const snapshot = visibleElementSnapshot(toggle);
+      if (toggle instanceof HTMLElement && snapshot.visible) {
+        toggle.scrollIntoView({ block: "center", inline: "center" });
+        toggle.click();
+        return {
+          clicked: true,
+          label: snapshot.label,
+          selector: '[data-testid="task-center-expert-info-toggle"]',
+        };
+      }
+      return {
+        clicked: false,
+        label: snapshot.label,
+        selector: '[data-testid="task-center-expert-info-toggle"]',
+      };
+    }),
+  );
+}
+
+async function waitForExpertPanelVisibleAfterSurfaceSwitch(page, options) {
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < Math.min(options.timeoutMs, 10_000)) {
+    const snapshot = await evaluatePageSnapshot(page, () => ({
+      expertPanelVisible: Boolean(
+        document.querySelector('[data-testid="expert-info-panel"]'),
+      ),
+      harnessPanelVisible: Boolean(
+        document.querySelector('[data-testid="harness-status-panel"]'),
+      ),
+      activeSurface:
+        document
+          .querySelector('[data-testid="workspace-right-surface-host"]')
+          ?.getAttribute("data-surface") ?? null,
+    }));
+    lastSnapshot = snapshot;
+    if (snapshot?.expertPanelVisible && snapshot.activeSurface === "expertInfo") {
+      return sanitizeJson(snapshot);
+    }
+    await sleep(options.intervalMs);
+  }
+
+  throw new Error(
+    `导出 Harness 证据后未能切回专家面板: ${JSON.stringify(
+      sanitizeJson(lastSnapshot),
+    )}`,
+  );
 }
 
 async function closeExpertSkillPickerAfterSelection(page, options) {

@@ -33,7 +33,7 @@ interface UseWorkspaceTaskFilesRefSyncRuntimeParams {
 }
 
 interface UseWorkspaceSoulArtifactVoiceTurnRuntimeParams {
-  generationBrief?: string | null;
+  generationBrief?: Record<string, unknown> | string | null;
   setSoulArtifactVoiceEnabledForTurn: Dispatch<SetStateAction<boolean>>;
 }
 

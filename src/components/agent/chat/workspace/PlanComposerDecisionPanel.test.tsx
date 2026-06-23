@@ -122,6 +122,36 @@ describe("PlanComposerDecisionPanel", () => {
     expect(getAdjustmentInput(container)?.getAttribute("placeholder")).toBe(
       "否，请告诉我如何调整",
     );
+    expect(
+      container.querySelector('[data-testid="plan-composer-revision-status"]'),
+    ).toBeNull();
+  });
+
+  it("带 latest plan revision 时应显示计划版本绑定状态", () => {
+    const { container } = renderPanel(
+      createRequest({
+        arguments: {
+          plan_revision_id: "proposed_plan:3",
+          source_item_id: "plan:proposed_plan:3",
+          turn_id: "turn-3",
+          plan_source: "tool",
+        },
+      }),
+    );
+    const status = container.querySelector<HTMLElement>(
+      '[data-testid="plan-composer-revision-status"]',
+    );
+
+    expect(status).toBeTruthy();
+    expect(status?.textContent).toContain("已绑定当前计划 proposed_plan:3");
+    expect(status?.getAttribute("data-plan-revision-id")).toBe(
+      "proposed_plan:3",
+    );
+    expect(status?.getAttribute("data-plan-source-item-id")).toBe(
+      "plan:proposed_plan:3",
+    );
+    expect(status?.getAttribute("data-plan-turn-id")).toBe("turn-3");
+    expect(status?.getAttribute("data-plan-source")).toBe("tool");
   });
 
   it("默认提交第一个选项", () => {

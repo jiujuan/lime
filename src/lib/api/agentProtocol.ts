@@ -409,6 +409,62 @@ export interface AgentEventThinkingDelta {
   text: string;
 }
 
+export interface AgentEventReasoningStarted {
+  type: "reasoning_started";
+  reasoningId?: string;
+  model?: unknown;
+  providerMetadata?: Record<string, unknown>;
+}
+
+export interface AgentEventReasoningDelta {
+  type: "reasoning_delta";
+  reasoningId?: string;
+  text: string;
+  delta?: string;
+  model?: unknown;
+  providerMetadata?: Record<string, unknown>;
+}
+
+export interface AgentEventReasoningFinal {
+  type: "reasoning_final";
+  reasoningId?: string;
+  text: string;
+  model?: unknown;
+  providerMetadata?: Record<string, unknown>;
+}
+
+export interface AgentEventReasoningEnded {
+  type: "reasoning_ended";
+  reasoningId?: string;
+  status?: string;
+  model?: unknown;
+  providerMetadata?: Record<string, unknown>;
+}
+
+export interface AgentEventPlanDelta {
+  type: "plan_delta";
+  text: string;
+  delta?: string;
+  plan?: unknown;
+  explanation?: string;
+  sourceItemId?: string;
+  toolCallId?: string;
+  revisionId?: string;
+  source?: string;
+}
+
+export interface AgentEventPlanFinal {
+  type: "plan_final";
+  text: string;
+  delta?: string;
+  plan?: unknown;
+  explanation?: string;
+  sourceItemId?: string;
+  toolCallId?: string;
+  revisionId?: string;
+  source?: string;
+}
+
 export interface AgentEventToolStart {
   type: "tool_start";
   tool_name: string;
@@ -545,6 +601,20 @@ export interface AgentEventModelChange {
   type: "model_change";
   model: string;
   mode: string;
+}
+
+export interface AgentEventModelEffective {
+  type: "model_effective";
+  model?: unknown;
+  modelRef?: unknown;
+  provider?: string;
+  modelName?: string;
+  source?: string;
+  serviceModelSlot?: string;
+  reasoning?: unknown;
+  capability?: unknown;
+  toolCalling?: unknown;
+  requestedReasoningEffort?: string;
 }
 
 export interface AgentRuntimeStatusMetadata {
@@ -797,6 +867,12 @@ export type AgentEvent = (
   | AgentEventTextDelta
   | AgentEventTextDeltaBatch
   | AgentEventThinkingDelta
+  | AgentEventReasoningStarted
+  | AgentEventReasoningDelta
+  | AgentEventReasoningFinal
+  | AgentEventReasoningEnded
+  | AgentEventPlanDelta
+  | AgentEventPlanFinal
   | AgentEventToolStart
   | AgentEventToolEnd
   | AgentEventToolProgress
@@ -807,6 +883,7 @@ export type AgentEvent = (
   | AgentEventActionResolved
   | AgentEventTurnContext
   | AgentEventModelChange
+  | AgentEventModelEffective
   | AgentEventContextTrace
   | AgentEventRuntimeStatus
   | AgentEventTaskProfileResolved
@@ -1149,12 +1226,96 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
               : "provider",
       };
     }
-    case "reasoning_delta":
     case "thinking_delta":
       return {
         type: "thinking_delta",
         text: (event.text as string) || "",
       };
+    case "reasoning_started":
+    case "reasoning.started":
+    case "reasoning.start": {
+      const payload = normalizeRecord(event.payload);
+      const source = payload ?? event;
+      return {
+        type: "reasoning_started",
+        reasoningId: pickStringField(source, "reasoningId", "reasoning_id", "id"),
+        model: source.model,
+        providerMetadata:
+          normalizeRecord(source.providerMetadata) ??
+          normalizeRecord(source.provider_metadata),
+      };
+    }
+    case "reasoning_delta":
+    case "reasoning.delta": {
+      const payload = normalizeRecord(event.payload);
+      const source = payload ?? event;
+      return {
+        type: "reasoning_delta",
+        reasoningId: pickStringField(source, "reasoningId", "reasoning_id", "id"),
+        text: pickStringField(source, "text", "delta", "message", "content") || "",
+        delta: pickStringField(source, "delta", "text", "message", "content"),
+        model: source.model,
+        providerMetadata:
+          normalizeRecord(source.providerMetadata) ??
+          normalizeRecord(source.provider_metadata),
+      };
+    }
+    case "reasoning_final":
+    case "reasoning.final": {
+      const payload = normalizeRecord(event.payload);
+      const source = payload ?? event;
+      return {
+        type: "reasoning_final",
+        reasoningId: pickStringField(source, "reasoningId", "reasoning_id", "id"),
+        text: pickStringField(source, "text", "delta", "message", "content") || "",
+        model: source.model,
+        providerMetadata:
+          normalizeRecord(source.providerMetadata) ??
+          normalizeRecord(source.provider_metadata),
+      };
+    }
+    case "reasoning_ended":
+    case "reasoning.ended":
+    case "reasoning.end": {
+      const payload = normalizeRecord(event.payload);
+      const source = payload ?? event;
+      return {
+        type: "reasoning_ended",
+        reasoningId: pickStringField(source, "reasoningId", "reasoning_id", "id"),
+        status: pickStringField(source, "status"),
+        model: source.model,
+        providerMetadata:
+          normalizeRecord(source.providerMetadata) ??
+          normalizeRecord(source.provider_metadata),
+      };
+    }
+    case "plan_delta":
+    case "plan.delta":
+    case "plan_final":
+    case "plan.final": {
+      const payload = normalizeRecord(event.payload);
+      const source = payload ?? event;
+      const isFinal = type === "plan_final" || type === "plan.final";
+      const planEvent = {
+        text: pickStringField(source, "text", "delta", "message", "content") || "",
+        delta: pickStringField(source, "delta", "text", "message", "content"),
+        plan: source.plan,
+        explanation: pickStringField(source, "explanation"),
+        sourceItemId: pickStringField(source, "sourceItemId", "source_item_id"),
+        toolCallId: pickStringField(source, "toolCallId", "tool_call_id"),
+        revisionId: pickStringField(source, "revisionId", "revision_id"),
+        source: pickStringField(source, "source"),
+      };
+      return isFinal
+        ? {
+            type: "plan_final",
+            ...planEvent,
+          }
+        : {
+            type: "plan_delta",
+            ...planEvent,
+          };
+    }
     case "tool_start":
     case "tool_started":
     case "tool.started":
@@ -1364,6 +1525,38 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
         model: (event.model as string) || "",
         mode: (event.mode as string) || "",
       };
+    case "model_effective":
+    case "model.effective": {
+      const payload = normalizeRecord(event.payload);
+      const source = payload ?? event;
+      return {
+        type: "model_effective",
+        model: source.model,
+        modelRef: source.modelRef ?? source.model_ref,
+        provider: pickStringField(source, "provider", "providerId", "provider_id"),
+        modelName: pickStringField(
+          source,
+          "modelName",
+          "model_name",
+          "modelId",
+          "model_id",
+        ),
+        source: pickStringField(source, "source"),
+        serviceModelSlot: pickStringField(
+          source,
+          "serviceModelSlot",
+          "service_model_slot",
+        ),
+        reasoning: source.reasoning,
+        capability: source.capability,
+        toolCalling: source.toolCalling ?? source.tool_calling,
+        requestedReasoningEffort: pickStringField(
+          source,
+          "requestedReasoningEffort",
+          "requested_reasoning_effort",
+        ),
+      };
+    }
     case "context_trace":
       return {
         type: "context_trace",

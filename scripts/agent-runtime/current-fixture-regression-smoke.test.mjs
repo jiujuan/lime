@@ -62,6 +62,23 @@ describe("agent runtime current fixture regression smoke guard", () => {
     expect(content).toContain("停止后同会话继续输出 Electron fixture");
   });
 
+  it("runs the real Electron Plan history hydrate Claw fixture", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain("Claw Plan revisioned history hydrate Electron fixture");
+    expect(content).toContain(
+      "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
+    );
+    expect(content).toContain("--scenario");
+    expect(content).toContain("plan");
+    expect(content).toContain(
+      "claw-chat-current-fixture-plan-history-hydrate-regression",
+    );
+    expect(content).toContain(
+      "Plan revisioned thread item + history hydrate Electron fixture",
+    );
+  });
+
   it("runs the real Coding Workbench Electron fixture in the current regression set", () => {
     const content = readSmokeScript();
 
@@ -77,6 +94,17 @@ describe("agent runtime current fixture regression smoke guard", () => {
     expect(content).toContain(
       "真实 GUI coding 输入到 Coding Workbench Electron fixture",
     );
+  });
+
+  it("keeps the aggregate fixture smoke diagnosable and app-url aware", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain("function printHelp()");
+    expect(content).toContain('arg === "-h" || arg === "--help"');
+    expect(content).toContain("--app-url <url>");
+    expect(content).toContain("function nodeSmokeArgs(args, options)");
+    expect(content).toContain('"--app-url", options.appUrl');
+    expect(content).toContain("args: resolvedArgs");
   });
 
   it("does not opt into live provider or mock backend evidence", () => {

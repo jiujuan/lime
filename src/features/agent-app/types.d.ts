@@ -17,7 +17,11 @@ export interface RuntimePackageDeclaration {
         hash?: string;
     };
     worker?: {
-        path: string;
+        path?: string;
+        entrypoint?: string;
+        contract?: string;
+        sampleRequest?: string;
+        outputArtifactKind?: string;
         hash?: string;
     };
     storage?: {
@@ -187,7 +191,11 @@ export interface NormalizedRuntimePackage {
         hash?: string;
     };
     worker?: {
-        path: string;
+        path?: string;
+        entrypoint?: string;
+        contract?: string;
+        sampleRequest?: string;
+        outputArtifactKind?: string;
         hash?: string;
     };
     storage?: {
@@ -215,7 +223,7 @@ export interface NormalizedAppEntry {
     enabledByDefault: boolean;
 }
 export interface NormalizedAppManifest {
-    manifestVersion: "0.2" | "0.3" | "0.5" | "0.6" | "0.7";
+    manifestVersion: "0.2" | "0.3" | "0.5" | "0.6" | "0.7" | "0.8" | "0.9" | "0.10" | "0.11";
     appId: string;
     displayName: string;
     version: string;

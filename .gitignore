@@ -61,6 +61,7 @@ internal/exec-plans/*
 !internal/exec-plans/production-command-current-migration-plan.md
 !internal/exec-plans/tech-debt-tracker.md
 !internal/exec-plans/right-surface-implementation-progress.md
+!internal/exec-plans/agent-app-host-v3-implementation.md
 !internal/exec-plans/agent-app-uninstall-current-ui-progress.md
 !internal/exec-plans/p16-diagnostics-current-fail-closed-progress.md
 !internal/exec-plans/tauri-wrapper-quick-cleanup-queue.md
@@ -68,6 +69,7 @@ internal/exec-plans/*
 !internal/exec-plans/db-slimming-codex-alignment-plan.md
 !internal/exec-plans/models-runtime-unification-plan.md
 !internal/exec-plans/mcp-modernization-progress.md
+!internal/exec-plans/plan-runtime-implementation-progress.md
 internal/roadmap/**
 !internal/roadmap/
 !internal/roadmap/db/
@@ -101,6 +103,9 @@ internal/roadmap/rightsurface/**
 !internal/roadmap/models/
 internal/roadmap/models/**
 !internal/roadmap/models/*.md
+!internal/roadmap/plan/
+internal/roadmap/plan/**
+!internal/roadmap/plan/*.md
 !internal/roadmap/test/
 internal/roadmap/test/**
 !internal/roadmap/test/*.md
@@ -151,6 +156,8 @@ internal/roadmap/i18n/**
 !internal/roadmap/agentapp/
 internal/roadmap/agentapp/**
 !internal/roadmap/agentapp/*.md
+!internal/roadmap/agentapp/v3/
+!internal/roadmap/agentapp/v3/*.md
 !internal/roadmap/agentworkbench/
 internal/roadmap/agentworkbench/**
 !internal/roadmap/agentworkbench/*.md

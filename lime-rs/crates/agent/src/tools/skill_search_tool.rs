@@ -30,7 +30,7 @@ impl Tool for SkillSearchTool {
     }
 
     fn description(&self) -> &str {
-        "Search available Agent Skills by lightweight metadata. Returns matching skill names, scopes, locators, and reasons only; it does not read SKILL.md bodies, enable SkillTool, or expand tool permissions."
+        "Search available Agent Skills by lightweight metadata. For expert-bound or workspace-enabled skill candidates, call this before Skill so the selector evidence is recorded. Returns matching skill names, scopes, locators, and reasons only; it does not read SKILL.md bodies, enable SkillTool, or expand tool permissions."
     }
 
     fn input_schema(&self) -> Value {

@@ -125,6 +125,21 @@ export { parseManifest, AgentAppManifestError } from "./manifest/parseManifest";
 export { normalizeManifest } from "./manifest/normalizeManifest";
 export { projectApp } from "./projection/projectApp";
 export { checkReadiness } from "./readiness/checkReadiness";
+export {
+  buildAgentAppHostLifecycleSnapshot,
+  buildAgentAppRightSurfaceContract,
+} from "./host";
+export type {
+  AgentAppHostFunctionKey,
+  AgentAppHostFunctionState,
+  AgentAppHostFunctionStatus,
+  AgentAppHostLifecycleSnapshot,
+  AgentAppProductProfileObject,
+  AgentAppProductProfilePaneKind,
+  AgentAppRightSurfaceContract,
+  AgentAppRightSurfaceTabKind,
+  BuildAgentAppHostLifecycleSnapshotParams,
+} from "./host";
 export { p0HostCapabilityProfile } from "./readiness/hostCapabilityProfile";
 export {
   StaticRuntimeProfilePort,

@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 
 export type WorkspaceRightSurfaceKind =
   | "workbench"
+  | "appSurface"
+  | "productProfile"
   | "expertInfo"
   | "objectCanvas"
   | "files"
@@ -18,6 +20,7 @@ export type WorkspaceRightSurfaceLayoutVariant =
 export interface WorkspaceRightSurfaceState {
   activeSurface: WorkspaceRightSurfaceKind | null;
   previousSurface: WorkspaceRightSurfaceKind | null;
+  openSurfaces: readonly WorkspaceRightSurfaceKind[];
   source: WorkspaceRightSurfaceSource;
   layoutVariant: WorkspaceRightSurfaceLayoutVariant;
 }

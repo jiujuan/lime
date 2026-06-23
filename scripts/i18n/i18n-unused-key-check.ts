@@ -86,6 +86,8 @@ const DEFAULT_PROTECTED_PREFIXES = [
   "skills.workspace.marketplace.",
   "skills.workspace.sidebar.",
   "workspace.document.editor.slashCommand.",
+  "workspace.productProfile.action.",
+  "workspace.productProfile.actionPrompt.",
 ] as const;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

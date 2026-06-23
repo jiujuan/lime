@@ -295,6 +295,56 @@ export interface AgentEventThinkingDelta {
     type: "thinking_delta";
     text: string;
 }
+export interface AgentEventReasoningStarted {
+    type: "reasoning_started";
+    reasoningId?: string;
+    model?: unknown;
+    providerMetadata?: Record<string, unknown>;
+}
+export interface AgentEventReasoningDelta {
+    type: "reasoning_delta";
+    reasoningId?: string;
+    text: string;
+    delta?: string;
+    model?: unknown;
+    providerMetadata?: Record<string, unknown>;
+}
+export interface AgentEventReasoningFinal {
+    type: "reasoning_final";
+    reasoningId?: string;
+    text: string;
+    model?: unknown;
+    providerMetadata?: Record<string, unknown>;
+}
+export interface AgentEventReasoningEnded {
+    type: "reasoning_ended";
+    reasoningId?: string;
+    status?: string;
+    model?: unknown;
+    providerMetadata?: Record<string, unknown>;
+}
+export interface AgentEventPlanDelta {
+    type: "plan_delta";
+    text: string;
+    delta?: string;
+    plan?: unknown;
+    explanation?: string;
+    sourceItemId?: string;
+    toolCallId?: string;
+    revisionId?: string;
+    source?: string;
+}
+export interface AgentEventPlanFinal {
+    type: "plan_final";
+    text: string;
+    delta?: string;
+    plan?: unknown;
+    explanation?: string;
+    sourceItemId?: string;
+    toolCallId?: string;
+    revisionId?: string;
+    source?: string;
+}
 export interface AgentEventToolStart {
     type: "tool_start";
     tool_name: string;
@@ -415,6 +465,19 @@ export interface AgentEventModelChange {
     type: "model_change";
     model: string;
     mode: string;
+}
+export interface AgentEventModelEffective {
+    type: "model_effective";
+    model?: unknown;
+    modelRef?: unknown;
+    provider?: string;
+    modelName?: string;
+    source?: string;
+    serviceModelSlot?: string;
+    reasoning?: unknown;
+    capability?: unknown;
+    toolCalling?: unknown;
+    requestedReasoningEffort?: string;
 }
 export interface AgentRuntimeStatusMetadata {
     [key: string]: unknown;
@@ -579,7 +642,7 @@ export interface AgentEventError {
     type: "error";
     message: string;
 }
-export type AgentEvent = AgentEventThreadStarted | AgentEventTurnStarted | AgentEventItemStarted | AgentEventItemUpdated | AgentEventItemCompleted | AgentEventTurnCompleted | AgentEventTurnFailed | AgentEventTurnCanceled | AgentEventTextDelta | AgentEventTextDeltaBatch | AgentEventThinkingDelta | AgentEventToolStart | AgentEventToolEnd | AgentEventToolProgress | AgentEventToolOutputDelta | AgentEventToolInputDelta | AgentEventArtifactSnapshot | AgentEventActionRequired | AgentEventActionResolved | AgentEventTurnContext | AgentEventModelChange | AgentEventContextTrace | AgentEventRuntimeStatus | AgentEventTaskProfileResolved | AgentEventCandidateSetResolved | AgentEventRoutingDecisionMade | AgentEventRoutingFallbackApplied | AgentEventRoutingNotPossible | AgentEventLimitStateUpdated | AgentEventSingleCandidateOnly | AgentEventSingleCandidateCapabilityGap | AgentEventCostEstimated | AgentEventCostRecorded | AgentEventRateLimitHit | AgentEventQuotaLow | AgentEventQuotaBlocked | AgentEventQueueAdded | AgentEventQueueRemoved | AgentEventQueueStarted | AgentEventQueueCleared | AgentEventSubagentStatusChanged | AgentEventMessage | AgentEventWarning | AgentEventError;
+export type AgentEvent = AgentEventThreadStarted | AgentEventTurnStarted | AgentEventItemStarted | AgentEventItemUpdated | AgentEventItemCompleted | AgentEventTurnCompleted | AgentEventTurnFailed | AgentEventTurnCanceled | AgentEventTextDelta | AgentEventTextDeltaBatch | AgentEventThinkingDelta | AgentEventReasoningStarted | AgentEventReasoningDelta | AgentEventReasoningFinal | AgentEventReasoningEnded | AgentEventPlanDelta | AgentEventPlanFinal | AgentEventToolStart | AgentEventToolEnd | AgentEventToolProgress | AgentEventToolOutputDelta | AgentEventToolInputDelta | AgentEventArtifactSnapshot | AgentEventActionRequired | AgentEventActionResolved | AgentEventTurnContext | AgentEventModelChange | AgentEventModelEffective | AgentEventContextTrace | AgentEventRuntimeStatus | AgentEventTaskProfileResolved | AgentEventCandidateSetResolved | AgentEventRoutingDecisionMade | AgentEventRoutingFallbackApplied | AgentEventRoutingNotPossible | AgentEventLimitStateUpdated | AgentEventSingleCandidateOnly | AgentEventSingleCandidateCapabilityGap | AgentEventCostEstimated | AgentEventCostRecorded | AgentEventRateLimitHit | AgentEventQuotaLow | AgentEventQuotaBlocked | AgentEventQueueAdded | AgentEventQueueRemoved | AgentEventQueueStarted | AgentEventQueueCleared | AgentEventSubagentStatusChanged | AgentEventMessage | AgentEventWarning | AgentEventError;
 export interface AgentUserPreferences {
     providerConfig?: AsterProviderConfig;
     providerPreference?: string;

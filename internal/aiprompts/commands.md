@@ -217,6 +217,7 @@ Agent App current 安装 / package / UI runtime 主链不得在页面或 feature
 - `agentAppInstalled/disabled/set`
 - `agentAppInstalled/uninstall/rehearsal`
 - `agentAppInstalled/uninstall`
+- `agentAppHostLifecycle/list`
 - `agentAppShell/prepare`
 - `agentAppUiRuntime/start`
 - `agentAppUiRuntime/status`
@@ -232,6 +233,8 @@ Agent App 仍有两类 Desktop Host 壳能力保留 legacy command name，但事
 `agentAppPackage/fetchCloud` 只负责 `packageUrl -> staging/cache -> APP.md manifest extraction -> sha256 package / manifest verification`，不生成 projection、不绕过 P17.2 install review；installed state 写入只走 `agentAppInstalled/save`。Cloud / LimeCore 仍只提供 release metadata。
 
 `agentAppUiRuntime/start` 启动 App UI 子进程时只能注入 Lime 本机 Gateway 的短期 Agent App scoped token；不得把上游 Provider API Key 或全局 `server.api_key` 原样下发给 App。当前 token scope 固定为 `model-generation`，只允许 App 侧通过 `LIME_GATEWAY_BASE / LIME_ACCESS_TOKEN` 调 Lime Gateway 标准 `/v1/chat/completions` 或 `/v1/messages` 生成端点；图片、count tokens、Gemini 原生和其他控制面端点仍只接受全局 Gateway key。
+
+`agentAppUiRuntime/start/status/stop` 可以返回 `taskRuntime` readiness 合同，用于说明 installed state 中声明的 `runtimePackage.worker` / `agentRuntime.worker/tasks` 是否可被后续 Agent App task worker executor 使用。该字段只做宿主能力投影和启动链证据，不执行 worker、不下发 Provider Key、不替代 `agent_app_runtime_* -> agentSession/turn/start` 的 current task 主链。
 
 Claw / Aster 原完整执行链是 Agent 对话 runtime 的 current 参考实现，不应被前端 `agentRuntime` 模块或 Agent App UI runtime 替代。迁移方向是把 Claw 原链整体直迁到 App Server `RuntimeCore -> AsterBackend -> backend host`，让 Claw 与 Agent App 后续对话 turn 共用 `agentSession/start + agentSession/turn/start + agentSession/event + agentSession/read`。`src/lib/api/agentRuntime/*` 只允许作为前端 thin client gateway / compat projection，负责把旧 UI 形状投影到 App Server current method；它不是第二套业务 runtime，不得在其中补模型执行、事件合成、read model 拼装或 mock fallback。`agentAppUiRuntime/*` 只负责 Agent App UI 子进程 `start/status/stop/entryUrl` 生命周期，不承接对话 turn、tool runtime、evidence 或 Claw/Aster 私有请求合同。
 

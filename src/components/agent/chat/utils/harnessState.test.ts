@@ -13,7 +13,7 @@ function createMessage(overrides: Partial<Message> = {}): Message {
 }
 
 describe("deriveHarnessSessionState", () => {
-  it("应优先从 thread items 提取计划、审批与文件活动", () => {
+  it("无 revision 的历史 plan 不应再驱动运行时计划", () => {
     const messages = [
       createMessage({
         runtimeStatus: {
@@ -69,14 +69,105 @@ describe("deriveHarnessSessionState", () => {
 
     const state = deriveHarnessSessionState(messages, [], items);
 
-    expect(state.plan.phase).toBe("planning");
+    expect(state.plan.phase).toBe("idle");
     expect(state.runtimeStatus?.title).toBe("正在准备处理");
-    expect(state.plan.items).toHaveLength(2);
+    expect(state.plan.items).toHaveLength(0);
+    expect(state.plan.sourceToolCallId).toBeUndefined();
+    expect(state.plan.revisionId).toBeUndefined();
     expect(state.pendingApprovals).toHaveLength(1);
     expect(state.pendingApprovals[0]?.requestId).toBe("approval-1");
     expect(state.recentFileEvents[0]?.path).toBe("workspace/plan.md");
     expect(state.outputSignals[0]?.artifactPath).toBe("workspace/plan.md");
     expect(state.latestContextTrace).toHaveLength(1);
+  });
+
+  it("应通过标准 PlanState 从带 revision 的 plan item 恢复运行时计划", () => {
+    const messages = [createMessage()];
+    const items: AgentThreadItem[] = [
+      {
+        id: "legacy-plan-step",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        sequence: 1,
+        status: "completed",
+        started_at: "2026-03-13T12:00:00.000Z",
+        completed_at: "2026-03-13T12:00:01.000Z",
+        updated_at: "2026-03-13T12:00:01.000Z",
+        type: "plan",
+        text: "旧单步计划",
+      },
+      {
+        id: "standard-plan",
+        thread_id: "thread-1",
+        turn_id: "turn-2",
+        sequence: 2,
+        status: "completed",
+        started_at: "2026-03-13T12:00:02.000Z",
+        completed_at: "2026-03-13T12:00:03.000Z",
+        updated_at: "2026-03-13T12:00:03.000Z",
+        type: "plan",
+        text: "- [x] 建立标准状态\n- [ ] 接入运行时条",
+        metadata: {
+          revisionId: "proposed_plan:2",
+          plan: [
+            { step: "建立标准状态", status: "completed" },
+            { step: "接入运行时条", status: "pending" },
+          ],
+        },
+      },
+    ];
+
+    const state = deriveHarnessSessionState(messages, [], items);
+
+    expect(state.plan).toEqual({
+      phase: "ready",
+      items: [
+        {
+          id: "standard-plan:1",
+          content: "建立标准状态",
+          status: "completed",
+        },
+        {
+          id: "standard-plan:2",
+          content: "接入运行时条",
+          status: "pending",
+        },
+      ],
+      sourceToolCallId: "standard-plan",
+      summaryText: undefined,
+      revisionId: "proposed_plan:2",
+      turnId: "turn-2",
+      source: "thread_item",
+    });
+  });
+
+  it("应通过标准 ReasoningState 从 reasoning item 恢复运行时思考状态", () => {
+    const messages = [createMessage()];
+    const items: AgentThreadItem[] = [
+      {
+        id: "reasoning-1",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        sequence: 1,
+        status: "in_progress",
+        started_at: "2026-03-13T12:00:00.000Z",
+        updated_at: "2026-03-13T12:00:01.000Z",
+        type: "reasoning",
+        text: "先拆解用户意图，再确认计划状态。",
+      },
+    ];
+
+    const state = deriveHarnessSessionState(messages, [], items);
+
+    expect(state.reasoning).toEqual({
+      reasoning: {
+        supported: true,
+        status: "running",
+        reasoningId: "reasoning-1",
+        text: "先拆解用户意图，再确认计划状态。",
+      },
+    });
+    expect(state.hasSignals).toBe(true);
   });
 
   it("应从消息 artifacts 提取当前文件写入状态", () => {

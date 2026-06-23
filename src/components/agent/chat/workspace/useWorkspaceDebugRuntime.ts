@@ -26,7 +26,7 @@ export interface WorkspaceDebugStateSnapshot {
   skillsCount: number;
   skillsLoading: boolean;
   topicsCount: number;
-  workspaceHealthError: string | null;
+  workspaceHealthError: boolean;
 }
 
 export interface UseWorkspaceDebugRuntimeParams extends WorkspaceDebugMountContext {
@@ -121,9 +121,14 @@ export function useWorkspaceDebugRuntime({
   ]);
 
   useEffect(() => {
-    logAgentDebug(AGENT_CHAT_DEBUG_COMPONENT, "stateSnapshot", stateSnapshot, {
-      dedupeKey: buildWorkspaceDebugStateSnapshotDedupeKey(stateSnapshot),
-      throttleMs: 800,
-    });
+    logAgentDebug(
+      AGENT_CHAT_DEBUG_COMPONENT,
+      "stateSnapshot",
+      { ...stateSnapshot },
+      {
+        dedupeKey: buildWorkspaceDebugStateSnapshotDedupeKey(stateSnapshot),
+        throttleMs: 800,
+      },
+    );
   }, [stateSnapshot]);
 }

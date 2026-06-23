@@ -11,6 +11,51 @@ const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, "../..");
 const LOG_PREFIX = "smoke:agent-runtime-current-fixture";
 
+function printHelp() {
+  console.log(`
+Agent Runtime Current Fixture Regression Smoke
+
+用途:
+  聚合 current Agent Runtime / Claw GUI fixture 回归，验证 GUI 输入框、Electron
+  Desktop Host bridge、App Server JSON-RPC 与 fixture backend 的 current 主链。
+
+用法:
+  node scripts/agent-runtime/current-fixture-regression-smoke.mjs [选项]
+
+选项:
+  --app-url <url>  可选 renderer dev server，例如 http://127.0.0.1:1420/
+  -h, --help       显示帮助
+`);
+}
+
+function parseArgs(argv) {
+  const options = {
+    appUrl: "",
+  };
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    const next = argv[index + 1];
+    if (arg === "-h" || arg === "--help") {
+      printHelp();
+      process.exit(0);
+    }
+    if (arg === "--app-url" && next) {
+      options.appUrl = next.trim();
+      index += 1;
+      continue;
+    }
+    throw new Error(`未知参数: ${arg}`);
+  }
+  return options;
+}
+
+function nodeSmokeArgs(args, options) {
+  if (!options.appUrl) {
+    return args;
+  }
+  return [args[0], "--app-url", options.appUrl, ...args.slice(1)];
+}
+
 function runVitest(label, args) {
   return runVitestSmoke({
     rootDir,
@@ -24,11 +69,12 @@ function runVitest(label, args) {
   });
 }
 
-function runNodeSmoke(label, args) {
+function runNodeSmoke(label, args, options) {
   const startedAt = Date.now();
+  const resolvedArgs = nodeSmokeArgs(args, options);
 
   console.log(`\n[${LOG_PREFIX}] > ${label}`);
-  const result = spawnSync(process.execPath, args, {
+  const result = spawnSync(process.execPath, resolvedArgs, {
     cwd: rootDir,
     stdio: "inherit",
     env: {
@@ -52,11 +98,13 @@ function runNodeSmoke(label, args) {
     label,
     status: "pass",
     durationMs: Date.now() - startedAt,
-    args,
+    args: resolvedArgs,
   };
 }
 
 function main() {
+  const options = parseArgs(process.argv.slice(2));
+
   runVitest("Agent 历史/缓存终态恢复", [
     "src/components/agent/chat/hooks/agentChatHistory.test.ts",
     "src/components/agent/chat/hooks/agentSessionScopedStorage.test.ts",
@@ -89,7 +137,7 @@ function main() {
     "code-artifact-workbench-gui-coding-input-regression",
     "--timeout-ms",
     "180000",
-  ]);
+  ], options);
 
   runNodeSmoke("Claw 停止后同会话继续输出 Electron fixture", [
     "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
@@ -99,7 +147,17 @@ function main() {
     "claw-chat-current-fixture-cancel-then-continue-regression",
     "--timeout-ms",
     "180000",
-  ]);
+  ], options);
+
+  runNodeSmoke("Claw Plan revisioned history hydrate Electron fixture", [
+    "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
+    "--scenario",
+    "plan",
+    "--prefix",
+    "claw-chat-current-fixture-plan-history-hydrate-regression",
+    "--timeout-ms",
+    "180000",
+  ], options);
 
   runNodeSmoke("Claw Skills Runtime natural + explicit $skill + Skills workspace try Electron fixture", [
     "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
@@ -109,7 +167,7 @@ function main() {
     "claw-chat-current-fixture-skills-runtime-regression",
     "--timeout-ms",
     "180000",
-  ]);
+  ], options);
 
   runNodeSmoke("Claw MCP structuredContent Agent Chat GUI Electron fixture", [
     "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
@@ -119,7 +177,7 @@ function main() {
     "claw-chat-current-fixture-mcp-structured-content-regression",
     "--timeout-ms",
     "180000",
-  ]);
+  ], options);
 
   runNodeSmoke("Claw Expert Skills Runtime declared + selected + invoked Electron fixture", [
     "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
@@ -129,7 +187,7 @@ function main() {
     "claw-chat-current-fixture-expert-skills-runtime-regression",
     "--timeout-ms",
     "180000",
-  ]);
+  ], options);
 
   runNodeSmoke("Claw Expert Plaza Skills Runtime click-through Electron fixture", [
     "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
@@ -139,7 +197,7 @@ function main() {
     "claw-chat-current-fixture-expert-plaza-skills-runtime-regression",
     "--timeout-ms",
     "180000",
-  ]);
+  ], options);
 
   runNodeSmoke("Claw Expert Panel Skills Runtime override Electron fixture", [
     "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
@@ -149,10 +207,10 @@ function main() {
     "claw-chat-current-fixture-expert-panel-skills-runtime-regression",
     "--timeout-ms",
     "180000",
-  ]);
+  ], options);
 
   console.log(
-    `[${LOG_PREFIX}] summary: current Agent Runtime fixture regression 已覆盖 history/cache hydration、final_done 工具收尾、failed read model、Claw 终态 UI、Electron fixture guard、真实 GUI coding 输入到 Coding Workbench Electron fixture、Claw GUI current fixture guard、停止后同会话继续输出 Electron fixture、Skills Runtime natural + 显式 $skill + 技能中心试用入口三入口按需加载 Electron fixture、MCP structuredContent 到 Agent Chat GUI 可见 Electron fixture、Expert Skills Runtime declared + selected + invoked Electron fixture、Expert Plaza 点击专家卡片进入同一 Skills Runtime 闭环 Electron fixture、ExpertInfoPanel 调整 skillRefs 后下一轮继承同一 Skills Runtime 闭环并展示 Evidence Pack 复盘 Electron fixture；liveProviderUsed=false`,
+    `[${LOG_PREFIX}] summary: current Agent Runtime fixture regression 已覆盖 history/cache hydration、final_done 工具收尾、failed read model、Claw 终态 UI、Electron fixture guard、真实 GUI coding 输入到 Coding Workbench Electron fixture、Claw GUI current fixture guard、停止后同会话继续输出 Electron fixture、Plan revisioned thread item + history hydrate Electron fixture、Skills Runtime natural + 显式 $skill + 技能中心试用入口三入口按需加载 Electron fixture、MCP structuredContent 到 Agent Chat GUI 可见 Electron fixture、Expert Skills Runtime declared + selected + invoked Electron fixture、Expert Plaza 点击专家卡片进入同一 Skills Runtime 闭环 Electron fixture、ExpertInfoPanel 调整 skillRefs 后下一轮继承同一 Skills Runtime 闭环并展示 Evidence Pack 复盘 Electron fixture；liveProviderUsed=false`,
   );
   console.log(`\n[${LOG_PREFIX}] 通过`);
 }

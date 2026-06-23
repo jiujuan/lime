@@ -10,6 +10,7 @@ import {
   type AgentSessionTurnStartResponse,
   METHOD_INITIALIZE,
   METHOD_INITIALIZED,
+  METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED,
   readReleaseManifest,
   resolveSidecarFromReleaseManifest,
   stdioSidecar,
@@ -210,7 +211,10 @@ export class ElectronAppServerHost {
         version: app.getVersion(),
       },
       capabilities: {
-        eventMethods: ["agentSession/event"],
+        eventMethods: [
+          "agentSession/event",
+          METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED,
+        ],
         experimental: true,
       },
     };

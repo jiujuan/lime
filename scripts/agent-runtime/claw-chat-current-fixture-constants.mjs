@@ -81,7 +81,8 @@ export const DEFAULTS = {
 };
 
 export const LOG_PREFIX = "[smoke:claw-chat-current-fixture]";
-export const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
+export const APP_SERVER_HANDLE_JSON_LINES_COMMAND =
+  "app_server_handle_json_lines";
 export const APP_SERVER_DRAIN_EVENTS_COMMAND = "app_server_drain_events";
 export const APP_SERVER_METHOD_INITIALIZE = "initialize";
 export const APP_SERVER_METHOD_INITIALIZED = "initialized";
@@ -91,10 +92,18 @@ export const APP_SERVER_METHOD_SESSION_UPDATE = "agentSession/update";
 export const APP_SERVER_METHOD_SESSION_TURN_START = "agentSession/turn/start";
 export const APP_SERVER_METHOD_SESSION_TURN_CANCEL = "agentSession/turn/cancel";
 export const APP_SERVER_METHOD_SESSION_READ = "agentSession/read";
-export const APP_SERVER_METHOD_SESSION_THREAD_RESUME = "agentSession/thread/resume";
+export const APP_SERVER_METHOD_SESSION_THREAD_RESUME =
+  "agentSession/thread/resume";
 export const APP_SERVER_METHOD_SESSION_LIST = "agentSession/list";
 export const APP_SERVER_METHOD_EVIDENCE_EXPORT = "evidence/export";
-export const APP_SERVER_METHOD_WORKSPACE_DEFAULT_ENSURE = "workspace/default/ensure";
+export const APP_SERVER_METHOD_WORKSPACE_DEFAULT_ENSURE =
+  "workspace/default/ensure";
+export const APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST =
+  "workspaceRightSurface/request";
+export const APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_LIST =
+  "workspaceRightSurface/pending/list";
+export const RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO =
+  "right-surface-visual-matrix";
 export const NEWS_PROMPT = "整理今天的国际新闻";
 export const CONTINUE_PROMPT = "继续输出";
 export const PLAN_PROMPT = "先给我一个修复计划，不要直接改代码";
@@ -106,13 +115,23 @@ export const CONTINUE_DONE_TEXT = "CLAW_CONTINUE_FIXTURE_DONE";
 export const PLAN_DONE_TEXT = "CLAW_PLAN_FIXTURE_DONE";
 export const GOAL_DONE_TEXT = "CLAW_GOAL_FIXTURE_DONE";
 export const WEB_TOOLS_RENDERING_DONE_TEXT = "CLAW_WEB_TOOLS_RENDERING_DONE";
-export const MCP_STRUCTURED_CONTENT_DONE_TEXT = "CLAW_MCP_STRUCTURED_CONTENT_DONE";
+export const MCP_STRUCTURED_CONTENT_DONE_TEXT =
+  "CLAW_MCP_STRUCTURED_CONTENT_DONE";
 export const WEB_TOOLS_SEARCH_TITLE = "Lime WebSearch Rendering Source";
-export const WEB_TOOLS_SEARCH_URL = "https://example.com/lime-websearch-rendering";
-export const WEB_TOOLS_SEARCH_SOURCE_LABEL = "example.com/lime-websearch-rendering";
-export const WEB_TOOLS_SEARCH_SNIPPET = "Search source used to verify inline rendering";
+export const WEB_TOOLS_SEARCH_URL =
+  "https://example.com/lime-websearch-rendering";
+export const WEB_TOOLS_SEARCH_SOURCE_LABEL =
+  "example.com/lime-websearch-rendering";
+export const WEB_TOOLS_SEARCH_SNIPPET =
+  "Search source used to verify inline rendering";
 export const WEB_TOOLS_MID_THINKING_TEXT =
   "搜索结果还需要继续筛掉广告软文，我先读取有效来源。";
+export const WEB_TOOLS_REASONING_FINAL_SIGNATURE =
+  "web-tools-reasoning-final-signature";
+export const WEB_TOOLS_REASONING_ITEM_SIGNATURE =
+  "web-tools-reasoning-item-signature";
+export const WEB_TOOLS_REASONING_NATIVE_ITEM_ID = "rs_web_tools_fixture";
+export const WEB_TOOLS_REASONING_PROVIDER_BACKEND = "codex";
 export const WEB_TOOLS_FETCH_MARKDOWN =
   "WebFetch 正文摘要：页面确认搜索来源可以展开，同时最终正文继续输出。";
 export const WEB_TOOLS_BROKEN_MARKDOWN_TEXT = [
@@ -139,11 +158,13 @@ export const SESSION_ID = `claw-chat-current-${Date.now()}-${process.pid}`;
 export const THREAD_ID = `${SESSION_ID}-thread`;
 export const SESSION_TITLE = "Claw 新闻输入 Electron fixture";
 export const WEB_TOOLS_SEARCH_TOOL_CALL_ID = `${SESSION_ID}:tool:websearch-rendering`;
+export const WEB_TOOLS_REASONING_FINAL_ID = `${SESSION_ID}:reasoning:web-tools-rendering-final`;
 export const WEB_TOOLS_REASONING_ITEM_ID = `${SESSION_ID}:reasoning:web-tools-rendering`;
 export const WEB_TOOLS_FETCH_TOOL_CALL_ID = `${SESSION_ID}:tool:webfetch-rendering`;
 export const MCP_STRUCTURED_CONTENT_TOOL_CALL_ID = `${SESSION_ID}:tool:mcp-structured-content`;
 export const MCP_STRUCTURED_CONTENT_TOOL_NAME = "mcp__docs__diagnostic_probe";
-export const MCP_STRUCTURED_CONTENT_TOOL_DISPLAY_LABEL = "docs / diagnostic probe";
+export const MCP_STRUCTURED_CONTENT_TOOL_DISPLAY_LABEL =
+  "docs / diagnostic probe";
 export const MCP_STRUCTURED_CONTENT_ANSWER =
   "MCP 结构化答案已进入 Agent Chat GUI";
 export const MCP_STRUCTURED_CONTENT_REFERENCE_ID = "doc-structured-1";
@@ -179,8 +200,8 @@ export const EXPERT_PANEL_SKILLS_RUNTIME_SCENARIO =
   createExpertPanelSkillsRuntimeFixtureScenario(SESSION_ID);
 export const EXPERT_SKILLS_RUNTIME_SESSION_ID = `${SESSION_ID}-expert-skills`;
 export const EXPERT_SKILLS_RUNTIME_THREAD_ID = `${EXPERT_SKILLS_RUNTIME_SESSION_ID}-thread`;
-export const EXPERT_SKILLS_RUNTIME_TURN_ID = `${EXPERT_SKILLS_RUNTIME_SESSION_ID}-turn`;
-export const EXPERT_SKILLS_RUNTIME_SESSION_TITLE = "专家 Skills Runtime Fixture";
+export const EXPERT_SKILLS_RUNTIME_SESSION_TITLE =
+  "专家 Skills Runtime Fixture";
 export const EVENT_READ_PROBE_PROMPT =
   "验证 agentSession/event 与 read model 同 turn 对齐。";
 export const EVENT_READ_PROBE_TURN_ID = `${SESSION_ID}-event-read-probe`;
@@ -202,6 +223,8 @@ export const WEB_TOOLS_RENDERING_ASSERTION_KEYS = [
   "guiWebSearchFinalTextInterleaved",
   "guiWebFetchTransportEnvelopeHidden",
   "readModelWebToolsRenderingCompleted",
+  "readModelWebToolsReasoningProviderMetadataPreserved",
+  "guiWebToolsReasoningDidNotOpenPlanRail",
 ];
 export const MCP_STRUCTURED_CONTENT_ASSERTION_KEYS = [
   "mcpStructuredContentPromptReachedBackend",
@@ -210,4 +233,14 @@ export const MCP_STRUCTURED_CONTENT_ASSERTION_KEYS = [
   "guiMcpStructuredContentEnvelopeHidden",
   "readModelMcpStructuredContentCompleted",
   "readModelMcpStructuredContentObserved",
+];
+export const RIGHT_SURFACE_VISUAL_MATRIX_ASSERTION_KEYS = [
+  "rightSurfaceVisualMatrixRequestedThroughAppServer",
+  "rightSurfaceVisualMatrixFilesSurfaceVisible",
+  "rightSurfaceVisualMatrixObjectCanvasSurfaceVisible",
+  "rightSurfaceVisualMatrixExpertSurfaceVisible",
+  "rightSurfaceVisualMatrixSurfacesMutuallyExclusive",
+  "rightSurfaceVisualMatrixHostsFillRightSide",
+  "rightSurfaceVisualMatrixPendingConsumeKeepsSurfaceOpen",
+  "rightSurfaceVisualMatrixDoesNotUseModelTurn",
 ];

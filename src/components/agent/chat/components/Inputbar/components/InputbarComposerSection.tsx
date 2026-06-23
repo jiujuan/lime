@@ -40,7 +40,12 @@ import type {
   WorkflowQuickAction,
   WorkflowStep,
 } from "../../../utils/workflowInputState";
-import { MetaIconButton } from "../styles";
+import {
+  MetaIconButton,
+  PlanModeContext,
+  PlanModeContextSegment,
+  PlanModeContextSeparator,
+} from "../styles";
 import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
 
 interface InputbarComposerSectionProps {
@@ -235,10 +240,22 @@ export const InputbarComposerSection: React.FC<
   const handleToolAction = (tool: string) => {
     onToolClick(tool);
   };
-  const planModeStatusLabel = copy.plusMenu.planMode
-    .replace(/模式$/, "")
-    .replace(/ mode$/i, "");
+  const planModeStatusLabel = copy.planStatus.label;
   const objectiveStatusLabel = copy.plusMenu.objective;
+  const planStatusModelLabel = resolvedModel?.trim()
+    ? copy.planStatus.model(resolvedModel.trim())
+    : copy.planStatus.modelFallback;
+  const planStatusReasoningLevel = resolvedReasoningEffort
+    ? copy.planStatus.reasoningLevels[resolvedReasoningEffort]
+    : copy.planStatus.reasoningDefault;
+  const planStatusReasoningLabel = copy.planStatus.reasoning(
+    planStatusReasoningLevel,
+  );
+  const planStatusTitle = [
+    copy.plusMenu.planMode,
+    planStatusModelLabel,
+    planStatusReasoningLabel,
+  ].join(" · ");
   const plusMenuKnowledgePanel =
     knowledgePackSelection || onStartKnowledgeOrganize ? (
       <InputbarKnowledgeControl
@@ -297,11 +314,25 @@ export const InputbarComposerSection: React.FC<
       />
 
       {activeTools["task_mode"] ? (
-        <InputbarModeStatusChip
-          label={planModeStatusLabel}
-          testId="inputbar-task-mode-status"
-          onRemove={() => handleToolAction("task_mode")}
-        />
+        <>
+          <InputbarModeStatusChip
+            label={planModeStatusLabel}
+            testId="inputbar-task-mode-status"
+            onRemove={() => handleToolAction("task_mode")}
+          />
+          <PlanModeContext
+            data-testid="inputbar-plan-mode-context"
+            title={planStatusTitle}
+          >
+            <PlanModeContextSegment>
+              {planStatusModelLabel}
+            </PlanModeContextSegment>
+            <PlanModeContextSeparator aria-hidden>·</PlanModeContextSeparator>
+            <PlanModeContextSegment>
+              {planStatusReasoningLabel}
+            </PlanModeContextSegment>
+          </PlanModeContext>
+        </>
       ) : null}
 
       {activeTools["objective_mode"] ? (

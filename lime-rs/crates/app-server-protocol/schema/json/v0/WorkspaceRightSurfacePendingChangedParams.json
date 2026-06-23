@@ -1,0 +1,145 @@
+{
+  "$defs": {
+    "WorkspaceRightSurfacePendingRequest": {
+      "properties": {
+        "candidateId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "expiresAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "metadata": true,
+        "origin": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "string"
+        },
+        "reason": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "requestedAt": {
+          "type": "string"
+        },
+        "sessionId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "status": {
+          "type": "string"
+        },
+        "surfaceKind": {
+          "type": "string"
+        },
+        "ttlMs": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "workspaceId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "workspaceRoot": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "origin",
+        "priority",
+        "requestId",
+        "requestedAt",
+        "status",
+        "surfaceKind"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "changeType": {
+      "type": "string"
+    },
+    "consumedRequestIds": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "dismissedRequestIds": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "missingRequestIds": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "pending": {
+      "items": {
+        "$ref": "#/$defs/WorkspaceRightSurfacePendingRequest"
+      },
+      "type": "array"
+    },
+    "requestIds": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "sessionId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "surfaceKind": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "workspaceId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "workspaceRoot": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "changeType"
+  ],
+  "title": "WorkspaceRightSurfacePendingChangedParams",
+  "type": "object"
+}

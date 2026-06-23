@@ -90,7 +90,6 @@ function createBaseParams(overrides: Record<string, unknown> = {}) {
       shouldShowGeneralWorkbenchFloatingInputOverlay: false,
       shouldRenderInlineA2UI: false,
     },
-    generalWorkbenchHarnessDialog: undefined,
     entryBannerVisible: false,
     entryBannerMessage: undefined,
     sceneAppExecutionSummaryCard: undefined,

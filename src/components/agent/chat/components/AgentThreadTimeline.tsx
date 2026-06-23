@@ -41,7 +41,6 @@ import {
   resolveExpandedBlockIndexes,
   resolveBlockSummaryLines,
   resolveProcessMixLabel,
-  isInternalThinkingPreviewLine,
   resolveThreadInlineStatusHint,
   resolvePendingRuntimeConfirmationPrompt,
   hasSubmittedRuntimeActionConfirmation,
@@ -273,11 +272,8 @@ function TimelineBlockCard({
   }
 
   const visibleHeadline = headline;
-  const safeThinkingSupportingLines = renderPlan.isThinkingOnlyBlock
-    ? supportingLines.filter((line) => !isInternalThinkingPreviewLine(line))
-    : supportingLines;
   const visibleSupportingLines =
-    renderPlan.isThinkingOnlyBlock && open ? [] : safeThinkingSupportingLines;
+    renderPlan.isThinkingOnlyBlock && open ? [] : supportingLines;
   const summaryCountLabel = block.items.length > 1 ? block.countLabel : null;
   const processMixLabel = resolveProcessMixLabel(block);
   const summaryDetailHint =

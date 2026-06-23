@@ -44,6 +44,7 @@ import {
   restoreFileChangesFromCheckpoints,
 } from "../utils/fileChangesUndo";
 import { orderStreamingContentPartsForDisplay } from "./streamingContentPartOrder";
+import { coalesceAdjacentDisplayContentParts } from "./streamingContentPartSegments";
 import { StreamingCursor, StreamingText } from "./StreamingText";
 import { StreamingWriteFileCard } from "./StreamingWriteFileCard";
 import {
@@ -185,10 +186,12 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
     );
     const interleavedContentParts = useMemo(
       () =>
-        orderStreamingContentPartsForDisplay(
-          sanitizeContentPartsForDisplay(contentParts, {
-            role: "assistant",
-          }),
+        coalesceAdjacentDisplayContentParts(
+          orderStreamingContentPartsForDisplay(
+            sanitizeContentPartsForDisplay(contentParts, {
+              role: "assistant",
+            }),
+          ),
         ) ?? [],
       [contentParts],
     );
@@ -620,15 +623,43 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
       const nodes: React.ReactNode[] = [];
       let processBuffer: StreamingProcessEntry[] = [];
 
+      const hasRenderableDownstreamContent = (startIndex: number): boolean =>
+        interleavedContentParts.slice(startIndex + 1).some((part) => {
+          if (part.type === "text") {
+            return part.text.trim().length > 0;
+          }
+          if (suppressProcessFlow) {
+            return false;
+          }
+          if (part.type === "thinking") {
+            return part.text.trim().length > 0;
+          }
+          if (part.type === "tool_use") {
+            return true;
+          }
+          if (part.type === "file_changes_batch") {
+            return part.aggregate.fileCount > 0;
+          }
+          return shouldRenderInlineActionRequest(part.actionRequired);
+        });
+
+      const processBufferOnlyThinking = () =>
+        processBuffer.length > 0 &&
+        processBuffer.every((entry) => entry.kind === "thinking");
+
       const flushProcessBuffer = (
         keySuffix: string,
+        options?: { forceGroup?: boolean },
       ) => {
         if (processBuffer.length === 0) {
           return;
         }
-        const shouldForceGroup = processBuffer.some(
-          (entry) => entry.kind !== "action",
-        );
+        const shouldKeepStreamingThinkingStandalone =
+          isStreaming && processBufferOnlyThinking();
+        const shouldForceGroup =
+          options?.forceGroup ??
+          (processBuffer.some((entry) => entry.kind !== "action") &&
+            !shouldKeepStreamingThinkingStandalone);
         const renderedRun = renderProcessRun(
           processBuffer,
           `interleaved-process-${keySuffix}`,
@@ -659,12 +690,15 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
           if (!part.text) {
             return;
           }
+          const hasDownstreamContent = hasRenderableDownstreamContent(index);
           processBuffer.push({
             kind: "thinking",
             id: `thinking-${index}`,
             text: part.text,
             defaultExpanded:
               isStreaming || isImportedProcessMetadata(part.metadata),
+            isActive: isStreaming,
+            autoCollapseEligible: hasDownstreamContent,
             metadata: part.metadata,
           });
           return;
@@ -679,6 +713,14 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
             id: part.toolCall.id,
             toolCall: part.toolCall,
           };
+          if (isStreaming && processBufferOnlyThinking()) {
+            flushProcessBuffer(String(index), {
+              forceGroup: shouldSplitProcessBeforeEntry(
+                processBuffer,
+                nextEntry,
+              ),
+            });
+          }
           if (shouldSplitProcessBeforeEntry(processBuffer, nextEntry)) {
             flushProcessBuffer(String(index));
           }
@@ -729,6 +771,9 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
         }
 
         if (!suppressProcessFlow) {
+          if (isStreaming && processBufferOnlyThinking()) {
+            flushProcessBuffer(String(index));
+          }
           processBuffer.push({
             kind: "action",
             id: part.actionRequired.requestId,
@@ -764,12 +809,19 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
 
     // 非交错内容统一收敛到同一条执行过程，避免重复渲染多条过程流。
     const fallbackProcessEntries: StreamingProcessEntry[] = [];
+    const hasFallbackDownstreamContent =
+      visibleText.trim().length > 0 ||
+      shouldRenderRuntimePeerCards ||
+      (toolCalls?.length ?? 0) > 0 ||
+      visibleActionRequests.length > 0;
     if (finalThinking) {
       fallbackProcessEntries.push({
         kind: "thinking",
         id: "fallback-thinking",
         text: finalThinking,
         defaultExpanded: isStreaming,
+        isActive: isStreaming,
+        autoCollapseEligible: hasFallbackDownstreamContent,
       });
     }
     for (const toolCall of suppressProcessFlow ? [] : toolCalls || []) {
@@ -787,6 +839,30 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
       });
     }
 
+    const fallbackProcessNode = (() => {
+      if (fallbackProcessEntries.length === 0) {
+        return null;
+      }
+
+      const [firstEntry, ...downstreamEntries] = fallbackProcessEntries;
+      if (
+        isStreaming &&
+        firstEntry?.kind === "thinking" &&
+        hasFallbackDownstreamContent
+      ) {
+        return (
+          <>
+            {renderProcessRun([firstEntry], "fallback-thinking")}
+            {downstreamEntries.length > 0
+              ? renderProcessRun(downstreamEntries, "fallback-process")
+              : null}
+          </>
+        );
+      }
+
+      return renderProcessRun(fallbackProcessEntries, "fallback-process");
+    })();
+
     return (
       <div
         className="flex flex-col gap-2"
@@ -794,9 +870,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
         data-content-part-types={contentPartDebugSignature}
         data-render-mode="standard"
       >
-        {fallbackProcessEntries.length > 0
-          ? renderProcessRun(fallbackProcessEntries, "fallback-process")
-          : null}
+        {fallbackProcessNode}
 
         {/* 解析后的内容区域（包括 A2UI、write_file、普通文本） */}
         {shouldRenderRuntimePeerCards ? (

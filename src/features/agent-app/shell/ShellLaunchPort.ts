@@ -45,10 +45,26 @@ export interface ShellLaunchReadiness {
   blockers: Array<{ code: string; message: string }>;
 }
 
+export type ShellSurfaceStrategy =
+  | "controlledBrowserWindow"
+  | "webContentsView";
+
+export interface ShellSurfaceContract {
+  activeStrategy: ShellSurfaceStrategy;
+  supportedStrategies: ShellSurfaceStrategy[];
+  embedding: {
+    standaloneWindow: boolean;
+    rightSurfaceDock: boolean;
+    iframe: false;
+    browserView: false;
+  };
+}
+
 export interface ShellLaunchResult {
   status: "launched" | "blocked";
   descriptor: ShellDescriptor;
   blockerCodes: string[];
+  surface?: ShellSurfaceContract;
 }
 
 export interface ShellLaunchPort {

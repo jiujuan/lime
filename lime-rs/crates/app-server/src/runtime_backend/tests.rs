@@ -4,8 +4,27 @@ use super::request_context::{
     selection_from_session_default, turn_context_from_request, RuntimeModelSelection,
 };
 use super::*;
+use crate::AgentAppDataSource;
+use crate::AppDataSource;
+use crate::AutomationManagementAppDataSource;
+use crate::AutomationOverviewAppDataSource;
+use crate::ConnectAppDataSource;
+use crate::DiagnosticsAppDataSource;
+use crate::GatewayAppDataSource;
+use crate::KnowledgeAppDataSource;
+use crate::McpAppDataSource;
+use crate::MediaAppDataSource;
+use crate::MemoryAppDataSource;
+use crate::ModelProviderAppDataSource;
 use crate::NoopAppDataSource;
+use crate::RightSurfaceAppDataSource;
 use crate::RuntimeHostContext;
+use crate::SessionAppDataSource;
+use crate::SkillAppDataSource;
+use crate::UsageStatsAppDataSource;
+use crate::VoiceAppDataSource;
+use crate::WorkspaceAppDataSource;
+use crate::WorkspaceSkillBindingAppDataSource;
 use app_server_protocol::AgentInput;
 use app_server_protocol::AgentSession;
 use app_server_protocol::AgentSessionActionScope;
@@ -13,8 +32,12 @@ use app_server_protocol::AgentSessionStatus;
 use app_server_protocol::AgentTurn;
 use app_server_protocol::AgentTurnStatus;
 use app_server_protocol::BusinessObjectRef;
+use app_server_protocol::McpServerLifecycleResponse;
+use app_server_protocol::McpServerStartParams;
+use app_server_protocol::McpServerStatusListResponse;
 use app_server_protocol::ProtocolKind;
 use app_server_protocol::RuntimeOptions;
+use async_trait::async_trait;
 use lime_agent::agent_tools::catalog::{
     MEMORY_ADD_NOTE_TOOL_NAME, MEMORY_LIST_TOOL_NAME, MEMORY_READ_TOOL_NAME,
     MEMORY_SEARCH_TOOL_NAME,
@@ -22,6 +45,8 @@ use lime_agent::agent_tools::catalog::{
 use lime_agent::AsterProviderProtocol;
 use lime_agent::{AgentEvent as RuntimeAgentEvent, AgentToolResult, RequestToolPolicyMode};
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::Mutex;
 use tempfile::TempDir;
 
 mod tool_inventory;
@@ -35,6 +60,78 @@ impl RuntimeEventSink for TestRuntimeEventSink {
     fn emit(&mut self, event: RuntimeEvent) -> Result<(), RuntimeCoreError> {
         self.events.push(event);
         Ok(())
+    }
+}
+
+#[derive(Default)]
+struct TestMcpAutostartDataSource {
+    servers: Vec<Value>,
+    started_servers: Mutex<Vec<String>>,
+    fail_start: bool,
+}
+
+impl TestMcpAutostartDataSource {
+    fn new(servers: Vec<Value>) -> Self {
+        Self {
+            servers,
+            started_servers: Mutex::new(Vec::new()),
+            fail_start: false,
+        }
+    }
+
+    fn with_fail_start(mut self) -> Self {
+        self.fail_start = true;
+        self
+    }
+
+    fn started_servers(&self) -> Vec<String> {
+        self.started_servers
+            .lock()
+            .expect("started servers lock")
+            .clone()
+    }
+}
+
+impl SessionAppDataSource for TestMcpAutostartDataSource {}
+impl WorkspaceAppDataSource for TestMcpAutostartDataSource {}
+impl SkillAppDataSource for TestMcpAutostartDataSource {}
+impl WorkspaceSkillBindingAppDataSource for TestMcpAutostartDataSource {}
+impl GatewayAppDataSource for TestMcpAutostartDataSource {}
+impl MediaAppDataSource for TestMcpAutostartDataSource {}
+impl VoiceAppDataSource for TestMcpAutostartDataSource {}
+impl AgentAppDataSource for TestMcpAutostartDataSource {}
+impl KnowledgeAppDataSource for TestMcpAutostartDataSource {}
+impl AutomationOverviewAppDataSource for TestMcpAutostartDataSource {}
+impl AutomationManagementAppDataSource for TestMcpAutostartDataSource {}
+impl MemoryAppDataSource for TestMcpAutostartDataSource {}
+impl DiagnosticsAppDataSource for TestMcpAutostartDataSource {}
+impl UsageStatsAppDataSource for TestMcpAutostartDataSource {}
+impl ModelProviderAppDataSource for TestMcpAutostartDataSource {}
+impl ConnectAppDataSource for TestMcpAutostartDataSource {}
+impl RightSurfaceAppDataSource for TestMcpAutostartDataSource {}
+
+#[async_trait]
+impl McpAppDataSource for TestMcpAutostartDataSource {
+    async fn list_mcp_servers_with_status(
+        &self,
+    ) -> Result<McpServerStatusListResponse, RuntimeCoreError> {
+        Ok(McpServerStatusListResponse {
+            servers: self.servers.clone(),
+        })
+    }
+
+    async fn start_mcp_server(
+        &self,
+        params: McpServerStartParams,
+    ) -> Result<McpServerLifecycleResponse, RuntimeCoreError> {
+        self.started_servers
+            .lock()
+            .expect("started servers lock")
+            .push(params.name);
+        if self.fail_start {
+            return Err(RuntimeCoreError::Backend("start failed".to_string()));
+        }
+        Ok(McpServerLifecycleResponse::default())
     }
 }
 
@@ -178,6 +275,77 @@ async fn respond_action_emits_resolved_fact_with_action_identity() {
     assert_eq!(event.payload["confirmed"].as_bool(), Some(false));
     assert_eq!(event.payload["decision"].as_str(), Some("deny"));
     assert_eq!(event.payload["scope"]["turnId"].as_str(), Some("turn-1"));
+}
+
+#[tokio::test]
+async fn runtime_backend_starts_enabled_lime_mcp_servers_before_tool_sync() {
+    let data_source = Arc::new(TestMcpAutostartDataSource::new(vec![
+        json!({
+            "name": "context7",
+            "enabled_lime": true,
+            "is_running": false
+        }),
+        json!({
+            "name": "already-running",
+            "enabledLime": true,
+            "isRunning": true
+        }),
+        json!({
+            "name": "disabled",
+            "enabled_lime": false,
+            "is_running": false
+        }),
+        json!({
+            "name": "runtime-camel",
+            "enabledLime": true,
+            "runtimeStatus": {
+                "isRunning": false
+            }
+        }),
+        json!({
+            "name": "runtime-running",
+            "enabled_lime": true,
+            "runtime_status": {
+                "is_running": true
+            }
+        }),
+        json!({
+            "name": " ",
+            "enabled_lime": true,
+            "is_running": false
+        }),
+    ]));
+    let app_data_source: Arc<dyn AppDataSource> = data_source.clone();
+    let backend = RuntimeBackend::new();
+
+    backend
+        .start_enabled_lime_mcp_servers_if_needed(app_data_source)
+        .await;
+
+    assert_eq!(
+        data_source.started_servers(),
+        vec!["context7".to_string(), "runtime-camel".to_string()]
+    );
+}
+
+#[tokio::test]
+async fn runtime_backend_mcp_autostart_failure_does_not_block_turn_preflight() {
+    let data_source = Arc::new(
+        TestMcpAutostartDataSource::new(vec![json!({
+            "name": "context7",
+            "enabled_lime": true,
+            "is_running": false
+        })])
+        .with_fail_start(),
+    );
+    let app_data_source: Arc<dyn AppDataSource> = data_source.clone();
+    let backend = RuntimeBackend::new();
+
+    backend
+        .start_enabled_lime_mcp_servers_if_needed(app_data_source)
+        .await;
+
+    assert_eq!(data_source.started_servers(), vec!["context7".to_string()]);
 }
 
 #[tokio::test]
@@ -926,6 +1094,76 @@ Use concise language.
 }
 
 #[test]
+fn session_config_does_not_project_expert_runtime_enable_allowed_tools_to_turn_scope() {
+    let workspace = TempDir::new().expect("workspace");
+    let skill_dir = workspace.path().join(".agents/skills/capability-report");
+    std::fs::create_dir_all(&skill_dir).expect("skill dir");
+    std::fs::write(
+        skill_dir.join("SKILL.md"),
+        r#"---
+name: Capability Report
+description: Review local capability.
+allowed_tools: Read
+---
+
+# Capability Report
+
+Use evidence.
+"#,
+    )
+    .expect("skill file");
+    let workspace_root = workspace.path().to_string_lossy().to_string();
+    let mut request = request_for_test(
+        "请先搜索 capability-report 后再执行",
+        None,
+        Some(json!({
+            "harness": {
+                "workspace_root": workspace_root,
+                "cwd": workspace.path().to_string_lossy(),
+                "expert": {
+                    "skill_refs": ["skill:capability-report"]
+                },
+                "workspace_skill_runtime_enable": {
+                    "source": "manual_session_enable",
+                    "approval": "manual",
+                    "workspace_root": workspace.path().to_string_lossy(),
+                    "bindings": [
+                        {
+                            "directory": "capability-report",
+                            "registered_skill_directory": skill_dir.to_string_lossy(),
+                            "source_draft_id": "capdraft-1",
+                            "source_verification_report_id": "capver-1"
+                        }
+                    ]
+                }
+            }
+        })),
+    );
+    let options = request.runtime_options.as_mut().expect("runtime options");
+    options.provider_preference = Some("openai".to_string());
+    options.model_preference = Some("gpt-4.1".to_string());
+    let host_request = aster_chat_request_from_request(&request);
+    let scope = session_scope_from_request(&request).expect("session scope");
+    let selection = selection_from_explicit_preferences(&request).expect("selection");
+    let policy = request_tool_policy_from_request(host_request.as_ref());
+
+    let config = session_config_from_request(
+        &request,
+        host_request.as_ref(),
+        &scope,
+        &selection,
+        &policy,
+        None,
+    );
+
+    let prompt = config.system_prompt.expect("system prompt");
+    assert!(prompt.contains("<expert_skill_refs>"));
+    assert!(!prompt.contains("<selected_skill_instructions>"));
+    let turn_context = config.turn_context.expect("turn context");
+    assert!(!turn_context.metadata.contains_key("tool_scope"));
+}
+
+#[test]
 fn session_config_does_not_project_tool_scope_for_unknown_skill_metadata() {
     let workspace = TempDir::new().expect("workspace");
     let skill_dir = workspace.path().join(".agents/skills/writer");
@@ -1192,6 +1430,82 @@ fn runtime_agent_tool_events_are_mirrored_to_coding_facts() {
         command_exited.payload["canonicalCommand"].as_str(),
         Some("cargo test -p app-server coding_events")
     );
+}
+
+#[test]
+fn model_effective_event_records_selected_model_and_reasoning_policy() {
+    let selection = RuntimeModelSelection {
+        provider: "openai".to_string(),
+        model: "gpt-codex".to_string(),
+        source: "runtime_options",
+        reasoning_effort: Some("high".to_string()),
+    };
+    let provider_config = ProviderConfig {
+        provider_name: "openai".to_string(),
+        provider_selector: Some("openai-main".to_string()),
+        model_name: "gpt-codex".to_string(),
+        api_key: Some("sk-test".to_string()),
+        base_url: Some("https://api.example.test/v1".to_string()),
+        credential_uuid: None,
+        reasoning_effort: Some("high".to_string()),
+        protocol: None,
+        toolshim: false,
+        toolshim_model: None,
+    };
+
+    let event = model_effective_event_from_runtime(&selection, &provider_config, "coding");
+
+    assert_eq!(event.event_type, "model.effective");
+    assert_eq!(event.payload["model"]["providerId"], "openai-main");
+    assert_eq!(event.payload["model"]["modelId"], "gpt-codex");
+    assert_eq!(event.payload["modelRef"]["providerId"], "openai-main");
+    assert_eq!(event.payload["reasoning"]["supported"], true);
+    assert_eq!(event.payload["reasoning"]["requestedLevel"], "high");
+    assert_eq!(event.payload["reasoning"]["effectiveLevel"], "high");
+    assert_eq!(event.payload["toolCalling"]["supported"], true);
+    assert_eq!(event.payload["requestedReasoningEffort"], "high");
+    assert_eq!(event.payload["serviceModelSlot"], "coding");
+    assert_eq!(event.payload["source"], "runtime_options");
+}
+
+#[test]
+fn runtime_thinking_delta_emits_reasoning_lifecycle_events() {
+    let mut sink = TestRuntimeEventSink::default();
+    let mut mirror = coding_events::CodingEventMirror::default();
+    let mut proposed_plan_parser = proposed_plan_parser::ProposedPlanParser::default();
+    let mut reasoning_state = reasoning_events::ReasoningEventState::default();
+
+    emit_runtime_agent_event_with_coding_mirror_and_plan_parser(
+        &RuntimeAgentEvent::ThinkingDelta {
+            text: "先理解目标".to_string(),
+        },
+        &mut sink,
+        &mut mirror,
+        &mut proposed_plan_parser,
+        &mut reasoning_state,
+    )
+    .expect("thinking delta should emit");
+    emit_reasoning_finish(&mut reasoning_state, "completed", &mut sink)
+        .expect("reasoning finish should emit");
+
+    let event_types = sink
+        .events
+        .iter()
+        .map(|event| event.event_type.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        event_types,
+        vec![
+            "reasoning.started",
+            "reasoning.delta",
+            "reasoning.final",
+            "reasoning.ended",
+        ]
+    );
+    assert_eq!(sink.events[0].payload["reasoningId"], "runtime-thinking");
+    assert_eq!(sink.events[1].payload["delta"], "先理解目标");
+    assert_eq!(sink.events[2].payload["text"], "先理解目标");
+    assert_eq!(sink.events[3].payload["status"], "completed");
 }
 
 #[test]

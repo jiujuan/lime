@@ -9,13 +9,15 @@ import type { AgentChatWorkspaceProps } from "../agentChatWorkspaceContract";
 import type { TaskCenterDraftSendRequest } from "../homePendingPreview";
 import type { OpenedProjectSummary } from "../hooks/useOpenedProjectSummaries";
 import type { LayoutMode } from "@/lib/workspace/workbenchContract";
-import type { TaskCenterDraftTab } from "./agentChatWorkspaceHelpers";
+import type {
+  TaskCenterDraftTab,
+  TaskCenterHomeSurfaceState,
+} from "./agentChatWorkspaceHelpers";
 import { useTaskCenterConversationNavigationRuntime } from "./useTaskCenterConversationNavigationRuntime";
 import { useTaskCenterFallbackRestoreRuntime } from "./useTaskCenterFallbackRestoreRuntime";
 import { useTaskCenterHomeChromeRuntime } from "./useTaskCenterHomeChromeRuntime";
 import { useTaskCenterNewTaskPageRuntime } from "./useTaskCenterNewTaskPageRuntime";
 import { useTaskCenterTabChrome } from "./useTaskCenterTabChrome";
-import type { TaskCenterHomeChromeState } from "./taskCenterSurfaceState";
 
 interface TaskCenterFallbackRestoreState {
   topicId: string;
@@ -110,7 +112,7 @@ interface TaskCenterChromeNavigationRuntime {
   shouldRenderTaskCenterEmbeddedHome: boolean;
   shouldRenderTaskCenterTabStrip: boolean;
   suppressHomeNavbarUtilityActions: boolean;
-  taskCenterHomeSurfaceState: TaskCenterHomeChromeState;
+  taskCenterHomeSurfaceState: TaskCenterHomeSurfaceState;
   taskCenterTabsNode: ReactNode;
   taskCenterVisibleTabIds: string[];
 }

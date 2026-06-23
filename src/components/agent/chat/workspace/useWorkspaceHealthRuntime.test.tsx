@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ensureWorkspaceReady } from "@/lib/api/project";
+import type { WorkspaceEnsureResult } from "@/lib/api/project";
 import { logAgentDebug } from "@/lib/agentDebug";
 import { recordWorkspaceRepair } from "@/lib/workspaceHealthTelemetry";
 import { scheduleMinimumDelayIdleTask } from "@/lib/utils/scheduleMinimumDelayIdleTask";
@@ -33,6 +34,19 @@ vi.mock("@/lib/utils/scheduleMinimumDelayIdleTask", () => ({
 type HookProps = Parameters<typeof useWorkspaceHealthRuntime>[0];
 
 const mountedRoots: Array<{ container: HTMLDivElement; root: Root }> = [];
+
+function workspaceEnsureResultFixture(
+  overrides: Partial<WorkspaceEnsureResult> = {},
+): WorkspaceEnsureResult {
+  return {
+    workspaceId: "project-1",
+    rootPath: "/tmp/project-1",
+    existed: true,
+    created: false,
+    repaired: false,
+    ...overrides,
+  };
+}
 
 function renderHook(props?: Partial<HookProps>) {
   const container = document.createElement("div");
@@ -83,10 +97,9 @@ beforeEach(() => {
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
 
-  vi.mocked(ensureWorkspaceReady).mockResolvedValue({
-    repaired: false,
-    rootPath: "/tmp/project-1",
-  });
+  vi.mocked(ensureWorkspaceReady).mockResolvedValue(
+    workspaceEnsureResultFixture(),
+  );
   vi.spyOn(console, "info").mockImplementation(() => undefined);
   vi.spyOn(console, "warn").mockImplementation(() => undefined);
 });
@@ -120,8 +133,10 @@ describe("buildWorkspacePathAutoRecoveryKey", () => {
 describe("useWorkspaceHealthRuntime", () => {
   it("项目切换后应检查 workspace，并记录自动修复", async () => {
     vi.mocked(ensureWorkspaceReady).mockResolvedValueOnce({
-      repaired: true,
-      rootPath: "/tmp/repaired",
+      ...workspaceEnsureResultFixture({
+        repaired: true,
+        rootPath: "/tmp/repaired",
+      }),
     });
     const { render, getValue } = renderHook();
 

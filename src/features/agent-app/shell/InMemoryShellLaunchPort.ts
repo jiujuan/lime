@@ -19,7 +19,10 @@ function readinessBlockers(
   descriptor: ShellDescriptor,
 ): ShellLaunchReadiness["blockers"] {
   const blockers: ShellLaunchReadiness["blockers"] = [];
-  if (descriptor.installMode !== "standalone" && descriptor.installMode !== "runtime_backed") {
+  if (
+    descriptor.installMode !== "standalone" &&
+    descriptor.installMode !== "runtime_backed"
+  ) {
     blockers.push({
       code: "SHELL_INSTALL_MODE_UNSUPPORTED",
       message: `Shell launch only supports standalone or runtime_backed, got ${descriptor.installMode}.`,
@@ -37,7 +40,10 @@ function readinessBlockers(
       message: `Runtime profile mode ${descriptor.runtimeProfile.installMode} does not match ${descriptor.installMode}.`,
     });
   }
-  if (descriptor.runtimeProfile.shellKind !== expectedShellKind(descriptor.installMode)) {
+  if (
+    descriptor.runtimeProfile.shellKind !==
+    expectedShellKind(descriptor.installMode)
+  ) {
     blockers.push({
       code: "SHELL_KIND_MISMATCH",
       message: `Runtime profile shell kind ${descriptor.runtimeProfile.shellKind} does not match ${descriptor.installMode}.`,
@@ -51,7 +57,8 @@ function readinessBlockers(
   ) {
     blockers.push({
       code: "ISOLATION_POLICY_INVALID",
-      message: "Shell launch requires read-only package, ref-only secrets, runtime-broker side effects and runtime provenance.",
+      message:
+        "Shell launch requires read-only package, ref-only secrets, runtime-broker side effects and runtime provenance.",
     });
   }
   return blockers;
@@ -77,11 +84,24 @@ export class InMemoryShellLaunchPort implements ShellLaunchPort {
         blockerCodes: readiness.blockers.map((blocker) => blocker.code),
       };
     }
-    this.launched.set(`${descriptor.appId}:${descriptor.entry.entryKey}`, descriptor);
+    this.launched.set(
+      `${descriptor.appId}:${descriptor.entry.entryKey}`,
+      descriptor,
+    );
     return {
       status: "launched",
       descriptor,
       blockerCodes: [],
+      surface: {
+        activeStrategy: "controlledBrowserWindow",
+        supportedStrategies: ["controlledBrowserWindow", "webContentsView"],
+        embedding: {
+          standaloneWindow: true,
+          rightSurfaceDock: true,
+          iframe: false,
+          browserView: false,
+        },
+      },
     };
   }
 

@@ -162,7 +162,9 @@ export function projectApp(params: {
       hasUiBundle: Boolean(manifest.runtimePackage.ui),
       hasWorkerBundle: Boolean(manifest.runtimePackage.worker),
       uiPath: manifest.runtimePackage.ui?.path,
-      workerPath: manifest.runtimePackage.worker?.path,
+      workerPath:
+        manifest.runtimePackage.worker?.entrypoint ??
+        manifest.runtimePackage.worker?.path,
     },
     storage: manifest.storage
       ? {

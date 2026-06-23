@@ -22,6 +22,15 @@ export function projectAppServerSessionReadToThreadReadModel(
   const detailThreadRead = normalizeThreadReadModel(
     readDetailThreadRead(response.detail),
   );
+  const sessionBusinessObjectRefMetadata =
+    readSessionBusinessObjectRefMetadata(response);
+  const hasDetailSessionBusinessObjectRefMetadata = Boolean(
+    detailThreadRead &&
+      Object.prototype.hasOwnProperty.call(
+        detailThreadRead,
+        "session_business_object_ref_metadata",
+      ),
+  );
   const sessionStatus = profileStatusFromSessionStatus(response.session.status);
   const protocolTurns = response.turns.map(projectAppServerTurn);
   const projected: AgentRuntimeThreadReadModel = {
@@ -40,6 +49,17 @@ export function projectAppServerSessionReadToThreadReadModel(
     queued_turns: detailThreadRead?.queued_turns ?? [],
     updated_at: response.session.updatedAt,
   };
+  const projectedSessionBusinessObjectRefMetadata =
+    hasDetailSessionBusinessObjectRefMetadata
+      ? (detailThreadRead?.session_business_object_ref_metadata ?? null)
+      : sessionBusinessObjectRefMetadata;
+  if (
+    projectedSessionBusinessObjectRefMetadata ||
+    hasDetailSessionBusinessObjectRefMetadata
+  ) {
+    projected.session_business_object_ref_metadata =
+      projectedSessionBusinessObjectRefMetadata;
+  }
 
   return normalizeThreadReadModel(projected) as AgentRuntimeThreadReadModel;
 }
@@ -125,4 +145,10 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
+}
+
+function readSessionBusinessObjectRefMetadata(
+  response: AppServerAgentSessionReadProjectionInput,
+): Record<string, unknown> | null {
+  return asRecord(response.session.businessObjectRef?.metadata);
 }

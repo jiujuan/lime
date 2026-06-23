@@ -1,3 +1,5 @@
+import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
+
 export type InputbarComposerSectionCopyKey =
   | "agentChat.inputbar.composer.advancedSettings.label"
   | "agentChat.inputbar.composer.advancedSettings.expand"
@@ -6,6 +8,17 @@ export type InputbarComposerSectionCopyKey =
   | "agentChat.inputbar.composer.currentModel.title"
   | "agentChat.inputbar.composer.fileManager.open"
   | "agentChat.inputbar.composer.fileManager.close"
+  | "agentChat.inputbar.planStatus.label"
+  | "agentChat.inputbar.planStatus.model"
+  | "agentChat.inputbar.planStatus.modelFallback"
+  | "agentChat.inputbar.planStatus.reasoning"
+  | "agentChat.inputbar.planStatus.reasoning.default"
+  | "agentChat.inputbar.planStatus.reasoning.none"
+  | "agentChat.inputbar.planStatus.reasoning.minimal"
+  | "agentChat.inputbar.planStatus.reasoning.low"
+  | "agentChat.inputbar.planStatus.reasoning.medium"
+  | "agentChat.inputbar.planStatus.reasoning.high"
+  | "agentChat.inputbar.planStatus.reasoning.xhigh"
   | "agentChat.inputbar.plusMenu.open"
   | "agentChat.inputbar.plusMenu.addFiles"
   | "agentChat.inputbar.plusMenu.attachKnowledge"
@@ -38,6 +51,14 @@ export interface InputbarComposerSectionCopy {
   fileManager: {
     open: string;
     close: string;
+  };
+  planStatus: {
+    label: string;
+    model: (model: string) => string;
+    modelFallback: string;
+    reasoning: (level: string) => string;
+    reasoningDefault: string;
+    reasoningLevels: Record<ModelReasoningEffortLevel, string>;
   };
   plusMenu: {
     open: string;
@@ -75,6 +96,25 @@ export function buildInputbarComposerSectionCopy(
     fileManager: {
       open: translate("agentChat.inputbar.composer.fileManager.open"),
       close: translate("agentChat.inputbar.composer.fileManager.close"),
+    },
+    planStatus: {
+      label: translate("agentChat.inputbar.planStatus.label"),
+      model: (model) =>
+        translate("agentChat.inputbar.planStatus.model", { model }),
+      modelFallback: translate("agentChat.inputbar.planStatus.modelFallback"),
+      reasoning: (level) =>
+        translate("agentChat.inputbar.planStatus.reasoning", { level }),
+      reasoningDefault: translate(
+        "agentChat.inputbar.planStatus.reasoning.default",
+      ),
+      reasoningLevels: {
+        none: translate("agentChat.inputbar.planStatus.reasoning.none"),
+        minimal: translate("agentChat.inputbar.planStatus.reasoning.minimal"),
+        low: translate("agentChat.inputbar.planStatus.reasoning.low"),
+        medium: translate("agentChat.inputbar.planStatus.reasoning.medium"),
+        high: translate("agentChat.inputbar.planStatus.reasoning.high"),
+        xhigh: translate("agentChat.inputbar.planStatus.reasoning.xhigh"),
+      },
     },
     plusMenu: {
       open: translate("agentChat.inputbar.plusMenu.open"),

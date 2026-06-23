@@ -2,10 +2,14 @@ mod agent_skills_context;
 mod agent_skills_telemetry;
 mod coding_events;
 mod memory_tools;
+mod model_capability;
 mod model_registry_metadata;
 mod model_route_contract;
 mod model_route_resolver;
 mod model_routing;
+mod plan_events;
+mod proposed_plan_parser;
+mod reasoning_events;
 mod skill_runtime_enable;
 mod tool_events;
 mod tool_inventory;
@@ -20,7 +24,7 @@ use crate::ExecutionRequest;
 use crate::RuntimeCoreError;
 use crate::RuntimeEvent;
 use crate::RuntimeEventSink;
-use app_server_protocol::{AgentSessionActionType, ProtocolKind};
+use app_server_protocol::{AgentSessionActionType, McpServerStartParams, ProtocolKind};
 use async_trait::async_trait;
 use lime_agent::AsterProviderProtocol;
 use lime_agent::{
@@ -31,6 +35,7 @@ use lime_core::config::{load_config, ToolExecutionPolicyConfig, WorkspaceSandbox
 use lime_core::database::{self, DbConnection};
 use lime_services::api_key_provider_service::ApiKeyProviderService;
 use serde_json::{json, Value};
+use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::sync::RwLock;
 
@@ -39,7 +44,7 @@ mod request_context;
 use request_context::{
     aster_chat_request_from_request, direct_provider_config_from_request,
     request_tool_policy_from_request, resolve_runtime_model_selection, session_config_from_request,
-    session_scope_from_request,
+    session_scope_from_request, RuntimeModelSelection,
 };
 
 #[derive(Default)]
@@ -106,11 +111,52 @@ impl RuntimeBackend {
         let Some(app_data_source) = app_data_source else {
             return Ok(());
         };
+        self.start_enabled_lime_mcp_servers_if_needed(app_data_source.clone())
+            .await;
         let snapshots = app_data_source.list_mcp_bridge_snapshots().await?;
         self.agent_state
             .sync_mcp_bridges(snapshots)
             .await
             .map_err(backend_error)
+    }
+
+    async fn start_enabled_lime_mcp_servers_if_needed(
+        &self,
+        app_data_source: Arc<dyn AppDataSource>,
+    ) {
+        let response = match app_data_source.list_mcp_servers_with_status().await {
+            Ok(response) => response,
+            Err(error) => {
+                tracing::warn!(
+                    error = %error,
+                    "[RuntimeBackend] 读取 MCP 运行状态失败，跳过 Agent turn MCP 自动启动"
+                );
+                return;
+            }
+        };
+
+        for server_name in enabled_lime_mcp_servers_to_start(&response.servers) {
+            match app_data_source
+                .start_mcp_server(McpServerStartParams {
+                    name: server_name.clone(),
+                })
+                .await
+            {
+                Ok(_) => {
+                    tracing::info!(
+                        server_name = %server_name,
+                        "[RuntimeBackend] 已为 Agent turn 启动 Lime MCP server"
+                    );
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        server_name = %server_name,
+                        error = %error,
+                        "[RuntimeBackend] Agent turn 启动 Lime MCP server 失败，继续使用当前可用工具面"
+                    );
+                }
+            }
+        }
     }
 
     async fn handle_turn_start(
@@ -199,6 +245,11 @@ impl RuntimeBackend {
             .await
             .map_err(backend_error)?
         };
+        sink.emit(model_effective_event_from_runtime(
+            &selection,
+            &provider_config,
+            route_resolution.service_model_slot(),
+        ))?;
         self.register_memory_tools_if_available().await?;
         self.sync_mcp_bridges_if_available().await?;
         let request_tool_policy = request_tool_policy_from_request(host_request.as_ref());
@@ -224,6 +275,8 @@ impl RuntimeBackend {
             .await;
         let mut emit_error = None;
         let mut coding_event_mirror = coding_events::CodingEventMirror::default();
+        let mut proposed_plan_parser = proposed_plan_parser::ProposedPlanParser::default();
+        let mut reasoning_event_state = reasoning_events::ReasoningEventState::default();
         let execution_result = stream_reply_with_policy(
             agent,
             &request.input.text,
@@ -235,10 +288,12 @@ impl RuntimeBackend {
                 if emit_error.is_some() {
                     return;
                 }
-                if let Err(error) = emit_runtime_agent_event_with_coding_mirror(
+                if let Err(error) = emit_runtime_agent_event_with_coding_mirror_and_plan_parser(
                     event,
                     sink,
                     &mut coding_event_mirror,
+                    &mut proposed_plan_parser,
+                    &mut reasoning_event_state,
                 ) {
                     emit_error = Some(error);
                 }
@@ -253,8 +308,10 @@ impl RuntimeBackend {
         if let Some(error) = emit_error {
             return Err(error);
         }
+        emit_proposed_plan_parser_flush(&mut proposed_plan_parser, sink)?;
 
         if execution.cancelled {
+            emit_reasoning_finish(&mut reasoning_event_state, "canceled", sink)?;
             sink.emit(RuntimeEvent::new(
                 "turn.canceled",
                 json!({
@@ -273,6 +330,7 @@ impl RuntimeBackend {
 
         self.agent_state
             .mark_current_healthy(&db, Some(&provider_config.model_name));
+        emit_reasoning_finish(&mut reasoning_event_state, "completed", sink)?;
         sink.emit(RuntimeEvent::new(
             "turn.completed",
             json!({
@@ -476,6 +534,93 @@ fn current_agent_runtime_config_metadata() -> Option<Value> {
     Some(Value::Object(metadata))
 }
 
+fn enabled_lime_mcp_servers_to_start(servers: &[Value]) -> Vec<String> {
+    let mut names = BTreeSet::new();
+    for server in servers {
+        if !value_bool_field(server, &["enabled_lime", "enabledLime"]) {
+            continue;
+        }
+        if mcp_status_is_running(server) {
+            continue;
+        }
+        if let Some(name) = value_string_field(server, &["name"]) {
+            names.insert(name.to_string());
+        }
+    }
+    names.into_iter().collect()
+}
+
+fn mcp_status_is_running(server: &Value) -> bool {
+    value_bool_field(server, &["is_running", "isRunning"])
+        || server
+            .get("runtime_status")
+            .is_some_and(|status| value_bool_field(status, &["is_running", "isRunning"]))
+        || server
+            .get("runtimeStatus")
+            .is_some_and(|status| value_bool_field(status, &["is_running", "isRunning"]))
+}
+
+fn value_bool_field(value: &Value, keys: &[&str]) -> bool {
+    keys.iter()
+        .any(|key| value.get(*key).and_then(Value::as_bool).unwrap_or(false))
+}
+
+fn value_string_field<'a>(value: &'a Value, keys: &[&str]) -> Option<&'a str> {
+    keys.iter()
+        .find_map(|key| value.get(*key).and_then(Value::as_str))
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+}
+
+fn model_effective_event_from_runtime(
+    selection: &RuntimeModelSelection,
+    provider_config: &ProviderConfig,
+    service_model_slot: &str,
+) -> RuntimeEvent {
+    let provider_id = provider_config
+        .provider_selector
+        .as_deref()
+        .unwrap_or(&selection.provider)
+        .to_string();
+    let model_ref =
+        model_capability::ModelRef::new(provider_id.clone(), provider_config.model_name.clone());
+    let capability = model_capability::resolve_basic_model_capability(model_ref);
+    let requested_reasoning_effort = provider_config
+        .reasoning_effort
+        .as_deref()
+        .or(selection.reasoning_effort.as_deref());
+    let reasoning_policy = model_capability::resolve_reasoning_policy(
+        &capability,
+        requested_reasoning_effort.and_then(model_capability::reasoning_level_from_str),
+    );
+    let mut payload = model_capability::model_effective_payload(&capability, &reasoning_policy);
+    if let Some(payload_object) = payload.as_object_mut() {
+        payload_object.insert("provider".to_string(), json!(provider_id));
+        payload_object.insert(
+            "modelName".to_string(),
+            json!(provider_config.model_name.clone()),
+        );
+        payload_object.insert(
+            "model_name".to_string(),
+            json!(provider_config.model_name.clone()),
+        );
+        payload_object.insert("source".to_string(), json!(selection.source));
+        payload_object.insert("serviceModelSlot".to_string(), json!(service_model_slot));
+        payload_object.insert("service_model_slot".to_string(), json!(service_model_slot));
+        if let Some(reasoning_effort) = requested_reasoning_effort {
+            payload_object.insert(
+                "requestedReasoningEffort".to_string(),
+                json!(reasoning_effort),
+            );
+            payload_object.insert(
+                "requested_reasoning_effort".to_string(),
+                json!(reasoning_effort),
+            );
+        }
+    }
+    RuntimeEvent::new("model.effective", payload)
+}
+
 fn initialize_runtime_database(
     db: Option<&DbConnection>,
 ) -> Result<DbConnection, RuntimeCoreError> {
@@ -538,17 +683,66 @@ fn provider_config_with_route_protocol(
     config
 }
 
+#[cfg(test)]
 fn emit_runtime_agent_event_with_coding_mirror(
     event: &RuntimeAgentEvent,
     sink: &mut dyn RuntimeEventSink,
     coding_event_mirror: &mut coding_events::CodingEventMirror,
 ) -> Result<(), RuntimeCoreError> {
+    let mut proposed_plan_parser = proposed_plan_parser::ProposedPlanParser::default();
+    let mut reasoning_event_state = reasoning_events::ReasoningEventState::default();
+    emit_runtime_agent_event_with_coding_mirror_and_plan_parser(
+        event,
+        sink,
+        coding_event_mirror,
+        &mut proposed_plan_parser,
+        &mut reasoning_event_state,
+    )
+}
+
+fn emit_runtime_agent_event_with_coding_mirror_and_plan_parser(
+    event: &RuntimeAgentEvent,
+    sink: &mut dyn RuntimeEventSink,
+    coding_event_mirror: &mut coding_events::CodingEventMirror,
+    proposed_plan_parser: &mut proposed_plan_parser::ProposedPlanParser,
+    reasoning_event_state: &mut reasoning_events::ReasoningEventState,
+) -> Result<(), RuntimeCoreError> {
     let coding_events = coding_event_mirror.process_event(event);
     for event in coding_events.before_raw {
         sink.emit(event)?;
     }
-    tool_events::emit_runtime_agent_event(event, sink)?;
+    if let RuntimeAgentEvent::ThinkingDelta { text } = event {
+        for event in reasoning_event_state.observe_delta(text) {
+            sink.emit(event)?;
+        }
+    }
+    for event in tool_events::runtime_events_from_agent_event(event)? {
+        for event in proposed_plan_parser::split_runtime_event(event, proposed_plan_parser) {
+            sink.emit(event)?;
+        }
+    }
     for event in coding_events.after_raw {
+        sink.emit(event)?;
+    }
+    Ok(())
+}
+
+fn emit_reasoning_finish(
+    reasoning_event_state: &mut reasoning_events::ReasoningEventState,
+    status: &str,
+    sink: &mut dyn RuntimeEventSink,
+) -> Result<(), RuntimeCoreError> {
+    for event in reasoning_event_state.finish(status) {
+        sink.emit(event)?;
+    }
+    Ok(())
+}
+
+fn emit_proposed_plan_parser_flush(
+    proposed_plan_parser: &mut proposed_plan_parser::ProposedPlanParser,
+    sink: &mut dyn RuntimeEventSink,
+) -> Result<(), RuntimeCoreError> {
+    for event in proposed_plan_parser::finish_runtime_events(proposed_plan_parser) {
         sink.emit(event)?;
     }
     Ok(())

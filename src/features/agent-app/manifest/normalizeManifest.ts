@@ -1,6 +1,7 @@
 import type {
   AppEntry,
   AppManifest,
+  AgentAppProfile,
   NormalizedAppEntry,
   NormalizedAppManifest,
   NormalizedRequires,
@@ -19,7 +20,19 @@ function slugifyAppId(value: string): string {
 
 function normalizeManifestVersion(
   version: string,
-): "0.2" | "0.3" | "0.5" | "0.6" | "0.7" | "0.8" | "0.9" | "0.10" {
+):
+  | "0.2"
+  | "0.3"
+  | "0.5"
+  | "0.6"
+  | "0.7"
+  | "0.8"
+  | "0.9"
+  | "0.10"
+  | "0.11" {
+  if (version.startsWith("0.11")) {
+    return "0.11";
+  }
   if (version.startsWith("0.10")) {
     return "0.10";
   }
@@ -89,6 +102,27 @@ function normalizeEntry(entry: AppEntry): NormalizedAppEntry {
   };
 }
 
+function normalizeProfiles(manifest: AppManifest): AgentAppProfile[] {
+  const profiles = new Set<AgentAppProfile>();
+  const declaredProfiles = manifest.profiles ?? [];
+
+  declaredProfiles.forEach((profile) => {
+    if (profile === "classic" || profile === "workbench") {
+      profiles.add(profile);
+    }
+  });
+
+  if (manifest.workbench) {
+    profiles.add("workbench");
+  }
+
+  if (profiles.size === 0) {
+    profiles.add("classic");
+  }
+
+  return Array.from(profiles);
+}
+
 export function normalizeManifest(
   manifest: AppManifest,
 ): NormalizedAppManifest {
@@ -152,6 +186,9 @@ export function normalizeManifest(
       input: manifest.install,
       fallbackName: displayName,
     }),
+    profiles: normalizeProfiles(manifest),
+    workbench: manifest.workbench,
+    distribution: manifest.distribution,
     presentation: manifest.presentation,
     agentRuntime: manifest.agentRuntime,
     requirements: manifest.requirements,

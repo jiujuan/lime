@@ -34,6 +34,8 @@ const fixtureSourceFiles = [
   "scripts/agent-runtime/claw-chat-current-fixture-gui-tool-waits.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-gui-web-tools-waits.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-skills-workspace.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-plan-history.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-right-surface-visual.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-scenario-flow.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-common-assertions.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-scenario-assertions.mjs",
@@ -229,6 +231,28 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("停止后的同一会话已经可以继续输出");
   });
 
+  it("covers Plan mode revisioned thread item and history hydrate in the real Electron fixture", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain('options.scenario === "plan"');
+    expect(content).toContain("enablePlanModeFromGui");
+    expect(content).toContain("waitForGuiPlanCompleted");
+    expect(content).toContain("waitForSessionReadPlanCompleted");
+    expect(content).toContain("verifyPlanHistoryHydrate");
+    expect(content).toContain("verify-plan-history-hydrate-from-sidebar");
+    expect(content).toContain("readModelPlanThreadItem");
+    expect(content).toContain("guiPlanHistoryHydrateCompleted");
+    expect(content).toContain("readModelPlanHistoryHydrate");
+    expect(content).toContain("readModelPlanThreadItemRevisioned");
+    expect(content).toContain("readModelPlanHistoryHydratePreserved");
+    expect(content).toContain("legacyUpdatePlanToolHidden");
+    expect(content).toContain("revisionId");
+    expect(content).toContain("proposed_plan");
+    expect(content).toContain("UpdatePlanTool");
+    expect(content).toContain("update_plan");
+    expect(content).toContain("legacyUpdatePlanToolVisible");
+  });
+
   it("locks the news WebSearch policy to model-visible auto choice, not keyword required", () => {
     const content = readSmokeScript();
 
@@ -280,9 +304,8 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain(
       'const MCP_STRUCTURED_CONTENT_TOOL_NAME = "mcp__docs__diagnostic_probe"',
     );
-    expect(content).toContain(
-      'const MCP_STRUCTURED_CONTENT_TOOL_DISPLAY_LABEL = "docs / diagnostic probe"',
-    );
+    expect(content).toContain("MCP_STRUCTURED_CONTENT_TOOL_DISPLAY_LABEL");
+    expect(content).toContain('"docs / diagnostic probe"');
     expect(content).toContain("MCP_STRUCTURED_CONTENT_ANSWER");
     expect(content).toContain("MCP_STRUCTURED_CONTENT_REFERENCE_ID");
     expect(content).toContain("MCP_STRUCTURED_CONTENT_PROTOCOL_OUTPUT");
@@ -368,6 +391,13 @@ describe("claw chat current Electron fixture smoke guard", () => {
     );
     expect(expertActionsContent).toContain("waitForExpertSkillPickerState");
     expect(expertActionsContent).toContain("clickExpertSkillPickerTrigger");
+    for (const fragment of [
+      "expert-info-skills-runtime-action-skill-code-review",
+      "mapping-action",
+      "setExpertSkillPickerQuery",
+      "pickerSearch",
+    ])
+      expect(expertActionsContent).toContain(fragment);
     expect(expertActionsContent).toContain("waitForExpertPanelAddedSkill");
     expect(expertActionsContent).toContain(
       "exportExpertPanelEvidencePackFromHarnessPanel",
@@ -428,7 +458,19 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("waitForBackendLedgerTurnStartContaining");
     expect(content).toContain("launchSkillsRuntimeFromWorkspacePanel");
     expect(content).toContain("createExpertSkillsRuntimeSession");
-    expect(content).toContain("startExpertSkillsRuntimeTurn");
+    for (const fragment of [
+      "send-expert-skills-runtime-prompt-from-gui",
+      "expertSkillsRuntimeInputSend",
+      "expectedSessionId: EXPERT_SKILLS_RUNTIME_SESSION_ID",
+      "expertSkillsRuntimeQueueResume",
+      "waitForBackendTurnStartWithCurrentQueueResume",
+    ])
+      expect(content).toContain(fragment);
+    for (const fragment of [
+      "startExpertSkillsRuntimeTurn",
+      "EXPERT_SKILLS_RUNTIME_TURN_ID",
+    ])
+      expect(content).not.toContain(fragment);
     expect(content).toContain("{ title }");
     expect(content).toContain("waitForBackendLedgerTurnStart");
     expect(content).toContain("manualEnableSkillsRuntimeSessionId");
@@ -571,6 +613,30 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).not.toContain("agent_runtime_");
     expect(scenarioContent).not.toContain("agent_runtime_");
     expect(expertActionsContent).not.toContain("agent_runtime_");
+  });
+
+  it("covers the Right Surface visual matrix without a model turn", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain("right-surface-visual-matrix");
+    expect(content).toContain("runRightSurfaceVisualMatrix");
+    expect(content).toContain("create-right-surface-visual-expert-session");
+    expect(content).toContain("run-right-surface-visual-matrix");
+    expect(content).toContain("workspaceRightSurface/request");
+    expect(content).toContain("workspaceRightSurface/pending/list");
+    expect(content).toContain("task-center-files-toggle");
+    expect(content).toContain("task-center-object-canvas-toggle");
+    expect(content).toContain("task-center-expert-info-toggle");
+    expect(content).toContain("workspace-right-surface-host");
+    expect(content).toContain("workspace-files-surface");
+    expect(content).toContain("workspace-object-canvas-surface");
+    expect(content).toContain("expert-info-panel");
+    expect(content).toContain("rightSurfaceVisualMatrixHostsFillRightSide");
+    expect(content).toContain(
+      "rightSurfaceVisualMatrixPendingConsumeKeepsSurfaceOpen",
+    );
+    expect(content).toContain("rightSurfaceVisualMatrixDoesNotUseModelTurn");
+    expect(content).not.toContain("agent_runtime_");
   });
 
   it("summarizes Skills runtime evidence with mixed camelCase and snake_case fields", () => {

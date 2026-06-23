@@ -899,6 +899,23 @@ describe("ElectronHostCommands local file shell facade", () => {
         status: "running",
         entryUrl: "http://127.0.0.1:4199/dashboard",
       },
+      surface: {
+        activeStrategy: "controlledBrowserWindow",
+        supportedStrategies: ["controlledBrowserWindow", "webContentsView"],
+        entryUrl: "http://127.0.0.1:4199/dashboard",
+        containerId: "agent-app-shell-content-factory-app-standalone",
+        embedding: {
+          standaloneWindow: true,
+          rightSurfaceDock: true,
+          iframe: false,
+          browserView: false,
+        },
+        isolation: {
+          contextIsolation: true,
+          sandbox: true,
+          nodeIntegration: false,
+        },
+      },
       shellWindow: {
         label: "agent-app-shell-content-factory-app-standalone",
         url: "http://127.0.0.1:4199/dashboard",

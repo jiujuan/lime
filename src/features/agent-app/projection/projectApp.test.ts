@@ -16,73 +16,39 @@ describe("Agent App projection P0", () => {
     });
     const projection = projectApp({ manifest: normalized, identity });
 
-    expect(projection.entries).toHaveLength(5);
+    expect(projection.entries).toHaveLength(1);
     expect(projection.entries.every((entry) => entry.presentation === "lab-only")).toBe(true);
     expect(projection.requiredCapabilities.map((item) => item.capability)).toEqual([
       "lime.agent",
       "lime.artifacts",
       "lime.evidence",
-      "lime.files",
       "lime.knowledge",
+      "lime.media",
+      "lime.policy",
       "lime.storage",
-      "lime.tools",
-      "lime.ui",
       "lime.workflow",
     ]);
     expect(projection.provenance).toMatchObject({
       sourceKind: "agent_app",
       appId: "content-factory-app",
-      appVersion: "0.3.0",
+      appVersion: "2.0.0",
     });
-    expect(projection.knowledgeBindings.map((binding) => binding.key)).toEqual([
-      "ip_knowledge",
-      "project_knowledge",
-      "material_library",
-    ]);
+    expect(projection.knowledgeBindings.map((binding) => binding.key)).toEqual([]);
     expect(projection.artifactTypes.map((artifact) => artifact.key)).toEqual([
-      "content_table",
-      "scene_table",
-      "content_batch",
-      "script_batch",
-      "prompt_batch",
+      "content_factory_workspace_patch",
     ]);
-    expect(projection.services.map((service) => service.key)).toEqual([
-      "content_worker",
-    ]);
-    expect(projection.workflows.map((workflow) => workflow.key)).toEqual([
-      "content_scenario_planning",
-    ]);
-    expect(projection.skillRequirements.map((skill) => skill.id)).toEqual([
-      "article-writer",
-    ]);
-    expect(projection.toolRequirements.map((tool) => tool.key)).toEqual([
-      "document_parser",
-      "competitor_research",
-      "creative_capability_search",
-    ]);
-    expect(
-      projection.toolRequirements.find(
-        (tool) => tool.key === "creative_capability_search",
-      )?.capabilities,
-    ).toEqual([
-      "lime.capability.image.generate",
-      "lime.capability.cover.generate",
-      "lime.capability.research.search",
-      "lime.capability.report.generate",
-      "lime.capability.pdf.read",
-      "lime.capability.summary.generate",
-    ]);
-    expect(projection.evals.map((evalRule) => evalRule.key)).toEqual([
-      "fact_grounding",
-      "publish_readiness",
-    ]);
-    expect(projection.secrets.map((secret) => secret.key)).toEqual([
-      "publishing_workspace_token",
-    ]);
-    expect(projection.overlayTemplates.map((overlay) => overlay.key)).toEqual([
-      "workspace_content_rules",
-    ]);
-    expect(projection.ui?.routes).toHaveLength(2);
+    expect(projection.services.map((service) => service.key)).toEqual([]);
+    expect(projection.workflows.map((workflow) => workflow.key)).toEqual([]);
+    expect(projection.skillRequirements.map((skill) => skill.id)).toEqual([]);
+    expect(projection.toolRequirements.map((tool) => tool.key)).toEqual([]);
+    expect(projection.runtimePackage).toMatchObject({
+      hasWorkerBundle: true,
+      workerPath: "./src/runtime/content-factory-worker.mjs",
+    });
+    expect(projection.evals.map((evalRule) => evalRule.key)).toEqual([]);
+    expect(projection.secrets.map((secret) => secret.key)).toEqual([]);
+    expect(projection.overlayTemplates.map((overlay) => overlay.key)).toEqual([]);
+    expect(projection.ui?.routes ?? []).toHaveLength(0);
     expect(projection.install).toMatchObject({
       supportedModes: ["in_lime"],
       preferredMode: "in_lime",

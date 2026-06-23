@@ -60,6 +60,24 @@ describe("agentUiEventProjection", () => {
     expect(
       buildAgentUiProjectionEvents(
         {
+          type: "reasoning_final",
+          reasoningId: "runtime-thinking",
+          text: "先分析完整过程",
+        },
+        baseContext,
+      )[0],
+    ).toMatchObject({
+      type: "reasoning.delta",
+      sourceType: "reasoning_final",
+      owner: "model",
+      phase: "reasoning",
+      surface: "inline_process",
+      persistence: "ephemeral_live",
+    });
+
+    expect(
+      buildAgentUiProjectionEvents(
+        {
           type: "runtime_status",
           status: {
             phase: "permission_review",
@@ -78,6 +96,33 @@ describe("agentUiEventProjection", () => {
       payload: {
         title: "等待确认",
         sourcePhase: "permission_review",
+      },
+    });
+  });
+
+  it("应把 model.effective 映射为模型生效事件", () => {
+    expect(
+      buildAgentUiProjectionEvents(
+        {
+          type: "model_effective",
+          modelRef: {
+            providerId: "openai",
+            modelId: "gpt-codex",
+          },
+          modelName: "gpt-codex",
+          serviceModelSlot: "coding",
+        },
+        baseContext,
+      )[0],
+    ).toMatchObject({
+      type: "run.status",
+      sourceType: "model_effective",
+      sequence: 10,
+      owner: "runtime",
+      scope: "run",
+      payload: {
+        model: "gpt-codex",
+        mode: "coding",
       },
     });
   });

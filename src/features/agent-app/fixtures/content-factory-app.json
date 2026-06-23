@@ -1,253 +1,254 @@
 {
-  "manifestVersion": "0.3.0",
+  "manifestVersion": "0.11.0",
   "name": "content-factory-app",
   "displayName": "内容工厂",
-  "version": "0.3.0",
-  "status": "draft",
+  "version": "2.0.0",
+  "status": "ready",
   "appType": "domain-app",
-  "description": "内容工厂，用三层知识库驱动批量内容生产、脚本工厂、策略报告、PPT 交付和数据复盘。",
-  "runtimeTargets": [
-    "local"
-  ],
+  "profiles": ["workbench"],
+  "description": "内容工厂是 Agent App v3 Workbench Profile 应用。Claw 保持中间对话和运行主链，右侧 Product Profile 恢复和操作当前业务产物。",
+  "runtimeTargets": ["local"],
   "requires": {
-    "lime": {
-      "appRuntime": ">=0.3.0 <1.0.0"
-    },
-    "sdk": "@lime/app-sdk@^0.3.0",
-    "capabilities": {
-      "lime.ui": "^0.3.0",
-      "lime.storage": "^0.3.0",
-      "lime.files": "^0.3.0",
-      "lime.agent": "^0.3.0",
-      "lime.knowledge": "^0.3.0",
-      "lime.tools": "^0.3.0",
-      "lime.artifacts": "^0.3.0",
-      "lime.workflow": "^0.3.0",
-      "lime.evidence": "^0.3.0"
-    }
+    "sdk": "@lime/app-sdk@^0.11.0",
+    "capabilities": [
+      "lime.agent",
+      "lime.artifacts",
+      "lime.evidence",
+      "lime.knowledge",
+      "lime.media",
+      "lime.policy",
+      "lime.workflow"
+    ]
+  },
+  "distribution": {
+    "primaryInstallSurface": "lime-app-center",
+    "channel": "stable",
+    "visibility": "public",
+    "pricing": "free"
+  },
+  "presentation": {
+    "icon": "./assets/icon.svg",
+    "category": "content",
+    "accent": "emerald"
   },
   "runtimePackage": {
-    "ui": {
-      "path": "./dist/ui"
+    "worker": {
+      "entrypoint": "./src/runtime/content-factory-worker.mjs",
+      "contract": "./app.runtime.yaml",
+      "sampleRequest": "./examples/runtime-request.sample.json",
+      "outputArtifactKind": "content_factory.workspace_patch"
+    }
+  },
+  "agentRuntime": {
+    "bridge": {
+      "kind": "app-server-json-rpc",
+      "required": true
     },
     "worker": {
-      "path": "./dist/worker"
+      "entrypoint": "./src/runtime/content-factory-worker.mjs",
+      "sampleRequest": "./examples/runtime-request.sample.json",
+      "outputArtifactKind": "content_factory.workspace_patch",
+      "directProviderAccess": false,
+      "directFilesystemAccess": false
     },
-    "storage": {
-      "schema": "./storage/schema.json",
-      "migrations": "./storage/migrations"
+    "tasks": [
+      {
+        "kind": "content.factory.generate"
+      },
+      {
+        "kind": "content.article.generate"
+      },
+      {
+        "kind": "content.image.generate"
+      },
+      {
+        "kind": "content.video.script.generate"
+      },
+      {
+        "kind": "content.video.storyboard.generate"
+      },
+      {
+        "kind": "content.delivery.review"
+      }
+    ],
+    "session": {
+      "modes": ["new", "resume", "continue", "fork"],
+      "historyRestore": {
+        "productWorkspace": "required",
+        "fallback": "artifactPreview"
+      }
     }
   },
   "storage": {
     "namespace": "content-factory-app",
-    "schema": "./storage/schema.json",
-    "migrations": "./storage/migrations",
     "retention": "ask"
   },
   "entries": [
     {
-      "key": "dashboard",
-      "kind": "page",
-      "title": "项目首页",
-      "description": "查看项目、知识库健康度和内容生产状态。",
-      "route": "/dashboard"
-    },
-    {
-      "key": "knowledge",
-      "kind": "page",
-      "title": "三层知识库",
-      "description": "管理 IP 知识库、项目知识库和素材库。",
-      "route": "/knowledge"
-    },
-    {
-      "key": "content_scenario_planning",
+      "key": "content_factory",
       "kind": "workflow",
-      "title": "内容场景规划",
-      "description": "基于知识库规划用户场景、痛点、解决方案和内容切入点。",
-      "workflow": "./workflows/content-scenarios.workflow.md",
+      "title": "内容工厂",
+      "description": "从创作需求生成文章、配图、视频分镜和交付检查清单。",
       "requiredCapabilities": [
         "lime.agent",
+        "lime.artifacts",
+        "lime.evidence",
         "lime.knowledge",
-        "lime.storage"
+        "lime.media"
       ]
-    },
-    {
-      "key": "content_factory",
-      "kind": "page",
-      "title": "内容工厂",
-      "description": "批量生成文案、短视频脚本和图片提示词。",
-      "route": "/content-factory"
-    },
-    {
-      "key": "content_strategist",
-      "kind": "expert-chat",
-      "title": "内容策略专家",
-      "description": "围绕定位、场景、选题和复盘给出策略建议。",
-      "persona": "./agents/content-strategist.md"
-    }
-  ],
-  "knowledgeTemplates": [
-    {
-      "key": "ip_knowledge",
-      "standard": "agentknowledge",
-      "type": "personal-profile",
-      "required": false
-    },
-    {
-      "key": "project_knowledge",
-      "standard": "agentknowledge",
-      "type": "brand-product",
-      "required": true
-    },
-    {
-      "key": "material_library",
-      "standard": "agentknowledge",
-      "type": "content-operations",
-      "required": false
     }
   ],
   "artifacts": [
     {
-      "key": "content_table",
-      "title": "内容表",
-      "type": "table",
-      "required": true
-    },
-    {
-      "key": "scene_table",
-      "title": "场景表",
-      "type": "table",
-      "required": true
-    },
-    {
-      "key": "content_batch",
-      "title": "内容批次",
-      "type": "batch",
-      "required": true
-    },
-    {
-      "key": "script_batch",
-      "title": "脚本批次",
-      "type": "batch",
-      "required": true
-    },
-    {
-      "key": "prompt_batch",
-      "title": "图片提示词批次",
-      "type": "batch",
-      "required": false
+      "key": "content_factory_workspace_patch",
+      "type": "content_factory.workspace_patch"
     }
   ],
-  "policies": [
-    {
-      "key": "lab_only",
-      "title": "P4-R 实验岛",
-      "required": true
-    }
-  ],
-  "services": [
-    {
-      "key": "content_worker",
-      "kind": "worker",
-      "path": "./dist/worker/index.js",
-      "required": true
-    }
-  ],
-  "workflows": [
-    {
-      "key": "content_scenario_planning",
-      "path": "./workflows/content-scenarios.workflow.md",
-      "humanReview": true,
-      "required": true
-    }
-  ],
-  "skillRefs": [
-    {
-      "id": "article-writer",
-      "standard": "agentskills",
-      "activation": "entry",
-      "required": true
-    }
-  ],
-  "toolRefs": [
-    {
-      "key": "document_parser",
-      "provider": "lime.tools",
-      "required": true
-    },
-    {
-      "key": "competitor_research",
-      "provider": "lime.tools",
-      "required": false
-    },
-    {
-      "key": "creative_capability_search",
-      "provider": "lime.tools",
-      "capabilities": [
-        "lime.capability.image.generate",
-        "lime.capability.cover.generate",
-        "lime.capability.research.search",
-        "lime.capability.report.generate",
-        "lime.capability.pdf.read",
-        "lime.capability.summary.generate"
+  "workbench": {
+    "profile": "production",
+    "productWorkspace": {
+      "scope": "session",
+      "primaryObjectKinds": [
+        "articleDraft",
+        "imageGenerationSet",
+        "videoStoryboard"
       ],
-      "required": false
-    }
-  ],
-  "evals": [
-    {
-      "key": "fact_grounding",
-      "kind": "quality",
-      "evidenceRequired": true,
-      "required": true
+      "snapshotPolicy": {
+        "onArtifactCreated": true,
+        "onUserSelectionChanged": true,
+        "onSessionClosed": true
+      }
     },
-    {
-      "key": "publish_readiness",
-      "kind": "human-review",
-      "evidenceRequired": false,
-      "required": false
-    }
-  ],
-  "events": [
-    {
-      "key": "content_factory.completed",
-      "direction": "publish",
-      "required": false
-    }
-  ],
-  "secrets": [
-    {
-      "key": "publishing_workspace_token",
-      "provider": "lime.secrets",
-      "scope": "workspace",
-      "required": false
-    }
-  ],
-  "overlayTemplates": [
-    {
-      "key": "workspace_content_rules",
-      "scope": "workspace",
-      "required": false
-    }
-  ],
-  "ui": {
-    "routes": [
+    "productionObjects": [
       {
-        "entry": "dashboard",
-        "path": "/dashboard"
+        "kind": "contentBrief",
+        "title": "内容简报",
+        "artifactKind": "content_brief",
+        "defaultSurface": "briefForm",
+        "versioning": "revision"
       },
       {
-        "entry": "content_factory",
-        "path": "/content-factory"
+        "kind": "articleDraft",
+        "title": "文章草稿",
+        "artifactKind": "markdown_document",
+        "defaultSurface": "documentCanvas",
+        "versioning": "revision",
+        "primary": true
+      },
+      {
+        "kind": "imageGenerationSet",
+        "title": "图片生成组",
+        "artifactKind": "image_set",
+        "defaultSurface": "imageGrid",
+        "versioning": "snapshot"
+      },
+      {
+        "kind": "videoScript",
+        "title": "视频脚本",
+        "artifactKind": "video_script",
+        "defaultSurface": "documentCanvas",
+        "versioning": "revision"
+      },
+      {
+        "kind": "videoStoryboard",
+        "title": "视频分镜",
+        "artifactKind": "storyboard",
+        "defaultSurface": "storyboard",
+        "versioning": "revision"
+      },
+      {
+        "kind": "deliveryChecklist",
+        "title": "交付检查清单",
+        "artifactKind": "delivery_checklist",
+        "defaultSurface": "checklist",
+        "versioning": "snapshot"
       }
-    ]
-  },
-  "lifecycle": {
-    "install": {
-      "reviewRequired": true
-    },
-    "uninstall": {
-      "policy": "ask"
+    ],
+    "workbenchTasks": [
+      {
+        "kind": "content.article.generate",
+        "title": "生成文章草稿",
+        "expectedObjects": ["articleDraft"],
+        "defaultSurface": "documentCanvas"
+      },
+      {
+        "kind": "content.image.generate",
+        "title": "生成配图",
+        "expectedObjects": ["imageGenerationSet"],
+        "defaultSurface": "imageGrid"
+      },
+      {
+        "kind": "content.video.script.generate",
+        "title": "生成视频脚本",
+        "expectedObjects": ["videoScript"],
+        "defaultSurface": "documentCanvas"
+      },
+      {
+        "kind": "content.video.storyboard.generate",
+        "title": "生成视频分镜",
+        "expectedObjects": ["videoStoryboard"],
+        "defaultSurface": "storyboard"
+      },
+      {
+        "kind": "content.delivery.review",
+        "title": "检查交付内容",
+        "expectedObjects": ["deliveryChecklist"],
+        "defaultSurface": "checklist",
+        "humanReview": true
+      }
+    ],
+    "objectSurfaces": [
+      {
+        "objectKind": "contentBrief",
+        "surfaceKind": "briefForm",
+        "title": "内容简报",
+        "renderer": "host_builtin",
+        "layout": "form"
+      },
+      {
+        "objectKind": "articleDraft",
+        "surfaceKind": "documentCanvas",
+        "title": "文章草稿",
+        "renderer": "host_builtin",
+        "layout": "document"
+      },
+      {
+        "objectKind": "imageGenerationSet",
+        "surfaceKind": "imageGrid",
+        "title": "图片生成组",
+        "renderer": "host_builtin",
+        "layout": "grid"
+      },
+      {
+        "objectKind": "videoScript",
+        "surfaceKind": "documentCanvas",
+        "title": "视频脚本",
+        "renderer": "host_builtin",
+        "layout": "document"
+      },
+      {
+        "objectKind": "videoStoryboard",
+        "surfaceKind": "storyboard",
+        "title": "视频分镜",
+        "renderer": "host_builtin",
+        "layout": "storyboard"
+      },
+      {
+        "objectKind": "deliveryChecklist",
+        "surfaceKind": "checklist",
+        "title": "交付检查清单",
+        "renderer": "host_builtin",
+        "layout": "checklist"
+      }
+    ],
+    "historyRestore": {
+      "defaultSurface": "selectedObject",
+      "restoreSelection": true,
+      "restoreLayout": true,
+      "fallback": "artifactPreview"
     }
-  }
+  },
+  "requirements": "./app.requirements.yaml",
+  "boundary": "./app.boundary.yaml",
+  "operations": "./app.operations.yaml"
 }

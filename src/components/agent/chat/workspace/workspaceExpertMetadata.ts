@@ -3,6 +3,7 @@ import { asRecord } from "./browserAssistArtifact";
 export interface ResolveExpertPanelRequestMetadataParams {
   initialAutoSendRequestMetadata?: Record<string, unknown>;
   initialRequestMetadata?: Record<string, unknown>;
+  sessionRequestMetadata?: Record<string, unknown> | null;
 }
 
 export function resolveExpertPanelRequestMetadata({
@@ -49,17 +50,34 @@ export function resolveWorkspaceRequestMetadataWithExpertSkills({
   expertSkillRefsOverride,
   initialAutoSendRequestMetadata,
   initialRequestMetadata,
+  sessionRequestMetadata,
 }: ResolveExpertPanelRequestMetadataParams & {
   expertSkillRefsOverride: string[] | null;
 }): Record<string, unknown> | null {
   const metadataWithExpertSkills = mergeExpertSkillRefsIntoRequestMetadata(
-    initialRequestMetadata ?? initialAutoSendRequestMetadata ?? null,
+    initialRequestMetadata ??
+      initialAutoSendRequestMetadata ??
+      sessionRequestMetadata ??
+      null,
     expertSkillRefsOverride,
   );
   return metadataWithExpertSkills &&
     Object.keys(metadataWithExpertSkills).length > 0
     ? metadataWithExpertSkills
     : null;
+}
+
+export function resolveSessionExpertRequestMetadata(
+  threadRead?: {
+    session_business_object_ref_metadata?: Record<string, unknown> | null;
+  } | null,
+): Record<string, unknown> | null {
+  const metadata = asRecord(threadRead?.session_business_object_ref_metadata);
+  const harness = asRecord(metadata?.harness);
+  if (!asRecord(metadata?.expert) && !asRecord(harness?.expert)) {
+    return null;
+  }
+  return { ...metadata };
 }
 
 export function shouldAllowDetachedInitialAutoSend(

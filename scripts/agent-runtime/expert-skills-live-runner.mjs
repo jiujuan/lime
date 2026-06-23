@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   EXPERT_SKILLS_RUNTIME_PROMPT,
+  SKILLS_RUNTIME_SKILL_NAME,
   buildExpertSkillsRuntimeMetadata,
 } from "./skills-runtime-fixture-scenario.mjs";
 import { buildExpertSkillsLiveGateReport } from "./expert-skills-live-gate.mjs";
@@ -16,7 +17,7 @@ import {
 } from "../lib/live-provider-smoke-gate.mjs";
 import {
   createAgentSessionCurrent,
-  exportAgentSessionEvidencePackCurrent,
+  invokeAppServerMethod,
   invokeDevBridge,
   readAgentRuntimeThreadCurrent,
   resolveProviderPreference,
@@ -40,13 +41,22 @@ const DEFAULT_OUTPUT = path.join(
   rootDir,
   ".lime/qc/expert-skills-live-runner-summary.json",
 );
+const DEFAULT_LIVE_WORKSPACE_ROOT = path.join(
+  rootDir,
+  ".lime/qc/expert-skills-live-workspace",
+);
 const DEFAULT_DETERMINISTIC_SUMMARY =
   ".lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-expert-panel-skills-runtime-regression-summary.json";
 const DEFAULT_HEALTH_URL = "http://127.0.0.1:3030/health";
 const DEFAULT_INVOKE_URL = "http://127.0.0.1:3030/invoke";
 const DEFAULT_TIMEOUT_MS = 180_000;
 const DEFAULT_INTERVAL_MS = 1_000;
+const DEFAULT_COMPLETION_GRACE_MS = 30_000;
 const LOG_PREFIX = "[smoke:expert-skills-live-runner]";
+const APP_SERVER_METHOD_EVIDENCE_EXPORT = "evidence/export";
+const LIVE_SKILL_DIRECTORY = "capability-report";
+const LIVE_SKILL_SOURCE_DRAFT_ID = "capdraft-live-capability-report";
+const LIVE_SKILL_VERIFICATION_REPORT_ID = "capver-live-capability-report";
 
 const CORE_ASSERTION_KEYS = [
   "expertSkillsRuntimePromptReachedBackend",
@@ -89,15 +99,19 @@ function jsonText(value) {
   }
 }
 
-function boolAt(value, keys) {
+function valueAt(value, keys) {
   let cursor = value;
   for (const key of keys) {
     if (!isRecord(cursor)) {
-      return false;
+      return undefined;
     }
     cursor = cursor[key];
   }
-  return cursor === true;
+  return cursor;
+}
+
+function boolAt(value, keys) {
+  return valueAt(value, keys) === true;
 }
 
 function hasLiveProviderStatement(summary) {
@@ -204,35 +218,292 @@ function countAny(text, patterns) {
   }, 0);
 }
 
+function pickString(target, keys) {
+  for (const key of keys) {
+    const value = target?.[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return "";
+}
+
+function visitRecords(value, visitor, seen = new Set()) {
+  if (!value || typeof value !== "object") {
+    return;
+  }
+  if (seen.has(value)) {
+    return;
+  }
+  seen.add(value);
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      visitRecords(item, visitor, seen);
+    }
+    return;
+  }
+  visitor(value);
+  for (const item of Object.values(value)) {
+    visitRecords(item, visitor, seen);
+  }
+}
+
+function toolRecordPayload(record) {
+  return isRecord(record?.payload) ? record.payload : record;
+}
+
+function toolRecordName(record) {
+  const payload = toolRecordPayload(record);
+  return pickString(payload, ["toolName", "tool_name", "name"]);
+}
+
+function toolRecordMetadata(record) {
+  const payload = toolRecordPayload(record);
+  return isRecord(payload?.metadata) ? payload.metadata : {};
+}
+
+function toolRecordType(record) {
+  return pickString(record, ["type", "eventType", "event_type"]);
+}
+
+function isStructuredToolRecord(record) {
+  const payload = toolRecordPayload(record);
+  const type = toolRecordType(record);
+  return (
+    type.startsWith("tool.") ||
+    Object.hasOwn(payload, "toolName") ||
+    Object.hasOwn(payload, "tool_name") ||
+    Object.hasOwn(payload, "toolCallId") ||
+    Object.hasOwn(payload, "tool_call_id") ||
+    Object.hasOwn(payload, "toolId") ||
+    Object.hasOwn(payload, "tool_id")
+  );
+}
+
+function collectStructuredToolMarkers(...sources) {
+  const markers = [];
+  for (const source of sources) {
+    visitRecords(source, (record) => {
+      if (!isStructuredToolRecord(record)) {
+        return;
+      }
+      const payload = toolRecordPayload(record);
+      const metadata = toolRecordMetadata(record);
+      const toolName = toolRecordName(record);
+      const toolFamily = pickString(metadata, [
+        "tool_family",
+        "toolFamily",
+      ]);
+      const payloadText = jsonText(payload);
+      if (toolName === "skill_search" || toolFamily === "skill_search") {
+        markers.push({ kind: "skill_search" });
+        return;
+      }
+      if (
+        toolName === "Skill" ||
+        toolName === "skill" ||
+        toolFamily === "skill" ||
+        payloadText.includes("skill_invocation")
+      ) {
+        markers.push({ kind: "skill_invocation" });
+      }
+    });
+  }
+  return markers;
+}
+
+function latestStatusFromThreadRead(threadRead) {
+  return String(
+    threadRead?.diagnostics?.latest_turn_status ||
+      threadRead?.diagnostics?.latestTurnStatus ||
+      threadRead?.runtime_summary?.latestTurnStatus ||
+      threadRead?.runtimeSummary?.latestTurnStatus ||
+      threadRead?.status ||
+      valueAt(threadRead, ["result", "session", "status"]) ||
+      "",
+  ).toLowerCase();
+}
+
+function threadCompleted(threadRead) {
+  const latestStatus = latestStatusFromThreadRead(threadRead);
+  if (latestStatus === "completed" || latestStatus === "succeeded") {
+    return true;
+  }
+  const turnStatuses = Array.isArray(threadRead?.turns)
+    ? threadRead.turns.map((turn) =>
+        String(turn?.status || "").toLowerCase(),
+      )
+    : [];
+  return turnStatuses.length > 0
+    ? turnStatuses.every((status) => status === "completed" || status === "succeeded")
+    : false;
+}
+
+function providerFailureMessage(threadRead) {
+  return (
+    pickString(threadRead?.diagnostics, [
+      "latest_turn_error_message",
+      "latestTurnErrorMessage",
+    ]) ||
+    pickString(threadRead?.runtime_summary, [
+      "latestTurnErrorMessage",
+      "latest_turn_error_message",
+    ]) ||
+    pickString(threadRead?.runtimeSummary, [
+      "latestTurnErrorMessage",
+      "latest_turn_error_message",
+    ]) ||
+    ""
+  );
+}
+
+async function exportAgentSessionEvidenceCurrent(options, { sessionId, turnId }) {
+  return invokeAppServerMethod(options, APP_SERVER_METHOD_EVIDENCE_EXPORT, {
+    sessionId,
+    turnId,
+    includeEvents: true,
+    includeArtifacts: true,
+    includeEvidencePack: true,
+  });
+}
+
+function writeLiveSkillFileIfMissing(skillFilePath) {
+  if (fs.existsSync(skillFilePath)) {
+    return false;
+  }
+  fs.writeFileSync(
+    skillFilePath,
+    [
+      "---",
+      "name: Capability Report",
+      "description: Read local context and produce a minimal capability/code-review report for live runtime verification.",
+      "allowed-tools: Read",
+      "---",
+      "",
+      "# Capability Report",
+      "",
+      "Use this skill when the current expert needs a small, evidence-backed code capability or review report.",
+      "",
+      "## Steps",
+      "",
+      "1. Read only the immediately relevant local context.",
+      "2. Identify one concrete capability, risk, or improvement.",
+      "3. Return the checked scope, evidence used, and one minimal recommendation.",
+      "",
+      "Do not claim that external systems were changed unless the evidence shows it.",
+      "",
+    ].join("\n"),
+  );
+  return true;
+}
+
+export function ensureExpertSkillsLiveWorkspaceSkill(workspaceRoot) {
+  const resolvedWorkspaceRoot = resolvePath(workspaceRoot);
+  if (!path.isAbsolute(resolvedWorkspaceRoot)) {
+    throw new Error(`live workspace root 必须是绝对路径: ${workspaceRoot}`);
+  }
+  const skillDirectory = path.join(
+    resolvedWorkspaceRoot,
+    ".agents",
+    "skills",
+    LIVE_SKILL_DIRECTORY,
+  );
+  const skillFilePath = path.join(skillDirectory, "SKILL.md");
+  const registrationDirectory = path.join(skillDirectory, ".lime");
+  const registrationFilePath = path.join(
+    registrationDirectory,
+    "registration.json",
+  );
+  fs.mkdirSync(registrationDirectory, { recursive: true });
+  const skillFileCreated = writeLiveSkillFileIfMissing(skillFilePath);
+  const registration = {
+    registrationId: "capreg-live-capability-report",
+    registeredAt: new Date().toISOString(),
+    skillDirectory: LIVE_SKILL_DIRECTORY,
+    registeredSkillDirectory: skillDirectory,
+    sourceDraftId: LIVE_SKILL_SOURCE_DRAFT_ID,
+    sourceVerificationReportId: LIVE_SKILL_VERIFICATION_REPORT_ID,
+    generatedFileCount: 1,
+    permissionSummary: ["Level 0 read-only live smoke"],
+  };
+  writeJsonFile(registrationFilePath, registration);
+  return {
+    workspaceRoot: resolvedWorkspaceRoot,
+    directory: LIVE_SKILL_DIRECTORY,
+    skillName: SKILLS_RUNTIME_SKILL_NAME,
+    skillDirectory,
+    skillFilePath,
+    registrationFilePath,
+    registration,
+    skillFileCreated,
+  };
+}
+
+export function buildExpertSkillsLiveRuntimeMetadata(workspaceSkill) {
+  const metadata = buildExpertSkillsRuntimeMetadata();
+  return {
+    ...metadata,
+    workspaceRoot: workspaceSkill.workspaceRoot,
+    harness: {
+      ...metadata.harness,
+      source: "smoke:expert-skills-live-runner",
+      workspace_root: workspaceSkill.workspaceRoot,
+      working_directory: workspaceSkill.workspaceRoot,
+      workspace_skill_runtime_enable: {
+        source: "manual_session_enable",
+        approval: "manual",
+        workspace_root: workspaceSkill.workspaceRoot,
+        bindings: [
+          {
+            directory: workspaceSkill.directory,
+            skill: workspaceSkill.skillName,
+            registered_skill_directory: workspaceSkill.skillDirectory,
+            source_draft_id:
+              workspaceSkill.registration.sourceDraftId ||
+              LIVE_SKILL_SOURCE_DRAFT_ID,
+            source_verification_report_id:
+              workspaceSkill.registration.sourceVerificationReportId ||
+              LIVE_SKILL_VERIFICATION_REPORT_ID,
+            permission_summary:
+              workspaceSkill.registration.permissionSummary || [],
+          },
+        ],
+      },
+    },
+  };
+}
+
 export function buildLiveRuntimeSummary({
   provider,
   model,
   threadRead,
   evidencePack,
+  evidenceExport,
   sessionId,
   turnId,
+  workspaceSkill,
 }) {
   const threadText = jsonText(threadRead);
   const evidenceText = jsonText(evidencePack);
-  const combinedText = `${threadText}\n${evidenceText}`;
-  const searchIndex = indexOfAny(combinedText, [
-    "skill_search",
-    "skillSearch",
-    "skill_searches",
-  ]);
-  const invocationIndex = indexOfAny(combinedText, [
-    "skill_invocation",
-    "skillInvocation",
-    "Skill invocation",
-  ]);
-  const skillSearchCount = countAny(combinedText, [
-    "skill_search",
-    "skillSearch",
-  ]);
-  const skillInvocationCount = countAny(combinedText, [
-    "skill_invocation",
-    "skillInvocation",
-  ]);
+  const evidenceExportText = jsonText(evidenceExport);
+  const combinedText = `${threadText}\n${evidenceText}\n${evidenceExportText}`;
+  const toolMarkers = collectStructuredToolMarkers(
+    threadRead,
+    evidencePack,
+    evidenceExport,
+  );
+  const searchIndex = toolMarkers.findIndex(
+    (marker) => marker.kind === "skill_search",
+  );
+  const invocationIndex = toolMarkers.findIndex(
+    (marker) => marker.kind === "skill_invocation",
+  );
+  const skillSearchCount = toolMarkers.filter(
+    (marker) => marker.kind === "skill_search",
+  ).length;
+  const skillInvocationCount = toolMarkers.filter(
+    (marker) => marker.kind === "skill_invocation",
+  ).length;
   const skillBodyReadObserved =
     combinedText.includes("skill_body_read") ||
     combinedText.includes("skillBodyRead") ||
@@ -263,14 +534,14 @@ export function buildLiveRuntimeSummary({
     expertDeclaredSkillRefsObserved: expertDeclaredObserved,
     expertSelectedSkillObserved: expertSelectedObserved,
     expertInvokedSkillObserved: expertInvokedObserved,
-    readModelExpertSkillsRuntimeCompleted: threadSettled(threadRead),
+    readModelExpertSkillsRuntimeCompleted: threadCompleted(threadRead),
     readModelExpertSkillSearchObserved: skillSearchCount > 0,
     readModelExpertSkillInvocationObserved: skillInvocationCount > 0,
     evidenceExpertSkillBodyReadObserved: skillBodyReadObserved,
     evidenceExpertSkillGateObserved: skillGateObserved,
     evidencePackExpertSkillSearchObserved: skillSearchCount > 0,
     evidencePackExpertSkillInvocationObserved: skillInvocationCount > 0,
-    expertSkillSearchBeforeSkillInvocation,
+    expertSkillSearchBeforeSkillInvocation: skillSearchBeforeSkillInvocation,
   };
   const ok = CORE_ASSERTION_KEYS.every((key) => assertions[key] === true);
 
@@ -291,6 +562,29 @@ export function buildLiveRuntimeSummary({
       turnId,
       thread: summarizeThreadRead(threadRead),
       evidencePack: summarizeEvidencePack(evidencePack),
+      evidenceExport: evidenceExport
+        ? {
+            eventCount: Array.isArray(evidenceExport.events)
+              ? evidenceExport.events.length
+              : Array.isArray(evidenceExport.agentEvents)
+                ? evidenceExport.agentEvents.length
+                : null,
+            artifactCount: Array.isArray(evidenceExport.artifacts)
+              ? evidenceExport.artifacts.length
+              : null,
+          }
+        : null,
+      providerFailureMessage: providerFailureMessage(threadRead) || null,
+      workspaceSkill: workspaceSkill
+        ? {
+            workspaceRoot: workspaceSkill.workspaceRoot,
+            directory: workspaceSkill.directory,
+            skillName: workspaceSkill.skillName,
+            skillFilePath: workspaceSkill.skillFilePath,
+            registrationFilePath: workspaceSkill.registrationFilePath,
+            skillFileCreated: workspaceSkill.skillFileCreated,
+          }
+        : null,
     },
     evidencePackExpertSkillsRuntime: {
       hasEvidencePack: Boolean(evidencePack),
@@ -314,7 +608,9 @@ export function buildLiveRuntimeSummary({
 async function waitForRuntimeCompletion(options, sessionId) {
   const startedAt = Date.now();
   let lastSnapshot = null;
-  while (Date.now() - startedAt < options.timeoutMs) {
+  const deadline = startedAt + options.timeoutMs;
+  const graceDeadline = deadline + options.completionGraceMs;
+  while (Date.now() < graceDeadline) {
     const threadRead = await readAgentRuntimeThreadCurrent(options, sessionId, {
       historyLimit: 80,
     });
@@ -322,10 +618,16 @@ async function waitForRuntimeCompletion(options, sessionId) {
     if (threadSettled(threadRead)) {
       return threadRead;
     }
+    const remainingMs = Date.now() < deadline
+      ? deadline - Date.now()
+      : graceDeadline - Date.now();
+    if (remainingMs <= 0) {
+      break;
+    }
     await sleep(options.intervalMs);
   }
   throw new Error(
-    `${LOG_PREFIX} live runtime timeout; last=${JSON.stringify(lastSnapshot)}`,
+    `${LOG_PREFIX} live runtime timeout; timeoutMs=${options.timeoutMs} completionGraceMs=${options.completionGraceMs} last=${JSON.stringify(lastSnapshot)}`,
   );
 }
 
@@ -343,7 +645,10 @@ async function executeLiveRuntime(options) {
   }
 
   const provider = await resolveProviderPreference(options);
-  const metadata = buildExpertSkillsRuntimeMetadata();
+  const workspaceSkill = ensureExpertSkillsLiveWorkspaceSkill(
+    options.liveWorkspaceRoot,
+  );
+  const metadata = buildExpertSkillsLiveRuntimeMetadata(workspaceSkill);
   const sessionId = await createAgentSessionCurrent(options, {
     workspaceId,
     title: `Expert Skills live ${new Date().toISOString()}`,
@@ -382,17 +687,21 @@ async function executeLiveRuntime(options) {
   });
 
   const threadRead = await waitForRuntimeCompletion(options, sessionId);
-  const evidencePack = await exportAgentSessionEvidencePackCurrent(options, {
+  const evidenceExport = await exportAgentSessionEvidenceCurrent(options, {
     sessionId,
     turnId,
   });
+  const evidencePack =
+    evidenceExport?.evidencePack ?? evidenceExport?.evidence_pack ?? null;
   return buildLiveRuntimeSummary({
     provider: provider.providerPreference,
     model: provider.modelPreference,
     threadRead,
     evidencePack,
+    evidenceExport,
     sessionId,
     turnId,
+    workspaceSkill,
   });
 }
 
@@ -417,7 +726,10 @@ Expert Skills Live Runner
   --output <path>             live summary 输出路径，默认 .lime/qc/expert-skills-live-runner-summary.json
   --health-url <url>          DevBridge health 地址，默认 ${DEFAULT_HEALTH_URL}
   --invoke-url <url>          DevBridge invoke 地址，默认 ${DEFAULT_INVOKE_URL}
+  --live-workspace-root <path>
+                              live smoke 专用 workspace root，默认 ${DEFAULT_LIVE_WORKSPACE_ROOT}
   --timeout-ms <ms>           live runtime 等待超时，默认 ${DEFAULT_TIMEOUT_MS}
+  --completion-grace-ms <ms>  timeout 后继续短暂读取完成态，默认 ${DEFAULT_COMPLETION_GRACE_MS}
   --interval-ms <ms>          轮询间隔，默认 ${DEFAULT_INTERVAL_MS}
   --provider-preference <id>  live runtime provider 偏好
   --model-preference <name>   live runtime model 偏好
@@ -435,7 +747,9 @@ export function parseArgs(argv) {
     output: DEFAULT_OUTPUT,
     healthUrl: DEFAULT_HEALTH_URL,
     invokeUrl: DEFAULT_INVOKE_URL,
+    liveWorkspaceRoot: DEFAULT_LIVE_WORKSPACE_ROOT,
     timeoutMs: DEFAULT_TIMEOUT_MS,
+    completionGraceMs: DEFAULT_COMPLETION_GRACE_MS,
     intervalMs: DEFAULT_INTERVAL_MS,
     providerPreference:
       process.env.LIME_AGENT_QC_PROVIDER ||
@@ -492,8 +806,18 @@ export function parseArgs(argv) {
       index += 1;
       continue;
     }
+    if (arg === "--live-workspace-root" && next) {
+      options.liveWorkspaceRoot = resolvePath(next);
+      index += 1;
+      continue;
+    }
     if (arg === "--timeout-ms" && next) {
       options.timeoutMs = Number(next);
+      index += 1;
+      continue;
+    }
+    if (arg === "--completion-grace-ms" && next) {
+      options.completionGraceMs = Number(next);
       index += 1;
       continue;
     }
@@ -527,6 +851,12 @@ export function parseArgs(argv) {
 
   if (!Number.isFinite(options.timeoutMs) || options.timeoutMs < 30_000) {
     throw new Error("--timeout-ms 必须是 >= 30000 的数字");
+  }
+  if (
+    !Number.isFinite(options.completionGraceMs) ||
+    options.completionGraceMs < 0
+  ) {
+    throw new Error("--completion-grace-ms 必须是 >= 0 的数字");
   }
   if (!Number.isFinite(options.intervalMs) || options.intervalMs < 100) {
     throw new Error("--interval-ms 必须是 >= 100 的数字");

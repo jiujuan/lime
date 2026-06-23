@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { cwd } from "node:process";
 import { describe, expect, it } from "vitest";
+import { readAppServerApiSources } from "../../test/appServerApiSources";
 
 const RETIRED_FRONTEND_SESSION_MANAGEMENT_COMMANDS = [
   "session_files_create",
@@ -115,7 +116,7 @@ describe("Session files frontend boundary", () => {
     const clientProtocolSource = readRepoFile(
       "packages/app-server-client/src/protocol.ts",
     );
-    const appServerFacadeSource = readRepoFile("src/lib/api/appServer.ts");
+    const appServerFacadeSource = readAppServerApiSources();
 
     for (const method of CURRENT_SESSION_FILE_METHODS) {
       expect(protocolSource).toContain(`"${method}"`);

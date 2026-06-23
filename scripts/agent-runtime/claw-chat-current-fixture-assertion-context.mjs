@@ -7,6 +7,7 @@ import {
   MCP_STRUCTURED_CONTENT_PROMPT,
   NEWS_PROMPT,
   PLAN_PROMPT,
+  RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO,
   SKILLS_RUNTIME_EXPLICIT_PROMPT,
   SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT,
   SKILLS_RUNTIME_PROMPT,
@@ -113,6 +114,8 @@ export function buildAssertionContext({
       options.scenario === "expert-plaza-skills-runtime";
     const isExpertPanelSkillsRuntimeScenario =
       options.scenario === "expert-panel-skills-runtime";
+    const isRightSurfaceVisualMatrixScenario =
+      options.scenario === RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO;
     const isAnyExpertSkillsRuntimeScenario =
       isExpertSkillsRuntimeScenario ||
       isExpertPlazaSkillsRuntimeScenario ||
@@ -241,6 +244,7 @@ export function buildAssertionContext({
     isExpertSkillsRuntimeScenario,
     isExpertPlazaSkillsRuntimeScenario,
     isExpertPanelSkillsRuntimeScenario,
+    isRightSurfaceVisualMatrixScenario,
     isAnyExpertSkillsRuntimeScenario,
     expertRuntimeTurnStartForAssertions,
     asterChatRequest,

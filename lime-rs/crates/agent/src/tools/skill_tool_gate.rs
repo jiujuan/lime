@@ -1070,7 +1070,7 @@ impl Tool for LimeSkillTool {
     }
 
     fn description(&self) -> &str {
-        "在显式启用的工作流中执行技能。通用对话默认不会暴露技能自动调用能力。"
+        "在显式启用的工作流中执行技能。通用对话默认不会暴露技能自动调用能力；专家绑定或 workspace runtime enable 的候选技能必须先调用 skill_search 记录 selector 证据，再调用 Skill。"
     }
 
     fn input_schema(&self) -> Value {

@@ -1443,9 +1443,15 @@ fn convert_item_payload(payload: ItemRuntimePayload) -> Option<AgentThreadItemPa
             content,
             metadata,
         }),
-        ItemRuntimePayload::Reasoning { text, summary } => {
-            Some(AgentThreadItemPayload::Reasoning { text, summary })
-        }
+        ItemRuntimePayload::Reasoning {
+            text,
+            summary,
+            metadata,
+        } => Some(AgentThreadItemPayload::Reasoning {
+            text,
+            summary,
+            metadata,
+        }),
         ItemRuntimePayload::ToolCall {
             tool_name,
             arguments,
@@ -2475,6 +2481,11 @@ mod tests {
                     "先判断任务类型".to_string(),
                     "再决定是否联网".to_string(),
                 ]),
+                metadata: Some(serde_json::json!({
+                    "provider_metadata": {
+                        "signature": "sig-anthropic"
+                    }
+                })),
             },
         };
 
@@ -2482,7 +2493,11 @@ mod tests {
         assert_eq!(events.len(), 1);
         match &events[0] {
             TauriAgentEvent::ItemStarted { item } => match &item.payload {
-                AgentThreadItemPayload::Reasoning { text, summary } => {
+                AgentThreadItemPayload::Reasoning {
+                    text,
+                    summary,
+                    metadata,
+                } => {
                     assert_eq!(text, "先判断任务类型\n\n再决定是否联网");
                     assert_eq!(
                         summary.as_ref(),
@@ -2490,6 +2505,14 @@ mod tests {
                             "先判断任务类型".to_string(),
                             "再决定是否联网".to_string(),
                         ])
+                    );
+                    assert_eq!(
+                        metadata.as_ref(),
+                        Some(&serde_json::json!({
+                            "provider_metadata": {
+                                "signature": "sig-anthropic"
+                            }
+                        }))
                     );
                 }
                 other => panic!("Unexpected payload: {other:?}"),

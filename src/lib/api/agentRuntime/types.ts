@@ -314,10 +314,12 @@ export interface AgentRuntimeThreadDiagnostics {
 
 export interface AgentRuntimeThreadReadModel {
   thread_id: string;
+  session_business_object_ref_metadata?: Record<string, unknown> | null;
   status?: string;
   profile_status?: AgentRuntimeProfileStatus;
   active_turn_id?: string;
   turns?: AgentRuntimeThreadTurnProfileView[];
+  thread_items?: AgentThreadItem[];
   pending_requests?: AgentRuntimeRequestView[];
   last_outcome?: AgentRuntimeOutcomeView | null;
   incidents?: AgentRuntimeIncidentView[];
@@ -329,6 +331,8 @@ export interface AgentRuntimeThreadReadModel {
   active_test_run_id?: string | null;
   active_action_id?: string | null;
   artifacts?: Record<string, unknown>[];
+  product_workspace?: Record<string, unknown> | null;
+  productWorkspace?: Record<string, unknown> | null;
   model_routing?: Record<string, unknown> | null;
   evidence_summary?: AgentRuntimeThreadEvidenceSummary | null;
   telemetry_summary?: AgentRuntimeThreadTelemetrySummary | null;
@@ -1423,6 +1427,7 @@ export interface AgentRuntimeUpdateSessionRequest {
   recent_access_mode?: AsterSessionExecutionRuntimeAccessMode;
   recent_preferences?: AsterSessionExecutionRuntimePreferences;
   recent_team_selection?: AsterSessionExecutionRuntimeRecentTeamSelection;
+  product_workspace_selected_object_ref?: Record<string, unknown> | null;
 }
 
 export interface AgentRuntimeFrontmatterHookMatcher {

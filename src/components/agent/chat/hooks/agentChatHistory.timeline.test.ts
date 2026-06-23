@@ -214,6 +214,111 @@ describe("agentChatHistory timeline fallback", () => {
     ]);
   });
 
+  it("历史 plan item 应恢复为 proposed_plan 且 update_plan tool_call 不应恢复为消息工具卡", () => {
+    const detail: AsterSessionDetail = {
+      id: "session-update-plan-history",
+      created_at: 1,
+      updated_at: 2,
+      messages: [],
+      turns: [
+        {
+          id: "turn-update-plan-history",
+          thread_id: "session-update-plan-history",
+          prompt_text: "先规划再执行",
+          status: "completed",
+          started_at: "2026-06-18T10:00:00.000Z",
+          completed_at: "2026-06-18T10:00:06.000Z",
+          created_at: "2026-06-18T10:00:00.000Z",
+          updated_at: "2026-06-18T10:00:06.000Z",
+        },
+      ],
+      items: [
+        {
+          id: "item-user-update-plan-history",
+          thread_id: "session-update-plan-history",
+          turn_id: "turn-update-plan-history",
+          sequence: 1,
+          type: "user_message",
+          content: "先规划再执行",
+          status: "completed",
+          started_at: "2026-06-18T10:00:00.000Z",
+          completed_at: "2026-06-18T10:00:00.000Z",
+          updated_at: "2026-06-18T10:00:00.000Z",
+        } as never,
+        {
+          id: "item-plan-update-plan-history",
+          thread_id: "session-update-plan-history",
+          turn_id: "turn-update-plan-history",
+          sequence: 2,
+          type: "plan",
+          text: "- [x] 整理计划\n- [ ] 执行修改",
+          metadata: {
+            revisionId: "update_plan:item-update-plan-history",
+            source: "update_plan",
+          },
+          status: "completed",
+          started_at: "2026-06-18T10:00:01.000Z",
+          completed_at: "2026-06-18T10:00:02.000Z",
+          updated_at: "2026-06-18T10:00:02.000Z",
+        } as never,
+        {
+          id: "item-tool-update-plan-history",
+          thread_id: "session-update-plan-history",
+          turn_id: "turn-update-plan-history",
+          sequence: 3,
+          type: "tool_call",
+          tool_name: "UpdatePlanTool",
+          arguments: {
+            plan: [
+              { step: "整理计划", status: "completed" },
+              { step: "执行修改", status: "in_progress" },
+            ],
+          },
+          output: "ok",
+          success: true,
+          status: "completed",
+          started_at: "2026-06-18T10:00:03.000Z",
+          completed_at: "2026-06-18T10:00:04.000Z",
+          updated_at: "2026-06-18T10:00:04.000Z",
+        } as never,
+        {
+          id: "item-assistant-update-plan-history",
+          thread_id: "session-update-plan-history",
+          turn_id: "turn-update-plan-history",
+          sequence: 4,
+          type: "agent_message",
+          text: "计划已更新。",
+          phase: "final_answer",
+          status: "completed",
+          started_at: "2026-06-18T10:00:05.000Z",
+          completed_at: "2026-06-18T10:00:06.000Z",
+          updated_at: "2026-06-18T10:00:06.000Z",
+        } as never,
+      ],
+    };
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "session-update-plan-history",
+    );
+    const assistantMessage = messages.find(
+      (message) => message.role === "assistant",
+    );
+
+    expect(assistantMessage?.toolCalls).toBeUndefined();
+    expect(assistantMessage?.contentParts).toEqual([
+      {
+        type: "text",
+        text:
+          "<proposed_plan>\n" +
+          "- [x] 整理计划\n" +
+          "- [ ] 执行修改\n" +
+          "</proposed_plan>\n" +
+          "计划已更新。",
+      },
+    ]);
+  });
+
   it("App Server 历史 turn 缺少旧 prompt_text 字段时不应中断会话恢复", () => {
     const detail: AsterSessionDetail = {
       id: "session-missing-legacy-text",

@@ -565,6 +565,8 @@ function appServerSessionUpdateParamsFromRequest(
     recentAccessMode: request.recent_access_mode,
     recentPreferences: request.recent_preferences,
     recentTeamSelection: request.recent_team_selection,
+    productWorkspaceSelectedObjectRef:
+      request.product_workspace_selected_object_ref ?? undefined,
   });
 }
 
@@ -694,12 +696,6 @@ function readSessionDetail(
   }
   const detail = response.detail as Partial<AsterSessionDetail>;
   const fallback = appServerSessionReadToRuntimeDetail(response);
-  const detailThreadRead = isRecord(detail.thread_read)
-    ? detail.thread_read
-    : isRecord((detail as Record<string, unknown>).threadRead)
-      ? ((detail as Record<string, unknown>)
-          .threadRead as AsterSessionDetail["thread_read"])
-      : undefined;
   const detailExecutionRuntime = isRecord(detail.execution_runtime)
     ? detail.execution_runtime
     : isRecord((detail as Record<string, unknown>).executionRuntime)
@@ -740,9 +736,7 @@ function readSessionDetail(
     queued_turns: Array.isArray(detail.queued_turns)
       ? detail.queued_turns
       : fallback.queued_turns,
-    thread_read:
-      detailThreadRead ??
-      projectAppServerSessionReadToThreadReadModel(response),
+    thread_read: fallback.thread_read,
     execution_runtime:
       detailExecutionRuntime === undefined
         ? fallback.execution_runtime

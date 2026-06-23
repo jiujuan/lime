@@ -62,8 +62,59 @@ function firstMeaningfulLine(text: string | undefined | null): string | null {
   return normalized || null;
 }
 
+function flattenMeaningfulLines(text: string | undefined | null): string | null {
+  const normalized = (text || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .join(" ");
+
+  return normalized || null;
+}
+
+function endsWithSentencePunctuation(line: string): boolean {
+  return /[.!?。！？…)"'」』】〕〉》]$/.test(line.trim());
+}
+
+function startsWithLeadingPunctuation(line: string): boolean {
+  return /^[,.;:!?，。；：！？、）)"'」』】〕〉》]/.test(line.trim());
+}
+
+function isThinkingPreviewFragmentLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed) {
+    return false;
+  }
+  if (startsWithLeadingPunctuation(trimmed)) {
+    return true;
+  }
+  if (trimmed.length <= 12) {
+    return true;
+  }
+  return trimmed.length <= 28 && !endsWithSentencePunctuation(trimmed);
+}
+
+function shouldFlattenThinkingPreviewFragments(text: string): boolean {
+  const textLines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  if (textLines.length < 2) {
+    return false;
+  }
+
+  const fragmentCount = textLines.filter(isThinkingPreviewFragmentLine).length;
+  if (textLines.length >= 4) {
+    return fragmentCount >= Math.ceil(textLines.length * 0.5);
+  }
+
+  return fragmentCount === textLines.length;
+}
+
 function extractThinkingPreviewLine(
   text: string | undefined | null,
+  options?: { flattenFragments?: boolean },
 ): string | null {
   const normalized = text?.trim();
   if (!normalized) {
@@ -71,7 +122,11 @@ function extractThinkingPreviewLine(
   }
 
   if (!STRUCTURED_CONTENT_HINT_RE.test(normalized)) {
-    return firstMeaningfulLine(normalizeProcessDisplayText(normalized));
+    const displayText = normalizeProcessDisplayText(normalized);
+    return options?.flattenFragments &&
+      shouldFlattenThinkingPreviewFragments(displayText)
+      ? flattenMeaningfulLines(displayText)
+      : firstMeaningfulLine(displayText);
   }
 
   const parsed = parseAIResponse(normalized, false);
@@ -662,7 +717,9 @@ export function summarizeThinkingItem(
 
   if (item.type === "reasoning") {
     return (
-      extractThinkingPreviewLine(item.summary?.join("；") || item.text) ||
+      extractThinkingPreviewLine(item.summary?.join("；") || item.text, {
+        flattenFragments: true,
+      }) ||
       (item.status === "in_progress" ? "思考中" : "已完成思考")
     );
   }

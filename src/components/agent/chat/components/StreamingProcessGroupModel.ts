@@ -3,6 +3,7 @@ import type { ActionRequired } from "../types";
 import { isUnifiedWebSearchToolName } from "../utils/searchResultPreview";
 import { isUnifiedWebFetchToolName } from "../utils/toolNameFamily";
 import { isImportedSourceMetadata } from "../utils/importedSourceMetadata";
+import { mergeIncrementalText } from "./streamingContentPartSegments";
 
 export type StreamingProcessEntry =
   | {
@@ -10,6 +11,8 @@ export type StreamingProcessEntry =
       id: string;
       text: string;
       defaultExpanded?: boolean;
+      isActive?: boolean;
+      autoCollapseEligible?: boolean;
       preserveSourceText?: boolean;
       metadata?: Record<string, unknown>;
     }
@@ -23,6 +26,64 @@ export type StreamingProcessEntry =
       id: string;
       actionRequired: ActionRequired;
     };
+
+function mergeThinkingEntries(
+  base: Extract<StreamingProcessEntry, { kind: "thinking" }>,
+  chunk: Extract<StreamingProcessEntry, { kind: "thinking" }>,
+): Extract<StreamingProcessEntry, { kind: "thinking" }> {
+  return {
+    ...base,
+    text: mergeIncrementalText(base.text, chunk.text),
+    defaultExpanded: base.defaultExpanded || chunk.defaultExpanded,
+    isActive: base.isActive || chunk.isActive,
+    autoCollapseEligible:
+      base.autoCollapseEligible || chunk.autoCollapseEligible,
+    preserveSourceText: base.preserveSourceText || chunk.preserveSourceText,
+    metadata: base.metadata ?? chunk.metadata,
+  };
+}
+
+export function coalesceAdjacentThinkingProcessEntries(
+  entries: StreamingProcessEntry[],
+): StreamingProcessEntry[] {
+  if (entries.length < 2) {
+    return entries;
+  }
+
+  const coalescedEntries: StreamingProcessEntry[] = [];
+  let pendingThinking: Extract<
+    StreamingProcessEntry,
+    { kind: "thinking" }
+  > | null = null;
+  let didCoalesce = false;
+
+  const flushPendingThinking = () => {
+    if (!pendingThinking) {
+      return;
+    }
+    coalescedEntries.push(pendingThinking);
+    pendingThinking = null;
+  };
+
+  for (const entry of entries) {
+    if (entry.kind !== "thinking") {
+      flushPendingThinking();
+      coalescedEntries.push(entry);
+      continue;
+    }
+
+    if (!pendingThinking) {
+      pendingThinking = entry;
+      continue;
+    }
+
+    didCoalesce = true;
+    pendingThinking = mergeThinkingEntries(pendingThinking, entry);
+  }
+
+  flushPendingThinking();
+  return didCoalesce ? coalescedEntries : entries;
+}
 
 export function isImportedProcessMetadata(metadata: unknown): boolean {
   return isImportedSourceMetadata(metadata);
@@ -68,9 +129,7 @@ function hasSuccessfulOrRunningWebRetrievalProcess(
   );
 }
 
-function hasOnlyWebRetrievalTools(
-  entries: StreamingProcessEntry[],
-): boolean {
+function hasOnlyWebRetrievalTools(entries: StreamingProcessEntry[]): boolean {
   const toolEntries = entries.filter(
     (entry): entry is Extract<StreamingProcessEntry, { kind: "tool" }> =>
       entry.kind === "tool",
@@ -130,18 +189,13 @@ export function shouldSplitProcessBeforeEntry(
   const nextIsWebRetrieval =
     nextEntry.kind === "tool" && isWebRetrievalToolCall(nextEntry.toolCall);
   const currentHasWebRetrieval = currentEntries.some(
-    (entry) =>
-      entry.kind === "tool" && isWebRetrievalToolCall(entry.toolCall),
+    (entry) => entry.kind === "tool" && isWebRetrievalToolCall(entry.toolCall),
   );
   const currentHasNonWebRetrieval = currentEntries.some(
-    (entry) =>
-      entry.kind !== "tool" || !isWebRetrievalToolCall(entry.toolCall),
+    (entry) => entry.kind !== "tool" || !isWebRetrievalToolCall(entry.toolCall),
   );
 
-  if (
-    currentHasWebRetrieval &&
-    !nextIsWebRetrieval
-  ) {
+  if (currentHasWebRetrieval && !nextIsWebRetrieval) {
     return nextEntry.kind !== "thinking";
   }
 
@@ -185,6 +239,13 @@ export function shouldAutoExpandProcessEntries(
     return true;
   }
 
+  const hasActiveThinking = entries.some(
+    (entry) => entry.kind === "thinking" && entry.isActive,
+  );
+  if (!hasImportedProcess && hasActiveThinking) {
+    return true;
+  }
+
   if (!hasImportedProcess && hasRunningWebRetrieval) {
     return true;
   }
@@ -197,10 +258,7 @@ export function shouldAutoExpandProcessEntries(
     return true;
   }
 
-  if (
-    !hasImportedProcess &&
-    hasSuccessfulOrRunningSkillProcess(entries)
-  ) {
+  if (!hasImportedProcess && hasSuccessfulOrRunningSkillProcess(entries)) {
     return true;
   }
 
@@ -217,7 +275,7 @@ export function shouldAutoExpandProcessEntries(
     return true;
   }
 
-  return entries.every((entry) => entry.kind === "thinking");
+  return false;
 }
 
 function hasRunningWebRetrievalProcess(

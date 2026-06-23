@@ -154,6 +154,14 @@ pub const METHOD_VOICE_MODEL_DEFAULT_SET: &str = "voiceModel/default/set";
 pub const METHOD_VOICE_MODEL_TEST_TRANSCRIBE_FILE: &str = "voiceModel/testTranscribeFile";
 pub const METHOD_WORKSPACE_SKILL_BINDINGS_LIST: &str = "workspaceSkillBindings/list";
 pub const METHOD_WORKSPACE_REGISTERED_SKILLS_LIST: &str = "workspaceRegisteredSkills/list";
+pub const METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST: &str = "workspaceRightSurface/request";
+pub const METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_LIST: &str = "workspaceRightSurface/pending/list";
+pub const METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CONSUME: &str =
+    "workspaceRightSurface/pending/consume";
+pub const METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS: &str =
+    "workspaceRightSurface/pending/dismiss";
+pub const METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED: &str =
+    "workspaceRightSurface/pendingChanged";
 pub const METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT: &str = "agentAppLocalPackage/inspect";
 pub const METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD: &str = "agentAppPackage/fetchCloud";
 pub const METHOD_AGENT_APP_INSTALLED_SAVE: &str = "agentAppInstalled/save";
@@ -162,6 +170,7 @@ pub const METHOD_AGENT_APP_INSTALLED_DISABLED_SET: &str = "agentAppInstalled/dis
 pub const METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL: &str =
     "agentAppInstalled/uninstall/rehearsal";
 pub const METHOD_AGENT_APP_INSTALLED_UNINSTALL: &str = "agentAppInstalled/uninstall";
+pub const METHOD_AGENT_APP_HOST_LIFECYCLE_LIST: &str = "agentAppHostLifecycle/list";
 pub const METHOD_AGENT_APP_SHELL_PREPARE: &str = "agentAppShell/prepare";
 pub const METHOD_AGENT_APP_UI_RUNTIME_START: &str = "agentAppUiRuntime/start";
 pub const METHOD_AGENT_APP_UI_RUNTIME_STATUS: &str = "agentAppUiRuntime/status";

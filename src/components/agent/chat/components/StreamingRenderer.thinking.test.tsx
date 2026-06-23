@@ -214,7 +214,7 @@ describe("StreamingRenderer thinking and status", () => {
     ).toBeNull();
   });
 
-  it("思考内容进入流式阶段后应展开，完成后自动折叠", () => {
+  it("思考内容进入流式阶段后应展开，完成后没有后续内容时保持展开", () => {
     const { container, rerender } = renderHarness({
       content: "",
       thinkingContent: "第一步：分析问题",
@@ -245,9 +245,128 @@ describe("StreamingRenderer thinking and status", () => {
 
     const completedDetails = container.querySelector("details");
     expect(completedDetails).toBeTruthy();
-    expect((completedDetails as HTMLDetailsElement).open).toBe(false);
+    expect((completedDetails as HTMLDetailsElement).open).toBe(true);
     expect(container.textContent).toContain("已完成思考");
-    expect(container.textContent).not.toContain("第二步：调用工具");
+    expect(container.textContent).toContain("第二步：调用工具");
+  });
+
+  it("思考后出现正文且未超过屏占比阈值时应继续展开", async () => {
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
+        if (
+          this.querySelector?.(
+            '[data-testid="markdown-renderer"], [data-testid="streaming-markdown-pending-tail"]',
+          )
+        ) {
+          return {
+            bottom: 120,
+            height: 120,
+            left: 0,
+            right: 0,
+            top: 0,
+            width: 0,
+            x: 0,
+            y: 0,
+            toJSON: () => ({}),
+          };
+        }
+        return {
+          bottom: 0,
+          height: 0,
+          left: 0,
+          right: 0,
+          top: 0,
+          width: 0,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        };
+      });
+
+    try {
+      const { container } = renderHarness({
+        content: "下面开始输出正文。",
+        thinkingContent: "第一步：分析问题\n第二步：确认边界",
+        isStreaming: true,
+      });
+
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      const details = container.querySelector("details");
+      expect(details).toBeTruthy();
+      expect((details as HTMLDetailsElement).open).toBe(true);
+      expect(container.textContent).toContain("第二步：确认边界");
+    } finally {
+      rectSpy.mockRestore();
+    }
+  });
+
+  it("思考后出现正文且超过屏占比阈值时应自动折叠", async () => {
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
+        if (
+          this.querySelector?.(
+            '[data-testid="markdown-renderer"], [data-testid="streaming-markdown-pending-tail"]',
+          )
+        ) {
+          return {
+            bottom: 420,
+            height: 420,
+            left: 0,
+            right: 0,
+            top: 0,
+            width: 0,
+            x: 0,
+            y: 0,
+            toJSON: () => ({}),
+          };
+        }
+        return {
+          bottom: 0,
+          height: 0,
+          left: 0,
+          right: 0,
+          top: 0,
+          width: 0,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        };
+      });
+
+    const previousInnerHeight = window.innerHeight;
+    Object.defineProperty(window, "innerHeight", {
+      configurable: true,
+      value: 800,
+    });
+
+    try {
+      const { container } = renderHarness({
+        content: "下面开始输出正文。",
+        thinkingContent: "第一步：分析问题\n第二步：确认边界",
+        isStreaming: true,
+      });
+
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      const details = container.querySelector("details");
+      expect(details).toBeTruthy();
+      expect((details as HTMLDetailsElement).open).toBe(false);
+      expect(container.textContent).toContain("思考中");
+      expect(container.textContent).not.toContain("第二步：确认边界");
+    } finally {
+      Object.defineProperty(window, "innerHeight", {
+        configurable: true,
+        value: previousInnerHeight,
+      });
+      rectSpy.mockRestore();
+    }
   });
 
   it("思考块应使用统一状态标签，并在完成态保留首行摘要", () => {
@@ -271,7 +390,7 @@ describe("StreamingRenderer thinking and status", () => {
     expect(container.textContent).toContain("先生成一版草稿");
   });
 
-  it("包含工具的运行中过程组应默认折叠，完成后保持摘要", () => {
+  it("包含工具的运行中过程应先流式展开思考，完成后保持摘要", () => {
     const { container, rerender } = renderHarness({
       content: "",
       contentParts: [
@@ -293,12 +412,20 @@ describe("StreamingRenderer thinking and status", () => {
       isStreaming: true,
     });
 
+    const runningThinking = container.querySelector<HTMLDetailsElement>(
+      '[data-testid="thinking-block"] details',
+    );
+    expect(runningThinking).not.toBeNull();
+    expect(runningThinking?.open).toBe(true);
+    expect(container.textContent).toContain("思考中");
+    expect(container.textContent).not.toContain("已完成思考");
+    expect(container.textContent).toContain("先确认过程组行高");
+
     const runningProcessGroup = container.querySelector<HTMLButtonElement>(
       '[data-testid="streaming-process-group"] button',
     );
     expect(runningProcessGroup).not.toBeNull();
     expect(runningProcessGroup?.getAttribute("aria-expanded")).toBe("false");
-    expect(container.textContent).not.toContain("先确认过程组行高");
     expect(
       container.querySelector('[data-testid="inline-tool-process-step"]'),
     ).toBeNull();
@@ -420,7 +547,9 @@ describe("StreamingRenderer thinking and status", () => {
     expect(text).not.toContain("lime_create_video_generation_task");
   });
 
-  it("思考块展开后应压平被切碎成多行的过程 prose", () => {
+  it("流式思考块不应把被切碎的过程文本交给 Markdown 解析", () => {
+    mockMarkdownRenderer.mockClear();
+
     const { container } = renderHarness({
       content: "",
       thinkingContent: [
@@ -453,12 +582,12 @@ describe("StreamingRenderer thinking and status", () => {
       details?.dispatchEvent(new Event("toggle", { bubbles: true }));
     });
 
-    expect(mockMarkdownRenderer).toHaveBeenCalled();
-    const latestCall =
-      mockMarkdownRenderer.mock.calls[mockMarkdownRenderer.mock.calls.length - 1];
-    expect(latestCall?.[0]?.content).toBe(
-      "目录也不存在。可能整个 .lime 目录都不存在。",
+    expect(mockMarkdownRenderer).not.toHaveBeenCalled();
+    const pendingTail = container.querySelector(
+      '[data-testid="streaming-markdown-pending-tail"]',
     );
+    expect(pendingTail?.textContent).toContain("目录");
+    expect(pendingTail?.textContent).toContain("不存在。");
   });
 
   it("过程组中的思考与工具应默认压缩为摘要", () => {

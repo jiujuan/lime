@@ -31,6 +31,11 @@ export function buildWorkflowRuntimeCapabilityProfile(
           ? "native"
           : baseProfile.capabilities["lime.ui"]?.implementation ?? "none",
       },
+      "lime.policy": {
+        version: baseProfile.capabilities["lime.policy"]?.version ?? "0.11.0",
+        enabled: true,
+        implementation: "native",
+      },
     },
     featureFlags: {
       ...baseProfile.featureFlags,

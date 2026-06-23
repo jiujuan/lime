@@ -204,13 +204,13 @@ describe("Agent App readiness P0", () => {
     );
   });
 
-  it("应接受 v0.10 manifest 和 install runtime 作为当前 Host 标准", () => {
+  it("应接受 v0.11 manifest 和 install runtime 作为当前 Host 标准", () => {
     const rawManifest = parseManifest({
-      manifestVersion: "0.10.0",
+      manifestVersion: "0.11.0",
       name: "content-factory-app",
-      version: "0.10.0",
+      version: "0.11.0",
       requires: {
-        sdk: "@lime/app-sdk@^0.10.0",
+        sdk: "@lime/app-sdk@^0.11.0",
         capabilities: ["lime.agent", "lime.connectors", "lime.terminal"],
       },
       entries: [{ key: "dashboard", kind: "page" }],
@@ -229,7 +229,7 @@ describe("Agent App readiness P0", () => {
     const projection = projectApp({ manifest, identity });
     const readiness = checkReadiness({ manifest, projection });
 
-    expect(manifest.manifestVersion).toBe("0.10");
+    expect(manifest.manifestVersion).toBe("0.11");
     expect(readiness.blockers.map((issue) => issue.code)).not.toEqual(
       expect.arrayContaining([
         "MANIFEST_VERSION_UNSUPPORTED",

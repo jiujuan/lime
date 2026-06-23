@@ -186,14 +186,6 @@ function renderCodeReviewSummaryPanel({
   );
 }
 
-interface GeneralWorkbenchHarnessDialogSectionProps extends HarnessPanelBaseProps {
-  enabled: boolean;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  teamMemorySnapshot?: TeamMemorySnapshot | null;
-  onSubmitCodeFixPrompt?: (prompt: string) => void | Promise<void>;
-}
-
 interface UseGeneralWorkbenchHarnessSurfaceParams {
   panelBaseProps: HarnessPanelBaseProps;
   onSubmitCodeFixPrompt?: (prompt: string) => void | Promise<void>;
@@ -256,63 +248,6 @@ function useGeneralWorkbenchHarnessSurface({
   };
 }
 
-export function GeneralWorkbenchHarnessDialogSection({
-  enabled,
-  open,
-  onOpenChange,
-  teamMemorySnapshot = null,
-  onSubmitCodeFixPrompt,
-  ...panelBaseProps
-}: GeneralWorkbenchHarnessDialogSectionProps) {
-  const {
-    diagnosticSessionId,
-    diagnosticWorkingDir,
-    fileCheckpointDialogOpen,
-    latestFileCheckpoint,
-    leadContent,
-    openFileCheckpoints,
-    setFileCheckpointDialogOpen,
-  } = useGeneralWorkbenchHarnessSurface({
-    panelBaseProps,
-    onSubmitCodeFixPrompt,
-  });
-
-  if (!enabled) {
-    return null;
-  }
-
-  return (
-    <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent
-          maxWidth="max-w-7xl"
-          className="lime-workbench-theme-scope lime-workbench-surface-scope flex h-[90vh] max-h-[90vh] flex-col overflow-hidden border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] p-0 text-[color:var(--lime-text)]"
-          draggable={true}
-          dragHandleSelector='[data-harness-drag-handle="true"]'
-        >
-          <HarnessStatusPanel
-            {...panelBaseProps}
-            layout="dialog"
-            teamMemorySnapshot={teamMemorySnapshot}
-            onOpenFileCheckpoints={openFileCheckpoints}
-            leadContent={leadContent}
-          />
-        </DialogContent>
-      </Dialog>
-
-      {diagnosticSessionId ? (
-        <AgentThreadFileCheckpointDialog
-          open={fileCheckpointDialogOpen}
-          onOpenChange={setFileCheckpointDialogOpen}
-          sessionId={diagnosticSessionId}
-          workingDir={diagnosticWorkingDir || null}
-          defaultCheckpointId={latestFileCheckpoint?.checkpoint_id || null}
-        />
-      ) : null}
-    </>
-  );
-}
-
 interface GeneralWorkbenchHarnessSurfaceSectionProps
   extends HarnessPanelBaseProps {
   enabled: boolean;
@@ -326,6 +261,7 @@ export function GeneralWorkbenchHarnessSurfaceSection({
   onSubmitCodeFixPrompt,
   ...panelBaseProps
 }: GeneralWorkbenchHarnessSurfaceSectionProps) {
+  const { t } = useTranslation("agent");
   const {
     diagnosticSessionId,
     diagnosticWorkingDir,
@@ -355,6 +291,9 @@ export function GeneralWorkbenchHarnessSurfaceSection({
           teamMemorySnapshot={teamMemorySnapshot}
           onOpenFileCheckpoints={openFileCheckpoints}
           leadContent={leadContent}
+          title={t("agentChat.workspaceHarnessDialog.title")}
+          description={t("agentChat.workspaceHarnessDialog.description")}
+          toggleLabel={t("agentChat.workspaceHarnessDialog.toggleLabel")}
         />
       </div>
 

@@ -2,6 +2,7 @@ import {
   createWorkspaceRightSurfaceOpenIntent,
   type WorkspaceRightSurfaceIntent,
 } from "./rightSurfaceIntentQueue";
+import type { WorkspaceRightSurfacePendingRequest } from "@/lib/api/workspaceRightSurface";
 import type { WorkspaceRightSurfaceCommandOrigin } from "./rightSurfaceCommand";
 import type { WorkspaceRightSurfaceRequestPriority } from "./rightSurfaceScheduler";
 import type { WorkspaceRightSurfaceKind } from "./rightSurfaceTypes";
@@ -57,6 +58,19 @@ export interface WorkspaceRightSurfaceObjectCanvasCandidateInput {
 }
 
 const DEFAULT_RUNTIME_PENDING_INTENT_TTL_MS = 60_000;
+const KNOWN_RIGHT_SURFACE_KINDS = new Set<WorkspaceRightSurfaceKind>([
+  "workbench",
+  "appSurface",
+  "productProfile",
+  "expertInfo",
+  "objectCanvas",
+  "files",
+  "shell",
+  "harness",
+]);
+const KNOWN_RIGHT_SURFACE_ORIGINS = new Set<
+  Extract<WorkspaceRightSurfaceCommandOrigin, "runtime" | "skill" | "mcpTool">
+>(["runtime", "skill", "mcpTool"]);
 
 export function buildWorkspaceRightSurfaceRuntimeOpenIntents(
   signals: readonly WorkspaceRightSurfaceRuntimeOpenSignal[],
@@ -70,6 +84,38 @@ export function buildWorkspaceRightSurfaceRuntimeOpenIntents(
       priority: signal.priority ?? "background",
       ttlMs: signal.ttlMs,
       reason: signal.reason,
+    }),
+  );
+}
+
+export function buildWorkspaceRightSurfaceAppServerPendingIntents(
+  pending: readonly WorkspaceRightSurfacePendingRequest[],
+  now: number,
+): WorkspaceRightSurfaceIntent[] {
+  return buildWorkspaceRightSurfaceRuntimeOpenIntents(
+    pending.flatMap((request) => {
+      if (request.status !== "pending") {
+        return [];
+      }
+
+      const kind = normalizeSurfaceKind(request.surfaceKind);
+      const origin = normalizeSurfaceOrigin(request.origin);
+      if (!kind || !origin) {
+        return [];
+      }
+
+      return [
+        {
+          id: `app-server:${request.requestId}`,
+          kind,
+          origin,
+          createdAt: parseRequestedAt(request.requestedAt) ?? now,
+          priority:
+            request.priority === "foreground" ? "foreground" : "background",
+          ttlMs: request.ttlMs ?? undefined,
+          reason: request.reason ?? undefined,
+        },
+      ];
     }),
   );
 }
@@ -179,4 +225,29 @@ function normalizePreviewPath(value?: string | null): string {
 
 function normalizeIntentKey(value?: string | null): string {
   return (value || "").trim().replace(/\s+/g, "-");
+}
+
+function normalizeSurfaceKind(
+  value?: string | null,
+): WorkspaceRightSurfaceKind | null {
+  const normalized = (value || "").trim() as WorkspaceRightSurfaceKind;
+  return KNOWN_RIGHT_SURFACE_KINDS.has(normalized) ? normalized : null;
+}
+
+function normalizeSurfaceOrigin(
+  value?: string | null,
+): Extract<
+  WorkspaceRightSurfaceCommandOrigin,
+  "runtime" | "skill" | "mcpTool"
+> | null {
+  const normalized = (value || "").trim() as Extract<
+    WorkspaceRightSurfaceCommandOrigin,
+    "runtime" | "skill" | "mcpTool"
+  >;
+  return KNOWN_RIGHT_SURFACE_ORIGINS.has(normalized) ? normalized : null;
+}
+
+function parseRequestedAt(value: string): number | null {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }

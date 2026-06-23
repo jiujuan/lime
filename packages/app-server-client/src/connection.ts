@@ -1,0 +1,429 @@
+import * as protocol from "./protocol.js";
+import { installAppServerConnectionMethods } from "./connection-methods.js";
+import { AppServerClient } from "./request-client.js";
+
+export type AppServerMessageTransport = {
+  send(message: protocol.JsonRpcMessage): void;
+  nextMessage(timeoutMs?: number): Promise<protocol.JsonRpcMessage>;
+};
+
+export type AppServerRequestOptions = {
+  timeoutMs?: number;
+};
+
+const APP_SERVER_TRANSPORT_READ_SLICE_MS = 250;
+
+export type AppServerRequestResult<T> = {
+  id: protocol.RequestId;
+  result: T;
+  response: protocol.JsonRpcResponse;
+  notifications: protocol.JsonRpcNotification[];
+  messages: protocol.JsonRpcMessage[];
+};
+
+export type AppServerRequestFirstMessageResult<T> =
+  | (AppServerRequestResult<T> & { completed: true })
+  | {
+      id: protocol.RequestId;
+      completed: false;
+      notifications: protocol.JsonRpcNotification[];
+      messages: protocol.JsonRpcMessage[];
+    };
+
+export class AppServerRequestError extends Error {
+  readonly id: protocol.RequestId;
+  readonly method: string;
+  readonly response: protocol.JsonRpcErrorResponse;
+  readonly notifications: protocol.JsonRpcNotification[];
+  readonly messages: protocol.JsonRpcMessage[];
+
+  constructor(
+    method: string,
+    response: protocol.JsonRpcErrorResponse,
+    notifications: protocol.JsonRpcNotification[],
+    messages: protocol.JsonRpcMessage[],
+  ) {
+    super(`${method} failed: ${response.error.message}`);
+    this.name = "AppServerRequestError";
+    this.id = response.id;
+    this.method = method;
+    this.response = response;
+    this.notifications = notifications;
+    this.messages = messages;
+  }
+}
+
+function remainingRequestTimeoutMs(
+  timeoutMs: number | undefined,
+  startedAt: number,
+): number | undefined {
+  if (timeoutMs === undefined) {
+    return undefined;
+  }
+  const elapsedMs = Date.now() - startedAt;
+  if (elapsedMs >= timeoutMs) {
+    throw new Error(
+      `timed out waiting for app-server message after ${timeoutMs}ms`,
+    );
+  }
+  return Math.max(1, timeoutMs - elapsedMs);
+}
+
+export class AppServerConnection {
+
+  readonly client: AppServerClient;
+  readonly transport: AppServerMessageTransport;
+
+  #bufferedMessages: protocol.JsonRpcMessage[] = [];
+  #mirroredNotifications: protocol.JsonRpcNotification[] = [];
+  #detachedRequestIds = new Set<protocol.RequestId>();
+  #transportReadLock: Promise<void> = Promise.resolve();
+
+  constructor(
+    transport: AppServerMessageTransport,
+    client: AppServerClient = new AppServerClient(),
+  ) {
+    this.transport = transport;
+    this.client = client;
+  }
+
+  async request<T>(
+    requestMessage: protocol.JsonRpcRequest,
+    method = requestMessage.method,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<T>> {
+    this.transport.send(requestMessage);
+    return await this.waitForResponse<T>(requestMessage.id, method, options);
+  }
+
+  async requestUntilFirstNotificationOrResponse<T>(
+    requestMessage: protocol.JsonRpcRequest,
+    method = requestMessage.method,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestFirstMessageResult<T>> {
+    this.transport.send(requestMessage);
+    const messages: protocol.JsonRpcMessage[] = [];
+    const notifications: protocol.JsonRpcNotification[] = [];
+
+    try {
+      const message = await this.#nextMessageForRequest(
+        requestMessage.id,
+        options.timeoutMs,
+      );
+      messages.push(message);
+
+      if (protocol.isJsonRpcNotification(message)) {
+        notifications.push(message);
+        this.#mirroredNotifications.push(message);
+        this.#detachedRequestIds.add(requestMessage.id);
+        return {
+          id: requestMessage.id,
+          completed: false,
+          notifications,
+          messages,
+        };
+      }
+
+      if (protocol.isJsonRpcErrorResponse(message) && message.id === requestMessage.id) {
+        throw new AppServerRequestError(
+          method,
+          message,
+          [...notifications],
+          [...messages],
+        );
+      }
+
+      if (protocol.isJsonRpcResponse(message) && message.id === requestMessage.id) {
+        return {
+          id: requestMessage.id,
+          result: message.result as T,
+          response: message,
+          notifications,
+          messages,
+          completed: true,
+        };
+      }
+
+      this.#detachedRequestIds.add(requestMessage.id);
+      return {
+        id: requestMessage.id,
+        completed: false,
+        notifications,
+        messages,
+      };
+    } catch (error) {
+      if (isAppServerTransportReadTimeoutError(error)) {
+        this.#detachedRequestIds.add(requestMessage.id);
+      }
+      throw error;
+    }
+  }
+
+  async waitForResponse<T>(
+    id: protocol.RequestId,
+    method: string,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<T>> {
+    const messages: protocol.JsonRpcMessage[] = [];
+    const notifications: protocol.JsonRpcNotification[] = [];
+    const startedAt = Date.now();
+
+    for (;;) {
+      const remainingTimeoutMs = remainingRequestTimeoutMs(
+        options.timeoutMs,
+        startedAt,
+      );
+      const message = await this.#nextMessageForRequest(id, remainingTimeoutMs);
+      messages.push(message);
+
+      if (protocol.isJsonRpcNotification(message)) {
+        notifications.push(message);
+        this.#mirroredNotifications.push(message);
+        await this.#yieldReadTurn();
+        continue;
+      }
+
+      if (protocol.isJsonRpcErrorResponse(message) && message.id === id) {
+        throw new AppServerRequestError(
+          method,
+          message,
+          [...notifications],
+          [...messages],
+        );
+      }
+
+      if (protocol.isJsonRpcResponse(message) && message.id === id) {
+        return {
+          id,
+          result: message.result as T,
+          response: message,
+          notifications,
+          messages,
+        };
+      }
+    }
+  }
+
+  async nextNotification(timeoutMs?: number): Promise<protocol.JsonRpcNotification> {
+    for (;;) {
+      const buffered = this.#shiftBufferedNotification();
+      if (buffered) {
+        return buffered;
+      }
+      const notification = await this.#withTransportRead(
+        timeoutMs,
+        () => this.#shiftBufferedNotification(),
+        (message) => {
+          if (this.#consumeDetachedRequestMessage(message)) {
+            return undefined;
+          }
+          if (protocol.isJsonRpcNotification(message)) {
+            return message;
+          }
+          this.#prependBufferedMessages([message]);
+          return undefined;
+        },
+      );
+      if (notification) {
+        return notification;
+      }
+    }
+  }
+
+  async nextMessage(timeoutMs?: number): Promise<protocol.JsonRpcMessage> {
+    for (;;) {
+      const buffered = this.#shiftBufferedMessage();
+      if (buffered) {
+        return buffered;
+      }
+      const message = await this.#withTransportRead<protocol.JsonRpcMessage | undefined>(
+        timeoutMs,
+        () => this.#shiftBufferedMessage(),
+        (incoming) =>
+          this.#consumeDetachedRequestMessage(incoming) ? undefined : incoming,
+      );
+      if (message) {
+        return message;
+      }
+    }
+  }
+
+  async #nextMessageForRequest(
+    id: protocol.RequestId,
+    timeoutMs?: number,
+  ): Promise<protocol.JsonRpcMessage> {
+    const startedAt = Date.now();
+
+    for (;;) {
+      const buffered = this.#shiftBufferedRequestMessage(id);
+      if (buffered) {
+        return buffered;
+      }
+
+      const remainingTimeoutMs =
+        timeoutMs === undefined
+          ? undefined
+          : Math.max(1, timeoutMs - (Date.now() - startedAt));
+      const readTimeoutMs =
+        remainingTimeoutMs === undefined
+          ? APP_SERVER_TRANSPORT_READ_SLICE_MS
+          : Math.min(remainingTimeoutMs, APP_SERVER_TRANSPORT_READ_SLICE_MS);
+      let message: protocol.JsonRpcMessage | undefined;
+      try {
+        message = await this.#withTransportRead<protocol.JsonRpcMessage | undefined>(
+          readTimeoutMs,
+          () => this.#shiftBufferedRequestMessage(id),
+          (incoming) => {
+            if (this.#consumeDetachedRequestMessage(incoming)) {
+              return undefined;
+            }
+            if (protocol.isJsonRpcNotification(incoming)) {
+              return incoming;
+            }
+            if (protocol.isJsonRpcResponse(incoming) && incoming.id === id) {
+              return incoming;
+            }
+            if (protocol.isJsonRpcErrorResponse(incoming) && incoming.id === id) {
+              return incoming;
+            }
+            this.#prependBufferedMessages([incoming]);
+            return undefined;
+          },
+        );
+      } catch (error) {
+        if (!isAppServerTransportReadTimeoutError(error)) {
+          throw error;
+        }
+        if (timeoutMs !== undefined && Date.now() - startedAt >= timeoutMs) {
+          throw new Error(
+            `timed out waiting for app-server message after ${timeoutMs}ms`,
+          );
+        }
+        await this.#yieldReadTurn();
+        continue;
+      }
+
+      if (message) {
+        return message;
+      }
+
+      await this.#yieldReadTurn();
+    }
+  }
+
+  #prependBufferedMessages(messages: protocol.JsonRpcMessage[]): void {
+    if (messages.length === 0) {
+      return;
+    }
+    const retained = messages.filter(
+      (message) => !this.#consumeDetachedRequestMessage(message),
+    );
+    if (retained.length === 0) {
+      return;
+    }
+    this.#bufferedMessages = [...retained, ...this.#bufferedMessages];
+  }
+
+  #shiftBufferedMessage(): protocol.JsonRpcMessage | undefined {
+    while (this.#bufferedMessages.length > 0) {
+      const message = this.#bufferedMessages.shift();
+      if (message && !this.#consumeDetachedRequestMessage(message)) {
+        return message;
+      }
+    }
+    return undefined;
+  }
+
+  #shiftBufferedRequestMessage(id: protocol.RequestId): protocol.JsonRpcMessage | undefined {
+    this.#dropDetachedBufferedRequestMessages();
+
+    const notificationIndex = this.#bufferedMessages.findIndex(
+      protocol.isJsonRpcNotification,
+    );
+    if (notificationIndex >= 0) {
+      const [message] = this.#bufferedMessages.splice(notificationIndex, 1);
+      return message;
+    }
+
+    const responseIndex = this.#bufferedMessages.findIndex((message) => {
+      return (
+        (protocol.isJsonRpcResponse(message) || protocol.isJsonRpcErrorResponse(message)) &&
+        message.id === id
+      );
+    });
+    if (responseIndex < 0) {
+      return undefined;
+    }
+    const [message] = this.#bufferedMessages.splice(responseIndex, 1);
+    return message;
+  }
+
+  #shiftBufferedNotification(): protocol.JsonRpcNotification | undefined {
+    const mirrored = this.#mirroredNotifications.shift();
+    if (mirrored) {
+      return mirrored;
+    }
+    this.#dropDetachedBufferedRequestMessages();
+    const index = this.#bufferedMessages.findIndex(protocol.isJsonRpcNotification);
+    if (index < 0) {
+      return undefined;
+    }
+    const [message] = this.#bufferedMessages.splice(index, 1);
+    return message as protocol.JsonRpcNotification;
+  }
+
+  #dropDetachedBufferedRequestMessages(): void {
+    this.#bufferedMessages = this.#bufferedMessages.filter(
+      (message) => !this.#consumeDetachedRequestMessage(message),
+    );
+  }
+
+  #consumeDetachedRequestMessage(message: protocol.JsonRpcMessage): boolean {
+    if (
+      (protocol.isJsonRpcResponse(message) || protocol.isJsonRpcErrorResponse(message)) &&
+      this.#detachedRequestIds.has(message.id)
+    ) {
+      this.#detachedRequestIds.delete(message.id);
+      return true;
+    }
+    return false;
+  }
+
+  async #withTransportRead<T>(
+    timeoutMs?: number,
+    beforeRead?: () => T | undefined,
+    afterRead?: (message: protocol.JsonRpcMessage) => T,
+  ): Promise<T> {
+    const previousRead = this.#transportReadLock;
+    let releaseRead: () => void = () => undefined;
+    this.#transportReadLock = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    await previousRead;
+    try {
+      const buffered = beforeRead?.();
+      if (buffered) {
+        return buffered;
+      }
+      const message = await this.transport.nextMessage(timeoutMs);
+      return afterRead ? afterRead(message) : (message as T);
+    } finally {
+      releaseRead();
+    }
+  }
+
+  async #yieldReadTurn(): Promise<void> {
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 0);
+    });
+  }
+}
+
+installAppServerConnectionMethods(AppServerConnection.prototype);
+
+function isAppServerTransportReadTimeoutError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message.includes("timed out waiting for app-server message after")
+  );
+}

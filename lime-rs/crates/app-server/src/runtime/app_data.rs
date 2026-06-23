@@ -8,6 +8,7 @@ mod mcp;
 mod media;
 mod memory;
 mod model_providers;
+mod right_surface;
 mod sessions;
 mod skills;
 mod usage_stats;
@@ -25,6 +26,10 @@ pub use mcp::McpAppDataSource;
 pub use media::MediaAppDataSource;
 pub use memory::MemoryAppDataSource;
 pub use model_providers::ModelProviderAppDataSource;
+pub use right_surface::{
+    RightSurfaceAppDataSource, WorkspaceObjectCanvasSnapshot,
+    WorkspaceObjectCanvasSnapshotListParams,
+};
 pub use sessions::SessionAppDataSource;
 pub use skills::SkillAppDataSource;
 pub use skills::WorkspaceSkillBindingAppDataSource;
@@ -52,6 +57,7 @@ pub trait AppDataSource:
     + UsageStatsAppDataSource
     + ModelProviderAppDataSource
     + ConnectAppDataSource
+    + RightSurfaceAppDataSource
     + Send
     + Sync
 {
@@ -75,6 +81,7 @@ impl<T> AppDataSource for T where
         + UsageStatsAppDataSource
         + ModelProviderAppDataSource
         + ConnectAppDataSource
+        + RightSurfaceAppDataSource
         + Send
         + Sync
 {

@@ -1,0 +1,298 @@
+{
+  "$defs": {
+    "AgentAppHistoryRestoreContract": {
+      "properties": {
+        "defaultPane": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "defaultTab": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "fallback": {
+          "type": "string"
+        },
+        "restoreLayout": {
+          "type": "boolean"
+        },
+        "restoreSelection": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "enabled",
+        "fallback",
+        "restoreLayout",
+        "restoreSelection"
+      ],
+      "type": "object"
+    },
+    "AgentAppHostFunctionState": {
+      "properties": {
+        "blockers": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "currentOwner": {
+          "type": "string"
+        },
+        "followUps": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "key": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "currentOwner",
+        "key",
+        "status"
+      ],
+      "type": "object"
+    },
+    "AgentAppProductProfileContract": {
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "objects": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentAppProductProfileObject"
+          },
+          "type": "array"
+        },
+        "panes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "rendererKinds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "enabled"
+      ],
+      "type": "object"
+    },
+    "AgentAppProductProfileObject": {
+      "properties": {
+        "artifactKind": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "defaultPane": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "primary": {
+          "type": "boolean"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "defaultPane",
+        "kind",
+        "primary",
+        "title"
+      ],
+      "type": "object"
+    },
+    "AgentAppRightSurfaceContract": {
+      "properties": {
+        "defaultActiveTab": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "dock": {
+          "type": "string"
+        },
+        "historyRestore": {
+          "$ref": "#/$defs/AgentAppHistoryRestoreContract"
+        },
+        "physicalDockCount": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "productProfile": {
+          "$ref": "#/$defs/AgentAppProductProfileContract"
+        },
+        "supportedTabs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "dock",
+        "historyRestore",
+        "physicalDockCount",
+        "productProfile"
+      ],
+      "type": "object"
+    },
+    "AgentAppTaskRuntimeContract": {
+      "properties": {
+        "blockers": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "contractPath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "directFilesystemAccess": {
+          "type": "boolean"
+        },
+        "directProviderAccess": {
+          "type": "boolean"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "followUps": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "outputArtifactKind": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sampleRequestPath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "taskKinds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "workerEntrypoint": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "directFilesystemAccess",
+        "directProviderAccess",
+        "enabled"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "appCenterStatus": {
+      "type": "string"
+    },
+    "appId": {
+      "type": "string"
+    },
+    "blockers": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "displayName": {
+      "type": "string"
+    },
+    "followUps": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "functions": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/AgentAppHostFunctionState"
+      },
+      "type": "array"
+    },
+    "generatedAt": {
+      "type": "string"
+    },
+    "profiles": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "readinessStatus": {
+      "type": "string"
+    },
+    "rightSurface": {
+      "$ref": "#/$defs/AgentAppRightSurfaceContract"
+    },
+    "taskRuntime": {
+      "$ref": "#/$defs/AgentAppTaskRuntimeContract"
+    }
+  },
+  "required": [
+    "appCenterStatus",
+    "appId",
+    "displayName",
+    "generatedAt",
+    "readinessStatus",
+    "rightSurface",
+    "taskRuntime"
+  ],
+  "title": "AgentAppHostLifecycleSnapshot",
+  "type": "object"
+}

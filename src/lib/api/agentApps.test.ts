@@ -14,6 +14,7 @@ import {
   getAgentAppCloudCatalog,
   installLocalAgentAppPackage,
   launchAgentAppShell,
+  listAgentAppHostLifecycleSnapshots,
   listInstalledAgentApps,
   prepareAgentAppShellForAppServerTestOnly,
   previewAgentAppUninstall,
@@ -55,25 +56,25 @@ function buildCloudApp(
   return {
     appId: "content-factory-app",
     displayName: "内容工厂",
-    version: "0.3.0",
+    version: "2.0.0",
     releaseId: "release-001",
     tenantId: "tenant-0001",
     tenantEnablementRef: "enablement-001",
     channel: "stable",
-    signatureRef: "sigstore:content-factory-app@0.3.0",
+    signatureRef: "sigstore:content-factory-app@2.0.0",
     licenseState: "active",
     registrationRequired: false,
     registrationState: "not_required",
     enabled: true,
     packageUrl:
-      "https://packages.limecloud.example/apps/content-factory-app-0.3.0.lapp",
+      "https://packages.limecloud.example/apps/content-factory-app-2.0.0.lapp",
     packageHash: PACKAGE_HASH,
     manifestHash: MANIFEST_HASH,
     capabilityRequirements: {
-      "lime.ui": "^0.3.0",
-      "lime.storage": "^0.3.0",
+      "lime.ui": "^0.11.0",
+      "lime.storage": "^0.11.0",
     },
-    defaultEntries: ["dashboard"],
+    defaultEntries: ["content_factory"],
     policyDefaults: {},
     toolAvailability: [],
     ...overrides,
@@ -207,6 +208,91 @@ describe("agentApps API", () => {
     expect(safeInvoke).not.toHaveBeenCalledWith("agent_app_list_installed");
   });
 
+  it("宿主生命周期 snapshot 应通过 App Server current 方法读取", async () => {
+    appServerRequestMock.mockResolvedValueOnce({
+      result: {
+        snapshots: [
+          {
+            appId: "content-factory-app",
+            displayName: "内容工厂",
+            profiles: ["workbench"],
+            appCenterStatus: "ready",
+            readinessStatus: "ready",
+            rightSurface: {
+              dock: "right",
+              physicalDockCount: 1,
+              defaultActiveTab: "productProfile",
+              supportedTabs: ["productProfile"],
+              productProfile: {
+                enabled: true,
+                objects: [],
+                panes: [],
+                rendererKinds: [],
+              },
+              historyRestore: {
+                enabled: true,
+                defaultTab: "productProfile",
+                defaultPane: "artifact",
+                restoreSelection: true,
+                restoreLayout: true,
+                fallback: "artifactPreview",
+              },
+            },
+            functions: [],
+            taskRuntime: {
+              enabled: true,
+              workerEntrypoint: "./src/runtime/content-factory-worker.mjs",
+              contractPath: "./app.runtime.yaml",
+              sampleRequestPath: "./examples/runtime-request.sample.json",
+              outputArtifactKind: "content_factory.workspace_patch",
+              taskKinds: ["content.factory.generate"],
+              directProviderAccess: false,
+              directFilesystemAccess: false,
+              blockers: [],
+              followUps: [],
+            },
+            blockers: [],
+            followUps: [],
+            generatedAt: "2026-06-23T00:00:00.000Z",
+          },
+        ],
+        issues: [],
+      },
+    });
+
+    await expect(listAgentAppHostLifecycleSnapshots()).resolves.toEqual({
+      snapshots: [
+        expect.objectContaining({
+          appId: "content-factory-app",
+          appCenterStatus: "ready",
+        }),
+      ],
+      issues: [],
+    });
+
+    expect(appServerRequestMock).toHaveBeenCalledWith(
+      "agentAppHostLifecycle/list",
+      {},
+    );
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "agent_app_list_installed",
+      expect.anything(),
+    );
+  });
+
+  it("宿主生命周期 snapshot 返回格式非法时不应回退 legacy", async () => {
+    appServerRequestMock.mockResolvedValueOnce({
+      result: {
+        issues: [],
+      },
+    });
+
+    await expect(listAgentAppHostLifecycleSnapshots()).rejects.toThrow(
+      "App Server agentAppHostLifecycle/list did not return snapshots",
+    );
+    expect(safeInvoke).not.toHaveBeenCalled();
+  });
+
   it("安装本地非企业定制 Agent App 时应保存 resolved setup 后的可启动 readiness", async () => {
     const manifest = {
       ...(contentFactoryFixture as AppManifest),
@@ -257,18 +343,10 @@ describe("agentApps API", () => {
       },
     });
     expect(state.setup).toMatchObject({
-      knowledgeBindings: {
-        project_knowledge: true,
-      },
-      skills: {
-        "article-writer": true,
-      },
-      tools: {
-        document_parser: true,
-      },
-      workflows: {
-        content_scenario_planning: true,
-      },
+      knowledgeBindings: {},
+      skills: {},
+      tools: {},
+      workflows: {},
     });
     expect(
       state.readiness.warnings.some((issue) => issue.required === true),
@@ -548,7 +626,7 @@ describe("agentApps API", () => {
         descriptor: expect.objectContaining({
           appId: "content-factory-app",
           packageUrl:
-            "https://packages.limecloud.example/apps/content-factory-app-0.3.0.lapp",
+            "https://packages.limecloud.example/apps/content-factory-app-2.0.0.lapp",
           packageHash: PACKAGE_HASH,
           manifestHash: MANIFEST_HASH,
         }),
@@ -618,13 +696,13 @@ describe("agentApps API", () => {
       appId: "content-factory-app",
       sourceKind: "cloud_release",
       sourceUri:
-        "https://packages.limecloud.example/apps/content-factory-app-0.3.0.lapp",
+        "https://packages.limecloud.example/apps/content-factory-app-2.0.0.lapp",
       packageUrl:
-        "https://packages.limecloud.example/apps/content-factory-app-0.3.0.lapp",
+        "https://packages.limecloud.example/apps/content-factory-app-2.0.0.lapp",
       releaseId: "release-001",
       releaseChannel: "stable",
       tenantEnablementRef: "enablement-001",
-      signatureRef: "sigstore:content-factory-app@0.3.0",
+      signatureRef: "sigstore:content-factory-app@2.0.0",
       packageHash: PACKAGE_HASH,
       manifestHash: MANIFEST_HASH,
       packageVerificationStatus: "verified",
@@ -701,23 +779,23 @@ describe("agentApps API", () => {
             {
               appId: "content-factory-app",
               displayName: "内容工厂",
-              version: "0.3.0",
+              version: "2.0.0",
               releaseId: "release-001",
               tenantId: "tenant-0001",
               tenantEnablementRef: "enablement-001",
               channel: "stable",
-              signatureRef: "sigstore:content-factory-app@0.3.0",
+              signatureRef: "sigstore:content-factory-app@2.0.0",
               licenseState: "active",
               enabled: true,
               packageUrl:
-                "https://packages.limecloud.example/apps/content-factory-app-0.3.0.lapp",
+                "https://packages.limecloud.example/apps/content-factory-app-2.0.0.lapp",
               packageHash: PACKAGE_HASH,
               manifestHash: MANIFEST_HASH,
               capabilityRequirements: {
-                "lime.ui": "^0.3.0",
-                "lime.storage": "^0.3.0",
+                "lime.ui": "^0.11.0",
+                "lime.storage": "^0.11.0",
               },
-              defaultEntries: ["dashboard"],
+              defaultEntries: ["content_factory"],
               policyDefaults: {
                 allowServerAssisted: false,
               },
@@ -771,16 +849,16 @@ describe("agentApps API", () => {
             {
               appId: "content-factory-app",
               displayName: "内容工厂",
-              version: "0.3.0",
+              version: "2.0.0",
               registrationRequired: true,
               registrationState: "active",
               enabled: true,
               packageUrl:
-                "https://packages.limecloud.example/apps/content-factory-app-0.3.0.lapp",
+                "https://packages.limecloud.example/apps/content-factory-app-2.0.0.lapp",
               packageHash: PACKAGE_HASH,
               manifestHash: MANIFEST_HASH,
               capabilityRequirements: {},
-              defaultEntries: ["dashboard"],
+              defaultEntries: ["content_factory"],
               policyDefaults: {},
               toolAvailability: [],
             },
@@ -842,15 +920,15 @@ describe("agentApps API", () => {
             {
               appId: "content-factory-app",
               displayName: "内容工厂",
-              version: "0.3.0",
+              version: "2.0.0",
               releaseId: "release-bootstrap",
               enabled: true,
               packageUrl:
-                "https://packages.limecloud.example/apps/content-factory-app-0.3.0.lapp",
+                "https://packages.limecloud.example/apps/content-factory-app-2.0.0.lapp",
               packageHash: PACKAGE_HASH,
               manifestHash: MANIFEST_HASH,
               capabilityRequirements: {},
-              defaultEntries: ["dashboard"],
+              defaultEntries: ["content_factory"],
               policyDefaults: {},
               toolAvailability: [],
             },
@@ -883,6 +961,18 @@ describe("agentApps API", () => {
           entryUrl: "http://127.0.0.1:4199/dashboard",
           entryKey: "dashboard",
           route: "/dashboard",
+          taskRuntime: {
+            enabled: true,
+            workerEntrypoint: "./src/runtime/content-factory-worker.mjs",
+            contractPath: "./app.runtime.yaml",
+            sampleRequestPath: "./examples/runtime-request.sample.json",
+            outputArtifactKind: "content_factory.workspace_patch",
+            taskKinds: ["content.factory.generate"],
+            directProviderAccess: false,
+            directFilesystemAccess: false,
+            blockers: [],
+            followUps: [],
+          },
         },
       })
       .mockResolvedValueOnce({
@@ -907,6 +997,11 @@ describe("agentApps API", () => {
     ).resolves.toMatchObject({
       status: "running",
       entryUrl: "http://127.0.0.1:4199/dashboard",
+      taskRuntime: expect.objectContaining({
+        enabled: true,
+        workerEntrypoint: "./src/runtime/content-factory-worker.mjs",
+        taskKinds: ["content.factory.generate"],
+      }),
     });
     await expect(
       getAgentAppUiRuntimeStatus({ appId: "content-factory-app" }),
@@ -1181,12 +1276,37 @@ describe("agentApps API", () => {
       descriptorVersion: 1,
       devShell: true,
       blockerCodes: [],
+      surface: {
+        activeStrategy: "controlledBrowserWindow",
+        supportedStrategies: ["controlledBrowserWindow", "webContentsView"],
+        entryUrl: "http://127.0.0.1:4199/dashboard",
+        containerId: "agent-app-shell-content-factory-app-standalone",
+        embedding: {
+          standaloneWindow: true,
+          rightSurfaceDock: true,
+          iframe: false,
+          browserView: false,
+        },
+        isolation: {
+          contextIsolation: true,
+          sandbox: true,
+          nodeIntegration: false,
+        },
+      },
       launchedAt: "2026-05-15T00:00:00.000Z",
     });
 
     await expect(launchAgentAppShell({ descriptor })).resolves.toMatchObject({
       status: "launched",
       devShell: true,
+      surface: {
+        activeStrategy: "controlledBrowserWindow",
+        supportedStrategies: ["controlledBrowserWindow", "webContentsView"],
+        embedding: {
+          iframe: false,
+          browserView: false,
+        },
+      },
     });
     expect(safeInvoke).toHaveBeenCalledWith("agent_app_launch_shell", {
       request: { descriptor },
@@ -1219,6 +1339,24 @@ describe("agentApps API", () => {
 
     await expect(launchAgentAppShell({ descriptor })).rejects.toThrow(
       "agent_app_launch_shell did not return status",
+    );
+  });
+
+  it("Agent App Shell launch 缺少 surface 合同时应 fail closed", async () => {
+    const descriptor = buildShellDescriptor();
+    vi.mocked(safeInvoke).mockResolvedValue({
+      appId: "content-factory-app",
+      status: "launched",
+      installMode: "standalone",
+      shellKind: "app_shell",
+      descriptorVersion: 1,
+      devShell: true,
+      blockerCodes: [],
+      launchedAt: "2026-05-15T00:00:00.000Z",
+    });
+
+    await expect(launchAgentAppShell({ descriptor })).rejects.toThrow(
+      "agent_app_launch_shell did not return shell surface",
     );
   });
 });

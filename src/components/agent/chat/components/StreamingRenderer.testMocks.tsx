@@ -132,6 +132,15 @@ vi.mock("react-i18next", () => ({
       if (key === "agentChat.toolCall.importedCommandRecord.description") {
         return "从本地历史导入的执行记录，仅用于还原当时的过程；不会重新执行，也不需要再次授权。";
       }
+      if (key === "agentChat.thinkingBlock.status.completed") {
+        return "已完成思考";
+      }
+      if (key === "agentChat.thinkingBlock.status.running") {
+        return "思考中";
+      }
+      if (key === "agentChat.thinkingBlock.preview.structured") {
+        return "在整理结构化内容";
+      }
       if (key === "agentChat.processGroup.completedThinking") {
         return "已完成思考";
       }

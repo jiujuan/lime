@@ -5,6 +5,7 @@ import type {
   GeneralWorkbenchTaskRailContextItem,
   GeneralWorkbenchTaskRailItem,
   GeneralWorkbenchTaskRailPlanItem,
+  GeneralWorkbenchTaskRailPlanRevision,
 } from "./generalWorkbenchTaskRailViewModel";
 import {
   type MinimalTranslate,
@@ -35,6 +36,7 @@ export interface GeneralWorkbenchRunControlSurfaceProjection {
   participantItem: GeneralWorkbenchTaskRailContextItem | null;
   splitLaneItem: GeneralWorkbenchTaskRailContextItem | null;
   planItems: GeneralWorkbenchTaskRailPlanItem[];
+  planRevision: GeneralWorkbenchTaskRailPlanRevision | null;
   planOverflowCount: number;
   activitySummary: GeneralWorkbenchTaskRailContextItem | null;
   approvalSummary: GeneralWorkbenchTaskRailContextItem | null;
@@ -371,6 +373,7 @@ function buildSplitLaneItem(
 export function buildGeneralWorkbenchRunControlSurfaceProjection({
   contextItems,
   planItems,
+  planRevision,
   planOverflowCount,
   activityItems,
   activityOverflowCount,
@@ -385,6 +388,7 @@ export function buildGeneralWorkbenchRunControlSurfaceProjection({
 }: {
   contextItems: readonly GeneralWorkbenchTaskRailContextItem[];
   planItems: readonly GeneralWorkbenchTaskRailPlanItem[];
+  planRevision?: GeneralWorkbenchTaskRailPlanRevision | null;
   planOverflowCount: number;
   activityItems: readonly GeneralWorkbenchTaskRailActivityItem[];
   activityOverflowCount: number;
@@ -450,6 +454,7 @@ export function buildGeneralWorkbenchRunControlSurfaceProjection({
     participantItem,
     splitLaneItem,
     planItems: [...planItems],
+    planRevision: planRevision ?? null,
     planOverflowCount: Math.max(planOverflowCount, 0),
     activitySummary,
     approvalSummary,

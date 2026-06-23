@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { buildProjection, type Message } from "./messageListItemProjection.testHarness";
+import {
+  buildProjection,
+  type Message,
+} from "./messageListItemProjection.testHarness";
 
 describe("messageListItemProjection content parts", () => {
   it("工具过程存在时应保留过程前导语和过程后最终正文", () => {
@@ -197,8 +200,120 @@ describe("messageListItemProjection content parts", () => {
     expect(
       projection.rendererContentParts
         ?.filter((part) => part.type === "text")
-      .map((part) => part.text),
+        .map((part) => part.text),
     ).toEqual([leadingText, finalText]);
+  });
+
+  it("补齐本地 thinking 时不应把已完成思考追加到工具和最终正文之后", () => {
+    const finalText = "## 今日国际新闻\n\n已整理主要事件。";
+    const message: Message = {
+      id: "assistant-thinking-tail-after-final",
+      role: "assistant",
+      content: finalText,
+      timestamp: new Date("2026-06-24T10:00:00.000Z"),
+      isThinking: false,
+      thinkingContent: "用户想了解今天的国际新闻，需要先搜索并读取可靠来源。",
+      contentParts: [
+        {
+          type: "thinking",
+          text: "用户想了解今天的国际新闻，",
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-web-search-thinking-tail",
+            name: "web_search",
+            arguments: '{"query":"2026-06-24 international news"}',
+            status: "completed",
+            result: {
+              success: true,
+              output: "ok",
+            },
+          } as never,
+        },
+        {
+          type: "text",
+          text: finalText,
+        },
+      ],
+    };
+
+    const projection = buildProjection(message);
+
+    expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
+      "thinking",
+      "tool_use",
+      "text",
+    ]);
+    expect(projection.rendererContentParts?.[0]).toMatchObject({
+      type: "thinking",
+      text: "用户想了解今天的国际新闻，需要先搜索并读取可靠来源。",
+    });
+    expect(
+      projection.rendererContentParts
+        ?.map((part, index) => (part.type === "thinking" ? index : -1))
+        .filter((index) => index >= 0),
+    ).toEqual([0]);
+  });
+
+  it("思考内容已覆盖的过程前 text 不应再作为普通正文显示", () => {
+    const duplicatedLead =
+      "我先联网核实今天主要国际新闻，再按地区与影响整理成简明摘要。";
+    const thinkingText = `${duplicatedLead}初步搜索只拿到栏目页少量结果；继续抓取流媒体的世界提炼可验头条。`;
+    const message: Message = {
+      id: "assistant-thinking-duplicated-text",
+      role: "assistant",
+      content: duplicatedLead,
+      timestamp: new Date("2026-06-24T10:00:00.000Z"),
+      isThinking: true,
+      contentParts: [
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-guardian-search",
+            name: "web_search",
+            arguments:
+              '{"query":"The Guardian June 24 2026 world news Europe heat"}',
+            status: "running",
+          } as never,
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-dw-search",
+            name: "web_search",
+            arguments:
+              '{"query":"DW June 24 2026 world news Europe heatwave Ukraine"}',
+            status: "running",
+          } as never,
+        },
+        {
+          type: "text",
+          text: duplicatedLead,
+        },
+        {
+          type: "thinking",
+          text: thinkingText,
+        },
+      ],
+    };
+
+    const projection = buildProjection(message);
+
+    expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
+      "tool_use",
+      "tool_use",
+      "thinking",
+    ]);
+    expect(
+      projection.rendererContentParts?.some(
+        (part) => part.type === "text" && part.text === duplicatedLead,
+      ),
+    ).toBe(false);
+    expect(projection.rendererContentParts?.[2]).toMatchObject({
+      type: "thinking",
+      text: thinkingText,
+    });
   });
 
   it("过程前累计 text 与最终正文只差空白时也不应重复显示", () => {

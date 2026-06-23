@@ -9,8 +9,7 @@ export const WORKSPACE_HARNESS_TITLE =
   agentEnUSResource["agentChat.workspaceHarnessDialog.title"];
 export const WORKSPACE_HARNESS_DESCRIPTION =
   agentEnUSResource["agentChat.workspaceHarnessDialog.description"];
-export const GENERAL_ASSISTANT_TITLE =
-  agentEnUSResource["agentChat.runtimeStrip.title.general"];
+export const GENERAL_CONTEXT_HINT = "普通聊天模式";
 
 export type MockEmptyStateProps = {
   input?: string;

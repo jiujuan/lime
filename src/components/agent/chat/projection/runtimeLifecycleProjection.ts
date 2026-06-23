@@ -118,6 +118,40 @@ export function buildModelChangeEvent(
   );
 }
 
+export function buildModelEffectiveEvent(
+  event: Extract<AgentEvent, { type: "model_effective" }>,
+  context: AgentUiProjectionContext,
+): AgentUiProjectionEvent {
+  return buildAgentUiModelChangeEvent(
+    {
+      sourceType: event.type,
+      model: modelNameFromEffectiveEvent(event),
+      mode: event.serviceModelSlot || "effective",
+    },
+    context,
+  );
+}
+
+function modelNameFromEffectiveEvent(
+  event: Extract<AgentEvent, { type: "model_effective" }>,
+): string {
+  return (
+    event.modelName ||
+    modelIdFromValue(event.modelRef) ||
+    modelIdFromValue(event.model) ||
+    ""
+  );
+}
+
+function modelIdFromValue(value: unknown): string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return "";
+  }
+  const record = value as Record<string, unknown>;
+  const modelId = record.modelId ?? record.model_id ?? record.model;
+  return typeof modelId === "string" ? modelId : "";
+}
+
 export function buildTaskProfileResolvedEvent(
   event: AgentEventTaskProfileResolved,
   context: AgentUiProjectionContext,

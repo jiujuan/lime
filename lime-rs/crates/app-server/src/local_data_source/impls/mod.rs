@@ -9,6 +9,7 @@ mod mcp;
 mod media;
 mod memory;
 mod model_providers;
+mod right_surface;
 mod sessions;
 mod skills;
 mod usage_stats;

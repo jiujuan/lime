@@ -501,6 +501,8 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
   rightSurfaceLaunchers?: ComponentProps<
     typeof TaskCenterUtilityToolbar
   >["rightSurfaceLaunchers"];
+  rightSurfaceObjectCanvasOpen?: boolean;
+  onToggleRightSurfaceObjectCanvas?: () => void;
   rightSurfaceFilesOpen?: boolean;
   onToggleRightSurfaceFiles?: () => void;
   rightSurfaceShellOpen?: boolean;
@@ -638,6 +640,8 @@ export function WorkspaceConversationScene({
   liveCanvasPreview,
   rightSurfaceContent,
   rightSurfaceLaunchers,
+  rightSurfaceObjectCanvasOpen,
+  onToggleRightSurfaceObjectCanvas,
   rightSurfaceFilesOpen,
   onToggleRightSurfaceFiles,
   rightSurfaceShellOpen,
@@ -649,7 +653,6 @@ export function WorkspaceConversationScene({
   chatPanelWidth,
   chatPanelMinWidth,
   generalWorkbenchDialog,
-  generalWorkbenchHarnessDialog,
   showFloatingInputOverlay,
   hasPendingA2UIForm,
 }: WorkspaceConversationSceneProps) {
@@ -814,6 +817,11 @@ export function WorkspaceConversationScene({
       harnessAttentionLevel={harnessAttentionLevel ?? "idle"}
       harnessToggleLabel={harnessToggleLabel ?? "Harness"}
       shellPanelOpen={shellPanelOpen}
+      onToggleObjectCanvasPanel={
+        rightSurfaceObjectCanvasOpen || onToggleRightSurfaceObjectCanvas
+          ? onToggleRightSurfaceObjectCanvas
+          : undefined
+      }
       onToggleFilesPanel={
         rightSurfaceFilesOpen || onToggleRightSurfaceFiles
           ? onToggleRightSurfaceFiles
@@ -937,7 +945,6 @@ export function WorkspaceConversationScene({
         chatPanelWidth={chatPanelWidth}
         chatPanelMinWidth={chatPanelMinWidth}
         generalWorkbenchDialog={generalWorkbenchDialog}
-        generalWorkbenchHarnessDialog={generalWorkbenchHarnessDialog}
         showFloatingInputOverlay={showFloatingInputOverlay}
         hasPendingA2UIForm={hasPendingA2UIForm}
         inputbarNode={inputbarNode}

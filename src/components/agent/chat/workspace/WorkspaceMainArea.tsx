@@ -59,7 +59,6 @@ interface WorkspaceMainAreaProps {
   chatPanelWidth?: string;
   chatPanelMinWidth?: string;
   generalWorkbenchDialog: ReactNode;
-  generalWorkbenchHarnessDialog: ReactNode;
   showFloatingInputOverlay: boolean;
   hasPendingA2UIForm: boolean;
   inputbarNode: ReactNode;
@@ -82,7 +81,6 @@ export function WorkspaceMainArea({
   chatPanelWidth,
   chatPanelMinWidth,
   generalWorkbenchDialog,
-  generalWorkbenchHarnessDialog,
   showFloatingInputOverlay,
   hasPendingA2UIForm,
   inputbarNode,
@@ -283,7 +281,6 @@ export function WorkspaceMainArea({
         />
       </GeneralWorkbenchLayoutShell>
       {generalWorkbenchDialog}
-      {generalWorkbenchHarnessDialog}
       {showFloatingInputOverlay ? (
         <GeneralWorkbenchInputOverlay
           $bottomInset={shellBottomInset}

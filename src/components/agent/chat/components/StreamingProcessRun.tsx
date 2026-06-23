@@ -7,6 +7,7 @@ import {
   StreamingProcessGroup,
 } from "./StreamingProcessGroup";
 import {
+  coalesceAdjacentThinkingProcessEntries,
   isImportedProcessMetadata,
   isImportedToolCall,
   shouldAutoExpandProcessEntries,
@@ -100,7 +101,11 @@ export const StreamingProcessRun: React.FC<StreamingProcessRunProps> = memo(
           />
         );
       },
-      [onPermissionResponse, promoteActionRequestsToA2UI, readOnlyActionRequests],
+      [
+        onPermissionResponse,
+        promoteActionRequestsToA2UI,
+        readOnlyActionRequests,
+      ],
     );
 
     const renderProcessEntry = useCallback(
@@ -114,6 +119,10 @@ export const StreamingProcessRun: React.FC<StreamingProcessRunProps> = memo(
           const preserveThinkingSourceText =
             entry.preserveSourceText ||
             isImportedProcessMetadata(entry.metadata);
+          const isThinkingStreaming =
+            Boolean(entry.isActive ?? isStreaming) &&
+            isStreaming &&
+            !preserveThinkingSourceText;
           return (
             <ThinkingBlock
               key={entry.id}
@@ -122,8 +131,10 @@ export const StreamingProcessRun: React.FC<StreamingProcessRunProps> = memo(
               grouped={grouped}
               groupMarker={groupMarker}
               hideSummary={grouped}
-              isStreaming={isStreaming && !preserveThinkingSourceText}
+              isStreaming={isThinkingStreaming}
               preserveSourceText={preserveThinkingSourceText}
+              autoCollapseEligible={Boolean(entry.autoCollapseEligible)}
+              autoCollapseWhenOverflow={true}
             />
           );
         }
@@ -131,7 +142,9 @@ export const StreamingProcessRun: React.FC<StreamingProcessRunProps> = memo(
         if (entry.kind === "tool") {
           const siblingToolCalls = processEntries
             .filter(
-              (candidate): candidate is Extract<
+              (
+                candidate,
+              ): candidate is Extract<
                 StreamingProcessEntry,
                 { kind: "tool" }
               > => candidate.kind === "tool",
@@ -178,15 +191,18 @@ export const StreamingProcessRun: React.FC<StreamingProcessRunProps> = memo(
       return null;
     }
 
-    const toolCount = entries.filter((entry) => entry.kind === "tool").length;
-    const hasImportedProcess = entries.some(
+    const coalescedEntries = coalesceAdjacentThinkingProcessEntries(entries);
+    const toolCount = coalescedEntries.filter(
+      (entry) => entry.kind === "tool",
+    ).length;
+    const hasImportedProcess = coalescedEntries.some(
       (entry) =>
         (entry.kind === "thinking" &&
           isImportedProcessMetadata(entry.metadata)) ||
         (entry.kind === "tool" && isImportedToolCall(entry.toolCall)),
     );
     const processEntries = hasImportedProcess
-      ? entries.map((entry) =>
+      ? coalescedEntries.map((entry) =>
           entry.kind === "thinking"
             ? {
                 ...entry,
@@ -195,9 +211,9 @@ export const StreamingProcessRun: React.FC<StreamingProcessRunProps> = memo(
               }
             : entry,
         )
-      : entries;
+      : coalescedEntries;
 
-    if (forceGroup || (toolCount > 0 && entries.length > 1)) {
+    if (forceGroup || (toolCount > 0 && processEntries.length > 1)) {
       return (
         <StreamingProcessGroup
           entries={processEntries}

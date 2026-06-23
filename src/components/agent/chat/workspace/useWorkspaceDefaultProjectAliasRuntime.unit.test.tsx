@@ -6,6 +6,7 @@ import {
   ensureWorkspaceReady,
   getProject,
   type Project,
+  type WorkspaceEnsureResult,
 } from "@/lib/api/project";
 import { logAgentDebug } from "@/lib/agentDebug";
 import {
@@ -43,6 +44,19 @@ function projectFixture(overrides: Partial<Project> = {}): Project {
     isArchived: false,
     ...overrides,
   } as Project;
+}
+
+function workspaceEnsureResultFixture(
+  overrides: Partial<WorkspaceEnsureResult> = {},
+): WorkspaceEnsureResult {
+  return {
+    workspaceId: "remembered-project",
+    rootPath: "/repaired-root",
+    existed: true,
+    created: false,
+    repaired: false,
+    ...overrides,
+  };
 }
 
 function Harness({
@@ -104,10 +118,9 @@ describe("useWorkspaceDefaultProjectAliasRuntime", () => {
     root = createRoot(container);
     latestProject = null;
     vi.mocked(getProject).mockResolvedValue(projectFixture());
-    vi.mocked(ensureWorkspaceReady).mockResolvedValue({
-      repaired: false,
-      rootPath: "/repaired-root",
-    });
+    vi.mocked(ensureWorkspaceReady).mockResolvedValue(
+      workspaceEnsureResultFixture(),
+    );
     vi.spyOn(console, "info").mockImplementation(() => undefined);
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
   });

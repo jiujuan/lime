@@ -48,6 +48,7 @@ const {
   METHOD_AGENT_APP_INSTALLED_SAVE,
   METHOD_AGENT_APP_INSTALLED_UNINSTALL,
   METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL,
+  METHOD_AGENT_APP_HOST_LIFECYCLE_LIST,
   METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT,
   METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD,
   METHOD_AGENT_APP_SHELL_PREPARE,
@@ -307,6 +308,11 @@ const {
   METHOD_WORKSPACE_PROJECT_PATH_RESOLVE,
   METHOD_WORKSPACE_READ,
   METHOD_WORKSPACE_REGISTERED_SKILLS_LIST,
+  METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED,
+  METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CONSUME,
+  METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS,
+  METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_LIST,
+  METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST,
   METHOD_WORKSPACE_SKILL_BINDINGS_LIST,
   METHOD_WORKSPACE_UPDATE,
   assertCompatibleManifest,
@@ -325,6 +331,7 @@ const {
   isAppServerNotificationMethod,
   isAppServerRequestMethod,
   isAgentSessionEventNotification,
+  isWorkspaceRightSurfacePendingChangedNotification,
   readReleaseManifest,
   readProtocolSchemaManifest,
   listProtocolSchemaFiles,
@@ -342,6 +349,7 @@ const {
   startPackagedAppServerSidecar,
   stdioSidecar,
   sidecarRestartDelayMs,
+  workspaceRightSurfacePendingChangedNotification,
 } = await import(
   /* @vite-ignore */ pathToFileURL(join(packageRoot, "dist/index.js")).href
 );
@@ -470,6 +478,30 @@ test("builds workspace and skill read requests with current methods", () => {
     parentRootPath: "/workspace",
   });
   const ready = client.ensureWorkspaceReady({ id: "workspace-main" });
+  const rightSurfaceRequest = client.requestWorkspaceRightSurface({
+    workspaceId: "workspace-main",
+    workspaceRoot: "/workspace/project",
+    sessionId: "session-main",
+    surfaceKind: "objectCanvas",
+    origin: "mcpTool",
+    priority: "normal",
+    reason: "browser assist candidate",
+    candidateId: "browser-assist:session-main",
+  });
+  const rightSurfacePending = client.listWorkspaceRightSurfacePending({
+    workspaceId: "workspace-main",
+    surfaceKind: "objectCanvas",
+    limit: 8,
+  });
+  const rightSurfaceConsume = client.consumeWorkspaceRightSurfacePending({
+    requestId: "right-surface:req-1",
+    requestIds: ["right-surface:req-2"],
+  });
+  const rightSurfaceDismiss = client.dismissWorkspaceRightSurfacePending({
+    requestId: "right-surface:req-3",
+    requestIds: ["right-surface:req-4"],
+    reason: "user_closed_surface",
+  });
   const skills = client.listSkills();
   const skill = client.readSkill({ skillName: "article-writer" });
   const bindings = client.listWorkspaceSkillBindings({
@@ -562,6 +594,46 @@ test("builds workspace and skill read requests with current methods", () => {
   });
   assert.equal(ready.method, METHOD_WORKSPACE_ENSURE_READY);
   assert.deepEqual(ready.params, { id: "workspace-main" });
+  assert.equal(
+    rightSurfaceRequest.method,
+    METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST,
+  );
+  assert.deepEqual(rightSurfaceRequest.params, {
+    workspaceId: "workspace-main",
+    workspaceRoot: "/workspace/project",
+    sessionId: "session-main",
+    surfaceKind: "objectCanvas",
+    origin: "mcpTool",
+    priority: "normal",
+    reason: "browser assist candidate",
+    candidateId: "browser-assist:session-main",
+  });
+  assert.equal(
+    rightSurfacePending.method,
+    METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_LIST,
+  );
+  assert.deepEqual(rightSurfacePending.params, {
+    workspaceId: "workspace-main",
+    surfaceKind: "objectCanvas",
+    limit: 8,
+  });
+  assert.equal(
+    rightSurfaceConsume.method,
+    METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CONSUME,
+  );
+  assert.deepEqual(rightSurfaceConsume.params, {
+    requestId: "right-surface:req-1",
+    requestIds: ["right-surface:req-2"],
+  });
+  assert.equal(
+    rightSurfaceDismiss.method,
+    METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS,
+  );
+  assert.deepEqual(rightSurfaceDismiss.params, {
+    requestId: "right-surface:req-3",
+    requestIds: ["right-surface:req-4"],
+    reason: "user_closed_surface",
+  });
   assert.equal(skills.method, METHOD_SKILL_LIST);
   assert.deepEqual(skills.params, {});
   assert.equal(skill.method, METHOD_SKILL_READ);
@@ -812,6 +884,7 @@ test("builds app data surface requests with current methods", () => {
   const client = new AppServerClient();
 
   const installed = client.listAgentAppInstalled();
+  const hostLifecycle = client.listAgentAppHostLifecycle();
   const runtimeStart = client.startAgentAppUiRuntime({
     appId: "content-factory-app",
     entryKey: "dashboard",
@@ -1183,6 +1256,8 @@ test("builds app data surface requests with current methods", () => {
 
   assert.equal(installed.method, METHOD_AGENT_APP_INSTALLED_LIST);
   assert.deepEqual(installed.params, {});
+  assert.equal(hostLifecycle.method, METHOD_AGENT_APP_HOST_LIFECYCLE_LIST);
+  assert.deepEqual(hostLifecycle.params, {});
   assert.equal(runtimeStart.method, METHOD_AGENT_APP_UI_RUNTIME_START);
   assert.deepEqual(runtimeStart.params, {
     appId: "content-factory-app",
@@ -2273,6 +2348,20 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_WORKSPACE_PROJECTS_ROOT_READ, kind: "request" },
     { method: METHOD_WORKSPACE_PROJECT_PATH_RESOLVE, kind: "request" },
     { method: METHOD_WORKSPACE_ENSURE_READY, kind: "request" },
+    { method: METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST, kind: "request" },
+    { method: METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_LIST, kind: "request" },
+    {
+      method: METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CONSUME,
+      kind: "request",
+    },
+    {
+      method: METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS,
+      kind: "request",
+    },
+    {
+      method: METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED,
+      kind: "notification",
+    },
     { method: METHOD_SKILL_LIST, kind: "request" },
     { method: METHOD_SKILL_READ, kind: "request" },
     { method: METHOD_SKILL_MANAGEMENT_LIST, kind: "request" },
@@ -2325,6 +2414,7 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_AGENT_APP_INSTALLED_DISABLED_SET, kind: "request" },
     { method: METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL, kind: "request" },
     { method: METHOD_AGENT_APP_INSTALLED_UNINSTALL, kind: "request" },
+    { method: METHOD_AGENT_APP_HOST_LIFECYCLE_LIST, kind: "request" },
     { method: METHOD_AGENT_APP_SHELL_PREPARE, kind: "request" },
     { method: METHOD_AGENT_APP_UI_RUNTIME_START, kind: "request" },
     { method: METHOD_AGENT_APP_UI_RUNTIME_STATUS, kind: "request" },
@@ -2594,6 +2684,26 @@ test("exports app-server method catalog with request and notification kinds", ()
     true,
   );
   assert.equal(isAppServerRequestMethod(METHOD_WORKSPACE_LIST), true);
+  assert.equal(
+    isAppServerRequestMethod(METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_LIST),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CONSUME),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED),
+    false,
+  );
   assert.equal(isAppServerRequestMethod(METHOD_SKILL_LIST), true);
   assert.equal(
     isAppServerRequestMethod(METHOD_WORKSPACE_SKILL_BINDINGS_LIST),
@@ -2623,6 +2733,10 @@ test("exports app-server method catalog with request and notification kinds", ()
   );
   assert.equal(
     isAppServerRequestMethod(METHOD_AGENT_APP_INSTALLED_UNINSTALL),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_AGENT_APP_HOST_LIFECYCLE_LIST),
     true,
   );
   assert.equal(isAppServerRequestMethod(METHOD_AGENT_APP_SHELL_PREPARE), true);
@@ -2769,8 +2883,45 @@ test("exports app-server method catalog with request and notification kinds", ()
   assert.equal(isAppServerNotificationMethod(METHOD_INITIALIZED), true);
   assert.equal(isAppServerNotificationMethod(METHOD_AGENT_SESSION_EVENT), true);
   assert.equal(
+    isAppServerNotificationMethod(METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED),
+    true,
+  );
+  assert.equal(
     isAppServerNotificationMethod(METHOD_AGENT_SESSION_START),
     false,
+  );
+});
+
+test("parses workspace right surface pending changed notifications", () => {
+  const notification = {
+    method: METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED,
+    params: {
+      changeType: "requested",
+      requestIds: ["right_surface_1"],
+      pending: [
+        {
+          requestId: "right_surface_1",
+          surfaceKind: "objectCanvas",
+          origin: "mcpTool",
+          priority: "normal",
+          requestedAt: "2026-06-23T00:00:00.000Z",
+          status: "pending",
+        },
+      ],
+    },
+  };
+
+  assert.equal(
+    isWorkspaceRightSurfacePendingChangedNotification(notification),
+    true,
+  );
+  assert.equal(
+    workspaceRightSurfacePendingChangedNotification(notification)?.params.changeType,
+    "requested",
+  );
+  assert.equal(
+    workspaceRightSurfacePendingChangedNotification({ method: "other" }),
+    undefined,
   );
 });
 

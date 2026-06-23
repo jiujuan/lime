@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AgentThreadItem, Message } from "../types";
 import {
+  buildPlanImplementationHarnessMetadata,
   buildPlanImplementationRequestId,
   selectProposedPlanImplementationDecision,
 } from "./planImplementationDecision";
@@ -92,6 +93,9 @@ describe("planImplementationDecision", () => {
           turn_id: "turn-2",
           sequence: 3,
           text: "- 读取 Codex 参考\n- 复刻确认抽屉",
+          metadata: {
+            revisionId: "update_plan:tool-2",
+          },
         }),
       ],
     });
@@ -101,6 +105,10 @@ describe("planImplementationDecision", () => {
       action: {
         arguments: {
           source: "thread_item",
+          plan_revision_id: "update_plan:tool-2",
+          source_item_id: "plan-item-2",
+          turn_id: "turn-2",
+          plan_source: "thread_item",
         },
       },
     });
@@ -127,6 +135,9 @@ describe("planImplementationDecision", () => {
           },
         ],
         sourceToolCallId: "plan-tool-1",
+        revisionId: "proposed_plan:2",
+        turnId: "turn-plan-2",
+        source: "tool",
       },
     });
 
@@ -134,15 +145,52 @@ describe("planImplementationDecision", () => {
       planText: "- 复刻底部确认抽屉\n- 补真实 fixture smoke",
       action: {
         arguments: {
-          source: "thread_item",
+          source: "plan_state",
           proposed_plan: "- 复刻底部确认抽屉\n- 补真实 fixture smoke",
           plan_approval_request: true,
+          plan_revision_id: "proposed_plan:2",
+          source_item_id: "plan-tool-1",
+          turn_id: "turn-plan-2",
+          plan_source: "tool",
         },
       },
     });
     expect(decision?.action.requestId).toContain(
-      "local-plan-implementation:plan-state:plan-tool-1:2:",
+      "local-plan-implementation:plan-state:proposed_plan:2:2:",
     );
+  });
+
+  it("应把实施确认绑定到 latest plan revision metadata", () => {
+    expect(
+      buildPlanImplementationHarnessMetadata({
+        requestId: "local-plan-implementation:1",
+        decision: "accepted",
+        requestArguments: {
+          proposed_plan: "- 核对计划\n- 复测 E2E",
+          source: "plan_state",
+          plan_revision_id: "proposed_plan:3",
+          source_item_id: "plan:proposed_plan:3",
+          turn_id: "turn-3",
+          plan_source: "tool",
+        },
+      }),
+    ).toEqual({
+      latest_plan_revision: {
+        revision_id: "proposed_plan:3",
+        source_item_id: "plan:proposed_plan:3",
+        turn_id: "turn-3",
+        source: "tool",
+      },
+      plan_implementation_decision: {
+        request_id: "local-plan-implementation:1",
+        decision: "accepted",
+        plan_revision_id: "proposed_plan:3",
+        source_item_id: "plan:proposed_plan:3",
+        turn_id: "turn-3",
+        source: "tool",
+        proposed_plan: "- 核对计划\n- 复测 E2E",
+      },
+    });
   });
 
   it("只有计划摘要文本时不应生成实施确认", () => {

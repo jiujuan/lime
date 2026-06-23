@@ -1,4 +1,70 @@
 {
+  "$defs": {
+    "AgentAppTaskRuntimeContract": {
+      "properties": {
+        "blockers": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "contractPath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "directFilesystemAccess": {
+          "type": "boolean"
+        },
+        "directProviderAccess": {
+          "type": "boolean"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "followUps": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "outputArtifactKind": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sampleRequestPath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "taskKinds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "workerEntrypoint": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "directFilesystemAccess",
+        "directProviderAccess",
+        "enabled"
+      ],
+      "type": "object"
+    }
+  },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
     "appId": {
@@ -53,6 +119,16 @@
     },
     "status": {
       "type": "string"
+    },
+    "taskRuntime": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AgentAppTaskRuntimeContract"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "required": [

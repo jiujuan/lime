@@ -19,6 +19,7 @@
         "string"
       ]
     },
+    "productWorkspaceSelectedObjectRef": true,
     "providerName": {
       "type": [
         "null",

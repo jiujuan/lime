@@ -29,6 +29,27 @@ import {
 } from "./agentChatHistoryProcess";
 import { dedupeAdjacentHistoryMessages } from "./agentChatHistorySignatures";
 import { isAuxiliaryHistoryTurn, readThreadItemText } from "./agentChatHistoryTimelineBasics";
+import { isUpdatePlanToolName } from "../utils/toolNameFamily";
+
+function readPlanRevisionId(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return null;
+  }
+  const record = metadata as Record<string, unknown>;
+  const revisionId = record.revisionId ?? record.revision_id;
+  return typeof revisionId === "string" && revisionId.trim()
+    ? revisionId.trim()
+    : null;
+}
+
+function shouldHydratePlanItem(item: AgentThreadItem): boolean {
+  return item.type === "plan" && Boolean(readPlanRevisionId(item.metadata));
+}
+
+function formatPlanItemAsProposedPlan(text: string): string {
+  const normalized = text.trim();
+  return normalized ? `<proposed_plan>\n${normalized}\n</proposed_plan>\n` : "";
+}
 
 function buildMessageFromThreadItem(
   item: AgentThreadItem,
@@ -227,6 +248,25 @@ export function hydrateSessionDetailMessagesFromThreadItems(
       continue;
     }
 
+    if (item.type === "plan") {
+      if (!shouldHydratePlanItem(item)) {
+        continue;
+      }
+      const planText = formatPlanItemAsProposedPlan(item.text);
+      if (!planText) {
+        continue;
+      }
+      const draft = ensureAssistantDraft(item);
+      draft.contentParts = appendTextToParts(
+        draft.contentParts || [],
+        planText,
+      );
+      draft.timestamp = parseHistoryTimestamp(
+        item.completed_at || item.updated_at || item.started_at,
+      );
+      continue;
+    }
+
     if (item.type === "reasoning") {
       const draft = ensureAssistantDraft(item);
       draft.contentParts = appendThinkingToHistoryParts(
@@ -246,6 +286,9 @@ export function hydrateSessionDetailMessagesFromThreadItems(
       item.type === "patch" ||
       item.type === "web_search"
     ) {
+      if (item.type === "tool_call" && isUpdatePlanToolName(item.tool_name)) {
+        continue;
+      }
       const draft = ensureAssistantDraft(item);
       const toolCall = toToolCallState(item);
       if (!toolCall) {

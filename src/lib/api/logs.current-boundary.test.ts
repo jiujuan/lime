@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { cwd } from "node:process";
 import { describe, expect, it } from "vitest";
+import { readAppServerApiSources } from "../../test/appServerApiSources";
 
 const LEGACY_LOG_DIAGNOSTIC_FACADE_COMMANDS = [
   "get_logs",
@@ -102,7 +103,7 @@ describe("logs diagnostics current App Server boundary", () => {
     const logsSource = readRepoFile("src/lib/api/logs.ts");
     const serverRuntimeSource = readRepoFile("src/lib/api/serverRuntime.ts");
     const source = `${logsSource}\n${serverRuntimeSource}`;
-    const appServerSource = readRepoFile("src/lib/api/appServer.ts");
+    const appServerSource = readAppServerApiSources();
 
     for (const methodConstant of CURRENT_LOG_DIAGNOSTIC_METHOD_CONSTANTS) {
       expect(appServerSource).toContain(methodConstant);
@@ -116,7 +117,7 @@ describe("logs diagnostics current App Server boundary", () => {
   });
 
   it("App Server protocol 和治理 catalog 应记录日志诊断 current 方法", () => {
-    const appServerSource = readRepoFile("src/lib/api/appServer.ts");
+    const appServerSource = readAppServerApiSources();
     const clientProtocolSource = readRepoFile(
       "packages/app-server-client/src/protocol.ts",
     );

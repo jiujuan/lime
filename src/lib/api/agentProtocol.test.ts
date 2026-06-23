@@ -814,6 +814,136 @@ describe("agentProtocol", () => {
       type: "thinking_delta",
       text: "先判断任务性质",
     });
+
+    expect(
+      parseAgentEvent({
+        type: "reasoning.delta",
+        payload: {
+          reasoningId: "reasoning-1",
+          delta: "继续分析计划",
+          model: { providerId: "openai", modelId: "gpt-codex" },
+        },
+      }),
+    ).toEqual({
+      type: "reasoning_delta",
+      reasoningId: "reasoning-1",
+      text: "继续分析计划",
+      delta: "继续分析计划",
+      model: { providerId: "openai", modelId: "gpt-codex" },
+      providerMetadata: undefined,
+    });
+
+    expect(
+      parseAgentEvent({
+        type: "reasoning.started",
+        payload: {
+          reasoningId: "reasoning-1",
+        },
+      }),
+    ).toEqual({
+      type: "reasoning_started",
+      reasoningId: "reasoning-1",
+      model: undefined,
+      providerMetadata: undefined,
+    });
+
+    expect(
+      parseAgentEvent({
+        type: "reasoning.final",
+        payload: {
+          reasoningId: "reasoning-1",
+          text: "完整思考摘要",
+        },
+      }),
+    ).toEqual({
+      type: "reasoning_final",
+      reasoningId: "reasoning-1",
+      text: "完整思考摘要",
+      model: undefined,
+      providerMetadata: undefined,
+    });
+
+    expect(
+      parseAgentEvent({
+        type: "reasoning.ended",
+        payload: {
+          reasoningId: "reasoning-1",
+          status: "completed",
+        },
+      }),
+    ).toEqual({
+      type: "reasoning_ended",
+      reasoningId: "reasoning-1",
+      status: "completed",
+      model: undefined,
+      providerMetadata: undefined,
+    });
+
+    expect(
+      parseAgentEvent({
+        type: "plan.final",
+        payload: {
+          text: "- [x] 读现状",
+          revisionId: "rev-plan",
+          toolCallId: "tool-plan",
+          source: "update_plan",
+          plan: [{ step: "读现状", status: "completed" }],
+        },
+      }),
+    ).toEqual({
+      type: "plan_final",
+      text: "- [x] 读现状",
+      delta: "- [x] 读现状",
+      plan: [{ step: "读现状", status: "completed" }],
+      explanation: undefined,
+      sourceItemId: undefined,
+      toolCallId: "tool-plan",
+      revisionId: "rev-plan",
+      source: "update_plan",
+    });
+
+    expect(
+      parseAgentEvent({
+        type: "model.effective",
+        payload: {
+          model: { providerId: "openai", modelId: "gpt-codex" },
+          modelRef: { providerId: "openai", modelId: "gpt-codex" },
+          provider: "openai",
+          modelName: "gpt-codex",
+          source: "runtime_options",
+          serviceModelSlot: "coding",
+          requestedReasoningEffort: "high",
+          reasoning: {
+            supported: true,
+            requestedLevel: "high",
+            effectiveLevel: "high",
+          },
+          toolCalling: {
+            supported: true,
+            streaming: true,
+          },
+        },
+      }),
+    ).toEqual({
+      type: "model_effective",
+      model: { providerId: "openai", modelId: "gpt-codex" },
+      modelRef: { providerId: "openai", modelId: "gpt-codex" },
+      provider: "openai",
+      modelName: "gpt-codex",
+      source: "runtime_options",
+      serviceModelSlot: "coding",
+      reasoning: {
+        supported: true,
+        requestedLevel: "high",
+        effectiveLevel: "high",
+      },
+      capability: undefined,
+      toolCalling: {
+        supported: true,
+        streaming: true,
+      },
+      requestedReasoningEffort: "high",
+    });
   });
 
   it("应解析任务路由链事件", () => {

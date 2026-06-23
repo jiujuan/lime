@@ -36,7 +36,7 @@ pub(super) fn thread_items_from_events(stored: &StoredSession) -> Vec<Value> {
                     items.push(item);
                 }
             }
-            "reasoning.delta" | "reasoning.summary" | "reasoning.completed" => {
+            "reasoning.delta" | "reasoning.summary" | "reasoning.completed" | "reasoning.final" => {
                 if let Some(item) = reasoning_item(stored, event) {
                     items.push(item);
                 }
@@ -737,7 +737,10 @@ fn reasoning_item(stored: &StoredSession, event: &AgentEvent) -> Option<Value> {
     if text.is_empty() {
         return None;
     }
-    let status = if event.event_type == "reasoning.completed" {
+    let status = if matches!(
+        event.event_type.as_str(),
+        "reasoning.completed" | "reasoning.final"
+    ) {
         "completed"
     } else {
         "in_progress"
@@ -750,7 +753,7 @@ fn reasoning_item(stored: &StoredSession, event: &AgentEvent) -> Option<Value> {
         json!({
             "text": text,
             "summary": summary_list(&event.payload),
-            "metadata": event_metadata(event),
+            "metadata": reasoning_metadata(event, &event.payload),
         }),
     ))
 }
@@ -798,7 +801,7 @@ fn reasoning_item_from_item_event(stored: &StoredSession, event: &AgentEvent) ->
         compact_json(json!({
             "text": text,
             "summary": summary_list(payload),
-            "metadata": event_metadata(event),
+            "metadata": reasoning_metadata(event, payload),
         })),
     );
     if let Some(object) = value.as_object_mut() {
@@ -947,6 +950,48 @@ fn event_metadata(event: &AgentEvent) -> Value {
     Value::Object(metadata)
 }
 
+fn reasoning_metadata(event: &AgentEvent, payload: &Value) -> Value {
+    let mut metadata = event_metadata(event);
+    let Some(metadata_object) = metadata.as_object_mut() else {
+        return metadata;
+    };
+
+    merge_reasoning_metadata_object(metadata_object, payload.get("metadata"));
+    merge_provider_metadata_aliases(metadata_object, payload);
+    merge_provider_metadata_aliases(metadata_object, &event.payload);
+
+    compact_json(metadata)
+}
+
+fn merge_reasoning_metadata_object(target: &mut Map<String, Value>, value: Option<&Value>) {
+    let Some(Value::Object(source)) = value else {
+        return;
+    };
+    for (key, value) in source {
+        if value.is_null() {
+            continue;
+        }
+        target.insert(key.clone(), value.clone());
+    }
+    if let Some(value) = value {
+        merge_provider_metadata_aliases(target, value);
+    }
+}
+
+fn merge_provider_metadata_aliases(target: &mut Map<String, Value>, source: &Value) {
+    let Some(source) = source.as_object() else {
+        return;
+    };
+    if let Some(value) = source
+        .get("provider_metadata")
+        .or_else(|| source.get("providerMetadata"))
+        .cloned()
+        .filter(|value| !value.is_null())
+    {
+        target.insert("provider_metadata".to_string(), value);
+    }
+}
+
 fn command_exit_item_status(payload: &Value) -> &'static str {
     let exit_code = payload
         .get("exitCode")
@@ -973,4 +1018,131 @@ fn summary_list(payload: &Value) -> Vec<String> {
         values.push(value.to_string());
     }
     values
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use app_server_protocol::{AgentSession, AgentSessionStatus};
+    use std::collections::HashMap;
+
+    fn stored_session(events: Vec<AgentEvent>) -> StoredSession {
+        StoredSession {
+            session: AgentSession {
+                session_id: "session-1".to_string(),
+                thread_id: "thread-1".to_string(),
+                app_id: "agent-runtime".to_string(),
+                workspace_id: None,
+                business_object_ref: None,
+                status: AgentSessionStatus::Running,
+                created_at: "2026-06-23T00:00:00.000Z".to_string(),
+                updated_at: "2026-06-23T00:00:00.000Z".to_string(),
+            },
+            turns: Vec::new(),
+            turn_inputs: HashMap::new(),
+            turn_runtime_options: HashMap::new(),
+            events,
+            output_blobs: HashMap::new(),
+        }
+    }
+
+    fn agent_event(event_id: &str, sequence: u64, event_type: &str, payload: Value) -> AgentEvent {
+        AgentEvent {
+            event_id: event_id.to_string(),
+            sequence,
+            session_id: "session-1".to_string(),
+            thread_id: Some("thread-1".to_string()),
+            turn_id: Some("turn-1".to_string()),
+            event_type: event_type.to_string(),
+            timestamp: "2026-06-23T00:00:01.000Z".to_string(),
+            payload,
+        }
+    }
+
+    #[test]
+    fn reasoning_item_payload_metadata_is_preserved_in_thread_items() {
+        let stored = stored_session(vec![agent_event(
+            "evt-reasoning-item",
+            7,
+            "item.started",
+            json!({
+                "item": {
+                    "id": "reasoning-1",
+                    "thread_id": "thread-1",
+                    "turn_id": "turn-1",
+                    "sequence": 7,
+                    "status": "in_progress",
+                    "type": "reasoning",
+                    "text": "先判断任务类型",
+                    "summary": ["先判断任务类型"],
+                    "metadata": {
+                        "provider_metadata": {
+                            "signature": "sig-anthropic"
+                        },
+                        "native_reasoning_item_id": "rs_123"
+                    }
+                }
+            }),
+        )]);
+
+        let items = thread_items_from_events(&stored);
+
+        assert_eq!(items.len(), 1);
+        let metadata = items[0]
+            .get("metadata")
+            .and_then(Value::as_object)
+            .expect("reasoning metadata");
+        assert_eq!(
+            metadata.get("source_event_id"),
+            Some(&json!("evt-reasoning-item"))
+        );
+        assert_eq!(
+            metadata
+                .get("provider_metadata")
+                .and_then(|value| value.get("signature")),
+            Some(&json!("sig-anthropic"))
+        );
+        assert_eq!(
+            metadata.get("native_reasoning_item_id"),
+            Some(&json!("rs_123"))
+        );
+    }
+
+    #[test]
+    fn reasoning_final_provider_metadata_is_projected_to_thread_item_metadata() {
+        let stored = stored_session(vec![agent_event(
+            "evt-reasoning-final",
+            8,
+            "reasoning.final",
+            json!({
+                "reasoningId": "runtime-thinking",
+                "text": "完整思考摘要",
+                "providerMetadata": {
+                    "backend": "codex",
+                    "summary_index": 1
+                }
+            }),
+        )]);
+
+        let items = thread_items_from_events(&stored);
+
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["type"], "reasoning");
+        assert_eq!(items[0]["status"], "completed");
+        assert_eq!(items[0]["text"], "完整思考摘要");
+        assert_eq!(
+            items[0]
+                .get("metadata")
+                .and_then(|metadata| metadata.get("provider_metadata"))
+                .and_then(|provider_metadata| provider_metadata.get("backend")),
+            Some(&json!("codex"))
+        );
+        assert_eq!(
+            items[0]
+                .get("metadata")
+                .and_then(|metadata| metadata.get("provider_metadata"))
+                .and_then(|provider_metadata| provider_metadata.get("summary_index")),
+            Some(&json!(1))
+        );
+    }
 }

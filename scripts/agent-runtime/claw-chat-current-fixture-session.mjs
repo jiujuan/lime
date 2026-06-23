@@ -1,13 +1,10 @@
 import {
   APP_SERVER_METHOD_SESSION_READ,
   APP_SERVER_METHOD_SESSION_START,
-  APP_SERVER_METHOD_SESSION_TURN_START,
   APP_SERVER_METHOD_SESSION_UPDATE,
-  EXPERT_SKILLS_RUNTIME_PROMPT,
   EXPERT_SKILLS_RUNTIME_SESSION_ID,
   EXPERT_SKILLS_RUNTIME_SESSION_TITLE,
   EXPERT_SKILLS_RUNTIME_THREAD_ID,
-  EXPERT_SKILLS_RUNTIME_TURN_ID,
   FIXTURE_MODEL,
   FIXTURE_PROVIDER,
   NEWS_PROMPT,
@@ -19,11 +16,9 @@ import {
 } from "./claw-chat-current-fixture-constants.mjs";
 import { sendPromptFromGui } from "./claw-chat-current-fixture-gui-actions.mjs";
 import {
-  collectAgentSessionEvents,
   evaluatePageSnapshot,
   invokeAppServerFromPage,
 } from "./claw-chat-current-fixture-rpc.mjs";
-import { waitForAgentSessionEventsForTurn } from "./claw-chat-current-fixture-read-model-waits.mjs";
 import { assert, sanitizeJson, sleep } from "./claw-chat-current-fixture-utils.mjs";
 
 export async function createFixtureSession(page, workspace, requestLog) {
@@ -167,72 +162,6 @@ export async function createExpertSkillsRuntimeSession(page, workspace, requestL
     update: update.result,
     expertMetadata,
   };
-}
-
-export async function startExpertSkillsRuntimeTurn(page, workspace, requestLog) {
-  assert(workspace?.rootPath, "expert skills fixture 缺少 workspace rootPath");
-  const eventName = `agentSession/event/${EXPERT_SKILLS_RUNTIME_SESSION_ID}`;
-  const expertMetadata = buildExpertSkillsRuntimeMetadata();
-  const turnConfig = {
-    metadata: expertMetadata,
-    working_dir: workspace.rootPath,
-    workspace_root: workspace.rootPath,
-  };
-  const turnStart = await invokeAppServerFromPage(
-    page,
-    APP_SERVER_METHOD_SESSION_TURN_START,
-    {
-      sessionId: EXPERT_SKILLS_RUNTIME_SESSION_ID,
-      turnId: EXPERT_SKILLS_RUNTIME_TURN_ID,
-      input: {
-        text: EXPERT_SKILLS_RUNTIME_PROMPT,
-      },
-      runtimeOptions: {
-        stream: true,
-        eventName,
-        providerPreference: FIXTURE_PROVIDER,
-        modelPreference: FIXTURE_MODEL,
-        metadata: expertMetadata,
-        hostOptions: {
-          asterChatRequest: {
-            message: EXPERT_SKILLS_RUNTIME_PROMPT,
-            session_id: EXPERT_SKILLS_RUNTIME_SESSION_ID,
-            event_name: eventName,
-            provider_preference: FIXTURE_PROVIDER,
-            model_preference: FIXTURE_MODEL,
-            turn_id: EXPERT_SKILLS_RUNTIME_TURN_ID,
-            turn_config: turnConfig,
-          },
-        },
-      },
-      metadata: expertMetadata,
-      queueIfBusy: false,
-      skipPreSubmitResume: true,
-    },
-    requestLog,
-  );
-
-  const eventObservation = await waitForAgentSessionEventsForTurn(
-    page,
-    { timeoutMs: 30_000, intervalMs: 250 },
-    EXPERT_SKILLS_RUNTIME_TURN_ID,
-    turnStart.messages,
-  );
-
-  return sanitizeJson({
-    eventName,
-    turnStartResult: {
-      turnId:
-        turnStart.result?.turn?.turnId ??
-        turnStart.result?.turn?.turn_id ??
-        null,
-      status: turnStart.result?.turn?.status ?? null,
-      messageCount: turnStart.messages.length,
-      notificationCount: collectAgentSessionEvents(turnStart.messages).length,
-    },
-    events: eventObservation.summary,
-    expertMetadata,
-  });
 }
 
 export async function injectExpertSkillsRuntimeCatalog(page, options = {}) {

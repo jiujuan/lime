@@ -947,6 +947,11 @@ describe("Agent API 治理护栏", () => {
       thread_read: {
         thread_id: "thread-runtime-2",
         status: "running",
+        profile_status: "running",
+        active_turn_id: undefined,
+        turns: [],
+        pending_requests: [],
+        incidents: [],
         queued_turns: [
           {
             queued_turn_id: "queued-2",
@@ -957,6 +962,7 @@ describe("Agent API 治理护栏", () => {
             position: 1,
           },
         ],
+        updated_at: "2026-06-06T00:00:02.000Z",
       },
       messages: [
         {

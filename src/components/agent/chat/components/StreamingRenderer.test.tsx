@@ -26,18 +26,23 @@ describe("StreamingRenderer", () => {
       pendingTail: "| Codex",
     });
 
-    expect(
-      resolveStreamingMarkdownDisplaySource("## 标题", true),
-    ).toEqual({
+    expect(resolveStreamingMarkdownDisplaySource("## 标题", true)).toEqual({
       markdown: "",
       pendingTail: "## 标题",
     });
 
-    expect(
-      resolveStreamingMarkdownDisplaySource("## 标题", false),
-    ).toEqual({
+    expect(resolveStreamingMarkdownDisplaySource("## 标题", false)).toEqual({
       markdown: "## 标题",
       pendingTail: "",
+    });
+
+    expect(
+      resolveStreamingMarkdownDisplaySource("- 半截列表\n- 仍在输出", true, {
+        deferMarkdownUntilComplete: true,
+      }),
+    ).toEqual({
+      markdown: "",
+      pendingTail: "- 半截列表\n- 仍在输出",
     });
   });
 
@@ -55,7 +60,9 @@ describe("StreamingRenderer", () => {
     expect(markdownContents).toContain("表格：\n");
     expect(container.textContent).toContain("| 来源");
     expect(
-      container.querySelector('[data-testid="streaming-markdown-pending-tail"]'),
+      container.querySelector(
+        '[data-testid="streaming-markdown-pending-tail"]',
+      ),
     ).not.toBeNull();
   });
 
@@ -140,6 +147,60 @@ describe("StreamingRenderer", () => {
     expect(container.textContent).not.toContain("我");
     expect(container.textContent).toContain("调研简报");
     expect(container.textContent).toContain("已确认主要来源");
+  });
+
+  it("交错搜索后的连续正文片段应合并成一个 Markdown 块", () => {
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-search-before-fragmented-answer",
+            name: "WebSearch",
+            arguments: JSON.stringify({ query: "international news today" }),
+            status: "completed",
+            result: {
+              success: true,
+              output: JSON.stringify({
+                results: [
+                  {
+                    title: "International news source",
+                    url: "https://example.com/news",
+                    snippet: "news summary",
+                  },
+                ],
+              }),
+            },
+            startTime: new Date("2026-06-02T09:00:00.000Z"),
+            endTime: new Date("2026-06-02T09:00:01.000Z"),
+          },
+        },
+        {
+          type: "text",
+          text: "## 国际新闻简报\n\n",
+        },
+        {
+          type: "text",
+          text: "- France 24：主要来源已确认。\n",
+        },
+        {
+          type: "text",
+          text: "- BBC：要点已确认。",
+        },
+      ],
+      isStreaming: false,
+    });
+
+    const markdownBlocks = container.querySelectorAll(
+      '[data-testid="markdown-renderer"]',
+    );
+    expect(markdownBlocks).toHaveLength(1);
+    expect(markdownBlocks[0]?.textContent).toContain("国际新闻简报");
+    expect(markdownBlocks[0]?.textContent).toContain(
+      "France 24：主要来源已确认。",
+    );
+    expect(markdownBlocks[0]?.textContent).toContain("BBC：要点已确认。");
   });
 
   it("交错图片查看过程应保持顺序并支持展开图片预览", () => {
@@ -786,9 +847,7 @@ describe("StreamingRenderer", () => {
 
     const renderedText = container.textContent || "";
     expect(renderedText).toContain("已执行 1 项技能操作");
-    expect(renderedText).toContain(
-      "运行启用 · 手动会话 · 人工确认 · 1 个绑定",
-    );
+    expect(renderedText).toContain("运行启用 · 手动会话 · 人工确认 · 1 个绑定");
     expect(renderedText).not.toContain("permissionBehavior");
     expect(renderedText).not.toContain("workspaceSkillRuntimeEnableAttached");
     expect(renderedText).not.toContain("workspace_skill_runtime_enable");
@@ -837,5 +896,4 @@ describe("StreamingRenderer", () => {
         ?.getAttribute("data-visual-style"),
     ).toBe("grouped-inline");
   });
-
 });

@@ -28,6 +28,7 @@ import {
   launchAgentAppShell,
   saveInstalledAgentAppState,
   getAgentAppCloudCatalog,
+  listAgentAppHostLifecycleSnapshots,
   listInstalledAgentApps,
   previewAgentAppUninstall,
   reviewCloudAgentAppRelease,
@@ -58,6 +59,7 @@ import { resolveInstalledAgentAppDisplayName } from "./agentAppDisplay";
 import {
   buildAppCenterFilterCounts,
   buildAppCenterItems,
+  buildAppCenterHostLifecycleSummary,
   canOneClickUpdate,
   filterAppCenterItems,
   getActionLabelKey,
@@ -72,11 +74,20 @@ import {
   paginateAppCenterItems,
   resolveAppIconSrc,
   type AppCenterItem,
+  type AppCenterHostLifecycleTone,
   type AppCenterSourceFilter,
   type AppCenterSourceKind,
   type AppCenterStatusFilter,
   type AppCenterStatusKind,
 } from "./AgentAppsPageViewModel";
+import {
+  requestAgentAppRightSurfaceLaunch,
+  type AgentAppRightSurfaceLaunchTarget,
+} from "./agentAppRightSurfaceLaunch";
+import {
+  resolveAgentAppLaunchTargetPolicy,
+  type AgentAppLaunchTargetMode,
+} from "./agentAppLaunchTargetPolicy";
 import { UiExtensionHost } from "../runtime/uiExtensionHost";
 import { WorkflowRuntimeHost } from "../runtime/workflowRuntimeHost";
 import { evaluateAgentAppEntryRuntimeGuard } from "../runtime/entryRuntimeGuard";
@@ -95,6 +106,7 @@ import type {
   InstalledAgentAppState,
   ProjectedEntry,
 } from "../types";
+import type { AgentAppHostLifecycleSnapshot } from "../host";
 
 const PAGE_FLAGS = resolveAgentAppHostFlags({
   labEnabled: true,
@@ -191,17 +203,41 @@ function appCenterSourceClass(source: AppCenterSourceKind): string {
   return "border-emerald-200 bg-emerald-50 text-emerald-700";
 }
 
+function hostLifecycleClass(tone: AppCenterHostLifecycleTone): string {
+  if (tone === "emerald") {
+    return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  }
+  if (tone === "amber") {
+    return "border-amber-200 bg-amber-50 text-amber-700";
+  }
+  if (tone === "rose") {
+    return "border-rose-200 bg-rose-50 text-rose-700";
+  }
+  return "border-slate-200 bg-slate-50 text-slate-600";
+}
+
+type AgentAppDynamicTranslation = (
+  key: string,
+  options?: Record<string, unknown>,
+) => string;
+
 export function AgentAppsPage({
   onNavigate,
   pageParams,
+  rightSurfaceTarget,
 }: {
   onNavigate?: (page: Page, params?: PageParams) => void;
   pageParams?: AgentAppsPageParams;
+  rightSurfaceTarget?: AgentAppRightSurfaceLaunchTarget | null;
 }) {
   const { t } = useTranslation("agent");
+  const dynamicT = t as AgentAppDynamicTranslation;
   const profile = useMemo(buildProfile, []);
   const adapterStore = useMemo(() => new InMemoryAgentAppCapabilityStore(), []);
   const [installed, setInstalled] = useState<InstalledAgentAppState[]>([]);
+  const [hostLifecycleSnapshots, setHostLifecycleSnapshots] = useState<
+    AgentAppHostLifecycleSnapshot[] | null
+  >(null);
   const [issueCount, setIssueCount] = useState(0);
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const [cloudCatalog, setCloudCatalog] =
@@ -228,6 +264,8 @@ export function AgentAppsPage({
     useState<AppCenterStatusFilter>("all");
   const [sourceFilter, setSourceFilter] =
     useState<AppCenterSourceFilter>("all");
+  const [launchTargetMode, setLaunchTargetMode] =
+    useState<AgentAppLaunchTargetMode>("standalone");
   const [currentPage, setCurrentPage] = useState(1);
   const [moreInfoOpen, setMoreInfoOpen] = useState(false);
   const handledLaunchRequestRef = useRef<string | null>(null);
@@ -262,8 +300,9 @@ export function AgentAppsPage({
         cloudApps,
         catalogSource: cloudCatalog?.source ?? "seeded",
         convertLocalFileSrc,
+        hostLifecycleSnapshots: hostLifecycleSnapshots ?? undefined,
       }),
-    [cloudApps, cloudCatalog?.source, installed],
+    [cloudApps, cloudCatalog?.source, hostLifecycleSnapshots, installed],
   );
 
   const filteredItems = useMemo(
@@ -286,16 +325,35 @@ export function AgentAppsPage({
     () => buildAppCenterFilterCounts(appItems),
     [appItems],
   );
+  const launchTargetPolicy = useMemo(
+    () =>
+      resolveAgentAppLaunchTargetPolicy({
+        mode: launchTargetMode,
+        rightSurfaceTarget,
+      }),
+    [launchTargetMode, rightSurfaceTarget],
+  );
+
+  useEffect(() => {
+    if (
+      launchTargetMode === "rightSurface" &&
+      !launchTargetPolicy.rightSurfaceAvailable
+    ) {
+      setLaunchTargetMode("standalone");
+    }
+  }, [launchTargetMode, launchTargetPolicy.rightSurfaceAvailable]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [list, catalog] = await Promise.all([
+      const [list, catalog, hostLifecycle] = await Promise.all([
         listInstalledAgentApps(),
         getAgentAppCloudCatalog(),
+        listAgentAppHostLifecycleSnapshots(),
       ]);
       setInstalled(list.states);
-      setIssueCount(list.issues.length);
+      setHostLifecycleSnapshots(hostLifecycle.snapshots);
+      setIssueCount(list.issues.length + hostLifecycle.issues.length);
       setCloudCatalog(catalog);
       setSelectedAppId((current) => {
         const requestedAppId = pageParams?.selectedAgentAppId?.trim();
@@ -643,6 +701,22 @@ export function AgentAppsPage({
             });
             return;
           }
+          try {
+            if (launchTargetPolicy.rightSurfaceTarget) {
+              await requestAgentAppRightSurfaceLaunch({
+                appId: state.appId,
+                title: resolveInstalledAgentAppDisplayName(state),
+                entry,
+                shellLaunch: result,
+                target: launchTargetPolicy.rightSurfaceTarget,
+              });
+            }
+          } catch (error) {
+            toast.error(t("agentApp.apps.toast.failed"), {
+              description:
+                error instanceof Error ? error.message : String(error),
+            });
+          }
           const summary = t("agentApp.apps.launch.shellLaunched", {
             title: entry.title,
             target:
@@ -723,7 +797,14 @@ export function AgentAppsPage({
         );
       });
     },
-    [adapterStore, onNavigate, runBusy, t, uninstallDescriptor],
+    [
+      adapterStore,
+      launchTargetPolicy.rightSurfaceTarget,
+      onNavigate,
+      runBusy,
+      t,
+      uninstallDescriptor,
+    ],
   );
 
   useEffect(() => {
@@ -1130,6 +1211,55 @@ export function AgentAppsPage({
                 </span>
               </div>
             </div>
+            <div
+              className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] px-3 py-2"
+              data-testid="agent-apps-launch-target-policy"
+            >
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-[color:var(--lime-text-strong)]">
+                  {t("agentApp.apps.launchTarget.label")}
+                </p>
+                {!launchTargetPolicy.rightSurfaceAvailable ? (
+                  <p
+                    className="mt-0.5 text-xs text-[color:var(--lime-text-muted)]"
+                    data-testid="agent-apps-launch-target-unavailable"
+                  >
+                    {t(
+                      "agentApp.apps.launchTarget.rightSurfaceUnavailable",
+                    )}
+                  </p>
+                ) : null}
+              </div>
+              <div className="inline-flex rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] p-1">
+                <button
+                  type="button"
+                  className={`h-8 rounded-full px-3 text-xs font-semibold transition ${
+                    launchTargetPolicy.mode === "standalone"
+                      ? "bg-[color:var(--lime-text-strong)] text-[color:var(--lime-surface)]"
+                      : "text-[color:var(--lime-text-muted)] hover:bg-[color:var(--lime-surface-hover)] hover:text-[color:var(--lime-text-strong)]"
+                  }`}
+                  aria-pressed={launchTargetPolicy.mode === "standalone"}
+                  onClick={() => setLaunchTargetMode("standalone")}
+                  data-testid="agent-apps-launch-target-standalone"
+                >
+                  {t("agentApp.apps.launchTarget.standalone")}
+                </button>
+                <button
+                  type="button"
+                  className={`h-8 rounded-full px-3 text-xs font-semibold transition ${
+                    launchTargetPolicy.mode === "rightSurface"
+                      ? "bg-[color:var(--lime-text-strong)] text-[color:var(--lime-surface)]"
+                      : "text-[color:var(--lime-text-muted)] hover:bg-[color:var(--lime-surface-hover)] hover:text-[color:var(--lime-text-strong)]"
+                  } disabled:cursor-not-allowed disabled:text-[color:var(--lime-text-muted)] disabled:opacity-50 disabled:hover:bg-transparent`}
+                  aria-pressed={launchTargetPolicy.mode === "rightSurface"}
+                  disabled={!launchTargetPolicy.rightSurfaceAvailable}
+                  onClick={() => setLaunchTargetMode("rightSurface")}
+                  data-testid="agent-apps-launch-target-right-surface"
+                >
+                  {t("agentApp.apps.launchTarget.rightSurface")}
+                </button>
+              </div>
+            </div>
             <main className="min-w-0">
               <div
                 className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
@@ -1138,6 +1268,7 @@ export function AgentAppsPage({
                 {pagedItems.map((item) => {
                   const selectedRow = selectedItem?.appId === item.appId;
                   const defaultEntry = getDefaultEntry(item);
+                  const hostSummary = buildAppCenterHostLifecycleSummary(item);
                   return (
                     <div
                       key={item.appId}
@@ -1186,6 +1317,31 @@ export function AgentAppsPage({
                               </>
                             ) : null}
                           </div>
+                          {hostSummary ? (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <span
+                                className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-medium ${hostLifecycleClass(
+                                  hostSummary.tone,
+                                )}`}
+                                data-testid={`agent-apps-host-status-${item.appId}`}
+                              >
+                                {dynamicT(hostSummary.labelKey)}
+                              </span>
+                              {hostSummary.productProfileEnabled ? (
+                                <span
+                                  className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-600"
+                                  data-testid={`agent-apps-host-product-profile-${item.appId}`}
+                                >
+                                  {t(
+                                    "agentApp.apps.center.host.productProfile",
+                                    {
+                                      count: hostSummary.productObjectCount,
+                                    },
+                                  )}
+                                </span>
+                              ) : null}
+                            </div>
+                          ) : null}
                         </div>
                       </div>
 
@@ -1482,6 +1638,60 @@ export function AgentAppsPage({
                   {selectedItem.registrationBlocked && selectedItem.cloudApp
                     ? renderRegistrationForm(selectedItem.cloudApp)
                     : null}
+
+                  {(() => {
+                    const hostSummary =
+                      buildAppCenterHostLifecycleSummary(selectedItem);
+                    if (!hostSummary) {
+                      return null;
+                    }
+                    return (
+                      <section
+                        className="space-y-3 rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] p-3"
+                        data-testid="agent-apps-host-lifecycle"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 text-sm font-semibold text-[color:var(--lime-text-strong)]">
+                            <ShieldCheck size={16} />
+                            {t("agentApp.apps.center.host.title")}
+                          </div>
+                          <span
+                            className={`rounded-md border px-2.5 py-1 text-xs font-medium ${hostLifecycleClass(
+                              hostSummary.tone,
+                            )}`}
+                            data-testid={`agent-apps-detail-host-status-${selectedItem.appId}`}
+                          >
+                            {dynamicT(hostSummary.labelKey)}
+                          </span>
+                        </div>
+                        <div className="grid gap-2 text-xs text-[color:var(--lime-text-muted)] sm:grid-cols-2">
+                          <div className="rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 py-2">
+                            {t("agentApp.apps.center.host.rightSurface", {
+                              tabs: hostSummary.supportedTabCount,
+                              tab: hostSummary.defaultTab ?? "-",
+                            })}
+                          </div>
+                          <div className="rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 py-2">
+                            {t(
+                              hostSummary.blockerCount > 0
+                                ? "agentApp.apps.center.host.blockers"
+                                : "agentApp.apps.center.host.noBlockers",
+                              {
+                                count: hostSummary.blockerCount,
+                              },
+                            )}
+                          </div>
+                          {hostSummary.productProfileEnabled ? (
+                            <div className="rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 py-2 sm:col-span-2">
+                              {t("agentApp.apps.center.host.productProfile", {
+                                count: hostSummary.productObjectCount,
+                              })}
+                            </div>
+                          ) : null}
+                        </div>
+                      </section>
+                    );
+                  })()}
 
                   {selectedItem.installedState ? (
                     <section className="space-y-3">
