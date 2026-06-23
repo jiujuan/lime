@@ -182,21 +182,6 @@ function readRecord(value: unknown): Record<string, unknown> | undefined {
   return isRecord(value) ? value : undefined;
 }
 
-function readStringAt(
-  value: unknown,
-  path: string[],
-): string | undefined {
-  let current: unknown = value;
-  for (const segment of path) {
-    const record = readRecord(current);
-    if (!record) {
-      return undefined;
-    }
-    current = record[segment];
-  }
-  return readString(current);
-}
-
 function readBooleanAt(value: unknown, path: string[]): boolean | undefined {
   let current: unknown = value;
   for (const segment of path) {
