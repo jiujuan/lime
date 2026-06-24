@@ -34,7 +34,7 @@
 
 | 范围                  | 命令                                                                            | 文件 / 用例                                                | 实测耗时          | 备注                                                                                                                                                                                     |
 | --------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 前端分层统计          | `npm run test:layers:stats`                                                     | Vitest 总 `1012` 个文件；默认可运行 `1011`；live-gated `1` | 统计脚本级        | 同一事实源来自 `scripts/lib/vitest-layer-classifier.mjs`；unit `485`、component `397`，component VM 迁移候选当前发布基线为 `12` 个；后续继续降回 `8` 或更低                              |
+| 前端分层统计          | `npm run test:layers:stats`                                                     | Vitest 总 `1012` 个文件；默认可运行 `1011`；live-gated `1` | 统计脚本级        | 同一事实源来自 `scripts/lib/vitest-layer-classifier.mjs`；unit `485`、component `397`，component VM 迁移候选当前发布基线为 `22` 个；后续继续降回 `12` / `8` 或更低                              |
 | 前端 Unit             | `npm run test:unit`                                                             | 最近有效默认复测 `483` 个文件，`2851` 个 case              | `161.62s`（通过） | 本地 / AI TDD 默认第一轮信号保持绿色；unit runner 默认 Node + threads pool，`--single-fork` / `--pool=forks` 可回退；高负载下的 `293.89s` / `366.78s` 只作为环境噪声记录，不作为稳定基准 |
 | 前端全量 Vitest       | `npm run test:frontend:all`                                                     | 默认可运行 `891` 个文件；最近完整跑完 `63/63` 批次         | 约 `306.95s`      | 交付前 / CI 全量入口；runner 不输出聚合 case 总数                                                                                                                                        |
 | 前端 Integration 定向 | `npm run test:integration -- src/lib/layered-design/export.integration.test.ts` | `1` 个文件，`16` 个 case                                   | `29.83s`（通过）  | `layered-design` ZIP / PSD 导出属于重二进制打包验证，已移出 unit                                                                                                                         |
@@ -71,7 +71,7 @@
 下一次重启优先级：
 
 1. **先稳基准**：工作树和机器负载安静后复跑一次 `/usr/bin/time -p npm run test:unit`，确认默认 Node + threads + 本地 fast-check 降采样后的稳定耗时；如果仍明显慢于 `138.63s`，优先做 transform / collect 慢文件画像，而不是继续试错 pool 默认。
-2. **再治理候选数**：当前发布基线剩余 12 个 component migration candidates 仍是下一优先级；优先继续 `useWorkspaceSendActions.test.tsx`，把已由 `workspaceModelSkillLaunchRequestContext.unit.test.ts` 覆盖的重复 metadata 挂载断言删除或拆成 focused component suites，先降回 `8`。
+2. **再治理候选数**：当前发布基线剩余 22 个 component migration candidates 仍是下一优先级；优先继续 `useWorkspaceSendActions.test.tsx`，把已由 `workspaceModelSkillLaunchRequestContext.unit.test.ts` 覆盖的重复 metadata 挂载断言删除或拆成 focused component suites，先降回 `12` / `8`。
 3. **最后看 Rust**：`npm run test:rust:unit` 当前约 `61.76s`，后端后续优化重点应是定向 crate / filter 回路，而不是先全量重构 Rust 测试。
 
 前端 Vitest 当前分层：
