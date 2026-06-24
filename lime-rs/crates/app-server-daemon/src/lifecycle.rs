@@ -222,7 +222,7 @@ mod tests {
         let lock = acquire_operation_lock(path.clone()).expect("reacquire lock");
         drop(lock);
         assert!(!path.exists());
-        let _ = std::fs::remove_dir_all(path.parent().and_then(Path::parent).expect("temp root"));
+        let _ = std::fs::remove_dir_all(path.parent().expect("temp root"));
     }
 
     fn temp_lock_path(name: &str) -> PathBuf {
