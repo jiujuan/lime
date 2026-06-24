@@ -6,6 +6,7 @@ export type WorkspaceRightSurfaceKind =
   | "productProfile"
   | "expertInfo"
   | "objectCanvas"
+  | "browser"
   | "files"
   | "shell"
   | "harness";
@@ -31,5 +32,6 @@ export interface RightSurfaceRenderInput {
 
 export interface RightSurfaceDefinition {
   kind: WorkspaceRightSurfaceKind;
+  label?: string | null;
   render(input: RightSurfaceRenderInput): ReactNode;
 }

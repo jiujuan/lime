@@ -77,6 +77,21 @@ describe("appUpdate API", () => {
     );
   });
 
+  it("自动检查更新应透传 automatic 标记", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      current: "1.0.0",
+      hasUpdate: false,
+    });
+
+    await expect(checkForUpdates({ automatic: true })).resolves.toEqual(
+      expect.objectContaining({ current: "1.0.0", hasUpdate: false }),
+    );
+
+    expect(safeInvoke).toHaveBeenCalledWith("check_for_updates", {
+      automatic: true,
+    });
+  });
+
   it("下载更新收到非下载结果时应 fail closed", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
 

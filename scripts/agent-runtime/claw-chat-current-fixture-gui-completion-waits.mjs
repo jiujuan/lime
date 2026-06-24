@@ -23,12 +23,18 @@ export async function waitForGuiChatCompleted(
     prompt = NEWS_PROMPT,
     doneText = ASSISTANT_DONE_TEXT,
     summaryText = "今日国际新闻简要整理",
+    requiredVisibleTexts,
     dedupeGuardTexts = [],
     disallowedVisibleTexts = ["legacy_tool_event"],
   } = {},
 ) {
   const startedAt = Date.now();
   let lastSnapshot = null;
+  const requiredAssistantVisibleTexts =
+    requiredVisibleTexts ??
+    (prompt === NEWS_PROMPT && doneText === ASSISTANT_DONE_TEXT
+      ? ["全球市场继续关注能源", "国际组织呼吁"]
+      : []);
   while (Date.now() - startedAt < options.timeoutMs) {
     const snapshot = await evaluatePageSnapshot(
       page,
@@ -36,6 +42,7 @@ export async function waitForGuiChatCompleted(
         prompt,
         doneText,
         summaryText,
+        requiredAssistantVisibleTexts,
         dedupeGuardTexts,
         disallowedVisibleTexts,
       }) => {
@@ -75,6 +82,12 @@ export async function waitForGuiChatCompleted(
           url: window.location.href,
           hasPrompt: text.includes(prompt),
           hasAssistantSummary: text.includes(summaryText),
+          requiredVisibleTextHits: requiredAssistantVisibleTexts.map(
+            (requiredText) => ({
+              text: requiredText,
+              occurrences: mainText.split(requiredText).length - 1,
+            }),
+          ),
           summaryOccurrences: text.split(summaryText).length - 1,
           mainSummaryOccurrences: mainText.split(summaryText).length - 1,
           dedupeGuardHits: dedupeGuardTexts.map((guardText) => ({
@@ -107,6 +120,7 @@ export async function waitForGuiChatCompleted(
         prompt,
         doneText,
         summaryText,
+        requiredAssistantVisibleTexts,
         dedupeGuardTexts,
         disallowedVisibleTexts,
       },
@@ -116,9 +130,17 @@ export async function waitForGuiChatCompleted(
       continue;
     }
     lastSnapshot = snapshot;
+    const hasRequiredAssistantVisibleTexts =
+      (snapshot.requiredVisibleTextHits || []).every(
+        (hit) => hit.occurrences > 0,
+      );
+    const hasExpectedAssistantContent =
+      requiredAssistantVisibleTexts.length > 0
+        ? snapshot.hasAssistantSummary && hasRequiredAssistantVisibleTexts
+        : snapshot.hasAssistantSummary || snapshot.hasDoneText;
     if (
       snapshot.hasPrompt &&
-      (snapshot.hasAssistantSummary || snapshot.hasDoneText) &&
+      hasExpectedAssistantContent &&
       snapshot.textareaVisible &&
       snapshot.textareaDisabled === false &&
       snapshot.stopButtonVisible === false &&

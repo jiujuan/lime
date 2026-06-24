@@ -94,6 +94,22 @@ const agentAppSurfacePendingRequest: WorkspaceRightSurfacePendingRequest = {
     },
   },
 };
+const browserPendingRequest: WorkspaceRightSurfacePendingRequest = {
+  ...pendingRequest,
+  requestId: "right_surface_browser_1",
+  surfaceKind: "browser",
+  origin: "runtime",
+  priority: "foreground",
+  reason: "browser_requirement",
+  candidateId: "https://example.com/fallback",
+  metadata: {
+    title: "Example Browser",
+    launchUrl: "https://example.com/dashboard",
+    browserSessionId: "browser-session-1",
+    profileKey: "task-profile",
+    targetId: "target-1",
+  },
+};
 
 function renderHook(props?: Partial<HookProps>) {
   const container = document.createElement("div");
@@ -378,6 +394,49 @@ describe("useWorkspaceRightSurfacePendingRuntime", () => {
           action: "open",
           kind: "appSurface",
           reason: "agent_app_surface_ready",
+        }),
+      }),
+    ]);
+  });
+
+  it("应把 browser pending metadata 投影为 Right Surface Browser intent", async () => {
+    const listPending = vi.fn(async () => ({
+      pending: [browserPendingRequest],
+    }));
+    const { render, getValue } = renderHook({ listPending });
+
+    await render();
+
+    await vi.waitFor(() => {
+      expect(getValue().pendingBrowserIntent).toEqual({
+        source: "rightSurfacePending",
+        sourceRequestId: "right_surface_browser_1",
+        origin: "runtime",
+        reason: "browser_requirement",
+        priority: "foreground",
+        browserSessionId: "browser-session-1",
+        launchUrl: "https://example.com/dashboard",
+        title: "Example Browser",
+        profileKey: "task-profile",
+        targetId: "target-1",
+        sessionRef: {
+          sourceRequestId: "right_surface_browser_1",
+          browserSessionId: "browser-session-1",
+          profileKey: "task-profile",
+          adapterKind: "cdp",
+          launchUrl: "https://example.com/dashboard",
+          title: "Example Browser",
+        },
+      });
+    });
+    expect(getValue().pendingIntents).toEqual([
+      expect.objectContaining({
+        id: "app-server:right_surface_browser_1",
+        priority: "foreground",
+        command: expect.objectContaining({
+          action: "open",
+          kind: "browser",
+          reason: "browser_requirement",
         }),
       }),
     ]);

@@ -721,4 +721,52 @@ describe("submitOpRuntimeCompaction", () => {
       },
     });
   });
+
+  it("不应裁掉历史专家 session 恢复出的 expert metadata", () => {
+    const result = buildSubmitOpRuntimeCompaction({
+      requestMetadata: {
+        expert: {
+          expertId: "code-literature",
+          title: "代码文学专家",
+          skillRefs: ["skill:capability-report"],
+        },
+        harness: {
+          theme: "general",
+          session_mode: "default",
+          expert: {
+            expert_id: "code-literature",
+            title: "代码文学专家",
+            skill_refs: ["skill:capability-report"],
+          },
+        },
+      },
+      executionRuntime: {
+        session_id: "session-expert",
+        source: "runtime_snapshot",
+        recent_theme: "general",
+        recent_session_mode: "default",
+      },
+      syncedRecentPreferences: null,
+      syncedSessionModelPreference: null,
+      syncedExecutionStrategy: null,
+      effectiveExecutionStrategy: "react",
+      effectiveProviderType: "openai",
+      effectiveModel: "gpt-5.4",
+    });
+
+    expect(result.metadata).toEqual({
+      expert: {
+        expertId: "code-literature",
+        title: "代码文学专家",
+        skillRefs: ["skill:capability-report"],
+      },
+      harness: {
+        expert: {
+          expert_id: "code-literature",
+          title: "代码文学专家",
+          skill_refs: ["skill:capability-report"],
+        },
+      },
+    });
+  });
 });

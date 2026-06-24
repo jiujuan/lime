@@ -1,4 +1,5 @@
 import {
+  CONTENT_FACTORY_PRODUCT_PROFILE_ASSERTION_KEYS,
   EXPERT_PANEL_SKILLS_RUNTIME_ASSERTION_KEYS,
   EXPERT_PLAZA_SKILLS_RUNTIME_ASSERTION_KEYS,
   EXPERT_SKILLS_RUNTIME_ASSERTION_KEYS,
@@ -13,6 +14,7 @@ export function buildNotApplicableAssertions(context) {
     isAnyExpertSkillsRuntimeScenario,
     isCancelOnlyScenario,
     isCancelThenContinueScenario,
+    isContentFactoryProductProfileScenario,
     isExpertPanelSkillsRuntimeScenario,
     isExpertPlazaSkillsRuntimeScenario,
     isGoalScenario,
@@ -22,7 +24,10 @@ export function buildNotApplicableAssertions(context) {
     isSkillsRuntimeScenario,
     isWebToolsRenderingScenario,
   } = context;
-  if (isRightSurfaceVisualMatrixScenario) {
+  if (
+    isRightSurfaceVisualMatrixScenario ||
+    isContentFactoryProductProfileScenario
+  ) {
     return [
       "usedCurrentTurnCancel",
       "externalFixtureCancelUsed",
@@ -60,6 +65,9 @@ export function buildNotApplicableAssertions(context) {
       ...EXPERT_SKILLS_RUNTIME_ASSERTION_KEYS,
       ...EXPERT_PLAZA_SKILLS_RUNTIME_ASSERTION_KEYS,
       ...EXPERT_PANEL_SKILLS_RUNTIME_ASSERTION_KEYS,
+      ...(isRightSurfaceVisualMatrixScenario
+        ? CONTENT_FACTORY_PRODUCT_PROFILE_ASSERTION_KEYS
+        : RIGHT_SURFACE_VISUAL_MATRIX_ASSERTION_KEYS),
     ];
   }
   const baseNotApplicableAssertions = isCancelOnlyScenario
@@ -353,5 +361,6 @@ export function buildNotApplicableAssertions(context) {
   return [
     ...notApplicableAssertions,
     ...RIGHT_SURFACE_VISUAL_MATRIX_ASSERTION_KEYS,
+    ...CONTENT_FACTORY_PRODUCT_PROFILE_ASSERTION_KEYS,
   ];
 }

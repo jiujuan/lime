@@ -56,7 +56,12 @@ describe("CanvasWorkbenchToolTabsViewModel", () => {
         { id: "terminal:1", kind: "terminal", sequence: 1 },
         { id: "browser:1", kind: "browser", sequence: 1 },
         { id: "project-files:1", kind: "project-files", sequence: 1 },
-        { id: "browser:2", kind: "browser", sequence: 2 },
+        {
+          id: "browser:2",
+          kind: "browser",
+          sequence: 2,
+          browserTitle: "Reuters | World News",
+        },
       ],
       translateWorkbench: t,
     });
@@ -65,7 +70,7 @@ describe("CanvasWorkbenchToolTabsViewModel", () => {
       { key: "terminal:1", label: "终端", closable: true },
       { key: "browser:1", label: "新选项卡", closable: true },
       { key: "project-files:1", label: "打开文件", closable: true },
-      { key: "browser:2", label: "新选项卡 2", closable: true },
+      { key: "browser:2", label: "Reuters | World News", closable: true },
     ]);
   });
 

@@ -104,7 +104,7 @@ describe("messageListInlineProcess", () => {
     ]);
   });
 
-  it("工具仍在运行时流式 overlay 应留在过程层，不提前追加最终正文", () => {
+  it("工具仍在运行时流式 overlay 也应作为正文追加到过程后", () => {
     const parts = [
       {
         type: "tool_use",
@@ -120,7 +120,6 @@ describe("messageListInlineProcess", () => {
       mergeStreamingOverlayContentParts(
         parts,
         "我正在核对搜索结果，稍后整理结论。",
-        { holdOverlayAsProcessWhileRunning: true },
       ),
     ).toEqual([
       {
@@ -132,7 +131,7 @@ describe("messageListInlineProcess", () => {
         },
       },
       {
-        type: "thinking",
+        type: "text",
         text: "我正在核对搜索结果，稍后整理结论。",
       },
     ]);

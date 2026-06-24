@@ -215,6 +215,94 @@ describe("StreamingRenderer WebSearch sequence rendering", () => {
     expect(expandedText).not.toContain('"markdown"');
   });
 
+  it("带 sequence 的文本晚于网页工具到达时应按事件顺序拆开展示", () => {
+    const firstText = "我会先联网核实今天的主要国际新闻。";
+    const secondText = "我再补一个交叉对照，避免依赖单一来源。";
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "tool_use",
+          metadata: { sequence: 2 },
+          toolCall: {
+            id: "tool-search-late-text-order-1",
+            name: "web_search",
+            arguments: JSON.stringify({
+              query: "2026-06-24 international news Reuters AP BBC",
+            }),
+            startTime: new Date("2026-06-24T09:00:00.000Z"),
+            status: "completed",
+            result: {
+              success: true,
+              output: JSON.stringify({
+                results: [
+                  {
+                    title: "Reuters World News",
+                    url: "https://example.com/reuters-world",
+                    snippet: "World news summary",
+                  },
+                ],
+              }),
+            },
+          },
+        },
+        {
+          type: "tool_use",
+          metadata: { sequence: 5 },
+          toolCall: {
+            id: "tool-fetch-late-text-order-1",
+            name: "WebFetch",
+            arguments: JSON.stringify({
+              url: "https://example.com/reuters-world",
+            }),
+            startTime: new Date("2026-06-24T09:00:02.000Z"),
+            status: "completed",
+            result: {
+              success: true,
+              output: JSON.stringify({
+                markdown: "Reuters 世界新闻正文摘要。",
+              }),
+            },
+          },
+        },
+        {
+          type: "text",
+          text: firstText,
+          metadata: { source: "agent_thread_item", sequence: 1 },
+        },
+        {
+          type: "text",
+          text: secondText,
+          metadata: { source: "agent_thread_item", sequence: 7 },
+        },
+      ],
+      isStreaming: false,
+    });
+
+    const renderer = container.querySelector<HTMLElement>(
+      '[data-testid="streaming-renderer"]',
+    );
+    expect(renderer?.getAttribute("data-content-part-types")).toBe(
+      "text#1|tool:web_search:completed#2|tool:WebFetch:completed#5|text#7",
+    );
+
+    const markdownSources = mockMarkdownRenderer.mock.calls.map(
+      ([props]) => props.content,
+    );
+    expect(markdownSources).toContain(firstText);
+    expect(markdownSources).toContain(secondText);
+    expect(markdownSources).not.toContain(`${firstText}${secondText}`);
+
+    const collapsedText = container.textContent || "";
+    const firstIndex = collapsedText.indexOf(firstText);
+    const processIndex =
+      collapsedText.indexOf("已搜索网页 1 次，读取网页 1 次");
+    const secondIndex = collapsedText.indexOf(secondText);
+    expect(firstIndex).toBeGreaterThanOrEqual(0);
+    expect(processIndex).toBeGreaterThan(firstIndex);
+    expect(secondIndex).toBeGreaterThan(processIndex);
+  });
+
   it("完成态网页检索无预览入口时展开态仍应保留中间思考", () => {
     const { container } = renderHarness({
       content: "",
@@ -300,9 +388,7 @@ describe("StreamingRenderer WebSearch sequence rendering", () => {
     const thinkingIndex = expandedText.indexOf(
       "中间思考：搜索之后需要读取页面确认正文。",
     );
-    const fetchIndex = expandedText.indexOf(
-      "example.com/lime-websearch-rendering",
-    );
+    const fetchIndex = expandedText.indexOf("读取页面", thinkingIndex);
     const finalIndex =
       expandedText.indexOf("网页搜索渲染结论：最终正文继续输出。");
 
@@ -407,7 +493,7 @@ describe("StreamingRenderer WebSearch sequence rendering", () => {
     const thinkingIndex = expandedText.indexOf(
       "用户想了解今天的国际新闻，需要搜索并读取可靠来源。",
     );
-    const fetchIndex = expandedText.indexOf("example.com/bbc-zhongwen");
+    const fetchIndex = expandedText.indexOf("读取页面", thinkingIndex);
     const finalIndex = expandedText.indexOf("今日国际新闻");
 
     expect(thinkingBlocks).toHaveLength(1);

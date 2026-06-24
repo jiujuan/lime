@@ -8,6 +8,7 @@ import type {
 import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
 import { logAgentDebug } from "@/lib/agentDebug";
 import type { Message } from "../types";
+import { buildAgentTextDeltaContentPartMetadata } from "../utils/contentPartTimeline";
 import { updateMessageArtifactsStatus } from "../utils/messageArtifacts";
 import { isRetainedSkillProcessMessage } from "../utils/skillInlineProcessRetention";
 import {
@@ -31,10 +32,13 @@ import {
 import { recordAgentStreamPerformanceMetric } from "./agentStreamPerformanceMetrics";
 import type { AgentStreamRequestLogFinishPayload } from "./agentStreamRequestLogController";
 import { buildAgentStreamProcessBoundaryTextCommitPatch } from "./agentStreamProcessBoundaryCommit";
-import {
-  isPersistedReasoningContentPart,
-} from "./agentStreamReasoningContentSync";
+import { isPersistedReasoningContentPart } from "./agentStreamReasoningContentSync";
 import { resetStreamedReasoningSegment } from "./agentStreamReasoningTimeline";
+import {
+  clearActiveTextSegmentState,
+  resolveAccumulatedContentBeforeActiveTextSegment,
+  shouldCommitActiveTextSegmentAsFinal,
+} from "./agentStreamTextDeltaLifecycle";
 import {
   buildAgentStreamFirstTextPaintContext,
   buildAgentStreamTextRenderFlushPlan,
@@ -51,6 +55,7 @@ import {
 } from "./agentStreamTimerController";
 import { buildAgentStreamQueuedDraftStatePlan } from "./agentStreamQueueController";
 import { projectAgentStreamTimelineItem } from "./agentStreamTimelineItemProjector";
+import { mergeAssistantAgentMessageContentPartsFromThreadItems } from "./agentStreamAgentMessageContentSync";
 import { saveAgentSessionCachedMessagesSnapshot } from "./agentSessionScopedStorage";
 import { shouldLetLegacyToolEventUpdateMessageLayer } from "./agentStreamLegacyToolEventGate";
 import {
@@ -204,6 +209,10 @@ export function createAgentStreamRuntimeHandlerActions({
       eventName,
       content: nextContent,
       boundary: "render_flush",
+      itemId: requestState.activeTextSegmentItemId,
+      phase: requestState.activeTextSegmentPhase,
+      sequence: requestState.activeTextSegmentSequence,
+      turnId: requestState.activeTextSegmentTurnId,
       updatedAt: flushStartedAt,
     });
     if (flushPlan.shouldScheduleFirstTextPaint) {
@@ -241,6 +250,22 @@ export function createAgentStreamRuntimeHandlerActions({
 
   const commitRenderedTextBeforeProcessPart = () => {
     flushPendingTextRender();
+    if (
+      !requestState.accumulatedContent.trim() &&
+      !requestState.renderedContent?.trim()
+    ) {
+      return;
+    }
+
+    if (!shouldCommitActiveTextSegmentAsFinal(requestState)) {
+      const retainedFinalPrefix =
+        resolveAccumulatedContentBeforeActiveTextSegment(requestState);
+      requestState.accumulatedContent = retainedFinalPrefix;
+      requestState.renderedContent = retainedFinalPrefix;
+      clearActiveTextSegmentState(requestState);
+      clearAgentStreamTextOverlay(assistantMsgId);
+      return;
+    }
 
     setMessages((prev) =>
       prev.map((msg) => {
@@ -254,16 +279,24 @@ export function createAgentStreamRuntimeHandlerActions({
           shouldRetainThinkingPart: isPersistedReasoningContentPart,
           surfaceThinkingDeltas:
             surfaceThinkingDeltas || isRetainedSkillProcessMessage(msg),
+          textPartMetadata: buildAgentTextDeltaContentPartMetadata({
+            itemId: requestState.activeTextSegmentItemId,
+            phase: requestState.activeTextSegmentPhase,
+            sequence: requestState.activeTextSegmentSequence,
+            turnId: requestState.activeTextSegmentTurnId,
+          }),
         });
         if (!patch.content && !patch.contentParts) {
           return msg;
         }
+        clearActiveTextSegmentState(requestState);
         return {
           ...msg,
           ...patch,
         };
       }),
     );
+    clearActiveTextSegmentState(requestState);
   };
 
   const scheduleTextRenderFlush = () => {
@@ -344,6 +377,12 @@ export function createAgentStreamRuntimeHandlerActions({
       contentParts: reconcileAgentStreamFinalContentParts({
         parts: msg.contentParts,
         finalContent,
+        finalTextPartMetadata: buildAgentTextDeltaContentPartMetadata({
+          itemId: requestState.activeTextSegmentItemId,
+          phase: requestState.activeTextSegmentPhase,
+          sequence: requestState.activeTextSegmentSequence,
+          turnId: requestState.activeTextSegmentTurnId,
+        }),
         rawContent: requestState.accumulatedContent || finalContent,
         surfaceThinkingDeltas:
           surfaceThinkingDeltas || isRetainedSkillProcessMessage(msg),
@@ -499,8 +538,23 @@ export function createAgentStreamRuntimeHandlerActions({
         return {
           ...updateMessageArtifactsStatus(msg, "complete"),
           ...buildAgentStreamCompletedAssistantMessagePatch({
-            parts: msg.contentParts,
+            parts: mergeAssistantAgentMessageContentPartsFromThreadItems({
+              parts: msg.contentParts,
+              items: [
+                ...Array.from(
+                  requestState.streamedAgentMessageItemsByItemId?.values() ??
+                    [],
+                ),
+                ...(getThreadItems?.() ?? []),
+              ],
+            }),
             finalContent,
+            finalTextPartMetadata: buildAgentTextDeltaContentPartMetadata({
+              itemId: requestState.activeTextSegmentItemId,
+              phase: requestState.activeTextSegmentPhase,
+              sequence: requestState.activeTextSegmentSequence,
+              turnId: requestState.activeTextSegmentTurnId,
+            }),
             previousContent: msg.content,
             rawContent,
             surfaceThinkingDeltas:

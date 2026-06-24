@@ -62,6 +62,15 @@ describe("agentStreamCompletionController", () => {
     expect(
       shouldFailAgentStreamMissingFinalReply({
         accumulatedContent: "最终答复",
+        hasFinalAnswerRequiredProcessBoundary: true,
+        hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldFailAgentStreamMissingFinalReply({
+        accumulatedContent: "最终答复",
+        hasFinalAnswerRequiredProcessBoundary: true,
+        hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary: true,
       }),
     ).toBe(false);
   });
@@ -162,6 +171,90 @@ describe("agentStreamCompletionController", () => {
     ]);
   });
 
+  it("完成态 suffix 不应追加到早于 process boundary 的文本段", () => {
+    const parts = [
+      {
+        type: "tool_use",
+        metadata: { sequence: 2 },
+        toolCall: { id: "tool-a" },
+      },
+      {
+        type: "text",
+        text: "第一段。",
+        metadata: { source: "agent_text_delta", sequence: 1 },
+      },
+    ] as unknown as Message["contentParts"];
+
+    expect(
+      reconcileAgentStreamFinalContentParts({
+        parts,
+        finalContent: "第一段。第二段。",
+        rawContent: "第一段。第二段。",
+        surfaceThinkingDeltas: true,
+      }),
+    ).toEqual([
+      {
+        type: "tool_use",
+        metadata: { sequence: 2 },
+        toolCall: { id: "tool-a" },
+      },
+      {
+        type: "text",
+        text: "第一段。",
+        metadata: { source: "agent_text_delta", sequence: 1 },
+      },
+      { type: "text", text: "第二段。" },
+    ]);
+  });
+
+  it("完成态 reconcile 不应把 commentary text 当作最终正文", () => {
+    const parts = [
+      {
+        type: "text",
+        text: "我先联网核实目标页面来源。",
+        metadata: {
+          source: "agent_text_delta",
+          itemId: "commentary-1",
+          phase: "commentary",
+          sequence: 1,
+          turnId: "turn-1",
+        },
+      },
+      {
+        type: "tool_use",
+        metadata: { sequence: 2 },
+        toolCall: { id: "tool-a" },
+      },
+    ] as unknown as Message["contentParts"];
+
+    expect(
+      reconcileAgentStreamFinalContentParts({
+        parts,
+        finalContent: "最终正文。",
+        rawContent: "最终正文。",
+        surfaceThinkingDeltas: true,
+      }),
+    ).toEqual([
+      {
+        type: "text",
+        text: "我先联网核实目标页面来源。",
+        metadata: {
+          source: "agent_text_delta",
+          itemId: "commentary-1",
+          phase: "commentary",
+          sequence: 1,
+          turnId: "turn-1",
+        },
+      },
+      {
+        type: "tool_use",
+        metadata: { sequence: 2 },
+        toolCall: { id: "tool-a" },
+      },
+      { type: "text", text: "最终正文。" },
+    ]);
+  });
+
   it("应在不展示 thinking 时过滤 thinking part", () => {
     const parts = [
       { type: "thinking", text: "推理" },
@@ -209,7 +302,7 @@ describe("agentStreamCompletionController", () => {
           toolCall: {
             id: "tool-news-stale",
             name: "WebSearch",
-            arguments: "{\"query\":\"2026年6月7日 国际新闻\"}",
+            arguments: '{"query":"2026年6月7日 国际新闻"}',
             status: "running",
             startTime: startedAt,
           },
@@ -220,7 +313,7 @@ describe("agentStreamCompletionController", () => {
         {
           id: "tool-news-stale",
           name: "WebSearch",
-          arguments: "{\"query\":\"2026年6月7日 国际新闻\"}",
+          arguments: '{"query":"2026年6月7日 国际新闻"}',
           status: "running",
           startTime: startedAt,
         },
@@ -368,6 +461,49 @@ describe("agentStreamCompletionController", () => {
       },
       toastMessage: AGENT_STREAM_EMPTY_FINAL_REPLY_ERROR_MESSAGE,
       usage,
+    });
+  });
+
+  it("搜索等过程边界后没有 assistant 正文时应构造缺少最终回复失败计划", () => {
+    expect(
+      buildAgentStreamFinalDonePlan({
+        accumulatedContent: "我先联网核实信息。",
+        hasFinalAnswerRequiredProcessBoundary: true,
+        hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary: false,
+        queuedTurnId: "queued-search-no-final",
+        toolCallCount: 1,
+      }),
+    ).toEqual({
+      type: "missing_final_reply_failure",
+      errorMessage: AGENT_STREAM_EMPTY_FINAL_REPLY_ERROR_MESSAGE,
+      queuedTurnIds: ["queued-search-no-final"],
+      requestLogPayload: {
+        eventType: "chat_request_error",
+        status: "error",
+        error: AGENT_STREAM_EMPTY_FINAL_REPLY_ERROR_MESSAGE,
+      },
+      toastMessage: AGENT_STREAM_EMPTY_FINAL_REPLY_ERROR_MESSAGE,
+    });
+  });
+
+  it("搜索等过程边界后已有 assistant 正文时应正常完成", () => {
+    expect(
+      buildAgentStreamFinalDonePlan({
+        accumulatedContent: "我先联网核实信息。最终摘要。",
+        hasFinalAnswerRequiredProcessBoundary: true,
+        hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary: true,
+        queuedTurnId: "queued-search-final",
+        toolCallCount: 1,
+      }),
+    ).toEqual({
+      type: "complete",
+      finalContent: "我先联网核实信息。最终摘要。",
+      queuedTurnIds: ["queued-search-final"],
+      requestLogPayload: {
+        eventType: "chat_request_complete",
+        status: "success",
+        description: "请求完成，工具调用 1 次",
+      },
     });
   });
 

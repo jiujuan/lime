@@ -14,9 +14,10 @@ import {
   sanitizeMessageTextForDisplay,
 } from "../utils/messageDisplaySanitizer";
 import { hasStructuredHistoricalContentHint } from "../projection/historicalMessageHydrationProjection";
+import { shouldUseAgentMessageAsFinalText } from "../utils/agentMessagePhase";
 import type { MessageListRenderGroup } from "./MessageList.types";
 import type { AgentStreamTextOverlaySnapshot } from "../hooks/agentStreamTextOverlayStore";
-import type { Message, PendingA2UISource } from "../types";
+import type { AgentThreadItem, Message, PendingA2UISource } from "../types";
 import { buildHistoricalMessagePreview } from "./messageListHistoricalPreviewText";
 import {
   parseLeadingUserCommandTag,
@@ -46,6 +47,7 @@ import {
 import { shouldRenderAssistantRuntimeStatusPill } from "./messageAssistantMetaFooterState";
 import { resolveAgentRuntimeErrorPresentation } from "../utils/agentRuntimeErrorPresentation";
 import { hasImportedSourceProcessItem } from "../utils/importedSourceProcess";
+import { isUpdatePlanToolName } from "../utils/toolNameFamily";
 import {
   MESSAGE_LIST_COMPACT_HISTORICAL_ASSISTANT_PREVIEW_CHARS,
   MESSAGE_LIST_COMPACT_HISTORICAL_ASSISTANT_THRESHOLD,
@@ -71,7 +73,6 @@ import {
   hasRunningWebRetrievalContentPart,
   hasRunningWebRetrievalTimelineItem,
   hideFinalAnswerContentPartsWhileRunning,
-  holdTextContentPartsAsProcessWhileRunning,
   isActiveThreadTurnStatus,
   normalizeInactiveRunningWebRetrievalContentParts,
   normalizeInactiveRunningWebRetrievalTimelineItems,
@@ -117,6 +118,64 @@ function isRuntimeFailureOnlyAssistantText(
   );
 }
 
+function canMergeTimelineAsSparseProcessPatch(
+  items?: AgentThreadItem[],
+): boolean {
+  return Boolean(
+    items?.length &&
+      items.every(
+        (item) =>
+          item.type === "reasoning" ||
+          item.type === "agent_message" ||
+          item.type === "turn_summary",
+      ),
+  );
+}
+
+function canTimelineOwnInlineProcessFlow(items?: AgentThreadItem[]): boolean {
+  return Boolean(
+    items?.some((item) => {
+      if (item.type === "tool_call") {
+        return !isUpdatePlanToolName(item.tool_name);
+      }
+      return (
+        item.type === "plan" ||
+        item.type === "command_execution" ||
+        item.type === "patch" ||
+        item.type === "web_search" ||
+        item.type === "approval_request" ||
+        item.type === "request_user_input" ||
+        item.type === "subagent_activity" ||
+        item.type === "context_compaction"
+      );
+    }),
+  );
+}
+
+function resolveTimelineOwnedVisibleText(
+  parts?: Message["contentParts"],
+): string | null {
+  const text = (parts || [])
+    .filter(
+      (
+        part,
+      ): part is Extract<
+        NonNullable<Message["contentParts"]>[number],
+        { type: "text"; text: string }
+      > => part.type === "text" && part.text.trim().length > 0,
+    )
+    .filter((part) =>
+      shouldUseAgentMessageAsFinalText(
+        typeof part.metadata?.phase === "string" ? part.metadata.phase : null,
+      ),
+    )
+    .map((part) => part.text.trim())
+    .join("\n\n")
+    .trim();
+
+  return text || null;
+}
+
 export interface ResolveMessageListItemProjectionOptions {
   activeCurrentTurnId: string | null;
   activePendingA2UISource: PendingA2UISource | null;
@@ -154,10 +213,13 @@ export function resolveMessageListItemProjection({
   shouldDeferThreadItemsScan,
   streamingTextOverlay = null,
 }: ResolveMessageListItemProjectionOptions) {
-  const rawDisplayContent =
-    message.role === "assistant" && streamingTextOverlay?.content
+  const rawStreamingFinalTextOverlayContent =
+    message.role === "assistant" &&
+    streamingTextOverlay?.content &&
+    shouldUseAgentMessageAsFinalText(streamingTextOverlay.phase)
       ? streamingTextOverlay.content
-      : message.content || "";
+      : null;
+  const rawDisplayContent = message.content || "";
   const hasImages = Array.isArray(message.images) && message.images.length > 0;
   const imageWorkbenchDisplayState = resolveImageWorkbenchMessageDisplayState({
     message,
@@ -232,8 +294,27 @@ export function resolveMessageListItemProjection({
   const hasRunningWebRetrievalPart = hasRunningWebRetrievalContentPart(
     rawDisplayContentParts,
   );
+  const hasInlineToolUseProcessPart =
+    hasInlineToolUseContentPart(rawDisplayContentParts);
   const hasActiveTimelineTurn =
     timeline !== null && isActiveThreadTurnStatus(timeline.turn.status);
+  const isLegacyUnphasedStreamingOverlay =
+    message.role === "assistant" &&
+    Boolean(rawStreamingFinalTextOverlayContent?.trim()) &&
+    !streamingTextOverlay?.phase?.trim();
+  const hasStructuredProcessBoundaryForActiveTurn =
+    hasProcessTimelineItems ||
+    hasCompletedOrRunningWebRetrievalTimelineProcess ||
+    hasRunningWebRetrievalPart ||
+    hasInlineToolUseProcessPart;
+  const shouldHideLegacyUnphasedOverlayDuringProcess =
+    isLegacyUnphasedStreamingOverlay &&
+    hasStructuredProcessBoundaryForActiveTurn &&
+    (message.isThinking || isSending || hasActiveTimelineTurn);
+  const streamingFinalTextOverlayContent =
+    shouldHideLegacyUnphasedOverlayDuringProcess
+      ? null
+      : rawStreamingFinalTextOverlayContent;
   const hasFinalAnswerAfterRunningWebRetrieval =
     hasFinalAnswerTextAfterRunningWebRetrieval(rawTimelineItems);
   const hasFinalAnswerTimelineItem =
@@ -241,7 +322,7 @@ export function resolveMessageListItemProjection({
   const isActiveAssistantOutput =
     message.isThinking ||
     isSending ||
-    Boolean(streamingTextOverlay?.content?.trim()) ||
+    Boolean(streamingFinalTextOverlayContent?.trim()) ||
     hasActiveTimelineTurn;
   const shouldHoldRunningWebRetrieval =
     (hasRunningTimelineProcess || hasRunningWebRetrievalPart) &&
@@ -283,20 +364,19 @@ export function resolveMessageListItemProjection({
     timeline.turn.id !== activeCurrentTurnId &&
     !hasImportedSourcePrimaryTimeline &&
     expandedHistoricalTimelineKeys.has(primaryTimelineKey!);
-  const shouldHoldStreamingOverlayAsProcess =
-    Boolean(streamingTextOverlay?.content?.trim()) &&
-    shouldHoldRunningWebRetrieval;
+  const hasStreamingOverlayText = Boolean(
+    streamingFinalTextOverlayContent?.trim(),
+  );
+  const hasStructuredFinalTextAfterProcessBoundary =
+    hasFinalTextAfterProcessBoundary(displayContentParts);
   const shouldHideAssistantTextWhileRunning =
     shouldHoldRunningWebRetrieval &&
     !hasFinalAnswerTimelineItem &&
+    !hasStreamingOverlayText &&
+    !hasStructuredFinalTextAfterProcessBoundary &&
     (hasFinalAnswerAfterRunningWebRetrieval ||
-      Boolean(streamingTextOverlay?.content?.trim()) ||
       Boolean(displayContent.trim()) ||
       !message.thinkingContent?.trim());
-  const shouldHoldAssistantTextAsProcess =
-    shouldHoldRunningWebRetrieval &&
-    !hasFinalAnswerTimelineItem &&
-    !shouldHideAssistantTextWhileRunning;
   const isActiveProcessOnlyOutput =
     message.role === "assistant" &&
     isActiveAssistantOutput &&
@@ -304,16 +384,26 @@ export function resolveMessageListItemProjection({
     !displayContent.trim() &&
     (hasCompletedOrRunningWebRetrievalTimelineProcess ||
       hasRunningWebRetrievalPart);
+  const messageContentPartsOwnInlineProcessFlow =
+    message.role === "assistant" &&
+    hasInlineProcessContentParts(message, {
+      displayContent,
+      timelineItems: timelineItemsForDisplay,
+    });
+  const timelineOwnsInlineProcessFlow =
+    !messageContentPartsOwnInlineProcessFlow &&
+    canTimelineOwnInlineProcessFlow(timelineItemsForDisplay);
   const timelineInlineContentParts =
     message.role === "assistant" &&
+    (timelineOwnsInlineProcessFlow ||
+      (messageContentPartsOwnInlineProcessFlow &&
+        canMergeTimelineAsSparseProcessPatch(timelineItemsForDisplay))) &&
     !shouldPreferCompactHistoricalTimeline &&
     !shouldKeepExpandedHistoricalTimelineInTimeline
       ? buildTimelineInlineContentParts({
-          displayContent: shouldHoldStreamingOverlayAsProcess
+          displayContent: shouldHideAssistantTextWhileRunning
             ? ""
-            : shouldHideAssistantTextWhileRunning
-              ? ""
-              : displayContent,
+            : displayContent,
           existingContentParts: displayContentParts,
           items: timelineItemsForDisplay,
         })
@@ -335,30 +425,20 @@ export function resolveMessageListItemProjection({
       ) ||
       // 消息 contentParts 已经持有过程顺序时，始终保留 inline process flow，
       // 让思考、工具、确认与文件改动按时间序穿插显示。
-      hasInlineProcessContentParts(message, {
-        displayContent,
-        timelineItems: timelineItemsForDisplay,
-      }));
+      messageContentPartsOwnInlineProcessFlow);
   const ensuredConversationContentParts =
     message.role === "assistant"
       ? ensureInlineThinkingContentPart({
           parts: hideFinalAnswerContentPartsWhileRunning(
-            holdTextContentPartsAsProcessWhileRunning(
-              mergeStreamingOverlayContentParts(
-                timelineInlineContentParts ||
-                  filterConversationDisplayContentParts(displayContentParts, {
-                    includeProcessFlow: includeInlineProcessFlow,
-                    preserveToolUseParts: !hasProcessTimelineItems,
-                  }),
-                shouldHideAssistantTextWhileRunning
-                  ? null
-                  : streamingTextOverlay?.content || null,
-                {
-                  holdOverlayAsProcessWhileRunning:
-                    shouldHoldStreamingOverlayAsProcess,
-                },
-              ),
-              shouldHoldAssistantTextAsProcess,
+            mergeStreamingOverlayContentParts(
+              timelineInlineContentParts ||
+                filterConversationDisplayContentParts(displayContentParts, {
+                  includeProcessFlow: includeInlineProcessFlow,
+                  preserveToolUseParts: !hasProcessTimelineItems,
+                }),
+              shouldHideAssistantTextWhileRunning
+                ? null
+                : streamingFinalTextOverlayContent,
             ),
             shouldHideAssistantTextWhileRunning,
           ),
@@ -366,7 +446,7 @@ export function resolveMessageListItemProjection({
           shouldEnsure:
             includeInlineProcessFlow &&
             Boolean(message.thinkingContent?.trim()) &&
-            (Boolean(streamingTextOverlay?.content?.trim()) ||
+            (Boolean(streamingFinalTextOverlayContent?.trim()) ||
               hasActiveTimelineTurn ||
               !hasPersistedReasoningTimeline),
         })
@@ -537,7 +617,7 @@ export function resolveMessageListItemProjection({
         part.actionRequired.status !== "submitted",
     );
   const hasActiveStreamingOverlay = Boolean(
-    streamingTextOverlay?.content?.trim(),
+    streamingFinalTextOverlayContent?.trim(),
   );
   const isCurrentInteractiveAssistantMessage =
     message.role === "assistant" &&
@@ -551,23 +631,24 @@ export function resolveMessageListItemProjection({
   const shouldReadOnlyInteractiveContent =
     message.role === "assistant" && !isCurrentInteractiveAssistantMessage;
   const usesProcessSeparatedFinalText =
+    messageContentPartsOwnInlineProcessFlow &&
     includeInlineProcessFlow &&
     hasFinalTextAfterProcessBoundary(conversationContentParts);
   const rendererConversationContentParts = usesProcessSeparatedFinalText
-    ? resolveProcessSeparatedContentParts(conversationContentParts, {
-        displayContent,
-      })
+    ? resolveProcessSeparatedContentParts(conversationContentParts)
     : conversationContentParts;
-  const rawActionContent = resolveAssistantActionContent({
-    displayContent:
-      shouldHoldAssistantTextAsProcess || shouldHideAssistantTextWhileRunning
-        ? ""
-        : displayContent,
-    conversationContentParts: usesProcessSeparatedFinalText
-      ? rendererConversationContentParts
-      : conversationContentParts,
-    useProcessSeparatedFinalText: usesProcessSeparatedFinalText,
-  });
+  const timelineOwnedActionContent = timelineOwnsInlineProcessFlow
+    ? resolveTimelineOwnedVisibleText(conversationContentParts)
+    : null;
+  const rawActionContent =
+    timelineOwnedActionContent ??
+    resolveAssistantActionContent({
+      displayContent: shouldHideAssistantTextWhileRunning ? "" : displayContent,
+      conversationContentParts: usesProcessSeparatedFinalText
+        ? rendererConversationContentParts
+        : conversationContentParts,
+      useProcessSeparatedFinalText: usesProcessSeparatedFinalText,
+    });
   const shouldSuppressDuplicatedFailureText =
     Boolean(timeline) &&
     isRuntimeFailureOnlyAssistantText(message, rawActionContent);
@@ -643,10 +724,7 @@ export function resolveMessageListItemProjection({
       : usesProcessSeparatedFinalText
         ? actionContent
         : actionContent ||
-          (shouldHoldAssistantTextAsProcess ||
-          shouldHideAssistantTextWhileRunning
-            ? ""
-            : visibleRawDisplayContent);
+          (shouldHideAssistantTextWhileRunning ? "" : visibleRawDisplayContent);
   const rendererContentParts =
     shouldSuppressDuplicatedFailureText ||
     shouldCollapseLongHistoricalMessage ||

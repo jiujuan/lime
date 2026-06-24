@@ -1206,6 +1206,570 @@ describe("agentStreamRuntimeHandler", () => {
     expect(mockToast.error).toHaveBeenCalledWith("模型未输出最终答复，请重试");
   });
 
+  it("工具过程后没有 assistant 正文时不应把工具前开场白当最终答复", () => {
+    let messages: Message[] = [
+      {
+        id: "assistant-search-no-final",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-06-24T10:00:00.000Z"),
+        isThinking: true,
+        contentParts: [],
+      },
+    ];
+    const requestState = {
+      accumulatedContent: "",
+      hasFinalAnswerRequiredProcessBoundary: false,
+      hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary: false,
+      queuedTurnId: "queued-search-no-final",
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+    };
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const removeQueuedTurnState = vi.fn();
+    const setIsSending = vi.fn();
+    const disposeListener = vi.fn();
+    const callbacks = {
+      activateStream: () => {},
+      isStreamActivated: () => true,
+      clearOptimisticItem: () => {},
+      clearOptimisticTurn: () => {},
+      disposeListener,
+      removeQueuedDraftMessages: () => {},
+      clearActiveStreamIfMatch: () => true,
+      upsertQueuedTurn: () => {},
+      removeQueuedTurnState,
+      playToolcallSound: () => {},
+      playTypewriterSound: () => {},
+      appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
+        parts,
+    };
+    const baseOptions = {
+      requestState,
+      callbacks,
+      eventName: "agent-runtime-search-no-final",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-search-no-final",
+      activeSessionId: "session-news",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react" as const,
+      content: "整理今天的国际新闻",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      setMessages: setMessages as never,
+      setPendingActions: vi.fn() as never,
+      setThreadItems: vi.fn() as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: setIsSending as never,
+    };
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "text_delta",
+        text: "我会先联网核实今天国际新闻的主要议题，再整理摘要。",
+        itemId: "commentary-news-plan",
+        phase: "commentary",
+        sequence: 1,
+        turn_id: "turn-search-final",
+      } as AgentEvent,
+    });
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "tool_start",
+        tool_id: "tool-web-search-1",
+        tool_name: "WebSearch",
+        arguments: JSON.stringify({ query: "international news today" }),
+        sequence: 2,
+      } as AgentEvent,
+    });
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "tool_end",
+        tool_id: "tool-web-search-1",
+        sequence: 3,
+        result: {
+          success: true,
+          output: "2 results",
+        },
+      } as AgentEvent,
+    });
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "turn_completed",
+        sequence: 4,
+        turn: {
+          id: "turn-search-no-final",
+          thread_id: "thread-news",
+          prompt_text: "整理今天的国际新闻",
+          status: "completed",
+          started_at: "2026-06-24T10:00:00.000Z",
+          completed_at: "2026-06-24T10:00:01.000Z",
+          created_at: "2026-06-24T10:00:00.000Z",
+          updated_at: "2026-06-24T10:00:01.000Z",
+        },
+      } as AgentEvent,
+    });
+
+    expect(
+      requestState.hasFinalAnswerRequiredProcessBoundary,
+    ).toBe(true);
+    expect(
+      requestState.hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary,
+    ).toBe(false);
+    expect(messages[0]?.content).toContain("执行失败：");
+    expect(messages[0]?.runtimeStatus).toMatchObject({
+      phase: "failed",
+      title: "当前处理失败",
+      detail: "模型未输出最终答复，请重试",
+    });
+    expect(removeQueuedTurnState).toHaveBeenCalledWith([
+      "queued-search-no-final",
+    ]);
+    expect(setIsSending).toHaveBeenCalledWith(false);
+    expect(disposeListener).toHaveBeenCalledTimes(1);
+    expect(mockToast.error).toHaveBeenCalledWith("模型未输出最终答复，请重试");
+  });
+
+  it("commentary 阶段 text_delta 应进入 agent_message timeline，不应追加到正文 overlay", () => {
+    let messages: Message[] = [
+      {
+        id: "assistant-commentary",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-06-24T10:00:00.000Z"),
+        isThinking: true,
+        contentParts: [],
+      },
+    ];
+    let threadItems: AgentThreadItem[] = [];
+    const requestState = {
+      accumulatedContent: "",
+      hasFinalAnswerRequiredProcessBoundary: false,
+      hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary: false,
+      queuedTurnId: null,
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+    };
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const setThreadItems = vi.fn(
+      (
+        value:
+          | AgentThreadItem[]
+          | ((prev: AgentThreadItem[]) => AgentThreadItem[]),
+      ) => {
+        threadItems =
+          typeof value === "function" ? value(threadItems) : value;
+      },
+    );
+
+    handleTurnStreamEvent({
+      data: {
+        type: "text_delta",
+        text: "我会先搜索公开资料。",
+        itemId: "item-commentary-1",
+        phase: "commentary",
+        sequence: 1,
+        session_id: "session-commentary",
+        thread_id: "thread-commentary",
+        turn_id: "turn-commentary",
+        timestamp: "2026-06-24T10:00:00.000Z",
+      } as AgentEvent,
+      requestState,
+      callbacks: {
+        activateStream: () => {},
+        isStreamActivated: () => true,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener: () => {},
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch: () => true,
+        upsertQueuedTurn: () => {},
+        removeQueuedTurnState: () => {},
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+        appendThinkingToParts: (parts) => parts,
+      },
+      eventName: "agent-runtime-commentary",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-commentary",
+      activeSessionId: "session-commentary",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react",
+      content: "搜索资料",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      setMessages: setMessages as never,
+      setPendingActions: vi.fn() as never,
+      setThreadItems: setThreadItems as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: vi.fn() as never,
+    });
+
+    expect(requestState.accumulatedContent).toBe("");
+    expect(messages[0]?.content).toBe("");
+    expect(getAgentStreamTextOverlay("assistant-commentary")).toBeNull();
+    expect(messages[0]?.contentParts).toEqual([
+      {
+        type: "text",
+        text: "我会先搜索公开资料。",
+        metadata: {
+          source: "agent_text_delta",
+          itemId: "item-commentary-1",
+          phase: "commentary",
+          sequence: 1,
+          turnId: "turn-commentary",
+        },
+      },
+    ]);
+    expect(threadItems).toEqual([
+      expect.objectContaining({
+        id: "item-commentary-1",
+        type: "agent_message",
+        phase: "commentary",
+        text: "我会先搜索公开资料。",
+        turn_id: "turn-commentary",
+      }),
+    ]);
+  });
+
+  it("commentary delta 早于 assistant message 挂载时应在后续过程事件重放进 contentParts", () => {
+    let messages: Message[] = [];
+    let threadItems: AgentThreadItem[] = [];
+    const requestState = {
+      accumulatedContent: "",
+      queuedTurnId: null,
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+    };
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const setThreadItems = vi.fn(
+      (
+        value:
+          | AgentThreadItem[]
+          | ((prev: AgentThreadItem[]) => AgentThreadItem[]),
+      ) => {
+        threadItems =
+          typeof value === "function" ? value(threadItems) : value;
+      },
+    );
+    const baseOptions = {
+      requestState,
+      callbacks: {
+        activateStream: () => {},
+        isStreamActivated: () => true,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener: () => {},
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch: () => true,
+        upsertQueuedTurn: () => {},
+        removeQueuedTurnState: () => {},
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+        appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
+          parts,
+      },
+      eventName: "agent-runtime-commentary-race",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-commentary-race",
+      activeSessionId: "session-commentary-race",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react" as const,
+      content: "搜索资料",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      setMessages: setMessages as never,
+      setPendingActions: vi.fn() as never,
+      getThreadItems: () => threadItems,
+      setThreadItems: setThreadItems as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: vi.fn() as never,
+    };
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "text_delta",
+        text: "我先联网核实目标页面来源。\n",
+        item_id: "item-commentary-race",
+        itemId: "item-commentary-race",
+        phase: "commentary",
+        sequence: 1,
+        session_id: "session-commentary-race",
+        thread_id: "thread-commentary-race",
+        turn_id: "turn-commentary-race",
+        timestamp: "2026-06-24T10:00:00.000Z",
+      } as AgentEvent,
+    });
+
+    messages = [
+      {
+        id: "assistant-commentary-race",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-06-24T10:00:00.000Z"),
+        isThinking: true,
+        contentParts: [],
+      },
+    ];
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "tool_start",
+        tool_id: "tool-web-search-race",
+        tool_name: "WebSearch",
+        arguments: JSON.stringify({ query: "Lime WebSearch rendering" }),
+        sequence: 2,
+      } as AgentEvent,
+    });
+
+    expect(messages[0]?.contentParts?.map((part) => part.type)).toEqual([
+      "text",
+      "tool_use",
+    ]);
+    expect(messages[0]?.contentParts?.[0]).toMatchObject({
+      type: "text",
+      text: "我先联网核实目标页面来源。",
+      metadata: {
+        source: "agent_text_delta",
+        itemId: "item-commentary-race",
+        phase: "commentary",
+        sequence: 1,
+        turnId: "turn-commentary-race",
+      },
+    });
+  });
+
+  it("工具过程后有 assistant 正文时应由结构化顺序正常完成", () => {
+    let messages: Message[] = [
+      {
+        id: "assistant-search-final",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-06-24T10:00:00.000Z"),
+        isThinking: true,
+        contentParts: [],
+      },
+    ];
+    let threadItems: AgentThreadItem[] = [];
+    const requestState = {
+      accumulatedContent: "",
+      hasFinalAnswerRequiredProcessBoundary: false,
+      hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary: false,
+      queuedTurnId: "queued-search-final",
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+    };
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const removeQueuedTurnState = vi.fn();
+    const onComplete = vi.fn();
+    const setThreadItems = vi.fn(
+      (
+        value:
+          | AgentThreadItem[]
+          | ((prev: AgentThreadItem[]) => AgentThreadItem[]),
+      ) => {
+        threadItems =
+          typeof value === "function" ? value(threadItems) : value;
+      },
+    );
+    const callbacks = {
+      activateStream: () => {},
+      isStreamActivated: () => true,
+      clearOptimisticItem: () => {},
+      clearOptimisticTurn: () => {},
+      disposeListener: () => {},
+      removeQueuedDraftMessages: () => {},
+      clearActiveStreamIfMatch: () => true,
+      upsertQueuedTurn: () => {},
+      removeQueuedTurnState,
+      playToolcallSound: () => {},
+      playTypewriterSound: () => {},
+      appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
+        parts,
+    };
+    const baseOptions = {
+      requestState,
+      callbacks,
+      observer: {
+        onComplete,
+      },
+      eventName: "agent-runtime-search-final",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-search-final",
+      activeSessionId: "session-news",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react" as const,
+      content: "整理今天的国际新闻",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      setMessages: setMessages as never,
+      setPendingActions: vi.fn() as never,
+      setThreadItems: setThreadItems as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: vi.fn() as never,
+    };
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "text_delta",
+        text: "我会先联网核实今天国际新闻的主要议题，再整理摘要。",
+        sequence: 1,
+      } as AgentEvent,
+    });
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "tool_start",
+        tool_id: "tool-web-search-2",
+        tool_name: "WebSearch",
+        arguments: JSON.stringify({ query: "international news today" }),
+        sequence: 2,
+      } as AgentEvent,
+    });
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "tool_end",
+        tool_id: "tool-web-search-2",
+        sequence: 3,
+        result: {
+          success: true,
+          output: "2 results",
+        },
+      } as AgentEvent,
+    });
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "text_delta",
+        text: "最终摘要：国际议题集中在安全、能源和供应链。",
+        itemId: "final-news-summary",
+        phase: "final_answer",
+        sequence: 4,
+        turn_id: "turn-search-final",
+      } as AgentEvent,
+    });
+    expect(getAgentStreamTextOverlay("assistant-search-final")).toBeNull();
+    expect(messages[0]?.contentParts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "text",
+          text: "最终摘要：国际议题集中在安全、能源和供应链。",
+          metadata: expect.objectContaining({
+            itemId: "final-news-summary",
+            phase: "final_answer",
+            sequence: 4,
+            source: "agent_text_delta",
+            turnId: "turn-search-final",
+          }),
+        }),
+      ]),
+    );
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "turn_completed",
+        text: "最终摘要：国际议题集中在安全、能源和供应链。",
+        sequence: 5,
+        turn: {
+          id: "turn-search-final",
+          thread_id: "thread-news",
+          prompt_text: "整理今天的国际新闻",
+          status: "completed",
+          started_at: "2026-06-24T10:00:00.000Z",
+          completed_at: "2026-06-24T10:00:01.000Z",
+          created_at: "2026-06-24T10:00:00.000Z",
+          updated_at: "2026-06-24T10:00:01.000Z",
+        },
+      } as AgentEvent,
+    });
+
+    expect(
+      requestState.hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary,
+    ).toBe(true);
+    expect(messages[0]?.content).toContain(
+      "最终摘要：国际议题集中在安全、能源和供应链。",
+    );
+    expect(messages[0]?.content).not.toContain(
+      "我会先联网核实今天国际新闻的主要议题",
+    );
+    expect(messages[0]?.isThinking).toBe(false);
+    expect(messages[0]?.runtimeStatus).toBeUndefined();
+    expect(onComplete).toHaveBeenCalledWith(
+      "最终摘要：国际议题集中在安全、能源和供应链。",
+    );
+    expect(threadItems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "tool-web-search-2",
+          type: "tool_call",
+          status: "completed",
+        }),
+      ]),
+    );
+    expect(removeQueuedTurnState).toHaveBeenCalledWith([
+      "queued-search-final",
+    ]);
+    expect(mockToast.error).not.toHaveBeenCalledWith(
+      "模型未输出最终答复，请重试",
+    );
+  });
+
   it("收到空 turn_completed 但已有真实产物信号时应软完成而不是等待 turn_completed", () => {
     let messages: Message[] = [
       {
@@ -1762,7 +2326,7 @@ describe("agentStreamRuntimeHandler", () => {
     expect(playTypewriterSound).toHaveBeenCalledTimes(1);
   });
 
-  it("tool_start 前应先把已渲染文本提交到 contentParts，保持文字和工具顺序", () => {
+  it("tool_start 前的无 provenance 文本不应提交为正文或 commentary", () => {
     let messages: Message[] = [
       {
         id: "assistant-1",
@@ -1773,9 +2337,20 @@ describe("agentStreamRuntimeHandler", () => {
         contentParts: [],
       },
     ];
+    let threadItems: AgentThreadItem[] = [];
     const setMessages = vi.fn(
       (value: Message[] | ((prev: Message[]) => Message[])) => {
         messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const setThreadItems = vi.fn(
+      (
+        value:
+          | AgentThreadItem[]
+          | ((prev: AgentThreadItem[]) => AgentThreadItem[]),
+      ) => {
+        threadItems =
+          typeof value === "function" ? value(threadItems) : value;
       },
     );
     const requestState = {
@@ -1818,7 +2393,7 @@ describe("agentStreamRuntimeHandler", () => {
       toolNameByToolId: new Map<string, string>(),
       setMessages: setMessages as never,
       setPendingActions: vi.fn() as never,
-      setThreadItems: vi.fn() as never,
+      setThreadItems: setThreadItems as never,
       setThreadTurns: vi.fn() as never,
       setCurrentTurnId: vi.fn() as never,
       setExecutionRuntime: vi.fn() as never,
@@ -1841,9 +2416,9 @@ describe("agentStreamRuntimeHandler", () => {
       } as AgentEvent,
     });
 
-    expect(messages[0]?.content).toBe("先分析。");
+    expect(messages[0]?.content).toBe("");
+    expect(getAgentStreamTextOverlay("assistant-1")).toBeNull();
     expect(messages[0]?.contentParts).toEqual([
-      { type: "text", text: "先分析。" },
       expect.objectContaining({
         type: "tool_use",
         toolCall: expect.objectContaining({
@@ -1853,6 +2428,322 @@ describe("agentStreamRuntimeHandler", () => {
         }),
       }),
     ]);
+    expect(threadItems).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "agent_message",
+          text: "先分析。",
+        }),
+      ]),
+    );
+    expect(requestState.accumulatedContent).toBe("");
+  });
+
+  it("process 后的无 phase 文本不应 live 显示，最终只接受 turn_completed.text", () => {
+    let messages: Message[] = [
+      {
+        id: "assistant-live-search",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-06-24T10:00:00.000Z"),
+        isThinking: true,
+        contentParts: [],
+      },
+    ];
+    let threadItems: AgentThreadItem[] = [];
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const setThreadItems = vi.fn(
+      (
+        value:
+          | AgentThreadItem[]
+          | ((prev: AgentThreadItem[]) => AgentThreadItem[]),
+      ) => {
+        threadItems =
+          typeof value === "function" ? value(threadItems) : value;
+      },
+    );
+    const requestState = {
+      accumulatedContent: "",
+      queuedTurnId: null,
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+    };
+    const baseOptions = {
+      requestState,
+      callbacks: {
+        activateStream: vi.fn(),
+        isStreamActivated: () => true,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener: () => {},
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch: () => true,
+        upsertQueuedTurn: () => {},
+        removeQueuedTurnState: () => {},
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+        appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
+          parts,
+      },
+      eventName: "agent-runtime-live-search-unphased",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-live-search",
+      activeSessionId: "session-live-search",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react" as const,
+      content: "整理今天的国际新闻",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      setMessages: setMessages as never,
+      setPendingActions: vi.fn() as never,
+      setThreadItems: setThreadItems as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: vi.fn() as never,
+    };
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "tool_start",
+        tool_id: "tool-live-search",
+        tool_name: "WebSearch",
+        arguments: JSON.stringify({ query: "international news" }),
+        sequence: 2,
+      } as AgentEvent,
+    });
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "text_delta",
+        text: "我",
+        itemId: "legacy-unphased-after-search",
+        sequence: 3,
+        turn_id: "turn-live-search",
+      } as AgentEvent,
+    });
+
+    expect(requestState.accumulatedContent).toBe("");
+    expect(getAgentStreamTextOverlay("assistant-live-search")).toBeNull();
+    expect(messages[0]?.content).toBe("");
+    expect(messages[0]?.contentParts?.map((part) => part.type)).toEqual([
+      "tool_use",
+    ]);
+    expect(JSON.stringify(messages[0]?.contentParts)).not.toContain("\"我\"");
+    expect(threadItems).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "agent_message",
+          text: "我",
+        }),
+      ]),
+    );
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "turn_completed",
+        text: "最终摘要：已按来源整理国际新闻。",
+        sequence: 9,
+        turn: {
+          id: "turn-live-search",
+          thread_id: "session-live-search",
+          prompt_text: "整理今天的国际新闻",
+          status: "completed",
+          started_at: "2026-06-24T10:00:00.000Z",
+          completed_at: "2026-06-24T10:00:03.000Z",
+          created_at: "2026-06-24T10:00:00.000Z",
+          updated_at: "2026-06-24T10:00:03.000Z",
+        },
+      } as AgentEvent,
+    });
+
+    expect(messages[0]?.content).toBe("最终摘要：已按来源整理国际新闻。");
+    expect(messages[0]?.content).not.toContain("我最终摘要");
+    expect(messages[0]?.contentParts?.map((part) => part.type)).toEqual([
+      "tool_use",
+      "text",
+    ]);
+  });
+
+  it("工具先到且文本乱序到达时不应把 process 前后文本合并成一句", () => {
+    const firstText = "我会先联网核实今天的主要国际新闻。";
+    const secondText = "我再补一个交叉对照，避免依赖单一来源。";
+    let messages: Message[] = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-06-24T10:00:00.000Z"),
+        isThinking: true,
+        contentParts: [],
+      },
+    ];
+    let threadItems: AgentThreadItem[] = [];
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const setThreadItems = vi.fn(
+      (
+        value:
+          | AgentThreadItem[]
+          | ((prev: AgentThreadItem[]) => AgentThreadItem[]),
+      ) => {
+        threadItems =
+          typeof value === "function" ? value(threadItems) : value;
+      },
+    );
+    const requestState = {
+      accumulatedContent: "",
+      queuedTurnId: null,
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+    };
+    const baseOptions = {
+      requestState,
+      callbacks: {
+        activateStream: vi.fn(),
+        isStreamActivated: () => true,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener: () => {},
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch: () => true,
+        upsertQueuedTurn: () => {},
+        removeQueuedTurnState: () => {},
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+        appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
+          parts,
+      },
+      eventName: "agent-runtime-late-text-sequence-test",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-1",
+      activeSessionId: "session-1",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react" as const,
+      content: "整理今天的国际新闻",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      setMessages: setMessages as never,
+      setPendingActions: vi.fn() as never,
+      setThreadItems: setThreadItems as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: vi.fn() as never,
+    };
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "tool_start",
+        tool_id: "tool-search",
+        tool_name: "web_search",
+        arguments: JSON.stringify({ query: "international news" }),
+        sequence: 2,
+      } as AgentEvent,
+    });
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "tool_end",
+        tool_id: "tool-search",
+        sequence: 5,
+        result: {
+          success: true,
+          output: "搜索完成",
+        },
+      } as AgentEvent,
+    });
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "text_delta",
+        text: firstText,
+        sequence: 1,
+      } as AgentEvent,
+    });
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "text_delta",
+        text: secondText,
+        itemId: "final-news-cross-check",
+        phase: "final_answer",
+        sequence: 7,
+        turn_id: "turn-news-order",
+      } as AgentEvent,
+    });
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "turn_completed",
+        turn: {
+          id: "turn-news-order",
+          thread_id: "session-1",
+          prompt_text: "整理今天的国际新闻",
+          status: "completed",
+          started_at: "2026-06-24T10:00:00.000Z",
+          completed_at: "2026-06-24T10:00:03.000Z",
+          created_at: "2026-06-24T10:00:00.000Z",
+          updated_at: "2026-06-24T10:00:03.000Z",
+        },
+      } as AgentEvent,
+    });
+
+    const textParts = messages[0]?.contentParts?.filter(
+      (
+        part,
+      ): part is Extract<
+        NonNullable<Message["contentParts"]>[number],
+        { type: "text" }
+      > => part.type === "text",
+    );
+    expect(textParts?.map((part) => part.text)).toEqual([secondText]);
+    expect(textParts?.[0]?.metadata).toMatchObject({
+      source: "agent_text_delta",
+      sequence: 7,
+    });
+    expect(threadItems).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "agent_message",
+          text: firstText,
+        }),
+      ]),
+    );
+    expect(messages[0]?.contentParts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "tool_use",
+          metadata: expect.objectContaining({ sequence: 2 }),
+          toolCall: expect.objectContaining({
+            id: "tool-search",
+            status: "completed",
+          }),
+        }),
+      ]),
+    );
   });
 
   it("thinking 关闭时不应把 reasoning_delta 渲染进助手正文", () => {
@@ -1940,6 +2831,7 @@ describe("agentStreamRuntimeHandler", () => {
       data: {
         type: "text_delta",
         text: "好",
+        phase: "final_answer",
       } as AgentEvent,
     });
 
@@ -2127,6 +3019,7 @@ describe("agentStreamRuntimeHandler", () => {
       data: {
         type: "text_delta",
         text: "我来为你生成这张照片。",
+        phase: "final_answer",
       } as AgentEvent,
     });
 
@@ -2340,7 +3233,11 @@ describe("agentStreamRuntimeHandler", () => {
 
     handleTurnStreamEvent({
       ...baseOptions,
-      data: { type: "text_delta", text: "正文一" } as AgentEvent,
+      data: {
+        type: "text_delta",
+        text: "正文一",
+        phase: "final_answer",
+      } as AgentEvent,
     });
 
     expect(messages[0]?.thinkingContent).toBe("先想第一段。");

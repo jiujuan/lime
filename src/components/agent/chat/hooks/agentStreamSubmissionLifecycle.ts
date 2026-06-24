@@ -27,6 +27,8 @@ export interface ActiveStreamState {
 export interface StreamRequestState {
   accumulatedContent: string;
   hasMeaningfulCompletionSignal?: boolean;
+  hasFinalAnswerRequiredProcessBoundary?: boolean;
+  hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary?: boolean;
   requestLogId: string | null;
   requestStartedAt: number;
   submissionDispatchedAt?: number | null;
@@ -51,6 +53,10 @@ export interface StreamRequestState {
   pendingTextRenderTimerId?: ReturnType<typeof setTimeout> | null;
   renderedContent?: string;
   preservedAssistantContentInitialized?: boolean;
+  activeTextSegmentSequence?: number | null;
+  latestAssistantTextEventSequence?: number | null;
+  maxProcessEventSequence?: number | null;
+  maxFinalAnswerRequiredProcessEventSequence?: number | null;
   performanceTrace?: AgentUiPerformanceTraceMetadata | null;
 }
 
@@ -106,6 +112,8 @@ export function createAgentStreamSubmissionLifecycle(
   const requestState: StreamRequestState = {
     accumulatedContent: "",
     hasMeaningfulCompletionSignal: false,
+    hasFinalAnswerRequiredProcessBoundary: false,
+    hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary: false,
     requestLogId: null,
     requestStartedAt: 0,
     submissionDispatchedAt: null,
@@ -127,6 +135,10 @@ export function createAgentStreamSubmissionLifecycle(
     queuedDraftCleanupTimerId: null,
     pendingTextRenderTimerId: null,
     renderedContent: "",
+    activeTextSegmentSequence: null,
+    latestAssistantTextEventSequence: null,
+    maxProcessEventSequence: null,
+    maxFinalAnswerRequiredProcessEventSequence: null,
     performanceTrace: null,
   };
   const optimisticStartedAt = assistantMsg.timestamp.toISOString();

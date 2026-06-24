@@ -7,28 +7,43 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type KeyboardEvent,
 } from "react";
 import {
   ArrowLeft,
   ArrowRight,
+  ChevronDown,
+  ChevronUp,
   ExternalLink,
   Globe2,
   Lock,
   RotateCw,
+  Search,
+  X,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
   destroyEmbeddedBrowserView,
+  findInEmbeddedBrowserView,
   goBackEmbeddedBrowserView,
   goForwardEmbeddedBrowserView,
   isEmbeddedBrowserHostAvailable,
+  listenEmbeddedBrowserDownload,
+  listenEmbeddedBrowserPermissionRequest,
   listenEmbeddedBrowserViewLoadFailed,
   listenEmbeddedBrowserViewState,
   mountEmbeddedBrowserView,
   navigateEmbeddedBrowserView,
   reloadEmbeddedBrowserView,
+  setEmbeddedBrowserViewZoom,
   setEmbeddedBrowserViewBounds,
+  stopFindInEmbeddedBrowserView,
+  stopLoadingEmbeddedBrowserView,
   type EmbeddedBrowserBounds,
+  type EmbeddedBrowserDownloadEvent,
+  type EmbeddedBrowserPermissionRequestEvent,
   type EmbeddedBrowserViewState,
 } from "@/lib/api/embeddedBrowser";
 import { openExternalUrlWithSystemBrowser } from "@/lib/api/externalUrl";
@@ -37,6 +52,18 @@ import {
   normalizeCanvasWorkbenchBrowserUrl,
   resolveCanvasWorkbenchBrowserInputValue,
 } from "./CanvasWorkbenchBrowserViewModel";
+import { CanvasWorkbenchBrowserDownloadShelf } from "./CanvasWorkbenchBrowserDownloadShelf";
+import { CanvasWorkbenchBrowserPermissionBanner } from "./CanvasWorkbenchBrowserPermissionBanner";
+import {
+  CanvasWorkbenchBrowserErrorBanner,
+  CanvasWorkbenchBrowserHostUnavailable,
+  CanvasWorkbenchBrowserLoading,
+} from "./CanvasWorkbenchBrowserStatusOverlays";
+import {
+  type BrowserErrorDisplay,
+  resolveBrowserCommandErrorDisplay,
+  resolveBrowserLoadFailureDisplay,
+} from "./CanvasWorkbenchBrowserStatusDisplay";
 
 type CanvasWorkbenchTranslation = (
   key: string,
@@ -48,8 +75,12 @@ interface CanvasWorkbenchBrowserPanelProps {
   translateWorkbench: CanvasWorkbenchTranslation;
   initialUrl?: string | null;
   obscuredByChromeOverlay?: boolean;
-  onNavigate?: (url: string) => void;
+  onNavigate?: (url: string, title?: string | null) => void;
 }
+
+const MIN_BROWSER_ZOOM_FACTOR = 0.5;
+const MAX_BROWSER_ZOOM_FACTOR = 3;
+const BROWSER_ZOOM_STEP = 0.1;
 
 function resolveElementBounds(element: HTMLElement): EmbeddedBrowserBounds {
   const rect = element.getBoundingClientRect();
@@ -72,6 +103,21 @@ function boundsEqual(
     left?.width === right.width &&
     left?.height === right.height
   );
+}
+
+function clampBrowserZoomFactor(value: number): number {
+  return (
+    Math.round(
+      Math.min(
+        MAX_BROWSER_ZOOM_FACTOR,
+        Math.max(MIN_BROWSER_ZOOM_FACTOR, value),
+      ) * 100,
+    ) / 100
+  );
+}
+
+function formatBrowserZoomPercent(value: number): string {
+  return `${Math.round(value * 100)}%`;
 }
 
 export const CanvasWorkbenchBrowserPanel = memo(
@@ -102,7 +148,14 @@ export const CanvasWorkbenchBrowserPanel = memo(
     const [addressValue, setAddressValue] = useState(
       resolveCanvasWorkbenchBrowserInputValue(resolvedInitialUrl),
     );
-    const [errorText, setErrorText] = useState<string | null>(null);
+    const [findVisible, setFindVisible] = useState(false);
+    const [findValue, setFindValue] = useState("");
+    const [latestDownload, setLatestDownload] =
+      useState<EmbeddedBrowserDownloadEvent | null>(null);
+    const [latestPermission, setLatestPermission] =
+      useState<EmbeddedBrowserPermissionRequestEvent | null>(null);
+    const [errorDisplay, setErrorDisplay] =
+      useState<BrowserErrorDisplay | null>(null);
     const hostAvailable = isEmbeddedBrowserHostAvailable();
     const onNavigateRef = useRef(onNavigate);
     onNavigateRef.current = onNavigate;
@@ -131,12 +184,16 @@ export const CanvasWorkbenchBrowserPanel = memo(
             bounds,
             visible: visible && !obscuredByChromeOverlayRef.current,
           });
-          setErrorText(null);
+          setErrorDisplay((current) =>
+            current?.source === "host" ? null : current,
+          );
         } catch (error) {
-          setErrorText(error instanceof Error ? error.message : String(error));
+          setErrorDisplay(
+            resolveBrowserCommandErrorDisplay(error, translateWorkbench),
+          );
         }
       },
-      [hostAvailable, viewId],
+      [hostAvailable, translateWorkbench, viewId],
     );
 
     const navigateTo = useCallback(
@@ -152,20 +209,22 @@ export const CanvasWorkbenchBrowserPanel = memo(
             url: nextUrl,
           });
           setState(nextState);
-          setErrorText(null);
-          onNavigate?.(nextUrl);
+          setErrorDisplay(null);
+          onNavigate?.(nextState.url || nextUrl, nextState.title);
         } catch (error) {
-          setErrorText(error instanceof Error ? error.message : String(error));
+          setErrorDisplay(
+            resolveBrowserCommandErrorDisplay(error, translateWorkbench),
+          );
         }
       },
-      [hostAvailable, onNavigate, viewId],
+      [hostAvailable, onNavigate, translateWorkbench, viewId],
     );
 
     useEffect(() => {
       if (!hostAvailable) {
         mountedRef.current = false;
         setState(null);
-        setErrorText(null);
+        setErrorDisplay(null);
         return;
       }
       let cancelled = false;
@@ -195,14 +254,17 @@ export const CanvasWorkbenchBrowserPanel = memo(
           setAddressValue(
             resolveCanvasWorkbenchBrowserInputValue(nextState.url),
           );
-          setErrorText(null);
-          onNavigateRef.current?.(nextState.url || mountUrlRef.current);
+          setErrorDisplay(null);
+          onNavigateRef.current?.(
+            nextState.url || mountUrlRef.current,
+            nextState.title,
+          );
           void syncBounds(true);
         })
         .catch((error) => {
           if (!cancelled) {
-            setErrorText(
-              error instanceof Error ? error.message : String(error),
+            setErrorDisplay(
+              resolveBrowserCommandErrorDisplay(error, translateWorkbench),
             );
           }
         });
@@ -212,7 +274,7 @@ export const CanvasWorkbenchBrowserPanel = memo(
         mountedRef.current = false;
         void destroyEmbeddedBrowserView(viewId).catch(() => undefined);
       };
-    }, [hostAvailable, syncBounds, viewId]);
+    }, [hostAvailable, syncBounds, translateWorkbench, viewId]);
 
     useEffect(() => {
       if (!hostAvailable) {
@@ -221,19 +283,21 @@ export const CanvasWorkbenchBrowserPanel = memo(
       let disposed = false;
       let unlistenState: (() => void) | undefined;
       let unlistenLoadFailed: (() => void) | undefined;
+      let unlistenDownload: (() => void) | undefined;
+      let unlistenPermission: (() => void) | undefined;
       const handleState = (nextState: EmbeddedBrowserViewState) => {
         if (nextState.viewId !== viewId) {
           return;
         }
         setState(nextState);
         if (nextState.isLoading) {
-          setErrorText(null);
+          setErrorDisplay(null);
         }
         if (nextState.url) {
           setAddressValue(
             resolveCanvasWorkbenchBrowserInputValue(nextState.url),
           );
-          onNavigateRef.current?.(nextState.url);
+          onNavigateRef.current?.(nextState.url, nextState.title);
         }
       };
       void listenEmbeddedBrowserViewState(handleState)
@@ -251,11 +315,8 @@ export const CanvasWorkbenchBrowserPanel = memo(
         }
         setState(event);
         setAddressValue(resolveCanvasWorkbenchBrowserInputValue(event.url));
-        setErrorText(
-          event.errorDescription ||
-            translateWorkbench(
-              "agentChat.canvasWorkbench.browser.loadFailedTitle",
-            ),
+        setErrorDisplay(
+          resolveBrowserLoadFailureDisplay(event, translateWorkbench),
         );
       })
         .then((nextUnlisten) => {
@@ -266,11 +327,41 @@ export const CanvasWorkbenchBrowserPanel = memo(
           unlistenLoadFailed = nextUnlisten;
         })
         .catch(() => undefined);
+      void listenEmbeddedBrowserDownload((event) => {
+        if (event.viewId !== viewId) {
+          return;
+        }
+        setLatestDownload(event);
+      })
+        .then((nextUnlisten) => {
+          if (disposed) {
+            nextUnlisten();
+            return;
+          }
+          unlistenDownload = nextUnlisten;
+        })
+        .catch(() => undefined);
+      void listenEmbeddedBrowserPermissionRequest((event) => {
+        if (event.viewId !== viewId) {
+          return;
+        }
+        setLatestPermission(event);
+      })
+        .then((nextUnlisten) => {
+          if (disposed) {
+            nextUnlisten();
+            return;
+          }
+          unlistenPermission = nextUnlisten;
+        })
+        .catch(() => undefined);
 
       return () => {
         disposed = true;
         unlistenState?.();
         unlistenLoadFailed?.();
+        unlistenDownload?.();
+        unlistenPermission?.();
       };
     }, [hostAvailable, translateWorkbench, viewId]);
 
@@ -346,10 +437,66 @@ export const CanvasWorkbenchBrowserPanel = memo(
     ) => {
       try {
         setState(await command());
-        setErrorText(null);
+        setErrorDisplay(null);
       } catch (error) {
-        setErrorText(error instanceof Error ? error.message : String(error));
+        setErrorDisplay(
+          resolveBrowserCommandErrorDisplay(error, translateWorkbench),
+        );
       }
+    };
+
+    const pageTitle =
+      state?.title?.trim() ||
+      translateWorkbench("agentChat.canvasWorkbench.browser.title");
+    const faviconUrl = state?.faviconUrl || null;
+    const loadProgress =
+      typeof state?.loadProgress === "number"
+        ? Math.min(1, Math.max(0, state.loadProgress))
+        : state?.isLoading
+          ? 0.35
+          : 1;
+    const zoomFactor =
+      typeof state?.zoomFactor === "number" ? state.zoomFactor : 1;
+    const findState = state?.find ?? {
+      text: "",
+      activeMatchOrdinal: 0,
+      matches: 0,
+      finalUpdate: true,
+    };
+
+    const runFind = (forward: boolean, findNext: boolean) => {
+      const text = findValue.trim();
+      if (!text) {
+        void handleBrowserCommand(() => stopFindInEmbeddedBrowserView(viewId));
+        return;
+      }
+      void handleBrowserCommand(() =>
+        findInEmbeddedBrowserView({
+          viewId,
+          text,
+          forward,
+          findNext,
+        }),
+      );
+    };
+
+    const handleFindKeyDown = (
+      event: KeyboardEvent<HTMLInputElement>,
+    ): void => {
+      if (event.key !== "Enter") {
+        return;
+      }
+      event.preventDefault();
+      runFind(!event.shiftKey, true);
+    };
+
+    const updateZoom = (nextZoomFactor: number) => {
+      void handleBrowserCommand(() =>
+        setEmbeddedBrowserViewZoom(
+          viewId,
+          clampBrowserZoomFactor(nextZoomFactor),
+        ),
+      );
     };
 
     return (
@@ -359,7 +506,7 @@ export const CanvasWorkbenchBrowserPanel = memo(
       >
         <form
           onSubmit={handleSubmit}
-          className="flex h-10 items-center gap-2 border-b border-slate-200 bg-slate-50 px-2"
+          className="relative flex h-10 items-center gap-2 border-b border-slate-200 bg-slate-50 px-2"
         >
           <button
             type="button"
@@ -400,12 +547,16 @@ export const CanvasWorkbenchBrowserPanel = memo(
           <button
             type="button"
             aria-label={translateWorkbench(
-              "agentChat.canvasWorkbench.browser.refresh",
+              state?.isLoading
+                ? "agentChat.canvasWorkbench.browser.stop"
+                : "agentChat.canvasWorkbench.browser.refresh",
             )}
             disabled={!hostAvailable}
             onClick={() => {
               void handleBrowserCommand(() =>
-                reloadEmbeddedBrowserView(viewId),
+                state?.isLoading
+                  ? stopLoadingEmbeddedBrowserView(viewId)
+                  : reloadEmbeddedBrowserView(viewId),
               );
             }}
             className={cn(
@@ -413,10 +564,27 @@ export const CanvasWorkbenchBrowserPanel = memo(
               ghostButtonClassName,
             )}
           >
-            <RotateCw
-              className={cn("h-4 w-4", state?.isLoading && "animate-spin")}
-            />
+            {state?.isLoading ? (
+              <X className="h-4 w-4" />
+            ) : (
+              <RotateCw className="h-4 w-4" />
+            )}
           </button>
+          <div
+            className="flex h-8 min-w-[96px] max-w-[170px] flex-[0_1_170px] items-center gap-1.5 overflow-hidden rounded-[8px] border border-slate-200 bg-white px-2 text-[12px] text-slate-600"
+            title={pageTitle}
+          >
+            {faviconUrl ? (
+              <img
+                alt=""
+                className="h-3.5 w-3.5 shrink-0 rounded-[3px]"
+                src={faviconUrl}
+              />
+            ) : (
+              <Globe2 className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+            )}
+            <span className="truncate">{pageTitle}</span>
+          </div>
           <label className="flex min-w-0 flex-1 items-center gap-2 rounded-[8px] border border-slate-200 bg-white px-2.5 py-1.5 text-[13px] text-slate-500">
             <Lock className="h-3.5 w-3.5 shrink-0 text-slate-400" />
             <input
@@ -436,6 +604,107 @@ export const CanvasWorkbenchBrowserPanel = memo(
           <button
             type="button"
             aria-label={translateWorkbench(
+              "agentChat.canvasWorkbench.browser.find",
+            )}
+            title={translateWorkbench("agentChat.canvasWorkbench.browser.find")}
+            disabled={!hostAvailable}
+            onClick={() => setFindVisible((visible) => !visible)}
+            className={cn(
+              "inline-flex h-8 w-8 items-center justify-center rounded-[8px] border transition-colors disabled:cursor-not-allowed disabled:opacity-45",
+              findVisible
+                ? "border-slate-300 bg-white text-slate-900"
+                : ghostButtonClassName,
+            )}
+          >
+            <Search className="h-4 w-4" />
+          </button>
+          {findVisible ? (
+            <div className="flex h-8 w-[210px] shrink-0 items-center gap-1 rounded-[8px] border border-slate-200 bg-white px-1.5 text-[12px] text-slate-600">
+              <input
+                aria-label={translateWorkbench(
+                  "agentChat.canvasWorkbench.browser.findInput",
+                )}
+                className="min-w-0 flex-1 bg-transparent text-[12px] text-slate-700 outline-none placeholder:text-slate-400"
+                value={findValue}
+                placeholder={translateWorkbench(
+                  "agentChat.canvasWorkbench.browser.findPlaceholder",
+                )}
+                onChange={(event) => setFindValue(event.target.value)}
+                onKeyDown={handleFindKeyDown}
+                disabled={!hostAvailable}
+                spellCheck={false}
+              />
+              <span className="w-10 shrink-0 text-right text-[11px] text-slate-400">
+                {translateWorkbench(
+                  "agentChat.canvasWorkbench.browser.findMatchCount",
+                  {
+                    active: findState.activeMatchOrdinal,
+                    total: findState.matches,
+                  },
+                )}
+              </span>
+              <button
+                type="button"
+                aria-label={translateWorkbench(
+                  "agentChat.canvasWorkbench.browser.findPrevious",
+                )}
+                disabled={!hostAvailable || !findValue.trim()}
+                onClick={() => runFind(false, true)}
+                className="inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ChevronUp className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                aria-label={translateWorkbench(
+                  "agentChat.canvasWorkbench.browser.findNext",
+                )}
+                disabled={!hostAvailable || !findValue.trim()}
+                onClick={() => runFind(true, true)}
+                className="inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ChevronDown className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ) : null}
+          <div className="flex h-8 shrink-0 items-center gap-1 rounded-[8px] border border-slate-200 bg-white px-1">
+            <button
+              type="button"
+              aria-label={translateWorkbench(
+                "agentChat.canvasWorkbench.browser.zoomOut",
+              )}
+              disabled={!hostAvailable || zoomFactor <= MIN_BROWSER_ZOOM_FACTOR}
+              onClick={() => updateZoom(zoomFactor - BROWSER_ZOOM_STEP)}
+              className="inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ZoomOut className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              aria-label={translateWorkbench(
+                "agentChat.canvasWorkbench.browser.zoomReset",
+              )}
+              disabled={!hostAvailable}
+              onClick={() => updateZoom(1)}
+              className="inline-flex h-6 min-w-10 items-center justify-center rounded-[6px] px-1 text-[11px] font-medium text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {formatBrowserZoomPercent(zoomFactor)}
+            </button>
+            <button
+              type="button"
+              aria-label={translateWorkbench(
+                "agentChat.canvasWorkbench.browser.zoomIn",
+              )}
+              disabled={!hostAvailable || zoomFactor >= MAX_BROWSER_ZOOM_FACTOR}
+              onClick={() => updateZoom(zoomFactor + BROWSER_ZOOM_STEP)}
+              className="inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ZoomIn className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <button
+            type="button"
+            aria-label={translateWorkbench(
               "agentChat.canvasWorkbench.browser.openExternal",
             )}
             title={translateWorkbench(
@@ -451,6 +720,17 @@ export const CanvasWorkbenchBrowserPanel = memo(
           >
             <ExternalLink className="h-4 w-4" />
           </button>
+          {state?.isLoading ? (
+            <div
+              aria-hidden="true"
+              className="absolute inset-x-0 bottom-0 h-0.5 bg-transparent"
+            >
+              <div
+                className="h-full bg-emerald-500 transition-[width] duration-150"
+                style={{ width: `${Math.max(8, loadProgress * 100)}%` }}
+              />
+            </div>
+          ) : null}
         </form>
         <div className="relative min-h-0 flex-1 bg-white">
           <div
@@ -459,57 +739,28 @@ export const CanvasWorkbenchBrowserPanel = memo(
             className="absolute inset-0 bg-white"
           />
           {!hostAvailable ? (
-            <div
-              data-testid="canvas-workbench-browser-host-unavailable"
-              className="absolute inset-0 flex items-center justify-center p-6"
-            >
-              <div className="max-w-[380px] text-center">
-                <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-[10px] border border-amber-200 bg-amber-50 text-amber-700 shadow-sm shadow-amber-950/5">
-                  <Globe2 className="h-5 w-5" />
-                </div>
-                <div className="text-[15px] font-semibold text-slate-900">
-                  {translateWorkbench(
-                    "agentChat.canvasWorkbench.browser.hostUnavailableTitle",
-                  )}
-                </div>
-                <div className="mt-1 text-[13px] leading-5 text-slate-500">
-                  {translateWorkbench(
-                    "agentChat.canvasWorkbench.browser.hostUnavailableBody",
-                  )}
-                </div>
-              </div>
-            </div>
-          ) : !state && !errorText ? (
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
-              <div className="max-w-[360px] text-center">
-                <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-[10px] border border-slate-200 bg-white text-slate-500 shadow-sm shadow-slate-950/5">
-                  <Globe2 className="h-5 w-5" />
-                </div>
-                <div className="text-[15px] font-semibold text-slate-900">
-                  {translateWorkbench(
-                    "agentChat.canvasWorkbench.browser.title",
-                  )}
-                </div>
-                <div className="mt-1 text-[13px] leading-5 text-slate-500">
-                  {translateWorkbench(
-                    "agentChat.canvasWorkbench.browser.loading",
-                  )}
-                </div>
-              </div>
-            </div>
+            <CanvasWorkbenchBrowserHostUnavailable
+              translateWorkbench={translateWorkbench}
+            />
+          ) : !state && !errorDisplay ? (
+            <CanvasWorkbenchBrowserLoading
+              translateWorkbench={translateWorkbench}
+            />
           ) : null}
-          {errorText ? (
-            <div
-              data-testid="canvas-workbench-browser-error"
-              className="absolute inset-x-4 top-4 rounded-[10px] border border-rose-200 bg-rose-50 px-3 py-2 text-[13px] leading-5 text-rose-900 shadow-sm shadow-rose-950/5"
-            >
-              <div className="font-medium">
-                {translateWorkbench(
-                  "agentChat.canvasWorkbench.browser.loadFailedTitle",
-                )}
-              </div>
-              <div className="mt-0.5 text-rose-800/90">{errorText}</div>
-            </div>
+          {errorDisplay ? (
+            <CanvasWorkbenchBrowserErrorBanner error={errorDisplay} />
+          ) : null}
+          {!errorDisplay && latestPermission ? (
+            <CanvasWorkbenchBrowserPermissionBanner
+              permission={latestPermission}
+              translateWorkbench={translateWorkbench}
+            />
+          ) : null}
+          {latestDownload ? (
+            <CanvasWorkbenchBrowserDownloadShelf
+              download={latestDownload}
+              translateWorkbench={translateWorkbench}
+            />
           ) : null}
         </div>
       </section>

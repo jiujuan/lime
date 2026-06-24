@@ -1,5 +1,10 @@
+mod browser;
 mod observability;
 
+use self::browser::browser_action_index_summary;
+use self::browser::browser_evidence_artifacts;
+use self::browser::browser_file_evidence_artifacts;
+use self::browser::browser_file_evidence_summary;
 use self::observability::mcp_resource_reads_summary;
 use self::observability::mcp_tool_results_summary;
 use self::observability::skill_invocations_summary;
@@ -124,6 +129,8 @@ fn basic_evidence_pack_summary(request: &EvidencePackRequest) -> EvidencePackSum
         })
     };
 
+    let browser_action_index = browser_action_index_summary(&request.events, &request.artifacts);
+    let browser_file_evidence = browser_file_evidence_summary(&request.events, &request.artifacts);
     let evidence_artifacts = evidence_pack_artifacts(request);
     let coding_summary = coding_evidence_summary(&request.events);
     let skill_invocations = skill_invocations_summary(&request.events);
@@ -134,6 +141,51 @@ fn basic_evidence_pack_summary(request: &EvidencePackRequest) -> EvidencePackSum
         .as_array()
         .map(Vec::len)
         .unwrap_or_default();
+
+    let mut observability_summary = json!({
+        "schema_version": "runtime-evidence-pack.v1",
+        "source": "app-server-basic",
+        "event_count": request.events.len(),
+        "artifact_count": request.artifacts.len(),
+        "evidence_artifact_count": evidence_artifacts.len(),
+        "request_telemetry": request_telemetry_summary,
+        "coding": coding_summary,
+        "skill_invocations": skill_invocations,
+        "skill_searches": skill_searches,
+        "mcp_tool_results": mcp_tool_results,
+        "mcp_resource_reads": mcp_resource_reads,
+    });
+    if browser_action_index.is_some() || browser_file_evidence.is_some() {
+        let snapshot_count = browser_action_index
+            .as_ref()
+            .and_then(|index| index.get("action_count"))
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let mut modality_runtime_contracts = Map::new();
+        modality_runtime_contracts.insert("snapshot_count".to_string(), json!(snapshot_count));
+        if let Some(browser_action_index) = browser_action_index {
+            modality_runtime_contracts.insert(
+                "snapshot_index".to_string(),
+                json!({
+                    "browser_action_index": browser_action_index,
+                }),
+            );
+        }
+        if let Some(browser_file_evidence) = browser_file_evidence {
+            modality_runtime_contracts.insert(
+                "file_evidence".to_string(),
+                json!({
+                    "browser_file_artifacts": browser_file_evidence,
+                }),
+            );
+        }
+        if let Some(summary) = observability_summary.as_object_mut() {
+            summary.insert(
+                "modality_runtime_contracts".to_string(),
+                Value::Object(modality_runtime_contracts),
+            );
+        }
+    }
 
     EvidencePackSummary {
         pack_relative_root: format!(
@@ -150,19 +202,7 @@ fn basic_evidence_pack_summary(request: &EvidencePackRequest) -> EvidencePackSum
         queued_turn_count,
         recent_artifact_count: request.artifacts.len(),
         known_gaps,
-        observability_summary: Some(json!({
-            "schema_version": "runtime-evidence-pack.v1",
-            "source": "app-server-basic",
-            "event_count": request.events.len(),
-            "artifact_count": request.artifacts.len(),
-            "evidence_artifact_count": evidence_artifacts.len(),
-            "request_telemetry": request_telemetry_summary,
-            "coding": coding_summary,
-            "skill_invocations": skill_invocations,
-            "skill_searches": skill_searches,
-            "mcp_tool_results": mcp_tool_results,
-            "mcp_resource_reads": mcp_resource_reads,
-        })),
+        observability_summary: Some(observability_summary),
         completion_audit_summary: Some(json!({
             "decision": completion_decision,
             "pendingRequestCount": pending_request_count,
@@ -398,6 +438,14 @@ fn evidence_pack_artifacts(request: &EvidencePackRequest) -> Vec<EvidencePackArt
             event.event_id.as_str(),
         ));
     }
+    artifacts.extend(browser_evidence_artifacts(
+        &request.events,
+        &request.artifacts,
+    ));
+    artifacts.extend(browser_file_evidence_artifacts(
+        &request.events,
+        &request.artifacts,
+    ));
     dedupe_evidence_artifacts(artifacts)
 }
 

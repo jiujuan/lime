@@ -3834,6 +3834,7 @@ Extract it into the Agent Skills directory.`,
         "@站点搜索 站点:GitHub 关键词:openai agents sdk issue 数量:8",
       );
       expect(mockSendMessage.mock.calls[0]?.[2]).toBe(false);
+      expect(mockPreheatBrowserAssistInBackground).not.toHaveBeenCalled();
       expect(mockSendMessage.mock.calls[0]?.[8]).toMatchObject({
         requestMetadata: {
           harness: {
@@ -6721,6 +6722,14 @@ Extract it into the Agent Skills directory.`,
         "@浏览器 打开 https://news.baidu.com 并提炼页面主要内容",
       );
       expect(mockSendMessage.mock.calls[0]?.[2]).toBe(false);
+      expect(mockEnsureBrowserAssistCanvas).toHaveBeenCalledWith(
+        "https://news.baidu.com",
+        {
+          silent: true,
+          navigationMode: "explicit-url",
+        },
+      );
+      expect(mockPreheatBrowserAssistInBackground).not.toHaveBeenCalled();
       expect(mockSendMessage.mock.calls[0]?.[8]).toMatchObject({
         requestMetadata: {
           harness: {
@@ -6753,6 +6762,65 @@ Extract it into the Agent Skills directory.`,
           replayText: "https://news.baidu.com 并提炼页面主要内容",
         }),
       ]);
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("@浏览器 应把当前可见 Browser Assist session 写入 harness metadata", async () => {
+    const harness = mountHook({
+      input: "@浏览器 打开 https://example.com/current 并总结当前页面",
+      browserAssistProfileKey: "visible-profile",
+      browserAssistSessionState: {
+        sessionId: "browser-session-visible",
+        profileKey: "visible-profile",
+        url: "https://example.com/current",
+        title: "Visible Page",
+        targetId: "target-visible",
+        transportKind: "existing_session",
+        lifecycleState: "live",
+        controlMode: "human_takeover",
+        source: "runtime_launch",
+        updatedAt: 1710000000000,
+      },
+    });
+
+    try {
+      await act(async () => {
+        const started = await harness.getValue().handleSend();
+        expect(started).toBe(true);
+      });
+
+      expect(mockSendMessage).toHaveBeenCalledTimes(1);
+      expect(mockSendMessage.mock.calls[0]?.[2]).toBe(false);
+      expect(mockEnsureBrowserAssistCanvas).toHaveBeenCalledWith(
+        "https://example.com/current",
+        {
+          silent: true,
+          navigationMode: "explicit-url",
+        },
+      );
+      expect(mockSendMessage.mock.calls[0]?.[8]).toMatchObject({
+        requestMetadata: {
+          harness: {
+            browser_requirement: "required",
+            browser_launch_url: "https://example.com/current",
+            browser_assist: expect.objectContaining({
+              enabled: true,
+              session_id: "browser-session-visible",
+              profile_key: "visible-profile",
+              launch_url: "https://example.com/current",
+              title: "Visible Page",
+              target_id: "target-visible",
+              transport_kind: "existing_session",
+              lifecycle_state: "live",
+              control_mode: "human_takeover",
+              entry_source: "at_browser_command",
+            }),
+          },
+        },
+      });
+      expect(mockPreheatBrowserAssistInBackground).not.toHaveBeenCalled();
     } finally {
       harness.unmount();
     }

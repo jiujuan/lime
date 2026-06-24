@@ -9,6 +9,13 @@ function metadataRecord(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
+function itemMetadataRecord(item: AgentThreadItem): Record<string, unknown> {
+  return {
+    ...(metadataRecord(item.metadata) || {}),
+    sequence: item.sequence,
+  };
+}
+
 function mergeResultMetadata(
   metadata: Record<string, unknown> | undefined,
   extra?: Record<string, unknown>,
@@ -71,35 +78,34 @@ export function toActionRequired(item: AgentThreadItem): ActionRequired | null {
 
 export function toToolCallState(item: AgentThreadItem): ToolCallState | null {
   switch (item.type) {
-    case "tool_call":
-      {
-        const metadata = metadataRecord(item.metadata);
-        return {
-          id: item.id,
-          name: item.tool_name,
-          arguments:
-            item.arguments === undefined
-              ? undefined
-              : JSON.stringify(item.arguments, null, 2),
-          status: mapItemStatus(item.status),
-          result:
-            item.output !== undefined ||
-            item.error !== undefined ||
-            item.metadata !== undefined
-              ? {
-                  success:
-                    item.success ??
-                    (item.status === "completed" && item.error === undefined),
-                  output: item.output || "",
-                  error: item.error,
-                  metadata,
-                }
-              : undefined,
-          metadata,
-          startTime: new Date(item.started_at),
-          endTime: item.completed_at ? new Date(item.completed_at) : undefined,
-        };
-      }
+    case "tool_call": {
+      const metadata = itemMetadataRecord(item);
+      return {
+        id: item.id,
+        name: item.tool_name,
+        arguments:
+          item.arguments === undefined
+            ? undefined
+            : JSON.stringify(item.arguments, null, 2),
+        status: mapItemStatus(item.status),
+        result:
+          item.output !== undefined ||
+          item.error !== undefined ||
+          item.metadata !== undefined
+            ? {
+                success:
+                  item.success ??
+                  (item.status === "completed" && item.error === undefined),
+                output: item.output || "",
+                error: item.error,
+                metadata,
+              }
+            : undefined,
+        metadata,
+        startTime: new Date(item.started_at),
+        endTime: item.completed_at ? new Date(item.completed_at) : undefined,
+      };
+    }
     case "command_execution":
       return {
         id: item.id,
@@ -123,6 +129,7 @@ export function toToolCallState(item: AgentThreadItem): ToolCallState | null {
                 output: item.aggregated_output || "",
                 error: item.error,
                 metadata: mergeResultMetadata(metadataRecord(item.metadata), {
+                  sequence: item.sequence,
                   ...(item.exit_code !== undefined
                     ? { exit_code: item.exit_code }
                     : {}),
@@ -130,69 +137,67 @@ export function toToolCallState(item: AgentThreadItem): ToolCallState | null {
                 }),
               }
             : undefined,
-        metadata: metadataRecord(item.metadata),
+        metadata: itemMetadataRecord(item),
         startTime: new Date(item.started_at),
         endTime: item.completed_at ? new Date(item.completed_at) : undefined,
       };
-    case "patch":
-      {
-        const metadata = metadataRecord(item.metadata);
-        return {
-          id: item.id,
-          name: "apply_patch",
-          arguments: JSON.stringify(
-            { paths: item.paths ?? item.summary ?? [] },
-            null,
-            2,
-          ),
-          status: mapItemStatus(item.status),
-          result:
-            item.stdout !== undefined ||
-            item.stderr !== undefined ||
-            item.success !== undefined ||
-            item.metadata !== undefined
-              ? {
-                  success:
-                    item.success ??
-                    (item.status === "completed" && item.stderr === undefined),
-                  output: item.stdout || item.text || "",
-                  error: item.stderr,
-                  metadata,
-                }
-              : undefined,
-          metadata,
-          startTime: new Date(item.started_at),
-          endTime: item.completed_at ? new Date(item.completed_at) : undefined,
-        };
-      }
-    case "web_search":
-      {
-        const metadata = metadataRecord(item.metadata);
-        return {
-          id: item.id,
-          name: "web_search",
-          arguments:
-            item.query !== undefined || item.action !== undefined
-              ? JSON.stringify(
-                  { action: item.action || "web_search", query: item.query },
-                  null,
-                  2,
-                )
-              : undefined,
-          status: mapItemStatus(item.status),
-          result:
-            item.output !== undefined || metadata
-              ? {
-                  success: item.status !== "failed",
-                  output: item.output || "",
-                  metadata,
-                }
-              : undefined,
-          metadata,
-          startTime: new Date(item.started_at),
-          endTime: item.completed_at ? new Date(item.completed_at) : undefined,
-        };
-      }
+    case "patch": {
+      const metadata = itemMetadataRecord(item);
+      return {
+        id: item.id,
+        name: "apply_patch",
+        arguments: JSON.stringify(
+          { paths: item.paths ?? item.summary ?? [] },
+          null,
+          2,
+        ),
+        status: mapItemStatus(item.status),
+        result:
+          item.stdout !== undefined ||
+          item.stderr !== undefined ||
+          item.success !== undefined ||
+          item.metadata !== undefined
+            ? {
+                success:
+                  item.success ??
+                  (item.status === "completed" && item.stderr === undefined),
+                output: item.stdout || item.text || "",
+                error: item.stderr,
+                metadata,
+              }
+            : undefined,
+        metadata,
+        startTime: new Date(item.started_at),
+        endTime: item.completed_at ? new Date(item.completed_at) : undefined,
+      };
+    }
+    case "web_search": {
+      const metadata = itemMetadataRecord(item);
+      return {
+        id: item.id,
+        name: "web_search",
+        arguments:
+          item.query !== undefined || item.action !== undefined
+            ? JSON.stringify(
+                { action: item.action || "web_search", query: item.query },
+                null,
+                2,
+              )
+            : undefined,
+        status: mapItemStatus(item.status),
+        result:
+          item.output !== undefined || metadata
+            ? {
+                success: item.status !== "failed",
+                output: item.output || "",
+                metadata,
+              }
+            : undefined,
+        metadata,
+        startTime: new Date(item.started_at),
+        endTime: item.completed_at ? new Date(item.completed_at) : undefined,
+      };
+    }
     default:
       return null;
   }

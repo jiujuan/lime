@@ -6,6 +6,7 @@ use std::fs;
 use std::path::Path;
 
 mod base;
+mod browser;
 mod coding_snapshot;
 mod handoff_review;
 mod provider_telemetry;

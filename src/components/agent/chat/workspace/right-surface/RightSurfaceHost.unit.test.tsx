@@ -10,6 +10,7 @@ vi.mock("react-i18next", () => ({
     t: (key: string, options?: { defaultValue?: string }) => {
       const copy: Record<string, string> = {
         "agentChat.rightSurface.tabs.appSurface": "Agent App",
+        "agentChat.rightSurface.tabs.browser": "浏览器",
         "agentChat.rightSurface.tabs.productProfile": "产物 Profile",
         "agentChat.rightSurface.tabs.files": "文件",
         "agentChat.rightSurface.tabs.shell": "Shell",
@@ -37,6 +38,11 @@ const definitions: RightSurfaceDefinition[] = [
   {
     kind: "shell",
     render: () => <div data-testid="shell-pane">Shell</div>,
+  },
+  {
+    kind: "browser",
+    label: "Example Domain",
+    render: () => <div data-testid="browser-pane">Browser</div>,
   },
 ];
 
@@ -120,6 +126,20 @@ describe("RightSurfaceHost", () => {
     });
 
     expect(onSelectSurface).toHaveBeenCalledWith("files");
+  });
+
+  it("browser tab 应优先显示页面标题", () => {
+    const container = renderHost({
+      activeSurface: "files",
+      openSurfaces: ["files", "browser"],
+    });
+
+    expect(container.textContent).toContain("Example Domain");
+    expect(
+      container
+        .querySelector('[data-testid="workspace-right-surface-tab-browser"]')
+        ?.getAttribute("aria-label"),
+    ).toBe("Example Domain");
   });
 
   it("只有一个 open surface 时不渲染 tab strip", () => {

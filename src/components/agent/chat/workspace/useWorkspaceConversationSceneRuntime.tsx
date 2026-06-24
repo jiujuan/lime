@@ -271,6 +271,8 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   rightSurfaceLaunchers?: ConversationScenePresentationParams["scene"]["rightSurfaceLaunchers"];
   rightSurfaceObjectCanvasOpen?: ConversationScenePresentationParams["scene"]["rightSurfaceObjectCanvasOpen"];
   onToggleRightSurfaceObjectCanvas?: ConversationScenePresentationParams["scene"]["onToggleRightSurfaceObjectCanvas"];
+  rightSurfaceBrowserOpen?: ConversationScenePresentationParams["scene"]["rightSurfaceBrowserOpen"];
+  onToggleRightSurfaceBrowser?: ConversationScenePresentationParams["scene"]["onToggleRightSurfaceBrowser"];
   rightSurfaceFilesOpen?: ConversationScenePresentationParams["scene"]["rightSurfaceFilesOpen"];
   onToggleRightSurfaceFiles?: ConversationScenePresentationParams["scene"]["onToggleRightSurfaceFiles"];
   rightSurfaceShellOpen?: ConversationScenePresentationParams["scene"]["rightSurfaceShellOpen"];
@@ -445,6 +447,8 @@ export function useWorkspaceConversationSceneRuntime({
   rightSurfaceLaunchers,
   rightSurfaceObjectCanvasOpen,
   onToggleRightSurfaceObjectCanvas,
+  rightSurfaceBrowserOpen,
+  onToggleRightSurfaceBrowser,
   rightSurfaceFilesOpen,
   onToggleRightSurfaceFiles,
   rightSurfaceShellOpen,
@@ -835,6 +839,11 @@ export function useWorkspaceConversationSceneRuntime({
         taskCenterUtilityActionsVisible && Boolean(rightSurfaceObjectCanvasOpen),
       onToggleRightSurfaceObjectCanvas: taskCenterUtilityActionsVisible
         ? onToggleRightSurfaceObjectCanvas
+        : undefined,
+      rightSurfaceBrowserOpen:
+        taskCenterUtilityActionsVisible && Boolean(rightSurfaceBrowserOpen),
+      onToggleRightSurfaceBrowser: taskCenterUtilityActionsVisible
+        ? onToggleRightSurfaceBrowser
         : undefined,
       rightSurfaceFilesOpen:
         taskCenterUtilityActionsVisible && Boolean(rightSurfaceFilesOpen),

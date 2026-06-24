@@ -425,7 +425,7 @@ describe("HarnessStatusPanel outputs", () => {
     );
 
     const firstSearchResult = document.body.querySelector(
-      '[aria-label="预览搜索结果：Xinhua world news summary at 0030 GMT, March 13"]',
+      '[aria-label="打开搜索结果：Xinhua world news summary at 0030 GMT, March 13"]',
     ) as HTMLButtonElement | null;
 
     await act(async () => {

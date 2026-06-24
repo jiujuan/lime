@@ -203,7 +203,6 @@ export function createExpertPanelSkillsRuntimeFixtureScenario(sessionId) {
     prompt: EXPERT_SKILLS_RUNTIME_PANEL_PROMPT,
     doneText: EXPERT_SKILLS_RUNTIME_PANEL_DONE_TEXT,
     summaryText: "专家面板新增 Skill 后的下一轮 runtime 证据已完成",
-    guiSummaryText: "我识别到右侧专家面板更新后的 skillRefs",
     dedupeGuardTexts: ["专家 Skills runtime 证据已完成"],
     trigger: "expert_panel_skill_refs_override",
     selectionReason:

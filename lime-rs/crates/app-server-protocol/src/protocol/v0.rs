@@ -1,6 +1,7 @@
 mod agent_apps;
 mod agent_session;
 mod automation;
+mod browser_session;
 mod catalog;
 mod channels;
 mod connect;
@@ -29,6 +30,7 @@ mod workspaces;
 pub use agent_apps::*;
 pub use agent_session::*;
 pub use automation::*;
+pub use browser_session::*;
 pub use catalog::*;
 pub use channels::*;
 pub use connect::*;

@@ -11,6 +11,7 @@ import i18n from "i18next";
 import { toast } from "sonner";
 import { initLimeI18n } from "@/i18n/createI18n";
 import type { LayoutMode } from "@/lib/workspace/workbenchContract";
+import { executeBrowserSessionAction } from "@/lib/api/browserRuntime";
 import {
   browserExecuteAction,
   siteRunAdapter,
@@ -48,6 +49,12 @@ import {
   readFirstString,
   resolveBrowserAssistArtifactScopeKey,
 } from "./browserAssistArtifact";
+import {
+  buildBrowserAssistControlSessionRef,
+  resolveBrowserAssistNavigationControlPlan,
+  resolveBrowserAssistObservationControlPlan,
+  type BrowserAssistControlPlan,
+} from "./workspaceBrowserAssistControl";
 
 function normalizeBrowserAssistState(value: string | null | undefined): string {
   return value?.trim().toLowerCase() || "";
@@ -123,6 +130,47 @@ function resolveBrowserActionPageSnapshot(
         [pageInfo, normalizedResultData],
         ["title", "target_title", "targetTitle"],
       ) || fallbackTitle,
+  };
+}
+
+async function executeBrowserAssistControlPlan(
+  plan: BrowserAssistControlPlan,
+) {
+  if (plan.channel === "app_server_browser_session") {
+    if (!plan.sessionId) {
+      throw new Error("Browser session ref 缺少 sessionId");
+    }
+    const result = await executeBrowserSessionAction({
+      sessionId: plan.sessionId,
+      action: plan.action,
+      args: plan.args,
+    });
+    return {
+      data: result.result,
+      sessionId: result.sessionId,
+      targetId: undefined,
+      transportKind: "cdp_frames",
+    };
+  }
+
+  if (!plan.profileKey) {
+    throw new Error("Browser session ref 缺少 profileKey");
+  }
+  const result = await browserExecuteAction({
+    profile_key: plan.profileKey,
+    backend: "lime_extension_bridge",
+    action: plan.action,
+    args: plan.args,
+    timeout_ms: 20000,
+  });
+  if (!result.success) {
+    throw new Error(result.error || "浏览器控制失败");
+  }
+  return {
+    data: result.data,
+    sessionId: result.session_id,
+    targetId: result.target_id,
+    transportKind: "existing_session",
   };
 }
 
@@ -721,6 +769,21 @@ export function useWorkspaceBrowserAssistRuntime({
             "transport_kind",
           ]),
       );
+      const currentTargetId =
+        browserAssistSessionState?.targetId ||
+        readFirstString(artifactMeta ? [artifactMeta] : [], [
+          "targetId",
+          "target_id",
+        ]) ||
+        undefined;
+      const currentSessionRef = buildBrowserAssistControlSessionRef({
+        sessionId: currentSessionId,
+        profileKey,
+        url: currentUrl,
+        title: fallbackTitle,
+        targetId: currentTargetId,
+        transportKind,
+      });
 
       if (currentUrl === url) {
         openBrowserAssistCanvas(GENERAL_BROWSER_ASSIST_ARTIFACT_ID);
@@ -730,6 +793,48 @@ export function useWorkspaceBrowserAssistRuntime({
       setBrowserAssistLaunching(true);
 
       try {
+        const currentSessionPlan = resolveBrowserAssistNavigationControlPlan(
+          currentSessionRef,
+          url,
+        );
+        if (currentSessionPlan) {
+          const actionResult =
+            await executeBrowserAssistControlPlan(currentSessionPlan);
+          const { url: nextUrl, title: nextTitle } =
+            resolveBrowserActionPageSnapshot(
+              actionResult.data,
+              url,
+              fallbackTitle,
+            );
+
+          commitBrowserAssistSessionState(
+            createBrowserAssistSessionState({
+              sessionId:
+                actionResult.sessionId ||
+                currentSessionRef.browserSessionId ||
+                undefined,
+              profileKey: currentSessionRef.profileKey || profileKey,
+              url: nextUrl,
+              title: nextTitle,
+              targetId: actionResult.targetId || currentTargetId,
+              transportKind:
+                actionResult.transportKind ||
+                browserAssistSessionState?.transportKind,
+              lifecycleState:
+                browserAssistSessionState?.lifecycleState || "live",
+              controlMode: browserAssistSessionState?.controlMode,
+              source: "runtime_launch",
+              updatedAt: Date.now(),
+            }),
+          );
+          openBrowserAssistCanvas(GENERAL_BROWSER_ASSIST_ARTIFACT_ID);
+
+          if (!options?.silent) {
+            toast.success(`已切换浏览器页面：${nextTitle}`);
+          }
+          return true;
+        }
+
         const attempts =
           transportKind === "existing_session"
             ? [
@@ -817,10 +922,7 @@ export function useWorkspaceBrowserAssistRuntime({
             profileKey,
             url: nextUrl,
             title: nextTitle,
-            targetId:
-              result.target_id ||
-              browserAssistSessionState?.targetId ||
-              undefined,
+            targetId: result.target_id || currentTargetId,
             transportKind: resolvedTransportKind,
             lifecycleState: browserAssistSessionState?.lifecycleState || "live",
             controlMode: browserAssistSessionState?.controlMode,
@@ -854,6 +956,112 @@ export function useWorkspaceBrowserAssistRuntime({
       commitBrowserAssistSessionState,
       generalBrowserAssistProfileKey,
       openBrowserAssistCanvas,
+    ],
+  );
+
+  const observeBrowserAssistCanvasSession = useCallback(
+    async (options?: { silent?: boolean }): Promise<boolean> => {
+      if (activeTheme !== "general") {
+        return false;
+      }
+
+      const artifactMeta = asRecord(browserAssistArtifact?.meta);
+      const profileKey =
+        browserAssistSessionState?.profileKey ||
+        readFirstString(artifactMeta ? [artifactMeta] : [], [
+          "profileKey",
+          "profile_key",
+        ]) ||
+        generalBrowserAssistProfileKey;
+      const currentSessionId =
+        browserAssistSessionState?.sessionId ||
+        readFirstString(artifactMeta ? [artifactMeta] : [], [
+          "sessionId",
+          "session_id",
+        ]) ||
+        undefined;
+      const currentUrl =
+        browserAssistSessionState?.url ||
+        readFirstString(artifactMeta ? [artifactMeta] : [], [
+          "url",
+          "launchUrl",
+        ]) ||
+        "";
+      const currentTitle =
+        browserAssistSessionState?.title ||
+        browserAssistArtifact?.title?.trim() ||
+        getBrowserAssistFallbackTitle();
+      const currentTargetId =
+        browserAssistSessionState?.targetId ||
+        readFirstString(artifactMeta ? [artifactMeta] : [], [
+          "targetId",
+          "target_id",
+        ]) ||
+        undefined;
+      const transportKind =
+        browserAssistSessionState?.transportKind ||
+        readFirstString(artifactMeta ? [artifactMeta] : [], [
+          "transportKind",
+          "transport_kind",
+        ]);
+      const sessionRef = buildBrowserAssistControlSessionRef({
+        sessionId: currentSessionId,
+        profileKey,
+        url: currentUrl,
+        title: currentTitle,
+        targetId: currentTargetId,
+        transportKind,
+      });
+      const plan = resolveBrowserAssistObservationControlPlan(sessionRef);
+      if (!plan) {
+        return false;
+      }
+
+      try {
+        const actionResult = await executeBrowserAssistControlPlan(plan);
+        const { url: nextUrl, title: nextTitle } =
+          resolveBrowserActionPageSnapshot(
+            actionResult.data,
+            currentUrl || sessionRef.launchUrl || "https://www.google.com",
+            currentTitle,
+          );
+        commitBrowserAssistSessionState(
+          createBrowserAssistSessionState({
+            sessionId:
+              actionResult.sessionId ||
+              sessionRef.browserSessionId ||
+              undefined,
+            profileKey: sessionRef.profileKey || profileKey,
+            url: nextUrl,
+            title: nextTitle,
+            targetId: actionResult.targetId || currentTargetId,
+            transportKind:
+              actionResult.transportKind ||
+              browserAssistSessionState?.transportKind,
+            lifecycleState: browserAssistSessionState?.lifecycleState || "live",
+            controlMode: browserAssistSessionState?.controlMode,
+            source: "runtime_launch",
+            updatedAt: Date.now(),
+          }),
+        );
+        return true;
+      } catch (error) {
+        if (!options?.silent) {
+          toast.error(
+            `读取浏览器页面失败: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+        return false;
+      }
+    },
+    [
+      activeTheme,
+      browserAssistArtifact,
+      browserAssistSessionState,
+      commitBrowserAssistSessionState,
+      generalBrowserAssistProfileKey,
     ],
   );
 
@@ -907,6 +1115,7 @@ export function useWorkspaceBrowserAssistRuntime({
         if (hasSessionContext) {
           openBrowserAssistCanvas(GENERAL_BROWSER_ASSIST_ARTIFACT_ID);
           if (!targetUrl) {
+            void observeBrowserAssistCanvasSession({ silent: true });
             return true;
           }
           return navigateBrowserAssistCanvasToUrl(targetUrl, options);
@@ -981,6 +1190,7 @@ export function useWorkspaceBrowserAssistRuntime({
         generalBrowserAssistProfileKey,
         attachExistingSessionBrowserAssist,
         navigateBrowserAssistCanvasToUrl,
+        observeBrowserAssistCanvasSession,
         onBrowserWorkbenchOpenRequest,
         openBrowserAssistCanvas,
         projectId,

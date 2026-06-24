@@ -1,19 +1,15 @@
 import type { ContentPart } from "../types";
-
-function readComparableSequence(part: ContentPart): number | null {
-  const sequence =
-    part.type === "tool_use"
-      ? (part.metadata?.sequence ?? part.toolCall.metadata?.sequence)
-      : part.metadata?.sequence;
-  return typeof sequence === "number" &&
-    Number.isFinite(sequence) &&
-    sequence < Number.MAX_SAFE_INTEGER
-    ? sequence
-    : null;
-}
+import { readContentPartSequence } from "../utils/contentPartTimeline";
 
 function isProcessPart(part: ContentPart): boolean {
   return part.type === "thinking" || part.type === "tool_use";
+}
+
+function shouldOrderPartWithProcessRun(part: ContentPart): boolean {
+  if (isProcessPart(part)) {
+    return true;
+  }
+  return part.type === "text" && readContentPartSequence(part) !== null;
 }
 
 function orderProcessRunBySequence(parts: ContentPart[]): ContentPart[] {
@@ -24,7 +20,7 @@ function orderProcessRunBySequence(parts: ContentPart[]): ContentPart[] {
   const indexedParts = parts.map((part, index) => ({
     part,
     index,
-    sequence: readComparableSequence(part),
+    sequence: readContentPartSequence(part),
   }));
   if (!indexedParts.every((entry) => entry.sequence !== null)) {
     return parts;
@@ -58,7 +54,7 @@ export function orderStreamingContentPartsForDisplay(
   };
 
   for (const part of parts) {
-    if (isProcessPart(part)) {
+    if (shouldOrderPartWithProcessRun(part)) {
       processRun.push(part);
       continue;
     }

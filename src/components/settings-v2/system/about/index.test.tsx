@@ -280,6 +280,10 @@ describe("AboutSection", () => {
     });
 
     expect(mockCheckForUpdates).toHaveBeenCalledTimes(2);
+    expect(mockCheckForUpdates).toHaveBeenNthCalledWith(1, {
+      automatic: true,
+    });
+    expect(mockCheckForUpdates).toHaveBeenNthCalledWith(2);
 
     await act(async () => {
       findButton(container, "Download Update").click();

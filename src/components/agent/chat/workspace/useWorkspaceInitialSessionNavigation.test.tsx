@@ -12,6 +12,7 @@ const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 interface ProbeProps {
   currentSessionId?: string | null;
   initialSessionId?: string | null;
+  shouldHydrateMatchedInitialSession?: boolean;
   switchTopic: (
     topicId: string,
     options?: {
@@ -109,6 +110,60 @@ describe("useWorkspaceInitialSessionNavigation", () => {
     await flushEffects();
 
     expect(switchTopic).not.toHaveBeenCalled();
+  });
+
+  it("当前会话已命中但仍在恢复态时应继续触发 hydrate", async () => {
+    const switchTopic = vi.fn(async () => undefined);
+    renderHook({
+      initialSessionId: "session-42",
+      currentSessionId: "session-42",
+      shouldHydrateMatchedInitialSession: true,
+      switchTopic,
+      resolveInitialSessionSwitch: () => ({
+        allowDetachedSession: true,
+      }),
+    });
+
+    await flushEffects();
+
+    expect(switchTopic).toHaveBeenCalledWith("session-42", {
+      allowDetachedSession: true,
+      forceRefresh: true,
+    });
+  });
+
+  it("初始导航进入同一会话恢复壳后应继续强制 hydrate", async () => {
+    const switchTopic = vi.fn(async () => undefined);
+    const mounted = renderHook({
+      initialSessionId: "session-42",
+      currentSessionId: null,
+      shouldHydrateMatchedInitialSession: false,
+      switchTopic,
+      resolveInitialSessionSwitch: () => ({
+        allowDetachedSession: true,
+      }),
+    });
+
+    await flushEffects();
+
+    mounted.rerender({
+      initialSessionId: "session-42",
+      currentSessionId: "session-42",
+      shouldHydrateMatchedInitialSession: true,
+      switchTopic,
+      resolveInitialSessionSwitch: () => ({
+        allowDetachedSession: true,
+      }),
+    });
+    await flushEffects();
+
+    expect(switchTopic).toHaveBeenNthCalledWith(1, "session-42", {
+      allowDetachedSession: true,
+    });
+    expect(switchTopic).toHaveBeenNthCalledWith(2, "session-42", {
+      allowDetachedSession: true,
+      forceRefresh: true,
+    });
   });
 
   it("切换到新的初始会话时应重新触发恢复", async () => {

@@ -63,6 +63,12 @@ const workspacePatch = {
             url: "https://lime.local/image-1.png",
             prompt: "明亮的中文内容工厂主图",
           },
+          {
+            id: "artifact-image-local",
+            title: "本地缓存图",
+            filePath: "/tmp/lime-content-factory/local-image.png",
+            prompt: "已缓存到本地的内容工厂配图",
+          },
         ],
       },
     },
@@ -74,6 +80,32 @@ const workspacePatch = {
     splitMode: "chat-right-dock",
   },
   sourceArtifacts: [{ artifactRef: "artifact-workspace-patch-1" }],
+  workerEvidence: [
+    {
+      id: "evt-worker-success:workerEvidence",
+      status: "completed",
+      source: "agent_app_task_worker",
+      appId: "content-factory-app",
+      taskId: "task-article-1",
+      taskKind: "content.article.generate",
+      turnId: "turn-action-1",
+      artifactRef: "artifact-workspace-patch-1",
+      artifactKind: "content_factory.workspace_patch",
+      updatedAt: "2026-06-24T00:00:00.000Z",
+    },
+    {
+      id: "evt-worker-failed:workerEvidence",
+      status: "failed",
+      source: "agent_app_task_worker",
+      appId: "content-factory-app",
+      taskId: "task-image-1",
+      taskKind: "content.image.generate",
+      turnId: "turn-action-2",
+      errorCode: "worker_invalid_json_output",
+      errorMessage: "Agent App worker returned invalid JSON",
+      updatedAt: "2026-06-24T00:00:02.000Z",
+    },
+  ],
   actionHistory: [
     {
       id: "turn-action-1:productProfileAction:regenerate",
@@ -181,6 +213,12 @@ describe("workspaceProductProfileModel", () => {
         title: "主图",
         url: "https://lime.local/image-1.png",
       }),
+      expect.objectContaining({
+        id: "artifact-image-local",
+        localPath: "/tmp/lime-content-factory/local-image.png",
+        filePath: "/tmp/lime-content-factory/local-image.png",
+        url: null,
+      }),
     ]);
     expect(viewModel.selectedActionHistory).toEqual([
       expect.objectContaining({
@@ -197,6 +235,14 @@ describe("workspaceProductProfileModel", () => {
     expect(viewModel.sourceArtifacts).toEqual([
       { artifactRef: "artifact-workspace-patch-1" },
     ]);
+    expect(viewModel.latestWorkerEvidence).toEqual(
+      expect.objectContaining({
+        status: "failed",
+        taskId: "task-image-1",
+        errorCode: "worker_invalid_json_output",
+      }),
+    );
+    expect(viewModel.workerEvidence).toHaveLength(2);
   });
 
   it("应从对象 source 投影结构化预览内容", () => {
@@ -218,6 +264,39 @@ describe("workspaceProductProfileModel", () => {
 
     expect(viewModel.selectedPreview.documentText).toContain("首版文章正文");
     expect(viewModel.selectedPreview.images).toEqual([]);
+  });
+
+  it("旧 read model 没有 workerEvidence 时应从 diagnostics 投影失败记录", () => {
+    const legacyWorkspacePatch = {
+      ...workspacePatch,
+    } as Record<string, unknown>;
+    delete legacyWorkspacePatch.workerEvidence;
+    const profile = buildWorkspaceProductProfileFromThreadRead({
+      thread_id: "thread-main",
+      active_turn_id: "turn-worker-failed",
+      productWorkspace: legacyWorkspacePatch,
+      diagnostics: {
+        latest_turn_error_message:
+          "Agent App task worker failed: invalid JSON",
+        latest_turn_completed_at: "2026-06-24T00:00:03.000Z",
+        warning_count: 0,
+        context_compaction_count: 0,
+        failed_tool_call_count: 0,
+        failed_command_count: 0,
+        pending_request_count: 0,
+      },
+    });
+    expect(profile).not.toBeNull();
+
+    const viewModel = buildWorkspaceProductProfileViewModel(profile!);
+
+    expect(viewModel.latestWorkerEvidence).toEqual(
+      expect.objectContaining({
+        status: "failed",
+        turnId: "turn-worker-failed",
+        errorMessage: "Agent App task worker failed: invalid JSON",
+      }),
+    );
   });
 
   it("应构造可随 Claw turn 透传的 Product Profile action metadata", () => {

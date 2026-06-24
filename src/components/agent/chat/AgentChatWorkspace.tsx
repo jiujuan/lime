@@ -216,6 +216,7 @@ import {
   resolveWorkspaceRightSurfaceState,
   type WorkspaceRightSurfaceKind,
 } from "./workspace/right-surface";
+import { RightSurfaceBrowserPanel } from "./workspace/right-surface/browser/RightSurfaceBrowserPanel";
 import { ExpertInfoPanel } from "./experts/ExpertInfoPanel";
 import { FileManagerSidebar } from "./components/FileManager/FileManagerSidebar";
 import type { GeneralWorkbenchFollowUpActionPayload } from "./components/generalWorkbenchSidebarContract";
@@ -232,6 +233,8 @@ import {
   normalizeArtifactProtocolPath,
   resolveArtifactProtocolFilePath,
 } from "@/lib/artifact-protocol";
+import { saveAgentRuntimeArtifactDocumentSnapshot } from "@/lib/api/agentRuntime/appServerArtifactClient";
+import { buildArtifactDocumentSaveEvidenceWriteContext } from "./workspace/workspaceArtifactDocumentSaveEvidence";
 import { resolveSiteSavedContentTargetFromRunResult } from "./utils/siteToolResultSummary";
 import type { ArtifactDocumentV1 } from "@/lib/artifact-document";
 import type { ArtifactTimelineOpenTarget } from "./utils/artifactTimelineNavigation";
@@ -289,6 +292,8 @@ import {
   buildWorkspaceRightSurfaceRuntimePendingIntents,
 } from "./workspace/workspaceRightSurfaceRuntimeProjection";
 import { useWorkspaceRightSurfacePendingRuntime } from "./workspace/useWorkspaceRightSurfacePendingRuntime";
+import type { WorkspaceRightSurfaceBrowserIntent } from "./workspace/workspaceRightSurfaceBrowserIntent";
+import { buildBrowserSessionRefFromBrowserAssistSessionState } from "./workspace/workspaceBrowserSessionRef";
 import {
   createRestoredInteractiveMessageSnapshot,
   resolveReadOnlyInteractiveMessageIds,
@@ -765,38 +770,6 @@ export function AgentChatWorkspace({
     serviceSkillsError,
   });
 
-  const expertPanelRequestMetadata = useMemo(
-    () =>
-      resolveExpertPanelRequestMetadata({
-        initialAutoSendRequestMetadata,
-        initialRequestMetadata,
-      }),
-    [initialAutoSendRequestMetadata, initialRequestMetadata],
-  );
-  const expertWorkspaceSkillRuntime = useExpertWorkspaceSkillRuntime({
-    activeTheme,
-    requestMetadata: expertPanelRequestMetadata,
-    workspaceRoot: project?.rootPath,
-    deferredDelayMs: shouldDeferWorkspaceAuxiliaryLoads
-      ? deferredWorkspaceAuxiliaryLoadMs
-      : undefined,
-    onOpenSkillsManage: _onNavigate
-      ? handleOpenSkillsManageFromExpertPanel
-      : undefined,
-  });
-  const expertPanelRuntimeKey = expertWorkspaceSkillRuntime.runtimeKey;
-  const workspaceSkillBindingsRuntime =
-    expertWorkspaceSkillRuntime.bindingsRuntime;
-  const expertWorkspaceSkillRuntimeEnableRefs =
-    expertWorkspaceSkillRuntime.enabledRefs;
-  const expertWorkspaceSkillRuntimeEnableBindings =
-    expertWorkspaceSkillRuntime.enabledBindings;
-  const expertWorkspaceSkillRuntimeEnableInput =
-    expertWorkspaceSkillRuntime.enableInput;
-  const handleEnableExpertWorkspaceSkillRuntime =
-    expertWorkspaceSkillRuntime.handleEnableWorkspaceSkillRuntime;
-  const pruneExpertWorkspaceSkillRuntimeEnableRefs =
-    expertWorkspaceSkillRuntime.pruneEnabledRefsForSkillRefs;
   const initialAutoSendAllowsDetachedSession = useMemo(
     () => shouldAllowDetachedInitialAutoSend(initialAutoSendRequestMetadata),
     [initialAutoSendRequestMetadata],
@@ -806,11 +779,6 @@ export function AgentChatWorkspace({
       buildPendingServiceSkillLaunchSignature(initialPendingServiceSkillLaunch),
     [initialPendingServiceSkillLaunch],
   );
-  const combinedSkillsLoading =
-    skillsLoading ||
-    serviceSkillsLoading ||
-    workspaceSkillBindingsRuntime.loading;
-
   // Workbench Store（用于工作区右侧技能面板状态同步）
   const pendingSkillKey = useWorkbenchStore((state) => state.pendingSkillKey);
   const clearThemeSkillsRailState = useWorkbenchStore(
@@ -1074,6 +1042,51 @@ export function AgentChatWorkspace({
       deferredWorkspaceAuxiliaryLoadMs,
     });
   const activeSessionKey = sessionId?.trim() || null;
+  const sessionExpertRequestMetadata = useMemo(
+    () => resolveSessionExpertRequestMetadata(threadRead),
+    [threadRead],
+  );
+  const expertPanelRequestMetadata = useMemo(
+    () =>
+      resolveExpertPanelRequestMetadata({
+        initialAutoSendRequestMetadata,
+        initialRequestMetadata,
+        sessionRequestMetadata: sessionExpertRequestMetadata,
+      }),
+    [
+      initialAutoSendRequestMetadata,
+      initialRequestMetadata,
+      sessionExpertRequestMetadata,
+    ],
+  );
+  const expertWorkspaceSkillRuntime = useExpertWorkspaceSkillRuntime({
+    activeTheme,
+    requestMetadata: expertPanelRequestMetadata,
+    workspaceRoot: project?.rootPath,
+    deferredDelayMs: shouldDeferWorkspaceAuxiliaryLoads
+      ? deferredWorkspaceAuxiliaryLoadMs
+      : undefined,
+    onOpenSkillsManage: _onNavigate
+      ? handleOpenSkillsManageFromExpertPanel
+      : undefined,
+  });
+  const expertPanelRuntimeKey = expertWorkspaceSkillRuntime.runtimeKey;
+  const workspaceSkillBindingsRuntime =
+    expertWorkspaceSkillRuntime.bindingsRuntime;
+  const expertWorkspaceSkillRuntimeEnableRefs =
+    expertWorkspaceSkillRuntime.enabledRefs;
+  const expertWorkspaceSkillRuntimeEnableBindings =
+    expertWorkspaceSkillRuntime.enabledBindings;
+  const expertWorkspaceSkillRuntimeEnableInput =
+    expertWorkspaceSkillRuntime.enableInput;
+  const handleEnableExpertWorkspaceSkillRuntime =
+    expertWorkspaceSkillRuntime.handleEnableWorkspaceSkillRuntime;
+  const pruneExpertWorkspaceSkillRuntimeEnableRefs =
+    expertWorkspaceSkillRuntime.pruneEnabledRefsForSkillRefs;
+  const combinedSkillsLoading =
+    skillsLoading ||
+    serviceSkillsLoading ||
+    workspaceSkillBindingsRuntime.loading;
   const { expertSkillRefsOverride, handleExpertSkillRefsChange } =
     useWorkspaceExpertAgentLaunchSyncRuntime({
       expertAgentLaunch,
@@ -1082,10 +1095,6 @@ export function AgentChatWorkspace({
         pruneExpertWorkspaceSkillRuntimeEnableRefs,
       sessionId,
     });
-  const sessionExpertRequestMetadata = useMemo(
-    () => resolveSessionExpertRequestMetadata(threadRead),
-    [threadRead],
-  );
   const workspaceRequestMetadataWithExpertSkills = useMemo(
     () =>
       resolveWorkspaceRequestMetadataWithExpertSkills({
@@ -1237,7 +1246,9 @@ export function AgentChatWorkspace({
       activeTheme,
       contentId: contentId ?? null,
       initialContentLoadError: initialContentLoadError ?? null,
+      isAutoRestoringSession,
       isInitialContentLoading,
+      isSessionHydrating,
       isSending,
       layoutMode,
       messagesCount: messages.length,
@@ -1275,6 +1286,13 @@ export function AgentChatWorkspace({
     onBrowserWorkbenchOpenRequest:
       workbenchRequests.requestBrowserWorkbenchOpen,
   });
+  const browserAssistSessionRef = useMemo(
+    () =>
+      buildBrowserSessionRefFromBrowserAssistSessionState(
+        browserAssistSessionState,
+      ),
+    [browserAssistSessionState],
+  );
   const {
     activeArtifactViewTargetId,
     artifactDisplayState,
@@ -1326,6 +1344,7 @@ export function AgentChatWorkspace({
         "browser-runtime",
         resolveBrowserRuntimeNavigationFromBrowserAssist({
           artifact,
+          browserSessionRef: browserAssistSessionRef,
           browserAssistSessionState,
           contentId,
           generalBrowserAssistProfileKey: GENERAL_BROWSER_ASSIST_PROFILE_KEY,
@@ -1333,7 +1352,13 @@ export function AgentChatWorkspace({
         }),
       );
     },
-    [_onNavigate, browserAssistSessionState, contentId, projectId],
+    [
+      _onNavigate,
+      browserAssistSessionRef,
+      browserAssistSessionState,
+      contentId,
+      projectId,
+    ],
   );
   const handleOpenBrowserRuntimeForSiteSkillExecution = useCallback(() => {
     if (!_onNavigate || !initialSiteSkillLaunch?.adapterName?.trim()) {
@@ -1735,12 +1760,33 @@ export function AgentChatWorkspace({
     setActiveTheme,
     setCreationMode,
   });
+  const taskCenterDraftSurfaceActiveRef = useRef(false);
+  const [taskCenterDraftTabs, setTaskCenterDraftTabs] = useState<
+    TaskCenterDraftTab[]
+  >([]);
+  const [activeTaskCenterDraftTabId, setActiveTaskCenterDraftTabId] = useState<
+    string | null
+  >(null);
+  const [taskCenterDraftSendRequest, setTaskCenterDraftSendRequest] =
+    useState<TaskCenterDraftSendRequest | null>(null);
+  const [homePendingPreviewRequest, setHomePendingPreviewRequest] =
+    useState<TaskCenterDraftSendRequest | null>(null);
+  const handleBeforeTopicSwitch = useCallback(
+    (topicId: string) => {
+      taskCenterDraftSurfaceActiveRef.current = false;
+      setActiveTaskCenterDraftTabId(null);
+      setTaskCenterDraftSendRequest(null);
+      setHomePendingPreviewRequest(null);
+      deferSessionRecentMetadataSyncForNavigation(topicId);
+    },
+    [deferSessionRecentMetadataSyncForNavigation],
+  );
 
   const { switchTopic } = useWorkspaceTopicSwitch({
     projectId: validatedRuntimeProjectId,
     externalProjectId,
     originalSwitchTopic,
-    onBeforeTopicSwitch: deferSessionRecentMetadataSyncForNavigation,
+    onBeforeTopicSwitch: handleBeforeTopicSwitch,
     startTopicProjectResolution,
     finishTopicProjectResolution,
     deferTopicSwitch,
@@ -1763,19 +1809,10 @@ export function AgentChatWorkspace({
     initialSessionId,
     currentSessionId: sessionId,
     resolveInitialSessionSwitch,
+    shouldHydrateMatchedInitialSession:
+      isAutoRestoringSession || isSessionHydrating,
     switchTopic,
   });
-  const taskCenterDraftSurfaceActiveRef = useRef(false);
-  const [taskCenterDraftTabs, setTaskCenterDraftTabs] = useState<
-    TaskCenterDraftTab[]
-  >([]);
-  const [activeTaskCenterDraftTabId, setActiveTaskCenterDraftTabId] = useState<
-    string | null
-  >(null);
-  const [taskCenterDraftSendRequest, setTaskCenterDraftSendRequest] =
-    useState<TaskCenterDraftSendRequest | null>(null);
-  const [homePendingPreviewRequest, setHomePendingPreviewRequest] =
-    useState<TaskCenterDraftSendRequest | null>(null);
   const {
     clearTaskCenterEmbeddedHomeSession,
     isTaskCenterEntry,
@@ -1900,6 +1937,7 @@ export function AgentChatWorkspace({
     browserAssistProfileKey: browserAssistRequestProfileKey,
     browserAssistPreferredBackend: browserAssistRequestPreferredBackend,
     browserAssistAutoLaunch: browserAssistRequestAutoLaunch,
+    browserAssistSessionState,
     workspaceRequestMetadataBase:
       workspaceRequestMetadataWithExpertSkills ?? undefined,
     savedSoulArtifactVoiceGenerationBrief: soulArtifactVoiceGenerationBrief,
@@ -2424,6 +2462,24 @@ export function AgentChatWorkspace({
           },
         }),
       );
+      const saveResult = await saveAgentRuntimeArtifactDocumentSnapshot(
+        artifact,
+        document,
+      );
+      if (saveResult.status === "appended") {
+        await Promise.resolve(
+          handleWriteFile(
+            serializedDocument,
+            filePath,
+            buildArtifactDocumentSaveEvidenceWriteContext({
+              artifact,
+              document,
+              evidence: saveResult.evidence,
+              serializedDocument,
+            }),
+          ),
+        );
+      }
     },
     [handleWriteFile],
   );
@@ -2679,28 +2735,21 @@ export function AgentChatWorkspace({
       if (!url) {
         return;
       }
-      const snapshotContent = item.snapshotContent?.trim();
-      const projection = createPreviewArtifact({
-        source: "url",
-        sourceRef: url,
-        path: url,
-        title: item.snapshotTitle?.trim() || item.title?.trim() || url,
-        content: snapshotContent || item.snippet?.trim() || "",
-        meta: {
-          openedFrom: "search-result",
-          urlSnapshotSource: snapshotContent
-            ? item.snapshotSource || "web_fetch"
-            : "search_result",
-        },
-      });
-      upsertGeneralArtifact(projection.artifact);
-      handleWorkspaceArtifactClick(projection.artifact);
-      workbenchRequests.requestCanvasWorkbenchPreviewOpen({
-        filePath: null,
-        selectionKey: `artifact:${projection.artifact.id}`,
-      });
+      if (layoutMode === "chat") {
+        handleToggleCanvas();
+      } else if (layoutMode === "canvas") {
+        setLayoutMode("chat-canvas");
+      }
+      setCanvasWorkbenchLayoutMode("split");
+      workbenchRequests.requestBrowserWorkbenchOpen(url);
     },
-    [handleWorkspaceArtifactClick, workbenchRequests, upsertGeneralArtifact],
+    [
+      handleToggleCanvas,
+      layoutMode,
+      setCanvasWorkbenchLayoutMode,
+      setLayoutMode,
+      workbenchRequests,
+    ],
   );
   const handleOpenMessagePreview = useCallback(
     (target: MessagePreviewTarget, message: Message) => {
@@ -4008,6 +4057,13 @@ export function AgentChatWorkspace({
     sceneLayoutMode === "chat";
   const [manualRightSurface, setManualRightSurface] =
     useState<WorkspaceRightSurfaceKind | null>(null);
+  const [rightSurfaceBrowserTitle, setRightSurfaceBrowserTitle] = useState<
+    string | null
+  >(null);
+  const [
+    activeBrowserRightSurfaceIntent,
+    setActiveBrowserRightSurfaceIntent,
+  ] = useState<WorkspaceRightSurfaceBrowserIntent | null>(null);
   const [activeFilesRightSurfaceTarget, setActiveFilesRightSurfaceTarget] =
     useState<WorkspaceFilesSurfaceTarget | null>(null);
   const [activeAgentAppSurfaces, setActiveAgentAppSurfaces] = useState<
@@ -4026,6 +4082,7 @@ export function AgentChatWorkspace({
   const canvasWorkbenchRootPath =
     sessionWorkingDir?.trim() || project?.rootPath || null;
   const shellRightSurfaceAvailable = Boolean(canvasWorkbenchRootPath);
+  const browserRightSurfaceAvailable = true;
   const rightSurfaceAppServerPendingRuntime =
     useWorkspaceRightSurfacePendingRuntime({
       enabled: true,
@@ -4035,6 +4092,24 @@ export function AgentChatWorkspace({
     });
   const { consumePendingRequestsForSurface, dismissPendingRequestsForSurface } =
     rightSurfaceAppServerPendingRuntime;
+  const pendingBrowserRightSurfaceIntent =
+    rightSurfaceAppServerPendingRuntime.pendingBrowserIntent;
+  const browserRightSurfaceIntent =
+    activeBrowserRightSurfaceIntent ?? pendingBrowserRightSurfaceIntent;
+  const browserRightSurfaceSessionRef =
+    browserRightSurfaceIntent?.sessionRef ?? browserAssistSessionRef;
+  const browserRightSurfaceUsesBrowserAssistSession =
+    browserRightSurfaceSessionRef === browserAssistSessionRef;
+  const browserRightSurfaceControlMode =
+    browserRightSurfaceIntent?.controlMode ??
+    (browserRightSurfaceUsesBrowserAssistSession
+      ? browserAssistSessionState?.controlMode
+      : null);
+  const browserRightSurfaceLifecycleState =
+    browserRightSurfaceIntent?.lifecycleState ??
+    (browserRightSurfaceUsesBrowserAssistSession
+      ? browserAssistSessionState?.lifecycleState
+      : null);
   const productProfileFromThreadRead = useMemo(
     () => buildWorkspaceProductProfileFromThreadRead(sceneThreadRead),
     [sceneThreadRead],
@@ -4165,6 +4240,39 @@ export function AgentChatWorkspace({
   ]);
   const rightSurfaceHarnessEnabled =
     !suppressHomeNavbarUtilityActions && showHarnessToggle;
+  useEffect(() => {
+    if (
+      !pendingBrowserRightSurfaceIntent ||
+      pendingBrowserRightSurfaceIntent.priority !== "foreground"
+    ) {
+      return;
+    }
+    if (
+      manualRightSurface === "browser" &&
+      activeBrowserRightSurfaceIntent?.sourceRequestId ===
+        pendingBrowserRightSurfaceIntent.sourceRequestId
+    ) {
+      return;
+    }
+
+    setHarnessPanelVisible(false);
+    setExpertInfoPanelCollapsed(true);
+    setActiveFilesRightSurfaceTarget(null);
+    setActiveObjectCanvasRightSurfaceCandidate(null);
+    setActiveProductProfile(null);
+    setActiveBrowserRightSurfaceIntent(pendingBrowserRightSurfaceIntent);
+    setRightSurfaceBrowserTitle(
+      pendingBrowserRightSurfaceIntent.title?.trim() || null,
+    );
+    setManualRightSurface("browser");
+    void consumePendingRequestsForSurface("browser");
+  }, [
+    activeBrowserRightSurfaceIntent?.sourceRequestId,
+    consumePendingRequestsForSurface,
+    manualRightSurface,
+    pendingBrowserRightSurfaceIntent,
+    setHarnessPanelVisible,
+  ]);
   const handleToggleRightSurfaceFiles = useCallback(() => {
     if (!filesRightSurfaceAvailable) {
       return;
@@ -4214,6 +4322,42 @@ export function AgentChatWorkspace({
     setManualRightSurface((current) => (current === "shell" ? null : current));
     void dismissPendingRequestsForSurface("shell", "user_closed_surface");
   }, [dismissPendingRequestsForSurface]);
+  const handleToggleRightSurfaceBrowser = useCallback(() => {
+    if (!browserRightSurfaceAvailable) {
+      return;
+    }
+    const shouldOpenBrowser = manualRightSurface !== "browser";
+    setHarnessPanelVisible(false);
+    setExpertInfoPanelCollapsed(true);
+    setActiveFilesRightSurfaceTarget(null);
+    setActiveObjectCanvasRightSurfaceCandidate(null);
+    setActiveProductProfile(null);
+    setManualRightSurface(shouldOpenBrowser ? "browser" : null);
+    if (shouldOpenBrowser) {
+      if (pendingBrowserRightSurfaceIntent) {
+        setActiveBrowserRightSurfaceIntent(pendingBrowserRightSurfaceIntent);
+        setRightSurfaceBrowserTitle(
+          pendingBrowserRightSurfaceIntent.title?.trim() || null,
+        );
+      }
+      void consumePendingRequestsForSurface("browser");
+    } else {
+      void dismissPendingRequestsForSurface("browser", "user_closed_surface");
+    }
+  }, [
+    browserRightSurfaceAvailable,
+    consumePendingRequestsForSurface,
+    dismissPendingRequestsForSurface,
+    manualRightSurface,
+    pendingBrowserRightSurfaceIntent,
+    setHarnessPanelVisible,
+  ]);
+  const handleRightSurfaceBrowserNavigate = useCallback(
+    (_url: string, title?: string | null) => {
+      setRightSurfaceBrowserTitle(title?.trim() || null);
+    },
+    [],
+  );
   const handleToggleRightSurfaceObjectCanvas = useCallback(() => {
     if (
       !objectCanvasRightSurfaceAvailable &&
@@ -4318,8 +4462,12 @@ export function AgentChatWorkspace({
       setActiveObjectCanvasRightSurfaceCandidate(null);
       setActiveProductProfile(null);
     }
+    if (manualRightSurface === "browser" && !browserRightSurfaceAvailable) {
+      setManualRightSurface(null);
+    }
   }, [
     agentAppSurfaceRightSurfaceAvailable,
+    browserRightSurfaceAvailable,
     filesRightSurfaceAvailable,
     manualRightSurface,
     objectCanvasRightSurfaceAvailable,
@@ -4384,6 +4532,7 @@ export function AgentChatWorkspace({
     add("harness", manualRightSurface === "harness");
     add("appSurface", manualRightSurface === "appSurface");
     add("expertInfo", manualRightSurface === "expertInfo");
+    add("browser", manualRightSurface === "browser");
     return next;
   }, [
     agentAppSurfaceRightSurfaceAvailable,
@@ -4435,6 +4584,12 @@ export function AgentChatWorkspace({
           ? productProfileRightSurface
           : null,
       );
+      if (kind === "browser" && pendingBrowserRightSurfaceIntent) {
+        setActiveBrowserRightSurfaceIntent(pendingBrowserRightSurfaceIntent);
+        setRightSurfaceBrowserTitle(
+          pendingBrowserRightSurfaceIntent.title?.trim() || null,
+        );
+      }
       setManualRightSurface(kind === "workbench" ? null : kind);
       void consumePendingRequestsForSurface(kind);
       if (kind === "productProfile") {
@@ -4446,6 +4601,7 @@ export function AgentChatWorkspace({
       agentAppSurfaceRightSurface,
       filesRightSurfaceTarget,
       objectCanvasRightSurfaceCandidate,
+      pendingBrowserRightSurfaceIntent,
       productProfileRightSurface,
       rightSurfaceState.activeSurface,
       setHarnessPanelVisible,
@@ -4610,6 +4766,29 @@ export function AgentChatWorkspace({
               }
             />
           ),
+        }
+      : {}),
+    ...(browserRightSurfaceAvailable
+      ? {
+          browser: {
+            label:
+              rightSurfaceBrowserTitle ??
+              browserRightSurfaceIntent?.title ??
+              browserRightSurfaceSessionRef?.title ??
+              null,
+            render: () => (
+              <RightSurfaceBrowserPanel
+                active={rightSurfaceState.activeSurface === "browser"}
+                controlMode={browserRightSurfaceControlMode}
+                initialUrl={
+                  browserRightSurfaceSessionRef?.launchUrl ?? null
+                }
+                lifecycleState={browserRightSurfaceLifecycleState}
+                sessionRef={browserRightSurfaceSessionRef}
+                onNavigate={handleRightSurfaceBrowserNavigate}
+              />
+            ),
+          },
         }
       : {}),
     ...(rightSurfaceHarnessEnabled
@@ -4839,6 +5018,8 @@ export function AgentChatWorkspace({
       rightSurfaceState.activeSurface === "objectCanvas" ||
       rightSurfaceState.activeSurface === "productProfile",
     onToggleRightSurfaceObjectCanvas: handleToggleRightSurfaceObjectCanvas,
+    rightSurfaceBrowserOpen: rightSurfaceState.activeSurface === "browser",
+    onToggleRightSurfaceBrowser: handleToggleRightSurfaceBrowser,
     rightSurfaceFilesOpen: rightSurfaceState.activeSurface === "files",
     onToggleRightSurfaceFiles: handleToggleRightSurfaceFiles,
     rightSurfaceShellOpen: rightSurfaceState.activeSurface === "shell",

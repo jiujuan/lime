@@ -377,7 +377,7 @@
   "agentChat.searchResultPreview.emptySnippet": "아직 요약이 없습니다. 클릭하면 출처를 바로 열 수 있습니다.",
   "agentChat.searchResultPreview.expandAria": "검색 결과 펼치기",
   "agentChat.searchResultPreview.expandMore": "나머지 결과 {{countLabel}}개 펼치기",
-  "agentChat.searchResultPreview.previewAria": "검색 결과 미리보기: {{title}}",
+  "agentChat.searchResultPreview.openAria": "검색 결과 열기: {{title}}",
   "agentChat.sessionOverview.latestPromptFallback": "아직 새 작업 입력이 없습니다.",
   "agentChat.sessionOverview.metrics.inProgress": "진행 중 {{countLabel}}",
   "agentChat.sessionOverview.metrics.noFollowUp": "후속 조치 없음",

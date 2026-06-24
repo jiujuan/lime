@@ -37,6 +37,10 @@ const RIGHT_SURFACE_TAB_LABELS: Record<
     key: "agentChat.rightSurface.tabs.objectCanvas",
     fallback: "对象画布",
   },
+  browser: {
+    key: "agentChat.rightSurface.tabs.browser",
+    fallback: "浏览器",
+  },
   files: {
     key: "agentChat.rightSurface.tabs.files",
     fallback: "文件",
@@ -90,6 +94,8 @@ export function RightSurfaceHost({
             const label = t(RIGHT_SURFACE_TAB_LABELS[kind].key, {
               defaultValue: RIGHT_SURFACE_TAB_LABELS[kind].fallback,
             });
+            const tabLabel =
+              definitionByKind.get(kind)?.label?.trim() || label;
             const active = kind === activeSurface;
             return (
               <button
@@ -102,7 +108,7 @@ export function RightSurfaceHost({
                     : "border-transparent bg-transparent text-[color:var(--lime-text-muted)] hover:bg-[color:var(--lime-chrome-tab-hover)] hover:text-[color:var(--lime-text-strong)]",
                 )}
                 aria-selected={active}
-                aria-label={label}
+                aria-label={tabLabel}
                 data-testid={`workspace-right-surface-tab-${kind}`}
                 role="tab"
                 onClick={() => {
@@ -111,7 +117,7 @@ export function RightSurfaceHost({
                   }
                 }}
               >
-                {label}
+                {tabLabel}
               </button>
             );
           })}

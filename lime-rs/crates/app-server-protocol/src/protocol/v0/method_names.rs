@@ -162,6 +162,12 @@ pub const METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS: &str =
     "workspaceRightSurface/pending/dismiss";
 pub const METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED: &str =
     "workspaceRightSurface/pendingChanged";
+pub const METHOD_BROWSER_SESSION_TARGET_LIST: &str = "browserSession/target/list";
+pub const METHOD_BROWSER_SESSION_OPEN: &str = "browserSession/open";
+pub const METHOD_BROWSER_SESSION_READ: &str = "browserSession/read";
+pub const METHOD_BROWSER_SESSION_CLOSE: &str = "browserSession/close";
+pub const METHOD_BROWSER_SESSION_EVENT_LIST: &str = "browserSession/event/list";
+pub const METHOD_BROWSER_SESSION_ACTION_EXECUTE: &str = "browserSession/action/execute";
 pub const METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT: &str = "agentAppLocalPackage/inspect";
 pub const METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD: &str = "agentAppPackage/fetchCloud";
 pub const METHOD_AGENT_APP_INSTALLED_SAVE: &str = "agentAppInstalled/save";
@@ -280,4 +286,5 @@ pub const METHOD_AGENT_SESSION_TURN_START: &str = "agentSession/turn/start";
 pub const METHOD_AGENT_SESSION_TURN_CANCEL: &str = "agentSession/turn/cancel";
 pub const METHOD_AGENT_SESSION_ACTION_REPLAY: &str = "agentSession/action/replay";
 pub const METHOD_AGENT_SESSION_ACTION_RESPOND: &str = "agentSession/action/respond";
+pub const METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND: &str = "agentSession/runtimeEvents/append";
 pub const METHOD_AGENT_SESSION_EVENT: &str = "agentSession/event";

@@ -43,6 +43,7 @@ const APP_SERVER_REQUEST_TIMEOUT_OVERRIDE_CEILING_MS = 600_000;
 const APP_SERVER_STREAMING_TURN_ACK_GRACE_MS = 250;
 const APP_SERVER_PROXY_REQUEST_ID_PREFIX = "electron-host";
 const APP_SERVER_DATA_DIR_NAME = "app-server";
+const APP_SERVER_RECENT_NOTIFICATION_LIMIT = 500;
 const DEFAULT_APP_SERVER_PRODUCT_DB_MIGRATION_CLEANUP: NonNullable<
   SidecarLaunchConfig["productDbMigrationCleanup"]
 > = "drop-tables";
@@ -58,6 +59,7 @@ type HandleJsonLinesRequest = {
 };
 
 type DrainEventsRequest = {
+  includeRecent?: boolean;
   limit?: number;
 };
 
@@ -70,6 +72,7 @@ export class ElectronAppServerHost {
   #connected: ConnectedAppServerSidecar | null = null;
   #connectPromise: Promise<ConnectedAppServerSidecar> | null = null;
   #nextProxyRequestId = 1;
+  #recentNotifications: JsonRpcMessage[] = [];
   #stopping = false;
 
   async warmup(): Promise<InitializeResponse> {
@@ -143,6 +146,7 @@ export class ElectronAppServerHost {
       (await this.#connect()).connection.transport.send(message);
     }
 
+    this.#rememberRecentNotifications(responses);
     return {
       lines: responses.map(encodeMessage),
     };
@@ -152,7 +156,12 @@ export class ElectronAppServerHost {
     request: DrainEventsRequest = {},
   ): Promise<{ lines: string[] }> {
     const connected = await this.#connect();
-    const limit = Math.max(1, Math.min(100, Math.floor(request.limit ?? 20)));
+    const limit = normalizeDrainEventsLimit(
+      request.limit,
+      request.includeRecent === true
+        ? APP_SERVER_RECENT_NOTIFICATION_LIMIT
+        : 100,
+    );
     const drained: JsonRpcMessage[] = [];
 
     for (let index = 0; index < limit; index += 1) {
@@ -163,8 +172,16 @@ export class ElectronAppServerHost {
       }
     }
 
+    this.#rememberRecentNotifications(drained);
+    const messages =
+      request.includeRecent === true
+        ? uniqueJsonRpcMessages([...this.#recentNotifications, ...drained]).slice(
+            -limit,
+          )
+        : drained;
+
     return {
-      lines: drained.map(encodeMessage),
+      lines: messages.map(encodeMessage),
     };
   }
 
@@ -200,6 +217,17 @@ export class ElectronAppServerHost {
     } finally {
       this.#connectPromise = null;
     }
+  }
+
+  #rememberRecentNotifications(messages: JsonRpcMessage[]): void {
+    const notifications = messages.filter(isJsonRpcNotification);
+    if (notifications.length === 0) {
+      return;
+    }
+    this.#recentNotifications = [
+      ...this.#recentNotifications,
+      ...notifications,
+    ].slice(-APP_SERVER_RECENT_NOTIFICATION_LIMIT);
   }
 
   async #start(): Promise<ConnectedAppServerSidecar> {
@@ -401,6 +429,62 @@ function isAppServerRequestTimeoutError(error: unknown): boolean {
     error instanceof Error &&
     error.message.includes("timed out waiting for app-server message after")
   );
+}
+
+function normalizeDrainEventsLimit(
+  value: unknown,
+  maxLimit: number,
+): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return 20;
+  }
+  return Math.max(1, Math.min(maxLimit, Math.floor(value)));
+}
+
+function uniqueJsonRpcMessages(messages: JsonRpcMessage[]): JsonRpcMessage[] {
+  const seen = new Set<string>();
+  const uniqueMessages: JsonRpcMessage[] = [];
+
+  for (const message of messages) {
+    const key = jsonRpcMessageDedupKey(message);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    uniqueMessages.push(message);
+  }
+
+  return uniqueMessages;
+}
+
+function jsonRpcMessageDedupKey(message: JsonRpcMessage): string {
+  const eventId = jsonRpcNotificationEventId(message);
+  if (eventId) {
+    return `event:${eventId}`;
+  }
+  return `message:${JSON.stringify(message)}`;
+}
+
+function jsonRpcNotificationEventId(
+  message: JsonRpcMessage,
+): string | undefined {
+  if (!isJsonRpcNotification(message)) {
+    return undefined;
+  }
+  const params = message.params;
+  if (!params || typeof params !== "object" || Array.isArray(params)) {
+    return undefined;
+  }
+  const event = (params as { event?: unknown }).event;
+  if (!event || typeof event !== "object" || Array.isArray(event)) {
+    return undefined;
+  }
+  const eventId =
+    (event as { eventId?: unknown; event_id?: unknown }).eventId ??
+    (event as { eventId?: unknown; event_id?: unknown }).event_id;
+  return typeof eventId === "string" && eventId.trim()
+    ? eventId.trim()
+    : undefined;
 }
 
 function streamingTurnStartAcceptedResponse(

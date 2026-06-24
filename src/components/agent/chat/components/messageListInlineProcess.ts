@@ -536,63 +536,12 @@ function isTimelineProcessBoundaryPart(
   );
 }
 
-function hasRunningProcessPart(parts?: Message["contentParts"]): boolean {
-  return Boolean(
-    parts?.some((part) => {
-      if (part.type === "tool_use") {
-        return part.toolCall.status === "running";
-      }
-
-      if (part.type === "action_required") {
-        return part.actionRequired.status !== "submitted";
-      }
-
-      return false;
-    }),
-  );
-}
-
-function appendOverlayAsThinkingContentPart(
-  parts: Message["contentParts"] | undefined,
-  overlayContent: string,
-): Message["contentParts"] {
-  const thinkingPart: NonNullable<Message["contentParts"]>[number] = {
-    type: "thinking",
-    text: overlayContent,
-  };
-  if (!parts?.length) {
-    return [thinkingPart];
-  }
-
-  const nextParts = [...parts];
-  const lastPart = nextParts[nextParts.length - 1];
-  if (lastPart?.type === "thinking") {
-    nextParts[nextParts.length - 1] = {
-      ...lastPart,
-      text: `${lastPart.text}\n\n${overlayContent}`,
-    };
-    return nextParts;
-  }
-
-  return [...nextParts, thinkingPart];
-}
-
 export function mergeStreamingOverlayContentParts(
   parts: Message["contentParts"] | undefined,
   overlayContent: string | null,
-  options?: {
-    holdOverlayAsProcessWhileRunning?: boolean;
-  },
 ): Message["contentParts"] | undefined {
   if (!overlayContent) {
     return parts;
-  }
-
-  if (
-    options?.holdOverlayAsProcessWhileRunning &&
-    hasRunningProcessPart(parts)
-  ) {
-    return appendOverlayAsThinkingContentPart(parts, overlayContent);
   }
 
   const textPart: NonNullable<Message["contentParts"]>[number] = {

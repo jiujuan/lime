@@ -83,7 +83,10 @@ export interface AgentAppHostLifecycleSnapshot {
   followUps?: string[];
   functions?: AgentAppHostFunctionState[];
   generatedAt: string;
+  issueCategories?: AgentAppReadinessIssueCategorySummary[];
+  primaryIssueCategory?: null | string;
   profiles?: string[];
+  publishBlocked: boolean;
   readinessStatus: string;
   rightSurface: AgentAppRightSurfaceContract;
   taskRuntime: AgentAppTaskRuntimeContract;
@@ -203,6 +206,7 @@ export interface AgentAppTaskRuntimeContract {
   enabled: boolean;
   followUps?: string[];
   outputArtifactKind?: null | string;
+  packageRootPath?: null | string;
   sampleRequestPath?: null | string;
   taskKinds?: string[];
   workerEntrypoint?: null | string;
@@ -737,6 +741,21 @@ export interface AgentSessionReviewDecisionTemplateExportResponse {
   workspaceRoot: string;
 }
 
+export interface AgentSessionRuntimeEventAppendParams {
+  runtimeEvents?: AgentSessionRuntimeEventInput[];
+  sessionId: string;
+  turnId?: null | string;
+}
+
+export interface AgentSessionRuntimeEventAppendResponse {
+  events?: AgentEvent[];
+}
+
+export interface AgentSessionRuntimeEventInput {
+  payload: unknown;
+  type: string;
+}
+
 export interface AgentSessionStartParams {
   appId: string;
   businessObjectRef?: BusinessObjectRef | null;
@@ -961,6 +980,109 @@ export interface AutomationSchedulerConfigUpdateResponse {
 
 export interface AutomationSchedulerStatusResponse {
   status: unknown;
+}
+
+export interface BrowserSessionActionExecuteParams {
+  action: string;
+  args?: unknown;
+  sessionId: string;
+}
+
+export interface BrowserSessionActionExecuteResponse {
+  action: string;
+  result?: unknown;
+  sessionId: string;
+}
+
+export interface BrowserSessionCloseResponse {
+  sessionId: string;
+  status: string;
+}
+
+export interface BrowserSessionEventItem {
+  occurredAt: string;
+  payload?: unknown;
+  sequence: number;
+  sessionId: string;
+}
+
+export interface BrowserSessionEventListParams {
+  cursor?: number | null;
+  sessionId: string;
+}
+
+export interface BrowserSessionEventListResponse {
+  events?: BrowserSessionEventItem[];
+  nextCursor: number;
+}
+
+export interface BrowserSessionIdParams {
+  sessionId: string;
+}
+
+export interface BrowserSessionOpenParams {
+  environmentPresetId?: null | string;
+  environmentPresetName?: null | string;
+  launchUrl?: null | string;
+  profileKey: string;
+  remoteDebuggingPort: number;
+  targetId?: null | string;
+}
+
+export interface BrowserSessionOpenResponse {
+  session: BrowserSessionState;
+}
+
+export interface BrowserSessionPageInfo {
+  markdown: string;
+  title: string;
+  updatedAt: string;
+  url: string;
+}
+
+export interface BrowserSessionReadResponse {
+  session: BrowserSessionState;
+}
+
+export interface BrowserSessionState {
+  connected: boolean;
+  controlMode: string;
+  createdAt: string;
+  devtoolsFrontendUrl?: null | string;
+  environmentPresetId?: null | string;
+  environmentPresetName?: null | string;
+  humanReason?: null | string;
+  lastError?: null | string;
+  lastEventAt?: null | string;
+  lastFrameAt?: null | string;
+  lastPageInfo?: BrowserSessionPageInfo | null;
+  lifecycleState: string;
+  profileKey: string;
+  remoteDebuggingPort: number;
+  sessionId: string;
+  streamMode?: null | string;
+  targetId: string;
+  targetTitle: string;
+  targetUrl: string;
+  transportKind: string;
+  wsDebuggerUrl: string;
+}
+
+export interface BrowserSessionTargetInfo {
+  devtoolsFrontendUrl?: null | string;
+  id: string;
+  targetType?: string;
+  title?: string;
+  url?: string;
+  webSocketDebuggerUrl?: null | string;
+}
+
+export interface BrowserSessionTargetListParams {
+  remoteDebuggingPort: number;
+}
+
+export interface BrowserSessionTargetListResponse {
+  targets?: BrowserSessionTargetInfo[];
 }
 
 export interface BusinessObjectRef {
@@ -3900,5 +4022,11 @@ export interface jsonRpcResponse {
 }
 
 export type requestId = number | string;
+
+export interface AgentAppReadinessIssueCategorySummary {
+  category: string;
+  codes?: string[];
+  count: number;
+}
 
 export type AgentSessionCwdFilter = string | string[];

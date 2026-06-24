@@ -1,6 +1,7 @@
 import {
   APP_SERVER_METHOD_SESSION_READ,
   ASSISTANT_DONE_TEXT,
+  CONTENT_FACTORY_PRODUCT_PROFILE_SCENARIO,
   CONTINUE_DONE_TEXT,
   CONTINUE_PROMPT,
   EXPERT_PANEL_SKILLS_RUNTIME_SCENARIO,
@@ -19,6 +20,7 @@ import {
   PLAN_PROMPT,
   PLAN_STEPS,
   RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO,
+  SESSION_ID,
   SKILLS_RUNTIME_EXPLICIT_PROMPT,
   SKILLS_RUNTIME_EXPLICIT_SCENARIO,
   SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT,
@@ -36,6 +38,7 @@ import {
   WEB_TOOLS_REASONING_PROVIDER_BACKEND,
   WEB_TOOLS_SEARCH_TOOL_CALL_ID,
 } from "./claw-chat-current-fixture-constants.mjs";
+import { runContentFactoryProductProfileScenario } from "./claw-chat-current-fixture-content-factory-product-profile.mjs";
 import {
   addExpertSkillsRuntimeSkillFromInfoPanel,
   exportExpertPanelEvidencePackFromHarnessPanel,
@@ -61,6 +64,7 @@ import { waitForGuiMcpStructuredContentCompleted } from "./claw-chat-current-fix
 import {
   inspectGuiWebToolsRenderingDebug,
   waitForGuiWebToolsRenderingCompleted,
+  waitForGuiWebToolsRenderingInProgress,
 } from "./claw-chat-current-fixture-gui-web-tools-waits.mjs";
 import {
   createExpertSkillsRuntimeSession,
@@ -100,6 +104,32 @@ import {
 } from "./claw-chat-current-fixture-backend-ledger.mjs";
 import { logStage, sanitizeJson } from "./claw-chat-current-fixture-utils.mjs";
 
+function summarizeThreadItemsForProbe(items) {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+  return items.map((item) => ({
+    id: typeof item?.id === "string" ? item.id : null,
+    type: typeof item?.type === "string" ? item.type : null,
+    phase: typeof item?.phase === "string" ? item.phase : null,
+    sequence: typeof item?.sequence === "number" ? item.sequence : null,
+    text:
+      typeof item?.text === "string"
+        ? item.text.slice(0, 120)
+        : typeof item?.message === "string"
+          ? item.message.slice(0, 120)
+          : typeof item?.content === "string"
+            ? item.content.slice(0, 120)
+            : null,
+    turnId:
+      typeof item?.turn_id === "string"
+        ? item.turn_id
+        : typeof item?.turnId === "string"
+          ? item.turnId
+          : null,
+  }));
+}
+
 export async function executeScenarioFlow({
   page,
   options,
@@ -108,7 +138,18 @@ export async function executeScenarioFlow({
   appServerRequests,
   runtimeEnv,
 }) {
-  if (options.scenario === RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO) {
+  if (options.scenario === CONTENT_FACTORY_PRODUCT_PROFILE_SCENARIO) {
+    logStage("run-content-factory-product-profile");
+    Object.assign(
+      summary,
+      await runContentFactoryProductProfileScenario({
+        page,
+        options,
+        workspace,
+        appServerRequests,
+      }),
+    );
+  } else if (options.scenario === RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO) {
     logStage("create-right-surface-visual-expert-session");
     const expertSessionCreation = await createExpertSkillsRuntimeSession(
       page,
@@ -274,6 +315,11 @@ export async function executeScenarioFlow({
       await sendPromptFromGui(page, options, WEB_TOOLS_RENDERING_PROMPT),
     );
 
+    logStage("wait-gui-web-tools-rendering-in-progress");
+    summary.guiWebToolsRenderingInProgress = sanitizeJson(
+      await waitForGuiWebToolsRenderingInProgress(page, options),
+    );
+
     logStage("wait-gui-web-tools-rendering-completed");
     try {
       summary.guiWebToolsRenderingCompleted = sanitizeJson(
@@ -300,12 +346,18 @@ export async function executeScenarioFlow({
           appServerRequests,
         );
         const serializedProbe = JSON.stringify(probe.result || {});
+        const detailItems = probe.result?.detail?.items;
+        const threadReadItems = probe.result?.detail?.thread_read?.thread_items;
         summary.readModelWebToolsRenderingFailureProbe = sanitizeJson({
-          detailItemCount: Array.isArray(probe.result?.detail?.items)
-            ? probe.result.detail.items.length
+          detailItemCount: Array.isArray(detailItems)
+            ? detailItems.length
             : null,
+          detailItems: summarizeThreadItemsForProbe(detailItems),
           includesMidThinking: serializedProbe.includes(
             WEB_TOOLS_MID_THINKING_TEXT,
+          ),
+          includesIntroText: serializedProbe.includes(
+            "我先联网核实目标页面来源。",
           ),
           includesWebSearchTool: serializedProbe.includes(
             WEB_TOOLS_SEARCH_TOOL_CALL_ID,
@@ -313,6 +365,10 @@ export async function executeScenarioFlow({
           includesWebFetchTool: serializedProbe.includes(
             WEB_TOOLS_FETCH_TOOL_CALL_ID,
           ),
+          threadReadItemCount: Array.isArray(threadReadItems)
+            ? threadReadItems.length
+            : null,
+          threadReadItems: summarizeThreadItemsForProbe(threadReadItems),
         });
       } catch (probeError) {
         summary.readModelWebToolsRenderingFailureProbe = sanitizeJson({
@@ -932,7 +988,8 @@ export async function executeScenarioFlow({
     options.scenario !== "expert-skills-runtime" &&
     options.scenario !== "expert-plaza-skills-runtime" &&
     options.scenario !== "expert-panel-skills-runtime" &&
-    options.scenario !== RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO
+    options.scenario !== RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO &&
+    options.scenario !== CONTENT_FACTORY_PRODUCT_PROFILE_SCENARIO
   ) {
     logStage("wait-gui-completed");
     summary.guiCompleted = sanitizeJson(

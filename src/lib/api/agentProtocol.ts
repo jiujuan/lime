@@ -346,6 +346,8 @@ export interface AgentActionRequiredQuestion {
 export interface AgentEventTextDelta {
   type: "text_delta";
   text: string;
+  itemId?: string;
+  phase?: string;
 }
 
 export type AgentEventTextDeltaBatchBoundary =
@@ -360,6 +362,8 @@ export interface AgentEventTextDeltaBatch {
   text: string;
   chunks: string[];
   boundary: AgentEventTextDeltaBatchBoundary;
+  itemId?: string;
+  phase?: string;
 }
 
 export interface AgentEventThreadStarted {
@@ -1188,21 +1192,31 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
         turn: event.turn as AgentThreadTurn,
       };
     case "text_delta":
-    case "message.delta":
+    case "message.delta": {
+      const payload = normalizeRecord(event.payload);
+      const source = payload ?? event;
       return {
         type: "text_delta",
-        text: pickStringField(event, "text", "delta", "message", "content") || "",
+        text:
+          pickStringField(source, "text", "delta", "message", "content") || "",
+        itemId: pickStringField(
+          source,
+          "itemId",
+          "item_id",
+          "id",
+          "messageId",
+          "message_id",
+        ),
+        phase: pickStringField(source, "phase", "messagePhase", "message_phase"),
       };
+    }
     case "text_delta_batch":
     case "message.delta_batch":
     case "message.batch": {
       const payload = normalizeRecord(event.payload);
+      const source = payload ?? event;
       const text =
-        pickStringField(event, "text", "delta", "message", "content") ||
-        (payload
-          ? pickStringField(payload, "text", "delta", "message", "content")
-          : "") ||
-        "";
+        pickStringField(source, "text", "delta", "message", "content") || "";
       const chunks = Array.isArray(event.chunks)
         ? event.chunks.filter(
             (chunk): chunk is string => typeof chunk === "string",
@@ -1218,6 +1232,15 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
         type: "text_delta_batch",
         text,
         chunks,
+        itemId: pickStringField(
+          source,
+          "itemId",
+          "item_id",
+          "id",
+          "messageId",
+          "message_id",
+        ),
+        phase: pickStringField(source, "phase", "messagePhase", "message_phase"),
         boundary:
           typeof event.boundary === "string"
             ? event.boundary

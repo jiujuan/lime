@@ -1,17 +1,23 @@
+import { Buffer } from "node:buffer";
+import { webcrypto } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { safeInvoke } from "@/lib/dev-bridge";
 import contentFactoryFixture from "@/features/agent-app/fixtures/content-factory-app.json";
 import { buildCloudReleasePackageIdentity } from "@/features/agent-app/install/cloudBootstrap";
+import { buildCloudReleaseSignaturePayload } from "@/features/agent-app/install/cloudReleaseSignature";
 import { buildAgentAppPackageCacheEntry } from "@/features/agent-app/install/packageCache";
 import { buildWorkflowRuntimeCapabilityProfile } from "@/features/agent-app/runtime/workflowRuntimeCapabilityProfile";
 import type { ShellDescriptor } from "@/features/agent-app/shell";
 import type {
+  AgentAppCloudReleaseSignatureProof,
+  AgentAppCloudReleaseSignatureTrustRoot,
   AppManifest,
   CloudBootstrapApp,
   CloudBootstrapReleaseDescriptor,
 } from "@/features/agent-app/types";
 import {
   getAgentAppCloudCatalog,
+  installCloudAgentAppRelease,
   installLocalAgentAppPackage,
   launchAgentAppShell,
   listAgentAppHostLifecycleSnapshots,
@@ -119,6 +125,60 @@ function buildShellDescriptor(): ShellDescriptor {
       packageHash: PACKAGE_HASH,
       manifestHash: MANIFEST_HASH,
       loadedAt: "2026-05-15T00:00:00.000Z",
+    },
+  };
+}
+
+async function buildSignedCloudApp(): Promise<{
+  app: CloudBootstrapApp;
+  trustRoot: AgentAppCloudReleaseSignatureTrustRoot;
+}> {
+  const app = buildCloudApp();
+  const keyPair = await webcrypto.subtle.generateKey(
+    {
+      name: "RSASSA-PKCS1-v1_5",
+      modulusLength: 2048,
+      publicExponent: new Uint8Array([1, 0, 1]),
+      hash: "SHA-256",
+    },
+    true,
+    ["sign", "verify"],
+  );
+  if (!("privateKey" in keyPair) || !("publicKey" in keyPair)) {
+    throw new Error("RSA key generation did not return a key pair");
+  }
+  const proofDraft: AgentAppCloudReleaseSignatureProof = {
+    schemaVersion: "agent-app-cloud-release-signature/v1",
+    publicKeyId: "agent-app-root-2026",
+    algorithm: "RSASSA-PKCS1-v1_5-SHA256",
+    signature: "",
+    signedAt: "2026-06-24T00:00:00.000Z",
+  };
+  const signature = await webcrypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    keyPair.privateKey,
+    new TextEncoder().encode(
+      buildCloudReleaseSignaturePayload({
+        ...app,
+        signatureProof: proofDraft,
+      }),
+    ),
+  );
+  const publicKey = await webcrypto.subtle.exportKey("spki", keyPair.publicKey);
+
+  return {
+    app: {
+      ...app,
+      signatureProof: {
+        ...proofDraft,
+        signature: Buffer.from(signature).toString("base64"),
+      },
+    },
+    trustRoot: {
+      publicKeyId: "agent-app-root-2026",
+      algorithm: "RSASSA-PKCS1-v1_5-SHA256",
+      publicKey: Buffer.from(publicKey).toString("base64"),
+      appIds: [app.appId],
     },
   };
 }
@@ -609,12 +669,22 @@ describe("agentApps API", () => {
         workerRuntimeEnabled: true,
       }),
       catalogSource: "remote",
+      signatureVerificationStatus: "verified",
     });
 
     expect(result.review).toMatchObject({
       appId: "content-factory-app",
       sourceKind: "cloud_release",
       packageVerificationStatus: "verified",
+      releaseEvidence: {
+        status: "ready",
+        sourceKind: "fetched_package",
+        catalogSource: "remote",
+        packageHashMatched: true,
+        manifestHashMatched: true,
+        blockerCodes: [],
+        warningCodes: [],
+      },
       sourceState: {
         kind: "cloud-discovered",
         canReview: true,
@@ -661,12 +731,20 @@ describe("agentApps API", () => {
         workerRuntimeEnabled: true,
       }),
       catalogSource: "remote",
+      signatureVerificationStatus: "verified",
     });
 
     expect(result.review).toMatchObject({
       appId: "content-factory-app",
       sourceKind: "cloud_release",
       packageVerificationStatus: "verified",
+      releaseEvidence: {
+        status: "ready",
+        sourceKind: "verified_cache",
+        catalogSource: "remote",
+        packageHashMatched: true,
+        manifestHashMatched: true,
+      },
       sourceState: {
         kind: "cloud-discovered",
         canReview: true,
@@ -690,6 +768,7 @@ describe("agentApps API", () => {
         workerRuntimeEnabled: true,
       }),
       catalogSource: "remote",
+      signatureVerificationStatus: "verified",
     });
 
     expect(result.review).toMatchObject({
@@ -706,9 +785,19 @@ describe("agentApps API", () => {
       packageHash: PACKAGE_HASH,
       manifestHash: MANIFEST_HASH,
       packageVerificationStatus: "verified",
+      releaseEvidence: {
+        status: "warning",
+        sourceKind: "explicit_manifest",
+        catalogSource: "remote",
+        packageHashMatched: null,
+        manifestHashMatched: null,
+        signatureVerificationStatus: "verified",
+        warningCodes: ["package_hash_unverified", "manifest_hash_unverified"],
+      },
       sourceState: {
-        kind: "cloud-discovered",
+        kind: "release-evidence-warning",
         canReview: true,
+        reason: "MANIFEST_HASH_UNVERIFIED, PACKAGE_HASH_UNVERIFIED",
       },
     });
     expect(result.state).toMatchObject({
@@ -721,6 +810,162 @@ describe("agentApps API", () => {
       },
     });
     expect(safeInvoke).not.toHaveBeenCalled();
+  });
+
+  it("审查 remote Cloud release 时应由可信根验证 signatureProof", async () => {
+    const { app, trustRoot } = await buildSignedCloudApp();
+
+    const result = await reviewCloudAgentAppRelease({
+      app,
+      packageManifest: contentFactoryFixture,
+      actualPackageHash: PACKAGE_HASH,
+      actualManifestHash: MANIFEST_HASH,
+      profile: buildWorkflowRuntimeCapabilityProfile({
+        realAdapterEnabled: true,
+        uiRuntimeEnabled: true,
+        workerRuntimeEnabled: true,
+      }),
+      catalogSource: "remote",
+      signatureTrustRoots: [trustRoot],
+      signatureCrypto: webcrypto as unknown as Crypto,
+    });
+
+    expect(result.review.releaseEvidence).toMatchObject({
+      status: "ready",
+      catalogSource: "remote",
+      signaturePolicy: "required",
+      signatureVerificationStatus: "verified",
+      packageHashMatched: true,
+      manifestHashMatched: true,
+      blockerCodes: [],
+      warningCodes: [],
+    });
+  });
+
+  it("审查 remote Cloud release 时应默认读取宿主运行时可信根", async () => {
+    const { app, trustRoot } = await buildSignedCloudApp();
+    window.__LIME_OEM_CLOUD__ = {
+      agentAppSignatureTrustRoots: [trustRoot],
+    };
+
+    const result = await reviewCloudAgentAppRelease({
+      app,
+      packageManifest: contentFactoryFixture,
+      actualPackageHash: PACKAGE_HASH,
+      actualManifestHash: MANIFEST_HASH,
+      catalogSource: "remote",
+      signatureCrypto: webcrypto as unknown as Crypto,
+    });
+
+    expect(result.review.releaseEvidence).toMatchObject({
+      status: "ready",
+      signaturePolicy: "required",
+      signatureVerificationStatus: "verified",
+      blockerCodes: [],
+      warningCodes: [],
+    });
+  });
+
+  it("审查 remote Cloud release 时签名未验证应进入 blocked evidence", async () => {
+    appServerRequestMock.mockImplementation(async (method, args) => {
+      if (method === "agentAppPackage/fetchCloud") {
+        const descriptor = (
+          args as {
+            descriptor: CloudBootstrapReleaseDescriptor;
+          }
+        ).descriptor;
+        return {
+          result: buildAgentAppPackageCacheEntry({
+            identity: descriptor.identity,
+            manifestSnapshot: contentFactoryFixture,
+            actualPackageHash: PACKAGE_HASH,
+            actualManifestHash: MANIFEST_HASH,
+            cachedAt: descriptor.loadedAt,
+          }),
+        };
+      }
+      throw new Error(`unexpected method ${method}`);
+    });
+
+    const result = await reviewCloudAgentAppRelease({
+      app: buildCloudApp(),
+      catalogSource: "remote",
+    });
+
+    expect(result.review.releaseEvidence).toMatchObject({
+      status: "blocked",
+      signaturePolicy: "required",
+      signatureVerificationStatus: "declared",
+      blockerCodes: ["signature_unverified"],
+    });
+    expect(result.review.sourceState).toMatchObject({
+      kind: "release-evidence-blocked",
+      canReview: false,
+      reason: "CLOUD_SIGNATURE_UNVERIFIED",
+    });
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "agent_app_fetch_cloud_package",
+      expect.anything(),
+    );
+  });
+
+  it("审查 remote Cloud release 时 signatureProof 缺少可信根应进入 blocked evidence", async () => {
+    const { app } = await buildSignedCloudApp();
+
+    const result = await reviewCloudAgentAppRelease({
+      app,
+      packageManifest: contentFactoryFixture,
+      actualPackageHash: PACKAGE_HASH,
+      actualManifestHash: MANIFEST_HASH,
+      catalogSource: "remote",
+      signatureTrustRoots: [],
+      signatureCrypto: webcrypto as unknown as Crypto,
+    });
+
+    expect(result.review.releaseEvidence).toMatchObject({
+      status: "blocked",
+      signaturePolicy: "required",
+      signatureVerificationStatus: "failed",
+      blockerCodes: ["signature_verification_failed"],
+    });
+    expect(result.review.sourceState).toMatchObject({
+      kind: "release-evidence-blocked",
+      canReview: false,
+      reason: "CLOUD_SIGNATURE_VERIFICATION_FAILED",
+    });
+  });
+
+  it("直接安装 remote Cloud release 时签名门禁未通过必须 fail closed", async () => {
+    appServerRequestMock.mockImplementation(async (method, args) => {
+      if (method === "agentAppPackage/fetchCloud") {
+        const descriptor = (
+          args as {
+            descriptor: CloudBootstrapReleaseDescriptor;
+          }
+        ).descriptor;
+        return {
+          result: buildAgentAppPackageCacheEntry({
+            identity: descriptor.identity,
+            manifestSnapshot: contentFactoryFixture,
+            actualPackageHash: PACKAGE_HASH,
+            actualManifestHash: MANIFEST_HASH,
+            cachedAt: descriptor.loadedAt,
+          }),
+        };
+      }
+      throw new Error(`unexpected method ${method}`);
+    });
+
+    await expect(
+      installCloudAgentAppRelease({
+        app: buildCloudApp(),
+        catalogSource: "remote",
+      }),
+    ).rejects.toThrow("did not pass release evidence gates");
+    expect(appServerRequestMock).not.toHaveBeenCalledWith(
+      "agentAppInstalled/save",
+      expect.anything(),
+    );
   });
 
   it("审查 Cloud release 时 verified cache hash mismatch 必须阻断", async () => {

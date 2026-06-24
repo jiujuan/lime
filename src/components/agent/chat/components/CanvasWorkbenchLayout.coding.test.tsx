@@ -13,6 +13,7 @@ import {
   mockListProjectGitCommits,
   mount,
   mockDestroyEmbeddedBrowserView,
+  mockListenEmbeddedBrowserViewState,
   mockListenEmbeddedBrowserViewLoadFailed,
   mockReadProjectGitDiff,
   mockMountEmbeddedBrowserView,
@@ -54,7 +55,8 @@ describe("CanvasWorkbenchLayout coding mode", () => {
   it("普通文件预览请求应切到文件内容 tab 而不是停在审查", async () => {
     const onPreviewOpenRequestHandled = vi.fn();
     const defaultPreview = {
-      selectionKey: "default-preview:outputs/international-news-analysis-2026-06-16.md",
+      selectionKey:
+        "default-preview:outputs/international-news-analysis-2026-06-16.md",
       title: "international-news-analysis-2026-06-16.md",
       content: "# 今日国际新闻分析\n\n正文内容",
       filePath: "outputs/international-news-analysis-2026-06-16.md",
@@ -642,12 +644,29 @@ describe("CanvasWorkbenchLayout coding mode", () => {
     );
     expect(mockMountEmbeddedBrowserView).toHaveBeenCalledTimes(1);
     expect(mockDestroyEmbeddedBrowserView).not.toHaveBeenCalled();
+    const stateHandler =
+      mockListenEmbeddedBrowserViewState.mock.calls.at(-1)?.[0];
     const loadFailedHandler =
       mockListenEmbeddedBrowserViewLoadFailed.mock.calls.at(-1)?.[0];
     const mountedBrowserViewId =
       mockMountEmbeddedBrowserView.mock.calls.at(-1)?.[0]?.viewId;
+    expect(stateHandler).toBeTypeOf("function");
     expect(loadFailedHandler).toBeTypeOf("function");
     expect(mountedBrowserViewId).toBeTypeOf("string");
+    act(() => {
+      stateHandler?.({
+        viewId: mountedBrowserViewId,
+        url: "https://example.com/",
+        title: "Example Domain",
+        canGoBack: false,
+        canGoForward: false,
+        isLoading: false,
+      });
+    });
+    await flushEffects();
+    expect(
+      container.querySelector('[aria-label="切换画布标签-Example Domain"]'),
+    ).not.toBeNull();
     act(() => {
       loadFailedHandler?.({
         viewId: mountedBrowserViewId,
@@ -670,7 +689,7 @@ describe("CanvasWorkbenchLayout coding mode", () => {
     clickByAriaLabel(container, "在系统浏览器打开");
     await flushEffects();
     expect(mockOpenExternalUrlWithSystemBrowser).toHaveBeenCalled();
-    clickByAriaLabel(container, "关闭工作台标签-新选项卡");
+    clickByAriaLabel(container, "关闭工作台标签-Example Domain");
     await flushEffects();
     expect(
       container.querySelector('[data-testid="canvas-workbench-panel-browser"]'),
@@ -1392,7 +1411,8 @@ describe("CanvasWorkbenchLayout coding mode", () => {
       defaultPreview: {
         selectionKey: "task:task-current",
         title: "greeting.ts",
-        content: "export function greeting() { return 'Hello Lime Workbench'; }",
+        content:
+          "export function greeting() { return 'Hello Lime Workbench'; }",
         filePath:
           ".lime/qc/code-artifact-workbench-electron-fixture/src/greeting.ts",
         absolutePath:

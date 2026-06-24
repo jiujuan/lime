@@ -129,7 +129,7 @@ export function AppUpdateEntry({
   useEffect(() => {
     let disposed = false;
 
-    void checkForUpdates()
+    void checkForUpdates({ automatic: true })
       .then((result) => {
         if (!disposed) {
           setVersionInfo(result);

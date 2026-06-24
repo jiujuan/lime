@@ -1,15 +1,10 @@
 import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 
-import { openExternalUrlWithSystemBrowser } from "@/lib/api/externalUrl";
 import { renderTool } from "./InlineToolProcessStep.testHarness";
 
-vi.mock("@/lib/api/externalUrl", () => ({
-  openExternalUrlWithSystemBrowser: vi.fn().mockResolvedValue(undefined),
-}));
-
 describe("InlineToolProcessStep web tools", () => {
-  it("WebSearch 展开后应优先展示搜索结果列表并打开 URL 预览", () => {
+  it("WebSearch 展开后应优先展示搜索结果列表并请求在右侧浏览器打开来源", () => {
     const onOpenUrlPreview = vi.fn();
     const { container } = renderTool(
       {
@@ -44,12 +39,12 @@ describe("InlineToolProcessStep web tools", () => {
 
     expect(
       document.body.querySelector(
-        '[aria-label="预览搜索结果：Xinhua world news summary at 0030 GMT, March 13"]',
+        '[aria-label="打开搜索结果：Xinhua world news summary at 0030 GMT, March 13"]',
       ),
     ).not.toBeNull();
     act(() => {
       const firstResult = document.body.querySelector(
-        '[aria-label="预览搜索结果：Xinhua world news summary at 0030 GMT, March 13"]',
+        '[aria-label="打开搜索结果：Xinhua world news summary at 0030 GMT, March 13"]',
       ) as HTMLButtonElement | null;
       firstResult?.click();
     });
@@ -58,10 +53,8 @@ describe("InlineToolProcessStep web tools", () => {
       expect.objectContaining({
         title: "Xinhua world news summary at 0030 GMT, March 13",
         url: "https://example.com/xinhua",
-        snippet: "全球要闻摘要，覆盖国际局势与市场动态。",
       }),
     );
-    expect(openExternalUrlWithSystemBrowser).not.toHaveBeenCalled();
     expect(container.textContent).toContain(
       "Friday morning news: March 13, 2026 | WORLD - wng.org",
     );
@@ -70,7 +63,7 @@ describe("InlineToolProcessStep web tools", () => {
     ).toBeNull();
   });
 
-  it("WebSearch 点击 URL 预览时应复用同组 WebFetch 正文快照", () => {
+  it("WebSearch 点击来源时应打开右侧浏览器而不是同组 WebFetch 快照预览", () => {
     const onOpenUrlPreview = vi.fn();
     const { container } = renderTool(
       {
@@ -125,7 +118,7 @@ describe("InlineToolProcessStep web tools", () => {
     });
     act(() => {
       const result = document.body.querySelector(
-        '[aria-label="预览搜索结果：Reuters World News"]',
+        '[aria-label="打开搜索结果：Reuters World News"]',
       ) as HTMLButtonElement | null;
       result?.click();
     });
@@ -134,10 +127,6 @@ describe("InlineToolProcessStep web tools", () => {
       expect.objectContaining({
         title: "Reuters World News",
         url: "https://www.reuters.com/world/",
-        snippet: "搜索结果摘要",
-        snapshotTitle: "Reuters snapshot",
-        snapshotContent: "# Reuters snapshot\n\n正文来自 WebFetch。",
-        snapshotSource: "web_fetch",
       }),
     );
   });

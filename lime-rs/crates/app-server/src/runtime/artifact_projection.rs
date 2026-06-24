@@ -1,4 +1,6 @@
+use super::artifact_document_versions;
 use super::output_refs;
+use super::product_profile_artifact_document_projection;
 use super::string_array_field;
 use super::string_field;
 use super::StoredSession;
@@ -6,6 +8,7 @@ use app_server_protocol::AgentEvent;
 use app_server_protocol::ArtifactContentStatus;
 use app_server_protocol::ArtifactSummary;
 use serde_json::{json, Map, Value};
+use std::collections::HashMap;
 use std::collections::HashSet;
 
 pub(super) fn paginate_artifact_summaries(
@@ -52,7 +55,7 @@ pub(super) fn artifact_summaries_for_turn(
     events: &[AgentEvent],
     turn_id: Option<&str>,
 ) -> Vec<ArtifactSummary> {
-    let mut seen = HashSet::new();
+    let mut index_by_ref = HashMap::new();
     let mut summaries = Vec::new();
     for event in events.iter().rev() {
         if let Some(turn_id) = turn_id {
@@ -63,12 +66,26 @@ pub(super) fn artifact_summaries_for_turn(
         for mut summary in artifact_summaries_from_event(event) {
             summary.content = None;
             summary.content_status = ArtifactContentStatus::NotRequested;
-            if seen.insert(summary.artifact_ref.clone()) {
-                summaries.push(summary);
-            }
+            upsert_artifact_summary(&mut summaries, &mut index_by_ref, summary);
         }
     }
     summaries
+}
+
+pub(super) fn upsert_artifact_summary(
+    summaries: &mut Vec<ArtifactSummary>,
+    index_by_ref: &mut HashMap<String, usize>,
+    summary: ArtifactSummary,
+) {
+    if let Some(index) = index_by_ref.get(&summary.artifact_ref).copied() {
+        artifact_document_versions::merge_artifact_document_version_history(
+            &mut summaries[index],
+            &summary,
+        );
+        return;
+    }
+    index_by_ref.insert(summary.artifact_ref.clone(), summaries.len());
+    summaries.push(summary);
 }
 
 pub(super) fn stored_artifact_summaries_for_turn(
@@ -89,7 +106,8 @@ pub(super) fn stored_artifact_summaries_for_turn(
 }
 
 pub(super) fn artifact_summaries_from_event(event: &AgentEvent) -> Vec<ArtifactSummary> {
-    let mut summaries = Vec::new();
+    let mut summaries =
+        product_profile_artifact_document_projection::artifact_summaries_from_event(event);
     if let Some(summary) = artifact_summary_from_event(event) {
         summaries.push(summary);
     }
@@ -115,17 +133,21 @@ fn artifact_summary_from_event(event: &AgentEvent) -> Option<ArtifactSummary> {
         .clone()
         .or_else(|| path.clone())
         .unwrap_or_else(|| event.event_id.clone());
-    let metadata = artifact
-        .get("metadata")
-        .cloned()
-        .or_else(|| payload.get("metadata").cloned())
-        .or_else(|| {
-            if payload.get("artifact").is_some() && artifact.is_object() {
-                Some(artifact.clone())
-            } else {
-                None
-            }
-        });
+    let metadata = artifact_metadata_with_sidecar_ref(
+        artifact
+            .get("metadata")
+            .cloned()
+            .or_else(|| payload.get("metadata").cloned())
+            .or_else(|| {
+                if payload.get("artifact").is_some() && artifact.is_object() {
+                    Some(artifact.clone())
+                } else {
+                    None
+                }
+            }),
+        artifact,
+        payload,
+    );
 
     Some(ArtifactSummary {
         artifact_ref,
@@ -145,6 +167,46 @@ fn artifact_summary_from_event(event: &AgentEvent) -> Option<ArtifactSummary> {
         content_status: ArtifactContentStatus::NotRequested,
         metadata,
     })
+}
+
+fn artifact_metadata_with_sidecar_ref(
+    metadata: Option<Value>,
+    artifact: &Value,
+    payload: &Value,
+) -> Option<Value> {
+    let sidecar_ref = artifact
+        .get("sidecarRef")
+        .or_else(|| payload.get("sidecarRef"))
+        .cloned();
+    let Some(sidecar_ref) = sidecar_ref else {
+        return metadata;
+    };
+    let Some(Value::Object(mut metadata)) = metadata else {
+        return Some(json!({
+            "sidecarRef": sidecar_ref,
+        }));
+    };
+    metadata
+        .entry("sidecarRef".to_string())
+        .or_insert(sidecar_ref);
+    copy_artifact_content_metadata_if_present(&mut metadata, "contentStatus", artifact, payload);
+    copy_artifact_content_metadata_if_present(&mut metadata, "contentBytes", artifact, payload);
+    copy_artifact_content_metadata_if_present(&mut metadata, "contentSha256", artifact, payload);
+    Some(Value::Object(metadata))
+}
+
+fn copy_artifact_content_metadata_if_present(
+    metadata: &mut Map<String, Value>,
+    key: &str,
+    artifact: &Value,
+    payload: &Value,
+) {
+    if metadata.contains_key(key) {
+        return;
+    }
+    if let Some(value) = artifact.get(key).or_else(|| payload.get(key)) {
+        metadata.insert(key.to_string(), value.clone());
+    }
 }
 
 fn artifact_ref_summaries_from_event(event: &AgentEvent) -> Vec<ArtifactSummary> {

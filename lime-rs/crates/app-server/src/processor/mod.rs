@@ -1,6 +1,7 @@
 mod agent_app;
 mod agent_session;
 mod automation;
+mod browser_session;
 mod connect;
 mod conversation_import;
 mod diagnostics;
@@ -94,6 +95,7 @@ use app_server_protocol::METHOD_AGENT_SESSION_READ;
 use app_server_protocol::METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT;
 use app_server_protocol::METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE;
 use app_server_protocol::METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT;
+use app_server_protocol::METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND;
 use app_server_protocol::METHOD_AGENT_SESSION_START;
 use app_server_protocol::METHOD_AGENT_SESSION_THREAD_RESUME;
 use app_server_protocol::METHOD_AGENT_SESSION_TOOL_INVENTORY_READ;
@@ -114,6 +116,12 @@ use app_server_protocol::METHOD_AUTOMATION_SCHEDULER_CONFIG_UPDATE;
 use app_server_protocol::METHOD_AUTOMATION_SCHEDULER_STATUS;
 use app_server_protocol::METHOD_AUTOMATION_SCHEDULE_PREVIEW;
 use app_server_protocol::METHOD_AUTOMATION_SCHEDULE_VALIDATE;
+use app_server_protocol::METHOD_BROWSER_SESSION_ACTION_EXECUTE;
+use app_server_protocol::METHOD_BROWSER_SESSION_CLOSE;
+use app_server_protocol::METHOD_BROWSER_SESSION_EVENT_LIST;
+use app_server_protocol::METHOD_BROWSER_SESSION_OPEN;
+use app_server_protocol::METHOD_BROWSER_SESSION_READ;
+use app_server_protocol::METHOD_BROWSER_SESSION_TARGET_LIST;
 use app_server_protocol::METHOD_CAPABILITY_LIST;
 use app_server_protocol::METHOD_CONNECT_CALLBACK_SEND;
 use app_server_protocol::METHOD_CONNECT_DEEP_LINK_RESOLVE;
@@ -751,6 +759,19 @@ impl RequestProcessor {
                 self.handle_workspace_right_surface_pending_dismiss_impl(params)
                     .await
             }
+            METHOD_BROWSER_SESSION_TARGET_LIST => {
+                self.handle_browser_session_target_list_impl(params).await
+            }
+            METHOD_BROWSER_SESSION_OPEN => self.handle_browser_session_open_impl(params).await,
+            METHOD_BROWSER_SESSION_READ => self.handle_browser_session_read_impl(params).await,
+            METHOD_BROWSER_SESSION_CLOSE => self.handle_browser_session_close_impl(params).await,
+            METHOD_BROWSER_SESSION_EVENT_LIST => {
+                self.handle_browser_session_event_list_impl(params).await
+            }
+            METHOD_BROWSER_SESSION_ACTION_EXECUTE => {
+                self.handle_browser_session_action_execute_impl(params)
+                    .await
+            }
             METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT => {
                 self.handle_agent_app_local_package_inspect_impl(params)
                     .await
@@ -999,6 +1020,9 @@ impl RequestProcessor {
             METHOD_AGENT_SESSION_TURN_CANCEL => self.handle_turn_cancel(params).await,
             METHOD_AGENT_SESSION_ACTION_REPLAY => self.handle_action_replay(params).await,
             METHOD_AGENT_SESSION_ACTION_RESPOND => self.handle_action_respond(params).await,
+            METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND => {
+                self.handle_runtime_events_append_impl(params).await
+            }
             METHOD_AGENT_SESSION_TOOL_INVENTORY_READ => {
                 self.handle_tool_inventory_read_impl(params).await
             }

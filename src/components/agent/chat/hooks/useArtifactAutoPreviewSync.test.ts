@@ -71,6 +71,44 @@ describe("useArtifactAutoPreviewSync helpers", () => {
     expect(merged?.meta.writePhase).toBe("streaming");
   });
 
+  it("读取到 App Server metadata 后应把版本链证据合并回 artifact", () => {
+    const artifact = createArtifact({
+      status: "complete",
+      content: "{\"schemaVersion\":\"artifact_document.v1\"}",
+      meta: {
+        filePath: ".app-server/artifacts/report.json",
+        writePhase: "completed",
+      },
+    });
+
+    const merged = mergePreviewContentIntoArtifact(artifact, {
+      artifactId: "artifact-document:report",
+      artifactRef: "artifact-report",
+      path: ".app-server/artifacts/report.json",
+      content: "{\"schemaVersion\":\"artifact_document.v1\"}",
+      title: "Report",
+      metadata: {
+        artifactDocumentId: "artifact-document:report",
+        artifactVersionId: "artifact-document:report:v2",
+        artifactVersionNo: 2,
+      },
+    });
+
+    expect(merged).not.toBeNull();
+    expect(merged?.content).toBe("{\"schemaVersion\":\"artifact_document.v1\"}");
+    expect(merged?.status).toBe("complete");
+    expect(merged?.meta).toMatchObject({
+      artifactId: "artifact-document:report",
+      artifactRef: "artifact-report",
+      appServerArtifactRef: "artifact-report",
+      appServerArtifactTitle: "Report",
+      artifactDocumentId: "artifact-document:report",
+      artifactVersionId: "artifact-document:report:v2",
+      artifactVersionNo: 2,
+      writePhase: "completed",
+    });
+  });
+
   it("已有更长内容时不应被更短的 preview 回退覆盖", () => {
     const artifact = createArtifact({
       status: "streaming",

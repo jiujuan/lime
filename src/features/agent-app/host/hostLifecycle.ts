@@ -87,6 +87,7 @@ export interface AgentAppRightSurfaceContract {
 
 export interface AgentAppTaskRuntimeContract {
   enabled: boolean;
+  packageRootPath: string | null;
   workerEntrypoint: string | null;
   contractPath: string | null;
   sampleRequestPath: string | null;
@@ -96,6 +97,12 @@ export interface AgentAppTaskRuntimeContract {
   directFilesystemAccess: boolean;
   blockers: string[];
   followUps: string[];
+}
+
+export interface AgentAppHostLifecycleIssueCategorySummary {
+  category: string;
+  count: number;
+  codes: string[];
 }
 
 export interface AgentAppHostLifecycleSnapshot {
@@ -109,6 +116,9 @@ export interface AgentAppHostLifecycleSnapshot {
   functions: AgentAppHostFunctionState[];
   blockers: string[];
   followUps: string[];
+  publishBlocked?: boolean;
+  primaryIssueCategory?: string | null;
+  issueCategories?: AgentAppHostLifecycleIssueCategorySummary[];
   generatedAt: string;
 }
 
@@ -244,6 +254,7 @@ export function buildAgentAppTaskRuntimeContract(
 
   return {
     enabled,
+    packageRootPath: null,
     workerEntrypoint,
     contractPath,
     sampleRequestPath,
@@ -254,8 +265,8 @@ export function buildAgentAppTaskRuntimeContract(
     blockers,
     followUps: enabled
       ? [
-          "接入 App Server Agent App task worker executor。",
           "补 worker 输出到 ArtifactDocument / Product Workspace 版本链。",
+          "补 worker 执行 evidence、超时 / 失败分类和发布签名门禁。",
         ]
       : ["需要声明 runtimePackage.worker 或 agentRuntime.worker 后才能运行后台任务。"],
   };

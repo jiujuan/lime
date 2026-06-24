@@ -202,13 +202,13 @@ function WebSearchPreviewProcessRow({
   groupMarker,
   sectionTitle,
   items,
-  onOpenUrlPreview,
+  onOpenItem,
 }: {
   entry: ToolEntry;
   groupMarker: string;
   sectionTitle: string;
   items: SearchResultPreviewItem[];
-  onOpenUrlPreview: (item: SearchResultPreviewItem) => void;
+  onOpenItem?: (item: SearchResultPreviewItem) => void | Promise<void>;
 }) {
   return (
     <WebRetrievalProcessRow
@@ -218,7 +218,7 @@ function WebSearchPreviewProcessRow({
     >
       <SearchResultPreviewList
         items={items}
-        onOpenItem={onOpenUrlPreview}
+        onOpenItem={onOpenItem}
         popoverSide="bottom"
         popoverAlign="start"
         className="max-w-2xl"
@@ -266,11 +266,9 @@ export function StreamingWebSearchProcessTimeline({
 }: WebSearchTimelineProps): React.ReactNode {
   const previewItemsByToolId = buildSearchPreviewItemsByToolId(entries);
   const shouldRenderTimeline =
-    Boolean(onOpenUrlPreview) &&
-    previewItemsByToolId.size > 0 &&
-    hasNonToolEntries;
+    previewItemsByToolId.size > 0 && hasNonToolEntries;
 
-  if (shouldRenderTimeline && onOpenUrlPreview) {
+  if (shouldRenderTimeline) {
     return (
       <div className="space-y-1">
         {entries.map((entry, index) => {
@@ -280,7 +278,7 @@ export function StreamingWebSearchProcessTimeline({
             isUnifiedWebSearchToolName(entry.toolCall.name)
           ) {
             const items = previewItemsByToolId.get(entry.id);
-            if (items && items.length > 0) {
+            if (items && items.length > 0 && onOpenUrlPreview) {
               return (
                 <WebSearchPreviewProcessRow
                   key={entry.id}
@@ -288,7 +286,7 @@ export function StreamingWebSearchProcessTimeline({
                   groupMarker={groupMarker}
                   sectionTitle={resolveSectionTitle("web_search_sources")}
                   items={items}
-                  onOpenUrlPreview={onOpenUrlPreview}
+                  onOpenItem={onOpenUrlPreview}
                 />
               );
             }
@@ -317,11 +315,7 @@ export function StreamingWebSearchProcessTimeline({
     );
   }
 
-  if (
-    onOpenUrlPreview &&
-    previewItemsByToolId.size > 0 &&
-    !hasNonToolEntries
-  ) {
+  if (onOpenUrlPreview && previewItemsByToolId.size > 0 && !hasNonToolEntries) {
     const previewItems = Array.from(previewItemsByToolId.values()).flat();
     return (
       <div className="space-y-3">

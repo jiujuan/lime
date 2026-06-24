@@ -27,6 +27,7 @@
 - 参考运行时主链总计划：`internal/exec-plans/upstream-runtime-alignment-plan.md`
 - 参考运行时主链进度日志：`internal/exec-plans/upstream-runtime-alignment-progress.md`
 - Agent Runtime 单一投影入口收口计划：`internal/exec-plans/agent-runtime-single-projection-entry-plan.md`
+- Claw Streaming Rendering Codex 对齐重构计划：`internal/exec-plans/claw-streaming-rendering-codex-refactor-plan.md`
 - 生产命令 current 迁移计划：`internal/exec-plans/production-command-current-migration-plan.md`
 - Agent App uninstall current UI 进度：`internal/exec-plans/agent-app-uninstall-current-ui-progress.md`
 - P16 Diagnostics current fail-closed 进度：`internal/exec-plans/p16-diagnostics-current-fail-closed-progress.md`
@@ -35,6 +36,7 @@
 - Provider 模型能力 taxonomy 进度日志：`internal/exec-plans/provider-model-taxonomy-progress.md`
 - MCP 现代化进度：`internal/exec-plans/mcp-modernization-progress.md`
 - Right Surface 统一承载实施进度：`internal/exec-plans/right-surface-implementation-progress.md`
+- Browser Runtime / Right Surface 骨架实施计划：`internal/exec-plans/browser-runtime-right-surface-plan.md`
 - Lime 多模态运行合同实施计划：`internal/exec-plans/multimodal-runtime-contract-plan.md`
 - 云端套餐与支付边界收口计划：`internal/exec-plans/cloud-commerce-user-center-boundary.md`
 - `@` 命令本地执行纠偏计划：`internal/exec-plans/at-command-local-execution-alignment-plan.md`

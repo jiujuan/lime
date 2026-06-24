@@ -5,7 +5,10 @@ import {
   getClientAgentApps,
   submitClientAgentAppRegistrationCode,
 } from "./oemCloudControlPlane";
-import { resolveOemCloudRuntimeContext } from "./oemCloudRuntime";
+import {
+  resolveOemCloudAgentAppSignatureTrustRoots,
+  resolveOemCloudRuntimeContext,
+} from "./oemCloudRuntime";
 import contentFactoryFixture from "../../features/agent-app/fixtures/content-factory-app.json";
 import {
   AgentAppCloudBootstrapError,
@@ -37,11 +40,18 @@ import {
   buildLocalAgentAppSourceState,
   type AgentAppInstallReview,
 } from "../../features/agent-app/install/installReview";
+import { buildCloudReleaseEvidence } from "../../features/agent-app/install/cloudReleaseEvidence";
+import { verifyCloudReleaseSignature } from "../../features/agent-app/install/cloudReleaseSignature";
+import type {
+  AgentAppCloudReleaseSignaturePolicy,
+  AgentAppCloudReleaseSignatureVerificationStatus,
+} from "../../features/agent-app/install/cloudReleaseEvidence";
 import type {
   AppManifest,
   CloudBootstrapApp,
   CloudBootstrapPayload,
   CloudBootstrapReleaseDescriptor,
+  AgentAppCloudReleaseSignatureTrustRoot,
   HostCapabilityProfile,
   InstalledAgentAppState,
   PackageSourceKind,
@@ -115,6 +125,10 @@ export interface AgentAppCloudReleasePackageAcquisitionOptions {
   packageManifest?: unknown;
   actualPackageHash?: string;
   actualManifestHash?: string;
+  signaturePolicy?: AgentAppCloudReleaseSignaturePolicy;
+  signatureVerificationStatus?: AgentAppCloudReleaseSignatureVerificationStatus;
+  signatureTrustRoots?: AgentAppCloudReleaseSignatureTrustRoot[];
+  signatureCrypto?: Pick<Crypto, "subtle">;
   packageCacheEntry?: AgentAppPackageCacheEntry;
   resolveCachedPackage?: (
     descriptor: CloudBootstrapReleaseDescriptor,
@@ -1028,6 +1042,10 @@ export async function installCloudAgentAppRelease(params: {
   packageManifest?: unknown;
   actualPackageHash?: string;
   actualManifestHash?: string;
+  signaturePolicy?: AgentAppCloudReleaseSignaturePolicy;
+  signatureVerificationStatus?: AgentAppCloudReleaseSignatureVerificationStatus;
+  signatureTrustRoots?: AgentAppCloudReleaseSignatureTrustRoot[];
+  signatureCrypto?: Pick<Crypto, "subtle">;
   packageCacheEntry?: AgentAppPackageCacheEntry;
   resolveCachedPackage?: AgentAppCloudReleasePackageAcquisitionOptions["resolveCachedPackage"];
   fetchCloudPackage?: AgentAppCloudReleasePackageAcquisitionOptions["fetchCloudPackage"];
@@ -1035,6 +1053,11 @@ export async function installCloudAgentAppRelease(params: {
   profile?: HostCapabilityProfile;
 }): Promise<InstalledAgentAppState> {
   const result = await reviewCloudAgentAppRelease(params);
+  if (result.review.releaseEvidence?.status === "blocked") {
+    throw new AgentAppCloudBootstrapError(
+      `Cloud release ${params.app.appId}@${params.app.version} did not pass release evidence gates: ${result.review.releaseEvidence.blockerCodes.join(", ")}`,
+    );
+  }
   return saveInstalledAgentAppState({ state: result.state });
 }
 
@@ -1105,6 +1128,10 @@ export async function reviewCloudAgentAppRelease(params: {
   packageManifest?: unknown;
   actualPackageHash?: string;
   actualManifestHash?: string;
+  signaturePolicy?: AgentAppCloudReleaseSignaturePolicy;
+  signatureVerificationStatus?: AgentAppCloudReleaseSignatureVerificationStatus;
+  signatureTrustRoots?: AgentAppCloudReleaseSignatureTrustRoot[];
+  signatureCrypto?: Pick<Crypto, "subtle">;
   packageCacheEntry?: AgentAppPackageCacheEntry;
   resolveCachedPackage?: AgentAppCloudReleasePackageAcquisitionOptions["resolveCachedPackage"];
   fetchCloudPackage?: AgentAppCloudReleasePackageAcquisitionOptions["fetchCloudPackage"];
@@ -1124,6 +1151,27 @@ export async function reviewCloudAgentAppRelease(params: {
   if (verifiedPackage.verification.status !== "verified") {
     throw new AgentAppCloudBootstrapError(verifiedPackage.verification.message);
   }
+  const signatureVerificationStatus =
+    params.signatureVerificationStatus ??
+    (await verifyCloudReleaseSignature({
+      app: params.app,
+      trustRoots:
+        params.signatureTrustRoots ??
+        resolveOemCloudAgentAppSignatureTrustRoots(),
+      crypto: params.signatureCrypto,
+    }));
+  const releaseEvidence = buildCloudReleaseEvidence({
+    app: params.app,
+    catalogSource: params.catalogSource ?? "seeded",
+    sourceKind: acquiredPackage.sourceKind,
+    actualPackageHash: acquiredPackage.actualPackageHash,
+    actualManifestHash: acquiredPackage.actualManifestHash,
+    signaturePolicy:
+      params.signaturePolicy ??
+      (params.catalogSource === "remote" ? "required" : "optional"),
+    signatureVerificationStatus,
+    packageVerificationStatus: verifiedPackage.verification.status,
+  });
   const setupPreview = buildCloudBootstrapInstalledAppPreview({
     app: params.app,
     packageManifest: acquiredPackage.packageManifest,
@@ -1153,11 +1201,13 @@ export async function reviewCloudAgentAppRelease(params: {
   return {
     review: buildAgentAppInstallReview({
       preview,
+      releaseEvidence,
       packageVerificationStatus: verifiedPackage.verification.status,
       sourceState: buildCloudAgentAppSourceState({
         app: params.app,
         catalogSource: params.catalogSource ?? "seeded",
         installed: params.installed ?? [],
+        releaseEvidence,
       }),
       generatedAt: preview.identity.loadedAt,
     }),

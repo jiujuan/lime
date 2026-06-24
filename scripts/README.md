@@ -111,6 +111,16 @@ App Server release manifest 与 sidecar smoke 脚本已迁到 `scripts/app-serve
 
 新增 App Server 脚本继续进入 `scripts/app-server/` 或复用现有 App Server npm scripts；涉及 Electron packaged sidecar / release asset 的脚本仍按 Electron / release 批次单独迁移。
 
+### Browser Runtime 脚本
+
+`npm run smoke:browser-runtime` 是既有根 smoke 入口，当前只保留为稳定 npm script。它已迁到 `app_server_handle_json_lines -> browserSession/*` App Server current 主链，不再调用 `launch_browser_session`、`close_chrome_profile_session` 或旧 Tauri / Electron browser runtime facade。真实运行前必须先启动 Electron DevBridge 和带 CDP 端口的 Chrome / Chromium，例如：
+
+```bash
+npm run smoke:browser-runtime -- --remote-debugging-port 9222
+```
+
+后续新增 Browser 脚本默认进入 `scripts/browser/` 或复用现有 npm script；共享实现进入 `scripts/lib/`。
+
 ### MCP 脚本
 
 MCP current 使用链路 smoke 位于 `scripts/mcp/`。对外继续使用 `package.json` 里的稳定入口：

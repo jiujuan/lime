@@ -135,6 +135,14 @@ describe("electron/ipcChannels", () => {
     );
     expect(isElectronHostCommand("embedded_browser_view_navigate")).toBe(true);
     expect(isElectronHostCommand("embedded_browser_view_reload")).toBe(true);
+    expect(isElectronHostCommand("embedded_browser_view_stop")).toBe(true);
+    expect(isElectronHostCommand("embedded_browser_view_find_in_page")).toBe(
+      true,
+    );
+    expect(
+      isElectronHostCommand("embedded_browser_view_stop_find_in_page"),
+    ).toBe(true);
+    expect(isElectronHostCommand("embedded_browser_view_set_zoom")).toBe(true);
     expect(isElectronHostCommand("embedded_browser_view_go_back")).toBe(true);
     expect(isElectronHostCommand("embedded_browser_view_go_forward")).toBe(
       true,

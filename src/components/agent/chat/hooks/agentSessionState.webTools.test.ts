@@ -192,6 +192,13 @@ describe("agentSessionState WebTools hydrate", () => {
           {
             type: "text",
             text: "我先联网核实目标页面来源。",
+            metadata: {
+              source: "agent_text_delta",
+              itemId: "commentary-web-tools-current",
+              phase: "commentary",
+              sequence: 1,
+              turnId,
+            },
           },
           {
             type: "tool_use",
@@ -269,6 +276,18 @@ describe("agentSessionState WebTools hydrate", () => {
         }),
       ],
       items: [
+        createItem({
+          id: "commentary-web-tools-current",
+          type: "agent_message",
+          turn_id: turnId,
+          sequence: 1,
+          text: "我先联网核实目标页面来源。",
+          phase: "commentary",
+          status: "completed",
+          started_at: "2026-06-20T13:00:00.500Z",
+          completed_at: "2026-06-20T13:00:00.800Z",
+          updated_at: "2026-06-20T13:00:00.800Z",
+        } as Partial<AgentThreadItem>),
         createItem({
           id: "tool-search-current",
           type: "tool_call",
@@ -364,6 +383,7 @@ describe("agentSessionState WebTools hydrate", () => {
       "local-assistant-web-tools-current",
     );
     expect(renderGroup?.timeline?.items.map((item) => item.id)).toEqual([
+      "commentary-web-tools-current",
       "tool-search-current",
       "reasoning-web-tools-current",
       "tool-fetch-current",

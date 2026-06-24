@@ -1,4 +1,5 @@
 import { toast } from "sonner";
+import type { AgentThreadItem } from "@/lib/api/agentProtocol";
 import { logAgentDebug } from "@/lib/agentDebug";
 import { updateMessageArtifactsStatus } from "../utils/messageArtifacts";
 import {
@@ -67,9 +68,8 @@ import {
   buildAgentStreamThinkingDeltaMessagePatch,
   buildAgentStreamThinkingDeltaPreApplyPlan,
 } from "./agentStreamThinkingDeltaController";
-import {
-  isPersistedReasoningContentPart,
-} from "./agentStreamReasoningContentSync";
+import { syncAssistantAgentMessageContentPartFromThreadItem } from "./agentStreamAgentMessageContentSync";
+import { isPersistedReasoningContentPart } from "./agentStreamReasoningContentSync";
 import { isRuntimePermissionConfirmationWaitMessage } from "../utils/runtimeActionConfirmation";
 import { buildAgentUiProjectionEvents } from "../projection/agentUiEventProjection";
 import { recordAgentUiProjectionEvents } from "../projection/conversationProjectionStore";
@@ -99,6 +99,18 @@ import {
   sequenceFromAgentEvent,
   stringifySubmittedActionResponse,
 } from "./agentStreamRuntimeHandlerUtils";
+import {
+  noteActiveFinalTextSegment,
+  resolveTextSegmentFinalEligibility,
+  shouldRouteTextDeltaToFinalOverlay,
+  shouldSuppressLegacyTextDeltaAfterProcessBoundary,
+  type TextDeltaAgentEvent,
+} from "./agentStreamTextDeltaLifecycle";
+
+function normalizeOptionalText(value?: string | null): string | null {
+  const normalized = value?.trim();
+  return normalized ? normalized : null;
+}
 
 export function handleTurnStreamEvent({
   data,
@@ -213,6 +225,224 @@ export function handleTurnStreamEvent({
     setThreadItems,
     setThreadTurns,
   };
+  const syncStreamedAgentMessageContentParts = () => {
+    const items = requestState.streamedAgentMessageItemsByItemId;
+    if (!items || items.size === 0) {
+      return;
+    }
+    const threadItems = getThreadItems?.() ?? [];
+    for (const item of items.values()) {
+      syncAssistantAgentMessageContentPartFromThreadItem({
+        assistantMsgId,
+        item,
+        threadItems,
+        setMessages,
+      });
+    }
+  };
+  const noteProcessEventSequence = (sequence: number | null | undefined) => {
+    if (typeof sequence !== "number" || !Number.isFinite(sequence)) {
+      return;
+    }
+    requestState.maxProcessEventSequence = Math.max(
+      requestState.maxProcessEventSequence ?? Number.NEGATIVE_INFINITY,
+      sequence,
+    );
+    syncStreamedAgentMessageContentParts();
+  };
+  const noteFinalAnswerRequiredProcessBoundary = (
+    sequence: number | null | undefined,
+  ) => {
+    const processSequence =
+      typeof sequence === "number" && Number.isFinite(sequence)
+        ? sequence
+        : null;
+    requestState.hasFinalAnswerRequiredProcessBoundary = true;
+    if (
+      processSequence !== null &&
+      typeof requestState.latestAssistantTextEventSequence === "number" &&
+      processSequence < requestState.latestAssistantTextEventSequence
+    ) {
+      requestState.hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary =
+        true;
+    } else {
+      requestState.hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary =
+        false;
+    }
+    if (processSequence === null) {
+      return;
+    }
+    requestState.maxFinalAnswerRequiredProcessEventSequence = Math.max(
+      requestState.maxFinalAnswerRequiredProcessEventSequence ??
+        Number.NEGATIVE_INFINITY,
+      processSequence,
+    );
+    noteProcessEventSequence(processSequence);
+  };
+  const noteTextEventBeforeAppend = (event: TextDeltaAgentEvent) => {
+    const sequence = sequenceFromAgentEvent(event);
+    const itemId = normalizeOptionalText(event.itemId);
+    const phase = normalizeOptionalText(event.phase);
+    const turnId = normalizeOptionalText(event.turn_id);
+    const eventSequence =
+      typeof sequence === "number" && Number.isFinite(sequence)
+        ? sequence
+        : null;
+    const activeItemId = normalizeOptionalText(
+      requestState.activeTextSegmentItemId,
+    );
+    const activePhase = normalizeOptionalText(
+      requestState.activeTextSegmentPhase,
+    );
+    const activeTurnId = normalizeOptionalText(
+      requestState.activeTextSegmentTurnId,
+    );
+    const eligibility = resolveTextSegmentFinalEligibility(event);
+    const activeEligibility =
+      requestState.activeTextSegmentFinalEligibility ?? null;
+    if (
+      (activeItemId && itemId && activeItemId !== itemId) ||
+      (activePhase && phase && activePhase !== phase) ||
+      (activeTurnId && turnId && activeTurnId !== turnId) ||
+      (activeEligibility &&
+        eligibility &&
+        activeEligibility !== eligibility)
+    ) {
+      commitRenderedTextBeforeProcessPart();
+    }
+    noteActiveFinalTextSegment({ event, requestState });
+    if (eventSequence !== null) {
+      requestState.latestAssistantTextEventSequence = Math.max(
+        requestState.latestAssistantTextEventSequence ??
+          Number.NEGATIVE_INFINITY,
+        eventSequence,
+      );
+      const activeTextSequence = requestState.activeTextSegmentSequence;
+      const maxProcessSequence = requestState.maxProcessEventSequence;
+      if (
+        typeof activeTextSequence === "number" &&
+        typeof maxProcessSequence === "number" &&
+        activeTextSequence < maxProcessSequence &&
+        eventSequence > maxProcessSequence
+      ) {
+        commitRenderedTextBeforeProcessPart();
+      }
+      if (typeof requestState.activeTextSegmentSequence !== "number") {
+        requestState.activeTextSegmentSequence = eventSequence;
+      }
+    }
+    if (!requestState.activeTextSegmentItemId && itemId) {
+      requestState.activeTextSegmentItemId = itemId;
+    }
+    if (!requestState.activeTextSegmentPhase && phase) {
+      requestState.activeTextSegmentPhase = phase;
+    }
+    if (!requestState.activeTextSegmentTurnId && turnId) {
+      requestState.activeTextSegmentTurnId = turnId;
+    }
+    if (!requestState.hasFinalAnswerRequiredProcessBoundary) {
+      return;
+    }
+    const maxReplyProcessSequence =
+      requestState.maxFinalAnswerRequiredProcessEventSequence;
+    if (
+      eventSequence !== null &&
+      typeof maxReplyProcessSequence === "number" &&
+      eventSequence <= maxReplyProcessSequence
+    ) {
+      return;
+    }
+    requestState.hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary =
+      true;
+  };
+  const upsertStructuredAgentMessageDeltaItem = (
+    event: TextDeltaAgentEvent,
+    options: { textDelta?: string } = {},
+  ): boolean => {
+    const textDelta = options.textDelta ?? event.text;
+    if (!textDelta) {
+      return true;
+    }
+    const itemId =
+      normalizeOptionalText(event.itemId) ||
+      normalizeOptionalText(event.event_id);
+    const turnId =
+      normalizeOptionalText(event.turn_id) ||
+      normalizeOptionalText(requestState.currentTurnId) ||
+      normalizeOptionalText(requestState.queuedTurnId);
+    if (!itemId || !turnId) {
+      return true;
+    }
+
+    const textByItem =
+      requestState.streamedAgentMessageTextByItemId ??
+      new Map<string, string>();
+    requestState.streamedAgentMessageTextByItemId = textByItem;
+    const nextText = appendTextWithOverlapFallback(
+      textByItem.get(itemId) || "",
+      textDelta,
+    );
+    textByItem.set(itemId, nextText);
+
+    const now = event.timestamp || new Date().toISOString();
+    const sequence = sequenceFromAgentEvent(event) ?? Number.MAX_SAFE_INTEGER;
+    const item = {
+      id: itemId,
+      thread_id:
+        normalizeOptionalText(event.thread_id) ||
+        normalizeOptionalText(event.session_id) ||
+        activeSessionId,
+      turn_id: turnId,
+      sequence,
+      status: "in_progress" as const,
+      started_at: now,
+      updated_at: now,
+      type: "agent_message" as const,
+      text: nextText,
+      ...(event.phase ? { phase: event.phase } : {}),
+      metadata: {
+        source: "agent_text_delta",
+        ...(event.itemId ? { itemId: event.itemId } : {}),
+        ...(event.phase ? { phase: event.phase } : {}),
+      },
+    };
+
+    const itemsByItemId =
+      requestState.streamedAgentMessageItemsByItemId ??
+      new Map<string, AgentThreadItem>();
+    requestState.streamedAgentMessageItemsByItemId = itemsByItemId;
+    itemsByItemId.set(itemId, item);
+    logAgentDebug(
+      "AgentStream",
+      "nonFinalTextDelta",
+      {
+        eventName,
+        itemId,
+        phase: event.phase ?? null,
+        sequence,
+        sessionId: activeSessionId,
+        textLength: nextText.length,
+        turnId,
+      },
+      {
+        dedupeKey: `${eventName}:structuredAgentMessageTextDelta:${itemId}:${sequence}:${nextText.length}`,
+      },
+    );
+
+    bindAssistantMessageToRuntimeTurn(setMessages, assistantMsgId, turnId);
+    setThreadItems((prev) =>
+      upsertThreadItemState(removeThreadItemState(prev, pendingItemKey), item),
+    );
+    if (normalizeOptionalText(event.itemId)) {
+      syncAssistantAgentMessageContentPartFromThreadItem({
+        assistantMsgId,
+        item,
+        threadItems: getThreadItems?.(),
+        setMessages,
+      });
+    }
+    return true;
+  };
 
   switch (data.type) {
     case "message":
@@ -270,6 +500,8 @@ export function handleTurnStreamEvent({
         resetStreamedReasoningSegment(requestState);
       }
       if (data.item.type === "tool_call" || data.item.type === "reasoning") {
+        noteFinalAnswerRequiredProcessBoundary(sequenceFromAgentEvent(data));
+        noteFinalAnswerRequiredProcessBoundary(data.item.sequence);
         commitRenderedTextBeforeProcessPart();
       }
       handleAgentStreamThreadItemLifecycleEvent({
@@ -288,6 +520,8 @@ export function handleTurnStreamEvent({
         resetStreamedReasoningSegment(requestState);
       }
       if (data.item.type === "tool_call" || data.item.type === "reasoning") {
+        noteFinalAnswerRequiredProcessBoundary(sequenceFromAgentEvent(data));
+        noteFinalAnswerRequiredProcessBoundary(data.item.sequence);
         commitRenderedTextBeforeProcessPart();
       }
       if (
@@ -454,6 +688,8 @@ export function handleTurnStreamEvent({
     case "thinking_delta":
     case "reasoning_delta":
       {
+        noteFinalAnswerRequiredProcessBoundary(sequenceFromAgentEvent(data));
+        commitRenderedTextBeforeProcessPart();
         const reasoningText =
           data.type === "reasoning_delta"
             ? data.text || data.delta || ""
@@ -536,6 +772,11 @@ export function handleTurnStreamEvent({
 
     case "reasoning_started":
     case "reasoning_final":
+      noteFinalAnswerRequiredProcessBoundary(sequenceFromAgentEvent(data));
+      commitRenderedTextBeforeProcessPart();
+      activateStream();
+      break;
+
     case "reasoning_ended":
       activateStream();
       break;
@@ -544,6 +785,7 @@ export function handleTurnStreamEvent({
     case "plan_final": {
       activateStream();
       clearOptimisticItem();
+      noteProcessEventSequence(sequenceFromAgentEvent(data));
       commitRenderedTextBeforeProcessPart();
       const now = new Date().toISOString();
       const planItem = buildAgentStreamPlanThreadItem({
@@ -569,6 +811,25 @@ export function handleTurnStreamEvent({
     case "text_delta_batch": {
       activateStream();
       clearOptimisticItem();
+      const shouldRouteToFinalOverlay = shouldRouteTextDeltaToFinalOverlay({
+        event: data,
+        requestState,
+      });
+      if (!shouldRouteToFinalOverlay) {
+        if (
+          shouldSuppressLegacyTextDeltaAfterProcessBoundary({
+            event: data,
+            requestState,
+          })
+        ) {
+          commitRenderedTextBeforeProcessPart();
+          break;
+        }
+        noteProcessEventSequence(sequenceFromAgentEvent(data));
+        commitRenderedTextBeforeProcessPart();
+        upsertStructuredAgentMessageDeltaItem(data);
+        break;
+      }
       if (shouldPreserveAssistantContent) {
         break;
       }
@@ -580,6 +841,9 @@ export function handleTurnStreamEvent({
           replayOffset: requestState.prefilledMessageSnapshotReplayOffset,
         });
         visibleTextDelta = visibleDelta.textDelta;
+        if (visibleTextDelta) {
+          noteTextEventBeforeAppend(data);
+        }
         const textDeltaPlan = buildAgentStreamTextDeltaApplyPlan({
           activeSessionId,
           accumulatedContent: requestState.accumulatedContent,
@@ -619,6 +883,14 @@ export function handleTurnStreamEvent({
         }
         requestState.accumulatedContent = textDeltaPlan.nextAccumulatedContent;
       }
+      const isStructuredFinalDelta =
+        resolveTextSegmentFinalEligibility(data) === "explicit_final" &&
+        Boolean(normalizeOptionalText(data.itemId));
+      if (visibleTextDelta && isStructuredFinalDelta) {
+        upsertStructuredAgentMessageDeltaItem(data, {
+          textDelta: visibleTextDelta,
+        });
+      }
       if (visibleTextDelta) {
         if (
           !surfaceThinkingDeltas &&
@@ -651,6 +923,10 @@ export function handleTurnStreamEvent({
         );
         playTypewriterSound();
       }
+      if (isStructuredFinalDelta) {
+        clearStreamingTextOverlay();
+        break;
+      }
       scheduleTextRenderFlush();
       break;
     }
@@ -658,6 +934,7 @@ export function handleTurnStreamEvent({
     case "tool_start":
       activateStream();
       clearOptimisticItem();
+      noteFinalAnswerRequiredProcessBoundary(sequenceFromAgentEvent(data));
       commitRenderedTextBeforeProcessPart();
       upsertFallbackTextOverlayIfSilent("tool_start_fallback");
       playToolcallSound();
@@ -686,6 +963,8 @@ export function handleTurnStreamEvent({
     case "tool_progress":
       activateStream();
       clearOptimisticItem();
+      noteFinalAnswerRequiredProcessBoundary(sequenceFromAgentEvent(data));
+      commitRenderedTextBeforeProcessPart();
       {
         const shouldUpdateMessageLayer =
           shouldUpdateLegacyToolMessageLayer(data);
@@ -705,6 +984,7 @@ export function handleTurnStreamEvent({
     case "tool_input_delta":
       activateStream();
       clearOptimisticItem();
+      noteFinalAnswerRequiredProcessBoundary(sequenceFromAgentEvent(data));
       commitRenderedTextBeforeProcessPart();
       {
         const shouldUpdateMessageLayer =
@@ -729,6 +1009,8 @@ export function handleTurnStreamEvent({
     case "tool_output_delta":
       activateStream();
       clearOptimisticItem();
+      noteFinalAnswerRequiredProcessBoundary(sequenceFromAgentEvent(data));
+      commitRenderedTextBeforeProcessPart();
       {
         const shouldUpdateMessageLayer =
           shouldUpdateLegacyToolMessageLayer(data);
@@ -748,6 +1030,8 @@ export function handleTurnStreamEvent({
     case "tool_end":
       activateStream();
       clearOptimisticItem();
+      noteFinalAnswerRequiredProcessBoundary(sequenceFromAgentEvent(data));
+      commitRenderedTextBeforeProcessPart();
       {
         const toolEndPlan = buildAgentStreamToolEndPreApplyPlan({
           result: data.result,
@@ -814,6 +1098,7 @@ export function handleTurnStreamEvent({
           clearOptimisticItem();
         }
       }
+      noteProcessEventSequence(sequenceFromAgentEvent(data));
       commitRenderedTextBeforeProcessPart();
       bindAssistantMessageToRuntimeTurn(
         setMessages,

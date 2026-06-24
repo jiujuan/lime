@@ -283,12 +283,17 @@ export function AppSidebarConversationShelf({
   const [collapsedProjectIds, setCollapsedProjectIds] = useState<Set<string>>(
     () => new Set(),
   );
+  const activeProjectIdKey = useMemo(
+    () =>
+      activeConversationGroups.projectSections
+        .map((section) => section.project.id)
+        .join("\u0000"),
+    [activeConversationGroups.projectSections],
+  );
 
   useEffect(() => {
     const activeProjectIds = new Set(
-      activeConversationGroups.projectSections.map(
-        (section) => section.project.id,
-      ),
+      activeProjectIdKey ? activeProjectIdKey.split("\u0000") : [],
     );
 
     setCollapsedProjectIds((current) => {
@@ -297,7 +302,7 @@ export function AppSidebarConversationShelf({
       );
       return next.size === current.size ? current : next;
     });
-  }, [activeConversationGroups.projectSections]);
+  }, [activeProjectIdKey]);
 
   useEffect(() => {
     if (!menuState && !projectMenuState) {

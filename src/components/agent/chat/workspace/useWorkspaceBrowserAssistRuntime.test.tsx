@@ -14,6 +14,7 @@ import { useWorkspaceBrowserAssistRuntime } from "./useWorkspaceBrowserAssistRun
 const mockSiteRunAdapter = vi.fn();
 const mockLaunchBrowserSession = vi.fn();
 const mockBrowserExecuteAction = vi.fn();
+const mockExecuteBrowserSessionAction = vi.fn();
 
 vi.mock("sonner", () => ({
   toast: {
@@ -29,6 +30,11 @@ vi.mock("@/lib/webview-api", () => ({
   launchBrowserSession: (...args: unknown[]) =>
     mockLaunchBrowserSession(...args),
   siteRunAdapter: (...args: unknown[]) => mockSiteRunAdapter(...args),
+}));
+
+vi.mock("@/lib/api/browserRuntime", () => ({
+  executeBrowserSessionAction: (...args: unknown[]) =>
+    mockExecuteBrowserSessionAction(...args),
 }));
 
 type HookProps = Parameters<typeof useWorkspaceBrowserAssistRuntime>[0];
@@ -112,6 +118,7 @@ beforeEach(async () => {
   mockSiteRunAdapter.mockReset();
   mockLaunchBrowserSession.mockReset();
   mockBrowserExecuteAction.mockReset();
+  mockExecuteBrowserSessionAction.mockReset();
 });
 
 afterEach(() => {
@@ -370,6 +377,127 @@ describe("useWorkspaceBrowserAssistRuntime", () => {
       timeout_ms: 20000,
     });
     expect(mockLaunchBrowserSession).not.toHaveBeenCalled();
+  });
+
+  it("CDP current session 导航应走 App Server browserSession/action/execute", async () => {
+    mockExecuteBrowserSessionAction.mockResolvedValue({
+      sessionId: "browser-session-cdp",
+      action: "navigate",
+      result: {
+        page_info: {
+          title: "News Page",
+          url: "https://news.example.com/",
+        },
+      },
+    });
+    const upsertGeneralArtifact = vi.fn();
+    const scopeKey = resolveBrowserAssistSessionScopeKey(
+      "workspace-1",
+      "session-1",
+    );
+    const { render, getValue } = renderHook({
+      artifacts: [
+        buildBrowserAssistArtifact({
+          scopeKey,
+          profileKey: "general-browser",
+          browserSessionId: "browser-session-cdp",
+          url: "https://old.example.com/",
+          title: "Old Page",
+          targetId: "target-cdp",
+          transportKind: "cdp_frames",
+          lifecycleState: "live",
+        }),
+      ],
+      upsertGeneralArtifact,
+    });
+
+    await render();
+    await act(async () => {
+      await Promise.resolve();
+      await getValue().ensureBrowserAssistCanvas(
+        "https://news.example.com/",
+        {
+          navigationMode: "explicit-url",
+          silent: true,
+        },
+      );
+      await Promise.resolve();
+    });
+
+    expect(mockExecuteBrowserSessionAction).toHaveBeenCalledWith({
+      sessionId: "browser-session-cdp",
+      action: "navigate",
+      args: {
+        action: "goto",
+        url: "https://news.example.com/",
+        timeout_ms: 20000,
+      },
+    });
+    expect(mockBrowserExecuteAction).not.toHaveBeenCalled();
+    expect(getValue().browserAssistSessionState).toEqual(
+      expect.objectContaining({
+        sessionId: "browser-session-cdp",
+        profileKey: "general-browser",
+        url: "https://news.example.com/",
+        title: "News Page",
+        transportKind: "cdp_frames",
+      }),
+    );
+  });
+
+  it("已有 CDP current session 但无新 URL 时应通过 read_page 观察当前页", async () => {
+    mockExecuteBrowserSessionAction.mockResolvedValue({
+      sessionId: "browser-session-cdp",
+      action: "read_page",
+      result: {
+        page_info: {
+          title: "Observed Page",
+          url: "https://observed.example.com/",
+        },
+      },
+    });
+    const scopeKey = resolveBrowserAssistSessionScopeKey(
+      "workspace-1",
+      "session-1",
+    );
+    const { render, getValue } = renderHook({
+      artifacts: [
+        buildBrowserAssistArtifact({
+          scopeKey,
+          profileKey: "general-browser",
+          browserSessionId: "browser-session-cdp",
+          url: "https://old.example.com/",
+          title: "Old Page",
+          targetId: "target-cdp",
+          transportKind: "cdp_frames",
+          lifecycleState: "live",
+        }),
+      ],
+    });
+
+    await render();
+    await act(async () => {
+      await Promise.resolve();
+      await getValue().ensureBrowserAssistCanvas("打开当前页面", {
+        navigationMode: "none",
+        silent: true,
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mockExecuteBrowserSessionAction).toHaveBeenCalledWith({
+      sessionId: "browser-session-cdp",
+      action: "read_page",
+      args: undefined,
+    });
+    expect(getValue().browserAssistSessionState).toEqual(
+      expect.objectContaining({
+        sessionId: "browser-session-cdp",
+        url: "https://observed.example.com/",
+        title: "Observed Page",
+      }),
+    );
   });
 
   it("限制为附着会话时不应回退拉起托管浏览器", async () => {

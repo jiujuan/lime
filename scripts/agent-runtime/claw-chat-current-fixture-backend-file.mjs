@@ -257,34 +257,62 @@ if (input.kind === "turnStart") {
                       : isExpertPanelSkillsRuntimePrompt
                         ? "${EXPERT_SKILLS_RUNTIME_PANEL_DONE_TEXT}"
                         : "${ASSISTANT_DONE_TEXT}";
+  const hasProcessPrelude =
+    isEventReadProbe ||
+    isPlanPrompt ||
+    isWebToolsRenderingPrompt ||
+    isMcpStructuredContentPrompt ||
+    isSkillsRuntimePrompt ||
+    isExplicitSkillsRuntimePrompt ||
+    isManualEnableSkillsRuntimePrompt ||
+    isExpertSkillsRuntimePrompt ||
+    isExpertPanelSkillsRuntimePrompt;
+  const currentTurnIdForItem = currentTurnId() || "turn";
+  const commentaryItemId = \`agent-message-commentary-\${currentTurnIdForItem}\`;
+  const finalAnswerItemId = \`agent-message-final-\${currentTurnIdForItem}\`;
+  function messageDeltaPayload(text, phase, itemId) {
+    return {
+      text,
+      item_id: itemId,
+      itemId,
+      phase,
+      thread_id: currentThreadId(),
+      threadId: currentThreadId(),
+      turn_id: currentTurnId(),
+      turnId: currentTurnId()
+    };
+  }
+  const initialMessageText = isEventReadProbe
+    ? "事件流 probe 已进入 RuntimeCore：\\n"
+    : isContinuePrompt
+      ? "继续输出已恢复：\\n"
+      : isPlanPrompt
+        ? "我先给出计划，不会直接改代码：\\n"
+        : isGoalPrompt
+          ? "追求目标已进入当前回合：\\n"
+          : isWebToolsRenderingPrompt
+            ? "我先联网核实目标页面来源。\\n"
+            : isMcpStructuredContentPrompt
+              ? "我先调用 MCP docs 诊断工具，并只把用户答案放在 structuredContent。\\n"
+              : isSkillsRuntimePrompt
+                ? "我先搜索 Skills metadata，再按需加载单个 SKILL.md。\\n"
+                : isExplicitSkillsRuntimePrompt
+                  ? "我识别到显式 Skill 提及，仍先检索 metadata，再按需加载单个 SKILL.md。\\n"
+                  : isManualEnableSkillsRuntimePrompt
+                    ? "我识别到本轮手动启用的 workspace Skill，仍先核对 metadata，再按需加载单个 SKILL.md。\\n"
+                    : isExpertSkillsRuntimePrompt
+                      ? "我识别到专家绑定的 skillRefs，但仍先通过 skill_search 选择，再按需加载单个 SKILL.md。\\n"
+                      : isExpertPanelSkillsRuntimePrompt
+                        ? "我识别到右侧专家面板更新后的 skillRefs，并继续通过 skill_search 选择单个 Skill。\\n"
+                        : "以下是今日国际新闻简要整理：\\n";
   const initialEvents = [
     {
       type: "message.delta",
-      payload: {
-        text: isEventReadProbe
-          ? "事件流 probe 已进入 RuntimeCore：\\n"
-          : isContinuePrompt
-            ? "继续输出已恢复：\\n"
-            : isPlanPrompt
-              ? "我先给出计划，不会直接改代码：\\n"
-              : isGoalPrompt
-                ? "追求目标已进入当前回合：\\n"
-                : isWebToolsRenderingPrompt
-                  ? "我先联网核实目标页面来源。\\n"
-                  : isMcpStructuredContentPrompt
-                    ? "我先调用 MCP docs 诊断工具，并只把用户答案放在 structuredContent。\\n"
-                    : isSkillsRuntimePrompt
-                      ? "我先搜索 Skills metadata，再按需加载单个 SKILL.md。\\n"
-                      : isExplicitSkillsRuntimePrompt
-                        ? "我识别到显式 Skill 提及，仍先检索 metadata，再按需加载单个 SKILL.md。\\n"
-                        : isManualEnableSkillsRuntimePrompt
-                          ? "我识别到本轮手动启用的 workspace Skill，仍先核对 metadata，再按需加载单个 SKILL.md。\\n"
-                          : isExpertSkillsRuntimePrompt
-                            ? "我识别到专家绑定的 skillRefs，但仍先通过 skill_search 选择，再按需加载单个 SKILL.md。\\n"
-                            : isExpertPanelSkillsRuntimePrompt
-                              ? "我识别到右侧专家面板更新后的 skillRefs，并继续通过 skill_search 选择单个 Skill。\\n"
-          : "以下是今日国际新闻简要整理：\\n"
-      }
+      payload: messageDeltaPayload(
+        initialMessageText,
+        hasProcessPrelude ? "commentary" : "final_answer",
+        hasProcessPrelude ? commentaryItemId : finalAnswerItemId
+      )
     }
   ];
   const followupText = isContinuePrompt
@@ -797,9 +825,7 @@ ${expertPanelSkillsRuntimeBackendEvents}
   emitEvents([
     {
       type: "message.delta",
-      payload: {
-        text: followupText
-      }
+      payload: messageDeltaPayload(followupText, "final_answer", finalAnswerItemId)
     }
   ]);
   await sleep(120);

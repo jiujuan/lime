@@ -275,17 +275,15 @@ describe("CanvasWorkbenchLayout", () => {
       '[data-testid="canvas-workbench-direct-tabs"] [data-canvas-tab-kind="browser"]',
     );
     expect(browserTabs).toHaveLength(2);
-    expect(browserTabs[0]?.textContent).toContain("新选项卡");
+    expect(browserTabs[0]?.textContent).toContain("Google");
     expect(browserTabs[1]?.textContent).toContain("新选项卡 2");
 
-    const secondBrowserClose = container.querySelector(
+    const browserClose = container.querySelector(
       '[aria-label="关闭工作台标签-新选项卡 2"]',
     ) as HTMLButtonElement | null;
-    expect(secondBrowserClose).not.toBeNull();
+    expect(browserClose).not.toBeNull();
     act(() => {
-      secondBrowserClose?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
+      browserClose?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 

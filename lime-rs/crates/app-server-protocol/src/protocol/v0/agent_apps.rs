@@ -188,7 +188,21 @@ pub struct AgentAppHostLifecycleSnapshot {
     pub blockers: Vec<String>,
     #[serde(default)]
     pub follow_ups: Vec<String>,
+    pub publish_blocked: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub primary_issue_category: Option<String>,
+    #[serde(default)]
+    pub issue_categories: Vec<AgentAppReadinessIssueCategorySummary>,
     pub generated_at: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppReadinessIssueCategorySummary {
+    pub category: String,
+    pub count: usize,
+    #[serde(default)]
+    pub codes: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -256,6 +270,8 @@ pub struct AgentAppHistoryRestoreContract {
 #[serde(rename_all = "camelCase")]
 pub struct AgentAppTaskRuntimeContract {
     pub enabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package_root_path: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worker_entrypoint: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

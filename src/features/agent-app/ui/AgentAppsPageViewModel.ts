@@ -17,6 +17,12 @@ import type {
   ProjectedEntry,
 } from "../types";
 import { resolveInstalledAgentAppDisplayName } from "./agentAppDisplay";
+import {
+  getPrimaryAgentAppReadinessIssueCategory,
+  summarizeAgentAppReadinessIssueCategories,
+  type AgentAppReadinessIssueCategory,
+  type AgentAppReadinessIssueCategorySummary,
+} from "./agentAppReadinessIssueClassification";
 
 export const APP_CENTER_PAGE_SIZE = 20;
 
@@ -71,6 +77,9 @@ export interface AppCenterHostLifecycleSummary {
   labelKey: string;
   tone: AppCenterHostLifecycleTone;
   blockerCount: number;
+  publishBlocked: boolean;
+  primaryIssueCategory: AgentAppReadinessIssueCategory | null;
+  issueCategories: AgentAppReadinessIssueCategorySummary[];
   productObjectCount: number;
   productProfileEnabled: boolean;
   supportedTabCount: number;
@@ -683,6 +692,57 @@ const HOST_LIFECYCLE_TONES: Record<
   planned: "slate",
 };
 
+const READINESS_ISSUE_CATEGORIES = new Set<AgentAppReadinessIssueCategory>([
+  "legacy",
+  "package",
+  "cloud",
+  "runtime",
+  "capability",
+  "permission",
+  "resource",
+  "taskRuntime",
+  "host",
+  "unknown",
+]);
+
+function normalizeReadinessIssueCategory(
+  value: string | null | undefined,
+): AgentAppReadinessIssueCategory | null {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return null;
+  }
+  return READINESS_ISSUE_CATEGORIES.has(
+    normalized as AgentAppReadinessIssueCategory,
+  )
+    ? (normalized as AgentAppReadinessIssueCategory)
+    : null;
+}
+
+function normalizeServerIssueCategories(
+  lifecycle: AgentAppHostLifecycleSnapshot,
+): AgentAppReadinessIssueCategorySummary[] {
+  return (lifecycle.issueCategories ?? []).flatMap((summary) => {
+    const category = normalizeReadinessIssueCategory(summary.category);
+    if (!category) {
+      return [];
+    }
+    return [
+      {
+        category,
+        count: Math.max(0, Number(summary.count) || 0),
+        codes: Array.from(
+          new Set(
+            (summary.codes ?? [])
+              .map((code) => code.trim())
+              .filter((code) => Boolean(code)),
+          ),
+        ).sort(),
+      },
+    ];
+  });
+}
+
 export function buildAppCenterHostLifecycleSummary(
   item: Pick<AppCenterItem, "hostLifecycle">,
 ): AppCenterHostLifecycleSummary | null {
@@ -690,11 +750,27 @@ export function buildAppCenterHostLifecycleSummary(
   if (!lifecycle) {
     return null;
   }
+  const serverIssueCategories = normalizeServerIssueCategories(lifecycle);
+  const issueCategories =
+    serverIssueCategories.length > 0
+      ? serverIssueCategories
+      : summarizeAgentAppReadinessIssueCategories(lifecycle.blockers);
+  const serverPrimaryIssueCategory = normalizeReadinessIssueCategory(
+    lifecycle.primaryIssueCategory,
+  );
   return {
     status: lifecycle.appCenterStatus,
     labelKey: HOST_LIFECYCLE_STATUS_LABEL_KEYS[lifecycle.appCenterStatus],
     tone: HOST_LIFECYCLE_TONES[lifecycle.appCenterStatus],
     blockerCount: lifecycle.blockers.length,
+    publishBlocked:
+      lifecycle.publishBlocked ??
+      (lifecycle.appCenterStatus === "blocked" ||
+        lifecycle.appCenterStatus === "delisted"),
+    primaryIssueCategory:
+      serverPrimaryIssueCategory ??
+      getPrimaryAgentAppReadinessIssueCategory(issueCategories),
+    issueCategories,
     productObjectCount: lifecycle.rightSurface.productProfile.objects.length,
     productProfileEnabled: lifecycle.rightSurface.productProfile.enabled,
     supportedTabCount: lifecycle.rightSurface.supportedTabs.length,

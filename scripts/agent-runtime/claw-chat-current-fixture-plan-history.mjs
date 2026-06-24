@@ -50,6 +50,7 @@ export async function verifyPlanHistoryHydrate({
     {
       sessionId: SESSION_ID,
       title: SESSION_TITLE,
+      allowPlanDecision: true,
     },
   );
   const guiPlanHistoryHydrateCompleted =

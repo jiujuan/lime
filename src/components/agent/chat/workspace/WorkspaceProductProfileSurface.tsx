@@ -1,4 +1,5 @@
 import {
+  Activity,
   CheckCircle2,
   ClipboardCheck,
   ExternalLink,
@@ -21,6 +22,10 @@ import type {
   WorkspaceProductProfileActionHistoryStatus,
 } from "./workspaceProductProfileActionHistory";
 import type {
+  WorkspaceProductProfileWorkerEvidenceItem,
+  WorkspaceProductProfileWorkerEvidenceStatus,
+} from "./workspaceProductProfileWorkerEvidence";
+import type {
   WorkspaceProductProfileActionIntent,
   WorkspaceProductProfileAction,
   WorkspaceProductObject,
@@ -30,6 +35,7 @@ import type {
   WorkspaceProductProfileStructuredPreview,
 } from "./workspaceProductProfileModel";
 import { buildWorkspaceProductProfileViewModel } from "./workspaceProductProfileModel";
+import { resolveWorkspaceProductProfileImageRenderSrc } from "./workspaceProductProfileImagePreview";
 import { buildWorkspaceProductProfilePreviewArtifact } from "./workspaceProductProfilePreviewArtifact";
 import {
   buildWorkspaceProductObjectKey,
@@ -85,6 +91,9 @@ export function WorkspaceProductProfileSurface({
   const [selectedObjectKey, setSelectedObjectKey] = useState<string | null>(
     null,
   );
+  const [pendingActionConfirmKey, setPendingActionConfirmKey] = useState<
+    string | null
+  >(null);
   const profileSelectionSignature = useMemo(
     () =>
       [
@@ -131,6 +140,10 @@ export function WorkspaceProductProfileSurface({
   const hasProductActions = Boolean(
     onActionIntent && viewModel.selectedActions.length > 0,
   );
+  const selectedProductObjectKey = objectKey(viewModel.selectedObject);
+  useEffect(() => {
+    setPendingActionConfirmKey(null);
+  }, [selectedProductObjectKey]);
 
   return (
     <section
@@ -195,26 +208,41 @@ export function WorkspaceProductProfileSurface({
                 </button>
               ) : null}
               {onActionIntent
-                ? viewModel.selectedActions.map((action) => (
-                    <ProductProfileActionButton
-                      key={action.key}
-                      action={action}
-                      disabled={actionsDisabled}
-                      onClick={() => {
-                        const prompt = dynamicT(action.promptKey, {
-                          objectTitle: viewModel.selectedObject.title,
-                          objectKind: viewModel.selectedObject.ref.kind,
-                          taskKind: action.taskKind ?? "",
-                        });
-                        onActionIntent({
-                          action,
-                          object: viewModel.selectedObject,
-                          profile: activeProfile,
-                          prompt,
-                        });
-                      }}
-                    />
-                  ))
+                ? viewModel.selectedActions.map((action) => {
+                    const actionConfirmKey = `${selectedProductObjectKey}:${action.key}`;
+                    const confirmationPending =
+                      action.risk === "write" &&
+                      pendingActionConfirmKey === actionConfirmKey;
+                    return (
+                      <ProductProfileActionButton
+                        key={action.key}
+                        action={action}
+                        confirmationPending={confirmationPending}
+                        disabled={actionsDisabled}
+                        onClick={() => {
+                          if (
+                            action.risk === "write" &&
+                            pendingActionConfirmKey !== actionConfirmKey
+                          ) {
+                            setPendingActionConfirmKey(actionConfirmKey);
+                            return;
+                          }
+                          setPendingActionConfirmKey(null);
+                          const prompt = dynamicT(action.promptKey, {
+                            objectTitle: viewModel.selectedObject.title,
+                            objectKind: viewModel.selectedObject.ref.kind,
+                            taskKind: action.taskKind ?? "",
+                          });
+                          onActionIntent({
+                            action,
+                            object: viewModel.selectedObject,
+                            profile: activeProfile,
+                            prompt,
+                          });
+                        }}
+                      />
+                    );
+                  })
                 : null}
             </div>
           ) : null}
@@ -232,6 +260,13 @@ export function WorkspaceProductProfileSurface({
           <ProductProfileActionHistoryCard
             actions={viewModel.selectedActionHistory}
             latestAction={viewModel.latestSelectedAction}
+          />
+        ) : null}
+
+        {viewModel.latestWorkerEvidence ? (
+          <ProductProfileWorkerEvidenceCard
+            evidence={viewModel.workerEvidence}
+            latestEvidence={viewModel.latestWorkerEvidence}
           />
         ) : null}
 
@@ -298,6 +333,15 @@ const ACTION_HISTORY_STATUS_KEYS: Record<
   unknown: "workspace.productProfile.actionHistory.status.unknown",
 };
 
+const WORKER_EVIDENCE_STATUS_KEYS: Record<
+  WorkspaceProductProfileWorkerEvidenceStatus,
+  string
+> = {
+  completed: "workspace.productProfile.workerEvidence.status.completed",
+  failed: "workspace.productProfile.workerEvidence.status.failed",
+  unknown: "workspace.productProfile.workerEvidence.status.unknown",
+};
+
 function ProductProfileActionHistoryCard({
   actions,
   latestAction,
@@ -337,9 +381,137 @@ function ProductProfileActionHistoryCard({
           label={dynamicT("workspace.productProfile.actionHistory.turn")}
           value={latestAction.turnId}
         />
+        <MetaRow
+          label={dynamicT("workspace.productProfile.actionHistory.result")}
+          value={formatActionResult(dynamicT, latestAction)}
+        />
+        {latestAction.errorMessage || latestAction.errorCode ? (
+          <MetaRow
+            label={dynamicT("workspace.productProfile.actionHistory.error")}
+            value={
+              latestAction.errorMessage ?? latestAction.errorCode ?? ""
+            }
+          />
+        ) : null}
       </div>
     </div>
   );
+}
+
+function formatActionResult(
+  t: WorkspaceDynamicTranslation,
+  action: WorkspaceProductProfileActionHistoryItem,
+): string {
+  const resultArtifacts = action.resultArtifacts ?? [];
+  if (resultArtifacts.length === 0) {
+    return t("workspace.productProfile.actionHistory.resultEmpty");
+  }
+  const firstArtifact = resultArtifacts[0];
+  const firstTitle =
+    firstArtifact.title || firstArtifact.artifactId || firstArtifact.artifactRef;
+  if (resultArtifacts.length === 1) {
+    return firstTitle;
+  }
+  return t("workspace.productProfile.actionHistory.resultCount", {
+    count: resultArtifacts.length,
+    title: firstTitle,
+  });
+}
+
+function ProductProfileWorkerEvidenceCard({
+  evidence,
+  latestEvidence,
+}: {
+  evidence: readonly WorkspaceProductProfileWorkerEvidenceItem[];
+  latestEvidence: WorkspaceProductProfileWorkerEvidenceItem;
+}) {
+  const { t } = useTranslation("workspace");
+  const dynamicT = t as WorkspaceDynamicTranslation;
+  const statusLabel = dynamicT(
+    WORKER_EVIDENCE_STATUS_KEYS[latestEvidence.status],
+  );
+
+  return (
+    <div
+      className="rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] p-3"
+      data-testid="workspace-product-profile-worker-evidence"
+    >
+      <ProductProfilePreviewHeader
+        icon={<Activity className="h-4 w-4" />}
+        title={dynamicT("workspace.productProfile.workerEvidence.title")}
+        detail={dynamicT("workspace.productProfile.workerEvidence.count", {
+          count: evidence.length,
+        })}
+      />
+      <div className="mt-3 grid gap-2 text-xs">
+        <MetaRow
+          label={dynamicT("workspace.productProfile.workerEvidence.status")}
+          value={statusLabel}
+        />
+        <MetaRow
+          label={dynamicT("workspace.productProfile.workerEvidence.task")}
+          value={latestEvidence.taskId ?? ""}
+        />
+        <MetaRow
+          label={dynamicT("workspace.productProfile.workerEvidence.taskKind")}
+          value={latestEvidence.taskKind ?? ""}
+        />
+        <MetaRow
+          label={dynamicT("workspace.productProfile.workerEvidence.turn")}
+          value={latestEvidence.turnId ?? ""}
+        />
+        <MetaRow
+          label={dynamicT("workspace.productProfile.workerEvidence.artifact")}
+          value={latestEvidence.artifactRef ?? ""}
+        />
+        <MetaRow
+          label={dynamicT("workspace.productProfile.workerEvidence.event")}
+          value={latestEvidence.eventType ?? latestEvidence.source}
+        />
+        <MetaRow
+          label={dynamicT("workspace.productProfile.workerEvidence.input")}
+          value={latestEvidence.inputSummary ?? ""}
+        />
+        <MetaRow
+          label={dynamicT("workspace.productProfile.workerEvidence.output")}
+          value={formatWorkerOutput(dynamicT, latestEvidence)}
+        />
+        {latestEvidence.workerEntrypoint ? (
+          <MetaRow
+            label={dynamicT(
+              "workspace.productProfile.workerEvidence.entrypoint",
+            )}
+            value={latestEvidence.workerEntrypoint}
+          />
+        ) : null}
+        {latestEvidence.errorMessage ? (
+          <MetaRow
+            label={dynamicT("workspace.productProfile.workerEvidence.error")}
+            value={
+              latestEvidence.errorCode
+                ? `${latestEvidence.errorCode}: ${latestEvidence.errorMessage}`
+                : latestEvidence.errorMessage
+            }
+          />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function formatWorkerOutput(
+  t: WorkspaceDynamicTranslation,
+  evidence: WorkspaceProductProfileWorkerEvidenceItem,
+): string {
+  if (evidence.outputSummary) {
+    return evidence.outputSummary;
+  }
+  if (typeof evidence.outputObjectCount === "number") {
+    return t("workspace.productProfile.workerEvidence.outputObjectCount", {
+      count: evidence.outputObjectCount,
+    });
+  }
+  return "";
 }
 
 function ProductProfileObjectPreview({
@@ -389,35 +561,10 @@ function ProductProfileObjectPreview({
         />
         <div className="mt-3 grid grid-cols-2 gap-2">
           {imageCells.map((image, index) => (
-            <div
+            <ProductProfileImageCell
               key={`${image.id}:${index}`}
-              className="aspect-[4/3] overflow-hidden rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-subtle)]"
-              data-testid="workspace-product-profile-image-cell"
-            >
-              <div className="flex h-full flex-col">
-                {image.url && isRenderableImageSrc(image.url) ? (
-                  <img
-                    alt={image.alt ?? image.title}
-                    className="min-h-0 flex-1 object-cover"
-                    src={image.url}
-                  />
-                ) : (
-                  <div className="flex min-h-0 flex-1 items-center justify-center">
-                    <Image className="h-5 w-5 text-[color:var(--lime-text-muted)]" />
-                  </div>
-                )}
-                <div className="min-h-[36px] border-t border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-2 py-1">
-                  <div className="truncate text-[11px] font-medium text-[color:var(--lime-text-strong)]">
-                    {image.title}
-                  </div>
-                  {image.prompt ? (
-                    <div className="truncate text-[10px] text-[color:var(--lime-text-muted)]">
-                      {image.prompt}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            </div>
+              image={image}
+            />
           ))}
         </div>
       </div>
@@ -642,25 +789,50 @@ function ChecklistMetric({ label, value }: { label: string; value: number }) {
 
 function ProductProfileActionButton({
   action,
+  confirmationPending,
   disabled,
   onClick,
 }: {
   action: WorkspaceProductProfileAction;
+  confirmationPending: boolean;
   disabled: boolean;
   onClick: () => void;
 }) {
   const { t } = useTranslation("workspace");
   const dynamicT = t as WorkspaceDynamicTranslation;
+  const actionLabel = dynamicT(action.labelKey);
   return (
     <button
       type="button"
-      className="inline-flex h-8 min-w-0 items-center justify-center gap-1 rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-2 text-xs font-medium text-[color:var(--lime-text-strong)] transition hover:bg-[color:var(--lime-surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+      className={`inline-flex h-8 min-w-0 items-center justify-center gap-1 rounded-lg border px-2 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
+        confirmationPending
+          ? "border-[color:var(--lime-surface-border-strong)] bg-[color:var(--lime-surface-subtle)] text-[color:var(--lime-text-strong)]"
+          : "border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] text-[color:var(--lime-text-strong)] hover:bg-[color:var(--lime-surface-hover)]"
+      }`}
       disabled={disabled}
       onClick={onClick}
+      aria-label={
+        confirmationPending
+          ? t("workspace.productProfile.actionConfirmAria", {
+              action: actionLabel,
+            })
+          : actionLabel
+      }
+      data-confirmation-pending={confirmationPending ? "true" : "false"}
       data-testid={`workspace-product-profile-action-${action.key}`}
     >
-      <ProductProfileActionIcon actionKey={action.key} />
-      <span className="truncate">{dynamicT(action.labelKey)}</span>
+      {confirmationPending ? (
+        <ClipboardCheck className="h-3.5 w-3.5 shrink-0" />
+      ) : (
+        <ProductProfileActionIcon actionKey={action.key} />
+      )}
+      <span className="truncate">
+        {confirmationPending
+          ? t("workspace.productProfile.actionConfirm", {
+              action: actionLabel,
+            })
+          : actionLabel}
+      </span>
     </button>
   );
 }
@@ -738,6 +910,44 @@ function ProductObjectIcon({ kind }: { kind: string }) {
     return <ListChecks className="h-4 w-4" />;
   }
   return <FileText className="h-4 w-4" />;
+}
+
+function ProductProfileImageCell({
+  image,
+}: {
+  image: WorkspaceProductProfileStructuredPreview["images"][number];
+}) {
+  const imageSrc = resolveWorkspaceProductProfileImageRenderSrc(image);
+  return (
+    <div
+      className="aspect-[4/3] overflow-hidden rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-subtle)]"
+      data-testid="workspace-product-profile-image-cell"
+    >
+      <div className="flex h-full flex-col">
+        {imageSrc && isRenderableImageSrc(imageSrc) ? (
+          <img
+            alt={image.alt ?? image.title}
+            className="min-h-0 flex-1 object-cover"
+            src={imageSrc}
+          />
+        ) : (
+          <div className="flex min-h-0 flex-1 items-center justify-center">
+            <Image className="h-5 w-5 text-[color:var(--lime-text-muted)]" />
+          </div>
+        )}
+        <div className="min-h-[36px] border-t border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-2 py-1">
+          <div className="truncate text-[11px] font-medium text-[color:var(--lime-text-strong)]">
+            {image.title}
+          </div>
+          {image.prompt ? (
+            <div className="truncate text-[10px] text-[color:var(--lime-text-muted)]">
+              {image.prompt}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function StatusBadge({ status }: { status: WorkspaceProductObjectStatus }) {

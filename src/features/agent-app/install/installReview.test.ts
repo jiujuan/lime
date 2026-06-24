@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { currentAgentAppHostRuntimeVersion } from "../readiness/hostCapabilityProfile";
 import type { CloudBootstrapApp, InstalledAgentAppState } from "../types";
+import type { AgentAppCloudReleaseEvidence } from "./cloudReleaseEvidence";
 import { buildCloudAgentAppSourceState } from "./installReview";
 
 function buildCloudApp(
@@ -59,6 +60,38 @@ function buildInstalledState(): InstalledAgentAppState {
   };
 }
 
+function buildReleaseEvidence(
+  overrides: Partial<AgentAppCloudReleaseEvidence> = {},
+): AgentAppCloudReleaseEvidence {
+  return {
+    appId: "content-factory-app",
+    version: "0.3.0",
+    catalogSource: "remote",
+    sourceKind: "fetched_package",
+    packageHashDeclared: true,
+    manifestHashDeclared: true,
+    signatureDeclared: true,
+    declaredPackageHash:
+      "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    declaredManifestHash:
+      "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    actualPackageHash:
+      "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    actualManifestHash:
+      "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    packageHashMatched: true,
+    manifestHashMatched: true,
+    signatureRef: "sigstore:content-factory-app@0.3.0",
+    signaturePolicy: "required",
+    signatureVerificationStatus: "verified",
+    packageVerificationStatus: "verified",
+    status: "ready",
+    blockerCodes: [],
+    warningCodes: [],
+    ...overrides,
+  };
+}
+
 describe("installReview", () => {
   it("应把需要注册码的 Cloud release 阻断在 source state", () => {
     const state = buildCloudAgentAppSourceState({
@@ -110,6 +143,51 @@ describe("installReview", () => {
       kind: "hash-missing",
       canReview: false,
       labelKey: "agentApp.apps.sourceState.hashMissing",
+    });
+  });
+
+  it("release evidence blocked 时应进入 source state 发布门禁", () => {
+    const state = buildCloudAgentAppSourceState({
+      app: buildCloudApp(),
+      catalogSource: "remote",
+      installed: [],
+      releaseEvidence: buildReleaseEvidence({
+        status: "blocked",
+        signatureVerificationStatus: "failed",
+        blockerCodes: ["signature_verification_failed"],
+      }),
+    });
+
+    expect(state).toMatchObject({
+      kind: "release-evidence-blocked",
+      canReview: false,
+      labelKey: "agentApp.apps.sourceState.releaseEvidenceBlocked",
+      tone: "rose",
+      reason: "CLOUD_SIGNATURE_VERIFICATION_FAILED",
+    });
+  });
+
+  it("release evidence warning 时应保留可审查但标记需要复核", () => {
+    const state = buildCloudAgentAppSourceState({
+      app: buildCloudApp({
+        registrationRequired: true,
+        registrationState: "active",
+      }),
+      catalogSource: "remote",
+      installed: [],
+      releaseEvidence: buildReleaseEvidence({
+        status: "warning",
+        signatureVerificationStatus: "declared",
+        warningCodes: ["signature_unverified"],
+      }),
+    });
+
+    expect(state).toMatchObject({
+      kind: "release-evidence-warning",
+      canReview: true,
+      labelKey: "agentApp.apps.sourceState.releaseEvidenceWarning",
+      tone: "amber",
+      reason: "CLOUD_SIGNATURE_UNVERIFIED",
     });
   });
 

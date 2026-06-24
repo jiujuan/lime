@@ -16,6 +16,8 @@ import type {
   PackageIdentity,
   AgentAppSetupState,
   AgentAppPackageVerificationResult,
+  AgentAppCloudReleaseSignatureAlgorithm,
+  AgentAppCloudReleaseSignatureProof,
 } from "../types";
 import {
   buildAgentAppPackageCacheEntry,
@@ -53,6 +55,14 @@ const ALLOWED_REGISTRATION_STATES = new Set<CloudBootstrapRegistrationState>([
   "expired",
   "revoked",
 ]);
+
+const ALLOWED_SIGNATURE_ALGORITHMS =
+  new Set<AgentAppCloudReleaseSignatureAlgorithm>([
+    "RSASSA-PKCS1-v1_5-SHA256",
+    "RSA-PSS-SHA256",
+    "ECDSA-P256-SHA256",
+    "Ed25519",
+  ]);
 
 const FORBIDDEN_BOOTSTRAP_KEYS = new Set([
   "apikey",
@@ -180,6 +190,53 @@ function readStringRecord(
       })
       .filter((entry): entry is readonly [string, string] => Boolean(entry)),
   );
+}
+
+function readSignatureProof(
+  value: unknown,
+  path: string,
+  issues: CloudBootstrapValidationIssue[],
+): AgentAppCloudReleaseSignatureProof | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    addIssue(issues, {
+      code: "FIELD_INVALID",
+      path,
+      message: "Cloud bootstrap signatureProof must be an object",
+    });
+    return undefined;
+  }
+
+  const publicKeyId = readRequiredString(value, "publicKeyId", path, issues);
+  const algorithmValue = normalizeOptionalString(value.algorithm);
+  if (
+    !algorithmValue ||
+    !ALLOWED_SIGNATURE_ALGORITHMS.has(
+      algorithmValue as AgentAppCloudReleaseSignatureAlgorithm,
+    )
+  ) {
+    addIssue(issues, {
+      code: "FIELD_INVALID",
+      path: `${path}.algorithm`,
+      message: "Cloud bootstrap signatureProof algorithm is unsupported",
+    });
+  }
+  const signature = readRequiredString(value, "signature", path, issues);
+
+  return {
+    schemaVersion: normalizeOptionalString(value.schemaVersion),
+    publicKeyId,
+    algorithm: ALLOWED_SIGNATURE_ALGORITHMS.has(
+      algorithmValue as AgentAppCloudReleaseSignatureAlgorithm,
+    )
+      ? (algorithmValue as AgentAppCloudReleaseSignatureAlgorithm)
+      : "RSASSA-PKCS1-v1_5-SHA256",
+    signature,
+    payloadHash: normalizeOptionalString(value.payloadHash),
+    signedAt: normalizeOptionalString(value.signedAt),
+  };
 }
 
 function readPolicyDefaults(
@@ -457,6 +514,11 @@ function normalizeCloudBootstrapApp(
     tenantEnablementRef: normalizeOptionalString(record.tenantEnablementRef),
     channel: normalizeOptionalString(record.channel),
     signatureRef: normalizeOptionalString(record.signatureRef),
+    signatureProof: readSignatureProof(
+      record.signatureProof,
+      `${path}.signatureProof`,
+      issues,
+    ),
     licenseState: readLicenseState(
       record.licenseState,
       `${path}.licenseState`,
@@ -638,6 +700,7 @@ export function buildCloudReleaseDescriptor(params: {
     packageHash: params.app.packageHash,
     manifestHash: params.app.manifestHash,
     signatureRef: params.app.signatureRef,
+    signatureProof: params.app.signatureProof,
     compatibility: {
       capabilities: { ...params.app.capabilityRequirements },
     },

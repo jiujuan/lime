@@ -36,6 +36,7 @@ describe("messageListItemProjection web retrieval", () => {
         messageId: message.id,
         eventName: "response.output_text.delta",
         content: "## 今日国际新闻简报\n\n- 第一条要闻。",
+        phase: "final_answer",
         updatedAt: Date.parse("2026-06-02T10:00:02.000Z"),
       },
     });
@@ -55,12 +56,13 @@ describe("messageListItemProjection web retrieval", () => {
     expect(parts[2]?.type === "text" ? parts[2].text : "").toContain(
       "今日国际新闻简报",
     );
+    expect(projection.displayContent).toBe("");
     expect(projection.actionContent).toBe(
-      "我先联网核实今天的国际新闻，再整理成简报。\n\n## 今日国际新闻简报\n\n- 第一条要闻。",
+      "## 今日国际新闻简报\n\n- 第一条要闻。",
     );
   });
 
-  it("完成态 WebTools contentParts 缺首段 text 时应从完整 content 恢复导语", () => {
+  it("完成态 WebTools contentParts 缺首段 text 时不应从完整 content 恢复导语", () => {
     const message: Message = {
       id: "assistant-completed-web-tools-missing-intro-part",
       role: "assistant",
@@ -120,21 +122,21 @@ describe("messageListItemProjection web retrieval", () => {
     });
 
     expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
-      "text",
       "tool_use",
       "tool_use",
       "thinking",
       "text",
     ]);
     expect(projection.rendererContentParts?.[0]).toMatchObject({
-      type: "text",
-      text: "我先联网核实目标页面来源。",
+      type: "tool_use",
     });
-    expect(projection.actionContent).toContain("我先联网核实目标页面来源。");
+    expect(projection.actionContent).not.toContain(
+      "我先联网核实目标页面来源。",
+    );
     expect(projection.actionContent).toContain("网页搜索渲染结论");
   });
 
-  it("网页搜索仍在运行时流式 overlay 不应提前显示成最终正文", () => {
+  it("网页搜索仍在运行时显式 final_answer overlay 应作为正文排在过程后", () => {
     const message: Message = {
       id: "assistant-running-search-overlay",
       role: "assistant",
@@ -165,17 +167,324 @@ describe("messageListItemProjection web retrieval", () => {
           messageId: message.id,
           eventName: "response.output_text.delta",
           content: "## 今日 AI 新闻\n\n- 第一条要闻。",
+          phase: "final_answer",
           updatedAt: Date.parse("2026-06-02T10:00:03.000Z"),
         },
       },
     );
 
     const parts = projection.rendererContentParts || [];
+    expect(parts.map((part) => part.type)).toEqual(["tool_use", "text"]);
+    expect(parts[1]).toMatchObject({
+      type: "text",
+      text: "## 今日 AI 新闻\n\n- 第一条要闻。",
+    });
+    expect(projection.actionContent).toBe("## 今日 AI 新闻\n\n- 第一条要闻。");
+    expect(projection.rendererContent).toBe(
+      "## 今日 AI 新闻\n\n- 第一条要闻。",
+    );
+    expect(projection.rendererRawContent).toBe(
+      "## 今日 AI 新闻\n\n- 第一条要闻。",
+    );
+    expect(JSON.stringify(parts)).not.toContain('"type":"thinking"');
+  });
+
+  it("搜索运行中首字正文已提交时，无 phase overlay 不应继续显示孤立正文", () => {
+    const message: Message = {
+      id: "assistant-running-search-overlay-prefix",
+      role: "assistant",
+      content: "我",
+      timestamp: new Date("2026-06-24T10:00:00.000Z"),
+      isThinking: true,
+      contentParts: [
+        {
+          type: "text",
+          text: "我",
+          metadata: {
+            source: "agent_text_delta",
+            sequence: 1,
+          },
+        },
+        {
+          type: "tool_use",
+          metadata: {
+            sequence: 2,
+          },
+          toolCall: {
+            id: "tool-web-search-prefix",
+            name: "web_search",
+            arguments:
+              '{"query":"2026-06-24 international news latest headlines"}',
+            status: "running",
+          } as never,
+        },
+      ],
+    };
+
+    const projection = buildProjection(message, null, {
+      isSending: true,
+      turnStatus: "running",
+      streamingTextOverlay: {
+        messageId: message.id,
+        eventName: "response.output_text.delta",
+        content: "我会先联网核实今天（2026-06-24）的国际新闻头条。",
+        updatedAt: Date.parse("2026-06-24T10:00:03.000Z"),
+      },
+    });
+
+    const parts = projection.rendererContentParts || [];
     expect(parts.map((part) => part.type)).toEqual(["tool_use"]);
+    expect(parts[0]).toMatchObject({
+      type: "tool_use",
+      toolCall: expect.objectContaining({
+        id: "tool-web-search-prefix",
+        status: "running",
+      }),
+    });
+    expect(JSON.stringify(parts)).not.toContain("我会先联网核实今天");
+    expect(
+      parts.some(
+        (part) =>
+          part.type === "thinking" &&
+          part.text.includes("我会先联网核实今天"),
+      ),
+    ).toBe(false);
+  });
+
+  it("完成后已有结构化 contentParts 时不应再用 timeline 重建另一组过程流", () => {
+    const message: Message = {
+      id: "assistant-completed-content-parts-owner",
+      role: "assistant",
+      content: "live final answer",
+      timestamp: new Date("2026-06-24T10:00:00.000Z"),
+      isThinking: false,
+      contentParts: [
+        {
+          type: "text",
+          text: "live commentary before search",
+          metadata: {
+            source: "agent_text_delta",
+            phase: "commentary",
+            sequence: 1,
+            turnId: "turn-content-parts-owner",
+          },
+        },
+        {
+          type: "tool_use",
+          metadata: { sequence: 2 },
+          toolCall: {
+            id: "web-search-content-parts-owner",
+            name: "WebSearch",
+            arguments: JSON.stringify({ query: "rendering owner" }),
+            status: "completed",
+            result: {
+              success: true,
+              output: "live search output",
+            },
+          } as never,
+        },
+        {
+          type: "thinking",
+          text: "live reasoning between tools",
+          metadata: {
+            source: "thread_item_reasoning",
+            threadItemId: "reasoning-content-parts-owner",
+            sequence: 3,
+            turnId: "turn-content-parts-owner",
+          },
+        },
+        {
+          type: "tool_use",
+          metadata: { sequence: 4 },
+          toolCall: {
+            id: "web-fetch-content-parts-owner",
+            name: "WebFetch",
+            arguments: JSON.stringify({
+              url: "https://example.com/rendering-owner",
+            }),
+            status: "completed",
+            result: {
+              success: true,
+              output: "live fetch output",
+            },
+          } as never,
+        },
+        {
+          type: "text",
+          text: "live final answer",
+          metadata: {
+            source: "agent_text_delta",
+            phase: "final_answer",
+            sequence: 5,
+            turnId: "turn-content-parts-owner",
+          },
+        },
+      ],
+    };
+
+    const projection = buildProjection(
+      message,
+      [
+        {
+          id: "timeline-commentary-content-parts-owner",
+          type: "agent_message",
+          thread_id: "thread-content-parts-owner",
+          turn_id: "turn-content-parts-owner",
+          sequence: 1,
+          phase: "commentary",
+          text: "timeline commentary should not replace live contentParts",
+          status: "completed",
+          started_at: "2026-06-24T10:00:00.000Z",
+          completed_at: "2026-06-24T10:00:00.500Z",
+          updated_at: "2026-06-24T10:00:00.500Z",
+        } as never,
+        {
+          id: "web-search-content-parts-owner",
+          type: "tool_call",
+          thread_id: "thread-content-parts-owner",
+          turn_id: "turn-content-parts-owner",
+          sequence: 2,
+          tool_name: "WebSearch",
+          arguments: { query: "rendering owner" },
+          output: "timeline search output",
+          status: "completed",
+          started_at: "2026-06-24T10:00:01.000Z",
+          completed_at: "2026-06-24T10:00:02.000Z",
+          updated_at: "2026-06-24T10:00:02.000Z",
+        } as never,
+        {
+          id: "reasoning-content-parts-owner",
+          type: "reasoning",
+          thread_id: "thread-content-parts-owner",
+          turn_id: "turn-content-parts-owner",
+          sequence: 3,
+          text: "timeline reasoning should not replace live contentParts",
+          status: "completed",
+          started_at: "2026-06-24T10:00:02.000Z",
+          completed_at: "2026-06-24T10:00:03.000Z",
+          updated_at: "2026-06-24T10:00:03.000Z",
+        } as never,
+        {
+          id: "web-fetch-content-parts-owner",
+          type: "tool_call",
+          thread_id: "thread-content-parts-owner",
+          turn_id: "turn-content-parts-owner",
+          sequence: 4,
+          tool_name: "WebFetch",
+          arguments: { url: "https://example.com/rendering-owner" },
+          output: "timeline fetch output",
+          status: "completed",
+          started_at: "2026-06-24T10:00:03.000Z",
+          completed_at: "2026-06-24T10:00:04.000Z",
+          updated_at: "2026-06-24T10:00:04.000Z",
+        } as never,
+        {
+          id: "timeline-final-content-parts-owner",
+          type: "agent_message",
+          thread_id: "thread-content-parts-owner",
+          turn_id: "turn-content-parts-owner",
+          sequence: 5,
+          phase: "final_answer",
+          text: "timeline final should not replace live contentParts",
+          status: "completed",
+          started_at: "2026-06-24T10:00:04.000Z",
+          completed_at: "2026-06-24T10:00:05.000Z",
+          updated_at: "2026-06-24T10:00:05.000Z",
+        } as never,
+      ],
+      {
+        isSending: false,
+        turnId: "turn-content-parts-owner",
+        turnStatus: "completed",
+      },
+    );
+
+    const serialized = JSON.stringify(projection.rendererContentParts);
+    expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
+      "text",
+      "tool_use",
+      "thinking",
+      "tool_use",
+      "text",
+    ]);
+    expect(serialized).toContain("live commentary before search");
+    expect(serialized).toContain("live reasoning between tools");
+    expect(serialized).toContain("live final answer");
+    expect(serialized).not.toContain("timeline commentary should not replace");
+    expect(serialized).not.toContain("timeline reasoning should not replace");
+    expect(serialized).not.toContain("timeline final should not replace");
+  });
+
+  it("搜索运行中 commentary overlay 不应作为最终正文，commentary item 应按序作为可见文本渲染", () => {
+    const message: Message = {
+      id: "assistant-running-search-commentary-overlay",
+      role: "assistant",
+      content: "",
+      timestamp: new Date("2026-06-24T10:00:00.000Z"),
+      isThinking: true,
+    };
+
+    const projection = buildProjection(
+      message,
+      [
+        {
+          id: "search-before-commentary",
+          thread_id: "thread-running-search",
+          turn_id: "turn-running-search-commentary",
+          sequence: 1,
+          status: "in_progress",
+          started_at: "2026-06-24T10:00:01.000Z",
+          updated_at: "2026-06-24T10:00:02.000Z",
+          type: "web_search",
+          action: "web_search",
+          query: "今天国际新闻",
+        } as never,
+        {
+          id: "commentary-after-search",
+          type: "agent_message",
+          turn_id: "turn-running-search-commentary",
+          sequence: 2,
+          phase: "commentary",
+          text: "我会继续读取来源并筛选重复报道。",
+          status: "in_progress",
+          started_at: "2026-06-24T10:00:03.000Z",
+          updated_at: "2026-06-24T10:00:03.000Z",
+        } as never,
+      ],
+      {
+        isSending: true,
+        turnStatus: "running",
+        streamingTextOverlay: {
+          messageId: message.id,
+          eventName: "message.delta",
+          content: "我会继续读取来源并筛选重复报道。",
+          phase: "commentary",
+          updatedAt: Date.parse("2026-06-24T10:00:03.000Z"),
+        },
+      },
+    );
+
+    const parts = projection.rendererContentParts || [];
+    expect(parts.map((part) => part.type)).toEqual(["tool_use", "text"]);
+    expect(parts[1]).toMatchObject({
+      type: "text",
+      text: "我会继续读取来源并筛选重复报道。",
+      metadata: {
+        phase: "commentary",
+        source: "agent_thread_item",
+        threadItemId: "commentary-after-search",
+        turnId: "turn-running-search-commentary",
+        sequence: 2,
+      },
+    });
+    expect(
+      parts.some(
+        (part) =>
+          part.type === "thinking" &&
+          part.text.includes("我会继续读取来源并筛选重复报道"),
+      ),
+    ).toBe(false);
     expect(projection.actionContent).toBe("");
-    expect(projection.rendererContent).toBe("");
-    expect(projection.rendererRawContent).toBe("");
-    expect(JSON.stringify(parts)).not.toContain("今日 AI 新闻");
   });
 
   it("网页搜索状态滞后为 running 时，已到达的 final_answer 应继续穿插显示", () => {
@@ -667,14 +976,21 @@ describe("messageListItemProjection web retrieval", () => {
     expect(projection.actionContent).toBe("");
     expect(projection.rendererRawContent).toBe("");
     expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
-      "thinking",
+      "text",
       "tool_use",
       "tool_use",
-      "thinking",
+      "text",
     ]);
     expect(projection.rendererContentParts?.[3]).toMatchObject({
-      type: "thinking",
+      type: "text",
       text: "来帮你搜索和分析一下不同学习机的评测结论。",
+      metadata: {
+        phase: "commentary",
+        source: "agent_thread_item",
+        threadItemId: "assistant-search-progress",
+        turnId: "turn-live-search-running",
+        sequence: 4,
+      },
     });
   });
 

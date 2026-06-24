@@ -8,6 +8,69 @@ const WEB_SEARCH_START_TIME = new Date("2026-06-22T01:00:00.000Z");
 const WEB_FETCH_START_TIME = new Date("2026-06-22T01:00:02.000Z");
 
 describe("agentChatHistoryProcess", () => {
+  it("远端 hydrate 新增 commentary text 时应按 sequence 插入工具过程前", () => {
+    const merged = mergeHydratedContentParts(
+      [
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "web-search",
+            name: "WebSearch",
+            arguments: '{"query":"Lime WebSearch rendering"}',
+            status: "completed",
+            startTime: WEB_SEARCH_START_TIME,
+          },
+          metadata: {
+            sequence: 3,
+          },
+        },
+        { type: "text", text: "网页搜索渲染结论：最终正文。" },
+      ],
+      [
+        {
+          type: "text",
+          text: "我先联网核实目标页面来源。",
+          metadata: {
+            source: "agent_thread_item",
+            threadItemId: "agent-message-commentary",
+            phase: "commentary",
+            sequence: 2,
+            turnId: "turn-web-tools",
+          },
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "web-search",
+            name: "WebSearch",
+            arguments: '{"query":"Lime WebSearch rendering"}',
+            status: "completed",
+            startTime: WEB_SEARCH_START_TIME,
+          },
+          metadata: {
+            sequence: 3,
+          },
+        },
+        { type: "text", text: "网页搜索渲染结论：最终正文。" },
+      ],
+    );
+
+    expect(merged?.map((part) => part.type)).toEqual([
+      "text",
+      "tool_use",
+      "text",
+    ]);
+    expect(merged?.[0]).toMatchObject({
+      type: "text",
+      text: "我先联网核实目标页面来源。",
+      metadata: {
+        threadItemId: "agent-message-commentary",
+        phase: "commentary",
+        sequence: 2,
+      },
+    });
+  });
+
   it("合并远端 WebTools hydrate 时应保留本地导语在工具过程前", () => {
     const merged = mergeHydratedContentParts(
       [

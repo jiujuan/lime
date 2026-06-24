@@ -15,6 +15,7 @@ import {
   buildReplayTrendCommand,
   collectLimeCorePolicyMissingInputs,
   collectLimeCorePolicyRefKeys,
+  filterBrowserActionIndexItems,
   formatAnalysisArtifactKindLabel,
   formatBrowserActionArtifactKindLabel,
   formatBrowserActionStatusLabel,
@@ -305,6 +306,9 @@ describe("harnessEvidenceViewModel", () => {
       observation_count: 1,
       screenshot_count: 1,
       last_url: "https://example.test",
+      thread_ids: ["thread-1"],
+      turn_ids: ["turn-1"],
+      content_ids: ["content-browser-1"],
       session_ids: ["browser-session-1"],
       target_ids: ["target-1"],
       profile_keys: ["profile-1"],
@@ -312,18 +316,29 @@ describe("harnessEvidenceViewModel", () => {
       artifact_kind_counts: [],
       action_counts: [],
       backend_counts: [],
+      executor_counts: [{ executor: "mcp__lime-browser", count: 1 }],
       items: [
         {
           artifact_kind: "browser_snapshot",
           tool_name: "browser_navigate",
           action: "navigate",
+          action_id: "browser-action-1",
           status: "completed",
           success: true,
           session_id: "browser-session-1",
           target_id: "target-1",
+          tab_id: "target-1",
           profile_key: "profile-1",
           backend: "playwright",
           request_id: "request-1",
+          thread_id: "thread-1",
+          turn_id: "turn-1",
+          content_id: "content-browser-1",
+          executor: "mcp__lime-browser",
+          evidence_refs: [
+            "browser_session:browser-session-1",
+            "browser_action:browser-session-1:browser-action-1",
+          ],
           last_url: "https://example.test",
           title: "Example",
           entry_source: "runtime",
@@ -352,11 +367,25 @@ describe("harnessEvidenceViewModel", () => {
           sessionCount: 1,
           observationCount: 1,
           screenshotCount: 1,
+          threadIds: ["thread-1"],
+          turnIds: ["turn-1"],
+          contentIds: ["content-browser-1"],
+          executorCounts: [{ executor: "mcp__lime-browser", count: 1 }],
           items: [
             {
               artifactKind: "browser_snapshot",
               toolName: "browser_navigate",
               action: "navigate",
+              actionId: "browser-action-1",
+              threadId: "thread-1",
+              turnId: "turn-1",
+              contentId: "content-browser-1",
+              executor: "mcp__lime-browser",
+              tabId: "target-1",
+              evidenceRefs: [
+                "browser_session:browser-session-1",
+                "browser_action:browser-session-1:browser-action-1",
+              ],
               success: true,
               observationAvailable: true,
               screenshotAvailable: true,
@@ -367,6 +396,63 @@ describe("harnessEvidenceViewModel", () => {
     });
     expect(artifact.createdAt).toBe(Date.parse(evidencePack.exported_at));
     expect(artifact.updatedAt).toBe(Date.parse(evidencePack.exported_at));
+  });
+
+  it("应按 thread / turn / content / executor 查询浏览器 action trace", () => {
+    const index: AgentRuntimeEvidenceBrowserActionIndex = {
+      action_count: 2,
+      session_count: 1,
+      observation_count: 2,
+      screenshot_count: 1,
+      thread_ids: ["thread-1", "thread-2"],
+      turn_ids: ["turn-1", "turn-2"],
+      content_ids: ["content-1", "content-2"],
+      session_ids: ["browser-session-1"],
+      target_ids: ["target-1"],
+      profile_keys: ["profile-1"],
+      status_counts: [],
+      artifact_kind_counts: [],
+      action_counts: [],
+      backend_counts: [],
+      executor_counts: [
+        { executor: "mcp__lime-browser", count: 1 },
+        { executor: "human", count: 1 },
+      ],
+      items: [
+        {
+          action_id: "browser-action-1",
+          thread_id: "thread-1",
+          turn_id: "turn-1",
+          content_id: "content-1",
+          executor: "mcp__lime-browser",
+        },
+        {
+          action_id: "browser-action-2",
+          thread_id: "thread-2",
+          turn_id: "turn-2",
+          content_id: "content-2",
+          executor: "human",
+        },
+      ],
+    };
+
+    expect(
+      filterBrowserActionIndexItems(index, { threadId: "thread-1" }).map(
+        (item) => item.action_id,
+      ),
+    ).toEqual(["browser-action-1"]);
+    expect(
+      filterBrowserActionIndexItems(index, {
+        turnId: "turn-2",
+        executor: "human",
+      }).map((item) => item.action_id),
+    ).toEqual(["browser-action-2"]);
+    expect(
+      filterBrowserActionIndexItems(index, {
+        contentId: "content-1",
+        executor: "human",
+      }),
+    ).toEqual([]);
   });
 
   it("应格式化 LimeCore policy 状态和决策", () => {

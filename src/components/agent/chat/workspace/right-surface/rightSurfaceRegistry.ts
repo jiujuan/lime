@@ -18,11 +18,15 @@ export interface WorkspaceRightSurfaceSpec {
   collapseTarget: WorkspaceRightSurfaceCollapseTarget;
 }
 
+export type WorkspaceRightSurfaceRenderer =
+  | ((input: RightSurfaceRenderInput) => ReactNode)
+  | {
+      label?: string | null;
+      render: (input: RightSurfaceRenderInput) => ReactNode;
+    };
+
 export type WorkspaceRightSurfaceRenderers = Partial<
-  Record<
-    WorkspaceRightSurfaceKind,
-    (input: RightSurfaceRenderInput) => ReactNode
-  >
+  Record<WorkspaceRightSurfaceKind, WorkspaceRightSurfaceRenderer>
 >;
 
 export const WORKSPACE_RIGHT_SURFACE_SPECS: readonly WorkspaceRightSurfaceSpec[] =
@@ -63,6 +67,13 @@ export const WORKSPACE_RIGHT_SURFACE_SPECS: readonly WorkspaceRightSurfaceSpec[]
       collapseTarget: "topToolbar",
     },
     {
+      kind: "browser",
+      slot: "canvasPanel",
+      exclusiveGroup: "workspaceRightSurface",
+      openSources: ["user", "route", "runtime"],
+      collapseTarget: "topToolbar",
+    },
+    {
       kind: "files",
       slot: "canvasPanel",
       exclusiveGroup: "workspaceRightSurface",
@@ -97,7 +108,13 @@ export function buildWorkspaceRightSurfaceDefinitions(
   renderers: WorkspaceRightSurfaceRenderers,
 ): RightSurfaceDefinition[] {
   return WORKSPACE_RIGHT_SURFACE_SPECS.flatMap((spec) => {
-    const render = renderers[spec.kind];
-    return render ? [{ kind: spec.kind, render }] : [];
+    const renderer = renderers[spec.kind];
+    if (!renderer) {
+      return [];
+    }
+    if (typeof renderer === "function") {
+      return [{ kind: spec.kind, render: renderer }];
+    }
+    return [{ kind: spec.kind, label: renderer.label, render: renderer.render }];
   });
 }

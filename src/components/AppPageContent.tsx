@@ -4,7 +4,7 @@
  * 负责根据当前页面类型渲染对应主内容，避免主入口继续膨胀。
  */
 
-import { lazy } from "react";
+import { lazy, useCallback } from "react";
 import styled from "styled-components";
 import type {
   AgentPageParams,
@@ -172,6 +172,7 @@ interface AppPageContentProps {
   onNavigate: (page: Page, params?: PageParams) => void;
   onAgentHasMessagesChange: (hasMessages: boolean) => void;
   activeAgentSessionTarget?: AgentAppRightSurfaceLaunchTarget | null;
+  agentSessionTargets?: AgentAppRightSurfaceLaunchTarget[] | null;
   onAgentSessionTargetChange?: (
     target: AgentAppRightSurfaceLaunchTarget | null,
   ) => void;
@@ -185,10 +186,29 @@ export function AppPageContent({
   onNavigate,
   onAgentHasMessagesChange,
   activeAgentSessionTarget,
+  agentSessionTargets,
   onAgentSessionTargetChange,
 }: AppPageContentProps) {
   const activePage = requestedPage ?? currentPage;
   const activePageParams = requestedPageParams ?? pageParams;
+  const agentSessionWorkspaceId =
+    activePage === "agent"
+      ? ((activePageParams as AgentPageParams).projectId ?? null)
+      : null;
+  const handleAgentSessionChange = useCallback(
+    (sessionId: string | null) => {
+      const normalizedSessionId = sessionId?.trim();
+      onAgentSessionTargetChange?.(
+        normalizedSessionId
+          ? {
+              sessionId: normalizedSessionId,
+              workspaceId: agentSessionWorkspaceId,
+            }
+          : null,
+      );
+    },
+    [agentSessionWorkspaceId, onAgentSessionTargetChange],
+  );
 
   if (activePage === "automation") {
     return (
@@ -266,17 +286,7 @@ export function AppPageContent({
           newChatAt={agentPageParams.newChatAt}
           expertAgentLaunch={agentPageParams.expertAgentLaunch}
           onHasMessagesChange={onAgentHasMessagesChange}
-          onSessionChange={(sessionId) => {
-            const normalizedSessionId = sessionId?.trim();
-            onAgentSessionTargetChange?.(
-              normalizedSessionId
-                ? {
-                    sessionId: normalizedSessionId,
-                    workspaceId: agentPageParams.projectId ?? null,
-                  }
-                : null,
-            );
-          }}
+          onSessionChange={handleAgentSessionChange}
         />
       </div>
     );
@@ -354,6 +364,7 @@ export function AppPageContent({
           onNavigate={onNavigate}
           pageParams={activePageParams as AgentAppsPageParams}
           rightSurfaceTarget={activeAgentSessionTarget}
+          rightSurfaceTargets={agentSessionTargets}
         />
       </div>
     );

@@ -1,5 +1,51 @@
 use super::*;
 
+struct PhasedAgentMessagesBackend;
+
+#[async_trait]
+impl ExecutionBackend for PhasedAgentMessagesBackend {
+    async fn start_turn(
+        &self,
+        _request: ExecutionRequest,
+        sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        sink.emit(RuntimeEvent::new("turn.started", json!({})))?;
+        sink.emit(RuntimeEvent::new(
+            "message.delta",
+            json!({
+                "itemId": "agent-commentary-1",
+                "text": "我先搜索公开资料。",
+                "phase": "commentary"
+            }),
+        ))?;
+        sink.emit(RuntimeEvent::new(
+            "message.delta",
+            json!({
+                "itemId": "agent-final-1",
+                "text": "最终答复。",
+                "phase": "final_answer"
+            }),
+        ))?;
+        sink.emit(RuntimeEvent::new("turn.completed", json!({})))
+    }
+
+    async fn cancel_turn(
+        &self,
+        _request: CancelExecutionRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+
+    async fn respond_action(
+        &self,
+        _request: ActionRespondRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+}
+
 #[tokio::test]
 async fn read_session_projects_runtime_turns_into_gui_messages() {
     let core = RuntimeCore::with_backend(Arc::new(CompletedBackend));
@@ -66,6 +112,65 @@ async fn read_session_projects_runtime_turns_into_gui_messages() {
         messages[1]["content"][0]["text"],
         "你好！有什么可以帮你的吗？"
     );
+}
+
+#[tokio::test]
+async fn read_session_does_not_project_commentary_phase_as_final_message() {
+    let core = RuntimeCore::with_backend(Arc::new(PhasedAgentMessagesBackend));
+    core.start_session(AgentSessionStartParams {
+        session_id: Some("sess_phased_messages".to_string()),
+        thread_id: Some("thread_phased_messages".to_string()),
+        app_id: "desktop".to_string(),
+        workspace_id: Some("workspace-main".to_string()),
+        business_object_ref: None,
+        locale: None,
+    })
+    .expect("session");
+
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: "sess_phased_messages".to_string(),
+            turn_id: Some("turn_phased_messages".to_string()),
+            input: AgentInput {
+                text: "搜索资料".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: None,
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("turn");
+
+    let read = core
+        .read_session(AgentSessionReadParams {
+            session_id: "sess_phased_messages".to_string(),
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .expect("read session");
+    let detail = read.detail.expect("session detail");
+    let messages = detail["messages"].as_array().expect("messages");
+    let items = detail["items"].as_array().expect("items");
+
+    assert_eq!(messages.len(), 2);
+    assert_eq!(messages[1]["role"], "assistant");
+    assert_eq!(messages[1]["content"][0]["text"], "最终答复。");
+    assert!(items.iter().any(|item| {
+        item["type"] == "agent_message"
+            && item["id"] == "agent-commentary-1"
+            && item["phase"] == "commentary"
+            && item["text"] == "我先搜索公开资料。"
+    }));
+    assert!(items.iter().any(|item| {
+        item["type"] == "agent_message"
+            && item["id"] == "agent-final-1"
+            && item["phase"] == "final_answer"
+            && item["text"] == "最终答复。"
+    }));
 }
 
 #[tokio::test]

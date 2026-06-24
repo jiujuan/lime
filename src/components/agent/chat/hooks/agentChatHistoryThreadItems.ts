@@ -1,13 +1,29 @@
 import type { AgentThreadItem } from "@/lib/api/agentProtocol";
 import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
 import type { Message } from "../types";
-import { sanitizeContentPartsForDisplay, sanitizeMessageTextForDisplay } from "../utils/messageDisplaySanitizer";
-import { resolveFinalAgentMessageItemIds, shouldUseAgentMessageAsFinalText } from "../utils/agentMessagePhase";
-import { aggregateFileChanges, isFileMutationToolName } from "../utils/fileChangeSummary";
+import {
+  sanitizeContentPartsForDisplay,
+  sanitizeMessageTextForDisplay,
+} from "../utils/messageDisplaySanitizer";
+import {
+  isAgentMessageCommentaryPhase,
+  resolveFinalAgentMessageItemIds,
+  shouldUseAgentMessageAsFinalText,
+} from "../utils/agentMessagePhase";
+import {
+  aggregateFileChanges,
+  isFileMutationToolName,
+} from "../utils/fileChangeSummary";
 import { SKILL_INLINE_PROCESS_RETENTION } from "../utils/skillInlineProcessRetention";
-import { buildImageTaskPreviewFromToolResult, buildTaskPreviewFromToolResult } from "../utils/taskPreviewFromToolResult";
+import {
+  buildImageTaskPreviewFromToolResult,
+  buildTaskPreviewFromToolResult,
+} from "../utils/taskPreviewFromToolResult";
 import { normalizeToolResultMetadata } from "./agentChatToolResult";
-import { toActionRequired, toToolCallState } from "../components/timeline-utils/itemConverters";
+import {
+  toActionRequired,
+  toToolCallState,
+} from "../components/timeline-utils/itemConverters";
 import { mergeAdjacentAssistantMessages } from "./agentChatHistoryAdjacentMerge";
 import {
   appendTextToParts,
@@ -16,19 +32,18 @@ import {
   parseHistoryTimestamp,
   mergeByKey,
 } from "./agentChatHistoryPrimitives";
-import {
-  contentPartMetadataFromThreadToolItem,
-} from "./agentChatHistoryReasoning";
-import {
-  extractThinkingContentFromParts,
-} from "./agentChatHistoryPrimitives";
+import { contentPartMetadataFromThreadToolItem } from "./agentChatHistoryReasoning";
+import { extractThinkingContentFromParts } from "./agentChatHistoryPrimitives";
 import {
   mergeHydratedToolStateContentParts,
   mergeImageWorkbenchPreview,
   mergeTaskPreview,
 } from "./agentChatHistoryProcess";
 import { dedupeAdjacentHistoryMessages } from "./agentChatHistorySignatures";
-import { isAuxiliaryHistoryTurn, readThreadItemText } from "./agentChatHistoryTimelineBasics";
+import {
+  isAuxiliaryHistoryTurn,
+  readThreadItemText,
+} from "./agentChatHistoryTimelineBasics";
 import { isUpdatePlanToolName } from "../utils/toolNameFamily";
 
 function readPlanRevisionId(metadata: unknown): string | null {
@@ -49,6 +64,18 @@ function shouldHydratePlanItem(item: AgentThreadItem): boolean {
 function formatPlanItemAsProposedPlan(text: string): string {
   const normalized = text.trim();
   return normalized ? `<proposed_plan>\n${normalized}\n</proposed_plan>\n` : "";
+}
+
+function agentMessageContentPartMetadata(
+  item: Extract<AgentThreadItem, { type: "agent_message" }>,
+): Record<string, unknown> {
+  return {
+    source: "agent_thread_item",
+    threadItemId: item.id,
+    turnId: item.turn_id,
+    sequence: item.sequence,
+    ...(item.phase ? { phase: item.phase } : {}),
+  };
 }
 
 function buildMessageFromThreadItem(
@@ -110,7 +137,7 @@ export function hydrateSessionDetailMessagesFromThreadItems(
       turnOrder.set(turn.id, index);
     });
 
-  const sortedItems = [...(detail.items || [])].sort((left, right) => {
+  const sortedItems = collectDetailThreadItems(detail).sort((left, right) => {
     const leftTurnOrder =
       turnOrder.get(left.turn_id) ?? Number.MAX_SAFE_INTEGER;
     const rightTurnOrder =
@@ -209,7 +236,11 @@ export function hydrateSessionDetailMessagesFromThreadItems(
     return assistantDraft;
   };
 
-  const appendAssistantText = (draft: Message, text: string) => {
+  const appendAssistantText = (
+    draft: Message,
+    text: string,
+    item: Extract<AgentThreadItem, { type: "agent_message" }>,
+  ) => {
     const sanitizedText = sanitizeMessageTextForDisplay(text, {
       role: "assistant",
       hasImages: false,
@@ -223,7 +254,42 @@ export function hydrateSessionDetailMessagesFromThreadItems(
     draft.contentParts = appendTextToParts(
       draft.contentParts || [],
       sanitizedText,
+      {
+        metadata: agentMessageContentPartMetadata(item),
+        preserveEventBoundary: true,
+      },
     );
+  };
+
+  const appendAssistantProcessText = (
+    draft: Message,
+    item: Extract<AgentThreadItem, { type: "agent_message" }>,
+  ): boolean => {
+    const text = readThreadItemText(item, ["text", "content", "message"]);
+    const sanitizedText = sanitizeMessageTextForDisplay(text, {
+      role: "assistant",
+      hasImages: false,
+    });
+    if (!sanitizedText) {
+      return false;
+    }
+    if (isAgentMessageCommentaryPhase(item.phase)) {
+      draft.contentParts = appendTextToParts(
+        draft.contentParts || [],
+        sanitizedText,
+        {
+          metadata: agentMessageContentPartMetadata(item),
+          preserveEventBoundary: true,
+        },
+      );
+      return true;
+    }
+    draft.contentParts = appendThinkingToHistoryParts(
+      draft.contentParts || [],
+      sanitizedText,
+      agentMessageContentPartMetadata(item),
+    );
+    return true;
   };
 
   for (const item of sortedItems) {
@@ -234,6 +300,15 @@ export function hydrateSessionDetailMessagesFromThreadItems(
         finalAgentMessageItemIds,
       );
       if (!message) {
+        if (item.type === "agent_message" && item.phase) {
+          const draft = ensureAssistantDraft(item);
+          const appended = appendAssistantProcessText(draft, item);
+          if (appended) {
+            draft.timestamp = parseHistoryTimestamp(
+              item.completed_at || item.updated_at || item.started_at,
+            );
+          }
+        }
         continue;
       }
       if (item.type === "user_message") {
@@ -243,7 +318,7 @@ export function hydrateSessionDetailMessagesFromThreadItems(
       }
 
       const draft = ensureAssistantDraft(item);
-      appendAssistantText(draft, message.content);
+      appendAssistantText(draft, message.content, item);
       draft.timestamp = message.timestamp;
       continue;
     }
@@ -410,4 +485,22 @@ export function hydrateSessionDetailMessagesFromThreadItems(
   return mergeAdjacentAssistantMessages(
     dedupeAdjacentHistoryMessages(messages),
   );
+}
+
+export function collectDetailThreadItems(
+  detail: AsterSessionDetail,
+): AgentThreadItem[] {
+  const seen = new Set<string>();
+  const items: AgentThreadItem[] = [];
+  for (const item of [
+    ...(detail.items || []),
+    ...(detail.thread_read?.thread_items || []),
+  ]) {
+    if (seen.has(item.id)) {
+      continue;
+    }
+    seen.add(item.id);
+    items.push(item);
+  }
+  return items;
 }

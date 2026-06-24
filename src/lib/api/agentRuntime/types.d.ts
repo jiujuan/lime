@@ -710,6 +710,9 @@ export interface AgentRuntimeEvidenceActionCount extends AgentRuntimeEvidenceCou
 export interface AgentRuntimeEvidenceBackendCount extends AgentRuntimeEvidenceCountEntry {
   backend: string;
 }
+export interface AgentRuntimeEvidenceExecutorCount extends AgentRuntimeEvidenceCountEntry {
+  executor: string;
+}
 export interface AgentRuntimeEvidenceBrowserActionItem {
   artifact_path?: string;
   contract_key?: string;
@@ -718,13 +721,20 @@ export interface AgentRuntimeEvidenceBrowserActionItem {
   artifact_kind?: string;
   tool_name?: string;
   action?: string;
+  action_id?: string;
   status?: string;
   success?: boolean;
   session_id?: string;
   target_id?: string;
+  tab_id?: string;
   profile_key?: string;
   backend?: string;
   request_id?: string;
+  thread_id?: string;
+  turn_id?: string;
+  content_id?: string;
+  executor?: string;
+  evidence_refs?: string[];
   last_url?: string;
   title?: string;
   attempt_count?: number;
@@ -737,6 +747,9 @@ export interface AgentRuntimeEvidenceBrowserActionIndex {
   observation_count: number;
   screenshot_count: number;
   last_url?: string;
+  thread_ids: string[];
+  turn_ids: string[];
+  content_ids: string[];
   session_ids: string[];
   target_ids: string[];
   profile_keys: string[];
@@ -744,6 +757,7 @@ export interface AgentRuntimeEvidenceBrowserActionIndex {
   artifact_kind_counts: AgentRuntimeEvidenceArtifactKindCount[];
   action_counts: AgentRuntimeEvidenceActionCount[];
   backend_counts: AgentRuntimeEvidenceBackendCount[];
+  executor_counts: AgentRuntimeEvidenceExecutorCount[];
   items: AgentRuntimeEvidenceBrowserActionItem[];
 }
 export interface AgentRuntimeEvidenceTaskIndexItem {

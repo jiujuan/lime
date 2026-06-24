@@ -123,43 +123,6 @@ export function normalizeInactiveRunningWebRetrievalTimelineItems(
   return changed ? nextItems : items;
 }
 
-export function holdTextContentPartsAsProcessWhileRunning(
-  parts?: Message["contentParts"],
-  shouldHold?: boolean,
-): Message["contentParts"] | undefined {
-  if (!shouldHold || !parts?.length) {
-    return parts;
-  }
-
-  let changed = false;
-  const nextParts: NonNullable<Message["contentParts"]> = [];
-  for (const part of parts) {
-    if (part.type !== "text") {
-      nextParts.push(part);
-      continue;
-    }
-
-    changed = true;
-    const normalized = part.text.trim();
-    if (!normalized) {
-      continue;
-    }
-
-    const lastPart = nextParts[nextParts.length - 1];
-    if (lastPart?.type === "thinking") {
-      nextParts[nextParts.length - 1] = {
-        ...lastPart,
-        text: `${lastPart.text}\n\n${normalized}`,
-      };
-      continue;
-    }
-
-    nextParts.push({ type: "thinking", text: normalized });
-  }
-
-  return changed ? nextParts : parts;
-}
-
 export function hideFinalAnswerContentPartsWhileRunning(
   parts?: Message["contentParts"],
   shouldHide?: boolean,
@@ -171,6 +134,13 @@ export function hideFinalAnswerContentPartsWhileRunning(
   let changed = false;
   const nextParts = parts.filter((part) => {
     if (part.type !== "text") {
+      return true;
+    }
+    const phase = part.metadata?.phase;
+    if (
+      typeof phase === "string" &&
+      isAgentMessageCommentaryPhase(phase)
+    ) {
       return true;
     }
     changed = true;

@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, ExternalLink, FileText, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { openExternalUrlWithSystemBrowser } from "@/lib/api/externalUrl";
 import { cn } from "@/lib/utils";
 import { skillsApi } from "@/lib/api/skills";
 import { MarkdownRenderer } from "./MarkdownRenderer";
@@ -83,7 +82,6 @@ interface InlineToolProcessStepProps {
   onOpenUrlPreview?: (item: SearchResultPreviewItem) => void;
   urlPreviewToolCalls?: ToolCallState[];
 }
-
 
 export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
   toolCall,
@@ -392,9 +390,7 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
   const skillSource =
     readString(metadata, ["skill_source", "skillSource"]) ||
     readString(argsRecord, ["source"]);
-  const isSkillInvocation =
-    isSkillLikeTool ||
-    skillSource === "SKILL.md";
+  const isSkillInvocation = isSkillLikeTool || skillSource === "SKILL.md";
   const skillName =
     readString(metadata, ["skill_name", "skillName"]) ||
     readString(argsRecord, ["skill", "name"]);
@@ -480,22 +476,11 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     Boolean(savedSiteContentTarget) ||
     Boolean(skillTitle && skillTitle !== subject);
 
-  const handleOpenExternalUrl = useCallback(async (url: string) => {
-    try {
-      await openExternalUrlWithSystemBrowser(url);
-    } catch (error) {
-      console.error("打开外部链接失败:", error);
-    }
-  }, []);
   const handleOpenSearchResult = useCallback(
     (item: SearchResultPreviewItem) => {
-      if (onOpenUrlPreview) {
-        onOpenUrlPreview(item);
-        return;
-      }
-      void handleOpenExternalUrl(item.url);
+      onOpenUrlPreview?.(item);
     },
-    [handleOpenExternalUrl, onOpenUrlPreview],
+    [onOpenUrlPreview],
   );
 
   useEffect(() => {
@@ -837,7 +822,9 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
                       <span className="block text-xs font-medium leading-5 text-emerald-900">
                         {savedSiteContentTarget.preferredTarget ===
                         "project_file"
-                          ? t("agentChat.toolCall.siteResult.openMarkdownPreview")
+                          ? t(
+                              "agentChat.toolCall.siteResult.openMarkdownPreview",
+                            )
                           : t("agentChat.toolCall.siteResult.openSavedContent")}
                       </span>
                       {savedSiteContentDisplayName ? (

@@ -35,6 +35,7 @@ export interface CanvasWorkbenchOpenedToolTab {
   kind: CanvasWorkbenchNewToolTab;
   sequence: number;
   browserUrl?: string | null;
+  browserTitle?: string | null;
 }
 
 export type CanvasWorkbenchTranslation = (

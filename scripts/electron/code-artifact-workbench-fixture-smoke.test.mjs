@@ -82,6 +82,9 @@ describe("code artifact workbench Electron fixture smoke guard", () => {
     expect(content).toContain("Electron renderer console error");
     expect(content).toContain("Electron renderer page error");
     expect(content).toContain("assertNoRendererErrors(consoleErrors, pageErrors)");
+    expect(content).toContain("lime:agent-runtime-sessions-changed");
+    expect(content).toContain('reason: "external"');
+    expect(content).toContain("workspaceId");
     expect(content).toContain("codingChangesEvidencePresent");
     expect(content).toContain("codingOutputsEvidencePresent");
     expect(content).toContain("codingLogsEvidencePresent");
@@ -120,6 +123,15 @@ describe("code artifact workbench Electron fixture smoke guard", () => {
     expect(content).not.toContain('"lime:task-center:open-task"');
     expect(content).toContain("openWorkbench");
     expect(content).toContain("hasUserPrompt");
+    expect(content).toContain("function hasHydratedSessionSnapshot(snapshot)");
+    expect(content).toContain(
+      "function hasGuiCodingInputHydratedSession(snapshot)",
+    );
+    expect(content).toContain(
+      "guiHydratedSession: hasHydratedSessionSnapshot(",
+    );
+    expect(content).toContain("isGuiCodingInput");
+    expect(content).toContain("hasToolTimelineText");
     expect(content).toContain("hasTaskCenterShell");
     expect(content).toContain("hasTaskCenterWorkbenchTab");
     expect(content).toContain("task-center-chrome-shell");
@@ -130,6 +142,7 @@ describe("code artifact workbench Electron fixture smoke guard", () => {
     expect(content).toContain("artifact-workbench-shell");
     expect(content).toContain("canvas-workbench-shell");
     expect(content).toContain("canvas-workbench-layout");
+    expect(content).toContain("代码产物会话未在 GUI 中完成 hydrate:");
     expect(content).toContain("canvas-workbench-panel-");
     expect(content).toContain("visibleWorkbenchRoot");
     expect(content).toContain(

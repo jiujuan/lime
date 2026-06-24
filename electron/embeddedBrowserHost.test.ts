@@ -4,16 +4,35 @@ import { ElectronEmbeddedBrowserHost } from "./embeddedBrowserHost";
 const {
   addChildViewMock,
   closeMock,
+  findInPageMock,
+  getSessionUserAgentMock,
+  getZoomFactorMock,
   loadUrlMock,
+  menuBuildFromTemplateMock,
+  menuPopupMock,
   reloadMock,
   removeChildViewMock,
+  sessionEventHandlers,
+  sessionFromPartitionMock,
+  setPermissionRequestHandlerMock,
   setBoundsMock,
+  setSessionUserAgentMock,
+  setWebContentsUserAgentMock,
+  setWindowOpenHandlerMock,
+  setZoomFactorMock,
+  shellOpenExternalMock,
+  stopMock,
+  stopFindInPageMock,
   setVisibleMock,
   webContentsEventHandlers,
   webContentsState,
   webContentsViewCtorMock,
+  clipboardWriteTextMock,
+  copyImageAtMock,
+  downloadUrlMock,
 } = vi.hoisted(() => {
   const webContentsState = {
+    destroyed: false,
     isLoading: false,
     title: "Example",
     url: "https://example.com/",
@@ -22,19 +41,65 @@ const {
     string,
     Array<(...args: unknown[]) => void>
   >();
+  const sessionEventHandlers = new Map<
+    string,
+    Array<(...args: unknown[]) => void>
+  >();
+  const setPermissionRequestHandlerMock = vi.fn();
   const loadUrlMock = vi.fn(async () => undefined);
   const reloadMock = vi.fn();
+  const stopMock = vi.fn();
+  const findInPageMock = vi.fn(() => 7);
+  const stopFindInPageMock = vi.fn();
+  const getZoomFactorMock = vi.fn(() => 1);
+  const setZoomFactorMock = vi.fn();
+  const clipboardWriteTextMock = vi.fn();
   const closeMock = vi.fn();
+  const copyImageAtMock = vi.fn();
+  const downloadUrlMock = vi.fn();
+  const getSessionUserAgentMock = vi.fn();
+  const setSessionUserAgentMock = vi.fn();
+  const sessionFromPartitionMock = vi.fn(() => ({
+    getUserAgent: getSessionUserAgentMock,
+    on: vi.fn((eventName: string, handler: (...args: unknown[]) => void) => {
+      const handlers = sessionEventHandlers.get(eventName) || [];
+      handlers.push(handler);
+      sessionEventHandlers.set(eventName, handlers);
+    }),
+    setPermissionRequestHandler: setPermissionRequestHandlerMock,
+    setUserAgent: setSessionUserAgentMock,
+  }));
+  const setWebContentsUserAgentMock = vi.fn();
+  const setWindowOpenHandlerMock = vi.fn();
+  const shellOpenExternalMock = vi.fn();
   const setBoundsMock = vi.fn();
   const setVisibleMock = vi.fn();
+  const menuPopupMock = vi.fn();
+  const menuBuildFromTemplateMock = vi.fn(() => ({
+    popup: menuPopupMock,
+  }));
   return {
     addChildViewMock: vi.fn(),
     closeMock,
+    clipboardWriteTextMock,
+    copyImageAtMock,
+    downloadUrlMock,
+    findInPageMock,
+    getSessionUserAgentMock,
+    getZoomFactorMock,
     loadUrlMock,
     reloadMock,
     removeChildViewMock: vi.fn(),
+    sessionEventHandlers,
+    sessionFromPartitionMock,
+    setPermissionRequestHandlerMock,
     setBoundsMock,
+    setSessionUserAgentMock,
+    setWebContentsUserAgentMock,
+    setZoomFactorMock,
     setVisibleMock,
+    menuBuildFromTemplateMock,
+    menuPopupMock,
     webContentsEventHandlers,
     webContentsState,
     webContentsViewCtorMock: vi.fn(() => ({
@@ -43,9 +108,13 @@ const {
       setVisible: setVisibleMock,
       webContents: {
         close: closeMock,
+        copyImageAt: copyImageAtMock,
+        downloadURL: downloadUrlMock,
+        findInPage: findInPageMock,
         getTitle: () => webContentsState.title,
         getURL: () => webContentsState.url,
-        isDestroyed: () => false,
+        getZoomFactor: getZoomFactorMock,
+        isDestroyed: () => webContentsState.destroyed,
         isLoading: () => webContentsState.isLoading,
         loadURL: loadUrlMock,
         navigationHistory: {
@@ -62,26 +131,50 @@ const {
           },
         ),
         reload: reloadMock,
-        setWindowOpenHandler: vi.fn(),
+        setZoomFactor: setZoomFactorMock,
+        stop: stopMock,
+        stopFindInPage: stopFindInPageMock,
+        setUserAgent: setWebContentsUserAgentMock,
+        setWindowOpenHandler: setWindowOpenHandlerMock,
       },
     })),
+    setWindowOpenHandlerMock,
+    shellOpenExternalMock,
+    stopMock,
+    stopFindInPageMock,
   };
 });
 
 vi.mock("./electronRuntime", () => ({
+  app: {
+    getLocale: () => "zh-CN",
+  },
+  clipboard: {
+    writeText: clipboardWriteTextMock,
+  },
+  Menu: {
+    buildFromTemplate: menuBuildFromTemplateMock,
+  },
+  session: {
+    fromPartition: sessionFromPartitionMock,
+  },
   shell: {
-    openExternal: vi.fn(),
+    openExternal: shellOpenExternalMock,
   },
   WebContentsView: webContentsViewCtorMock,
 }));
 
 function createWindow() {
+  let destroyed = false;
   return {
     contentView: {
       addChildView: addChildViewMock,
       removeChildView: removeChildViewMock,
     },
-    isDestroyed: () => false,
+    destroyForTest: () => {
+      destroyed = true;
+    },
+    isDestroyed: () => destroyed,
     off: vi.fn(),
     on: vi.fn(),
   };
@@ -97,16 +190,39 @@ describe("ElectronEmbeddedBrowserHost", () => {
   function resetMocks() {
     addChildViewMock.mockClear();
     closeMock.mockClear();
+    clipboardWriteTextMock.mockClear();
+    copyImageAtMock.mockClear();
+    downloadUrlMock.mockClear();
     loadUrlMock.mockReset();
     loadUrlMock.mockResolvedValue(undefined);
     reloadMock.mockClear();
+    stopMock.mockClear();
+    findInPageMock.mockClear();
+    stopFindInPageMock.mockClear();
+    getZoomFactorMock.mockClear();
+    getZoomFactorMock.mockReturnValue(1);
+    setZoomFactorMock.mockClear();
     removeChildViewMock.mockClear();
+    getSessionUserAgentMock.mockReset();
+    getSessionUserAgentMock.mockReturnValue(
+      "Mozilla/5.0 AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36 Electron/31.0.0 Lime/1.78.0",
+    );
+    sessionFromPartitionMock.mockClear();
+    setPermissionRequestHandlerMock.mockClear();
     setBoundsMock.mockClear();
+    setSessionUserAgentMock.mockClear();
+    setWebContentsUserAgentMock.mockClear();
+    setWindowOpenHandlerMock.mockClear();
+    shellOpenExternalMock.mockClear();
     setVisibleMock.mockClear();
+    menuBuildFromTemplateMock.mockClear();
+    menuPopupMock.mockClear();
     webContentsViewCtorMock.mockClear();
+    webContentsState.destroyed = false;
     webContentsState.isLoading = false;
     webContentsState.title = "Example";
     webContentsState.url = "https://example.com/";
+    sessionEventHandlers.clear();
     webContentsEventHandlers.clear();
   }
 
@@ -134,10 +250,24 @@ describe("ElectronEmbeddedBrowserHost", () => {
         webPreferences: expect.objectContaining({
           contextIsolation: true,
           nodeIntegration: false,
+          partition: "persist:embedded-browser",
           sandbox: true,
           webSecurity: true,
         }),
       }),
+    );
+    const normalizedUserAgent =
+      "Mozilla/5.0 AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36";
+    expect(sessionFromPartitionMock).toHaveBeenCalledWith(
+      "persist:embedded-browser",
+      { cache: true },
+    );
+    expect(setSessionUserAgentMock).toHaveBeenCalledWith(
+      normalizedUserAgent,
+      "zh-CN,zh,en-US,en",
+    );
+    expect(setWebContentsUserAgentMock).toHaveBeenCalledWith(
+      normalizedUserAgent,
     );
     expect(addChildViewMock).toHaveBeenCalled();
     expect(setBoundsMock).toHaveBeenCalledWith({
@@ -159,6 +289,12 @@ describe("ElectronEmbeddedBrowserHost", () => {
     });
     expect(reloadMock).toHaveBeenCalled();
 
+    webContentsState.isLoading = true;
+    await host.invoke(window as never, "embedded_browser_view_stop", {
+      viewId: "browser-1",
+    });
+    expect(stopMock).toHaveBeenCalled();
+
     await host.invoke(window as never, "embedded_browser_view_destroy", {
       viewId: "browser-1",
     });
@@ -167,6 +303,53 @@ describe("ElectronEmbeddedBrowserHost", () => {
     expect(
       emitted.some((item) => item.event === "embedded-browser-view-state"),
     ).toBe(true);
+  });
+
+  it("窗口关闭后销毁内嵌浏览器不访问已销毁 BrowserWindow", async () => {
+    resetMocks();
+    const emitted: Array<{ event: string; payload?: unknown }> = [];
+    const host = new ElectronEmbeddedBrowserHost((event, payload) => {
+      emitted.push({ event, payload });
+    });
+    const window = createWindow();
+
+    await host.invoke(window as never, "embedded_browser_view_mount", {
+      viewId: "browser-1",
+      url: "https://example.com",
+      bounds: { x: 10, y: 20, width: 300, height: 200 },
+    });
+
+    window.destroyForTest();
+
+    expect(() => host.dispose()).not.toThrow();
+    expect(removeChildViewMock).not.toHaveBeenCalled();
+    expect(closeMock).toHaveBeenCalled();
+    expect(emitted).toContainEqual({
+      event: "embedded-browser-view-destroyed",
+      payload: { viewId: "browser-1" },
+    });
+  });
+
+  it("WebContents 已销毁时不会重复 close", async () => {
+    resetMocks();
+    const host = new ElectronEmbeddedBrowserHost();
+    const window = createWindow();
+
+    await host.invoke(window as never, "embedded_browser_view_mount", {
+      viewId: "browser-1",
+      url: "https://example.com",
+      bounds: { x: 10, y: 20, width: 300, height: 200 },
+    });
+
+    webContentsState.destroyed = true;
+
+    await expect(
+      host.invoke(window as never, "embedded_browser_view_destroy", {
+        viewId: "browser-1",
+      }),
+    ).resolves.toEqual({});
+    expect(removeChildViewMock).toHaveBeenCalled();
+    expect(closeMock).not.toHaveBeenCalled();
   });
 
   it("拒绝非 http/https 地址", async () => {
@@ -202,7 +385,92 @@ describe("ElectronEmbeddedBrowserHost", () => {
     expect(loadUrlMock).toHaveBeenCalledWith("https://google.com/");
   });
 
-  it("更新 bounds 时应按 visible 参数隐藏或恢复原生 BrowserView", async () => {
+  it("同步 favicon、加载进度、页内查找和单标签缩放状态", async () => {
+    resetMocks();
+    const emitted: Array<{ event: string; payload?: unknown }> = [];
+    webContentsState.url = "";
+    webContentsState.isLoading = true;
+    loadUrlMock.mockReturnValue(new Promise(() => undefined));
+    setZoomFactorMock.mockImplementation((nextZoom: number) => {
+      getZoomFactorMock.mockReturnValue(nextZoom);
+    });
+    const host = new ElectronEmbeddedBrowserHost((event, payload) => {
+      emitted.push({ event, payload });
+    });
+    const window = createWindow();
+
+    await expect(
+      host.invoke(window as never, "embedded_browser_view_mount", {
+        viewId: "browser-1",
+        url: "https://example.com",
+      }),
+    ).resolves.toMatchObject({
+      viewId: "browser-1",
+      loadProgress: 0.1,
+      zoomFactor: 1,
+    });
+
+    emitWebContentsEvent("page-favicon-updated", {}, [
+      "https://example.com/favicon.ico",
+    ]);
+    await host.invoke(window as never, "embedded_browser_view_find_in_page", {
+      viewId: "browser-1",
+      text: "Example",
+    });
+    expect(findInPageMock).toHaveBeenCalledWith("Example", {
+      forward: true,
+      findNext: false,
+    });
+    emitWebContentsEvent(
+      "found-in-page",
+      {},
+      {
+        requestId: 7,
+        activeMatchOrdinal: 2,
+        matches: 5,
+        finalUpdate: true,
+      },
+    );
+
+    await host.invoke(window as never, "embedded_browser_view_set_zoom", {
+      viewId: "browser-1",
+      zoomFactor: 1.25,
+    });
+    await host.invoke(
+      window as never,
+      "embedded_browser_view_stop_find_in_page",
+      {
+        viewId: "browser-1",
+      },
+    );
+
+    expect(setZoomFactorMock).toHaveBeenCalledWith(1.25);
+    expect(stopFindInPageMock).toHaveBeenCalledWith("clearSelection");
+    expect(
+      emitted.some(
+        (item) =>
+          item.event === "embedded-browser-view-state" &&
+          (item.payload as { faviconUrl?: string }).faviconUrl ===
+            "https://example.com/favicon.ico",
+      ),
+    ).toBe(true);
+    expect(
+      emitted.some(
+        (item) =>
+          item.event === "embedded-browser-view-state" &&
+          (item.payload as { find?: { matches?: number } }).find?.matches === 5,
+      ),
+    ).toBe(true);
+    expect(
+      emitted.find(
+        (item) =>
+          item.event === "embedded-browser-view-state" &&
+          (item.payload as { zoomFactor?: number }).zoomFactor === 1.25,
+      ),
+    ).toBeTruthy();
+  });
+
+  it("更新 bounds 时应按 visible 参数隐藏或恢复 WebContentsView", async () => {
     resetMocks();
     const host = new ElectronEmbeddedBrowserHost();
     const window = createWindow();
@@ -266,6 +534,7 @@ describe("ElectronEmbeddedBrowserHost", () => {
           url: "https://blocked.example/",
           errorCode: null,
           errorDescription: "navigation failed",
+          failureCategory: "load_failed",
         }),
       });
     });
@@ -315,7 +584,316 @@ describe("ElectronEmbeddedBrowserHost", () => {
         url: "https://blocked.example/",
         errorCode: -105,
         errorDescription: "NAME_NOT_RESOLVED",
+        failureCategory: "dns",
+      }),
+    });
+  });
+
+  it("按 Electron 加载失败原因分类错误页", async () => {
+    resetMocks();
+    const emitted: Array<{ event: string; payload?: unknown }> = [];
+    const host = new ElectronEmbeddedBrowserHost((event, payload) => {
+      emitted.push({ event, payload });
+    });
+    const window = createWindow();
+
+    await host.invoke(window as never, "embedded_browser_view_navigate", {
+      viewId: "browser-1",
+      url: "https://cert.example",
+    });
+    emitWebContentsEvent(
+      "did-fail-load",
+      {},
+      -202,
+      "CERT_AUTHORITY_INVALID",
+      "https://cert.example/",
+    );
+
+    await host.invoke(window as never, "embedded_browser_view_navigate", {
+      viewId: "browser-1",
+      url: "https://blocked.example",
+    });
+    emitWebContentsEvent(
+      "did-fail-load",
+      {},
+      -20,
+      "ERR_BLOCKED_BY_CLIENT",
+      "https://blocked.example/",
+    );
+
+    await host.invoke(window as never, "embedded_browser_view_navigate", {
+      viewId: "browser-1",
+      url: "https://stopped.example",
+    });
+    emitWebContentsEvent(
+      "did-fail-load",
+      {},
+      -3,
+      "ERR_ABORTED",
+      "https://stopped.example/",
+    );
+
+    expect(loadFailureFor(emitted, "https://cert.example/")).toMatchObject({
+      failureCategory: "tls",
+    });
+    expect(loadFailureFor(emitted, "https://blocked.example/")).toMatchObject({
+      failureCategory: "blocked",
+    });
+    expect(loadFailureFor(emitted, "https://stopped.example/")).toMatchObject({
+      failureCategory: "aborted",
+    });
+  });
+
+  it("target blank 应留在内嵌浏览器内导航，不弹系统浏览器", async () => {
+    resetMocks();
+    const emitted: Array<{ event: string; payload?: unknown }> = [];
+    const host = new ElectronEmbeddedBrowserHost((event, payload) => {
+      emitted.push({ event, payload });
+    });
+    const window = createWindow();
+
+    await host.invoke(window as never, "embedded_browser_view_mount", {
+      viewId: "browser-1",
+      url: "https://example.com",
+      bounds: { x: 10, y: 20, width: 300, height: 200 },
+    });
+    loadUrlMock.mockClear();
+
+    const handler = setWindowOpenHandlerMock.mock.calls[0]?.[0] as
+      | ((details: { url: string }) => { action: string })
+      | undefined;
+    expect(handler).toBeTypeOf("function");
+    expect(handler?.({ url: "https://example.com/new" })).toEqual({
+      action: "deny",
+    });
+
+    expect(shellOpenExternalMock).not.toHaveBeenCalled();
+    expect(loadUrlMock).toHaveBeenCalledWith("https://example.com/new");
+    expect(
+      emitted.find(
+        (item) =>
+          item.event === "embedded-browser-view-state" &&
+          (item.payload as { url?: string }).url === "https://example.com/new",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("右键链接和图片时显示受控菜单，不弹出系统浏览器", async () => {
+    resetMocks();
+    const emitted: Array<{ event: string; payload?: unknown }> = [];
+    const host = new ElectronEmbeddedBrowserHost((event, payload) => {
+      emitted.push({ event, payload });
+    });
+    const window = createWindow();
+
+    await host.invoke(window as never, "embedded_browser_view_mount", {
+      viewId: "browser-1",
+      url: "https://example.com",
+      bounds: { x: 10, y: 20, width: 300, height: 200 },
+    });
+    loadUrlMock.mockClear();
+
+    emitWebContentsEvent(
+      "context-menu",
+      {},
+      {
+        x: 12,
+        y: 24,
+        pageURL: "https://example.com/page",
+        linkURL: "https://example.com/link",
+        mediaType: "image",
+        srcURL: "https://example.com/image.png",
+      },
+    );
+
+    expect(menuBuildFromTemplateMock).toHaveBeenCalled();
+    expect(menuPopupMock).toHaveBeenCalledWith({ window });
+    const menuCalls = menuBuildFromTemplateMock.mock.calls as unknown as Array<
+      [
+        Array<{
+          label?: string;
+          click?: () => void;
+        }>,
+      ]
+    >;
+    const template = menuCalls[0]?.[0] ?? [];
+    expect(template.map((item) => item.label).filter(Boolean)).toEqual(
+      expect.arrayContaining([
+        "在当前标签页打开链接",
+        "在系统浏览器中打开链接",
+        "复制链接地址",
+        "复制图片",
+        "复制图片地址",
+        "图片另存为",
+      ]),
+    );
+
+    template.find((item) => item.label === "在当前标签页打开链接")?.click?.();
+    expect(loadUrlMock).toHaveBeenCalledWith("https://example.com/link");
+    expect(shellOpenExternalMock).not.toHaveBeenCalled();
+    expect(
+      emitted.find(
+        (item) =>
+          item.event === "embedded-browser-view-state" &&
+          (item.payload as { url?: string }).url === "https://example.com/link",
+      ),
+    ).toBeTruthy();
+
+    template.find((item) => item.label === "复制链接地址")?.click?.();
+    expect(clipboardWriteTextMock).toHaveBeenCalledWith(
+      "https://example.com/link",
+    );
+    template.find((item) => item.label === "复制图片")?.click?.();
+    expect(copyImageAtMock).toHaveBeenCalledWith(12, 24);
+    template.find((item) => item.label === "图片另存为")?.click?.();
+    expect(downloadUrlMock).toHaveBeenCalledWith(
+      "https://example.com/image.png",
+    );
+  });
+
+  it("下载事件应按 viewId 回传进度和完成状态，不暴露本地保存路径", async () => {
+    resetMocks();
+    const emitted: Array<{ event: string; payload?: unknown }> = [];
+    const host = new ElectronEmbeddedBrowserHost((event, payload) => {
+      emitted.push({ event, payload });
+    });
+    const window = createWindow();
+
+    await host.invoke(window as never, "embedded_browser_view_mount", {
+      viewId: "browser-1",
+      url: "https://example.com",
+      bounds: { x: 10, y: 20, width: 300, height: 200 },
+    });
+
+    const item = createDownloadItem();
+    const webContents = webContentsViewCtorMock.mock.results[0]?.value
+      .webContents as unknown;
+    emitSessionEvent("will-download", {}, item, webContents);
+    item.receivedBytes = 50;
+    item.emit("updated", {}, "progressing");
+    item.receivedBytes = 100;
+    item.emit("done", {}, "completed");
+
+    const downloads = emitted.filter(
+      (entry) => entry.event === "embedded-browser-view-download",
+    );
+    expect(downloads).toHaveLength(3);
+    expect(downloads[0]?.payload).toMatchObject({
+      viewId: "browser-1",
+      url: "https://example.com/report.pdf",
+      filename: "report.pdf",
+      mimeType: "application/pdf",
+      state: "started",
+      receivedBytes: 0,
+      totalBytes: 100,
+      canResume: false,
+    });
+    expect(downloads[1]?.payload).toMatchObject({
+      state: "progressing",
+      receivedBytes: 50,
+    });
+    expect(downloads[2]?.payload).toMatchObject({
+      state: "completed",
+      receivedBytes: 100,
+    });
+    expect(JSON.stringify(downloads)).not.toContain("/Users/");
+  });
+
+  it("页面权限请求默认拒绝，并向 Renderer 回传受控事件", async () => {
+    resetMocks();
+    const emitted: Array<{ event: string; payload?: unknown }> = [];
+    const host = new ElectronEmbeddedBrowserHost((event, payload) => {
+      emitted.push({ event, payload });
+    });
+    const window = createWindow();
+
+    await host.invoke(window as never, "embedded_browser_view_mount", {
+      viewId: "browser-1",
+      url: "https://example.com",
+      bounds: { x: 10, y: 20, width: 300, height: 200 },
+    });
+
+    const permissionHandler = setPermissionRequestHandlerMock.mock
+      .calls[0]?.[0] as
+      | ((
+          webContents: unknown,
+          permission: string,
+          callback: (allowed: boolean) => void,
+          details: {
+            requestingUrl?: string;
+            embeddingOrigin?: string;
+          },
+        ) => void)
+      | undefined;
+    expect(permissionHandler).toBeTypeOf("function");
+    const callback = vi.fn();
+    const webContents = webContentsViewCtorMock.mock.results[0]?.value
+      .webContents as unknown;
+
+    permissionHandler?.(webContents, "media", callback, {
+      requestingUrl: "https://example.com/camera",
+      embeddingOrigin: "https://example.com",
+    });
+
+    expect(callback).toHaveBeenCalledWith(false);
+    expect(
+      emitted.find(
+        (entry) => entry.event === "embedded-browser-view-permission-request",
+      ),
+    ).toMatchObject({
+      payload: expect.objectContaining({
+        viewId: "browser-1",
+        permission: "media",
+        url: "https://example.com/",
+        requestingUrl: "https://example.com/camera",
+        embeddingOrigin: "https://example.com",
+        decision: "blocked",
       }),
     });
   });
 });
+
+function loadFailureFor(
+  emitted: Array<{ event: string; payload?: unknown }>,
+  url: string,
+) {
+  return emitted.find(
+    (item) =>
+      item.event === "embedded-browser-view-load-failed" &&
+      (item.payload as { url?: string }).url === url,
+  )?.payload;
+}
+
+function emitSessionEvent(eventName: string, ...args: unknown[]) {
+  for (const handler of sessionEventHandlers.get(eventName) || []) {
+    handler(...args);
+  }
+}
+
+function createDownloadItem() {
+  const handlers = new Map<string, Array<(...args: unknown[]) => void>>();
+  return {
+    receivedBytes: 0,
+    canResume: () => false,
+    getFilename: () => "report.pdf",
+    getMimeType: () => "application/pdf",
+    getReceivedBytes() {
+      return this.receivedBytes;
+    },
+    getTotalBytes: () => 100,
+    getURL: () => "https://example.com/report.pdf",
+    on(eventName: string, handler: (...args: unknown[]) => void) {
+      const nextHandlers = handlers.get(eventName) || [];
+      nextHandlers.push(handler);
+      handlers.set(eventName, nextHandlers);
+    },
+    once(eventName: string, handler: (...args: unknown[]) => void) {
+      this.on(eventName, handler);
+    },
+    emit(eventName: string, ...args: unknown[]) {
+      for (const handler of handlers.get(eventName) || []) {
+        handler(...args);
+      }
+    },
+  };
+}

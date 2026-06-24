@@ -1,3 +1,6 @@
+use crate::evidence::{
+    attach_browser_action_evidence, new_browser_action_id, BrowserActionEvidenceInput,
+};
 use crate::manager::CdpSessionHandle;
 use crate::types::{BrowserEvent, BrowserEventPayload, BrowserPageInfo};
 use chrono::Utc;
@@ -13,7 +16,8 @@ pub async fn execute_action(
     action: &str,
     args: Value,
 ) -> Result<Value, String> {
-    match action {
+    let event_cursor = session.event_buffer(None).await.next_cursor;
+    let result = match action {
         "navigate" => navigate(session, &args).await,
         "click" => click(session, &args).await,
         "type" | "form_input" => type_text(session, &args).await,
@@ -45,7 +49,40 @@ pub async fn execute_action(
             Ok(json!({ "events": events }))
         }
         _ => Err(format!("CDP 直连不支持动作: {action}")),
-    }
+    }?;
+    let state = session.state().await;
+    let screenshot_bytes = if should_capture_screenshot_for_action(action) {
+        capture_screenshot_bytes(session).await
+    } else {
+        None
+    };
+    let dom_snapshot_bytes = if should_capture_document_facts_for_action(action) {
+        capture_dom_snapshot_bytes(session).await
+    } else {
+        None
+    };
+    let accessibility_snapshot_bytes = if should_capture_document_facts_for_action(action) {
+        capture_accessibility_snapshot_bytes(session).await
+    } else {
+        None
+    };
+
+    Ok(attach_browser_action_evidence(
+        result,
+        BrowserActionEvidenceInput {
+            session_id: state.session_id,
+            tab_id: Some(state.target_id),
+            action_id: new_browser_action_id(),
+            action: action.to_string(),
+            network_events: session.collect_network_events(Some(event_cursor)),
+            console_events: session.collect_console_messages(Some(event_cursor)),
+            screenshot_bytes,
+            dom_snapshot_bytes,
+            accessibility_snapshot_bytes,
+            force_network_log: action == "read_network_requests",
+            force_console_log: action == "read_console_messages",
+        },
+    ))
 }
 
 async fn navigate(session: &CdpSessionHandle, args: &Value) -> Result<Value, String> {
@@ -479,6 +516,83 @@ fn resolve_navigation_command_timeout_ms(wait_timeout_ms: u64) -> u64 {
     wait_timeout_ms.max(DEFAULT_ACTION_TIMEOUT_MS)
 }
 
+fn should_capture_screenshot_for_action(action: &str) -> bool {
+    should_capture_document_facts_for_action(action)
+}
+
+fn should_capture_document_facts_for_action(action: &str) -> bool {
+    matches!(
+        action,
+        "navigate" | "get_page_info" | "read_page" | "get_page_text"
+    )
+}
+
+async fn capture_screenshot_bytes(session: &CdpSessionHandle) -> Option<usize> {
+    let result = session
+        .send_command(
+            "Page.captureScreenshot",
+            json!({
+                "format": "png",
+                "captureBeyondViewport": false,
+            }),
+            DEFAULT_ACTION_TIMEOUT_MS,
+        )
+        .await
+        .ok()?;
+    result
+        .get("data")
+        .and_then(Value::as_str)
+        .map(base64_decoded_len)
+}
+
+async fn capture_dom_snapshot_bytes(session: &CdpSessionHandle) -> Option<usize> {
+    let result = session
+        .runtime_evaluate(
+            r#"
+(() => ({
+  url: location.href,
+  title: document.title || location.href,
+  outerHTML: document.documentElement?.outerHTML || "",
+}))()
+"#
+            .to_string(),
+            true,
+            DEFAULT_ACTION_TIMEOUT_MS,
+        )
+        .await
+        .ok()?;
+    Some(serialized_value_size(&result))
+}
+
+async fn capture_accessibility_snapshot_bytes(session: &CdpSessionHandle) -> Option<usize> {
+    let result = session
+        .send_command(
+            "Accessibility.getFullAXTree",
+            json!({}),
+            DEFAULT_ACTION_TIMEOUT_MS,
+        )
+        .await
+        .ok()?;
+    Some(serialized_value_size(&result))
+}
+
+fn base64_decoded_len(value: &str) -> usize {
+    let trimmed = value.trim();
+    let padding = trimmed
+        .as_bytes()
+        .iter()
+        .rev()
+        .take_while(|byte| **byte == b'=')
+        .count();
+    (trimmed.len().saturating_mul(3) / 4usize).saturating_sub(padding.min(2))
+}
+
+fn serialized_value_size(value: &Value) -> usize {
+    serde_json::to_vec(value)
+        .map(|bytes| bytes.len())
+        .unwrap_or(0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -537,5 +651,39 @@ mod tests {
                 "agent framework".to_string(),
             ]
         );
+    }
+
+    #[test]
+    fn screenshot_is_only_captured_for_snapshot_actions() {
+        assert!(should_capture_screenshot_for_action("navigate"));
+        assert!(should_capture_screenshot_for_action("read_page"));
+        assert!(!should_capture_screenshot_for_action(
+            "read_network_requests"
+        ));
+        assert!(!should_capture_screenshot_for_action("click"));
+    }
+
+    #[test]
+    fn document_facts_are_only_captured_for_snapshot_actions() {
+        assert!(should_capture_document_facts_for_action("navigate"));
+        assert!(should_capture_document_facts_for_action("get_page_info"));
+        assert!(should_capture_document_facts_for_action("read_page"));
+        assert!(should_capture_document_facts_for_action("get_page_text"));
+        assert!(!should_capture_document_facts_for_action(
+            "read_console_messages"
+        ));
+        assert!(!should_capture_document_facts_for_action("click"));
+    }
+
+    #[test]
+    fn base64_decoded_len_accounts_for_padding() {
+        assert_eq!(base64_decoded_len("TWFu"), 3);
+        assert_eq!(base64_decoded_len("TWE="), 2);
+        assert_eq!(base64_decoded_len("TQ=="), 1);
+    }
+
+    #[test]
+    fn serialized_value_size_counts_json_bytes() {
+        assert_eq!(serialized_value_size(&json!({"a":"b"})), 9);
     }
 }

@@ -683,6 +683,72 @@ function hasGuiToolTimelineEvidence({
   );
 }
 
+function hasSessionConversationShell(snapshot) {
+  return (
+    snapshot?.hasMessageList === true ||
+    snapshot?.hasConversationShell === true
+  );
+}
+
+function hasSessionWorkbenchAnchor(snapshot) {
+  return (
+    snapshot?.hasWorkbenchToggle === true ||
+    snapshot?.hasTaskCenterWorkbenchTab === true ||
+    snapshot?.hasWorkbenchEntry === true ||
+    snapshot?.hasTaskCenterShell === true ||
+    snapshot?.hasWorkbenchSidebar === true ||
+    snapshot?.hasArtifactWorkbenchShell === true ||
+    snapshot?.hasCanvasWorkbenchShell === true
+  );
+}
+
+function hasSessionArtifactAnchor(snapshot) {
+  return (
+    snapshot?.hasArtifactPath === true ||
+    snapshot?.hasCodeText === true ||
+    hasSessionWorkbenchAnchor(snapshot)
+  );
+}
+
+function hasGuiCodingInputHydratedSession(snapshot) {
+  return (
+    snapshot?.isGuiCodingInput === true &&
+    snapshot?.hasUserPrompt === true &&
+    snapshot?.hasToolTimelineText === true &&
+    hasSessionWorkbenchAnchor(snapshot) &&
+    hasSessionConversationShell(snapshot)
+  );
+}
+
+function hasHydratedSessionSnapshot(snapshot) {
+  if (!snapshot || snapshot.isRestoringSession === true) {
+    return false;
+  }
+
+  const hasAssistantCompletionCopy =
+    snapshot.hasDoneText === true || snapshot.hasGeneratedText === true;
+  const hasDirectArtifactHydration =
+    snapshot.hasUserPrompt === true &&
+    hasAssistantCompletionCopy &&
+    hasSessionArtifactAnchor(snapshot);
+  const hasWorkbenchShellHydration =
+    snapshot.hasUserPrompt === true &&
+    (hasAssistantCompletionCopy ||
+      snapshot.hasToolName === true ||
+      snapshot.hasToolOutputPreview === true ||
+      snapshot.hasArtifactPath === true ||
+      snapshot.hasCodeText === true) &&
+    (snapshot.hasWorkbenchToggle === true ||
+      snapshot.hasTaskCenterWorkbenchTab === true) &&
+    hasSessionConversationShell(snapshot);
+
+  return (
+    hasDirectArtifactHydration ||
+    hasWorkbenchShellHydration ||
+    hasGuiCodingInputHydratedSession(snapshot)
+  );
+}
+
 async function expandTimelineProcessGroups(page, options) {
   const startedAt = Date.now();
   const timeoutMs = Math.min(options.timeoutMs, 15_000);
@@ -1361,6 +1427,21 @@ async function startCodeArtifactSession(page, workspaceId, requests) {
     executionStrategy: "react",
   });
 
+  await page.evaluate(
+    ({ sessionId, workspaceId }) => {
+      window.dispatchEvent(
+        new CustomEvent("lime:agent-runtime-sessions-changed", {
+          detail: {
+            reason: "external",
+            sessionId,
+            workspaceId,
+          },
+        }),
+      );
+    },
+    { sessionId: SESSION_ID, workspaceId },
+  );
+
   return {
     session: session.result,
   };
@@ -1703,6 +1784,7 @@ async function waitForFixtureSessionOpenedFromSidebar(page, options) {
 
 async function waitForSessionHydrated(page, options) {
   const startedAt = Date.now();
+  let lastSnapshot = null;
   while (Date.now() - startedAt < options.timeoutMs) {
     const snapshot = await evaluatePageSnapshot(
       page,
@@ -1713,6 +1795,7 @@ async function waitForSessionHydrated(page, options) {
         assistantArtifactText,
         toolName,
         toolOutputPreview,
+        isGuiCodingInput,
       }) => {
         const text = document.body?.innerText || "";
         const normalizeText = (value) =>
@@ -1740,6 +1823,7 @@ async function waitForSessionHydrated(page, options) {
             text.includes("Tool 结果") ||
             text.includes("Tool result") ||
             text.includes(toolOutputPreview),
+          isGuiCodingInput,
           hasArtifactPath: text.includes(artifactPath),
           hasCodeText: text.includes("Hello Lime Workbench"),
           hasMessageList: Boolean(
@@ -1799,45 +1883,24 @@ async function waitForSessionHydrated(page, options) {
         assistantArtifactText: ASSISTANT_ARTIFACT_TEXT,
         toolName: TOOL_NAME,
         toolOutputPreview: TOOL_OUTPUT_PREVIEW,
+        isGuiCodingInput: options.scenario === "gui-coding-input",
       },
     );
     if (!snapshot) {
       await sleep(options.intervalMs);
       continue;
     }
-    if (
-      !snapshot.isRestoringSession &&
-      snapshot.hasUserPrompt &&
-      (snapshot.hasDoneText || snapshot.hasGeneratedText) &&
-      (snapshot.hasArtifactPath ||
-        snapshot.hasCodeText ||
-        snapshot.hasWorkbenchToggle ||
-        snapshot.hasTaskCenterWorkbenchTab ||
-        snapshot.hasWorkbenchEntry ||
-        snapshot.hasTaskCenterShell ||
-        snapshot.hasWorkbenchSidebar ||
-        snapshot.hasArtifactWorkbenchShell ||
-        snapshot.hasCanvasWorkbenchShell)
-    ) {
-      return snapshot;
-    }
-    if (
-      !snapshot.isRestoringSession &&
-      snapshot.hasUserPrompt &&
-      (snapshot.hasDoneText ||
-        snapshot.hasGeneratedText ||
-        snapshot.hasToolName ||
-        snapshot.hasToolOutputPreview ||
-        snapshot.hasArtifactPath ||
-        snapshot.hasCodeText) &&
-      (snapshot.hasWorkbenchToggle || snapshot.hasTaskCenterWorkbenchTab) &&
-      (snapshot.hasMessageList || snapshot.hasConversationShell)
-    ) {
+    lastSnapshot = snapshot;
+    if (hasHydratedSessionSnapshot(snapshot)) {
       return snapshot;
     }
     await sleep(options.intervalMs);
   }
-  throw new Error("代码产物会话未在 GUI 中完成 hydrate");
+  throw new Error(
+    `代码产物会话未在 GUI 中完成 hydrate: ${JSON.stringify(
+      sanitizeJson(lastSnapshot),
+    )}`,
+  );
 }
 
 async function openWorkbench(page, options) {
@@ -2756,22 +2819,9 @@ async function run() {
         summary.sessionCreation?.toolTimelineProjectionPersisted === true,
       codingProjectionPersisted:
         summary.sessionCreation?.codingProjectionPersisted === true,
-      guiHydratedSession:
-        ((summary.sessionHydrated?.hasDoneText === true ||
-          summary.sessionHydrated?.hasGeneratedText === true) &&
-          summary.sessionHydrated?.hasUserPrompt === true &&
-          (summary.sessionHydrated?.hasArtifactPath === true ||
-            summary.sessionHydrated?.hasCodeText === true ||
-            summary.sessionHydrated?.hasWorkbenchToggle === true ||
-            summary.sessionHydrated?.hasTaskCenterWorkbenchTab === true ||
-            summary.sessionHydrated?.hasWorkbenchEntry === true ||
-            summary.sessionHydrated?.hasTaskCenterShell === true ||
-            summary.sessionHydrated?.hasArtifactWorkbenchShell === true ||
-            summary.sessionHydrated?.hasCanvasWorkbenchShell === true)) ||
-        ((summary.sessionHydrated?.hasWorkbenchToggle === true ||
-          summary.sessionHydrated?.hasTaskCenterWorkbenchTab === true) &&
-          (summary.sessionHydrated?.hasMessageList === true ||
-            summary.sessionHydrated?.hasConversationShell === true)),
+      guiHydratedSession: hasHydratedSessionSnapshot(
+        summary.sessionHydrated,
+      ),
       workbenchOpened:
         summary.workbench?.snapshot?.hasWorkbenchSidebar === true ||
         summary.workbench?.snapshot?.hasHarnessPanel === true ||

@@ -1,6 +1,6 @@
+use super::agent_app_task_runtime::build_agent_app_task_runtime_contract;
 use super::json_string;
 use super::timestamp;
-use super::agent_app_task_runtime::build_agent_app_task_runtime_contract;
 use super::RuntimeCore;
 use super::RuntimeCoreError;
 use app_server_protocol::AgentAppFetchCloudPackageParams;
@@ -268,7 +268,7 @@ impl RuntimeCore {
             .find_agent_app_installed_state(&params.app_id)
             .await
             .ok()
-            .map(|state| build_agent_app_task_runtime_contract(&state, None));
+            .map(|state| build_agent_app_task_runtime_contract_with_runtime_dir(&state));
         Ok(stopped_agent_app_ui_runtime_status(
             params.app_id,
             "Agent App UI runtime 未启动。",
@@ -663,6 +663,19 @@ fn resolve_agent_app_runtime_dir(state: &serde_json::Value) -> Result<PathBuf, R
         .join("packages")
         .join(package_dir_name);
     canonicalize_existing_agent_app_dir(&app_dir.to_string_lossy())
+}
+
+fn build_agent_app_task_runtime_contract_with_runtime_dir(
+    state: &serde_json::Value,
+) -> AgentAppTaskRuntimeContract {
+    let app_dir = resolve_agent_app_runtime_dir(state).ok();
+    let mut contract = build_agent_app_task_runtime_contract(state, app_dir.as_deref());
+    if contract.enabled && contract.package_root_path.is_none() {
+        contract
+            .blockers
+            .push("TASK_RUNTIME_PACKAGE_ROOT_UNAVAILABLE".to_string());
+    }
+    contract
 }
 
 fn canonicalize_existing_agent_app_dir(value: &str) -> Result<PathBuf, RuntimeCoreError> {

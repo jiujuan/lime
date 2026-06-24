@@ -1,6 +1,5 @@
 import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
-import "./StreamingRenderer.testMocks";
 import {
   installStreamingRendererTestHarness,
   renderStreamingRendererHarness as renderHarness,
@@ -116,7 +115,7 @@ describe("StreamingRenderer WebSearch result details", () => {
     expect(container.textContent).toContain("reuters.com/world");
     act(() => {
       const result = document.body.querySelector(
-        '[aria-label="预览搜索结果：Reuters World News"]',
+        '[aria-label="打开搜索结果：Reuters World News"]',
       ) as HTMLButtonElement | null;
       result?.click();
     });
@@ -125,10 +124,6 @@ describe("StreamingRenderer WebSearch result details", () => {
       expect.objectContaining({
         title: "Reuters World News",
         url: "https://www.reuters.com/world/",
-        snippet: "搜索结果摘要",
-        snapshotTitle: "Reuters snapshot",
-        snapshotContent: "# Reuters snapshot\n\n完整页面正文。",
-        snapshotSource: "web_fetch",
       }),
     );
     expect(container.textContent).not.toContain("raw page payload");

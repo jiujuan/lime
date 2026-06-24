@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -102,6 +103,71 @@ function runNodeSmoke(label, args, options) {
   };
 }
 
+function runElectronFixtureSmoke(label, args, options) {
+  ensureElectronFixtureBuild(options);
+  return runNodeSmoke(label, args, options);
+}
+
+function ensureElectronFixtureBuild(options) {
+  if (options.appUrl) {
+    return {
+      status: "skipped",
+      reason: "app-url",
+    };
+  }
+
+  const requiredFiles = [
+    path.join(rootDir, "dist", "index.html"),
+    path.join(rootDir, "dist-electron", "main", "main.js"),
+    path.join(rootDir, "dist-electron", "app-server.release.json"),
+  ];
+  const missingFiles = requiredFiles.filter((filePath) => !existsSync(filePath));
+  if (missingFiles.length === 0) {
+    return {
+      status: "ready",
+      missingFiles: [],
+    };
+  }
+
+  console.log(
+    `\n[${LOG_PREFIX}] > Electron fixture packaged renderer/assets build`,
+  );
+  console.log(
+    `[${LOG_PREFIX}] missing build artifacts: ${missingFiles
+      .map((filePath) => path.relative(rootDir, filePath))
+      .join(", ")}`,
+  );
+  const result = spawnSync(npmCommand(), ["run", "electron:build:smoke"], {
+    cwd: rootDir,
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      LIME_ALLOW_LIVE_PROVIDER_SMOKE: "0",
+      LIME_REAL_API_TEST: "0",
+    },
+  });
+
+  if (result.error) {
+    throw result.error;
+  }
+  if (typeof result.status === "number" && result.status !== 0) {
+    const error = new Error(
+      `[${LOG_PREFIX}] Electron fixture packaged renderer/assets build 失败`,
+    );
+    error.exitCode = result.status;
+    throw error;
+  }
+
+  return {
+    status: "built",
+    missingFiles,
+  };
+}
+
+function npmCommand() {
+  return process.platform === "win32" ? "npm.cmd" : "npm";
+}
+
 function main() {
   const options = parseArgs(process.argv.slice(2));
 
@@ -129,7 +195,9 @@ function main() {
     "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs",
   ]);
 
-  runNodeSmoke("Coding Workbench Electron fixture", [
+  ensureElectronFixtureBuild(options);
+
+  runElectronFixtureSmoke("Coding Workbench Electron fixture", [
     "scripts/electron/code-artifact-workbench-fixture-smoke.mjs",
     "--scenario",
     "gui-coding-input",
@@ -139,7 +207,7 @@ function main() {
     "180000",
   ], options);
 
-  runNodeSmoke("Claw 停止后同会话继续输出 Electron fixture", [
+  runElectronFixtureSmoke("Claw 停止后同会话继续输出 Electron fixture", [
     "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
     "--scenario",
     "cancel-then-continue",
@@ -149,7 +217,7 @@ function main() {
     "180000",
   ], options);
 
-  runNodeSmoke("Claw Plan revisioned history hydrate Electron fixture", [
+  runElectronFixtureSmoke("Claw Plan revisioned history hydrate Electron fixture", [
     "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
     "--scenario",
     "plan",
@@ -159,7 +227,7 @@ function main() {
     "180000",
   ], options);
 
-  runNodeSmoke("Claw Skills Runtime natural + explicit $skill + Skills workspace try Electron fixture", [
+  runElectronFixtureSmoke("Claw Skills Runtime natural + explicit $skill + Skills workspace try Electron fixture", [
     "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
     "--scenario",
     "skills-runtime",
@@ -169,7 +237,7 @@ function main() {
     "180000",
   ], options);
 
-  runNodeSmoke("Claw MCP structuredContent Agent Chat GUI Electron fixture", [
+  runElectronFixtureSmoke("Claw MCP structuredContent Agent Chat GUI Electron fixture", [
     "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
     "--scenario",
     "mcp-structured-content",
@@ -179,7 +247,7 @@ function main() {
     "180000",
   ], options);
 
-  runNodeSmoke("Claw Expert Skills Runtime declared + selected + invoked Electron fixture", [
+  runElectronFixtureSmoke("Claw Expert Skills Runtime declared + selected + invoked Electron fixture", [
     "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
     "--scenario",
     "expert-skills-runtime",
@@ -189,7 +257,7 @@ function main() {
     "180000",
   ], options);
 
-  runNodeSmoke("Claw Expert Plaza Skills Runtime click-through Electron fixture", [
+  runElectronFixtureSmoke("Claw Expert Plaza Skills Runtime click-through Electron fixture", [
     "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
     "--scenario",
     "expert-plaza-skills-runtime",
@@ -199,7 +267,7 @@ function main() {
     "180000",
   ], options);
 
-  runNodeSmoke("Claw Expert Panel Skills Runtime override Electron fixture", [
+  runElectronFixtureSmoke("Claw Expert Panel Skills Runtime override Electron fixture", [
     "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
     "--scenario",
     "expert-panel-skills-runtime",

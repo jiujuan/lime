@@ -1,5 +1,6 @@
 import {
   CONTINUE_PROMPT,
+  CONTENT_FACTORY_PRODUCT_PROFILE_SCENARIO,
   EXPERT_SKILLS_RUNTIME_PANEL_PROMPT,
   EXPERT_SKILLS_RUNTIME_PROMPT,
   EXPERT_SKILLS_RUNTIME_SKILL_REF,
@@ -116,6 +117,8 @@ export function buildAssertionContext({
       options.scenario === "expert-panel-skills-runtime";
     const isRightSurfaceVisualMatrixScenario =
       options.scenario === RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO;
+    const isContentFactoryProductProfileScenario =
+      options.scenario === CONTENT_FACTORY_PRODUCT_PROFILE_SCENARIO;
     const isAnyExpertSkillsRuntimeScenario =
       isExpertSkillsRuntimeScenario ||
       isExpertPlazaSkillsRuntimeScenario ||
@@ -137,7 +140,9 @@ export function buildAssertionContext({
                 ? skillsRuntimeTurnStart?.asterChatRequest
                 : isAnyExpertSkillsRuntimeScenario
                   ? expertRuntimeTurnStartForAssertions?.asterChatRequest
-            : newsTurnStart?.asterChatRequest) ?? {};
+                  : isContentFactoryProductProfileScenario
+                    ? {}
+                    : newsTurnStart?.asterChatRequest) ?? {};
     const hasCancelPhase = isCancelOnlyScenario || isCancelThenContinueScenario;
     const goalHarness = readHarnessMetadataFromTurnStart(goalTurnStart);
     const goalObjectiveText = readObjectiveTextFromHarness(goalHarness);
@@ -207,7 +212,9 @@ export function buildAssertionContext({
                     : expertSkillsRuntimeTurnStart?.inputText?.includes(
                       EXPERT_SKILLS_RUNTIME_PROMPT,
                     ) === true
-          : newsTurnStart?.inputText === NEWS_PROMPT;
+                  : isContentFactoryProductProfileScenario
+                    ? true
+                    : newsTurnStart?.inputText === NEWS_PROMPT;
   return {
     backendLedger,
     traceMessages,
@@ -245,6 +252,7 @@ export function buildAssertionContext({
     isExpertPlazaSkillsRuntimeScenario,
     isExpertPanelSkillsRuntimeScenario,
     isRightSurfaceVisualMatrixScenario,
+    isContentFactoryProductProfileScenario,
     isAnyExpertSkillsRuntimeScenario,
     expertRuntimeTurnStartForAssertions,
     asterChatRequest,

@@ -129,6 +129,30 @@
       ],
       "type": "object"
     },
+    "AgentAppReadinessIssueCategorySummary": {
+      "properties": {
+        "category": {
+          "type": "string"
+        },
+        "codes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "count": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "category",
+        "count"
+      ],
+      "type": "object"
+    },
     "AgentAppRightSurfaceContract": {
       "properties": {
         "defaultActiveTab": {
@@ -204,6 +228,12 @@
             "string"
           ]
         },
+        "packageRootPath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
         "sampleRequestPath": {
           "type": [
             "null",
@@ -267,12 +297,28 @@
     "generatedAt": {
       "type": "string"
     },
+    "issueCategories": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/AgentAppReadinessIssueCategorySummary"
+      },
+      "type": "array"
+    },
+    "primaryIssueCategory": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
     "profiles": {
       "default": [],
       "items": {
         "type": "string"
       },
       "type": "array"
+    },
+    "publishBlocked": {
+      "type": "boolean"
     },
     "readinessStatus": {
       "type": "string"
@@ -289,6 +335,7 @@
     "appId",
     "displayName",
     "generatedAt",
+    "publishBlocked",
     "readinessStatus",
     "rightSurface",
     "taskRuntime"

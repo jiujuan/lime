@@ -5,6 +5,7 @@ import {
   replaceRuntimeAttachmentPlaceholders,
 } from "./runtimeAttachmentPlaceholder";
 import { isInternalThinkingPreviewLine } from "./internalThinkingText";
+import { readContentPartSequence } from "./contentPartTimeline";
 import { stripAssistantProtocolResidue } from "./protocolResidue";
 import { formatRuntimePeerMessageText } from "./runtimePeerMessageDisplay";
 
@@ -41,8 +42,7 @@ const ASSISTANT_TOOL_PROCESS_LEAD_IN_RE =
   /^(?:(?:我|我们)(?:会|将|来)?先?|让我|先|接下来|现在|正在)?\s*(?:联网|上网)?(?:搜索|检索|查询|查找|核实|确认|验证|获取|拉取|浏览|打开|访问|抓取|读取|联网|上网)/i;
 const ASSISTANT_USER_FACING_LEAD_IN_RE =
   /(?:再|然后|随后|并).*(?:整理|汇总|生成|输出|给出|形成|组织).*(?:简报|报告|摘要|结论|清单|要点|正文|回答)/i;
-const ASSISTANT_MARKDOWN_HEADING_RE =
-  /(?:^|\n)\s{0,3}#{1,6}[ \t]+\S/;
+const ASSISTANT_MARKDOWN_HEADING_RE = /(?:^|\n)\s{0,3}#{1,6}[ \t]+\S/;
 const ASSISTANT_LOOSE_MARKDOWN_HEADING_RE =
   /(?:^|\n)\s{0,3}(?:#{1,6}(?=\S)|[^\n#|`*_]{2,72}#{2,6}\s*(?=\n|$))/;
 const ASSISTANT_MARKDOWN_BLOCK_START_RE =
@@ -53,8 +53,7 @@ const ASSISTANT_RUNTIME_ERROR_ENVELOPE_PREFIX_RE =
   /^\s*Ran into this error:\s*/;
 const ASSISTANT_RUNTIME_ERROR_ENVELOPE_RETRY_RE =
   /\n+\s*Please retry if you think this is a transient or recoverable error\.\s*$/;
-const ASSISTANT_RUNTIME_ERROR_TITLE_RE =
-  /^Ran into this erro(?:r\b|\.\.\.$)/i;
+const ASSISTANT_RUNTIME_ERROR_TITLE_RE = /^Ran into this erro(?:r\b|\.\.\.$)/i;
 const MARKDOWN_IMAGE_RE = /!\[([^\]\n]*)]\((?:[^()\\\n]|\\.|\([^)\n]*\))*\)/;
 const MARKDOWN_IMAGE_GLOBAL_RE =
   /!\[([^\]\n]*)]\((?:[^()\\\n]|\\.|\([^)\n]*\))*\)/g;
@@ -81,6 +80,15 @@ function hasAdjacentToolUse(parts: ContentPart[], index: number): boolean {
   );
 }
 
+function hasStructuredContentPartProvenance(part: ContentPart): boolean {
+  return Boolean(
+    part.metadata?.source ||
+    part.metadata?.threadItemId ||
+    part.metadata?.turnId ||
+    readContentPartSequence(part) !== null,
+  );
+}
+
 function isProcessContentPart(part: ContentPart | undefined): boolean {
   return Boolean(part && part.type !== "text");
 }
@@ -102,7 +110,10 @@ function hasNearbyProcessPart(parts: ContentPart[], index: number): boolean {
   return false;
 }
 
-function isBeforeFirstProcessPart(parts: ContentPart[], index: number): boolean {
+function isBeforeFirstProcessPart(
+  parts: ContentPart[],
+  index: number,
+): boolean {
   return !parts.slice(0, index).some(isProcessContentPart);
 }
 
@@ -416,9 +427,7 @@ export function isAssistantRuntimeErrorDisplayText(
 
   return Boolean(
     options.allowTruncatedTitle &&
-      ASSISTANT_RUNTIME_ERROR_TITLE_RE.test(
-        normalized.replace(/\s+/g, " "),
-      ),
+    ASSISTANT_RUNTIME_ERROR_TITLE_RE.test(normalized.replace(/\s+/g, " ")),
   );
 }
 
@@ -442,9 +451,10 @@ export function sanitizeMessageTextForDisplay(
     return "";
   }
 
-  const displayMessage = options.role === "user"
-    ? stripRedundantMarkdownImageAltEchoes(formattedRuntimePeerMessage)
-    : formattedRuntimePeerMessage;
+  const displayMessage =
+    options.role === "user"
+      ? stripRedundantMarkdownImageAltEchoes(formattedRuntimePeerMessage)
+      : formattedRuntimePeerMessage;
 
   if (!displayMessage) {
     return "";
@@ -508,10 +518,16 @@ export function sanitizeContentPartsForDisplay(
       return [];
     }
 
-    if (
-      options.role === "assistant" &&
-      hasNearbyProcessPart(parts, index)
-    ) {
+    if (options.role === "assistant" && hasNearbyProcessPart(parts, index)) {
+      if (hasStructuredContentPartProvenance(part)) {
+        return [
+          {
+            ...part,
+            text: sanitizedText,
+          },
+        ];
+      }
+
       if (
         isBeforeFirstProcessPart(parts, index) &&
         shouldKeepLeadingProcessIntro(sanitizedText)

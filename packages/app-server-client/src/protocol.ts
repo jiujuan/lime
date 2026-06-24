@@ -124,6 +124,15 @@ export const METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS =
   "workspaceRightSurface/pending/dismiss";
 export const METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED =
   "workspaceRightSurface/pendingChanged";
+export const METHOD_BROWSER_SESSION_TARGET_LIST =
+  "browserSession/target/list";
+export const METHOD_BROWSER_SESSION_OPEN = "browserSession/open";
+export const METHOD_BROWSER_SESSION_READ = "browserSession/read";
+export const METHOD_BROWSER_SESSION_CLOSE = "browserSession/close";
+export const METHOD_BROWSER_SESSION_EVENT_LIST =
+  "browserSession/event/list";
+export const METHOD_BROWSER_SESSION_ACTION_EXECUTE =
+  "browserSession/action/execute";
 export const METHOD_SKILL_LIST = "skill/list";
 export const METHOD_SKILL_READ = "skill/read";
 export const METHOD_SKILL_MANAGEMENT_LIST = "skillManagement/list";
@@ -329,6 +338,8 @@ export const METHOD_AGENT_SESSION_TURN_CANCEL = "agentSession/turn/cancel";
 export const METHOD_AGENT_SESSION_ACTION_REPLAY = "agentSession/action/replay";
 export const METHOD_AGENT_SESSION_ACTION_RESPOND =
   "agentSession/action/respond";
+export const METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND =
+  "agentSession/runtimeEvents/append";
 export const METHOD_AGENT_SESSION_EVENT = "agentSession/event";
 export const METHOD_MODEL_LIST = "model/list";
 export const METHOD_MODEL_PREFERENCES_LIST = "modelPreferences/list";
@@ -480,6 +491,12 @@ export const APP_SERVER_METHODS = [
     method: METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED,
     kind: "notification",
   },
+  { method: METHOD_BROWSER_SESSION_TARGET_LIST, kind: "request" },
+  { method: METHOD_BROWSER_SESSION_OPEN, kind: "request" },
+  { method: METHOD_BROWSER_SESSION_READ, kind: "request" },
+  { method: METHOD_BROWSER_SESSION_CLOSE, kind: "request" },
+  { method: METHOD_BROWSER_SESSION_EVENT_LIST, kind: "request" },
+  { method: METHOD_BROWSER_SESSION_ACTION_EXECUTE, kind: "request" },
   { method: METHOD_SKILL_LIST, kind: "request" },
   { method: METHOD_SKILL_READ, kind: "request" },
   { method: METHOD_SKILL_MANAGEMENT_LIST, kind: "request" },
@@ -682,6 +699,7 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_AGENT_SESSION_TURN_CANCEL, kind: "request" },
   { method: METHOD_AGENT_SESSION_ACTION_REPLAY, kind: "request" },
   { method: METHOD_AGENT_SESSION_ACTION_RESPOND, kind: "request" },
+  { method: METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND, kind: "request" },
   { method: METHOD_AGENT_SESSION_EVENT, kind: "notification" },
 ] as const satisfies readonly AppServerMethodSpec[];
 
@@ -2952,6 +2970,20 @@ export type AgentAppUiRuntimeStopParams = {
   appId: string;
 };
 
+export type AgentAppTaskRuntimeContract = {
+  enabled: boolean;
+  packageRootPath?: string | null;
+  workerEntrypoint?: string | null;
+  taskKinds?: string[];
+  outputArtifactKind?: string | null;
+  contractPath?: string | null;
+  sampleRequestPath?: string | null;
+  blockers?: string[];
+  followUps?: string[];
+  directProviderAccess: boolean;
+  directFilesystemAccess: boolean;
+};
+
 export type AgentAppUiRuntimeStatusResponse = {
   appId: string;
   status: "starting" | "running" | "stopped" | "failed" | string;
@@ -2962,6 +2994,7 @@ export type AgentAppUiRuntimeStatusResponse = {
   message?: string;
   entryKey?: string;
   route?: string;
+  taskRuntime?: AgentAppTaskRuntimeContract | null;
 };
 
 export type KnowledgeListPacksParams = {

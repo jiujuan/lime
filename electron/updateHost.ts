@@ -39,6 +39,10 @@ type VersionInfo = {
   error?: string | null;
 };
 
+type CheckForUpdatesOptions = {
+  automatic?: boolean;
+};
+
 type UpdateNotificationAnchorRect = {
   x: number;
   y: number;
@@ -73,6 +77,7 @@ type UpdateWindowController = {
 const UPDATE_INSTALL_SESSION_EVENT = "app-update://session";
 const MAC_UPDATE_MANIFEST_NAME = "RELEASES.json";
 const DEFAULT_UPDATE_BASE_URL = "https://updates.limecloud.com";
+const DEV_MAC_APP_PATH_SEGMENT = "/Lime-dev.app/Contents/MacOS/";
 
 export class ElectronUpdateHost {
   readonly #broadcast: Broadcast;
@@ -101,7 +106,7 @@ export class ElectronUpdateHost {
   ): Promise<unknown> {
     switch (command) {
       case "check_for_updates":
-        return await this.checkForUpdates();
+        return await this.checkForUpdates(parseCheckForUpdatesOptions(args));
       case "download_update":
         return await this.downloadUpdate();
       case "start_update_install_session":
@@ -137,8 +142,13 @@ export class ElectronUpdateHost {
     }
   }
 
-  async checkForUpdates(): Promise<VersionInfo> {
+  async checkForUpdates(
+    options: CheckForUpdatesOptions = {},
+  ): Promise<VersionInfo> {
     if (!this.#canUseUpdater()) {
+      if (options.automatic) {
+        return this.#currentVersionInfo();
+      }
       return {
         current: app.getVersion(),
         hasUpdate: false,
@@ -367,6 +377,9 @@ export class ElectronUpdateHost {
     if (process.env.VITE_DEV_SERVER_URL) {
       return false;
     }
+    if (isDevelopmentPackagedApp(process.execPath, process.platform)) {
+      return false;
+    }
     return app.isPackaged;
   }
 
@@ -539,6 +552,14 @@ export class ElectronUpdateHost {
   }
 }
 
+function parseCheckForUpdatesOptions(
+  value: Record<string, unknown> | undefined,
+): CheckForUpdatesOptions {
+  return {
+    automatic: value?.automatic === true,
+  };
+}
+
 function parseUpdateNotificationAnchorRect(
   value: unknown,
 ): UpdateNotificationAnchorRect | null {
@@ -591,6 +612,16 @@ function buildUpdateInfo(
 
 function isAutoUpdaterSupportedPlatform(platform: NodeJS.Platform): boolean {
   return platform === "darwin" || platform === "win32";
+}
+
+function isDevelopmentPackagedApp(
+  execPath: string,
+  platform: NodeJS.Platform,
+): boolean {
+  if (platform !== "darwin") {
+    return false;
+  }
+  return execPath.replace(/\\/g, "/").includes(DEV_MAC_APP_PATH_SEGMENT);
 }
 
 function runtimeUpdateFeedUrl(

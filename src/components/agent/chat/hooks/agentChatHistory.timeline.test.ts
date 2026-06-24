@@ -313,8 +313,18 @@ describe("agentChatHistory timeline fallback", () => {
           "<proposed_plan>\n" +
           "- [x] 整理计划\n" +
           "- [ ] 执行修改\n" +
-          "</proposed_plan>\n" +
-          "计划已更新。",
+          "</proposed_plan>",
+      },
+      {
+        type: "text",
+        text: "计划已更新。",
+        metadata: {
+          source: "agent_thread_item",
+          threadItemId: "item-assistant-update-plan-history",
+          turnId: "turn-update-plan-history",
+          sequence: 4,
+          phase: "final_answer",
+        },
       },
     ]);
   });
@@ -463,10 +473,109 @@ describe("agentChatHistory timeline fallback", () => {
             filePath: ".lime/qc/code-artifact-workbench/src/greeting.ts",
             artifactPath: ".lime/qc/code-artifact-workbench/src/greeting.ts",
             previewText: "export const greeting = 'hello';",
+            sessionId: "session-artifact-only",
+            turnId: "turn-artifact-only",
+            artifactRef: "artifact-ref-1",
+            appServerArtifactSessionId: "session-artifact-only",
+            appServerArtifactTurnId: "turn-artifact-only",
+            appServerArtifactRef: "artifact-ref-1",
           },
         },
       ],
     });
+  });
+
+  it("Product Profile artifact summary 不应恢复成中间产物消息", () => {
+    const detail: AsterSessionDetail = {
+      id: "session-product-profile-artifacts",
+      thread_id: "session-product-profile-artifacts-thread",
+      created_at: 1,
+      updated_at: 2,
+      messages: [],
+      turns: [],
+      items: [],
+      artifacts: [
+        {
+          artifactRef: "artifact-article-1",
+          eventId: "event-product-profile-artifact-1",
+          sequence: 1,
+          artifactId: "artifact-article-1",
+          path: ".lime/artifacts/product-profile/article.artifact.json",
+          title: "公众号文章草稿",
+          kind: "artifact_document",
+          status: "complete",
+          contentStatus: "available",
+          metadata: {
+            openedFrom: "app_server_product_workspace",
+            artifactSchema: "artifact_document.v1",
+            productProfile: {
+              appId: "content-factory-app",
+              sessionId: "session-product-profile-artifacts",
+              objectKind: "articleDraft",
+              objectId: "article-1",
+            },
+          },
+        },
+        {
+          artifactRef: "artifact-workspace-patch-1",
+          eventId: "event-product-profile-patch-1",
+          sequence: 2,
+          artifactId: "artifact-workspace-patch-1",
+          path: ".lime/artifacts/content-factory-workspace-patch.json",
+          title: "内容工厂工作区补丁",
+          kind: "content_factory.workspace_patch",
+          status: "complete",
+          contentStatus: "available",
+          metadata: {
+            contentFactoryWorkspacePatch: {
+              appId: "content-factory-app",
+              sessionId: "session-product-profile-artifacts",
+              objects: [
+                {
+                  ref: {
+                    appId: "content-factory-app",
+                    kind: "articleDraft",
+                    id: "article-1",
+                    sessionId: "session-product-profile-artifacts",
+                  },
+                  title: "公众号文章草稿",
+                  status: "ready",
+                },
+              ],
+            },
+          },
+        },
+      ],
+      thread_read: {
+        thread_id: "session-product-profile-artifacts-thread",
+        status: "completed",
+        profile_status: "completed",
+        pending_requests: [],
+        incidents: [],
+        queued_turns: [],
+        product_workspace: {
+          schemaVersion: "product-workspace.v1",
+          appId: "content-factory-app",
+          sessionId: "session-product-profile-artifacts",
+          objects: [
+            {
+              ref: {
+                appId: "content-factory-app",
+                kind: "articleDraft",
+                id: "article-1",
+                sessionId: "session-product-profile-artifacts",
+              },
+              title: "公众号文章草稿",
+              status: "ready",
+            },
+          ],
+        },
+      } as never,
+    } as AsterSessionDetail & { artifacts: unknown[] };
+
+    expect(
+      hydrateSessionDetailMessages(detail, "session-product-profile-artifacts"),
+    ).toEqual([]);
   });
 
   it("历史恢复不应把 commentary 阶段消息合并进最终正文", () => {
@@ -542,6 +651,17 @@ describe("agentChatHistory timeline fallback", () => {
       contentParts: [
         {
           type: "text",
+          text: "我会先检索多组来源并交叉核对。",
+          metadata: {
+            source: "agent_thread_item",
+            threadItemId: "assistant-commentary",
+            turnId: "turn-commentary-final",
+            sequence: 2,
+            phase: "commentary",
+          },
+        },
+        {
+          type: "text",
           text: "## 今日国际新闻简报\n\n- 第一条要闻。",
         },
       ],
@@ -550,6 +670,12 @@ describe("agentChatHistory timeline fallback", () => {
     expect(
       messages[1]?.contentParts
         ?.filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .join("\n"),
+    ).toContain("我会先检索");
+    expect(
+      messages[1]?.contentParts
+        ?.filter((part) => part.type === "thinking")
         .map((part) => part.text)
         .join("\n"),
     ).not.toContain("我会先检索");

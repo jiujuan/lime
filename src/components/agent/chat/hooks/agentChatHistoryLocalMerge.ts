@@ -1,9 +1,11 @@
 import type {
+  ContentPart,
   Message,
   MessageImageWorkbenchPreview,
   MessageTaskPreview,
 } from "../types";
 import { projectConversationMessagesByRuntimeTurn } from "../utils/conversationTimelineOrdering";
+import { readContentPartSequence } from "../utils/contentPartTimeline";
 import { mergeArtifacts } from "../utils/messageArtifacts";
 import {
   extractThinkingContentFromParts,
@@ -310,19 +312,68 @@ function hasRetainableLocalAssistantProcessState(
   );
 }
 
+function readContentPartMetadataIdentity(part: ContentPart): string | null {
+  const metadata = part.metadata;
+  const itemId = metadata?.itemId ?? metadata?.threadItemId;
+  if (typeof itemId === "string" && itemId.trim()) {
+    return itemId.trim();
+  }
+
+  const turnId = typeof metadata?.turnId === "string" ? metadata.turnId : "";
+  const phase = typeof metadata?.phase === "string" ? metadata.phase : "";
+  const sequence = readContentPartSequence(part);
+  if (turnId && phase && sequence !== null) {
+    return `${turnId}:${phase}:${sequence}`;
+  }
+
+  if (turnId && sequence !== null) {
+    return `${turnId}:${sequence}`;
+  }
+
+  return null;
+}
+
+function readProcessContentPartIdentity(part: ContentPart): string | null {
+  if (!contentPartContainsProcess(part)) {
+    return null;
+  }
+
+  if (part.type === "tool_use") {
+    return part.toolCall.id ? `tool:${part.toolCall.id}` : null;
+  }
+
+  if (part.type === "action_required") {
+    return part.actionRequired.requestId
+      ? `action:${part.actionRequired.requestId}`
+      : null;
+  }
+
+  const metadataIdentity = readContentPartMetadataIdentity(part);
+  return metadataIdentity ? `${part.type}:${metadataIdentity}` : null;
+}
+
+function hasLocalProcessPartMissingFromRemote(
+  localMessage: Message,
+  remoteMessage: Message,
+): boolean {
+  const remoteProcessIdentities = new Set(
+    (remoteMessage.contentParts || [])
+      .map(readProcessContentPartIdentity)
+      .filter((identity): identity is string => Boolean(identity)),
+  );
+
+  return (localMessage.contentParts || []).some((part) => {
+    const identity = readProcessContentPartIdentity(part);
+    return Boolean(identity && !remoteProcessIdentities.has(identity));
+  });
+}
+
 function shouldMergeLocalAssistantProcessState(
   localMessage: Message | undefined,
   remoteMessage: Message,
 ): boolean {
   const hasVisibleProcessState =
-    Boolean(
-      localMessage?.contentParts?.some(
-        (part) =>
-          part.type === "tool_use" ||
-          part.type === "action_required" ||
-          part.type === "file_changes_batch",
-      ),
-    ) ||
+    Boolean(localMessage?.contentParts?.some(contentPartContainsProcess)) ||
     (localMessage?.toolCalls?.length || 0) > 0 ||
     (localMessage?.actionRequests?.length || 0) > 0 ||
     (localMessage?.contextTrace?.length || 0) > 0 ||
@@ -334,20 +385,32 @@ function shouldMergeLocalAssistantProcessState(
   if (
     !localMessage ||
     remoteMessage.role !== "assistant" ||
-    !hasVisibleProcessState ||
-    hasRetainableLocalAssistantProcessState(remoteMessage)
+    !hasVisibleProcessState
   ) {
     return false;
   }
 
   const localContent = normalizeSignatureText(localMessage.content);
   const remoteContent = normalizeSignatureText(remoteMessage.content);
-  return Boolean(
+  const hasCompatibleContent = Boolean(
     localContent &&
-    remoteContent &&
-    localContent === remoteContent &&
-    !isOmittedHistoryContentProjection(remoteMessage),
+      remoteContent &&
+      localContent === remoteContent &&
+      !isOmittedHistoryContentProjection(remoteMessage),
   );
+  const hasCompatibleTurn = Boolean(
+    localMessage.runtimeTurnId &&
+      remoteMessage.runtimeTurnId &&
+      localMessage.runtimeTurnId === remoteMessage.runtimeTurnId,
+  );
+  if (hasRetainableLocalAssistantProcessState(remoteMessage)) {
+    return (
+      hasLocalProcessPartMissingFromRemote(localMessage, remoteMessage) &&
+      (hasCompatibleTurn || hasCompatibleContent)
+    );
+  }
+
+  return hasCompatibleContent;
 }
 
 function isLocalAssistantInMatchedUserTurn(params: {

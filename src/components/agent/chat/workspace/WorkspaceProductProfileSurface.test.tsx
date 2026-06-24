@@ -5,6 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkspaceProductProfileSurface } from "./WorkspaceProductProfileSurface";
 import type { WorkspaceProductProfile } from "./workspaceProductProfileModel";
 
+vi.mock("@/lib/api/fileSystem", () => ({
+  resolveLocalFilePreviewUrl: (path?: string | null) =>
+    path?.startsWith("/") ? `asset://${path}` : null,
+}));
+
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, options?: Record<string, unknown>) => {
@@ -24,7 +29,27 @@ vi.mock("react-i18next", () => ({
         "workspace.productProfile.actionHistory.latest": "最近操作",
         "workspace.productProfile.actionHistory.status": "状态",
         "workspace.productProfile.actionHistory.turn": "回合",
+        "workspace.productProfile.actionHistory.result": "结果产物",
+        "workspace.productProfile.actionHistory.resultEmpty": "暂无结果产物",
+        "workspace.productProfile.actionHistory.resultCount": `${options?.title ?? ""} 等 ${options?.count ?? 0} 个产物`,
+        "workspace.productProfile.actionHistory.error": "错误",
         "workspace.productProfile.actionHistory.status.completed": "已完成",
+        "workspace.productProfile.workerEvidence.title": "运行记录",
+        "workspace.productProfile.workerEvidence.count": `${options?.count ?? 0} 条记录`,
+        "workspace.productProfile.workerEvidence.status": "状态",
+        "workspace.productProfile.workerEvidence.task": "任务",
+        "workspace.productProfile.workerEvidence.taskKind": "任务类型",
+        "workspace.productProfile.workerEvidence.turn": "回合",
+        "workspace.productProfile.workerEvidence.artifact": "产物",
+        "workspace.productProfile.workerEvidence.event": "事件",
+        "workspace.productProfile.workerEvidence.input": "输入",
+        "workspace.productProfile.workerEvidence.output": "输出",
+        "workspace.productProfile.workerEvidence.entrypoint": "入口",
+        "workspace.productProfile.workerEvidence.outputObjectCount": `${options?.count ?? 0} 个对象`,
+        "workspace.productProfile.workerEvidence.error": "错误",
+        "workspace.productProfile.workerEvidence.status.completed": "已完成",
+        "workspace.productProfile.workerEvidence.status.failed": "失败",
+        "workspace.productProfile.workerEvidence.status.unknown": "未知",
         "workspace.productProfile.surface.document": "文章画布",
         "workspace.productProfile.surface.imageGrid": "图片组",
         "workspace.productProfile.preview.document": "文档预览",
@@ -35,6 +60,9 @@ vi.mock("react-i18next", () => ({
         "workspace.productProfile.action.regenerate": "重新生成",
         "workspace.productProfile.action.createVariant": "生成变体",
         "workspace.productProfile.action.applyToArticle": "应用到文章",
+        "workspace.productProfile.action.exportMarkdown": "导出 Markdown",
+        "workspace.productProfile.actionConfirm": `确认 ${options?.action ?? ""}`,
+        "workspace.productProfile.actionConfirmAria": `确认执行 ${options?.action ?? ""}`,
         "workspace.productProfile.actionPrompt.revise": `请改写「${options?.objectTitle ?? ""}」`,
         "workspace.productProfile.actionPrompt.regenerate": `请重新生成「${options?.objectTitle ?? ""}」`,
         "workspace.productProfile.actionPrompt.createVariant": `请生成「${options?.objectTitle ?? ""}」变体`,
@@ -56,6 +84,46 @@ const profile: WorkspaceProductProfile = {
   workspaceId: "workspace-main",
   source: "threadRead",
   objectCount: 2,
+  workerEvidence: [
+    {
+      id: "evt-worker-failed:workerEvidence",
+      status: "failed",
+      source: "agent_app_task_worker",
+      appId: "content-factory-app",
+      taskId: "task-image-1",
+      taskKind: "content.image.generate",
+      turnId: "turn-action-2",
+      eventType: "runtime.error",
+      workerEntrypoint: "./runtime/content-factory-worker.mjs",
+      inputSummary: "prompt=生成图片; inputKeys=topic",
+      outputSummary: null,
+      outputObjectCount: null,
+      artifactRef: null,
+      artifactKind: null,
+      errorCode: "worker_invalid_json_output",
+      errorMessage: "Agent App worker returned invalid JSON",
+      updatedAt: "2026-06-24T00:00:02.000Z",
+    },
+    {
+      id: "evt-worker-success:workerEvidence",
+      status: "completed",
+      source: "agent_app_task_worker",
+      appId: "content-factory-app",
+      taskId: "task-article-1",
+      taskKind: "content.article.generate",
+      turnId: "turn-action-1",
+      eventType: "artifact.snapshot",
+      workerEntrypoint: "./runtime/content-factory-worker.mjs",
+      inputSummary: "prompt=生成文章; inputKeys=topic",
+      outputSummary: "2 objects: 公众号文章草稿, 配图组",
+      outputObjectCount: 2,
+      artifactRef: "artifact-workspace-patch-1",
+      artifactKind: "content_factory.workspace_patch",
+      errorCode: null,
+      errorMessage: null,
+      updatedAt: "2026-06-24T00:00:00.000Z",
+    },
+  ],
   actionHistory: [
     {
       id: "turn-action-1:productProfileAction:regenerate",
@@ -78,6 +146,15 @@ const profile: WorkspaceProductProfile = {
       objectStatus: "needs_review",
       taskKind: "content.image.generate",
       prompt: "请重新生成「配图组」",
+      resultArtifacts: [
+        {
+          artifactRef: "artifact-image-regenerated",
+          artifactId: "artifact-document:image-regenerated",
+          title: "重新生成配图",
+          kind: "artifact_document",
+          status: "ready",
+        },
+      ],
       submittedAt: "2026-06-24T00:00:00.000Z",
       completedAt: "2026-06-24T00:00:01.000Z",
     },
@@ -125,7 +202,7 @@ const profile: WorkspaceProductProfile = {
           {
             id: "artifact-image-2",
             title: "副图候选",
-            url: "https://lime.local/image-2.png",
+            localPath: "/tmp/lime-content-factory/image-2.png",
           },
         ],
       },
@@ -212,12 +289,26 @@ describe("WorkspaceProductProfileSurface", () => {
     expect(container.textContent).toContain("重新生成");
     expect(container.textContent).toContain("已完成");
     expect(container.textContent).toContain("turn-action-1");
+    expect(container.textContent).toContain("重新生成配图");
+    expect(container.textContent).toContain("运行记录");
+    expect(container.textContent).toContain("2 条记录");
+    expect(container.textContent).toContain("task-image-1");
+    expect(container.textContent).toContain("content.image.generate");
+    expect(container.textContent).toContain("runtime.error");
+    expect(container.textContent).toContain("prompt=生成图片; inputKeys=topic");
+    expect(container.textContent).toContain("./runtime/content-factory-worker.mjs");
+    expect(container.textContent).toContain("worker_invalid_json_output");
     expect(container.textContent).toContain("主图候选");
     expect(container.textContent).toContain("中文内容工厂配图");
+    expect(
+      container.querySelector<HTMLImageElement>(
+        'img[src="asset:///tmp/lime-content-factory/image-2.png"]',
+      ),
+    ).not.toBeNull();
     expect(container.textContent).toContain("1 个来源产物");
   });
 
-  it("应把对象动作转换为 Claw 输入意图", () => {
+  it("写入动作应二次确认后再转换为 Claw 输入意图", () => {
     const onActionIntent = vi.fn();
     const container = renderSurface({ onActionIntent });
     const button = container.querySelector<HTMLButtonElement>(
@@ -225,6 +316,13 @@ describe("WorkspaceProductProfileSurface", () => {
     );
 
     expect(button).not.toBeNull();
+    act(() => {
+      button?.click();
+    });
+    expect(onActionIntent).not.toHaveBeenCalled();
+    expect(button?.dataset.confirmationPending).toBe("true");
+    expect(button?.textContent).toContain("确认 重新生成");
+
     act(() => {
       button?.click();
     });
@@ -273,6 +371,33 @@ describe("WorkspaceProductProfileSurface", () => {
     );
 
     expect(button?.disabled).toBe(true);
+  });
+
+  it("只读动作应单击后直接转换为 Claw 输入意图", () => {
+    const onActionIntent = vi.fn();
+    const container = renderSurface({ onActionIntent });
+    const articleRow = container.querySelector<HTMLButtonElement>(
+      '[data-testid="workspace-product-profile-object-articleDraft"]',
+    );
+    act(() => {
+      articleRow?.click();
+    });
+    const button = container.querySelector<HTMLButtonElement>(
+      '[data-testid="workspace-product-profile-action-export_markdown"]',
+    );
+
+    expect(button).not.toBeNull();
+    act(() => {
+      button?.click();
+    });
+
+    expect(button?.dataset.confirmationPending).toBe("false");
+    expect(onActionIntent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: expect.objectContaining({ key: "export_markdown" }),
+        object: expect.objectContaining({ title: "公众号文章草稿" }),
+      }),
+    );
   });
 
   it("点击对象列表应在右侧 Profile 内切换当前产物并上抛选择变化", () => {

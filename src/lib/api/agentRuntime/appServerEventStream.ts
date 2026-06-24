@@ -421,6 +421,9 @@ export function projectAppServerAgentEventPayload(
         ...basePayload,
         type: "text_delta",
         text: readString(payload, "text", "delta", "message") ?? "",
+        itemId: readAgentMessageItemId(payload),
+        item_id: readAgentMessageItemId(payload),
+        phase: readAgentMessagePhase(payload),
       };
     case "message.delta_batch":
     case "message.batch":
@@ -434,13 +437,6 @@ export function projectAppServerAgentEventPayload(
       };
     case "item.completed": {
       const item = readAgentThreadItemFromPayload(payload, event, "completed");
-      if (item?.type === "agent_message") {
-        return {
-          ...basePayload,
-          type: "message",
-          message: readAgentMessageFromThreadItem(item, event.timestamp),
-        };
-      }
       return {
         ...basePayload,
         type: "item_completed",
@@ -1207,10 +1203,32 @@ function projectTextDeltaBatchPayload(
     type: "text_delta_batch",
     text: readString(payload, "text", "delta", "message") ?? chunks.join(""),
     chunks,
+    itemId: readAgentMessageItemId(payload),
+    item_id: readAgentMessageItemId(payload),
+    phase: readAgentMessagePhase(payload),
     boundary:
       readString(payload, "boundary", "streamBoundary", "stream_kind") ??
       "provider",
   };
+}
+
+function readAgentMessageItemId(
+  payload: Record<string, unknown>,
+): string | undefined {
+  return readString(
+    payload,
+    "itemId",
+    "item_id",
+    "id",
+    "messageId",
+    "message_id",
+  );
+}
+
+function readAgentMessagePhase(
+  payload: Record<string, unknown>,
+): string | undefined {
+  return readString(payload, "phase", "messagePhase", "message_phase");
 }
 
 function readAgentMessageFromPayload(
@@ -1331,23 +1349,6 @@ function readAgentThreadItemBase(
     started_at: readString(item, "started_at", "startedAt") ?? event.timestamp,
     completed_at: readString(item, "completed_at", "completedAt"),
     updated_at: readString(item, "updated_at", "updatedAt") ?? event.timestamp,
-  };
-}
-
-function readAgentMessageFromThreadItem(
-  item: Record<string, unknown>,
-  timestamp: string,
-) {
-  return {
-    id: readString(item, "id", "messageId"),
-    role: "assistant",
-    content: [
-      {
-        type: "text",
-        text: readString(item, "text", "content", "message") ?? "",
-      },
-    ],
-    timestamp: readTimestampMs(item.timestamp, timestamp),
   };
 }
 

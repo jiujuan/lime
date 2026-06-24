@@ -71,6 +71,7 @@ describe("agentAppRightSurfaceLaunch", () => {
       }),
     ).toMatchObject({
       workspaceId: "workspace-main",
+      sessionId: "session-main",
       surfaceKind: "appSurface",
       origin: "agent_app_center",
       reason: "agent_app_shell_surface_ready",

@@ -30,11 +30,11 @@ export function buildAgentStreamProcessBoundaryTextCommitPatch(params: {
   renderedContent?: string | null;
   shouldRetainThinkingPart: (part: ContentPart) => boolean;
   surfaceThinkingDeltas: boolean;
+  textPartMetadata?: Record<string, unknown>;
 }): { content?: string; contentParts?: ContentPart[] } {
-  const candidateContent =
-    params.accumulatedContent?.trim()
-      ? params.accumulatedContent
-      : params.renderedContent || "";
+  const candidateContent = params.accumulatedContent?.trim()
+    ? params.accumulatedContent
+    : params.renderedContent || "";
   if (!candidateContent.trim()) {
     return {};
   }
@@ -44,6 +44,21 @@ export function buildAgentStreamProcessBoundaryTextCommitPatch(params: {
     return {};
   }
 
+  const retainedParts = retainVisibleProcessBoundaryParts({
+    parts: params.parts,
+    shouldRetainThinkingPart: params.shouldRetainThinkingPart,
+    surfaceThinkingDeltas: params.surfaceThinkingDeltas,
+  });
+  if (!currentText) {
+    return {
+      content: candidateContent,
+      contentParts: appendTextToParts(retainedParts, candidateContent, {
+        metadata: params.textPartMetadata,
+        preserveEventBoundary: Boolean(params.textPartMetadata),
+      }),
+    };
+  }
+
   if (currentText && candidateContent.startsWith(currentText)) {
     const pendingText = candidateContent.slice(currentText.length);
     if (!pendingText.trim()) {
@@ -51,14 +66,10 @@ export function buildAgentStreamProcessBoundaryTextCommitPatch(params: {
     }
     return {
       content: candidateContent,
-      contentParts: appendTextToParts(
-        retainVisibleProcessBoundaryParts({
-          parts: params.parts,
-          shouldRetainThinkingPart: params.shouldRetainThinkingPart,
-          surfaceThinkingDeltas: params.surfaceThinkingDeltas,
-        }),
-        pendingText,
-      ),
+      contentParts: appendTextToParts(retainedParts, pendingText, {
+        metadata: params.textPartMetadata,
+        preserveEventBoundary: Boolean(params.textPartMetadata),
+      }),
     };
   }
 

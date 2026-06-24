@@ -29,6 +29,10 @@ import {
   buildWorkspaceProductProfileFromPendingRequests,
   type WorkspaceProductProfile,
 } from "./workspaceProductProfileModel";
+import {
+  buildWorkspaceRightSurfacePendingBrowserIntent,
+  type WorkspaceRightSurfaceBrowserIntent,
+} from "./workspaceRightSurfaceBrowserIntent";
 
 const DEFAULT_RIGHT_SURFACE_PENDING_POLL_MS = 5_000;
 const DEFAULT_RIGHT_SURFACE_PENDING_EVENT_DRAIN_MS = 250;
@@ -69,6 +73,7 @@ export interface WorkspaceRightSurfacePendingRuntime {
   pendingAgentAppSurfaces: WorkspaceAgentAppSurfaceDescriptor[];
   pendingObjectCanvasCandidate: WorkspaceObjectCanvasCandidate | null;
   pendingProductProfile: WorkspaceProductProfile | null;
+  pendingBrowserIntent: WorkspaceRightSurfaceBrowserIntent | null;
   lastError: Error | null;
   refreshPendingRequests: () => Promise<void>;
   consumePendingRequestsForSurface: (
@@ -361,6 +366,10 @@ export function useWorkspaceRightSurfacePendingRuntime({
     () => buildWorkspaceProductProfileFromPendingRequests(pendingRequests),
     [pendingRequests],
   );
+  const pendingBrowserIntent = useMemo(
+    () => buildWorkspaceRightSurfacePendingBrowserIntent(pendingRequests),
+    [pendingRequests],
+  );
 
   return {
     pendingRequests,
@@ -370,6 +379,7 @@ export function useWorkspaceRightSurfacePendingRuntime({
     pendingAgentAppSurfaces,
     pendingObjectCanvasCandidate,
     pendingProductProfile,
+    pendingBrowserIntent,
     lastError,
     refreshPendingRequests,
     consumePendingRequestsForSurface,

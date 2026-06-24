@@ -85,6 +85,27 @@ export type {
   AgentAppPackageCacheStageResult,
 } from "./install/packageCache";
 export {
+  buildCloudReleaseEvidence,
+  listCloudReleaseEvidenceIssueCodes,
+} from "./install/cloudReleaseEvidence";
+export {
+  buildCloudReleaseSignaturePayload,
+  verifyCloudReleaseSignature,
+} from "./install/cloudReleaseSignature";
+export type { VerifyCloudReleaseSignatureParams } from "./install/cloudReleaseSignature";
+export type {
+  AgentAppCloudReleaseEvidence,
+  AgentAppCloudReleaseEvidenceBlockerCode,
+  AgentAppCloudReleaseEvidenceCatalogSource,
+  AgentAppCloudReleaseEvidenceIssueCode,
+  AgentAppCloudReleaseSignaturePolicy,
+  AgentAppCloudReleaseSignatureVerificationStatus,
+  AgentAppCloudReleaseEvidenceSourceKind,
+  AgentAppCloudReleaseEvidenceStatus,
+  AgentAppCloudReleaseEvidenceWarningCode,
+  BuildCloudReleaseEvidenceParams,
+} from "./install/cloudReleaseEvidence";
+export {
   buildSetupStateFromBindings,
   InMemoryAgentAppSetupStateStore,
 } from "./install/setupStateStore";

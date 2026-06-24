@@ -4,8 +4,18 @@ import type {
   MessageImageWorkbenchPreview,
   MessageTaskPreview,
 } from "../types";
-import type { HistoryToolCall, HistoryToolUseContentPart } from "./agentChatHistoryTypes";
-import { appendTextToParts, normalizeSignatureText } from "./agentChatHistoryPrimitives";
+import type {
+  HistoryToolCall,
+  HistoryToolUseContentPart,
+} from "./agentChatHistoryTypes";
+import {
+  appendTextToParts,
+  normalizeSignatureText,
+} from "./agentChatHistoryPrimitives";
+import {
+  isProcessBoundaryContentPart,
+  readContentPartSequence,
+} from "../utils/contentPartTimeline";
 
 function settleRunningToolCallOnCompletedAssistant(
   toolCall: HistoryToolCall,
@@ -26,7 +36,9 @@ function settleRunningToolCallOnCompletedAssistant(
   };
 }
 
-export function settleCompletedAssistantRunningToolState(message: Message): Message {
+export function settleCompletedAssistantRunningToolState(
+  message: Message,
+): Message {
   if (
     message.role !== "assistant" ||
     message.isThinking ||
@@ -106,7 +118,7 @@ export function mergeTaskPreview(
 }
 
 export function contentPartContainsProcess(part: ContentPart): boolean {
-  return part.type !== "text";
+  return isProcessBoundaryContentPart(part);
 }
 
 export function mergeToolCallStates(
@@ -181,6 +193,39 @@ function shouldAppendHydratedTextPart(
       normalizedExistingText.includes(normalizedText)
     );
   });
+}
+
+function readProcessTextPartIdentity(part: ContentPart): string | null {
+  if (part.type !== "text" || !contentPartContainsProcess(part)) {
+    return null;
+  }
+
+  const metadata = part.metadata;
+  const itemId = metadata?.itemId ?? metadata?.threadItemId;
+  if (typeof itemId === "string" && itemId.trim()) {
+    return `text:${itemId.trim()}`;
+  }
+
+  const phase = typeof metadata?.phase === "string" ? metadata.phase : "";
+  const turnId = typeof metadata?.turnId === "string" ? metadata.turnId : "";
+  const sequence = readContentPartSequence(part);
+  if (phase && turnId && sequence !== null) {
+    return `text:${turnId}:${phase}:${sequence}`;
+  }
+
+  return null;
+}
+
+function hasProcessTextPartIdentity(
+  parts: ContentPart[],
+  candidate: ContentPart,
+): boolean {
+  const identity = readProcessTextPartIdentity(candidate);
+  if (!identity) {
+    return false;
+  }
+
+  return parts.some((part) => readProcessTextPartIdentity(part) === identity);
 }
 
 export function mergeHydratedToolStateContentParts(
@@ -363,7 +408,9 @@ export function mergeHydratedContentParts(
     let merged = [...local];
     for (const part of remote) {
       if (part.type === "text" && part.text.trim()) {
-        merged = appendTextToParts(merged, part.text);
+        if (shouldAppendHydratedTextPart(merged, part.text)) {
+          merged = appendTextToParts(merged, part.text);
+        }
       }
     }
     return merged;
@@ -445,6 +492,12 @@ export function mergeHydratedContentParts(
       }
 
       if (part.type === "text" && part.text.trim()) {
+        if (contentPartContainsProcess(part)) {
+          if (!hasProcessTextPartIdentity(merged, part)) {
+            insertProcessPart(part);
+          }
+          continue;
+        }
         if (shouldAppendHydratedTextPart(merged, part.text)) {
           merged.push(part);
         }
@@ -463,6 +516,19 @@ function findInitialProcessInsertionIndex(
   parts: ContentPart[],
   nextPart: ContentPart,
 ): number {
+  const nextSequence = readContentPartSequence(nextPart);
+  if (nextSequence !== null) {
+    const finalTextIndex = findLastTextPartIndex(parts);
+    const searchEndIndex = finalTextIndex >= 0 ? finalTextIndex : parts.length;
+    for (let index = 0; index < searchEndIndex; index += 1) {
+      const existingSequence = readContentPartSequence(parts[index]!);
+      if (existingSequence !== null && existingSequence > nextSequence) {
+        return index;
+      }
+    }
+    return searchEndIndex;
+  }
+
   const nextSortKey = contentPartSortTime(nextPart);
   if (nextSortKey === null) {
     const firstProcessIndex = findFirstProcessPartIndex(parts);

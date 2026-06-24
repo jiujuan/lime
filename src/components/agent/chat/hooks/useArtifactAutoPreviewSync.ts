@@ -8,9 +8,13 @@ import {
 } from "../utils/messageArtifacts";
 
 export interface ArtifactAutoPreviewResult {
+  artifactId?: string;
+  artifactRef?: string;
   path?: string;
   content?: string | null;
   isBinary?: boolean;
+  metadata?: unknown;
+  title?: string;
   error?: string | null;
 }
 
@@ -35,6 +39,34 @@ function normalizePreviewText(value: string, maxChars: number): string {
     return trimmed;
   }
   return `${trimmed.slice(0, maxChars).trimEnd()}…`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function buildPreviewMetadataPatch(
+  preview: ArtifactAutoPreviewResult,
+): Record<string, unknown> {
+  const previewMetadata = isRecord(preview.metadata) ? preview.metadata : {};
+  return Object.fromEntries(
+    Object.entries({
+      ...previewMetadata,
+      artifactId: preview.artifactId,
+      artifactRef: preview.artifactRef,
+      appServerArtifactRef: preview.artifactRef,
+      appServerArtifactTitle: preview.title,
+    }).filter(([, value]) => value !== undefined),
+  );
+}
+
+function hasMetadataPatchChange(
+  artifact: Artifact,
+  patch: Record<string, unknown>,
+): boolean {
+  return Object.entries(patch).some(
+    ([key, value]) => artifact.meta[key] !== value,
+  );
 }
 
 export function shouldAutoSyncArtifactPreview(
@@ -82,6 +114,8 @@ export function mergePreviewContentIntoArtifact(
   const nextPath =
     preview.path?.trim() || resolveArtifactProtocolFilePath(artifact);
   const currentContent = artifact.content;
+  const metadataPatch = buildPreviewMetadataPatch(preview);
+  const hasMetadataChange = hasMetadataPatchChange(artifact, metadataPatch);
 
   if (!nextContent.trim() && currentContent.trim()) {
     return null;
@@ -97,7 +131,8 @@ export function mergePreviewContentIntoArtifact(
 
   if (
     nextContent === currentContent &&
-    nextPath === resolveArtifactProtocolFilePath(artifact)
+    nextPath === resolveArtifactProtocolFilePath(artifact) &&
+    !hasMetadataChange
   ) {
     return null;
   }
@@ -113,6 +148,7 @@ export function mergePreviewContentIntoArtifact(
           : artifact.status;
   const nextWritePhase: WriteArtifactContext["metadata"] = {
     ...(artifact.meta as ArtifactWriteMetadata),
+    ...metadataPatch,
     writePhase:
       nextStatus === "complete"
         ? "completed"

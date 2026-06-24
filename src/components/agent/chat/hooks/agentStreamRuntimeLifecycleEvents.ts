@@ -33,6 +33,7 @@ import {
   bindAssistantMessageToRuntimeTurn,
   extractVisibleTextFromAgentMessage,
 } from "./agentStreamRuntimeHandlerUtils";
+import { shouldUseAgentMessageAsFinalText } from "../utils/agentMessagePhase";
 import type {
   HandleTurnStreamEventOptions,
   StreamRequestState,
@@ -53,6 +54,16 @@ type AgentStreamCompletionMessagePlan = Extract<
 > & {
   usage?: Message["usage"];
 };
+
+function noteCompletedTextAsAssistantReplyIfNeeded(
+  requestState: StreamRequestState,
+) {
+  if (!requestState.hasFinalAnswerRequiredProcessBoundary) {
+    return;
+  }
+  requestState.hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary =
+    true;
+}
 
 export function handleAgentStreamMessageSnapshotEvent(params: {
   assistantMsgId: string;
@@ -282,7 +293,10 @@ export function handleAgentStreamTurnCompletedEvent(params: {
   const completedAt = params.event.turn.completed_at || new Date().toISOString();
   params.setters.setThreadItems((prev) =>
     prev.map((item) =>
-      isStreamedReasoningTimelineItem(item, params.event.turn.id)
+      isStreamedReasoningTimelineItem(item, params.event.turn.id) ||
+      (item.type === "agent_message" &&
+        item.turn_id === params.event.turn.id &&
+        !shouldUseAgentMessageAsFinalText(item.phase))
         ? {
             ...item,
             status: "completed",
@@ -293,21 +307,43 @@ export function handleAgentStreamTurnCompletedEvent(params: {
     ),
   );
   resetStreamedReasoningSegment(params.requestState);
-  if (params.event.text?.trim() && !params.shouldPreserveAssistantContent) {
+  if (
+    params.event.text?.trim() &&
+    !params.shouldPreserveAssistantContent
+  ) {
     const completedText = params.event.text;
     const existingContent = params.requestState.accumulatedContent;
-    const nextContent = !existingContent.trim()
+    const shouldPreferCompletedText =
+      Boolean(params.requestState.hasFinalAnswerRequiredProcessBoundary) &&
+      completedText.trim().length > 0;
+    const completedTextAdopted = shouldPreferCompletedText || !existingContent.trim()
+      ? true
+      : completedText.startsWith(existingContent) &&
+        completedText.length > existingContent.length;
+    const nextContent = shouldPreferCompletedText
+      ? completedText
+      : !existingContent.trim()
       ? completedText
       : completedText.startsWith(existingContent)
         ? completedText
         : existingContent;
     params.requestState.accumulatedContent = nextContent;
     params.requestState.renderedContent = nextContent;
-    params.requestState.hasMeaningfulCompletionSignal = true;
+    if (
+      completedTextAdopted ||
+      params.requestState.hasFinalAnswerRequiredProcessBoundary
+    ) {
+      noteCompletedTextAsAssistantReplyIfNeeded(params.requestState);
+    }
   }
   const turnCompletedPlan = buildAgentStreamFinalDonePlan({
     accumulatedContent: params.requestState.accumulatedContent,
     fallbackContent: params.assistantFallbackContent,
+    hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary:
+      params.requestState
+        .hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary,
+    hasFinalAnswerRequiredProcessBoundary:
+      params.requestState.hasFinalAnswerRequiredProcessBoundary,
     hasMeaningfulCompletionSignal:
       params.requestState.hasMeaningfulCompletionSignal,
     queuedTurnId: params.requestState.queuedTurnId,

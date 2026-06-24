@@ -25,12 +25,17 @@
 - `src/features/agent-app/ui/AgentAppsPageViewModel.unit.test.ts`
 - `src/lib/api/agentApps.ts`
 - `src/lib/api/agentApps.test.ts`
+- `electron/agentAppTaskWorker.ts`
+- `electron/hostCommands.ts`
+- `electron/hostCommands.test.ts`
 - `lime-rs/crates/app-server-protocol/src/protocol/v0/**`
 - `lime-rs/crates/app-server-protocol/src/schema_export/registry.rs`
 - `lime-rs/crates/app-server-protocol/schema/json/**`
 - `lime-rs/crates/app-server/src/processor/**`
 - `lime-rs/crates/app-server/src/runtime.rs`
 - `lime-rs/crates/app-server/src/runtime/agent_app_host_lifecycle.rs`
+- `lime-rs/crates/app-server/src/runtime/agent_app_task_runtime.rs`
+- `lime-rs/crates/app-server/src/runtime/agent_apps.rs`
 - `packages/app-server-client/src/protocol.ts`
 - `packages/app-server-client/src/generated/protocol-types.ts`
 - `packages/app-server-client/src/request-client-methods.ts`
@@ -95,9 +100,31 @@
 - [x] App Center standalone launch result -> 当前 Claw session `workspaceRightSurface/request` 触发链：Shell 启动成功后复用 `appSurface` metadata 投递 Right Surface pending；无有效 Claw target 时保留独立窗口，不伪造会话。
 - [x] Agent App Surface 多实例骨架：同一个 Right Surface `appSurface` tab 内支持多个 Agent App 实例的内部 tab、focus 和 close fallback；pending 按 `containerId` 去重，不新增命令、不复活 iframe / BrowserView。
 - [x] Agent App Surface 隐藏实例保活：同一个 `appSurface` 内部 tab 切换时保留多个 WebContentsView，只通过 `visible:false` 和 bounds 管理 inactive 实例，关闭实例时才 destroy。
-- [x] App Center standalone launch 目标策略显式化：默认只打开独立窗口，用户选择“当前 Claw 右侧”且存在有效 target 时才投递 `workspaceRightSurface/request`，右侧不可用时禁用选项。
+- [x] App Center standalone launch 目标策略显式化：默认只打开独立窗口，用户选择“Claw 右侧”且存在有效 target 时才投递 `workspaceRightSurface/request`，右侧不可用时禁用选项。
+- [x] App Center 多会话 Right Surface 目标选择器：App shell 维护最近 5 个 Claw 会话 target，应用中心可选择具体会话；`workspaceRightSurface/request` 同时携带 `workspaceId / sessionId`，不新增 App Server method 或 Electron IPC。
+- [x] App Center 多会话 Right Surface 目标跨重启恢复：最近 5 个 Claw session target 持久化到 renderer localStorage，重启后应用中心仍可选择历史 target；坏 JSON / storage 不可用时 fail closed，不新增 App Server method 或 Electron IPC。
+- [x] App Center readiness issue 分类骨架：把 host lifecycle blocker / readiness stable code 归为 legacy / package / cloud / runtime / capability / permission / resource / taskRuntime / host / unknown，供发布门禁、详情和远程 catalog evidence 后续复用。
+- [x] App Center 详情页 readiness 分类露出：宿主能力详情面板展示发布门禁分类 chips，五语言本地化，分类 UI 抽到独立小组件，避免继续向超大 `AgentAppsPage.tsx` 追加业务逻辑。
 - [x] 内容工厂独立仓真实 worker / task runtime 骨架：`src/runtime/content-factory-worker.mjs` 可从 task request 生成 `content_factory.workspace_patch`，覆盖内容简报、文章草稿、图片组、视频脚本、视频分镜和交付检查清单。
 - [x] Lime 宿主 task runtime 合同骨架：从 `runtimePackage.worker` / `agentRuntime.worker/tasks` 投影 `taskRuntime`，同步到 `agentAppHostLifecycle/list` 与 `agentAppUiRuntime/start/status`，但暂不执行 worker executor。
+- [x] Product Profile worker evidence 首版：从 worker 成功 `artifact.snapshot` 与失败 `runtime.error` 投影 `workerEvidence`，右侧 Profile 展示最近运行状态、任务、回合、产物和错误。
+- [x] Product Profile worker 深度详情：worker runtime event 写入 `inputSummary / outputSummary / outputObjectCount / workerEntrypoint`，App Server read model 透传到 `product_workspace.workerEvidence`，右侧 Profile 展示输入、输出、事件和入口。
+- [x] Product Profile 图片本地文件预览首版：`images[]` 支持 `localPath / filePath / cachedPath`，右侧图片格和“打开预览”优先使用可渲染本地 asset URL，ArtifactDocument 保留原始 URL / 本地路径 metadata；内容工厂 schema / docs 同步声明本地缓存字段。
+- [x] Product Profile Preview ArtifactDocument 首版：右侧“打开预览”生成的 source-backed artifact 携带标准 `artifact_document.v1`、`currentVersionId / currentVersionNo / versionHistory / currentVersionDiff`，先接入现有 Artifact Workbench 版本事实。
+- [x] Product Profile App Server ArtifactDocument read model 首版：`artifact.snapshot` 中的 Product Workspace objects 物化为 `thread_read.artifacts` 对象级 `artifact_document` summary，metadata 携带同一份 `artifactDocument`，`artifact/read includeContent` 可读取内联 `artifact_document.v1` JSON。
+- [x] Product Profile ArtifactDocument 事件日志内版本链合并首版：同一 artifact ref 多次 `artifact.snapshot` 会合并 `versionHistory`，`thread_read.artifacts` 与 `artifact/read includeContent` 均返回最新正文和完整版本链。
+- [x] Renderer App Server runtime event append client 补齐：`AppServerClient.appendAgentSessionRuntimeEvents(...)` 暴露既有 `agentSession/runtimeEvents/append` current method，为后续 Artifact Workbench 保存回写 runtime event 铺路。
+- [x] Artifact Workbench 保存回写 runtime event：`appServerArtifactClient` 增加 ArtifactDocument snapshot append helper，`AgentChatWorkspace` 保存 ArtifactDocument 后在有 App Server scope 时追加 `artifact.snapshot`，同一 artifact ref 的编辑版本可进入 App Server read model。
+- [x] 远程 catalog / 发布包 evidence 纯逻辑骨架：Cloud release install review 返回 `releaseEvidence`，投影声明 hash、实际 hash、获取来源、签名引用、warning / blocker codes，不伪造真实签名验证。
+- [x] 应用中心安装审查 UI 露出发布包 evidence：云端安装 / 更新审查弹窗展示发布包证据状态、来源、package hash、manifest hash 和签名声明，本地安装不显示云端 evidence。
+- [x] Remote catalog 签名门禁首版：remote Cloud release 默认要求 verified 签名；未验证或失败的签名进入 blocked evidence，安装确认按钮禁用，直接安装 fail closed；seeded / bootstrap 仍按 warning 过渡。
+- [x] Remote catalog `signatureProof` verifier / trust root 首版：catalog 可声明结构化签名证明，宿主用可信根和 Web Crypto 校验 canonical payload；无可信根、proof 篡改或签名失败均 fail closed，不信任 catalog 自带公钥。
+- [x] Remote catalog trust root 事实源首版：`resolveOemCloudRuntimeContext` 和安装审查默认读取宿主运行时配置 / bootstrap 快照里的 `agentAppSignatureTrustRoots`，catalog 只提供 proof，不能自带公钥让自己通过。
+- [x] Release evidence 发布策略首版：`releaseEvidence.status=blocked` 进入 source state 发布门禁并阻断审查确认，`warning` 保留可审查但显示需要复核；evidence code 投影为稳定 issue code 并复用应用中心发布门禁分类。
+- [x] Remote catalog trust root 轮换策略首版：可信根支持 `notBefore / notAfter / revoked / revokedAt`，`signatureProof.signedAt` 进入 canonical payload 并受有效期校验；撤销根 fail closed，坏日期不会降级为可用 root。
+- [x] Release audit evidence 聚合首版：把 package hash、manifest hash、signature 和 package verification 聚合为稳定审计项，App Center 安装审查显示 blocker / warning 摘要，后续 server-side readiness / 发布报告可复用同一纯投影。
+- [x] Server-side readiness issue 分类首版：`agentAppHostLifecycle/list` 返回 `publishBlocked / primaryIssueCategory / issueCategories`，App Center 优先消费服务端分类字段，缺字段时保留前端本地分类兜底。
+- [x] Release audit report 导出首版：安装审查弹层可复制发布审计 Markdown 报告，报告复用 release audit summary 纯投影，作为上架排障和发布留证材料。
 
 ## 进度日志
 
@@ -228,20 +255,234 @@
   - `npm run verify:gui-smoke` 通过，renderer、Electron host、App Server sidecar、Claw workbench shell 和 memory settings ready。
   - `git diff --check` 通过。
   - 尝试 `npm run typecheck`，`tsc --noEmit` 约 90 秒无诊断输出后中止；完整 typecheck 仍作为后续门禁缺口。
+- 2026-06-24：Claw 历史会话打开 / Expert Skills Runtime fixture 回归修复：`useWorkspaceInitialSessionNavigation` 将普通初始导航和“当前会话已命中但仍在恢复态”的 matched hydrate 分成独立应用键；当侧栏打开的 `initialSessionId` 已成为当前 `sessionId` 但仍显示恢复壳时，会再次以 `forceRefresh` 触发 `switchTopic`，避免 pending shell 永久卡住。`AgentChatWorkspace` 调试快照补充 `isAutoRestoringSession / isSessionHydrating`，便于后续 Electron fixture 直接定位恢复态。验证通过：
+  - `npx vitest run "src/components/agent/chat/workspace/useWorkspaceInitialSessionNavigation.test.tsx" "src/components/agent/chat/workspace/useWorkspaceTopicSwitch.test.tsx" "src/components/agent/chat/workspace/agentChatWorkspaceHelpers.unit.test.ts" "src/components/agent/chat/workspace/taskCenterSurfaceState.unit.test.ts"`，38 tests。
+  - `npm run build:renderer:electron:smoke` 通过，renderer smoke bundle 构建成功。
+  - `node "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs" --scenario expert-skills-runtime --prefix claw-chat-current-fixture-expert-skills-runtime-regression --timeout-ms 180000` 通过；summary 断言 `expertSkillsRuntimeMetadataReachedBackend=true`，backend ledger 的 `turnStart.expert / harnessExpert` 均包含 `skill:capability-report`。
+  - `npm run smoke:agent-runtime-current-fixture` 通过，覆盖 history/cache hydrate、Claw GUI current fixture、Skills Runtime、MCP structuredContent、Expert Skills Runtime、Expert Plaza 和 Expert Panel override。
+  - `npm run verify:gui-smoke` 通过，renderer、Electron host、App Server sidecar、Claw workbench shell 和 memory settings ready。
+  - `git diff --check` 通过。
+- 2026-06-24：Agent App task worker executor 骨架接入宿主：`agentAppUiRuntime/status` 的 `taskRuntime` 增加 `packageRootPath`，由 App Server 从 installed state 解析本机包根目录；Electron `agent_app_runtime_start_task` 不再要求前端传路径，taskKind 命中已声明 worker tasks 时会执行受控 Node worker，并通过 App Server current `agentSession/runtimeEvents/append` 写回 `artifact.snapshot` / `content_factory.workspace_patch`。该刀不新增 `content_factory_*` 命令，不下发 provider key，worker 只继承最小 HOME/PATH/TMPDIR 环境。验证通过：
+  - `cargo test -p app-server --manifest-path "lime-rs/Cargo.toml" agent_app_task_runtime -- --nocapture`，2 tests。
+  - `cargo check -p app-server --manifest-path "lime-rs/Cargo.toml"` 通过。
+  - `cargo test -p app-server-protocol --manifest-path "lime-rs/Cargo.toml"`，23 tests。
+  - `npx vitest run "electron/hostCommands.test.ts"`，85 tests。
+  - `npx vitest run "packages/app-server-client/tests/client.test.mjs" "src/features/agent-app/host/hostLifecycle.test.ts" "src/lib/api/agentApps.test.ts"`，92 tests。
+  - `npm run check:protocol-types` 通过。
+  - `npm run test:contracts` 通过。
+  - `npm test && npm run runtime:sample && npm run validate:app`（`/Users/coso/Documents/dev/ai/limecloud/content-factory-app`）通过。
+  - `npm run typecheck:electron` 通过。
+  - `npm run verify:gui-smoke` 通过，renderer、Electron host、App Server sidecar、Claw workbench shell 和 memory settings ready。
+  - `git diff --check` 通过。
+- 2026-06-24：Agent App task worker 失败 evidence 收口：worker 输出非法 JSON、合同不满足、超时、输出过大、入口异常或进程失败时，Electron Host 不再让已启动 turn 只剩悬空错误，而是构造 `runtime.error` 事件并继续通过 App Server current `agentSession/runtimeEvents/append` 写回 read model；`agent_app_runtime_start_task` 返回 `worker.status=failed / errorCode / errorMessage`。该刀不新增 App Server method，不新增 `content_factory_*` 命令，复用既有 diagnostics / error item read model。验证通过：
+  - `npx vitest run "electron/hostCommands.test.ts" -t "Agent App runtime current bridge"`，7 tests。
+  - `npx vitest run "electron/hostCommands.test.ts"`，86 tests。
+  - `npm run typecheck:electron` 通过。
+  - `npm run test:contracts` 通过。
+  - `npm run verify:gui-smoke` 通过，renderer、Electron host、App Server sidecar、Claw workbench shell 和 memory settings ready。
+  - `git diff --check` 通过。
+- 2026-06-24：Product Profile worker evidence 首版落地：App Server Product Workspace read model 从 `agent_app_task_worker` 成功 `artifact.snapshot` 投影 `workerEvidence.completed`，从失败 `runtime.error` 投影 `workerEvidence.failed / errorCode / errorMessage`；前端 `workspaceProductProfileWorkerEvidence` 合并新字段、旧 sourceArtifacts 和 diagnostics 兜底，右侧 `WorkspaceProductProfileSurface` 展示运行记录卡。该刀不新增 App Server method，不新增 Electron IPC，不新增 `content_factory_*` 命令。验证通过：
+  - `npx vitest run "src/components/agent/chat/workspace/workspaceProductProfileModel.unit.test.ts" "src/components/agent/chat/workspace/WorkspaceProductProfileSurface.test.tsx"`，12 tests。
+  - `cargo test -p app-server --manifest-path "lime-rs/Cargo.toml" read_session_materializes_content_factory_workspace_patch_into_product_workspace`，1 test。
+  - 五语言 `workspace.json` JSON parse 通过。
+  - `npm run test:contracts` 通过。
+  - `rustfmt --edition 2021 --check "lime-rs/crates/app-server/src/runtime/product_workspace_projection.rs"` 通过。
+  - `git diff --check` 通过。
+  - `npm run verify:gui-smoke` 通过，renderer、Electron host typecheck/build、App Server sidecar、Claw workbench shell 和 memory settings ready。
+  - 尝试 `npm run smoke:agent-runtime-current-fixture`，前置 Vitest 与 Electron/App Server fixture smoke guard 通过，但 Coding Workbench Electron fixture 卡在 `wait-session-hydrated` 后无新输出，约 2 分钟后手动中断；后续需要单独复查该 fixture 稳定性，不把它计为本轮通过证据。
+- 2026-06-24：Product Profile Preview ArtifactDocument 首版落地：新增 `workspaceProductProfileArtifactDocument`，把文档、图片组、分镜、清单、简报对象投影为标准 `ArtifactDocumentV1`；`workspaceProductProfilePreviewArtifact` 在保持原 preview artifact 行为的同时写入 `meta.artifactDocument / artifactSchema / artifactDocumentId / artifactVersionId / artifactVersionNo`。该刀不新增 App Server method，不新增 Electron IPC，不做本地文件持久化；后续保存 / 编辑继续交给现有 Artifact Workbench 版本逻辑。验证通过：
+  - `npx vitest run "src/components/agent/chat/workspace/workspaceProductProfilePreviewArtifact.unit.test.ts" "src/components/agent/chat/workspace/workspaceProductProfileModel.unit.test.ts" "src/components/agent/chat/workspace/WorkspaceProductProfileSurface.test.tsx"`，14 tests。
+  - `git diff --check` 通过。
+  - `npm run verify:gui-smoke` 通过，renderer、Electron host typecheck/build、App Server sidecar、Claw workbench shell 和 memory settings ready。
+  - 尝试 `npx tsc --noEmit --project tsconfig.json --pretty false --incremental false --skipLibCheck false`，约 90 秒无诊断输出后手动中断；完整全仓 typecheck 仍作为后续门禁缺口。
+- 2026-06-24：Product Profile App Server ArtifactDocument read model 首版落地：新增 `product_profile_artifact_document_projection`，在 `artifact_projection` 中把 worker `artifact.snapshot` / Product Workspace objects 物化为对象级 `ArtifactSummary`，`thread_read.artifacts` 现在可以直接看到 `artifact-article-1` 这类产物的 `kind=artifact_document`、`metadata.artifactDocument`、`artifactDocumentId / artifactVersionId / productProfile`；`artifact/read includeContent` 可读取内联 `artifact_document.v1` JSON。该刀不新增 App Server method，不新增 `content_factory_*` 命令，不复活旧 Tauri / iframe 路径；仍不是完整持久化服务，跨会话编辑版本合并留后续。验证通过：
+  - `cargo check -p app-server --manifest-path "lime-rs/Cargo.toml"`。
+  - `cargo test -p app-server --manifest-path "lime-rs/Cargo.toml" read_session_materializes_content_factory_workspace_patch_into_product_workspace`，1 test，覆盖 `thread_read.artifacts` 对象级 ArtifactDocument 和 `artifact/read includeContent`。
+  - `rustfmt --edition 2021` 已格式化 `product_profile_artifact_document_projection.rs`、`artifact_projection.rs`、`runtime.rs` 与 read model 测试文件。
+  - 体量记录：新增 Rust helper 当前约 `731` 行，低于 `800` 行预警线；后续若扩展真实持久化服务，应按 `blocks / preview source / metadata envelope` 拆分。
+- 2026-06-24：内容工厂 Product Profile Electron fixture 闭环通过：新增 `content-factory-product-profile` 场景，使用 App Server current `agentSession/runtimeEvents/append` 写入 `artifact.snapshot + runtime.error`，再通过 `workspaceRightSurface/request(origin=runtime, surfaceKind=productProfile)` 投递右侧 Product Profile pending；GUI 从侧栏打开历史会话后右侧 Dock 显示 `公众号文章草稿 / 配图组 / 运行记录`，`artifact/read includeContent` 可读到内联 `artifact_document.v1`。修复项包括：pending origin 不能使用非法 `fixture:*`，Right Surface 视觉断言兼容带 tabs 的 active pane，content-factory 场景不再等待普通新闻聊天完成态，fixture task id 避免被 `sk-*` 脱敏误伤。验证通过：
+  - `node --check "scripts/agent-runtime/claw-chat-current-fixture-content-factory-product-profile.mjs"` 等相关 fixture 脚本语法检查通过。
+  - `npx vitest run "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs"`，20 tests。
+  - `npx vitest run "src/components/agent/chat/workspace/workspaceRightSurfaceRuntimeProjection.unit.test.ts" "src/components/agent/chat/workspace/right-surface/rightSurfaceRuntimeAdapter.unit.test.ts"`，17 tests。
+  - `node "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs" --scenario content-factory-product-profile --prefix claw-chat-current-fixture-content-factory-product-profile --timeout-ms 180000` 通过；summary 断言 `contentFactoryProductProfileRightSurfaceVisible=true`、`contentFactoryProductProfileArtifactsProjected=true`、`contentFactoryProductProfileWorkerFailureEvidence=true`、`contentFactoryProductProfileDoesNotUseModelTurn=true`，backend ledger `turnStartCount=0`。
+- 2026-06-24：Right Surface Product Profile Playwright 证据补齐：复跑真实 Electron / Playwright fixture，证据落盘到 `.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-content-factory-product-profile-evidence-summary.json` 与 `...-chat.png`；`actionableConsoleErrors=[]`，GUI active surface 为 `productProfile`，右侧可见 `产物 Profile / 公众号文章草稿 / 配图组 / 运行记录`，`artifact/read includeContent` 仍返回 `artifact_document.v1`，backend ledger `turnStartCount=0`。验证通过：
+  - `node "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs" --scenario content-factory-product-profile --prefix claw-chat-current-fixture-content-factory-product-profile-evidence --timeout-ms 180000`。
+- 2026-06-24：完整前端 typecheck 缺口收口：修复 `messageListTimelineContentParts` / `contentPartTimeline` / `agentStreamAgentMessageContentSync` 的 union 收窄、streaming 测试 request state fixture、workspace debug snapshot fixture、Product Profile worker evidence fallback 类型和 Agent App task runtime fixture `packageRootPath`；这些修复只收窄类型和测试 fixture，不改变 Agent App / Right Surface current 协议。验证通过：
+  - `npx vitest run "src/components/agent/chat/hooks/agentStreamRuntimeHandler.unit.test.ts"`，37 tests。
+  - `npx vitest run "src/components/agent/chat/components/messageListTimelineContentParts.unit.test.ts" "src/components/agent/chat/hooks/agentStreamRuntimeHandler.unit.test.ts" "src/components/agent/chat/workspace/useWorkspaceDebugRuntime.unit.test.ts" "src/features/agent-app/ui/AgentAppsPageViewModel.unit.test.ts"`，54 tests。
+  - `npm run typecheck` 通过。
+  - `git diff --check` 通过。
+  - 类型修复后复跑 `node "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs" --scenario content-factory-product-profile --prefix claw-chat-current-fixture-content-factory-product-profile-post-typecheck --timeout-ms 180000` 通过；summary 位于 `.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-content-factory-product-profile-post-typecheck-summary.json`，`actionableConsoleErrors=[]`，内容工厂 Product Profile 场景断言全为 true。
+- 2026-06-24：Agent Runtime current 聚合 fixture 复查通过：此前卡在 `Coding Workbench Electron fixture / wait-session-hydrated` 的聚合门禁本轮已跑通；输出覆盖 history/cache hydration、final_done 工具收尾、failed read model、Claw 终态 UI、真实 GUI coding 输入到 Coding Workbench、Claw current fixture guard、停止后同会话继续输出、Plan history hydrate、Skills Runtime、MCP structuredContent、Expert Skills Runtime、Expert Plaza 和 ExpertInfoPanel evidence pack 复盘，`liveProviderUsed=false`。验证通过：
+  - `npm run smoke:agent-runtime-current-fixture`。
+- 2026-06-24：类型修复和聚合 fixture 后补跑 GUI 最小冒烟，`npm run verify:gui-smoke` 通过；renderer build、Electron host build/typecheck、App Server sidecar、Claw workbench shell 和 memory settings ready。
+- 2026-06-24：App Center 多会话 Right Surface 目标选择器落地：新增 `AgentAppLaunchTargetControl`，把 2100 行 `AgentAppsPage.tsx` 中的目标选择 UI 拆出；`agentAppLaunchTargetPolicy` 负责 target id、列表去重、选中解析和 fallback；App shell 记录最近 5 个 Claw session target，App Center 可在“Claw 右侧”模式下选择具体会话。`requestAgentAppRightSurfaceLaunch` 继续复用 `workspaceRightSurface/request` current pending 链路，并同时传 `workspaceId / sessionId`，避免 UI 选中会话但请求只落到 workspace。验证通过：
+  - `npx vitest run "src/features/agent-app/ui/agentAppLaunchTargetPolicy.unit.test.ts" "src/features/agent-app/ui/agentAppRightSurfaceLaunch.unit.test.ts" "src/features/agent-app/ui/AgentAppsPage.test.tsx"`，30 tests。
+  - `npm run test:contracts` 通过。
+  - `npm run verify:gui-smoke` 通过，renderer build、Electron host typecheck/build、App Server sidecar、Claw workbench shell 和 memory settings ready。
+  - `git diff --check` 通过。
+  - 尝试 `npm run typecheck`，约 6 分钟无诊断输出且未自然退出后手动中断；本轮不把全仓 typecheck 计为通过证据。
+- 2026-06-24：App Surface 多实例真实 Electron 证据补齐：扩展 `right-surface-visual-matrix` fixture，经 App Server current `workspaceRightSurface/request` 同时投递 `files / objectCanvas / appSurface` pending，其中 `appSurface` 注入 `内容工厂` 与 `Prompt Lab` 两个 `webContentsView` 实例，右侧 Dock 通过 `workspace-right-surface-tab-appSurface` 打开后验证内部 tabs / frame / viewport。执行过程中修复 `ElectronEmbeddedBrowserHost` destroy 幂等性，避免窗口关闭时对已销毁 BrowserWindow 访问导致主进程 `Object has been destroyed` 弹窗。验证通过：
+  - `npx vitest run "electron/embeddedBrowserHost.test.ts"`，11 tests。
+  - `npx vitest run "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs"`，20 tests。
+  - `node "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs" --scenario right-surface-visual-matrix --prefix claw-chat-current-fixture-right-surface-visual-matrix-app-surface --timeout-ms 180000` 通过；summary 位于 `.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-right-surface-visual-matrix-app-surface-summary.json`，`rightSurfaceVisualMatrixAppSurfaceMultiInstanceTabs=true`，`pendingAfterClicks.count=0`，`actionableConsoleErrors=[]`，backend ledger `turnStartCount=0`。
+- 2026-06-24：App Center 多会话 Right Surface 目标跨重启恢复落地：新增 `agentAppLaunchTargetPersistence` 纯 helper，负责最近 target 去重、裁剪、序列化、坏 JSON 和 localStorage 异常 fail closed；`App.tsx` 启动时从 localStorage 恢复最近 Claw session target，并在 `AgentChatPage.onSessionChange` 回传新 target 后写回，App Center 继续通过既有 target selector 选择历史会话。该刀不新增 App Server method、不新增 Electron IPC、不新增 `content_factory_*` 命令，继续复用 `workspaceRightSurface/request` current pending 链路。验证通过：
+  - `npx vitest run "src/features/agent-app/ui/agentAppLaunchTargetPersistence.unit.test.ts" "src/features/agent-app/ui/agentAppLaunchTargetPolicy.unit.test.ts" "src/features/agent-app/ui/AgentAppsPage.test.tsx"`，34 tests。
+  - `npm run verify:gui-smoke` 通过，renderer build、Electron host typecheck/build、App Server sidecar、Claw workbench shell 和 memory settings ready。
+  - 尝试 `npm run typecheck`，约 6 分钟无诊断输出且未自然退出后手动中断；本轮不把全仓 typecheck 计为通过证据。
+- 2026-06-24：App Center readiness issue 分类骨架落地：新增 `agentAppReadinessIssueClassification` 纯 helper，将 readiness / host lifecycle stable code 归到 legacy、package、cloud、runtime、capability、permission、resource、taskRuntime、host、unknown；`buildAppCenterHostLifecycleSummary(...)` 输出 `publishBlocked / primaryIssueCategory / issueCategories`，后续详情和远程 catalog evidence 可复用同一分类事实源。该刀不新增用户可见文案、不新增 App Server method、不新增 Electron IPC。验证通过：
+  - `npx vitest run "src/features/agent-app/ui/agentAppReadinessIssueClassification.unit.test.ts" "src/features/agent-app/ui/AgentAppsPageViewModel.unit.test.ts"`，11 tests。
+- 2026-06-24：App Center 详情页 readiness 分类露出落地：新增 `AgentAppReadinessIssueSummary` 小组件，在宿主能力详情面板中展示“发布门禁”分类 chips；新增五语言 `agent.json` 文案，不暴露 stable code 到默认 UI。`AgentAppsPage.tsx` 已超过 1000 行，本刀只做 import 与组件挂载，分类展示逻辑保持在独立组件 / helper 中，后续继续把 App Center detail 片段拆出。验证通过：
+  - `npx vitest run "src/features/agent-app/ui/agentAppReadinessIssueClassification.unit.test.ts" "src/features/agent-app/ui/AgentAppsPageViewModel.unit.test.ts" "src/features/agent-app/ui/AgentAppsPage.test.tsx"`，32 tests。
+  - `npx eslint "src/features/agent-app/ui/AgentAppReadinessIssueSummary.tsx" "src/features/agent-app/ui/AgentAppsPage.tsx" "src/features/agent-app/ui/AgentAppsPage.test.tsx" "src/features/agent-app/ui/AgentAppsPageViewModel.ts" "src/features/agent-app/ui/agentAppReadinessIssueClassification.ts" --max-warnings 0` 通过。
+  - 五语言 `agent.json` JSON parse 通过。
+- 2026-06-24：远程 catalog / 发布包 evidence 纯逻辑骨架落地：新增 `cloudReleaseEvidence`，把 Cloud release 声明 package hash / manifest hash、实际获取 hash、catalog 来源、package 来源、signatureRef 和 package verification status 投影为 `ready / warning / blocked` 与稳定 warning / blocker codes；`reviewCloudAgentAppRelease` 将该 evidence 随 `AgentAppInstallReview.releaseEvidence` 返回。显式 manifest 若缺少实际 hash 只标记为 warning，不伪造本地 hash 已验证；缺声明 hash、hash mismatch 或 verification 非 verified 进入 blocker。该刀不新增 App Server method、不新增 Electron IPC、不新增用户可见 UI。验证通过：
+  - `npx vitest run "src/features/agent-app/install/cloudReleaseEvidence.test.ts" "src/features/agent-app/install/installReview.test.ts" "src/lib/api/agentApps.test.ts"`，47 tests。
+  - `npx eslint "src/features/agent-app/install/cloudReleaseEvidence.ts" "src/features/agent-app/install/cloudReleaseEvidence.test.ts" "src/features/agent-app/install/installReview.ts" "src/lib/api/agentApps.ts" "src/lib/api/agentApps.test.ts" "src/features/agent-app/index.ts"` 通过。
+  - `git diff --check -- "src/features/agent-app/install/cloudReleaseEvidence.ts" "src/features/agent-app/install/cloudReleaseEvidence.test.ts" "src/features/agent-app/install/installReview.ts" "src/lib/api/agentApps.ts" "src/lib/api/agentApps.test.ts" "src/features/agent-app/index.ts"` 通过。
+  - 尝试 `npm run typecheck`，约 3 分钟无诊断输出且未自然退出后手动中断；本轮不把全仓 typecheck 计为通过证据。
+- 2026-06-24：应用中心安装审查发布包 evidence UI 落地：新增 `AgentAppReleaseEvidenceSummary` 小组件，云端安装 / 更新审查弹窗显示 evidence 状态 chip、catalog / package 来源、package hash、manifest hash 和签名声明；本地安装审查不显示云端 evidence。新增五语言 `agent.json` 文案；`AgentAppsPage.tsx` 只做 import + 挂载，避免继续把 evidence 展示逻辑塞入超大页面组件。验证通过：
+  - `npx vitest run "src/features/agent-app/ui/AgentAppsPage.test.tsx" "src/features/agent-app/install/cloudReleaseEvidence.test.ts" "src/lib/api/agentApps.test.ts"`，63 tests。
+  - 五语言 `agent.json` JSON parse 通过。
+  - `npx vitest run "src/i18n/__tests__/loadNamespace.test.ts" "src/i18n/__tests__/types.test.ts"`，8 tests。
+  - `npx eslint "src/features/agent-app/ui/AgentAppReleaseEvidenceSummary.tsx" "src/features/agent-app/ui/AgentAppsPage.tsx" "src/features/agent-app/ui/AgentAppsPage.test.tsx" "src/features/agent-app/ui/AgentAppsPage.testFixtures.tsx" "src/features/agent-app/install/cloudReleaseEvidence.ts" "src/features/agent-app/install/cloudReleaseEvidence.test.ts" "src/features/agent-app/install/installReview.ts" "src/lib/api/agentApps.ts" "src/lib/api/agentApps.test.ts" "src/features/agent-app/index.ts"` 通过。
+  - `git diff --check` 目标写集通过；新增文件尾随空白检查通过。
+  - `npm run verify:gui-smoke` 通过，renderer build、Electron host typecheck/build、App Server sidecar、Claw workbench shell 和 memory settings ready。
+- 2026-06-24：Remote catalog 签名门禁首版落地：`cloudReleaseEvidence` 增加 `signaturePolicy` 与 `signatureVerificationStatus`，remote catalog 默认 `required`；`reviewCloudAgentAppRelease` 会返回 blocked evidence，`installCloudAgentAppRelease` 直接安装路径 fail closed，App Center 安装确认按钮在 blocked evidence 下禁用并保留 evidence 明细。当前不伪造 cryptographic signature verification，只提供 verified 状态接入口；seeded / bootstrap 仍按 warning 过渡。内容工厂独立仓 `docs/release.md` 同步写入 remote catalog 必须提供签名引用并通过 Lime 宿主 verified evidence 的上架口径。验证通过：
+  - `npx vitest run "src/features/agent-app/install/cloudReleaseEvidence.test.ts" "src/features/agent-app/ui/AgentAppsPage.test.tsx" "src/lib/api/agentApps.test.ts"`，69 tests。
+  - `npx vitest run "src/i18n/__tests__/loadNamespace.test.ts" "src/i18n/__tests__/types.test.ts"`，8 tests。
+  - 五语言 `agent.json` JSON parse 通过。
+  - `npx eslint "src/features/agent-app/install/cloudReleaseEvidence.ts" "src/features/agent-app/install/cloudReleaseEvidence.test.ts" "src/features/agent-app/ui/AgentAppReleaseEvidenceSummary.tsx" "src/features/agent-app/ui/AgentAppsPage.tsx" "src/features/agent-app/ui/AgentAppsPage.test.tsx" "src/features/agent-app/ui/AgentAppsPage.testFixtures.tsx" "src/lib/api/agentApps.ts" "src/lib/api/agentApps.test.ts" "src/features/agent-app/index.ts"` 通过。
+  - `npm run validate:app`（`/Users/coso/Documents/dev/ai/limecloud/content-factory-app`）通过。
+  - `git diff --check`（Lime 目标写集）通过；`git diff --check -- "docs/release.md"`（内容工厂仓）通过；新增文件尾随空白检查通过。
+  - `npm run verify:gui-smoke` 通过，renderer build、Electron host typecheck/build、App Server sidecar、Claw workbench shell 和 memory settings ready。
+  - 尝试 `npm run typecheck`，约 3 分钟无诊断输出且未自然退出后手动中断；本轮不把全仓 typecheck 计为通过证据。
+- 2026-06-24：Remote catalog `signatureProof` verifier / trust root 首版落地：新增 `cloudReleaseSignature`，使用 Web Crypto 校验 `RSASSA-PKCS1-v1_5-SHA256 / RSA-PSS-SHA256 / ECDSA-P256-SHA256 / Ed25519` proof；签名 payload 固定绑定 `appId / version / releaseId / tenant / channel / packageUrl / packageHash / manifestHash / signatureRef`。`CloudBootstrapApp` / `CloudBootstrapReleaseDescriptor` 保留 `signatureProof`，`reviewCloudAgentAppRelease` 在未显式传入迁移状态时由 proof + `signatureTrustRoots` 产出 `signatureVerificationStatus`；无可信根、key id 不匹配、payload hash mismatch 或签名验证失败均进入 blocked evidence。内容工厂独立仓 `docs/release.md` 同步要求 remote catalog 提供 `signatureProof.publicKeyId` 并命中宿主可信根。验证通过：
+  - `npx vitest run "src/features/agent-app/install/cloudReleaseSignature.test.ts" "src/features/agent-app/install/cloudBootstrap.test.ts" "src/features/agent-app/install/cloudReleaseEvidence.test.ts" "src/lib/api/agentApps.test.ts"`，67 tests。
+  - `npx eslint "src/features/agent-app/install/cloudReleaseSignature.ts" "src/features/agent-app/install/cloudReleaseSignature.test.ts" "src/features/agent-app/install/cloudBootstrap.ts" "src/features/agent-app/install/cloudBootstrap.test.ts" "src/features/agent-app/types.ts" "src/features/agent-app/index.ts" "src/lib/api/agentApps.ts" "src/lib/api/agentApps.test.ts"` 通过。
+  - `npm run validate:app`（`/Users/coso/Documents/dev/ai/limecloud/content-factory-app`）通过。
+  - `git diff --check`（Lime tracked 目标写集）通过；`git diff --check -- "docs/release.md"`（内容工厂仓 tracked 写集）通过；`rg -n "[ \t]$" "src/features/agent-app/install/cloudReleaseSignature.ts" "src/features/agent-app/install/cloudReleaseSignature.test.ts" "/Users/coso/Documents/dev/ai/limecloud/content-factory-app/docs/release.md"` 无匹配，覆盖未跟踪新文件尾随空白。
+- 2026-06-24：Remote catalog trust root 事实源首版落地：`oemCloudRuntime` 解析 `window.__LIME_OEM_CLOUD__.agentAppSignatureTrustRoots`、`window.__LIME_BOOTSTRAP__.agentAppSignatureTrustRoots` 和 `bootstrap.agentApps.signatureTrustRoots`，并把可信根纳入 `OemCloudRuntimeContext`；`reviewCloudAgentAppRelease` 在未显式传入 `signatureTrustRoots` 时默认读取宿主事实源。remote catalog 仍只能声明 `signatureProof`，不能通过 catalog payload 自带 public key 自签通过。内容工厂独立仓 `docs/release.md` 同步写明 trust root 来源边界。验证通过：
+  - `npx vitest run "src/lib/api/oemCloudRuntime.test.ts" "src/features/agent-app/install/cloudReleaseSignature.test.ts" "src/features/agent-app/install/cloudBootstrap.test.ts" "src/features/agent-app/install/cloudReleaseEvidence.test.ts" "src/lib/api/agentApps.test.ts"`，73 tests。
+  - `npx eslint "src/lib/api/oemCloudRuntime.ts" "src/lib/api/oemCloudRuntime.test.ts" "src/features/agent-app/install/cloudReleaseSignature.ts" "src/features/agent-app/install/cloudReleaseSignature.test.ts" "src/features/agent-app/install/cloudBootstrap.ts" "src/features/agent-app/install/cloudBootstrap.test.ts" "src/features/agent-app/install/cloudReleaseEvidence.ts" "src/features/agent-app/install/cloudReleaseEvidence.test.ts" "src/features/agent-app/types.ts" "src/features/agent-app/index.ts" "src/lib/api/agentApps.ts" "src/lib/api/agentApps.test.ts"` 通过。
+  - `npm run validate:app`（`/Users/coso/Documents/dev/ai/limecloud/content-factory-app`）通过。
+  - `git diff --check`（Lime tracked 目标写集）通过；`git diff --check -- "docs/release.md"`（内容工厂仓 tracked 写集）通过；`rg -n "[ \t]$" "src/features/agent-app/install/cloudReleaseEvidence.ts" "src/features/agent-app/install/cloudReleaseEvidence.test.ts" "src/features/agent-app/install/cloudReleaseSignature.ts" "src/features/agent-app/install/cloudReleaseSignature.test.ts" "/Users/coso/Documents/dev/ai/limecloud/content-factory-app/docs/release.md"` 无匹配，覆盖未跟踪新文件尾随空白。
+  - 尝试 `npm run typecheck`，`tsc --noEmit` 超过约 120 秒无诊断输出且未自然退出后手动中断；本轮不把全仓 typecheck 计为通过证据。
+- 2026-06-24：Release evidence 发布策略首版落地：新增 `listCloudReleaseEvidenceIssueCodes(...)`，把 release evidence blocker / warning code 投影为稳定发布门禁 code；`buildCloudAgentAppSourceState(...)` 接入 `releaseEvidence`，blocked 进入 `release-evidence-blocked` 且 `canReview=false`，warning 进入 `release-evidence-warning` 且 `canReview=true`；`agentAppReadinessIssueClassification` 复用 package / cloud 分类展示证据风险；五语言补齐 source state 文案。内容工厂独立仓 `docs/release.md` 同步写明 blocked / warning 策略。验证通过：
+  - `npx vitest run "src/features/agent-app/ui/AgentAppsPage.test.tsx" "src/features/agent-app/ui/AgentAppsPageViewModel.unit.test.ts" "src/features/agent-app/install/cloudReleaseEvidence.test.ts" "src/features/agent-app/install/installReview.test.ts" "src/features/agent-app/ui/agentAppReadinessIssueClassification.unit.test.ts" "src/lib/api/agentApps.test.ts"`，91 tests。
+  - `npx vitest run "src/i18n/__tests__/loadNamespace.test.ts" "src/i18n/__tests__/types.test.ts"`，8 tests。
+  - 五语言 `agent.json` JSON parse 通过。
+  - `npx eslint "src/features/agent-app/install/cloudReleaseEvidence.ts" "src/features/agent-app/install/cloudReleaseEvidence.test.ts" "src/features/agent-app/install/installReview.ts" "src/features/agent-app/install/installReview.test.ts" "src/features/agent-app/ui/agentAppReadinessIssueClassification.ts" "src/features/agent-app/ui/agentAppReadinessIssueClassification.unit.test.ts" "src/features/agent-app/ui/AgentAppsPage.tsx" "src/features/agent-app/ui/AgentAppsPage.test.tsx" "src/features/agent-app/ui/AgentAppsPageViewModel.ts" "src/features/agent-app/ui/AgentAppsPageViewModel.unit.test.ts" "src/features/agent-app/index.ts" "src/lib/api/agentApps.ts" "src/lib/api/agentApps.test.ts"` 通过。
+  - `npm run validate:app`（`/Users/coso/Documents/dev/ai/limecloud/content-factory-app`）通过。
+  - `git diff --check`（Lime tracked 目标写集）通过；`git diff --check -- "docs/release.md"`（内容工厂仓 tracked 写集）通过；新增未跟踪 helper / UI 分类文件尾随空白检查无匹配。
+  - 尝试 `npm run typecheck`，`tsc --noEmit` 超过约 120 秒无诊断输出且未自然退出后手动中断；本轮不把全仓 typecheck 计为通过证据。
+- 2026-06-24：Remote catalog trust root 轮换 / 过期 / 撤销策略首版落地：`AgentAppCloudReleaseSignatureTrustRoot` 增加 `notBefore / notAfter / revoked / revokedAt`；`signatureProof.signedAt` 与 proof metadata 进入 `agent-app-cloud-release-signature-payload/v2` canonical payload，signedAt 被篡改会签名失败。verifier 要求带有效期的 root 必须有合法 signedAt 且落在窗口内，撤销 root 直接 fail closed；`oemCloudRuntime` 保守解析生命周期字段，坏日期 root 被丢弃。内容工厂独立仓 `docs/release.md` 同步发布标准。验证通过：
+  - `npx vitest run "src/features/agent-app/install/cloudReleaseSignature.test.ts" "src/lib/api/oemCloudRuntime.test.ts" "src/lib/api/agentApps.test.ts"`，58 tests。
+  - `npx vitest run "src/features/agent-app/install/cloudReleaseSignature.test.ts" "src/features/agent-app/install/cloudBootstrap.test.ts" "src/features/agent-app/install/cloudReleaseEvidence.test.ts" "src/features/agent-app/install/installReview.test.ts" "src/lib/api/oemCloudRuntime.test.ts" "src/lib/api/agentApps.test.ts"`，90 tests。
+  - `npx eslint "src/features/agent-app/install/cloudReleaseSignature.ts" "src/features/agent-app/install/cloudReleaseSignature.test.ts" "src/features/agent-app/types.ts" "src/lib/api/oemCloudRuntime.ts" "src/lib/api/oemCloudRuntime.test.ts" "src/lib/api/agentApps.test.ts" --max-warnings 0` 通过。
+  - `npm run validate:app`（`/Users/coso/Documents/dev/ai/limecloud/content-factory-app`）通过。
+  - `git diff --check`（Lime 目标写集）与 `git diff --check -- "docs/release.md"`（内容工厂仓）通过；目标文件尾随空白检查无匹配。
+  - 尝试 `npm run typecheck`，`tsc --noEmit` 超过约 120 秒无诊断输出且未自然退出后手动中断；本轮不把全仓 typecheck 计为通过证据。
+- 2026-06-24：Release audit evidence 聚合首版落地：新增 `buildCloudReleaseAuditSummary(...)`，把 release evidence blocker / warning issue codes 聚合到 `packageHash / manifestHash / signature / packageVerification` 四类稳定审计项；`AgentAppReleaseEvidenceSummary` 在安装审查弹层展示发布审计摘要与 issue code data attribute，blocked 时继续阻断确认，warning 仍可审查。五语言补齐发布审计文案，内容工厂独立仓 `docs/release.md` 同步上架口径。验证通过：
+  - `npx vitest run "src/features/agent-app/install/cloudReleaseEvidence.test.ts"`，14 tests。
+  - `npx vitest run "src/features/agent-app/ui/AgentAppsPage.test.tsx"`，22 tests。
+  - `npx vitest run "src/i18n/__tests__/loadNamespace.test.ts" "src/i18n/__tests__/types.test.ts"`，8 tests。
+  - `npx eslint "src/features/agent-app/install/cloudReleaseEvidence.ts" "src/features/agent-app/install/cloudReleaseEvidence.test.ts" "src/features/agent-app/ui/AgentAppReleaseEvidenceSummary.tsx" "src/features/agent-app/ui/AgentAppsPage.test.tsx" --max-warnings 0` 通过。
+- 2026-06-24：Server-side readiness issue 分类首版落地：App Server `agentAppHostLifecycle/list` 的 `AgentAppHostLifecycleSnapshot` 增加 `publishBlocked / primaryIssueCategory / issueCategories`，Rust projection 按稳定 blocker code 聚合 legacy / package / cloud / runtime / capability / permission / resource / taskRuntime / host / unknown 分类；App Center ViewModel 优先消费服务端分类字段，旧 snapshot / 测试兜底继续用前端分类 helper。验证通过：
+  - `cargo test -p app-server --manifest-path "lime-rs/Cargo.toml" agent_app_host_lifecycle -- --nocapture`，2 tests。
+  - `cargo run -p app-server-protocol --bin write_schema_fixtures --manifest-path "lime-rs/Cargo.toml"` 通过。
+  - `npm run generate:protocol-types` / `npm run check:protocol-types` 通过。
+  - `cargo test -p app-server-protocol --manifest-path "lime-rs/Cargo.toml"`，23 tests。
+  - `npx vitest run "src/features/agent-app/ui/AgentAppsPageViewModel.unit.test.ts" "src/lib/api/agentApps.test.ts"`，49 tests。
+  - `npx vitest run "packages/app-server-client/tests/client.test.mjs"`，53 tests。
+  - `npx eslint "src/features/agent-app/host/hostLifecycle.ts" "src/features/agent-app/ui/AgentAppsPageViewModel.ts" "src/features/agent-app/ui/AgentAppsPageViewModel.unit.test.ts" "src/lib/api/agentApps.ts" "src/lib/api/agentApps.test.ts" --max-warnings 0` 通过。
+  - `node scripts/check-app-server-client-contract.mjs` 通过，283 checks。
+  - `npm run test:contracts` 通过。
+- 2026-06-24：Release audit report 导出首版落地：新增 `buildCloudReleaseAuditReport(...)`，从 release evidence 生成稳定 Markdown 和文件名；`AgentAppReleaseEvidenceSummary` 增加复制报告按钮，使用浏览器 clipboard 写入报告并显示复制状态，不新增 Electron IPC / App Server method。五语言补齐按钮、title 和复制状态文案；内容工厂独立仓 `docs/release.md` 同步要求把报告作为上架排障和发布留证材料。验证通过：
+  - `npx vitest run "src/features/agent-app/install/cloudReleaseEvidence.test.ts"`，15 tests。
+  - `npx vitest run "src/features/agent-app/ui/AgentAppsPage.test.tsx"`，22 tests。
+  - `npx vitest run "src/i18n/__tests__/loadNamespace.test.ts" "src/i18n/__tests__/types.test.ts"`，8 tests。
+  - `npx eslint "src/features/agent-app/install/cloudReleaseEvidence.ts" "src/features/agent-app/install/cloudReleaseEvidence.test.ts" "src/features/agent-app/ui/AgentAppReleaseEvidenceSummary.tsx" "src/features/agent-app/ui/AgentAppsPage.test.tsx" --max-warnings 0` 通过。
+- 2026-06-24：Product Profile ArtifactDocument 事件日志内版本链合并首版落地：新增 `artifact_document_versions` helper，`artifact_projection` / `artifact_reader` 在同一 `artifact_ref` 多次出现时不再直接丢弃旧 snapshot，而是把旧版 `versionHistory` 合并进最新 ArtifactDocument；`artifact/read includeContent` 同步返回最新正文和合并后的 `artifact_document.v1` JSON。该刀不新增 App Server method、不新增 Electron IPC，不做文件级持久化服务；后续跨会话编辑保存仍需单独落 current 写入链。验证通过：
+  - `cargo test -p app-server --manifest-path "lime-rs/Cargo.toml" product_profile_artifact_documents_merge_version_history_across_turns -- --nocapture`，1 test。
+  - `cargo test -p app-server --manifest-path "lime-rs/Cargo.toml" read_session_materializes_content_factory_workspace_patch_into_product_workspace -- --nocapture`，1 test。
+- 2026-06-24：Renderer App Server runtime event append client 补齐：`appServerConstants / appServerTypes / appServerClientMethods` 暴露既有 `agentSession/runtimeEvents/append`，前端后续可通过 `AppServerClient.appendAgentSessionRuntimeEvents(...)` 写入 ArtifactDocument 保存事件，不需要在组件中裸 `request`，也不新增协议。验证通过：
+  - `npx vitest run "src/lib/api/appServer.test.ts"`，29 tests。
+  - `npx eslint "src/lib/api/appServerConstants.ts" "src/lib/api/appServerTypes.ts" "src/lib/api/appServerClientMethods.ts" "src/lib/api/appServer.test.ts" --max-warnings 0` 通过。
+  - `git diff --check` 目标写集通过；目标文件尾随空白检查无匹配。
+  - 尝试 `npm run test:contracts`，其中 `npm run check:protocol-types` 通过且生成文件无漂移，但 `scripts/check-app-server-client-contract.mjs` 因既有 `lime-rs/crates/agent/src/request_tool_policy.rs` WebSearch preflight guard 缺失失败；该文件不属于本轮写集，本轮不顺手修复。
+- 2026-06-24：Artifact Workbench 保存回写 runtime event 首版落地：`appServerArtifactClient` 复用既有 `agentSession/runtimeEvents/append` current method，新增 `saveAgentRuntimeArtifactDocumentSnapshot(...)` 与 params builder；保存 ArtifactDocument 时优先沿用 metadata 中的 `artifactRef`，兼容 Product Profile 的 `productProfile.sessionId / artifactIds` 嵌套 scope，缺少 App Server session scope 时 fail closed 跳过，不伪造 session。`AgentChatWorkspace` 的 `handleSaveArtifactDocument` 在本地 workbench 写入后追加 `artifact.snapshot`，让编辑版本进入 App Server event log 和后端版本链合并逻辑。验证：
+  - `npx vitest run "src/lib/api/agentRuntime/appServerArtifactClient.test.ts"`，14 tests。
+  - `npx vitest run "src/lib/api/appServer.test.ts" "src/lib/api/agentRuntime/appServerArtifactClient.test.ts"`，43 tests。
+  - `npx vitest run "src/components/agent/chat/workspace/useWorkspaceArtifactPreviewActions.test.tsx"`，19 tests。
+  - `npx eslint "src/lib/api/agentRuntime/appServerArtifactClient.ts" "src/lib/api/agentRuntime/appServerArtifactClient.test.ts" "src/components/agent/chat/AgentChatWorkspace.tsx" --max-warnings 0` 通过。
+  - `git diff --check` 通过。
+  - 尝试 `npm run typecheck`，`tsc --noEmit` 长时间无诊断输出且未自然退出后手动中断；本轮不把全仓 typecheck 计为通过证据。
+  - 尝试 `npm run test:contracts`，其中 `npm run check:protocol-types` 通过且生成文件无漂移，但 `scripts/check-app-server-client-contract.mjs` 仍因既有 `lime-rs/crates/agent/src/request_tool_policy.rs` WebSearch preflight guard 缺失失败；该文件不属于本轮写集，本轮不顺手修复。
+- 2026-06-24：Artifact Workbench 保存回写 App Server read model 验证补齐：新增 `artifact_workbench_save_snapshot_merges_with_product_profile_artifact_document_history`，覆盖 Product Profile 初版 `artifact_document.v1`、Workbench 保存 v2 `artifact.snapshot`、sidecar 正文持久化和 `artifact/read includeContent` 合并版本链。修正 `artifact_projection` 在 `artifact.metadata` 存在时丢失 `sidecarRef` 的问题，并让合并后的 ArtifactDocument 正文在 includeContent 时优先于 sidecar 原始正文，避免版本链只存在于 summary metadata。验证通过：
+  - `cargo test -p app-server --manifest-path "lime-rs/Cargo.toml" artifact_workbench_save_snapshot_merges_with_product_profile_artifact_document_history -- --nocapture`，1 test。
+  - `cargo test -p app-server --manifest-path "lime-rs/Cargo.toml" runtime::tests::read_model::artifacts -- --nocapture`，4 tests。
+  - `cargo fmt --manifest-path "lime-rs/Cargo.toml" --all` 通过。
+- 2026-06-25：Artifact Workbench 保存证据投影补齐：`saveAgentRuntimeArtifactDocumentSnapshot(...)` 成功结果不再只返回 `eventCount`，同步返回 `artifactDocumentId / artifactRef / sessionId / turnId / versionId / versionNo / eventId / sidecarRelativePath / contentStatus / contentBytes / contentSha256` 等稳定证据。该刀只投影既有 `agentSession/runtimeEvents/append` 请求与响应，不新增 App Server method、不新增 Electron IPC，为后续 UI 保存状态、历史恢复审计和文件级持久化服务复用同一证据对象。验证通过：
+  - `npx vitest run "src/lib/api/agentRuntime/appServerArtifactClient.test.ts"`，15 tests。
+  - `npx eslint "src/lib/api/agentRuntime/appServerArtifactClient.ts" "src/lib/api/agentRuntime/appServerArtifactClient.test.ts" --max-warnings 0` 通过。
+- 2026-06-25：Artifact Workbench 保存证据回写本地 Artifact metadata：新增 `workspaceArtifactDocumentSaveEvidence` 纯 helper，把 App Server append 返回的 `AgentRuntimeArtifactDocumentSnapshotSaveEvidence` 合并为 Workbench `WriteArtifactContext`；`AgentChatWorkspace.handleSaveArtifactDocument(...)` 在本地保存和 App Server `artifact.snapshot` append 成功后，二次写回 `artifactDocumentSaveEvidence / appServerArtifactEventId / appServerArtifactRef / appServerSidecarRelativePath / artifactVersionId / artifactVersionNo` 等证据字段。缺少 scope 或 append method 时仍 fail closed，不伪造证据；不新增 App Server method、不新增 Electron IPC。验证通过：
+  - `npx vitest run "src/components/agent/chat/workspace/workspaceArtifactDocumentSaveEvidence.unit.test.ts"`，2 tests。
+  - `npx vitest run "src/lib/api/agentRuntime/appServerArtifactClient.test.ts"`，15 tests。
+  - `npx vitest run "src/components/agent/chat/index.workbench01.test.tsx" -t "空白新建任务首页应去掉项目栏和会话标签"`，1 passed / 13 skipped。
+  - `npx eslint "src/components/agent/chat/workspace/workspaceArtifactDocumentSaveEvidence.ts" "src/components/agent/chat/workspace/workspaceArtifactDocumentSaveEvidence.unit.test.ts" "src/components/agent/chat/AgentChatWorkspace.tsx" --max-warnings 0` 通过。
+- 2026-06-25：Artifact preview 读取侧消费保存证据字段：`appServerArtifactClient` 的 artifact/read scope 解析补齐 `appServerArtifactSessionId / appServerArtifactTurnId / appServerArtifactRef`，本地 Workbench Artifact 即使只保留保存证据字段，也能回到同一个 App Server `artifact.snapshot` 版本链读取最新 ArtifactDocument 正文。该刀不新增协议，只收敛本地 metadata 与 App Server read params 的字段合同。验证通过：
+  - `npx vitest run "src/lib/api/agentRuntime/appServerArtifactClient.test.ts"`，16 tests。
+  - `npx eslint "src/lib/api/agentRuntime/appServerArtifactClient.ts" "src/lib/api/agentRuntime/appServerArtifactClient.test.ts" --max-warnings 0` 通过。
+- 2026-06-25：历史恢复 Artifact 保留 App Server scope：`agentChatHistoryArtifacts` 从历史 `ArtifactSummary` 恢复 Workbench Artifact 时补齐 `sessionId / artifactRef / turnId` 与显式 `appServerArtifactSessionId / appServerArtifactRef / appServerArtifactTurnId`，缺少 summary session 字段时以 `AsterSessionDetail.id` 作为 App Server session fallback。这样从历史对话打开产物时，预览读取仍能回到同一 App Server artifact 版本链，而不是只剩本地 previewText。验证通过：
+  - `npx vitest run "src/components/agent/chat/hooks/agentChatHistory.timeline.test.ts"`，11 tests。
+  - `npx eslint "src/components/agent/chat/hooks/agentChatHistoryArtifacts.ts" "src/components/agent/chat/hooks/agentChatHistory.timeline.test.ts" --max-warnings 0` 通过。
+- 2026-06-25：Artifact preview 自动同步 App Server metadata：`HarnessFilePreviewResult` 与 `ArtifactAutoPreviewResult` 支持 `artifactId / artifactRef / metadata / title` 可选证据字段；`useWorkspaceArtifactPreviewActions` 从 App Server `artifact/read` 读取预览时透传 summary metadata；`mergePreviewContentIntoArtifact` 在正文 / 路径不变但 metadata 新增时也会同步一次本地 Artifact。这样历史打开或本地空壳 artifact 经过 preview loader 后，会把 `artifactDocumentId / artifactVersionId / artifactVersionNo / appServerArtifactRef` 等版本链证据带回 Workbench store。验证通过：
+  - `npx vitest run "src/components/agent/chat/hooks/useArtifactAutoPreviewSync.test.ts" "src/components/agent/chat/workspace/useWorkspaceArtifactPreviewActions.test.tsx"`，24 tests。
+  - `npx eslint "src/components/agent/chat/hooks/useArtifactAutoPreviewSync.ts" "src/components/agent/chat/hooks/useArtifactAutoPreviewSync.test.ts" "src/components/agent/chat/workspace/useWorkspaceArtifactPreviewActions.ts" "src/components/agent/chat/workspace/useWorkspaceArtifactPreviewActions.test.tsx" "src/components/agent/chat/components/useHarnessPreviewDialog.ts" --max-warnings 0` 通过。
+- 2026-06-25：Product Profile 写入动作二次确认：右侧 Product Profile 中 `risk=write` 的动作首次点击只进入确认态，第二次点击同一对象 / 同一动作才提交 Claw turn；切换对象会清空确认态，`risk=read` 动作保持单击提交。该刀只在右侧面板内增加审批边界，不新增协议、不新增 Electron IPC；五语言补齐 `actionConfirm / actionConfirmAria`。验证通过：
+  - `npx vitest run "src/components/agent/chat/workspace/WorkspaceProductProfileSurface.test.tsx"`，7 tests。
+  - `npx vitest run "src/i18n/__tests__/loadNamespace.test.ts" "src/i18n/__tests__/types.test.ts"`，8 tests。
+  - `npx eslint "src/components/agent/chat/workspace/WorkspaceProductProfileSurface.tsx" "src/components/agent/chat/workspace/WorkspaceProductProfileSurface.test.tsx" --max-warnings 0` 通过。
+- 2026-06-25：Product Profile action result evidence 首版：App Server `product_profile_action_projection` 将同一 turn 的 `artifact.snapshot` 汇入 `resultArtifacts / result_artifacts`，并从 `runtime.error / turn.failed` 汇入 `errorCode / errorMessage`；前端 `workspaceProductProfileActionHistory` 兼容 camel/snake 字段，右侧操作历史卡显示最近动作的结果产物和错误。该刀不新增 App Server method、不新增 Electron IPC，只增强现有 read model。验证通过：
+  - `cargo test -p app-server --manifest-path "lime-rs/Cargo.toml" read_session_materializes_content_factory_workspace_patch_into_product_workspace -- --nocapture`，1 test。
+  - `cargo fmt --manifest-path "lime-rs/Cargo.toml" --all` 通过。
+  - `npx vitest run "src/components/agent/chat/workspace/workspaceProductProfileActionHistory.unit.test.ts" "src/components/agent/chat/workspace/WorkspaceProductProfileSurface.test.tsx" "src/i18n/__tests__/loadNamespace.test.ts" "src/i18n/__tests__/types.test.ts"`，17 tests。
+  - `npx vitest run "src/components/agent/chat/workspace/workspaceProductProfileActionHistory.unit.test.ts" "src/components/agent/chat/workspace/workspaceProductProfileModel.unit.test.ts" "src/components/agent/chat/workspace/WorkspaceProductProfileSurface.test.tsx" "src/i18n/__tests__/loadNamespace.test.ts" "src/i18n/__tests__/types.test.ts"`，23 tests。
+  - `npx eslint "src/components/agent/chat/workspace/workspaceProductProfileActionHistory.ts" "src/components/agent/chat/workspace/workspaceProductProfileActionHistory.unit.test.ts" "src/components/agent/chat/workspace/WorkspaceProductProfileSurface.tsx" "src/components/agent/chat/workspace/WorkspaceProductProfileSurface.test.tsx" --max-warnings 0` 通过。
+  - `npm run verify:gui-smoke` 首次被未跟踪 `electron/embeddedBrowserPermissions.ts` 的 Electron typecheck 阻塞；已最小修复 `url` fallback 与 `embeddingOrigin` union 收窄后，`npm run typecheck:electron` 和 `npm run verify:gui-smoke` 通过。
+  - `git diff --check` 通过。
+- 2026-06-25：Product Profile worker 深度详情落地：`electron/agentAppTaskWorker.ts` 在成功 `artifact.snapshot` 与失败 `runtime.error` 的 `agentAppWorker` metadata 中写入受控摘要字段，App Server `product_workspace_projection` 透传到 `workerEvidence`，前端 `workspaceProductProfileWorkerEvidence` 兼容 camel/snake 字段并在右侧运行记录卡展示事件、输入、输出和 worker 入口。该刀不新增 App Server method、不新增 Electron IPC、不复活旧 Tauri / iframe 路径。验证通过：
+  - `npx vitest run "src/components/agent/chat/workspace/workspaceProductProfileWorkerEvidence.unit.test.ts" "src/components/agent/chat/workspace/workspaceProductProfileModel.unit.test.ts" "src/components/agent/chat/workspace/WorkspaceProductProfileSurface.test.tsx" "src/i18n/__tests__/loadNamespace.test.ts" "src/i18n/__tests__/types.test.ts"`，23 tests。
+  - `npx vitest run "electron/hostCommands.test.ts" -t "agent_app_runtime_start_task .*worker"`，2 tests。
+  - `cargo test -p app-server --manifest-path "lime-rs/Cargo.toml" read_session_materializes_content_factory_workspace_patch_into_product_workspace -- --nocapture`，1 test。
+  - `cargo fmt --manifest-path "lime-rs/Cargo.toml" --all` 通过。
+  - `npx eslint "src/components/agent/chat/workspace/workspaceProductProfileWorkerEvidence.ts" "src/components/agent/chat/workspace/workspaceProductProfileWorkerEvidence.unit.test.ts" "src/components/agent/chat/workspace/WorkspaceProductProfileSurface.tsx" "src/components/agent/chat/workspace/WorkspaceProductProfileSurface.test.tsx" "electron/agentAppTaskWorker.ts" "electron/hostCommands.test.ts" --max-warnings 0` 通过。
+  - `npm run typecheck:electron` 通过。
+  - `npm run verify:gui-smoke` 通过，renderer、Electron host、App Server sidecar、Claw workbench shell 和 memory settings ready。
+  - Rust 定向测试首次被当前工作树中 `lime-rs/crates/app-server/src/runtime/evidence_provider/browser/action_index.rs` 的 `tool_name` move 后借用编译错误阻塞；已做单行 `tool_name.clone()` 编译修复，未扩展 browser evidence 旁支。
+- 2026-06-25：Product Profile 图片本地文件预览首版落地：`workspaceProductProfileModel` 解析 `images[].localPath / filePath / cachedPath`，新增 `workspaceProductProfileImagePreview` 纯 helper，只有绝对本地路径会通过 `resolveLocalFilePreviewUrl(...)` 转成 Electron asset URL；右侧图片格、Preview Artifact 和 ArtifactDocument image block 统一使用该可渲染源，并保留 `productProfileImage.localPath / sourcePath` 与 block metadata。内容工厂 schema / development docs 同步声明本地缓存字段。该刀不新增 App Server method、不新增 Electron IPC、不走 mock fallback。验证通过：
+  - `npx vitest run "src/components/agent/chat/workspace/workspaceProductProfileImagePreview.unit.test.ts" "src/components/agent/chat/workspace/workspaceProductProfileModel.unit.test.ts" "src/components/agent/chat/workspace/workspaceProductProfilePreviewArtifact.unit.test.ts" "src/components/agent/chat/workspace/WorkspaceProductProfileSurface.test.tsx"`，19 tests。
+  - `npx eslint "src/components/agent/chat/workspace/workspaceProductProfileImagePreview.ts" "src/components/agent/chat/workspace/workspaceProductProfileImagePreview.unit.test.ts" "src/components/agent/chat/workspace/workspaceProductProfileModel.ts" "src/components/agent/chat/workspace/workspaceProductProfileModel.unit.test.ts" "src/components/agent/chat/workspace/workspaceProductProfilePreviewArtifact.ts" "src/components/agent/chat/workspace/workspaceProductProfilePreviewArtifact.unit.test.ts" "src/components/agent/chat/workspace/workspaceProductProfileArtifactDocument.ts" "src/components/agent/chat/workspace/WorkspaceProductProfileSurface.tsx" "src/components/agent/chat/workspace/WorkspaceProductProfileSurface.test.tsx" --max-warnings 0` 通过。
+  - `npm run validate:app`（`/Users/coso/Documents/dev/ai/limecloud/content-factory-app`）通过。
+  - 五语言 `workspace.json` JSON parse 通过。
+  - `npm run typecheck:electron` 通过。
+  - `npm run verify:gui-smoke` 通过，renderer、Electron host、App Server sidecar、Claw workbench shell 和 memory settings ready。
 
 ## 后续缺口
 
-1. Electron Desktop Host / Claw：`WebContentsView` App Surface 容器、App Center -> 当前 Claw Right Surface 显式触发策略、前端多实例 / focus / close / hidden preserve 管理已落骨架；后续补多会话目标选择器、目标会话展示名和 Right Surface Playwright 证据。
-2. App Server：`agentAppHostLifecycle/list` 已落 current JSON-RPC 骨架；后续需要把完整 manifest / readiness 强类型化，并补 server-side readiness issue 分类。
-3. Right Surface UI：`productProfile` 已作为一等 kind 接入，Right Surface state / Host 已有多 tab 骨架；内容工厂 Product Profile 首版 read model / pending 水合、host_builtin 分型渲染、对象本地切换、本地选择持久化、App Server selection writeback、结构化预览、Claw turn action dispatch、action history read model / 状态卡和 Preview Artifact 打开骨架已完成。后续仍需补操作审批、更细 action 结果 evidence、ArtifactDocument 持久化 / 版本链，以及图片实际文件缓存 / 读取能力。
-4. 应用中心：`delisted / blocked / ready` 门禁已接数据层、action 禁用、服务端 lifecycle refresh、card / detail 可见状态和五语言 i18n；后续要补发布签名、远程 catalog evidence 和更细的 readiness issue 分类。
-5. 内容工厂新仓：v3 package skeleton、开发文档、发布文档、workspace patch 样例和 deterministic worker / task runtime 已可自校验；Lime 宿主已能在 lifecycle / UI runtime status 中读取 task runtime 合同。后续要补 App Server worker executor、发布签名、应用中心包校验 evidence。
-6. 验证：骨架阶段已跑定向 unit、Rust read model、`npm run test:contracts` 和 `verify:gui-smoke`；后续补完整 `npm run typecheck` 与 Right Surface Playwright 证据。
+1. Electron Desktop Host / Claw：`WebContentsView` App Surface 容器、App Center -> Claw Right Surface 显式触发策略、多会话目标选择器、跨重启 target 恢复、前端多实例 / focus / close / hidden preserve 管理和真实 Electron 多实例证据已完成；readiness issue 分类已进入 App Center summary 和详情 UI，且 `agentAppHostLifecycle/list` 已开始返回 server-side 分类字段；Cloud release install review 已带发布包 evidence，并已在安装 / 更新审查弹窗露出；remote catalog 未 verified 签名会阻断安装确认，`signatureProof` verifier、宿主 trust root 事实源、trust root 轮换 / 过期 / 撤销策略、发布审计 evidence 聚合和 Markdown 报告复制首版已完成。后续重点转向 ArtifactDocument 持久化。
+2. App Server：`agentAppHostLifecycle/list` 已落 current JSON-RPC 骨架，并返回 server-side readiness issue 分类；后续需要把完整 manifest / readiness 强类型化，减少当前从 installed state JSON 投影时的动态字段解析。
+3. Right Surface UI：`productProfile` 已作为一等 kind 接入，Right Surface state / Host 已有多 tab 骨架；内容工厂 Product Profile 首版 read model / pending 水合、host_builtin 分型渲染、对象本地切换、本地选择持久化、App Server selection writeback、结构化预览、Claw turn action dispatch、action history read model / 状态卡、worker evidence 运行记录卡与深度详情、图片本地文件预览、Preview Artifact 打开骨架、ArtifactDocument v1 首版本链、App Server artifact summary metadata、事件日志内版本链合并、renderer runtime event append client 和 Artifact Workbench 保存回写 runtime event 已完成。后续仍需补 ArtifactDocument 文件级持久化服务 / 跨会话编辑保存合并，以及真实媒体生成 / 缓存写入 executor。
+4. 应用中心：`delisted / blocked / ready` 门禁已接数据层、action 禁用、服务端 lifecycle refresh、card / detail 可见状态、readiness issue 分类 summary / 详情露出和五语言 i18n；Cloud release install review 已返回发布包 evidence，并已接入安装 / 更新审查 UI；remote catalog 签名未 verified 时 blocked，`signatureProof` 有可信根且校验通过时才 ready；release evidence blocked / warning 已进入 source state 发布策略与 issue 分类；可信根轮换 / 过期 / 撤销、发布审计摘要、Markdown 报告复制和 server-side readiness 分类首版已 fail closed。后续补更完整的发布报告归档 / 导出文件入口。
+5. 内容工厂新仓：v3 package skeleton、开发文档、发布文档、workspace patch 样例和 deterministic worker / task runtime 已可自校验；Lime 宿主已能从 App Server `taskRuntime.packageRootPath` 定位包根目录，并由 Desktop Host 受控执行 worker 后写回 App Server runtime events；worker 成功写 `artifact.snapshot`，失败写 `runtime.error`，右侧 Product Profile 已显示运行记录和输入 / 输出 / 入口深度详情，图片组已支持远程 URL 与宿主可访问的本地缓存路径预览，打开预览已带 ArtifactDocument v1 首版本链，App Server artifact read model 已可按对象级 artifact ref 读到内联 ArtifactDocument 并合并同一 artifact ref 的多次 snapshot 版本历史；Artifact Workbench 保存已可把编辑后的 ArtifactDocument 追加回同一 App Server event log；应用中心安装审查已能看到包校验 evidence 数据并支持 `signatureProof` 首版验证。后续要补 ArtifactDocument 文件级持久化服务 / 跨会话编辑保存合并，以及真实媒体生成 / 缓存写入 executor。
+6. 验证：骨架阶段已跑定向 unit、Rust read model、`npm run test:contracts`、`npm run verify:gui-smoke`、内容工厂 Product Profile Electron fixture、Right Surface Product Profile Playwright 证据、完整 `npm run typecheck` 和 `npm run smoke:agent-runtime-current-fixture`；本轮最后一次 `npm run test:contracts` 因既有 `request_tool_policy.rs` WebSearch preflight guard 缺失失败，Agent App / ArtifactDocument 目标写集的定向验证已通过。后续进入发布前聚合时再补 `npm run verify:local` 或 `npm run verify:local:full`。
 
 ## 风险登记
 
 - 当前工作树已有大量未归属改动，本轮只追加窄写集，不清理其它 dirty 文件。
 - 本轮先落纯编排骨架，不宣称完整产品可交付。
-- Product Profile renderer 仍是 host_builtin 骨架；当前动作已通过 Claw send helper 进入 current turn，selection 已通过 `agentSession/update` 写回 current read model，action history 已可从 turn metadata 复盘，但操作审批、更细 action 结果 evidence 和产物版本链需要后续补齐。
-- `WebContentsView` App Surface 容器已有 Right Surface 骨架；App Center standalone launch 默认独立窗口，显式选择当前 Claw 右侧且 target 有效时才投递 `appSurface` pending，`appSurface` 内部已支持多实例 focus / close / hidden preserve；target 目前仍来自 App shell 内存态，不做跨重启恢复。后续要补多 session 选择和 Right Surface 真实交互证据。
-- 内容工厂 worker 当前是 deterministic runtime 骨架，用于验证 task request -> Product Workspace Patch 的业务合同；Lime 宿主只读取 task runtime readiness，尚未执行 worker executor。真实模型生成、媒体执行、ArtifactDocument 版本链和发布签名仍由后续主线补齐。
+- Product Profile renderer 仍是 host_builtin 骨架；当前动作已通过 Claw send helper 进入 current turn，selection 已通过 `agentSession/update` 写回 current read model，action history 已可从 turn metadata 复盘，worker evidence 已有输入 / 输出 / 入口深度详情，预览产物和 App Server artifact summary 已携带 ArtifactDocument v1 首版本链，并能合并同一 artifact ref 的事件日志内版本历史；Artifact Workbench 保存动作已回写 App Server runtime event。ArtifactDocument 文件级持久化服务 / 跨会话编辑保存合并需要后续补齐。
+- `workspaceProductProfileModel.ts` 已超过 800 行预警线，本轮只补图片本地路径字段解析；下一刀若继续扩 Product Profile preview，应优先拆 `readPreviewImage / readStoryboardRow / readChecklistItem / readPreviewFields` 到独立 projection helper，避免逼近 1000 行硬边界。
+- `WebContentsView` App Surface 容器已有 Right Surface 骨架；App Center standalone launch 默认独立窗口，显式选择 Claw 右侧且 target 有效时才投递 `appSurface` pending，`appSurface` 内部已支持多实例 focus / close / hidden preserve；真实 Electron `right-surface-visual-matrix` 已覆盖 App Surface 多实例 tab 证据。多会话 target 已从 App shell 内存态扩展为 renderer localStorage 恢复，坏 JSON / storage 不可用时 fail closed。
+- 内容工厂 worker 当前是 deterministic runtime 骨架，用于验证 task request -> Product Workspace Patch 的业务合同；Lime 宿主已能在 `agent_app_runtime_start_task` 中执行受控 worker 并 append runtime event，失败路径也会写入 `runtime.error`，右侧 Product Profile 已能展示 worker evidence 运行记录和深度详情，图片预览可消费宿主可访问的本地缓存路径。真实模型生成、媒体执行、ArtifactDocument 文件级持久化和图片缓存写入 executor 仍由后续主线补齐。

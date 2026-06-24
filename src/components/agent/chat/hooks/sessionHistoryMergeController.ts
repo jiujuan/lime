@@ -11,6 +11,7 @@ import {
   mergeHydratedMessagesWithLocalState,
   shouldCompactCompletedSessionHistory,
 } from "./agentChatHistory";
+import { collectDetailThreadItems } from "./agentChatHistoryThreadItems";
 
 export interface SessionHistoryMergePlan {
   currentTurnId: string | null;
@@ -48,7 +49,7 @@ export function buildSessionHistoryMergePlan(params: {
   const mergedThreadItems = filterConversationThreadItems(
     mergeThreadItems(
       params.currentThreadItems,
-      normalizeLegacyThreadItems(params.detail.items || []),
+      normalizeLegacyThreadItems(collectDetailThreadItems(params.detail)),
     ),
   );
 

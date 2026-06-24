@@ -396,6 +396,49 @@ export function formatBrowserActionStatusLabel(
   }
 }
 
+export interface BrowserActionIndexQuery {
+  threadId?: string;
+  turnId?: string;
+  contentId?: string;
+  executor?: string;
+}
+
+export function filterBrowserActionIndexItems(
+  index: AgentRuntimeEvidenceBrowserActionIndex,
+  query: BrowserActionIndexQuery,
+): AgentRuntimeEvidenceBrowserActionItem[] {
+  const normalizedQuery = {
+    threadId: query.threadId?.trim(),
+    turnId: query.turnId?.trim(),
+    contentId: query.contentId?.trim(),
+    executor: query.executor?.trim(),
+  };
+  return index.items.filter((item) => {
+    if (
+      normalizedQuery.threadId &&
+      item.thread_id !== normalizedQuery.threadId
+    ) {
+      return false;
+    }
+    if (normalizedQuery.turnId && item.turn_id !== normalizedQuery.turnId) {
+      return false;
+    }
+    if (
+      normalizedQuery.contentId &&
+      item.content_id !== normalizedQuery.contentId
+    ) {
+      return false;
+    }
+    if (
+      normalizedQuery.executor &&
+      item.executor !== normalizedQuery.executor
+    ) {
+      return false;
+    }
+    return true;
+  });
+}
+
 export function buildBrowserReplayArtifact(
   evidencePack: AgentRuntimeEvidencePack,
   index: AgentRuntimeEvidenceBrowserActionIndex,
@@ -414,20 +457,31 @@ export function buildBrowserReplayArtifact(
         observationCount: index.observation_count,
         screenshotCount: index.screenshot_count,
         lastUrl: index.last_url,
+        threadIds: index.thread_ids,
+        turnIds: index.turn_ids,
+        contentIds: index.content_ids,
         sessionIds: index.session_ids,
         targetIds: index.target_ids,
         profileKeys: index.profile_keys,
+        executorCounts: index.executor_counts,
         items: index.items.map((item) => ({
           artifactKind: item.artifact_kind,
           toolName: item.tool_name,
           action: item.action,
+          actionId: item.action_id,
           status: item.status,
           success: item.success,
           sessionId: item.session_id,
           targetId: item.target_id,
+          tabId: item.tab_id,
           profileKey: item.profile_key,
           backend: item.backend,
           requestId: item.request_id,
+          threadId: item.thread_id,
+          turnId: item.turn_id,
+          contentId: item.content_id,
+          executor: item.executor,
+          evidenceRefs: item.evidence_refs,
           lastUrl: item.last_url,
           title: item.title,
           entrySource: item.entry_source,
@@ -507,9 +561,7 @@ export function formatReviewDecisionStatusLabel(status?: string): string {
   }
 }
 
-export function formatReviewDecisionRiskLevelLabel(
-  riskLevel?: string,
-): string {
+export function formatReviewDecisionRiskLevelLabel(riskLevel?: string): string {
   switch (riskLevel?.trim()) {
     case "low":
       return "低";

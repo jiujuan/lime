@@ -7,6 +7,7 @@ import {
 import {
   flushEffects,
   mockGetAgentRuntimeSession,
+  mockListAgentRuntimeSessions,
   mockUpdateAgentRuntimeSession,
   mountHook,
 } from "../useAsterAgentChat.testUtils";
@@ -122,6 +123,117 @@ describe("useAsterAgentChat 偏好持久化 - history normalization", () => {
         role: "assistant",
         content: "已收到你的选择，继续执行。",
       });
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("切换话题时应从 thread_read.thread_items 恢复 revisioned proposed_plan", async () => {
+    const workspaceId = "ws-history-thread-read-plan";
+    const sessionId = "topic-thread-read-plan";
+    mockListAgentRuntimeSessions.mockResolvedValue([
+      {
+        id: sessionId,
+        name: "Claw 新闻输入 Electron fixture",
+        created_at: 1782259735,
+        updated_at: 1782259738,
+        messages_count: 2,
+        workspace_id: workspaceId,
+      },
+    ]);
+    mockGetAgentRuntimeSession.mockResolvedValue({
+      id: sessionId,
+      thread_id: "thread-read-plan-items",
+      created_at: 1782259735,
+      updated_at: 1782259738,
+      execution_strategy: "react",
+      messages_count: 2,
+      messages: [],
+      items: [],
+      turns: [
+        {
+          id: "turn-plan-1",
+          thread_id: "thread-read-plan-items",
+          prompt_text: "先给我一个修复计划，不要直接改代码",
+          status: "completed",
+          started_at: "2026-06-23T10:00:00.000Z",
+          completed_at: "2026-06-23T10:00:03.000Z",
+          created_at: "2026-06-23T10:00:00.000Z",
+          updated_at: "2026-06-23T10:00:03.000Z",
+        },
+      ],
+      thread_read: {
+        thread_id: "thread-read-plan-items",
+        status: "completed",
+        thread_items: [
+          {
+            id: "item-user-plan-1",
+            type: "user_message",
+            thread_id: "thread-read-plan-items",
+            turn_id: "turn-plan-1",
+            sequence: 1,
+            status: "completed",
+            started_at: "2026-06-23T10:00:00.000Z",
+            updated_at: "2026-06-23T10:00:00.000Z",
+            completed_at: "2026-06-23T10:00:00.000Z",
+            content: "先给我一个修复计划，不要直接改代码",
+          },
+          {
+            id: "item-plan-1",
+            type: "plan",
+            thread_id: "thread-read-plan-items",
+            turn_id: "turn-plan-1",
+            sequence: 2,
+            status: "completed",
+            started_at: "2026-06-23T10:00:01.000Z",
+            updated_at: "2026-06-23T10:00:03.000Z",
+            completed_at: "2026-06-23T10:00:03.000Z",
+            text: [
+              "- 确认计划模式请求进入 App Server",
+              "- 输出 proposed_plan",
+              "- 验证右侧计划轨显示",
+            ].join("\n"),
+            metadata: {
+              source: "proposed_plan",
+              revisionId: "proposed_plan:fixture-1",
+            },
+          },
+        ],
+      },
+    });
+
+    const harness = mountHook(workspaceId);
+
+    try {
+      await flushEffects();
+      await act(async () => {
+        await harness.getValue().switchTopic(sessionId);
+      });
+      await flushEffects();
+
+      const value = harness.getValue();
+      expect(value.sessionId).toBe(sessionId);
+      expect(value.messages).toHaveLength(2);
+      expect(value.messages[0]).toMatchObject({
+        role: "user",
+        content: "先给我一个修复计划，不要直接改代码",
+      });
+      const assistantMessage = value.messages[1];
+      expect(assistantMessage).toMatchObject({
+        role: "assistant",
+      });
+      const assistantText = assistantMessage?.contentParts
+        ?.filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .join("\n");
+      expect(assistantText).toContain("<proposed_plan>");
+      expect(assistantText).toContain("确认计划模式请求进入 App Server");
+      expect(assistantText).toContain("输出 proposed_plan");
+      expect(assistantText).toContain("验证右侧计划轨显示");
+      expect(value.threadItems.map((item) => item.id)).toEqual([
+        "item-user-plan-1",
+        "item-plan-1",
+      ]);
     } finally {
       harness.unmount();
     }

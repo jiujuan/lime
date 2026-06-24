@@ -530,6 +530,189 @@ describe("MessageList reasoning flow", () => {
     );
   });
 
+  it("WebTools 已由内联 contentParts 持有时完成态 timeline 不应再渲染第二组过程流", () => {
+    const now = new Date("2026-06-24T10:00:00.000Z");
+    const messages: Message[] = [
+      {
+        id: "msg-assistant-web-tools-inline-owner",
+        role: "assistant",
+        content: "最终整理完成。",
+        timestamp: now,
+        runtimeTurnId: "turn-web-tools-inline-owner",
+        contentParts: [
+          {
+            type: "text",
+            text: "我先联网核实来源。",
+            metadata: {
+              phase: "commentary",
+              source: "agent_text_delta",
+              sequence: 1,
+              turnId: "turn-web-tools-inline-owner",
+            },
+          },
+          {
+            type: "tool_use",
+            metadata: {
+              sequence: 2,
+              turnId: "turn-web-tools-inline-owner",
+            },
+            toolCall: {
+              id: "tool-web-search-inline-owner",
+              name: "WebSearch",
+              arguments: JSON.stringify({ query: "Lime WebTools rendering" }),
+              status: "completed",
+              result: { success: true, output: "search output" },
+              startTime: now,
+              endTime: now,
+            },
+          },
+          {
+            type: "thinking",
+            text: "搜索后继续读取可靠来源。",
+            metadata: {
+              source: "thread_item_reasoning",
+              threadItemId: "reasoning-web-tools-inline-owner",
+              sequence: 3,
+              turnId: "turn-web-tools-inline-owner",
+            },
+          },
+          {
+            type: "tool_use",
+            metadata: {
+              sequence: 4,
+              turnId: "turn-web-tools-inline-owner",
+            },
+            toolCall: {
+              id: "tool-web-fetch-inline-owner",
+              name: "WebFetch",
+              arguments: JSON.stringify({
+                url: "https://example.com/lime-webtools-rendering",
+              }),
+              status: "completed",
+              result: { success: true, output: "fetch output" },
+              startTime: now,
+              endTime: now,
+            },
+          },
+          {
+            type: "text",
+            text: "最终整理完成。",
+            metadata: {
+              phase: "final_answer",
+              source: "agent_text_delta",
+              sequence: 5,
+              turnId: "turn-web-tools-inline-owner",
+            },
+          },
+        ],
+      },
+    ];
+
+    const container = render(messages, {
+      currentTurnId: "turn-web-tools-inline-owner",
+      turns: [
+        {
+          id: "turn-web-tools-inline-owner",
+          thread_id: "thread-web-tools-inline-owner",
+          prompt_text: "整理今天的国际新闻",
+          status: "completed",
+          started_at: "2026-06-24T10:00:00.000Z",
+          completed_at: "2026-06-24T10:00:05.000Z",
+          created_at: "2026-06-24T10:00:00.000Z",
+          updated_at: "2026-06-24T10:00:05.000Z",
+        },
+      ],
+      threadItems: [
+        {
+          id: "commentary-web-tools-inline-owner",
+          thread_id: "thread-web-tools-inline-owner",
+          turn_id: "turn-web-tools-inline-owner",
+          sequence: 1,
+          status: "completed",
+          started_at: "2026-06-24T10:00:00.000Z",
+          completed_at: "2026-06-24T10:00:01.000Z",
+          updated_at: "2026-06-24T10:00:01.000Z",
+          type: "agent_message",
+          phase: "commentary",
+          text: "timeline commentary should not render separately",
+        } as never,
+        {
+          id: "web-search-web-tools-inline-owner",
+          thread_id: "thread-web-tools-inline-owner",
+          turn_id: "turn-web-tools-inline-owner",
+          sequence: 2,
+          status: "completed",
+          started_at: "2026-06-24T10:00:01.000Z",
+          completed_at: "2026-06-24T10:00:02.000Z",
+          updated_at: "2026-06-24T10:00:02.000Z",
+          type: "web_search",
+          action: "web_search",
+          query: "Lime WebTools rendering",
+          output: "timeline search output",
+        } as never,
+        {
+          id: "reasoning-web-tools-inline-owner",
+          thread_id: "thread-web-tools-inline-owner",
+          turn_id: "turn-web-tools-inline-owner",
+          sequence: 3,
+          status: "completed",
+          started_at: "2026-06-24T10:00:02.000Z",
+          completed_at: "2026-06-24T10:00:03.000Z",
+          updated_at: "2026-06-24T10:00:03.000Z",
+          type: "reasoning",
+          text: "timeline reasoning should not render separately",
+        } as never,
+        {
+          id: "web-fetch-web-tools-inline-owner",
+          thread_id: "thread-web-tools-inline-owner",
+          turn_id: "turn-web-tools-inline-owner",
+          sequence: 4,
+          status: "completed",
+          started_at: "2026-06-24T10:00:03.000Z",
+          completed_at: "2026-06-24T10:00:04.000Z",
+          updated_at: "2026-06-24T10:00:04.000Z",
+          type: "tool_call",
+          tool_name: "WebFetch",
+          arguments: { url: "https://example.com/lime-webtools-rendering" },
+          output: "timeline fetch output",
+        } as never,
+        {
+          id: "final-web-tools-inline-owner",
+          thread_id: "thread-web-tools-inline-owner",
+          turn_id: "turn-web-tools-inline-owner",
+          sequence: 5,
+          status: "completed",
+          started_at: "2026-06-24T10:00:04.000Z",
+          completed_at: "2026-06-24T10:00:05.000Z",
+          updated_at: "2026-06-24T10:00:05.000Z",
+          type: "agent_message",
+          phase: "final_answer",
+          text: "timeline final should not render separately",
+        } as never,
+      ],
+    });
+
+    expect(
+      container.querySelector(
+        '[data-testid="assistant-primary-timeline-shell"]',
+      ),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
+    ).toBeNull();
+    expect(mockStreamingRenderer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contentParts: [
+          expect.objectContaining({ type: "text" }),
+          expect.objectContaining({ type: "tool_use" }),
+          expect.objectContaining({ type: "thinking" }),
+          expect.objectContaining({ type: "tool_use" }),
+          expect.objectContaining({ type: "text" }),
+        ],
+      }),
+    );
+  });
+
   it("恢复历史对话时有内联过程的已完成助手消息不应退化成纯最终正文", () => {
     const messages: Message[] = [
       {

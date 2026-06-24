@@ -9,6 +9,7 @@ export type AppServerHandleJsonLinesResult = {
 };
 
 export type AppServerDrainEventsRequest = {
+  includeRecent?: boolean;
   limit?: number;
 };
 
@@ -112,6 +113,12 @@ export type AppServerRuntimeOptions = protocol.RuntimeOptions;
 export type AppServerAgentSessionTurnStartParams = protocol.AgentSessionTurnStartParams;
 export type AppServerAgentSessionTurnCancelParams =
   protocol.AgentSessionTurnCancelParams;
+export type AppServerAgentSessionRuntimeEventInput =
+  protocol.AgentSessionRuntimeEventInput;
+export type AppServerAgentSessionRuntimeEventAppendParams =
+  protocol.AgentSessionRuntimeEventAppendParams;
+export type AppServerAgentSessionRuntimeEventAppendResponse =
+  protocol.AgentSessionRuntimeEventAppendResponse;
 export type AppServerAgentSessionActionType = protocol.AgentSessionActionType;
 export type AppServerAgentSessionActionScope = protocol.AgentSessionActionScope;
 export type AppServerAgentSessionActionRespondParams =

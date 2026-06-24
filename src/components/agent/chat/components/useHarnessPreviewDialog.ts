@@ -15,11 +15,15 @@ import {
 } from "./harnessStatusPanelViewModel";
 
 export interface HarnessFilePreviewResult {
+  artifactId?: string;
+  artifactRef?: string;
   path?: string;
   content?: string | null;
   error?: string | null;
   isBinary?: boolean;
+  metadata?: unknown;
   size?: number;
+  title?: string;
 }
 
 export interface HarnessPreviewDialogState {

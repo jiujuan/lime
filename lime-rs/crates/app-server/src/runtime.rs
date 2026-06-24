@@ -3,11 +3,13 @@ mod agent_app_task_runtime;
 mod agent_apps;
 mod app_data;
 mod artifact_content;
+mod artifact_document_versions;
 mod artifact_projection;
 mod artifact_reader;
 mod artifact_sidecar;
 mod automation;
 mod backend;
+mod browser_session;
 mod capabilities;
 mod coding_activity_projection;
 mod connect;
@@ -34,6 +36,7 @@ mod model_providers;
 mod objectives;
 mod output_refs;
 mod product_profile_action_projection;
+mod product_profile_artifact_document_projection;
 mod product_workspace_projection;
 mod project_git;
 mod projection_payload_summary;
@@ -136,6 +139,7 @@ use app_server_protocol::ManagedObjectiveStatus;
 use async_trait::async_trait;
 use chrono::SecondsFormat;
 use chrono::Utc;
+use lime_browser_runtime::{BrowserProfileScope, BrowserRuntimeManager};
 use lime_infra::telemetry::RequestLog;
 use lime_infra::telemetry::TelemetryStore;
 use std::collections::HashMap;
@@ -367,6 +371,7 @@ pub struct RuntimeCore {
     pub(in crate::runtime) event_log_writer: Option<Arc<EventLogWriter>>,
     pub(in crate::runtime) projection_store: Option<Arc<ProjectionStore>>,
     pub(in crate::runtime) telemetry_store: Option<Arc<TelemetryStore>>,
+    pub(in crate::runtime) browser_runtime: Arc<BrowserRuntimeManager>,
     evidence_export_provider: Arc<dyn EvidenceExportProvider>,
     knowledge_builder_runtime_executor: Arc<dyn KnowledgeBuilderRuntimeExecutor>,
     app_data_source: Arc<dyn AppDataSource>,
@@ -387,6 +392,7 @@ pub(in crate::runtime) struct RuntimeCoreState {
     pub(in crate::runtime) sessions: HashMap<String, StoredSession>,
     pub(in crate::runtime) right_surface_pending:
         Vec<app_server_protocol::WorkspaceRightSurfacePendingRequest>,
+    pub(in crate::runtime) browser_profile_scopes: Vec<BrowserProfileScope>,
     agent_app_ui_runtimes: HashMap<String, agent_apps::AgentAppUiRuntimeProcess>,
 }
 
@@ -456,6 +462,7 @@ impl RuntimeCore {
             event_log_writer: None,
             projection_store: None,
             telemetry_store: None,
+            browser_runtime: Arc::new(BrowserRuntimeManager::new()),
             evidence_export_provider,
             knowledge_builder_runtime_executor: Arc::new(
                 NativeKnowledgeBuilderRuntimeExecutor::new(),

@@ -30,6 +30,15 @@ describe("workspaceProductProfileActionHistory", () => {
         threadId: "thread-main",
         appId: "content-factory-app",
         submittedAt: "2026-06-24T00:01:00.000Z",
+        resultArtifacts: [
+          {
+            artifactRef: "artifact-image-regenerated",
+            artifactId: "artifact-document:image-regenerated",
+            title: "重新生成配图",
+            kind: "artifact_document",
+            status: "ready",
+          },
+        ],
         objectRef: {
           appId: "content-factory-app",
           kind: "imageGenerationSet",
@@ -61,6 +70,33 @@ describe("workspaceProductProfileActionHistory", () => {
         key: "regenerate",
         status: "completed",
         turnId: "turn-action-2",
+        resultArtifacts: [
+          expect.objectContaining({
+            artifactRef: "artifact-image-regenerated",
+            title: "重新生成配图",
+          }),
+        ],
+      }),
+    ]);
+  });
+
+  it("应解析失败 action 的错误证据", () => {
+    expect(
+      readWorkspaceProductProfileActionHistory([
+        {
+          key: "regenerate",
+          status: "failed",
+          turn_id: "turn-action-failed",
+          session_id: "session-main",
+          app_id: "content-factory-app",
+          error_code: "worker_invalid_json_output",
+          error_message: "Agent App worker returned invalid JSON",
+        },
+      ]),
+    ).toEqual([
+      expect.objectContaining({
+        errorCode: "worker_invalid_json_output",
+        errorMessage: "Agent App worker returned invalid JSON",
       }),
     ]);
   });

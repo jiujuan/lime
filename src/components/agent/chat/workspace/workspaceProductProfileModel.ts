@@ -5,6 +5,11 @@ import {
   readWorkspaceProductProfileActionHistory,
   type WorkspaceProductProfileActionHistoryItem,
 } from "./workspaceProductProfileActionHistory";
+import {
+  buildWorkspaceProductProfileWorkerEvidenceFromThreadRead,
+  readWorkspaceProductProfileWorkerEvidence,
+  type WorkspaceProductProfileWorkerEvidenceItem,
+} from "./workspaceProductProfileWorkerEvidence";
 
 export type WorkspaceProductProfileSource =
   | "threadRead"
@@ -65,6 +70,9 @@ export interface WorkspaceProductProfilePreviewImage {
   id: string;
   title: string;
   url?: string | null;
+  localPath?: string | null;
+  filePath?: string | null;
+  cachedPath?: string | null;
   alt?: string | null;
   prompt?: string | null;
 }
@@ -127,6 +135,7 @@ export interface WorkspaceProductProfile {
   layoutState?: WorkspaceProductProfileLayoutState | null;
   sourceArtifacts?: Record<string, unknown>[];
   actionHistory: WorkspaceProductProfileActionHistoryItem[];
+  workerEvidence?: WorkspaceProductProfileWorkerEvidenceItem[];
   updatedAt?: string | null;
 }
 
@@ -140,6 +149,8 @@ export interface WorkspaceProductProfileViewModel {
   statusCounts: Record<WorkspaceProductObjectStatus, number>;
   sourceArtifacts: Record<string, unknown>[];
   updatedAt: string | null;
+  workerEvidence: WorkspaceProductProfileWorkerEvidenceItem[];
+  latestWorkerEvidence: WorkspaceProductProfileWorkerEvidenceItem | null;
   selectedSurface: WorkspaceProductProfileObjectSurface;
   selectedActions: WorkspaceProductProfileAction[];
   selectedActionHistory: WorkspaceProductProfileActionHistoryItem[];
@@ -175,10 +186,24 @@ export function buildWorkspaceProductProfileFromThreadRead(
   if (!record) {
     return null;
   }
-  return buildWorkspaceProductProfileFromUnknown(
+  const profile = buildWorkspaceProductProfileFromUnknown(
     firstRecord(record.productWorkspace, record.product_workspace),
     "threadRead",
   );
+  if (!profile) {
+    return null;
+  }
+  return {
+    ...profile,
+    workerEvidence: buildWorkspaceProductProfileWorkerEvidenceFromThreadRead({
+      productWorkspace: firstRecord(
+        record.productWorkspace,
+        record.product_workspace,
+      ),
+      sourceArtifacts: profile.sourceArtifacts,
+      threadRead,
+    }),
+  };
 }
 
 export function buildWorkspaceProductProfileFromPendingRequests(
@@ -206,21 +231,29 @@ export function buildWorkspaceProductProfileFromPendingRequests(
     if (!profile) {
       continue;
     }
+    const sourceArtifacts =
+      profile.sourceArtifacts && profile.sourceArtifacts.length > 0
+        ? profile.sourceArtifacts
+        : [
+            {
+              requestId: request.requestId,
+              origin: request.origin,
+              reason: request.reason,
+              requestedAt: request.requestedAt,
+            },
+          ];
     return {
       ...profile,
       workspaceId: profile.workspaceId ?? request.workspaceId ?? null,
       sessionId: profile.sessionId || request.sessionId || profile.sessionId,
-      sourceArtifacts:
-        profile.sourceArtifacts && profile.sourceArtifacts.length > 0
-          ? profile.sourceArtifacts
-          : [
-              {
-                requestId: request.requestId,
-                origin: request.origin,
-                reason: request.reason,
-                requestedAt: request.requestedAt,
-              },
-            ],
+      sourceArtifacts,
+      workerEvidence:
+        (profile.workerEvidence?.length ?? 0) > 0
+          ? (profile.workerEvidence ?? [])
+          : buildWorkspaceProductProfileWorkerEvidenceFromThreadRead({
+              productWorkspace: profile as unknown as Record<string, unknown>,
+              sourceArtifacts,
+            }),
       updatedAt: profile.updatedAt ?? request.requestedAt,
     };
   }
@@ -280,6 +313,9 @@ export function buildWorkspaceProductProfileFromUnknown(
     actionHistory: readWorkspaceProductProfileActionHistory(
       readArray(record.actionHistory, record.action_history),
     ),
+    workerEvidence: readWorkspaceProductProfileWorkerEvidence(
+      readArray(record.workerEvidence, record.worker_evidence),
+    ),
     updatedAt: readString(record.updatedAt, record.updated_at) || null,
   };
 }
@@ -315,6 +351,8 @@ export function buildWorkspaceProductProfileViewModel(
     statusCounts,
     sourceArtifacts: profile.sourceArtifacts ?? [],
     updatedAt: profile.updatedAt ?? null,
+    workerEvidence: profile.workerEvidence ?? [],
+    latestWorkerEvidence: profile.workerEvidence?.[0] ?? null,
     selectedSurface: resolveProductObjectSurface(selectedObject.ref.kind),
     selectedActions: resolveProductObjectActions(selectedObject.ref.kind),
     selectedActionHistory,
@@ -583,13 +621,27 @@ function readPreviewImage(
     return null;
   }
   const url = readString(record.url, record.src, record.thumbnailUrl);
+  const localPath = readString(
+    record.localPath,
+    record.local_path,
+    record.filePath,
+    record.file_path,
+    record.path,
+    record.cachedPath,
+    record.cached_path,
+    record.assetPath,
+    record.asset_path,
+  );
   const id =
-    readString(record.id, record.artifactId, record.artifact_id, url) ||
+    readString(record.id, record.artifactId, record.artifact_id, url, localPath) ||
     `image-${index + 1}`;
   return {
     id,
     title: readString(record.title, record.name, record.alt, id) || id,
     url: url || null,
+    localPath: localPath || null,
+    filePath: readString(record.filePath, record.file_path) || null,
+    cachedPath: readString(record.cachedPath, record.cached_path) || null,
     alt: readString(record.alt, record.description) || null,
     prompt:
       readString(record.prompt, record.imagePrompt, record.image_prompt) ||

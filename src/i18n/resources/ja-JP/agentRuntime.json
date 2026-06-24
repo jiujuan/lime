@@ -377,7 +377,7 @@
   "agentChat.searchResultPreview.emptySnippet": "概要はまだありません。クリックするとソースを直接開けます。",
   "agentChat.searchResultPreview.expandAria": "検索結果を展開",
   "agentChat.searchResultPreview.expandMore": "残り {{countLabel}} 件の結果を表示",
-  "agentChat.searchResultPreview.previewAria": "検索結果をプレビュー：{{title}}",
+  "agentChat.searchResultPreview.openAria": "検索結果を開く：{{title}}",
   "agentChat.sessionOverview.latestPromptFallback": "新しいタスク入力はまだありません。",
   "agentChat.sessionOverview.metrics.inProgress": "進行中 {{countLabel}}",
   "agentChat.sessionOverview.metrics.noFollowUp": "フォローアップ不要",

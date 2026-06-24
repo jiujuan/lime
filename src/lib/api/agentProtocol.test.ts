@@ -221,10 +221,14 @@ describe("agentProtocol", () => {
       parseAgentEvent({
         type: "message.delta",
         text: "<proposed_plan>\n- 确认计划模式\n</proposed_plan>",
+        itemId: "item-commentary-1",
+        phase: "commentary",
       }),
     ).toEqual({
       type: "text_delta",
       text: "<proposed_plan>\n- 确认计划模式\n</proposed_plan>",
+      itemId: "item-commentary-1",
+      phase: "commentary",
     });
 
     expect(
@@ -234,12 +238,16 @@ describe("agentProtocol", () => {
           text: "第一段\n第二段",
           chunks: ["第一段\n", "第二段"],
           boundary: "newline",
+          item_id: "item-final-1",
+          phase: "final_answer",
         },
       }),
     ).toEqual({
       type: "text_delta_batch",
       text: "第一段\n第二段",
       chunks: ["第一段\n", "第二段"],
+      itemId: "item-final-1",
+      phase: "final_answer",
       boundary: "newline",
     });
   });

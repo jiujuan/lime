@@ -15,6 +15,7 @@ import {
   METHOD_AGENT_APP_UI_RUNTIME_STOP,
   METHOD_AGENT_SESSION_ACTION_RESPOND,
   METHOD_AGENT_SESSION_READ,
+  METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
   METHOD_AGENT_SESSION_START,
   METHOD_AGENT_SESSION_TURN_CANCEL,
   METHOD_AGENT_SESSION_TURN_START,
@@ -37,6 +38,7 @@ import {
   METHOD_WORKSPACE_READ,
   type AgentSessionActionRespondResponse,
   type AgentSessionReadResponse,
+  type AgentSessionRuntimeEventAppendResponse,
   type AgentSessionStartResponse,
   type AgentSessionTurnCancelResponse,
   type AgentSessionTurnStartResponse,
@@ -78,6 +80,10 @@ import {
   runProjectShellCommand,
   type ProjectPathOpenTool,
 } from "./projectToolsHost";
+import {
+  buildAgentAppTaskWorkerFailureResult,
+  runAgentAppTaskWorker,
+} from "./agentAppTaskWorker";
 
 type HostArgs = Record<string, unknown> | null | undefined;
 type AppServerParams = Record<string, unknown>;
@@ -1236,6 +1242,12 @@ export class ElectronHostCommands {
     const queueIfBusy = readBoolean(request, "queueIfBusy") ?? true;
     const skipPreSubmitResume =
       readBoolean(request, "skipPreSubmitResume") ?? false;
+    const requestedPackageRootPath =
+      readString(request, "packageRootPath") ??
+      readString(request, "runtimePackageRoot") ??
+      readString(request, "appRootPath") ??
+      undefined;
+    const explicitRunWorker = readBoolean(request, "runWorker");
     const turnConfig =
       readRecord(request, "turnConfig") ??
       readRecord(request, "turn_config") ??
@@ -1291,6 +1303,14 @@ export class ElectronHostCommands {
         turn_config: turnConfig,
       },
     };
+    const workerConfig = await this.#resolveAgentAppRuntimeWorkerConfig({
+      appId,
+      taskKind,
+      requestedPackageRootPath,
+      requireWorker: explicitRunWorker === true,
+      skipWorker: explicitRunWorker === false,
+    });
+    const shouldRunWorker = Boolean(workerConfig);
 
     await this.#ensureAgentAppRuntimeSession({ sessionId, appId, workspaceId });
     await this.#appServerRequest<AgentSessionTurnStartResponse>(
@@ -1315,6 +1335,21 @@ export class ElectronHostCommands {
         skipPreSubmitResume,
       },
     );
+    const worker = shouldRunWorker
+      ? await this.#runAndAppendAgentAppRuntimeWorker({
+          appId,
+          taskId,
+          taskKind,
+          sessionId,
+          turnId,
+          packageRootPath: workerConfig?.packageRootPath,
+          workerEntrypoint: workerConfig?.workerEntrypoint ?? null,
+          request,
+        })
+      : {
+          status: "skipped",
+          reason: "package_root_missing",
+        };
 
     return {
       appId,
@@ -1326,7 +1361,122 @@ export class ElectronHostCommands {
       turnId,
       eventName,
       status: "accepted",
+      worker,
       submittedAt: new Date().toISOString(),
+    };
+  }
+
+  async #resolveAgentAppRuntimeWorkerConfig(params: {
+    appId: string;
+    taskKind: string;
+    requestedPackageRootPath?: string;
+    requireWorker: boolean;
+    skipWorker: boolean;
+  }): Promise<{
+    packageRootPath: string;
+    workerEntrypoint: string;
+  } | null> {
+    if (params.skipWorker) {
+      return null;
+    }
+    const status = await this.#appServerRequest<AgentAppUiRuntimeStatusResponse>(
+      METHOD_AGENT_APP_UI_RUNTIME_STATUS,
+      { appId: params.appId },
+    );
+    const taskRuntime = status.taskRuntime;
+    if (!taskRuntime?.enabled) {
+      if (params.requireWorker || params.requestedPackageRootPath) {
+        throw new Error(`Agent App ${params.appId} task runtime is not enabled`);
+      }
+      return null;
+    }
+    const taskKinds = Array.isArray(taskRuntime.taskKinds)
+      ? taskRuntime.taskKinds
+      : [];
+    const shouldRunForTaskKind =
+      params.requireWorker ||
+      Boolean(params.requestedPackageRootPath) ||
+      taskKinds.includes(params.taskKind);
+    if (!shouldRunForTaskKind) {
+      return null;
+    }
+    const blockers = taskRuntime.blockers ?? [];
+    if (blockers.length > 0) {
+      throw new Error(
+        `Agent App ${params.appId} task runtime is blocked: ${blockers.join(", ")}`,
+      );
+    }
+    const workerEntrypoint = taskRuntime.workerEntrypoint?.trim();
+    if (!workerEntrypoint) {
+      throw new Error(
+        `Agent App ${params.appId} task runtime has no worker entrypoint`,
+      );
+    }
+    const packageRootPath =
+      params.requestedPackageRootPath ?? taskRuntime.packageRootPath?.trim();
+    if (!packageRootPath) {
+      throw new Error(
+        `Agent App ${params.appId} task runtime has no package root path`,
+      );
+    }
+    return {
+      packageRootPath,
+      workerEntrypoint,
+    };
+  }
+
+  async #runAndAppendAgentAppRuntimeWorker(params: {
+    appId: string;
+    taskId: string;
+    taskKind: string;
+    sessionId: string;
+    turnId: string;
+    packageRootPath?: string;
+    workerEntrypoint: string | null;
+    request: Record<string, unknown>;
+  }): Promise<Record<string, unknown>> {
+    if (!params.packageRootPath) {
+      throw new Error("Agent App task worker requires packageRootPath");
+    }
+    if (!params.workerEntrypoint) {
+      throw new Error("Agent App task worker requires workerEntrypoint");
+    }
+    const workerRequest = {
+      appId: params.appId,
+      taskId: params.taskId,
+      taskKind: params.taskKind,
+      sessionId: params.sessionId,
+      turnId: params.turnId,
+      packageRootPath: params.packageRootPath,
+      workerEntrypoint: params.workerEntrypoint,
+      input: params.request.input,
+      prompt: readString(params.request, "prompt") ?? undefined,
+      title: readString(params.request, "title") ?? undefined,
+      metadata: params.request.metadata,
+      timeoutMs: readNumber(params.request, "workerTimeoutMs") ?? undefined,
+    };
+    const workerResult = await runAgentAppTaskWorker(workerRequest).catch(
+      (error) => buildAgentAppTaskWorkerFailureResult(workerRequest, error),
+    );
+    const appended =
+      await this.#appServerRequest<AgentSessionRuntimeEventAppendResponse>(
+        METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
+        {
+          sessionId: params.sessionId,
+          turnId: params.turnId,
+          runtimeEvents: workerResult.runtimeEvents,
+        },
+      );
+    return {
+      status: workerResult.status,
+      artifactKind:
+        workerResult.status === "completed" ? workerResult.artifactKind : undefined,
+      errorCode:
+        workerResult.status === "failed" ? workerResult.errorCode : undefined,
+      errorMessage:
+        workerResult.status === "failed" ? workerResult.errorMessage : undefined,
+      runtimeEventCount: workerResult.runtimeEvents.length,
+      appendedEventCount: appended.events?.length ?? 0,
     };
   }
 

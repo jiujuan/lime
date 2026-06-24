@@ -503,6 +503,8 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
   >["rightSurfaceLaunchers"];
   rightSurfaceObjectCanvasOpen?: boolean;
   onToggleRightSurfaceObjectCanvas?: () => void;
+  rightSurfaceBrowserOpen?: boolean;
+  onToggleRightSurfaceBrowser?: () => void;
   rightSurfaceFilesOpen?: boolean;
   onToggleRightSurfaceFiles?: () => void;
   rightSurfaceShellOpen?: boolean;
@@ -642,6 +644,8 @@ export function WorkspaceConversationScene({
   rightSurfaceLaunchers,
   rightSurfaceObjectCanvasOpen,
   onToggleRightSurfaceObjectCanvas,
+  rightSurfaceBrowserOpen,
+  onToggleRightSurfaceBrowser,
   rightSurfaceFilesOpen,
   onToggleRightSurfaceFiles,
   rightSurfaceShellOpen,
@@ -820,6 +824,11 @@ export function WorkspaceConversationScene({
       onToggleObjectCanvasPanel={
         rightSurfaceObjectCanvasOpen || onToggleRightSurfaceObjectCanvas
           ? onToggleRightSurfaceObjectCanvas
+          : undefined
+      }
+      onToggleBrowserPanel={
+        rightSurfaceBrowserOpen || onToggleRightSurfaceBrowser
+          ? onToggleRightSurfaceBrowser
           : undefined
       }
       onToggleFilesPanel={

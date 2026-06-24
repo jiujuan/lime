@@ -26,6 +26,7 @@ interface InitialSessionSwitchResolution extends InitialSessionSwitchOptions {
 interface UseWorkspaceInitialSessionNavigationParams {
   initialSessionId?: string | null;
   currentSessionId?: string | null;
+  shouldHydrateMatchedInitialSession?: boolean;
   switchTopic: InitialSessionSwitchTopic;
   resolveInitialSessionSwitch?: (
     sessionId: string,
@@ -58,12 +59,19 @@ export function rememberInitialSessionNavigationStart(sessionId: string) {
 export function useWorkspaceInitialSessionNavigation({
   initialSessionId,
   currentSessionId,
+  shouldHydrateMatchedInitialSession = false,
   switchTopic,
   resolveInitialSessionSwitch,
 }: UseWorkspaceInitialSessionNavigationParams) {
   const appliedInitialSessionIdRef = useRef<string | null>(null);
   const normalizedInitialSessionId = normalizeSessionId(initialSessionId);
   const normalizedCurrentSessionId = normalizeSessionId(currentSessionId);
+  const shouldRunMatchedHydration =
+    normalizedCurrentSessionId === normalizedInitialSessionId &&
+    shouldHydrateMatchedInitialSession;
+  const appliedNavigationKey = normalizedInitialSessionId
+    ? `${normalizedInitialSessionId}:${shouldRunMatchedHydration ? "matched-hydrate" : "navigate"}`
+    : null;
 
   useEffect(() => {
     if (!normalizedInitialSessionId) {
@@ -71,13 +79,16 @@ export function useWorkspaceInitialSessionNavigation({
       return;
     }
 
-    if (normalizedCurrentSessionId === normalizedInitialSessionId) {
-      appliedInitialSessionIdRef.current = normalizedInitialSessionId;
+    if (
+      normalizedCurrentSessionId === normalizedInitialSessionId &&
+      !shouldHydrateMatchedInitialSession
+    ) {
+      appliedInitialSessionIdRef.current = appliedNavigationKey;
       externalNavigationStartsBySessionId.delete(normalizedInitialSessionId);
       return;
     }
 
-    if (appliedInitialSessionIdRef.current === normalizedInitialSessionId) {
+    if (appliedInitialSessionIdRef.current === appliedNavigationKey) {
       return;
     }
 
@@ -128,12 +139,14 @@ export function useWorkspaceInitialSessionNavigation({
       return;
     }
 
-    appliedInitialSessionIdRef.current = normalizedInitialSessionId;
+    appliedInitialSessionIdRef.current = appliedNavigationKey;
     switchTopicStarts.set(dedupeKey, startedAt);
     logAgentDebug("AgentChatPage", "initialSessionNavigation.start", {
       currentSessionId: normalizedCurrentSessionId,
-      forceRefresh: resolvedSwitchOptions?.forceRefresh === true,
+      forceRefresh:
+        shouldRunMatchedHydration || resolvedSwitchOptions?.forceRefresh === true,
       initialSessionId: normalizedInitialSessionId,
+      matchedHydration: shouldRunMatchedHydration,
       resumeSessionStartHooks:
         resolvedSwitchOptions?.resumeSessionStartHooks === true,
       allowDetachedSession:
@@ -141,7 +154,7 @@ export function useWorkspaceInitialSessionNavigation({
     });
 
     const switchOptions: InitialSessionSwitchOptions = {
-      ...(resolvedSwitchOptions?.forceRefresh === true
+      ...(shouldRunMatchedHydration || resolvedSwitchOptions?.forceRefresh === true
         ? { forceRefresh: true }
         : {}),
       ...(resolvedSwitchOptions?.resumeSessionStartHooks === true
@@ -176,7 +189,10 @@ export function useWorkspaceInitialSessionNavigation({
   }, [
     normalizedCurrentSessionId,
     normalizedInitialSessionId,
+    appliedNavigationKey,
     resolveInitialSessionSwitch,
+    shouldHydrateMatchedInitialSession,
+    shouldRunMatchedHydration,
     switchTopic,
   ]);
 }

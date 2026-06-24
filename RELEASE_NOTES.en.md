@@ -1,55 +1,49 @@
-## Lime v1.78.0
+## Lime v1.79.0
 
 <sub>The Simplified Chinese release notes are the primary version. This English page is a companion for international readers.</sub>
 
 ### New Features
 
-- Agent App Host v3 is now on the current path: host lifecycle, history restore, product workspace profiles, Right Surface contracts, readiness descriptors, App Server protocol schemas, and generated TS/Rust client types were added together.
-- Workspace Right Surface now has App Server JSON-RPC methods: `workspaceRightSurface/request`, `pending/list`, `pending/consume`, `pending/dismiss`, and the `workspaceRightSurface/pendingChanged` notification.
-- Right Surface pending requests gained a minimal AppDataSource / Local SQLite persistence path, while the renderer now shares one `AppServerEventBus` drain loop across Agent Runtime and Right Surface consumers.
-- objectCanvas gained its first product skeleton: Browser Assist candidates can open in Right Surface, with board / object / edge models, view models, metadata trimming, persist / replay request schemas, and an App Server snapshot store.
-- objectCanvas replay now exposes RuntimeCore readiness projection and an `object_canvas.replay.dry_run` audit event. Execution remains blocked intentionally until the real replay executor exists.
-- Planning and reasoning are now represented in the streaming UI path through plan state, a plan event controller, model reasoning state, inputbar plan status, and plan decision panel wiring.
-- `@limecloud/app-server-client` was split into connection, request client, sidecar manifest, sidecar lifecycle/process, and helper modules so Electron Host and independent apps can reuse the same client surface.
+- Browser Runtime and the Right Surface browser workspace moved onto the current path: App Server `browserSession/*` protocol methods, Electron embedded browser hosting, canvas browser panels, Right Surface browser panels, download shelf, context menu, and session state projection were added together.
+- Claw workspace now connects browser assist with product-profile work: browser sessions, product profile artifact documents, worker evidence, document versions, and save evidence can flow through the same Workspace / Evidence Pack path.
+- Agent App install and launch flows gained release evidence: cloud release evidence, release signatures, readiness issue classification, launch target controls / persistence, and Agent App task worker wiring.
+- App Server protocol and the npm client now cover browser sessions, runtime event append, Agent App host lifecycle snapshot/list responses, and UI runtime status shapes, with Rust schemas and TypeScript protocol types regenerated.
+- Claw streaming rendering now has structured content timelines, web retrieval process projection, text delta lifecycle handling, and content part ordering so reasoning, tools, web search, and final answers render more consistently across live streaming and history restore.
 
 ### Fixes
 
-- Fixed multiple Right Surface rendering paths competing with each other: the old Harness outer dialog fallback was removed, and Files / objectCanvas / Harness / Shell / Workbench / Expert now share one surface host.
-- Fixed false launcher availability when no result file or object candidate exists. Files and objectCanvas now follow real target / candidate availability.
-- Fixed pending Right Surface requests stopping at toolbar badges; pending metadata can now make a surface clickable, open it, consume it, and dismiss it.
-- Fixed the risk of multiple frontend runtimes competing for the App Server event drain by routing Agent Runtime and Right Surface pending updates through the shared event bus.
-- Improved streaming process display for reasoning, plans, tool calls, Markdown grouping, thinking blocks, tool family labels, and inline process projection.
-- Normalized Context7 tool display names from `resolve_library_id / query_docs` to the current `resolve-library-id / query-docs` form.
+- Fixed missing traceable session references between browser assist and Right Surface. Workspace now drives the right-side browser surface through browser session refs, intents, control modes, and runtime navigation.
+- Fixed Agent App cloud installs showing entry points without release trust context. Install review can now surface signatures, release evidence, and readiness issues.
+- Fixed ordering drift between WebSearch / WebFetch, reasoning, and final answer content across streaming and hydration by relying on structured sequence / provenance instead of display-text regexes.
+- Fixed artifact document save evidence missing auditable document versions by adding artifact document versions and product profile artifact document projection in App Server runtime.
+- Fixed the Browser Runtime manager growing into a single responsibility hotspot by splitting session lifecycle, target reading, event streams, and evidence output into focused modules.
 
 ### Improvements and Refactors
 
-- Split `src/lib/api/appServer.ts` into constants, types, transport, response, client, and method modules to reduce single-file ownership and make contract guards easier to maintain.
-- Split `packages/app-server-client/src/index.ts` into protocol, connection, sidecar, and request-helper modules while keeping the package entrypoint re-exports.
-- Added App Server protocol schemas for Right Surface, Agent App Host lifecycle, product profiles, history restore, and objectCanvas, then regenerated TypeScript protocol types.
-- Continued modularizing the Claw / Agent Runtime current fixture with plan history, right surface visual checks, expert-skills live runner, and tool-execution smoke helpers.
-- Moved Workspace conversation logic for Right Surface state, objectCanvas, product profiles, plan decisions, runtime projection, and view models into focused testable modules.
-- Consolidated Agent tools / external data / MCP dynamic tool display through family classifiers and projection helpers to reduce duplicated renderer branches.
+- Split `lime-rs/crates/agent/src/request_tool_policy.rs` into auto compaction, runtime status, stream diagnostics, stream idle, text batching, web search preflight / tracker, and web retrieval process modules; the root file now keeps only dispatch boundaries.
+- Split the Browser Runtime manager into CDP targets, session, session events, session lifecycle, session reader, and session stream modules to reduce ownership and testing load.
+- Added App Server runtime modules for browser session processing/runtime, browser evidence provider, product workspace/profile projection, and artifact document projection, continuing the move of GUI evidence into the App Server current owner.
+- Continued extracting Agent Chat frontend behavior into testable modules for history merge, content part timeline, stream completion, text delta lifecycle, Right Surface runtime projection, browser assist control, and product profile models.
+- Continued modularizing Claw current fixture scripts with product profile content factory, browser/right-surface visual checks, web tool waits, scenario assertions, and code artifact workbench fixture support.
 
 ### Tests and Quality
 
-- Added and expanded regressions for Right Surface registry, controller, runtime adapter, pending runtime, host rendering, Workspace scene wiring, and toolbar integration.
-- Added focused tests for objectCanvas model, view model, persistence, replay, App Server snapshot storage, and RuntimeCore replay dry-run audit projection.
-- Added coverage for plan state, model reasoning state, plan event controller, plan decision panel, inputbar plan status, and streaming process grouping.
-- Expanded Agent App manifest, readiness, host lifecycle, Agent Apps page view model, App Server API, and protocol client tests.
-- Extended `scripts/check-app-server-client-contract.mjs` and current entrypoint guards for the split App Server client, Right Surface methods, and sidecar release manifest helpers.
-- Updated five-locale i18n resources for new visible copy in agent, agentInputbar, and workspace namespaces.
-- Updated release version facts to `1.78.0` across the root app, Rust workspace, CLI npm package, App Server client package, Cargo lock, and Aster sub-workspace lock.
+- Added and expanded regressions for Browser Runtime API, embedded browser host, browser session protocol, browser panels, Right Surface browser panels, browser assist control, browser runtime navigation, and workspace browser session refs.
+- Added and expanded Agent App tests for release evidence, release signatures, readiness issue classification, launch target persistence, Agent Apps page view models, cloud bootstrap, and install review.
+- Added and expanded streaming regressions for content part ordering, projection guards, text delta lifecycle, content timelines, web retrieval projection, MessageList reasoning flow / persistence, and stream runtime handling.
+- Expanded App Server protocol catalog, generated schemas, app-server-client request methods, contract guards, and release manifest checks.
+- Updated five-locale i18n resources for new visible copy in Agent, Agent Runtime, and Workspace namespaces.
+- Updated release version facts to `1.79.0` across the root app, Rust workspace, CLI npm package, App Server client package, Cargo lock, and the Aster sub-workspace lock.
 
 ### Documentation
 
-- Added Agent App v3 roadmap, PRD, architecture, interface contracts, Electron / App Server technical baseline, history product workspace, and content factory workspace documentation.
-- Added Plan runtime roadmap and implementation plan covering plan events, reasoning state, inputbar status, and future Runtime executor boundaries.
-- Updated the Right Surface roadmap and progress log for the dock / tab / pane model, App Server contracts, pending persistence, objectCanvas snapshots, and replay dry-run work.
-- Updated agent tool test batch docs and the coverage matrix for external info/data tools, Context7 docs tools, and dynamic tool family display.
-- Updated Desktop Host / App Server command-boundary docs with the Agent App Host lifecycle current method.
+- Added the Claw streaming rendering correctness document to lock down content part provenance, lifecycle, and tool / reasoning / final answer ordering boundaries.
+- Added traceable agent acceptance methodology and paper drafts to document the evidence model for acceptance.
+- Added Browser Runtime / Right Surface execution planning and the browser roadmap for browser sessions, Right Surface integration, Evidence Pack, and validation gates.
+- Updated the quality workflow, execution plan index, Agent App Host v3 implementation plan, and scripts directory notes so the release candidate remains traceable.
 
 ### Other
 
-- This release continues converging Agent App, Right Surface, planning / reasoning events, objectCanvas, App Server client, and GUI smoke fixtures onto the App Server JSON-RPC / RuntimeCore / Electron Desktop Host current path. Old mock fallback, outer dialog fallback, and parallel renderer event-drain paths are not sources for new capabilities.
+- This release continues converging browser assist, Agent App release evidence, Claw streaming display, product-profile workspace, and Evidence Pack onto the App Server JSON-RPC / RuntimeCore / Electron Desktop Host current path. Old mock fallback, parallel renderer event drains, and unstructured display-text inference are not sources for new capabilities.
 
-**Full changes**: `v1.77.0` -> `v1.78.0`
+**Full changes**: `v1.78.0` -> `v1.79.0`

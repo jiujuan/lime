@@ -160,6 +160,12 @@ fn app_server_method_catalog_keeps_request_and_notification_methods_together() {
             METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CONSUME,
             METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS,
             METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED,
+            METHOD_BROWSER_SESSION_TARGET_LIST,
+            METHOD_BROWSER_SESSION_OPEN,
+            METHOD_BROWSER_SESSION_READ,
+            METHOD_BROWSER_SESSION_CLOSE,
+            METHOD_BROWSER_SESSION_EVENT_LIST,
+            METHOD_BROWSER_SESSION_ACTION_EXECUTE,
             METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT,
             METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD,
             METHOD_AGENT_APP_INSTALLED_SAVE,
@@ -276,6 +282,7 @@ fn app_server_method_catalog_keeps_request_and_notification_methods_together() {
             METHOD_AGENT_SESSION_TURN_CANCEL,
             METHOD_AGENT_SESSION_ACTION_REPLAY,
             METHOD_AGENT_SESSION_ACTION_RESPOND,
+            METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
             METHOD_AGENT_SESSION_EVENT,
         ]
     );
@@ -319,6 +326,18 @@ fn app_server_method_catalog_keeps_request_and_notification_methods_together() {
     ));
     assert!(is_app_server_notification_method(
         METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED
+    ));
+    assert!(is_app_server_request_method(
+        METHOD_BROWSER_SESSION_TARGET_LIST
+    ));
+    assert!(is_app_server_request_method(METHOD_BROWSER_SESSION_OPEN));
+    assert!(is_app_server_request_method(METHOD_BROWSER_SESSION_READ));
+    assert!(is_app_server_request_method(METHOD_BROWSER_SESSION_CLOSE));
+    assert!(is_app_server_request_method(
+        METHOD_BROWSER_SESSION_EVENT_LIST
+    ));
+    assert!(is_app_server_request_method(
+        METHOD_BROWSER_SESSION_ACTION_EXECUTE
     ));
     assert!(!is_app_server_request_method(
         METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED

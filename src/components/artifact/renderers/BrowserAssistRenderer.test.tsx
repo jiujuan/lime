@@ -79,7 +79,9 @@ describe("BrowserAssistRenderer", () => {
     );
 
     expect(container.textContent).toContain("正在连接浏览器协助");
-    expect(container.textContent).toContain("正在连接已附着的 Chrome / CDP 会话");
+    expect(container.textContent).toContain(
+      "正在连接已附着的 Chrome / CDP 会话",
+    );
     expect(container.textContent).toContain("https://example.com");
   });
 
@@ -186,22 +188,33 @@ describe("BrowserAssistRenderer", () => {
               {
                 artifactKind: "browser_session",
                 action: "navigate",
+                actionId: "browser-action-1",
                 status: "completed",
                 success: true,
                 sessionId: "browser-session-1",
                 targetId: "target-1",
+                tabId: "target-1",
                 backend: "cdp_direct",
+                evidenceRefs: [
+                  "browser_session:browser-session-1",
+                  "browser_action:browser-session-1:browser-action-1",
+                ],
                 lastUrl: "https://example.com/",
               },
               {
                 artifactKind: "browser_snapshot",
                 action: "get_page_info",
+                actionId: "browser-action-2",
                 status: "completed",
                 success: true,
                 sessionId: "browser-session-1",
                 targetId: "target-1",
+                tabId: "target-1",
                 entrySource: "at_browser_agent_command",
                 backend: "lime_extension_bridge",
+                evidenceRefs: [
+                  "browser_snapshot:browser-session-1:browser-action-2",
+                ],
                 lastUrl: "https://example.com/",
                 observationAvailable: true,
                 screenshotAvailable: true,
@@ -212,10 +225,17 @@ describe("BrowserAssistRenderer", () => {
       }),
     );
 
-    expect(container.textContent).toContain("browser_replay_viewer");
+    expect(container.textContent).toContain("浏览器复盘视图");
+    expect(container.textContent).toContain("浏览器控制");
     expect(container.textContent).toContain("Browser Assist 复盘");
+    expect(container.textContent).toContain("只读复盘");
     expect(container.textContent).toContain("get_page_info");
     expect(container.textContent).toContain("browser_snapshot");
+    expect(container.textContent).toContain("browser-action-2");
+    expect(container.textContent).toContain("target-1");
+    expect(container.textContent).toContain(
+      "browser_snapshot:browser-session-1:browser-action-2",
+    );
     expect(container.textContent).toContain("https://example.com/");
     expect(container.textContent).toContain("观察 / 截图");
   });

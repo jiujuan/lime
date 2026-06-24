@@ -35,6 +35,7 @@ lime-gateway.workspace = true
 lime-infra.workspace = true
 lime-agent.workspace = true
 lime-knowledge.workspace = true
+lime-browser-runtime.workspace = true
 lime-media-runtime.workspace = true
 lime-mcp.workspace = true
 runtime-core.workspace = true

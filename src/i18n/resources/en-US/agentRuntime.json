@@ -377,7 +377,7 @@
   "agentChat.searchResultPreview.emptySnippet": "No summary yet. Click to open the source directly.",
   "agentChat.searchResultPreview.expandAria": "Expand search results",
   "agentChat.searchResultPreview.expandMore": "Show {{countLabel}} more results",
-  "agentChat.searchResultPreview.previewAria": "Preview search result: {{title}}",
+  "agentChat.searchResultPreview.openAria": "Open search result: {{title}}",
   "agentChat.sessionOverview.latestPromptFallback": "No new task input yet.",
   "agentChat.sessionOverview.metrics.inProgress": "In progress {{countLabel}}",
   "agentChat.sessionOverview.metrics.noFollowUp": "No follow-up needed",

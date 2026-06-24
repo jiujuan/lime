@@ -1,10 +1,14 @@
 import {
   AppServerClient,
+  type AppServerAgentSessionRuntimeEventAppendParams,
+  type AppServerAgentSessionRuntimeEventAppendResponse,
   type AppServerArtifactReadResponse,
   type AppServerArtifactReadParams,
   type AppServerArtifactSummary,
 } from "@/lib/api/appServer";
+import type { ArtifactDocumentV1 } from "@/lib/artifact-document";
 import type { Artifact } from "@/lib/artifact/types";
+import { resolveArtifactProtocolFilePath } from "@/lib/artifact-protocol";
 import type { AgentThreadItem } from "../agentProtocol";
 
 export type AgentRuntimeTimelineArtifactItem = Extract<
@@ -21,10 +25,37 @@ export type AgentRuntimeTimelineArtifactContent = {
   title?: string;
 };
 
-export type AppServerArtifactRpcClient = Pick<AppServerClient, "readArtifacts">;
+export type AppServerArtifactRpcClient = Pick<AppServerClient, "readArtifacts"> &
+  Partial<Pick<AppServerClient, "appendAgentSessionRuntimeEvents">>;
 
 export interface AppServerArtifactClientDeps {
   appServerClient?: AppServerArtifactRpcClient;
+}
+
+export type AgentRuntimeArtifactDocumentSnapshotSaveResult =
+  | {
+      status: "appended";
+      eventCount: number;
+      evidence: AgentRuntimeArtifactDocumentSnapshotSaveEvidence;
+    }
+  | {
+      status: "skipped";
+      reason: "missing_scope" | "missing_append_method";
+    };
+
+export interface AgentRuntimeArtifactDocumentSnapshotSaveEvidence {
+  artifactDocumentId: string;
+  artifactRef: string;
+  contentBytes?: number;
+  contentSha256?: string;
+  contentStatus?: string;
+  eventId?: string;
+  filePath?: string;
+  sessionId: string;
+  sidecarRelativePath?: string;
+  turnId?: string;
+  versionId?: string;
+  versionNo?: number;
 }
 
 export function createAppServerArtifactClient({
@@ -69,10 +100,103 @@ export function createAppServerArtifactClient({
     });
   }
 
+  async function saveAgentRuntimeArtifactDocumentSnapshot(
+    artifact: Artifact,
+    document: ArtifactDocumentV1,
+  ): Promise<AgentRuntimeArtifactDocumentSnapshotSaveResult> {
+    const params = appServerArtifactSnapshotAppendParamsFromArtifactDocument(
+      artifact,
+      document,
+    );
+    if (!params) {
+      return {
+        status: "skipped",
+        reason: "missing_scope",
+      };
+    }
+    if (!appServerClient.appendAgentSessionRuntimeEvents) {
+      return {
+        status: "skipped",
+        reason: "missing_append_method",
+      };
+    }
+
+    const response =
+      await appServerClient.appendAgentSessionRuntimeEvents(params);
+    assertRuntimeEventAppendResponse(response.result);
+    const evidence = projectArtifactDocumentSnapshotSaveEvidence({
+      document,
+      params,
+      response: response.result,
+    });
+    return {
+      status: "appended",
+      eventCount: response.result.events?.length ?? 0,
+      evidence,
+    };
+  }
+
   return {
     readAgentRuntimeArtifactPreviewContent,
     readAgentRuntimeTimelineArtifactContent,
+    saveAgentRuntimeArtifactDocumentSnapshot,
   };
+}
+
+export function projectArtifactDocumentSnapshotSaveEvidence({
+  document,
+  params,
+  response,
+}: {
+  document: ArtifactDocumentV1;
+  params: AppServerAgentSessionRuntimeEventAppendParams;
+  response: AppServerAgentSessionRuntimeEventAppendResponse;
+}): AgentRuntimeArtifactDocumentSnapshotSaveEvidence {
+  const firstEvent = response.events?.[0];
+  const eventPayload = asRecord(firstEvent?.payload);
+  const artifact = asRecord(eventPayload?.artifact) || eventPayload;
+  const sidecarRef =
+    asRecord(artifact?.sidecarRef) || asRecord(eventPayload?.sidecarRef);
+  const metadata = asRecord(artifact?.metadata);
+  const artifactRef =
+    readText(artifact, ["artifactRef", "artifact_ref", "artifactId"]) ||
+    readText(metadata, ["artifactRef", "artifact_ref"]) ||
+    normalizeText(document.artifactId) ||
+    "artifact-document";
+  const filePath =
+    readText(artifact, ["filePath", "file_path", "path"]) ||
+    readText(metadata, ["filePath", "file_path"]);
+  const versionId =
+    readText(metadata, ["artifactVersionId", "artifact_version_id"]) ||
+    normalizeText(document.metadata.currentVersionId);
+  const versionNo =
+    readFiniteNumber(metadata?.artifactVersionNo) ??
+    readFiniteNumber(metadata?.artifact_version_no) ??
+    document.metadata.currentVersionNo;
+
+  return omitUndefined({
+    artifactDocumentId: document.artifactId,
+    artifactRef,
+    contentBytes:
+      readFiniteNumber(artifact?.contentBytes) ??
+      readFiniteNumber(eventPayload?.contentBytes),
+    contentSha256:
+      readText(artifact, ["contentSha256", "content_sha256"]) ||
+      readText(eventPayload, ["contentSha256", "content_sha256"]),
+    contentStatus:
+      readText(artifact, ["contentStatus", "content_status"]) ||
+      readText(eventPayload, ["contentStatus", "content_status"]),
+    eventId: normalizeText(firstEvent?.eventId),
+    filePath,
+    sessionId: params.sessionId,
+    sidecarRelativePath: readText(sidecarRef, [
+      "relativePath",
+      "relative_path",
+    ]),
+    turnId: normalizeText(params.turnId) || normalizeText(firstEvent?.turnId),
+    versionId,
+    versionNo,
+  });
 }
 
 function assertArtifactReadResponse(
@@ -94,6 +218,28 @@ function isArtifactReadResponse(
     (value as { artifacts: unknown[] }).artifacts.every(isArtifactSummary) &&
     (typeof (value as { nextCursor?: unknown }).nextCursor === "undefined" ||
       typeof (value as { nextCursor?: unknown }).nextCursor === "string")
+  );
+}
+
+function assertRuntimeEventAppendResponse(
+  value: unknown,
+): asserts value is AppServerAgentSessionRuntimeEventAppendResponse {
+  if (!isRuntimeEventAppendResponse(value)) {
+    throw new Error(
+      "agentSession/runtimeEvents/append did not return runtime events",
+    );
+  }
+}
+
+function isRuntimeEventAppendResponse(
+  value: unknown,
+): value is AppServerAgentSessionRuntimeEventAppendResponse {
+  return (
+    Boolean(value) &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    (typeof (value as { events?: unknown }).events === "undefined" ||
+      Array.isArray((value as { events?: unknown }).events))
   );
 }
 
@@ -140,6 +286,8 @@ export function appServerArtifactReadParamsFromTimelineItem(
     "session_id",
     "appServerSessionId",
     "app_server_session_id",
+    "appServerArtifactSessionId",
+    "app_server_artifact_session_id",
   ]);
   if (!sessionId) {
     return null;
@@ -161,6 +309,8 @@ export function appServerArtifactReadParamsFromTimelineItem(
       "turn_id",
       "appServerTurnId",
       "app_server_turn_id",
+      "appServerArtifactTurnId",
+      "app_server_artifact_turn_id",
     ]) || normalizeText(item.turn_id);
 
   return omitUndefined({
@@ -177,40 +327,21 @@ export function appServerArtifactReadParamsFromArtifactPreview(
   artifactPath: string,
 ): AppServerArtifactReadParams | null {
   const metadata = asRecord(artifact.meta);
-  const sessionId = readText(metadata, [
-    "sessionId",
-    "session_id",
-    "appServerSessionId",
-    "app_server_session_id",
-  ]);
+  const sessionId = resolveArtifactSessionId(metadata);
   if (!sessionId) {
     return null;
   }
 
   const normalizedArtifactPath = normalizeText(artifactPath);
   const artifactRef =
-    readText(metadata, [
-      "artifactRef",
-      "artifact_ref",
-      "appServerArtifactRef",
-      "app_server_artifact_ref",
-      "artifactId",
-      "artifact_id",
-      "artifactDocumentId",
-      "artifact_document_id",
-    ]) ||
+    resolveArtifactRef(metadata) ||
     normalizeText(artifact.id) ||
     normalizedArtifactPath;
   if (!artifactRef) {
     return null;
   }
 
-  const turnId = readText(metadata, [
-    "turnId",
-    "turn_id",
-    "appServerTurnId",
-    "app_server_turn_id",
-  ]);
+  const turnId = resolveArtifactTurnId(metadata);
 
   return omitUndefined({
     sessionId,
@@ -218,6 +349,70 @@ export function appServerArtifactReadParamsFromArtifactPreview(
     artifactRef,
     includeContent: true,
     limit: 1,
+  });
+}
+
+export function appServerArtifactSnapshotAppendParamsFromArtifactDocument(
+  artifact: Artifact,
+  document: ArtifactDocumentV1,
+): AppServerAgentSessionRuntimeEventAppendParams | null {
+  const metadata = asRecord(artifact.meta);
+  const sessionId = resolveArtifactSessionId(metadata);
+  if (!sessionId) {
+    return null;
+  }
+
+  const filePath = resolveArtifactProtocolFilePath(artifact);
+  const artifactRef =
+    resolveArtifactRef(metadata) ||
+    normalizeText(document.artifactId) ||
+    normalizeText(artifact.id) ||
+    normalizeText(filePath);
+  if (!artifactRef) {
+    return null;
+  }
+
+  const turnId =
+    resolveArtifactTurnId(metadata) || normalizeText(document.turnId);
+  const content = JSON.stringify(document, null, 2);
+  const artifactMetadata = {
+    ...(metadata || {}),
+    artifactSchema: document.schemaVersion,
+    artifactKind: document.kind,
+    artifactDocument: document,
+    artifactTitle: document.title,
+    artifactDocumentId: document.artifactId,
+    artifactVersionId: normalizeText(document.metadata.currentVersionId),
+    artifactVersionNo: document.metadata.currentVersionNo,
+    artifactRef,
+    filePath,
+    productProfile:
+      asRecord(document.metadata.productProfile) ||
+      asRecord(metadata?.productProfile),
+  };
+
+  return omitUndefined({
+    sessionId,
+    turnId,
+    runtimeEvents: [
+      {
+        type: "artifact.snapshot",
+        payload: {
+          artifact: omitUndefined({
+            artifactId: artifactRef,
+            artifactRef,
+            artifactDocumentId: document.artifactId,
+            filePath,
+            path: filePath,
+            title: document.title || artifact.title,
+            kind: "artifact_document",
+            status: document.status,
+            content,
+            metadata: omitUndefined(artifactMetadata),
+          }),
+        },
+      },
+    ],
   });
 }
 
@@ -333,6 +528,9 @@ export const readAgentRuntimeTimelineArtifactContent =
 export const readAgentRuntimeArtifactPreviewContent =
   defaultAppServerArtifactClient.readAgentRuntimeArtifactPreviewContent;
 
+export const saveAgentRuntimeArtifactDocumentSnapshot =
+  defaultAppServerArtifactClient.saveAgentRuntimeArtifactDocumentSnapshot;
+
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -341,6 +539,12 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 
 function normalizeText(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function readFiniteNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
 function readText(
@@ -354,6 +558,103 @@ function readText(
     }
   }
   return undefined;
+}
+
+function readNestedText(
+  record: Record<string, unknown> | undefined,
+  path: string[],
+): string | undefined {
+  let current: unknown = record;
+  for (const key of path) {
+    const next = asRecord(current)?.[key];
+    if (typeof next === "undefined") {
+      return undefined;
+    }
+    current = next;
+  }
+  return normalizeText(current);
+}
+
+function readStringArrayFirst(
+  record: Record<string, unknown> | undefined,
+  path: string[],
+): string | undefined {
+  let current: unknown = record;
+  for (const key of path) {
+    const next = asRecord(current)?.[key];
+    if (typeof next === "undefined") {
+      return undefined;
+    }
+    current = next;
+  }
+  if (!Array.isArray(current)) {
+    return undefined;
+  }
+  for (const item of current) {
+    const normalized = normalizeText(item);
+    if (normalized) {
+      return normalized;
+    }
+  }
+  return undefined;
+}
+
+function resolveArtifactSessionId(
+  metadata: Record<string, unknown> | undefined,
+): string | undefined {
+  return (
+    readText(metadata, [
+      "sessionId",
+      "session_id",
+      "appServerSessionId",
+      "app_server_session_id",
+      "appServerArtifactSessionId",
+      "app_server_artifact_session_id",
+    ]) ||
+    readNestedText(metadata, ["productProfile", "sessionId"]) ||
+    readNestedText(metadata, ["productProfile", "session_id"]) ||
+    readNestedText(metadata, ["sourceRunBinding", "sessionId"]) ||
+    readNestedText(metadata, ["sourceRunBinding", "session_id"])
+  );
+}
+
+function resolveArtifactTurnId(
+  metadata: Record<string, unknown> | undefined,
+): string | undefined {
+  return (
+    readText(metadata, [
+      "turnId",
+      "turn_id",
+      "appServerTurnId",
+      "app_server_turn_id",
+      "appServerArtifactTurnId",
+      "app_server_artifact_turn_id",
+    ]) ||
+    readNestedText(metadata, ["sourceRunBinding", "turnId"]) ||
+    readNestedText(metadata, ["sourceRunBinding", "turn_id"])
+  );
+}
+
+function resolveArtifactRef(
+  metadata: Record<string, unknown> | undefined,
+): string | undefined {
+  return (
+    readText(metadata, [
+      "artifactRef",
+      "artifact_ref",
+      "appServerArtifactRef",
+      "app_server_artifact_ref",
+    ]) ||
+    readStringArrayFirst(metadata, ["productProfile", "artifactIds"]) ||
+    readStringArrayFirst(metadata, ["productProfile", "artifact_ids"]) ||
+    readText(metadata, [
+      "sourceRef",
+      "artifactId",
+      "artifact_id",
+      "artifactDocumentId",
+      "artifact_document_id",
+    ])
+  );
 }
 
 function normalizePath(value: unknown): string | undefined {

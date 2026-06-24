@@ -145,6 +145,49 @@ function webToolsSnapshotFromDom({
     !processText.includes(markdownHeadingText) &&
     !processText.includes("推荐 型号") &&
     !processText.includes("| 品牌 | 型号 |");
+  const messageBubbles = Array.from(
+    document.querySelectorAll("[data-message-role]"),
+  ).map((bubble, index) => ({
+    index,
+    role: bubble.getAttribute("data-message-role") || "",
+    messageContentPartTypes:
+      bubble.getAttribute("data-message-content-part-types") || "",
+    rendererContentPartTypes:
+      bubble.getAttribute("data-renderer-content-part-types") || "",
+    timelineItems: bubble.getAttribute("data-timeline-items") || "",
+    text: bubble.textContent || "",
+  }));
+  const latestAssistantBubble = messageBubbles
+    .filter((bubble) => bubble.role === "assistant")
+    .at(-1);
+  const normalizeContentPartTypes = (value) =>
+    String(value || "")
+      .split(/[\s,|>]+/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+  const latestAssistantRendererPartTypes = normalizeContentPartTypes(
+    latestAssistantBubble?.rendererContentPartTypes,
+  );
+  const isProcessContentPartSignature = (part) =>
+    part === "tool_use" ||
+    part.startsWith("tool:") ||
+    part === "thinking" ||
+    part.startsWith("thinking#") ||
+    part === "action_required" ||
+    part === "file_changes_batch";
+  const isTextContentPartSignature = (part) =>
+    part === "text" || part.startsWith("text#");
+  const latestAssistantTextAfterProcessPart = (() => {
+    const firstProcessIndex = latestAssistantRendererPartTypes.findIndex(
+      isProcessContentPartSignature,
+    );
+    if (firstProcessIndex < 0) {
+      return false;
+    }
+    return latestAssistantRendererPartTypes
+      .slice(firstProcessIndex + 1)
+      .some(isTextContentPartSignature);
+  })();
   const taskRailText =
     document
       .querySelector('[data-testid="task-center-run-control-surface"]')
@@ -209,6 +252,15 @@ function webToolsSnapshotFromDom({
     webProcessGroupRunning: webProcessGroup?.processRunning === "yes",
     webProcessGroupKind: webProcessGroup?.processKind || "",
     webProcessGroupText: processText,
+    latestAssistantMessageContentPartTypes:
+      latestAssistantBubble?.messageContentPartTypes || "",
+    latestAssistantRendererContentPartTypes:
+      latestAssistantBubble?.rendererContentPartTypes || "",
+    latestAssistantTextAfterProcessPart,
+    runningProcessHasLegacyTextAfterProcess:
+      Boolean(webProcessGroup?.processRunning === "yes") &&
+      latestAssistantTextAfterProcessPart &&
+      !text.includes(finalSummary),
     processGroupExcludesFinalMarkdown,
     processGroupCount: processGroups.length,
     rawJsonEnvelopeVisible: forbiddenTransportFragments.some((value) =>
@@ -296,6 +348,8 @@ export async function waitForGuiWebToolsRenderingInProgress(page, options) {
       snapshot.hasTimelineOrderPreserved === true &&
       snapshot.hasAssistantSummary === false &&
       snapshot.hasDoneText === false &&
+      snapshot.latestAssistantTextAfterProcessPart === false &&
+      snapshot.runningProcessHasLegacyTextAfterProcess === false &&
       snapshot.processGroupExcludesFinalMarkdown === true &&
       snapshot.rawJsonEnvelopeVisible === false &&
       snapshot.searchNoiseVisible === false

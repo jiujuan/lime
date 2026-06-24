@@ -1,3 +1,4 @@
+/* eslint-disable no-redeclare */
 import { createRequire } from "node:module";
 import type * as Electron from "electron";
 
@@ -8,6 +9,7 @@ export const {
   app,
   autoUpdater,
   BrowserWindow,
+  clipboard,
   dialog,
   globalShortcut,
   ipcMain,

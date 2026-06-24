@@ -144,6 +144,7 @@ function buildHostLifecycleSnapshot(
     },
     taskRuntime: {
       enabled: true,
+      packageRootPath: null,
       workerEntrypoint: "./src/runtime/content-factory-worker.mjs",
       contractPath: "./app.runtime.yaml",
       sampleRequestPath: "./examples/runtime-request.sample.json",
@@ -555,6 +556,76 @@ describe("AgentAppsPageViewModel", () => {
     ]);
     expect(item.statusKind).toBe("partial");
     expect(isPrimaryActionDisabled(item, null)).toBe(true);
+  });
+
+  it("宿主 lifecycle summary 应输出发布门禁 issue 分类", () => {
+    const summary = buildAppCenterHostLifecycleSummary({
+      hostLifecycle: buildHostLifecycleSnapshot({
+        appCenterStatus: "blocked",
+        blockers: [
+          "CAPABILITY_MISSING",
+          "CLOUD_REGISTRATION_REQUIRED",
+          "TASK_RUNTIME_WORKER_ENTRYPOINT_MISSING",
+          "CAPABILITY_MISSING",
+        ],
+      }),
+    });
+
+    expect(summary).toEqual(
+      expect.objectContaining({
+        publishBlocked: true,
+        primaryIssueCategory: "cloud",
+        issueCategories: [
+          {
+            category: "cloud",
+            count: 1,
+            codes: ["CLOUD_REGISTRATION_REQUIRED"],
+          },
+          {
+            category: "capability",
+            count: 2,
+            codes: ["CAPABILITY_MISSING"],
+          },
+          {
+            category: "taskRuntime",
+            count: 1,
+            codes: ["TASK_RUNTIME_WORKER_ENTRYPOINT_MISSING"],
+          },
+        ],
+      }),
+    );
+  });
+
+  it("宿主 lifecycle summary 应优先使用服务端 readiness 分类字段", () => {
+    const summary = buildAppCenterHostLifecycleSummary({
+      hostLifecycle: buildHostLifecycleSnapshot({
+        appCenterStatus: "ready",
+        blockers: [],
+        publishBlocked: true,
+        primaryIssueCategory: "package",
+        issueCategories: [
+          {
+            category: "package",
+            count: 2,
+            codes: ["PACKAGE_HASH_MISMATCH", "PACKAGE_VERIFICATION_FAILED"],
+          },
+        ],
+      }),
+    });
+
+    expect(summary).toEqual(
+      expect.objectContaining({
+        publishBlocked: true,
+        primaryIssueCategory: "package",
+        issueCategories: [
+          {
+            category: "package",
+            count: 2,
+            codes: ["PACKAGE_HASH_MISMATCH", "PACKAGE_VERIFICATION_FAILED"],
+          },
+        ],
+      }),
+    );
   });
 
   it("旧 Tauri / iframe-only installed app 应进入宿主下架门禁并禁用主动作", () => {

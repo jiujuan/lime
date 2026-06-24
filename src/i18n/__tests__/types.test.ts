@@ -727,7 +727,7 @@ function assertI18nKeyTypes() {
     ns: "agent",
     countLabel: "2",
   });
-  i18n.t("agentChat.searchResultPreview.previewAria", {
+  i18n.t("agentChat.searchResultPreview.openAria", {
     ns: "agent",
     title: "Example",
   });

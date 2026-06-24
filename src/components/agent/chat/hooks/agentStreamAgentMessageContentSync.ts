@@ -1,0 +1,216 @@
+import type { Dispatch, SetStateAction } from "react";
+import type { AgentThreadItem } from "@/lib/api/agentProtocol";
+import type { Message } from "../types";
+import {
+  isAgentMessageCommentaryPhase,
+  isAgentMessageFinalAnswerPhase,
+} from "../utils/agentMessagePhase";
+import {
+  buildAgentTextDeltaContentPartMetadata,
+  readContentPartSequence,
+} from "../utils/contentPartTimeline";
+
+type MessageContentPart = NonNullable<Message["contentParts"]>[number];
+type MessageContentParts = NonNullable<Message["contentParts"]>;
+
+function isComparableSequence(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value < Number.MAX_SAFE_INTEGER
+  );
+}
+
+function threadItemToolSequenceById(
+  items: readonly AgentThreadItem[],
+  turnId?: string | null,
+): Map<string, number> {
+  const sequenceById = new Map<string, number>();
+  const normalizedTurnId = turnId?.trim();
+  for (const item of items) {
+    if (item.type !== "tool_call") {
+      continue;
+    }
+    if (normalizedTurnId && item.turn_id !== normalizedTurnId) {
+      continue;
+    }
+    if (isComparableSequence(item.sequence)) {
+      sequenceById.set(item.id, item.sequence);
+    }
+  }
+  return sequenceById;
+}
+
+function contentPartSequence(
+  part: MessageContentPart,
+  sequenceByToolId: Map<string, number>,
+): number | null {
+  const metadataSequence = readContentPartSequence(part);
+  if (metadataSequence !== null) {
+    return metadataSequence;
+  }
+  if (part.type === "tool_use") {
+    const itemSequence = sequenceByToolId.get(part.toolCall.id);
+    return isComparableSequence(itemSequence) ? itemSequence : null;
+  }
+  return null;
+}
+
+function isAgentMessageTextPartForItem(
+  part: MessageContentPart,
+  itemId: string,
+): boolean {
+  return (
+    part.type === "text" &&
+    (part.metadata?.itemId === itemId || part.metadata?.threadItemId === itemId)
+  );
+}
+
+function insertContentPartBySequence(params: {
+  nextPart: MessageContentPart;
+  parts: MessageContentParts;
+  sequence: number;
+  sequenceByToolId: Map<string, number>;
+}): MessageContentParts {
+  if (!isComparableSequence(params.sequence)) {
+    return [...params.parts, params.nextPart];
+  }
+
+  const insertBeforeIndex = params.parts.findIndex((part) => {
+    const existingSequence = contentPartSequence(part, params.sequenceByToolId);
+    return existingSequence !== null && existingSequence > params.sequence;
+  });
+
+  if (insertBeforeIndex < 0) {
+    return [...params.parts, params.nextPart];
+  }
+
+  return [
+    ...params.parts.slice(0, insertBeforeIndex),
+    params.nextPart,
+    ...params.parts.slice(insertBeforeIndex),
+  ];
+}
+
+function shouldSyncAgentMessageContentPartPhase(
+  phase?: string | null,
+): boolean {
+  return (
+    isAgentMessageCommentaryPhase(phase) || isAgentMessageFinalAnswerPhase(phase)
+  );
+}
+
+function upsertAgentMessageContentPart(params: {
+  item: AgentThreadItem;
+  parts: MessageContentParts;
+  threadItems?: readonly AgentThreadItem[];
+}): MessageContentParts {
+  if (
+    params.item.type !== "agent_message" ||
+    !shouldSyncAgentMessageContentPartPhase(params.item.phase)
+  ) {
+    return params.parts;
+  }
+
+  const item = params.item;
+  const text = item.text?.trim();
+  if (!text) {
+    return params.parts;
+  }
+
+  const metadata = buildAgentTextDeltaContentPartMetadata({
+    itemId: item.id,
+    phase: item.phase,
+    sequence: item.sequence,
+    turnId: item.turn_id,
+  });
+  const nextPart: MessageContentPart = {
+    type: "text",
+    text,
+    ...(metadata ? { metadata } : {}),
+  };
+  const existingIndex = params.parts.findIndex((part) =>
+    isAgentMessageTextPartForItem(part, item.id),
+  );
+
+  if (existingIndex >= 0) {
+    const existingPart = params.parts[existingIndex];
+    if (
+      existingPart?.type === "text" &&
+      existingPart.text === text &&
+      existingPart.metadata?.turnId === item.turn_id &&
+      existingPart.metadata?.phase === item.phase
+    ) {
+      return params.parts;
+    }
+    const nextParts = [...params.parts];
+    nextParts[existingIndex] = nextPart;
+    return nextParts;
+  }
+
+  const sequenceByToolId = threadItemToolSequenceById(
+    params.threadItems ?? [],
+    item.turn_id,
+  );
+  return insertContentPartBySequence({
+    nextPart,
+    parts: params.parts,
+    sequence: item.sequence,
+    sequenceByToolId,
+  });
+}
+
+export function mergeAssistantAgentMessageContentPartsFromThreadItems(params: {
+  items: readonly AgentThreadItem[];
+  parts?: MessageContentParts;
+}): MessageContentParts | undefined {
+  const agentMessageItems = params.items.filter(
+    (
+      item,
+    ): item is Extract<AgentThreadItem, { type: "agent_message" }> =>
+      item.type === "agent_message" &&
+      shouldSyncAgentMessageContentPartPhase(item.phase),
+  );
+  if (agentMessageItems.length === 0) {
+    return params.parts;
+  }
+
+  return agentMessageItems.reduce<MessageContentParts>(
+    (parts, item) =>
+      upsertAgentMessageContentPart({
+        item,
+        parts,
+        threadItems: params.items,
+      }),
+    params.parts || [],
+  );
+}
+
+export function syncAssistantAgentMessageContentPartFromThreadItem(params: {
+  assistantMsgId: string;
+  item: AgentThreadItem;
+  threadItems?: readonly AgentThreadItem[];
+  setMessages: Dispatch<SetStateAction<Message[]>>;
+}): void {
+  params.setMessages((prev) =>
+    prev.map((message) => {
+      if (message.id !== params.assistantMsgId) {
+        return message;
+      }
+
+      const currentParts = message.contentParts || [];
+      const nextParts = upsertAgentMessageContentPart({
+        item: params.item,
+        parts: currentParts,
+        threadItems: params.threadItems,
+      });
+      if (nextParts === currentParts) {
+        return message;
+      }
+      return {
+        ...message,
+        contentParts: nextParts,
+      };
+    }),
+  );
+}

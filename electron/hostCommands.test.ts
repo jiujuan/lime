@@ -1725,6 +1725,20 @@ describe("ElectronHostCommands Agent App runtime current bridge", () => {
   it("agent_app_runtime_start_task 通过 App Server session start 与 turn start 投影", async () => {
     const userDataDir = await createTempUserDataDir();
     const request = vi.fn(async (method: string) => {
+      if (method === "agentAppUiRuntime/status") {
+        return {
+          appId: "content-factory-app",
+          status: "stopped",
+          taskRuntime: {
+            enabled: false,
+            blockers: [],
+            followUps: [],
+            taskKinds: [],
+            directProviderAccess: false,
+            directFilesystemAccess: false,
+          },
+        };
+      }
       if (method === "agentSession/start") {
         return {
           session: {
@@ -1791,13 +1805,16 @@ describe("ElectronHostCommands Agent App runtime current bridge", () => {
       status: "accepted",
     });
 
-    expect(request).toHaveBeenNthCalledWith(1, "agentSession/start", {
+    expect(request).toHaveBeenNthCalledWith(1, "agentAppUiRuntime/status", {
+      appId: "content-factory-app",
+    });
+    expect(request).toHaveBeenNthCalledWith(2, "agentSession/start", {
       sessionId: "session-1",
       appId: "content-factory-app",
       workspaceId: "workspace-1",
     });
     expect(request).toHaveBeenNthCalledWith(
-      2,
+      3,
       "agentSession/turn/start",
       expect.objectContaining({
         sessionId: "session-1",
@@ -1837,9 +1854,303 @@ describe("ElectronHostCommands Agent App runtime current bridge", () => {
     );
   });
 
+  it("agent_app_runtime_start_task 执行 task worker 并写回 App Server runtime event", async () => {
+    const userDataDir = await createTempUserDataDir();
+    const packageRoot = await createTempUserDataDir();
+    await mkdir(path.join(packageRoot, "runtime"), { recursive: true });
+    await writeFile(
+      path.join(packageRoot, "runtime", "worker.mjs"),
+      [
+        "let input = '';",
+        "for await (const chunk of process.stdin) input += chunk;",
+        "const request = JSON.parse(input);",
+        "process.stdout.write(JSON.stringify({",
+        "  artifactKind: 'content_factory.workspace_patch',",
+        "  appId: request.appId,",
+        "  taskKind: request.taskKind,",
+        "  patch: {",
+        "    appId: request.appId,",
+        "    sessionId: request.sessionId,",
+        "    objects: [{",
+        "      ref: { appId: request.appId, kind: 'articleDraft', id: 'draft-1', sessionId: request.sessionId },",
+        "      title: '文章草稿',",
+        "      source: { markdown: '# 草稿' }",
+        "    }]",
+        "  }",
+        "}));",
+      ].join("\n"),
+      "utf8",
+    );
+    const request = vi.fn(async (method: string, params?: unknown) => {
+      if (method === "agentAppUiRuntime/status") {
+        return {
+          appId: "content-factory-app",
+          status: "ready",
+          taskRuntime: {
+            enabled: true,
+            packageRootPath: packageRoot,
+            workerEntrypoint: "./runtime/worker.mjs",
+            outputArtifactKind: "content_factory.workspace_patch",
+            taskKinds: ["content.article.generate"],
+            blockers: [],
+            followUps: [],
+            directProviderAccess: false,
+            directFilesystemAccess: false,
+          },
+        };
+      }
+      if (method === "agentSession/start") {
+        return {
+          session: {
+            sessionId: "session-1",
+            threadId: "thread-1",
+            appId: "content-factory-app",
+            workspaceId: "workspace-1",
+            status: "idle",
+            createdAt: "2026-06-07T00:00:00.000Z",
+            updatedAt: "2026-06-07T00:00:00.000Z",
+          },
+        };
+      }
+      if (method === "agentSession/turn/start") {
+        return {
+          turn: {
+            turnId: "turn-1",
+            sessionId: "session-1",
+            threadId: "thread-1",
+            status: "accepted",
+          },
+        };
+      }
+      if (method === "agentSession/runtimeEvents/append") {
+        const appendParams = params as {
+          sessionId: string;
+          turnId: string;
+          runtimeEvents: Array<{ type: string; payload: Record<string, unknown> }>;
+        };
+        expect(appendParams.sessionId).toBe("session-1");
+        expect(appendParams.turnId).toBe("turn-1");
+        expect(appendParams.runtimeEvents[0].type).toBe("artifact.snapshot");
+        expect(appendParams.runtimeEvents[0].payload.kind).toBe(
+          "content_factory.workspace_patch",
+        );
+        expect(
+          (appendParams.runtimeEvents[0].payload.metadata as Record<string, unknown>)
+            .contentFactoryWorkspacePatch,
+        ).toBeTruthy();
+        expect(
+          (appendParams.runtimeEvents[0].payload.metadata as Record<string, Record<string, unknown>>)
+            .agentAppWorker,
+        ).toEqual(
+          expect.objectContaining({
+            workerEntrypoint: "./runtime/worker.mjs",
+            status: "completed",
+            inputSummary: "prompt=生成文章; inputKeys=topic",
+            outputSummary: "1 objects: 文章草稿",
+            outputObjectCount: 1,
+          }),
+        );
+        return {
+          events: [
+            {
+              eventId: "evt-worker",
+              sequence: 1,
+              sessionId: "session-1",
+              threadId: "thread-1",
+              turnId: "turn-1",
+              type: "artifact.snapshot",
+              timestamp: "2026-06-07T00:00:00.000Z",
+              payload: appendParams.runtimeEvents[0].payload,
+            },
+          ],
+        };
+      }
+      throw new Error(`unexpected App Server method: ${method}`);
+    });
+    const host = createHost(userDataDir, () => undefined, request);
+
+    await expect(
+      host.invoke("agent_app_runtime_start_task", {
+        request: {
+          appId: "content-factory-app",
+          workspaceId: "workspace-1",
+          sessionId: "session-1",
+          taskId: "task-1",
+          taskKind: "content.article.generate",
+          prompt: "生成文章",
+          input: { topic: "Agent App Host v3" },
+          eventName: "agent_app_runtime:content-factory-app:task-1",
+          turnId: "turn-1",
+        },
+      }),
+    ).resolves.toMatchObject({
+      appId: "content-factory-app",
+      taskId: "task-1",
+      status: "accepted",
+      worker: {
+        status: "completed",
+        artifactKind: "content_factory.workspace_patch",
+        runtimeEventCount: 1,
+        appendedEventCount: 1,
+      },
+    });
+
+    expect(request).toHaveBeenNthCalledWith(1, "agentAppUiRuntime/status", {
+      appId: "content-factory-app",
+    });
+    expect(request).toHaveBeenNthCalledWith(
+      4,
+      "agentSession/runtimeEvents/append",
+      expect.objectContaining({
+        sessionId: "session-1",
+        turnId: "turn-1",
+      }),
+    );
+  });
+
+  it("agent_app_runtime_start_task 在 worker 失败时写回 runtime.error evidence", async () => {
+    const userDataDir = await createTempUserDataDir();
+    const packageRoot = await createTempUserDataDir();
+    await mkdir(path.join(packageRoot, "runtime"), { recursive: true });
+    await writeFile(
+      path.join(packageRoot, "runtime", "worker.mjs"),
+      "process.stdout.write('{');\n",
+      "utf8",
+    );
+    const request = vi.fn(async (method: string, params?: unknown) => {
+      if (method === "agentAppUiRuntime/status") {
+        return {
+          appId: "content-factory-app",
+          status: "ready",
+          taskRuntime: {
+            enabled: true,
+            packageRootPath: packageRoot,
+            workerEntrypoint: "./runtime/worker.mjs",
+            outputArtifactKind: "content_factory.workspace_patch",
+            taskKinds: ["content.article.generate"],
+            blockers: [],
+            followUps: [],
+            directProviderAccess: false,
+            directFilesystemAccess: false,
+          },
+        };
+      }
+      if (method === "agentSession/start") {
+        return {
+          session: {
+            sessionId: "session-1",
+            threadId: "thread-1",
+            appId: "content-factory-app",
+            workspaceId: "workspace-1",
+            status: "idle",
+            createdAt: "2026-06-07T00:00:00.000Z",
+            updatedAt: "2026-06-07T00:00:00.000Z",
+          },
+        };
+      }
+      if (method === "agentSession/turn/start") {
+        return {
+          turn: {
+            turnId: "turn-1",
+            sessionId: "session-1",
+            threadId: "thread-1",
+            status: "accepted",
+          },
+        };
+      }
+      if (method === "agentSession/runtimeEvents/append") {
+        const appendParams = params as {
+          sessionId: string;
+          turnId: string;
+          runtimeEvents: Array<{ type: string; payload: Record<string, unknown> }>;
+        };
+        expect(appendParams.sessionId).toBe("session-1");
+        expect(appendParams.turnId).toBe("turn-1");
+        expect(appendParams.runtimeEvents[0].type).toBe("runtime.error");
+        expect(appendParams.runtimeEvents[0].payload).toEqual(
+          expect.objectContaining({
+            source: "agent_app_task_worker",
+            appId: "content-factory-app",
+            taskId: "task-1",
+            taskKind: "content.article.generate",
+            errorCode: "worker_invalid_json_output",
+            status: "failed",
+          }),
+        );
+        expect(appendParams.runtimeEvents[0].payload.message).toEqual(
+          expect.stringContaining("Agent App task worker failed:"),
+        );
+        expect(
+          (
+            (appendParams.runtimeEvents[0].payload.metadata as Record<
+              string,
+              Record<string, unknown>
+            >).agentAppWorker
+          ).inputSummary,
+        ).toBe("prompt=生成文章; inputKeys=topic");
+        return {
+          events: [
+            {
+              eventId: "evt-worker-failed",
+              sequence: 1,
+              sessionId: "session-1",
+              threadId: "thread-1",
+              turnId: "turn-1",
+              type: "runtime.error",
+              timestamp: "2026-06-07T00:00:00.000Z",
+              payload: appendParams.runtimeEvents[0].payload,
+            },
+          ],
+        };
+      }
+      throw new Error(`unexpected App Server method: ${method}`);
+    });
+    const host = createHost(userDataDir, () => undefined, request);
+
+    await expect(
+      host.invoke("agent_app_runtime_start_task", {
+        request: {
+          appId: "content-factory-app",
+          workspaceId: "workspace-1",
+          sessionId: "session-1",
+          taskId: "task-1",
+          taskKind: "content.article.generate",
+          prompt: "生成文章",
+          input: { topic: "Agent App Host v3" },
+          eventName: "agent_app_runtime:content-factory-app:task-1",
+          turnId: "turn-1",
+        },
+      }),
+    ).resolves.toMatchObject({
+      appId: "content-factory-app",
+      taskId: "task-1",
+      status: "accepted",
+      worker: {
+        status: "failed",
+        errorCode: "worker_invalid_json_output",
+        runtimeEventCount: 1,
+        appendedEventCount: 1,
+      },
+    });
+  });
+
   it("agent_app_runtime_start_task 对已存在 session 做幂等投影并继续提交 turn", async () => {
     const userDataDir = await createTempUserDataDir();
     const request = vi.fn(async (method: string) => {
+      if (method === "agentAppUiRuntime/status") {
+        return {
+          appId: "content-factory-app",
+          status: "stopped",
+          taskRuntime: {
+            enabled: false,
+            blockers: [],
+            followUps: [],
+            taskKinds: [],
+            directProviderAccess: false,
+            directFilesystemAccess: false,
+          },
+        };
+      }
       if (method === "agentSession/start") {
         throw sessionAlreadyExistsError("session-1");
       }
@@ -1877,6 +2188,7 @@ describe("ElectronHostCommands Agent App runtime current bridge", () => {
       status: "accepted",
     });
     expect(request.mock.calls.map(([method]) => method)).toEqual([
+      "agentAppUiRuntime/status",
       "agentSession/start",
       "agentSession/turn/start",
     ]);

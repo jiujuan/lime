@@ -16,6 +16,16 @@ export interface WorkspaceProductProfileActionHistoryObjectRef {
   sourceTaskId?: string | null;
 }
 
+export interface WorkspaceProductProfileActionResultArtifact {
+  artifactRef: string;
+  eventId?: string | null;
+  artifactId?: string | null;
+  path?: string | null;
+  title?: string | null;
+  kind?: string | null;
+  status?: string | null;
+}
+
 export interface WorkspaceProductProfileActionHistoryItem {
   id: string;
   key: string;
@@ -34,6 +44,9 @@ export interface WorkspaceProductProfileActionHistoryItem {
   prompt: string | null;
   submittedAt: string | null;
   completedAt: string | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  resultArtifacts?: WorkspaceProductProfileActionResultArtifact[];
 }
 
 export function readWorkspaceProductProfileActionHistory(
@@ -93,6 +106,44 @@ function readActionHistoryItem(
     prompt: readString(record.prompt) || null,
     submittedAt: readString(record.submittedAt, record.submitted_at) || null,
     completedAt: readString(record.completedAt, record.completed_at) || null,
+    errorCode: readString(record.errorCode, record.error_code) || null,
+    errorMessage:
+      readString(
+        record.errorMessage,
+        record.error_message,
+        record.message,
+        record.error,
+      ) || null,
+    resultArtifacts: readArray(record.resultArtifacts, record.result_artifacts)
+      .map(readActionResultArtifact)
+      .filter(
+        (
+          item,
+        ): item is WorkspaceProductProfileActionResultArtifact =>
+          Boolean(item),
+      ),
+  };
+}
+
+function readActionResultArtifact(
+  value: unknown,
+): WorkspaceProductProfileActionResultArtifact | null {
+  const record = asRecord(value);
+  if (!record) {
+    return null;
+  }
+  const artifactRef = readString(record.artifactRef, record.artifact_ref);
+  if (!artifactRef) {
+    return null;
+  }
+  return {
+    artifactRef,
+    eventId: readString(record.eventId, record.event_id) || null,
+    artifactId: readString(record.artifactId, record.artifact_id) || null,
+    path: readString(record.path) || null,
+    title: readString(record.title) || null,
+    kind: readString(record.kind) || null,
+    status: readString(record.status) || null,
   };
 }
 

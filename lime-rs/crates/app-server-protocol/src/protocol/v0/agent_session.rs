@@ -175,6 +175,31 @@ pub struct AgentSessionActionRespondResponse {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct AgentSessionRuntimeEventAppendParams {
+    pub session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn_id: Option<String>,
+    #[serde(default)]
+    pub runtime_events: Vec<AgentSessionRuntimeEventInput>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionRuntimeEventInput {
+    #[serde(rename = "type", alias = "eventType", alias = "event_type")]
+    pub event_type: String,
+    pub payload: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionRuntimeEventAppendResponse {
+    #[serde(default)]
+    pub events: Vec<AgentEvent>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentSessionEventParams {
     pub event: AgentEvent,
 }

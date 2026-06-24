@@ -1,4 +1,8 @@
 import type { ContentPart } from "../types";
+import {
+  canMergeCoalescibleContentParts,
+  mergeIncrementalTextWithOverlap,
+} from "../utils/contentPartTimeline";
 
 export const normalizeHistoryPartType = (value: unknown): string => {
   if (typeof value !== "string") return "";
@@ -11,37 +15,38 @@ export const normalizeHistoryPartType = (value: unknown): string => {
 export const appendTextWithOverlapDetection = (
   base: string,
   chunk: string,
-): string => {
-  if (!base) return chunk;
-  if (!chunk) return base;
-  if (chunk.startsWith(base)) return chunk;
-  if (base.endsWith(chunk)) return base;
-  if (base.includes(chunk)) return base;
-
-  const maxOverlap = Math.min(base.length, chunk.length);
-  for (let overlap = maxOverlap; overlap > 0; overlap -= 1) {
-    if (base.slice(-overlap) === chunk.slice(0, overlap)) {
-      return base + chunk.slice(overlap);
-    }
-  }
-
-  return base + chunk;
-};
+): string => mergeIncrementalTextWithOverlap(base, chunk);
 
 export const appendTextToParts = (
   parts: ContentPart[],
   text: string,
+  options: {
+    metadata?: Record<string, unknown>;
+    preserveEventBoundary?: boolean;
+  } = {},
 ): ContentPart[] => {
   const newParts = [...parts];
   const lastPart = newParts[newParts.length - 1];
+  const nextPart: Extract<ContentPart, { type: "text" }> = {
+    type: "text",
+    text,
+    ...(options.metadata ? { metadata: options.metadata } : {}),
+  };
 
-  if (lastPart && lastPart.type === "text") {
+  if (
+    lastPart &&
+    lastPart.type === "text" &&
+    !options.preserveEventBoundary &&
+    canMergeCoalescibleContentParts(lastPart, nextPart)
+  ) {
     newParts[newParts.length - 1] = {
+      ...lastPart,
       type: "text",
       text: appendTextWithOverlapDetection(lastPart.text, text),
+      metadata: lastPart.metadata ?? options.metadata,
     };
   } else {
-    newParts.push({ type: "text", text });
+    newParts.push(nextPart);
   }
   return newParts;
 };
@@ -158,7 +163,9 @@ export function isFailedHistoryStatus(value: unknown): boolean {
   return status === "failed" || status === "error";
 }
 
-export function asHistoryRecord(value: unknown): Record<string, unknown> | null {
+export function asHistoryRecord(
+  value: unknown,
+): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;

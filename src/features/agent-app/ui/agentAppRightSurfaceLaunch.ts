@@ -10,6 +10,9 @@ import type { ProjectedEntry } from "../types";
 export interface AgentAppRightSurfaceLaunchTarget {
   workspaceId?: string | null;
   sessionId?: string | null;
+  label?: string | null;
+  title?: string | null;
+  description?: string | null;
 }
 
 export interface AgentAppRightSurfaceLaunchInput {
@@ -83,7 +86,7 @@ export function buildAgentAppRightSurfaceRequestParams(
 
   return {
     ...(workspaceId ? { workspaceId } : {}),
-    ...(!workspaceId && sessionId ? { sessionId } : {}),
+    ...(sessionId ? { sessionId } : {}),
     surfaceKind: "appSurface",
     origin: "agent_app_center",
     reason: "agent_app_shell_surface_ready",

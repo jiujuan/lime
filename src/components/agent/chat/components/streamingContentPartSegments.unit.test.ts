@@ -60,6 +60,23 @@ describe("coalesceAdjacentDisplayContentParts", () => {
     ]);
   });
 
+  it("带事件 metadata 的相邻 text part 应保留独立边界", () => {
+    const parts: ContentPart[] = [
+      {
+        type: "text",
+        text: "我会先联网核实今天的主要国际新闻。",
+        metadata: { source: "agent_thread_item", sequence: 1 },
+      },
+      {
+        type: "text",
+        text: "我再补一个交叉对照。",
+        metadata: { source: "agent_thread_item", sequence: 7 },
+      },
+    ];
+
+    expect(coalesceAdjacentDisplayContentParts(parts)).toBe(parts);
+  });
+
   it("没有连续同类 part 时保持原数组引用，避免制造无意义重渲染", () => {
     const parts: ContentPart[] = [
       { type: "text", text: "第一段" },

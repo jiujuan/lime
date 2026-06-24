@@ -10,7 +10,6 @@ import {
 } from "../utils/fileChangeSummary";
 import {
   hasImportedSourceProcessItem,
-  isImportedSourceProcessItem,
 } from "../utils/importedSourceProcess";
 import {
   toActionRequired,
@@ -21,8 +20,17 @@ import {
   isUnifiedWebFetchToolName,
   isUnifiedWebSearchToolName,
 } from "../utils/toolNameFamily";
+import {
+  isProcessBoundaryContentPart,
+  readContentPartSequence,
+} from "../utils/contentPartTimeline";
 
 type MessageContentPart = NonNullable<Message["contentParts"]>[number];
+type TextMessageContentPart = Extract<MessageContentPart, { type: "text" }>;
+type ThinkingMessageContentPart = Extract<
+  MessageContentPart,
+  { type: "thinking" }
+>;
 
 function stringifyTimelineArguments(value: unknown): string | undefined {
   if (value === undefined) {
@@ -50,6 +58,7 @@ function resolveTimelineToolStatus(
 function appendTextContentPart(
   parts: MessageContentPart[],
   text: string | undefined,
+  metadata?: Record<string, unknown>,
 ) {
   const normalized = text?.trim();
   if (!normalized) {
@@ -57,12 +66,16 @@ function appendTextContentPart(
   }
 
   const lastPart = parts[parts.length - 1];
-  if (lastPart?.type === "text") {
+  if (lastPart?.type === "text" && !metadata && !lastPart.metadata) {
     lastPart.text = `${lastPart.text}\n${normalized}`;
     return;
   }
 
-  parts.push({ type: "text", text: normalized });
+  parts.push({
+    type: "text",
+    text: normalized,
+    ...(metadata ? { metadata } : {}),
+  });
 }
 
 function appendThinkingContentPart(
@@ -107,13 +120,33 @@ function appendPlanContentPart(
 
 function isTextContentPart(
   part: MessageContentPart,
-): part is Extract<MessageContentPart, { type: "text" }> {
+): part is TextMessageContentPart {
   return part.type === "text";
+}
+
+function readTextContentPartPhase(
+  part: TextMessageContentPart,
+): string | null {
+  const phase = part.metadata?.phase;
+  return typeof phase === "string" ? phase : null;
+}
+
+function isCommentaryTextContentPart(part: MessageContentPart): boolean {
+  return (
+    isTextContentPart(part) &&
+    isAgentMessageCommentaryPhase(readTextContentPartPhase(part))
+  );
+}
+
+function isFinalTextContentPart(
+  part: MessageContentPart,
+): part is TextMessageContentPart {
+  return isTextContentPart(part) && !isCommentaryTextContentPart(part);
 }
 
 function isThinkingContentPart(
   part: MessageContentPart,
-): part is Extract<MessageContentPart, { type: "thinking" }> {
+): part is ThinkingMessageContentPart {
   return part.type === "thinking";
 }
 
@@ -149,29 +182,22 @@ function resolveExistingFinalTextPart(
   return textParts[textParts.length - 1] || null;
 }
 
-function normalizeFinalTextSignature(text: string): string {
-  return text.replace(/\s+/g, "").trim();
-}
-
 function hasSameFinalTextContentPart(params: {
   finalText: string;
   parts: MessageContentPart[];
 }): boolean {
-  const finalTextSignature = normalizeFinalTextSignature(params.finalText);
-  const firstProcessIndex = params.parts.findIndex(isProcessContentPart);
+  const firstProcessIndex = params.parts.findIndex(
+    isProcessBoundaryContentPart,
+  );
+  const normalizedFinalText = params.finalText.trim();
   return params.parts.some((part, index) => {
-    if (!isTextContentPart(part)) {
+    if (!isFinalTextContentPart(part)) {
       return false;
     }
     if (firstProcessIndex >= 0 && index <= firstProcessIndex) {
       return false;
     }
-    const text = part.text.trim();
-    return (
-      text === params.finalText ||
-      (finalTextSignature.length >= 12 &&
-        normalizeFinalTextSignature(text) === finalTextSignature)
-    );
+    return part.text.trim() === normalizedFinalText;
   });
 }
 
@@ -181,6 +207,55 @@ function collectThinkingText(parts: MessageContentPart[]): string {
     .map((part) => part.text)
     .join("")
     .trim();
+}
+
+function collectExistingThinkingTexts(
+  parts?: Message["contentParts"],
+): Set<string> {
+  const texts = new Set<string>();
+  for (const part of parts || []) {
+    if (isThinkingContentPart(part)) {
+      const text = part.text.trim();
+      if (text) {
+        texts.add(text);
+      }
+    }
+  }
+  return texts;
+}
+
+function hasOnlyDuplicateReasoningItems(params: {
+  items: AgentThreadItem[];
+  existingContentParts?: Message["contentParts"];
+}): boolean {
+  const reasoningItems = params.items.filter(
+    (item): item is Extract<AgentThreadItem, { type: "reasoning" }> =>
+      item.type === "reasoning" && item.text.trim().length > 0,
+  );
+  if (reasoningItems.length === 0) {
+    return false;
+  }
+
+  if (
+    !params.items.every(
+      (item) =>
+        item.type === "turn_summary" ||
+        (item.type === "reasoning" && item.text.trim().length > 0),
+    )
+  ) {
+    return false;
+  }
+
+  const existingThinkingTexts = collectExistingThinkingTexts(
+    params.existingContentParts,
+  );
+  if (existingThinkingTexts.size === 0) {
+    return false;
+  }
+
+  return reasoningItems.every((item) =>
+    existingThinkingTexts.has(item.text.trim()),
+  );
 }
 
 function removeTimelineLeadThinkingCoveredByExistingLead(params: {
@@ -256,15 +331,7 @@ function mergeExistingLeadAndFinalParts(params: {
   return merged;
 }
 
-function shouldRenderTimelineAgentMessageText(item: AgentThreadItem): boolean {
-  if (item.type !== "agent_message") {
-    return false;
-  }
-
-  return shouldUseAgentMessageAsFinalText(item.phase);
-}
-
-function shouldRenderTimelineAgentMessageAsThinking(
+function shouldRenderTimelineAgentMessageAsCommentaryText(
   item: AgentThreadItem,
 ): item is Extract<AgentThreadItem, { type: "agent_message" }> {
   return (
@@ -272,10 +339,51 @@ function shouldRenderTimelineAgentMessageAsThinking(
   );
 }
 
+function shouldRenderTimelineAgentMessageAsVisibleText(
+  item: AgentThreadItem,
+): item is Extract<AgentThreadItem, { type: "agent_message" }> {
+  return (
+    item.type === "agent_message" &&
+    (shouldUseAgentMessageAsFinalText(item.phase) ||
+      isAgentMessageCommentaryPhase(item.phase))
+  );
+}
+
 function metadataRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined;
+}
+
+function mergeTimelineMetadata(
+  base: Record<string, unknown> | undefined,
+  extra: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    ...(base || {}),
+    ...extra,
+  };
+}
+
+function timelineItemMetadata(
+  item: AgentThreadItem,
+  source: string,
+): Record<string, unknown> {
+  return mergeTimelineMetadata(metadataRecord(item.metadata), {
+    source,
+    threadItemId: item.id,
+    turnId: item.turn_id,
+    sequence: item.sequence,
+    ...(item.type === "agent_message" && item.phase
+      ? { phase: item.phase }
+      : {}),
+  });
+}
+
+function timelineTextMetadata(
+  item: Extract<AgentThreadItem, { type: "agent_message" }>,
+): Record<string, unknown> {
+  return timelineItemMetadata(item, "agent_thread_item");
 }
 
 function buildTimelineToolContentPart(
@@ -325,16 +433,7 @@ function buildTimelineActionContentPart(
 
 function hasFinalTextContentPart(parts: MessageContentPart[]): boolean {
   return parts.some(
-    (part) => part.type === "text" && part.text.trim().length > 0,
-  );
-}
-
-function isProcessContentPart(part: MessageContentPart): boolean {
-  return (
-    part.type === "thinking" ||
-    part.type === "tool_use" ||
-    part.type === "action_required" ||
-    part.type === "file_changes_batch"
+    (part) => isFinalTextContentPart(part) && part.text.trim().length > 0,
   );
 }
 
@@ -370,9 +469,7 @@ function resolveContentPartSequence(
   if (part.type !== "tool_use") {
     return null;
   }
-  const metadataSequence = finiteNumber(
-    part.metadata?.sequence ?? part.toolCall.metadata?.sequence,
-  );
+  const metadataSequence = readContentPartSequence(part);
   if (metadataSequence !== null) {
     return metadataSequence;
   }
@@ -380,10 +477,6 @@ function resolveContentPartSequence(
   return typeof sequence === "number" && Number.isFinite(sequence)
     ? sequence
     : null;
-}
-
-function finiteNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function isWebRetrievalContentPart(part: MessageContentPart): boolean {
@@ -394,32 +487,42 @@ function isWebRetrievalContentPart(part: MessageContentPart): boolean {
   );
 }
 
-function buildSparseTimelineProcessPart(
+function buildSparseTimelineInlinePart(
   item: AgentThreadItem,
 ): MessageContentPart | null {
   if (item.type === "reasoning") {
     const part: MessageContentPart[] = [];
-    appendThinkingContentPart(part, item.text, metadataRecord(item.metadata));
+    appendThinkingContentPart(
+      part,
+      item.text,
+      timelineItemMetadata(item, "thread_item_reasoning"),
+    );
     return part[0] ?? null;
   }
 
-  if (shouldRenderTimelineAgentMessageAsThinking(item)) {
+  if (shouldRenderTimelineAgentMessageAsCommentaryText(item)) {
     const part: MessageContentPart[] = [];
-    appendThinkingContentPart(part, item.text, metadataRecord(item.metadata));
+    appendTextContentPart(
+      part,
+      item.text,
+      timelineItemMetadata(item, "agent_thread_item"),
+    );
     return part[0] ?? null;
   }
 
   return null;
 }
 
-function normalizeSparseProcessText(text: string): string {
-  return text.trim().replace(/\s+/g, " ");
-}
-
 function getSparseProcessPartKey(part: MessageContentPart): string | null {
   if (isThinkingContentPart(part)) {
-    const text = normalizeSparseProcessText(part.text);
+    const text = part.text.trim();
     return text ? `thinking:${text}` : null;
+  }
+  if (isTextContentPart(part)) {
+    const text = part.text.trim();
+    const phase =
+      typeof part.metadata?.phase === "string" ? part.metadata.phase : "";
+    return text ? `text:${phase}:${text}` : null;
   }
   return null;
 }
@@ -441,8 +544,7 @@ function canMergeSparseTimelineProcessItem(item: AgentThreadItem): boolean {
   if (item.type === "agent_message") {
     return (
       item.text.trim().length > 0 &&
-      (shouldRenderTimelineAgentMessageText(item) ||
-        shouldRenderTimelineAgentMessageAsThinking(item))
+      shouldRenderTimelineAgentMessageAsVisibleText(item)
     );
   }
   if (item.type === "reasoning") {
@@ -461,7 +563,7 @@ function mergeSparseTimelineProcessIntoExistingParts(params: {
   displayContent: string;
 }): MessageContentPart[] | null {
   const existingParts = params.existingContentParts || [];
-  if (!existingParts.some(isProcessContentPart)) {
+  if (!existingParts.some(isProcessBoundaryContentPart)) {
     return null;
   }
 
@@ -479,11 +581,13 @@ function mergeSparseTimelineProcessIntoExistingParts(params: {
     .filter(canMergeSparseTimelineProcessItem)
     .map((item) => ({
       item,
-      part: buildSparseTimelineProcessPart(item),
+      part: buildSparseTimelineInlinePart(item),
       timeMs: resolveThreadItemTimeMs(item),
     }))
     .filter(
-      (entry): entry is {
+      (
+        entry,
+      ): entry is {
         item: AgentThreadItem;
         part: MessageContentPart;
         timeMs: number | null;
@@ -604,7 +708,7 @@ function mergeSparseTimelineProcessIntoExistingParts(params: {
       sawWebRetrievalProcess = true;
       flushPendingBefore(null);
     }
-    if (isProcessContentPart(part)) {
+    if (isProcessBoundaryContentPart(part)) {
       sawProcess = true;
     }
   }
@@ -710,18 +814,15 @@ export function buildTimelineInlineContentParts(params: {
     return sparseMergedParts;
   }
 
-  const hasAgentMessage = items.some(
-    (item) => {
-      if (item.type !== "agent_message") {
-        return false;
-      }
-      return (
-        (shouldRenderTimelineAgentMessageText(item) ||
-          shouldRenderTimelineAgentMessageAsThinking(item)) &&
-        item.text.trim().length > 0
-      );
-    },
-  );
+  const hasAgentMessage = items.some((item) => {
+    if (item.type !== "agent_message") {
+      return false;
+    }
+    return (
+      shouldRenderTimelineAgentMessageAsVisibleText(item) &&
+      item.text.trim().length > 0
+    );
+  });
   const hasImportedProcess = hasImportedSourceProcessItem(items);
 
   const reasoningCount = items.filter(
@@ -730,12 +831,6 @@ export function buildTimelineInlineContentParts(params: {
   const planCount = items.filter(
     (item) => item.type === "plan" && item.text.trim().length > 0,
   ).length;
-  const hasImportedReasoning = items.some(
-    (item) =>
-      item.type === "reasoning" &&
-      item.text.trim().length > 0 &&
-      isImportedSourceProcessItem(item),
-  );
   const toolLikeCount = items.filter(
     (item) =>
       (item.type === "tool_call" && !isUpdatePlanToolName(item.tool_name)) ||
@@ -750,11 +845,10 @@ export function buildTimelineInlineContentParts(params: {
       item.type === "approval_request" || item.type === "request_user_input",
   ).length;
   if (
-    reasoningCount < 2 &&
-    planCount === 0 &&
-    !hasImportedReasoning &&
-    toolLikeCount === 0 &&
-    actionLikeCount === 0
+    hasOnlyDuplicateReasoningItems({
+      items,
+      existingContentParts: params.existingContentParts,
+    })
   ) {
     return undefined;
   }
@@ -775,7 +869,7 @@ export function buildTimelineInlineContentParts(params: {
       appendThinkingContentPart(
         parts,
         item.text,
-        metadataRecord(item.metadata),
+        timelineItemMetadata(item, "thread_item_reasoning"),
       );
       continue;
     }
@@ -787,18 +881,9 @@ export function buildTimelineInlineContentParts(params: {
 
     if (
       item.type === "agent_message" &&
-      shouldRenderTimelineAgentMessageText(item)
+      shouldRenderTimelineAgentMessageAsVisibleText(item)
     ) {
-      appendTextContentPart(parts, item.text);
-      continue;
-    }
-
-    if (shouldRenderTimelineAgentMessageAsThinking(item)) {
-      appendThinkingContentPart(
-        parts,
-        item.text,
-        metadataRecord(item.metadata),
-      );
+      appendTextContentPart(parts, item.text, timelineTextMetadata(item));
       continue;
     }
 

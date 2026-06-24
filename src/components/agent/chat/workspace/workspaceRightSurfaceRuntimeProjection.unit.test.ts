@@ -56,6 +56,7 @@ describe("workspaceRightSurfaceRuntimeProjection", () => {
       "productProfile",
       "expertInfo",
       "objectCanvas",
+      "browser",
       "files",
       "shell",
       "harness",
@@ -94,6 +95,9 @@ describe("workspaceRightSurfaceRuntimeProjection", () => {
     ).toMatchObject({ pendingCount: 1, disabled: false });
     expect(
       launchers.find((launcher) => launcher.kind === "shell"),
+    ).toMatchObject({ disabled: false });
+    expect(
+      launchers.find((launcher) => launcher.kind === "browser"),
     ).toMatchObject({ disabled: false });
     expect(
       launchers.find((launcher) => launcher.kind === "files"),

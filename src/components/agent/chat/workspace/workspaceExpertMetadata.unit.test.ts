@@ -20,6 +20,28 @@ describe("workspaceExpertMetadata", () => {
     ).toBe(initialAutoSendRequestMetadata);
   });
 
+  it("专家面板 metadata 应能从历史 session metadata 恢复", () => {
+    const sessionRequestMetadata = {
+      title: "代码文学专家",
+      expert: {
+        expertId: "code-literature",
+        skillRefs: ["skill:capability-report"],
+      },
+      harness: {
+        expert: {
+          expert_id: "code-literature",
+          skill_refs: ["skill:capability-report"],
+        },
+      },
+    };
+
+    expect(
+      resolveExpertPanelRequestMetadata({
+        sessionRequestMetadata,
+      }),
+    ).toBe(sessionRequestMetadata);
+  });
+
   it("合并 skill refs 时应同时写入 expert 与 harness expert", () => {
     expect(
       mergeExpertSkillRefsIntoRequestMetadata(

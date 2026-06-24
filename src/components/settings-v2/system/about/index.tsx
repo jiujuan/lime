@@ -135,7 +135,7 @@ export function AboutSection() {
   useEffect(() => {
     const loadCurrentVersion = async () => {
       try {
-        const result = await checkForUpdates();
+        const result = await checkForUpdates({ automatic: true });
         setVersionInfo({
           ...result,
           current:

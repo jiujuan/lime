@@ -1,5 +1,7 @@
+use super::artifact_projection;
 use super::status::agent_turn_status_label;
 use super::StoredSession;
+use app_server_protocol::AgentEvent;
 use app_server_protocol::AgentTurn;
 use app_server_protocol::AgentTurnStatus;
 use serde_json::{json, Map, Value};
@@ -131,8 +133,71 @@ fn product_profile_action_from_metadata(
         value.insert("completedAt".to_string(), json!(completed_at));
         value.insert("completed_at".to_string(), json!(completed_at));
     }
+    let result_artifacts = product_profile_action_result_artifacts(stored, &turn.turn_id);
+    if !result_artifacts.is_empty() {
+        value.insert(
+            "resultArtifacts".to_string(),
+            Value::Array(result_artifacts.clone()),
+        );
+        value.insert(
+            "result_artifacts".to_string(),
+            Value::Array(result_artifacts),
+        );
+    }
+    if let Some(error) = product_profile_action_error(stored, &turn.turn_id) {
+        if let Some(error_code) = string_field(&error, &["errorCode", "error_code"]) {
+            value.insert("errorCode".to_string(), json!(error_code.clone()));
+            value.insert("error_code".to_string(), json!(error_code));
+        }
+        if let Some(error_message) = string_field(
+            &error,
+            &["errorMessage", "error_message", "message", "error"],
+        ) {
+            value.insert("errorMessage".to_string(), json!(error_message.clone()));
+            value.insert("error_message".to_string(), json!(error_message));
+        }
+    }
     value.insert("source".to_string(), json!("runtime_options_metadata"));
     Some(Value::Object(value))
+}
+
+fn product_profile_action_result_artifacts(stored: &StoredSession, turn_id: &str) -> Vec<Value> {
+    artifact_projection::artifact_summaries_for_turn(&stored.events, Some(turn_id))
+        .into_iter()
+        .filter_map(|summary| serde_json::to_value(summary).ok())
+        .collect()
+}
+
+fn product_profile_action_error(stored: &StoredSession, turn_id: &str) -> Option<Value> {
+    stored
+        .events
+        .iter()
+        .rev()
+        .find(|event| {
+            event.turn_id.as_deref() == Some(turn_id)
+                && matches!(event.event_type.as_str(), "runtime.error" | "turn.failed")
+        })
+        .map(product_profile_action_error_from_event)
+}
+
+fn product_profile_action_error_from_event(event: &AgentEvent) -> Value {
+    let mut value = Map::new();
+    copy_string_field(&mut value, "errorCode", "error_code", &event.payload);
+    copy_string_field(&mut value, "errorMessage", "error_message", &event.payload);
+    if let Some(message) = string_field(
+        &event.payload,
+        &["message", "error", "reason", "detail", "details"],
+    ) {
+        value.insert("message".to_string(), json!(message));
+    }
+    Value::Object(value)
+}
+
+fn copy_string_field(target: &mut Map<String, Value>, camel: &str, snake: &str, source: &Value) {
+    if let Some(value) = string_field(source, &[camel, snake]) {
+        target.insert(camel.to_string(), json!(value.clone()));
+        target.insert(snake.to_string(), json!(value));
+    }
 }
 
 fn is_product_profile_surface(metadata: &Value) -> bool {

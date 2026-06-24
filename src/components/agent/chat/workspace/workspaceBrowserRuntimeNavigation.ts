@@ -5,9 +5,14 @@ import type {
 } from "@/types/page";
 import type { BrowserAssistSessionState } from "../types";
 import { asRecord, readFirstString } from "./browserAssistArtifact";
+import type { BrowserSessionRef } from "./workspaceBrowserSessionRef";
 
 export interface ResolveBrowserRuntimeNavigationFromBrowserAssistParams {
   artifact?: Pick<Artifact, "meta"> | null;
+  browserSessionRef?: Pick<
+    BrowserSessionRef,
+    "browserSessionId" | "profileKey"
+  > | null;
   browserAssistSessionState?: Pick<
     BrowserAssistSessionState,
     "profileKey" | "sessionId" | "targetId"
@@ -29,6 +34,7 @@ export interface ResolveBrowserRuntimeNavigationFromSiteSkillParams {
 
 export function resolveBrowserRuntimeNavigationFromBrowserAssist({
   artifact,
+  browserSessionRef,
   browserAssistSessionState,
   contentId,
   generalBrowserAssistProfileKey,
@@ -44,6 +50,7 @@ export function resolveBrowserRuntimeNavigationFromBrowserAssist({
         "profileKey",
         "profile_key",
       ]) ||
+      browserSessionRef?.profileKey ||
       browserAssistSessionState?.profileKey ||
       generalBrowserAssistProfileKey,
     initialSessionId:
@@ -51,6 +58,7 @@ export function resolveBrowserRuntimeNavigationFromBrowserAssist({
         "sessionId",
         "session_id",
       ]) ||
+      browserSessionRef?.browserSessionId ||
       browserAssistSessionState?.sessionId ||
       undefined,
     initialTargetId:

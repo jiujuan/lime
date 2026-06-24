@@ -525,6 +525,25 @@ export async function registerAgentStreamTurnEventBinding(
       const schemaVersion = extractAgentStreamRuntimeEventSchemaVersion(
         event.payload,
       );
+      if (data?.type === "text_delta" || data?.type === "text_delta_batch") {
+        logAgentDebug(
+          "AgentStream",
+          "inboundTextDelta",
+          {
+            eventName,
+            itemId: data.itemId ?? null,
+            parsedType: data.type,
+            phase: data.phase ?? null,
+            rawEventType: eventType,
+            sequence: data.sequence ?? null,
+            sessionId: data.session_id ?? activeSessionId,
+            turnId: data.turn_id ?? null,
+          },
+          {
+            dedupeKey: `${eventName}:inboundTextDelta:${data.itemId ?? "no-item"}:${data.sequence ?? "no-sequence"}:${data.phase ?? "no-phase"}`,
+          },
+        );
+      }
       if (!data) {
         if (!terminalRecoveryPollStarted) {
           clearDeferredRecoveryPoll();

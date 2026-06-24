@@ -10,6 +10,7 @@ import type {
   AgentRuntimeCompletionAuditRequiredEvidence,
   AgentRuntimeCompletionAuditSummary,
   AgentRuntimeEvidenceDecisionCount,
+  AgentRuntimeEvidenceExecutorCount,
   AgentRuntimeEvidenceLimeCorePolicyEvaluation,
   AgentRuntimeEvidenceLimeCorePolicyIndex,
   AgentRuntimeEvidenceLimeCorePolicyInput,
@@ -241,6 +242,24 @@ function normalizeEvidenceBackendCount(
   };
 }
 
+function normalizeEvidenceExecutorCount(
+  value: unknown,
+): AgentRuntimeEvidenceExecutorCount | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const executor = readStringField(value, "executor");
+  if (!executor) {
+    return null;
+  }
+
+  return {
+    executor,
+    count: readNumberField(value, "count"),
+  };
+}
+
 function normalizeEvidenceDecisionCount(
   value: unknown,
 ): AgentRuntimeEvidenceDecisionCount | null {
@@ -282,13 +301,20 @@ function normalizeBrowserActionItem(
     ),
     tool_name: readOptionalStringField(value, "toolName", "tool_name"),
     action: readOptionalStringField(value, "action"),
+    action_id: readOptionalStringField(value, "actionId", "action_id"),
     status: readOptionalStringField(value, "status"),
     success: readOptionalBooleanField(value, "success"),
     session_id: readOptionalStringField(value, "sessionId", "session_id"),
     target_id: readOptionalStringField(value, "targetId", "target_id"),
+    tab_id: readOptionalStringField(value, "tabId", "tab_id"),
     profile_key: readOptionalStringField(value, "profileKey", "profile_key"),
     backend: readOptionalStringField(value, "backend"),
     request_id: readOptionalStringField(value, "requestId", "request_id"),
+    thread_id: readOptionalStringField(value, "threadId", "thread_id"),
+    turn_id: readOptionalStringField(value, "turnId", "turn_id"),
+    content_id: readOptionalStringField(value, "contentId", "content_id"),
+    executor: readOptionalStringField(value, "executor"),
+    evidence_refs: readStringListField(value, "evidenceRefs", "evidence_refs"),
     last_url: readOptionalStringField(value, "lastUrl", "last_url"),
     title: readOptionalStringField(value, "title"),
     attempt_count: readOptionalNumberField(
@@ -342,6 +368,11 @@ function normalizeBrowserActionIndex(
     "backendCounts",
     "backend_counts",
   );
+  const rawExecutorCounts = readArrayField(
+    value,
+    "executorCounts",
+    "executor_counts",
+  );
   const rawItems = readArrayField(value, "items");
 
   const index: AgentRuntimeEvidenceBrowserActionIndex = {
@@ -358,6 +389,9 @@ function normalizeBrowserActionIndex(
       "screenshot_count",
     ),
     last_url: readOptionalStringField(value, "lastUrl", "last_url"),
+    thread_ids: readStringListField(value, "threadIds", "thread_ids"),
+    turn_ids: readStringListField(value, "turnIds", "turn_ids"),
+    content_ids: readStringListField(value, "contentIds", "content_ids"),
     session_ids: readStringListField(value, "sessionIds", "session_ids"),
     target_ids: readStringListField(value, "targetIds", "target_ids"),
     profile_keys: readStringListField(value, "profileKeys", "profile_keys"),
@@ -373,6 +407,9 @@ function normalizeBrowserActionIndex(
     backend_counts: rawBackendCounts
       .map((entry: unknown) => normalizeEvidenceBackendCount(entry))
       .filter(Boolean) as AgentRuntimeEvidenceBackendCount[],
+    executor_counts: rawExecutorCounts
+      .map((entry: unknown) => normalizeEvidenceExecutorCount(entry))
+      .filter(Boolean) as AgentRuntimeEvidenceExecutorCount[],
     items: rawItems
       .map((entry: unknown) => normalizeBrowserActionItem(entry))
       .filter(Boolean) as AgentRuntimeEvidenceBrowserActionItem[],
@@ -384,6 +421,10 @@ function normalizeBrowserActionIndex(
     index.observation_count === 0 &&
     index.screenshot_count === 0 &&
     !index.last_url &&
+    index.thread_ids.length === 0 &&
+    index.turn_ids.length === 0 &&
+    index.content_ids.length === 0 &&
+    index.executor_counts.length === 0 &&
     index.items.length === 0
   ) {
     return undefined;
@@ -1058,22 +1099,14 @@ function normalizeEvidenceSkillInvocation(
     event: readStringField(value, "event") || "skill_invocation",
     skill_name: skillName,
     status: readStringField(value, "status"),
-    source_event_id: readStringField(
-      value,
-      "sourceEventId",
-      "source_event_id",
-    ),
+    source_event_id: readStringField(value, "sourceEventId", "source_event_id"),
     source_event_type: readStringField(
       value,
       "sourceEventType",
       "source_event_type",
     ),
     turn_id: readOptionalStringField(value, "turnId", "turn_id"),
-    tool_call_id: readOptionalStringField(
-      value,
-      "toolCallId",
-      "tool_call_id",
-    ),
+    tool_call_id: readOptionalStringField(value, "toolCallId", "tool_call_id"),
     workspace_skill_source: readRecordField(
       value,
       "workspaceSkillSource",
@@ -1111,11 +1144,7 @@ function normalizeEvidenceSkillSearch(
   return {
     event: readStringField(value, "event") || "skill_search",
     query: readOptionalStringField(value, "query"),
-    result_count: readOptionalNumberField(
-      value,
-      "resultCount",
-      "result_count",
-    ),
+    result_count: readOptionalNumberField(value, "resultCount", "result_count"),
     snapshot_skill_count: readOptionalNumberField(
       value,
       "snapshotSkillCount",
@@ -1129,11 +1158,7 @@ function normalizeEvidenceSkillSearch(
       "source_event_type",
     ),
     turn_id: readOptionalStringField(value, "turnId", "turn_id"),
-    tool_call_id: readOptionalStringField(
-      value,
-      "toolCallId",
-      "tool_call_id",
-    ),
+    tool_call_id: readOptionalStringField(value, "toolCallId", "tool_call_id"),
   };
 }
 
@@ -1176,11 +1201,7 @@ function normalizeEvidenceMcpToolResult(
       "structured_content_keys",
     ),
     turn_id: readOptionalStringField(value, "turnId", "turn_id"),
-    tool_call_id: readOptionalStringField(
-      value,
-      "toolCallId",
-      "tool_call_id",
-    ),
+    tool_call_id: readOptionalStringField(value, "toolCallId", "tool_call_id"),
   };
 }
 
@@ -1260,11 +1281,7 @@ function normalizeEvidenceMcpResourceRead(
     ),
     content_refs: contentRefs,
     turn_id: readOptionalStringField(value, "turnId", "turn_id"),
-    tool_call_id: readOptionalStringField(
-      value,
-      "toolCallId",
-      "tool_call_id",
-    ),
+    tool_call_id: readOptionalStringField(value, "toolCallId", "tool_call_id"),
   };
 }
 
@@ -1337,7 +1354,8 @@ function normalizeEvidenceObservabilitySummary(value: unknown) {
           > => entry !== null,
         )
     : [];
-  const rawMcpResourceReads = value.mcpResourceReads ?? value.mcp_resource_reads;
+  const rawMcpResourceReads =
+    value.mcpResourceReads ?? value.mcp_resource_reads;
   const mcpResourceReads = Array.isArray(rawMcpResourceReads)
     ? rawMcpResourceReads
         .map((entry: unknown) => normalizeEvidenceMcpResourceRead(entry))

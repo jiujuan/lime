@@ -56,6 +56,7 @@ internal/exec-plans/*
 !internal/exec-plans/agent-tools-test-batches/
 !internal/exec-plans/agent-tools-test-batches/*.md
 !internal/exec-plans/README.md
+!internal/exec-plans/claw-streaming-rendering-codex-refactor-plan.md
 !internal/exec-plans/devlime-codex-claude-alignment-gap-list.md
 !internal/exec-plans/app-server-implementation-plan.md
 !internal/exec-plans/production-command-current-migration-plan.md
@@ -70,8 +71,12 @@ internal/exec-plans/*
 !internal/exec-plans/models-runtime-unification-plan.md
 !internal/exec-plans/mcp-modernization-progress.md
 !internal/exec-plans/plan-runtime-implementation-progress.md
+!internal/exec-plans/browser-runtime-right-surface-plan.md
 internal/roadmap/**
 !internal/roadmap/
+!internal/roadmap/browser/
+internal/roadmap/browser/**
+!internal/roadmap/browser/README.md
 !internal/roadmap/db/
 internal/roadmap/db/**
 !internal/roadmap/db/*.md
@@ -180,6 +185,8 @@ internal/knowledge
 internal/knowledge/*
 !internal/knowledge/README.md
 internal/research/**
+!internal/research/workbech/
+!internal/research/workbech/*.md
 
 
 # Issues tracking (internal use only)

@@ -13,6 +13,7 @@ import type { ActionRequired, Message } from "../types";
 import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
 import type { AgentUiPerformanceTraceMetadata } from "./agentStreamPerformanceMetrics";
 import type { AgentStreamReasoningTimelineState } from "./agentStreamReasoningTimeline";
+import type { TextSegmentFinalEligibility } from "./agentStreamTextDeltaLifecycle";
 
 export type MessageParts = NonNullable<Message["contentParts"]>;
 
@@ -22,10 +23,11 @@ export interface StreamObserver {
   onError?: (message: string) => void;
 }
 
-export interface StreamRequestState
-  extends AgentStreamReasoningTimelineState {
+export interface StreamRequestState extends AgentStreamReasoningTimelineState {
   accumulatedContent: string;
   hasMeaningfulCompletionSignal?: boolean;
+  hasFinalAnswerRequiredProcessBoundary?: boolean;
+  hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary?: boolean;
   queuedTurnId: string | null;
   requestLogId: string | null;
   requestStartedAt: number;
@@ -58,6 +60,17 @@ export interface StreamRequestState
   streamedReasoningStartedAt?: string | null;
   streamedReasoningSequence?: number | null;
   streamedReasoningSegmentCounter?: number;
+  streamedAgentMessageTextByItemId?: Map<string, string>;
+  streamedAgentMessageItemsByItemId?: Map<string, AgentThreadItem>;
+  activeTextSegmentItemId?: string | null;
+  activeTextSegmentPhase?: string | null;
+  activeTextSegmentSequence?: number | null;
+  activeTextSegmentTurnId?: string | null;
+  activeTextSegmentStartOffset?: number | null;
+  activeTextSegmentFinalEligibility?: TextSegmentFinalEligibility | null;
+  latestAssistantTextEventSequence?: number | null;
+  maxProcessEventSequence?: number | null;
+  maxFinalAnswerRequiredProcessEventSequence?: number | null;
 }
 
 export interface StreamLifecycleCallbacks {

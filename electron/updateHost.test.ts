@@ -54,6 +54,50 @@ describe("ElectronUpdateHost", () => {
     expect(setFeedURLMock).not.toHaveBeenCalled();
   });
 
+  it("updater 不可用时自动检查更新应返回本地版本", async () => {
+    const host = new ElectronUpdateHost(vi.fn());
+
+    await expect(
+      host.invoke("check_for_updates", { automatic: true }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        current: "1.60.0",
+        hasUpdate: false,
+        error: null,
+      }),
+    );
+
+    expect(checkForUpdatesMock).not.toHaveBeenCalled();
+    expect(setFeedURLMock).not.toHaveBeenCalled();
+  });
+
+  it("本地 Lime-dev.app 不应启用真实 updater", async () => {
+    const originalExecPath = process.execPath;
+    Object.defineProperty(process, "execPath", {
+      configurable: true,
+      value:
+        "/Users/example/project/.lime/electron-dev-host/Lime-dev.app/Contents/MacOS/Lime",
+    });
+    try {
+      appState.isPackaged = true;
+      const host = new ElectronUpdateHost(vi.fn());
+
+      await expect(host.invoke("check_for_updates")).resolves.toEqual({
+        current: "1.60.0",
+        hasUpdate: false,
+        error: "Electron updater is only enabled for packaged builds.",
+      });
+
+      expect(checkForUpdatesMock).not.toHaveBeenCalled();
+      expect(setFeedURLMock).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(process, "execPath", {
+        configurable: true,
+        value: originalExecPath,
+      });
+    }
+  });
+
   it("open_update_window 应把按钮锚点矩形传给更新窗口控制器", async () => {
     const open = vi.fn();
     const host = new ElectronUpdateHost(vi.fn(), {

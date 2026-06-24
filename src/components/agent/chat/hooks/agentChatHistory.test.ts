@@ -408,6 +408,87 @@ describe("agentChatHistory core hydrate", () => {
     }
   });
 
+  it("App Server read detail.thread_read.thread_items 应恢复 revisioned proposed_plan 历史", () => {
+    const detail: AsterSessionDetail = {
+      id: "session-thread-read-plan-items",
+      thread_id: "thread-read-plan-items",
+      created_at: 1,
+      updated_at: 2,
+      messages: [],
+      turns: [
+        {
+          id: "turn-plan-1",
+          thread_id: "thread-read-plan-items",
+          prompt_text: "先给我一个修复计划，不要直接改代码",
+          status: "completed",
+          started_at: "2026-06-23T10:00:00.000Z",
+          completed_at: "2026-06-23T10:00:03.000Z",
+          created_at: "2026-06-23T10:00:00.000Z",
+          updated_at: "2026-06-23T10:00:03.000Z",
+        },
+      ],
+      thread_read: {
+        thread_id: "thread-read-plan-items",
+        status: "completed",
+        thread_items: [
+          {
+            id: "item-user-plan-1",
+            type: "user_message",
+            thread_id: "thread-read-plan-items",
+            turn_id: "turn-plan-1",
+            sequence: 1,
+            status: "completed",
+            started_at: "2026-06-23T10:00:00.000Z",
+            updated_at: "2026-06-23T10:00:00.000Z",
+            completed_at: "2026-06-23T10:00:00.000Z",
+            content: "先给我一个修复计划，不要直接改代码",
+          },
+          {
+            id: "item-plan-1",
+            type: "plan",
+            thread_id: "thread-read-plan-items",
+            turn_id: "turn-plan-1",
+            sequence: 2,
+            status: "completed",
+            started_at: "2026-06-23T10:00:01.000Z",
+            updated_at: "2026-06-23T10:00:03.000Z",
+            completed_at: "2026-06-23T10:00:03.000Z",
+            text: [
+              "- 确认计划模式请求进入 App Server",
+              "- 输出 proposed_plan",
+              "- 验证右侧计划轨显示",
+            ].join("\n"),
+            metadata: {
+              source: "proposed_plan",
+              revisionId: "proposed_plan:fixture-1",
+            },
+          },
+        ],
+      },
+    };
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "session-thread-read-plan-items",
+    );
+
+    expect(messages.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+    ]);
+    expect(messages[0]?.content).toBe(
+      "先给我一个修复计划，不要直接改代码",
+    );
+    const planTextPart = messages[1]?.contentParts?.find(
+      (part) =>
+        part.type === "text" && part.text.includes("<proposed_plan>"),
+    );
+    expect(planTextPart).toMatchObject({
+      type: "text",
+      text: expect.stringContaining("输出 proposed_plan"),
+    });
+  });
+
   it("App Server thread_read.tool_calls 应合入已恢复助手消息", () => {
     const detail: AsterSessionDetail = {
       id: "session-app-server-tool-calls",

@@ -3592,6 +3592,8 @@ describe("agentRuntime threadClient", () => {
             payload: {
               chunks: ["最终", "答复"],
               boundary: "provider",
+              itemId: "item-final-batch",
+              phase: "final_answer",
             },
           },
         },
@@ -3601,6 +3603,8 @@ describe("agentRuntime threadClient", () => {
       text: "最终答复",
       chunks: ["最终", "答复"],
       boundary: "provider",
+      itemId: "item-final-batch",
+      phase: "final_answer",
       event_id: "evt-batch",
       session_id: "session-1",
       turn_id: "turn-1",
@@ -3659,17 +3663,13 @@ describe("agentRuntime threadClient", () => {
         },
       }),
     ).toMatchObject({
-      type: "message",
-      message: {
+      type: "item_completed",
+      item: {
         id: "item-1",
-        role: "assistant",
-        content: [
-          {
-            type: "text",
-            text: "最终答复",
-          },
-        ],
-        timestamp: Date.parse("2026-06-06T00:00:07.000Z"),
+        type: "agent_message",
+        text: "最终答复",
+        phase: "final_answer",
+        status: "completed",
       },
       event_id: "evt-item-message",
       session_id: "session-1",

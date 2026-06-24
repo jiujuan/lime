@@ -377,7 +377,7 @@
   "agentChat.searchResultPreview.emptySnippet": "暫無摘要，點擊可直接開啟來源。",
   "agentChat.searchResultPreview.expandAria": "展開搜尋結果",
   "agentChat.searchResultPreview.expandMore": "展開其餘 {{countLabel}} 筆結果",
-  "agentChat.searchResultPreview.previewAria": "預覽搜尋結果：{{title}}",
+  "agentChat.searchResultPreview.openAria": "開啟搜尋結果：{{title}}",
   "agentChat.sessionOverview.latestPromptFallback": "目前還沒有新的任務輸入。",
   "agentChat.sessionOverview.metrics.inProgress": "進行中 {{countLabel}}",
   "agentChat.sessionOverview.metrics.noFollowUp": "無需跟進",

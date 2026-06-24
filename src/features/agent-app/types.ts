@@ -564,6 +564,32 @@ export interface PackageIdentity {
   signatureRef?: string;
 }
 
+export type AgentAppCloudReleaseSignatureAlgorithm =
+  | "RSASSA-PKCS1-v1_5-SHA256"
+  | "RSA-PSS-SHA256"
+  | "ECDSA-P256-SHA256"
+  | "Ed25519";
+
+export interface AgentAppCloudReleaseSignatureProof {
+  schemaVersion?: string;
+  publicKeyId: string;
+  algorithm: AgentAppCloudReleaseSignatureAlgorithm;
+  signature: string;
+  payloadHash?: string;
+  signedAt?: string;
+}
+
+export interface AgentAppCloudReleaseSignatureTrustRoot {
+  publicKeyId: string;
+  algorithm: AgentAppCloudReleaseSignatureAlgorithm;
+  publicKey: string;
+  appIds?: string[];
+  notBefore?: string;
+  notAfter?: string;
+  revoked?: boolean;
+  revokedAt?: string;
+}
+
 export type AgentAppPackageVerificationStatus =
   | "verified"
   | "missing"
@@ -621,6 +647,7 @@ export interface CloudBootstrapApp {
   tenantEnablementRef?: string;
   channel?: string;
   signatureRef?: string;
+  signatureProof?: AgentAppCloudReleaseSignatureProof;
   licenseState?: CloudBootstrapLicenseState;
   registrationRequired: boolean;
   registrationState?: CloudBootstrapRegistrationState;
@@ -668,6 +695,7 @@ export interface CloudBootstrapReleaseDescriptor {
   packageHash: string;
   manifestHash: string;
   signatureRef?: string;
+  signatureProof?: AgentAppCloudReleaseSignatureProof;
   compatibility: {
     capabilities: Record<string, string>;
   };

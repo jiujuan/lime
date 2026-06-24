@@ -9,6 +9,7 @@ import { resolveElectronAppServerRuntimeEnv } from "../lib/electron-app-server-a
 import { resolveDevAppServerBinary } from "../lib/electron-dev-sidecar.mjs";
 import {
   APP_SERVER_METHOD_SESSION_LIST,
+  CONTENT_FACTORY_PRODUCT_PROFILE_SCENARIO,
   DEFAULTS,
   FIXTURE_MODEL,
   FIXTURE_PROVIDER,
@@ -72,7 +73,7 @@ Claw Chat Current Electron Fixture Smoke
   --app-url <url>        可选 renderer dev server，例如 http://127.0.0.1:1420/
   --evidence-dir <path>  证据目录
   --prefix <name>        证据文件前缀
-  --scenario <name>      complete | cancel | cancel-then-continue | plan | goal | web-tools-rendering | mcp-structured-content | skills-runtime | expert-skills-runtime | expert-plaza-skills-runtime | expert-panel-skills-runtime | right-surface-visual-matrix，默认 complete
+  --scenario <name>      complete | cancel | cancel-then-continue | plan | goal | web-tools-rendering | mcp-structured-content | skills-runtime | expert-skills-runtime | expert-plaza-skills-runtime | expert-panel-skills-runtime | right-surface-visual-matrix | content-factory-product-profile，默认 complete
   --timeout-ms <ms>      总超时，默认 180000
   --interval-ms <ms>     轮询间隔，默认 500
   --keep-temp            保留临时目录便于调试
@@ -148,6 +149,7 @@ function parseArgs(argv) {
     "expert-plaza-skills-runtime",
     "expert-panel-skills-runtime",
     RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO,
+    CONTENT_FACTORY_PRODUCT_PROFILE_SCENARIO,
   ];
   if (!allowedScenarios.includes(options.scenario)) {
     throw new Error(`--scenario 只能是 ${allowedScenarios.join("、")}`);
@@ -252,6 +254,15 @@ async function run() {
     guiRightSurfaceVisualMatrixSessionVisible: null,
     guiRightSurfaceVisualMatrixSessionOpened: null,
     rightSurfaceVisualMatrix: null,
+    contentFactoryProductProfileSessionCreation: null,
+    contentFactoryProductProfileRuntimeEventsAppend: null,
+    contentFactoryProductProfileRightSurfaceRequest: null,
+    guiContentFactoryProductProfileSessionVisible: null,
+    guiContentFactoryProductProfileSessionOpened: null,
+    contentFactoryProductProfileRightSurface: null,
+    contentFactoryProductProfileGui: null,
+    contentFactoryProductProfileReadModel: null,
+    contentFactoryProductProfileArtifactRead: null,
     expertSkillsRuntimeSkill: null,
     expertSkillsRuntimeTurnStart: null,
     expertPlazaSkillsRuntimeCatalog: null,
@@ -479,6 +490,9 @@ async function run() {
     summary.consoleErrors = consoleErrors;
     summary.actionableConsoleErrors = actionableConsoleErrors;
     summary.agentDebugLogs = agentDebugLogs.slice(-200);
+    summary.agentStreamDebugLogs = agentDebugLogs
+      .filter((entry) => entry.text.includes("[AgentDebug] AgentStream."))
+      .slice(-200);
     summary.pageLifecycleEvents = pageLifecycleEvents;
     summary.appServerRequestMethods = assertionReport.appServerRequestMethods;
     summary.backend = sanitizeJson(assertionReport.backendSummary);
@@ -530,6 +544,9 @@ async function run() {
     summary.consoleErrors = consoleErrors;
     summary.actionableConsoleErrors = actionableConsoleErrors;
     summary.agentDebugLogs = agentDebugLogs.slice(-200);
+    summary.agentStreamDebugLogs = agentDebugLogs
+      .filter((entry) => entry.text.includes("[AgentDebug] AgentStream."))
+      .slice(-200);
     summary.pageLifecycleEvents = pageLifecycleEvents;
     try {
       if (page) {

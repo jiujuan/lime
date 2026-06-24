@@ -5,6 +5,10 @@ export interface AgentStreamTextOverlaySnapshot {
   eventName: string;
   content: string;
   boundary?: string;
+  itemId?: string;
+  phase?: string;
+  sequence?: number;
+  turnId?: string;
   updatedAt: number;
 }
 
@@ -36,6 +40,10 @@ export function upsertAgentStreamTextOverlay(params: {
   eventName: string;
   content: string;
   boundary?: string;
+  itemId?: string | null;
+  phase?: string | null;
+  sequence?: number | null;
+  turnId?: string | null;
   updatedAt?: number;
 }) {
   if (!params.messageId) {
@@ -52,6 +60,12 @@ export function upsertAgentStreamTextOverlay(params: {
     eventName: params.eventName,
     content: params.content,
     boundary: params.boundary,
+    ...(params.itemId ? { itemId: params.itemId } : {}),
+    ...(params.phase ? { phase: params.phase } : {}),
+    ...(typeof params.sequence === "number" && Number.isFinite(params.sequence)
+      ? { sequence: params.sequence }
+      : {}),
+    ...(params.turnId ? { turnId: params.turnId } : {}),
     updatedAt: params.updatedAt ?? Date.now(),
   });
   emit(params.messageId);

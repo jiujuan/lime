@@ -130,7 +130,7 @@ describe("SearchResultPreviewList", () => {
     vi.useFakeTimers();
     const { container } = renderList();
     const trigger = container.querySelector(
-      'button[aria-label="Preview search result: Result 1"]',
+      'button[aria-label="Open search result: Result 1"]',
     ) as HTMLButtonElement | null;
 
     act(() => {

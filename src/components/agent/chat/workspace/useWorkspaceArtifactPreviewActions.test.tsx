@@ -665,6 +665,8 @@ describe("useWorkspaceArtifactPreviewActions", () => {
     );
     expect(readFilePreviewSpy).not.toHaveBeenCalled();
     expect(preview).toEqual({
+      artifactId: "artifact-report",
+      artifactRef: "artifact-report",
       path: ".app-server/artifacts/report.md",
       content: "# App Server 正文",
       isBinary: false,

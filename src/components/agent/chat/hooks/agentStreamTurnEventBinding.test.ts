@@ -1155,6 +1155,11 @@ describe("agentStreamTurnEventBinding", () => {
       {
         type: "text",
         text: "第一段",
+        metadata: {
+          source: "agent_text_delta",
+          sequence: 1,
+          turnId: "turn-app-server",
+        },
       },
     ]);
     expect(streamActivated).toBe(true);
@@ -1302,6 +1307,8 @@ describe("agentStreamTurnEventBinding", () => {
 
     project("message.delta", 1, {
       text: "我先联网核实目标页面来源。\n",
+      itemId: "agent-message-commentary-turn-app-server-web-tools",
+      phase: "commentary",
     });
     project("tool.started", 2, {
       toolCallId: "tool-web-search",
@@ -1369,6 +1376,8 @@ describe("agentStreamTurnEventBinding", () => {
     });
     project("message.delta", 8, {
       text: "网页搜索渲染结论：搜索来源已展开，读取页面已归入同一过程，最终正文继续输出。",
+      itemId: "agent-message-final-turn-app-server-web-tools",
+      phase: "final_answer",
     });
     project("turn.completed", 9, {
       turn: {
@@ -1392,6 +1401,17 @@ describe("agentStreamTurnEventBinding", () => {
       "tool_use",
       "text",
     ]);
+    expect(messages[0]?.contentParts?.[0]).toMatchObject({
+      type: "text",
+      text: "我先联网核实目标页面来源。",
+      metadata: {
+        source: "agent_text_delta",
+        itemId: "agent-message-commentary-turn-app-server-web-tools",
+        phase: "commentary",
+        sequence: 1,
+        turnId: "turn-app-server-web-tools",
+      },
+    });
     expect(messages[0]?.contentParts?.[2]).toMatchObject({
       type: "thinking",
       text: "搜索结果还需要继续筛掉广告软文，我先读取有效来源。",
@@ -1402,6 +1422,7 @@ describe("agentStreamTurnEventBinding", () => {
       },
     });
     expect(threadItems.map((item) => item.type)).toEqual([
+      "agent_message",
       "tool_call",
       "reasoning",
       "tool_call",

@@ -155,6 +155,11 @@ export interface AgentAppRuntimeStartTaskRequest {
   humanReview?: boolean;
   eventName?: string;
   turnId?: string;
+  packageRootPath?: string;
+  runtimePackageRoot?: string;
+  appRootPath?: string;
+  runWorker?: boolean;
+  workerTimeoutMs?: number;
   providerPreference?: string;
   modelPreference?: string;
   turnConfig?: AgentTurnConfigSnapshot;
@@ -174,6 +179,7 @@ export interface AgentAppRuntimeStartTaskResult {
   turnId: string;
   eventName: string;
   status: "accepted";
+  worker?: unknown;
   submittedAt: string;
 }
 

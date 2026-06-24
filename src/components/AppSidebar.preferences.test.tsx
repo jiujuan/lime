@@ -38,6 +38,8 @@ describe("AppSidebar preferences", () => {
     });
     await flushEffects(3);
 
+    expect(mockCheckForUpdates).toHaveBeenCalledWith({ automatic: true });
+
     const accountSlot = container.querySelector(
       '[data-testid="app-sidebar-account-slot"]',
     );

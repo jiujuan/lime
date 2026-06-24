@@ -15,6 +15,10 @@ export interface VersionInfo {
   error?: string;
 }
 
+export interface CheckForUpdatesOptions {
+  automatic?: boolean;
+}
+
 export interface DownloadUpdateResult {
   success: boolean;
   message: string;
@@ -77,10 +81,12 @@ export interface UpdateNotificationAnchorRect {
   height: number;
 }
 
-export async function checkForUpdates(): Promise<VersionInfo> {
+export async function checkForUpdates(
+  options?: CheckForUpdatesOptions,
+): Promise<VersionInfo> {
   return invokeUpdateCommand<VersionInfo>(
     "check_for_updates",
-    undefined,
+    options?.automatic ? { automatic: true } : undefined,
     assertVersionInfo,
   );
 }

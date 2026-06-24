@@ -121,7 +121,7 @@ function SearchResultHoverCard({
         <button
           ref={triggerRef}
           type="button"
-          aria-label={t("agentChat.searchResultPreview.previewAria", {
+          aria-label={t("agentChat.searchResultPreview.openAria", {
             title: item.title,
           })}
           className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-left transition-colors hover:bg-slate-50"
@@ -247,7 +247,7 @@ export function SearchResultPreviewList({
             type="button"
             className="block w-full rounded-md px-1.5 py-1 text-left transition-colors hover:bg-slate-50"
             onClick={() => void handleOpenItem(item)}
-            aria-label={t("agentChat.searchResultPreview.previewAria", {
+            aria-label={t("agentChat.searchResultPreview.openAria", {
               title: item.title,
             })}
           >

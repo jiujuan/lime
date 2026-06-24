@@ -46,6 +46,12 @@ function readNonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
 
+function omitUndefined<T extends Record<string, unknown>>(value: T): T {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== undefined),
+  ) as T;
+}
+
 function resolveArtifactSelectionFilePath(artifact: Artifact): string | null {
   return (
     readNonEmptyString(artifact.meta.filePath) ??
@@ -264,11 +270,17 @@ export function useWorkspaceArtifactPreviewActions({
             });
           }
 
-          return createFallbackResult({
-            path: appServerContent.filePath || normalizedPath,
-            content: appServerContent.content,
-            size: appServerContent.content.length,
-          });
+          return createFallbackResult(
+            omitUndefined({
+              artifactId: appServerContent.artifactId,
+              artifactRef: appServerContent.artifactRef,
+              path: appServerContent.filePath || normalizedPath,
+              content: appServerContent.content,
+              metadata: appServerContent.metadata,
+              size: appServerContent.content.length,
+              title: appServerContent.title,
+            }),
+          );
         } catch (error) {
           return createFallbackResult({
             error: error instanceof Error ? error.message : String(error),

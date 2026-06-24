@@ -10,6 +10,7 @@ use std::collections::HashMap;
 
 pub(super) fn thread_items_from_events(stored: &StoredSession) -> Vec<Value> {
     let mut items = Vec::new();
+    let mut agent_message_item_by_id = HashMap::<String, usize>::new();
     let mut last_text_item_by_turn = std::collections::HashMap::<String, usize>::new();
     let mut command_items = HashMap::<String, Value>::new();
     let mut patch_items = HashMap::<String, Value>::new();
@@ -22,6 +23,17 @@ pub(super) fn thread_items_from_events(stored: &StoredSession) -> Vec<Value> {
         match event.event_type.as_str() {
             "message.delta" => {
                 if let Some(item) = agent_message_item(stored, event) {
+                    if let Some(stable_item_id) = agent_message_payload_id(event) {
+                        if let Some(existing_index) =
+                            agent_message_item_by_id.get(&stable_item_id).copied()
+                        {
+                            merge_agent_message_item(&mut items[existing_index], &item);
+                            continue;
+                        }
+                        agent_message_item_by_id.insert(stable_item_id, items.len());
+                        items.push(item);
+                        continue;
+                    }
                     if is_imported_agent_message_event(event) {
                         items.push(item);
                         continue;
@@ -168,6 +180,15 @@ fn is_imported_agent_message_event(event: &AgentEvent) -> bool {
         .unwrap_or(false)
         || string_field(&event.payload, &["sourceClient", "source_client"])
             .is_some_and(|value| !value.trim().is_empty())
+}
+
+fn agent_message_payload_id(event: &AgentEvent) -> Option<String> {
+    raw_string_field(
+        &event.payload,
+        &["id", "itemId", "item_id", "messageId", "message_id"],
+    )
+    .map(|value| value.trim().to_string())
+    .filter(|value| !value.is_empty())
 }
 
 fn upsert_command_item(
@@ -684,14 +705,20 @@ fn agent_message_item(stored: &StoredSession, event: &AgentEvent) -> Option<Valu
     if text.is_empty() {
         return None;
     }
+    let phase = raw_string_field(&event.payload, &["phase", "messagePhase", "message_phase"])
+        .unwrap_or_else(|| "final".to_string());
     Some(base_item(
         stored,
         event,
         "agent_message",
         "completed",
         json!({
+            "id": raw_string_field(
+                &event.payload,
+                &["id", "itemId", "item_id", "messageId", "message_id"],
+            ),
             "text": text,
-            "phase": "final",
+            "phase": phase,
             "metadata": event_metadata(event),
         }),
     ))
@@ -1144,5 +1171,41 @@ mod tests {
                 .and_then(|provider_metadata| provider_metadata.get("summary_index")),
             Some(&json!(1))
         );
+    }
+
+    #[test]
+    fn agent_message_delta_preserves_item_id_and_phase() {
+        let stored = stored_session(vec![
+            agent_event(
+                "evt-commentary-1",
+                1,
+                "message.delta",
+                json!({
+                    "itemId": "agent-message-commentary",
+                    "text": "我先搜索",
+                    "phase": "commentary",
+                    "imported": true
+                }),
+            ),
+            agent_event(
+                "evt-commentary-2",
+                2,
+                "message.delta",
+                json!({
+                    "itemId": "agent-message-commentary",
+                    "text": "并筛选来源。",
+                    "phase": "commentary",
+                    "imported": true
+                }),
+            ),
+        ]);
+
+        let items = thread_items_from_events(&stored);
+
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["id"], "agent-message-commentary");
+        assert_eq!(items[0]["type"], "agent_message");
+        assert_eq!(items[0]["phase"], "commentary");
+        assert_eq!(items[0]["text"], "我先搜索并筛选来源。");
     }
 }

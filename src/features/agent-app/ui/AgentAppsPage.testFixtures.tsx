@@ -7,6 +7,7 @@ import contentFactoryFixtureData from "../fixtures/content-factory-app.json";
 import { buildInstalledAgentAppState } from "../install/installedAppState";
 import { buildInstalledAppPreview } from "../install/installedAppPreview";
 import { buildAgentAppLabResolvedSetupState } from "../install/labInstallFlow";
+import type { AgentAppInstallReview } from "../install/installReview";
 import { buildPackageIdentity } from "../install/packageIdentity";
 import { buildWorkflowRuntimeCapabilityProfile } from "../runtime/workflowRuntimeCapabilityProfile";
 import { buildAgentAppHostLifecycleSnapshot } from "../host";
@@ -161,6 +162,12 @@ vi.mock("react-i18next", () => ({
       }
       if (key === "agentApp.apps.surface.title") {
         return `using:${String(params?.title)}`;
+      }
+      if (key === "agentApp.apps.launchTarget.targetFallback") {
+        return `Claw ${String(params?.index)}`;
+      }
+      if (key === "agentApp.apps.launchTarget.targetHint") {
+        return `target:${String(params?.target)}`;
       }
       if (typeof params?.count === "number") {
         return `${key}:${params.count}`;
@@ -338,6 +345,9 @@ export async function renderPage(
   rightSurfaceTarget?: Parameters<
     typeof AgentAppsPage
   >[0]["rightSurfaceTarget"],
+  rightSurfaceTargets?: Parameters<
+    typeof AgentAppsPage
+  >[0]["rightSurfaceTargets"],
 ) {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -349,6 +359,7 @@ export async function renderPage(
         onNavigate={onNavigate}
         pageParams={pageParams}
         rightSurfaceTarget={rightSurfaceTarget}
+        rightSurfaceTargets={rightSurfaceTargets}
       />,
     );
     await Promise.resolve();
@@ -396,7 +407,10 @@ function installState(state: InstalledAgentAppState): InstalledAgentAppState {
   return state;
 }
 
-export function buildReviewResult(state: InstalledAgentAppState) {
+export function buildReviewResult(
+  state: InstalledAgentAppState,
+  reviewOverrides: Partial<AgentAppInstallReview> = {},
+) {
   return {
     state,
     review: {
@@ -427,6 +441,7 @@ export function buildReviewResult(state: InstalledAgentAppState) {
       blockerCount: state.readiness.blockers.length,
       warningCount: state.readiness.warnings.length,
       generatedAt: state.updatedAt,
+      ...reviewOverrides,
     },
   };
 }
@@ -553,8 +568,37 @@ function setupDefaultApiMocks() {
     buildReviewResult(buildReadyState()),
   );
   apiMocks.reviewCloudAgentAppRelease.mockImplementation(
-    async (_params: { app: CloudBootstrapApp }) =>
-      buildReviewResult(buildReadyState()),
+    async (_params: { app: CloudBootstrapApp }) => {
+      const state = buildReadyState();
+      return buildReviewResult(state, {
+        sourceKind: "cloud_release",
+        sourceUri:
+          "https://lime.local/agent-apps/content-factory-app/releases/0.3.0/package.zip",
+        packageUrl:
+          "https://lime.local/agent-apps/content-factory-app/releases/0.3.0/package.zip",
+        releaseEvidence: {
+          appId: state.appId,
+          version: state.identity.appVersion,
+          catalogSource: "seeded",
+          sourceKind: "fetched_package",
+          packageHashDeclared: true,
+          manifestHashDeclared: true,
+          signatureDeclared: false,
+          declaredPackageHash: state.identity.packageHash,
+          declaredManifestHash: state.identity.manifestHash,
+          actualPackageHash: state.identity.packageHash,
+          actualManifestHash: state.identity.manifestHash,
+          packageHashMatched: true,
+          manifestHashMatched: true,
+          signaturePolicy: "optional",
+          signatureVerificationStatus: "not_configured",
+          packageVerificationStatus: "verified",
+          status: "warning",
+          blockerCodes: [],
+          warningCodes: ["signature_missing"],
+        },
+      });
+    },
   );
   apiMocks.saveInstalledAgentAppState.mockImplementation(
     async (request: { state: InstalledAgentAppState }) =>

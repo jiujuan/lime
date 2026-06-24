@@ -39,6 +39,13 @@ export function resolveContentPartDebugSignature(
             : "";
         return `thinking${sequence}`;
       }
+      if (part.type === "text") {
+        const sequence =
+          typeof part.metadata?.sequence === "number"
+            ? `#${part.metadata.sequence}`
+            : "";
+        return `text${sequence}`;
+      }
       return part.type;
     })
     .join("|");

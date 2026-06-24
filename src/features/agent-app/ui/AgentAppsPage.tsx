@@ -88,6 +88,9 @@ import {
   resolveAgentAppLaunchTargetPolicy,
   type AgentAppLaunchTargetMode,
 } from "./agentAppLaunchTargetPolicy";
+import { AgentAppLaunchTargetControl } from "./AgentAppLaunchTargetControl";
+import { AgentAppReadinessIssueSummary } from "./AgentAppReadinessIssueSummary";
+import { AgentAppReleaseEvidenceSummary } from "./AgentAppReleaseEvidenceSummary";
 import { UiExtensionHost } from "../runtime/uiExtensionHost";
 import { WorkflowRuntimeHost } from "../runtime/workflowRuntimeHost";
 import { evaluateAgentAppEntryRuntimeGuard } from "../runtime/entryRuntimeGuard";
@@ -225,10 +228,12 @@ export function AgentAppsPage({
   onNavigate,
   pageParams,
   rightSurfaceTarget,
+  rightSurfaceTargets,
 }: {
   onNavigate?: (page: Page, params?: PageParams) => void;
   pageParams?: AgentAppsPageParams;
   rightSurfaceTarget?: AgentAppRightSurfaceLaunchTarget | null;
+  rightSurfaceTargets?: AgentAppRightSurfaceLaunchTarget[] | null;
 }) {
   const { t } = useTranslation("agent");
   const dynamicT = t as AgentAppDynamicTranslation;
@@ -266,6 +271,8 @@ export function AgentAppsPage({
     useState<AppCenterSourceFilter>("all");
   const [launchTargetMode, setLaunchTargetMode] =
     useState<AgentAppLaunchTargetMode>("standalone");
+  const [selectedRightSurfaceTargetId, setSelectedRightSurfaceTargetId] =
+    useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [moreInfoOpen, setMoreInfoOpen] = useState(false);
   const handledLaunchRequestRef = useRef<string | null>(null);
@@ -330,8 +337,15 @@ export function AgentAppsPage({
       resolveAgentAppLaunchTargetPolicy({
         mode: launchTargetMode,
         rightSurfaceTarget,
+        rightSurfaceTargets,
+        selectedRightSurfaceTargetId,
       }),
-    [launchTargetMode, rightSurfaceTarget],
+    [
+      launchTargetMode,
+      rightSurfaceTarget,
+      rightSurfaceTargets,
+      selectedRightSurfaceTargetId,
+    ],
   );
 
   useEffect(() => {
@@ -342,6 +356,27 @@ export function AgentAppsPage({
       setLaunchTargetMode("standalone");
     }
   }, [launchTargetMode, launchTargetPolicy.rightSurfaceAvailable]);
+
+  useEffect(() => {
+    if (!launchTargetPolicy.rightSurfaceTargets.length) {
+      setSelectedRightSurfaceTargetId(null);
+      return;
+    }
+    setSelectedRightSurfaceTargetId((current) => {
+      if (
+        current &&
+        launchTargetPolicy.rightSurfaceTargets.some(
+          (option) => option.id === current,
+        )
+      ) {
+        return current;
+      }
+      return launchTargetPolicy.rightSurfaceTargetId;
+    });
+  }, [
+    launchTargetPolicy.rightSurfaceTargetId,
+    launchTargetPolicy.rightSurfaceTargets,
+  ]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -457,6 +492,10 @@ export function AgentAppsPage({
 
   async function handleConfirmInstallReview() {
     if (!installReview) {
+      return;
+    }
+    if (installReview.review.releaseEvidence?.status === "blocked") {
+      toast.error("agentApp.apps.installReview.releaseEvidence.blockedConfirm");
       return;
     }
     const state = await runBusy(
@@ -961,6 +1000,8 @@ export function AgentAppsPage({
       installedState: installReview.state,
       convertLocalFileSrc,
     });
+    const installReviewBlocked =
+      installReview.review.releaseEvidence?.status === "blocked";
 
     return (
       <div
@@ -1039,13 +1080,23 @@ export function AgentAppsPage({
                 })}
               </p>
             </div>
+            <AgentAppReleaseEvidenceSummary
+              evidence={installReview.review.releaseEvidence}
+            />
           </div>
 
           <div className="flex flex-wrap gap-2 border-t border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-5 py-4">
             <button
               type="button"
               className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-full bg-[color:var(--lime-text-strong)] px-4 text-sm font-semibold text-[color:var(--lime-surface)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={Boolean(busyAction)}
+              disabled={Boolean(busyAction) || installReviewBlocked}
+              title={
+                installReviewBlocked
+                  ? t(
+                      "agentApp.apps.installReview.releaseEvidence.blockedConfirm",
+                    )
+                  : undefined
+              }
               onClick={() => void handleConfirmInstallReview()}
               data-testid="agent-apps-install-review-confirm"
             >
@@ -1211,55 +1262,12 @@ export function AgentAppsPage({
                 </span>
               </div>
             </div>
-            <div
-              className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] px-3 py-2"
-              data-testid="agent-apps-launch-target-policy"
-            >
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-[color:var(--lime-text-strong)]">
-                  {t("agentApp.apps.launchTarget.label")}
-                </p>
-                {!launchTargetPolicy.rightSurfaceAvailable ? (
-                  <p
-                    className="mt-0.5 text-xs text-[color:var(--lime-text-muted)]"
-                    data-testid="agent-apps-launch-target-unavailable"
-                  >
-                    {t(
-                      "agentApp.apps.launchTarget.rightSurfaceUnavailable",
-                    )}
-                  </p>
-                ) : null}
-              </div>
-              <div className="inline-flex rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] p-1">
-                <button
-                  type="button"
-                  className={`h-8 rounded-full px-3 text-xs font-semibold transition ${
-                    launchTargetPolicy.mode === "standalone"
-                      ? "bg-[color:var(--lime-text-strong)] text-[color:var(--lime-surface)]"
-                      : "text-[color:var(--lime-text-muted)] hover:bg-[color:var(--lime-surface-hover)] hover:text-[color:var(--lime-text-strong)]"
-                  }`}
-                  aria-pressed={launchTargetPolicy.mode === "standalone"}
-                  onClick={() => setLaunchTargetMode("standalone")}
-                  data-testid="agent-apps-launch-target-standalone"
-                >
-                  {t("agentApp.apps.launchTarget.standalone")}
-                </button>
-                <button
-                  type="button"
-                  className={`h-8 rounded-full px-3 text-xs font-semibold transition ${
-                    launchTargetPolicy.mode === "rightSurface"
-                      ? "bg-[color:var(--lime-text-strong)] text-[color:var(--lime-surface)]"
-                      : "text-[color:var(--lime-text-muted)] hover:bg-[color:var(--lime-surface-hover)] hover:text-[color:var(--lime-text-strong)]"
-                  } disabled:cursor-not-allowed disabled:text-[color:var(--lime-text-muted)] disabled:opacity-50 disabled:hover:bg-transparent`}
-                  aria-pressed={launchTargetPolicy.mode === "rightSurface"}
-                  disabled={!launchTargetPolicy.rightSurfaceAvailable}
-                  onClick={() => setLaunchTargetMode("rightSurface")}
-                  data-testid="agent-apps-launch-target-right-surface"
-                >
-                  {t("agentApp.apps.launchTarget.rightSurface")}
-                </button>
-              </div>
-            </div>
+            <AgentAppLaunchTargetControl
+              policy={launchTargetPolicy}
+              selectedTargetId={selectedRightSurfaceTargetId}
+              onModeChange={setLaunchTargetMode}
+              onSelectedTargetIdChange={setSelectedRightSurfaceTargetId}
+            />
             <main className="min-w-0">
               <div
                 className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
@@ -1689,6 +1697,10 @@ export function AgentAppsPage({
                             </div>
                           ) : null}
                         </div>
+                        <AgentAppReadinessIssueSummary
+                          summary={hostSummary}
+                          appId={selectedItem.appId}
+                        />
                       </section>
                     );
                   })()}

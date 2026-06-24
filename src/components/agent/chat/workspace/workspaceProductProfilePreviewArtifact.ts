@@ -1,5 +1,6 @@
 import { createPreviewArtifact } from "@/lib/artifact/previewArtifact";
 import type { Artifact } from "@/lib/artifact/types";
+import { buildWorkspaceProductProfileArtifactDocument } from "./workspaceProductProfileArtifactDocument";
 import { buildWorkspaceProductObjectKey } from "./workspaceProductProfileSelection";
 import type {
   WorkspaceProductObject,
@@ -7,6 +8,11 @@ import type {
   WorkspaceProductProfileStructuredPreview,
   WorkspaceProductProfileSurfaceLayout,
 } from "./workspaceProductProfileModel";
+import {
+  resolveWorkspaceProductProfileImageLocalPath,
+  resolveWorkspaceProductProfileImageRenderSrc,
+  resolveWorkspaceProductProfileImageSourceLabel,
+} from "./workspaceProductProfileImagePreview";
 
 export interface WorkspaceProductProfilePreviewArtifactInput {
   profile: WorkspaceProductProfile;
@@ -26,8 +32,23 @@ export function buildWorkspaceProductProfilePreviewArtifact({
   profile,
 }: WorkspaceProductProfilePreviewArtifactInput): Artifact | null {
   const sourceRef = artifactIds[0] ?? buildWorkspaceProductObjectKey(object);
+  const artifactDocument = buildWorkspaceProductProfileArtifactDocument({
+    artifactIds,
+    layout,
+    now,
+    object,
+    preview,
+    profile,
+  });
   const meta = {
     openedFrom: "right_surface_product_profile",
+    artifactSchema: artifactDocument.schemaVersion,
+    artifactKind: artifactDocument.kind,
+    artifactDocument,
+    artifactTitle: artifactDocument.title,
+    artifactDocumentId: artifactDocument.artifactId,
+    artifactVersionId: artifactDocument.metadata.currentVersionId,
+    artifactVersionNo: artifactDocument.metadata.currentVersionNo,
     productProfile: {
       appId: profile.appId,
       sessionId: profile.sessionId,
@@ -39,17 +60,34 @@ export function buildWorkspaceProductProfilePreviewArtifact({
   };
 
   if (layout === "imageGrid") {
-    const firstImage = preview.images.find((image) => image.url);
-    if (firstImage?.url) {
+    const firstImage = preview.images.find((image) =>
+      Boolean(resolveWorkspaceProductProfileImageRenderSrc(image)),
+    );
+    const firstImageSrc = firstImage
+      ? resolveWorkspaceProductProfileImageRenderSrc(firstImage)
+      : null;
+    if (firstImage && firstImageSrc) {
+      const localPath = resolveWorkspaceProductProfileImageLocalPath(firstImage);
+      const sourcePath =
+        resolveWorkspaceProductProfileImageSourceLabel(firstImage) ||
+        firstImageSrc;
       return createPreviewArtifact({
-        source: "artifact",
-        sourceRef: firstImage.id || sourceRef,
-        path: firstImage.url,
+        source: localPath ? "file" : "artifact",
+        sourceRef: localPath || firstImage.id || sourceRef,
+        path: localPath || sourcePath,
         title: firstImage.title || object.title,
         isBinary: true,
-        mimeType: resolveImageMimeType(firstImage.url),
-        previewUrl: firstImage.url,
-        meta,
+        mimeType: resolveImageMimeType(sourcePath),
+        previewUrl: firstImageSrc,
+        meta: {
+          ...meta,
+          productProfileImage: {
+            id: firstImage.id,
+            url: firstImage.url ?? null,
+            localPath,
+            sourcePath,
+          },
+        },
         now,
       }).artifact;
     }
@@ -136,7 +174,9 @@ function buildPreviewMarkdown({
       ...preview.images.map((image) =>
         [
           `- ${image.title}`,
-          image.url ? ` ${image.url}` : "",
+          resolveWorkspaceProductProfileImageSourceLabel(image)
+            ? ` ${resolveWorkspaceProductProfileImageSourceLabel(image)}`
+            : "",
           image.prompt ? ` ${image.prompt}` : "",
         ].join(""),
       ),

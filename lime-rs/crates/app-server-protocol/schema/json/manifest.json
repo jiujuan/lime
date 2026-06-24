@@ -160,6 +160,10 @@
     },
     {
       "kind": "request",
+      "method": "agentSession/runtimeEvents/append"
+    },
+    {
+      "kind": "request",
       "method": "agentSession/start"
     },
     {
@@ -237,6 +241,30 @@
     {
       "kind": "request",
       "method": "automationScheduler/status"
+    },
+    {
+      "kind": "request",
+      "method": "browserSession/action/execute"
+    },
+    {
+      "kind": "request",
+      "method": "browserSession/close"
+    },
+    {
+      "kind": "request",
+      "method": "browserSession/event/list"
+    },
+    {
+      "kind": "request",
+      "method": "browserSession/open"
+    },
+    {
+      "kind": "request",
+      "method": "browserSession/read"
+    },
+    {
+      "kind": "request",
+      "method": "browserSession/target/list"
     },
     {
       "kind": "request",
@@ -1199,6 +1227,9 @@
       "AgentSessionReviewDecisionSaveParams",
       "AgentSessionReviewDecisionTemplateExportParams",
       "AgentSessionReviewDecisionTemplateExportResponse",
+      "AgentSessionRuntimeEventAppendParams",
+      "AgentSessionRuntimeEventAppendResponse",
+      "AgentSessionRuntimeEventInput",
       "AgentSessionStartParams",
       "AgentSessionStartResponse",
       "AgentSessionStatus",
@@ -1239,6 +1270,21 @@
       "AutomationSchedulerConfigUpdateParams",
       "AutomationSchedulerConfigUpdateResponse",
       "AutomationSchedulerStatusResponse",
+      "BrowserSessionActionExecuteParams",
+      "BrowserSessionActionExecuteResponse",
+      "BrowserSessionCloseResponse",
+      "BrowserSessionEventItem",
+      "BrowserSessionEventListParams",
+      "BrowserSessionEventListResponse",
+      "BrowserSessionIdParams",
+      "BrowserSessionOpenParams",
+      "BrowserSessionOpenResponse",
+      "BrowserSessionPageInfo",
+      "BrowserSessionReadResponse",
+      "BrowserSessionState",
+      "BrowserSessionTargetInfo",
+      "BrowserSessionTargetListParams",
+      "BrowserSessionTargetListResponse",
       "BusinessObjectRef",
       "CapabilityDescriptor",
       "CapabilityListParams",

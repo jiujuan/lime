@@ -76,6 +76,7 @@ declare module "./appServerClient" {
     listSessionFiles(params: appServer.AppServerSessionFileGetOrCreateParams): Promise<appServer.AppServerRequestResult<appServer.AppServerSessionFileListResponse>>;
     startTurn(params: appServer.AppServerAgentSessionTurnStartParams): Promise<appServer.AppServerRequestResult<appServer.AppServerAgentSessionTurnStartResponse>>;
     cancelTurn(params: appServer.AppServerAgentSessionTurnCancelParams): Promise<appServer.AppServerRequestResult<appServer.AppServerAgentSessionTurnCancelResponse>>;
+    appendAgentSessionRuntimeEvents(params: appServer.AppServerAgentSessionRuntimeEventAppendParams): Promise<appServer.AppServerRequestResult<appServer.AppServerAgentSessionRuntimeEventAppendResponse>>;
     respondAction(params: appServer.AppServerAgentSessionActionRespondParams): Promise<appServer.AppServerRequestResult<appServer.AppServerAgentSessionActionRespondResponse>>;
     replayAction(params: appServer.AppServerAgentSessionActionReplayParams): Promise<appServer.AppServerRequestResult<appServer.AppServerAgentSessionActionReplayResponse>>;
     listLogs(): Promise<appServer.AppServerRequestResult<appServer.AppServerLogListResponse>>;
@@ -209,6 +210,7 @@ const APP_SERVER_CLIENT_METHODS: readonly AppServerClientMethodSpec[] = [
   { name: "listSessionFiles", method: constants.APP_SERVER_METHOD_SESSION_FILE_LIST, params: "required" },
   { name: "startTurn", method: constants.APP_SERVER_METHOD_AGENT_SESSION_TURN_START, params: "required" },
   { name: "cancelTurn", method: constants.APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL, params: "required" },
+  { name: "appendAgentSessionRuntimeEvents", method: constants.APP_SERVER_METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND, params: "required" },
   { name: "respondAction", method: constants.APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND, params: "required" },
   { name: "replayAction", method: constants.APP_SERVER_METHOD_AGENT_SESSION_ACTION_REPLAY, params: "required" },
   { name: "listLogs", method: constants.APP_SERVER_METHOD_LOG_LIST, params: "none" },

@@ -1,6 +1,5 @@
 import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
-import "./StreamingRenderer.testMocks";
 import {
   installStreamingRendererTestHarness,
   renderStreamingRendererHarness as renderHarness,
@@ -68,9 +67,9 @@ describe("StreamingRenderer WebSearch imported rendering", () => {
     const processGroupButtons = container.querySelectorAll<HTMLButtonElement>(
       '[data-testid="streaming-process-group"] > button',
     );
-    const searchGroupButton = processGroupButtons.item(1) as
-      | HTMLButtonElement
-      | null;
+    const searchGroupButton = processGroupButtons.item(
+      1,
+    ) as HTMLButtonElement | null;
 
     expect(processGroupButtons).toHaveLength(2);
     expect(processGroupButton?.getAttribute("aria-expanded")).toBe("true");
@@ -78,9 +77,7 @@ describe("StreamingRenderer WebSearch imported rendering", () => {
     expect(searchGroupButton?.textContent).toContain(
       "已搜索网页：Lime history import",
     );
-    expect(searchGroupButton?.textContent).not.toContain(
-      "导入的命令记录",
-    );
+    expect(searchGroupButton?.textContent).not.toContain("导入的命令记录");
     expect(container.textContent).not.toContain("npm test");
     expect(container.textContent).not.toContain("Output:");
     expect(searchGroupButton?.textContent).toContain("Lime history import");
@@ -188,7 +185,9 @@ describe("StreamingRenderer WebSearch imported rendering", () => {
     expect(container.textContent).toContain("搜索来源");
     expect(container.textContent).toContain("读取页面");
     expect(container.textContent).toContain("Lime renderer roadmap");
-    expect(container.textContent).toContain("example.com/lime-renderer-roadmap");
+    expect(container.textContent).toContain(
+      "example.com/lime-renderer-roadmap",
+    );
     expect(container.textContent).not.toContain(
       "https://example.com/lime-renderer-roadmap",
     );
@@ -199,7 +198,7 @@ describe("StreamingRenderer WebSearch imported rendering", () => {
 
     act(() => {
       const result = document.body.querySelector(
-        '[aria-label="预览搜索结果：Lime renderer roadmap"]',
+        '[aria-label="打开搜索结果：Lime renderer roadmap"]',
       ) as HTMLButtonElement | null;
       result?.click();
     });
@@ -208,10 +207,6 @@ describe("StreamingRenderer WebSearch imported rendering", () => {
       expect.objectContaining({
         title: "Lime renderer roadmap",
         url: "https://example.com/lime-renderer-roadmap",
-        snippet: "Renderer roadmap summary",
-        snapshotTitle: "Renderer roadmap snapshot",
-        snapshotContent: "# Renderer roadmap\n\nImported page content.",
-        snapshotSource: "web_fetch",
       }),
     );
   });
@@ -260,5 +255,4 @@ describe("StreamingRenderer WebSearch imported rendering", () => {
     expect(container.textContent).not.toContain('"type"');
     expect(container.textContent).not.toContain('"search_query"');
   });
-
 });

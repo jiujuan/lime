@@ -62,6 +62,16 @@ import {
   persistVoiceModelSettingsFocusRequest,
 } from "./lib/voiceModelSettingsNavigation";
 import type { AgentAppRightSurfaceLaunchTarget } from "./features/agent-app/ui/agentAppRightSurfaceLaunch";
+import {
+  normalizeAgentAppRightSurfaceLaunchTarget,
+} from "./features/agent-app/ui/agentAppLaunchTargetPolicy";
+import {
+  DEFAULT_AGENT_APP_RIGHT_SURFACE_TARGET_LIMIT,
+  loadAgentAppRightSurfaceLaunchTargetsFromStorage,
+  saveAgentAppRightSurfaceLaunchTargetsToStorage,
+  upsertAgentAppRightSurfaceLaunchTarget,
+  type AgentAppLaunchTargetStorage,
+} from "./features/agent-app/ui/agentAppLaunchTargetPersistence";
 
 const AppContainer = styled.div`
   display: flex;
@@ -136,6 +146,34 @@ const ConnectConfirmDialog = lazy(() =>
     default: module.ConnectConfirmDialog,
   })),
 );
+
+interface AgentSessionTargetState {
+  active: AgentAppRightSurfaceLaunchTarget | null;
+  recent: AgentAppRightSurfaceLaunchTarget[];
+}
+
+function getAgentSessionTargetStorage(): AgentAppLaunchTargetStorage | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+function loadInitialAgentSessionTargetState(): AgentSessionTargetState {
+  const recent =
+    loadAgentAppRightSurfaceLaunchTargetsFromStorage(
+      getAgentSessionTargetStorage(),
+    );
+  return {
+    active: recent[0] ?? null,
+    recent,
+  };
+}
+
 function AppContent() {
   startupTracker.mark("AppContent: render start");
 
@@ -153,8 +191,8 @@ function AppContent() {
     handleNavigate,
   } = useAppNavigation();
   const [agentHasMessages, setAgentHasMessages] = useState(false);
-  const [activeAgentSessionTarget, setActiveAgentSessionTarget] =
-    useState<AgentAppRightSurfaceLaunchTarget | null>(null);
+  const [agentSessionTargetState, setAgentSessionTargetState] =
+    useState<AgentSessionTargetState>(loadInitialAgentSessionTargetState);
 
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
   const [pendingRecommendation, setPendingRecommendation] = useState<{
@@ -415,9 +453,34 @@ function AppContent() {
     },
     [],
   );
+  useEffect(() => {
+    saveAgentAppRightSurfaceLaunchTargetsToStorage(
+      getAgentSessionTargetStorage(),
+      agentSessionTargetState.recent,
+    );
+  }, [agentSessionTargetState.recent]);
+
   const handleAgentSessionTargetChange = useCallback(
     (target: AgentAppRightSurfaceLaunchTarget | null) => {
-      setActiveAgentSessionTarget(target?.sessionId ? target : null);
+      const normalized = normalizeAgentAppRightSurfaceLaunchTarget(target);
+      if (!normalized?.sessionId) {
+        setAgentSessionTargetState((current) => ({
+          ...current,
+          active: null,
+        }));
+        return;
+      }
+      setAgentSessionTargetState((current) => {
+        const recent = upsertAgentAppRightSurfaceLaunchTarget(
+          current.recent,
+          normalized,
+          DEFAULT_AGENT_APP_RIGHT_SURFACE_TARGET_LIMIT,
+        );
+        return {
+          active: recent[0] ?? normalized,
+          recent,
+        };
+      });
     },
     [],
   );
@@ -481,7 +544,8 @@ function AppContent() {
                 navigationRequestId={navigationRequestId}
                 onNavigate={handleNavigate}
                 onAgentHasMessagesChange={setAgentHasMessages}
-                activeAgentSessionTarget={activeAgentSessionTarget}
+                activeAgentSessionTarget={agentSessionTargetState.active}
+                agentSessionTargets={agentSessionTargetState.recent}
                 onAgentSessionTargetChange={handleAgentSessionTargetChange}
               />
             </Suspense>

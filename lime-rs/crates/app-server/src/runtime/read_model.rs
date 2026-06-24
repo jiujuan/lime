@@ -231,6 +231,7 @@ fn runtime_assistant_message_from_events(
     for event in events.iter().filter(|event| {
         event.turn_id.as_deref() == Some(turn.turn_id.as_str())
             && event.event_type == "message.delta"
+            && should_use_message_delta_as_final_text(event)
     }) {
         if let Some(delta) = raw_string_field(
             &event.payload,
@@ -265,6 +266,16 @@ fn runtime_assistant_message_from_events(
         ],
         "timestamp": timestamp_seconds(timestamp_value.or(turn.completed_at.as_deref())),
     }))
+}
+
+fn should_use_message_delta_as_final_text(event: &AgentEvent) -> bool {
+    match raw_string_field(&event.payload, &["phase", "messagePhase", "message_phase"]) {
+        None => true,
+        Some(phase) => {
+            let normalized = phase.trim().to_ascii_lowercase();
+            normalized == "final" || normalized == "final_answer"
+        }
+    }
 }
 
 fn runtime_error_items_from_events(stored: &StoredSession) -> Vec<serde_json::Value> {

@@ -235,6 +235,37 @@ describe("Cloud Bootstrap payload P5.1", () => {
     });
   });
 
+  it("应保留 Cloud release signatureProof 供宿主验证", () => {
+    const app = parseCloudBootstrapPayload(
+      buildPayload({
+        signatureProof: {
+          schemaVersion: "agent-app-cloud-release-signature/v1",
+          publicKeyId: "agent-app-root-2026",
+          algorithm: "RSASSA-PKCS1-v1_5-SHA256",
+          signature: "c2lnbmF0dXJl",
+          payloadHash:
+            "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          signedAt: "2026-06-24T00:00:00.000Z",
+        },
+      }),
+    ).apps[0]!;
+
+    expect(app.signatureProof).toMatchObject({
+      publicKeyId: "agent-app-root-2026",
+      algorithm: "RSASSA-PKCS1-v1_5-SHA256",
+      signature: "c2lnbmF0dXJl",
+    });
+    expect(
+      buildCloudReleaseDescriptor({
+        app,
+        loadedAt: "2026-06-24T00:00:00.000Z",
+      }).signatureProof,
+    ).toMatchObject({
+      publicKeyId: "agent-app-root-2026",
+      algorithm: "RSASSA-PKCS1-v1_5-SHA256",
+    });
+  });
+
   it("应在 package hash mismatch 时阻断 Cloud release verification", () => {
     const app = parseCloudBootstrapPayload(buildPayload()).apps[0]!;
     const result = buildVerifiedCloudReleasePackage({

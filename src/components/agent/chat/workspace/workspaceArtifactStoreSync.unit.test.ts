@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { Artifact, ArtifactType } from "@/lib/artifact/types";
 import { GENERAL_BROWSER_ASSIST_ARTIFACT_ID } from "./browserAssistArtifact";
-import { resolveWorkspaceArtifactsFromMessages } from "./workspaceArtifactStoreSync";
+import {
+  areWorkspaceArtifactsEqual,
+  resolveWorkspaceArtifactsFromMessages,
+} from "./workspaceArtifactStoreSync";
 
 function artifact(id: string, type: ArtifactType = "document"): Artifact {
   return {
@@ -29,6 +32,30 @@ function browserAssistArtifact(scopeKey: string): Artifact {
 }
 
 describe("resolveWorkspaceArtifactsFromMessages", () => {
+  it("artifact store 等价判断应允许同内容不同引用短路", () => {
+    expect(
+      areWorkspaceArtifactsEqual(
+        [artifact("artifact-1")],
+        [{ ...artifact("artifact-1") }],
+      ),
+    ).toBe(true);
+  });
+
+  it("artifact store 等价判断应识别内容或顺序变化", () => {
+    expect(
+      areWorkspaceArtifactsEqual(
+        [artifact("artifact-1"), artifact("artifact-2")],
+        [artifact("artifact-2"), artifact("artifact-1")],
+      ),
+    ).toBe(false);
+    expect(
+      areWorkspaceArtifactsEqual(
+        [artifact("artifact-1")],
+        [{ ...artifact("artifact-1"), updatedAt: 2 }],
+      ),
+    ).toBe(false);
+  });
+
   it("非 general 主题应清空 artifact store", () => {
     expect(
       resolveWorkspaceArtifactsFromMessages({

@@ -4,6 +4,9 @@ import { vi } from "vitest";
 export const parseAIResponseMock = vi.fn();
 export const listAgentRuntimeFileCheckpointsMock = vi.fn();
 export const restoreAgentRuntimeFileCheckpointMock = vi.fn();
+export const openExternalUrlWithSystemBrowserMock = vi
+  .fn()
+  .mockResolvedValue(undefined);
 export const mockMarkdownRenderer = vi.fn(
   ({
     content,
@@ -45,6 +48,11 @@ vi.mock("@/lib/api/agentRuntime", () => ({
     listAgentRuntimeFileCheckpointsMock(...args),
   restoreAgentRuntimeFileCheckpoint: (...args: unknown[]) =>
     restoreAgentRuntimeFileCheckpointMock(...args),
+}));
+
+vi.mock("@/lib/api/externalUrl", () => ({
+  openExternalUrlWithSystemBrowser: (...args: unknown[]) =>
+    openExternalUrlWithSystemBrowserMock(...args),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -179,8 +187,8 @@ vi.mock("react-i18next", () => ({
       if (key === "agentChat.processGroup.webSearch.section.webFetchPages") {
         return "读取页面";
       }
-      if (key === "agentChat.searchResultPreview.previewAria") {
-        return `预览搜索结果：${values?.title ?? ""}`;
+      if (key === "agentChat.searchResultPreview.openAria") {
+        return `打开搜索结果：${values?.title ?? ""}`;
       }
       if (key === "agentChat.searchResultPreview.emptySnippet") {
         return "暂无摘要";

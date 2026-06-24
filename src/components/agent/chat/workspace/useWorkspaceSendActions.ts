@@ -76,7 +76,7 @@ import { extractAgentUiPerformanceTraceMetadata } from "../hooks/agentStreamPerf
 import type { UseRuntimeTeamFormationResult } from "../hooks/useRuntimeTeamFormation";
 import type { SendMessageFn } from "../hooks/agentChatShared";
 import { normalizeExecutionStrategy } from "../hooks/agentChatCoreUtils";
-import type { Message, MessageImage } from "../types";
+import type { BrowserAssistSessionState, Message, MessageImage } from "../types";
 import type { TeamDefinition } from "../utils/teamDefinitions";
 import type { AgentAccessMode } from "../hooks/agentChatStorage";
 import {
@@ -273,6 +273,7 @@ interface UseWorkspaceSendActionsParams {
     | "cdp_direct"
     | null;
   browserAssistAutoLaunch?: boolean | null;
+  browserAssistSessionState?: BrowserAssistSessionState | null;
   workspaceRequestMetadataBase?: Record<string, unknown>;
   savedSoulArtifactVoiceGenerationBrief?: Record<string, unknown> | null;
   soulArtifactVoiceEnabledForTurn?: boolean;
@@ -320,6 +321,7 @@ interface WorkspaceResolvedSendState {
   sourceText: string;
   dispatchText: string;
   sendBoundary: GeneralWorkbenchSendBoundaryState;
+  browserRequirementForSend: GeneralWorkbenchSendBoundaryState["browserRequirementMatch"];
   effectiveToolPreferences: ChatToolPreferences;
   effectiveWebSearch?: boolean;
   effectiveSearchMode?: AgentRuntimeWebSearchMode;
@@ -402,6 +404,7 @@ export function useWorkspaceSendActions({
   browserAssistProfileKey,
   browserAssistPreferredBackend,
   browserAssistAutoLaunch,
+  browserAssistSessionState,
   workspaceRequestMetadataBase,
   savedSoulArtifactVoiceGenerationBrief,
   soulArtifactVoiceEnabledForTurn,
@@ -658,6 +661,7 @@ export function useWorkspaceSendActions({
       let effectiveToolPreferences =
         sendOptions?.toolPreferencesOverride ?? chatToolPreferences;
       const { browserRequirementMatch } = sendBoundary;
+      let browserRequirementForSend = browserRequirementMatch;
       const mergedLaunchRequestMetadata = {
         ...(workspaceRequestMetadataBase || {}),
         ...(sendOptions?.requestMetadata || {}),
@@ -2537,12 +2541,19 @@ export function useWorkspaceSendActions({
           : null;
       if (parsedBrowserWorkbenchCommand) {
         effectiveWebSearch = false;
+        effectiveSearchMode = "disabled";
+        browserRequirementForSend = {
+          requirement: parsedBrowserWorkbenchCommand.browserRequirement,
+          reason: parsedBrowserWorkbenchCommand.browserRequirementReason,
+          launchUrl: parsedBrowserWorkbenchCommand.launchUrl,
+        };
         ensureSubmissionPreview();
         sendOptions = {
           ...(sendOptions || {}),
           requestMetadata: buildBrowserControlLaunchRequestMetadata(
             sendOptions?.requestMetadata,
             parsedBrowserWorkbenchCommand,
+            browserAssistSessionState,
           ),
         };
         markCompletedMentionCommand(
@@ -2660,7 +2671,7 @@ export function useWorkspaceSendActions({
       const shouldSkipBrowserAssistPrime =
         shouldSkipBrowserAssistPrimeForPlainFirstTurn({
           activeTheme,
-          browserRequirementMatch: sendBoundary.browserRequirementMatch,
+          browserRequirementMatch: browserRequirementForSend,
           hasBoundSkillLaunch,
           imagesCount: images?.length ?? 0,
           messagesCount,
@@ -2672,7 +2683,7 @@ export function useWorkspaceSendActions({
         primeBrowserAssistBeforeSend({
           activeTheme,
           sourceText,
-          browserRequirementMatch,
+          browserRequirementMatch: browserRequirementForSend,
           ensureBrowserAssistCanvas,
         });
       }
@@ -2753,6 +2764,7 @@ export function useWorkspaceSendActions({
           text,
           images: effectiveImages,
           sendBoundary,
+          browserRequirementForSend,
           effectiveToolPreferences,
           effectiveWebSearch,
           effectiveSearchMode,
@@ -2768,6 +2780,7 @@ export function useWorkspaceSendActions({
     },
     [
       activeTheme,
+      browserAssistSessionState,
       chatToolPreferences,
       contentId,
       contextWorkspace,
@@ -2844,6 +2857,7 @@ export function useWorkspaceSendActions({
         text,
         images,
         sendBoundary,
+        browserRequirementForSend,
         effectiveWebSearch,
         effectiveSearchMode,
         submissionPreviewKey,
@@ -2906,7 +2920,7 @@ export function useWorkspaceSendActions({
           currentGateKey,
           themeWorkbenchActiveQueueTitle,
           contentId,
-          browserRequirementMatch: sendBoundary.browserRequirementMatch,
+          browserRequirementMatch: browserRequirementForSend,
           browserAssistProfileKey,
           browserAssistPreferredBackend,
           browserAssistAutoLaunch,
@@ -2945,7 +2959,7 @@ export function useWorkspaceSendActions({
           ),
           hasCapabilityRoute: Boolean(
             sendOptions?.capabilityRoute ||
-            sendBoundary.browserRequirementMatch,
+              browserRequirementForSend,
           ),
           hasSkillRequest: Boolean(sendOptions?.skillRequest),
           hasSelectedTeam: Boolean(selectedTeam),

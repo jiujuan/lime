@@ -700,7 +700,7 @@ describe("i18n namespace loader", () => {
         "agentChat.searchResultPreview.expandMore",
       );
       expect(resources[locale].agent).toHaveProperty(
-        "agentChat.searchResultPreview.previewAria",
+        "agentChat.searchResultPreview.openAria",
       );
       for (const codeWorkbenchKey of [
         "agentChat.harness.codeWorkbench.title",

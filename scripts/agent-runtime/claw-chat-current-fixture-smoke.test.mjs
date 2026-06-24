@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
+import { CONTENT_FACTORY_PRODUCT_PROFILE_ASSERTION_KEYS } from "./claw-chat-current-fixture-constants.mjs";
 import {
   createExpertSkillsRuntimeFixtureScenario,
   createManualEnableSkillsRuntimeFixtureScenario,
@@ -36,6 +37,7 @@ const fixtureSourceFiles = [
   "scripts/agent-runtime/claw-chat-current-fixture-skills-workspace.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-plan-history.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-right-surface-visual.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-content-factory-product-profile.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-scenario-flow.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-common-assertions.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-scenario-assertions.mjs",
@@ -240,9 +242,20 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("waitForSessionReadPlanCompleted");
     expect(content).toContain("verifyPlanHistoryHydrate");
     expect(content).toContain("verify-plan-history-hydrate-from-sidebar");
+    expect(content).toContain("allowPlanDecision: true");
+    expect(content).toContain("lime:agent-runtime-sessions-changed");
+    expect(content).toContain('reason: "external"');
+    expect(content).toContain("hasPlanDecisionPanel");
+    expect(content).toContain("hasPlanDecisionTitle");
     expect(content).toContain("readModelPlanThreadItem");
     expect(content).toContain("guiPlanHistoryHydrateCompleted");
     expect(content).toContain("readModelPlanHistoryHydrate");
+    expect(content).toContain(
+      "summary.guiPlanCompleted?.hasPlanSection === true",
+    );
+    expect(content).toContain(
+      "summary.guiPlanCompleted?.hasAllPlanSteps === true",
+    );
     expect(content).toContain("readModelPlanThreadItemRevisioned");
     expect(content).toContain("readModelPlanHistoryHydratePreserved");
     expect(content).toContain("legacyUpdatePlanToolHidden");
@@ -588,7 +601,9 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(scenarioContent).toContain("expertSkillsRuntime");
     expect(scenarioContent).toContain("expert_skills_runtime");
     expect(scenarioContent).toContain("guiSummaryText");
-    expect(scenarioContent).toContain("我识别到右侧专家面板更新后的 skillRefs");
+    expect(scenarioContent).toContain(
+      "专家面板新增 Skill 后的下一轮 runtime 证据已完成",
+    );
     expect(scenarioContent).toContain("expert_declared_skill_refs");
     expect(scenarioContent).toContain("expert_selected_skill");
     expect(scenarioContent).toContain("expert_invoked_skill");
@@ -626,17 +641,70 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("workspaceRightSurface/pending/list");
     expect(content).toContain("task-center-files-toggle");
     expect(content).toContain("task-center-object-canvas-toggle");
+    expect(content).toContain("task-center-browser-toggle");
     expect(content).toContain("task-center-expert-info-toggle");
+    expect(content).toContain("workspace-right-surface-tab-appSurface");
+    expect(content).toContain("right-surface-browser.png");
     expect(content).toContain("workspace-right-surface-host");
     expect(content).toContain("workspace-files-surface");
     expect(content).toContain("workspace-object-canvas-surface");
+    expect(content).toContain("right-surface-browser-panel");
+    expect(content).toContain("summarizeRightSurfaceRequest(requests.browser)");
+    expect(content).toContain(
+      "fs.existsSync(rightSurfaceVisualCaptures.browser.screenshot)",
+    );
     expect(content).toContain("expert-info-panel");
+    expect(content).toContain("workspace-agent-app-surface");
+    expect(content).toContain("workspace-agent-app-surface-tabs");
+    expect(content).toContain("workspace-agent-app-surface-frame");
+    expect(content).toContain("workspace-agent-app-surface-viewport");
+    expect(content).toContain("agent-app-shell-content-factory-app-main");
+    expect(content).toContain("agent-app-shell-prompt-lab-app");
+    expect(content).toContain("webContentsView");
+    expect(content).toContain("iframe: false");
+    expect(content).toContain("browserView: false");
     expect(content).toContain("rightSurfaceVisualMatrixHostsFillRightSide");
+    expect(content).toContain("rightSurfaceVisualMatrixBrowserSurfaceVisible");
+    expect(content).toContain("rightSurfaceVisualMatrixAppSurfaceVisible");
+    expect(content).toContain(
+      "rightSurfaceVisualMatrixAppSurfaceMultiInstanceTabs",
+    );
     expect(content).toContain(
       "rightSurfaceVisualMatrixPendingConsumeKeepsSurfaceOpen",
     );
     expect(content).toContain("rightSurfaceVisualMatrixDoesNotUseModelTurn");
     expect(content).not.toContain("agent_runtime_");
+  });
+
+  it("covers content factory Product Profile through runtime event append and artifact read", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain("content-factory-product-profile");
+    expect(content).toContain("runContentFactoryProductProfileScenario");
+    expect(content).toContain("agentSession/runtimeEvents/append");
+    expect(content).toContain("artifact/read");
+    expect(content).toContain("content_factory.workspace_patch");
+    expect(content).toContain("contentFactoryWorkspacePatch");
+    expect(content).toContain("内容工厂 Product Profile Fixture");
+    expect(content).toContain("公众号文章草稿");
+    expect(content).toContain("配图组");
+    expect(content).toContain("artifact-article-1");
+    expect(content).toContain("artifact-image-1");
+    expect(content).toContain("task-center-object-canvas-toggle");
+    expect(content).toContain("workspace-product-profile-surface");
+    expect(content).toContain("workspace-right-surface-host");
+    expect(content).toContain("artifact_document.v1");
+    expect(content).toContain("worker_invalid_json_output");
+    expect(content).toContain(
+      "contentFactoryProductProfileDoesNotUseModelTurn",
+    );
+    for (const assertionKey of CONTENT_FACTORY_PRODUCT_PROFILE_ASSERTION_KEYS) {
+      expect(content).toContain(assertionKey);
+    }
+    expect(content).not.toContain("APP_SERVER_METHOD_CONTENT_FACTORY");
+    expect(content).not.toContain("content_factory/start");
+    expect(content).not.toContain("content_factory/generate");
+    expect(content).not.toContain("BrowserView");
   });
 
   it("summarizes Skills runtime evidence with mixed camelCase and snake_case fields", () => {

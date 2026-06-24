@@ -24,8 +24,9 @@ pub(super) fn build_agent_app_task_runtime_contract(
     let output_artifact_kind = json_string(runtime_package_worker, &["outputArtifactKind"])
         .or_else(|| json_string(agent_runtime_worker, &["outputArtifactKind"]));
     let task_kinds = task_kinds(agent_runtime);
-    let enabled =
-        runtime_package_worker.is_object() || agent_runtime_worker.is_object() || !task_kinds.is_empty();
+    let enabled = runtime_package_worker.is_object()
+        || agent_runtime_worker.is_object()
+        || !task_kinds.is_empty();
     let direct_provider_access =
         json_bool(agent_runtime_worker, &["directProviderAccess"]).unwrap_or(false);
     let direct_filesystem_access =
@@ -54,6 +55,11 @@ pub(super) fn build_agent_app_task_runtime_contract(
 
     AgentAppTaskRuntimeContract {
         enabled,
+        package_root_path: if enabled {
+            app_dir.map(|path| path.to_string_lossy().to_string())
+        } else {
+            None
+        },
         worker_entrypoint,
         contract_path,
         sample_request_path,
@@ -64,11 +70,14 @@ pub(super) fn build_agent_app_task_runtime_contract(
         blockers: unique_strings(blockers),
         follow_ups: if enabled {
             vec![
-                "接入 App Server Agent App task worker executor。".to_string(),
                 "补 worker 输出到 ArtifactDocument / Product Workspace 版本链。".to_string(),
+                "补 worker 执行 evidence、超时 / 失败分类和发布签名门禁。".to_string(),
             ]
         } else {
-            vec!["需要声明 runtimePackage.worker 或 agentRuntime.worker 后才能运行后台任务。".to_string()]
+            vec![
+                "需要声明 runtimePackage.worker 或 agentRuntime.worker 后才能运行后台任务。"
+                    .to_string(),
+            ]
         },
     }
 }
@@ -155,7 +164,10 @@ mod tests {
             contract.worker_entrypoint.as_deref(),
             Some("./src/runtime/content-factory-worker.mjs")
         );
-        assert_eq!(contract.contract_path.as_deref(), Some("./app.runtime.yaml"));
+        assert_eq!(
+            contract.contract_path.as_deref(),
+            Some("./app.runtime.yaml")
+        );
         assert_eq!(
             contract.sample_request_path.as_deref(),
             Some("./examples/runtime-request.sample.json")

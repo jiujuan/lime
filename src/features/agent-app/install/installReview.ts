@@ -4,6 +4,10 @@ import type {
   InstalledAppPreview,
   ReadinessStatus,
 } from "../types";
+import {
+  listCloudReleaseEvidenceIssueCodes,
+  type AgentAppCloudReleaseEvidence,
+} from "./cloudReleaseEvidence";
 import { listAgentAppCleanupNamespaceGroups } from "./cleanupNamespaceClassifier";
 
 export type AgentAppSourceStateKind =
@@ -14,6 +18,8 @@ export type AgentAppSourceStateKind =
   | "registration-active"
   | "cloud-disabled"
   | "hash-missing"
+  | "release-evidence-blocked"
+  | "release-evidence-warning"
   | "offline-cached"
   | "installed";
 
@@ -24,6 +30,8 @@ export type AgentAppSourceStateLabelKey =
   | "agentApp.apps.sourceState.registrationActive"
   | "agentApp.apps.sourceState.cloudDisabled"
   | "agentApp.apps.sourceState.hashMissing"
+  | "agentApp.apps.sourceState.releaseEvidenceBlocked"
+  | "agentApp.apps.sourceState.releaseEvidenceWarning"
   | "agentApp.apps.sourceState.offlineCached"
   | "agentApp.apps.sourceState.installed";
 
@@ -48,6 +56,7 @@ export interface AgentAppInstallReview {
   releaseChannel?: string;
   tenantEnablementRef?: string;
   signatureRef?: string;
+  releaseEvidence?: AgentAppCloudReleaseEvidence;
   packageVerificationStatus?: string;
   sourceState: AgentAppSourceState;
   packageHash: string;
@@ -68,6 +77,7 @@ export interface BuildCloudSourceStateParams {
   app: CloudBootstrapApp;
   catalogSource: "remote" | "bootstrap" | "seeded";
   installed: InstalledAgentAppState[];
+  releaseEvidence?: AgentAppCloudReleaseEvidence;
 }
 
 function countCleanupTargets(preview: InstalledAppPreview): number {
@@ -90,6 +100,7 @@ export function buildCloudAgentAppSourceState({
   app,
   catalogSource,
   installed,
+  releaseEvidence,
 }: BuildCloudSourceStateParams): AgentAppSourceState {
   const alreadyInstalled = installed.some(
     (state) =>
@@ -140,6 +151,26 @@ export function buildCloudAgentAppSourceState({
     };
   }
 
+  if (releaseEvidence?.status === "blocked") {
+    return {
+      kind: "release-evidence-blocked",
+      labelKey: "agentApp.apps.sourceState.releaseEvidenceBlocked",
+      tone: "rose",
+      canReview: false,
+      reason: listCloudReleaseEvidenceIssueCodes(releaseEvidence).join(", "),
+    };
+  }
+
+  if (releaseEvidence?.status === "warning") {
+    return {
+      kind: "release-evidence-warning",
+      labelKey: "agentApp.apps.sourceState.releaseEvidenceWarning",
+      tone: "amber",
+      canReview: true,
+      reason: listCloudReleaseEvidenceIssueCodes(releaseEvidence).join(", "),
+    };
+  }
+
   if (app.registrationRequired && app.registrationState === "active") {
     return {
       kind: "registration-active",
@@ -160,6 +191,7 @@ export function buildCloudAgentAppSourceState({
 export function buildAgentAppInstallReview(params: {
   preview: InstalledAppPreview;
   sourceState: AgentAppSourceState;
+  releaseEvidence?: AgentAppCloudReleaseEvidence;
   packageVerificationStatus?: string;
   generatedAt?: string;
 }): AgentAppInstallReview {
@@ -185,6 +217,7 @@ export function buildAgentAppInstallReview(params: {
     releaseChannel: preview.identity.channel,
     tenantEnablementRef: preview.identity.tenantEnablementRef,
     signatureRef: preview.identity.signatureRef,
+    releaseEvidence: params.releaseEvidence,
     packageVerificationStatus: params.packageVerificationStatus,
     sourceState,
     packageHash: preview.identity.packageHash,

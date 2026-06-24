@@ -36,6 +36,12 @@
         "string"
       ]
     },
+    "packageRootPath": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
     "sampleRequestPath": {
       "type": [
         "null",

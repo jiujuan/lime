@@ -7,7 +7,7 @@ use super::RuntimeCoreError;
 use app_server_protocol::ArtifactContentStatus;
 use app_server_protocol::ArtifactReadParams;
 use app_server_protocol::ArtifactReadResponse;
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 impl RuntimeCore {
     pub fn read_artifacts(
@@ -24,7 +24,7 @@ impl RuntimeCore {
                 .get(&params.session_id)
                 .ok_or_else(|| RuntimeCoreError::SessionNotFound(params.session_id.clone()))?;
 
-            let mut seen = HashSet::new();
+            let mut index_by_ref = HashMap::new();
             let mut summaries = Vec::new();
             for event in stored.events.iter().rev() {
                 if let Some(turn_id) = params.turn_id.as_deref() {
@@ -38,9 +38,11 @@ impl RuntimeCore {
                             continue;
                         }
                     }
-                    if seen.insert(summary.artifact_ref.clone()) {
-                        summaries.push(summary);
-                    }
+                    artifact_projection::upsert_artifact_summary(
+                        &mut summaries,
+                        &mut index_by_ref,
+                        summary,
+                    );
                 }
             }
             for summary in output_refs::output_summaries_for_turn(
@@ -52,9 +54,11 @@ impl RuntimeCore {
                         continue;
                     }
                 }
-                if seen.insert(summary.artifact_ref.clone()) {
-                    summaries.push(summary);
-                }
+                artifact_projection::upsert_artifact_summary(
+                    &mut summaries,
+                    &mut index_by_ref,
+                    summary,
+                );
             }
             (
                 stored.session.clone(),
@@ -70,24 +74,28 @@ impl RuntimeCore {
         );
         if params.include_content.unwrap_or(false) {
             for artifact in &mut artifacts {
+                let projected_content = artifact.content.clone();
                 let request = ArtifactContentRequest {
                     session: session.clone(),
                     artifact: artifact.clone(),
                 };
-                artifact.content = output_refs::output_content(
-                    &output_blobs,
-                    self.output_snapshot_store.as_ref(),
-                    session.session_id.as_str(),
-                    artifact.artifact_ref.as_str(),
-                )
-                .or_else(|| {
-                    artifact_sidecar_content(
-                        self.sidecar_store.as_deref(),
-                        session.session_id.as_str(),
-                        artifact,
-                    )
-                })
-                .or_else(|| self.artifact_content_provider.read_content(&request));
+                artifact.content = projected_content
+                    .or_else(|| {
+                        output_refs::output_content(
+                            &output_blobs,
+                            self.output_snapshot_store.as_ref(),
+                            session.session_id.as_str(),
+                            artifact.artifact_ref.as_str(),
+                        )
+                    })
+                    .or_else(|| {
+                        artifact_sidecar_content(
+                            self.sidecar_store.as_deref(),
+                            session.session_id.as_str(),
+                            artifact,
+                        )
+                    })
+                    .or_else(|| self.artifact_content_provider.read_content(&request));
                 artifact.content_status = if artifact.content.is_some() {
                     ArtifactContentStatus::Available
                 } else {

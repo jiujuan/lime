@@ -8,7 +8,10 @@ import type { Message } from "../types";
 import { mergeArtifacts } from "../utils/messageArtifacts";
 import { resolveActiveArtifactViewTargetId } from "./workspaceArtifactViewTarget";
 import { resolveWorkspaceSelectedArtifactIdCorrection } from "./workspaceArtifactSelection";
-import { resolveWorkspaceArtifactsFromMessages } from "./workspaceArtifactStoreSync";
+import {
+  areWorkspaceArtifactsEqual,
+  resolveWorkspaceArtifactsFromMessages,
+} from "./workspaceArtifactStoreSync";
 import { resolveSettledWorkbenchArtifacts } from "./workspaceSettledArtifacts";
 
 type ArtifactStoreSetter<T> = (update: T | ((previous: T) => T)) => void;
@@ -101,14 +104,17 @@ export function useWorkspaceArtifactStoreRuntime({
   });
 
   useEffect(() => {
-    setArtifacts((currentArtifacts) =>
-      resolveWorkspaceArtifactsFromMessages({
+    setArtifacts((currentArtifacts) => {
+      const nextArtifacts = resolveWorkspaceArtifactsFromMessages({
         activeTheme,
         messages,
         currentArtifacts,
         browserAssistScopeKey,
-      }),
-    );
+      });
+      return areWorkspaceArtifactsEqual(currentArtifacts, nextArtifacts)
+        ? currentArtifacts
+        : nextArtifacts;
+    });
   }, [activeTheme, browserAssistScopeKey, messages, setArtifacts]);
 
   useEffect(() => {

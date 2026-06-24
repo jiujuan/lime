@@ -1,9 +1,16 @@
 import {
-  shell,
+  session,
   WebContentsView,
   type BrowserWindow,
   type Rectangle,
 } from "./electronRuntime";
+import { installEmbeddedBrowserContextMenu } from "./embeddedBrowserContextMenu";
+import { installEmbeddedBrowserDownloadHandling } from "./embeddedBrowserDownloads";
+import { installEmbeddedBrowserPermissionHandling } from "./embeddedBrowserPermissions";
+import type {
+  Session as ElectronSession,
+  WebContents as ElectronWebContents,
+} from "electron";
 
 type HostArgs = Record<string, unknown> | null | undefined;
 type HostEventEmitter = (event: string, payload?: unknown) => void;
@@ -13,6 +20,10 @@ export const EMBEDDED_BROWSER_COMMANDS = [
   "embedded_browser_view_set_bounds",
   "embedded_browser_view_navigate",
   "embedded_browser_view_reload",
+  "embedded_browser_view_stop",
+  "embedded_browser_view_find_in_page",
+  "embedded_browser_view_stop_find_in_page",
+  "embedded_browser_view_set_zoom",
   "embedded_browser_view_go_back",
   "embedded_browser_view_go_forward",
   "embedded_browser_view_destroy",
@@ -24,9 +35,27 @@ export interface EmbeddedBrowserViewState {
   viewId: string;
   url: string;
   title: string;
+  faviconUrl: string | null;
   canGoBack: boolean;
   canGoForward: boolean;
   isLoading: boolean;
+  loadProgress: number;
+  zoomFactor: number;
+  find: EmbeddedBrowserFindState;
+}
+
+export type EmbeddedBrowserLoadFailureCategory =
+  | "dns"
+  | "tls"
+  | "blocked"
+  | "aborted"
+  | "load_failed";
+
+export interface EmbeddedBrowserFindState {
+  text: string;
+  activeMatchOrdinal: number;
+  matches: number;
+  finalUpdate: boolean;
 }
 
 interface EmbeddedBrowserEntry {
@@ -36,7 +65,14 @@ interface EmbeddedBrowserEntry {
   closeListener: () => void;
   pendingUrl?: string;
   navigationToken: number;
+  faviconUrl: string | null;
+  loadProgress: number;
+  find: EmbeddedBrowserFindState;
+  findRequestId: number | null;
 }
+
+const EMBEDDED_BROWSER_PARTITION = "persist:embedded-browser";
+const EMBEDDED_BROWSER_ACCEPT_LANGUAGES = "zh-CN,zh,en-US,en";
 
 export function isEmbeddedBrowserCommand(
   command: string,
@@ -47,6 +83,7 @@ export function isEmbeddedBrowserCommand(
 export class ElectronEmbeddedBrowserHost {
   #entries = new Map<string, EmbeddedBrowserEntry>();
   #emit: HostEventEmitter;
+  #sessionHandlersInstalled = false;
 
   constructor(emit: HostEventEmitter = () => undefined) {
     this.#emit = emit;
@@ -74,6 +111,14 @@ export class ElectronEmbeddedBrowserHost {
         return await this.#navigate(window, args);
       case "embedded_browser_view_reload":
         return this.#reload(window, args);
+      case "embedded_browser_view_stop":
+        return this.#stop(window, args);
+      case "embedded_browser_view_find_in_page":
+        return this.#findInPage(window, args);
+      case "embedded_browser_view_stop_find_in_page":
+        return this.#stopFindInPage(window, args);
+      case "embedded_browser_view_set_zoom":
+        return this.#setZoom(window, args);
       case "embedded_browser_view_go_back":
         return this.#goBack(window, args);
       case "embedded_browser_view_go_forward":
@@ -131,7 +176,59 @@ export class ElectronEmbeddedBrowserHost {
 
   #reload(window: BrowserWindow, args?: HostArgs): EmbeddedBrowserViewState {
     const entry = this.#ensureEntry(window, readViewId(args));
+    entry.loadProgress = 0.1;
     entry.view.webContents.reload();
+    return this.#emitState(entry);
+  }
+
+  #stop(window: BrowserWindow, args?: HostArgs): EmbeddedBrowserViewState {
+    const entry = this.#ensureEntry(window, readViewId(args));
+    entry.pendingUrl = undefined;
+    if (entry.view.webContents.isLoading()) {
+      entry.view.webContents.stop();
+    }
+    entry.loadProgress = 1;
+    return this.#emitState(entry);
+  }
+
+  #findInPage(
+    window: BrowserWindow,
+    args?: HostArgs,
+  ): EmbeddedBrowserViewState {
+    const entry = this.#ensureEntry(window, readViewId(args));
+    const text = readString(args, "text") ?? "";
+    if (!text) {
+      return this.#stopFindInPage(window, args);
+    }
+
+    entry.find = {
+      text,
+      activeMatchOrdinal: 0,
+      matches: 0,
+      finalUpdate: false,
+    };
+    entry.findRequestId = entry.view.webContents.findInPage(text, {
+      forward: readOptionalBoolean(args, "forward") ?? true,
+      findNext: readOptionalBoolean(args, "findNext") ?? false,
+    });
+    return this.#emitState(entry);
+  }
+
+  #stopFindInPage(
+    window: BrowserWindow,
+    args?: HostArgs,
+  ): EmbeddedBrowserViewState {
+    const entry = this.#ensureEntry(window, readViewId(args));
+    entry.findRequestId = null;
+    entry.find = createEmptyFindState();
+    entry.view.webContents.stopFindInPage(readStopFindAction(args));
+    return this.#emitState(entry);
+  }
+
+  #setZoom(window: BrowserWindow, args?: HostArgs): EmbeddedBrowserViewState {
+    const entry = this.#ensureEntry(window, readViewId(args));
+    const zoomFactor = readZoomFactor(args);
+    entry.view.webContents.setZoomFactor(zoomFactor);
     return this.#emitState(entry);
   }
 
@@ -158,12 +255,9 @@ export class ElectronEmbeddedBrowserHost {
       return {};
     }
 
-    entry.window.off("closed", entry.closeListener);
-    entry.window.contentView.removeChildView(entry.view);
-    if (!entry.view.webContents.isDestroyed()) {
-      entry.view.webContents.close();
-    }
     this.#entries.delete(viewId);
+    detachEntryFromWindow(entry);
+    closeEntryView(entry);
     this.#emit("embedded-browser-view-destroyed", { viewId });
     return {};
   }
@@ -172,8 +266,7 @@ export class ElectronEmbeddedBrowserHost {
     const existing = this.#entries.get(viewId);
     if (existing) {
       if (existing.window !== window) {
-        existing.window.off("closed", existing.closeListener);
-        existing.window.contentView.removeChildView(existing.view);
+        detachEntryFromWindow(existing);
         existing.window = window;
         existing.closeListener = () => this.#destroy({ viewId });
         window.on("closed", existing.closeListener);
@@ -182,48 +275,92 @@ export class ElectronEmbeddedBrowserHost {
       return existing;
     }
 
+    const { embeddedSession, userAgent: embeddedBrowserUserAgent } =
+      configureEmbeddedBrowserSession();
+    this.#installSessionHandlers(embeddedSession);
     const view = new WebContentsView({
       webPreferences: {
         contextIsolation: true,
         javascript: true,
         nodeIntegration: false,
-        partition: "persist:embedded-browser",
+        partition: EMBEDDED_BROWSER_PARTITION,
         sandbox: true,
         webSecurity: true,
       },
     });
     view.setBackgroundColor("#ffffff");
-    view.webContents.setWindowOpenHandler(({ url }) => {
-      if (isHttpUrl(url)) {
-        void shell.openExternal(url);
-      }
-      return { action: "deny" };
-    });
-
+    view.webContents.setUserAgent(embeddedBrowserUserAgent);
     const entry: EmbeddedBrowserEntry = {
       viewId,
       view,
       window,
       closeListener: () => this.#destroy({ viewId }),
       navigationToken: 0,
+      faviconUrl: null,
+      loadProgress: 1,
+      find: createEmptyFindState(),
+      findRequestId: null,
     };
+    view.webContents.setWindowOpenHandler(({ url }) => {
+      const normalizedUrl = normalizeHttpUrl(url);
+      if (normalizedUrl) {
+        this.#startNavigation(entry, normalizedUrl);
+        this.#emitState(entry);
+      }
+      return { action: "deny" };
+    });
+    installEmbeddedBrowserContextMenu({
+      view,
+      window,
+      navigate: (url) => this.#startNavigation(entry, url),
+      emitState: () => {
+        this.#emitState(entry);
+      },
+    });
     window.on("closed", entry.closeListener);
     window.contentView.addChildView(view);
     this.#entries.set(viewId, entry);
     view.webContents.on("did-navigate", (_event, url) => {
       this.#clearPendingNavigation(entry, url);
+      entry.loadProgress = Math.max(entry.loadProgress, 0.7);
       this.#emitState(entry);
     });
     view.webContents.on("did-navigate-in-page", (_event, url) => {
       this.#clearPendingNavigation(entry, url);
       this.#emitState(entry);
     });
-    view.webContents.on("did-start-loading", () => this.#emitState(entry));
+    view.webContents.on("did-start-loading", () => {
+      entry.loadProgress = 0.35;
+      this.#emitState(entry);
+    });
     view.webContents.on("did-stop-loading", () => {
       this.#clearPendingNavigation(entry, entry.view.webContents.getURL());
+      entry.loadProgress = 1;
       this.#emitState(entry);
     });
     view.webContents.on("page-title-updated", () => this.#emitState(entry));
+    view.webContents.on("page-favicon-updated", (_event, favicons) => {
+      entry.faviconUrl = Array.isArray(favicons)
+        ? (favicons.find((item) => typeof item === "string" && item.trim()) ??
+          null)
+        : null;
+      this.#emitState(entry);
+    });
+    view.webContents.on("found-in-page", (_event, result) => {
+      const nextFind = readFindResult(result, entry.find.text);
+      if (entry.findRequestId !== null && nextFind.requestId !== null) {
+        if (nextFind.requestId !== entry.findRequestId) {
+          return;
+        }
+      }
+      entry.find = {
+        text: nextFind.text,
+        activeMatchOrdinal: nextFind.activeMatchOrdinal,
+        matches: nextFind.matches,
+        finalUpdate: nextFind.finalUpdate,
+      };
+      this.#emitState(entry);
+    });
     view.webContents.on(
       "did-fail-load",
       (_event, errorCode, errorDescription, validatedUrl) => {
@@ -231,6 +368,7 @@ export class ElectronEmbeddedBrowserHost {
           return;
         }
         this.#clearPendingNavigation(entry, validatedUrl);
+        entry.loadProgress = 1;
         this.#emitLoadFailed(
           entry,
           errorCode,
@@ -242,8 +380,42 @@ export class ElectronEmbeddedBrowserHost {
     return entry;
   }
 
+  #installSessionHandlers(embeddedSession: ElectronSession): void {
+    if (this.#sessionHandlersInstalled) {
+      return;
+    }
+    this.#sessionHandlersInstalled = true;
+    const controller = {
+      findEntryByWebContents: (webContents: ElectronWebContents) =>
+        this.#findEntryByWebContents(webContents),
+    };
+    installEmbeddedBrowserDownloadHandling(
+      embeddedSession,
+      controller,
+      this.#emit,
+    );
+    installEmbeddedBrowserPermissionHandling(
+      embeddedSession,
+      controller,
+      this.#emit,
+    );
+  }
+
+  #findEntryByWebContents(webContents: ElectronWebContents) {
+    for (const entry of this.#entries.values()) {
+      if (entry.view.webContents === webContents) {
+        return {
+          viewId: entry.viewId,
+          webContents: entry.view.webContents,
+        };
+      }
+    }
+    return null;
+  }
+
   #startNavigation(entry: EmbeddedBrowserEntry, url: string): void {
     entry.pendingUrl = url;
+    entry.loadProgress = 0.1;
     const navigationToken = entry.navigationToken + 1;
     entry.navigationToken = navigationToken;
 
@@ -271,6 +443,7 @@ export class ElectronEmbeddedBrowserHost {
           return;
         }
         this.#clearPendingNavigation(entry);
+        entry.loadProgress = 1;
         this.#emitState(entry);
       })
       .catch((error) => {
@@ -282,6 +455,7 @@ export class ElectronEmbeddedBrowserHost {
           return;
         }
         this.#clearPendingNavigation(entry);
+        entry.loadProgress = 1;
         this.#emitLoadFailed(
           entry,
           null,
@@ -320,6 +494,7 @@ export class ElectronEmbeddedBrowserHost {
       ...(url ? { url } : {}),
       errorCode,
       errorDescription,
+      failureCategory: classifyLoadFailure(errorCode, errorDescription),
     });
   }
 
@@ -330,16 +505,83 @@ export class ElectronEmbeddedBrowserHost {
   }
 }
 
+function configureEmbeddedBrowserSession(): {
+  embeddedSession: ElectronSession;
+  userAgent: string;
+} {
+  const embeddedSession = session.fromPartition(EMBEDDED_BROWSER_PARTITION, {
+    cache: true,
+  });
+  const userAgent = normalizeEmbeddedBrowserUserAgent(
+    embeddedSession.getUserAgent(),
+  );
+  embeddedSession.setUserAgent(userAgent, EMBEDDED_BROWSER_ACCEPT_LANGUAGES);
+  return { embeddedSession, userAgent };
+}
+
+function normalizeEmbeddedBrowserUserAgent(value: string): string {
+  const normalized = value
+    .replace(/\sElectron\/[^\s]+/gi, "")
+    .replace(/\sLime\/[^\s]+/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return normalized || value;
+}
+
 function readState(entry: EmbeddedBrowserEntry): EmbeddedBrowserViewState {
   const webContents = entry.view.webContents;
   return {
     viewId: entry.viewId,
     url: entry.pendingUrl || webContents.getURL(),
     title: webContents.getTitle(),
+    faviconUrl: entry.faviconUrl,
     canGoBack: webContents.navigationHistory.canGoBack(),
     canGoForward: webContents.navigationHistory.canGoForward(),
     isLoading: webContents.isLoading() || Boolean(entry.pendingUrl),
+    loadProgress: normalizeLoadProgress(entry),
+    zoomFactor: normalizeZoomFactor(webContents.getZoomFactor()),
+    find: entry.find,
   };
+}
+
+function createEmptyFindState(): EmbeddedBrowserFindState {
+  return {
+    text: "",
+    activeMatchOrdinal: 0,
+    matches: 0,
+    finalUpdate: true,
+  };
+}
+
+function readFindResult(
+  value: unknown,
+  fallbackText: string,
+): EmbeddedBrowserFindState & { requestId: number | null } {
+  const record = readRecord(value);
+  return {
+    text: fallbackText,
+    requestId: readInteger(record?.requestId),
+    activeMatchOrdinal: Math.max(
+      0,
+      readInteger(record?.activeMatchOrdinal) ?? 0,
+    ),
+    matches: Math.max(0, readInteger(record?.matches) ?? 0),
+    finalUpdate:
+      typeof record?.finalUpdate === "boolean" ? record.finalUpdate : false,
+  };
+}
+
+function normalizeLoadProgress(entry: EmbeddedBrowserEntry): number {
+  const loading =
+    entry.view.webContents.isLoading() || Boolean(entry.pendingUrl);
+  if (!loading) {
+    return 1;
+  }
+  return clampNumber(entry.loadProgress, 0.05, 0.95);
+}
+
+function normalizeZoomFactor(value: number): number {
+  return Math.round(clampNumber(value, 0.5, 3) * 100) / 100;
 }
 
 function readViewId(args?: HostArgs): string {
@@ -408,6 +650,37 @@ function applyBounds(
   view.setVisible(visible && bounds.width > 0 && bounds.height > 0);
 }
 
+function detachEntryFromWindow(entry: EmbeddedBrowserEntry): void {
+  try {
+    if (!entry.window.isDestroyed()) {
+      entry.window.off("closed", entry.closeListener);
+      entry.window.contentView.removeChildView(entry.view);
+    }
+  } catch (error) {
+    ignoreElectronDestroyedObject(error);
+  }
+}
+
+function closeEntryView(entry: EmbeddedBrowserEntry): void {
+  try {
+    if (!entry.view.webContents.isDestroyed()) {
+      entry.view.webContents.close();
+    }
+  } catch (error) {
+    ignoreElectronDestroyedObject(error);
+  }
+}
+
+function ignoreElectronDestroyedObject(error: unknown): void {
+  if (
+    error instanceof Error &&
+    /Object has been destroyed/i.test(error.message)
+  ) {
+    return;
+  }
+  throw error;
+}
+
 function readOptionalBoolean(args: HostArgs, key: string): boolean | null {
   const value = readRecord(args)?.[key];
   return typeof value === "boolean" ? value : null;
@@ -418,14 +691,47 @@ function readString(args: HostArgs, key: string): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function readRecord(args: HostArgs): Record<string, unknown> | null {
-  return args && typeof args === "object" && !Array.isArray(args) ? args : null;
+function readRecord(args: unknown): Record<string, unknown> | null {
+  return args && typeof args === "object" && !Array.isArray(args)
+    ? (args as Record<string, unknown>)
+    : null;
 }
 
 function readInteger(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value)
     ? Math.round(value)
     : null;
+}
+
+function readNumber(args: HostArgs, key: string): number | null {
+  const value = readRecord(args)?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function readZoomFactor(args: HostArgs): number {
+  const value = readNumber(args, "zoomFactor");
+  if (value === null) {
+    throw new Error("embedded browser zoomFactor 必须是有效数字。");
+  }
+  return normalizeZoomFactor(value);
+}
+
+function readStopFindAction(
+  args: HostArgs,
+): "clearSelection" | "keepSelection" | "activateSelection" {
+  const value = readString(args, "action");
+  if (
+    value === "clearSelection" ||
+    value === "keepSelection" ||
+    value === "activateSelection"
+  ) {
+    return value;
+  }
+  return "clearSelection";
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
 function normalizeHttpUrl(value: string): string | null {
@@ -439,6 +745,40 @@ function normalizeHttpUrl(value: string): string | null {
   }
 }
 
-function isHttpUrl(value: string): boolean {
-  return Boolean(normalizeHttpUrl(value));
+function classifyLoadFailure(
+  errorCode: number | null,
+  errorDescription: string,
+): EmbeddedBrowserLoadFailureCategory {
+  const description = errorDescription.toUpperCase();
+  if (errorCode === -3 || description.includes("ABORTED")) {
+    return "aborted";
+  }
+  if (
+    errorCode === -105 ||
+    errorCode === -137 ||
+    description.includes("NAME_NOT_RESOLVED") ||
+    description.includes("DNS") ||
+    description.includes("HOST_RESOLVER")
+  ) {
+    return "dns";
+  }
+  if (
+    (typeof errorCode === "number" && errorCode <= -200 && errorCode >= -299) ||
+    description.includes("CERT") ||
+    description.includes("SSL") ||
+    description.includes("TLS")
+  ) {
+    return "tls";
+  }
+  if (
+    errorCode === -20 ||
+    errorCode === -27 ||
+    errorCode === -30 ||
+    description.includes("BLOCKED") ||
+    description.includes("CSP") ||
+    description.includes("POLICY")
+  ) {
+    return "blocked";
+  }
+  return "load_failed";
 }

@@ -80,6 +80,7 @@ const {
   METHOD_AGENT_SESSION_READ,
   METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE,
   METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
+  METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
   METHOD_AGENT_SESSION_START,
   METHOD_AGENT_SESSION_THREAD_RESUME,
   METHOD_AGENT_SESSION_TOOL_INVENTORY_READ,
@@ -100,6 +101,12 @@ const {
   METHOD_AUTOMATION_SCHEDULER_STATUS,
   METHOD_AUTOMATION_SCHEDULE_PREVIEW,
   METHOD_AUTOMATION_SCHEDULE_VALIDATE,
+  METHOD_BROWSER_SESSION_ACTION_EXECUTE,
+  METHOD_BROWSER_SESSION_CLOSE,
+  METHOD_BROWSER_SESSION_EVENT_LIST,
+  METHOD_BROWSER_SESSION_OPEN,
+  METHOD_BROWSER_SESSION_READ,
+  METHOD_BROWSER_SESSION_TARGET_LIST,
   METHOD_CAPABILITY_LIST,
   METHOD_CONNECT_CALLBACK_SEND,
   METHOD_CONNECT_DEEP_LINK_RESOLVE,
@@ -502,6 +509,30 @@ test("builds workspace and skill read requests with current methods", () => {
     requestIds: ["right-surface:req-4"],
     reason: "user_closed_surface",
   });
+  const browserTargets = client.listBrowserSessionTargets({
+    remoteDebuggingPort: 9222,
+  });
+  const browserOpen = client.openBrowserSession({
+    profileKey: "task-profile",
+    remoteDebuggingPort: 9222,
+    targetId: "target-1",
+    launchUrl: "https://example.com",
+  });
+  const browserRead = client.readBrowserSession({
+    sessionId: "browser-session-1",
+  });
+  const browserClose = client.closeBrowserSession({
+    sessionId: "browser-session-1",
+  });
+  const browserEvents = client.listBrowserSessionEvents({
+    sessionId: "browser-session-1",
+    cursor: 3,
+  });
+  const browserAction = client.executeBrowserSessionAction({
+    sessionId: "browser-session-1",
+    action: "get_page_info",
+    args: { includeMarkdown: true },
+  });
   const skills = client.listSkills();
   const skill = client.readSkill({ skillName: "article-writer" });
   const bindings = client.listWorkspaceSkillBindings({
@@ -633,6 +664,30 @@ test("builds workspace and skill read requests with current methods", () => {
     requestId: "right-surface:req-3",
     requestIds: ["right-surface:req-4"],
     reason: "user_closed_surface",
+  });
+  assert.equal(browserTargets.method, METHOD_BROWSER_SESSION_TARGET_LIST);
+  assert.deepEqual(browserTargets.params, { remoteDebuggingPort: 9222 });
+  assert.equal(browserOpen.method, METHOD_BROWSER_SESSION_OPEN);
+  assert.deepEqual(browserOpen.params, {
+    profileKey: "task-profile",
+    remoteDebuggingPort: 9222,
+    targetId: "target-1",
+    launchUrl: "https://example.com",
+  });
+  assert.equal(browserRead.method, METHOD_BROWSER_SESSION_READ);
+  assert.deepEqual(browserRead.params, { sessionId: "browser-session-1" });
+  assert.equal(browserClose.method, METHOD_BROWSER_SESSION_CLOSE);
+  assert.deepEqual(browserClose.params, { sessionId: "browser-session-1" });
+  assert.equal(browserEvents.method, METHOD_BROWSER_SESSION_EVENT_LIST);
+  assert.deepEqual(browserEvents.params, {
+    sessionId: "browser-session-1",
+    cursor: 3,
+  });
+  assert.equal(browserAction.method, METHOD_BROWSER_SESSION_ACTION_EXECUTE);
+  assert.deepEqual(browserAction.params, {
+    sessionId: "browser-session-1",
+    action: "get_page_info",
+    args: { includeMarkdown: true },
   });
   assert.equal(skills.method, METHOD_SKILL_LIST);
   assert.deepEqual(skills.params, {});
@@ -2362,6 +2417,12 @@ test("exports app-server method catalog with request and notification kinds", ()
       method: METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED,
       kind: "notification",
     },
+    { method: METHOD_BROWSER_SESSION_TARGET_LIST, kind: "request" },
+    { method: METHOD_BROWSER_SESSION_OPEN, kind: "request" },
+    { method: METHOD_BROWSER_SESSION_READ, kind: "request" },
+    { method: METHOD_BROWSER_SESSION_CLOSE, kind: "request" },
+    { method: METHOD_BROWSER_SESSION_EVENT_LIST, kind: "request" },
+    { method: METHOD_BROWSER_SESSION_ACTION_EXECUTE, kind: "request" },
     { method: METHOD_SKILL_LIST, kind: "request" },
     { method: METHOD_SKILL_READ, kind: "request" },
     { method: METHOD_SKILL_MANAGEMENT_LIST, kind: "request" },
@@ -2567,6 +2628,7 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_AGENT_SESSION_TURN_CANCEL, kind: "request" },
     { method: METHOD_AGENT_SESSION_ACTION_REPLAY, kind: "request" },
     { method: METHOD_AGENT_SESSION_ACTION_RESPOND, kind: "request" },
+    { method: METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND, kind: "request" },
     { method: METHOD_AGENT_SESSION_EVENT, kind: "notification" },
   ]);
   assert.equal(isAppServerRequestMethod(METHOD_INITIALIZE), true);
@@ -2703,6 +2765,15 @@ test("exports app-server method catalog with request and notification kinds", ()
   assert.equal(
     isAppServerRequestMethod(METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED),
     false,
+  );
+  assert.equal(isAppServerRequestMethod(METHOD_BROWSER_SESSION_TARGET_LIST), true);
+  assert.equal(isAppServerRequestMethod(METHOD_BROWSER_SESSION_OPEN), true);
+  assert.equal(isAppServerRequestMethod(METHOD_BROWSER_SESSION_READ), true);
+  assert.equal(isAppServerRequestMethod(METHOD_BROWSER_SESSION_CLOSE), true);
+  assert.equal(isAppServerRequestMethod(METHOD_BROWSER_SESSION_EVENT_LIST), true);
+  assert.equal(
+    isAppServerRequestMethod(METHOD_BROWSER_SESSION_ACTION_EXECUTE),
+    true,
   );
   assert.equal(isAppServerRequestMethod(METHOD_SKILL_LIST), true);
   assert.equal(
@@ -2877,6 +2948,10 @@ test("exports app-server method catalog with request and notification kinds", ()
   assert.equal(isAppServerRequestMethod(METHOD_AGENT_SESSION_TURN_START), true);
   assert.equal(
     isAppServerRequestMethod(METHOD_AGENT_SESSION_ACTION_RESPOND),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND),
     true,
   );
   assert.equal(isAppServerRequestMethod(METHOD_INITIALIZED), false);

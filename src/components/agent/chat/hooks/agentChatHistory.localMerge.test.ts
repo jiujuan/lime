@@ -201,6 +201,179 @@ describe("agentChatHistory local merge", () => {
     expect(mergedMessages[3]?.toolCalls?.[0]?.name).toBe("read_file");
   });
 
+  it("刷新会话详情时应保留同 turn 本地 commentary 过程文本", () => {
+    const turnId = "turn-web-tools-commentary-merge";
+    const localMessages = [
+      {
+        id: "local-user-web-tools-commentary",
+        role: "user" as const,
+        content: "验证网页搜索渲染",
+        timestamp: new Date("2026-06-24T10:00:00.000Z"),
+        runtimeTurnId: turnId,
+      },
+      {
+        id: "local-assistant-web-tools-commentary",
+        role: "assistant" as const,
+        content: "网页搜索渲染结论：最终正文。",
+        timestamp: new Date("2026-06-24T10:00:05.000Z"),
+        runtimeTurnId: turnId,
+        contentParts: [
+          {
+            type: "text" as const,
+            text: "我先联网核实目标页面来源。",
+            metadata: {
+              source: "agent_text_delta",
+              itemId: "agent-message-commentary",
+              phase: "commentary",
+              sequence: 2,
+              turnId,
+            },
+          },
+          {
+            type: "tool_use" as const,
+            toolCall: {
+              id: "web-search",
+              name: "WebSearch",
+              arguments: '{"query":"Lime WebSearch rendering"}',
+              status: "completed" as const,
+              startTime: new Date("2026-06-24T10:00:01.000Z"),
+            },
+            metadata: {
+              sequence: 3,
+            },
+          },
+          {
+            type: "tool_use" as const,
+            toolCall: {
+              id: "web-fetch",
+              name: "WebFetch",
+              arguments:
+                '{"url":"https://example.com/lime-websearch-rendering"}',
+              status: "completed" as const,
+              startTime: new Date("2026-06-24T10:00:03.000Z"),
+            },
+            metadata: {
+              sequence: 7,
+            },
+          },
+          {
+            type: "text" as const,
+            text: "网页搜索渲染结论：最终正文。",
+            metadata: {
+              source: "agent_text_delta",
+              itemId: "agent-message-final",
+              phase: "final_answer",
+              sequence: 10,
+              turnId,
+            },
+          },
+        ],
+      },
+    ];
+    const hydratedMessages = [
+      {
+        id: "history-user-web-tools-commentary",
+        role: "user" as const,
+        content: "验证网页搜索渲染",
+        timestamp: new Date("2026-06-24T10:00:00.000Z"),
+        runtimeTurnId: turnId,
+      },
+      {
+        id: "history-assistant-web-tools-commentary",
+        role: "assistant" as const,
+        content: "网页搜索渲染结论：最终正文。",
+        timestamp: new Date("2026-06-24T10:00:05.000Z"),
+        runtimeTurnId: turnId,
+        contentParts: [
+          {
+            type: "tool_use" as const,
+            toolCall: {
+              id: "web-search",
+              name: "WebSearch",
+              arguments: '{"query":"Lime WebSearch rendering"}',
+              status: "completed" as const,
+              startTime: new Date("2026-06-24T10:00:01.000Z"),
+              result: {
+                success: true,
+                output: "source",
+              },
+            },
+            metadata: {
+              sequence: 3,
+            },
+          },
+          {
+            type: "thinking" as const,
+            text: "搜索结果还需要继续筛掉广告软文，我先读取有效来源。",
+            metadata: {
+              source: "thread_item_reasoning",
+              threadItemId: "reasoning-web-tools",
+              sequence: 5,
+            },
+          },
+          {
+            type: "tool_use" as const,
+            toolCall: {
+              id: "web-fetch",
+              name: "WebFetch",
+              arguments:
+                '{"url":"https://example.com/lime-websearch-rendering"}',
+              status: "completed" as const,
+              startTime: new Date("2026-06-24T10:00:03.000Z"),
+              result: {
+                success: true,
+                output: "page",
+              },
+            },
+            metadata: {
+              sequence: 7,
+            },
+          },
+          {
+            type: "text" as const,
+            text: "网页搜索渲染结论：最终正文。",
+            metadata: {
+              source: "agent_thread_item",
+              threadItemId: "agent-message-final",
+              phase: "final_answer",
+              sequence: 10,
+              turnId,
+            },
+          },
+        ],
+      },
+    ];
+
+    const mergedMessages = mergeHydratedMessagesWithLocalState(
+      localMessages,
+      hydratedMessages,
+    );
+
+    const assistant = mergedMessages[1];
+    expect(assistant?.id).toBe("local-assistant-web-tools-commentary");
+    expect(assistant?.content).toBe("网页搜索渲染结论：最终正文。");
+    expect(assistant?.contentParts?.map((part) => part.type)).toEqual([
+      "text",
+      "tool_use",
+      "thinking",
+      "tool_use",
+      "text",
+    ]);
+    expect(assistant?.contentParts?.[0]).toMatchObject({
+      type: "text",
+      text: "我先联网核实目标页面来源。",
+      metadata: {
+        itemId: "agent-message-commentary",
+        phase: "commentary",
+        sequence: 2,
+        turnId,
+      },
+    });
+    expect(assistant?.thinkingContent).toBe(
+      "搜索结果还需要继续筛掉广告软文，我先读取有效来源。",
+    );
+  });
+
   it("刷新会话详情时不应把已完成输出替换成后端历史投影", () => {
     const localMessages = [
       {

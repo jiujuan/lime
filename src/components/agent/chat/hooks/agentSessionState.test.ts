@@ -10,6 +10,7 @@ import {
   resolveMissingSessionFromTopicsAction,
   resolveRestorableTopicSessionId,
   shouldDeferSessionDetailHydration,
+  shouldSkipAlreadyHydratedSession,
 } from "./agentSessionState";
 
 function createMessage(overrides: Partial<Message> = {}): Message {
@@ -184,6 +185,60 @@ describe("agentSessionState", () => {
         },
       }),
     ).toBe(false);
+  });
+
+  it("pending shell 空壳命中历史 topic 时不应跳过 detail hydration", () => {
+    expect(
+      shouldSkipAlreadyHydratedSession({
+        currentTurnId: null,
+        hydratedSessionId: "topic-history",
+        messagesCount: 0,
+        queuedTurnsCount: 0,
+        selectedTopic: {
+          messagesCount: 2,
+          status: "done",
+        },
+        sessionId: "topic-history",
+        threadItemsCount: 0,
+        threadTurnsCount: 0,
+      }),
+    ).toBe(false);
+  });
+
+  it("已 hydrate 且本地已有内容时应跳过重复 detail hydration", () => {
+    expect(
+      shouldSkipAlreadyHydratedSession({
+        currentTurnId: null,
+        hydratedSessionId: "topic-history",
+        messagesCount: 1,
+        queuedTurnsCount: 0,
+        selectedTopic: {
+          messagesCount: 2,
+          status: "done",
+        },
+        sessionId: "topic-history",
+        threadItemsCount: 0,
+        threadTurnsCount: 0,
+      }),
+    ).toBe(true);
+  });
+
+  it("已 hydrate 的空草稿 topic 应跳过 detail hydration", () => {
+    expect(
+      shouldSkipAlreadyHydratedSession({
+        currentTurnId: null,
+        hydratedSessionId: "topic-draft",
+        messagesCount: 0,
+        queuedTurnsCount: 0,
+        selectedTopic: {
+          messagesCount: 0,
+          status: "draft",
+        },
+        sessionId: "topic-draft",
+        threadItemsCount: 0,
+        threadTurnsCount: 0,
+      }),
+    ).toBe(true);
   });
 
   it("会话未出现在 topics 时应按状态决定清空、跳过或远程校验", () => {

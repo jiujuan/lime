@@ -12,6 +12,7 @@ const EXPECTED_SURFACE_KINDS: WorkspaceRightSurfaceKind[] = [
   "productProfile",
   "expertInfo",
   "objectCanvas",
+  "browser",
   "files",
   "shell",
   "harness",

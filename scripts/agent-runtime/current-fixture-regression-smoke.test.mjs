@@ -14,6 +14,7 @@ describe("agent runtime current fixture regression smoke guard", () => {
 
     expect(content).toContain("runVitestSmoke");
     expect(content).toContain("runNodeSmoke");
+    expect(content).toContain("runElectronFixtureSmoke");
     expect(content).toContain(
       "src/components/agent/chat/hooks/agentChatHistory.test.ts",
     );
@@ -105,6 +106,28 @@ describe("agent runtime current fixture regression smoke guard", () => {
     expect(content).toContain("function nodeSmokeArgs(args, options)");
     expect(content).toContain('"--app-url", options.appUrl');
     expect(content).toContain("args: resolvedArgs");
+  });
+
+  it("prepares packaged renderer and Electron host assets before real Electron fixtures", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain("function ensureElectronFixtureBuild(options)");
+    expect(content).toContain("function runElectronFixtureSmoke(label, args, options)");
+    expect(content).toContain('path.join(rootDir, "dist", "index.html")');
+    expect(content).toContain(
+      'path.join(rootDir, "dist-electron", "main", "main.js")',
+    );
+    expect(content).toContain(
+      'path.join(rootDir, "dist-electron", "app-server.release.json")',
+    );
+    expect(content).toContain('"electron:build:smoke"');
+    expect(content).toContain("ensureElectronFixtureBuild(options)");
+    expect(content.indexOf("ensureElectronFixtureBuild(options)")).toBeLessThan(
+      content.indexOf('runElectronFixtureSmoke("Coding Workbench Electron fixture"'),
+    );
+    expect(content).toContain(
+      'runElectronFixtureSmoke("Claw Expert Plaza Skills Runtime click-through Electron fixture"',
+    );
   });
 
   it("does not opt into live provider or mock backend evidence", () => {

@@ -14,6 +14,7 @@ pub(super) fn product_workspace_from_events(
         for patch in workspace_patches_from_event(event) {
             workspace.apply_patch(event, &patch);
         }
+        workspace.apply_worker_evidence(event);
     }
     workspace.into_value()
 }
@@ -44,6 +45,7 @@ struct ProductWorkspaceBuilder<'a> {
     selected_object_ref: Option<Value>,
     layout_state: Option<Value>,
     source_artifacts: Vec<Value>,
+    worker_evidence: Vec<Value>,
     updated_at: Option<String>,
 }
 
@@ -58,6 +60,7 @@ impl<'a> ProductWorkspaceBuilder<'a> {
             selected_object_ref: None,
             layout_state: None,
             source_artifacts: Vec::new(),
+            worker_evidence: Vec::new(),
             updated_at: None,
         }
     }
@@ -108,6 +111,13 @@ impl<'a> ProductWorkspaceBuilder<'a> {
         self.updated_at = Some(event.timestamp.clone());
     }
 
+    fn apply_worker_evidence(&mut self, event: &AgentEvent) {
+        if let Some(worker_evidence) = worker_evidence_from_event(event) {
+            self.worker_evidence.push(worker_evidence);
+            self.updated_at = Some(event.timestamp.clone());
+        }
+    }
+
     fn into_value(self) -> Option<Value> {
         if self.objects.is_empty() {
             return None;
@@ -142,6 +152,12 @@ impl<'a> ProductWorkspaceBuilder<'a> {
             "sourceArtifacts".to_string(),
             Value::Array(self.source_artifacts),
         );
+        if !self.worker_evidence.is_empty() {
+            value.insert(
+                "workerEvidence".to_string(),
+                Value::Array(self.worker_evidence),
+            );
+        }
         if let Some(updated_at) = self.updated_at {
             value.insert("updatedAt".to_string(), json!(updated_at));
         }
@@ -270,6 +286,96 @@ fn source_artifact_from_event(event: &AgentEvent) -> Option<Value> {
         "title": string_field(artifact, &["title", "artifactTitle", "artifact_title"]),
         "updatedAt": event.timestamp,
     }))
+}
+
+fn worker_evidence_from_event(event: &AgentEvent) -> Option<Value> {
+    let worker_metadata = worker_metadata_from_event(event);
+    let payload_source = string_field(&event.payload, &["source"]);
+    let is_worker_event =
+        worker_metadata.is_some() || payload_source.as_deref() == Some("agent_app_task_worker");
+    if !is_worker_event {
+        return None;
+    }
+
+    let artifact = event.payload.get("artifact").unwrap_or(&event.payload);
+    let status = match event.event_type.as_str() {
+        "runtime.error" | "turn.failed" => "failed",
+        "artifact.snapshot" => "completed",
+        _ => "unknown",
+    };
+    let message = string_field(
+        &event.payload,
+        &[
+            "message",
+            "errorMessage",
+            "error_message",
+            "error",
+            "reason",
+        ],
+    );
+
+    Some(json!({
+        "id": format!("{}:workerEvidence", event.event_id),
+        "eventId": event.event_id,
+        "turnId": event.turn_id,
+        "status": status,
+        "source": "agent_app_task_worker",
+        "eventType": event.event_type,
+        "appId": worker_string_field(worker_metadata, &["appId", "app_id"])
+            .or_else(|| string_field(&event.payload, &["appId", "app_id"])),
+        "taskId": worker_string_field(worker_metadata, &["taskId", "task_id"])
+            .or_else(|| string_field(&event.payload, &["taskId", "task_id"])),
+        "taskKind": worker_string_field(worker_metadata, &["taskKind", "task_kind"])
+            .or_else(|| string_field(&event.payload, &["taskKind", "task_kind"])),
+        "workerEntrypoint": worker_string_field(worker_metadata, &["workerEntrypoint", "worker_entrypoint"]),
+        "inputSummary": worker_string_field(worker_metadata, &["inputSummary", "input_summary"]),
+        "outputSummary": worker_string_field(worker_metadata, &["outputSummary", "output_summary"]),
+        "outputObjectCount": worker_number_field(worker_metadata, &["outputObjectCount", "output_object_count"]),
+        "artifactRef": string_field(artifact, &["artifactId", "artifact_id", "id", "artifactRef", "artifact_ref", "path"]),
+        "artifactKind": string_field(artifact, &["kind", "artifactKind", "artifact_kind"])
+            .or_else(|| worker_string_field(worker_metadata, &["outputArtifactKind", "output_artifact_kind"])),
+        "title": string_field(artifact, &["title", "artifactTitle", "artifact_title"]),
+        "errorCode": string_field(&event.payload, &["errorCode", "error_code"]),
+        "errorMessage": message,
+        "updatedAt": event.timestamp,
+    }))
+}
+
+fn worker_metadata_from_event(event: &AgentEvent) -> Option<&Value> {
+    let payload = &event.payload;
+    let artifact = payload.get("artifact");
+    payload
+        .get("agentAppWorker")
+        .or_else(|| payload.get("agent_app_worker"))
+        .or_else(|| {
+            payload
+                .get("metadata")
+                .and_then(|metadata| metadata.get("agentAppWorker"))
+        })
+        .or_else(|| {
+            payload
+                .get("metadata")
+                .and_then(|metadata| metadata.get("agent_app_worker"))
+        })
+        .or_else(|| {
+            artifact
+                .and_then(|artifact| artifact.get("metadata"))
+                .and_then(|metadata| metadata.get("agentAppWorker"))
+        })
+        .or_else(|| {
+            artifact
+                .and_then(|artifact| artifact.get("metadata"))
+                .and_then(|metadata| metadata.get("agent_app_worker"))
+        })
+        .filter(|value| value.is_object())
+}
+
+fn worker_string_field(value: Option<&Value>, keys: &[&str]) -> Option<String> {
+    value.and_then(|value| string_field(value, keys))
+}
+
+fn worker_number_field(value: Option<&Value>, keys: &[&str]) -> Option<u64> {
+    value.and_then(|value| keys.iter().find_map(|key| value.get(*key)?.as_u64()))
 }
 
 fn default_layout_state() -> Value {

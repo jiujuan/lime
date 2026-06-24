@@ -30,6 +30,30 @@ describe("messageListTimelineContentParts", () => {
     ).toBe("running");
   });
 
+  it("单条 reasoning 也应进入结构化 contentParts", () => {
+    const contentParts = buildTimelineInlineContentParts({
+      displayContent: "",
+      items: buildThreadItems([
+        {
+          id: "reasoning-single",
+          type: "reasoning",
+          turn_id: "turn-single-reasoning",
+          sequence: 1,
+          text: "先确认搜索目标，再开始读取来源。",
+          status: "in_progress",
+          started_at: "2026-06-24T10:00:00.000Z",
+          updated_at: "2026-06-24T10:00:01.000Z",
+        },
+      ]),
+    });
+
+    expect(contentParts?.map((part) => part.type)).toEqual(["thinking"]);
+    expect(contentParts?.[0]).toMatchObject({
+      type: "thinking",
+      text: "先确认搜索目标，再开始读取来源。",
+    });
+  });
+
   it("只有 update_plan 工具项时不应生成旧工具过程", () => {
     const contentParts = buildTimelineInlineContentParts({
       displayContent: "",
@@ -111,12 +135,12 @@ describe("messageListTimelineContentParts", () => {
     });
 
     expect(contentParts?.some((part) => part.type === "tool_use")).toBe(false);
-    expect(contentParts?.map((part) => part.type)).toEqual(["text"]);
+    expect(contentParts?.map((part) => part.type)).toEqual(["text", "text"]);
     expect(
       contentParts?.[0]?.type === "text" ? contentParts[0].text : "",
     ).toContain("<proposed_plan>");
     expect(
-      contentParts?.[0]?.type === "text" ? contentParts[0].text : "",
+      contentParts?.[1]?.type === "text" ? contentParts[1].text : "",
     ).toContain("计划已更新。");
   });
 
@@ -195,13 +219,20 @@ describe("messageListTimelineContentParts", () => {
     });
 
     expect(contentParts?.map((part) => part.type)).toEqual([
-      "thinking",
+      "text",
       "tool_use",
       "text",
     ]);
     expect(contentParts?.[0]).toMatchObject({
-      type: "thinking",
+      type: "text",
       text: "我来帮你分析这个项目的改进空间。先让我了解一下项目结构和关键文件。",
+      metadata: {
+        phase: "commentary",
+        source: "agent_thread_item",
+        threadItemId: "assistant-commentary-intro",
+        turnId: "turn-commentary-process-final",
+        sequence: 1,
+      },
     });
     expect(contentParts?.[1]).toMatchObject({
       type: "tool_use",

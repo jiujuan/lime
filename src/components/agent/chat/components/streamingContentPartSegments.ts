@@ -1,31 +1,15 @@
 import type { ContentPart } from "../types";
+import {
+  canMergeCoalescibleContentParts,
+  mergeIncrementalTextWithOverlap,
+} from "../utils/contentPartTimeline";
 
 type TextContentPart = Extract<ContentPart, { type: "text" }>;
 type ThinkingContentPart = Extract<ContentPart, { type: "thinking" }>;
 type CoalescibleContentPart = TextContentPart | ThinkingContentPart;
 
 export function mergeIncrementalText(base: string, chunk: string): string {
-  if (!base) {
-    return chunk;
-  }
-  if (!chunk) {
-    return base;
-  }
-  if (chunk.startsWith(base)) {
-    return chunk;
-  }
-  if (base.endsWith(chunk)) {
-    return base;
-  }
-
-  const maxOverlap = Math.min(base.length, chunk.length);
-  for (let overlap = maxOverlap; overlap > 0; overlap -= 1) {
-    if (base.slice(-overlap) === chunk.slice(0, overlap)) {
-      return base + chunk.slice(overlap);
-    }
-  }
-
-  return base + chunk;
+  return mergeIncrementalTextWithOverlap(base, chunk);
 }
 
 function mergeCoalescibleContentPart<TPart extends CoalescibleContentPart>(
@@ -74,7 +58,7 @@ export function coalesceAdjacentDisplayContentParts(
       continue;
     }
 
-    if (pendingPart.type !== part.type) {
+    if (!canMergeCoalescibleContentParts(pendingPart, part)) {
       flushPendingPart();
       pendingPart = part;
       continue;

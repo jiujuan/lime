@@ -389,6 +389,76 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     ).not.toBeNull();
   });
 
+  it("点击 WebSearch 来源应在右侧 Browser 工作台打开 URL，而不是 URL 预览", async () => {
+    installMockAgentChatUnifiedState(
+      createMockAgentChatUnifiedState({
+        messages: [
+          {
+            id: "msg-search-assistant",
+            role: "assistant",
+            content: "已整理搜索来源。",
+            timestamp: new Date("2026-06-24T10:00:00.000Z"),
+          },
+        ],
+      }),
+    );
+
+    const mounted = mountPage({
+      theme: "general",
+      lockTheme: true,
+    });
+    await flushEffects();
+
+    const latestMessageListProps = mockMessageList.mock.calls.at(-1)?.[0] as
+      | {
+          onOpenUrlPreview?: (item: {
+            id: string;
+            title: string;
+            url: string;
+            hostname: string;
+            snippet?: string;
+            snapshotContent?: string;
+          }) => void;
+        }
+      | undefined;
+    expect(latestMessageListProps?.onOpenUrlPreview).toEqual(
+      expect.any(Function),
+    );
+
+    act(() => {
+      latestMessageListProps?.onOpenUrlPreview?.({
+        id: "source-1",
+        title: "Reuters World News",
+        url: " https://www.reuters.com/world/ ",
+        hostname: "www.reuters.com",
+        snippet: "搜索结果摘要",
+        snapshotContent: "# Reuters snapshot\n\n正文来自 WebFetch。",
+      });
+    });
+    await flushEffects(4);
+
+    expect(
+      mounted.container
+        .querySelector('[data-testid="layout-transition"]')
+        ?.getAttribute("data-mode"),
+    ).toBe("chat-canvas");
+
+    const latestWorkbenchProps = mockCanvasWorkbenchLayout.mock.calls.at(
+      -1,
+    )?.[0] as
+      | {
+          browserOpenRequest?: { url?: string | null } | null;
+          previewOpenRequest?: unknown;
+        }
+      | undefined;
+    expect(latestWorkbenchProps?.browserOpenRequest).toEqual(
+      expect.objectContaining({
+        url: "https://www.reuters.com/world/",
+      }),
+    );
+    expect(latestWorkbenchProps?.previewOpenRequest ?? null).toBeNull();
+  });
+
   it("通用模式空闲时应保留顶部 Harness 入口", async () => {
     const container = renderPage({
       theme: "general",

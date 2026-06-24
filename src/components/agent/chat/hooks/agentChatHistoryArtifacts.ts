@@ -15,6 +15,7 @@ type HistoryArtifactSummary = {
   artifactRef?: unknown;
   eventId?: unknown;
   sequence?: unknown;
+  sessionId?: unknown;
   turnId?: unknown;
   artifactId?: unknown;
   path?: unknown;
@@ -117,10 +118,15 @@ function collectHistoryArtifactSummaries(
   ];
 }
 
-function historyArtifactFromSummary(
-  summary: HistoryArtifactSummary,
-): Artifact | null {
+function historyArtifactFromSummary(params: {
+  sessionIdFallback: string;
+  summary: HistoryArtifactSummary;
+}): Artifact | null {
+  const { sessionIdFallback, summary } = params;
   const metadata = asHistoryRecord(summary.metadata);
+  if (isProductProfileArtifactSummary(summary, metadata)) {
+    return null;
+  }
   const path =
     readHistoryString(summary.path) ||
     readHistoryMetadataString(metadata, [
@@ -156,6 +162,19 @@ function historyArtifactFromSummary(
     readHistoryNumber(metadata?.createdAt) ??
     readHistoryNumber(metadata?.updatedAt) ??
     now;
+  const sessionId =
+    readHistoryString(summary.sessionId) ||
+    readHistoryMetadataString(metadata, [
+      "sessionId",
+      "session_id",
+      "appServerSessionId",
+      "app_server_session_id",
+      "appServerArtifactSessionId",
+      "app_server_artifact_session_id",
+    ]) ||
+    sessionIdFallback;
+  const turnId = readHistoryString(summary.turnId) || undefined;
+  const artifactRef = readHistoryString(summary.artifactRef) || undefined;
 
   return {
     id,
@@ -165,10 +184,14 @@ function historyArtifactFromSummary(
     status: historyArtifactStatusFromSummary(summary),
     meta: {
       ...(metadata ?? {}),
-      artifactRef: readHistoryString(summary.artifactRef) || undefined,
+      artifactRef,
       eventId: readHistoryString(summary.eventId) || undefined,
       sequence: readHistoryNumber(summary.sequence),
-      turnId: readHistoryString(summary.turnId) || undefined,
+      sessionId,
+      turnId,
+      appServerArtifactSessionId: sessionId,
+      appServerArtifactTurnId: turnId,
+      appServerArtifactRef: artifactRef,
       contentStatus: readHistoryString(summary.contentStatus) || undefined,
       filePath: path,
       artifactPath: path,
@@ -179,6 +202,53 @@ function historyArtifactFromSummary(
     createdAt: timestamp,
     updatedAt: timestamp,
   };
+}
+
+function isProductProfileArtifactSummary(
+  summary: HistoryArtifactSummary,
+  metadata: Record<string, unknown> | null,
+): boolean {
+  const summaryKind = readHistoryString(summary.kind);
+  if (summaryKind === "content_factory.workspace_patch") {
+    return true;
+  }
+  if (!metadata) {
+    return false;
+  }
+  const productProfile =
+    asHistoryRecord(metadata.productProfile) ??
+    asHistoryRecord(metadata.product_profile);
+  const artifactDocument =
+    asHistoryRecord(metadata.artifactDocument) ??
+    asHistoryRecord(metadata.artifact_document);
+  const artifactDocumentMetadata = asHistoryRecord(artifactDocument?.metadata);
+  const artifactDocumentProductProfile =
+    asHistoryRecord(artifactDocumentMetadata?.productProfile) ??
+    asHistoryRecord(artifactDocumentMetadata?.product_profile);
+  const contentFactoryWorkspacePatch =
+    asHistoryRecord(metadata.contentFactoryWorkspacePatch) ??
+    asHistoryRecord(metadata.content_factory_workspace_patch);
+  const openedFrom = readHistoryMetadataString(metadata, [
+    "openedFrom",
+    "opened_from",
+  ]);
+  const artifactSchema = readHistoryMetadataString(metadata, [
+    "artifactSchema",
+    "artifact_schema",
+  ]);
+  const artifactKind = readHistoryMetadataString(metadata, [
+    "artifactKind",
+    "artifact_kind",
+    "kind",
+  ]);
+  return (
+    Boolean(productProfile || artifactDocumentProductProfile) ||
+    Boolean(contentFactoryWorkspacePatch) ||
+    openedFrom === "app_server_product_workspace" ||
+    artifactKind === "content_factory.workspace_patch" ||
+    (artifactSchema === "artifact_document.v1" &&
+      Boolean(productProfile || artifactDocumentProductProfile))
+  );
 }
 
 function isCodeHistoryArtifact(artifact: Artifact): boolean {
@@ -265,7 +335,12 @@ export function hydrateSessionDetailMessagesFromArtifacts(
 ): Message[] {
   const artifacts = mergeArtifacts(
     collectHistoryArtifactSummaries(detail)
-      .map(historyArtifactFromSummary)
+      .map((summary) =>
+        historyArtifactFromSummary({
+          sessionIdFallback: detail.id,
+          summary,
+        }),
+      )
       .filter((artifact): artifact is Artifact => artifact !== null),
   );
   if (artifacts.length === 0) {

@@ -9,8 +9,14 @@ export interface ResolveExpertPanelRequestMetadataParams {
 export function resolveExpertPanelRequestMetadata({
   initialAutoSendRequestMetadata,
   initialRequestMetadata,
+  sessionRequestMetadata,
 }: ResolveExpertPanelRequestMetadataParams): Record<string, unknown> | null {
-  return initialAutoSendRequestMetadata ?? initialRequestMetadata ?? null;
+  return (
+    initialAutoSendRequestMetadata ??
+    initialRequestMetadata ??
+    sessionRequestMetadata ??
+    null
+  );
 }
 
 export function mergeExpertSkillRefsIntoRequestMetadata(

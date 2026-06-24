@@ -363,6 +363,7 @@ export async function drainAppServerEventsFromPage(page, limit = 50) {
       }
       const response = await invoke(command, {
         request: {
+          includeRecent: true,
           limit,
         },
       });

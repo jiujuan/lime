@@ -46,11 +46,25 @@ describe("messageListTimelineContentParts imported timeline", () => {
       {
         type: "thinking",
         text: "先判断用户截图里的第一句为什么没有展示在最前面。",
-        metadata: importedMetadata,
+        metadata: {
+          ...importedMetadata,
+          source: "thread_item_reasoning",
+          threadItemId: "reasoning-imported-single",
+          turnId: "turn-imported-single-reasoning",
+          sequence: 1,
+        },
       },
       {
         type: "text",
         text: "已确认处理方案。",
+        metadata: {
+          ...importedMetadata,
+          source: "agent_thread_item",
+          threadItemId: "assistant-imported-single-final",
+          turnId: "turn-imported-single-reasoning",
+          sequence: 2,
+          phase: "final_answer",
+        },
       },
     ]);
   });
@@ -175,10 +189,21 @@ describe("messageListTimelineContentParts imported timeline", () => {
       ]),
     });
 
-    expect(contentParts?.map((part) => part.type)).toEqual(["text"]);
+    expect(contentParts?.map((part) => part.type)).toEqual(["text", "text"]);
     expect(contentParts?.[0]).toMatchObject({
       type: "text",
-      text: "<proposed_plan>\n- [ ] 继续执行计划\n</proposed_plan>\n继续执行计划。",
+      text: "<proposed_plan>\n- [ ] 继续执行计划\n</proposed_plan>",
+    });
+    expect(contentParts?.[1]).toMatchObject({
+      type: "text",
+      text: "继续执行计划。",
+      metadata: {
+        source: "agent_thread_item",
+        threadItemId: "assistant-plan-only",
+        turnId: "turn-imported-plan-only",
+        sequence: 2,
+        phase: "final_answer",
+      },
     });
   });
 
@@ -374,6 +399,14 @@ describe("messageListTimelineContentParts imported timeline", () => {
       {
         type: "text",
         text: "已完成上下文整理。",
+        metadata: {
+          ...importedMetadata,
+          source: "agent_thread_item",
+          threadItemId: "assistant-imported-specialized-final",
+          turnId: "turn-imported-specialized-process",
+          sequence: 3,
+          phase: "final_answer",
+        },
       },
     ]);
   });

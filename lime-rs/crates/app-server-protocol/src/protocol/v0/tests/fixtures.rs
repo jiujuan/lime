@@ -518,6 +518,48 @@ fn agent_session_turn_start_request_matches_protocol_fixture_shape() {
 }
 
 #[test]
+fn agent_session_runtime_events_append_request_matches_protocol_fixture_shape() {
+    let value = serde_json::to_value(JsonRpcRequest::new(
+        RequestId::Integer(8),
+        METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
+        Some(
+            serde_json::to_value(AgentSessionRuntimeEventAppendParams {
+                session_id: "sess_1".to_string(),
+                turn_id: Some("turn_1".to_string()),
+                runtime_events: vec![AgentSessionRuntimeEventInput {
+                    event_type: "artifact.snapshot".to_string(),
+                    payload: json!({
+                        "artifactId": "artifact-worker",
+                        "kind": "content_factory.workspace_patch",
+                    }),
+                }],
+            })
+            .expect("serialize params"),
+        ),
+    ))
+    .expect("serialize request");
+
+    assert_eq!(
+        value,
+        json!({
+            "id": 8,
+            "method": "agentSession/runtimeEvents/append",
+            "params": {
+                "sessionId": "sess_1",
+                "turnId": "turn_1",
+                "runtimeEvents": [{
+                    "type": "artifact.snapshot",
+                    "payload": {
+                        "artifactId": "artifact-worker",
+                        "kind": "content_factory.workspace_patch"
+                    }
+                }]
+            }
+        })
+    );
+}
+
+#[test]
 fn agent_session_turn_cancel_request_matches_protocol_fixture_shape() {
     let value = serde_json::to_value(JsonRpcRequest::new(
         RequestId::Integer(3),

@@ -7,6 +7,7 @@ import {
   FolderOpen,
   GitBranch,
   GitCommitHorizontal,
+  Globe2,
   Monitor,
   PanelRightClose,
   PanelRightOpen,
@@ -102,6 +103,7 @@ interface TaskCenterUtilityToolbarProps {
   harnessToggleLabel: string;
   shellPanelOpen: boolean;
   onToggleShellPanel?: () => void;
+  onToggleBrowserPanel?: () => void;
   onToggleFilesPanel?: () => void;
   onToggleObjectCanvasPanel?: () => void;
   rightSurfaceLaunchers?: readonly WorkspaceRightSurfaceLauncherProjection[];
@@ -193,6 +195,7 @@ export function TaskCenterUtilityToolbar({
   harnessToggleLabel,
   shellPanelOpen,
   onToggleShellPanel,
+  onToggleBrowserPanel,
   onToggleFilesPanel,
   onToggleObjectCanvasPanel,
   rightSurfaceLaunchers,
@@ -221,6 +224,7 @@ export function TaskCenterUtilityToolbar({
   const shellLauncher = rightSurfaceLauncherByKind.get("shell");
   const harnessLauncher = rightSurfaceLauncherByKind.get("harness");
   const filesLauncher = rightSurfaceLauncherByKind.get("files");
+  const browserLauncher = rightSurfaceLauncherByKind.get("browser");
   const productProfileLauncher =
     rightSurfaceLauncherByKind.get("productProfile");
   const objectCanvasLauncher = rightSurfaceLauncherByKind.get("objectCanvas");
@@ -263,11 +267,18 @@ export function TaskCenterUtilityToolbar({
     (!filesLauncher?.disabled ||
       Boolean(filesLauncher?.active) ||
       (filesLauncher?.pendingCount ?? 0) > 0);
+  const shouldRenderBrowserToggle =
+    Boolean(onToggleBrowserPanel) &&
+    Boolean(browserLauncher) &&
+    (!browserLauncher?.disabled ||
+      Boolean(browserLauncher?.active) ||
+      (browserLauncher?.pendingCount ?? 0) > 0);
   const shouldRenderPanelToolGroup =
     shouldRenderHarnessToggle ||
     showExpertInfoToggle ||
     showCanvasToggle ||
     shouldRenderObjectCanvasToggle ||
+    shouldRenderBrowserToggle ||
     shouldRenderFilesToggle;
   const effectiveCanvasOpen = workbenchLauncher?.active ?? isCanvasOpen;
   const workbenchPendingCount = workbenchLauncher?.pendingCount ?? 0;
@@ -277,6 +288,8 @@ export function TaskCenterUtilityToolbar({
   const objectCanvasPendingCount = objectProfilePendingCount;
   const effectiveFilesPanelOpen = Boolean(filesLauncher?.active);
   const filesPendingCount = filesLauncher?.pendingCount ?? 0;
+  const effectiveBrowserPanelOpen = Boolean(browserLauncher?.active);
+  const browserPendingCount = browserLauncher?.pendingCount ?? 0;
   const effectiveExpertInfoPanelVisible =
     expertInfoLauncher?.active ?? expertInfoPanelVisible;
   const expertInfoPendingCount = expertInfoLauncher?.pendingCount ?? 0;
@@ -731,6 +744,38 @@ export function TaskCenterUtilityToolbar({
                   {objectCanvasPendingCount > 99
                     ? "99+"
                     : objectCanvasPendingCount}
+                </span>
+              ) : null}
+            </Button>
+          ) : null}
+
+          {shouldRenderBrowserToggle ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={cn(
+                taskCenterIconOnlyButtonClassName,
+                "relative",
+                effectiveBrowserPanelOpen &&
+                  "bg-[color:var(--lime-chrome-tab-active-surface)] text-[color:var(--lime-text)]",
+              )}
+              disabled={browserLauncher?.disabled}
+              onClick={onToggleBrowserPanel}
+              aria-label={agentText(
+                effectiveBrowserPanelOpen
+                  ? "agentChat.navbar.closeBrowser"
+                  : "agentChat.navbar.openBrowser",
+                effectiveBrowserPanelOpen ? "关闭浏览器" : "打开浏览器",
+              )}
+              aria-expanded={effectiveBrowserPanelOpen}
+              title={agentText("agentChat.navbar.browser", "浏览器")}
+              data-testid="task-center-browser-toggle"
+            >
+              <Globe2 className="h-4 w-4" />
+              {browserPendingCount > 0 ? (
+                <span className="absolute -right-1 -top-1 rounded-full border border-[color:var(--lime-surface-border-strong)] bg-[color:var(--lime-surface)] px-1 text-[9px] font-medium leading-4 text-[color:var(--lime-brand-strong)]">
+                  {browserPendingCount > 99 ? "99+" : browserPendingCount}
                 </span>
               ) : null}
             </Button>

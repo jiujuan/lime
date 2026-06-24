@@ -91,6 +91,7 @@ export function buildWorkspaceRightSurfaceRuntimeAvailableSurfaces({
   if (objectCanvasAvailable) {
     surfaces.push("objectCanvas");
   }
+  surfaces.push("browser");
   if (filesAvailable) {
     surfaces.push("files");
   }

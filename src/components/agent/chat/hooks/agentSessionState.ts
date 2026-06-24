@@ -25,6 +25,7 @@ import {
   mergeThreadItems,
   mergeThreadTurns,
 } from "../utils/threadTimelineView";
+import { collectDetailThreadItems } from "./agentChatHistoryThreadItems";
 import { createExecutionRuntimeFromSessionDetail } from "../utils/sessionExecutionRuntime";
 import { normalizeExecutionStrategy } from "./agentChatCoreUtils";
 import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
@@ -264,6 +265,40 @@ export function shouldDeferSessionDetailHydration(options: {
   );
 }
 
+export function shouldSkipAlreadyHydratedSession(options: {
+  hydratedSessionId: string | null;
+  sessionId: string;
+  currentTurnId: string | null;
+  messagesCount: number;
+  queuedTurnsCount: number;
+  threadItemsCount: number;
+  threadTurnsCount: number;
+  selectedTopic?: Pick<Topic, "messagesCount" | "status"> | null;
+}): boolean {
+  if (options.hydratedSessionId !== options.sessionId) {
+    return false;
+  }
+
+  const hasLocalSessionContent =
+    options.messagesCount > 0 ||
+    hasSessionHydrationActivity({
+      currentTurnId: options.currentTurnId,
+      queuedTurnsCount: options.queuedTurnsCount,
+      threadItemsCount: options.threadItemsCount,
+      threadTurnsCount: options.threadTurnsCount,
+    });
+  if (hasLocalSessionContent) {
+    return true;
+  }
+
+  const topicMessagesCount = options.selectedTopic?.messagesCount ?? 0;
+  const topicStatus = options.selectedTopic?.status ?? "draft";
+  const topicExpectsRemoteDetail =
+    topicMessagesCount > 0 || topicStatus !== "draft";
+
+  return !topicExpectsRemoteDetail;
+}
+
 export type MissingSessionFromTopicsAction =
   | {
       kind: "none";
@@ -444,7 +479,9 @@ export function buildHydratedAgentSessionSnapshot(
       sessionId: effectiveCurrentSessionId,
     });
   const incomingTurns = detail.turns || [];
-  const incomingItems = normalizeLegacyThreadItems(detail.items || []);
+  const incomingItems = normalizeLegacyThreadItems(
+    collectDetailThreadItems(detail),
+  );
   const shouldPreserveExecutionRuntimeOnMissingDetail =
     shouldPreserveExistingTimeline;
   const nextExecutionRuntime = createExecutionRuntimeFromSessionDetail(detail);

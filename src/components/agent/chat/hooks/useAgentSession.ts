@@ -68,6 +68,7 @@ import {
   createEmptyAgentSessionSnapshot,
   resolveMissingSessionFromTopicsAction,
   resolveRestorableTopicSessionId,
+  shouldSkipAlreadyHydratedSession,
   shouldDeferSessionDetailHydration,
   type AgentSessionSnapshot,
 } from "./agentSessionState";
@@ -1542,6 +1543,15 @@ export function useAgentSession(options: UseAgentSessionOptions) {
 
       persistSessionRestoreCandidate(topicId);
       hydratedSessionRef.current = topicId;
+      const applyFinalizeSuccessState = () => {
+        const finalizeSuccessStatePlan = buildSessionFinalizeSuccessStatePlan();
+        if (finalizeSuccessStatePlan.shouldClearAutoRestoringSession) {
+          setIsAutoRestoringSession(false);
+        }
+        if (finalizeSuccessStatePlan.shouldResetSessionHydrating) {
+          setIsSessionHydrating(false);
+        }
+      };
       const applyResolvedDetail = () => {
         applySessionDetail(topicId, detail, {
           localSnapshotOverride,
@@ -1552,6 +1562,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
             shadowExecutionStrategyFallback,
           }),
         });
+        applyFinalizeSuccessState();
       };
 
       if (useTransition) {
@@ -1724,13 +1735,6 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         });
       }
 
-      const finalizeSuccessStatePlan = buildSessionFinalizeSuccessStatePlan();
-      if (finalizeSuccessStatePlan.shouldClearAutoRestoringSession) {
-        setIsAutoRestoringSession(false);
-      }
-      if (finalizeSuccessStatePlan.shouldResetSessionHydrating) {
-        setIsSessionHydrating(false);
-      }
       return true;
     },
     [
@@ -2742,16 +2746,27 @@ export function useAgentSession(options: UseAgentSessionOptions) {
 
     missingSessionVerificationRef.current = null;
 
-    if (hydratedSessionRef.current === sessionId) {
-      return;
-    }
-
-    hydratedSessionRef.current = sessionId;
     const hasLocalTimelineCache =
       messages.length > 0 && (threadTurns.length > 0 || threadItems.length > 0);
     const hasPreservedMessageCache =
       preserveRestoredMessages && messages.length > 0;
     const selectedTopic = topics.find((topic) => topic.id === sessionId);
+    if (
+      shouldSkipAlreadyHydratedSession({
+        currentTurnId,
+        hydratedSessionId: hydratedSessionRef.current,
+        messagesCount: messages.length,
+        queuedTurnsCount: queuedTurns.length,
+        selectedTopic,
+        sessionId,
+        threadItemsCount: threadItems.length,
+        threadTurnsCount: threadTurns.length,
+      })
+    ) {
+      return;
+    }
+
+    hydratedSessionRef.current = sessionId;
     const shouldResumeHydrationSession = shouldResumeTaskSession(selectedTopic);
     logAgentDebug("useAgentSession", "hydrateSession.start", {
       cacheMode: hasLocalTimelineCache

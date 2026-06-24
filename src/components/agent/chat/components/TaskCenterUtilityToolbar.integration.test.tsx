@@ -486,6 +486,41 @@ describe("TaskCenterUtilityToolbar", () => {
     expect(onToggleFilesPanel).toHaveBeenCalledTimes(1);
   });
 
+  it("右侧 surface projection 应能驱动浏览器入口展开态、badge 和点击回调", () => {
+    const onToggleBrowserPanel = vi.fn();
+    const container = renderToolbar({
+      onToggleBrowserPanel,
+      rightSurfaceLaunchers: [
+        {
+          kind: "browser",
+          active: true,
+          disabled: false,
+          pendingCount: 1,
+          collapseTarget: "topToolbar",
+        },
+      ],
+    });
+
+    const browserToggle = container.querySelector<HTMLButtonElement>(
+      '[data-testid="task-center-browser-toggle"]',
+    );
+
+    expect(browserToggle).not.toBeNull();
+    expect(browserToggle?.getAttribute("aria-expanded")).toBe("true");
+    expect(browserToggle?.getAttribute("aria-label")).toBe("关闭浏览器");
+    expect(browserToggle?.getAttribute("title")).toBe("浏览器");
+    expect(browserToggle?.className).toContain(
+      "lime-chrome-tab-active-surface",
+    );
+    expect(browserToggle?.textContent).toContain("1");
+
+    act(() => {
+      browserToggle?.click();
+    });
+
+    expect(onToggleBrowserPanel).toHaveBeenCalledTimes(1);
+  });
+
   it("右侧 surface projection 应能驱动对象画布入口展开态、badge 和点击回调", () => {
     const onToggleObjectCanvasPanel = vi.fn();
     const container = renderToolbar({

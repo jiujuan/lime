@@ -377,7 +377,7 @@
   "agentChat.searchResultPreview.emptySnippet": "暂无摘要，点击可直接打开来源。",
   "agentChat.searchResultPreview.expandAria": "展开搜索结果",
   "agentChat.searchResultPreview.expandMore": "展开其余 {{countLabel}} 条结果",
-  "agentChat.searchResultPreview.previewAria": "预览搜索结果：{{title}}",
+  "agentChat.searchResultPreview.openAria": "打开搜索结果：{{title}}",
   "agentChat.sessionOverview.latestPromptFallback": "当前还没有新的任务输入。",
   "agentChat.sessionOverview.metrics.inProgress": "进行中 {{countLabel}}",
   "agentChat.sessionOverview.metrics.noFollowUp": "无需跟进",

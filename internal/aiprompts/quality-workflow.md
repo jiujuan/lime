@@ -84,6 +84,8 @@ npm run smoke:agent-runtime-current-fixture
 
 修 Agent Runtime / Claw chat 的 streaming 卡住、无法停止、输入框不可用、用户消息 / assistant 输出可见性、`final_done` 后仍显示“正在输出”等问题时，必须优先补状态机级回归：terminal 事件必须覆盖 App Server current `turn.completed` 投影后的 `turn_completed`，以及 `done` / `final_done` / 可软完成的 `error`；这些事件应清理对应 active stream、dispose listener，并在当前 stream 匹配或尚未激活时显式把 `isSending` 收回 `false`。不要用固定 timeout / grace timer 合成 `final_done` 作为产品收口；Codex app-server 语义下 `turn/completed` 是 turn 终态，最终正文来自已完成 message/item 或 `turn.completed` payload。定向测试必须覆盖陈旧 terminal 事件不能误停新的 active stream，优先放在 `agentStreamRuntimeHandler.unit.test.ts` / `agentStreamCompletionController.test.ts` / `MessageList.test.tsx`，再跑 `npm run smoke:agent-runtime-current-fixture` 和对应真实 Electron fixture。无法停止 / 停止后无法继续输出类问题还必须证明同一 current session 的 `cancel-then-continue`：GUI 点击停止后输入框恢复，随后同一会话从 GUI 输入“继续输出”，后端收到第二个 `turnStart`，GUI 与 read model 都完成第二轮。
 
+修 Agent Runtime / Claw chat 的 reasoning、工具调用、WebSearch / WebFetch 或最终正文排版顺序时，必须把 display correctness 绑定到结构化事件生命周期，而不是正文内容。current 口径见 `internal/aiprompts/claw-streaming-rendering-correctness.md`：`ContentPart` 必须保留 `sequence / turnId / itemId / phase / source` provenance；renderer 不做 lifecycle 语义判断；禁止用“已完成思考”、搜索文案、新闻正文、`Finding` 等自然语言正文或展示文案正则识别 reasoning / search / final answer；工具完成、reasoning 完成、`turn_completed.text` 终态标记本身都不等于 final answer。最低定向回归应覆盖 sequence-bearing text 与 process part 混排、provenance text 不盲合并、completion suffix 不追加到早于 process boundary 的 text、tool / reasoning 后没有 assistant final text 时 fail closed、live stream 与 history hydrate 同构。
+
 如果本轮问题直接涉及历史详情 hydrate、最近对话恢复、归档 / 反归档后的 read model 读取，聚合 guard 通过后再显式跑：
 
 ```bash

@@ -95,6 +95,9 @@ export const APP_SERVER_METHOD_SESSION_READ = "agentSession/read";
 export const APP_SERVER_METHOD_SESSION_THREAD_RESUME =
   "agentSession/thread/resume";
 export const APP_SERVER_METHOD_SESSION_LIST = "agentSession/list";
+export const APP_SERVER_METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND =
+  "agentSession/runtimeEvents/append";
+export const APP_SERVER_METHOD_ARTIFACT_READ = "artifact/read";
 export const APP_SERVER_METHOD_EVIDENCE_EXPORT = "evidence/export";
 export const APP_SERVER_METHOD_WORKSPACE_DEFAULT_ENSURE =
   "workspace/default/ensure";
@@ -104,6 +107,8 @@ export const APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_LIST =
   "workspaceRightSurface/pending/list";
 export const RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO =
   "right-surface-visual-matrix";
+export const CONTENT_FACTORY_PRODUCT_PROFILE_SCENARIO =
+  "content-factory-product-profile";
 export const NEWS_PROMPT = "整理今天的国际新闻";
 export const CONTINUE_PROMPT = "继续输出";
 export const PLAN_PROMPT = "先给我一个修复计划，不要直接改代码";
@@ -157,6 +162,16 @@ export const FIXTURE_MODEL = "fixture-model";
 export const SESSION_ID = `claw-chat-current-${Date.now()}-${process.pid}`;
 export const THREAD_ID = `${SESSION_ID}-thread`;
 export const SESSION_TITLE = "Claw 新闻输入 Electron fixture";
+export const CONTENT_FACTORY_PRODUCT_PROFILE_SESSION_ID = `${SESSION_ID}-content-factory-product-profile`;
+export const CONTENT_FACTORY_PRODUCT_PROFILE_THREAD_ID = `${CONTENT_FACTORY_PRODUCT_PROFILE_SESSION_ID}-thread`;
+export const CONTENT_FACTORY_PRODUCT_PROFILE_SESSION_TITLE =
+  "内容工厂 Product Profile Fixture";
+export const CONTENT_FACTORY_PRODUCT_PROFILE_TURN_ID =
+  "turn_content_factory_product_profile";
+export const CONTENT_FACTORY_PRODUCT_PROFILE_ARTICLE_ARTIFACT_ID =
+  "artifact-article-1";
+export const CONTENT_FACTORY_PRODUCT_PROFILE_IMAGE_ARTIFACT_ID =
+  "artifact-image-1";
 export const WEB_TOOLS_SEARCH_TOOL_CALL_ID = `${SESSION_ID}:tool:websearch-rendering`;
 export const WEB_TOOLS_REASONING_FINAL_ID = `${SESSION_ID}:reasoning:web-tools-rendering-final`;
 export const WEB_TOOLS_REASONING_ITEM_ID = `${SESSION_ID}:reasoning:web-tools-rendering`;
@@ -239,8 +254,21 @@ export const RIGHT_SURFACE_VISUAL_MATRIX_ASSERTION_KEYS = [
   "rightSurfaceVisualMatrixFilesSurfaceVisible",
   "rightSurfaceVisualMatrixObjectCanvasSurfaceVisible",
   "rightSurfaceVisualMatrixExpertSurfaceVisible",
+  "rightSurfaceVisualMatrixBrowserSurfaceVisible",
   "rightSurfaceVisualMatrixSurfacesMutuallyExclusive",
   "rightSurfaceVisualMatrixHostsFillRightSide",
   "rightSurfaceVisualMatrixPendingConsumeKeepsSurfaceOpen",
   "rightSurfaceVisualMatrixDoesNotUseModelTurn",
+];
+export const CONTENT_FACTORY_PRODUCT_PROFILE_ASSERTION_KEYS = [
+  "contentFactoryProductProfileRuntimeEventsAppended",
+  "contentFactoryProductProfileRightSurfaceRequested",
+  "contentFactoryProductProfileSessionOpenedFromSidebar",
+  "contentFactoryProductProfileRightSurfaceVisible",
+  "contentFactoryProductProfilePageShowsObjects",
+  "contentFactoryProductProfileReadModelProjected",
+  "contentFactoryProductProfileArtifactsProjected",
+  "contentFactoryProductProfileArtifactReadContent",
+  "contentFactoryProductProfileWorkerFailureEvidence",
+  "contentFactoryProductProfileDoesNotUseModelTurn",
 ];

@@ -1,6 +1,6 @@
+use super::agent_app_task_runtime::build_agent_app_task_runtime_contract;
 use super::json_string;
 use super::timestamp;
-use super::agent_app_task_runtime::build_agent_app_task_runtime_contract;
 use super::RuntimeCore;
 use super::RuntimeCoreError;
 use app_server_protocol::AgentAppHistoryRestoreContract;
@@ -9,8 +9,10 @@ use app_server_protocol::AgentAppHostLifecycleListResponse;
 use app_server_protocol::AgentAppHostLifecycleSnapshot;
 use app_server_protocol::AgentAppProductProfileContract;
 use app_server_protocol::AgentAppProductProfileObject;
+use app_server_protocol::AgentAppReadinessIssueCategorySummary;
 use app_server_protocol::AgentAppRightSurfaceContract;
 use serde_json::Value;
+use std::collections::HashMap;
 use std::collections::HashSet;
 
 const RIGHT_SURFACE_TABS: &[&str] = &[
@@ -29,6 +31,19 @@ const PRODUCT_PROFILE_PANES: &[&str] = &[
     "evidence",
     "expertInfo",
     "appSurface",
+];
+
+const ISSUE_CATEGORY_PRIORITY: &[&str] = &[
+    "legacy",
+    "package",
+    "cloud",
+    "runtime",
+    "capability",
+    "permission",
+    "resource",
+    "taskRuntime",
+    "host",
+    "unknown",
 ];
 
 impl RuntimeCore {
@@ -79,6 +94,11 @@ fn build_agent_app_host_lifecycle_snapshot(state: &Value) -> AgentAppHostLifecyc
             .iter()
             .flat_map(|function| function.follow_ups.iter().cloned()),
     );
+    let issue_categories = summarize_readiness_issue_categories(&blockers);
+    let primary_issue_category = issue_categories
+        .first()
+        .map(|summary| summary.category.clone());
+    let publish_blocked = matches!(app_center_status.as_str(), "blocked" | "delisted");
 
     AgentAppHostLifecycleSnapshot {
         app_id,
@@ -91,6 +111,9 @@ fn build_agent_app_host_lifecycle_snapshot(state: &Value) -> AgentAppHostLifecyc
         functions,
         blockers,
         follow_ups,
+        publish_blocked,
+        primary_issue_category,
+        issue_categories,
         generated_at: json_string(state, &["updatedAt"]).unwrap_or_else(timestamp),
     }
 }
@@ -443,6 +466,86 @@ fn readiness_missing_capabilities(readiness: &Value) -> Vec<String> {
         .collect()
 }
 
+fn classify_readiness_issue_code(code: &str) -> &'static str {
+    match code {
+        "LEGACY_OR_DEPRECATED_APP" => "legacy",
+        "PACKAGE_HASH_MISSING"
+        | "MANIFEST_HASH_MISSING"
+        | "PACKAGE_HASH_MISMATCH"
+        | "MANIFEST_HASH_MISMATCH"
+        | "PACKAGE_VERIFICATION_FAILED"
+        | "PACKAGE_HASH_UNVERIFIED"
+        | "MANIFEST_HASH_UNVERIFIED" => "package",
+        "CLOUD_APP_DISABLED"
+        | "CLOUD_LICENSE_UNAVAILABLE"
+        | "CLOUD_REGISTRATION_REQUIRED"
+        | "CLOUD_TOOL_UNAVAILABLE"
+        | "CLOUD_POLICY_UNSUPPORTED"
+        | "CLOUD_ENTRY_NOT_ENABLED"
+        | "CLOUD_SIGNATURE_MISSING"
+        | "CLOUD_SIGNATURE_UNVERIFIED"
+        | "CLOUD_SIGNATURE_VERIFICATION_FAILED" => "cloud",
+        "MANIFEST_VERSION_UNSUPPORTED"
+        | "RUNTIME_TARGET_UNSUPPORTED"
+        | "INSTALL_MODE_UNSUPPORTED"
+        | "RUNTIME_VERSION_UNSUPPORTED"
+        | "RUNTIME_PROFILE_MISSING"
+        | "UI_RUNTIME_DISABLED"
+        | "WORKER_RUNTIME_DISABLED"
+        | "WORKBENCH_PRODUCTION_OBJECTS_MISSING"
+        | "WORKBENCH_HISTORY_RESTORE_MISSING" => "runtime",
+        "CAPABILITY_MISSING" | "CAPABILITY_VERSION_UNSUPPORTED" => "capability",
+        "PERMISSION_REQUIRED" | "SECRET_REQUIRED" => "permission",
+        "STORAGE_DECLARED_BUT_DISABLED"
+        | "KNOWLEDGE_BINDING_REQUIRED"
+        | "SKILL_REQUIRED"
+        | "TOOL_REQUIRED"
+        | "ARTIFACT_TYPE_REQUIRED"
+        | "EVAL_REQUIRED"
+        | "OVERLAY_REQUIRED"
+        | "SERVICE_REQUIRED"
+        | "WORKFLOW_REQUIRED" => "resource",
+        "TASK_RUNTIME_WORKER_ENTRYPOINT_MISSING"
+        | "TASK_RUNTIME_TASKS_MISSING"
+        | "TASK_RUNTIME_DIRECT_PROVIDER_ACCESS_UNSUPPORTED"
+        | "TASK_RUNTIME_DIRECT_FILESYSTEM_ACCESS_UNSUPPORTED" => "taskRuntime",
+        "SERVER_HOST_GATE_BLOCKED" => "host",
+        _ => "unknown",
+    }
+}
+
+fn summarize_readiness_issue_categories(
+    codes: &[String],
+) -> Vec<AgentAppReadinessIssueCategorySummary> {
+    let mut buckets: HashMap<&'static str, (usize, HashSet<String>)> = HashMap::new();
+    for code in codes {
+        let normalized = code.trim();
+        if normalized.is_empty() {
+            continue;
+        }
+        let category = classify_readiness_issue_code(normalized);
+        let bucket = buckets
+            .entry(category)
+            .or_insert_with(|| (0, HashSet::new()));
+        bucket.0 += 1;
+        bucket.1.insert(normalized.to_string());
+    }
+
+    ISSUE_CATEGORY_PRIORITY
+        .iter()
+        .filter_map(|category| {
+            let (count, codes) = buckets.remove(category)?;
+            let mut codes = codes.into_iter().collect::<Vec<_>>();
+            codes.sort();
+            Some(AgentAppReadinessIssueCategorySummary {
+                category: (*category).to_string(),
+                count,
+                codes,
+            })
+        })
+        .collect()
+}
+
 fn json_string_array(value: Option<&Value>) -> Option<Vec<String>> {
     value.map(|value| {
         value
@@ -474,4 +577,96 @@ fn unique_strings(values: impl IntoIterator<Item = String>) -> Vec<String> {
         result.push(normalized.to_string());
     }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn summarizes_readiness_issue_categories_by_priority() {
+        let summaries = summarize_readiness_issue_categories(&[
+            "CLOUD_SIGNATURE_UNVERIFIED".to_string(),
+            "PACKAGE_HASH_MISMATCH".to_string(),
+            "CAPABILITY_MISSING".to_string(),
+            "CLOUD_SIGNATURE_UNVERIFIED".to_string(),
+            "UNMAPPED_CODE".to_string(),
+        ]);
+
+        assert_eq!(summaries.len(), 4);
+        assert_eq!(summaries[0].category, "package");
+        assert_eq!(summaries[0].count, 1);
+        assert_eq!(summaries[0].codes, vec!["PACKAGE_HASH_MISMATCH"]);
+        assert_eq!(summaries[1].category, "cloud");
+        assert_eq!(summaries[1].count, 2);
+        assert_eq!(summaries[1].codes, vec!["CLOUD_SIGNATURE_UNVERIFIED"]);
+        assert_eq!(summaries[2].category, "capability");
+        assert_eq!(summaries[3].category, "unknown");
+    }
+
+    #[test]
+    fn projects_server_readiness_categories_in_lifecycle_snapshot() {
+        let state = json!({
+            "appId": "content-factory-app",
+            "updatedAt": "2026-06-24T00:00:00.000Z",
+            "manifest": {
+                "appId": "content-factory-app",
+                "displayName": "内容工厂",
+                "profiles": ["workbench"],
+                "workbench": {
+                    "historyRestore": {
+                        "defaultSurface": "selectedObject"
+                    },
+                    "productionObjects": [
+                        {
+                            "kind": "articleDraft",
+                            "title": "文章草稿",
+                            "defaultSurface": "artifact",
+                            "primary": true
+                        }
+                    ]
+                },
+                "runtimePackage": {
+                    "worker": {
+                        "entrypoint": "./src/runtime/content-factory-worker.mjs"
+                    }
+                },
+                "agentRuntime": {
+                    "tasks": [
+                        { "kind": "content.factory.generate" }
+                    ]
+                }
+            },
+            "readiness": {
+                "status": "blocked",
+                "blockers": [
+                    { "code": "CLOUD_SIGNATURE_UNVERIFIED" },
+                    { "code": "PACKAGE_HASH_MISMATCH" },
+                    { "code": "CAPABILITY_MISSING" }
+                ]
+            }
+        });
+
+        let snapshot = build_agent_app_host_lifecycle_snapshot(&state);
+
+        assert!(snapshot.publish_blocked);
+        assert_eq!(snapshot.primary_issue_category.as_deref(), Some("package"));
+        assert_eq!(
+            snapshot
+                .issue_categories
+                .iter()
+                .map(|summary| summary.category.as_str())
+                .collect::<Vec<_>>(),
+            vec!["package", "cloud", "capability"]
+        );
+        assert_eq!(
+            snapshot
+                .issue_categories
+                .iter()
+                .find(|summary| summary.category == "cloud")
+                .map(|summary| summary.codes.clone()),
+            Some(vec!["CLOUD_SIGNATURE_UNVERIFIED".to_string()])
+        );
+    }
 }

@@ -17,7 +17,9 @@ export interface WorkspaceDebugStateSnapshot {
   activeTheme: string;
   contentId: string | null;
   initialContentLoadError: string | null;
+  isAutoRestoringSession: boolean;
   isInitialContentLoading: boolean;
+  isSessionHydrating: boolean;
   isSending: boolean;
   layoutMode: LayoutMode;
   messagesCount: number;

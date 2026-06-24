@@ -126,7 +126,12 @@ function buildCanvasWorkbenchToolTab(
   );
   return {
     key: tab.id,
-    label: tab.sequence > 1 ? `${baseLabel} ${tab.sequence}` : baseLabel,
+    label:
+      tab.kind === "browser" && tab.browserTitle?.trim()
+        ? tab.browserTitle.trim()
+        : tab.sequence > 1
+          ? `${baseLabel} ${tab.sequence}`
+          : baseLabel,
     closable: true,
   };
 }

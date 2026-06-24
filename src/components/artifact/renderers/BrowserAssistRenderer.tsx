@@ -20,13 +20,16 @@ interface BrowserActionReplayItem {
   artifactKind?: string;
   toolName?: string;
   action?: string;
+  actionId?: string;
   status?: string;
   success?: boolean;
   sessionId?: string;
   targetId?: string;
+  tabId?: string;
   profileKey?: string;
   backend?: string;
   requestId?: string;
+  evidenceRefs?: string[];
   lastUrl?: string;
   title?: string;
   entrySource?: string;
@@ -122,13 +125,16 @@ function normalizeReplayItem(value: unknown): BrowserActionReplayItem | null {
     artifactKind: readString(record, "artifactKind", "artifact_kind"),
     toolName: readString(record, "toolName", "tool_name"),
     action: readString(record, "action"),
+    actionId: readString(record, "actionId", "action_id"),
     status: readString(record, "status"),
     success: readBoolean(record, "success"),
     sessionId: readString(record, "sessionId", "session_id"),
     targetId: readString(record, "targetId", "target_id"),
+    tabId: readString(record, "tabId", "tab_id"),
     profileKey: readString(record, "profileKey", "profile_key"),
     backend: readString(record, "backend"),
     requestId: readString(record, "requestId", "request_id"),
+    evidenceRefs: readStringList(record, "evidenceRefs", "evidence_refs"),
     lastUrl: readString(record, "lastUrl", "last_url"),
     title: readString(record, "title"),
     entrySource: readString(record, "entrySource", "entry_source"),
@@ -305,7 +311,9 @@ function BrowserReplayView({ index }: { index: BrowserActionReplayIndex }) {
             <div>
               <div className="flex items-center gap-2 text-sm font-medium text-sky-700">
                 <Eye className="h-4 w-4" />
-                <span>browser_replay_viewer</span>
+                <span>
+                  {t("workspace.browserAssistRenderer.replay.viewerBadge")}
+                </span>
               </div>
               <h3 className="mt-2 text-lg font-semibold text-foreground">
                 {t("workspace.browserAssistRenderer.replay.title")}
@@ -316,7 +324,10 @@ function BrowserReplayView({ index }: { index: BrowserActionReplayIndex }) {
             </div>
             <div className="flex flex-wrap gap-2">
               <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-800">
-                browser_control
+                {t("workspace.browserAssistRenderer.replay.controlBadge")}
+              </span>
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800">
+                {t("workspace.browserAssistRenderer.replay.readOnlyBadge")}
               </span>
               <span className="rounded-full border border-border bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground">
                 {t("workspace.browserAssistRenderer.replay.actionsBadge", {
@@ -386,7 +397,13 @@ function BrowserReplayView({ index }: { index: BrowserActionReplayIndex }) {
             <div className="space-y-2">
               {recentItems.map((item, itemIndex) => (
                 <div
-                  key={[item.requestId, item.sessionId, item.action, itemIndex]
+                  key={[
+                    item.actionId,
+                    item.requestId,
+                    item.sessionId,
+                    item.action,
+                    itemIndex,
+                  ]
                     .filter(Boolean)
                     .join(":")}
                   className="rounded-xl border border-border bg-background p-3"
@@ -454,6 +471,26 @@ function BrowserReplayView({ index }: { index: BrowserActionReplayIndex }) {
                           </span>
                         </span>
                       ) : null}
+                      {item.tabId ? (
+                        <span>
+                          {t(
+                            "workspace.browserAssistRenderer.replay.item.tabLabel",
+                          )}
+                          <span className="ml-1 font-mono text-foreground">
+                            {item.tabId}
+                          </span>
+                        </span>
+                      ) : null}
+                      {item.actionId ? (
+                        <span>
+                          {t(
+                            "workspace.browserAssistRenderer.replay.item.actionIdLabel",
+                          )}
+                          <span className="ml-1 font-mono text-foreground">
+                            {item.actionId}
+                          </span>
+                        </span>
+                      ) : null}
                       {item.entrySource ? (
                         <span>
                           {t(
@@ -465,6 +502,16 @@ function BrowserReplayView({ index }: { index: BrowserActionReplayIndex }) {
                         </span>
                       ) : null}
                     </div>
+                    {item.evidenceRefs?.length ? (
+                      <div className="break-all">
+                        {t(
+                          "workspace.browserAssistRenderer.replay.item.evidenceRefsLabel",
+                        )}
+                        <span className="ml-1 font-mono text-foreground">
+                          {item.evidenceRefs.join(", ")}
+                        </span>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               ))}

@@ -64,6 +64,7 @@ const KNOWN_RIGHT_SURFACE_KINDS = new Set<WorkspaceRightSurfaceKind>([
   "productProfile",
   "expertInfo",
   "objectCanvas",
+  "browser",
   "files",
   "shell",
   "harness",

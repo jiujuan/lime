@@ -1,6 +1,11 @@
 import i18n from "i18next";
 import type { Message } from "../types";
 import {
+  isProcessBoundaryContentPart,
+  shouldAppendCompletionSuffixToTextPart,
+} from "../utils/contentPartTimeline";
+import { isAgentMessageCommentaryPhase } from "../utils/agentMessagePhase";
+import {
   containsAssistantProtocolResidue,
   stripAssistantProtocolResidue,
 } from "../utils/protocolResidue";
@@ -145,6 +150,8 @@ export function isAgentStreamEmptyFinalReplyError(message: string): boolean {
 
 export function shouldFailAgentStreamMissingFinalReply(params: {
   accumulatedContent: string;
+  hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary?: boolean;
+  hasFinalAnswerRequiredProcessBoundary?: boolean;
   hasMeaningfulCompletionSignal?: boolean;
 }): boolean {
   if (params.hasMeaningfulCompletionSignal) {
@@ -160,6 +167,9 @@ export function shouldFailAgentStreamMissingFinalReply(params: {
     !cleanedFinalContent &&
     (containsAssistantProtocolResidue(params.accumulatedContent) ||
       !rawFinalContent)
+  ) || Boolean(
+    params.hasFinalAnswerRequiredProcessBoundary &&
+      !params.hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary,
   );
 }
 
@@ -182,16 +192,6 @@ export function resolveAgentStreamGracefulCompletionContent(params: {
   );
 }
 
-function isProcessBoundaryContentPart(
-  part: NonNullable<Message["contentParts"]>[number],
-): boolean {
-  return (
-    part.type === "tool_use" ||
-    part.type === "action_required" ||
-    part.type === "file_changes_batch"
-  );
-}
-
 function shouldRetainPersistedThinkingContentPart(
   part: NonNullable<Message["contentParts"]>[number],
 ): boolean {
@@ -204,6 +204,22 @@ function shouldRetainPersistedThinkingContentPart(
     (metadata?.source === "thread_item_reasoning" ||
       metadata?.source === "agent_thread_item")
   );
+}
+
+type MessageContentPart = NonNullable<Message["contentParts"]>[number];
+
+function isCommentaryTextContentPart(part: MessageContentPart): boolean {
+  return (
+    part.type === "text" &&
+    typeof part.metadata?.phase === "string" &&
+    isAgentMessageCommentaryPhase(part.metadata.phase)
+  );
+}
+
+function isFinalTextContentPart(
+  part: MessageContentPart,
+): part is Extract<MessageContentPart, { type: "text" }> {
+  return part.type === "text" && !isCommentaryTextContentPart(part);
 }
 
 function completeRunningToolCallOnFinalDone(
@@ -249,12 +265,21 @@ function completeRunningToolCallsOnFinalDone(
 export function reconcileAgentStreamFinalContentParts(params: {
   parts: Message["contentParts"];
   finalContent: string;
+  finalTextPartMetadata?: Record<string, unknown>;
   rawContent: string;
   surfaceThinkingDeltas: boolean;
 }): Message["contentParts"] {
   if (!params.parts?.length) {
     return params.finalContent
-      ? [{ type: "text", text: params.finalContent }]
+      ? [
+          {
+            type: "text",
+            text: params.finalContent,
+            ...(params.finalTextPartMetadata
+              ? { metadata: params.finalTextPartMetadata }
+              : {}),
+          },
+        ]
       : params.parts;
   }
 
@@ -270,11 +295,20 @@ export function reconcileAgentStreamFinalContentParts(params: {
   }
 
   const textContent = visibleParts
-    .filter((part) => part.type === "text")
+    .filter(isFinalTextContentPart)
     .map((part) => part.text)
     .join("");
   if (!textContent && params.finalContent) {
-    return [...visibleParts, { type: "text", text: params.finalContent }];
+    return [
+      ...visibleParts,
+      {
+        type: "text",
+        text: params.finalContent,
+        ...(params.finalTextPartMetadata
+          ? { metadata: params.finalTextPartMetadata }
+          : {}),
+      },
+    ];
   }
   const finalTextChanged =
     params.finalContent !== params.rawContent ||
@@ -285,15 +319,26 @@ export function reconcileAgentStreamFinalContentParts(params: {
   }
 
   if (!params.finalContent) {
-    const processParts = visibleParts.filter((part) => part.type !== "text");
+    const processParts = visibleParts.filter(
+      (part) => part.type !== "text" || isCommentaryTextContentPart(part),
+    );
     return processParts.length > 0 ? processParts : undefined;
   }
 
   const textPartIndexes = visibleParts.flatMap((part, index) =>
-    part.type === "text" ? [index] : [],
+    isFinalTextContentPart(part) ? [index] : [],
   );
   if (textPartIndexes.length === 0) {
-    return [...visibleParts, { type: "text", text: params.finalContent }];
+    return [
+      ...visibleParts,
+      {
+        type: "text",
+        text: params.finalContent,
+        ...(params.finalTextPartMetadata
+          ? { metadata: params.finalTextPartMetadata }
+          : {}),
+      },
+    ];
   }
 
   const nextParts = [...visibleParts];
@@ -315,13 +360,35 @@ export function reconcileAgentStreamFinalContentParts(params: {
     const lastPartIndex = nextParts.length - 1;
     const lastPart = nextParts[lastPartIndex];
     if (lastPart?.type === "text") {
+      if (!shouldAppendCompletionSuffixToTextPart(nextParts, lastPartIndex)) {
+        return [
+          ...nextParts,
+          {
+            type: "text",
+            text: suffix,
+            ...(params.finalTextPartMetadata
+              ? { metadata: params.finalTextPartMetadata }
+              : {}),
+          },
+        ];
+      }
       nextParts[lastPartIndex] = {
+        ...lastPart,
         type: "text",
         text: `${lastPart.text}${suffix}`,
       };
       return nextParts;
     }
-    return [...nextParts, { type: "text", text: suffix }];
+    return [
+      ...nextParts,
+      {
+        type: "text",
+        text: suffix,
+        ...(params.finalTextPartMetadata
+          ? { metadata: params.finalTextPartMetadata }
+          : {}),
+      },
+    ];
   }
 
   if (processBoundaryIndex >= 0) {
@@ -340,11 +407,23 @@ export function reconcileAgentStreamFinalContentParts(params: {
       nextParts[lastTextAfterProcessIndex] = {
         type: "text",
         text: nextText,
+        ...(params.finalTextPartMetadata
+          ? { metadata: params.finalTextPartMetadata }
+          : {}),
       };
       return nextParts;
     }
 
-    return [...nextParts, { type: "text", text: params.finalContent }];
+    return [
+      ...nextParts,
+      {
+        type: "text",
+        text: params.finalContent,
+        ...(params.finalTextPartMetadata
+          ? { metadata: params.finalTextPartMetadata }
+          : {}),
+      },
+    ];
   }
 
   if (textPartIndexes.length === 1) {
@@ -435,6 +514,7 @@ export function resolveAgentStreamCompletedVisibleContent(params: {
 
 export function buildAgentStreamCompletedAssistantMessagePatch(params: {
   finalContent: string;
+  finalTextPartMetadata?: Record<string, unknown>;
   parts: Message["contentParts"];
   previousContent?: string;
   rawContent: string;
@@ -462,6 +542,7 @@ export function buildAgentStreamCompletedAssistantMessagePatch(params: {
       reconcileAgentStreamFinalContentParts({
         parts: params.parts,
         finalContent,
+        finalTextPartMetadata: params.finalTextPartMetadata,
         rawContent: params.rawContent,
         surfaceThinkingDeltas: params.surfaceThinkingDeltas,
       }),
@@ -478,6 +559,8 @@ export function buildAgentStreamCompletedAssistantMessagePatch(params: {
 export function buildAgentStreamFinalDonePlan(params: {
   accumulatedContent: string;
   fallbackContent?: string | null;
+  hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary?: boolean;
+  hasFinalAnswerRequiredProcessBoundary?: boolean;
   hasMeaningfulCompletionSignal?: boolean;
   queuedTurnId?: string | null;
   toolCallCount: number;
@@ -486,6 +569,10 @@ export function buildAgentStreamFinalDonePlan(params: {
   if (
     shouldFailAgentStreamMissingFinalReply({
       accumulatedContent: params.accumulatedContent,
+      hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary:
+        params.hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary,
+      hasFinalAnswerRequiredProcessBoundary:
+        params.hasFinalAnswerRequiredProcessBoundary,
       hasMeaningfulCompletionSignal: params.hasMeaningfulCompletionSignal,
     })
   ) {

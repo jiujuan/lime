@@ -18,7 +18,10 @@ export interface CanvasWorkbenchToolTabsState {
     tab: CanvasWorkbenchTab,
   ) => CanvasWorkbenchNewToolTab | null;
   resolveBrowserInitialUrl: (tab: CanvasWorkbenchTab) => string | null;
-  updateBrowserTabUrl: (tab: CanvasWorkbenchTab, url: string) => void;
+  updateBrowserTabPage: (
+    tab: CanvasWorkbenchTab,
+    page: { url: string; title?: string | null },
+  ) => void;
 }
 
 export function useCanvasWorkbenchToolTabsState({
@@ -97,12 +100,13 @@ export function useCanvasWorkbenchToolTabsState({
     [openedToolTabs],
   );
 
-  const updateBrowserTabUrl = useCallback(
-    (tab: CanvasWorkbenchTab, url: string) => {
+  const updateBrowserTabPage = useCallback(
+    (tab: CanvasWorkbenchTab, page: { url: string; title?: string | null }) => {
+      const browserTitle = page.title?.trim() || null;
       setOpenedToolTabs((previous) =>
         previous.map((item) =>
           item.id === tab && item.kind === "browser"
-            ? { ...item, browserUrl: url }
+            ? { ...item, browserUrl: page.url, browserTitle }
             : item,
         ),
       );
@@ -136,6 +140,6 @@ export function useCanvasWorkbenchToolTabsState({
     closeToolTab,
     resolveToolTabKind: resolveCanvasWorkbenchToolTabKind,
     resolveBrowserInitialUrl,
-    updateBrowserTabUrl,
+    updateBrowserTabPage,
   };
 }

@@ -63,6 +63,51 @@ describe("workspaceBrowserRuntimeNavigation", () => {
     });
   });
 
+  it("Browser Assist 导航没有 artifact meta 时应优先使用 BrowserSessionRef", () => {
+    expect(
+      resolveBrowserRuntimeNavigationFromBrowserAssist({
+        browserSessionRef: {
+          browserSessionId: "session-from-ref",
+          profileKey: "profile-from-ref",
+        },
+        browserAssistSessionState: {
+          profileKey: "profile-from-state",
+          sessionId: "session-from-state",
+        },
+        generalBrowserAssistProfileKey: "default-profile",
+      }),
+    ).toEqual({
+      projectId: undefined,
+      contentId: undefined,
+      initialProfileKey: "profile-from-ref",
+      initialSessionId: "session-from-ref",
+      initialTargetId: undefined,
+    });
+  });
+
+  it("Browser Assist 导航仍应让 artifact meta 覆盖 BrowserSessionRef", () => {
+    expect(
+      resolveBrowserRuntimeNavigationFromBrowserAssist({
+        artifact: artifact({
+          profile_key: "profile-from-artifact",
+          session_id: "session-from-artifact",
+          target_id: "target-from-artifact",
+        }),
+        browserSessionRef: {
+          browserSessionId: "session-from-ref",
+          profileKey: "profile-from-ref",
+        },
+        generalBrowserAssistProfileKey: "default-profile",
+      }),
+    ).toEqual({
+      projectId: undefined,
+      contentId: undefined,
+      initialProfileKey: "profile-from-artifact",
+      initialSessionId: "session-from-artifact",
+      initialTargetId: "target-from-artifact",
+    });
+  });
+
   it("站点技能导航应优先使用执行态 profile / target 并保留启动参数", () => {
     expect(
       resolveBrowserRuntimeNavigationFromSiteSkill({

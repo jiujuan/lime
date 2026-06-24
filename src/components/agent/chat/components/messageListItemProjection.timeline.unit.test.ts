@@ -10,6 +10,109 @@ function buildTimelineProjection(message: Message, timelineItems: AgentThreadIte
 }
 
 describe("messageListItemProjection timeline", () => {
+  it("running process 中的无 phase streaming overlay 不应作为孤立正文显示", () => {
+    const message: Message = {
+      id: "assistant-live-web-search",
+      role: "assistant",
+      content: "",
+      timestamp: new Date("2026-06-24T10:00:06.000Z"),
+      isThinking: true,
+      contentParts: [],
+      runtimeStatus: {
+        phase: "synthesizing",
+        title: "正在输出",
+        detail: "",
+      },
+    };
+
+    const projection = buildProjection(
+      message,
+      [
+        {
+          id: "web-search-running",
+          type: "web_search",
+          thread_id: "thread-live-web-search",
+          turn_id: "turn-live-web-search",
+          sequence: 2,
+          action: "web_search",
+          query: "Reuters world news June 24 2026 international headlines",
+          status: "in_progress",
+          started_at: "2026-06-24T10:00:02.000Z",
+          updated_at: "2026-06-24T10:00:03.000Z",
+        },
+      ],
+      {
+        turnId: "turn-live-web-search",
+        turnStatus: "running",
+        isSending: true,
+        streamingTextOverlay: {
+          messageId: "assistant-live-web-search",
+          eventName: "agent-runtime-live-web-search",
+          content: "我",
+          boundary: "render_flush",
+          sequence: 3,
+          updatedAt: Date.parse("2026-06-24T10:00:04.000Z"),
+        },
+      },
+    );
+
+    const parts = projection.rendererContentParts || [];
+    expect(parts.map((part) => part.type)).toEqual(["tool_use"]);
+    expect(parts.some((part) => part.type === "text")).toBe(false);
+    expect(projection.hasAssistantBodyContent).toBe(true);
+  });
+
+  it("显式 final_answer streaming overlay 在 process 后仍应实时显示", () => {
+    const message: Message = {
+      id: "assistant-live-final",
+      role: "assistant",
+      content: "",
+      timestamp: new Date("2026-06-24T10:00:06.000Z"),
+      isThinking: true,
+      contentParts: [],
+    };
+
+    const projection = buildProjection(
+      message,
+      [
+        {
+          id: "web-search-completed",
+          type: "web_search",
+          thread_id: "thread-live-final",
+          turn_id: "turn-live-final",
+          sequence: 2,
+          action: "web_search",
+          query: "international news",
+          status: "completed",
+          started_at: "2026-06-24T10:00:02.000Z",
+          completed_at: "2026-06-24T10:00:03.000Z",
+          updated_at: "2026-06-24T10:00:03.000Z",
+          results: [],
+        },
+      ],
+      {
+        turnId: "turn-live-final",
+        turnStatus: "running",
+        isSending: true,
+        streamingTextOverlay: {
+          messageId: "assistant-live-final",
+          eventName: "agent-runtime-live-final",
+          content: "今日国际新闻摘要：",
+          boundary: "render_flush",
+          phase: "final_answer",
+          sequence: 7,
+          updatedAt: Date.parse("2026-06-24T10:00:04.000Z"),
+        },
+      },
+    );
+
+    const parts = projection.rendererContentParts || [];
+    expect(parts.map((part) => part.type)).toEqual(["tool_use", "text"]);
+    expect(parts[1]?.type === "text" ? parts[1].text : "").toBe(
+      "今日国际新闻摘要：",
+    );
+  });
+
   it("timeline 中的 commentary 首句应保留在工具过程之前，且不污染最终正文", () => {
     const message: Message = {
       id: "assistant-commentary-process",
@@ -65,13 +168,20 @@ describe("messageListItemProjection timeline", () => {
 
     const parts = projection.rendererContentParts || [];
     expect(parts.map((part) => part.type)).toEqual([
-      "thinking",
+      "text",
       "tool_use",
       "text",
     ]);
-    expect(parts[0]?.type === "thinking" ? parts[0].text : "").toBe(
+    expect(parts[0]?.type === "text" ? parts[0].text : "").toBe(
       "我来帮你分析这个项目的改进空间。先让我了解一下项目结构和关键文件。",
     );
+    expect(parts[0]?.type === "text" ? parts[0].metadata : {}).toMatchObject({
+      phase: "commentary",
+      source: "agent_thread_item",
+      threadItemId: "assistant-commentary-intro",
+      turnId: "turn-commentary-process-final",
+      sequence: 1,
+    });
     expect(parts[1]?.type === "tool_use" ? parts[1].toolCall.id : "").toBe(
       "command-list-project",
     );

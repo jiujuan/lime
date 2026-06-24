@@ -609,11 +609,20 @@ describe("MessageList reasoning persistence", () => {
       expect.objectContaining({
         thinkingContent: undefined,
         contentParts: [
-          { type: "thinking", text: "Inspecting folder for details" },
-          { type: "text", text: "我先围绕你给出的路径做只读侦查。" },
+          expect.objectContaining({
+            type: "thinking",
+            text: "Inspecting folder for details",
+          }),
+          expect.objectContaining({
+            type: "text",
+            text: "我先围绕你给出的路径做只读侦查。",
+          }),
           expect.objectContaining({ type: "tool_use" }),
-          { type: "thinking", text: "Analyzing file sizes" },
-          { type: "text", text: "已确认该目录存在。" },
+          expect.objectContaining({
+            type: "thinking",
+            text: "Analyzing file sizes",
+          }),
+          expect.objectContaining({ type: "text", text: "已确认该目录存在。" }),
         ],
       }),
     );

@@ -134,7 +134,7 @@ export const CanvasWorkbenchTopTabs = memo(function CanvasWorkbenchTopTabs({
       active && !disabled
         ? "border-slate-300 bg-white text-slate-950 shadow-sm shadow-slate-950/5"
         : "border-transparent bg-transparent text-slate-600 hover:border-slate-200 hover:bg-white/70 hover:text-slate-950",
-      closable ? "px-1.5 pr-1" : "px-2.5",
+      closable ? "max-w-[220px] px-1.5 pr-1" : "px-2.5",
     );
     const tabContent = (
       <>
@@ -172,6 +172,7 @@ export const CanvasWorkbenchTopTabs = memo(function CanvasWorkbenchTopTabs({
             role="tab"
             aria-selected={active}
             disabled={disabled}
+            title={label}
             onClick={() => {
               if (disabled) {
                 return;
@@ -217,6 +218,7 @@ export const CanvasWorkbenchTopTabs = memo(function CanvasWorkbenchTopTabs({
         role="tab"
         aria-selected={active}
         disabled={disabled}
+        title={label}
         onClick={() => {
           if (disabled) {
             return;

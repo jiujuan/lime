@@ -610,12 +610,28 @@
             "generatedAt": {
               "type": "string"
             },
+            "issueCategories": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/AgentAppReadinessIssueCategorySummary"
+              },
+              "type": "array"
+            },
+            "primaryIssueCategory": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
             "profiles": {
               "default": [],
               "items": {
                 "type": "string"
               },
               "type": "array"
+            },
+            "publishBlocked": {
+              "type": "boolean"
             },
             "readinessStatus": {
               "type": "string"
@@ -632,6 +648,7 @@
             "appId",
             "displayName",
             "generatedAt",
+            "publishBlocked",
             "readinessStatus",
             "rightSurface",
             "taskRuntime"
@@ -696,6 +713,30 @@
             "kind",
             "primary",
             "title"
+          ],
+          "type": "object"
+        },
+        "AgentAppReadinessIssueCategorySummary": {
+          "properties": {
+            "category": {
+              "type": "string"
+            },
+            "codes": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "category",
+            "count"
           ],
           "type": "object"
         },
@@ -769,6 +810,12 @@
               "type": "array"
             },
             "outputArtifactKind": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "packageRootPath": {
               "type": [
                 "null",
                 "string"
@@ -951,6 +998,30 @@
           ],
           "type": "object"
         },
+        "AgentAppReadinessIssueCategorySummary": {
+          "properties": {
+            "category": {
+              "type": "string"
+            },
+            "codes": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "category",
+            "count"
+          ],
+          "type": "object"
+        },
         "AgentAppRightSurfaceContract": {
           "properties": {
             "defaultActiveTab": {
@@ -1026,6 +1097,12 @@
                 "string"
               ]
             },
+            "packageRootPath": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
             "sampleRequestPath": {
               "type": [
                 "null",
@@ -1089,12 +1166,28 @@
         "generatedAt": {
           "type": "string"
         },
+        "issueCategories": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentAppReadinessIssueCategorySummary"
+          },
+          "type": "array"
+        },
+        "primaryIssueCategory": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
         "profiles": {
           "default": [],
           "items": {
             "type": "string"
           },
           "type": "array"
+        },
+        "publishBlocked": {
+          "type": "boolean"
         },
         "readinessStatus": {
           "type": "string"
@@ -1111,6 +1204,7 @@
         "appId",
         "displayName",
         "generatedAt",
+        "publishBlocked",
         "readinessStatus",
         "rightSurface",
         "taskRuntime"
@@ -1813,6 +1907,12 @@
             "string"
           ]
         },
+        "packageRootPath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
         "sampleRequestPath": {
           "type": [
             "null",
@@ -1907,6 +2007,12 @@
               "type": "array"
             },
             "outputArtifactKind": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "packageRootPath": {
               "type": [
                 "null",
                 "string"
@@ -6426,6 +6532,121 @@
       "title": "AgentSessionReviewDecisionTemplateExportResponse",
       "type": "object"
     },
+    "AgentSessionRuntimeEventAppendParams": {
+      "$defs": {
+        "AgentSessionRuntimeEventInput": {
+          "properties": {
+            "payload": true,
+            "type": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "payload",
+            "type"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "runtimeEvents": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentSessionRuntimeEventInput"
+          },
+          "type": "array"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "turnId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "sessionId"
+      ],
+      "title": "AgentSessionRuntimeEventAppendParams",
+      "type": "object"
+    },
+    "AgentSessionRuntimeEventAppendResponse": {
+      "$defs": {
+        "AgentEvent": {
+          "properties": {
+            "eventId": {
+              "type": "string"
+            },
+            "payload": true,
+            "sequence": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "threadId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "timestamp": {
+              "type": "string"
+            },
+            "turnId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "type": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "eventId",
+            "payload",
+            "sequence",
+            "sessionId",
+            "timestamp",
+            "type"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "events": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentEvent"
+          },
+          "type": "array"
+        }
+      },
+      "title": "AgentSessionRuntimeEventAppendResponse",
+      "type": "object"
+    },
+    "AgentSessionRuntimeEventInput": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "payload": true,
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "payload",
+        "type"
+      ],
+      "title": "AgentSessionRuntimeEventInput",
+      "type": "object"
+    },
     "AgentSessionStartParams": {
       "$defs": {
         "BusinessObjectRef": {
@@ -7878,6 +8099,793 @@
         "status"
       ],
       "title": "AutomationSchedulerStatusResponse",
+      "type": "object"
+    },
+    "BrowserSessionActionExecuteParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "args": true,
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "sessionId"
+      ],
+      "title": "BrowserSessionActionExecuteParams",
+      "type": "object"
+    },
+    "BrowserSessionActionExecuteResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "result": {
+          "default": null
+        },
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "sessionId"
+      ],
+      "title": "BrowserSessionActionExecuteResponse",
+      "type": "object"
+    },
+    "BrowserSessionCloseResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId",
+        "status"
+      ],
+      "title": "BrowserSessionCloseResponse",
+      "type": "object"
+    },
+    "BrowserSessionEventItem": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "occurredAt": {
+          "type": "string"
+        },
+        "payload": {
+          "default": null
+        },
+        "sequence": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "occurredAt",
+        "sequence",
+        "sessionId"
+      ],
+      "title": "BrowserSessionEventItem",
+      "type": "object"
+    },
+    "BrowserSessionEventListParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "cursor": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId"
+      ],
+      "title": "BrowserSessionEventListParams",
+      "type": "object"
+    },
+    "BrowserSessionEventListResponse": {
+      "$defs": {
+        "BrowserSessionEventItem": {
+          "properties": {
+            "occurredAt": {
+              "type": "string"
+            },
+            "payload": {
+              "default": null
+            },
+            "sequence": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "sessionId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "occurredAt",
+            "sequence",
+            "sessionId"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "events": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/BrowserSessionEventItem"
+          },
+          "type": "array"
+        },
+        "nextCursor": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "nextCursor"
+      ],
+      "title": "BrowserSessionEventListResponse",
+      "type": "object"
+    },
+    "BrowserSessionIdParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId"
+      ],
+      "title": "BrowserSessionIdParams",
+      "type": "object"
+    },
+    "BrowserSessionOpenParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "environmentPresetId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "environmentPresetName": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "launchUrl": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "profileKey": {
+          "type": "string"
+        },
+        "remoteDebuggingPort": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "targetId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "profileKey",
+        "remoteDebuggingPort"
+      ],
+      "title": "BrowserSessionOpenParams",
+      "type": "object"
+    },
+    "BrowserSessionOpenResponse": {
+      "$defs": {
+        "BrowserSessionPageInfo": {
+          "properties": {
+            "markdown": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "markdown",
+            "title",
+            "updatedAt",
+            "url"
+          ],
+          "type": "object"
+        },
+        "BrowserSessionState": {
+          "properties": {
+            "connected": {
+              "type": "boolean"
+            },
+            "controlMode": {
+              "type": "string"
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "devtoolsFrontendUrl": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "environmentPresetId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "environmentPresetName": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "humanReason": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "lastError": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "lastEventAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "lastFrameAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "lastPageInfo": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/BrowserSessionPageInfo"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "lifecycleState": {
+              "type": "string"
+            },
+            "profileKey": {
+              "type": "string"
+            },
+            "remoteDebuggingPort": {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "streamMode": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "targetId": {
+              "type": "string"
+            },
+            "targetTitle": {
+              "type": "string"
+            },
+            "targetUrl": {
+              "type": "string"
+            },
+            "transportKind": {
+              "type": "string"
+            },
+            "wsDebuggerUrl": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "connected",
+            "controlMode",
+            "createdAt",
+            "lifecycleState",
+            "profileKey",
+            "remoteDebuggingPort",
+            "sessionId",
+            "targetId",
+            "targetTitle",
+            "targetUrl",
+            "transportKind",
+            "wsDebuggerUrl"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "session": {
+          "$ref": "#/$defs/BrowserSessionState"
+        }
+      },
+      "required": [
+        "session"
+      ],
+      "title": "BrowserSessionOpenResponse",
+      "type": "object"
+    },
+    "BrowserSessionPageInfo": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "markdown": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "markdown",
+        "title",
+        "updatedAt",
+        "url"
+      ],
+      "title": "BrowserSessionPageInfo",
+      "type": "object"
+    },
+    "BrowserSessionReadResponse": {
+      "$defs": {
+        "BrowserSessionPageInfo": {
+          "properties": {
+            "markdown": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "markdown",
+            "title",
+            "updatedAt",
+            "url"
+          ],
+          "type": "object"
+        },
+        "BrowserSessionState": {
+          "properties": {
+            "connected": {
+              "type": "boolean"
+            },
+            "controlMode": {
+              "type": "string"
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "devtoolsFrontendUrl": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "environmentPresetId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "environmentPresetName": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "humanReason": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "lastError": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "lastEventAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "lastFrameAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "lastPageInfo": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/BrowserSessionPageInfo"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "lifecycleState": {
+              "type": "string"
+            },
+            "profileKey": {
+              "type": "string"
+            },
+            "remoteDebuggingPort": {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "streamMode": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "targetId": {
+              "type": "string"
+            },
+            "targetTitle": {
+              "type": "string"
+            },
+            "targetUrl": {
+              "type": "string"
+            },
+            "transportKind": {
+              "type": "string"
+            },
+            "wsDebuggerUrl": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "connected",
+            "controlMode",
+            "createdAt",
+            "lifecycleState",
+            "profileKey",
+            "remoteDebuggingPort",
+            "sessionId",
+            "targetId",
+            "targetTitle",
+            "targetUrl",
+            "transportKind",
+            "wsDebuggerUrl"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "session": {
+          "$ref": "#/$defs/BrowserSessionState"
+        }
+      },
+      "required": [
+        "session"
+      ],
+      "title": "BrowserSessionReadResponse",
+      "type": "object"
+    },
+    "BrowserSessionState": {
+      "$defs": {
+        "BrowserSessionPageInfo": {
+          "properties": {
+            "markdown": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "markdown",
+            "title",
+            "updatedAt",
+            "url"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "connected": {
+          "type": "boolean"
+        },
+        "controlMode": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "devtoolsFrontendUrl": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "environmentPresetId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "environmentPresetName": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "humanReason": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "lastError": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "lastEventAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "lastFrameAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "lastPageInfo": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BrowserSessionPageInfo"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lifecycleState": {
+          "type": "string"
+        },
+        "profileKey": {
+          "type": "string"
+        },
+        "remoteDebuggingPort": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "streamMode": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "targetId": {
+          "type": "string"
+        },
+        "targetTitle": {
+          "type": "string"
+        },
+        "targetUrl": {
+          "type": "string"
+        },
+        "transportKind": {
+          "type": "string"
+        },
+        "wsDebuggerUrl": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "connected",
+        "controlMode",
+        "createdAt",
+        "lifecycleState",
+        "profileKey",
+        "remoteDebuggingPort",
+        "sessionId",
+        "targetId",
+        "targetTitle",
+        "targetUrl",
+        "transportKind",
+        "wsDebuggerUrl"
+      ],
+      "title": "BrowserSessionState",
+      "type": "object"
+    },
+    "BrowserSessionTargetInfo": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "devtoolsFrontendUrl": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "targetType": {
+          "default": "",
+          "type": "string"
+        },
+        "title": {
+          "default": "",
+          "type": "string"
+        },
+        "url": {
+          "default": "",
+          "type": "string"
+        },
+        "webSocketDebuggerUrl": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "BrowserSessionTargetInfo",
+      "type": "object"
+    },
+    "BrowserSessionTargetListParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "remoteDebuggingPort": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "remoteDebuggingPort"
+      ],
+      "title": "BrowserSessionTargetListParams",
+      "type": "object"
+    },
+    "BrowserSessionTargetListResponse": {
+      "$defs": {
+        "BrowserSessionTargetInfo": {
+          "properties": {
+            "devtoolsFrontendUrl": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "id": {
+              "type": "string"
+            },
+            "targetType": {
+              "default": "",
+              "type": "string"
+            },
+            "title": {
+              "default": "",
+              "type": "string"
+            },
+            "url": {
+              "default": "",
+              "type": "string"
+            },
+            "webSocketDebuggerUrl": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "targets": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/BrowserSessionTargetInfo"
+          },
+          "type": "array"
+        }
+      },
+      "title": "BrowserSessionTargetListResponse",
       "type": "object"
     },
     "BusinessObjectRef": {
@@ -28929,6 +29937,7 @@
               "agentSession/replayCase/export",
               "agentSession/reviewDecision/save",
               "agentSession/reviewDecisionTemplate/export",
+              "agentSession/runtimeEvents/append",
               "agentSession/start",
               "agentSession/thread/resume",
               "agentSession/toolInventory/read",
@@ -28949,6 +29958,12 @@
               "automationScheduler/config/read",
               "automationScheduler/config/update",
               "automationScheduler/status",
+              "browserSession/action/execute",
+              "browserSession/close",
+              "browserSession/event/list",
+              "browserSession/open",
+              "browserSession/read",
+              "browserSession/target/list",
               "capability/list",
               "connectCallback/send",
               "connectDeepLink/resolve",

@@ -7,8 +7,13 @@ import type { AgentToolCallState as ToolCallState } from "@/lib/api/agentProtoco
 import type { SearchResultPreviewItem } from "../utils/searchResultPreview";
 import { InlineToolProcessStep } from "./InlineToolProcessStep";
 
+export const openExternalUrlWithSystemBrowserMock = vi
+  .fn()
+  .mockResolvedValue(undefined);
+
 vi.mock("@/lib/api/externalUrl", () => ({
-  openExternalUrlWithSystemBrowser: vi.fn().mockResolvedValue(undefined),
+  openExternalUrlWithSystemBrowser: (...args: unknown[]) =>
+    openExternalUrlWithSystemBrowserMock(...args),
 }));
 
 vi.mock("./MarkdownRenderer", () => ({

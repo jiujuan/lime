@@ -14,6 +14,7 @@ import {
   APP_SERVER_METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE,
   APP_SERVER_METHOD_AGENT_SESSION_THREAD_RESUME,
   APP_SERVER_METHOD_AGENT_SESSION_UPDATE,
+  APP_SERVER_METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
   APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL,
   APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
   APP_SERVER_METHOD_ARTIFACT_READ,
@@ -562,6 +563,75 @@ describe("App Server API", () => {
               artifactRef: "artifact-report",
               includeContent: true,
               limit: 1,
+            },
+          }),
+        ],
+      },
+    });
+  });
+
+  it("appendAgentSessionRuntimeEvents 应通过 App Server current method 写入 runtime event", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      lines: [
+        line({
+          id: 6,
+          result: {
+            events: [
+              {
+                eventId: "evt-runtime-1",
+                sessionId: "session-1",
+                turnId: "turn-1",
+                sequence: 8,
+                type: "artifact.snapshot",
+                payload: {
+                  artifact: {
+                    artifactId: "artifact-document-1",
+                  },
+                },
+                timestamp: "2026-06-24T00:00:00.000Z",
+              },
+            ],
+          },
+        }),
+      ],
+    });
+
+    const client = new AppServerClient({ initialRequestId: 6 });
+    const result = await client.appendAgentSessionRuntimeEvents({
+      sessionId: "session-1",
+      turnId: "turn-1",
+      runtimeEvents: [
+        {
+          type: "artifact.snapshot",
+          payload: {
+            artifact: {
+              artifactId: "artifact-document-1",
+            },
+          },
+        },
+      ],
+    });
+
+    expect(result.result.events?.[0]?.eventId).toBe("evt-runtime-1");
+    expect(safeInvoke).toHaveBeenCalledWith("app_server_handle_json_lines", {
+      request: {
+        lines: [
+          line({
+            id: 6,
+            method: APP_SERVER_METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
+            params: {
+              sessionId: "session-1",
+              turnId: "turn-1",
+              runtimeEvents: [
+                {
+                  type: "artifact.snapshot",
+                  payload: {
+                    artifact: {
+                      artifactId: "artifact-document-1",
+                    },
+                  },
+                },
+              ],
             },
           }),
         ],

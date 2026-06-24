@@ -425,6 +425,48 @@ describe("workspaceSendHelpers runtime team preview", () => {
     });
   });
 
+  it("历史专家 session metadata 应保留到工作区发送 request metadata", () => {
+    const metadata = buildWorkspaceRequestMetadata({
+      workspaceRequestMetadataBase: {
+        expert: {
+          expertId: "code-literature",
+          title: "代码文学专家",
+          skillRefs: ["skill:capability-report"],
+        },
+        harness: {
+          source: "history-session",
+          expert: {
+            expert_id: "code-literature",
+            title: "代码文学专家",
+            skill_refs: ["skill:capability-report"],
+          },
+        },
+      },
+      effectiveToolPreferences: {
+        task: false,
+        subagent: false,
+      },
+      mappedTheme: "general",
+      isThemeWorkbench: false,
+      currentGateKey: "default",
+    });
+
+    expect(metadata).toMatchObject({
+      expert: {
+        expertId: "code-literature",
+        title: "代码文学专家",
+        skillRefs: ["skill:capability-report"],
+      },
+      harness: expect.objectContaining({
+        expert: {
+          expert_id: "code-literature",
+          title: "代码文学专家",
+          skill_refs: ["skill:capability-report"],
+        },
+      }),
+    });
+  });
+
   it("保存的 Soul 创作声线无本轮显式声线时应作为发送 fallback", () => {
     const metadata = buildWorkspaceRequestMetadata({
       savedSoulArtifactVoiceGenerationBrief: {

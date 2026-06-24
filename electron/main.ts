@@ -1,3 +1,4 @@
+/* global Electron, process */
 import {
   IPC_DEEP_LINK_GET_CURRENT_CHANNEL,
   IPC_DEEP_LINK_GET_URLS_CHANNEL,
@@ -22,7 +23,6 @@ import { ElectronDevHttpBridge } from "./devHttpBridge";
 import { ElectronHostCommands } from "./hostCommands";
 import {
   buildMainWindowChromeOptions,
-  buildMainWindowStartupDataUrl,
   buildMainWindowStartupHtml,
   buildMainWindowStartupOptions,
 } from "./mainWindowOptions";
@@ -64,7 +64,7 @@ import {
   type IpcMainInvokeEvent,
 } from "./electronRuntime";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -227,7 +227,7 @@ async function loadMainWindowStartupScreen(
   });
 
   try {
-    await window.loadURL(buildMainWindowStartupDataUrl(startupHtml));
+    await window.loadURL(writeMainWindowStartupHtmlFile(startupHtml));
   } catch (error) {
     console.warn(
       `[electron-host] startup screen failed: ${
@@ -235,6 +235,14 @@ async function loadMainWindowStartupScreen(
       }`,
     );
   }
+}
+
+function writeMainWindowStartupHtmlFile(html: string): string {
+  const startupDir = path.join(app.getPath("userData"), "startup");
+  mkdirSync(startupDir, { recursive: true });
+  const startupPath = path.join(startupDir, "main-window-startup.html");
+  writeFileSync(startupPath, html, "utf8");
+  return pathToFileURL(startupPath).toString();
 }
 
 async function waitForMainWindowStartupScreenVisible(
@@ -1103,7 +1111,7 @@ async function handleHostInvoke(
     }
     return await appServerHost.drainEvents(
       typeof request === "object" && request !== null
-        ? (request as { limit?: number })
+        ? (request as { includeRecent?: boolean; limit?: number })
         : {},
     );
   }

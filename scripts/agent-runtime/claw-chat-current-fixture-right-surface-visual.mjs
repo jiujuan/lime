@@ -1,3 +1,4 @@
+import path from "node:path";
 import {
   APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_LIST,
   APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST,
@@ -11,9 +12,12 @@ import {
 } from "./claw-chat-current-fixture-utils.mjs";
 
 const RIGHT_SURFACE_ROOTS = {
+  appSurface: "workspace-agent-app-surface",
+  browser: "right-surface-browser-panel",
   expertInfo: "expert-info-panel",
   files: "workspace-files-surface",
   objectCanvas: "workspace-object-canvas-surface",
+  productProfile: "workspace-product-profile-surface",
 };
 
 export async function runRightSurfaceVisualMatrix({
@@ -60,6 +64,74 @@ export async function runRightSurfaceVisualMatrix({
         transportKind: "cdp",
       },
     }),
+    browser: await requestRightSurfacePending(page, appServerRequests, {
+      workspace,
+      sessionId,
+      surfaceKind: "browser",
+      candidateId: "right-surface-visual-browser",
+      metadata: {
+        browserSessionId: "fixture-browser-session",
+        profileKey: "fixture-profile",
+        targetId: "fixture-target",
+        launchUrl: "https://example.com/right-surface-browser",
+        title: "Right Surface visual browser",
+        adapterKind: "cdp",
+        lifecycleState: "ready",
+        controlMode: "inspect",
+      },
+    }),
+    appSurfaceContentFactory: await requestRightSurfacePending(
+      page,
+      appServerRequests,
+      {
+        workspace,
+        sessionId,
+        surfaceKind: "appSurface",
+        candidateId: "agent-app-shell-content-factory-app-main",
+        metadata: {
+          appId: "content-factory-app",
+          title: "内容工厂",
+          surface: {
+            entryUrl:
+              "https://example.com/lime-agent-apps/content-factory/right-surface",
+            containerId: "agent-app-shell-content-factory-app-main",
+            activeStrategy: "webContentsView",
+            supportedStrategies: ["controlledBrowserWindow", "webContentsView"],
+            embedding: {
+              rightSurfaceDock: true,
+              iframe: false,
+              browserView: false,
+            },
+          },
+        },
+      },
+    ),
+    appSurfacePromptLab: await requestRightSurfacePending(
+      page,
+      appServerRequests,
+      {
+        workspace,
+        sessionId,
+        surfaceKind: "appSurface",
+        candidateId: "agent-app-shell-prompt-lab-app",
+        metadata: {
+          appId: "prompt-lab-app",
+          title: "Prompt Lab",
+          surface: {
+            entryUrl:
+              "https://example.com/lime-agent-apps/prompt-lab/right-surface",
+            containerId: "agent-app-shell-prompt-lab-app",
+            activeStrategy: "webContentsView",
+            supportedStrategies: ["controlledBrowserWindow", "webContentsView"],
+            embedding: {
+              rightSurfaceDock: true,
+              iframe: false,
+              browserView: false,
+            },
+          },
+        },
+      },
+    ),
   };
 
   const captures = {
@@ -70,6 +142,7 @@ export async function runRightSurfaceVisualMatrix({
     }),
     objectCanvas: await clickAndAssertRightSurface(page, options, {
       surfaceKind: "objectCanvas",
+      activeSurfaceKind: "productProfile",
       toggleTestId: "task-center-object-canvas-toggle",
       rootTestId: RIGHT_SURFACE_ROOTS.objectCanvas,
     }),
@@ -77,6 +150,17 @@ export async function runRightSurfaceVisualMatrix({
       surfaceKind: "expertInfo",
       toggleTestId: "task-center-expert-info-toggle",
       rootTestId: RIGHT_SURFACE_ROOTS.expertInfo,
+    }),
+    browser: await clickAndAssertRightSurface(page, options, {
+      surfaceKind: "browser",
+      toggleTestId: "task-center-browser-toggle",
+      rootTestId: RIGHT_SURFACE_ROOTS.browser,
+      screenshotName: "right-surface-browser",
+    }),
+    appSurface: await clickAndAssertRightSurface(page, options, {
+      surfaceKind: "appSurface",
+      toggleTestId: "workspace-right-surface-tab-appSurface",
+      rootTestId: RIGHT_SURFACE_ROOTS.appSurface,
     }),
   };
 
@@ -97,6 +181,13 @@ export async function runRightSurfaceVisualMatrix({
     requests: {
       files: summarizeRightSurfaceRequest(requests.files),
       objectCanvas: summarizeRightSurfaceRequest(requests.objectCanvas),
+      browser: summarizeRightSurfaceRequest(requests.browser),
+      appSurfaceContentFactory: summarizeRightSurfaceRequest(
+        requests.appSurfaceContentFactory,
+      ),
+      appSurfacePromptLab: summarizeRightSurfaceRequest(
+        requests.appSurfacePromptLab,
+      ),
     },
     captures,
     pendingAfterClicks: summarizePendingList(pendingAfterClicks.result),
@@ -126,30 +217,55 @@ async function requestRightSurfacePending(
   );
 }
 
-async function clickAndAssertRightSurface(
+export async function clickAndAssertRightSurface(
   page,
   options,
-  { surfaceKind, toggleTestId, rootTestId },
+  {
+    surfaceKind,
+    activeSurfaceKind = surfaceKind,
+    toggleTestId,
+    rootTestId,
+    screenshotName = null,
+  },
 ) {
   const toggle = await waitForRightSurfaceToggle(page, options, toggleTestId);
   await clickRightSurfaceToggle(page, toggleTestId);
   const opened = await waitForRightSurfaceSnapshot(page, options, {
+    activeSurfaceKind,
     surfaceKind,
     rootTestId,
   });
 
   await sleep(1_000);
   const stable = await captureRightSurfaceSnapshot(page, {
+    activeSurfaceKind,
     surfaceKind,
     rootTestId,
   });
-  assertRightSurfaceSnapshot(stable, surfaceKind);
+  assertRightSurfaceSnapshot(stable, surfaceKind, activeSurfaceKind);
+  const screenshot = screenshotName
+    ? await captureRightSurfaceScreenshot(page, options, screenshotName)
+    : null;
 
   return {
     toggle,
     opened,
     stable,
+    screenshot,
   };
+}
+
+async function captureRightSurfaceScreenshot(page, options, screenshotName) {
+  const screenshotPath = path.join(
+    options.evidenceDir,
+    `${options.prefix}-${screenshotName}.png`,
+  );
+  await page.screenshot({
+    path: screenshotPath,
+    fullPage: false,
+    timeout: 15_000,
+  });
+  return screenshotPath;
 }
 
 async function waitForRightSurfaceToggle(page, options, testId) {
@@ -244,7 +360,7 @@ async function clickRightSurfaceToggle(page, testId) {
 async function waitForRightSurfaceSnapshot(
   page,
   options,
-  { surfaceKind, rootTestId },
+  { surfaceKind, activeSurfaceKind = surfaceKind, rootTestId },
 ) {
   const startedAt = Date.now();
   let lastSnapshot = null;
@@ -254,7 +370,7 @@ async function waitForRightSurfaceSnapshot(
       rootTestId,
     });
     lastSnapshot = snapshot;
-    if (isRightSurfaceSnapshotReady(snapshot, surfaceKind)) {
+    if (isRightSurfaceSnapshotReady(snapshot, surfaceKind, activeSurfaceKind)) {
       return snapshot;
     }
     await sleep(options.intervalMs);
@@ -267,21 +383,49 @@ async function waitForRightSurfaceSnapshot(
   );
 }
 
-async function captureRightSurfaceSnapshot(page, { surfaceKind, rootTestId }) {
+async function captureRightSurfaceSnapshot(
+  page,
+  { surfaceKind, activeSurfaceKind = surfaceKind, rootTestId },
+) {
   return await page.evaluate(
-    ({ surfaceKind, rootTestId, roots }) => {
+    ({ surfaceKind, activeSurfaceKind, rootTestId, roots }) => {
       const host = document.querySelector(
         '[data-testid="workspace-right-surface-host"]',
       );
       const canvasPanel = document.querySelector(
         '[data-testid="layout-canvas-panel"]',
       );
+      const activePane = document.querySelector(
+        '[data-testid="workspace-right-surface-active-pane"]',
+      );
       const layoutRoot = document.querySelector(
         '[data-testid="layout-transition-root"]',
       );
       const root = document.querySelector(`[data-testid="${rootTestId}"]`);
+      const agentAppTabs = document.querySelector(
+        '[data-testid="workspace-agent-app-surface-tabs"]',
+      );
+      const agentAppTabButtons = Array.from(
+        document.querySelectorAll(
+          '[data-testid^="workspace-agent-app-surface-tab-"]',
+        ),
+      );
+      const agentAppFrames = Array.from(
+        document.querySelectorAll(
+          '[data-testid="workspace-agent-app-surface-frame"]',
+        ),
+      );
+      const agentAppViewports = Array.from(
+        document.querySelectorAll(
+          '[data-testid="workspace-agent-app-surface-viewport"]',
+        ),
+      );
+      const browserPanel = document.querySelector(
+        '[data-testid="right-surface-browser-panel"]',
+      );
       const hostRect = rectFor(host);
       const canvasPanelRect = rectFor(canvasPanel);
+      const activePaneRect = rectFor(activePane);
       const rootRect = rectFor(root);
       const rootVisibility = Object.fromEntries(
         Object.entries(roots).map(([kind, testId]) => {
@@ -306,9 +450,26 @@ async function captureRightSurfaceSnapshot(page, { surfaceKind, rootTestId }) {
         hostRect && rootRect
           ? Math.abs(hostRect.height - rootRect.height)
           : null;
+      const rootActivePaneWidthDelta =
+        activePaneRect && rootRect
+          ? Math.abs(activePaneRect.width - rootRect.width)
+          : null;
+      const rootActivePaneHeightDelta =
+        activePaneRect && rootRect
+          ? Math.abs(activePaneRect.height - rootRect.height)
+          : null;
+      const rootFillsHost =
+        Boolean(hostRect && rootRect) &&
+        rootRect.width >= hostRect.width - 8 &&
+        rootRect.height >= hostRect.height - 8;
+      const rootFillsActivePane =
+        Boolean(activePaneRect && rootRect) &&
+        rootRect.width >= activePaneRect.width - 8 &&
+        rootRect.height >= activePaneRect.height - 8;
 
       return {
         expectedSurface: surfaceKind,
+        expectedActiveSurface: activeSurfaceKind,
         activeSurface: host?.getAttribute("data-surface") ?? null,
         layoutMode: layoutRoot?.getAttribute("data-effective-mode") ?? null,
         hostVisible: visibleInfo(host).visible,
@@ -318,6 +479,7 @@ async function captureRightSurfaceSnapshot(page, { surfaceKind, rootTestId }) {
         rects: {
           host: hostRect,
           canvasPanel: canvasPanelRect,
+          activePane: activePaneRect,
           root: rootRect,
         },
         geometry: {
@@ -325,17 +487,59 @@ async function captureRightSurfaceSnapshot(page, { surfaceKind, rootTestId }) {
           hostCanvasHeightDelta,
           rootHostWidthDelta,
           rootHostHeightDelta,
+          rootActivePaneWidthDelta,
+          rootActivePaneHeightDelta,
           hostFillsCanvasPanel:
             Boolean(hostRect && canvasPanelRect) &&
             hostRect.width >= 360 &&
             hostRect.height >= 500 &&
             hostCanvasWidthDelta <= 8 &&
             hostCanvasHeightDelta <= 8,
-          rootFillsHost:
-            Boolean(hostRect && rootRect) &&
-            rootRect.width >= hostRect.width - 8 &&
-            rootRect.height >= hostRect.height - 8,
+          rootFillsHost,
+          rootFillsActivePane,
+          rootFillsSurfaceViewport: rootFillsHost || rootFillsActivePane,
         },
+        agentAppSurface: {
+          tabs: visibleInfo(agentAppTabs),
+          tabCount: agentAppTabButtons.length,
+          tabLabels: agentAppTabButtons.map((button) =>
+            (button.textContent || "").trim(),
+          ),
+          activeTabLabels: agentAppTabButtons
+            .filter((button) => button.getAttribute("aria-selected") === "true")
+            .map((button) => (button.textContent || "").trim()),
+          frameCount: agentAppFrames.length,
+          visibleFrameCount: agentAppFrames.filter(
+            (frame) => visibleInfo(frame).visible,
+          ).length,
+          viewportCount: agentAppViewports.length,
+          visibleViewportCount: agentAppViewports.filter(
+            (viewport) => visibleInfo(viewport).visible,
+          ).length,
+        },
+        browserSurface: browserPanel
+          ? {
+              adapterKind:
+                browserPanel.getAttribute("data-browser-adapter-kind") ?? "",
+              controlMode:
+                browserPanel.getAttribute("data-browser-control-mode") ?? "",
+              controlOwner:
+                browserPanel.getAttribute("data-browser-control-owner") ?? "",
+              humanTakeover:
+                browserPanel.getAttribute("data-browser-human-takeover") ?? "",
+              lifecycleState:
+                browserPanel.getAttribute("data-browser-lifecycle-state") ?? "",
+              profileKey:
+                browserPanel.getAttribute("data-browser-profile-key") ?? "",
+              sessionId:
+                browserPanel.getAttribute("data-browser-session-id") ?? "",
+              hasControlOverlay: Boolean(
+                document.querySelector(
+                  '[data-testid="right-surface-browser-control-overlay"]',
+                ),
+              ),
+            }
+          : null,
         bodyTextSample: (document.body?.innerText || "").slice(0, 2000),
       };
 
@@ -376,6 +580,7 @@ async function captureRightSurfaceSnapshot(page, { surfaceKind, rootTestId }) {
       }
     },
     {
+      activeSurfaceKind,
       surfaceKind,
       rootTestId,
       roots: RIGHT_SURFACE_ROOTS,
@@ -383,22 +588,30 @@ async function captureRightSurfaceSnapshot(page, { surfaceKind, rootTestId }) {
   );
 }
 
-function isRightSurfaceSnapshotReady(snapshot, surfaceKind) {
+function isRightSurfaceSnapshotReady(
+  snapshot,
+  surfaceKind,
+  activeSurfaceKind = surfaceKind,
+) {
   return (
-    snapshot?.activeSurface === surfaceKind &&
+    snapshot?.activeSurface === activeSurfaceKind &&
     snapshot?.hostVisible === true &&
     snapshot?.rootVisible === true &&
     Array.isArray(snapshot?.visibleRootKinds) &&
     snapshot.visibleRootKinds.length === 1 &&
     snapshot.visibleRootKinds[0] === surfaceKind &&
     snapshot?.geometry?.hostFillsCanvasPanel === true &&
-    snapshot?.geometry?.rootFillsHost === true
+    snapshot?.geometry?.rootFillsSurfaceViewport === true
   );
 }
 
-function assertRightSurfaceSnapshot(snapshot, surfaceKind) {
+function assertRightSurfaceSnapshot(
+  snapshot,
+  surfaceKind,
+  activeSurfaceKind = surfaceKind,
+) {
   assert(
-    isRightSurfaceSnapshotReady(snapshot, surfaceKind),
+    isRightSurfaceSnapshotReady(snapshot, surfaceKind, activeSurfaceKind),
     `Right Surface stable snapshot 未保持目标 surface: ${surfaceKind}; snapshot=${JSON.stringify(
       sanitizeJson(snapshot),
     )}`,

@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildWorkflowRuntimeCapabilityProfile } from "../runtime/workflowRuntimeCapabilityProfile";
 import type { AppManifest } from "../types";
+import type { AgentAppHostLifecycleSnapshot } from "../host";
 import {
   act,
   apiMocks,
@@ -86,6 +87,11 @@ describe("AgentAppsPage", () => {
     );
     expect(apiMocks.saveInstalledAgentAppState).not.toHaveBeenCalled();
     expectInstallReviewDialog(container);
+    expect(
+      container.querySelector(
+        '[data-testid="agent-apps-install-review-release-evidence"]',
+      ),
+    ).toBeNull();
 
     const confirmInstall = container.querySelector(
       '[data-testid="agent-apps-install-review-confirm"]',
@@ -177,43 +183,101 @@ describe("AgentAppsPage", () => {
   });
 
   it("应用中心应展示 Agent App 宿主状态和 Right Surface 合同", async () => {
-    installedStates.push(
-      buildReadyState({
-        manifest: {
-          ...(contentFactoryFixture as AppManifest),
-          status: "ready",
-          profiles: ["workbench"],
-          workbench: {
-            profile: "production",
-            productWorkspace: {
-              scope: "session",
-              primaryObjectKinds: ["articleDraft"],
+    const installed = buildReadyState({
+      manifest: {
+        ...(contentFactoryFixture as AppManifest),
+        status: "ready",
+        profiles: ["workbench"],
+        workbench: {
+          profile: "production",
+          productWorkspace: {
+            scope: "session",
+            primaryObjectKinds: ["articleDraft"],
+          },
+          productionObjects: [
+            {
+              kind: "articleDraft",
+              title: "文章草稿",
+              artifactKind: "markdown_document",
+              defaultSurface: "documentCanvas",
+              primary: true,
             },
-            productionObjects: [
-              {
-                kind: "articleDraft",
-                title: "文章草稿",
-                artifactKind: "markdown_document",
-                defaultSurface: "documentCanvas",
-                primary: true,
-              },
-            ],
-            objectSurfaces: [
-              {
-                objectKind: "articleDraft",
-                surfaceKind: "documentCanvas",
-                renderer: "host_builtin",
-              },
-            ],
-            historyRestore: {
-              defaultSurface: "selectedObject",
-              restoreSelection: true,
-              restoreLayout: true,
+          ],
+          objectSurfaces: [
+            {
+              objectKind: "articleDraft",
+              surfaceKind: "documentCanvas",
+              renderer: "host_builtin",
             },
+          ],
+          historyRestore: {
+            defaultSurface: "selectedObject",
+            restoreSelection: true,
+            restoreLayout: true,
           },
         },
-      }),
-    );
+      },
+    });
+    installedStates.push(installed);
+    const hostSnapshot = {
+      appId: installed.appId,
+      displayName: "内容工厂",
+      profiles: ["workbench"],
+      appCenterStatus: "blocked",
+      readinessStatus: "blocked",
+      rightSurface: {
+        dock: "right",
+        physicalDockCount: 1,
+        defaultActiveTab: "productProfile",
+        supportedTabs: ["productProfile", "file"],
+        productProfile: {
+          enabled: true,
+          objects: [
+            {
+              kind: "articleDraft",
+              title: "文章草稿",
+              defaultPane: "documentCanvas",
+              artifactKind: "markdown_document",
+              primary: true,
+            },
+          ],
+          panes: ["documentCanvas"],
+          rendererKinds: ["host_builtin"],
+        },
+        historyRestore: {
+          enabled: true,
+          defaultTab: "productProfile",
+          defaultPane: "documentCanvas",
+          restoreSelection: true,
+          restoreLayout: true,
+          fallback: "artifactPreview",
+        },
+      },
+      taskRuntime: {
+        enabled: true,
+        packageRootPath: null,
+        workerEntrypoint: null,
+        contractPath: null,
+        sampleRequestPath: null,
+        outputArtifactKind: null,
+        taskKinds: [],
+        directProviderAccess: false,
+        directFilesystemAccess: false,
+        blockers: ["TASK_RUNTIME_WORKER_ENTRYPOINT_MISSING"],
+        followUps: [],
+      },
+      functions: [],
+      blockers: [
+        "CLOUD_REGISTRATION_REQUIRED",
+        "TASK_RUNTIME_WORKER_ENTRYPOINT_MISSING",
+      ],
+      followUps: [],
+      generatedAt: installed.updatedAt,
+    } satisfies AgentAppHostLifecycleSnapshot;
+    apiMocks.listAgentAppHostLifecycleSnapshots.mockResolvedValue({
+      snapshots: [hostSnapshot],
+      issues: [],
+    });
     const container = await renderPage();
     await flush();
 
@@ -238,6 +302,20 @@ describe("AgentAppsPage", () => {
       "agentApp.apps.center.host.rightSurface",
     );
     expect(detail?.textContent).toContain("agentApp.apps.center.host.blockers");
+    expect(detail?.textContent).toContain(
+      "agentApp.apps.center.host.issueSummary.title",
+    );
+    expect(detail?.textContent).toContain(
+      "agentApp.apps.center.host.issueCategory.cloud",
+    );
+    expect(detail?.textContent).toContain(
+      "agentApp.apps.center.host.issueCategory.taskRuntime",
+    );
+    expect(
+      container.querySelector(
+        '[data-testid="agent-apps-host-readiness-category-cloud"]',
+      ),
+    ).not.toBeNull();
   });
 
   it("安装确认弹层应展示待安装 App 的 manifest 图标", async () => {
@@ -716,6 +794,59 @@ describe("AgentAppsPage", () => {
     );
     expect(apiMocks.saveInstalledAgentAppState).not.toHaveBeenCalled();
     expectInstallReviewDialog(container);
+    const releaseEvidence = container.querySelector(
+      '[data-testid="agent-apps-install-review-release-evidence"]',
+    );
+    expect(releaseEvidence).not.toBeNull();
+    expect(releaseEvidence?.getAttribute("data-source-kind")).toBe(
+      "fetched_package",
+    );
+    expect(releaseEvidence?.getAttribute("data-catalog-source")).toBe("seeded");
+    expect(
+      container.querySelector(
+        '[data-testid="agent-apps-install-review-release-evidence-status"]',
+      )?.textContent,
+    ).toContain("agentApp.apps.installReview.releaseEvidence.status.warning");
+    expect(container.textContent).toContain(
+      "agentApp.apps.installReview.releaseEvidence.checkStatus.missing",
+    );
+    expect(
+      container
+        .querySelector(
+          '[data-testid="agent-apps-install-review-release-audit-summary"]',
+        )
+        ?.getAttribute("data-can-install"),
+    ).toBe("true");
+    expect(container.textContent).toContain(
+      "agentApp.apps.installReview.releaseEvidence.audit.counts",
+    );
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", {
+      ...navigator,
+      clipboard: { writeText },
+    });
+    const copyReport = container.querySelector(
+      '[data-testid="agent-apps-install-review-release-audit-copy"]',
+    ) as HTMLButtonElement | null;
+    await act(async () => {
+      copyReport?.click();
+      await Promise.resolve();
+    });
+    expect(writeText).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "# Agent App Release Audit: content-factory-app@0.3.0",
+      ),
+    );
+    expect(writeText).toHaveBeenCalledWith(
+      expect.stringContaining("- Status: warning"),
+    );
+    expect(
+      container.querySelector(
+        '[data-testid="agent-apps-install-review-release-audit-copy-state"]',
+      )?.textContent,
+    ).toContain(
+      "agentApp.apps.installReview.releaseEvidence.audit.copyState.copied",
+    );
 
     const confirmInstall = container.querySelector(
       '[data-testid="agent-apps-install-review-confirm"]',
@@ -733,6 +864,89 @@ describe("AgentAppsPage", () => {
       }),
     });
     expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("Cloud App 发布包证据阻断时不允许确认安装", async () => {
+    apiMocks.reviewCloudAgentAppRelease.mockImplementationOnce(async () => {
+      const state = buildReadyState();
+      return buildReviewResult(state, {
+        sourceKind: "cloud_release",
+        sourceUri:
+          "https://lime.local/agent-apps/content-factory-app/releases/0.3.0/package.zip",
+        packageUrl:
+          "https://lime.local/agent-apps/content-factory-app/releases/0.3.0/package.zip",
+        releaseEvidence: {
+          appId: state.appId,
+          version: state.identity.appVersion,
+          catalogSource: "remote",
+          sourceKind: "fetched_package",
+          packageHashDeclared: true,
+          manifestHashDeclared: true,
+          signatureDeclared: true,
+          declaredPackageHash: state.identity.packageHash,
+          declaredManifestHash: state.identity.manifestHash,
+          actualPackageHash: state.identity.packageHash,
+          actualManifestHash: state.identity.manifestHash,
+          packageHashMatched: true,
+          manifestHashMatched: true,
+          signatureRef: "sigstore:content-factory-app@0.3.0",
+          signaturePolicy: "required",
+          signatureVerificationStatus: "declared",
+          packageVerificationStatus: "verified",
+          status: "blocked",
+          blockerCodes: ["signature_unverified"],
+          warningCodes: [],
+        },
+      });
+    });
+
+    const container = await renderPage();
+    await flush();
+
+    const installCloud = container.querySelector(
+      '[data-testid="agent-apps-install-cloud-content-factory-app"]',
+    ) as HTMLButtonElement | null;
+    await act(async () => {
+      installCloud?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await flush();
+
+    const confirmInstall = container.querySelector(
+      '[data-testid="agent-apps-install-review-confirm"]',
+    ) as HTMLButtonElement | null;
+    expect(confirmInstall?.disabled).toBe(true);
+    expect(
+      container.querySelector(
+        '[data-testid="agent-apps-install-review-release-evidence-status"]',
+      )?.textContent,
+    ).toContain("agentApp.apps.installReview.releaseEvidence.status.blocked");
+    expect(container.textContent).toContain(
+      "agentApp.apps.installReview.releaseEvidence.checkStatus.unverified",
+    );
+    expect(
+      container
+        .querySelector(
+          '[data-testid="agent-apps-install-review-release-audit-summary"]',
+        )
+        ?.getAttribute("data-can-install"),
+    ).toBe("false");
+    expect(
+      container
+        .querySelector(
+          '[data-testid="agent-apps-install-review-release-audit-signature"]',
+        )
+        ?.getAttribute("data-issue-codes"),
+    ).toBe("CLOUD_SIGNATURE_UNVERIFIED");
+
+    await act(async () => {
+      confirmInstall?.click();
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(apiMocks.saveInstalledAgentAppState).not.toHaveBeenCalled();
   });
 
   it("Cloud App 缺少 hash 时应阻断安装审查", async () => {
@@ -1039,6 +1253,7 @@ describe("AgentAppsPage", () => {
     expect(apiMocks.requestWorkspaceRightSurface).toHaveBeenCalledWith(
       expect.objectContaining({
         workspaceId: "workspace-main",
+        sessionId: "session-main",
         surfaceKind: "appSurface",
         origin: "agent_app_center",
         reason: "agent_app_shell_surface_ready",
@@ -1065,6 +1280,81 @@ describe("AgentAppsPage", () => {
       container.querySelector('[data-testid="agent-apps-launch-summary"]')
         ?.textContent,
     ).toContain("shell:项目首页:http://127.0.0.1:4199/dashboard");
+  });
+
+  it("选择多个 Claw 目标时应把 standalone App surface 投递到选中的会话", async () => {
+    installedStates.push(buildStandaloneState());
+    const container = await renderPage(
+      undefined,
+      undefined,
+      {
+        workspaceId: "workspace-main",
+        sessionId: "session-main",
+        label: "主会话",
+      },
+      [
+        {
+          workspaceId: "workspace-main",
+          sessionId: "session-main",
+          label: "主会话",
+        },
+        {
+          workspaceId: "workspace-main",
+          sessionId: "session-review",
+          label: "复盘会话",
+        },
+      ],
+    );
+    await flush();
+
+    const rightSurfaceButton = container.querySelector(
+      '[data-testid="agent-apps-launch-target-right-surface"]',
+    ) as HTMLButtonElement | null;
+    await act(async () => {
+      rightSurfaceButton?.click();
+      await Promise.resolve();
+    });
+    await flush();
+
+    const targetSelect = container.querySelector(
+      '[data-testid="agent-apps-launch-target-select"]',
+    ) as HTMLSelectElement | null;
+    expect(targetSelect).not.toBeNull();
+    expect(targetSelect?.options).toHaveLength(2);
+    await act(async () => {
+      if (targetSelect?.options[1]) {
+        targetSelect.value = targetSelect.options[1].value;
+        targetSelect.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(
+      container.querySelector('[data-testid="agent-apps-launch-target-current"]')
+        ?.textContent,
+    ).toContain("复盘会话");
+
+    await openAppDetail(container);
+
+    const launchButton = container.querySelector(
+      '[data-testid="agent-apps-launch-entry-dashboard"]',
+    ) as HTMLButtonElement | null;
+    await act(async () => {
+      launchButton?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(apiMocks.requestWorkspaceRightSurface).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "workspace-main",
+        sessionId: "session-review",
+        surfaceKind: "appSurface",
+      }),
+      {},
+    );
   });
 
   it("没有 Claw target 时应禁用右侧打开选项", async () => {

@@ -298,7 +298,7 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     closeToolTab,
     resolveToolTabKind,
     resolveBrowserInitialUrl,
-    updateBrowserTabUrl,
+    updateBrowserTabPage,
   } = useCanvasWorkbenchToolTabsState({
     activeTab,
     setActiveTab,
@@ -474,7 +474,9 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     if (!previewOpenRequest) {
       return;
     }
-    if (handledPreviewOpenRequestKeyRef.current === previewOpenRequest.requestKey) {
+    if (
+      handledPreviewOpenRequestKeyRef.current === previewOpenRequest.requestKey
+    ) {
       return;
     }
     const selectionKey = previewOpenRequest.selectionKey?.trim();
@@ -627,8 +629,8 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
       changeView={resolvedChangeView}
       changesFilesPanelOpen={changesFilesPanelOpen}
       browserInitialUrl={resolveBrowserInitialUrl(activeTab)}
-      onBrowserNavigate={(url) => {
-        updateBrowserTabUrl(activeTab, url);
+      onBrowserNavigate={(url, title) => {
+        updateBrowserTabPage(activeTab, { url, title });
       }}
       loadFilePreview={loadFilePreview}
       workspaceUnavailable={workspaceUnavailable}

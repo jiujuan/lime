@@ -69,7 +69,7 @@ interface CanvasWorkbenchShellProps {
   changeView?: CanvasWorkbenchChangeView | null;
   changesFilesPanelOpen?: boolean;
   browserInitialUrl?: string | null;
-  onBrowserNavigate?: (url: string) => void;
+  onBrowserNavigate?: (url: string, title?: string | null) => void;
   loadFilePreview?: (path: string) => Promise<HarnessFilePreviewResult>;
   workspaceUnavailable: boolean;
   workspaceRoot?: string | null;

@@ -9,6 +9,7 @@ import {
 const {
   fakeConnection,
   lifecycleConfigs,
+  enqueueFakeNotifications,
   recordedRequests,
   releaseDelayedStaleError,
   resetFakeConnection,
@@ -189,6 +190,10 @@ const {
     }),
   };
 
+  function enqueueFakeNotifications(notifications: JsonRpcMessage[]): void {
+    mirroredNotifications.push(...notifications);
+  }
+
   class FakeAppServerSidecarLifecycle {
     connected:
       | {
@@ -244,6 +249,7 @@ const {
   return {
     fakeConnection,
     lifecycleConfigs,
+    enqueueFakeNotifications,
     recordedRequests,
     resetFakeConnection: () => {
       recordedRequests.length = 0;
@@ -300,6 +306,27 @@ vi.mock("@limecloud/app-server-client", async (importOriginal) => {
     }),
   };
 });
+
+function agentSessionEventMessage(options: {
+  eventId: string;
+  sequence: number;
+  type: string;
+}): JsonRpcMessage {
+  return {
+    method: "agentSession/event",
+    params: {
+      event: {
+        eventId: options.eventId,
+        sequence: options.sequence,
+        sessionId: "session-b",
+        turnId: "turn-b",
+        type: options.type,
+        timestamp: "2026-06-06T00:00:00.000Z",
+        payload: {},
+      },
+    },
+  };
+}
 
 describe("ElectronAppServerHost", () => {
   beforeEach(() => {
@@ -497,6 +524,103 @@ describe("ElectronAppServerHost", () => {
       },
     });
     expect(fakeConnection.nextNotification).toHaveBeenCalled();
+  });
+
+  it("drainEvents includeRecent 应允许第二观察者读取最近已消费 notification", async () => {
+    const { ElectronAppServerHost } = await import("./appServerHost");
+    const host = new ElectronAppServerHost();
+    enqueueFakeNotifications([
+      agentSessionEventMessage({
+        eventId: "evt-tool-started",
+        sequence: 2,
+        type: "tool.started",
+      }),
+    ]);
+
+    const consumed = await host.drainEvents({ limit: 1 });
+    expect(decodeMessage(consumed.lines[0] ?? "")).toMatchObject({
+      method: "agentSession/event",
+      params: {
+        event: {
+          eventId: "evt-tool-started",
+          type: "tool.started",
+        },
+      },
+    });
+
+    const replayed = await host.drainEvents({
+      includeRecent: true,
+      limit: 5,
+    });
+    const replayedMessages = replayed.lines.map(decodeMessage);
+
+    expect(replayedMessages).toEqual([
+      expect.objectContaining({
+        method: "agentSession/event",
+        params: {
+          event: expect.objectContaining({
+            eventId: "evt-tool-started",
+            type: "tool.started",
+          }),
+        },
+      }),
+    ]);
+  });
+
+  it("drainEvents includeRecent 应按 eventId 去重并保留工具生命周期终态", async () => {
+    const { ElectronAppServerHost } = await import("./appServerHost");
+    const host = new ElectronAppServerHost();
+    enqueueFakeNotifications([
+      agentSessionEventMessage({
+        eventId: "evt-tool-started",
+        sequence: 2,
+        type: "tool.started",
+      }),
+      agentSessionEventMessage({
+        eventId: "evt-tool-result",
+        sequence: 3,
+        type: "tool.result",
+      }),
+      agentSessionEventMessage({
+        eventId: "evt-turn-completed",
+        sequence: 4,
+        type: "turn.completed",
+      }),
+      agentSessionEventMessage({
+        eventId: "evt-tool-result",
+        sequence: 3,
+        type: "tool.result",
+      }),
+    ]);
+
+    await host.drainEvents({ limit: 4 });
+
+    const replayed = await host.drainEvents({
+      includeRecent: true,
+      limit: 3,
+    });
+    const events = replayed.lines
+      .map(decodeMessage)
+      .map((message) =>
+        "params" in message &&
+        message.params &&
+        typeof message.params === "object" &&
+        !Array.isArray(message.params)
+          ? (message.params as { event?: unknown }).event
+          : null,
+      )
+      .filter(Boolean) as Array<{ eventId: string; type: string }>;
+
+    expect(events.map((event) => event.eventId)).toEqual([
+      "evt-tool-started",
+      "evt-tool-result",
+      "evt-turn-completed",
+    ]);
+    expect(events.map((event) => event.type)).toEqual([
+      "tool.started",
+      "tool.result",
+      "turn.completed",
+    ]);
   });
 
   it("长 turn/start 未返回时应先回 accepted，避免阻塞后续前端提交", async () => {

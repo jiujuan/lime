@@ -423,7 +423,13 @@ export async function waitForGuiSessionVisible(
     if (Date.now() - lastRefreshAt > 2_000) {
       lastRefreshAt = Date.now();
       await page.evaluate(() => {
-        window.dispatchEvent(new Event("focus"));
+        window.dispatchEvent(
+          new CustomEvent("lime:agent-runtime-sessions-changed", {
+            detail: {
+              reason: "external",
+            },
+          }),
+        );
       });
     }
     await sleep(options.intervalMs);
@@ -446,7 +452,7 @@ export async function openSessionFromSidebar(
   page,
   options,
   requestLog,
-  { sessionId, title },
+  { sessionId, title, allowPlanDecision = false },
 ) {
   const startedAt = Date.now();
   let lastSnapshot = null;
@@ -456,11 +462,18 @@ export async function openSessionFromSidebar(
       lastClick = await evaluatePageSnapshot(
         page,
         ({ title }) => {
-          const candidates = Array.from(
+          const sidebarCandidates = Array.from(
             document.querySelectorAll(
-              '[data-testid="app-sidebar-conversation-open"], button',
+              '[data-testid="app-sidebar-conversation-open"]',
             ),
           );
+          const sidebarCandidateSet = new Set(sidebarCandidates);
+          const candidates = [
+            ...sidebarCandidates,
+            ...Array.from(document.querySelectorAll("button")).filter(
+              (button) => !sidebarCandidateSet.has(button),
+            ),
+          ];
           const button = candidates.find((candidate) => {
             const label = [
               candidate.getAttribute("title") || "",
@@ -534,6 +547,10 @@ export async function openSessionFromSidebar(
           );
           const bodyText = document.body?.innerText || "";
           const mainText = document.querySelector("main")?.textContent || "";
+          const planDecisionPanel = document.querySelector(
+            '[data-testid="plan-composer-decision-panel"]',
+          );
+          const planDecisionText = planDecisionPanel?.textContent || "";
           return {
             url: window.location.href,
             hasTextarea: Boolean(textarea),
@@ -561,11 +578,13 @@ export async function openSessionFromSidebar(
             ),
             textareaDisabled:
               textarea instanceof HTMLTextAreaElement ? textarea.disabled : null,
+            hasPlanDecisionPanel: Boolean(planDecisionPanel),
+            hasPlanDecisionTitle: planDecisionText.includes("实施此计划"),
             bodyText,
             mainText,
           };
         },
-            { title },
+        { title },
       );
       lastSnapshot = {
         clicked: lastClick,
@@ -587,19 +606,25 @@ export async function openSessionFromSidebar(
         readModel?.result?.detail?.session?.sessionId ??
         readModel?.result?.detail?.session?.session_id ??
         null;
-      if (
-        inputReady?.hasTextarea &&
-        inputReady?.hasInputbarCore &&
-        inputReady?.textareaVisible &&
-        inputReady?.textareaDisabled === false &&
+      const openedCurrentSession =
         readModelSessionId === sessionId &&
         !inputReady?.hasConversationMenu &&
         !inputReady?.hasRecentConversationsShell &&
         !inputReady?.isRestoringSessionShell &&
         !isTaskCenterHomeText(inputReady?.mainText || "") &&
         !isTaskCenterHomeText(inputReady?.bodyText || "") &&
-        (inputReady?.hasSessionTitleInMain || inputReady?.hasMessageList)
-      ) {
+        (inputReady?.hasSessionTitleInMain || inputReady?.hasMessageList);
+      const inputbarReady =
+        inputReady?.hasTextarea &&
+        inputReady?.hasInputbarCore &&
+        inputReady?.textareaVisible &&
+        inputReady?.textareaDisabled === false;
+      const planDecisionReady =
+        allowPlanDecision === true &&
+        inputReady?.hasMessageList === true &&
+        inputReady?.hasPlanDecisionPanel === true &&
+        inputReady?.hasPlanDecisionTitle === true;
+      if (openedCurrentSession && (inputbarReady || planDecisionReady)) {
         return lastSnapshot;
       }
     }
