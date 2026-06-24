@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
-import contentFactoryFixture from "../fixtures/content-factory-app.json";
 import { buildPackageIdentity } from "../install/packageIdentity";
 import { normalizeManifest } from "../manifest/normalizeManifest";
 import { parseManifest } from "../manifest/parseManifest";
 import { projectApp } from "../projection/projectApp";
 import { checkReadiness } from "../readiness/checkReadiness";
+import { buildContentFactoryUiRuntimeTestManifest } from "../testing/contentFactoryTestManifest";
 import {
   validateProjectionSchemaCoverage,
   validateReadinessSchemaCoverage,
 } from "./schemaGate";
 
 function buildProjectionAndReadiness() {
-  const manifest = parseManifest(contentFactoryFixture);
+  const manifest = parseManifest(buildContentFactoryUiRuntimeTestManifest());
   const normalized = normalizeManifest(manifest);
   const identity = buildPackageIdentity({
     manifest,

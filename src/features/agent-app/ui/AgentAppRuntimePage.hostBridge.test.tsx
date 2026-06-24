@@ -101,7 +101,7 @@ describe("AgentAppRuntimePage Host Bridge", () => {
               }),
               agentRuntime: expect.objectContaining({
                 version: "0.6",
-                enabled: false,
+                enabled: true,
               }),
               requirementBoundary: expect.objectContaining({
                 version: "0.7",

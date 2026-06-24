@@ -5,6 +5,7 @@ import { buildInstalledAgentAppState } from "./installedAppState";
 import { buildAgentAppCleanupRehearsalEvidence } from "./cleanupRehearsalEvidence";
 
 const now = "2026-05-15T00:00:00.000Z";
+const contentFactoryAppVersion = contentFactoryFixture.version;
 
 function buildInstalledStateFixture() {
   const preview = buildInstalledAppPreview({
@@ -34,7 +35,7 @@ describe("cleanup rehearsal evidence P16-H.3", () => {
 
     expect(evidence).toMatchObject({
       appId: "content-factory-app",
-      appVersion: "0.3.0",
+      appVersion: contentFactoryAppVersion,
       packageHash: state.identity.packageHash,
       manifestHash: state.identity.manifestHash,
       strategy: "delete-data",

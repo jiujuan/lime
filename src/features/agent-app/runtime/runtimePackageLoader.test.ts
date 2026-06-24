@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import { buildInstalledAppPreview } from "../install/installedAppPreview";
 import { buildAgentAppPackageCacheEntry } from "../install/packageCache";
 import { AgentAppCapabilityError } from "../sdk/capabilityErrors";
+import {
+  buildContentFactoryUiRuntimeResolvedSetup,
+  buildContentFactoryUiRuntimeTestManifest,
+} from "../testing/contentFactoryTestManifest";
 import { buildUiRuntimeCapabilityProfile } from "./uiRuntimeCapabilityProfile";
 import {
   findUiBundleDescriptor,
@@ -13,6 +17,8 @@ const now = "2026-05-15T00:00:00.000Z";
 
 function buildPreview() {
   return buildInstalledAppPreview({
+    fixture: buildContentFactoryUiRuntimeTestManifest(),
+    setup: buildContentFactoryUiRuntimeResolvedSetup(),
     profile: buildUiRuntimeCapabilityProfile({
       realAdapterEnabled: true,
       uiRuntimeEnabled: true,

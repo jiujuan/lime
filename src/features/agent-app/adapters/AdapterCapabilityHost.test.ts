@@ -1,13 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { buildInstalledAppPreview } from "../install/installedAppPreview";
 import { uninstallApp } from "../install/uninstallApp";
+import { buildWorkflowRuntimeCapabilityProfile } from "../runtime/workflowRuntimeCapabilityProfile";
 import { AdapterCapabilityHost } from "./AdapterCapabilityHost";
-import { buildAdapterCapabilityProfile } from "./adapterCapabilityProfile";
 import { InMemoryAgentAppCapabilityStore } from "./InMemoryAgentAppCapabilityStore";
+
+const CONTENT_FACTORY_ENTRY_KEY = "content_factory";
 
 function buildAdapterPreview() {
   return buildInstalledAppPreview({
-    profile: buildAdapterCapabilityProfile(),
+    profile: buildWorkflowRuntimeCapabilityProfile({
+      realAdapterEnabled: true,
+    }),
     loadedAt: "2026-05-15T00:00:00.000Z",
     checkedAt: "2026-05-15T00:00:00.000Z",
     generatedAt: "2026-05-15T00:00:00.000Z",
@@ -24,7 +28,7 @@ describe("AdapterCapabilityHost", () => {
       now: () => "2026-05-15T00:00:00.000Z",
     });
 
-    const result = await host.runEntry("dashboard");
+    const result = await host.runEntry(CONTENT_FACTORY_ENTRY_KEY);
 
     expect(result.run.status).toBe("succeeded");
     expect(result.artifacts[0]).toMatchObject({
@@ -33,22 +37,22 @@ describe("AdapterCapabilityHost", () => {
       provenance: {
         sourceKind: "agent_app",
         appId: "content-factory-app",
-        entryKey: "dashboard",
+        entryKey: CONTENT_FACTORY_ENTRY_KEY,
         workflowRunId: result.run.runId,
       },
     });
     expect(result.evidence[0]).toMatchObject({
       id: "adapter-evidence-1",
-      refs: [result.artifacts[0].id],
+      refs: [result.artifacts[0].id, "adapter-task-1"],
       provenance: {
         sourceKind: "agent_app",
         appId: "content-factory-app",
-        entryKey: "dashboard",
+        entryKey: CONTENT_FACTORY_ENTRY_KEY,
         workflowRunId: result.run.runId,
       },
     });
     expect(host.getArtifacts({ appId: "content-factory-app" })).toHaveLength(1);
-    expect(host.getEvidence({ entryKey: "dashboard" })).toHaveLength(1);
+    expect(host.getEvidence({ entryKey: CONTENT_FACTORY_ENTRY_KEY })).toHaveLength(1);
     expect(host.getStorageEntries({ workflowRunId: result.run.runId })).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -66,15 +70,11 @@ describe("AdapterCapabilityHost", () => {
       now: () => "2026-05-15T00:00:00.000Z",
     });
 
-    const result = await host.runEntry("content_scenario_planning");
+    const result = await host.runEntry(CONTENT_FACTORY_ENTRY_KEY);
 
     expect(result.knowledge[0]).toMatchObject({
-      query: "内容场景规划",
-      records: expect.arrayContaining([
-        expect.objectContaining({
-          id: "knowledge:content-factory-app:project_knowledge",
-        }),
-      ]),
+      query: "内容工厂",
+      records: [],
       provenance: expect.objectContaining({
         workflowRunId: result.run.runId,
       }),
@@ -84,14 +84,10 @@ describe("AdapterCapabilityHost", () => {
       traceId: "adapter-trace-1",
       status: "succeeded",
       taskKind: "entry.workflow",
-      idempotencyKey: `${result.run.runId}:content_scenario_planning`,
+      idempotencyKey: `${result.run.runId}:${CONTENT_FACTORY_ENTRY_KEY}`,
       input: expect.objectContaining({
-        entryKey: "content_scenario_planning",
-        knowledgeRecordIds: [
-          "knowledge:content-factory-app:ip_knowledge",
-          "knowledge:content-factory-app:project_knowledge",
-          "knowledge:content-factory-app:material_library",
-        ],
+        entryKey: CONTENT_FACTORY_ENTRY_KEY,
+        knowledgeRecordIds: [],
       }),
       expectedOutput: {
         artifactKind: "adapter_agent_app_artifact",
@@ -106,17 +102,13 @@ describe("AdapterCapabilityHost", () => {
         }),
       ],
       provenance: expect.objectContaining({
-        entryKey: "content_scenario_planning",
+        entryKey: CONTENT_FACTORY_ENTRY_KEY,
         workflowRunId: result.run.runId,
       }),
     });
     expect(result.run.taskIds).toEqual(["adapter-task-1"]);
     expect(result.artifacts[0].content).toMatchObject({
-      knowledgeRecordIds: [
-        "knowledge:content-factory-app:ip_knowledge",
-        "knowledge:content-factory-app:project_knowledge",
-        "knowledge:content-factory-app:material_library",
-      ],
+      knowledgeRecordIds: [],
       taskIds: ["adapter-task-1"],
     });
     expect(result.evidence[0].refs).toEqual([
@@ -124,7 +116,7 @@ describe("AdapterCapabilityHost", () => {
       "adapter-task-1",
     ]);
     expect(
-      host.getTasks({ entryKey: "content_scenario_planning" }),
+      host.getTasks({ entryKey: CONTENT_FACTORY_ENTRY_KEY }),
     ).toHaveLength(1);
   });
 
@@ -132,7 +124,7 @@ describe("AdapterCapabilityHost", () => {
     const preview = buildAdapterPreview();
     const host = new AdapterCapabilityHost({ preview });
     const sdk = host.createSdkContext(
-      "content_scenario_planning",
+      CONTENT_FACTORY_ENTRY_KEY,
       "manual-run",
     );
 
@@ -209,7 +201,9 @@ describe("AdapterCapabilityHost", () => {
           },
         ],
       },
-      profile: buildAdapterCapabilityProfile(),
+      profile: buildWorkflowRuntimeCapabilityProfile({
+        realAdapterEnabled: true,
+      }),
       loadedAt: "2026-05-15T00:00:00.000Z",
       checkedAt: "2026-05-15T00:00:00.000Z",
       generatedAt: "2026-05-15T00:00:00.000Z",
@@ -246,7 +240,7 @@ describe("AdapterCapabilityHost", () => {
       realAdapterEnabled: false,
     });
 
-    await expect(host.runEntry("dashboard")).rejects.toMatchObject({
+    await expect(host.runEntry(CONTENT_FACTORY_ENTRY_KEY)).rejects.toMatchObject({
       code: "FEATURE_DISABLED",
     });
   });
@@ -254,7 +248,7 @@ describe("AdapterCapabilityHost", () => {
   it("delete-data 卸载应清理 adapter storage、artifact、evidence 和 task", async () => {
     const preview = buildAdapterPreview();
     const host = new AdapterCapabilityHost({ preview });
-    const result = await host.runEntry("content_scenario_planning");
+    const result = await host.runEntry(CONTENT_FACTORY_ENTRY_KEY);
 
     const uninstall = await uninstallApp({
       host,

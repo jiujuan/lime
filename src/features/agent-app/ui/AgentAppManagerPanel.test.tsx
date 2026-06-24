@@ -1,6 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import contentFactoryFixtureData from "../fixtures/content-factory-app.json";
 import { resolveAgentAppHostFlags } from "../featureFlag";
 import { buildInstalledAgentAppState } from "../install/installedAppState";
 import { buildInstalledAppPreview } from "../install/installedAppPreview";
@@ -8,8 +9,8 @@ import {
   buildAgentAppLabResolvedSetupState,
   evaluateAgentAppLabInstallFlow,
 } from "../install/labInstallFlow";
-import { buildUiRuntimeCapabilityProfile } from "../runtime/uiRuntimeCapabilityProfile";
-import type { InstalledAgentAppState } from "../types";
+import { buildWorkflowRuntimeCapabilityProfile } from "../runtime/workflowRuntimeCapabilityProfile";
+import type { AppManifest, InstalledAgentAppState } from "../types";
 import { AgentAppManagerPanel } from "./AgentAppManagerPanel";
 
 vi.mock("react-i18next", () => ({
@@ -32,6 +33,38 @@ interface MountedPanel {
 }
 
 const mountedPanels: MountedPanel[] = [];
+
+const contentFactoryBaseFixture = contentFactoryFixtureData as AppManifest;
+
+function buildContentFactoryManagerFixture(): AppManifest {
+  return {
+    ...contentFactoryBaseFixture,
+    version: "0.3.0",
+    runtimePackage: {
+      ...contentFactoryBaseFixture.runtimePackage,
+      ui: {
+        path: "./dist/index.html",
+      },
+    },
+    entries: [
+      {
+        key: "dashboard",
+        kind: "page",
+        title: "项目首页",
+        route: "/dashboard",
+        requiredCapabilities: ["lime.ui", "lime.agent", "lime.storage"],
+      },
+      ...contentFactoryBaseFixture.entries.map((entry) => ({ ...entry })),
+    ],
+    knowledgeTemplates: [
+      {
+        key: "project_knowledge",
+        type: "project",
+        required: true,
+      },
+    ],
+  };
+}
 
 function cloneInstalledStateForRepository(
   state: InstalledAgentAppState,
@@ -100,17 +133,22 @@ function buildReadyManagerFixture() {
   const flags = resolveAgentAppHostFlags({
     realAdapterEnabled: true,
     uiRuntimeEnabled: true,
+    workerRuntimeEnabled: true,
   });
+  const fixture = buildContentFactoryManagerFixture();
+  const profile = buildWorkflowRuntimeCapabilityProfile(flags);
   const setupPreview = buildInstalledAppPreview({
-    profile: buildUiRuntimeCapabilityProfile(flags),
+    fixture,
+    profile,
     loadedAt: "2026-05-15T00:00:00.000Z",
     checkedAt: "2026-05-15T00:00:00.000Z",
     generatedAt: "2026-05-15T00:00:00.000Z",
   });
   const setup = buildAgentAppLabResolvedSetupState(setupPreview.projection);
   const preview = buildInstalledAppPreview({
+    fixture,
     setup,
-    profile: buildUiRuntimeCapabilityProfile(flags),
+    profile,
     loadedAt: "2026-05-15T00:00:00.000Z",
     checkedAt: "2026-05-15T00:00:00.000Z",
     generatedAt: "2026-05-15T00:00:00.000Z",

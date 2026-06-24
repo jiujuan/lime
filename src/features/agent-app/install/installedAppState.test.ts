@@ -12,6 +12,7 @@ import {
 import { buildSetupStateFromBindings } from "./setupStateStore";
 
 const now = "2026-05-15T00:00:00.000Z";
+const contentFactoryAppVersion = contentFactoryFixture.version;
 
 function buildPreviewWithSetup() {
   const setup = buildSetupStateFromBindings(
@@ -52,7 +53,7 @@ describe("InstalledAgentAppState P10", () => {
       disabled: false,
       identity: {
         appId: "content-factory-app",
-        appVersion: "0.3.0",
+        appVersion: contentFactoryAppVersion,
       },
       installMode: "in_lime",
       runtimeProfileSummary: {

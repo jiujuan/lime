@@ -19,8 +19,78 @@ import type {
 import { AgentAppsPage } from "./AgentAppsPage";
 
 export const act = reactAct;
-export const contentFactoryFixture = contentFactoryFixtureData;
 export const toast = sonnerToast;
+
+const contentFactoryBaseFixture = contentFactoryFixtureData as AppManifest;
+
+function buildContentFactoryUiRuntimeFixture(): AppManifest {
+  return {
+    ...contentFactoryBaseFixture,
+    version: "0.3.0",
+    runtimePackage: {
+      ...contentFactoryBaseFixture.runtimePackage,
+      ui: {
+        path: "./dist/index.html",
+      },
+    },
+    entries: [
+      {
+        key: "dashboard",
+        kind: "page",
+        title: "项目首页",
+        route: "/dashboard",
+        requiredCapabilities: ["lime.ui", "lime.agent", "lime.storage"],
+      },
+      ...contentFactoryBaseFixture.entries.map((entry) => ({ ...entry })),
+    ],
+    knowledgeTemplates: [
+      {
+        key: "project_knowledge",
+        type: "project",
+        required: true,
+      },
+    ],
+    artifacts: [
+      ...(contentFactoryBaseFixture.artifacts ?? []).map((artifact) => ({
+        ...artifact,
+      })),
+      {
+        key: "content_table",
+        title: "内容表",
+        type: "content_table",
+      },
+    ],
+    evals: [
+      ...(contentFactoryBaseFixture.evals ?? []).map((evalRule) => ({
+        ...evalRule,
+      })),
+      {
+        key: "fact_grounding",
+        kind: "fact_grounding",
+      },
+    ],
+    secrets: [
+      ...(contentFactoryBaseFixture.secrets ?? []).map((secret) => ({
+        ...secret,
+      })),
+      {
+        key: "publish_api_key",
+        provider: "host-secret",
+      },
+    ],
+    overlayTemplates: [
+      ...(contentFactoryBaseFixture.overlayTemplates ?? []).map((overlay) => ({
+        ...overlay,
+      })),
+      {
+        key: "content_review_overlay",
+        scope: "entry",
+      },
+    ],
+  };
+}
+
+export const contentFactoryFixture = buildContentFactoryUiRuntimeFixture();
 
 export const LOCAL_APP_DIR = "/tmp/lime/content-factory-app";
 export const REMOVED_MACHINE_PATH = [

@@ -273,9 +273,9 @@ jobs:
 
       - name: Test Rust workspace
         env:
-          TMPDIR: ${{ github.workspace }}/.tmp/rust-full
-          TEMP: ${{ github.workspace }}/.tmp/rust-full
-          TMP: ${{ github.workspace }}/.tmp/rust-full
+          TMPDIR: ${{ runner.temp }}/rust-full
+          TEMP: ${{ runner.temp }}/rust-full
+          TMP: ${{ runner.temp }}/rust-full
         run: |
           mkdir -p "$TMPDIR"
           npm run test:rust

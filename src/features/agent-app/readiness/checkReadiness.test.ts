@@ -22,27 +22,17 @@ function buildProjection() {
 }
 
 const resolvedSetup: AgentAppSetupState = {
-  knowledgeBindings: {
-    ip_knowledge: true,
-    project_knowledge: true,
-    material_library: true,
-  },
-  skills: { "article-writer": true },
-  tools: {
-    document_parser: true,
-    competitor_research: true,
-  },
+  knowledgeBindings: {},
+  skills: {},
+  tools: {},
   artifactTypes: {
-    content_table: true,
-    scene_table: true,
-    content_batch: true,
-    script_batch: true,
+    content_factory_workspace_patch: true,
   },
-  evals: { fact_grounding: true },
-  secrets: { publishing_workspace_token: true },
-  overlays: { workspace_content_rules: true },
-  services: { content_worker: true },
-  workflows: { content_scenario_planning: true },
+  evals: {},
+  secrets: {},
+  overlays: {},
+  services: {},
+  workflows: {},
 };
 
 describe("Agent App readiness P0", () => {
@@ -58,26 +48,17 @@ describe("Agent App readiness P0", () => {
     expect(readiness.blockers.map((issue) => issue.code)).toContain("CAPABILITY_MISSING");
     expect(readiness.warnings.map((issue) => issue.code)).toEqual(
       expect.arrayContaining([
-        "KNOWLEDGE_BINDING_REQUIRED",
-        "SKILL_REQUIRED",
-        "TOOL_REQUIRED",
         "ARTIFACT_TYPE_REQUIRED",
-        "EVAL_REQUIRED",
-        "SERVICE_REQUIRED",
-        "WORKFLOW_REQUIRED",
       ]),
     );
     expect(readiness.warnings.map((issue) => issue.code)).toEqual(
       expect.arrayContaining([
         "STORAGE_DECLARED_BUT_DISABLED",
-        "UI_RUNTIME_DISABLED",
         "WORKER_RUNTIME_DISABLED",
-        "SECRET_REQUIRED",
-        "OVERLAY_REQUIRED",
       ]),
     );
     expect(
-      readiness.warnings.find((issue) => issue.code === "KNOWLEDGE_BINDING_REQUIRED"),
+      readiness.warnings.find((issue) => issue.code === "ARTIFACT_TYPE_REQUIRED"),
     ).toHaveProperty("remediation");
     expect(readiness.installModes).toEqual([
       expect.objectContaining({
@@ -88,7 +69,7 @@ describe("Agent App readiness P0", () => {
     ]);
   });
 
-  it("能力启用后仍应进入 needs-setup 而不是假装 ready", () => {
+  it("能力启用后仍应进入 degraded 而不是假装 ready", () => {
     const { manifest, projection } = buildProjection();
     const profile: HostCapabilityProfile = {
       ...p0HostCapabilityProfile,
@@ -101,9 +82,9 @@ describe("Agent App readiness P0", () => {
     };
     const readiness = checkReadiness({ manifest, projection, profile });
 
-    expect(readiness.status).toBe("needs-setup");
+    expect(readiness.status).toBe("degraded");
     expect(readiness.warnings.map((issue) => issue.code)).toContain(
-      "KNOWLEDGE_BINDING_REQUIRED",
+      "ARTIFACT_TYPE_REQUIRED",
     );
     expect(readiness.missingCapabilities).toHaveLength(0);
   });

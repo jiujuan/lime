@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildUiRuntimeCapabilityProfile } from "../runtime/uiRuntimeCapabilityProfile";
+import { buildWorkflowRuntimeCapabilityProfile } from "../runtime/workflowRuntimeCapabilityProfile";
 import { buildInstalledAppPreview } from "./installedAppPreview";
 import {
   buildAgentAppLabResolvedSetupState,
@@ -9,17 +9,15 @@ import {
 const now = "2026-05-15T00:00:00.000Z";
 
 function buildFlags() {
-  return buildUiRuntimeCapabilityProfile({
+  return buildWorkflowRuntimeCapabilityProfile({
     realAdapterEnabled: true,
-    uiRuntimeEnabled: true,
   }).featureFlags;
 }
 
 function buildPreviewWithResolvedSetup() {
   const base = buildInstalledAppPreview({
-    profile: buildUiRuntimeCapabilityProfile({
+    profile: buildWorkflowRuntimeCapabilityProfile({
       realAdapterEnabled: true,
-      uiRuntimeEnabled: true,
     }),
     loadedAt: now,
     checkedAt: now,
@@ -28,9 +26,8 @@ function buildPreviewWithResolvedSetup() {
   const setup = buildAgentAppLabResolvedSetupState(base.projection);
   const preview = buildInstalledAppPreview({
     setup,
-    profile: buildUiRuntimeCapabilityProfile({
+    profile: buildWorkflowRuntimeCapabilityProfile({
       realAdapterEnabled: true,
-      uiRuntimeEnabled: true,
     }),
     loadedAt: now,
     checkedAt: now,
@@ -40,11 +37,10 @@ function buildPreviewWithResolvedSetup() {
 }
 
 describe("Agent App P15 Lab install flow", () => {
-  it("应串联 review、verified cache、installed state，并在 setup 未完成时停在 needs-setup", () => {
+  it("应串联 review、verified cache、installed state，并在授权未确认时停在 permission-review", () => {
     const preview = buildInstalledAppPreview({
-      profile: buildUiRuntimeCapabilityProfile({
+      profile: buildWorkflowRuntimeCapabilityProfile({
         realAdapterEnabled: true,
-        uiRuntimeEnabled: true,
       }),
       loadedAt: now,
       checkedAt: now,
@@ -53,29 +49,29 @@ describe("Agent App P15 Lab install flow", () => {
     const result = evaluateAgentAppLabInstallFlow({
       preview,
       flags: buildFlags(),
-      entryKey: "content_scenario_planning",
+      entryKey: "content_factory",
       operation: "run-entry",
-      permissionDecision: "accepted",
+      permissionDecision: "requires-review",
       now,
     });
 
-    expect(result.status).toBe("needs-setup");
+    expect(result.status).toBe("permission-review");
     expect(result.completedStages).toEqual([
       "source-selected",
       "package-reviewed",
       "package-verified",
       "installed",
       "setup-review",
+      "permission-review",
     ]);
     expect(result.review).toMatchObject({
       appId: "content-factory-app",
       sourceKind: "fixture",
-      requiredSetupCount: expect.any(Number),
+      requiredSetupCount: 0,
     });
-    expect(result.review.requiredSetupCount).toBeGreaterThan(0);
     expect(result.cacheSave.verification.status).toBe("verified");
     expect(result.installedState?.appId).toBe("content-factory-app");
-    expect(result.guard?.status).toBe("needs-setup");
+    expect(result.guard?.status).toBe("allow");
     expect(result.canLaunch).toBe(false);
   });
 
@@ -85,8 +81,8 @@ describe("Agent App P15 Lab install flow", () => {
       preview,
       setup,
       flags: buildFlags(),
-      entryKey: "dashboard",
-      operation: "mount-ui",
+      entryKey: "content_factory",
+      operation: "run-entry",
       permissionDecision: "accepted",
       now,
     });
@@ -100,8 +96,8 @@ describe("Agent App P15 Lab install flow", () => {
       preview,
       setup,
       flags: buildFlags(),
-      entryKey: "dashboard",
-      operation: "mount-ui",
+      entryKey: "content_factory",
+      operation: "run-entry",
       permissionDecision: "accepted",
       launchRequested: true,
       now,
@@ -162,8 +158,8 @@ describe("Agent App P15 Lab install flow", () => {
       preview,
       setup,
       flags: buildFlags(),
-      entryKey: "dashboard",
-      operation: "mount-ui",
+      entryKey: "content_factory",
+      operation: "run-entry",
       permissionDecision: "denied",
       launchRequested: true,
       now,

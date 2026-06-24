@@ -23,6 +23,11 @@ const MANIFEST_HASH_002 =
   "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
 const PACKAGE_HASH_OTHER =
   "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+const CONTENT_FACTORY_APP_VERSION = contentFactoryFixture.version;
+const CONTENT_FACTORY_PACKAGE_URL =
+  `https://packages.limecloud.example/apps/content-factory-app-${CONTENT_FACTORY_APP_VERSION}.lapp`;
+const CONTENT_FACTORY_SIGNATURE_REF =
+  `sigstore:content-factory-app@${CONTENT_FACTORY_APP_VERSION}`;
 
 function buildPayload(overrides: Record<string, unknown> = {}) {
   return {
@@ -34,7 +39,7 @@ function buildPayload(overrides: Record<string, unknown> = {}) {
       {
         appId: "content-factory-app",
         displayName: "内容工厂",
-        version: "0.3.0",
+        version: CONTENT_FACTORY_APP_VERSION,
         logo: "https://assets.limecloud.example/content-factory-logo.png",
         presentation: {
           logo: "https://assets.limecloud.example/content-factory-presentation-logo.png",
@@ -43,11 +48,10 @@ function buildPayload(overrides: Record<string, unknown> = {}) {
         tenantId: "tenant-123",
         tenantEnablementRef: "enablement_001",
         channel: "stable",
-        signatureRef: "sigstore:content-factory-app@0.3.0",
+        signatureRef: CONTENT_FACTORY_SIGNATURE_REF,
         licenseState: "active",
         enabled: true,
-        packageUrl:
-          "https://packages.limecloud.example/apps/content-factory-app-0.3.0.lapp",
+        packageUrl: CONTENT_FACTORY_PACKAGE_URL,
         packageHash: PACKAGE_HASH_001,
         manifestHash: MANIFEST_HASH_001,
         capabilityRequirements: {
@@ -78,11 +82,11 @@ describe("Cloud Bootstrap payload P5.1", () => {
     expect(payload.generatedAt).toBe("2026-05-15T00:00:00.000Z");
     expect(app).toMatchObject({
       appId: "content-factory-app",
-      version: "0.3.0",
+      version: CONTENT_FACTORY_APP_VERSION,
       releaseId: "release_001",
       tenantEnablementRef: "enablement_001",
       channel: "stable",
-      signatureRef: "sigstore:content-factory-app@0.3.0",
+      signatureRef: CONTENT_FACTORY_SIGNATURE_REF,
       licenseState: "active",
       enabled: true,
       logo: "https://assets.limecloud.example/content-factory-logo.png",
@@ -107,10 +111,9 @@ describe("Cloud Bootstrap payload P5.1", () => {
       }),
     ).toEqual({
       sourceKind: "cloud_release",
-      sourceUri:
-        "https://packages.limecloud.example/apps/content-factory-app-0.3.0.lapp",
+      sourceUri: CONTENT_FACTORY_PACKAGE_URL,
       appId: "content-factory-app",
-      appVersion: "0.3.0",
+      appVersion: CONTENT_FACTORY_APP_VERSION,
       packageHash: PACKAGE_HASH_001,
       manifestHash: MANIFEST_HASH_001,
       loadedAt: "2026-05-15T00:00:00.000Z",
@@ -118,7 +121,7 @@ describe("Cloud Bootstrap payload P5.1", () => {
       tenantId: "tenant-123",
       tenantEnablementRef: "enablement_001",
       channel: "stable",
-      signatureRef: "sigstore:content-factory-app@0.3.0",
+      signatureRef: CONTENT_FACTORY_SIGNATURE_REF,
     });
   });
 
@@ -166,8 +169,7 @@ describe("Cloud Bootstrap payload P5.1", () => {
 
     expect(source).toMatchObject({
       sourceKind: "cloud_release",
-      sourceUri:
-        "https://packages.limecloud.example/apps/content-factory-app-0.3.0.lapp",
+      sourceUri: CONTENT_FACTORY_PACKAGE_URL,
       enabled: true,
       identity: {
         sourceKind: "cloud_release",
@@ -209,18 +211,16 @@ describe("Cloud Bootstrap payload P5.1", () => {
       }),
     ).toMatchObject({
       sourceKind: "cloud_release",
-      sourceUri:
-        "https://packages.limecloud.example/apps/content-factory-app-0.3.0.lapp",
+      sourceUri: CONTENT_FACTORY_PACKAGE_URL,
       appId: "content-factory-app",
-      version: "0.3.0",
+      version: CONTENT_FACTORY_APP_VERSION,
       releaseId: "release_001",
       tenantEnablementRef: "enablement_001",
       channel: "stable",
-      packageUrl:
-        "https://packages.limecloud.example/apps/content-factory-app-0.3.0.lapp",
+      packageUrl: CONTENT_FACTORY_PACKAGE_URL,
       packageHash: PACKAGE_HASH_001,
       manifestHash: MANIFEST_HASH_001,
-      signatureRef: "sigstore:content-factory-app@0.3.0",
+      signatureRef: CONTENT_FACTORY_SIGNATURE_REF,
       compatibility: {
         capabilities: {
           "lime.ui": "^0.3.0",

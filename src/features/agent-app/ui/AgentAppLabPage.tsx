@@ -1232,14 +1232,20 @@ export function AgentAppLabPage({ flags }: AgentAppLabPageProps = {}) {
         : null,
     [capabilityHost, resolvedFlags],
   );
+  const defaultLaunchEntry = preview.projection.entries[0];
+  const defaultLaunchOperation: AgentAppEntryRuntimeGuardOperation =
+    defaultLaunchEntry &&
+    ["page", "panel", "settings"].includes(defaultLaunchEntry.kind)
+      ? "mount-ui"
+      : "run-entry";
   const installFlow = useMemo(
     () =>
       evaluateAgentAppLabInstallFlow({
         preview,
         setup: labSetup,
         flags: resolvedFlags,
-        entryKey: lastLaunch?.entryKey ?? "dashboard",
-        operation: lastLaunch?.operation ?? "mount-ui",
+        entryKey: lastLaunch?.entryKey ?? defaultLaunchEntry?.key ?? "",
+        operation: lastLaunch?.operation ?? defaultLaunchOperation,
         permissionDecision: "accepted",
         launchRequested: Boolean(lastLaunch),
         runtimeProfile: capabilityProfile
@@ -1250,7 +1256,15 @@ export function AgentAppLabPage({ flags }: AgentAppLabPageProps = {}) {
           : undefined,
         now: "2026-05-15T00:00:00.000Z",
       }),
-    [capabilityProfile, labSetup, lastLaunch, preview, resolvedFlags],
+    [
+      capabilityProfile,
+      defaultLaunchEntry?.key,
+      defaultLaunchOperation,
+      labSetup,
+      lastLaunch,
+      preview,
+      resolvedFlags,
+    ],
   );
   const managerCompanionInstalledState = useMemo(
     () =>
@@ -1556,7 +1570,7 @@ export function AgentAppLabPage({ flags }: AgentAppLabPageProps = {}) {
       return;
     }
     const guardResult = evaluateGuard(
-      "content_scenario_planning",
+      "content_factory",
       "run-content-demo",
     );
     if (guardResult.status !== "allow") {
@@ -1576,7 +1590,7 @@ export function AgentAppLabPage({ flags }: AgentAppLabPageProps = {}) {
         }),
       );
       setLastLaunch({
-        entryKey: "content_scenario_planning",
+        entryKey: "content_factory",
         operation: "run-content-demo",
       });
     } catch (error) {

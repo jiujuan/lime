@@ -6,11 +6,17 @@ import {
   LocalInstalledAgentAppStateRepository,
 } from "../install/installedAppState";
 import { uninstallApp } from "../install/uninstallApp";
+import {
+  buildContentFactoryUiRuntimeResolvedSetup,
+  buildContentFactoryUiRuntimeTestManifest,
+} from "../testing/contentFactoryTestManifest";
 import { buildMockCapabilityProfile } from "./mockCapabilityProfile";
 import { MockCapabilityHost } from "./MockCapabilityHost";
 
 function buildMockPreview() {
   return buildInstalledAppPreview({
+    fixture: buildContentFactoryUiRuntimeTestManifest(),
+    setup: buildContentFactoryUiRuntimeResolvedSetup(),
     profile: buildMockCapabilityProfile(),
     loadedAt: "2026-05-15T00:00:00.000Z",
     checkedAt: "2026-05-15T00:00:00.000Z",

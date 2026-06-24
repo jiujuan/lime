@@ -185,7 +185,7 @@ export async function runContentFactoryDemo(params: {
   entryKey?: string;
   now?: () => string;
 }): Promise<ContentFactoryDemoResult> {
-  const entryKey = params.entryKey ?? "content_scenario_planning";
+  const entryKey = params.entryKey ?? "content_factory";
   const now = params.now ?? (() => new Date().toISOString());
   const input: ContentFactoryProjectInput = {
     ...defaultContentFactoryProjectInput,

@@ -2,11 +2,17 @@ import { describe, expect, it } from "vitest";
 import { buildAdapterCapabilityProfile } from "../adapters/adapterCapabilityProfile";
 import { buildInstalledAppPreview } from "../install/installedAppPreview";
 import { AgentAppCapabilityError } from "../sdk/capabilityErrors";
+import {
+  buildContentFactoryUiRuntimeResolvedSetup,
+  buildContentFactoryUiRuntimeTestManifest,
+} from "../testing/contentFactoryTestManifest";
 import { buildUiRuntimeCapabilityProfile } from "./uiRuntimeCapabilityProfile";
 import { UiExtensionHost } from "./uiExtensionHost";
 
 function buildPreviewWithUiRuntime() {
   return buildInstalledAppPreview({
+    fixture: buildContentFactoryUiRuntimeTestManifest(),
+    setup: buildContentFactoryUiRuntimeResolvedSetup(),
     profile: buildUiRuntimeCapabilityProfile({
       realAdapterEnabled: true,
       uiRuntimeEnabled: true,

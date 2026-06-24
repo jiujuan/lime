@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { AdapterCapabilityHost } from "../adapters/AdapterCapabilityHost";
-import { buildAdapterCapabilityProfile } from "../adapters/adapterCapabilityProfile";
 import { InMemoryAgentAppCapabilityStore } from "../adapters/InMemoryAgentAppCapabilityStore";
 import { buildInstalledAppPreview } from "../install/installedAppPreview";
 import { uninstallApp } from "../install/uninstallApp";
@@ -8,7 +7,12 @@ import { runContentFactoryDemo } from "./contentFactoryDemo";
 import { buildWorkflowRuntimeCapabilityProfile } from "./workflowRuntimeCapabilityProfile";
 import { WorkflowRuntimeHost } from "./workflowRuntimeHost";
 
-function buildPreview(profile = buildAdapterCapabilityProfile()) {
+function buildPreview(
+  profile = buildWorkflowRuntimeCapabilityProfile({
+    realAdapterEnabled: true,
+    workerRuntimeEnabled: true,
+  }),
+) {
   return buildInstalledAppPreview({
     profile,
     loadedAt: "2026-05-15T00:00:00.000Z",
@@ -36,17 +40,13 @@ describe("runContentFactoryDemo", () => {
       status: "ready",
       targetPlatforms: ["公众号", "小红书"],
     });
-    expect(result.knowledge.records).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ bindingKey: "project_knowledge" }),
-      ]),
-    );
+    expect(result.knowledge.records).toEqual([]);
     expect(result.tasks[0]).toMatchObject({
       taskId: "adapter-task-1",
       status: "succeeded",
     });
-    expect(result.scenarios).toHaveLength(3);
-    expect(result.contentAssets).toHaveLength(6);
+    expect(result.scenarios).toHaveLength(1);
+    expect(result.contentAssets).toHaveLength(2);
     expect(result.storageEntries.map((entry) => entry.key)).toEqual([
       `projects/${result.project.projectId}`,
       `knowledge-bindings/${result.project.projectId}`,
@@ -58,7 +58,7 @@ describe("runContentFactoryDemo", () => {
       kind: "content_table",
       provenance: expect.objectContaining({
         sourceKind: "agent_app",
-        entryKey: "content_scenario_planning",
+        entryKey: "content_factory",
         workflowRunId: result.run.run.runId,
       }),
     });

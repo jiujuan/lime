@@ -16,7 +16,57 @@ import { AgentAppRuntimePage } from "./AgentAppRuntimePage";
 
 const LOCAL_APP_DIR = "/tmp/lime/content-factory-app";
 
-export const contentFactoryManifest = contentFactoryFixture as AppManifest;
+const contentFactoryBaseManifest = contentFactoryFixture as AppManifest;
+
+function buildContentFactoryUiRuntimeManifest(): AppManifest {
+  return {
+    ...contentFactoryBaseManifest,
+    version: "0.3.0",
+    runtimePackage: {
+      ...contentFactoryBaseManifest.runtimePackage,
+      ui: {
+        path: "./dist/index.html",
+      },
+    },
+    entries: [
+      {
+        key: "dashboard",
+        kind: "page",
+        title: "项目首页",
+        route: "/dashboard",
+        requiredCapabilities: ["lime.ui", "lime.agent", "lime.storage"],
+      },
+    ],
+    knowledgeTemplates: [
+      {
+        key: "project_knowledge",
+        type: "project",
+        required: true,
+      },
+    ],
+    artifacts: [
+      ...(contentFactoryBaseManifest.artifacts ?? []).map((artifact) => ({
+        ...artifact,
+      })),
+      {
+        key: "content_table",
+        title: "内容表",
+        type: "content_table",
+      },
+    ],
+    evals: [
+      ...(contentFactoryBaseManifest.evals ?? []).map((evalRule) => ({
+        ...evalRule,
+      })),
+      {
+        key: "fact_grounding",
+        kind: "fact_grounding",
+      },
+    ],
+  };
+}
+
+export const contentFactoryManifest = buildContentFactoryUiRuntimeManifest();
 
 const hoisted = vi.hoisted(() => ({
   apiMocks: {

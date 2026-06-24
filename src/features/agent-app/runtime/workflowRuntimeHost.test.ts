@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { AdapterCapabilityHost } from "../adapters/AdapterCapabilityHost";
 import { InMemoryAgentAppCapabilityStore } from "../adapters/InMemoryAgentAppCapabilityStore";
 import { buildInstalledAppPreview } from "../install/installedAppPreview";
+import { buildContentFactoryUiRuntimeTestManifest } from "../testing/contentFactoryTestManifest";
 import { buildWorkflowRuntimeCapabilityProfile } from "./workflowRuntimeCapabilityProfile";
 import {
   WorkflowRuntimeHost,
@@ -13,6 +14,7 @@ const FIXED_NOW = "2026-05-15T00:00:00.000Z";
 
 function buildAdapterHost() {
   const preview = buildInstalledAppPreview({
+    fixture: buildContentFactoryUiRuntimeTestManifest(),
     profile: buildWorkflowRuntimeCapabilityProfile({
       realAdapterEnabled: true,
       workerRuntimeEnabled: true,

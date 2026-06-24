@@ -71,7 +71,7 @@ describe("AgentAppLabPage", () => {
     vi.unstubAllGlobals();
   });
 
-  it("应展示 fixture entries、blocked readiness 和 cleanup dry-run", async () => {
+  it("应展示 current workflow fixture、blocked readiness 和 cleanup dry-run", async () => {
     const container = await renderPage();
 
     expect(
@@ -79,11 +79,12 @@ describe("AgentAppLabPage", () => {
     ).not.toBeNull();
     expect(
       container.querySelectorAll('[data-testid="agent-app-entry-card"]'),
-    ).toHaveLength(5);
+    ).toHaveLength(1);
     expect(
       container.querySelector('[data-testid="agent-app-readiness-blocked"]'),
     ).not.toBeNull();
     expect(container.textContent).toContain("content-factory-app");
+    expect(container.textContent).toContain("content_factory");
     expect(container.textContent).toContain("package-fnv1a-");
     expect(container.textContent).toContain(
       "<LimeAppData>/agent-apps/storage/content-factory-app",
@@ -96,7 +97,7 @@ describe("AgentAppLabPage", () => {
   it("开启 mock SDK 也不能让产品页出现 mock 运行入口", async () => {
     const container = await renderPage({ mockSdkEnabled: true });
     const button = container.querySelector(
-      '[data-testid="agent-app-run-entry-content_scenario_planning"]',
+      '[data-testid="agent-app-run-entry-content_factory"]',
     ) as HTMLButtonElement | null;
 
     expect(button).toBeNull();
@@ -108,7 +109,7 @@ describe("AgentAppLabPage", () => {
   it("开启 real adapter 后点击 entry 也不得绕过 P14 setup guard", async () => {
     const container = await renderPage({ realAdapterEnabled: true });
     const button = container.querySelector(
-      '[data-testid="agent-app-run-entry-content_scenario_planning"]',
+      '[data-testid="agent-app-run-entry-content_factory"]',
     ) as HTMLButtonElement | null;
 
     expect(button).not.toBeNull();
@@ -119,18 +120,17 @@ describe("AgentAppLabPage", () => {
 
     expect(
       container.querySelector(
-        '[data-testid="agent-app-entry-runtime-guard-needs-setup"]',
+        '[data-testid="agent-app-entry-runtime-guard-blocked"]',
       ),
     ).not.toBeNull();
     expect(
       container.querySelector('[data-testid="agent-app-run-result"]'),
     ).toBeNull();
-    expect(container.textContent).toContain("project_knowledge");
-    expect(container.textContent).toContain("article-writer");
-    expect(container.textContent).toContain("document_parser");
+    expect(container.textContent).toContain("lime.policy");
+    expect(container.textContent).toContain("content_factory_workspace_patch");
   });
 
-  it("开启 UI runtime 后点击 page entry 也必须先经过 P14 guard", async () => {
+  it("开启 UI runtime 不会为 workflow-only fixture 暴露 page entry", async () => {
     const container = await renderPage({
       realAdapterEnabled: true,
       uiRuntimeEnabled: true,
@@ -139,28 +139,17 @@ describe("AgentAppLabPage", () => {
       '[data-testid="agent-app-open-ui-entry-dashboard"]',
     ) as HTMLButtonElement | null;
 
-    expect(button).not.toBeNull();
-    await act(async () => {
-      button?.click();
-      await Promise.resolve();
-    });
-
-    expect(
-      container.querySelector(
-        '[data-testid="agent-app-entry-runtime-guard-needs-setup"]',
-      ),
-    ).not.toBeNull();
+    expect(button).toBeNull();
     expect(
       container.querySelector('[data-testid="agent-app-ui-runtime-result"]'),
     ).toBeNull();
-    expect(container.textContent).toContain("agentApp.lab.guard.rawApiBlocked");
-    expect(container.textContent).toContain("lime.ui");
+    expect(container.textContent).toContain("content_factory");
   });
 
-  it("P15 Lab setup 解决后可完成 install flow 并挂载 UI entry", async () => {
+  it("P15 Lab setup 解决后可完成 install flow 并运行 workflow entry", async () => {
     const container = await renderPage({
       realAdapterEnabled: true,
-      uiRuntimeEnabled: true,
+      workerRuntimeEnabled: true,
     });
     const setupButton = container.querySelector(
       '[data-testid="agent-app-lab-resolve-setup"]',
@@ -177,7 +166,7 @@ describe("AgentAppLabPage", () => {
     );
 
     const button = container.querySelector(
-      '[data-testid="agent-app-open-ui-entry-dashboard"]',
+      '[data-testid="agent-app-run-entry-content_factory"]',
     ) as HTMLButtonElement | null;
     await act(async () => {
       button?.click();
@@ -185,7 +174,7 @@ describe("AgentAppLabPage", () => {
     });
 
     expect(
-      container.querySelector('[data-testid="agent-app-ui-runtime-result"]'),
+      container.querySelector('[data-testid="agent-app-run-result"]'),
     ).not.toBeNull();
     expect(
       container.querySelector(
@@ -205,7 +194,7 @@ describe("AgentAppLabPage", () => {
   it("P16 Agent App Manager 应复用 P14 guard 并提供禁用和清理证据预览", async () => {
     const container = await renderPage({
       realAdapterEnabled: true,
-      uiRuntimeEnabled: true,
+      workerRuntimeEnabled: true,
     });
     const setupButton = container.querySelector(
       '[data-testid="agent-app-lab-resolve-setup"]',
@@ -235,7 +224,7 @@ describe("AgentAppLabPage", () => {
     );
 
     const launchButton = container.querySelector(
-      '[data-testid="agent-app-manager-launch-entry-dashboard"]',
+      '[data-testid="agent-app-manager-launch-entry-content_factory"]',
     ) as HTMLButtonElement | null;
     await act(async () => {
       launchButton?.click();
@@ -248,7 +237,7 @@ describe("AgentAppLabPage", () => {
       ),
     ).not.toBeNull();
     expect(
-      container.querySelector('[data-testid="agent-app-ui-runtime-result"]'),
+      container.querySelector('[data-testid="agent-app-run-result"]'),
     ).not.toBeNull();
     expect(
       container.querySelector(
@@ -291,7 +280,7 @@ describe("AgentAppLabPage", () => {
   it("P16-H Manager 选择 companion App 后 launch 与 disable 状态应绑定 selected state", async () => {
     const container = await renderPage({
       realAdapterEnabled: true,
-      uiRuntimeEnabled: true,
+      workerRuntimeEnabled: true,
     });
     const setupButton = container.querySelector(
       '[data-testid="agent-app-lab-resolve-setup"]',
@@ -317,7 +306,7 @@ describe("AgentAppLabPage", () => {
     ).toContain("fixture:content-factory-playbook-app");
 
     const launchButton = container.querySelector(
-      '[data-testid="agent-app-manager-launch-entry-dashboard"]',
+      '[data-testid="agent-app-manager-launch-entry-content_factory"]',
     ) as HTMLButtonElement | null;
     await act(async () => {
       launchButton?.click();
@@ -325,7 +314,7 @@ describe("AgentAppLabPage", () => {
     });
 
     expect(
-      container.querySelector('[data-testid="agent-app-ui-runtime-result"]')
+      container.querySelector('[data-testid="agent-app-run-result"]')
         ?.textContent,
     ).toContain("content-factory-playbook-app");
 
@@ -375,7 +364,7 @@ describe("AgentAppLabPage", () => {
     unmountPage(container);
     const restoredContainer = await renderPage({
       realAdapterEnabled: true,
-      uiRuntimeEnabled: true,
+      workerRuntimeEnabled: true,
     });
     const restoredSetupButton = restoredContainer.querySelector(
       '[data-testid="agent-app-lab-resolve-setup"]',
@@ -394,7 +383,7 @@ describe("AgentAppLabPage", () => {
     });
 
     const restoredLaunchButton = restoredContainer.querySelector(
-      '[data-testid="agent-app-manager-launch-entry-dashboard"]',
+      '[data-testid="agent-app-manager-launch-entry-content_factory"]',
     ) as HTMLButtonElement | null;
     expect(restoredContainer.textContent).toContain(
       "agentApp.lab.manager.status.disabled",
@@ -416,18 +405,18 @@ describe("AgentAppLabPage", () => {
 
     expect(
       container.querySelector(
-        '[data-testid="agent-app-entry-runtime-guard-needs-setup"]',
+        '[data-testid="agent-app-entry-runtime-guard-blocked"]',
       ),
     ).not.toBeNull();
     expect(
       container.querySelector('[data-testid="agent-app-content-demo-result"]'),
     ).toBeNull();
     expect(container.textContent).toContain(
-      "agentApp.lab.guard.summary.needs-setup",
+      "agentApp.lab.guard.summary.blocked",
     );
   });
 
-  it("开启 workflow runtime 后内容工厂 demo 仍不得绕过 P14 guard", async () => {
+  it("开启 workflow runtime 后内容工厂 demo 可通过 P14 guard 并返回 workflow evidence", async () => {
     const container = await renderPage({
       realAdapterEnabled: true,
       workerRuntimeEnabled: true,
@@ -446,14 +435,14 @@ describe("AgentAppLabPage", () => {
       container.querySelector(
         '[data-testid="agent-app-workflow-runtime-result"]',
       ),
-    ).toBeNull();
+    ).not.toBeNull();
     expect(
       container.querySelector(
-        '[data-testid="agent-app-entry-runtime-guard-needs-setup"]',
+        '[data-testid="agent-app-entry-runtime-guard-allow"]',
       ),
     ).not.toBeNull();
     expect(container.textContent).toContain(
-      "agentApp.lab.guard.summary.needs-setup",
+      "agentApp.lab.workflowRuntime.completed",
     );
   });
 });

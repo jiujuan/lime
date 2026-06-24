@@ -25,7 +25,7 @@ function buildInstalledStateFixture() {
 }
 
 describe("Agent App P17.3 cleanup namespace classifier", () => {
-  it("应把 cleanup plan 归类为 package / setup / overlay / storage / artifact / evidence / secret namespace", () => {
+  it("应把 cleanup plan 归类为 package / setup / storage / artifact / export namespace", () => {
     const { preview } = buildInstalledStateFixture();
 
     const groups = listAgentAppCleanupNamespaceGroups(preview.cleanupPlan);
@@ -44,11 +44,6 @@ describe("Agent App P17.3 cleanup namespace classifier", () => {
           appData: false,
         }),
         expect.objectContaining({
-          category: "overlay-ref",
-          namespaceKind: "overlay",
-          appData: true,
-        }),
-        expect.objectContaining({
           category: "storage-namespace",
           namespaceKind: "storage",
           appData: true,
@@ -59,22 +54,17 @@ describe("Agent App P17.3 cleanup namespace classifier", () => {
           appData: true,
         }),
         expect.objectContaining({
-          category: "evidence-ref",
-          namespaceKind: "evidence",
-          appData: true,
-        }),
-        expect.objectContaining({
-          category: "secret-ref",
-          namespaceKind: "secret",
+          category: "export",
+          namespaceKind: "export",
           appData: true,
         }),
       ]),
     );
-    expect(preview.cleanupPlan.overlayRefs[0]?.value).toBe(
-      "overlay-ref:content-factory-app:workspace_content_rules",
+    expect(preview.cleanupPlan.artifactRefs[0]?.value).toBe(
+      "artifact-ref:content-factory-app:content_factory_workspace_patch",
     );
-    expect(preview.cleanupPlan.secretRefs[0]?.value).toBe(
-      "secret-ref:content-factory-app:publishing_workspace_token",
+    expect(preview.cleanupPlan.exportPaths[0]?.value).toBe(
+      "<LimeAppData>/agent-apps/exports/content-factory-app",
     );
   });
 
@@ -92,11 +82,9 @@ describe("Agent App P17.3 cleanup namespace classifier", () => {
       strategy: "delete-data",
     });
     const appDataCategories = [
-      "overlay-ref",
       "storage-namespace",
       "artifact-ref",
-      "evidence-ref",
-      "secret-ref",
+      "export",
     ];
 
     appDataCategories.forEach((category) => {

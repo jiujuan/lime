@@ -185,7 +185,7 @@ describe("AgentAppsPage runtime launch", () => {
     await openAppDetail(container);
 
     const launchButton = container.querySelector(
-      '[data-testid="agent-apps-launch-entry-content_scenario_planning"]',
+      '[data-testid="agent-apps-launch-entry-content_factory"]',
     ) as HTMLButtonElement | null;
     await act(async () => {
       launchButton?.click();
@@ -197,9 +197,7 @@ describe("AgentAppsPage runtime launch", () => {
     expect(
       container.querySelector('[data-testid="agent-apps-launch-summary"]')
         ?.textContent,
-    ).toContain(
-      "workflow:内容场景规划:content_scenario_planning-workflow-runtime-1",
-    );
+    ).toContain("workflow:内容工厂:content_factory-workflow-runtime-1");
   });
 
   it("从导航进入已安装 App 时应自动打开默认 UI entry", async () => {

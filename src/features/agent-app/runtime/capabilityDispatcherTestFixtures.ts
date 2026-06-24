@@ -3,6 +3,7 @@ import { AdapterCapabilityHost } from "../adapters/AdapterCapabilityHost";
 import { InMemoryAgentAppCapabilityStore } from "../adapters/InMemoryAgentAppCapabilityStore";
 import { buildInstalledAppPreview } from "../install/installedAppPreview";
 import { buildLimeRuntimeProfileForPreview } from "../runtime-profile";
+import { buildContentFactoryUiRuntimeTestManifest } from "../testing/contentFactoryTestManifest";
 import type { CapabilityHost } from "../sdk/CapabilityHost";
 import type { AgentAppRuntimeProcessView, AgentAppTaskRecord } from "../types";
 import { AgentRuntimeCapabilityHost } from "./agentRuntimeCapabilityHost";
@@ -50,6 +51,7 @@ export function buildDispatcher(
     workerRuntimeEnabled: true,
   });
   const preview = buildInstalledAppPreview({
+    fixture: buildContentFactoryUiRuntimeTestManifest(),
     profile,
     loadedAt: FIXED_NOW,
     checkedAt: FIXED_NOW,
@@ -84,6 +86,7 @@ export function buildDispatcherWithCloudSessionCapability() {
     workerRuntimeEnabled: true,
   });
   const preview = buildInstalledAppPreview({
+    fixture: buildContentFactoryUiRuntimeTestManifest(),
     profile,
     loadedAt: FIXED_NOW,
     checkedAt: FIXED_NOW,
@@ -125,6 +128,7 @@ export function buildDispatcherWithCloudSessionCapability() {
 
 export function buildDispatcherWithoutDeclaredCapability(capability: string) {
   const preview = buildInstalledAppPreview({
+    fixture: buildContentFactoryUiRuntimeTestManifest(),
     profile: buildWorkflowRuntimeCapabilityProfile({
       realAdapterEnabled: true,
       uiRuntimeEnabled: true,
@@ -141,6 +145,12 @@ export function buildDispatcherWithoutDeclaredCapability(capability: string) {
   });
   const projection = {
     ...preview.projection,
+    entries: preview.projection.entries.map((entry) => ({
+      ...entry,
+      requiredCapabilities: entry.requiredCapabilities.filter(
+        (requirement) => requirement.capability !== capability,
+      ),
+    })),
     requiredCapabilities: preview.projection.requiredCapabilities.filter(
       (requirement) => requirement.capability !== capability,
     ),
@@ -158,6 +168,7 @@ export function buildDispatcherWithoutDeclaredCapability(capability: string) {
 
 export function buildDispatcherWithoutCreativeCapabilityToolRef() {
   const preview = buildInstalledAppPreview({
+    fixture: buildContentFactoryUiRuntimeTestManifest(),
     profile: buildWorkflowRuntimeCapabilityProfile({
       realAdapterEnabled: true,
       uiRuntimeEnabled: true,
@@ -191,6 +202,7 @@ export function buildDispatcherWithoutCreativeCapabilityToolRef() {
 
 export function buildDispatcherWithoutCreativeCapabilityAllowlist() {
   const preview = buildInstalledAppPreview({
+    fixture: buildContentFactoryUiRuntimeTestManifest(),
     profile: buildWorkflowRuntimeCapabilityProfile({
       realAdapterEnabled: true,
       uiRuntimeEnabled: true,
@@ -236,6 +248,7 @@ export function buildRuntimeProjectionDispatcher(
     workerRuntimeEnabled: true,
   });
   const preview = buildInstalledAppPreview({
+    fixture: buildContentFactoryUiRuntimeTestManifest(),
     profile,
     loadedAt: FIXED_NOW,
     checkedAt: FIXED_NOW,
@@ -688,6 +701,7 @@ export function buildToolExecutionHandoffDispatcher() {
     workerRuntimeEnabled: true,
   });
   const preview = buildInstalledAppPreview({
+    fixture: buildContentFactoryUiRuntimeTestManifest(),
     profile,
     loadedAt: FIXED_NOW,
     checkedAt: FIXED_NOW,

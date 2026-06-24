@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import { buildInstalledAppPreview } from "../install/installedAppPreview";
 import { buildAgentAppPackageCacheEntry } from "../install/packageCache";
 import { currentAgentAppHostRuntimeVersion } from "../readiness/hostCapabilityProfile";
+import { buildContentFactoryUiRuntimeTestManifest } from "../testing/contentFactoryTestManifest";
 import type { AgentAppSetupState, InstalledAppPreview } from "../types";
 import { buildLimeRuntimeProfileFromHostProfile } from "../runtime-profile";
-import { buildUiRuntimeCapabilityProfile } from "./uiRuntimeCapabilityProfile";
+import { buildWorkflowRuntimeCapabilityProfile } from "./workflowRuntimeCapabilityProfile";
 import { loadRuntimePackageDescriptor } from "./runtimePackageLoader";
 import { evaluateAgentAppEntryRuntimeGuard } from "./entryRuntimeGuard";
 
@@ -27,10 +28,12 @@ const resolvedSetup: AgentAppSetupState = {
 
 function buildPreview(setup?: AgentAppSetupState): InstalledAppPreview {
   return buildInstalledAppPreview({
+    fixture: buildContentFactoryUiRuntimeTestManifest(),
     setup,
-    profile: buildUiRuntimeCapabilityProfile({
+    profile: buildWorkflowRuntimeCapabilityProfile({
       realAdapterEnabled: true,
       uiRuntimeEnabled: true,
+      workerRuntimeEnabled: true,
     }),
     loadedAt: now,
     checkedAt: now,
@@ -45,11 +48,20 @@ function buildRuntimeProfile(
   return buildLimeRuntimeProfileFromHostProfile({
     appId: preview.identity.appId,
     installMode,
-    hostProfile: buildUiRuntimeCapabilityProfile({
+    hostProfile: buildWorkflowRuntimeCapabilityProfile({
       realAdapterEnabled: true,
       uiRuntimeEnabled: true,
+      workerRuntimeEnabled: true,
     }),
   });
+}
+
+function buildFlags() {
+  return buildWorkflowRuntimeCapabilityProfile({
+    realAdapterEnabled: true,
+    uiRuntimeEnabled: true,
+    workerRuntimeEnabled: true,
+  }).featureFlags;
 }
 
 function loadRuntime(preview: InstalledAppPreview, actualPackageHash?: string) {
@@ -74,10 +86,7 @@ describe("EntryRuntimeGuard P14", () => {
     const result = evaluateAgentAppEntryRuntimeGuard({
       preview,
       entryKey: "dashboard",
-      flags: buildUiRuntimeCapabilityProfile({
-        realAdapterEnabled: true,
-        uiRuntimeEnabled: true,
-      }).featureFlags,
+      flags: buildFlags(),
       operation: "mount-ui",
       runtimePackageLoad,
       permissionDecision: "accepted",
@@ -115,10 +124,7 @@ describe("EntryRuntimeGuard P14", () => {
     const result = evaluateAgentAppEntryRuntimeGuard({
       preview,
       entryKey: "dashboard",
-      flags: buildUiRuntimeCapabilityProfile({
-        realAdapterEnabled: true,
-        uiRuntimeEnabled: true,
-      }).featureFlags,
+      flags: buildFlags(),
       operation: "mount-ui",
       runtimePackageLoad,
       permissionDecision: "accepted",
@@ -141,10 +147,7 @@ describe("EntryRuntimeGuard P14", () => {
     const result = evaluateAgentAppEntryRuntimeGuard({
       preview,
       entryKey: "dashboard",
-      flags: buildUiRuntimeCapabilityProfile({
-        realAdapterEnabled: true,
-        uiRuntimeEnabled: true,
-      }).featureFlags,
+      flags: buildFlags(),
       operation: "mount-ui",
       runtimePackageLoad,
       permissionDecision: "accepted",
@@ -167,10 +170,7 @@ describe("EntryRuntimeGuard P14", () => {
     const result = evaluateAgentAppEntryRuntimeGuard({
       preview,
       entryKey: "dashboard",
-      flags: buildUiRuntimeCapabilityProfile({
-        realAdapterEnabled: true,
-        uiRuntimeEnabled: true,
-      }).featureFlags,
+      flags: buildFlags(),
       operation: "mount-ui",
       runtimePackageLoad,
       permissionDecision: "accepted",
@@ -209,10 +209,7 @@ describe("EntryRuntimeGuard P14", () => {
     const result = evaluateAgentAppEntryRuntimeGuard({
       preview,
       entryKey: "dashboard",
-      flags: buildUiRuntimeCapabilityProfile({
-        realAdapterEnabled: true,
-        uiRuntimeEnabled: true,
-      }).featureFlags,
+      flags: buildFlags(),
       operation: "mount-ui",
       runtimePackageLoad,
       permissionDecision: "accepted",
@@ -235,10 +232,7 @@ describe("EntryRuntimeGuard P14", () => {
     const result = evaluateAgentAppEntryRuntimeGuard({
       preview,
       entryKey: "content_scenario_planning",
-      flags: buildUiRuntimeCapabilityProfile({
-        realAdapterEnabled: true,
-        uiRuntimeEnabled: true,
-      }).featureFlags,
+      flags: buildFlags(),
       operation: "run-entry",
       runtimePackageLoad,
     });
@@ -260,10 +254,7 @@ describe("EntryRuntimeGuard P14", () => {
     const result = evaluateAgentAppEntryRuntimeGuard({
       preview,
       entryKey: "dashboard",
-      flags: buildUiRuntimeCapabilityProfile({
-        realAdapterEnabled: true,
-        uiRuntimeEnabled: true,
-      }).featureFlags,
+      flags: buildFlags(),
       operation: "mount-ui",
       runtimePackageLoad,
       permissionDecision: "accepted",
@@ -281,10 +272,7 @@ describe("EntryRuntimeGuard P14", () => {
     const result = evaluateAgentAppEntryRuntimeGuard({
       preview,
       entryKey: "dashboard",
-      flags: buildUiRuntimeCapabilityProfile({
-        realAdapterEnabled: true,
-        uiRuntimeEnabled: true,
-      }).featureFlags,
+      flags: buildFlags(),
       operation: "mount-ui",
       runtimePackageLoad,
       permissionDecision: "accepted",
@@ -305,10 +293,7 @@ describe("EntryRuntimeGuard P14", () => {
     const result = evaluateAgentAppEntryRuntimeGuard({
       preview,
       entryKey: "dashboard",
-      flags: buildUiRuntimeCapabilityProfile({
-        realAdapterEnabled: true,
-        uiRuntimeEnabled: true,
-      }).featureFlags,
+      flags: buildFlags(),
       operation: "mount-ui",
       runtimePackageLoad,
       permissionDecision: "accepted",
@@ -333,10 +318,7 @@ describe("EntryRuntimeGuard P14", () => {
     const result = evaluateAgentAppEntryRuntimeGuard({
       preview,
       entryKey: "dashboard",
-      flags: buildUiRuntimeCapabilityProfile({
-        realAdapterEnabled: true,
-        uiRuntimeEnabled: true,
-      }).featureFlags,
+      flags: buildFlags(),
       operation: "mount-ui",
       runtimePackageLoad,
       permissionDecision: "denied",
@@ -355,10 +337,7 @@ describe("EntryRuntimeGuard P14", () => {
     const result = evaluateAgentAppEntryRuntimeGuard({
       preview,
       entryKey: "content_scenario_planning",
-      flags: buildUiRuntimeCapabilityProfile({
-        realAdapterEnabled: true,
-        uiRuntimeEnabled: true,
-      }).featureFlags,
+      flags: buildFlags(),
       operation: "mount-ui",
       runtimePackageLoad,
     });

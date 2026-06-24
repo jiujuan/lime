@@ -5,6 +5,8 @@ import { buildInstalledAppPreview } from "../install/installedAppPreview";
 import { AgentRuntimeCapabilityHost } from "./agentRuntimeCapabilityHost";
 import { buildWorkflowRuntimeCapabilityProfile } from "./workflowRuntimeCapabilityProfile";
 
+const CONTENT_FACTORY_ENTRY_KEY = "content_factory";
+
 function buildDelegateHost() {
   const preview = buildInstalledAppPreview({
     profile: buildWorkflowRuntimeCapabilityProfile({
@@ -33,7 +35,7 @@ describe("AgentRuntimeCapabilityHost", () => {
       workspaceIdResolver: async () => "workspace-1",
       now: () => "2026-05-15T00:00:03.000Z",
     });
-    const sdk = host.createSdkContext("dashboard");
+    const sdk = host.createSdkContext(CONTENT_FACTORY_ENTRY_KEY);
 
     await expect(
       sdk.agent.startTask({
@@ -132,7 +134,7 @@ describe("AgentRuntimeCapabilityHost", () => {
       workspaceIdResolver: async () => "workspace-1",
       now: () => "2026-05-15T00:00:03.000Z",
     });
-    const sdk = host.createSdkContext("dashboard");
+    const sdk = host.createSdkContext(CONTENT_FACTORY_ENTRY_KEY);
 
     const started = await sdk.agent.startTask({
       title: "标准 runtime client 任务",
@@ -290,7 +292,7 @@ describe("AgentRuntimeCapabilityHost", () => {
       api,
       now: () => "2026-05-15T00:00:03.000Z",
     });
-    const sdk = host.createSdkContext("dashboard");
+    const sdk = host.createSdkContext(CONTENT_FACTORY_ENTRY_KEY);
 
     const started = await sdk.agent.startTask({
       title: "生成内容场景",
@@ -349,7 +351,7 @@ describe("AgentRuntimeCapabilityHost", () => {
       1,
       expect.objectContaining({
         appId: "content-factory-app",
-        entryKey: "dashboard",
+        entryKey: CONTENT_FACTORY_ENTRY_KEY,
         workspaceId: "workspace-1",
         taskId: "agent-app-requested-task",
         turnId: "agent-app-requested-turn",
@@ -473,7 +475,7 @@ describe("AgentRuntimeCapabilityHost", () => {
       2,
       expect.objectContaining({
         sessionId: "session-1",
-        idempotencyKey: "dashboard:content.scenario_planning:retry:1",
+        idempotencyKey: `${CONTENT_FACTORY_ENTRY_KEY}:content.scenario_planning:retry:1`,
       }),
     );
     expect(retried).toMatchObject({
@@ -543,7 +545,7 @@ describe("AgentRuntimeCapabilityHost", () => {
       now: () => "2026-05-15T00:00:03.000Z",
     });
     const started = await firstHost
-      .createSdkContext("dashboard")
+      .createSdkContext(CONTENT_FACTORY_ENTRY_KEY)
       .agent.startTask({
         title: "生成内容批次",
         taskKind: "content.copy.generate",
@@ -571,7 +573,7 @@ describe("AgentRuntimeCapabilityHost", () => {
       api,
       now: () => "2026-05-15T00:00:04.000Z",
     });
-    const reloadedSdk = reloadedHost.createSdkContext("dashboard");
+    const reloadedSdk = reloadedHost.createSdkContext(CONTENT_FACTORY_ENTRY_KEY);
     const restored = await reloadedSdk.agent.getTask(started.taskId);
     const listed = await reloadedSdk.agent.listTasks();
     const hostResponse = await reloadedSdk.agent.submitHostResponse({
@@ -683,7 +685,7 @@ describe("AgentRuntimeCapabilityHost", () => {
       api,
       now: () => "2026-05-15T00:00:03.000Z",
     });
-    const sdk = host.createSdkContext("dashboard");
+    const sdk = host.createSdkContext(CONTENT_FACTORY_ENTRY_KEY);
 
     const restored = await sdk.agent.getTask({
       taskId: "agent-app-task-direct-replay",
@@ -860,7 +862,7 @@ describe("AgentRuntimeCapabilityHost", () => {
       api,
       now: () => "2026-05-15T00:00:04.000Z",
     });
-    const sdk = host.createSdkContext("dashboard");
+    const sdk = host.createSdkContext(CONTENT_FACTORY_ENTRY_KEY);
     const started = await sdk.agent.startTask({
       title: "生成内容批次",
       taskKind: "content.copy.generate",
@@ -979,7 +981,7 @@ describe("AgentRuntimeCapabilityHost", () => {
       api,
       now: () => "2026-05-15T00:00:04.000Z",
     });
-    const sdk = host.createSdkContext("dashboard");
+    const sdk = host.createSdkContext(CONTENT_FACTORY_ENTRY_KEY);
     const started = await sdk.agent.startTask({
       title: "生成内容批次",
       taskKind: "content.copy.generate",
@@ -1091,7 +1093,7 @@ describe("AgentRuntimeCapabilityHost", () => {
       api,
       now: () => "2026-05-15T00:00:04.000Z",
     });
-    const sdk = host.createSdkContext("dashboard");
+    const sdk = host.createSdkContext(CONTENT_FACTORY_ENTRY_KEY);
     const started = await sdk.agent.startTask({
       title: "读取资料",
       taskKind: "content.research",

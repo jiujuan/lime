@@ -8,6 +8,8 @@ import {
 } from "./packageCache";
 
 const now = "2026-05-15T00:00:00.000Z";
+const contentFactoryAppVersion = contentFactoryFixture.version;
+const nextContentFactoryAppVersion = "2.0.1";
 
 function buildIdentity(manifest: unknown = contentFactoryFixture) {
   return buildPackageIdentity({
@@ -72,7 +74,7 @@ describe("Agent App package cache P12", () => {
 
   it("upgrade staging 不覆盖旧 package，commit 后可 rollback", () => {
     const oldIdentity = buildIdentity();
-    const newManifest = buildManifestVersion("0.3.1");
+    const newManifest = buildManifestVersion(nextContentFactoryAppVersion);
     const newIdentity = buildIdentity(newManifest);
     const repository = new InMemoryAgentAppPackageCacheRepository();
     const oldEntry = buildAgentAppPackageCacheEntry({
@@ -89,19 +91,21 @@ describe("Agent App package cache P12", () => {
 
     const staged = repository.stageUpgrade(newEntry);
     expect(staged.status).toBe("staged");
-    expect(repository.resolve(oldIdentity).entry?.identity.appVersion).toBe("0.3.0");
+    expect(repository.resolve(oldIdentity).entry?.identity.appVersion).toBe(
+      contentFactoryAppVersion,
+    );
 
     const committed = repository.commitStaged("content-factory-app");
     expect(committed).toMatchObject({
       status: "committed",
       activeEntry: {
         identity: {
-          appVersion: "0.3.1",
+          appVersion: nextContentFactoryAppVersion,
         },
       },
       previousEntry: {
         identity: {
-          appVersion: "0.3.0",
+          appVersion: contentFactoryAppVersion,
         },
       },
     });
@@ -111,7 +115,7 @@ describe("Agent App package cache P12", () => {
       status: "rolled_back",
       activeEntry: {
         identity: {
-          appVersion: "0.3.0",
+          appVersion: contentFactoryAppVersion,
         },
       },
       evidence: {
