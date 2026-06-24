@@ -251,10 +251,6 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 30
     needs: changed
-    env:
-      TMPDIR: ${{ runner.temp }}
-      TEMP: ${{ runner.temp }}
-      TMP: ${{ runner.temp }}
     if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changed.outputs.docs_only != 'true') || github.event_name == 'workflow_dispatch' }}
     steps:
       - name: Checkout
@@ -276,6 +272,10 @@ jobs:
           cache-on-failure: true
 
       - name: Test Rust workspace
+        env:
+          TMPDIR: ${{ runner.temp }}
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
         run: npm run test:rust
 
   windows_shell_runtime:
