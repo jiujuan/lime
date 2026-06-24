@@ -273,10 +273,12 @@ jobs:
 
       - name: Test Rust workspace
         env:
-          TMPDIR: ${{ runner.temp }}
-          TEMP: ${{ runner.temp }}
-          TMP: ${{ runner.temp }}
-        run: npm run test:rust
+          TMPDIR: ${{ github.workspace }}/.tmp/rust-full
+          TEMP: ${{ github.workspace }}/.tmp/rust-full
+          TMP: ${{ github.workspace }}/.tmp/rust-full
+        run: |
+          mkdir -p "$TMPDIR"
+          npm run test:rust
 
   windows_shell_runtime:
     name: Windows Shell Runtime

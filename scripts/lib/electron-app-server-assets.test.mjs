@@ -73,6 +73,7 @@ describe("electron app-server assets", () => {
       readPackageJson: async () => ({ version: "1.59.0" }),
       makeDir: async (...args) => calls.push(["mkdir", ...args]),
       copy: async (...args) => calls.push(["copy", ...args]),
+      clearLaunchBlockingXattrs: async (...args) => calls.push(["xattr", ...args]),
       getStat: async () => ({ mode: 0o755 }),
       changeMode: async (...args) => calls.push(["chmod", ...args]),
       write: async (...args) => calls.push(["write", ...args]),
@@ -101,12 +102,17 @@ describe("electron app-server assets", () => {
       path.resolve("/repo/lime/dist-electron/app-server/darwin-arm64/app-server"),
     ]);
     expect(calls[2]).toEqual([
+      "xattr",
+      path.resolve("/repo/lime/dist-electron/app-server/darwin-arm64/app-server"),
+      "darwin",
+    ]);
+    expect(calls[3]).toEqual([
       "chmod",
       path.resolve("/repo/lime/dist-electron/app-server/darwin-arm64/app-server"),
       0o755,
     ]);
-    expect(calls[3][0]).toBe("write");
-    expect(calls[3][1]).toBe(
+    expect(calls[4][0]).toBe("write");
+    expect(calls[4][1]).toBe(
       path.resolve("/repo/lime/dist-electron/app-server.release.json"),
     );
   });

@@ -113,6 +113,7 @@ export async function prepareElectronAppServerAssets({
   getStat = stat,
   changeMode = chmod,
   sha256File = hashFile,
+  clearLaunchBlockingXattrs = clearMacLaunchBlockingXattrs,
 } = {}) {
   const packageJson = await readPackageJson(path.resolve(repoRoot, "package.json"));
   const version = requiredValue(packageJson.version, "package version");
@@ -126,7 +127,7 @@ export async function prepareElectronAppServerAssets({
   await makeDir(path.dirname(destination), { recursive: true });
   await rm(destination, { force: true });
   await copy(path.resolve(sourceBinary), destination);
-  await clearMacLaunchBlockingXattrs(destination, platform);
+  await clearLaunchBlockingXattrs(destination, platform);
   const sourceStat = await getStat(path.resolve(sourceBinary));
   await changeMode(destination, sourceStat.mode);
 
