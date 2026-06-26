@@ -233,4 +233,6 @@ fn tool_item_event_payload(
 mod artifacts;
 mod imports_items;
 mod messages_diagnostics;
+mod product_profile_artifact_documents;
+mod product_profile_worker_failure;
 mod tool_calls;

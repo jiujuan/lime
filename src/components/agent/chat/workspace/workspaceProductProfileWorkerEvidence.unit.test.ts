@@ -35,6 +35,11 @@ describe("workspaceProductProfileWorkerEvidence", () => {
         input_summary: "prompt=生成图片; inputKeys=topic",
         error_code: "worker_invalid_json_output",
         error_message: "Agent App worker returned invalid JSON",
+        failure_category: "worker_output",
+        retryable: false,
+        retry_advice: "inspect_worker_output",
+        retry_attempt: 0,
+        retry_max_attempts: 0,
         updated_at: "2026-06-24T00:00:02.000Z",
       },
     ]);
@@ -50,6 +55,11 @@ describe("workspaceProductProfileWorkerEvidence", () => {
         outputSummary: null,
         outputObjectCount: null,
         errorCode: "worker_invalid_json_output",
+        failureCategory: "worker_output",
+        retryable: false,
+        retryAdvice: "inspect_worker_output",
+        retryAttempt: 0,
+        retryMaxAttempts: 0,
       }),
       expect.objectContaining({
         id: "evt-success:workerEvidence",

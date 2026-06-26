@@ -303,7 +303,7 @@ export function openPlusMenu(container: HTMLDivElement) {
 
 export function openPlusMenuPanel(
   container: HTMLDivElement,
-  panel: "knowledge" | "objective" | "skills",
+  panel: "knowledge" | "objective" | "plugins" | "skills",
 ) {
   openPlusMenu(container);
 

@@ -476,6 +476,20 @@ function ProductProfileWorkerEvidenceCard({
           label={dynamicT("workspace.productProfile.workerEvidence.output")}
           value={formatWorkerOutput(dynamicT, latestEvidence)}
         />
+        {latestEvidence.failureCategory ? (
+          <MetaRow
+            label={dynamicT(
+              "workspace.productProfile.workerEvidence.failureCategory",
+            )}
+            value={latestEvidence.failureCategory}
+          />
+        ) : null}
+        {latestEvidence.retryAdvice ? (
+          <MetaRow
+            label={dynamicT("workspace.productProfile.workerEvidence.retry")}
+            value={formatWorkerRetry(dynamicT, latestEvidence)}
+          />
+        ) : null}
         {latestEvidence.workerEntrypoint ? (
           <MetaRow
             label={dynamicT(
@@ -512,6 +526,24 @@ function formatWorkerOutput(
     });
   }
   return "";
+}
+
+function formatWorkerRetry(
+  t: WorkspaceDynamicTranslation,
+  evidence: WorkspaceProductProfileWorkerEvidenceItem,
+): string {
+  const retryable = evidence.retryable
+    ? t("workspace.productProfile.workerEvidence.retryable.yes")
+    : t("workspace.productProfile.workerEvidence.retryable.no");
+  const attempts =
+    typeof evidence.retryAttempt === "number" &&
+    typeof evidence.retryMaxAttempts === "number" &&
+    evidence.retryMaxAttempts > 0
+      ? ` ${evidence.retryAttempt}/${evidence.retryMaxAttempts}`
+      : "";
+  return [retryable, evidence.retryAdvice, attempts.trim()]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function ProductProfileObjectPreview({

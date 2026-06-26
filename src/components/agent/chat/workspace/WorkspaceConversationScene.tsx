@@ -76,6 +76,7 @@ interface WorkspaceChatContentParams {
   onDismissEntryBanner: () => void;
   creationReplaySurface?: CreationReplaySurfaceModel | null;
   sceneAppExecutionSummaryCard?: ReactNode;
+  pluginHistoryRestoreLandingCard?: ReactNode;
   serviceSkillExecutionCard?: ReactNode;
   stepProgressProps?: StepProgressProps | null;
   showChatLayout: boolean;
@@ -136,6 +137,7 @@ function renderWorkspaceChatContent({
   onDismissEntryBanner,
   creationReplaySurface,
   sceneAppExecutionSummaryCard,
+  pluginHistoryRestoreLandingCard,
   serviceSkillExecutionCard,
   stepProgressProps,
   showChatLayout,
@@ -166,10 +168,12 @@ function renderWorkspaceChatContent({
       pendingA2UISource.kind === "service_skill" ||
       Boolean(a2uiSubmissionNotice));
   const leadingMessageContent =
+    pluginHistoryRestoreLandingCard ||
     sceneAppExecutionSummaryCard ||
     stepProgressProps ||
     serviceSkillExecutionCard ? (
       <>
+        {pluginHistoryRestoreLandingCard}
         {sceneAppExecutionSummaryCard}
         {stepProgressProps ? <StepProgress {...stepProgressProps} /> : null}
         {serviceSkillExecutionCard}
@@ -302,6 +306,7 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
     typeof EmptyState
   >["onToggleFileManager"];
   sceneAppExecutionSummaryCard?: WorkspaceChatContentParams["sceneAppExecutionSummaryCard"];
+  pluginHistoryRestoreLandingCard?: WorkspaceChatContentParams["pluginHistoryRestoreLandingCard"];
   serviceSkillExecutionCard?: WorkspaceChatContentParams["serviceSkillExecutionCard"];
   stepProgressProps?: WorkspaceChatContentParams["stepProgressProps"];
   showChatLayout: boolean;
@@ -431,6 +436,7 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
   runtimeToolAvailability?: ComponentProps<
     typeof EmptyState
   >["runtimeToolAvailability"];
+  pluginSuggestions?: ComponentProps<typeof EmptyState>["pluginSuggestions"];
   initialInputCapability?: ComponentProps<
     typeof EmptyState
   >["initialInputCapability"];
@@ -529,6 +535,7 @@ export function WorkspaceConversationScene({
   fileManagerOpen,
   onToggleFileManager,
   sceneAppExecutionSummaryCard,
+  pluginHistoryRestoreLandingCard,
   serviceSkillExecutionCard,
   stepProgressProps,
   showChatLayout,
@@ -602,6 +609,7 @@ export function WorkspaceConversationScene({
   onDismissWorkspaceHint,
   onOpenSettings,
   runtimeToolAvailability,
+  pluginSuggestions,
   initialInputCapability,
   knowledgePackSelection,
   knowledgePackOptions,
@@ -718,6 +726,7 @@ export function WorkspaceConversationScene({
       : undefined,
     sessionId,
     runtimeToolAvailability,
+    pluginSuggestions,
     initialInputCapability,
     knowledgePackSelection,
     knowledgePackOptions,
@@ -747,6 +756,7 @@ export function WorkspaceConversationScene({
     onDismissEntryBanner,
     creationReplaySurface,
     sceneAppExecutionSummaryCard,
+    pluginHistoryRestoreLandingCard,
     serviceSkillExecutionCard,
     stepProgressProps,
     showChatLayout,
@@ -788,21 +798,19 @@ export function WorkspaceConversationScene({
     localShellPanelOpen &&
     shouldUseTaskCenterUtilityToolbar &&
     !shellManagedByRightSurface;
-  const effectiveShellPanelHeightPx =
-    bottomShellPanelOpen
-      ? shellPanelMaximized && typeof window !== "undefined"
-        ? Math.max(
-            TASK_CENTER_SHELL_PANEL_DEFAULT_HEIGHT_PX,
-            Math.floor(
-              window.innerHeight * TASK_CENTER_SHELL_PANEL_MAX_HEIGHT_RATIO,
-            ),
-          )
-        : shellPanelHeightPx
-      : 0;
-  const effectiveShellBottomInset =
-    bottomShellPanelOpen
-      ? `calc(${shellBottomInset} + ${effectiveShellPanelHeightPx}px)`
-      : shellBottomInset;
+  const effectiveShellPanelHeightPx = bottomShellPanelOpen
+    ? shellPanelMaximized && typeof window !== "undefined"
+      ? Math.max(
+          TASK_CENTER_SHELL_PANEL_DEFAULT_HEIGHT_PX,
+          Math.floor(
+            window.innerHeight * TASK_CENTER_SHELL_PANEL_MAX_HEIGHT_RATIO,
+          ),
+        )
+      : shellPanelHeightPx
+    : 0;
+  const effectiveShellBottomInset = bottomShellPanelOpen
+    ? `calc(${shellBottomInset} + ${effectiveShellPanelHeightPx}px)`
+    : shellBottomInset;
   const taskCenterUtilityToolbarNode = shouldUseTaskCenterUtilityToolbar ? (
     <TaskCenterUtilityToolbar
       projectRootPath={projectRootPath}
@@ -904,24 +912,23 @@ export function WorkspaceConversationScene({
         );
       })()
     : null;
-  const taskCenterShellPanelNode =
-    bottomShellPanelOpen ? (
-      <TaskCenterShellPanel
-        heightPx={effectiveShellPanelHeightPx}
-        maximized={shellPanelMaximized}
-        projectRootPath={projectRootPath}
-        onClose={() => {
-          setLocalShellPanelOpen(false);
-        }}
-        onHeightChange={(heightPx) => {
-          setShellPanelMaximized(false);
-          setShellPanelHeightPx(heightPx);
-        }}
-        onToggleMaximize={() => {
-          setShellPanelMaximized((current) => !current);
-        }}
-      />
-    ) : null;
+  const taskCenterShellPanelNode = bottomShellPanelOpen ? (
+    <TaskCenterShellPanel
+      heightPx={effectiveShellPanelHeightPx}
+      maximized={shellPanelMaximized}
+      projectRootPath={projectRootPath}
+      onClose={() => {
+        setLocalShellPanelOpen(false);
+      }}
+      onHeightChange={(heightPx) => {
+        setShellPanelMaximized(false);
+        setShellPanelHeightPx(heightPx);
+      }}
+      onToggleMaximize={() => {
+        setShellPanelMaximized((current) => !current);
+      }}
+    />
+  ) : null;
   const canvasContent =
     !liveCanvasPreview ? null : currentImageWorkbenchActive ||
       shouldShowCanvasLoadingState ? (

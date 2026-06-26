@@ -1,7 +1,10 @@
 import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 
-import { renderMarkdown as render } from "./MarkdownRenderer.testHarness";
+import {
+  renderMarkdown as render,
+  renderMarkdownHarness,
+} from "./MarkdownRenderer.testHarness";
 
 describe("MarkdownRenderer", () => {
   it("代码块复制按钮应使用中文文案并反馈复制状态", async () => {
@@ -72,5 +75,38 @@ describe("MarkdownRenderer", () => {
       copyButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     expect(writeText).toHaveBeenCalledWith("第一段输出\n\n第二段输出");
+  });
+
+  it("普通流式 Markdown 更新应立即渲染，不再等待 renderer 防抖", () => {
+    vi.useFakeTimers();
+    const { container, rerender } = renderMarkdownHarness("", {
+      isStreaming: true,
+    });
+
+    rerender("首字");
+    expect(container.textContent).toContain("首字");
+
+    rerender("首字继续");
+    expect(container.textContent).toContain("首字继续");
+  });
+
+  it("超长流式 Markdown 仍应使用轻量渲染防抖合并", () => {
+    vi.useFakeTimers();
+    const initialContent = "长文本".repeat(700);
+    const nextContent = `${initialContent}追加`;
+    const { container, rerender } = renderMarkdownHarness(initialContent, {
+      isStreaming: true,
+    });
+
+    expect(container.textContent).toContain(initialContent);
+
+    rerender(nextContent);
+    expect(container.textContent).not.toContain("追加");
+
+    act(() => {
+      vi.advanceTimersByTime(48);
+    });
+
+    expect(container.textContent).toContain("追加");
   });
 });

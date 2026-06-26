@@ -32,6 +32,7 @@ const mockResolveOemCloudRuntimeContext = vi.hoisted(() => vi.fn());
 const mockGetOemCloudBootstrapSnapshot = vi.hoisted(() => vi.fn());
 const mockUseGlobalMediaGenerationDefaults = vi.hoisted(() => vi.fn());
 const mockInstallSkillFromPromptInstruction = vi.hoisted(() => vi.fn());
+const mockListInstalledAgentApps = vi.hoisted(() => vi.fn());
 
 vi.mock("../utils/browserAssistPreheat", () => ({
   preheatBrowserAssistInBackground: mockPreheatBrowserAssistInBackground,
@@ -68,6 +69,11 @@ vi.mock("@/lib/oemCloudSession", async () => {
 vi.mock("@/hooks/useGlobalMediaGenerationDefaults", () => ({
   useGlobalMediaGenerationDefaults: () =>
     mockUseGlobalMediaGenerationDefaults(),
+}));
+
+vi.mock("@/lib/api/agentApps", () => ({
+  AGENT_APPS_CHANGED_EVENT: "lime:agent-apps-changed",
+  listInstalledAgentApps: () => mockListInstalledAgentApps(),
 }));
 
 vi.mock("@/lib/skills/skillInstallPrompt", async () => {
@@ -536,6 +542,10 @@ describe("useWorkspaceSendActions", () => {
     clearAgentUiProjectionEvents();
     mockResolveImageWorkbenchSkillRequest.mockReturnValue(null);
     mockEnsureSessionForCommandMetadata.mockResolvedValue(null);
+    mockListInstalledAgentApps.mockResolvedValue({
+      states: [],
+      issues: [],
+    });
     mockGetSkillCatalog.mockResolvedValue({ entries: [] });
     mockListSkillCatalogSceneEntries.mockReturnValue([]);
     mockGetOrCreateDefaultProject.mockResolvedValue({
@@ -628,6 +638,33 @@ describe("useWorkspaceSendActions", () => {
       });
 
       expect(mockSendMessage).toHaveBeenCalledTimes(1);
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("普通对话挂载和发送不应查询 Agent Apps 列表", async () => {
+    const harness = mountHook({
+      input: "帮我整理一下今天的重要新闻",
+    });
+
+    try {
+      expect(mockListInstalledAgentApps).not.toHaveBeenCalled();
+      await act(async () => {
+        const started = await harness
+          .getValue()
+          .handleSend(
+            [],
+            false,
+            false,
+            "帮我整理一下今天的重要新闻",
+            "react",
+          );
+        expect(started).toBe(true);
+      });
+
+      expect(mockSendMessage).toHaveBeenCalledTimes(1);
+      expect(mockListInstalledAgentApps).not.toHaveBeenCalled();
     } finally {
       harness.unmount();
     }

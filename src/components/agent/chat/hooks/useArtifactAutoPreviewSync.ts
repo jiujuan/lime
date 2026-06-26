@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { resolveAgentRuntimeArtifactDocumentScope } from "@/lib/api/agentRuntime/appServerArtifactClient";
 import type { Artifact } from "@/lib/artifact/types";
 import { resolveArtifactProtocolFilePath } from "@/lib/artifact-protocol";
 import type { ArtifactWriteMetadata, WriteArtifactContext } from "../types";
@@ -45,17 +46,50 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function areMetadataValuesEqual(left: unknown, right: unknown): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (!isRecord(left) || !isRecord(right)) {
+    return false;
+  }
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 function buildPreviewMetadataPatch(
+  artifact: Artifact,
   preview: ArtifactAutoPreviewResult,
 ): Record<string, unknown> {
   const previewMetadata = isRecord(preview.metadata) ? preview.metadata : {};
-  return Object.fromEntries(
+  const patch = Object.fromEntries(
     Object.entries({
       ...previewMetadata,
       artifactId: preview.artifactId,
       artifactRef: preview.artifactRef,
       appServerArtifactRef: preview.artifactRef,
       appServerArtifactTitle: preview.title,
+    }).filter(([, value]) => value !== undefined),
+  );
+  const scopeArtifact: Artifact = {
+    ...artifact,
+    meta: {
+      ...artifact.meta,
+      ...patch,
+    },
+  };
+  const persistenceScope =
+    resolveAgentRuntimeArtifactDocumentScope(scopeArtifact);
+  const existingPersistence = artifact.meta.artifactDocumentPersistence;
+  const artifactDocumentPersistence =
+    persistenceScope &&
+    areMetadataValuesEqual(existingPersistence, persistenceScope)
+      ? existingPersistence
+      : persistenceScope;
+
+  return Object.fromEntries(
+    Object.entries({
+      ...patch,
+      artifactDocumentPersistence: artifactDocumentPersistence ?? undefined,
     }).filter(([, value]) => value !== undefined),
   );
 }
@@ -114,7 +148,7 @@ export function mergePreviewContentIntoArtifact(
   const nextPath =
     preview.path?.trim() || resolveArtifactProtocolFilePath(artifact);
   const currentContent = artifact.content;
-  const metadataPatch = buildPreviewMetadataPatch(preview);
+  const metadataPatch = buildPreviewMetadataPatch(artifact, preview);
   const hasMetadataChange = hasMetadataPatchChange(artifact, metadataPatch);
 
   if (!nextContent.trim() && currentContent.trim()) {

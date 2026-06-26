@@ -12,7 +12,7 @@ describe("sidebarNav", () => {
       "新建任务",
       "专家",
       "Skills",
-      "Agent Apps",
+      "插件",
     ]);
 
     expect(FOOTER_SIDEBAR_NAV_ITEMS.map((item) => item.label)).toEqual([
@@ -54,7 +54,7 @@ describe("sidebarNav", () => {
   it("Agent App Lab 只在实验开关开启时进入左侧栏", () => {
     expect(
       buildMainSidebarNavItems({ labEnabled: false }).map((item) => item.id),
-    ).toContain("agent-apps");
+    ).toContain("plugins");
     expect(
       buildMainSidebarNavItems({ labEnabled: true }).map((item) => item.id),
     ).toContain("agent-app-lab");

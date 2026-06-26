@@ -24,11 +24,11 @@ export async function waitForGuiMcpStructuredContentCompleted(page, options) {
         const style = textarea ? window.getComputedStyle(textarea) : null;
         const textareaVisible = Boolean(
           textarea &&
-            rect &&
-            rect.width > 16 &&
-            rect.height > 16 &&
-            style?.visibility !== "hidden" &&
-            style?.display !== "none",
+          rect &&
+          rect.width > 16 &&
+          rect.height > 16 &&
+          style?.visibility !== "hidden" &&
+          style?.display !== "none",
         );
         const buttons = Array.from(document.querySelectorAll("button")).map(
           (button) => ({
@@ -60,7 +60,9 @@ export async function waitForGuiMcpStructuredContentCompleted(page, options) {
         return {
           url: window.location.href,
           hasPrompt: text.includes(prompt),
-          hasAssistantSummary: text.includes("MCP structuredContent 展示验证完成"),
+          hasAssistantSummary: text.includes(
+            "MCP structuredContent 展示验证完成",
+          ),
           hasDoneText: text.includes(doneText),
           hasStructuredAnswer: text.includes(answer),
           hasReferenceId: text.includes(referenceId),
@@ -79,7 +81,7 @@ export async function waitForGuiMcpStructuredContentCompleted(page, options) {
           stopButtonVisible,
           hasMessageList: Boolean(
             document.querySelector('[data-testid="message-list"]') ||
-              document.querySelector('[data-testid="message-list-frame"]'),
+            document.querySelector('[data-testid="message-list-frame"]'),
           ),
           bodyText: text,
         };
@@ -135,8 +137,29 @@ export async function waitForGuiMcpStructuredContentCompleted(page, options) {
   );
 }
 
-export async function expandAndInspectGuiMcpStructuredContentProcess(page, options) {
+export async function expandAndInspectGuiMcpStructuredContentProcess(
+  page,
+  options,
+) {
   await page.evaluate(() => {
+    const inlineToolSteps = Array.from(
+      document.querySelectorAll('[data-testid="inline-tool-process-step"]'),
+    );
+    for (const step of inlineToolSteps) {
+      const buttons = Array.from(step.querySelectorAll("button"));
+      const detailsButton = buttons.find((button) => {
+        const label = [
+          button.getAttribute("title") || "",
+          button.getAttribute("aria-label") || "",
+          button.textContent || "",
+        ].join("\n");
+        return /展开过程详情|查看结果|expand/i.test(label);
+      });
+      if (detailsButton instanceof HTMLButtonElement) {
+        detailsButton.click();
+      }
+    }
+
     const groups = Array.from(
       document.querySelectorAll('[data-testid="streaming-process-group"]'),
     );
@@ -170,6 +193,12 @@ export async function expandAndInspectGuiMcpStructuredContentProcess(page, optio
             expanded: button?.getAttribute("aria-expanded") || "",
           };
         });
+        const inlineToolSteps = Array.from(
+          document.querySelectorAll('[data-testid="inline-tool-process-step"]'),
+        ).map((step) => ({
+          text: step.textContent || "",
+          grouped: step.getAttribute("data-grouped") || "",
+        }));
         const mcpProcessGroup = processGroups.find(
           (group) =>
             group.text.includes(answer) ||
@@ -177,7 +206,16 @@ export async function expandAndInspectGuiMcpStructuredContentProcess(page, optio
             group.buttonText.includes("已完成 1 个步骤") ||
             group.text.includes("已完成 1 个步骤"),
         );
+        const mcpInlineStep = inlineToolSteps.find(
+          (step) =>
+            step.text.includes(answer) ||
+            step.text.includes(referenceId) ||
+            step.text.includes(toolName) ||
+            step.text.includes(toolDisplayLabel),
+        );
         const processText = mcpProcessGroup?.text || "";
+        const inlineText = mcpInlineStep?.text || "";
+        const visibleProcessText = inlineText || processText;
         const forbiddenEnvelopeFragments = [
           "request_metadata",
           "mcp_tool_result_projection",
@@ -189,22 +227,25 @@ export async function expandAndInspectGuiMcpStructuredContentProcess(page, optio
           '"diagnostics"',
         ];
         return {
-          mcpProcessGroupExpanded: mcpProcessGroup?.expanded === "true",
-          hasStructuredAnswer: processText.includes(answer),
-          hasReferenceId: processText.includes(referenceId),
+          mcpProcessGroupExpanded:
+            Boolean(mcpInlineStep) || mcpProcessGroup?.expanded === "true",
+          hasStructuredAnswer: visibleProcessText.includes(answer),
+          hasReferenceId: visibleProcessText.includes(referenceId),
           hasToolName:
-            processText.includes(toolName) ||
+            visibleProcessText.includes(toolName) ||
             text.includes(toolName) ||
-            processText.includes(toolDisplayLabel) ||
+            visibleProcessText.includes(toolDisplayLabel) ||
             text.includes(toolDisplayLabel),
           envelopeVisible: forbiddenEnvelopeFragments.some((value) =>
-            processText.includes(value),
+            visibleProcessText.includes(value),
           ),
           forbiddenEnvelopeHits: forbiddenEnvelopeFragments.filter((value) =>
-            processText.includes(value),
+            visibleProcessText.includes(value),
           ),
           processGroupCount: processGroups.length,
           processGroupText: processText,
+          inlineToolStepCount: inlineToolSteps.length,
+          inlineToolStepText: inlineText,
           bodyText: text,
         };
       },

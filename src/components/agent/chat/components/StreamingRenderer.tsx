@@ -713,15 +713,20 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
             id: part.toolCall.id,
             toolCall: part.toolCall,
           };
-          if (isStreaming && processBufferOnlyThinking()) {
+          const shouldSplitBeforeTool = shouldSplitProcessBeforeEntry(
+            processBuffer,
+            nextEntry,
+          );
+          if (
+            isStreaming &&
+            processBufferOnlyThinking() &&
+            shouldSplitBeforeTool
+          ) {
             flushProcessBuffer(String(index), {
-              forceGroup: shouldSplitProcessBeforeEntry(
-                processBuffer,
-                nextEntry,
-              ),
+              forceGroup: true,
             });
           }
-          if (shouldSplitProcessBeforeEntry(processBuffer, nextEntry)) {
+          if (shouldSplitBeforeTool) {
             flushProcessBuffer(String(index));
           }
           processBuffer.push(nextEntry);

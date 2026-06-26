@@ -47,28 +47,47 @@ vi.mock("react-i18next", () => ({
         "workspace.productProfile.workerEvidence.entrypoint": "入口",
         "workspace.productProfile.workerEvidence.outputObjectCount": `${options?.count ?? 0} 个对象`,
         "workspace.productProfile.workerEvidence.error": "错误",
+        "workspace.productProfile.workerEvidence.failureCategory": "失败类型",
+        "workspace.productProfile.workerEvidence.retry": "重试建议",
+        "workspace.productProfile.workerEvidence.retryable.yes": "可重试",
+        "workspace.productProfile.workerEvidence.retryable.no": "需处理后重试",
         "workspace.productProfile.workerEvidence.status.completed": "已完成",
         "workspace.productProfile.workerEvidence.status.failed": "失败",
         "workspace.productProfile.workerEvidence.status.unknown": "未知",
         "workspace.productProfile.surface.document": "文章画布",
         "workspace.productProfile.surface.imageGrid": "图片组",
+        "workspace.productProfile.surface.storyboard": "视频分镜",
+        "workspace.productProfile.surface.checklist": "交付检查清单",
         "workspace.productProfile.preview.document": "文档预览",
         "workspace.productProfile.preview.documentEmpty": "等待文档内容",
         "workspace.productProfile.preview.imageGrid": "图片组",
         "workspace.productProfile.preview.artifactCount": `${options?.count ?? 0} 个产物`,
+        "workspace.productProfile.preview.storyboard": "视频分镜",
+        "workspace.productProfile.preview.storyboardEmpty": "等待分镜内容",
+        "workspace.productProfile.preview.checklist": "交付复核",
+        "workspace.productProfile.preview.checklistEmpty": "等待复核结果",
         "workspace.productProfile.action.revise": "改写",
         "workspace.productProfile.action.regenerate": "重新生成",
         "workspace.productProfile.action.createVariant": "生成变体",
         "workspace.productProfile.action.applyToArticle": "应用到文章",
         "workspace.productProfile.action.exportMarkdown": "导出 Markdown",
+        "workspace.productProfile.action.rewriteShot": "改写镜头",
+        "workspace.productProfile.action.exportStoryboard": "导出分镜",
+        "workspace.productProfile.action.approve": "通过",
+        "workspace.productProfile.action.requestRevision": "要求修改",
         "workspace.productProfile.actionConfirm": `确认 ${options?.action ?? ""}`,
         "workspace.productProfile.actionConfirmAria": `确认执行 ${options?.action ?? ""}`,
         "workspace.productProfile.actionPrompt.revise": `请改写「${options?.objectTitle ?? ""}」`,
         "workspace.productProfile.actionPrompt.regenerate": `请重新生成「${options?.objectTitle ?? ""}」`,
         "workspace.productProfile.actionPrompt.createVariant": `请生成「${options?.objectTitle ?? ""}」变体`,
         "workspace.productProfile.actionPrompt.applyToArticle": `请应用「${options?.objectTitle ?? ""}」到文章`,
+        "workspace.productProfile.actionPrompt.rewriteShot": `请改写「${options?.objectTitle ?? ""}」镜头`,
+        "workspace.productProfile.actionPrompt.exportStoryboard": `请导出「${options?.objectTitle ?? ""}」`,
+        "workspace.productProfile.actionPrompt.approve": `请通过「${options?.objectTitle ?? ""}」`,
+        "workspace.productProfile.actionPrompt.requestRevision": `请要求修改「${options?.objectTitle ?? ""}」`,
         "workspace.productProfile.status.ready": "已就绪",
         "workspace.productProfile.status.needsReview": "待复核",
+        "workspace.productProfile.status.failed": "失败",
       };
       return copy[key] ?? key;
     },
@@ -83,7 +102,7 @@ const profile: WorkspaceProductProfile = {
   sessionId: "session-main",
   workspaceId: "workspace-main",
   source: "threadRead",
-  objectCount: 2,
+  objectCount: 4,
   workerEvidence: [
     {
       id: "evt-worker-failed:workerEvidence",
@@ -102,6 +121,11 @@ const profile: WorkspaceProductProfile = {
       artifactKind: null,
       errorCode: "worker_invalid_json_output",
       errorMessage: "Agent App worker returned invalid JSON",
+      failureCategory: "worker_output",
+      retryable: false,
+      retryAdvice: "inspect_worker_output",
+      retryAttempt: 0,
+      retryMaxAttempts: 0,
       updatedAt: "2026-06-24T00:00:02.000Z",
     },
     {
@@ -121,6 +145,11 @@ const profile: WorkspaceProductProfile = {
       artifactKind: "content_factory.workspace_patch",
       errorCode: null,
       errorMessage: null,
+      failureCategory: null,
+      retryable: null,
+      retryAdvice: null,
+      retryAttempt: null,
+      retryMaxAttempts: null,
       updatedAt: "2026-06-24T00:00:00.000Z",
     },
   ],
@@ -203,6 +232,56 @@ const profile: WorkspaceProductProfile = {
             id: "artifact-image-2",
             title: "副图候选",
             localPath: "/tmp/lime-content-factory/image-2.png",
+          },
+        ],
+      },
+    },
+    {
+      ref: {
+        appId: "content-factory-app",
+        kind: "videoStoryboard",
+        id: "storyboard-1",
+        sessionId: "session-main",
+        artifactIds: ["artifact-video-storyboard"],
+      },
+      title: "视频分镜",
+      status: "ready",
+      summary: "3 镜头短视频分镜",
+      source: {
+        scenes: [
+          {
+            id: "shot-1",
+            title: "厨房开场",
+            description: "镜头推近产品",
+            visualPrompt: "明亮厨房，自然光",
+            duration: "3s",
+          },
+        ],
+      },
+    },
+    {
+      ref: {
+        appId: "content-factory-app",
+        kind: "deliveryChecklist",
+        id: "delivery-checklist-1",
+        sessionId: "session-main",
+        artifactIds: ["artifact-delivery-checklist"],
+      },
+      title: "交付检查清单",
+      status: "ready",
+      summary: "发布前检查项",
+      source: {
+        items: [
+          {
+            id: "article",
+            title: "文章已生成",
+            status: "done",
+          },
+          {
+            id: "image-license",
+            title: "确认图片授权",
+            notes: "发布前需复核",
+            status: "todo",
           },
         ],
       },
@@ -298,6 +377,12 @@ describe("WorkspaceProductProfileSurface", () => {
     expect(container.textContent).toContain("prompt=生成图片; inputKeys=topic");
     expect(container.textContent).toContain("./runtime/content-factory-worker.mjs");
     expect(container.textContent).toContain("worker_invalid_json_output");
+    expect(container.textContent).toContain("失败类型");
+    expect(container.textContent).toContain("worker_output");
+    expect(container.textContent).toContain("重试建议");
+    expect(container.textContent).toContain(
+      "需处理后重试 · inspect_worker_output",
+    );
     expect(container.textContent).toContain("主图候选");
     expect(container.textContent).toContain("中文内容工厂配图");
     expect(
@@ -435,6 +520,41 @@ describe("WorkspaceProductProfileSurface", () => {
         '[data-testid="workspace-product-profile-action-regenerate"]',
       ),
     ).toBeNull();
+  });
+
+  it("切换到分镜和清单时应渲染宿主内置预览", () => {
+    const container = renderSurface();
+    const storyboardRow = container.querySelector<HTMLButtonElement>(
+      '[data-testid="workspace-product-profile-object-videoStoryboard"]',
+    );
+    act(() => {
+      storyboardRow?.click();
+    });
+
+    expect(container.textContent).toContain("视频分镜");
+    expect(container.textContent).toContain("厨房开场");
+    expect(container.textContent).toContain("镜头推近产品");
+    expect(
+      container.querySelector(
+        '[data-testid="workspace-product-profile-storyboard-row"]',
+      ),
+    ).not.toBeNull();
+
+    const checklistRow = container.querySelector<HTMLButtonElement>(
+      '[data-testid="workspace-product-profile-object-deliveryChecklist"]',
+    );
+    act(() => {
+      checklistRow?.click();
+    });
+
+    expect(container.textContent).toContain("交付检查清单");
+    expect(container.textContent).toContain("确认图片授权");
+    expect(container.textContent).toContain("发布前需复核");
+    expect(
+      container.querySelector(
+        '[data-testid="workspace-product-profile-checklist-item"]',
+      ),
+    ).not.toBeNull();
   });
 
   it("重新挂载时应恢复最近选择的产物", () => {

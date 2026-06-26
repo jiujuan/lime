@@ -1,3 +1,4 @@
+use crate::action_policy::{browser_action_requires_confirmation, build_action_required_result};
 use crate::evidence::{
     attach_browser_action_evidence, new_browser_action_id, BrowserActionEvidenceInput,
 };
@@ -16,6 +17,10 @@ pub async fn execute_action(
     action: &str,
     args: Value,
 ) -> Result<Value, String> {
+    if browser_action_requires_confirmation(action) {
+        return build_action_required_result(session, action, args).await;
+    }
+
     let event_cursor = session.event_buffer(None).await.next_cursor;
     let result = match action {
         "navigate" => navigate(session, &args).await,

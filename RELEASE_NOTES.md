@@ -1,47 +1,48 @@
-## Lime v1.79.0
+## Lime v1.80.0
 
 ### 新功能
 
-- 浏览器 Runtime 与 Right Surface 工作台进入 current 主链：新增 App Server `browserSession/*` 协议、Electron embedded browser host、画布浏览器面板、右侧 Surface 浏览器面板、下载架、上下文菜单和会话状态投影。
-- Claw 工作台支持浏览器辅助与产品资料协同：浏览器会话、产品 profile artifact document、worker evidence、文档版本和保存证据可以进入同一条 Workspace / Evidence Pack 链路。
-- Agent App 安装与启动链路补齐发布证据：新增 cloud release evidence、release signature、readiness issue 分类、launch target control / persistence 与 Agent App 任务 worker 接线。
-- App Server protocol / npm client 扩展浏览器会话、runtime event append、Agent App host lifecycle snapshot/list 与 UI runtime status 形状，并同步生成 Rust schema 与 TypeScript protocol types。
-- Claw streaming 渲染增加结构化内容时间线、web retrieval process、text delta lifecycle 与 content part ordering，支持 reasoning / tool / web search / final answer 更稳定地按生命周期展示。
+- 插件成为 Lime 一级产品概念：新增插件路线图、PRD、架构、接口合同、历史恢复规则与原型，明确插件负责安装、授权和分发，工作台应用作为插件内的独立 UI 能力。
+- 新增插件中心与 Marketplace 前端骨架：支持插件列表、详情、注册信息、Skill 面板、安装态合并、能力分类和 view model 投影，并接入导航与应用页入口。
+- Claw composer 支持插件显式激活：新增插件 chip / selector、`@插件` 输入能力、插件激活上下文、发送前 metadata 合并和 Right Surface 打开策略，普通会话不再依赖语义猜测插件。
+- 内容工厂插件 dogfood 进入主链：新增内容工厂插件 contract、worker runtime 样例、交付计划、workspace patch、媒体缓存声明、fixture package 和 browser intent launch 接线。
+- Agent App task worker runtime 扩展：App Server 能解析已安装 Agent App 的 runtime package、执行 worker turn、生成产品 Profile / artifact document 投影，并为内容工厂 worker 输出保留可追踪 evidence。
+- Browser Runtime 高风险动作进入 confirmation / human takeover 闭环：`click`、`type`、`submit`、`upload`、`download`、`javascript` 等页面变更动作在 CDP executor 内 fail-closed，并输出 `action.required`、permission facts 与 Evidence Pack action index。
+- ArtifactDocument 持久化链路补齐跨会话 scope、保存 evidence、preview 自动同步和文件级归档 manifest，历史打开后继续保存会复用同一个 App Server session / artifact ref。
 
 ### 修复
 
-- 修复浏览器辅助与 Right Surface 之间缺少可追踪会话引用的问题，Workspace 现在通过 browser session ref、intent、control mode 和 runtime navigation 统一驱动右侧浏览器 Surface。
-- 修复 Agent App 云端安装只展示入口、不展示发布可信度的问题，安装评审现在可以呈现签名、发布证据和 readiness issue。
-- 修复 WebSearch / WebFetch、reasoning 与最终正文在流式和历史恢复之间顺序不一致的问题，投影逻辑改为依赖结构化 sequence / provenance，而不是展示文案正则。
-- 修复 artifact document 保存后 Evidence Pack 缺少可审计文档版本的问题，App Server runtime 增加 artifact document versions 与 product profile artifact document projection。
-- 修复 Browser Runtime manager 过度集中导致会话生命周期、target 读取、事件流与 evidence 输出难以隔离测试的问题，拆分为按职责聚合的子模块。
+- 修复 Claw 普通工具过程记录被批次摘要替换的问题，`Read` / `Ran` / Skill / MCP 等过程现在按 tool id 时序逐条保留，WebSearch / WebFetch 继续使用专门检索时间线。
+- 修复 Agent App intent 读取已安装列表时可能阻断普通发送的问题；读取失败或超时会降级跳过 intent 匹配，不影响 `agentSession/turn/start`。
+- 修复 Artifact store 在 streaming / Browser Assist 期间因消息引用变化反复同步导致 `Maximum update depth exceeded` 的风险，改为基于 artifact 内容签名同步。
+- 修复内嵌浏览器主窗口刷新后 `WebContentsView` 未清理的问题，避免旧浏览器视图和新 renderer 状态交叉。
+- 修复历史会话继续编辑 ArtifactDocument 时 scope 分散的问题，`artifact/read`、preview sync 与保存回写统一使用 `artifactDocumentPersistence` metadata。
 
 ### 优化与重构
 
-- `lime-rs/crates/agent/src/request_tool_policy.rs` 拆分为 auto compaction、runtime status、stream diagnostics、stream idle、text batching、web search preflight / tracker 与 web retrieval process 子模块，中心文件只保留调度边界。
-- Browser Runtime manager 拆分为 CDP targets、session、session events、session lifecycle、session reader 与 session stream，降低单文件职责和回归维护成本。
-- App Server runtime 新增 browser session processor/runtime、browser evidence provider、product workspace/profile projection 与 artifact document projection，继续把 GUI 证据主链收敛到 App Server current owner。
-- Agent Chat 前端继续把历史合并、content part timeline、stream completion、text delta lifecycle、Right Surface runtime projection、browser assist control 和 product profile model 抽到可测纯模块。
-- Claw current fixture 脚本继续模块化，补齐 product profile content factory、browser/right surface visual、web tools waits、scenario assertions 与 code artifact workbench fixture 支撑。
+- 插件相关逻辑拆分为 manifest contract、marketplace registry、安装态、激活、历史恢复、Right Surface projection、内容工厂 contract 和浏览器 intent launch 等可测模块。
+- `useWorkspaceSendActions` 合并插件显式激活、Agent App intent 路由和已安装 App 缓存刷新，发送主路径保持 current App Server JSON-RPC / RuntimeCore 链路。
+- Browser Runtime 新增 `action_policy` 并将高风险动作 gating 下沉到 Rust executor，App Server evidence provider 只消费结构化动作状态。
+- Agent Chat streaming 渲染继续按 content part / lifecycle / provenance 分层，普通工具、web retrieval、thinking、final answer 各自保持明确 owner。
+- OEM cloud control plane 增加 typed client 与 contract 测试，为后续远程插件 marketplace 消费保留清晰边界。
 
 ### 测试与质量
 
-- 新增 / 扩展 Browser Runtime API、embedded browser host、browser session protocol、browser panel、Right Surface browser panel、browser assist control、browser runtime navigation 与 workspace browser session ref 回归。
-- 新增 / 扩展 Agent App release evidence、release signature、readiness issue classification、launch target persistence、Agent Apps page view model 与 cloud bootstrap / install review 测试。
-- 新增 / 扩展 streaming content part order、projection guard、text delta lifecycle、content timeline、web retrieval projection、MessageList reasoning flow / persistence 与 stream runtime handler 回归。
-- 扩展 App Server protocol catalog、generated schema、app-server-client request methods、contract guard 与 release manifest 相关校验。
-- 五语言 i18n 资源同步覆盖 Agent、Agent Runtime 与 Workspace 新增可见文案。
-- 本版发布事实源更新到 `1.79.0`：根应用、Rust workspace、CLI npm package、App Server client package、Cargo lock 与 Aster 子工作区 lock。
+- 新增 / 扩展插件 manifest、marketplace view model、安装态、激活、历史恢复、内容工厂 contract、browser intent launch 与 Right Surface projection 单测。
+- 新增 / 扩展 App Server Agent App worker turn、runtime package 解析、产品 Profile artifact document、worker failure、browser action evidence export 和 read model 回归。
+- 新增 / 扩展 Claw inputbar、插件 selector、发送路由、ArtifactDocument persistence、artifact preview sync、StreamingRenderer、InlineToolProcessStep 与 Markdown display source 回归。
+- 新增 / 扩展 Browser Runtime 高风险动作 fail-closed、Electron embedded browser host、code artifact workbench fixture、claw current fixture 与 GUI evidence 断言。
+- 五语言 i18n 资源同步覆盖插件、Agent、Inputbar、Workspace 和导航新增可见文案。
+- 本版发布事实源更新到 `1.80.0`：根应用、Rust workspace、CLI npm package、App Server client package、Cargo lock 与 Aster 子工作区 lock。
 
 ### 文档
 
-- 新增 Claw streaming rendering correctness 文档，明确 content part provenance、lifecycle、tool / reasoning / final answer 排序边界。
-- 新增 traceable agent acceptance 方法论与论文草稿，沉淀可追踪验收证据口径。
-- 新增 Browser Runtime / Right Surface 执行计划与浏览器路线图，记录浏览器会话、右侧 Surface、Evidence Pack 与回归门禁。
-- 更新质量流程、执行计划索引、Agent App Host v3 实施计划与脚本目录说明，保持发版候选范围可追踪。
+- 新增 `internal/roadmap/plugin/` 插件路线图文档集，覆盖 PRD、架构、技术基线、接口合同、实施计划、历史恢复、HTML 原型和低保真原型。
+- 更新 Agent App Host v3、Browser Runtime Right Surface、Claw streaming rendering 等执行计划，记录 v1.80.0 候选改动的验证证据、剩余缺口和退出条件。
+- 更新浏览器路线图，明确高风险动作 confirmation / human takeover 与 Evidence Pack action index 的 current 边界。
 
 ### 其他
 
-- 本版继续把浏览器辅助、Agent App 发布证据、Claw streaming 展示、产品资料工作台和 Evidence Pack 收敛到 App Server JSON-RPC / RuntimeCore / Electron Desktop Host current 主链；旧 mock fallback、旧并行事件消费路径和未结构化展示文案不作为新增能力入口。
+- 本版继续把插件化工作台、内容工厂 dogfood、ArtifactDocument 持久化、Browser Runtime 安全动作和 Claw 工具过程展示收敛到 App Server JSON-RPC / RuntimeCore / Electron Desktop Host current 主链；旧插件命令族、语义猜测激活、普通工具批次摘要和 mock fallback 不作为新增能力入口。
 
-**完整变更**: `v1.78.0` -> `v1.79.0`
+**完整变更**: `v1.79.0` -> `v1.80.0`

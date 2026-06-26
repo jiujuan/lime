@@ -77,6 +77,8 @@ internal/roadmap/**
 !internal/roadmap/browser/
 internal/roadmap/browser/**
 !internal/roadmap/browser/README.md
+!internal/roadmap/plugin/
+!internal/roadmap/plugin/**
 !internal/roadmap/db/
 internal/roadmap/db/**
 !internal/roadmap/db/*.md

@@ -209,6 +209,7 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   fileManagerOpen?: ConversationScenePresentationParams["scene"]["fileManagerOpen"];
   onToggleFileManager?: ConversationScenePresentationParams["scene"]["onToggleFileManager"];
   sceneAppExecutionSummaryCard?: ConversationScenePresentationParams["scene"]["sceneAppExecutionSummaryCard"];
+  pluginHistoryRestoreLandingCard?: ConversationScenePresentationParams["scene"]["pluginHistoryRestoreLandingCard"];
   serviceSkillExecutionCard?: ConversationScenePresentationParams["scene"]["serviceSkillExecutionCard"];
   contextWorkspaceEnabled: boolean;
   input: ConversationScenePresentationParams["scene"]["input"];
@@ -243,6 +244,7 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   serviceSkillGroups: ConversationScenePresentationParams["scene"]["serviceSkillGroups"];
   skillsLoading: ConversationScenePresentationParams["scene"]["isSkillsLoading"];
   onSelectServiceSkill?: ConversationScenePresentationParams["scene"]["onSelectServiceSkill"];
+  pluginSuggestions?: ConversationScenePresentationParams["scene"]["pluginSuggestions"];
   initialInputCapability?: ConversationScenePresentationParams["scene"]["initialInputCapability"];
   handleNavigateToSkillSettings: ConversationScenePresentationParams["scene"]["onNavigateToSettings"];
   handleRefreshSkills: ConversationScenePresentationParams["scene"]["onRefreshSkills"];
@@ -386,6 +388,7 @@ export function useWorkspaceConversationSceneRuntime({
   fileManagerOpen,
   onToggleFileManager,
   sceneAppExecutionSummaryCard,
+  pluginHistoryRestoreLandingCard,
   serviceSkillExecutionCard,
   contextWorkspaceEnabled,
   input,
@@ -419,6 +422,7 @@ export function useWorkspaceConversationSceneRuntime({
   serviceSkillGroups,
   skillsLoading,
   onSelectServiceSkill,
+  pluginSuggestions,
   initialInputCapability,
   handleNavigateToSkillSettings,
   handleRefreshSkills,
@@ -704,6 +708,7 @@ export function useWorkspaceConversationSceneRuntime({
       fileManagerOpen,
       onToggleFileManager,
       sceneAppExecutionSummaryCard,
+      pluginHistoryRestoreLandingCard,
       serviceSkillExecutionCard,
       showChatLayout: shellChromeRuntime.showChatLayout,
       compactChrome: shellChromeRuntime.isWorkspaceCompactChrome,
@@ -801,6 +806,7 @@ export function useWorkspaceConversationSceneRuntime({
         ? navigationActions.handleOpenAppearanceSettings
         : undefined,
       runtimeToolAvailability: inputbarScene.runtimeToolAvailability,
+      pluginSuggestions,
       initialInputCapability,
       knowledgePackSelection: inputbarScene.knowledgePackSelection,
       knowledgePackOptions: inputbarScene.knowledgePackOptions,
@@ -836,7 +842,8 @@ export function useWorkspaceConversationSceneRuntime({
       rightSurfaceContent,
       rightSurfaceLaunchers,
       rightSurfaceObjectCanvasOpen:
-        taskCenterUtilityActionsVisible && Boolean(rightSurfaceObjectCanvasOpen),
+        taskCenterUtilityActionsVisible &&
+        Boolean(rightSurfaceObjectCanvasOpen),
       onToggleRightSurfaceObjectCanvas: taskCenterUtilityActionsVisible
         ? onToggleRightSurfaceObjectCanvas
         : undefined,

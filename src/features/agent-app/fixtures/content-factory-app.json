@@ -44,6 +44,42 @@
       "kind": "app-server-json-rpc",
       "required": true
     },
+    "intents": [
+      {
+        "key": "content_factory_generate",
+        "mode": "natural_language",
+        "taskKind": "content.factory.generate",
+        "outputArtifactKind": "content_factory.workspace_patch",
+        "rightSurface": "productProfile",
+        "triggerPhrases": {
+          "zh-CN": [
+            "内容工厂",
+            "用内容工厂生成",
+            "生成文章配图视频分镜"
+          ],
+          "zh-TW": [
+            "內容工廠",
+            "用內容工廠生成"
+          ],
+          "en-US": [
+            "content factory",
+            "generate with content factory"
+          ],
+          "ja-JP": [
+            "コンテンツファクトリー"
+          ],
+          "ko-KR": [
+            "콘텐츠 팩토리"
+          ]
+        },
+        "expectedObjects": [
+          "articleDraft",
+          "imageGenerationSet",
+          "videoStoryboard",
+          "deliveryChecklist"
+        ]
+      }
+    ],
     "worker": {
       "entrypoint": "./src/runtime/content-factory-worker.mjs",
       "sampleRequest": "./examples/runtime-request.sample.json",

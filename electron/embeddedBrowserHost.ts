@@ -63,6 +63,7 @@ interface EmbeddedBrowserEntry {
   view: WebContentsView;
   window: BrowserWindow;
   closeListener: () => void;
+  rendererLoadListener: () => void;
   pendingUrl?: string;
   navigationToken: number;
   faviconUrl: string | null;
@@ -269,7 +270,9 @@ export class ElectronEmbeddedBrowserHost {
         detachEntryFromWindow(existing);
         existing.window = window;
         existing.closeListener = () => this.#destroy({ viewId });
-        window.on("closed", existing.closeListener);
+        existing.rendererLoadListener = () => this.#destroy({ viewId });
+        attachEntryToWindow(existing, window);
+        return existing;
       }
       window.contentView.addChildView(existing.view);
       return existing;
@@ -295,6 +298,7 @@ export class ElectronEmbeddedBrowserHost {
       view,
       window,
       closeListener: () => this.#destroy({ viewId }),
+      rendererLoadListener: () => this.#destroy({ viewId }),
       navigationToken: 0,
       faviconUrl: null,
       loadProgress: 1,
@@ -317,8 +321,7 @@ export class ElectronEmbeddedBrowserHost {
         this.#emitState(entry);
       },
     });
-    window.on("closed", entry.closeListener);
-    window.contentView.addChildView(view);
+    attachEntryToWindow(entry, window);
     this.#entries.set(viewId, entry);
     view.webContents.on("did-navigate", (_event, url) => {
       this.#clearPendingNavigation(entry, url);
@@ -650,10 +653,23 @@ function applyBounds(
   view.setVisible(visible && bounds.width > 0 && bounds.height > 0);
 }
 
+function attachEntryToWindow(
+  entry: EmbeddedBrowserEntry,
+  window: BrowserWindow,
+): void {
+  window.on("closed", entry.closeListener);
+  window.webContents.on("did-start-loading", entry.rendererLoadListener);
+  window.contentView.addChildView(entry.view);
+}
+
 function detachEntryFromWindow(entry: EmbeddedBrowserEntry): void {
   try {
     if (!entry.window.isDestroyed()) {
       entry.window.off("closed", entry.closeListener);
+      entry.window.webContents.off(
+        "did-start-loading",
+        entry.rendererLoadListener,
+      );
       entry.window.contentView.removeChildView(entry.view);
     }
   } catch (error) {

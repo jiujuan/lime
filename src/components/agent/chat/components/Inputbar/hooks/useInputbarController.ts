@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { BuiltinCommandBadge } from "../components/BuiltinCommandBadge";
+import { InputbarPluginBadge } from "../components/InputbarPluginBadge";
 import { RuntimeSceneBadge } from "../components/RuntimeSceneBadge";
 import { CuratedTaskBadge } from "../../../skill-selection/CuratedTaskBadge";
 import { SkillBadge } from "../../../skill-selection/SkillBadge";
@@ -57,6 +58,14 @@ import { toast } from "sonner";
 import { buildInputbarControllerCopy } from "./inputbarControllerCopy";
 import { buildInputbarWorkflowStateCopy } from "../inputbarWorkflowCopy";
 import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
+import {
+  applyInputbarPluginSelection,
+  removeInputbarPluginSelection,
+  resolveInputbarPluginDisplayName,
+  type InputbarPluginCapability,
+  type InputbarPluginSelection,
+  type InputbarPluginSkillCapability,
+} from "../pluginInputCapability";
 
 interface UseInputbarControllerParams {
   input: string;
@@ -81,6 +90,7 @@ interface UseInputbarControllerParams {
   knowledgePackSelection?: InputbarKnowledgePackSelection | null;
   onStartKnowledgeOrganize?: () => void;
   onManageKnowledgePacks?: () => void;
+  pluginSuggestions?: InputbarPluginCapability[];
   projectId?: string | null;
   sessionId?: string | null;
   pathReferences?: MessagePathReference[];
@@ -111,6 +121,7 @@ export function useInputbarController({
   knowledgePackSelection,
   onStartKnowledgeOrganize,
   onManageKnowledgePacks,
+  pluginSuggestions = [],
   projectId = null,
   sessionId = null,
   pathReferences = [],
@@ -133,6 +144,8 @@ export function useInputbarController({
   );
   const [activeCapability, setActiveCapability] =
     useState<InputCapabilitySelection | null>(null);
+  const [activePluginSelection, setActivePluginSelection] =
+    useState<InputbarPluginSelection | null>(null);
   const [knowledgeHubOpenRequestKey, setKnowledgeHubOpenRequestKey] =
     useState(0);
   const [editingCuratedTaskCapability, setEditingCuratedTaskCapability] =
@@ -300,11 +313,7 @@ export function useInputbarController({
     skills,
   ]);
 
-  const {
-    activeTools,
-    handleToolClick,
-    isFullscreen,
-  } = useInputbarToolState({
+  const { activeTools, handleToolClick, isFullscreen } = useInputbarToolState({
     toolStates,
     onToolStatesChange,
     openFileDialog,
@@ -376,10 +385,30 @@ export function useInputbarController({
     activeSkill ||
     activeBuiltinCommand ||
     activeRuntimeScene ||
-    activeCuratedTask
+    activeCuratedTask ||
+    activePluginSelection
       ? React.createElement(
           React.Fragment,
           null,
+          activePluginSelection
+            ? React.createElement(InputbarPluginBadge, {
+                selection: activePluginSelection,
+                removeLabel: t("agentChat.inputbar.pluginChip.remove", {
+                  name: resolveInputbarPluginDisplayName(
+                    activePluginSelection.plugin,
+                  ),
+                }),
+                onClear: () => {
+                  setInput(
+                    removeInputbarPluginSelection({
+                      input,
+                      selection: activePluginSelection,
+                    }),
+                  );
+                  setActivePluginSelection(null);
+                },
+              })
+            : null,
           activeBuiltinCommand
             ? React.createElement(BuiltinCommandBadge, {
                 command: activeBuiltinCommand,
@@ -550,6 +579,26 @@ export function useInputbarController({
     setActiveCapability(null);
     onSelectServiceSkill?.(skill);
   };
+  const handleSelectPlugin = (
+    plugin: InputbarPluginCapability,
+    skill?: InputbarPluginSkillCapability,
+  ) => {
+    const blocked =
+      plugin.disabled ||
+      (plugin.blockerCodes?.length ?? 0) > 0 ||
+      skill?.disabled ||
+      (skill?.blockerCodes?.length ?? 0) > 0;
+    if (blocked) {
+      return;
+    }
+    const selection = applyInputbarPluginSelection({
+      input,
+      plugin,
+      skill,
+    });
+    setInput(selection.text);
+    setActivePluginSelection(selection);
+  };
   const handleSelectInputCapability = (
     capability: InputCapabilitySelection,
   ) => {
@@ -611,6 +660,9 @@ export function useInputbarController({
     inputAdapter,
     topExtra,
     dialogLayer,
+    pluginSuggestions,
+    activePluginSelection,
+    handleSelectPlugin,
     workflowQuickActions,
     workflowQueueItems,
     workflowActiveItem,

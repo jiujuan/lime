@@ -798,6 +798,10 @@ export interface AgentRuntimeEvidenceBrowserActionItem {
   profile_key?: string;
   backend?: string;
   request_id?: string;
+  confirmation_request_id?: string;
+  control_mode?: string;
+  lifecycle_state?: string;
+  human_reason?: string;
   thread_id?: string;
   turn_id?: string;
   content_id?: string;

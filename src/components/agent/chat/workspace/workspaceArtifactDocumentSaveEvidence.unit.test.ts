@@ -63,6 +63,7 @@ function createEvidence(
     contentStatus: "available",
     eventId: "evt-artifact-save-1",
     filePath: ".app-server/artifacts/report.json",
+    lastPersistedAt: "2026-06-25T00:00:00.000Z",
     sessionId: "session-1",
     sidecarRelativePath:
       "sessions/session-1/runtime-artifacts/artifact-report.json",
@@ -98,6 +99,49 @@ describe("workspaceArtifactDocumentSaveEvidence", () => {
         updatedAt: 123,
         meta: {
           artifactDocument: document,
+          artifactDocumentPersistence: {
+            artifactDocumentId: "artifact-document:report",
+            artifactRef: "artifact-report",
+            lastPersistedAt: "2026-06-25T00:00:00.000Z",
+            sessionId: "session-1",
+            sidecarRelativePath:
+              "sessions/session-1/runtime-artifacts/artifact-report.json",
+            turnId: "turn-1",
+            versionId: "artifact-document:report:v2",
+            versionNo: 2,
+          },
+          artifactDocumentPersistenceManifest: {
+            artifactDocumentId: "artifact-document:report",
+            artifactRef: "artifact-report",
+            currentVersionId: "artifact-document:report:v2",
+            currentVersionNo: 2,
+            files: [
+              {
+                contentType: "application/json",
+                filename: "report.artifact.json",
+                format: "artifact_json",
+                role: "source",
+              },
+              {
+                contentType: "text/markdown",
+                filename: "report.md",
+                format: "markdown",
+                role: "readable",
+              },
+              {
+                contentType: "text/html",
+                filename: "report.html",
+                format: "html",
+                role: "preview",
+              },
+            ],
+            lastPersistedAt: "2026-06-25T00:00:00.000Z",
+            schemaVersion: "artifact_document.persistence_manifest.v1",
+            sessionId: "session-1",
+            sidecarRelativePath:
+              "sessions/session-1/runtime-artifacts/artifact-report.json",
+            turnId: "turn-1",
+          },
           artifactDocumentSaveEvidence: evidence,
           appServerArtifactDocumentId: "artifact-document:report",
           appServerArtifactEventId: "evt-artifact-save-1",
@@ -109,6 +153,7 @@ describe("workspaceArtifactDocumentSaveEvidence", () => {
           appServerArtifactContentStatus: "available",
           appServerArtifactContentBytes: 2048,
           appServerArtifactContentSha256: "sha256:artifact-content",
+          appServerLastPersistedAt: "2026-06-25T00:00:00.000Z",
           appServerLastUpdateSource: "artifact.snapshot",
           artifactVersionId: "artifact-document:report:v2",
           artifactVersionNo: 2,
@@ -127,6 +172,15 @@ describe("workspaceArtifactDocumentSaveEvidence", () => {
         appServerArtifactTurnId: "turn-1",
         appServerSidecarRelativePath:
           "sessions/session-1/runtime-artifacts/artifact-report.json",
+        artifactDocumentPersistenceManifest: {
+          artifactDocumentId: "artifact-document:report",
+          artifactRef: "artifact-report",
+          currentVersionId: "artifact-document:report:v2",
+          currentVersionNo: 2,
+          schemaVersion: "artifact_document.persistence_manifest.v1",
+          sessionId: "session-1",
+        },
+        appServerLastPersistedAt: "2026-06-25T00:00:00.000Z",
         appServerLastUpdateSource: "artifact.snapshot",
       },
     });
@@ -145,6 +199,7 @@ describe("workspaceArtifactDocumentSaveEvidence", () => {
         contentSha256: undefined,
         contentStatus: undefined,
         eventId: undefined,
+        lastPersistedAt: undefined,
         sidecarRelativePath: undefined,
         turnId: undefined,
       }),
@@ -164,6 +219,9 @@ describe("workspaceArtifactDocumentSaveEvidence", () => {
     );
     expect(context.artifact?.meta).not.toHaveProperty(
       "appServerSidecarRelativePath",
+    );
+    expect(context.artifact?.meta).not.toHaveProperty(
+      "appServerLastPersistedAt",
     );
     expect(context.artifact?.meta).not.toHaveProperty(
       "appServerArtifactContentBytes",

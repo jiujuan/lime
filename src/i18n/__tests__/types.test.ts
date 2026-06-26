@@ -395,8 +395,16 @@ function assertI18nKeyTypes() {
   i18n.t("agentChat.inputbar.plusMenu.attachKnowledge", { ns: "agent" });
   i18n.t("agentChat.inputbar.plusMenu.planMode", { ns: "agent" });
   i18n.t("agentChat.inputbar.plusMenu.objective", { ns: "agent" });
+  i18n.t("agentChat.inputbar.plusMenu.plugins", { ns: "agent" });
   i18n.t("agentChat.inputbar.plusMenu.skills", { ns: "agent" });
   i18n.t("agentChat.inputbar.plusMenu.unavailable", { ns: "agent" });
+  i18n.t("agentChat.inputbar.pluginChip.empty", { ns: "agent" });
+  i18n.t("agentChat.inputbar.pluginChip.remove", {
+    ns: "agent",
+    name: "内容工厂",
+  });
+  i18n.t("agentChat.inputbar.pluginChip.selectorTitle", { ns: "agent" });
+  i18n.t("agentChat.inputbar.pluginChip.unavailable", { ns: "agent" });
   i18n.t("agentChat.inputbar.composer.workspacePlaceholder.waiting", {
     ns: "agent",
   });

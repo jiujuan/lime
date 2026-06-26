@@ -6,10 +6,12 @@ import {
   appServerArtifactReadParamsFromArtifactPreview,
   appServerArtifactReadParamsFromTimelineItem,
   createAppServerArtifactClient,
+  agentRuntimeArtifactDocumentScopeFromSaveEvidence,
   hasAgentRuntimeArtifactPreviewScope,
   projectArtifactDocumentSnapshotSaveEvidence,
   projectArtifactPreviewContentFromAppServerSummaries,
   projectTimelineArtifactContentFromAppServerSummaries,
+  resolveAgentRuntimeArtifactDocumentScope,
   type AgentRuntimeTimelineArtifactItem,
 } from "./appServerArtifactClient";
 
@@ -569,6 +571,7 @@ describe("appServerArtifactClient", () => {
         contentStatus: "available",
         eventId: "evt-artifact-save-1",
         filePath: ".app-server/artifacts/report.md",
+        lastPersistedAt: "2026-06-25T00:00:00.000Z",
         sessionId: "session-1",
         sidecarRelativePath:
           "sessions/session-1/runtime-artifacts/artifact-report.json",
@@ -620,6 +623,7 @@ describe("appServerArtifactClient", () => {
       artifactDocumentId: "artifact-document:report",
       artifactRef: "artifact-document:report",
       eventId: "evt-minimal",
+      lastPersistedAt: "2026-06-25T00:00:00.000Z",
       sessionId: "session-1",
       turnId: "turn-1",
       versionId: "artifact-document:report:v2",
@@ -651,5 +655,105 @@ describe("appServerArtifactClient", () => {
     });
 
     expect(appServerClient.appendAgentSessionRuntimeEvents).not.toHaveBeenCalled();
+  });
+
+  it("保存后的 ArtifactDocument scope 应作为跨会话继续保存的稳定范围", () => {
+    const artifact = createArtifact({
+      id: "local-preview-id",
+      meta: {
+        filename: "report.json",
+        filePath: ".app-server/artifacts/report.json",
+        artifactDocumentSaveEvidence: {
+          artifactDocumentId: "artifact-document:report",
+          artifactRef: "artifact-report",
+          lastPersistedAt: "2026-06-25T00:00:00.000Z",
+          sessionId: "session-saved",
+          sidecarRelativePath:
+            "sessions/session-saved/runtime-artifacts/artifact-report.json",
+          turnId: "turn-saved",
+          versionId: "artifact-document:report:v3",
+          versionNo: 3,
+        },
+      },
+    });
+
+    expect(resolveAgentRuntimeArtifactDocumentScope(artifact)).toEqual({
+      artifactDocumentId: "artifact-document:report",
+      artifactRef: "artifact-report",
+      lastPersistedAt: "2026-06-25T00:00:00.000Z",
+      sessionId: "session-saved",
+      sidecarRelativePath:
+        "sessions/session-saved/runtime-artifacts/artifact-report.json",
+      turnId: "turn-saved",
+      versionId: "artifact-document:report:v3",
+      versionNo: 3,
+    });
+    expect(
+      appServerArtifactSnapshotAppendParamsFromArtifactDocument(
+        artifact,
+        createDocument({
+          turnId: "turn-document",
+          metadata: {
+            generatedBy: "user",
+            currentVersionId: "artifact-document:report:v4",
+            currentVersionNo: 4,
+            versionHistory: [],
+          },
+        }),
+      ),
+    ).toMatchObject({
+      sessionId: "session-saved",
+      turnId: "turn-saved",
+      runtimeEvents: [
+        {
+          payload: {
+            artifact: {
+              artifactId: "artifact-report",
+              artifactRef: "artifact-report",
+              artifactDocumentId: "artifact-document:report",
+              metadata: {
+                artifactDocumentPersistence: {
+                  artifactDocumentId: "artifact-document:report",
+                  artifactRef: "artifact-report",
+                  sessionId: "session-saved",
+                  turnId: "turn-saved",
+                  versionId: "artifact-document:report:v3",
+                  versionNo: 3,
+                },
+              },
+            },
+          },
+        },
+      ],
+    });
+  });
+
+  it("可从保存证据构造 ArtifactDocument persistence scope", () => {
+    expect(
+      agentRuntimeArtifactDocumentScopeFromSaveEvidence({
+        artifactDocumentId: "artifact-document:report",
+        artifactRef: "artifact-report",
+        eventId: "evt-save",
+        lastPersistedAt: "2026-06-25T00:00:00.000Z",
+        sessionId: "session-1",
+        sidecarRelativePath:
+          "sessions/session-1/runtime-artifacts/artifact-report.json",
+        sourceArtifactRef: "source-artifact-report",
+        turnId: "turn-1",
+        versionId: "artifact-document:report:v2",
+        versionNo: 2,
+      }),
+    ).toEqual({
+      artifactDocumentId: "artifact-document:report",
+      artifactRef: "artifact-report",
+      lastPersistedAt: "2026-06-25T00:00:00.000Z",
+      sessionId: "session-1",
+      sidecarRelativePath:
+        "sessions/session-1/runtime-artifacts/artifact-report.json",
+      sourceArtifactRef: "source-artifact-report",
+      turnId: "turn-1",
+      versionId: "artifact-document:report:v2",
+      versionNo: 2,
+    });
   });
 });

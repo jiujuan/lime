@@ -9,6 +9,7 @@ pub(in crate::runtime::tests) struct TestSessionDataSource {
     memory_backend: Option<crate::LocalMemoryBackend>,
     objective: Mutex<Option<ManagedObjective>>,
     audit_updates: Mutex<Vec<ManagedObjectiveAuditUpdate>>,
+    agent_app_installed_states: Mutex<Vec<serde_json::Value>>,
     knowledge_compile_requests: Mutex<Vec<lime_knowledge::KnowledgeCompilePackRequest>>,
     right_surface_pending: Mutex<Vec<WorkspaceRightSurfacePendingRequest>>,
     object_canvas_snapshots: Mutex<Vec<WorkspaceObjectCanvasSnapshot>>,
@@ -24,6 +25,7 @@ impl TestSessionDataSource {
             memory_backend: None,
             objective: Mutex::new(None),
             audit_updates: Mutex::new(Vec::new()),
+            agent_app_installed_states: Mutex::new(Vec::new()),
             knowledge_compile_requests: Mutex::new(Vec::new()),
             right_surface_pending: Mutex::new(Vec::new()),
             object_canvas_snapshots: Mutex::new(Vec::new()),
@@ -63,6 +65,17 @@ impl TestSessionDataSource {
             .objective
             .lock()
             .expect("test objective mutex poisoned") = Some(objective);
+        self
+    }
+
+    pub(in crate::runtime::tests) fn with_agent_app_installed_states(
+        self,
+        states: Vec<serde_json::Value>,
+    ) -> Self {
+        *self
+            .agent_app_installed_states
+            .lock()
+            .expect("test agent app installed states mutex poisoned") = states;
         self
     }
 
@@ -247,7 +260,21 @@ impl WorkspaceSkillBindingAppDataSource for TestSessionDataSource {}
 impl GatewayAppDataSource for TestSessionDataSource {}
 impl MediaAppDataSource for TestSessionDataSource {}
 impl VoiceAppDataSource for TestSessionDataSource {}
-impl AgentAppDataSource for TestSessionDataSource {}
+#[async_trait]
+impl AgentAppDataSource for TestSessionDataSource {
+    async fn list_agent_app_installed(
+        &self,
+    ) -> Result<AgentAppInstalledListResponse, RuntimeCoreError> {
+        Ok(AgentAppInstalledListResponse {
+            states: self
+                .agent_app_installed_states
+                .lock()
+                .expect("test agent app installed states mutex poisoned")
+                .clone(),
+            issues: Vec::new(),
+        })
+    }
+}
 impl AutomationOverviewAppDataSource for TestSessionDataSource {}
 impl McpAppDataSource for TestSessionDataSource {}
 impl AutomationManagementAppDataSource for TestSessionDataSource {}

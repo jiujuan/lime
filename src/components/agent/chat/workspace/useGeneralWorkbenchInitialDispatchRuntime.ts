@@ -21,10 +21,7 @@ import {
   type GeneralWorkbenchSendBoundaryState,
   type InitialDispatchPreviewSnapshot,
 } from "./workspaceSendHelpers";
-import {
-  isCanvasStateEmpty,
-  SOCIAL_ARTICLE_SKILL_KEY,
-} from "./generalWorkbenchHelpers";
+import { isCanvasStateEmpty } from "./generalWorkbenchHelpers";
 import { getDefaultGuidePromptByTheme } from "../utils/defaultGuidePrompt";
 import type { WorkspaceHandleSend } from "./useWorkspaceSendActions";
 
@@ -356,7 +353,6 @@ export function useGeneralWorkbenchInitialDispatchRuntime({
         consumedInitialPromptKey,
         initialUserImages,
         mappedTheme,
-        socialArticleSkillKey: SOCIAL_ARTICLE_SKILL_KEY,
         sourceText,
         sendOptions,
       }),

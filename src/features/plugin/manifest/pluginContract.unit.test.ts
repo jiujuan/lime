@@ -1,0 +1,310 @@
+import { describe, expect, it } from "vitest";
+
+import contentFactoryFixture from "@/features/agent-app/fixtures/content-factory-app.json";
+import { buildPackageIdentity } from "@/features/agent-app/install/packageIdentity";
+import { normalizeManifest } from "@/features/agent-app/manifest/normalizeManifest";
+import { parseManifest } from "@/features/agent-app/manifest/parseManifest";
+import {
+  buildPluginContractFromAgentAppManifest,
+  normalizePluginManifest,
+  PluginManifestError,
+} from "./pluginContract";
+import {
+  projectPluginRegistry,
+  projectPluginRegistryItem,
+} from "./pluginRegistry";
+
+describe("Plugin P1 manifest contract", () => {
+  it("应接受插件包 manifest 的 name / interface / componentPaths 形状", () => {
+    const contract = normalizePluginManifest({
+      name: "research-pack",
+      version: "1.0.0",
+      description: "Research pack",
+      keywords: ["research", "notes"],
+      categories: ["productivity"],
+      interface: {
+        displayName: "Research Pack",
+        shortDescription: "Research helpers",
+        longDescription: "Longer research helpers description",
+        category: "utility",
+        capabilities: ["skills", "mcp"],
+        defaultPrompt: ["Summarize a topic"],
+        screenshots: ["./assets/shot-1.png"],
+      },
+      componentPaths: {
+        skills: "./skills",
+        hooks: "./hooks.json",
+        apps: "./.app.json",
+        mcpServers: "./.mcp.json",
+      },
+    });
+
+    expect(contract).toMatchObject({
+      id: "research-pack",
+      displayName: "Research Pack",
+      version: "1.0.0",
+      keywords: ["research", "notes"],
+      description: "Research pack",
+      categories: ["productivity", "utility"],
+      capabilities: ["skills", "mcp"],
+      interface: {
+        displayName: "Research Pack",
+        shortDescription: "Research helpers",
+        longDescription: "Longer research helpers description",
+        category: "utility",
+        capabilities: ["skills", "mcp"],
+        defaultPrompt: ["Summarize a topic"],
+        screenshots: ["./assets/shot-1.png"],
+      },
+      componentPaths: {
+        skills: "./skills",
+        hooks: "./hooks.json",
+        apps: "./.app.json",
+        mcpServers: "./.mcp.json",
+      },
+    });
+  });
+
+  it("应兼容旧的 id / skills / mcpServers 声明形状", () => {
+    const contract = normalizePluginManifest({
+      id: "legacy-pack",
+      displayName: "Legacy Pack",
+      version: "1.0.0",
+      skills: [
+        {
+          id: "legacy-skill",
+          title: "Legacy Skill",
+        },
+      ],
+      mcpServers: {
+        type: "http",
+        url: "https://example.com/mcp",
+      },
+    });
+
+    expect(contract).toMatchObject({
+      id: "legacy-pack",
+      displayName: "Legacy Pack",
+      skills: [
+        {
+          id: "legacy-skill",
+          title: "Legacy Skill",
+        },
+      ],
+      componentPaths: {},
+    });
+  });
+
+  it("应从 Agent App manifest 投影插件根对象、激活入口、renderer 和历史恢复 contract", () => {
+    const manifest = normalizeManifest(parseManifest(contentFactoryFixture));
+    const identity = buildPackageIdentity({
+      manifest: parseManifest(contentFactoryFixture),
+      loadedAt: "2026-06-25T00:00:00.000Z",
+    });
+    const contract = buildPluginContractFromAgentAppManifest({
+      manifest,
+      identity,
+    });
+
+    expect(contract).toMatchObject({
+      schemaVersion: 1,
+      id: "content-factory-app",
+      displayName: "内容工厂",
+      version: "2.0.0",
+      provenance: {
+        sourceKind: "agent_app_manifest",
+        sourceId: "content-factory-app",
+        sourceVersion: "2.0.0",
+      },
+    });
+    expect(contract.agentApps).toEqual([
+      expect.objectContaining({
+        id: "content-factory-app",
+        title: "内容工厂",
+        uiKind: "pane",
+        entryKey: "content_factory",
+      }),
+    ]);
+    expect(contract.activationEntries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: "content_factory",
+          kind: "plugin",
+          intent: "manual",
+          defaultObjectKind: "articleDraft",
+        }),
+        expect.objectContaining({
+          key: "content_factory_generate",
+          kind: "plugin",
+          intent: "at_command",
+          defaultObjectKind: "articleDraft",
+        }),
+      ]),
+    );
+    expect(contract.artifactRenderers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          artifactType: "markdown_document",
+          surfaceKind: "documentCanvas",
+          rendererKind: "host_builtin",
+        }),
+        expect.objectContaining({
+          artifactType: "image_set",
+          surfaceKind: "imageGrid",
+          rendererKind: "host_builtin",
+        }),
+        expect.objectContaining({
+          artifactType: "storyboard",
+          surfaceKind: "storyboard",
+          rendererKind: "host_builtin",
+        }),
+        expect.objectContaining({
+          artifactType: "delivery_checklist",
+          surfaceKind: "checklist",
+          rendererKind: "host_builtin",
+        }),
+      ]),
+    );
+    expect(contract.rightSurface).toMatchObject({
+      defaultActiveTab: "productProfile",
+      supportedTabs: [
+        "productProfile",
+        "file",
+        "evidence",
+        "terminal",
+        "browser",
+        "sideChat",
+      ],
+      productWorkspace: {
+        enabled: true,
+        primaryObjectKind: "articleDraft",
+        selectionPolicy: "last",
+      },
+      historyRestore: {
+        enabled: true,
+        restoreSelection: true,
+        restoreLayout: true,
+      },
+    });
+    expect(contract.historyRestore).toEqual({
+      defaultSurface: "selectedObject",
+      restoreSelection: true,
+      restoreLayout: true,
+      fallback: "artifactPreview",
+    });
+  });
+
+  it("缺少必填字段或 renderer contract 非法时 fail closed", () => {
+    expect(() =>
+      normalizePluginManifest({ displayName: "插件", version: "1.0.0" }),
+    ).toThrow(PluginManifestError);
+    expect(() =>
+      normalizePluginManifest({
+        id: "broken-renderer",
+        displayName: "Broken",
+        version: "1.0.0",
+        artifactRenderers: [
+          {
+            artifactType: "articleDraft",
+            surfaceKind: "documentCanvas",
+            rendererKind: "raw_iframe",
+          },
+        ],
+      }),
+    ).toThrow("Plugin renderer kind is unsupported");
+  });
+
+  it("应为最小 manifest 补显式插件激活入口，但不伪造 renderer", () => {
+    const contract = normalizePluginManifest({
+      id: "research-pack",
+      displayName: "研究助手",
+      version: "1.0.0",
+    });
+
+    expect(contract.activationEntries).toEqual([
+      {
+        key: "research-pack",
+        title: "研究助手",
+        kind: "plugin",
+        intent: "manual",
+        defaultObjectKind: undefined,
+      },
+    ]);
+    expect(contract.artifactRenderers).toEqual([]);
+    expect(contract.rightSurface.productWorkspace.enabled).toBe(false);
+    expect(contract.historyRestore.defaultSurface).toBe("chat");
+  });
+});
+
+describe("Plugin P1 registry projection", () => {
+  it("应区分可安装、可激活、可渲染和只读历史四种状态", () => {
+    const manifest = normalizeManifest(parseManifest(contentFactoryFixture));
+    const contract = buildPluginContractFromAgentAppManifest({ manifest });
+    const installable = projectPluginRegistryItem({
+      contract,
+      installed: false,
+      readinessStatus: "unknown",
+    });
+    const active = projectPluginRegistryItem({
+      contract,
+      installed: true,
+      enabled: true,
+      readinessStatus: "ready",
+    });
+    const historyOnly = projectPluginRegistryItem({
+      contract,
+      installed: true,
+      enabled: false,
+      readinessStatus: "ready",
+      hasHistoryWorkspace: true,
+    });
+
+    expect(installable.capabilityStates).toEqual(["installable", "renderable"]);
+    expect(active.capabilityStates).toEqual(["activatable", "renderable"]);
+    expect(active.activationState).toBe("activatable");
+    expect(active.rendererState).toBe("renderable");
+    expect(active.historyState).toBe("read_write");
+    expect(historyOnly.capabilityStates).toEqual([
+      "renderable",
+      "read_only_history",
+    ]);
+    expect(historyOnly.activationState).toBe("disabled");
+    expect(historyOnly.historyState).toBe("read_only_history");
+  });
+
+  it("registry 应按展示名排序并保留阻断原因", () => {
+    const alpha = normalizePluginManifest({
+      id: "alpha",
+      displayName: "Alpha",
+      version: "1.0.0",
+    });
+    const beta = normalizePluginManifest({
+      id: "beta",
+      displayName: "Beta",
+      version: "1.0.0",
+      artifactRenderers: [
+        {
+          artifactType: "articleDraft",
+          surfaceKind: "documentCanvas",
+          rendererKind: "host_builtin",
+        },
+      ],
+    });
+    const registry = projectPluginRegistry([
+      { contract: beta, installed: true, readinessStatus: "blocked" },
+      { contract: alpha, installed: true, readinessStatus: "ready" },
+    ]);
+
+    expect(registry.map((item) => item.pluginId)).toEqual(["alpha", "beta"]);
+    expect(registry[0]).toMatchObject({
+      activationState: "activatable",
+      rendererState: "missing_renderer",
+      blockerCodes: ["PLUGIN_RENDERER_UNAVAILABLE"],
+    });
+    expect(registry[1]).toMatchObject({
+      activationState: "blocked",
+      rendererState: "renderable",
+      blockerCodes: ["PLUGIN_ACTIVATION_BLOCKED"],
+    });
+  });
+});

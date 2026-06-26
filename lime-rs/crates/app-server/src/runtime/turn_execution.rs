@@ -349,7 +349,14 @@ impl RuntimeCore {
                 turn.turn_id.clone(),
                 event_callback,
             );
-            let backend_result = self.backend.start_turn(request, &mut sink).await;
+            let backend_result = match self
+                .maybe_run_agent_app_worker_turn(&request, &mut sink)
+                .await
+            {
+                Ok(true) => Ok(()),
+                Ok(false) => self.backend.start_turn(request, &mut sink).await,
+                Err(error) => Err(error),
+            };
             if let Err(error) = backend_result {
                 if sink.emitted_count() > 0 {
                     sink.emit_failure(&error)?;
@@ -366,7 +373,14 @@ impl RuntimeCore {
             events
         } else {
             let mut sink = CollectingRuntimeEventSink::default();
-            let backend_result = self.backend.start_turn(request, &mut sink).await;
+            let backend_result = match self
+                .maybe_run_agent_app_worker_turn(&request, &mut sink)
+                .await
+            {
+                Ok(true) => Ok(()),
+                Ok(false) => self.backend.start_turn(request, &mut sink).await,
+                Err(error) => Err(error),
+            };
             if let Err(error) = backend_result {
                 if sink.emitted_count() > 0 {
                     sink.emit_failure(&error)?;

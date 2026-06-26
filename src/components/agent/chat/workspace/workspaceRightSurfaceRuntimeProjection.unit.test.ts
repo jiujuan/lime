@@ -5,6 +5,7 @@ import {
   buildWorkspaceRightSurfaceRuntimeLaunchers,
   buildWorkspaceRightSurfaceRuntimePendingIntents,
 } from "./workspaceRightSurfaceRuntimeProjection";
+import { normalizePluginManifest } from "@/features/plugin";
 
 describe("workspaceRightSurfaceRuntimeProjection", () => {
   it("应按 harness pending 与文件预览生成 runtime pending intents", () => {
@@ -202,6 +203,55 @@ describe("workspaceRightSurfaceRuntimeProjection", () => {
     ).toMatchObject({
       active: false,
       disabled: true,
+    });
+  });
+
+  it("显式插件激活应投影为 productProfile runtime pending intent", () => {
+    const plugin = normalizePluginManifest({
+      id: "creator-workbench",
+      displayName: "创作工作台",
+      version: "1.0.0",
+      artifactRenderers: [
+        {
+          artifactType: "articleDraft",
+          surfaceKind: "documentCanvas",
+          rendererKind: "host_builtin",
+        },
+      ],
+    });
+
+    const intents = buildWorkspaceRightSurfaceRuntimePendingIntents({
+      createdAt: 100,
+      harnessPendingCount: 0,
+      objectCanvasCandidateId: null,
+      pluginActivationContext: {
+        sessionId: "session-1",
+        pluginId: "creator-workbench",
+        activeEntryKey: "creator",
+        selectedObjectRef: {
+          pluginId: "creator-workbench",
+          objectKind: "articleDraft",
+          objectId: "pending",
+        },
+        openedTabs: ["productProfile"],
+        source: "user",
+      },
+      pluginContracts: [plugin],
+      preferredServiceSkillResultFileTargetRelativePath: null,
+      showHarnessToggle: false,
+      suppressHomeNavbarUtilityActions: false,
+    });
+
+    expect(intents).toHaveLength(1);
+    expect(intents[0]).toMatchObject({
+      id: "plugin:creator-workbench:creator:articleDraft:pending",
+      priority: "background",
+      command: {
+        action: "open",
+        kind: "productProfile",
+        origin: "runtime",
+        reason: "plugin_activation_context",
+      },
     });
   });
 });

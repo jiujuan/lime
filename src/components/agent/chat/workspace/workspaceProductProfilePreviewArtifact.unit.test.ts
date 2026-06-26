@@ -175,9 +175,21 @@ describe("workspaceProductProfilePreviewArtifact", () => {
       title: "主图",
       content: "https://lime.local/image-1.png",
       meta: expect.objectContaining({
+        surfaceKind: "imageGrid",
+        layout: "imageGrid",
+        productProfile: expect.objectContaining({
+          surfaceKind: "imageGrid",
+          layout: "imageGrid",
+        }),
         artifactDocument: expect.objectContaining({
           schemaVersion: "artifact_document.v1",
           kind: "brief",
+          metadata: expect.objectContaining({
+            productProfile: expect.objectContaining({
+              surfaceKind: "imageGrid",
+              layout: "imageGrid",
+            }),
+          }),
           blocks: expect.arrayContaining([
             expect.objectContaining({
               type: "image",
@@ -250,6 +262,186 @@ describe("workspaceProductProfilePreviewArtifact", () => {
           id: "artifact-image-local",
           localPath: "/tmp/lime-content-factory/local-image.png",
           sourcePath: "/tmp/lime-content-factory/local-image.png",
+        }),
+      }),
+    });
+  });
+
+  it("应把视频分镜对象投影为 storyboard preview artifact", () => {
+    const storyboardProfile: WorkspaceProductProfile = {
+      ...profile,
+      selectedObjectRef: {
+        appId: "content-factory-app",
+        kind: "videoStoryboard",
+        id: "storyboard-1",
+        sessionId: "session-main",
+      },
+      objects: [
+        ...profile.objects,
+        {
+          ref: {
+            appId: "content-factory-app",
+            kind: "videoStoryboard",
+            id: "storyboard-1",
+            sessionId: "session-main",
+            artifactIds: ["artifact-video-storyboard"],
+            sourceTurnId: "turn-storyboard-1",
+            sourceTaskId: "task-storyboard-1",
+          },
+          title: "视频分镜",
+          status: "ready",
+          summary: "3 镜头短视频分镜",
+          source: {
+            taskKind: "content.video.storyboard.generate",
+            taskId: "task-storyboard-1",
+            scenes: [
+              {
+                id: "shot-1",
+                title: "厨房开场",
+                description: "镜头推近产品",
+                visualPrompt: "明亮厨房，自然光",
+                duration: "3s",
+              },
+            ],
+          },
+        },
+      ],
+    };
+    const viewModel = buildWorkspaceProductProfileViewModel(storyboardProfile);
+
+    const artifact = buildWorkspaceProductProfilePreviewArtifact({
+      artifactIds: viewModel.selectedArtifactIds,
+      layout: viewModel.selectedSurface.layout,
+      object: viewModel.selectedObject,
+      preview: viewModel.selectedPreview,
+      profile: storyboardProfile,
+      now: 100,
+    });
+
+    expect(artifact).toMatchObject({
+      title: "视频分镜",
+      content: expect.stringContaining("厨房开场"),
+      meta: expect.objectContaining({
+        contentKind: "markdown",
+        renderMode: "canvas",
+        surfaceKind: "storyboard",
+        layout: "storyboard",
+        productProfile: expect.objectContaining({
+          surfaceKind: "storyboard",
+          layout: "storyboard",
+        }),
+        artifactDocument: expect.objectContaining({
+          kind: "brief",
+          metadata: expect.objectContaining({
+            productProfile: expect.objectContaining({
+              objectKind: "videoStoryboard",
+              surfaceKind: "storyboard",
+              layout: "storyboard",
+            }),
+          }),
+          blocks: [
+            expect.objectContaining({
+              type: "rich_text",
+              markdown: expect.stringContaining("厨房开场"),
+            }),
+          ],
+        }),
+      }),
+    });
+  });
+
+  it("应把交付检查清单投影为 checklist preview artifact", () => {
+    const checklistProfile: WorkspaceProductProfile = {
+      ...profile,
+      selectedObjectRef: {
+        appId: "content-factory-app",
+        kind: "deliveryChecklist",
+        id: "delivery-checklist-1",
+        sessionId: "session-main",
+      },
+      objects: [
+        ...profile.objects,
+        {
+          ref: {
+            appId: "content-factory-app",
+            kind: "deliveryChecklist",
+            id: "delivery-checklist-1",
+            sessionId: "session-main",
+            artifactIds: ["artifact-delivery-checklist"],
+            sourceTurnId: "turn-checklist-1",
+            sourceTaskId: "task-checklist-1",
+          },
+          title: "交付检查清单",
+          status: "ready",
+          summary: "发布前检查项",
+          source: {
+            taskKind: "content.delivery.review",
+            taskId: "task-checklist-1",
+            items: [
+              {
+                id: "article",
+                title: "文章已生成",
+                status: "done",
+              },
+              {
+                id: "image-license",
+                title: "确认图片授权",
+                notes: "发布前需复核",
+                status: "todo",
+              },
+            ],
+          },
+        },
+      ],
+    };
+    const viewModel = buildWorkspaceProductProfileViewModel(checklistProfile);
+
+    const artifact = buildWorkspaceProductProfilePreviewArtifact({
+      artifactIds: viewModel.selectedArtifactIds,
+      layout: viewModel.selectedSurface.layout,
+      object: viewModel.selectedObject,
+      preview: viewModel.selectedPreview,
+      profile: checklistProfile,
+      now: 100,
+    });
+
+    expect(artifact).toMatchObject({
+      title: "交付检查清单",
+      content: expect.stringContaining("确认图片授权"),
+      meta: expect.objectContaining({
+        contentKind: "markdown",
+        renderMode: "canvas",
+        surfaceKind: "checklist",
+        layout: "checklist",
+        productProfile: expect.objectContaining({
+          surfaceKind: "checklist",
+          layout: "checklist",
+        }),
+        artifactDocument: expect.objectContaining({
+          kind: "plan",
+          metadata: expect.objectContaining({
+            productProfile: expect.objectContaining({
+              objectKind: "deliveryChecklist",
+              surfaceKind: "checklist",
+              layout: "checklist",
+            }),
+          }),
+          blocks: [
+            expect.objectContaining({
+              type: "checklist",
+              items: [
+                expect.objectContaining({
+                  id: "article",
+                  state: "done",
+                }),
+                expect.objectContaining({
+                  id: "image-license",
+                  state: "todo",
+                  text: expect.stringContaining("发布前需复核"),
+                }),
+              ],
+            }),
+          ],
         }),
       }),
     });

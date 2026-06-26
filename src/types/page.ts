@@ -18,6 +18,7 @@ export type Page =
   | "agent"
   | "experts"
   | "skills"
+  | "plugins"
   | "agent-app"
   | "agent-apps"
   | "agent-app-lab"
@@ -195,6 +196,17 @@ export interface AgentAppsPageParams {
   launchRequestKey?: number;
 }
 
+export interface PluginsPageParams {
+  query?: string;
+  category?: string;
+  statusFilter?:
+    | "all"
+    | "installed"
+    | "installable"
+    | "activatable"
+    | "attention";
+}
+
 export interface AgentAppPageParams {
   appId?: string;
   entryKey?: string;
@@ -271,6 +283,7 @@ export type PageParams =
   | ResourcesPageParams
   | SettingsPageParams
   | SkillsPageParams
+  | PluginsPageParams
   | AgentAppPageParams
   | AgentAppLabPageParams
   | AgentAppsPageParams

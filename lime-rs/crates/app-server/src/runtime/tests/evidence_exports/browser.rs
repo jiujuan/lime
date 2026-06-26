@@ -353,6 +353,159 @@ async fn export_evidence_pack_includes_browser_session_and_snapshot_artifacts() 
     );
 }
 
+#[tokio::test]
+async fn export_evidence_pack_indexes_pending_browser_action_confirmation() {
+    let core = RuntimeCore::default();
+    core.start_session(AgentSessionStartParams {
+        session_id: Some("sess_browser_pending_action".to_string()),
+        thread_id: Some("thread_browser_pending_action".to_string()),
+        app_id: "agent-runtime".to_string(),
+        workspace_id: Some("workspace-main".to_string()),
+        business_object_ref: None,
+        locale: None,
+    })
+    .expect("session");
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: "sess_browser_pending_action".to_string(),
+            turn_id: Some("turn_browser_pending_action".to_string()),
+            input: AgentInput {
+                text: "点击付款按钮".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: None,
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("turn");
+    core.append_external_runtime_events(
+        "sess_browser_pending_action",
+        Some("turn_browser_pending_action"),
+        vec![
+            RuntimeEvent::new(
+                "tool.started",
+                json!({
+                    "toolCallId": "browser_tool_click_1",
+                    "toolName": "mcp__lime-browser__click"
+                }),
+            ),
+            RuntimeEvent::new(
+                "tool.result",
+                json!({
+                    "toolCallId": "browser_tool_click_1",
+                    "toolName": "mcp__lime-browser__click",
+                    "result": {
+                        "data": {
+                            "actionId": "browser-action-risky",
+                            "requestId": "browser-action-confirmation:browser-action-risky",
+                            "eventClass": "action.required",
+                            "failureCategory": "action_required",
+                            "status": "pending",
+                            "success": false,
+                            "controlMode": "human",
+                            "lifecycleState": "human_controlling",
+                            "humanReason": "browser_action_requires_confirmation",
+                            "action_required": {
+                                "requestId": "browser-action-confirmation:browser-action-risky",
+                                "actionType": "tool_confirmation",
+                                "toolName": "browserSession/action/execute",
+                                "arguments": {
+                                    "action": "click",
+                                    "sessionId": "browser-session-risk",
+                                    "profileKey": "task-profile-risk",
+                                    "targetId": "target-risk",
+                                    "url": "https://checkout.example/pay",
+                                    "permission_facts": {
+                                        "risk_level": "medium",
+                                        "risk_reason": "browser",
+                                        "requires_human_takeover": true
+                                    }
+                                }
+                            },
+                            "browser_action_trace": {
+                                "schemaVersion": "browser-action-trace.v1",
+                                "sessionId": "browser-session-risk",
+                                "tabId": "target-risk",
+                                "actionId": "browser-action-risky",
+                                "action": "click",
+                                "status": "pending",
+                                "success": false,
+                                "eventClass": "action.required",
+                                "failureCategory": "action_required",
+                                "requestId": "browser-action-confirmation:browser-action-risky",
+                                "profileKey": "task-profile-risk",
+                                "backend": "cdp_direct",
+                                "controlMode": "human",
+                                "lifecycleState": "human_controlling",
+                                "humanReason": "browser_action_requires_confirmation",
+                                "lastUrl": "https://checkout.example/pay",
+                                "evidenceRefs": [
+                                    "browser_session:browser-session-risk",
+                                    "browser_action:browser-session-risk:browser-action-risky"
+                                ]
+                            }
+                        }
+                    }
+                }),
+            ),
+        ],
+    )
+    .expect("append pending browser evidence event");
+
+    let response = core
+        .export_evidence(EvidenceExportParams {
+            session_id: "sess_browser_pending_action".to_string(),
+            turn_id: Some("turn_browser_pending_action".to_string()),
+            include_events: Some(true),
+            include_artifacts: Some(true),
+            include_evidence_pack: Some(true),
+        })
+        .await
+        .expect("export browser evidence");
+
+    let evidence_pack = response.evidence_pack.expect("evidence pack");
+    let browser_action_index = evidence_pack
+        .observability_summary
+        .as_ref()
+        .and_then(|summary| summary.get("modality_runtime_contracts"))
+        .and_then(|contracts| contracts.get("snapshot_index"))
+        .and_then(|snapshot_index| snapshot_index.get("browser_action_index"))
+        .expect("browser action index");
+    assert_eq!(browser_action_index["action_count"], 1);
+    assert_count_entry(
+        browser_action_index,
+        "status_counts",
+        "status",
+        "pending",
+        1,
+    );
+
+    let pending_item = browser_action_index["items"]
+        .as_array()
+        .and_then(|items| items.first())
+        .expect("pending browser action item");
+    assert_eq!(pending_item["action"], "click");
+    assert_eq!(pending_item["status"], "pending");
+    assert_eq!(pending_item["success"], false);
+    assert_eq!(pending_item["request_id"], "browser_tool_click_1");
+    assert_eq!(
+        pending_item["confirmation_request_id"],
+        "browser-action-confirmation:browser-action-risky"
+    );
+    assert_eq!(pending_item["control_mode"], "human");
+    assert_eq!(pending_item["lifecycle_state"], "human_controlling");
+    assert_eq!(
+        pending_item["human_reason"],
+        "browser_action_requires_confirmation"
+    );
+    assert_eq!(pending_item["session_id"], "browser-session-risk");
+    assert_eq!(pending_item["profile_key"], "task-profile-risk");
+    assert_eq!(pending_item["executor"], "mcp__lime-browser");
+}
+
 fn assert_json_array_contains(value: &serde_json::Value, key: &str, expected: &str) {
     assert!(
         value

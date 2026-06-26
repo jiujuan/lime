@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
-type InputbarPlusPanelId = "knowledge" | "skills";
+type InputbarPlusPanelId = "knowledge" | "plugins" | "skills";
 
 interface InputbarPlusMenuLabels {
   open: string;
@@ -25,6 +25,7 @@ interface InputbarPlusMenuLabels {
   planMode: string;
   subagent: string;
   objective: string;
+  plugins: string;
   skills: string;
   unavailable: string;
 }
@@ -36,12 +37,14 @@ export interface InputbarPlusMenuConfig {
   subagentEnabled?: boolean;
   knowledgeActive?: boolean;
   objectiveActive?: boolean;
+  pluginsActive?: boolean;
   skillsActive?: boolean;
   onAddFiles: () => void;
   onToggleTask: () => void;
   onToggleObjective: () => void;
   onToggleSubagent?: () => void;
   knowledgePanel?: React.ReactNode;
+  pluginsPanel?: React.ReactNode;
   skillsPanel?: React.ReactNode;
 }
 
@@ -144,6 +147,7 @@ export function InputbarPlusMenu({
     useState<InputbarPlusPanelId | null>(null);
   const panels: Record<InputbarPlusPanelId, React.ReactNode | undefined> = {
     knowledge: config.knowledgePanel,
+    plugins: config.pluginsPanel,
     skills: config.skillsPanel,
   };
 
@@ -300,6 +304,16 @@ export function InputbarPlusMenu({
             onClick={config.onToggleObjective}
           />
           <div className="my-1 border-t border-slate-100" />
+          {renderSecondaryRow({
+            active: Boolean(config.pluginsActive),
+            icon: <Blocks className="h-4 w-4" />,
+            label: config.labels.plugins,
+            panelId: "plugins",
+            testId: "inputbar-plus-plugins",
+            trailing: config.pluginsActive ? (
+              <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-emerald-500" />
+            ) : null,
+          })}
           {renderSecondaryRow({
             active: Boolean(config.skillsActive),
             icon: <Blocks className="h-4 w-4" />,

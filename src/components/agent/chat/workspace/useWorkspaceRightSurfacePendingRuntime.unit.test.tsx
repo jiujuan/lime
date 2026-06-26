@@ -2,6 +2,7 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { normalizePluginManifest } from "@/features/plugin";
 import type { WorkspaceRightSurfacePendingRequest } from "@/lib/api/workspaceRightSurface";
 import {
   applyWorkspaceRightSurfacePendingChanges,
@@ -67,6 +68,20 @@ const productProfilePendingRequest: WorkspaceRightSurfacePendingRequest = {
           },
         },
       ],
+    },
+  },
+};
+const productProfileArtifactPendingRequest: WorkspaceRightSurfacePendingRequest = {
+  ...productProfilePendingRequest,
+  requestId: "right_surface_product_profile_artifact_1",
+  metadata: {
+    artifact: {
+      artifactId: "artifact-workspace-patch-1",
+      path: ".lime/artifacts/content-factory-workspace-patch.json",
+      title: "内容工厂工作区补丁",
+      kind: "content_factory.workspace_patch",
+      status: "ready",
+      metadata: productProfilePendingRequest.metadata,
     },
   },
 };
@@ -362,6 +377,87 @@ describe("useWorkspaceRightSurfacePendingRuntime", () => {
     ]);
   });
 
+  it("应把 artifact metadata 包装的内容工厂 workspace patch 投影为产物 Profile", async () => {
+    const listPending = vi.fn(async () => ({
+      pending: [productProfileArtifactPendingRequest],
+    }));
+    const { render, getValue } = renderHook({ listPending });
+
+    await render();
+
+    await vi.waitFor(() => {
+      expect(getValue().pendingProductProfile).toMatchObject({
+        appId: "content-factory-app",
+        sessionId: "session-main",
+        source: "rightSurfacePending",
+        sourceArtifacts: [
+          {
+            requestId: "right_surface_product_profile_artifact_1",
+            origin: "runtime",
+            artifactRef: "artifact-workspace-patch-1",
+            kind: "content_factory.workspace_patch",
+          },
+        ],
+        objects: [
+          {
+            title: "公众号文章草稿",
+            status: "ready",
+          },
+        ],
+      });
+    });
+  });
+
+  it("应合并显式插件激活投影的 productProfile pending intent", async () => {
+    const listPending = vi.fn(async () => ({ pending: [] }));
+    const plugin = normalizePluginManifest({
+      id: "creator-workbench",
+      displayName: "创作工作台",
+      version: "1.0.0",
+      artifactRenderers: [
+        {
+          artifactType: "articleDraft",
+          surfaceKind: "documentCanvas",
+          rendererKind: "host_builtin",
+        },
+      ],
+    });
+    const { render, getValue } = renderHook({
+      listPending,
+      pluginActivationContext: {
+        sessionId: "session-main",
+        pluginId: "creator-workbench",
+        activeEntryKey: "creator",
+        selectedObjectRef: {
+          pluginId: "creator-workbench",
+          objectKind: "articleDraft",
+          objectId: "pending",
+        },
+        openedTabs: ["productProfile"],
+        source: "user",
+      },
+      pluginContracts: [plugin],
+    });
+
+    await render();
+
+    await vi.waitFor(() => {
+      expect(listPending).toHaveBeenCalled();
+    });
+    expect(getValue().pendingRequests).toEqual([]);
+    expect(getValue().pendingIntents).toEqual([
+      expect.objectContaining({
+        id: "plugin:creator-workbench:creator:articleDraft:pending",
+        command: expect.objectContaining({
+          action: "open",
+          kind: "productProfile",
+          origin: "runtime",
+          reason: "plugin_activation_context",
+        }),
+      }),
+    ]);
+  });
+
   it("应把 appSurface pending metadata 投影为右侧 Agent App Surface", async () => {
     const listPending = vi.fn(async () => ({
       pending: [agentAppSurfacePendingRequest],
@@ -419,6 +515,8 @@ describe("useWorkspaceRightSurfacePendingRuntime", () => {
         title: "Example Browser",
         profileKey: "task-profile",
         targetId: "target-1",
+        lifecycleState: null,
+        controlMode: null,
         sessionRef: {
           sourceRequestId: "right_surface_browser_1",
           browserSessionId: "browser-session-1",

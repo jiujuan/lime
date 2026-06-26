@@ -286,12 +286,12 @@ function importedThreadItems() {
       command: "npm test",
       cwd: "/workspace/imported-local-history",
       metadata: {
-        source_client: "codex",
+        source_client: "external-history",
         source_provenance: {
-          sourceClient: "codex",
-          sourceThreadId: "thread-codex-20260617abcdef",
+          sourceClient: "external-history",
+          sourceThreadId: "thread-imported-20260617abcdef",
         },
-        codexImportFidelity: {
+        importFidelity: {
           messages: 6,
           reasoning: 2,
           commands: 1,
@@ -528,8 +528,24 @@ describe("WorkspaceConversationScene", () => {
     expect(container.textContent).not.toContain("本地历史导入");
     expect(container.textContent).not.toContain("已还原");
     expect(container.textContent).not.toContain("imported_read_only");
-    expect(container.textContent).not.toContain("thread-codex");
+    expect(container.textContent).not.toContain("thread-imported");
     expect(container.textContent).not.toContain("npm test");
+  });
+
+  it("插件历史恢复落页应作为消息列表前置内容渲染", () => {
+    const container = renderScene({
+      pluginHistoryRestoreLandingCard: (
+        <div data-testid="plugin-history-landing-probe">已恢复应用工作区</div>
+      ),
+    });
+
+    expect(
+      container.querySelector('[data-testid="plugin-history-landing-probe"]')
+        ?.textContent,
+    ).toBe("已恢复应用工作区");
+    expect(
+      mockMessageList.mock.calls.at(-1)?.[0]?.leadingContent,
+    ).toBeTruthy();
   });
 
   it("生成应显示当前带入的灵感横条", () => {

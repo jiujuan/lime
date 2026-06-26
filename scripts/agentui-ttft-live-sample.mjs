@@ -20,11 +20,15 @@ const DEFAULT_INTERVAL_MS = 1_000;
 const DEFAULT_MESSAGE = "Reply with exactly: OK";
 const DEFAULT_MODE = "responsive-auto";
 const MAX_SAMPLES_PER_RUN = 6;
+const APP_SERVER_METHOD_EVIDENCE_EXPORT = "evidence/export";
 const TERMINAL_RUN_STATUSES = new Set([
+  "completed",
   "success",
   "error",
   "failed",
   "timeout",
+  "idle",
+  "aborted",
   "cancelled",
   "canceled",
 ]);
@@ -53,6 +57,7 @@ Lime AgentUI TTFT Live Sample
   --output PATH        写入脱敏 JSON；默认 stdout
   --allow-live-provider
                        确认允许调用真实模型 Provider；默认禁止以避免消耗额度
+  --trace              打印脱敏阶段耗时，便于定位 health / turn start / first text
   --health-url URL     DevBridge health 地址，默认 ${DEFAULT_HEALTH_URL}
   --invoke-url URL     DevBridge invoke 地址，默认 ${DEFAULT_INVOKE_URL}
   --timeout-ms MS      单条样本等待超时，默认 ${DEFAULT_TIMEOUT_MS}
@@ -74,6 +79,7 @@ function parseArgs(argv) {
     samples: 1,
     timeoutMs: DEFAULT_TIMEOUT_MS,
     allowLiveProvider: liveProviderSmokeAllowed(),
+    trace: false,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -126,6 +132,10 @@ function parseArgs(argv) {
       options.allowLiveProvider = true;
       continue;
     }
+    if (arg === "--trace") {
+      options.trace = true;
+      continue;
+    }
     if (arg === "--provider-preference" && argv[index + 1]) {
       options.providerPreference = String(argv[index + 1]).trim();
       index += 1;
@@ -163,6 +173,29 @@ function parseArgs(argv) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function trace(options, stage, fields = {}) {
+  if (!options.trace) {
+    return;
+  }
+  const suffix = Object.entries(fields)
+    .filter(
+      ([, value]) => value !== undefined && value !== null && value !== "",
+    )
+    .map(([key, value]) => `${key}=${String(value)}`)
+    .join(" ");
+  console.log(
+    `[agentui-ttft-live] stage=${stage}${suffix ? ` ${suffix}` : ""}`,
+  );
+}
+
+function parseTimestampMs(value) {
+  if (typeof value !== "string" || !value.trim()) {
+    return null;
+  }
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function asRecord(value) {
@@ -233,6 +266,9 @@ async function waitForHealth(options) {
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
+      trace(options, "health-ready", {
+        elapsedMs: Date.now() - startedAt,
+      });
       return text ? JSON.parse(text) : {};
     } catch (error) {
       lastError = error;
@@ -407,13 +443,67 @@ function summarizeThreadRead(threadRead) {
       hasFirstTextDelta: timing.firstTextDeltaMs !== null,
       hasRoutingEvidence: Boolean(
         routing.decisionSource ||
-          routing.selectedProvider ||
-          routing.selectedModel ||
-          routing.decisionReason,
+        routing.selectedProvider ||
+        routing.selectedModel ||
+        routing.decisionReason,
       ),
       isResponsiveChatAuto: routing.decisionSource === "responsive_chat_auto",
     },
   };
+}
+
+function eventType(event) {
+  return String(event?.type || "").trim();
+}
+
+function eventTurnId(event) {
+  return String(event?.turnId || event?.turn_id || "").trim();
+}
+
+function eventTimestampMs(event) {
+  return (
+    parseTimestampMs(event?.timestamp) ?? parseTimestampMs(event?.createdAt)
+  );
+}
+
+function summarizeTTFTFromEvidence(evidenceExport, expectedTurnId) {
+  const events = Array.isArray(evidenceExport?.events)
+    ? evidenceExport.events
+    : [];
+  const turnScopedEvents = expectedTurnId
+    ? events.filter((event) => eventTurnId(event) === expectedTurnId)
+    : events;
+  const turnStartedAt =
+    turnScopedEvents.find((event) => eventType(event) === "turn.started") ||
+    turnScopedEvents.find((event) => eventType(event) === "turn_started");
+  const firstTextDeltaEvent = turnScopedEvents.find(
+    (event) => eventType(event) === "message.delta",
+  );
+  const turnStartedMs = eventTimestampMs(turnStartedAt);
+  const firstTextDeltaMs = eventTimestampMs(firstTextDeltaEvent);
+
+  return {
+    evidenceEventCount: turnScopedEvents.length,
+    turnStartedAt: turnStartedAt?.timestamp || null,
+    firstTextDeltaAt: firstTextDeltaEvent?.timestamp || null,
+    firstTextDeltaMs:
+      turnStartedMs !== null && firstTextDeltaMs !== null
+        ? firstTextDeltaMs - turnStartedMs
+        : null,
+    firstTextDeltaEventType: firstTextDeltaEvent
+      ? eventType(firstTextDeltaEvent)
+      : null,
+  };
+}
+
+async function exportEvidenceForSession(options, sessionId, turnId) {
+  return await invoke(options, APP_SERVER_METHOD_EVIDENCE_EXPORT, {
+    sessionId,
+    turnId,
+    includeEvents: true,
+    includeArtifacts: false,
+    includeEvidencePack: false,
+  });
 }
 
 function isTerminalSample(summary) {
@@ -423,7 +513,9 @@ function isTerminalSample(summary) {
   if (TERMINAL_RUN_STATUSES.has(String(summary.status.latestRunStatus || ""))) {
     return true;
   }
-  if (TERMINAL_RUN_STATUSES.has(String(summary.status.latestTurnStatus || ""))) {
+  if (
+    TERMINAL_RUN_STATUSES.has(String(summary.status.latestTurnStatus || ""))
+  ) {
     return true;
   }
   return false;
@@ -432,10 +524,34 @@ function isTerminalSample(summary) {
 async function waitForSampleSummary(options, sessionId) {
   const startedAt = Date.now();
   let lastSummary = null;
+  let pollCount = 0;
+  let lastTraceKey = "";
 
   while (Date.now() - startedAt < options.timeoutMs) {
     const threadRead = await readAgentRuntimeThreadCurrent(options, sessionId);
     lastSummary = summarizeThreadRead(threadRead);
+    pollCount += 1;
+    const traceKey = [
+      lastSummary.status?.latestRunStatus,
+      lastSummary.status?.latestTurnStatus,
+      lastSummary.timing?.firstTextDeltaMs,
+    ].join(":");
+    if (
+      options.trace &&
+      (traceKey !== lastTraceKey ||
+        lastSummary.assertions?.hasFirstTextDelta ||
+        pollCount % 10 === 0)
+    ) {
+      lastTraceKey = traceKey;
+      trace(options, "poll-thread", {
+        elapsedMs: Date.now() - startedAt,
+        poll: pollCount,
+        turnStatus: lastSummary.status?.latestTurnStatus,
+        runStatus: lastSummary.status?.latestRunStatus,
+        firstVisibleDeltaMs: lastSummary.timing?.firstVisibleDeltaMs,
+        firstTextDeltaMs: lastSummary.timing?.firstTextDeltaMs,
+      });
+    }
     if (isTerminalSample(lastSummary)) {
       return lastSummary;
     }
@@ -449,7 +565,14 @@ async function waitForSampleSummary(options, sessionId) {
 }
 
 async function runSample(options, workspaceId, sampleIndex) {
+  const sampleStartedAt = Date.now();
   const stamp = `${Date.now()}-${process.pid}-${sampleIndex}`;
+  trace(options, "sample-start", {
+    sampleIndex,
+    mode: options.mode,
+    provider: options.providerPreference,
+    model: options.modelPreference,
+  });
   const sessionId = await createAgentSessionCurrent(options, {
     workspaceId,
     title: `AgentUI TTFT live sample ${options.mode} ${stamp}`,
@@ -460,6 +583,10 @@ async function runSample(options, workspaceId, sampleIndex) {
         mode: options.mode,
       },
     },
+  });
+  trace(options, "session-created", {
+    sampleIndex,
+    elapsedMs: Date.now() - sampleStartedAt,
   });
   const turnId = `agentui-ttft-${options.mode}-${stamp}`;
   const eventName = `aster_stream_${sessionId}_${turnId}`;
@@ -473,12 +600,53 @@ async function runSample(options, workspaceId, sampleIndex) {
     turnConfig: buildTurnConfig(options),
     skipPreSubmitResume: true,
   });
+  trace(options, "turn-started", {
+    sampleIndex,
+    elapsedMs: Date.now() - sampleStartedAt,
+  });
 
   const summary = await waitForSampleSummary(options, sessionId);
+  let ttftEvidence = {
+    evidenceEventCount: 0,
+    turnStartedAt: null,
+    firstTextDeltaAt: null,
+    firstTextDeltaMs: null,
+    firstTextDeltaEventType: null,
+  };
+  try {
+    const evidence = await exportEvidenceForSession(options, sessionId, turnId);
+    ttftEvidence = summarizeTTFTFromEvidence(evidence, turnId);
+    if (summary.timing.firstTextDeltaMs === null) {
+      summary.timing.firstTextDeltaMs = ttftEvidence.firstTextDeltaMs;
+    }
+    trace(options, "evidence-export", {
+      sampleIndex,
+      evidenceEvents: ttftEvidence.evidenceEventCount,
+      turnStartedAt: ttftEvidence.turnStartedAt,
+      firstTextDeltaAt: ttftEvidence.firstTextDeltaAt,
+      firstTextDeltaMs: ttftEvidence.firstTextDeltaMs,
+    });
+  } catch (error) {
+    trace(options, "evidence-export-failed", {
+      sampleIndex,
+      turnStatus: summary.status?.latestTurnStatus,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+  }
+  trace(options, "sample-complete", {
+    sampleIndex,
+    elapsedMs: Date.now() - sampleStartedAt,
+    turnStatus: summary.status?.latestTurnStatus,
+    runStatus: summary.status?.latestRunStatus,
+    firstTextDeltaMs: summary.timing?.firstTextDeltaMs,
+  });
   return {
     sampleIndex,
     sessionId,
     turnId,
+    evidenceEventCount: ttftEvidence.evidenceEventCount,
+    firstTextDeltaAt: ttftEvidence.firstTextDeltaAt,
+    firstTextDeltaMs: summary.timing?.firstTextDeltaMs ?? null,
     ...summary,
   };
 }
@@ -521,12 +689,19 @@ async function main() {
     allowed: options.allowLiveProvider,
     scriptName: "scripts/agentui-ttft-live-sample.mjs",
   });
+  trace(options, "start", {
+    mode: options.mode,
+    samples: options.samples,
+  });
   const health = await waitForHealth(options);
   const workspace = await invoke(options, "get_or_create_default_project", {});
   const workspaceId = workspace?.id;
   if (!workspaceId) {
     throw new Error("get_or_create_default_project 缺少 workspace id");
   }
+  trace(options, "workspace-ready", {
+    workspaceId,
+  });
 
   const samples = [];
   for (let index = 0; index < options.samples; index += 1) {

@@ -27,6 +27,7 @@ import type {
   InputbarKnowledgePackOption,
   InputbarKnowledgePackSelection,
 } from "./types";
+import type { InputbarPluginCapability } from "./pluginInputCapability";
 import { buildInputbarComposerSectionCopy } from "./components/inputbarComposerSectionCopy";
 import { buildInputbarCoreCopy } from "./components/inputbarCoreCopy";
 import {
@@ -99,6 +100,7 @@ interface InputbarProps extends SkillSelectionSourceProps {
   workflowRunState?: "idle" | "auto_running" | "await_user_decision";
   knowledgePackSelection?: InputbarKnowledgePackSelection | null;
   knowledgePackOptions?: InputbarKnowledgePackOption[];
+  pluginSuggestions?: InputbarPluginCapability[];
   onToggleKnowledgePack?: (enabled: boolean) => void;
   onSelectKnowledgePack?: (packName: string) => void;
   onToggleKnowledgeCompanionPack?: (packName: string, enabled: boolean) => void;
@@ -169,6 +171,7 @@ export const Inputbar: React.FC<InputbarProps> = ({
   workflowRunState,
   knowledgePackSelection = null,
   knowledgePackOptions = [],
+  pluginSuggestions = [],
   onToggleKnowledgePack,
   onSelectKnowledgePack,
   onToggleKnowledgeCompanionPack,
@@ -252,6 +255,9 @@ export const Inputbar: React.FC<InputbarProps> = ({
     skillSelection,
     handleSelectInputCapability,
     activeCapability,
+    pluginSuggestions: resolvedPluginSuggestions,
+    activePluginSelection,
+    handleSelectPlugin,
     knowledgeHubOpenRequestKey,
   } = useInputbarController({
     input,
@@ -274,6 +280,7 @@ export const Inputbar: React.FC<InputbarProps> = ({
     workflowSteps,
     workflowRunState,
     knowledgePackSelection,
+    pluginSuggestions,
     onStartKnowledgeOrganize,
     onManageKnowledgePacks,
     projectId,
@@ -344,6 +351,9 @@ export const Inputbar: React.FC<InputbarProps> = ({
         onSelectCharacter={onSelectCharacter}
         onSelectInputCapability={handleSelectInputCapability}
         activeCapability={activeCapability}
+        activePluginSelection={activePluginSelection}
+        pluginSuggestions={resolvedPluginSuggestions}
+        onSelectPlugin={handleSelectPlugin}
         projectId={projectId}
         sessionId={sessionId}
         defaultCuratedTaskReferenceMemoryIds={

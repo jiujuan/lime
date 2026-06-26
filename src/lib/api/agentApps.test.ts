@@ -441,8 +441,72 @@ describe("agentApps API", () => {
     );
   });
 
-  it("本地安装 content-factory-app 时未激活注册码应阻断 sideload", async () => {
+  it("本地安装 content-factory-app 开发仓不再要求云端注册码", async () => {
     const manifest = contentFactoryFixture as AppManifest;
+    const inspectedAt = "2026-05-15T00:00:00.000Z";
+    appServerRequestMock.mockImplementation(async (method, params) => {
+      if (method === "agentAppLocalPackage/inspect") {
+        return {
+          result: {
+            sourceKind: "local_folder",
+            sourceUri: LOCAL_APP_DIR,
+            appDir: LOCAL_APP_DIR,
+            appMarkdown: "",
+            manifest,
+            manifestHash: "manifest-local-1",
+            packageHash: "package-local-1",
+            inspectedAt,
+          },
+        };
+      }
+      if (method === "agentAppInstalled/save") {
+        return {
+          result: (params as { state: unknown }).state,
+        };
+      }
+      throw new Error(`unexpected method ${method}`);
+    });
+
+    await expect(
+      installLocalAgentAppPackage({
+        appDir: LOCAL_APP_DIR,
+        profile: buildWorkflowRuntimeCapabilityProfile({
+          realAdapterEnabled: true,
+          uiRuntimeEnabled: true,
+          workerRuntimeEnabled: true,
+        }),
+      }),
+    ).resolves.toMatchObject({
+      appId: "content-factory-app",
+      disabled: false,
+    });
+    expect(appServerRequestMock).toHaveBeenCalledWith(
+      "agentAppLocalPackage/inspect",
+      { appDir: LOCAL_APP_DIR },
+    );
+    expect(appServerRequestMock).toHaveBeenCalledWith(
+      "agentAppInstalled/save",
+      {
+        state: expect.objectContaining({
+          appId: "content-factory-app",
+        }),
+      },
+    );
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "agent_app_inspect_local_package",
+      expect.anything(),
+    );
+  });
+
+  it("本地企业定制 Agent App 未激活注册码时应阻断 sideload", async () => {
+    const manifest = {
+      ...(contentFactoryFixture as AppManifest),
+      name: "enterprise-custom-app",
+      displayName: "企业定制 App",
+      metadata: {
+        distribution: "enterprise_custom",
+      },
+    } satisfies AppManifest;
     const inspectedAt = "2026-05-15T00:00:00.000Z";
     appServerRequestMock.mockImplementation(async (method) => {
       if (method === "agentAppLocalPackage/inspect") {
@@ -463,7 +527,7 @@ describe("agentApps API", () => {
     });
 
     await expect(
-      installLocalAgentAppPackage({
+      reviewLocalAgentAppPackage({
         appDir: LOCAL_APP_DIR,
         profile: buildWorkflowRuntimeCapabilityProfile({
           realAdapterEnabled: true,
@@ -475,10 +539,6 @@ describe("agentApps API", () => {
       name: "AgentAppRegistrationRequiredError",
     });
     expect(appServerRequestMock).toHaveBeenCalledTimes(1);
-    expect(safeInvoke).not.toHaveBeenCalledWith(
-      "agent_app_inspect_local_package",
-      expect.anything(),
-    );
   });
 
   it("审查本地非企业定制 Agent App 时不应写入 installed state", async () => {
@@ -839,6 +899,16 @@ describe("agentApps API", () => {
       manifestHashMatched: true,
       blockerCodes: [],
       warningCodes: [],
+    });
+    expect(result.state.setup).toMatchObject({
+      cloudReleaseEvidence: {
+        status: "ready",
+        signaturePolicy: "required",
+        signatureVerificationStatus: "verified",
+        packageHashMatched: true,
+        manifestHashMatched: true,
+        packageVerificationStatus: "verified",
+      },
     });
   });
 

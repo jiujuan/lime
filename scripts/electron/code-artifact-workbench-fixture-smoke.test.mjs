@@ -74,10 +74,17 @@ describe("code artifact workbench Electron fixture smoke guard", () => {
     expect(content).toContain("guiPromptSubmitted");
     expect(content).toContain("clickCodingWorkbenchRecovery");
     expect(content).toContain("codingRecoveryEvidence");
+    expect(content).toContain("open-session-after-recovery");
+    expect(content).toContain("open-workbench-after-recovery");
+    expect(content).toContain("guiSessionOpenAfterRecovery");
+    expect(content).toContain("workbenchAfterRecovery");
     expect(content).toContain("coding-workbench-recovery-submit");
     expect(content).toContain("coding_workbench_recovery");
     expect(content).toContain("codingRecoveryGuiSubmitted");
     expect(content).toContain("codingRecoveryReachedBackend");
+    expect(content).toContain("capturedRecoveryContext");
+    expect(content).toContain("appServerJsonRpcObserved");
+    expect(content).toContain("backendTurnStartObserved");
     expect(content).toContain("assertNoRendererErrors");
     expect(content).toContain("Electron renderer console error");
     expect(content).toContain("Electron renderer page error");

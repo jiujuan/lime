@@ -35,6 +35,15 @@ describe("AgentAppsPage runtime launch", () => {
 
     await openAppDetail(container);
 
+    const rightSurfaceButton = container.querySelector(
+      '[data-testid="agent-apps-launch-target-right-surface"]',
+    ) as HTMLButtonElement | null;
+    await act(async () => {
+      rightSurfaceButton?.click();
+      await Promise.resolve();
+    });
+    await flush();
+
     const launchButton = container.querySelector(
       '[data-testid="agent-apps-launch-entry-dashboard"]',
     ) as HTMLButtonElement | null;
@@ -56,6 +65,65 @@ describe("AgentAppsPage runtime launch", () => {
     expect(
       container.querySelector('[data-testid="agent-apps-mounted-ui"]'),
     ).toBeNull();
+  });
+
+  it("正式入口点击 UI entry 时应把宿主 right surface target 透传到 runtime surface", async () => {
+    installedStates.push(
+      buildReadyState({
+        profile: buildWorkflowRuntimeCapabilityProfile({
+          realAdapterEnabled: true,
+          uiRuntimeEnabled: true,
+          workerRuntimeEnabled: true,
+        }),
+      }),
+    );
+    const onNavigate = vi.fn();
+    const container = await renderPage(
+      undefined,
+      onNavigate,
+      {
+        workspaceId: "workspace-main",
+        sessionId: "session-main",
+        label: "主工作区",
+      },
+      undefined,
+    );
+    await flush();
+
+    await openAppDetail(container);
+
+    const rightSurfaceButton = container.querySelector(
+      '[data-testid="agent-apps-launch-target-right-surface"]',
+    ) as HTMLButtonElement | null;
+    await act(async () => {
+      rightSurfaceButton?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await flush();
+
+    const launchButton = container.querySelector(
+      '[data-testid="agent-apps-launch-entry-dashboard"]',
+    ) as HTMLButtonElement | null;
+    await act(async () => {
+      launchButton?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(onNavigate).toHaveBeenCalledWith(
+      "agent-app",
+      expect.objectContaining({
+        appId: "content-factory-app",
+        entryKey: "dashboard",
+        launchRequestKey: expect.any(Number),
+        rightSurfaceTarget: expect.objectContaining({
+          workspaceId: "workspace-main",
+          sessionId: "session-main",
+        }),
+      }),
+    );
   });
 
   it("standalone App 点击 UI entry 时应通过 Shell launch 命令启动", async () => {

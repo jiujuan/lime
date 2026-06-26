@@ -58,6 +58,137 @@ describe("EmptyStateComposerPanel", () => {
     ).toBeTruthy();
   });
 
+  it("首页空态输入区加号菜单应显示插件入口并打开空态面板", () => {
+    const container = renderPanel({
+      isGeneralTheme: true,
+    });
+
+    openPlusMenuPanel(container, "plugins");
+
+    const pluginsRow = document.body.querySelector(
+      '[data-testid="inputbar-plus-plugins"]',
+    ) as HTMLButtonElement | null;
+    expect(pluginsRow).toBeTruthy();
+    expect(pluginsRow?.textContent).toContain("插件");
+    expect(pluginsRow?.disabled).toBe(false);
+    expect(
+      document.body.querySelector('[data-testid="inputbar-plus-panel-plugins"]')
+        ?.textContent,
+    ).toContain("当前没有可选插件");
+  });
+
+  it("首页空态输入区选择插件时应写回显式触发前缀并显示插件标记", async () => {
+    const container = renderPanel({
+      input: "整理今天的选题",
+      isGeneralTheme: true,
+      pluginSuggestions: [
+        {
+          pluginId: "content-workbench",
+          displayName: "内容工厂",
+          description: "整理内容生产资料",
+        },
+      ],
+    });
+
+    openPlusMenuPanel(container, "plugins");
+
+    const option = document.body.querySelector(
+      '[data-testid="inputbar-plugin-option"]',
+    ) as HTMLButtonElement | null;
+    expect(option).toBeTruthy();
+
+    await act(async () => {
+      option?.click();
+      await Promise.resolve();
+    });
+
+    expect(
+      container.querySelector('[data-testid="inputbar-plugin-badge"]')
+        ?.textContent,
+    ).toContain("内容工厂");
+    expect(
+      (container.querySelector("textarea") as HTMLTextAreaElement | null)
+        ?.value,
+    ).toBe("@内容工厂 整理今天的选题");
+  });
+
+  it("首页空态输入区选择插件技能时应写回 @插件:技能 前缀", async () => {
+    const container = renderPanel({
+      input: "整理今天的选题",
+      isGeneralTheme: true,
+      pluginSuggestions: [
+        {
+          pluginId: "content-workbench",
+          displayName: "内容工厂",
+          description: "整理内容生产资料",
+          skills: [
+            {
+              skillId: "article-writer",
+              title: "文章写作",
+              description: "生成文章草稿",
+            },
+          ],
+        },
+      ],
+    });
+
+    openPlusMenuPanel(container, "plugins");
+
+    const option = document.body.querySelector(
+      '[data-testid="inputbar-plugin-skill-option"]',
+    ) as HTMLButtonElement | null;
+    expect(option).toBeTruthy();
+
+    await act(async () => {
+      option?.click();
+      await Promise.resolve();
+    });
+
+    expect(
+      container.querySelector('[data-testid="inputbar-plugin-badge"]')
+        ?.textContent,
+    ).toContain("内容工厂:文章写作");
+    expect(
+      (container.querySelector("textarea") as HTMLTextAreaElement | null)
+        ?.value,
+    ).toBe("@内容工厂:文章写作 整理今天的选题");
+  });
+
+  it("首页空态输入区插件名称为空时应回退显示插件 id", async () => {
+    const container = renderPanel({
+      input: "整理今天的选题",
+      isGeneralTheme: true,
+      pluginSuggestions: [
+        {
+          pluginId: "content-workbench",
+          displayName: " ",
+          description: "整理内容生产资料",
+        },
+      ],
+    });
+
+    openPlusMenuPanel(container, "plugins");
+
+    expect(
+      document.body.querySelector('[data-testid="inputbar-plus-panel-plugins"]')
+        ?.textContent,
+    ).toContain("content-workbench");
+
+    const option = document.body.querySelector(
+      '[data-testid="inputbar-plugin-option"]',
+    ) as HTMLButtonElement | null;
+
+    await act(async () => {
+      option?.click();
+      await Promise.resolve();
+    });
+
+    expect(
+      container.querySelector('[data-testid="inputbar-plugin-badge"]')
+        ?.textContent,
+    ).toContain("content-workbench");
+  });
+
   it("首页空态输入区应使用新的浮层输入壳，而不是旧默认输入壳", () => {
     const container = renderPanel({
       isGeneralTheme: true,

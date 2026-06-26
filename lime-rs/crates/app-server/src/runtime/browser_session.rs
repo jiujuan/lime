@@ -219,17 +219,50 @@ fn attach_browser_action_trace(
     let tab_id = string_from_result_paths(&result, &[&["tab", "id"][..], &["targetId"][..]])
         .or_else(|| session_state.map(|state| state.target_id.clone()));
     let evidence_refs = browser_action_evidence_refs(session_id, action_id.as_str(), &result);
+    let status = string_from_result_paths(
+        &result,
+        &[
+            &["browser_action_trace", "status"][..],
+            &["status"][..],
+            &["action_required", "status"][..],
+        ],
+    )
+    .unwrap_or_else(|| {
+        if result_event_class(&result).as_deref() == Some("action.required") {
+            "pending".to_string()
+        } else {
+            "completed".to_string()
+        }
+    });
+    let success = bool_from_result_paths(
+        &result,
+        &[
+            &["browser_action_trace", "success"][..],
+            &["success"][..],
+            &["ok"][..],
+        ],
+    )
+    .unwrap_or(status == "completed");
     let trace = json!({
         "schemaVersion": "browser-action-trace.v1",
         "sessionId": session_id,
         "tabId": tab_id,
         "actionId": action_id,
         "action": action,
-        "status": "completed",
-        "success": true,
+        "status": status,
+        "success": success,
         "evidenceRefs": evidence_refs,
         "profileKey": session_state.map(|state| state.profile_key.clone()),
         "backend": "cdp_direct",
+        "eventClass": result_event_class(&result),
+        "failureCategory": string_from_result_paths(&result, &[&["failureCategory"][..], &["failure_category"][..]]),
+        "requestId": string_from_result_paths(&result, &[&["requestId"][..], &["request_id"][..], &["action_required", "requestId"][..], &["action_required", "request_id"][..]]),
+        "controlMode": string_from_result_paths(&result, &[&["controlMode"][..], &["control_mode"][..]])
+            .or_else(|| session_state.map(|state| serialize_enum_string(state.control_mode))),
+        "lifecycleState": string_from_result_paths(&result, &[&["lifecycleState"][..], &["lifecycle_state"][..]])
+            .or_else(|| session_state.map(|state| serialize_enum_string(state.lifecycle_state))),
+        "humanReason": string_from_result_paths(&result, &[&["humanReason"][..], &["human_reason"][..]])
+            .or_else(|| session_state.and_then(|state| state.human_reason.clone())),
         "lastUrl": string_from_result_paths(&result, &[&["page_info", "url"][..], &["url"][..]])
             .or_else(|| session_state.and_then(|state| state.last_page_info.as_ref().map(|page| page.url.clone())))
             .or_else(|| session_state.map(|state| state.target_url.clone())),
@@ -252,6 +285,18 @@ fn attach_browser_action_trace(
             Value::Object(object)
         }
     }
+}
+
+fn result_event_class(result: &Value) -> Option<String> {
+    string_from_result_paths(
+        result,
+        &[
+            &["browser_action_trace", "eventClass"][..],
+            &["browser_action_trace", "event_class"][..],
+            &["eventClass"][..],
+            &["event_class"][..],
+        ],
+    )
 }
 
 fn action_id_from_result(result: &Value) -> Option<String> {
@@ -348,6 +393,13 @@ fn value_at_path<'a>(value: &'a Value, path: &[&str]) -> Option<&'a Value> {
         current = current.get(*key)?;
     }
     Some(current)
+}
+
+fn bool_from_result_paths(result: &Value, paths: &[&[&str]]) -> Option<bool> {
+    paths
+        .iter()
+        .filter_map(|path| value_at_path(result, path))
+        .find_map(Value::as_bool)
 }
 
 fn value_string(value: &Value) -> Option<String> {
@@ -521,6 +573,48 @@ mod tests {
                 "missing {expected} in {refs:?}",
             );
         }
+    }
+
+    #[test]
+    fn browser_session_action_trace_preserves_action_required_state() {
+        let state = cdp_state("browser-session-1", "task-profile-1");
+        let traced = attach_browser_action_trace(
+            json!({
+                "actionId": "browser-action-risky",
+                "requestId": "browser-action-confirmation:browser-action-risky",
+                "eventClass": "action.required",
+                "failureCategory": "action_required",
+                "status": "pending",
+                "success": false,
+                "controlMode": "human",
+                "lifecycleState": "human_controlling",
+                "humanReason": "browser_action_requires_confirmation",
+                "action_required": {
+                    "requestId": "browser-action-confirmation:browser-action-risky",
+                    "actionType": "tool_confirmation",
+                    "toolName": "browserSession/action/execute"
+                }
+            }),
+            "browser-session-1",
+            "click",
+            Some(&state),
+        );
+
+        let trace = traced
+            .get("browser_action_trace")
+            .expect("browser action trace");
+        assert_eq!(trace["action"], "click");
+        assert_eq!(trace["status"], "pending");
+        assert_eq!(trace["success"], false);
+        assert_eq!(trace["eventClass"], "action.required");
+        assert_eq!(trace["failureCategory"], "action_required");
+        assert_eq!(
+            trace["requestId"],
+            "browser-action-confirmation:browser-action-risky"
+        );
+        assert_eq!(trace["controlMode"], "human");
+        assert_eq!(trace["lifecycleState"], "human_controlling");
+        assert_eq!(trace["humanReason"], "browser_action_requires_confirmation");
     }
 
     #[test]

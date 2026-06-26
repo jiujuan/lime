@@ -3,6 +3,17 @@ import { parseCloudBootstrapPayload } from "../../features/agent-app/install/clo
 import type { OemCloudCurrentSessionLike } from "@/lib/oemCloudSession";
 import type { CloudBootstrapPayload } from "../../features/agent-app/types";
 import type {
+  PluginMarketplaceActivationState,
+  PluginMarketplaceAuthenticationPolicy,
+  PluginMarketplaceInstallState,
+  PluginMarketplaceInstallationPolicy,
+  PluginMarketplaceItem,
+  PluginMarketplaceListResponse,
+  PluginMarketplacePackageRef,
+  PluginMarketplacePolicy,
+  PluginMarketplaceSourceKind,
+} from "./pluginMarketplaceTypes";
+import type {
   ModelAliasSource,
   ModelDeploymentSource,
   ModelManagementPlane,
@@ -240,6 +251,9 @@ export interface OemCloudBootstrapResponse {
   gateway?: OemCloudGatewayConfig;
   referral?: OemCloudReferralDashboard | null;
 }
+
+export type OemCloudPluginMarketplaceListResponse =
+  PluginMarketplaceListResponse;
 
 export interface SendClientAuthEmailCodePayload {
   identifier: string;
@@ -932,6 +946,26 @@ const MODEL_ALIAS_SOURCE_SET = new Set<ModelAliasSource>([
   "local",
 ]);
 
+const PLUGIN_MARKETPLACE_SOURCE_KIND_SET = new Set<PluginMarketplaceSourceKind>(
+  ["plugin_catalog", "agent_app_release"],
+);
+
+const PLUGIN_MARKETPLACE_INSTALLATION_POLICY_SET =
+  new Set<PluginMarketplaceInstallationPolicy>([
+    "NOT_AVAILABLE",
+    "AVAILABLE",
+    "INSTALLED_BY_DEFAULT",
+  ]);
+
+const PLUGIN_MARKETPLACE_AUTHENTICATION_POLICY_SET =
+  new Set<PluginMarketplaceAuthenticationPolicy>(["ON_INSTALL", "ON_USE"]);
+
+const PLUGIN_MARKETPLACE_INSTALL_STATE_SET =
+  new Set<PluginMarketplaceInstallState>(["available", "blocked"]);
+
+const PLUGIN_MARKETPLACE_ACTIVATION_STATE_SET =
+  new Set<PluginMarketplaceActivationState>(["activatable", "blocked"]);
+
 function parsePartnerHubAccessMode(
   value: unknown,
   fallback?: OemCloudPartnerHubAccessMode,
@@ -1011,6 +1045,72 @@ function parseOptionalModelAliasSource(
   return normalized && MODEL_ALIAS_SOURCE_SET.has(normalized)
     ? normalized
     : undefined;
+}
+
+function parsePluginMarketplaceSourceKind(
+  value: unknown,
+): PluginMarketplaceSourceKind {
+  const normalized = normalizeText(value) as
+    | PluginMarketplaceSourceKind
+    | undefined;
+  if (!normalized || !PLUGIN_MARKETPLACE_SOURCE_KIND_SET.has(normalized)) {
+    throw new OemCloudControlPlaneError("插件市场来源格式非法");
+  }
+  return normalized;
+}
+
+function parsePluginMarketplaceInstallationPolicy(
+  value: unknown,
+): PluginMarketplaceInstallationPolicy {
+  const normalized = normalizeText(value) as
+    | PluginMarketplaceInstallationPolicy
+    | undefined;
+  if (
+    !normalized ||
+    !PLUGIN_MARKETPLACE_INSTALLATION_POLICY_SET.has(normalized)
+  ) {
+    throw new OemCloudControlPlaneError("插件安装策略格式非法");
+  }
+  return normalized;
+}
+
+function parsePluginMarketplaceAuthenticationPolicy(
+  value: unknown,
+): PluginMarketplaceAuthenticationPolicy {
+  const normalized = normalizeText(value) as
+    | PluginMarketplaceAuthenticationPolicy
+    | undefined;
+  if (
+    !normalized ||
+    !PLUGIN_MARKETPLACE_AUTHENTICATION_POLICY_SET.has(normalized)
+  ) {
+    throw new OemCloudControlPlaneError("插件认证策略格式非法");
+  }
+  return normalized;
+}
+
+function parsePluginMarketplaceInstallState(
+  value: unknown,
+): PluginMarketplaceInstallState {
+  const normalized = normalizeText(value) as
+    | PluginMarketplaceInstallState
+    | undefined;
+  if (!normalized || !PLUGIN_MARKETPLACE_INSTALL_STATE_SET.has(normalized)) {
+    throw new OemCloudControlPlaneError("插件安装状态格式非法");
+  }
+  return normalized;
+}
+
+function parsePluginMarketplaceActivationState(
+  value: unknown,
+): PluginMarketplaceActivationState {
+  const normalized = normalizeText(value) as
+    | PluginMarketplaceActivationState
+    | undefined;
+  if (!normalized || !PLUGIN_MARKETPLACE_ACTIVATION_STATE_SET.has(normalized)) {
+    throw new OemCloudControlPlaneError("插件激活状态格式非法");
+  }
+  return normalized;
 }
 
 function unwrapEnvelope<T>(payload: unknown): {
@@ -1658,6 +1758,110 @@ function parseBootstrap(value: unknown): OemCloudBootstrapResponse {
     referral: isRecord(value.referral)
       ? parseReferralDashboard(value.referral)
       : null,
+  };
+}
+
+function parsePluginMarketplacePackageRef(
+  value: unknown,
+): PluginMarketplacePackageRef | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    throw new OemCloudControlPlaneError("插件包引用格式非法");
+  }
+  return {
+    releaseId: normalizeText(value.releaseId),
+    packageUrl: normalizeText(value.packageUrl),
+    packageHash: normalizeText(value.packageHash),
+    manifestHash: normalizeText(value.manifestHash),
+    signatureRef: normalizeText(value.signatureRef),
+  };
+}
+
+function parsePluginMarketplacePolicy(value: unknown): PluginMarketplacePolicy {
+  if (!isRecord(value)) {
+    throw new OemCloudControlPlaneError("插件策略格式非法");
+  }
+  return {
+    installation: parsePluginMarketplaceInstallationPolicy(value.installation),
+    authentication: parsePluginMarketplaceAuthenticationPolicy(
+      value.authentication,
+    ),
+    products: normalizeStringArray(value.products),
+  };
+}
+
+function parsePluginMarketplaceItem(value: unknown): PluginMarketplaceItem {
+  if (!isRecord(value)) {
+    throw new OemCloudControlPlaneError("插件市场条目格式非法");
+  }
+
+  const pluginKey = normalizeText(value.pluginKey);
+  const pluginName = normalizeText(value.pluginName);
+  const marketplaceName = normalizeText(value.marketplaceName);
+  const displayName = normalizeText(value.displayName);
+  if (!pluginKey || !pluginName || !marketplaceName || !displayName) {
+    throw new OemCloudControlPlaneError("插件市场条目格式非法");
+  }
+
+  return {
+    pluginKey,
+    pluginName,
+    marketplaceName,
+    marketplaceDisplayName: normalizeText(value.marketplaceDisplayName),
+    displayName,
+    description: normalizeText(value.description),
+    version: normalizeText(value.version),
+    category: normalizeText(value.category),
+    categories: normalizeStringArray(value.categories),
+    keywords: normalizeStringArray(value.keywords),
+    capabilities: normalizeStringArray(value.capabilities),
+    sourceKind: parsePluginMarketplaceSourceKind(value.sourceKind),
+    sourceRef: normalizeText(value.sourceRef),
+    appId: normalizeText(value.appId),
+    enabled: normalizeBoolean(value.enabled),
+    installState: parsePluginMarketplaceInstallState(value.installState),
+    activationState: parsePluginMarketplaceActivationState(
+      value.activationState,
+    ),
+    blockedReason: normalizeText(value.blockedReason),
+    policy: parsePluginMarketplacePolicy(value.policy),
+    package: parsePluginMarketplacePackageRef(value.package),
+    manifestSummary: isRecord(value.manifestSummary)
+      ? value.manifestSummary
+      : undefined,
+    updatedAt: normalizeText(value.updatedAt),
+  };
+}
+
+function parsePluginMarketplaceListResponse(
+  value: unknown,
+): PluginMarketplaceListResponse {
+  if (!isRecord(value)) {
+    throw new OemCloudControlPlaneError("插件市场目录格式非法");
+  }
+
+  const schemaVersion = normalizeText(value.schemaVersion);
+  const tenantId = normalizeText(value.tenantId);
+  const marketplaceName = normalizeText(value.marketplaceName);
+  if (
+    schemaVersion !== "plugin-marketplace/v1" ||
+    !tenantId ||
+    !marketplaceName
+  ) {
+    throw new OemCloudControlPlaneError("插件市场目录格式非法");
+  }
+
+  return {
+    schemaVersion,
+    tenantId,
+    generatedAt: normalizeText(value.generatedAt) ?? "",
+    marketplaceName,
+    marketplaceDisplayName: normalizeText(value.marketplaceDisplayName),
+    items: Array.isArray(value.items)
+      ? value.items.map(parsePluginMarketplaceItem)
+      : [],
   };
 }
 
@@ -2653,6 +2857,33 @@ export async function getClientAgentApps(
   return parseCloudBootstrapPayload(
     await requestControlPlane<unknown>(
       `/v1/public/tenants/${encodeURIComponent(tenantId)}/client/agent-apps`,
+      {
+        auth: true,
+      },
+    ),
+  );
+}
+
+export async function getClientPluginMarketplace(
+  tenantId: string,
+  params: { query?: string; category?: string; sort?: string } = {},
+): Promise<PluginMarketplaceListResponse> {
+  const search = new URLSearchParams();
+  if (params.query) {
+    search.set("query", params.query);
+  }
+  if (params.category) {
+    search.set("category", params.category);
+  }
+  if (params.sort) {
+    search.set("sort", params.sort);
+  }
+  const query = search.toString();
+  return parsePluginMarketplaceListResponse(
+    await requestControlPlane<unknown>(
+      `/v1/public/tenants/${encodeURIComponent(tenantId)}/client/plugins/marketplace${
+        query ? `?${query}` : ""
+      }`,
       {
         auth: true,
       },

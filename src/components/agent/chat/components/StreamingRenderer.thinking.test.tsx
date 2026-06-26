@@ -253,7 +253,9 @@ describe("StreamingRenderer thinking and status", () => {
   it("思考后出现正文且未超过屏占比阈值时应继续展开", async () => {
     const rectSpy = vi
       .spyOn(HTMLElement.prototype, "getBoundingClientRect")
-      .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
+      .mockImplementation(function getBoundingClientRectMock(
+        this: HTMLElement,
+      ) {
         if (
           this.querySelector?.(
             '[data-testid="markdown-renderer"], [data-testid="streaming-markdown-pending-tail"]',
@@ -307,7 +309,9 @@ describe("StreamingRenderer thinking and status", () => {
   it("思考后出现正文且超过屏占比阈值时应自动折叠", async () => {
     const rectSpy = vi
       .spyOn(HTMLElement.prototype, "getBoundingClientRect")
-      .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
+      .mockImplementation(function getBoundingClientRectMock(
+        this: HTMLElement,
+      ) {
         if (
           this.querySelector?.(
             '[data-testid="markdown-renderer"], [data-testid="streaming-markdown-pending-tail"]',
@@ -390,7 +394,7 @@ describe("StreamingRenderer thinking and status", () => {
     expect(container.textContent).toContain("先生成一版草稿");
   });
 
-  it("包含工具的运行中过程应先流式展开思考，完成后保持摘要", () => {
+  it("包含工具的运行中过程应先流式展开思考，完成后逐条保留工具记录", () => {
     const { container, rerender } = renderHarness({
       content: "",
       contentParts: [
@@ -421,14 +425,13 @@ describe("StreamingRenderer thinking and status", () => {
     expect(container.textContent).not.toContain("已完成思考");
     expect(container.textContent).toContain("先确认过程组行高");
 
-    const runningProcessGroup = container.querySelector<HTMLButtonElement>(
-      '[data-testid="streaming-process-group"] button',
-    );
-    expect(runningProcessGroup).not.toBeNull();
-    expect(runningProcessGroup?.getAttribute("aria-expanded")).toBe("false");
+    expect(
+      container.querySelector('[data-testid="streaming-process-group"]'),
+    ).toBeNull();
     expect(
       container.querySelector('[data-testid="inline-tool-process-step"]'),
-    ).toBeNull();
+    ).not.toBeNull();
+    expect(container.textContent).toContain("rg -n thinking src");
 
     rerender({
       content: "",
@@ -453,16 +456,17 @@ describe("StreamingRenderer thinking and status", () => {
       isStreaming: false,
     });
 
-    const completedProcessGroup = container.querySelector<HTMLButtonElement>(
-      '[data-testid="streaming-process-group"] button',
-    );
-    expect(completedProcessGroup).not.toBeNull();
-    expect(completedProcessGroup?.getAttribute("aria-expanded")).toBe("false");
-    expect(container.textContent).toContain("已运行 1 条命令");
-    expect(container.textContent).not.toContain("先确认过程组行高");
+    expect(
+      container.querySelector('[data-testid="streaming-process-group"]'),
+    ).toBeNull();
+    expect(container.textContent).toContain("已完成思考");
+    expect(container.textContent).toContain("rg -n thinking src");
+    expect(
+      container.querySelector('[data-testid="inline-tool-process-step"]'),
+    ).not.toBeNull();
   });
 
-  it("内容工作台工具过程组应保持正文前后顺序并隐藏协议细节", () => {
+  it("内容工作台工具记录应保持正文前后顺序并隐藏协议细节", () => {
     const { container } = renderHarness({
       content: "",
       contentParts: [
@@ -522,24 +526,24 @@ describe("StreamingRenderer thinking and status", () => {
     const finalNode = markdownNodes.find((node) =>
       node.textContent?.includes("内容任务已发起，继续整理最终说明。"),
     );
-    const processGroup = container.querySelector<HTMLElement>(
-      '[data-testid="streaming-process-group"]',
+    const toolSteps = container.querySelectorAll<HTMLElement>(
+      '[data-testid="inline-tool-process-step"]',
     );
+    const firstToolStep = toolSteps[0] ?? null;
 
     expect(introNode).not.toBeNull();
-    expect(processGroup).not.toBeNull();
+    expect(firstToolStep).not.toBeNull();
     expect(finalNode).not.toBeNull();
     expect(
-      introNode!.compareDocumentPosition(processGroup!) &
+      introNode!.compareDocumentPosition(firstToolStep!) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
-      processGroup!.compareDocumentPosition(finalNode!) &
+      firstToolStep!.compareDocumentPosition(finalNode!) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
 
-    const groupText = processGroup?.textContent || "";
-    expect(groupText).toContain("2");
+    expect(toolSteps).toHaveLength(2);
 
     const text = container.textContent || "";
     expect(text).not.toContain(".lime/tasks");
@@ -590,7 +594,7 @@ describe("StreamingRenderer thinking and status", () => {
     expect(pendingTail?.textContent).toContain("不存在。");
   });
 
-  it("过程组中的思考与工具应默认压缩为摘要", () => {
+  it("思考与普通工具应按时序独立渲染，不再压缩为批次摘要", () => {
     const { container } = renderHarness({
       content: "",
       contentParts: [
@@ -613,29 +617,31 @@ describe("StreamingRenderer thinking and status", () => {
       ],
     });
 
-    const processGroup = container.querySelector<HTMLButtonElement>(
-      '[data-testid="streaming-process-group"] button',
-    );
-    expect(processGroup).not.toBeNull();
-    expect(processGroup?.getAttribute("aria-expanded")).toBe("false");
-    expect(container.textContent).toContain("已运行 1 条命令");
-    expect(container.textContent).not.toContain("先确认过程组行高");
     expect(
-      container.querySelector('[data-testid="thinking-block"]'),
+      container.querySelector('[data-testid="streaming-process-group"]'),
     ).toBeNull();
+    expect(container.textContent).toContain("已完成思考");
+    expect(container.textContent).toContain("rg -n thinking src");
 
-    act(() => {
-      processGroup?.click();
-    });
+    const thinkingBlock = container.querySelector(
+      '[data-testid="thinking-block"]',
+    );
+    const toolStep = container.querySelector(
+      '[data-testid="inline-tool-process-step"]',
+    );
 
+    expect(thinkingBlock).not.toBeNull();
+    expect(toolStep).not.toBeNull();
     expect(
-      container
-        .querySelector('[data-testid="thinking-block"]')
-        ?.getAttribute("data-visual-style"),
-    ).toBe("grouped-inline");
+      thinkingBlock!.compareDocumentPosition(toolStep!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(thinkingBlock?.getAttribute("data-visual-style")).not.toBe(
+      "grouped-inline",
+    );
   });
 
-  it("仅思考过程组应把状态作为外层标题，展开后再显示思考正文", () => {
+  it("仅思考内容应保留为独立思考块，不再切到第二套过程组", () => {
     const { container } = renderHarness({
       content: "",
       contentParts: [
@@ -647,31 +653,19 @@ describe("StreamingRenderer thinking and status", () => {
       isStreaming: false,
     });
 
-    const processGroup = container.querySelector<HTMLButtonElement>(
-      '[data-testid="streaming-process-group"] button',
+    expect(
+      container.querySelector('[data-testid="streaming-process-group"]'),
+    ).toBeNull();
+    const thinkingBlock = container.querySelector(
+      '[data-testid="thinking-block"]',
     );
-    expect(processGroup).not.toBeNull();
-    expect(processGroup?.getAttribute("aria-expanded")).toBe("false");
-    expect(processGroup?.textContent).toContain("已完成思考");
-    expect(processGroup?.textContent).not.toContain(
-      "**Inspecting folder for details**",
+    expect(thinkingBlock).not.toBeNull();
+    expect(thinkingBlock?.getAttribute("data-visual-style")).not.toBe(
+      "grouped-inline",
     );
-    expect(container.textContent).not.toContain(
-      "**Inspecting folder for details**",
-    );
-
-    act(() => {
-      processGroup?.click();
-    });
-
-    expect(processGroup?.getAttribute("aria-expanded")).toBe("true");
+    expect(container.textContent).toContain("已完成思考");
     expect(container.textContent).toContain(
       "**Inspecting folder for details**",
     );
-    expect(
-      container
-        .querySelector('[data-testid="thinking-block"]')
-        ?.getAttribute("data-visual-style"),
-    ).toBe("grouped-inline");
   });
 });

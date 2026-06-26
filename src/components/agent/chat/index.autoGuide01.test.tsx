@@ -92,9 +92,7 @@ describe("AgentChatPage 自动引导", { timeout: 20_000 }, () => {
 
     expect(sharedSendMessageMock).toHaveBeenCalledTimes(1);
     const sendCall = getSendMessageCall();
-    expect(sendCall.content).toBe(
-      `/content_post_with_cover ${initialUserPrompt}`,
-    );
+    expect(sendCall.content).toBe(initialUserPrompt);
     expect(sendCall.images).toEqual([]);
     expect(sendCall.webSearch).toBeUndefined();
     expect(sendCall.thinking).toBeUndefined();
@@ -249,9 +247,7 @@ describe("AgentChatPage 自动引导", { timeout: 20_000 }, () => {
 
     expect(sharedSendMessageMock).toHaveBeenCalledTimes(1);
     const sendCall = getSendMessageCall();
-    expect(sendCall.content).toBe(
-      `/content_post_with_cover ${initialUserPrompt}`,
-    );
+    expect(sendCall.content).toBe(initialUserPrompt);
     expect(sendCall.images).toEqual([]);
     expect(sendCall.webSearch).toBeUndefined();
     expect(sendCall.thinking).toBeUndefined();
@@ -300,7 +296,7 @@ describe("AgentChatPage 自动引导", { timeout: 20_000 }, () => {
     expect(sharedSendMessageMock).toHaveBeenCalledTimes(1);
     const sendCall = getSendMessageCall();
     expect(sendCall.content).toBe(
-      `/content_post_with_cover [生效上下文]\n1. [素材] 品牌手册\n\n${initialUserPrompt}`,
+      `[生效上下文]\n1. [素材] 品牌手册\n\n${initialUserPrompt}`,
     );
     expect(sendCall.images).toEqual([]);
     expect(sendCall.webSearch).toBeUndefined();
@@ -388,9 +384,7 @@ describe("AgentChatPage 自动引导", { timeout: 20_000 }, () => {
 
     expect(sharedSendMessageMock).toHaveBeenCalledTimes(1);
     const sendCall = getSendMessageCall();
-    expect(sendCall.content).toBe(
-      `/content_post_with_cover ${initialUserPrompt}`,
-    );
+    expect(sendCall.content).toBe(initialUserPrompt);
     expect(sendCall.images).toEqual([]);
     expect(sendCall.webSearch).toBeUndefined();
     expect(sendCall.thinking).toBeUndefined();
@@ -457,7 +451,7 @@ describe("AgentChatPage 自动引导", { timeout: 20_000 }, () => {
     expect(sharedSendMessageMock).toHaveBeenCalledTimes(1);
     const sendCall = getSendMessageCall();
     expect(sendCall.content).toBe(
-      "/content_post_with_cover 请基于当前文稿与最近一次未完成的运行继续推进。任务标题：撰写主稿。优先衔接“写作推进”阶段。不要从头开始，先概括已有进度，再继续执行。",
+      "请基于当前文稿与最近一次未完成的运行继续推进。任务标题：撰写主稿。优先衔接“写作推进”阶段。不要从头开始，先概括已有进度，再继续执行。",
     );
     expect(sendCall.images).toEqual([]);
     expect(sendCall.webSearch).toBeUndefined();

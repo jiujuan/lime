@@ -46,7 +46,7 @@ const mockCharacterMention = vi.fn<
     inputCompletionEnabled?: boolean;
   }) => React.ReactNode
 >();
-type MockInputbarPlusPanelId = "knowledge" | "skills";
+type MockInputbarPlusPanelId = "knowledge" | "plugins" | "skills";
 
 interface MockInputbarPlusMenuConfig {
   labels: {
@@ -56,12 +56,15 @@ interface MockInputbarPlusMenuConfig {
     planMode: string;
     subagent: string;
     objective: string;
+    plugins: string;
     skills: string;
   };
   taskEnabled: boolean;
   knowledgeOpenRequestKey?: number;
   subagentEnabled?: boolean;
+  pluginsActive?: boolean;
   knowledgePanel?: React.ReactNode;
+  pluginsPanel?: React.ReactNode;
   skillsPanel?: React.ReactNode;
   onAddFiles: () => void;
   onToggleTask: () => void;
@@ -99,9 +102,11 @@ function MockInputbarCoreView(props: MockInputbarCoreProps) {
   const activePlusPanel =
     activePanel === "knowledge"
       ? props.plusMenu?.knowledgePanel
-      : activePanel === "skills"
-        ? props.plusMenu?.skillsPanel
-        : null;
+      : activePanel === "plugins"
+        ? props.plusMenu?.pluginsPanel
+        : activePanel === "skills"
+          ? props.plusMenu?.skillsPanel
+          : null;
 
   return (
     <div data-testid="inputbar-core">
@@ -170,6 +175,15 @@ function MockInputbarCoreView(props: MockInputbarCoreProps) {
               onClick={props.plusMenu.onToggleObjective}
             >
               {props.plusMenu.labels.objective}
+            </button>
+            <button
+              type="button"
+              data-testid="inputbar-plus-plugins"
+              disabled={!props.plusMenu.pluginsPanel}
+              onClick={() => setActivePanel("plugins")}
+            >
+              {props.plusMenu.labels.plugins}
+              {props.plusMenu.pluginsActive ? " on" : " off"}
             </button>
             <button
               type="button"
@@ -703,7 +717,7 @@ function expandAdvancedControls(container: HTMLDivElement) {
 
 function openPlusMenuPanel(
   container: HTMLDivElement,
-  panel: "knowledge" | "skills",
+  panel: "knowledge" | "plugins" | "skills",
 ) {
   expandAdvancedControls(container);
   const trigger = document.body.querySelector(
@@ -724,6 +738,10 @@ function openPlusMenuPanel(
 
 function openKnowledgePanel(container: HTMLDivElement) {
   return openPlusMenuPanel(container, "knowledge");
+}
+
+function openPluginsPanel(container: HTMLDivElement) {
+  return openPlusMenuPanel(container, "plugins");
 }
 
 function openSkillsPanel(container: HTMLDivElement) {
@@ -1197,7 +1215,9 @@ describe("Inputbar", () => {
     });
 
     expect(
-      container.querySelector('[data-testid="inputbar-objective-inline-panel"]'),
+      container.querySelector(
+        '[data-testid="inputbar-objective-inline-panel"]',
+      ),
     ).toBeNull();
 
     await act(async () => {
@@ -1226,7 +1246,9 @@ describe("Inputbar", () => {
     });
 
     expect(
-      container.querySelector('[data-testid="inputbar-objective-inline-panel"]'),
+      container.querySelector(
+        '[data-testid="inputbar-objective-inline-panel"]',
+      ),
     ).toBeNull();
   });
 
@@ -2958,6 +2980,193 @@ describe("Inputbar", () => {
     ).toBeTruthy();
   });
 
+  it("加号菜单选择插件时应写回显式触发前缀并显示插件标记", async () => {
+    const setInput = vi.fn();
+    const { container, rerender } = renderInputbar({
+      input: "整理今天的选题",
+      setInput,
+      pluginSuggestions: [
+        {
+          pluginId: "content-workbench",
+          displayName: "内容工厂",
+          description: "整理内容生产资料",
+        },
+      ],
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const pluginsPanel = openPluginsPanel(container);
+    expect(pluginsPanel.textContent).toContain("选择插件");
+    const option = pluginsPanel.querySelector(
+      '[data-testid="inputbar-plugin-option"]',
+    ) as HTMLButtonElement | null;
+    expect(option).toBeTruthy();
+
+    await act(async () => {
+      option?.click();
+      await Promise.resolve();
+    });
+
+    expect(setInput).toHaveBeenCalledWith("@内容工厂 整理今天的选题");
+
+    rerender({
+      input: "@内容工厂 整理今天的选题",
+      setInput,
+      pluginSuggestions: [
+        {
+          pluginId: "content-workbench",
+          displayName: "内容工厂",
+          description: "整理内容生产资料",
+        },
+      ],
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(
+      container.querySelector('[data-testid="inputbar-plugin-badge"]'),
+    ).toBeTruthy();
+  });
+
+  it("加号菜单选择插件技能时应写回 @插件:技能 前缀", async () => {
+    const setInput = vi.fn();
+    const { container, rerender } = renderInputbar({
+      input: "整理今天的选题",
+      setInput,
+      pluginSuggestions: [
+        {
+          pluginId: "content-workbench",
+          displayName: "内容工厂",
+          description: "整理内容生产资料",
+          skills: [
+            {
+              skillId: "article-writer",
+              title: "文章写作",
+              description: "生成文章草稿",
+            },
+          ],
+        },
+      ],
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const pluginsPanel = openPluginsPanel(container);
+    expect(pluginsPanel.textContent).toContain("文章写作");
+    const skillOption = pluginsPanel.querySelector(
+      '[data-testid="inputbar-plugin-skill-option"]',
+    ) as HTMLButtonElement | null;
+    expect(skillOption).toBeTruthy();
+
+    await act(async () => {
+      skillOption?.click();
+      await Promise.resolve();
+    });
+
+    expect(setInput).toHaveBeenCalledWith(
+      "@内容工厂:文章写作 整理今天的选题",
+    );
+
+    rerender({
+      input: "@内容工厂:文章写作 整理今天的选题",
+      setInput,
+      pluginSuggestions: [
+        {
+          pluginId: "content-workbench",
+          displayName: "内容工厂",
+          description: "整理内容生产资料",
+          skills: [
+            {
+              skillId: "article-writer",
+              title: "文章写作",
+              description: "生成文章草稿",
+            },
+          ],
+        },
+      ],
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(
+      container.querySelector('[data-testid="inputbar-plugin-badge"]')
+        ?.textContent,
+    ).toContain("内容工厂:文章写作");
+  });
+
+  it("没有插件候选时加号菜单仍应显示插件入口和空态", async () => {
+    const { container } = renderInputbar();
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const pluginsPanel = openPluginsPanel(container);
+    expect(pluginsPanel.textContent).toContain("当前没有可选插件");
+  });
+
+  it("插件候选名称为空时应回退显示插件 id", async () => {
+    const { container } = renderInputbar({
+      pluginSuggestions: [
+        {
+          pluginId: "content-workbench",
+          displayName: " ",
+          description: "整理内容生产资料",
+        },
+      ],
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const pluginsPanel = openPluginsPanel(container);
+    expect(pluginsPanel.textContent).toContain("content-workbench");
+  });
+
+  it("加号菜单中的阻断插件应禁用且不写回输入", async () => {
+    const setInput = vi.fn();
+    const { container } = renderInputbar({
+      input: "继续生成",
+      setInput,
+      pluginSuggestions: [
+        {
+          pluginId: "blocked-workbench",
+          displayName: "受限工作台",
+          disabled: true,
+          blockerCodes: ["PLUGIN_DISABLED"],
+        },
+      ],
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const pluginsPanel = openPluginsPanel(container);
+    const option = pluginsPanel.querySelector(
+      '[data-testid="inputbar-plugin-option"]',
+    ) as HTMLButtonElement | null;
+    expect(option).toBeTruthy();
+    expect(option?.disabled).toBe(true);
+
+    await act(async () => {
+      option?.click();
+      await Promise.resolve();
+    });
+
+    expect(setInput).not.toHaveBeenCalled();
+  });
+
   it("存在 executionRuntime 时底栏也应直接显示模型切换器", async () => {
     const { container } = renderInputbar({
       providerType: "openai",
@@ -3838,8 +4047,7 @@ describe("Inputbar", () => {
     expect(
       enabledContainer.querySelector(
         '[data-testid="inputbar-plus-subagent-mode"]',
-      )
-        ?.textContent,
+      )?.textContent,
     ).toContain("on");
   });
 

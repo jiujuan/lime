@@ -339,6 +339,13 @@ describe("toolDisplayInfo", () => {
 
     expect(subject).toBe("npm test");
     expect(
+      resolveToolPrimarySubject(
+        "functions.exec_command",
+        { cmd: "rg -n thinking src" },
+        null,
+      ),
+    ).toBe("rg -n thinking src");
+    expect(
       buildToolHeadline({
         toolDisplay: getToolDisplayInfo("exec_command", "completed"),
         toolName: "exec_command",
@@ -737,7 +744,9 @@ describe("toolDisplayInfo", () => {
         !key.endsWith(".hiddenSearchGroups"),
     );
 
-    expect(requiredKeys).toContain("agentChat.toolCall.group.command.completed");
+    expect(requiredKeys).toContain(
+      "agentChat.toolCall.group.command.completed",
+    );
 
     for (const locale of SUPPORTED_LOCALES) {
       const resource = loadNamespaceResource(locale, "agent");

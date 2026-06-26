@@ -166,6 +166,10 @@ vi.mock("./electronRuntime", () => ({
 
 function createWindow() {
   let destroyed = false;
+  const windowWebContentsEventHandlers = new Map<
+    string,
+    Array<(...args: unknown[]) => void>
+  >();
   return {
     contentView: {
       addChildView: addChildViewMock,
@@ -174,9 +178,29 @@ function createWindow() {
     destroyForTest: () => {
       destroyed = true;
     },
+    emitWebContentsEventForTest: (eventName: string, ...args: unknown[]) => {
+      for (const handler of windowWebContentsEventHandlers.get(eventName) ||
+        []) {
+        handler(...args);
+      }
+    },
     isDestroyed: () => destroyed,
     off: vi.fn(),
     on: vi.fn(),
+    webContents: {
+      off: vi.fn((eventName: string, handler: (...args: unknown[]) => void) => {
+        const handlers = windowWebContentsEventHandlers.get(eventName) || [];
+        windowWebContentsEventHandlers.set(
+          eventName,
+          handlers.filter((item) => item !== handler),
+        );
+      }),
+      on: vi.fn((eventName: string, handler: (...args: unknown[]) => void) => {
+        const handlers = windowWebContentsEventHandlers.get(eventName) || [];
+        handlers.push(handler);
+        windowWebContentsEventHandlers.set(eventName, handlers);
+      }),
+    },
   };
 }
 
@@ -323,6 +347,32 @@ describe("ElectronEmbeddedBrowserHost", () => {
 
     expect(() => host.dispose()).not.toThrow();
     expect(removeChildViewMock).not.toHaveBeenCalled();
+    expect(closeMock).toHaveBeenCalled();
+    expect(emitted).toContainEqual({
+      event: "embedded-browser-view-destroyed",
+      payload: { viewId: "browser-1" },
+    });
+  });
+
+  it("主窗口 renderer 刷新时销毁内嵌浏览器原生视图", async () => {
+    resetMocks();
+    const emitted: Array<{ event: string; payload?: unknown }> = [];
+    const host = new ElectronEmbeddedBrowserHost((event, payload) => {
+      emitted.push({ event, payload });
+    });
+    const window = createWindow();
+
+    await host.invoke(window as never, "embedded_browser_view_mount", {
+      viewId: "browser-1",
+      url: "https://example.com",
+      bounds: { x: 10, y: 20, width: 300, height: 200 },
+    });
+
+    removeChildViewMock.mockClear();
+    closeMock.mockClear();
+    window.emitWebContentsEventForTest("did-start-loading");
+
+    expect(removeChildViewMock).toHaveBeenCalled();
     expect(closeMock).toHaveBeenCalled();
     expect(emitted).toContainEqual({
       event: "embedded-browser-view-destroyed",

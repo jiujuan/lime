@@ -18,6 +18,7 @@ import {
   readRecord,
   readString,
   sanitizeJson,
+  sanitizeText,
   sleep,
 } from "./claw-chat-current-fixture-utils.mjs";
 import {
@@ -240,7 +241,12 @@ export async function clearInvokeBuffers(page) {
   });
 }
 
-export async function invokeAppServerFromPage(page, method, params = {}, requestLog) {
+export async function invokeAppServerFromPage(
+  page,
+  method,
+  params = {},
+  requestLog,
+) {
   const requestEntry = requestLog
     ? { method, params: sanitizeJson(params) }
     : null;

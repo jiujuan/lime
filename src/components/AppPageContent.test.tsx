@@ -24,6 +24,9 @@ const latestKnowledgePageProps = vi.hoisted(() => ({
 const latestAgentAppsProps = vi.hoisted(() => ({
   value: null as Record<string, unknown> | null,
 }));
+const latestPluginMarketplaceProps = vi.hoisted(() => ({
+  value: null as Record<string, unknown> | null,
+}));
 const latestExpertPlazaProps = vi.hoisted(() => ({
   value: null as Record<string, unknown> | null,
 }));
@@ -33,6 +36,7 @@ const latestSettingsPageProps = vi.hoisted(() => ({
 const agentAppLabLifecycle = vi.hoisted(() => ({ mounts: 0 }));
 const agentAppsLifecycle = vi.hoisted(() => ({ mounts: 0 }));
 const agentAppRuntimeLifecycle = vi.hoisted(() => ({ mounts: 0 }));
+const pluginMarketplaceLifecycle = vi.hoisted(() => ({ mounts: 0 }));
 vi.mock("./agent/chat", () => ({
   AgentChatPage: (props: Record<string, unknown>) => {
     latestAgentChatProps.value = props;
@@ -75,6 +79,17 @@ vi.mock("@/features/knowledge", () => ({
   KnowledgePage: (props: Record<string, unknown>) => {
     latestKnowledgePageProps.value = props;
     return <div data-testid="knowledge-page" />;
+  },
+}));
+
+vi.mock("@/features/plugin", () => ({
+  PluginMarketplacePage: (props: Record<string, unknown>) => {
+    latestPluginMarketplaceProps.value = props;
+    useEffect(() => {
+      pluginMarketplaceLifecycle.mounts += 1;
+    }, []);
+
+    return <div data-testid="plugin-marketplace-page" />;
   },
 }));
 
@@ -196,10 +211,12 @@ describe("AppPageContent", () => {
     agentChatLifecycle.unmounts = 0;
     latestSkillsWorkspaceProps.value = null;
     latestKnowledgePageProps.value = null;
+    latestPluginMarketplaceProps.value = null;
     latestExpertPlazaProps.value = null;
     latestSettingsPageProps.value = null;
     agentAppLabLifecycle.mounts = 0;
     agentAppsLifecycle.mounts = 0;
+    pluginMarketplaceLifecycle.mounts = 0;
   });
 
   afterEach(() => {
@@ -858,6 +875,23 @@ describe("AppPageContent", () => {
 
     expectTestId(container, "agent-app-lab-page");
     expect(agentAppLabLifecycle.mounts).toBe(1);
+  });
+
+  it("plugins 页面应渲染 current 插件中心入口", async () => {
+    const { container } = renderContent("plugins", {
+      query: "research",
+      statusFilter: "installable",
+    });
+    await flushEffects();
+
+    expectTestId(container, "plugin-marketplace-page");
+    expect(pluginMarketplaceLifecycle.mounts).toBe(1);
+    expect(latestPluginMarketplaceProps.value).toMatchObject({
+      pageParams: {
+        query: "research",
+        statusFilter: "installable",
+      },
+    });
   });
 
   it("agent-apps 页面应渲染正式 Agent Apps 管理入口", async () => {

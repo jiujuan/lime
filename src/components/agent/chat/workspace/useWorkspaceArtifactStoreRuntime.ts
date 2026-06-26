@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   settleLiveArtifactAfterStreamStops,
   useArtifactDisplayState,
@@ -64,6 +64,12 @@ export function useWorkspaceGeneralArtifactUpsert({
   );
 }
 
+export function buildMessageArtifactsSignature(
+  messages: readonly Pick<Message, "artifacts">[],
+): string {
+  return JSON.stringify(messages.map((message) => message.artifacts || []));
+}
+
 export function useWorkspaceArtifactStoreRuntime({
   activeTheme,
   artifacts,
@@ -102,12 +108,18 @@ export function useWorkspaceArtifactStoreRuntime({
     selectedArtifact,
     liveArtifact,
   });
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  const messageArtifactsSignature = useMemo(
+    () => buildMessageArtifactsSignature(messages),
+    [messages],
+  );
 
   useEffect(() => {
     setArtifacts((currentArtifacts) => {
       const nextArtifacts = resolveWorkspaceArtifactsFromMessages({
         activeTheme,
-        messages,
+        messages: messagesRef.current,
         currentArtifacts,
         browserAssistScopeKey,
       });
@@ -115,7 +127,12 @@ export function useWorkspaceArtifactStoreRuntime({
         ? currentArtifacts
         : nextArtifacts;
     });
-  }, [activeTheme, browserAssistScopeKey, messages, setArtifacts]);
+  }, [
+    activeTheme,
+    browserAssistScopeKey,
+    messageArtifactsSignature,
+    setArtifacts,
+  ]);
 
   useEffect(() => {
     const correctedSelectedArtifactId =

@@ -194,6 +194,13 @@ export function shouldSplitProcessBeforeEntry(
   const currentHasNonWebRetrieval = currentEntries.some(
     (entry) => entry.kind !== "tool" || !isWebRetrievalToolCall(entry.toolCall),
   );
+  const currentHasOnlyThinking = currentEntries.every(
+    (entry) => entry.kind === "thinking",
+  );
+
+  if (currentHasOnlyThinking && nextIsWebRetrieval) {
+    return false;
+  }
 
   if (currentHasWebRetrieval && !nextIsWebRetrieval) {
     return nextEntry.kind !== "thinking";

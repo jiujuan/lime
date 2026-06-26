@@ -132,8 +132,20 @@ export function hideFinalAnswerContentPartsWhileRunning(
   }
 
   let changed = false;
+  let hasSeenProcessBoundary = false;
   const nextParts = parts.filter((part) => {
+    if (
+      part.type === "tool_use" ||
+      part.type === "action_required" ||
+      part.type === "file_changes_batch"
+    ) {
+      hasSeenProcessBoundary = true;
+      return true;
+    }
     if (part.type !== "text") {
+      return true;
+    }
+    if (!hasSeenProcessBoundary) {
       return true;
     }
     const phase = part.metadata?.phase;

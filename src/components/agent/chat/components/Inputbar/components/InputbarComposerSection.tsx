@@ -16,6 +16,7 @@ import { InputbarVisionCapabilityNotice } from "./InputbarVisionCapabilityNotice
 import { InputbarAccessModeSelect } from "./InputbarAccessModeSelect";
 import { InputbarModeStatusChip } from "./InputbarModeStatusChip";
 import { InputbarObjectiveInlinePanel } from "./InputbarObjectiveInlinePanel";
+import { InputbarPluginSelector } from "./InputbarPluginSelector";
 import { isGeneralResearchTheme } from "../../../utils/generalAgentPrompt";
 import {
   buildSkillSelectionBindings,
@@ -47,6 +48,10 @@ import {
   PlanModeContextSeparator,
 } from "../styles";
 import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
+import type {
+  InputbarPluginCapability,
+  InputbarPluginSelection,
+} from "../pluginInputCapability";
 
 interface InputbarComposerSectionProps {
   renderWorkflowGeneratingPanel: boolean;
@@ -67,6 +72,9 @@ interface InputbarComposerSectionProps {
   onSelectCharacter?: (character: Character) => void;
   onSelectInputCapability: SelectInputCapabilityHandler;
   activeCapability?: InputCapabilitySelection | null;
+  activePluginSelection?: InputbarPluginSelection | null;
+  pluginSuggestions?: readonly InputbarPluginCapability[];
+  onSelectPlugin?: (plugin: InputbarPluginCapability) => void;
   defaultCuratedTaskReferenceMemoryIds?: string[];
   defaultCuratedTaskReferenceEntries?: CuratedTaskReferenceEntry[];
   knowledgePackSelection?: InputbarKnowledgePackSelection | null;
@@ -132,6 +140,9 @@ export const InputbarComposerSection: React.FC<
   onSelectCharacter,
   onSelectInputCapability,
   activeCapability,
+  activePluginSelection = null,
+  pluginSuggestions = [],
+  onSelectPlugin,
   defaultCuratedTaskReferenceMemoryIds = [],
   defaultCuratedTaskReferenceEntries = [],
   knowledgePackSelection,
@@ -274,6 +285,18 @@ export const InputbarComposerSection: React.FC<
   const plusMenuSkillsPanel = showSkillSelector ? (
     <SkillSelector {...skillSelectorProps} renderMode="inline" />
   ) : undefined;
+  const plusMenuPluginsPanel = onSelectPlugin ? (
+    <InputbarPluginSelector
+      plugins={pluginSuggestions}
+      labels={{
+        empty: copy.pluginChip.empty,
+        skillPrefix: copy.pluginChip.skillPrefix,
+        title: copy.pluginChip.selectorTitle,
+        unavailable: copy.pluginChip.unavailable,
+      }}
+      onSelectPlugin={onSelectPlugin}
+    />
+  ) : undefined;
   const fileManagerLabel = fileManagerOpen
     ? copy.fileManager.close
     : copy.fileManager.open;
@@ -290,8 +313,10 @@ export const InputbarComposerSection: React.FC<
     subagentEnabled: Boolean(activeTools["subagent_mode"]),
     knowledgeActive: Boolean(knowledgePackSelection?.enabled),
     objectiveActive: Boolean(activeTools["objective_mode"]),
+    pluginsActive: Boolean(activePluginSelection),
     skillsActive: Boolean(skillSelection.activeSkill),
     knowledgePanel: plusMenuKnowledgePanel,
+    pluginsPanel: plusMenuPluginsPanel,
     skillsPanel: plusMenuSkillsPanel,
     onAddFiles: () => handleToolAction("attach"),
     onToggleTask: () => handleToolAction("task_mode"),

@@ -1,6 +1,6 @@
 # Claw Streaming Rendering Codex 对齐重构计划
 
-> 状态：completed / S4.8 runtime status 与 auto compaction projection 拆分已收口；聚合 current fixture 与 web-tools-rendering 专项全绿
+> 状态：completed / S4.9 普通工具过程记录不再被批次摘要替换；WebTools、Skills Runtime 与 MCP structuredContent 真实 GUI fixture 已复跑通过；聚合 current fixture 剩 Expert Panel dedupe 旁路缺口
 > 创建时间：2026-06-24
 > 关联研究：`internal/research/workbech/codex-streaming-rendering.md`
 > 主目标：用 Codex 风格的结构化 item lifecycle 修复 Claw / Agent Chat 中 reasoning、WebSearch / WebFetch、阶段性输出与最终正文的错序、重复、消失和错误追加。
@@ -46,6 +46,7 @@
   - 用 CSS 或 DOM 位置修复 item 顺序。
   - renderer 内新增 reasoning/search/final answer 语义猜测。
   - process boundary 之后把 legacy 无 phase `message.delta` 合成为 live final overlay、commentary item 或 process text；`sequence` 只能用于排序和 provenance，不能作为 lifecycle 豁免条件。
+  - 普通工具过程用“已运行 N 条命令 / 已探索项目 / 已执行 N 项技能操作”等批次摘要替换默认可见历史记录。
 
 ## 3. 阶段切分
 
@@ -243,7 +244,7 @@
 
 ### S3.3 final_answer live part owner 收口
 
-状态：implemented / targeted tests passed / pending current fixture rerun
+状态：implemented / targeted + WebTools fixture verified / aggregate fixture interrupted on unrelated Coding Workbench wait
 
 复发症状：
 
@@ -254,7 +255,7 @@
 本轮规则：
 
 1. 显式 `phase=final_answer` 且带 `itemId` 的 text delta 必须在 streaming 阶段 upsert 到 `Message.contentParts`。
-2. 同一 `itemId` 的 final delta 按 item lifecycle 增量合并，保留 `source=item_text_delta / itemId / phase / sequence / turnId` provenance。
+2. 同一 `itemId` 的 final delta 按 item lifecycle 增量合并，保留 `source=agent_text_delta / itemId / phase / sequence / turnId` provenance。
 3. `streamingTextOverlay` 不再承载这类结构化 final segment；它只保留给无结构化 item 的 legacy final tail。
 4. completion controller 只做完成态收尾和缺失 suffix reconcile，不再成为第一套 final 正文渲染 owner。
 
@@ -263,17 +264,26 @@
 - `agentStreamAgentMessageContentSync.ts` 从 commentary-only 扩展为 agent message phase sync，统一支持 `commentary` 与 `final_answer`。
 - `agentStreamRuntimeHandler.ts` 在 explicit final text delta 更新 `accumulatedContent` 后，同步写入结构化 `contentParts`，并清除 overlay，避免 live / completed 双 owner。
 - `agentStreamRuntimeHandler.unit.test.ts` 增加 turn 完成前断言：final answer 已进入 `contentParts` 且 overlay 为空。
+- `internal/aiprompts/claw-streaming-rendering-correctness.md` 增加 final_answer live part owner invariant，明确 overlay 不能作为结构化 final 的第一渲染事实源。
 
 验证证据：
 
 - `npx vitest run "src/components/agent/chat/hooks/agentStreamRuntimeHandler.unit.test.ts" "src/components/agent/chat/components/MessageList.reasoningFlow.test.tsx" "src/components/agent/chat/components/StreamingRenderer.webSearch.sequence.test.tsx"`，3 个文件、56 个用例通过。
+- `npx vitest run "src/components/agent/chat/hooks/agentStreamTextDeltaLifecycle.unit.test.ts" "src/components/agent/chat/hooks/agentStreamRuntimeHandler.unit.test.ts" "src/components/agent/chat/components/messageListInlineProcess.test.ts" "src/components/agent/chat/components/messageListItemProjection.webRetrieval.unit.test.ts" "src/components/agent/chat/components/messageListItemProjection.timeline.unit.test.ts" "src/components/agent/chat/components/messageListItemProjection.timelineFlow.unit.test.ts" "src/components/agent/chat/components/messageListTimelineContentParts.unit.test.ts" "src/components/agent/chat/components/messageListTimelineContentParts.reasoning.unit.test.ts" "src/components/agent/chat/components/MessageList.reasoningFlow.test.tsx" "src/components/agent/chat/components/MessageList.reasoningPersistence.test.tsx" "src/components/agent/chat/components/StreamingRenderer.webSearch.sequence.test.tsx" "src/components/agent/chat/components/streamingProjectionGuard.unit.test.ts" "src/components/agent/chat/workspace/workspaceArtifactStoreSync.unit.test.ts" "src/components/agent/chat/workspace/useWorkspaceArtifactStoreRuntime.unit.test.ts" "src/components/app-sidebar/sidebarConversationGroups.test.ts" "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs"`，16 个文件、149 个用例通过。
+- `node scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs --scenario web-tools-rendering --app-url http://127.0.0.1:1420/ --prefix claw-chat-current-fixture-web-tools-rendering-final-part-owner-s3-3 --timeout-ms 180000` 通过。
+  - evidence：`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-web-tools-rendering-final-part-owner-s3-3-summary.json`
+  - screenshot：`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-web-tools-rendering-final-part-owner-s3-3-chat.png`
+  - 关键断言：`consoleErrors=[]`、completed `latestAssistantRendererContentPartTypes="text|tool:WebSearch:completed#3|thinking#5|tool:WebFetch:completed#7|text"`、`hasFinalTextAfterProcess=true`、`processGroupCount=1`、running `runningProcessHasLegacyTextAfterProcess=false`。
+- `npm run smoke:agent-runtime-current-fixture` 本轮未完成：聚合入口卡在 `Coding Workbench Electron fixture` 的 `collect-coding-workbench-gui-evidence-after-recovery` 后续等待，超过子场景 `--timeout-ms 180000` 仍未退出；已中断本轮 spawned 进程并确认无残留。该卡点不在本轮 WebTools / final_answer owner 主链。
+- `npm run typecheck` 本轮未完成：`tsc --noEmit` 超过 9 分钟无输出，仍处于 running；已中断本轮 spawned 进程并确认无残留，不计为通过。
 
 退出条件：
 
 - [x] 状态机单测证明 explicit final 在 live 阶段已有结构化 part owner。
 - [x] DOM 级 WebTools inline owner 回归仍通过。
-- [ ] 复跑 `claw-chat-current-fixture --scenario web-tools-rendering`，确认用户截图里的 final 正文不会在完成态消失。
-- [ ] 复跑 `npm run smoke:agent-runtime-current-fixture`。
+- [x] 复跑 `claw-chat-current-fixture --scenario web-tools-rendering`，确认用户截图里的 final 正文不会在完成态消失。
+- [ ] 复跑 `npm run smoke:agent-runtime-current-fixture` 并收掉 Coding Workbench 子场景卡住问题。
+- [ ] 复跑 `npm run typecheck` 到自然结束。
 
 ## 4. 已知验证结果
 
@@ -442,14 +452,60 @@
       - evidence：`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-web-tools-rendering-runtime-status-s48-summary.json`
       - 关键断言：`appServerJsonRpcUsed=true`、`liveProviderNotUsed=true`、`guiWebToolsLiveNoLegacyTextAfterProcess=true`、`guiWebToolsTimelineOrderPreserved=true`、`guiMarkdownRendered=true`、`noConsoleErrors=true`。
 
+- S4.9 普通工具过程记录持久化：
+  - 复发症状：用户截图中类似 Codex 的 `Read / Ran / Explored ...` 过程记录，在后续工具调用进入后被替换为批次摘要或另一套完成态渲染；视觉结果是“刚才看到的工具记录消失”。
+  - Codex 对齐依据：Codex App Server 的 `ThreadItem` 把 `commandExecution`、`mcpToolCall`、`dynamicToolCall`、`webSearch`、`reasoning` 等作为独立 item 追加 / 更新；TUI 可以把连续 exec 合入 `ExecCell`，但默认可见层仍保留每个 call，而不是只显示一个总摘要。
+  - current 修复：
+    - `StreamingProcessRun` 只让 WebSearch / WebFetch 进入专门 `StreamingProcessGroup` 时间线；普通 command/read/search/skill/task/image/site 工具默认渲染为逐条 `InlineToolProcessStep`。
+    - `StreamingRenderer` 不再在 tool 到来时无条件 flush 纯 thinking；纯 thinking + WebSearch/WebFetch 继续留在同一网页检索过程组内，避免 `Searching...` 短过渡显示成正文。
+    - `InlineToolProcessStep` 在消息仍流式输出时隐藏普通工具 raw result / post summary；完成态主行优先保留工具主体叙述，不再让 `ok`、任务 JSON 或 structured result 抢占过程行；vision 工具隐藏 `Viewed image...` raw result，只保留专门图片摘要和可展开预览。
+    - 普通工具完成态不再因为 active process 自动展开详情；raw result / structured output 只在用户显式展开时进入详情，避免历史 turn 或后续工具调用后把旧摘要、JSON、协议输出重新铺回正文。
+    - `functions.exec_command` 等 Codex 风格命名空间工具按命令工具提取主体，避免 `Ran / Read` 类过程记录只剩泛化动作。
+    - `mcp-structured-content` GUI fixture 断言迁到 current `inline-tool-process-step`，旧 `streaming-process-group` 不再作为普通工具完成态 owner。
+  - 分类：
+    - `current`：按 content part / tool id 时序逐条显示普通工具过程记录；每个工具自身负责详情折叠。
+    - `current`：WebSearch / WebFetch 的专门时间线和来源 / 读取页面展开态。
+    - `dead`：普通工具批次摘要替代默认可见记录。
+  - 定向验证：
+    - `npx vitest run "src/components/agent/chat/components/StreamingRenderer.processGroups.test.tsx" "src/components/agent/chat/components/StreamingRenderer.test.tsx" "src/components/agent/chat/components/StreamingRenderer.webSearch.sequence.test.tsx" "src/components/agent/chat/components/StreamingProcessGroupModel.unit.test.ts" "src/components/agent/chat/components/messageListItemProjection.webRetrieval.unit.test.ts"`，5 个文件、65 个用例通过。
+    - `npx vitest run "src/components/agent/chat/components/StreamingRenderer.processGroups.test.tsx" "src/components/agent/chat/components/StreamingRenderer.test.tsx" "src/components/agent/chat/components/StreamingRenderer.webSearch.sequence.test.tsx" "src/components/agent/chat/components/StreamingProcessGroupModel.unit.test.ts" "src/components/agent/chat/components/messageListItemProjection.webRetrieval.unit.test.ts" "src/components/agent/chat/components/StreamingRenderer.thinking.test.tsx" "src/components/agent/chat/components/StreamingRenderer.importedHistory.test.tsx" "src/components/agent/chat/components/messageListInlineProcess.test.ts" "src/components/agent/chat/components/messageListItemProjection.timeline.unit.test.ts" "src/components/agent/chat/components/messageListTimelineContentParts.unit.test.ts" "src/components/agent/chat/utils/toolDisplayInfo.test.ts"`，11 个文件、122 个用例通过。
+    - `npx vitest run "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs"`，1 个文件、20 个用例通过。
+    - `npx prettier --check "src/components/agent/chat/components/StreamingRenderer.tsx" "src/components/agent/chat/components/StreamingProcessRun.tsx" "src/components/agent/chat/components/StreamingProcessGroupModel.ts" "src/components/agent/chat/components/InlineToolProcessStep.tsx" "src/components/agent/chat/components/StreamingRenderer.processGroups.test.tsx" "src/components/agent/chat/components/StreamingRenderer.test.tsx" "src/components/agent/chat/components/StreamingProcessGroupModel.unit.test.ts"`，通过。
+    - `npx prettier --check "src/components/agent/chat/components/StreamingRenderer.tsx" "src/components/agent/chat/components/StreamingProcessRun.tsx" "src/components/agent/chat/components/StreamingProcessGroupModel.ts" "src/components/agent/chat/components/InlineToolProcessStep.tsx" "src/components/agent/chat/components/StreamingRenderer.processGroups.test.tsx" "src/components/agent/chat/components/StreamingRenderer.test.tsx" "src/components/agent/chat/components/StreamingProcessGroupModel.unit.test.ts" "src/components/agent/chat/components/StreamingRenderer.thinking.test.tsx" "src/components/agent/chat/components/StreamingRenderer.importedHistory.test.tsx" "src/components/agent/chat/utils/toolDisplaySubject.ts" "src/components/agent/chat/utils/toolDisplayInfo.test.ts" "scripts/agent-runtime/claw-chat-current-fixture-gui-tool-waits.mjs"`，通过。
+  - 真实 GUI fixture 验证：
+    - `node scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs --scenario web-tools-rendering --prefix claw-chat-current-fixture-web-tools-rendering-tool-history-s49 --timeout-ms 180000`，通过。
+      - evidence：`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-web-tools-rendering-tool-history-s49-summary.json`
+      - screenshot：`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-web-tools-rendering-tool-history-s49-chat.png`
+      - 关键断言：`guiWebToolsLiveNoLegacyTextAfterProcess=true`、`guiWebToolsTimelineOrderPreserved=true`、`guiWebSearchNoiseHidden=true`、`guiMarkdownRendered=true`。
+    - `node scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs --scenario web-tools-rendering --prefix claw-chat-current-fixture-web-tools-rendering-tool-history-s49b --timeout-ms 180000`，通过。
+      - evidence：`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-web-tools-rendering-tool-history-s49b-summary.json`
+    - `node scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs --scenario web-tools-rendering --prefix claw-chat-current-fixture-web-tools-rendering-tool-history-s49c --timeout-ms 180000`，通过。
+      - evidence：`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-web-tools-rendering-tool-history-s49c-summary.json`
+    - `node scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs --scenario skills-runtime --prefix claw-chat-current-fixture-skills-runtime-tool-history-s49 --timeout-ms 180000`，通过。
+      - evidence：`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-skills-runtime-tool-history-s49-summary.json`
+      - screenshot：`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-skills-runtime-tool-history-s49-chat.png`
+      - 关键断言：`guiSkillsRuntimeCompleted=true`、`readModelSkillSearchObserved=true`、`readModelSkillInvocationObserved=true`、`skillSearchBeforeSkillInvocation=true`、显式与手动启用 Skills Runtime 分支均完成。
+    - `node scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs --scenario skills-runtime --prefix claw-chat-current-fixture-skills-runtime-tool-history-s49b --timeout-ms 180000`，通过。
+      - evidence：`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-skills-runtime-tool-history-s49b-summary.json`
+    - `node scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs --scenario skills-runtime --prefix claw-chat-current-fixture-skills-runtime-tool-history-s49c --timeout-ms 180000`，通过。
+      - evidence：`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-skills-runtime-tool-history-s49c-summary.json`
+    - `node scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs --scenario mcp-structured-content --prefix claw-chat-current-fixture-mcp-structured-content-tool-history-s49b --timeout-ms 180000`，通过。
+      - evidence：`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-mcp-structured-content-tool-history-s49b-summary.json`
+    - `node scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs --scenario mcp-structured-content --prefix claw-chat-current-fixture-mcp-structured-content-tool-history-s49c --timeout-ms 180000`，通过。
+      - evidence：`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-mcp-structured-content-tool-history-s49c-summary.json`
+    - `npm run smoke:agent-runtime-current-fixture` 本轮未全绿：已通过 history/cache、stream completion、fixture smoke guard、Coding Workbench、cancel-then-continue、Plan history hydrate、Skills Runtime、MCP structuredContent、Expert Skills Runtime、Expert Plaza Skills Runtime；失败在 `Claw Expert Panel Skills Runtime override Electron fixture` 的 `dedupeGuardHits`，同一句 `专家 Skills runtime 证据已完成` 在整页出现 2 次。
+      - failure evidence：`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-expert-panel-skills-runtime-regression-summary.json`
+      - 定位：该旁路是 Expert Panel 二轮 fixture scenario / dedupe scope 问题，不是本轮普通工具 inline owner 主链；本轮直接相关三条 GUI fixture 已用 `s49c` 复跑通过。
+
 ## 5. 当前缺口
 
 1. S3 current 展示主线已完成：live running WebSearch 中间态已有结构化 evidence，completed read model 不再作为唯一证据。
 2. S4 后端 running 阻塞已完成 Rust current 修复、定向测试、Agent Runtime 聚合 fixture、Claw 新闻 GUI fixture 与 Web tools rendering fixture；App Server terminal 已被 GUI fixture 真实消费。
-3. 后续若复发展示问题，必须先看 `guiWebToolsRenderingInProgress.latestAssistantRendererContentPartTypes` 与 `latestAssistantTextAfterProcessPart`，不要从截图文字猜 lifecycle。
-4. `request_tool_policy.rs` 仍是 2800+ 行巨型文件；本轮已把 idle 专项测试、stream diagnostics、text batcher、web retrieval process state、reply retry mode、WebSearch preflight、request policy config、runtime status 与 auto compaction projection 外移，后续应继续按职责拆 WebSearch execution tracker、stream attempt orchestration 或取消上下文持久化等 production 子模块。
-5. 无 sequence 的旧纯文本 provider 仍作为兼容兜底存在；后续要删除它，必须先确认 App Server / provider 全部输出 `phase` 或完成态 `turn_completed.text`。
-6. 聚合 `smoke:agent-runtime-current-fixture` 已恢复全绿；后续如果 external fixture 直接通过 App Server 创建 / 更新 session，必须显式通知前端 `lime:agent-runtime-sessions-changed`，这是 test-only GUI 刷新同步，不是生产 mock 或 legacy fallback。
+3. S4.9 普通工具过程记录持久化已完成定向单测和真实 GUI fixture 复跑；WebTools、Skills Runtime、MCP structuredContent 证据已回填。
+4. 后续若复发展示问题，必须先看 `guiWebToolsRenderingInProgress.latestAssistantRendererContentPartTypes` 与 `latestAssistantTextAfterProcessPart`，普通工具则先看 DOM 中 `inline-tool-process-step` 数量与 tool id 时序，不要从截图文字猜 lifecycle。
+5. `request_tool_policy.rs` 仍是 2800+ 行巨型文件；本轮已把 idle 专项测试、stream diagnostics、text batcher、web retrieval process state、reply retry mode、WebSearch preflight、request policy config、runtime status 与 auto compaction projection 外移，后续应继续按职责拆 WebSearch execution tracker、stream attempt orchestration 或取消上下文持久化等 production 子模块。
+6. 无 sequence 的旧纯文本 provider 仍作为兼容兜底存在；后续要删除它，必须先确认 App Server / provider 全部输出 `phase` 或完成态 `turn_completed.text`。
+7. 聚合 `smoke:agent-runtime-current-fixture` 当前仍有 Expert Panel Skills Runtime override 旁路失败：第二轮 GUI 中旧专家 summary 出现 2 次，需下一刀收敛 Expert Panel fixture scenario 输出或把 dedupe guard 限定到 latest turn；不要用恢复普通工具批次摘要来掩盖该问题。
 
 ## 6. 下一刀
 

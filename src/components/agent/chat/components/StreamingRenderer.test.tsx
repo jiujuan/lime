@@ -66,6 +66,25 @@ describe("StreamingRenderer", () => {
     ).not.toBeNull();
   });
 
+  it("首个流式正文到达时应立即显示首批字符", () => {
+    const { container, rerender } = renderHarness({
+      content: "",
+      isStreaming: true,
+    });
+
+    rerender({
+      content: "这是首个流式正文，应该立即露出。",
+      isStreaming: true,
+    });
+
+    expect(container.textContent).toContain("这是首个流式");
+    expect(
+      container.querySelector(
+        '[data-testid="streaming-markdown-pending-tail"]',
+      ),
+    ).not.toBeNull();
+  });
+
   it("交错内容应隐藏紧邻工具调用的调度自述", () => {
     const { container } = renderHarness({
       content: "",
@@ -244,20 +263,13 @@ describe("StreamingRenderer", () => {
 
     const renderedText = container.textContent || "";
     expect(renderedText.indexOf("我先查看你给的截图。")).toBeLessThan(
-      renderedText.indexOf("已查看 1 张图片"),
+      renderedText.indexOf("dashboard.png"),
     );
-    expect(renderedText.indexOf("已查看 1 张图片")).toBeLessThan(
+    expect(renderedText.indexOf("dashboard.png")).toBeLessThan(
       renderedText.indexOf("最终观察：截图里有一个仪表盘。"),
     );
     expect(renderedText).not.toContain("Viewed image");
     expect(renderedText).not.toContain("data:image");
-
-    const groupButton = container.querySelector(
-      '[data-testid="streaming-process-group"] button',
-    );
-    act(() => {
-      groupButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
 
     const detailButton = Array.from(container.querySelectorAll("button")).find(
       (button) => button.title === "展开过程详情",
@@ -423,7 +435,7 @@ describe("StreamingRenderer", () => {
     expect(parseAIResponseMock).toHaveBeenCalledTimes(1);
   });
 
-  it("连续探索工具应默认折叠成批次摘要", () => {
+  it("连续探索工具应逐条保留过程记录", () => {
     const { container } = renderHarness({
       content: "",
       toolCalls: [
@@ -453,12 +465,15 @@ describe("StreamingRenderer", () => {
       ],
     });
 
-    expect(container.textContent).toContain("已探索项目");
-    expect(container.textContent).toContain("查看了 1 个文件，搜索 1 次");
-    expect(container.textContent).toContain("最新线索：query.ts");
     expect(
-      container.querySelector('[data-testid="inline-tool-process-step"]'),
+      container.querySelector('[data-testid="streaming-process-group"]'),
     ).toBeNull();
+    expect(
+      container.querySelectorAll('[data-testid="inline-tool-process-step"]')
+        .length,
+    ).toBe(2);
+    expect(container.textContent).toContain("src");
+    expect(container.textContent).toContain("query.ts");
   });
 
   it("普通工具列表应透传已保存站点内容打开回调", () => {
@@ -533,15 +548,6 @@ describe("StreamingRenderer", () => {
         },
       ],
       onOpenSavedSiteContent,
-    });
-
-    const processGroupButton = container.querySelector<HTMLButtonElement>(
-      '[data-testid="streaming-process-group"] button',
-    );
-    expect(processGroupButton).toBeTruthy();
-
-    act(() => {
-      processGroupButton?.click();
     });
 
     const markdownButton = Array.from(
@@ -698,10 +704,10 @@ describe("StreamingRenderer", () => {
 
     const renderedText = container.textContent || "";
     const introIndex = renderedText.indexOf("我先把工作拆成任务板。");
-    const firstProcessIndex = renderedText.indexOf("已处理 2 项安排");
+    const firstProcessIndex = renderedText.indexOf("整理国际新闻");
     const middleTextIndex =
       renderedText.indexOf("任务板已建立，接下来开始执行。");
-    const updateProcessIndex = renderedText.indexOf("已处理 1 项安排");
+    const updateProcessIndex = renderedText.indexOf("已更新任务 1");
     const finalTextIndex =
       renderedText.indexOf("最终结论：任务板状态已经同步完成。");
 
@@ -714,15 +720,13 @@ describe("StreamingRenderer", () => {
     expect(renderedText).not.toContain('"updatedFields"');
     expect(renderedText).not.toContain('"tasks"');
 
-    const processGroupButtons = container.querySelectorAll<HTMLButtonElement>(
-      '[data-testid="streaming-process-group"] button',
-    );
-    expect(processGroupButtons.length).toBe(2);
-
-    act(() => {
-      processGroupButtons[0]?.click();
-      processGroupButtons[1]?.click();
-    });
+    expect(
+      container.querySelector('[data-testid="streaming-process-group"]'),
+    ).toBeNull();
+    expect(
+      container.querySelectorAll('[data-testid="inline-tool-process-step"]')
+        .length,
+    ).toBe(3);
 
     const expandedText = container.textContent || "";
     expect(expandedText).toContain("整理国际新闻");
@@ -846,7 +850,7 @@ describe("StreamingRenderer", () => {
     });
 
     const renderedText = container.textContent || "";
-    expect(renderedText).toContain("已执行 1 项技能操作");
+    expect(renderedText).toContain("已执行技能 capability-report");
     expect(renderedText).toContain("运行启用 · 手动会话 · 人工确认 · 1 个绑定");
     expect(renderedText).not.toContain("permissionBehavior");
     expect(renderedText).not.toContain("workspaceSkillRuntimeEnableAttached");
@@ -856,7 +860,7 @@ describe("StreamingRenderer", () => {
     expect(renderedText).not.toContain("SkillTool allow/deny");
   });
 
-  it("交错内容里只有思考时也应渲染为轻量折叠过程行", () => {
+  it("交错内容里只有思考时应按时序渲染思考块", () => {
     const { container } = renderHarness({
       content: "",
       contentParts: [
@@ -872,28 +876,16 @@ describe("StreamingRenderer", () => {
       isStreaming: false,
     });
 
-    const processGroupButton = container.querySelector<HTMLButtonElement>(
-      '[data-testid="streaming-process-group"] button',
-    );
-    expect(processGroupButton?.getAttribute("aria-expanded")).toBe("false");
-    expect(processGroupButton?.textContent).toContain("已完成思考");
-    expect(container.textContent).not.toContain("先理解截图里的消息顺序");
+    expect(
+      container.querySelector('[data-testid="streaming-process-group"]'),
+    ).toBeNull();
     expect(
       container.querySelector('[data-testid="thinking-block"]'),
-    ).toBeNull();
+    ).toBeTruthy();
+    expect(container.textContent).toContain("已完成思考");
+    expect(container.textContent).toContain("先理解截图里的消息顺序");
     expect(container.textContent).toContain(
       "已经确认历史恢复路径也需要穿插显示。",
     );
-
-    act(() => {
-      processGroupButton?.click();
-    });
-
-    expect(container.textContent).toContain("先理解截图里的消息顺序");
-    expect(
-      container
-        .querySelector('[data-testid="thinking-block"]')
-        ?.getAttribute("data-visual-style"),
-    ).toBe("grouped-inline");
   });
 });

@@ -22,6 +22,11 @@ export interface WorkspaceProductProfileWorkerEvidenceItem {
   artifactKind: string | null;
   errorCode: string | null;
   errorMessage: string | null;
+  failureCategory: string | null;
+  retryable: boolean | null;
+  retryAdvice: string | null;
+  retryAttempt: number | null;
+  retryMaxAttempts: number | null;
   updatedAt: string | null;
 }
 
@@ -113,6 +118,13 @@ function readWorkerEvidenceItem(
         record.message,
         record.error,
       ) || null,
+    failureCategory:
+      readString(record.failureCategory, record.failure_category) || null,
+    retryable: readBoolean(record.retryable) ?? null,
+    retryAdvice: readString(record.retryAdvice, record.retry_advice) || null,
+    retryAttempt: readNumber(record.retryAttempt, record.retry_attempt) ?? null,
+    retryMaxAttempts:
+      readNumber(record.retryMaxAttempts, record.retry_max_attempts) ?? null,
     updatedAt: readString(record.updatedAt, record.updated_at) || null,
   };
 }
@@ -159,6 +171,11 @@ function readSourceArtifactWorkerEvidence(
         artifactKind: artifactKind || null,
         errorCode: null,
         errorMessage: null,
+        failureCategory: null,
+        retryable: null,
+        retryAdvice: null,
+        retryAttempt: null,
+        retryMaxAttempts: null,
         updatedAt: readString(record.updatedAt, record.updated_at) || null,
       };
     })
@@ -201,6 +218,11 @@ function readDiagnosticWorkerEvidence(
       artifactKind: null,
       errorCode: null,
       errorMessage: message,
+      failureCategory: null,
+      retryable: null,
+      retryAdvice: null,
+      retryAttempt: null,
+      retryMaxAttempts: null,
       updatedAt:
         readString(
           threadRead?.diagnostics?.latest_turn_completed_at,
@@ -270,6 +292,15 @@ function readString(...values: unknown[]): string {
 function readNumber(...values: unknown[]): number | undefined {
   for (const value of values) {
     if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function readBoolean(...values: unknown[]): boolean | undefined {
+  for (const value of values) {
+    if (typeof value === "boolean") {
       return value;
     }
   }

@@ -969,9 +969,6 @@ export async function installLocalAgentAppPackage(params: {
 }
 
 function isEnterpriseCustomLocalManifest(manifest: AppManifest): boolean {
-  if (manifest.name === "content-factory-app") {
-    return true;
-  }
   const metadata = (manifest as AppManifest & { metadata?: unknown }).metadata;
   return (
     isRecord(metadata) &&
@@ -1191,9 +1188,13 @@ export async function reviewCloudAgentAppRelease(params: {
     checkedAt: setupPreview.readiness.checkedAt,
     generatedAt: setupPreview.cleanupPlan.generatedAt,
   });
+  const setupWithCloudReleaseEvidence = {
+    ...setup,
+    cloudReleaseEvidence: releaseEvidence,
+  };
   const state = buildInstalledAgentAppState({
     preview,
-    setup,
+    setup: setupWithCloudReleaseEvidence,
     installedAt: preview.identity.loadedAt,
     updatedAt: preview.identity.loadedAt,
   });

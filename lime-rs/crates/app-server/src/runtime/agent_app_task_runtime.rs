@@ -1,8 +1,16 @@
+use super::RuntimeCoreError;
 use super::json_string;
 use app_server_protocol::AgentAppTaskRuntimeContract;
 use serde_json::Value;
 use std::collections::HashSet;
+use std::fs;
 use std::path::Path;
+use std::path::PathBuf;
+
+const AGENT_APP_DATA_DIR: &str = "agent-apps";
+const CONTENT_FACTORY_APP_ID: &str = "content-factory-app";
+const CONTENT_FACTORY_APP_DIR_ENV: &str = "CONTENT_FACTORY_APP_DIR";
+const RETIRED_AGENT_APP_RUNTIME_FIXTURE_DIR: &str = "agent-apps-runtime-fixtures";
 
 pub(super) fn build_agent_app_task_runtime_contract(
     state: &Value,
@@ -82,6 +90,162 @@ pub(super) fn build_agent_app_task_runtime_contract(
     }
 }
 
+pub(super) fn build_agent_app_task_runtime_contract_with_runtime_dir(
+    state: &Value,
+) -> AgentAppTaskRuntimeContract {
+    let app_dir = resolve_agent_app_runtime_dir(state).ok();
+    let mut contract = build_agent_app_task_runtime_contract(state, app_dir.as_deref());
+    if contract.enabled && contract.package_root_path.is_none() {
+        contract
+            .blockers
+            .push("TASK_RUNTIME_PACKAGE_ROOT_UNAVAILABLE".to_string());
+    }
+    contract
+}
+
+pub(super) fn resolve_agent_app_runtime_dir(
+    state: &serde_json::Value,
+) -> Result<PathBuf, RuntimeCoreError> {
+    let app_id = json_string(state, &["appId"])
+        .or_else(|| json_string(state, &["identity", "appId"]))
+        .or_else(|| json_string(state, &["manifest", "name"]))
+        .or_else(|| json_string(state, &["manifest", "appId"]));
+    let source_kind = json_string(state, &["identity", "sourceKind"]).unwrap_or_default();
+    let source_uri = json_string(state, &["identity", "sourceUri"]).unwrap_or_default();
+    if source_kind == "local_folder" {
+        return resolve_local_agent_app_runtime_dir(&source_uri, app_id.as_deref());
+    }
+
+    let package_hash = json_string(state, &["identity", "packageHash"]).ok_or_else(|| {
+        RuntimeCoreError::Backend("Agent App installed state 缺少 packageHash。".to_string())
+    })?;
+    let package_dir_name = package_hash.replace(':', "_");
+    let app_dir = lime_core::app_paths::preferred_data_dir()
+        .map_err(RuntimeCoreError::Backend)?
+        .join(AGENT_APP_DATA_DIR)
+        .join("packages")
+        .join(package_dir_name);
+    canonicalize_existing_agent_app_dir(&app_dir.to_string_lossy())
+}
+
+pub(super) fn canonicalize_existing_agent_app_dir(
+    value: &str,
+) -> Result<PathBuf, RuntimeCoreError> {
+    let path = PathBuf::from(value);
+    let canonical = fs::canonicalize(&path).map_err(|error| {
+        RuntimeCoreError::Backend(format!(
+            "无法解析 Agent App runtime 目录 {}: {error}",
+            path.display()
+        ))
+    })?;
+    if !canonical.is_dir() {
+        return Err(RuntimeCoreError::Backend(format!(
+            "Agent App runtime 路径不是目录: {}",
+            canonical.display()
+        )));
+    }
+    Ok(canonical)
+}
+
+pub(super) fn ensure_agent_app_runtime_folder(app_dir: &Path) -> Result<(), RuntimeCoreError> {
+    if !app_dir.join("package.json").is_file() {
+        return Err(RuntimeCoreError::Backend(format!(
+            "Agent App runtime 目录缺少 package.json: {}",
+            app_dir.display()
+        )));
+    }
+    Ok(())
+}
+
+fn resolve_local_agent_app_runtime_dir(
+    source_uri: &str,
+    app_id: Option<&str>,
+) -> Result<PathBuf, RuntimeCoreError> {
+    match canonicalize_existing_agent_app_dir(source_uri) {
+        Ok(app_dir) => Ok(app_dir),
+        Err(error) => {
+            if is_retired_content_factory_fixture_path(app_id, source_uri) {
+                if let Some(app_dir) = resolve_content_factory_development_app_dir(source_uri) {
+                    return Ok(app_dir);
+                }
+            }
+            Err(error)
+        }
+    }
+}
+
+fn is_retired_content_factory_fixture_path(app_id: Option<&str>, source_uri: &str) -> bool {
+    if app_id != Some(CONTENT_FACTORY_APP_ID) {
+        return false;
+    }
+    let normalized = source_uri.replace('\\', "/");
+    let retired_suffix =
+        format!("/{RETIRED_AGENT_APP_RUNTIME_FIXTURE_DIR}/{CONTENT_FACTORY_APP_ID}");
+    normalized.ends_with(&retired_suffix) || normalized.contains(&format!("{retired_suffix}/"))
+}
+
+fn resolve_content_factory_development_app_dir(source_uri: &str) -> Option<PathBuf> {
+    canonicalize_first_content_factory_app_dir(content_factory_development_app_dir_candidates(
+        source_uri,
+    ))
+}
+
+fn canonicalize_first_content_factory_app_dir(candidates: Vec<PathBuf>) -> Option<PathBuf> {
+    candidates.into_iter().find_map(|candidate| {
+        if !candidate.join("package.json").is_file() {
+            return None;
+        }
+        fs::canonicalize(candidate)
+            .ok()
+            .filter(|canonical| canonical.is_dir())
+    })
+}
+
+fn content_factory_development_app_dir_candidates(source_uri: &str) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+
+    if let Ok(value) = std::env::var(CONTENT_FACTORY_APP_DIR_ENV) {
+        push_unique_path(&mut candidates, PathBuf::from(value));
+    }
+
+    if let Ok(cwd) = std::env::current_dir() {
+        push_content_factory_repo_candidates_from_anchor(&mut candidates, &cwd);
+    }
+
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            push_content_factory_repo_candidates_from_anchor(&mut candidates, parent);
+        }
+    }
+
+    push_content_factory_repo_candidates_from_anchor(&mut candidates, Path::new(source_uri));
+    candidates
+}
+
+fn push_content_factory_repo_candidates_from_anchor(candidates: &mut Vec<PathBuf>, anchor: &Path) {
+    for ancestor in anchor.ancestors() {
+        if ancestor
+            .file_name()
+            .is_some_and(|name| name == CONTENT_FACTORY_APP_ID)
+        {
+            push_unique_path(candidates, ancestor.to_path_buf());
+        }
+        push_unique_path(
+            candidates,
+            ancestor.join("limecloud").join(CONTENT_FACTORY_APP_ID),
+        );
+    }
+}
+
+fn push_unique_path(paths: &mut Vec<PathBuf>, path: PathBuf) {
+    if path.as_os_str().is_empty() {
+        return;
+    }
+    if !paths.iter().any(|current| current == &path) {
+        paths.push(path);
+    }
+}
+
 fn task_kinds(agent_runtime: &Value) -> Vec<String> {
     unique_strings(
         agent_runtime
@@ -130,6 +294,7 @@ fn unique_strings(values: impl IntoIterator<Item = String>) -> Vec<String> {
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::fs;
 
     #[test]
     fn projects_v3_worker_contract_from_installed_state() {
@@ -206,6 +371,134 @@ mod tests {
         assert_eq!(
             contract.blockers,
             vec!["TASK_RUNTIME_WORKER_ENTRYPOINT_MISSING"]
+        );
+    }
+
+    #[test]
+    fn blocks_declared_worker_when_entrypoint_file_is_missing() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let state = json!({
+            "manifest": {
+                "runtimePackage": {
+                    "worker": {
+                        "entrypoint": "./src/runtime/content-factory-worker.mjs",
+                        "contract": "./app.runtime.yaml",
+                        "sampleRequest": "./examples/runtime-request.sample.json",
+                        "outputArtifactKind": "content_factory.workspace_patch"
+                    }
+                },
+                "agentRuntime": {
+                    "worker": {
+                        "directProviderAccess": false,
+                        "directFilesystemAccess": false
+                    },
+                    "tasks": [
+                        { "kind": "content.image.generate" }
+                    ]
+                }
+            }
+        });
+
+        let contract = build_agent_app_task_runtime_contract(&state, Some(temp.path()));
+
+        assert!(contract.enabled);
+        assert_eq!(
+            contract.blockers,
+            vec!["TASK_RUNTIME_WORKER_ENTRYPOINT_NOT_FOUND"]
+        );
+    }
+
+    #[test]
+    fn accepts_declared_worker_when_entrypoint_file_exists() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let worker_path = temp
+            .path()
+            .join("src")
+            .join("runtime")
+            .join("content-factory-worker.mjs");
+        fs::create_dir_all(worker_path.parent().expect("worker parent")).expect("worker dir");
+        fs::write(&worker_path, "export {};\n").expect("worker file");
+        let state = json!({
+            "manifest": {
+                "runtimePackage": {
+                    "worker": {
+                        "entrypoint": "./src/runtime/content-factory-worker.mjs",
+                        "contract": "./app.runtime.yaml",
+                        "sampleRequest": "./examples/runtime-request.sample.json",
+                        "outputArtifactKind": "content_factory.workspace_patch"
+                    }
+                },
+                "agentRuntime": {
+                    "worker": {
+                        "directProviderAccess": false,
+                        "directFilesystemAccess": false
+                    },
+                    "tasks": [
+                        { "kind": "content.image.generate" }
+                    ]
+                }
+            }
+        });
+
+        let contract = build_agent_app_task_runtime_contract(&state, Some(temp.path()));
+
+        assert!(contract.enabled);
+        assert_eq!(
+            contract.package_root_path.as_deref(),
+            Some(temp.path().to_string_lossy().as_ref())
+        );
+        assert!(contract.blockers.is_empty());
+    }
+
+    #[test]
+    fn detects_retired_content_factory_fixture_path() {
+        assert!(is_retired_content_factory_fixture_path(
+            Some(CONTENT_FACTORY_APP_ID),
+            "/workspace/aiclientproxy/lime/.lime/qc/agent-apps-runtime-fixtures/content-factory-app"
+        ));
+        assert!(is_retired_content_factory_fixture_path(
+            Some(CONTENT_FACTORY_APP_ID),
+            "C:\\workspace\\lime\\.lime\\qc\\agent-apps-runtime-fixtures\\content-factory-app"
+        ));
+        assert!(!is_retired_content_factory_fixture_path(
+            Some("other-app"),
+            "/workspace/aiclientproxy/lime/.lime/qc/agent-apps-runtime-fixtures/content-factory-app"
+        ));
+        assert!(!is_retired_content_factory_fixture_path(
+            Some(CONTENT_FACTORY_APP_ID),
+            "/workspace/limecloud/content-factory-app"
+        ));
+    }
+
+    #[test]
+    fn builds_content_factory_development_candidates_from_old_fixture_path() {
+        let candidates = content_factory_development_app_dir_candidates(
+            "/workspace/aiclientproxy/lime/.lime/qc/agent-apps-runtime-fixtures/content-factory-app",
+        );
+
+        assert!(candidates.iter().any(|candidate| {
+            candidate
+                .to_string_lossy()
+                .ends_with("/workspace/limecloud/content-factory-app")
+        }));
+    }
+
+    #[test]
+    fn canonicalizes_first_content_factory_candidate_with_package_json() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let missing_package_json = temp.path().join("missing-package-json");
+        let app_dir = temp.path().join(CONTENT_FACTORY_APP_ID);
+        fs::create_dir_all(&missing_package_json).expect("missing candidate dir");
+        fs::create_dir_all(&app_dir).expect("app dir");
+        fs::write(app_dir.join("package.json"), "{}").expect("package json");
+
+        let resolved =
+            canonicalize_first_content_factory_app_dir(vec![missing_package_json, app_dir.clone()])
+                .expect("resolved app dir");
+
+        assert_eq!(
+            resolved,
+            fs::canonicalize(app_dir).expect("canonical app dir")
         );
     }
 }

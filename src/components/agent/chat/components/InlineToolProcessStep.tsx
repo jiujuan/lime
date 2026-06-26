@@ -59,7 +59,6 @@ import { MemoryToolEvidencePanel } from "./MemoryToolEvidencePanel";
 import {
   asRecord,
   buildSiteNoticeLines,
-  LARGE_RESULT_AUTO_COLLAPSE_CHARS,
   normalizeSummaryLine,
   readBoolean,
   readNumber,
@@ -135,8 +134,12 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     normalizedToolName === "skill" ||
     normalizedToolName === "skilltool" ||
     normalizedToolName === "limerunserviceskill";
-  const shouldSuppressRunningResultText =
-    toolCall.status === "running" && isSkillLikeTool;
+  const shouldSuppressTransientResultText =
+    (toolCall.status === "running" || isMessageStreaming) &&
+    !isUnifiedWebSearchToolName(toolCall.name) &&
+    !isUnifiedWebFetchToolName(toolCall.name);
+  const shouldSuppressResultText =
+    shouldSuppressTransientResultText || toolDisplay.family === "vision";
   const filePath = useMemo(() => resolveToolFilePath(parsedArgs), [parsedArgs]);
   const fileContent = useMemo(() => {
     const content = parsedArgs.content || parsedArgs.text;
@@ -232,7 +235,7 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
       return t("agentChat.toolCall.importedCommandRecord.description");
     }
 
-    if (shouldSuppressRunningResultText) {
+    if (shouldSuppressResultText) {
       return "";
     }
 
@@ -291,7 +294,7 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     processNarrative.summary,
     rawResultText,
     shouldHideResultEnvelope,
-    shouldSuppressRunningResultText,
+    shouldSuppressResultText,
     t,
     toolCall.name,
     toolCall.result,
@@ -342,7 +345,7 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     });
   }, [rawResultText, toolCall.name, urlPreviewToolCalls]);
   const structuredResultPreview = useMemo(() => {
-    if (shouldSuppressRunningResultText) {
+    if (shouldSuppressResultText) {
       return null;
     }
     if (toolSearchSummary) {
@@ -364,7 +367,7 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     rawResultText,
     resultPreview,
     searchResultItems.length,
-    shouldSuppressRunningResultText,
+    shouldSuppressResultText,
     toolSearchSummary,
   ]);
   const savedSiteContentTarget = useMemo(
@@ -436,18 +439,23 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
             message: toolCall.progress.message,
           })
         : null;
+    const transientSummary = shouldSuppressResultText
+      ? progressSummary || processNarrative.preSummary
+      : null;
     const preferredSummary = importedSourcePresentation
       ? t("agentChat.toolCall.importedCommandRecord.description")
-      : toolCall.status === "running"
-        ? isSkillLikeTool
-          ? progressSummary || processNarrative.preSummary
-          : streamingOutputSummary ||
-            progressSummary ||
-            processNarrative.preSummary
-        : processNarrative.postSource === "generic" && structuredResultPreview
-          ? structuredResultPreview
+      : transientSummary
+        ? transientSummary
+        : toolCall.status === "running"
+          ? isSkillLikeTool
+            ? progressSummary || processNarrative.preSummary
+            : streamingOutputSummary ||
+              progressSummary ||
+              processNarrative.preSummary
           : processNarrative.postSummary ||
-            structuredResultPreview ||
+            (processNarrative.postSource === "generic"
+              ? processNarrative.preSummary
+              : structuredResultPreview) ||
             processNarrative.preSummary;
 
     return normalizeSummaryLine(preferredSummary, headline);
@@ -458,6 +466,7 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     processNarrative.postSource,
     processNarrative.postSummary,
     processNarrative.preSummary,
+    shouldSuppressResultText,
     structuredResultPreview,
     t,
     toolCall.progress?.message,
@@ -496,18 +505,8 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
       setExpanded(true);
       return;
     }
-
-    if (
-      shouldTreatAsActiveProcess &&
-      !toolSearchSummary &&
-      !isUnifiedWebSearchToolName(toolCall.name) &&
-      !isUnifiedWebFetchToolName(toolCall.name)
-    ) {
-      setExpanded(resultText.length <= LARGE_RESULT_AUTO_COLLAPSE_CHARS);
-    }
   }, [
     shouldTreatAsActiveProcess,
-    resultText.length,
     siteNoticeLines.length,
     toolCall.status,
     toolCall.name,

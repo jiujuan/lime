@@ -1,8 +1,11 @@
-use super::agent_app_task_runtime::build_agent_app_task_runtime_contract;
-use super::json_string;
-use super::timestamp;
 use super::RuntimeCore;
 use super::RuntimeCoreError;
+use super::agent_app_task_runtime::{
+    build_agent_app_task_runtime_contract, build_agent_app_task_runtime_contract_with_runtime_dir,
+    ensure_agent_app_runtime_folder, resolve_agent_app_runtime_dir,
+};
+use super::json_string;
+use super::timestamp;
 use app_server_protocol::AgentAppFetchCloudPackageParams;
 use app_server_protocol::AgentAppInstalledDisabledSetParams;
 use app_server_protocol::AgentAppInstalledListResponse;
@@ -22,7 +25,6 @@ use app_server_protocol::AgentAppUninstallParams;
 use app_server_protocol::AgentAppUninstallRehearsalParams;
 use app_server_protocol::AgentAppUninstallRehearsalResponse;
 use app_server_protocol::AgentAppUninstallResponse;
-use std::fs;
 use std::net::TcpListener;
 use std::path::Path;
 use std::path::PathBuf;
@@ -33,7 +35,6 @@ use tokio::process::Child;
 use tokio::process::Command;
 use tokio::time::sleep;
 
-const AGENT_APP_DATA_DIR: &str = "agent-apps";
 const AGENT_APP_UI_RUNTIME_STARTUP_TIMEOUT_SECS: u64 = 45;
 
 #[derive(Debug)]
@@ -644,65 +645,6 @@ fn build_agent_app_shell_prepare_response(
         window_title: fields.map(|fields| fields.window_title.clone()),
         prepared_at,
     }
-}
-
-fn resolve_agent_app_runtime_dir(state: &serde_json::Value) -> Result<PathBuf, RuntimeCoreError> {
-    let source_kind = json_string(state, &["identity", "sourceKind"]).unwrap_or_default();
-    let source_uri = json_string(state, &["identity", "sourceUri"]).unwrap_or_default();
-    if source_kind == "local_folder" {
-        return canonicalize_existing_agent_app_dir(&source_uri);
-    }
-
-    let package_hash = json_string(state, &["identity", "packageHash"]).ok_or_else(|| {
-        RuntimeCoreError::Backend("Agent App installed state 缺少 packageHash。".to_string())
-    })?;
-    let package_dir_name = package_hash.replace(':', "_");
-    let app_dir = lime_core::app_paths::preferred_data_dir()
-        .map_err(RuntimeCoreError::Backend)?
-        .join(AGENT_APP_DATA_DIR)
-        .join("packages")
-        .join(package_dir_name);
-    canonicalize_existing_agent_app_dir(&app_dir.to_string_lossy())
-}
-
-fn build_agent_app_task_runtime_contract_with_runtime_dir(
-    state: &serde_json::Value,
-) -> AgentAppTaskRuntimeContract {
-    let app_dir = resolve_agent_app_runtime_dir(state).ok();
-    let mut contract = build_agent_app_task_runtime_contract(state, app_dir.as_deref());
-    if contract.enabled && contract.package_root_path.is_none() {
-        contract
-            .blockers
-            .push("TASK_RUNTIME_PACKAGE_ROOT_UNAVAILABLE".to_string());
-    }
-    contract
-}
-
-fn canonicalize_existing_agent_app_dir(value: &str) -> Result<PathBuf, RuntimeCoreError> {
-    let path = PathBuf::from(value);
-    let canonical = fs::canonicalize(&path).map_err(|error| {
-        RuntimeCoreError::Backend(format!(
-            "无法解析 Agent App runtime 目录 {}: {error}",
-            path.display()
-        ))
-    })?;
-    if !canonical.is_dir() {
-        return Err(RuntimeCoreError::Backend(format!(
-            "Agent App runtime 路径不是目录: {}",
-            canonical.display()
-        )));
-    }
-    Ok(canonical)
-}
-
-fn ensure_agent_app_runtime_folder(app_dir: &Path) -> Result<(), RuntimeCoreError> {
-    if !app_dir.join("package.json").is_file() {
-        return Err(RuntimeCoreError::Backend(format!(
-            "Agent App runtime 目录缺少 package.json: {}",
-            app_dir.display()
-        )));
-    }
-    Ok(())
 }
 
 fn reserve_local_port() -> Result<u16, RuntimeCoreError> {

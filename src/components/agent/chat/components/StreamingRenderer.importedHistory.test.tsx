@@ -119,22 +119,15 @@ describe("StreamingRenderer imported history", () => {
       isStreaming: false,
     });
 
-    const processGroupButton = container.querySelector<HTMLButtonElement>(
-      '[data-testid="streaming-process-group"] button',
-    );
     const processGroupButtons = container.querySelectorAll<HTMLButtonElement>(
       '[data-testid="streaming-process-group"] > button',
     );
-    expect(processGroupButtons).toHaveLength(2);
-    expect(processGroupButton?.getAttribute("aria-expanded")).toBe("true");
+    expect(processGroupButtons).toHaveLength(1);
     expect(container.textContent).toContain("导入的命令记录");
-    expect(processGroupButton?.textContent).not.toContain("已完成 2 个步骤");
-    expect(processGroupButtons[1]?.textContent).toContain(
+    expect(processGroupButtons[0]?.textContent).toContain(
       "已搜索网页：Lime history import",
     );
-    expect(processGroupButtons[1]?.textContent).not.toContain(
-      "导入的命令记录",
-    );
+    expect(processGroupButtons[0]?.textContent).not.toContain("导入的命令记录");
     expect(container.textContent).toContain("已完成修复。");
     expect(container.textContent).not.toContain("imported_read_only");
     expect(container.textContent).not.toContain("npm test");
@@ -173,11 +166,14 @@ describe("StreamingRenderer imported history", () => {
       isStreaming: false,
     });
 
-    const processGroupButton = container.querySelector<HTMLButtonElement>(
-      '[data-testid="streaming-process-group"] button',
+    expect(
+      container.querySelector('[data-testid="streaming-process-group"]'),
+    ).toBeNull();
+    const commandRecord = container.querySelector(
+      '[data-testid="inline-tool-process-step"]',
     );
-    expect(processGroupButton?.getAttribute("aria-expanded")).toBe("true");
-    expect(processGroupButton?.textContent).toContain("导入的命令记录");
+    expect(commandRecord).not.toBeNull();
+    expect(commandRecord?.textContent).toContain("导入的命令记录");
     expect(container.textContent).toContain("不会重新执行");
     expect(container.textContent).not.toContain("npm test");
     expect(container.textContent).not.toContain("claude_code");
@@ -224,11 +220,9 @@ describe("StreamingRenderer imported history", () => {
       isStreaming: false,
     });
 
-    const processGroupButton = container.querySelector<HTMLButtonElement>(
-      '[data-testid="streaming-process-group"] button',
-    );
-    expect(processGroupButton?.getAttribute("aria-expanded")).toBe("true");
-
+    expect(
+      container.querySelector('[data-testid="streaming-process-group"]'),
+    ).toBeNull();
     const thinkingBlock = container.querySelector(
       '[data-testid="thinking-block"]',
     );
@@ -291,12 +285,9 @@ describe("StreamingRenderer imported history", () => {
       onFileClick,
     });
 
-    const processGroupButton = container.querySelector<HTMLButtonElement>(
-      '[data-testid="streaming-process-group"] button',
-    );
-    expect(processGroupButton?.getAttribute("aria-expanded")).toBe("true");
-    expect(processGroupButton?.textContent).toContain("导入的命令记录");
-    expect(processGroupButton?.textContent).toContain("已完成思考");
+    expect(
+      container.querySelector('[data-testid="streaming-process-group"]'),
+    ).toBeNull();
     expect(container.textContent).toContain(
       "I need to inspect the test failure first.",
     );
@@ -304,7 +295,8 @@ describe("StreamingRenderer imported history", () => {
       container
         .querySelector('[data-testid="thinking-block"]')
         ?.getAttribute("data-visual-style"),
-    ).toBe("grouped-inline");
+    ).not.toBe("grouped-inline");
+    expect(container.textContent).toContain("已查看 imported-preview.md");
 
     const openFileButton = container.querySelector<HTMLButtonElement>(
       '[data-testid="inline-tool-open-file"]',

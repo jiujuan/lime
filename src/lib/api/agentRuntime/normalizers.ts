@@ -310,6 +310,18 @@ function normalizeBrowserActionItem(
     profile_key: readOptionalStringField(value, "profileKey", "profile_key"),
     backend: readOptionalStringField(value, "backend"),
     request_id: readOptionalStringField(value, "requestId", "request_id"),
+    confirmation_request_id: readOptionalStringField(
+      value,
+      "confirmationRequestId",
+      "confirmation_request_id",
+    ),
+    control_mode: readOptionalStringField(value, "controlMode", "control_mode"),
+    lifecycle_state: readOptionalStringField(
+      value,
+      "lifecycleState",
+      "lifecycle_state",
+    ),
+    human_reason: readOptionalStringField(value, "humanReason", "human_reason"),
     thread_id: readOptionalStringField(value, "threadId", "thread_id"),
     turn_id: readOptionalStringField(value, "turnId", "turn_id"),
     content_id: readOptionalStringField(value, "contentId", "content_id"),

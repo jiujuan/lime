@@ -22,6 +22,10 @@ struct BrowserActionItem {
     profile_key: Option<String>,
     backend: Option<String>,
     request_id: Option<String>,
+    confirmation_request_id: Option<String>,
+    control_mode: Option<String>,
+    lifecycle_state: Option<String>,
+    human_reason: Option<String>,
     thread_id: Option<String>,
     turn_id: Option<String>,
     content_id: Option<String>,
@@ -291,6 +295,10 @@ fn browser_action_item_from_event(event: &AgentEvent) -> Option<BrowserActionIte
             ],
         )
         .or_else(|| Some(event.event_id.clone())),
+        confirmation_request_id: browser_confirmation_request_id(&event.payload),
+        control_mode: first_string(&candidates, &["controlMode", "control_mode"]),
+        lifecycle_state: first_string(&candidates, &["lifecycleState", "lifecycle_state"]),
+        human_reason: first_string(&candidates, &["humanReason", "human_reason"]),
         thread_id: event.thread_id.clone().or_else(|| {
             first_string(
                 &candidates,
@@ -437,6 +445,10 @@ fn browser_action_item_from_artifact(artifact: &ArtifactSummary) -> Option<Brows
                 "command_id",
             ],
         ),
+        confirmation_request_id: browser_confirmation_request_id(metadata),
+        control_mode: first_string(&candidates, &["controlMode", "control_mode"]),
+        lifecycle_state: first_string(&candidates, &["lifecycleState", "lifecycle_state"]),
+        human_reason: first_string(&candidates, &["humanReason", "human_reason"]),
         thread_id: first_string(&candidates, &["threadId", "thread_id"]),
         turn_id: artifact
             .turn_id
@@ -500,18 +512,32 @@ fn browser_candidate_values(value: &Value) -> Vec<&Value> {
     for path in [
         &["metadata"][..],
         &["arguments"][..],
+        &["action_required"][..],
+        &["actionRequired"][..],
+        &["action_required", "arguments"][..],
+        &["actionRequired", "arguments"][..],
         &["payload"][..],
         &["payload", "browser_action_trace"][..],
         &["payload", "browserActionTrace"][..],
         &["payload", "browser_action"][..],
         &["payload", "browserAction"][..],
+        &["payload", "action_required"][..],
+        &["payload", "actionRequired"][..],
         &["result"][..],
         &["result", "browser_action_trace"][..],
         &["result", "browserActionTrace"][..],
+        &["result", "action_required"][..],
+        &["result", "actionRequired"][..],
+        &["result", "action_required", "arguments"][..],
+        &["result", "actionRequired", "arguments"][..],
         &["result", "metadata"][..],
         &["result", "data"][..],
         &["result", "data", "browser_action_trace"][..],
         &["result", "data", "browserActionTrace"][..],
+        &["result", "data", "action_required"][..],
+        &["result", "data", "actionRequired"][..],
+        &["result", "data", "action_required", "arguments"][..],
+        &["result", "data", "actionRequired", "arguments"][..],
         &["result", "data", "browser_session"][..],
         &["result", "data", "browserSession"][..],
         &["result", "data", "browser_snapshot"][..],
@@ -525,6 +551,10 @@ fn browser_candidate_values(value: &Value) -> Vec<&Value> {
         &["data"][..],
         &["data", "browser_action_trace"][..],
         &["data", "browserActionTrace"][..],
+        &["data", "action_required"][..],
+        &["data", "actionRequired"][..],
+        &["data", "action_required", "arguments"][..],
+        &["data", "actionRequired", "arguments"][..],
         &["data", "browser_session"][..],
         &["data", "browserSession"][..],
         &["data", "browser_snapshot"][..],
@@ -610,6 +640,8 @@ fn is_browser_record(
                 "browserAction",
                 "browser_action_trace",
                 "browserActionTrace",
+                "action_required",
+                "actionRequired",
                 "browser_snapshot",
                 "browserSnapshot",
             ],
@@ -647,6 +679,40 @@ fn tool_name_from_event(event: &AgentEvent) -> Option<String> {
         &browser_candidate_values(&event.payload),
         &["toolName", "tool_name", "name"],
     )
+}
+
+fn browser_confirmation_request_id(value: &Value) -> Option<String> {
+    for path in [
+        &["action_required", "requestId"][..],
+        &["action_required", "request_id"][..],
+        &["actionRequired", "requestId"][..],
+        &["actionRequired", "request_id"][..],
+        &["browser_action_trace", "requestId"][..],
+        &["browser_action_trace", "request_id"][..],
+        &["browserActionTrace", "requestId"][..],
+        &["browserActionTrace", "request_id"][..],
+        &["payload", "action_required", "requestId"][..],
+        &["payload", "action_required", "request_id"][..],
+        &["payload", "browser_action_trace", "requestId"][..],
+        &["payload", "browser_action_trace", "request_id"][..],
+        &["result", "action_required", "requestId"][..],
+        &["result", "action_required", "request_id"][..],
+        &["result", "browser_action_trace", "requestId"][..],
+        &["result", "browser_action_trace", "request_id"][..],
+        &["result", "data", "action_required", "requestId"][..],
+        &["result", "data", "action_required", "request_id"][..],
+        &["result", "data", "browser_action_trace", "requestId"][..],
+        &["result", "data", "browser_action_trace", "request_id"][..],
+        &["data", "action_required", "requestId"][..],
+        &["data", "action_required", "request_id"][..],
+        &["data", "browser_action_trace", "requestId"][..],
+        &["data", "browser_action_trace", "request_id"][..],
+    ] {
+        if let Some(value) = value_at_path(value, path).and_then(value_string) {
+            return Some(value);
+        }
+    }
+    None
 }
 
 fn infer_action_from_tool_name(tool_name: Option<&str>) -> Option<String> {
@@ -708,7 +774,18 @@ fn is_browser_action(action: &str) -> bool {
             | "click"
             | "type"
             | "form_input"
+            | "submit"
+            | "select"
+            | "check"
+            | "uncheck"
+            | "press"
+            | "drag"
+            | "drop"
+            | "upload"
+            | "file_upload"
+            | "download"
             | "javascript"
+            | "execute_javascript"
             | "scroll"
             | "find"
     )
@@ -852,6 +929,14 @@ fn browser_action_item_value(item: BrowserActionItem) -> Value {
     insert_optional(&mut value, "profile_key", item.profile_key);
     insert_optional(&mut value, "backend", item.backend);
     insert_optional(&mut value, "request_id", item.request_id);
+    insert_optional(
+        &mut value,
+        "confirmation_request_id",
+        item.confirmation_request_id,
+    );
+    insert_optional(&mut value, "control_mode", item.control_mode);
+    insert_optional(&mut value, "lifecycle_state", item.lifecycle_state);
+    insert_optional(&mut value, "human_reason", item.human_reason);
     insert_optional(&mut value, "thread_id", item.thread_id);
     insert_optional(&mut value, "turn_id", item.turn_id);
     insert_optional(&mut value, "content_id", item.content_id);

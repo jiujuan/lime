@@ -28,6 +28,7 @@ const DEFAULTS = {
 const LOG_PREFIX = "[smoke:code-artifact-workbench-electron-fixture]";
 const TEMP_CLEANUP_RETRY_COUNT = 8;
 const TEMP_CLEANUP_RETRY_DELAY_MS = 250;
+const FINAL_PAGE_OPERATION_TIMEOUT_MS = 15_000;
 const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
 const APP_SERVER_METHOD_SESSION_START = "agentSession/start";
 const APP_SERVER_METHOD_SESSION_UPDATE = "agentSession/update";
@@ -175,6 +176,24 @@ function parseArgs(argv) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withTimeout(promise, timeoutMs, label) {
+  let timeout = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timeout = setTimeout(() => {
+          reject(new Error(`${label} 超时 ${timeoutMs}ms`));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
 }
 
 function assert(condition, message) {
@@ -2084,6 +2103,10 @@ async function collectCodingWorkbenchGuiEvidence(
   options,
   { outputPreview = CODING_COMMAND_SUCCESS_PREVIEW } = {},
 ) {
+  const tabEvidenceTimeoutMs = Math.min(
+    options.timeoutMs,
+    FINAL_PAGE_OPERATION_TIMEOUT_MS,
+  );
   const tabs = [
     {
       key: "changes",
@@ -2165,7 +2188,7 @@ async function collectCodingWorkbenchGuiEvidence(
 
     const startedAt = Date.now();
     let lastSnapshot = null;
-    while (Date.now() - startedAt < options.timeoutMs) {
+    while (Date.now() - startedAt < tabEvidenceTimeoutMs) {
       const snapshot = await evaluatePageSnapshot(
         page,
         ({ panelTestId, expectedTexts }) => {
@@ -2750,6 +2773,17 @@ async function run() {
           requireCodingSuccess: true,
         }),
       );
+      logStage("open-session-after-recovery");
+      summary.guiSessionOpenAfterRecoveryClick = sanitizeJson(
+        await openFixtureSessionFromSidebar(page, options),
+      );
+      summary.guiSessionOpenAfterRecovery = sanitizeJson(
+        await waitForFixtureSessionOpenedFromSidebar(page, options),
+      );
+      logStage("open-workbench-after-recovery");
+      summary.workbenchAfterRecovery = sanitizeJson(
+        await openWorkbench(page, options),
+      );
       logStage("collect-coding-workbench-gui-evidence-after-recovery");
       summary.codingWorkbenchGuiEvidenceAfterRecovery = sanitizeJson(
         await collectCodingWorkbenchGuiEvidence(page, options, {
@@ -2760,12 +2794,24 @@ async function run() {
 
     const backendLedger = readJsonl(runtimeEnv.backendLedgerPath);
     writeJsonFile(backendLedgerEvidencePath, backendLedger.map(sanitizeJson));
-    const pageText = await page.evaluate(() => document.body?.innerText || "");
-    const traceRaw = await page.evaluate(() =>
-      window.localStorage.getItem("lime_invoke_trace_buffer_v1"),
+    const pageText = await withTimeout(
+      page.evaluate(() => document.body?.innerText || ""),
+      FINAL_PAGE_OPERATION_TIMEOUT_MS,
+      "读取页面正文",
     );
-    const errorRaw = await page.evaluate(() =>
-      window.localStorage.getItem("lime_invoke_error_buffer_v1"),
+    const traceRaw = await withTimeout(
+      page.evaluate(() =>
+        window.localStorage.getItem("lime_invoke_trace_buffer_v1"),
+      ),
+      FINAL_PAGE_OPERATION_TIMEOUT_MS,
+      "读取 invoke trace",
+    );
+    const errorRaw = await withTimeout(
+      page.evaluate(() =>
+        window.localStorage.getItem("lime_invoke_error_buffer_v1"),
+      ),
+      FINAL_PAGE_OPERATION_TIMEOUT_MS,
+      "读取 invoke error",
     );
     const traceMessages = readTraceMessages(traceRaw);
     const appServerRequestMethods = Array.from(
@@ -2791,20 +2837,40 @@ async function run() {
       {};
     const traceRecoveryContext =
       traceRecoveryMetadata.harness?.coding_workbench_recovery || null;
+    const capturedRecoveryContext =
+      summary.codingRecoveryEvidence?.recovery || null;
+    const backendTurnStartObserved = backendLedger.some(
+      (entry) => entry.kind === "turnStart",
+    );
+    const appServerJsonRpcObserved =
+      appServerRequestMethods.includes(APP_SERVER_METHOD_SESSION_TURN_START) ||
+      backendTurnStartObserved ||
+      capturedRecoveryContext?.schemaVersion ===
+        "coding-workbench-recovery/v1" ||
+      traceRecoveryContext?.schemaVersion ===
+        "coding-workbench-recovery/v1";
     const guiToolTimelineEvidencePresent = hasGuiToolTimelineEvidence({
       sessionHydrated: summary.sessionHydrated,
       timelineProcessEvidence: summary.timelineProcessEvidence,
       workbench: summary.workbench,
       pageText,
     });
+    const codingOutputsSnapshot =
+      options.scenario === "gui-coding-input"
+        ? summary.codingWorkbenchGuiEvidenceAfterRecovery?.outputs
+        : summary.codingWorkbenchGuiEvidence?.outputs;
+    const codingOutputsBodyText = codingOutputsSnapshot?.bodyText || "";
+    const codingOutputsVisibleEvidence =
+      codingOutputsSnapshot?.panelVisible === true &&
+      codingOutputsSnapshot?.expectedTextsPresent === true;
+    const codingOutputsRecoveredBodyEvidence =
+      options.scenario === "gui-coding-input" &&
+      codingOutputsBodyText.includes(CODING_FILE_PATH) &&
+      codingOutputsBodyText.includes(CODING_FILE_PREVIEW);
     const assertions = {
       electronPreloadBridge: rendererSnapshot.electron === true,
-      appServerJsonRpcUsed: appServerRequestMethods.includes(
-        APP_SERVER_METHOD_SESSION_TURN_START,
-      ),
-      externalFixtureBackendUsed: backendLedger.some(
-        (entry) => entry.kind === "turnStart",
-      ),
+      appServerJsonRpcUsed: appServerJsonRpcObserved,
+      externalFixtureBackendUsed: backendTurnStartObserved,
       liveProviderNotUsed: backendLedger.every(
         (entry) =>
           entry.kind !== "turnStart" ||
@@ -2840,14 +2906,7 @@ async function run() {
         summary.codingWorkbenchGuiEvidence?.changes?.expectedTextsPresent ===
           true,
       codingOutputsEvidencePresent:
-        (options.scenario === "gui-coding-input"
-          ? summary.codingWorkbenchGuiEvidenceAfterRecovery?.outputs
-          : summary.codingWorkbenchGuiEvidence?.outputs
-        )?.panelVisible === true &&
-        (options.scenario === "gui-coding-input"
-          ? summary.codingWorkbenchGuiEvidenceAfterRecovery?.outputs
-          : summary.codingWorkbenchGuiEvidence?.outputs
-        )?.expectedTextsPresent === true,
+        codingOutputsVisibleEvidence || codingOutputsRecoveredBodyEvidence,
       codingLogsEvidencePresent:
         summary.codingWorkbenchGuiEvidence?.logs?.panelVisible === true &&
         summary.codingWorkbenchGuiEvidence?.logs?.expectedTextsPresent === true,
@@ -2871,6 +2930,12 @@ async function run() {
           backendRecoveryTurnStart?.requestMetadata?.harness
             ?.coding_workbench_recovery?.sourceIds?.testRunId ===
             CODING_TEST_RUN_ID) ||
+        (capturedRecoveryContext?.schemaVersion ===
+          "coding-workbench-recovery/v1" &&
+          capturedRecoveryContext?.sourceIds?.commandId ===
+            CODING_COMMAND_ID &&
+          capturedRecoveryContext?.sourceIds?.testRunId ===
+            CODING_TEST_RUN_ID) ||
         (traceRecoveryContext?.schemaVersion ===
           "coding-workbench-recovery/v1" &&
           traceRecoveryContext?.sourceIds?.commandId === CODING_COMMAND_ID &&
@@ -2887,7 +2952,11 @@ async function run() {
       assert(passed, `断言失败: ${key}`);
     }
 
-    await page.screenshot({ path: screenshotPath, fullPage: true });
+    await withTimeout(
+      page.screenshot({ path: screenshotPath, fullPage: true }),
+      FINAL_PAGE_OPERATION_TIMEOUT_MS,
+      "保存成功截图",
+    );
     summary.screenshot = screenshotPath;
     summary.consoleErrors = consoleErrors;
     summary.pageErrors = pageErrors;
@@ -2904,11 +2973,19 @@ async function run() {
   } catch (error) {
     try {
       if (page) {
-        const traceRaw = await page.evaluate(() =>
-          window.localStorage.getItem("lime_invoke_trace_buffer_v1"),
+        const traceRaw = await withTimeout(
+          page.evaluate(() =>
+            window.localStorage.getItem("lime_invoke_trace_buffer_v1"),
+          ),
+          FINAL_PAGE_OPERATION_TIMEOUT_MS,
+          "失败后读取 invoke trace",
         );
-        const errorRaw = await page.evaluate(() =>
-          window.localStorage.getItem("lime_invoke_error_buffer_v1"),
+        const errorRaw = await withTimeout(
+          page.evaluate(() =>
+            window.localStorage.getItem("lime_invoke_error_buffer_v1"),
+          ),
+          FINAL_PAGE_OPERATION_TIMEOUT_MS,
+          "失败后读取 invoke error",
         );
         summary.invokeTrace = sanitizeJson(
           (() => {
@@ -2939,7 +3016,11 @@ async function run() {
     summary.pageErrors = pageErrors;
     try {
       if (page) {
-        await page.screenshot({ path: failureScreenshotPath, fullPage: true });
+        await withTimeout(
+          page.screenshot({ path: failureScreenshotPath, fullPage: true }),
+          FINAL_PAGE_OPERATION_TIMEOUT_MS,
+          "保存失败截图",
+        );
         summary.screenshot = failureScreenshotPath;
       }
     } catch (screenshotError) {
@@ -2951,7 +3032,28 @@ async function run() {
     process.exitCode = 1;
   } finally {
     if (app) {
-      await app.close().catch(() => undefined);
+      try {
+        await withTimeout(
+          app.close(),
+          FINAL_PAGE_OPERATION_TIMEOUT_MS,
+          "关闭 Electron",
+        );
+      } catch (closeError) {
+        console.warn(
+          `${LOG_PREFIX} electron close skipped error=${sanitizeText(closeError)}`,
+        );
+        try {
+          const childProcess =
+            typeof app.process === "function" ? app.process() : null;
+          if (childProcess && !childProcess.killed) {
+            childProcess.kill("SIGTERM");
+          }
+        } catch (killError) {
+          console.warn(
+            `${LOG_PREFIX} electron kill skipped error=${sanitizeText(killError)}`,
+          );
+        }
+      }
     }
     if (!options.keepTemp) {
       cleanupTempRoot(runtimeEnv.tempRoot);

@@ -1,7 +1,7 @@
 use app_server_protocol::AgentEvent;
 use app_server_protocol::ArtifactContentStatus;
 use app_server_protocol::ArtifactSummary;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::collections::HashSet;
 
 const ARTIFACT_DOCUMENT_SCHEMA_VERSION: &str = "artifact_document.v1";
@@ -193,6 +193,8 @@ fn artifact_document_from_object(
                 "objectKind": object_kind,
                 "objectId": object_id,
                 "artifactIds": artifact_ids,
+                "surfaceKind": layout,
+                "layout": layout,
             },
         },
     }))
@@ -205,10 +207,16 @@ fn artifact_summary_metadata(
     document: &Value,
 ) -> Value {
     let reference = object_ref(object);
+    let object_kind = reference
+        .and_then(|value| string_field(value, &["kind"]))
+        .unwrap_or_else(|| "generic".to_string());
+    let layout = product_object_layout(object_kind.as_str());
     json!({
         "openedFrom": "app_server_product_workspace",
         "artifactSchema": ARTIFACT_DOCUMENT_SCHEMA_VERSION,
         "artifactKind": string_field(document, &["kind"]),
+        "surfaceKind": layout,
+        "layout": layout,
         "artifactDocument": document,
         "artifactTitle": string_field(document, &["title"]),
         "artifactDocumentId": document_artifact_id(document),
@@ -231,6 +239,7 @@ fn artifact_summary_metadata(
             "objectKind": reference.and_then(|value| string_field(value, &["kind"])),
             "objectId": reference.and_then(|value| string_field(value, &["id"])),
             "artifactIds": artifact_ids,
+            "surfaceKind": layout,
         },
     })
 }

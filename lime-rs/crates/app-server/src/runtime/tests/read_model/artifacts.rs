@@ -783,8 +783,11 @@ async fn read_session_materializes_content_factory_workspace_patch_into_product_
         .as_deref()
         .expect("artifact document content");
     assert!(content.contains("\"schemaVersion\": \"artifact_document.v1\""));
-    assert!(content
-        .contains("\"artifactId\": \"artifact-document:content-factory-app:artifact-article-1\""));
+    assert!(
+        content.contains(
+            "\"artifactId\": \"artifact-document:content-factory-app:artifact-article-1\""
+        )
+    );
 
     core.update_session_current(AgentSessionUpdateParams {
         session_id: "sess_product_workspace".to_string(),
@@ -875,16 +878,80 @@ async fn read_session_materializes_content_factory_workspace_patch_into_product_
                 "artifact.snapshot",
                 json!({
                     "artifact": {
-                        "artifactId": "artifact-image-regenerated",
-                        "artifactRef": "artifact-image-regenerated",
-                        "path": ".lime/artifacts/product-profile/image-regenerated.json",
-                        "title": "重新生成配图",
-                        "kind": "artifact_document",
+                        "artifactId": "artifact-image-regenerate-workspace-patch",
+                        "artifactRef": "artifact-image-regenerate-workspace-patch",
+                        "path": ".lime/artifacts/product-profile/image-regenerate-workspace-patch.json",
+                        "title": "配图组重新生成结果",
+                        "kind": "content_factory.workspace_patch",
                         "status": "ready",
                         "metadata": {
-                            "artifactDocumentId": "artifact-document:image-regenerated",
-                            "artifactVersionId": "artifact-document:image-regenerated:v1",
-                            "artifactVersionNo": 1
+                            "agentAppWorker": {
+                                "appId": "content-factory-app",
+                                "taskId": "task-image-regenerate-1",
+                                "taskKind": "content.image.generate",
+                                "turnId": "turn_product_profile_action",
+                                "workerEntrypoint": "./runtime/content-factory-worker.mjs",
+                                "status": "completed",
+                                "inputSummary": "action=regenerate; object=image-set-1",
+                                "outputSummary": "1 object: 配图组重新生成结果",
+                                "outputObjectCount": 1,
+                                "outputArtifactKind": "content_factory.workspace_patch"
+                            },
+                            "contentFactoryWorkspacePatch": {
+                                "schemaVersion": 1,
+                                "appId": "content-factory-app",
+                                "sessionId": "sess_product_workspace",
+                                "selectedObjectRef": {
+                                    "appId": "content-factory-app",
+                                    "kind": "imageGenerationSet",
+                                    "id": "image-set-1",
+                                    "sessionId": "sess_product_workspace"
+                                },
+                                "objects": [
+                                    {
+                                        "ref": {
+                                            "appId": "content-factory-app",
+                                            "kind": "imageGenerationSet",
+                                            "id": "image-set-1",
+                                            "sessionId": "sess_product_workspace",
+                                            "artifactIds": ["artifact-image-regenerated"],
+                                            "sourceTurnId": "turn_product_profile_action",
+                                            "sourceTaskId": "task-image-regenerate-1",
+                                            "version": "2"
+                                        },
+                                        "title": "配图组",
+                                        "status": "ready",
+                                        "summary": "已重新生成 2 张候选图",
+                                        "previewArtifactId": "artifact-image-regenerated",
+                                        "source": {
+                                            "taskKind": "content.image.generate",
+                                            "taskId": "task-image-regenerate-1",
+                                            "turnId": "turn_product_profile_action",
+                                            "artifactIds": ["artifact-image-regenerated"],
+                                            "images": [
+                                                {
+                                                    "id": "image-regenerated-1",
+                                                    "title": "厨房台面主图",
+                                                    "url": "file:///tmp/content-factory/image-regenerated-1.png",
+                                                    "prompt": "厨房台面主图，明亮自然光"
+                                                },
+                                                {
+                                                    "id": "image-regenerated-2",
+                                                    "title": "产品细节图",
+                                                    "url": "file:///tmp/content-factory/image-regenerated-2.png",
+                                                    "prompt": "产品细节图，突出质感"
+                                                }
+                                            ]
+                                        }
+                                    }
+                                ],
+                                "layoutState": {
+                                    "activeTabKind": "productProfile",
+                                    "activePaneKind": "imageGrid",
+                                    "openTabKinds": ["productProfile", "files"],
+                                    "splitMode": "chat-right-dock"
+                                }
+                            }
                         }
                     }
                 }),
@@ -914,16 +981,60 @@ async fn read_session_materializes_content_factory_workspace_patch_into_product_
     assert_eq!(action_history[0]["objectRef"]["id"], "image-set-1");
     assert_eq!(action_history[0]["objectTitle"], "配图组");
     assert_eq!(action_history[0]["taskKind"], "content.image.generate");
-    assert_eq!(
-        action_history[0]["resultArtifacts"][0]["artifactRef"],
-        "artifact-image-regenerated"
+    let action_result_artifacts = action_history[0]["resultArtifacts"]
+        .as_array()
+        .expect("product profile action result artifacts");
+    assert!(
+        action_result_artifacts
+            .iter()
+            .any(
+                |artifact| artifact["artifactRef"] == "artifact-image-regenerated"
+                    && artifact["kind"] == "artifact_document"
+                    && artifact["title"] == "配图组"
+            )
     );
-    assert_eq!(
-        action_history[0]["resultArtifacts"][0]["title"],
-        "重新生成配图"
+    assert!(
+        action_result_artifacts
+            .iter()
+            .any(
+                |artifact| artifact["artifactRef"] == "artifact-image-regenerate-workspace-patch"
+                    && artifact["kind"] == "content_factory.workspace_patch"
+            )
     );
     assert_eq!(
         action_detail["product_workspace"]["actionHistory"][0],
         action_history[0]
+    );
+    let image_object = action_detail["product_workspace"]["objects"]
+        .as_array()
+        .expect("product workspace objects")
+        .iter()
+        .find(|object| object["ref"]["id"] == "image-set-1")
+        .expect("updated image object");
+    assert_eq!(image_object["status"], "ready");
+    assert_eq!(image_object["summary"], "已重新生成 2 张候选图");
+    assert_eq!(
+        image_object["previewArtifactId"],
+        "artifact-image-regenerated"
+    );
+    assert_eq!(
+        image_object["ref"]["sourceTurnId"],
+        "turn_product_profile_action"
+    );
+    assert_eq!(
+        image_object["ref"]["sourceTaskId"],
+        "task-image-regenerate-1"
+    );
+    assert_eq!(
+        action_detail["product_workspace"]["selectedObjectRef"]["id"],
+        "image-set-1"
+    );
+    assert_eq!(
+        action_detail["product_workspace"]["workerEvidence"][2]["taskId"],
+        "task-image-regenerate-1"
+    );
+    assert_eq!(
+        action_detail["product_workspace"]["workerEvidence"][2]["status"],
+        "completed"
     );
 }

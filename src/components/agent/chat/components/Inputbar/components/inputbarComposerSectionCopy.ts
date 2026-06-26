@@ -25,8 +25,14 @@ export type InputbarComposerSectionCopyKey =
   | "agentChat.inputbar.plusMenu.planMode"
   | "agentChat.inputbar.tools.subagent.label"
   | "agentChat.inputbar.plusMenu.objective"
+  | "agentChat.inputbar.plusMenu.plugins"
   | "agentChat.inputbar.plusMenu.skills"
   | "agentChat.inputbar.plusMenu.unavailable"
+  | "agentChat.inputbar.pluginChip.empty"
+  | "agentChat.inputbar.pluginChip.remove"
+  | "agentChat.inputbar.pluginChip.skillPrefix"
+  | "agentChat.inputbar.pluginChip.selectorTitle"
+  | "agentChat.inputbar.pluginChip.unavailable"
   | "agentChat.inputbar.composer.workspacePlaceholder.waiting"
   | "agentChat.inputbar.composer.workspacePlaceholder.taskCenter"
   | "agentChat.inputbar.composer.workspacePlaceholder.default";
@@ -67,7 +73,15 @@ export interface InputbarComposerSectionCopy {
     planMode: string;
     subagent: string;
     objective: string;
+    plugins: string;
     skills: string;
+    unavailable: string;
+  };
+  pluginChip: {
+    empty: string;
+    remove: (name: string) => string;
+    skillPrefix: string;
+    selectorTitle: string;
     unavailable: string;
   };
   workspacePlaceholder: {
@@ -123,8 +137,17 @@ export function buildInputbarComposerSectionCopy(
       planMode: translate("agentChat.inputbar.plusMenu.planMode"),
       subagent: translate("agentChat.inputbar.tools.subagent.label"),
       objective: translate("agentChat.inputbar.plusMenu.objective"),
+      plugins: translate("agentChat.inputbar.plusMenu.plugins"),
       skills: translate("agentChat.inputbar.plusMenu.skills"),
       unavailable: translate("agentChat.inputbar.plusMenu.unavailable"),
+    },
+    pluginChip: {
+      empty: translate("agentChat.inputbar.pluginChip.empty"),
+      remove: (name) =>
+        translate("agentChat.inputbar.pluginChip.remove", { name }),
+      skillPrefix: translate("agentChat.inputbar.pluginChip.skillPrefix"),
+      selectorTitle: translate("agentChat.inputbar.pluginChip.selectorTitle"),
+      unavailable: translate("agentChat.inputbar.pluginChip.unavailable"),
     },
     workspacePlaceholder: {
       waiting: translate(

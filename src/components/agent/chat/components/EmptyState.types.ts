@@ -12,6 +12,7 @@ import type { MessagePathReference } from "../types";
 import type { InputbarSendHandler } from "./Inputbar/inputbarSendPayload";
 import type { InputbarOpenedProject } from "./Inputbar/components/InputbarProjectContextBar";
 import type { EmptyStateProjectConversationGroupModel } from "./EmptyStateViewModel";
+import type { InputbarPluginCapability } from "./Inputbar/pluginInputCapability";
 import type {
   InputbarKnowledgePackOption,
   InputbarKnowledgePackSelection,
@@ -83,6 +84,8 @@ export interface EmptyStateProps extends SkillSelectionSourceProps {
   onProjectContextChange?: (projectId: string | null) => void;
   /** 当前会话 ID */
   sessionId?: string | null;
+  /** 当前输入栏可显式激活的插件候选 */
+  pluginSuggestions?: InputbarPluginCapability[];
   /** 当前 runtime tool surface */
   runtimeToolAvailability?: RuntimeToolAvailability | null;
   /** 当前执行态摘要 */

@@ -51,8 +51,22 @@ export interface AgentRuntimeArtifactDocumentSnapshotSaveEvidence {
   contentStatus?: string;
   eventId?: string;
   filePath?: string;
+  lastPersistedAt?: string;
   sessionId: string;
   sidecarRelativePath?: string;
+  sourceArtifactRef?: string;
+  turnId?: string;
+  versionId?: string;
+  versionNo?: number;
+}
+
+export interface AgentRuntimeArtifactDocumentScope {
+  artifactDocumentId?: string;
+  artifactRef: string;
+  lastPersistedAt?: string;
+  sessionId: string;
+  sidecarRelativePath?: string;
+  sourceArtifactRef?: string;
   turnId?: string;
   versionId?: string;
   versionNo?: number;
@@ -173,6 +187,9 @@ export function projectArtifactDocumentSnapshotSaveEvidence({
     readFiniteNumber(metadata?.artifactVersionNo) ??
     readFiniteNumber(metadata?.artifact_version_no) ??
     document.metadata.currentVersionNo;
+  const sourceArtifactRef =
+    readText(metadata, ["sourceArtifactRef", "source_artifact_ref"]) ||
+    readText(eventPayload, ["sourceArtifactRef", "source_artifact_ref"]);
 
   return omitUndefined({
     artifactDocumentId: document.artifactId,
@@ -188,11 +205,13 @@ export function projectArtifactDocumentSnapshotSaveEvidence({
       readText(eventPayload, ["contentStatus", "content_status"]),
     eventId: normalizeText(firstEvent?.eventId),
     filePath,
+    lastPersistedAt: normalizeText(firstEvent?.timestamp),
     sessionId: params.sessionId,
     sidecarRelativePath: readText(sidecarRef, [
       "relativePath",
       "relative_path",
     ]),
+    sourceArtifactRef,
     turnId: normalizeText(params.turnId) || normalizeText(firstEvent?.turnId),
     versionId,
     versionNo,
@@ -326,27 +345,17 @@ export function appServerArtifactReadParamsFromArtifactPreview(
   artifact: Artifact,
   artifactPath: string,
 ): AppServerArtifactReadParams | null {
-  const metadata = asRecord(artifact.meta);
-  const sessionId = resolveArtifactSessionId(metadata);
-  if (!sessionId) {
+  const scope = resolveAgentRuntimeArtifactDocumentScope(artifact, {
+    artifactPath,
+  });
+  if (!scope) {
     return null;
   }
-
-  const normalizedArtifactPath = normalizeText(artifactPath);
-  const artifactRef =
-    resolveArtifactRef(metadata) ||
-    normalizeText(artifact.id) ||
-    normalizedArtifactPath;
-  if (!artifactRef) {
-    return null;
-  }
-
-  const turnId = resolveArtifactTurnId(metadata);
 
   return omitUndefined({
-    sessionId,
-    turnId,
-    artifactRef,
+    sessionId: scope.sessionId,
+    turnId: scope.turnId,
+    artifactRef: scope.artifactRef,
     includeContent: true,
     limit: 1,
   });
@@ -357,34 +366,27 @@ export function appServerArtifactSnapshotAppendParamsFromArtifactDocument(
   document: ArtifactDocumentV1,
 ): AppServerAgentSessionRuntimeEventAppendParams | null {
   const metadata = asRecord(artifact.meta);
-  const sessionId = resolveArtifactSessionId(metadata);
-  if (!sessionId) {
-    return null;
-  }
-
   const filePath = resolveArtifactProtocolFilePath(artifact);
-  const artifactRef =
-    resolveArtifactRef(metadata) ||
-    normalizeText(document.artifactId) ||
-    normalizeText(artifact.id) ||
-    normalizeText(filePath);
-  if (!artifactRef) {
+  const scope = resolveAgentRuntimeArtifactDocumentScope(artifact, {
+    artifactPath: filePath,
+    document,
+  });
+  if (!scope) {
     return null;
   }
 
-  const turnId =
-    resolveArtifactTurnId(metadata) || normalizeText(document.turnId);
   const content = JSON.stringify(document, null, 2);
   const artifactMetadata = {
     ...(metadata || {}),
     artifactSchema: document.schemaVersion,
     artifactKind: document.kind,
     artifactDocument: document,
+    artifactDocumentPersistence: scope,
     artifactTitle: document.title,
     artifactDocumentId: document.artifactId,
     artifactVersionId: normalizeText(document.metadata.currentVersionId),
     artifactVersionNo: document.metadata.currentVersionNo,
-    artifactRef,
+    artifactRef: scope.artifactRef,
     filePath,
     productProfile:
       asRecord(document.metadata.productProfile) ||
@@ -392,15 +394,15 @@ export function appServerArtifactSnapshotAppendParamsFromArtifactDocument(
   };
 
   return omitUndefined({
-    sessionId,
-    turnId,
+    sessionId: scope.sessionId,
+    turnId: scope.turnId,
     runtimeEvents: [
       {
         type: "artifact.snapshot",
         payload: {
           artifact: omitUndefined({
-            artifactId: artifactRef,
-            artifactRef,
+            artifactId: scope.artifactRef,
+            artifactRef: scope.artifactRef,
             artifactDocumentId: document.artifactId,
             filePath,
             path: filePath,
@@ -413,6 +415,103 @@ export function appServerArtifactSnapshotAppendParamsFromArtifactDocument(
         },
       },
     ],
+  });
+}
+
+export function resolveAgentRuntimeArtifactDocumentScope(
+  artifact: Artifact,
+  options: {
+    artifactPath?: string;
+    document?: ArtifactDocumentV1;
+  } = {},
+): AgentRuntimeArtifactDocumentScope | null {
+  const metadata = asRecord(artifact.meta);
+  const savedScope =
+    asRecord(metadata?.artifactDocumentPersistence) ||
+    asRecord(metadata?.artifactDocumentScope) ||
+    asRecord(metadata?.artifactDocumentSaveEvidence);
+  const document = options.document;
+  const artifactPath =
+    normalizeText(options.artifactPath) ||
+    normalizeText(resolveArtifactProtocolFilePath(artifact));
+
+  const sessionId =
+    readText(savedScope, ["sessionId", "session_id"]) ||
+    resolveArtifactSessionId(metadata);
+  if (!sessionId) {
+    return null;
+  }
+
+  const artifactRef =
+    readText(savedScope, ["artifactRef", "artifact_ref"]) ||
+    resolveArtifactRef(metadata) ||
+    normalizeText(document?.artifactId) ||
+    normalizeText(artifact.id) ||
+    artifactPath;
+  if (!artifactRef) {
+    return null;
+  }
+
+  const artifactDocumentId =
+    readText(savedScope, ["artifactDocumentId", "artifact_document_id"]) ||
+    readText(metadata, [
+      "artifactDocumentId",
+      "artifact_document_id",
+      "appServerArtifactDocumentId",
+      "app_server_artifact_document_id",
+    ]) ||
+    normalizeText(document?.artifactId);
+
+  return omitUndefined({
+    artifactDocumentId,
+    artifactRef,
+    lastPersistedAt:
+      readText(savedScope, ["lastPersistedAt", "last_persisted_at"]) ||
+      readText(metadata, ["appServerLastPersistedAt"]),
+    sessionId,
+    sidecarRelativePath:
+      readText(savedScope, ["sidecarRelativePath", "sidecar_relative_path"]) ||
+      readText(metadata, [
+        "appServerSidecarRelativePath",
+        "app_server_sidecar_relative_path",
+      ]),
+    sourceArtifactRef:
+      readText(savedScope, ["sourceArtifactRef", "source_artifact_ref"]) ||
+      readText(metadata, ["sourceArtifactRef", "source_artifact_ref"]),
+    turnId:
+      readText(savedScope, ["turnId", "turn_id"]) ||
+      resolveArtifactTurnId(metadata) ||
+      normalizeText(document?.turnId),
+    versionId:
+      readText(savedScope, ["versionId", "version_id"]) ||
+      readText(metadata, [
+        "artifactVersionId",
+        "artifact_version_id",
+        "appServerArtifactVersionId",
+      ]) ||
+      normalizeText(document?.metadata.currentVersionId),
+    versionNo:
+      readFiniteNumber(savedScope?.versionNo) ??
+      readFiniteNumber(savedScope?.version_no) ??
+      readFiniteNumber(metadata?.artifactVersionNo) ??
+      readFiniteNumber(metadata?.artifact_version_no) ??
+      document?.metadata.currentVersionNo,
+  });
+}
+
+export function agentRuntimeArtifactDocumentScopeFromSaveEvidence(
+  evidence: AgentRuntimeArtifactDocumentSnapshotSaveEvidence,
+): AgentRuntimeArtifactDocumentScope {
+  return omitUndefined({
+    artifactDocumentId: evidence.artifactDocumentId,
+    artifactRef: evidence.artifactRef,
+    lastPersistedAt: evidence.lastPersistedAt,
+    sessionId: evidence.sessionId,
+    sidecarRelativePath: evidence.sidecarRelativePath,
+    sourceArtifactRef: evidence.sourceArtifactRef,
+    turnId: evidence.turnId,
+    versionId: evidence.versionId,
+    versionNo: evidence.versionNo,
   });
 }
 

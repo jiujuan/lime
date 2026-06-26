@@ -187,9 +187,7 @@ describe("AgentChatPage 自动引导", { timeout: 20_000 }, () => {
 
     expect(sharedSendMessageMock).toHaveBeenCalledTimes(1);
     const sendCall = getSendMessageCall();
-    expect(sendCall.content).toBe(
-      "/content_post_with_cover 请基于当前上下文直接开始生成首版社媒主稿。",
-    );
+    expect(sendCall.content).toBe("请基于当前上下文直接开始生成首版社媒主稿。");
     expect(sendCall.images).toEqual([]);
     expect(sendCall.webSearch).toBeUndefined();
     expect(sendCall.thinking).toBeUndefined();

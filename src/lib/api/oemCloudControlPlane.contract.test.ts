@@ -14,6 +14,7 @@ import {
   getClientOrder,
   getClientBootstrap,
   getClientCreditsDashboard,
+  getClientPluginMarketplace,
   getClientSceneSkillPreferences,
   getPublicAuthCatalog,
   getClientProviderOffer,
@@ -431,6 +432,102 @@ describe("oemCloudControlPlane desktop auth", () => {
           licenseState: "revoked",
           enabled: false,
           disabledReason: "license revoked",
+        },
+      ],
+    });
+  });
+
+  it("应通过正式 client/plugins/marketplace 接口读取插件市场目录", async () => {
+    window.__LIME_SESSION_TOKEN__ = "session-token-001";
+
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        code: 200,
+        message: "success",
+        data: {
+          schemaVersion: "plugin-marketplace/v1",
+          tenantId: "tenant-0001",
+          generatedAt: "2026-06-25T00:00:00.000Z",
+          marketplaceName: "limecloud",
+          marketplaceDisplayName: "LimeCloud Marketplace",
+          items: [
+            {
+              pluginKey: "research-kit@limecloud",
+              pluginName: "research-kit",
+              marketplaceName: "limecloud",
+              marketplaceDisplayName: "LimeCloud Marketplace",
+              displayName: "Research Kit",
+              description: "Research plugin package",
+              version: "1.2.3",
+              category: "research",
+              categories: ["research"],
+              keywords: ["research", "research-style"],
+              capabilities: ["lime.skills"],
+              sourceKind: "agent_app_release",
+              sourceRef: "release-001",
+              appId: "research-kit",
+              enabled: true,
+              installState: "available",
+              activationState: "activatable",
+              policy: {
+                installation: "AVAILABLE",
+                authentication: "ON_USE",
+              },
+              package: {
+                releaseId: "release-001",
+                packageUrl:
+                  "https://packages.limecloud.example/plugins/research-kit-1.2.3.lpkg",
+                packageHash: AGENT_APP_PACKAGE_HASH,
+                manifestHash: AGENT_APP_MANIFEST_HASH,
+              },
+              manifestSummary: {
+                name: "research-kit",
+              },
+            },
+          ],
+        },
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const marketplace = await getClientPluginMarketplace("tenant-0001", {
+      query: "research style",
+      category: "research",
+      sort: "name",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://user.limeai.run/api/v1/public/tenants/tenant-0001/client/plugins/marketplace?query=research+style&category=research&sort=name",
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({
+          Accept: "application/json",
+          Authorization: "Bearer session-token-001",
+        }),
+      }),
+    );
+    expect(marketplace).toMatchObject({
+      schemaVersion: "plugin-marketplace/v1",
+      tenantId: "tenant-0001",
+      marketplaceName: "limecloud",
+      items: [
+        {
+          pluginKey: "research-kit@limecloud",
+          pluginName: "research-kit",
+          sourceKind: "agent_app_release",
+          installState: "available",
+          activationState: "activatable",
+          policy: {
+            installation: "AVAILABLE",
+            authentication: "ON_USE",
+          },
+          package: {
+            releaseId: "release-001",
+            packageHash: AGENT_APP_PACKAGE_HASH,
+            manifestHash: AGENT_APP_MANIFEST_HASH,
+          },
         },
       ],
     });

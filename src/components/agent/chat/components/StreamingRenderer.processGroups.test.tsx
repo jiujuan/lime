@@ -53,7 +53,7 @@ describe("StreamingRenderer process groups", () => {
     expect(container.textContent).toContain("先确认最新计划");
   });
 
-  it("非交错模式应将思考和工具收敛为同一执行过程组", () => {
+  it("非交错模式应逐条保留工具过程记录", () => {
     const { container } = renderHarness({
       content: "最终结论",
       thinkingContent: "先检查滚动触发逻辑\n再确认输出展开时机",
@@ -70,30 +70,24 @@ describe("StreamingRenderer process groups", () => {
       ],
     });
 
-    const processGroupButton = container.querySelector<HTMLButtonElement>(
-      '[data-testid="streaming-process-group"] button',
-    );
-    expect(processGroupButton?.getAttribute("aria-expanded")).toBe("false");
-    expect(container.textContent).not.toContain("先检查滚动触发逻辑");
-    expect(container.textContent).toContain("已运行 1 条命令");
     expect(
       container.querySelector('[data-testid="streaming-process-group"]'),
-    ).toBeTruthy();
-
-    act(() => {
-      processGroupButton?.click();
-    });
-
+    ).toBeNull();
+    expect(container.textContent).toContain("已完成思考");
     expect(container.textContent).toContain("先检查滚动触发逻辑");
     expect(
       container
         .querySelector('[data-testid="inline-tool-process-step"]')
         ?.getAttribute("data-grouped"),
-    ).toBe("yes");
+    ).toBe("no");
+    expect(
+      container.querySelectorAll('[data-testid="inline-tool-process-step"]')
+        .length,
+    ).toBe(1);
     expect(container.textContent).toContain("最终结论");
   });
 
-  it("交错内容中的思考与工具应按连续执行流分组", () => {
+  it("交错内容中的思考与工具应按连续执行流逐条渲染", () => {
     const { container } = renderHarness({
       content: "",
       contentParts: [
@@ -127,30 +121,19 @@ describe("StreamingRenderer process groups", () => {
       isStreaming: false,
     });
 
-    const processGroupButton = container.querySelector<HTMLButtonElement>(
-      '[data-testid="streaming-process-group"] button',
-    );
-    expect(processGroupButton?.getAttribute("aria-expanded")).toBe("false");
-    expect(container.textContent).toContain("已运行 1 条命令");
-    expect(container.textContent).not.toContain("先检查 auto-scroll 触发条件");
     expect(
-      container.querySelector('[data-testid="inline-tool-process-step"]'),
+      container.querySelector('[data-testid="streaming-process-group"]'),
     ).toBeNull();
-    expect(container.textContent).toContain("已经定位到滚动没有跟随增量输出。");
-
-    act(() => {
-      processGroupButton?.click();
-    });
-
     expect(container.textContent).toContain("先检查 auto-scroll 触发条件");
     expect(
       container
         .querySelector('[data-testid="inline-tool-process-step"]')
         ?.getAttribute("data-grouped"),
-    ).toBe("yes");
+    ).toBe("no");
+    expect(container.textContent).toContain("已经定位到滚动没有跟随增量输出。");
   });
 
-  it("交错内容里相邻多次命令应折叠为一条过程摘要", () => {
+  it("交错内容里相邻多次命令应逐条保留过程记录", () => {
     const { container } = renderHarness({
       content: "",
       contentParts: [
@@ -202,28 +185,77 @@ describe("StreamingRenderer process groups", () => {
       isStreaming: false,
     });
 
-    const processGroupButton = container.querySelector<HTMLButtonElement>(
-      '[data-testid="streaming-process-group"] button',
+    expect(
+      container.querySelector('[data-testid="streaming-process-group"]'),
+    ).toBeNull();
+    expect(container.textContent).toContain("先盘点目录");
+
+    const toolSteps = container.querySelectorAll(
+      '[data-testid="inline-tool-process-step"]',
     );
-    expect(processGroupButton?.getAttribute("aria-expanded")).toBe("false");
-    expect(container.textContent).toContain("已运行 3 条命令");
-    expect(container.textContent).not.toContain("先盘点目录");
+    expect(toolSteps.length).toBe(3);
+    expect(toolSteps[0]?.getAttribute("data-grouped")).toBe("no");
+    expect(container.textContent).toContain("ls /tmp");
+    expect(container.textContent).toContain("stat /tmp");
+    expect(container.textContent).toContain("du -sh /tmp");
+    expect(container.textContent).toContain("目录已盘点。");
+  });
+
+  it("追加后续工具时不应替换已显示的工具过程记录", () => {
+    const baseProps = {
+      content: "",
+      isStreaming: true,
+      contentParts: [
+        {
+          type: "tool_use" as const,
+          toolCall: {
+            id: "tool-preserve-read",
+            name: "Read",
+            arguments: JSON.stringify({ file_path: "ThinkingBlock.tsx" }),
+            status: "completed" as const,
+            result: { success: true, output: "ok" },
+            startTime: new Date("2026-06-25T09:00:00.000Z"),
+            endTime: new Date("2026-06-25T09:00:01.000Z"),
+          },
+        },
+      ],
+    };
+    const { container, rerender } = renderHarness(baseProps);
+
+    expect(container.textContent).toContain("ThinkingBlock.tsx");
     expect(
       container.querySelectorAll('[data-testid="inline-tool-process-step"]')
         .length,
-    ).toBe(0);
-    expect(container.textContent).toContain("目录已盘点。");
+    ).toBe(1);
 
-    act(() => {
-      processGroupButton?.click();
+    rerender({
+      ...baseProps,
+      contentParts: [
+        ...baseProps.contentParts,
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-preserve-rg",
+            name: "Bash",
+            arguments: JSON.stringify({ command: "rg -n groupMarker src" }),
+            status: "completed",
+            result: { success: true, output: "ok" },
+            startTime: new Date("2026-06-25T09:00:02.000Z"),
+            endTime: new Date("2026-06-25T09:00:03.000Z"),
+          },
+        },
+      ],
     });
 
-    const expandedToolSteps = container.querySelectorAll(
-      '[data-testid="inline-tool-process-step"]',
-    );
-    expect(expandedToolSteps.length).toBe(3);
-    expect(expandedToolSteps[0]?.getAttribute("data-grouped")).toBe("yes");
-    expect(container.textContent).toContain("先盘点目录");
+    expect(
+      container.querySelector('[data-testid="streaming-process-group"]'),
+    ).toBeNull();
+    expect(
+      container.querySelectorAll('[data-testid="inline-tool-process-step"]')
+        .length,
+    ).toBe(2);
+    expect(container.textContent).toContain("ThinkingBlock.tsx");
+    expect(container.textContent).toContain("rg -n groupMarker src");
   });
 
   it("消息仍在输出时，已失败的工具批次也应默认折叠，避免工具输出切开正文", () => {
@@ -291,7 +323,7 @@ describe("StreamingRenderer process groups", () => {
     expect(container.textContent).not.toContain("Fetching data issues");
   });
 
-  it("消息仍在输出时，普通运行工具批次仍应默认折叠，避免实时输出切开正文", () => {
+  it("消息仍在输出时，普通运行工具逐条显示但隐藏实时原始输出", () => {
     const { container } = renderHarness({
       content: "",
       contentParts: [
@@ -336,19 +368,22 @@ describe("StreamingRenderer process groups", () => {
       isStreaming: true,
     });
 
-    const processGroup = container.querySelector<HTMLButtonElement>(
-      '[data-testid="streaming-process-group"] button',
-    );
-
-    expect(processGroup?.getAttribute("aria-expanded")).toBe("false");
+    expect(
+      container.querySelector('[data-testid="streaming-process-group"]'),
+    ).toBeNull();
     expect(container.textContent).toContain("我先核实今天的国际新闻");
-    expect(container.textContent).toContain("运行中 2 条命令");
+    expect(
+      container.querySelectorAll('[data-testid="inline-tool-process-step"]')
+        .length,
+    ).toBe(2);
+    expect(container.textContent).toContain("python scrape.py");
+    expect(container.textContent).toContain("python normalize.py");
     expect(container.textContent).toContain("国际新闻简报");
     expect(container.textContent).not.toContain("raw html payload");
     expect(container.textContent).not.toContain("another raw payload");
   });
 
-  it("尾部 Skill 仍在运行时应保持展开，不能提前折叠成完成摘要", () => {
+  it("尾部 Skill 仍在运行时应显示工具过程且隐藏协议 payload", () => {
     const { container } = renderHarness({
       content: "",
       contentParts: [
@@ -382,18 +417,16 @@ describe("StreamingRenderer process groups", () => {
       isStreaming: true,
     });
 
-    const processGroup = container.querySelector<HTMLButtonElement>(
-      '[data-testid="streaming-process-group"] button',
-    );
-
-    expect(processGroup?.getAttribute("aria-expanded")).toBe("true");
+    expect(
+      container.querySelector('[data-testid="streaming-process-group"]'),
+    ).toBeNull();
     expect(container.textContent).toContain("先读取技能说明");
     expect(container.textContent).toContain("brand-product-knowledge-builder");
     expect(container.textContent).toContain("正在运行 Skill");
     expect(container.textContent).not.toContain("partial skill protocol");
   });
 
-  it("消息仍在输出时，completed Skill 过程也应保持展开但隐藏协议 payload", () => {
+  it("消息仍在输出时，completed Skill 过程应显示工具行但隐藏协议 payload", () => {
     const { container } = renderHarness({
       content: "",
       contentParts: [
@@ -430,11 +463,9 @@ describe("StreamingRenderer process groups", () => {
       isStreaming: true,
     });
 
-    const processGroup = container.querySelector<HTMLButtonElement>(
-      '[data-testid="streaming-process-group"] button',
-    );
-
-    expect(processGroup?.getAttribute("aria-expanded")).toBe("true");
+    expect(
+      container.querySelector('[data-testid="streaming-process-group"]'),
+    ).toBeNull();
     expect(container.textContent).toContain("capability-report");
     expect(container.textContent).toContain("我正在整理最终能力报告");
     expect(container.textContent).not.toContain("legacy_tool_event");
@@ -487,7 +518,7 @@ describe("StreamingRenderer process groups", () => {
     expect(container.textContent).toContain("已确认主要来源");
   });
 
-  it("交错内容里的工具折叠不应跨正文合并", () => {
+  it("交错内容里的工具记录应保持原始时序且不跨正文合并", () => {
     const { container } = renderHarness({
       content: "",
       contentParts: [
@@ -544,21 +575,26 @@ describe("StreamingRenderer process groups", () => {
     });
 
     expect(
-      container.querySelectorAll('[data-testid="streaming-process-group"]')
+      container.querySelector('[data-testid="streaming-process-group"]'),
+    ).toBeNull();
+    expect(
+      container.querySelectorAll('[data-testid="inline-tool-process-step"]')
         .length,
-    ).toBe(2);
+    ).toBe(3);
 
     const renderedText = container.textContent || "";
     const firstTextIndex = renderedText.indexOf("先说明检查目标。");
-    const firstGroupIndex = renderedText.indexOf("已运行 2 条命令");
+    const firstToolIndex = renderedText.indexOf("ls /tmp");
+    const secondToolIndex = renderedText.indexOf("pwd");
     const middleTextIndex = renderedText.indexOf("中间结论已经确认。");
-    const secondGroupIndex = renderedText.indexOf("已运行 1 条命令");
+    const thirdToolIndex = renderedText.indexOf("git status --short");
     const finalTextIndex = renderedText.indexOf("最终结论。");
 
     expect(firstTextIndex).toBeGreaterThanOrEqual(0);
-    expect(firstGroupIndex).toBeGreaterThan(firstTextIndex);
-    expect(middleTextIndex).toBeGreaterThan(firstGroupIndex);
-    expect(secondGroupIndex).toBeGreaterThan(middleTextIndex);
-    expect(finalTextIndex).toBeGreaterThan(secondGroupIndex);
+    expect(firstToolIndex).toBeGreaterThan(firstTextIndex);
+    expect(secondToolIndex).toBeGreaterThan(firstToolIndex);
+    expect(middleTextIndex).toBeGreaterThan(secondToolIndex);
+    expect(thirdToolIndex).toBeGreaterThan(middleTextIndex);
+    expect(finalTextIndex).toBeGreaterThan(thirdToolIndex);
   });
 });

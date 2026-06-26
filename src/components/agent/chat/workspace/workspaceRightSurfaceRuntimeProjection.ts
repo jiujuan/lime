@@ -8,11 +8,19 @@ import {
   type WorkspaceRightSurfaceLauncherProjection,
   type WorkspaceRightSurfaceState,
 } from "./right-surface";
+import type {
+  PluginActivationContext,
+  PluginContract,
+} from "@/features/plugin";
+import { buildWorkspacePluginRightSurfaceIntents } from "./workspacePluginRightSurfaceProjection";
 
 export interface BuildWorkspaceRightSurfaceRuntimePendingIntentsParams {
   createdAt: number;
   harnessPendingCount: number;
   objectCanvasCandidateId?: string | null;
+  pluginActivationContext?: PluginActivationContext | null;
+  pluginContracts?: readonly PluginContract[];
+  pluginRightSurfaceIntentTtlMs?: number;
   preferredServiceSkillResultFileTargetRelativePath?: string | null;
   showHarnessToggle: boolean;
   suppressHomeNavbarUtilityActions: boolean;
@@ -35,6 +43,9 @@ export function buildWorkspaceRightSurfaceRuntimePendingIntents({
   createdAt,
   harnessPendingCount,
   objectCanvasCandidateId,
+  pluginActivationContext,
+  pluginContracts = [],
+  pluginRightSurfaceIntentTtlMs,
   preferredServiceSkillResultFileTargetRelativePath,
   showHarnessToggle,
   suppressHomeNavbarUtilityActions,
@@ -54,6 +65,12 @@ export function buildWorkspaceRightSurfaceRuntimePendingIntents({
       enabled: Boolean(objectCanvasCandidateId),
       candidateId: objectCanvasCandidateId,
       createdAt,
+    }),
+    ...buildWorkspacePluginRightSurfaceIntents({
+      activationContext: pluginActivationContext,
+      contracts: pluginContracts,
+      createdAt,
+      ttlMs: pluginRightSurfaceIntentTtlMs,
     }),
   ];
 }

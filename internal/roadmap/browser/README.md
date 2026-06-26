@@ -920,8 +920,9 @@ MVP 状态：已由 `internal/exec-plans/browser-runtime-right-surface-plan.md` 
 - [x] 下载有受控 Host facts 和最小 UI：文件名、来源 URL、状态、进度进入 Browser 面板，不向 Renderer / Agent 暴露本地保存路径。
 - [x] DOM/accessibility/network/console facts 可进入 EvidencePack。
 - [x] Browser action trace 可按 thread / turn / content / executor 查询：`browser_action_index` 输出 join keys、summary ids / executor counts，前端 `filterBrowserActionIndexItems` 可按这些维度过滤。
-- [ ] 高风险动作进入 action.required / confirmation / human takeover。
+- [x] 高风险动作进入 action.required / confirmation / human takeover：`browser-runtime` CDP executor 对点击、输入、表单、上传/下载、脚本等 mutation 动作 fail-closed，不执行页面 mutation，输出 `tool_confirmation / permission_facts / confirmation_request_id`，并进入 `human_controlling / human` evidence。
 - [ ] Agent App 可通过 Browser intent 请求网页授权或受控浏览，不复制浏览器 UI。
+  - 2026-06-25：`AgentAppsPage -> AgentAppRuntimePage -> browserIntentLaunch` 主路径已接通，`lime.browser/open` 的 `requires_agent_task` intent 会转成 `surfaceKind=browser` Right Surface pending request，并只信任宿主 target；完整验收仍需真实网页工作流、GUI/fixture 证据和 Playwright。
 - [ ] Playwright 覆盖至少一个真实网页工作流：打开 URL、Agent observe、人工接管、继续执行、生成 evidence。
 
 ## 24. 测试策略

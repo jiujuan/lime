@@ -1,8 +1,12 @@
-import type { AgentRuntimeArtifactDocumentSnapshotSaveEvidence } from "@/lib/api/agentRuntime/appServerArtifactClient";
+import {
+  agentRuntimeArtifactDocumentScopeFromSaveEvidence,
+  type AgentRuntimeArtifactDocumentSnapshotSaveEvidence,
+} from "@/lib/api/agentRuntime/appServerArtifactClient";
 import type { ArtifactDocumentV1 } from "@/lib/artifact-document";
 import type { Artifact } from "@/lib/artifact/types";
 import { resolveArtifactProtocolFilePath } from "@/lib/artifact-protocol";
 import type { WriteArtifactContext } from "../types";
+import { buildWorkspaceArtifactDocumentPersistenceManifest } from "./workspaceArtifactDocumentPersistenceManifest";
 
 export interface BuildArtifactDocumentSaveEvidenceWriteContextParams {
   artifact: Artifact;
@@ -28,6 +32,14 @@ export function buildArtifactDocumentSaveEvidenceWriteContext({
     typeof artifact.meta.filePath === "string" && artifact.meta.filePath.trim()
       ? artifact.meta.filePath
       : filePath;
+  const persistenceScope =
+    agentRuntimeArtifactDocumentScopeFromSaveEvidence(evidence);
+  const persistenceManifest =
+    buildWorkspaceArtifactDocumentPersistenceManifest({
+      artifact,
+      document,
+      scope: persistenceScope,
+    });
 
   return {
     artifactId: artifact.id,
@@ -40,6 +52,8 @@ export function buildArtifactDocumentSaveEvidenceWriteContext({
       meta: omitUndefined({
         ...artifact.meta,
         artifactDocument: document,
+        artifactDocumentPersistence: persistenceScope,
+        artifactDocumentPersistenceManifest: persistenceManifest,
         artifactDocumentSaveEvidence: evidence,
         appServerArtifactDocumentId: evidence.artifactDocumentId,
         appServerArtifactEventId: evidence.eventId,
@@ -50,6 +64,7 @@ export function buildArtifactDocumentSaveEvidenceWriteContext({
         appServerArtifactContentStatus: evidence.contentStatus,
         appServerArtifactContentBytes: evidence.contentBytes,
         appServerArtifactContentSha256: evidence.contentSha256,
+        appServerLastPersistedAt: evidence.lastPersistedAt,
         appServerLastUpdateSource: "artifact.snapshot",
         artifactVersionId: evidence.versionId,
         artifactVersionNo: evidence.versionNo,
@@ -68,6 +83,8 @@ export function buildArtifactDocumentSaveEvidenceWriteContext({
       appServerArtifactSessionId: evidence.sessionId,
       appServerArtifactTurnId: evidence.turnId,
       appServerSidecarRelativePath: evidence.sidecarRelativePath,
+      artifactDocumentPersistenceManifest: persistenceManifest,
+      appServerLastPersistedAt: evidence.lastPersistedAt,
       appServerLastUpdateSource: "artifact.snapshot",
     }),
   };

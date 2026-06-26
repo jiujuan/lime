@@ -200,6 +200,7 @@ describe("StreamingRenderer WebSearch sequence rendering", () => {
     expect(thinkingIndex).toBeGreaterThan(searchIndex);
     expect(retrievalRows).toHaveLength(2);
     expect(thinkingBlock).not.toBeNull();
+    expect(thinkingBlock?.getAttribute("data-group-marker")).toBe("no");
     expect(
       retrievalRows[0]!.compareDocumentPosition(thinkingBlock!) &
         Node.DOCUMENT_POSITION_FOLLOWING,

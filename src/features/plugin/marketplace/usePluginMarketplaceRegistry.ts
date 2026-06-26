@@ -1,0 +1,156 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  loadPluginMarketplaceRegistry,
+  type PluginMarketplaceQuery,
+  type PluginMarketplaceRegistryLoaderDeps,
+  type PluginMarketplaceRegistrySnapshot,
+} from "./marketplaceRegistryLoader";
+import {
+  buildPluginMarketplaceViewModel,
+  type PluginMarketplaceViewModel,
+  type PluginMarketplaceViewOptions,
+} from "./pluginMarketplaceViewModel";
+
+export type PluginMarketplaceRegistryLoader = (
+  tenantId: string,
+  query?: PluginMarketplaceQuery,
+  deps?: PluginMarketplaceRegistryLoaderDeps,
+) => Promise<PluginMarketplaceRegistrySnapshot>;
+
+export interface UsePluginMarketplaceRegistryOptions {
+  tenantId: string;
+  marketplaceQuery?: PluginMarketplaceQuery;
+  viewOptions?: PluginMarketplaceViewOptions;
+  autoLoad?: boolean;
+  loader?: PluginMarketplaceRegistryLoader;
+  loaderDeps?: PluginMarketplaceRegistryLoaderDeps;
+}
+
+export interface UsePluginMarketplaceRegistryResult {
+  loading: boolean;
+  error: string | null;
+  snapshot: PluginMarketplaceRegistrySnapshot | null;
+  model: PluginMarketplaceViewModel | null;
+  refresh: () => Promise<PluginMarketplaceRegistrySnapshot>;
+}
+
+function readOptionalText(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function normalizeMarketplaceQuery(
+  query: PluginMarketplaceQuery | undefined,
+): PluginMarketplaceQuery {
+  return {
+    query: readOptionalText(query?.query),
+    category: readOptionalText(query?.category),
+    sort: readOptionalText(query?.sort),
+  };
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return typeof error === "string"
+    ? error
+    : "Plugin marketplace registry load failed";
+}
+
+export function usePluginMarketplaceRegistry({
+  tenantId,
+  marketplaceQuery,
+  viewOptions,
+  autoLoad = true,
+  loader = loadPluginMarketplaceRegistry,
+  loaderDeps,
+}: UsePluginMarketplaceRegistryOptions): UsePluginMarketplaceRegistryResult {
+  const mountedRef = useRef(false);
+  const requestSeqRef = useRef(0);
+  const marketplaceQueryText = marketplaceQuery?.query;
+  const marketplaceQueryCategory = marketplaceQuery?.category;
+  const marketplaceQuerySort = marketplaceQuery?.sort;
+  const viewQuery = viewOptions?.query;
+  const viewCategory = viewOptions?.category;
+  const viewStatusFilter = viewOptions?.statusFilter;
+  const viewSort = viewOptions?.sort;
+  const normalizedTenantId = useMemo(() => tenantId.trim(), [tenantId]);
+  const normalizedMarketplaceQuery = useMemo(
+    () =>
+      normalizeMarketplaceQuery({
+        query: marketplaceQueryText,
+        category: marketplaceQueryCategory,
+        sort: marketplaceQuerySort,
+      }),
+    [marketplaceQueryCategory, marketplaceQuerySort, marketplaceQueryText],
+  );
+  const [snapshot, setSnapshot] =
+    useState<PluginMarketplaceRegistrySnapshot | null>(null);
+  const [loading, setLoading] = useState(autoLoad);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      requestSeqRef.current += 1;
+    };
+  }, []);
+
+  const refresh = useCallback(async () => {
+    const requestSeq = requestSeqRef.current + 1;
+    requestSeqRef.current = requestSeq;
+    setLoading(true);
+    setError(null);
+
+    try {
+      const nextSnapshot = await loader(
+        normalizedTenantId,
+        normalizedMarketplaceQuery,
+        loaderDeps,
+      );
+      if (mountedRef.current && requestSeq === requestSeqRef.current) {
+        setSnapshot(nextSnapshot);
+      }
+      return nextSnapshot;
+    } catch (loadError) {
+      if (mountedRef.current && requestSeq === requestSeqRef.current) {
+        setError(errorMessage(loadError));
+      }
+      throw loadError;
+    } finally {
+      if (mountedRef.current && requestSeq === requestSeqRef.current) {
+        setLoading(false);
+      }
+    }
+  }, [loader, loaderDeps, normalizedMarketplaceQuery, normalizedTenantId]);
+
+  useEffect(() => {
+    if (!autoLoad) {
+      return;
+    }
+    void refresh().catch(() => undefined);
+  }, [autoLoad, refresh]);
+
+  const model = useMemo(
+    () =>
+      snapshot
+        ? buildPluginMarketplaceViewModel(snapshot, {
+            query: viewQuery,
+            category: viewCategory,
+            statusFilter: viewStatusFilter,
+            sort: viewSort,
+          })
+        : null,
+    [snapshot, viewCategory, viewQuery, viewSort, viewStatusFilter],
+  );
+
+  return {
+    loading,
+    error,
+    snapshot,
+    model,
+    refresh,
+  };
+}

@@ -98,6 +98,8 @@ export const APP_SERVER_METHOD_SESSION_LIST = "agentSession/list";
 export const APP_SERVER_METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND =
   "agentSession/runtimeEvents/append";
 export const APP_SERVER_METHOD_ARTIFACT_READ = "artifact/read";
+export const APP_SERVER_METHOD_AGENT_APP_INSTALLED_SAVE =
+  "agentAppInstalled/save";
 export const APP_SERVER_METHOD_EVIDENCE_EXPORT = "evidence/export";
 export const APP_SERVER_METHOD_WORKSPACE_DEFAULT_ENSURE =
   "workspace/default/ensure";
@@ -136,7 +138,7 @@ export const WEB_TOOLS_REASONING_FINAL_SIGNATURE =
 export const WEB_TOOLS_REASONING_ITEM_SIGNATURE =
   "web-tools-reasoning-item-signature";
 export const WEB_TOOLS_REASONING_NATIVE_ITEM_ID = "rs_web_tools_fixture";
-export const WEB_TOOLS_REASONING_PROVIDER_BACKEND = "codex";
+export const WEB_TOOLS_REASONING_PROVIDER_BACKEND = "reasoning_fixture";
 export const WEB_TOOLS_FETCH_MARKDOWN =
   "WebFetch 正文摘要：页面确认搜索来源可以展开，同时最终正文继续输出。";
 export const WEB_TOOLS_BROKEN_MARKDOWN_TEXT = [
@@ -168,6 +170,10 @@ export const CONTENT_FACTORY_PRODUCT_PROFILE_SESSION_TITLE =
   "内容工厂 Product Profile Fixture";
 export const CONTENT_FACTORY_PRODUCT_PROFILE_TURN_ID =
   "turn_content_factory_product_profile";
+export const CONTENT_FACTORY_PRODUCT_PROFILE_WORKER_ACTION_KEY =
+  "worker_dogfood";
+export const CONTENT_FACTORY_PRODUCT_PROFILE_WORKER_TURN_ID = `${CONTENT_FACTORY_PRODUCT_PROFILE_SESSION_ID}-worker-turn`;
+export const CONTENT_FACTORY_PRODUCT_PROFILE_WORKER_TASK_ID = `${CONTENT_FACTORY_PRODUCT_PROFILE_WORKER_TURN_ID}:${CONTENT_FACTORY_PRODUCT_PROFILE_WORKER_ACTION_KEY}`;
 export const CONTENT_FACTORY_PRODUCT_PROFILE_ARTICLE_ARTIFACT_ID =
   "artifact-article-1";
 export const CONTENT_FACTORY_PRODUCT_PROFILE_IMAGE_ARTIFACT_ID =
@@ -268,7 +274,10 @@ export const CONTENT_FACTORY_PRODUCT_PROFILE_ASSERTION_KEYS = [
   "contentFactoryProductProfilePageShowsObjects",
   "contentFactoryProductProfileReadModelProjected",
   "contentFactoryProductProfileArtifactsProjected",
+  "contentFactoryProductProfileRendererArtifactsProjected",
   "contentFactoryProductProfileArtifactReadContent",
   "contentFactoryProductProfileWorkerFailureEvidence",
+  "contentFactoryProductProfileWorkerTurnExecuted",
+  "contentFactoryProductProfileActionResultPatchProjected",
   "contentFactoryProductProfileDoesNotUseModelTurn",
 ];

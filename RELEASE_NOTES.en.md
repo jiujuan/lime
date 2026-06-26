@@ -1,49 +1,50 @@
-## Lime v1.79.0
+## Lime v1.80.0
 
 <sub>The Simplified Chinese release notes are the primary version. This English page is a companion for international readers.</sub>
 
 ### New Features
 
-- Browser Runtime and the Right Surface browser workspace moved onto the current path: App Server `browserSession/*` protocol methods, Electron embedded browser hosting, canvas browser panels, Right Surface browser panels, download shelf, context menu, and session state projection were added together.
-- Claw workspace now connects browser assist with product-profile work: browser sessions, product profile artifact documents, worker evidence, document versions, and save evidence can flow through the same Workspace / Evidence Pack path.
-- Agent App install and launch flows gained release evidence: cloud release evidence, release signatures, readiness issue classification, launch target controls / persistence, and Agent App task worker wiring.
-- App Server protocol and the npm client now cover browser sessions, runtime event append, Agent App host lifecycle snapshot/list responses, and UI runtime status shapes, with Rust schemas and TypeScript protocol types regenerated.
-- Claw streaming rendering now has structured content timelines, web retrieval process projection, text delta lifecycle handling, and content part ordering so reasoning, tools, web search, and final answers render more consistently across live streaming and history restore.
+- Plugins are now the top-level Lime product concept. New plugin roadmap, PRD, architecture, interface contracts, history-restore rules, and prototypes define plugins as the install / authorization / distribution root, with workspace apps as a plugin capability.
+- Added the first Plugin Center and Marketplace frontend path: plugin lists, detail panels, registration and skill panels, installed-state merging, capability categories, view-model projection, and navigation / app-page entry points.
+- Claw composer now supports explicit plugin activation with plugin chips / selectors, `@plugin` input, plugin activation context, send-time metadata merging, and Right Surface opening rules. Normal chats no longer rely on semantic plugin guessing.
+- Content Factory moved onto the plugin dogfood path with plugin contracts, worker runtime samples, delivery plans, workspace patches, media-cache declarations, fixture packages, and browser intent launch wiring.
+- Agent App task worker runtime was expanded so App Server can resolve installed runtime packages, execute worker turns, project product Profile / artifact documents, and keep traceable evidence for Content Factory worker output.
+- Browser Runtime high-risk actions now use a confirmation / human-takeover loop. Mutating actions such as `click`, `type`, `submit`, `upload`, `download`, and `javascript` fail closed in the CDP executor and emit `action.required`, permission facts, and Evidence Pack action-index entries.
+- ArtifactDocument persistence now carries cross-session scope, save evidence, automatic preview synchronization, and file-level archive manifests, so history restore can continue saving to the same App Server session / artifact ref.
 
 ### Fixes
 
-- Fixed missing traceable session references between browser assist and Right Surface. Workspace now drives the right-side browser surface through browser session refs, intents, control modes, and runtime navigation.
-- Fixed Agent App cloud installs showing entry points without release trust context. Install review can now surface signatures, release evidence, and readiness issues.
-- Fixed ordering drift between WebSearch / WebFetch, reasoning, and final answer content across streaming and hydration by relying on structured sequence / provenance instead of display-text regexes.
-- Fixed artifact document save evidence missing auditable document versions by adding artifact document versions and product profile artifact document projection in App Server runtime.
-- Fixed the Browser Runtime manager growing into a single responsibility hotspot by splitting session lifecycle, target reading, event streams, and evidence output into focused modules.
+- Fixed ordinary tool process records being replaced by batch summaries. `Read`, `Ran`, Skill, MCP, and similar process steps now remain visible in tool-id order, while WebSearch / WebFetch keep their dedicated retrieval timeline.
+- Fixed installed Agent App intent lookup blocking normal sends. Failures or timeouts now skip intent matching without blocking `agentSession/turn/start`.
+- Fixed an Artifact store synchronization loop risk during streaming / Browser Assist by switching to artifact content signatures instead of message object identity.
+- Fixed stale embedded-browser `WebContentsView` cleanup after main-window refreshes, preventing old browser views from crossing into new renderer state.
+- Fixed scattered ArtifactDocument scope during history editing by standardizing `artifact/read`, preview sync, and save append on `artifactDocumentPersistence` metadata.
 
 ### Improvements and Refactors
 
-- Split `lime-rs/crates/agent/src/request_tool_policy.rs` into auto compaction, runtime status, stream diagnostics, stream idle, text batching, web search preflight / tracker, and web retrieval process modules; the root file now keeps only dispatch boundaries.
-- Split the Browser Runtime manager into CDP targets, session, session events, session lifecycle, session reader, and session stream modules to reduce ownership and testing load.
-- Added App Server runtime modules for browser session processing/runtime, browser evidence provider, product workspace/profile projection, and artifact document projection, continuing the move of GUI evidence into the App Server current owner.
-- Continued extracting Agent Chat frontend behavior into testable modules for history merge, content part timeline, stream completion, text delta lifecycle, Right Surface runtime projection, browser assist control, and product profile models.
-- Continued modularizing Claw current fixture scripts with product profile content factory, browser/right-surface visual checks, web tool waits, scenario assertions, and code artifact workbench fixture support.
+- Split plugin work into testable modules for manifest contracts, marketplace registry, installed state, activation, history restore, Right Surface projection, Content Factory contracts, and browser intent launch.
+- Consolidated plugin activation, Agent App intent routing, and installed App cache refresh in `useWorkspaceSendActions` while keeping sends on the current App Server JSON-RPC / RuntimeCore path.
+- Added Browser Runtime `action_policy` and moved high-risk action gating into the Rust executor; App Server evidence now consumes structured action state.
+- Continued separating Agent Chat streaming rendering by content part, lifecycle, and provenance, with clear owners for ordinary tools, web retrieval, thinking, and final answer text.
+- Added a typed OEM cloud control-plane client and contract tests to keep the future remote plugin marketplace boundary explicit.
 
 ### Tests and Quality
 
-- Added and expanded regressions for Browser Runtime API, embedded browser host, browser session protocol, browser panels, Right Surface browser panels, browser assist control, browser runtime navigation, and workspace browser session refs.
-- Added and expanded Agent App tests for release evidence, release signatures, readiness issue classification, launch target persistence, Agent Apps page view models, cloud bootstrap, and install review.
-- Added and expanded streaming regressions for content part ordering, projection guards, text delta lifecycle, content timelines, web retrieval projection, MessageList reasoning flow / persistence, and stream runtime handling.
-- Expanded App Server protocol catalog, generated schemas, app-server-client request methods, contract guards, and release manifest checks.
-- Updated five-locale i18n resources for new visible copy in Agent, Agent Runtime, and Workspace namespaces.
-- Updated release version facts to `1.79.0` across the root app, Rust workspace, CLI npm package, App Server client package, Cargo lock, and the Aster sub-workspace lock.
+- Added and expanded tests for plugin manifests, marketplace view models, installed state, activation, history restore, Content Factory contracts, browser intent launch, and Right Surface projection.
+- Added and expanded App Server regressions for Agent App worker turns, runtime package resolution, product Profile artifact documents, worker failures, browser action evidence export, and read models.
+- Added and expanded Claw regressions for inputbar plugin controls, send routing, ArtifactDocument persistence, artifact preview sync, StreamingRenderer, InlineToolProcessStep, and Markdown display source handling.
+- Added and expanded Browser Runtime high-risk action fail-closed tests, Electron embedded-browser host tests, code artifact workbench fixtures, Claw current fixtures, and GUI evidence assertions.
+- Updated five-locale i18n resources for new visible copy in Plugin, Agent, Inputbar, Workspace, and Navigation surfaces.
+- Updated release version facts to `1.80.0` across the root app, Rust workspace, CLI npm package, App Server client package, Cargo lock, and the Aster sub-workspace lock.
 
 ### Documentation
 
-- Added the Claw streaming rendering correctness document to lock down content part provenance, lifecycle, and tool / reasoning / final answer ordering boundaries.
-- Added traceable agent acceptance methodology and paper drafts to document the evidence model for acceptance.
-- Added Browser Runtime / Right Surface execution planning and the browser roadmap for browser sessions, Right Surface integration, Evidence Pack, and validation gates.
-- Updated the quality workflow, execution plan index, Agent App Host v3 implementation plan, and scripts directory notes so the release candidate remains traceable.
+- Added the `internal/roadmap/plugin/` documentation set for the plugin roadmap, including PRD, architecture, technical baseline, interface contracts, implementation plan, history restore, HTML prototype, and low-fidelity prototype.
+- Updated Agent App Host v3, Browser Runtime Right Surface, and Claw streaming rendering execution plans with v1.80.0 release-candidate validation evidence, remaining gaps, and exit criteria.
+- Updated the browser roadmap to define the current boundary for high-risk action confirmation / human takeover and Evidence Pack action indexing.
 
 ### Other
 
-- This release continues converging browser assist, Agent App release evidence, Claw streaming display, product-profile workspace, and Evidence Pack onto the App Server JSON-RPC / RuntimeCore / Electron Desktop Host current path. Old mock fallback, parallel renderer event drains, and unstructured display-text inference are not sources for new capabilities.
+- This release continues converging the plugin workspace, Content Factory dogfood path, ArtifactDocument persistence, Browser Runtime safe actions, and Claw tool-process display onto the App Server JSON-RPC / RuntimeCore / Electron Desktop Host current path. Old plugin command families, semantic activation guessing, ordinary-tool batch summaries, and mock fallback are not sources for new capabilities.
 
-**Full changes**: `v1.78.0` -> `v1.79.0`
+**Full changes**: `v1.79.0` -> `v1.80.0`

@@ -103,6 +103,11 @@ const workspacePatch = {
       turnId: "turn-action-2",
       errorCode: "worker_invalid_json_output",
       errorMessage: "Agent App worker returned invalid JSON",
+      failureCategory: "worker_output",
+      retryable: false,
+      retryAdvice: "inspect_worker_output",
+      retryAttempt: 0,
+      retryMaxAttempts: 0,
       updatedAt: "2026-06-24T00:00:02.000Z",
     },
   ],
@@ -240,6 +245,9 @@ describe("workspaceProductProfileModel", () => {
         status: "failed",
         taskId: "task-image-1",
         errorCode: "worker_invalid_json_output",
+        failureCategory: "worker_output",
+        retryable: false,
+        retryAdvice: "inspect_worker_output",
       }),
     );
     expect(viewModel.workerEvidence).toHaveLength(2);

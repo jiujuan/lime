@@ -9,11 +9,11 @@ import {
   resetAppSidebarTest,
 } from "./AppSidebar.testFixtures";
 
-describe("AppSidebar Agent Apps", () => {
+describe("AppSidebar Plugins", () => {
   beforeEach(resetAppSidebarTest);
   afterEach(cleanupAppSidebarTest);
 
-  it("Agent Apps 聚合入口应常驻主导航并进入管理页", async () => {
+  it("插件中心入口应常驻主导航并进入插件页", async () => {
     const onNavigate = vi.fn();
     const container = mountSidebarContainer({ onNavigate });
     await flushEffects(2);
@@ -24,22 +24,22 @@ describe("AppSidebar Agent Apps", () => {
           '[data-testid="app-sidebar-main-nav"] button',
         ),
       ).map((button) => button.getAttribute("aria-label")),
-    ).toEqual(["新建任务", "专家", "Skills", "Agent Apps"]);
+    ).toEqual(["新建任务", "专家", "Skills", "插件"]);
 
     act(() => {
       container
-        .querySelector<HTMLButtonElement>('button[aria-label="Agent Apps"]')
+        .querySelector<HTMLButtonElement>('button[aria-label="插件"]')
         ?.click();
     });
 
-    expect(onNavigate).toHaveBeenCalledWith("agent-apps", undefined);
+    expect(onNavigate).toHaveBeenCalledWith("plugins", undefined);
     expect(mockListInstalledAgentApps).not.toHaveBeenCalled();
 
     await openAccountMenu(container);
     const accountMenu = container.querySelector(
       '[data-testid="app-sidebar-account-menu"]',
     );
-    expect(accountMenu?.textContent).not.toContain("Agent Apps");
+    expect(accountMenu?.textContent).not.toContain("插件");
   });
 
   it("已安装 Agent App 不应作为左侧独立导航项显示", async () => {
@@ -94,7 +94,7 @@ describe("AppSidebar Agent Apps", () => {
     const mainNav = container.querySelector(
       '[data-testid="app-sidebar-main-nav"]',
     );
-    expect(mainNav?.textContent).toContain("Agent Apps");
+    expect(mainNav?.textContent).toContain("插件");
     expect(mainNav?.textContent).not.toContain("内容工厂");
     expect(mainNav?.textContent).not.toContain("发布应用");
     expect(
@@ -103,7 +103,7 @@ describe("AppSidebar Agent Apps", () => {
           '[data-testid="app-sidebar-main-nav"] button',
         ),
       ).map((button) => button.getAttribute("aria-label")),
-    ).toEqual(["新建任务", "专家", "Skills", "Agent Apps"]);
+    ).toEqual(["新建任务", "专家", "Skills", "插件"]);
     expect(mockListInstalledAgentApps).not.toHaveBeenCalled();
   });
 
@@ -124,7 +124,7 @@ describe("AppSidebar Agent Apps", () => {
           '[data-testid="app-sidebar-main-nav"] button',
         ),
       ).map((button) => button.getAttribute("aria-label")),
-    ).toEqual(["新建任务", "专家", "Skills", "Agent Apps"]);
+    ).toEqual(["新建任务", "专家", "Skills", "插件"]);
   });
 
   it("安装态读取失败不应影响静态 Agent Apps 聚合入口", async () => {
@@ -137,7 +137,7 @@ describe("AppSidebar Agent Apps", () => {
 
       expect(
         container.querySelector<HTMLButtonElement>(
-          'button[aria-label="Agent Apps"]',
+          'button[aria-label="插件"]',
         ),
       ).not.toBeNull();
       expect(container.textContent).not.toContain("内容工厂");

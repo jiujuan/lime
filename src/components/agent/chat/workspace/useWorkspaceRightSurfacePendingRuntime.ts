@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { isAppServerBridgeAvailable } from "@/lib/api/appServerBridgeAvailability";
+import type {
+  PluginActivationContext,
+  PluginContract,
+} from "@/features/plugin";
+import { buildContentFactoryWorkspacePatchProfileFromPendingRequests } from "@/features/plugin-content-factory";
 import {
   consumeWorkspaceRightSurfacePending,
   dismissWorkspaceRightSurfacePending,
@@ -33,11 +38,13 @@ import {
   buildWorkspaceRightSurfacePendingBrowserIntent,
   type WorkspaceRightSurfaceBrowserIntent,
 } from "./workspaceRightSurfaceBrowserIntent";
+import { buildWorkspacePluginRightSurfaceIntents } from "./workspacePluginRightSurfaceProjection";
 
 const DEFAULT_RIGHT_SURFACE_PENDING_POLL_MS = 5_000;
 const DEFAULT_RIGHT_SURFACE_PENDING_EVENT_DRAIN_MS = 250;
 const DEFAULT_RIGHT_SURFACE_PENDING_EVENT_LIMIT = 20;
 const DEFAULT_RIGHT_SURFACE_PENDING_LIMIT = 50;
+const EMPTY_PLUGIN_CONTRACTS: readonly PluginContract[] = [];
 
 export interface UseWorkspaceRightSurfacePendingRuntimeOptions {
   enabled: boolean;
@@ -48,6 +55,9 @@ export interface UseWorkspaceRightSurfacePendingRuntimeOptions {
   eventDrainIntervalMs?: number;
   eventDrainLimit?: number;
   limit?: number;
+  pluginActivationContext?: PluginActivationContext | null;
+  pluginContracts?: readonly PluginContract[];
+  pluginRightSurfaceIntentTtlMs?: number;
   isBridgeAvailable?: () => boolean;
   listPending?: (
     params: WorkspaceRightSurfacePendingListParams,
@@ -129,6 +139,9 @@ export function useWorkspaceRightSurfacePendingRuntime({
   eventDrainIntervalMs = DEFAULT_RIGHT_SURFACE_PENDING_EVENT_DRAIN_MS,
   eventDrainLimit = DEFAULT_RIGHT_SURFACE_PENDING_EVENT_LIMIT,
   limit = DEFAULT_RIGHT_SURFACE_PENDING_LIMIT,
+  pluginActivationContext = null,
+  pluginContracts = EMPTY_PLUGIN_CONTRACTS,
+  pluginRightSurfaceIntentTtlMs,
   isBridgeAvailable = isAppServerBridgeAvailable,
   listPending = listWorkspaceRightSurfacePending,
   consumePending = consumeWorkspaceRightSurfacePending,
@@ -343,11 +356,27 @@ export function useWorkspaceRightSurfacePendingRuntime({
     subscribePendingChanges,
   ]);
 
-  const pendingIntents = useMemo(
-    () =>
-      buildWorkspaceRightSurfaceAppServerPendingIntents(pendingRequests, now()),
-    [now, pendingRequests],
-  );
+  const pendingIntents = useMemo(() => {
+    const createdAt = now();
+    return [
+      ...buildWorkspaceRightSurfaceAppServerPendingIntents(
+        pendingRequests,
+        createdAt,
+      ),
+      ...buildWorkspacePluginRightSurfaceIntents({
+        activationContext: pluginActivationContext,
+        contracts: pluginContracts,
+        createdAt,
+        ttlMs: pluginRightSurfaceIntentTtlMs,
+      }),
+    ];
+  }, [
+    now,
+    pendingRequests,
+    pluginActivationContext,
+    pluginContracts,
+    pluginRightSurfaceIntentTtlMs,
+  ]);
   const pendingFileTarget = useMemo(
     () => buildWorkspaceRightSurfacePendingFileTarget(pendingRequests),
     [pendingRequests],
@@ -363,7 +392,11 @@ export function useWorkspaceRightSurfacePendingRuntime({
     [pendingRequests],
   );
   const pendingProductProfile = useMemo(
-    () => buildWorkspaceProductProfileFromPendingRequests(pendingRequests),
+    () =>
+      buildWorkspaceProductProfileFromPendingRequests(pendingRequests) ??
+      buildContentFactoryWorkspacePatchProfileFromPendingRequests(
+        pendingRequests,
+      ),
     [pendingRequests],
   );
   const pendingBrowserIntent = useMemo(

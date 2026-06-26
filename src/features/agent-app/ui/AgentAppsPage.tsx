@@ -777,6 +777,7 @@ export function AgentAppsPage({
               appId: state.appId,
               entryKey: entry.key,
               launchRequestKey: Date.now(),
+              rightSurfaceTarget: launchTargetPolicy.rightSurfaceTarget,
             };
             onNavigate("agent-app", runtimeParams);
             return;

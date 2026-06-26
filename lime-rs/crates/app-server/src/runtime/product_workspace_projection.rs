@@ -1,6 +1,6 @@
 use app_server_protocol::AgentEvent;
 use app_server_protocol::AgentSession;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::collections::BTreeMap;
 
 const DEFAULT_SCHEMA_VERSION: &str = "product-workspace.v1";
@@ -299,7 +299,7 @@ fn worker_evidence_from_event(event: &AgentEvent) -> Option<Value> {
 
     let artifact = event.payload.get("artifact").unwrap_or(&event.payload);
     let status = match event.event_type.as_str() {
-        "runtime.error" | "turn.failed" => "failed",
+        "agent_app_worker.retry" | "runtime.error" | "turn.failed" => "failed",
         "artifact.snapshot" => "completed",
         _ => "unknown",
     };
@@ -332,11 +332,22 @@ fn worker_evidence_from_event(event: &AgentEvent) -> Option<Value> {
         "outputSummary": worker_string_field(worker_metadata, &["outputSummary", "output_summary"]),
         "outputObjectCount": worker_number_field(worker_metadata, &["outputObjectCount", "output_object_count"]),
         "artifactRef": string_field(artifact, &["artifactId", "artifact_id", "id", "artifactRef", "artifact_ref", "path"]),
-        "artifactKind": string_field(artifact, &["kind", "artifactKind", "artifact_kind"])
-            .or_else(|| worker_string_field(worker_metadata, &["outputArtifactKind", "output_artifact_kind"])),
+        "artifactKind": worker_string_field(worker_metadata, &["outputArtifactKind", "output_artifact_kind"])
+            .or_else(|| string_field(artifact, &["kind", "artifactKind", "artifact_kind"])),
         "title": string_field(artifact, &["title", "artifactTitle", "artifact_title"]),
-        "errorCode": string_field(&event.payload, &["errorCode", "error_code"]),
+        "errorCode": string_field(&event.payload, &["errorCode", "error_code"])
+            .or_else(|| worker_string_field(worker_metadata, &["errorCode", "error_code"])),
         "errorMessage": message,
+        "failureCategory": string_field(&event.payload, &["failureCategory", "failure_category"])
+            .or_else(|| worker_string_field(worker_metadata, &["failureCategory", "failure_category"])),
+        "retryable": event.payload.get("retryable").and_then(Value::as_bool)
+            .or_else(|| worker_bool_field(worker_metadata, &["retryable"])),
+        "retryAdvice": string_field(&event.payload, &["retryAdvice", "retry_advice"])
+            .or_else(|| worker_string_field(worker_metadata, &["retryAdvice", "retry_advice"])),
+        "retryAttempt": event.payload.get("retryAttempt").or_else(|| event.payload.get("retry_attempt")).and_then(Value::as_u64)
+            .or_else(|| worker_number_field(worker_metadata, &["retryAttempt", "retry_attempt"])),
+        "retryMaxAttempts": event.payload.get("retryMaxAttempts").or_else(|| event.payload.get("retry_max_attempts")).and_then(Value::as_u64)
+            .or_else(|| worker_number_field(worker_metadata, &["retryMaxAttempts", "retry_max_attempts"])),
         "updatedAt": event.timestamp,
     }))
 }
@@ -376,6 +387,10 @@ fn worker_string_field(value: Option<&Value>, keys: &[&str]) -> Option<String> {
 
 fn worker_number_field(value: Option<&Value>, keys: &[&str]) -> Option<u64> {
     value.and_then(|value| keys.iter().find_map(|key| value.get(*key)?.as_u64()))
+}
+
+fn worker_bool_field(value: Option<&Value>, keys: &[&str]) -> Option<bool> {
+    value.and_then(|value| keys.iter().find_map(|key| value.get(*key)?.as_bool()))
 }
 
 fn default_layout_state() -> Value {

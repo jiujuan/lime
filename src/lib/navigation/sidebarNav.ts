@@ -71,11 +71,11 @@ const BASE_MAIN_SIDEBAR_NAV_ITEMS: SidebarNavItemDefinition[] = [
     configurable: false,
   },
   {
-    id: "agent-apps",
-    label: "Agent Apps",
+    id: "plugins",
+    label: "插件",
     icon: Boxes,
-    page: "agent-apps",
-    isActive: (currentPage) => currentPage === "agent-apps",
+    page: "plugins",
+    isActive: (currentPage) => currentPage === "plugins",
     configurable: false,
   },
 ];

@@ -17,6 +17,7 @@ import { buildCleanupPlan } from "../install/cleanupPlan";
 import { checkReadiness } from "../readiness/checkReadiness";
 import { buildLimeRuntimeProfileForInstalledState } from "../runtime-profile";
 import { createAgentAppCapabilityDispatcher } from "../runtime/capabilityDispatcher";
+import { wrapAgentAppCapabilityDispatchWithBrowserIntentLaunch } from "../runtime/browserIntentLaunch";
 import { evaluateAgentAppEntryRuntimeGuard } from "../runtime/entryRuntimeGuard";
 import {
   createAgentAppHostBridge,
@@ -625,7 +626,7 @@ export function AgentAppRuntimePage({
         : null,
     [selected],
   );
-  const dispatchCapability = useMemo(() => {
+  const baseDispatchCapability = useMemo(() => {
     if (!selected || !capabilityHost || !activeEntry || !runtimeProfile) {
       return undefined;
     }
@@ -643,6 +644,31 @@ export function AgentAppRuntimePage({
       operations: selected.manifest.operations,
     });
   }, [activeEntry, capabilityHost, runtimeProfile, selected]);
+  const dispatchCapability = useMemo(() => {
+    if (!baseDispatchCapability || !selected || !activeEntry) {
+      return undefined;
+    }
+    return wrapAgentAppCapabilityDispatchWithBrowserIntentLaunch(
+      baseDispatchCapability,
+      {
+        appId: selected.appId,
+        title: displayName,
+        entry: activeEntry,
+        target: pageParams?.rightSurfaceTarget ?? null,
+      },
+      {
+        onError: (error) => {
+          toast.error(normalizeErrorMessage(error));
+        },
+      },
+    );
+  }, [
+    activeEntry,
+    baseDispatchCapability,
+    displayName,
+    pageParams?.rightSurfaceTarget,
+    selected,
+  ]);
 
   const refresh = useCallback(async () => {
     setLoading(true);

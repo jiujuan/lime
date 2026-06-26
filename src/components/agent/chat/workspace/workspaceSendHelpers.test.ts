@@ -43,7 +43,7 @@ describe("workspaceSendHelpers runtime team preview", () => {
     });
   });
 
-  it("工作区首条创作意图应包装成 current send boundary", () => {
+  it("工作区首条创作意图不应再包装成旧内容写作 skill", () => {
     const boundary = buildGeneralWorkbenchSendBoundaryState({
       isThemeWorkbench: true,
       contentId: "content-1",
@@ -51,12 +51,11 @@ describe("workspaceSendHelpers runtime team preview", () => {
       consumedInitialPromptKey: null,
       initialUserImages: [],
       mappedTheme: "general",
-      socialArticleSkillKey: "content_post_with_cover",
       sourceText: "请生成今天的社媒主稿",
     });
 
     expect(boundary).toMatchObject({
-      sourceText: "/content_post_with_cover 请生成今天的社媒主稿",
+      sourceText: "请生成今天的社媒主稿",
       shouldConsumePendingGeneralWorkbenchInitialPrompt: true,
       shouldDismissGeneralWorkbenchEntryPrompt: true,
       browserRequirementMatch: null,
@@ -96,13 +95,10 @@ describe("workspaceSendHelpers runtime team preview", () => {
       consumedInitialPromptKey: null,
       initialUserImages: [],
       mappedTheme: "general",
-      socialArticleSkillKey: "content_post_with_cover",
       sourceText: "帮我把这篇文章发布到微信公众号后台",
     });
 
-    expect(boundary.sourceText).toBe(
-      "/content_post_with_cover 帮我把这篇文章发布到微信公众号后台",
-    );
+    expect(boundary.sourceText).toBe("帮我把这篇文章发布到微信公众号后台");
     expect(boundary.browserRequirementMatch).toEqual(
       expect.objectContaining({
         requirement: "required_with_user_step",

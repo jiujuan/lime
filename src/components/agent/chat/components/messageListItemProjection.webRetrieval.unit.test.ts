@@ -189,7 +189,7 @@ describe("messageListItemProjection web retrieval", () => {
     expect(JSON.stringify(parts)).not.toContain('"type":"thinking"');
   });
 
-  it("搜索运行中首字正文已提交时，无 phase overlay 不应继续显示孤立正文", () => {
+  it("搜索运行中首字正文已提交时，应保留工具前导语但不显示无 phase overlay", () => {
     const message: Message = {
       id: "assistant-running-search-overlay-prefix",
       role: "assistant",
@@ -233,8 +233,12 @@ describe("messageListItemProjection web retrieval", () => {
     });
 
     const parts = projection.rendererContentParts || [];
-    expect(parts.map((part) => part.type)).toEqual(["tool_use"]);
+    expect(parts.map((part) => part.type)).toEqual(["text", "tool_use"]);
     expect(parts[0]).toMatchObject({
+      type: "text",
+      text: "我",
+    });
+    expect(parts[1]).toMatchObject({
       type: "tool_use",
       toolCall: expect.objectContaining({
         id: "tool-web-search-prefix",

@@ -528,6 +528,7 @@ interface UseWorkspaceInputbarSceneRuntimeParams {
   onSelectServiceSkill: InputbarParams["onSelectServiceSkill"];
   initialInputCapability?: AgentInitialInputCapabilityParams;
   initialKnowledgePackSelection?: AgentInitialKnowledgePackSelectionParams;
+  pluginSuggestions?: InputbarParams["pluginSuggestions"];
   setChatToolPreferences: Dispatch<SetStateAction<ChatToolPreferences>>;
   objectiveEnabled?: boolean;
   onObjectiveEnabledChange?: (enabled: boolean) => void;
@@ -635,6 +636,7 @@ export function useWorkspaceInputbarSceneRuntime({
   onSelectServiceSkill,
   initialInputCapability,
   initialKnowledgePackSelection,
+  pluginSuggestions,
   setChatToolPreferences,
   objectiveEnabled = false,
   onObjectiveEnabledChange,
@@ -825,6 +827,7 @@ export function useWorkspaceInputbarSceneRuntime({
         isSkillsLoading: skillsLoading,
         onSelectServiceSkill,
         initialInputCapability,
+        pluginSuggestions,
         toolStates: {
           objective: objectiveEnabled,
           plan: resolvedChatToolPreferences.task,

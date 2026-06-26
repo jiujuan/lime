@@ -103,6 +103,8 @@ export function buildWorkspaceProductProfileArtifactDocument({
         objectKind: object.ref.kind,
         objectId: object.ref.id,
         artifactIds,
+        surfaceKind: layout,
+        layout,
       },
     },
   };

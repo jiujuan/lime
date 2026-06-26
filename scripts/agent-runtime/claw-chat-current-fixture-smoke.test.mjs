@@ -38,6 +38,8 @@ const fixtureSourceFiles = [
   "scripts/agent-runtime/claw-chat-current-fixture-plan-history.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-right-surface-visual.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-content-factory-product-profile.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-content-factory-worker-dogfood.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-content-factory-workspace-patches.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-scenario-flow.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-common-assertions.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-scenario-assertions.mjs",
@@ -275,7 +277,7 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain('"web_search"');
   });
 
-  it("covers Codex-style WebSearch/WebFetch rendering in the real Electron fixture", () => {
+  it("covers web tool WebSearch/WebFetch rendering in the real Electron fixture", () => {
     const content = readSmokeScript();
 
     expect(content).toContain("web-tools-rendering");
@@ -681,6 +683,8 @@ describe("claw chat current Electron fixture smoke guard", () => {
 
     expect(content).toContain("content-factory-product-profile");
     expect(content).toContain("runContentFactoryProductProfileScenario");
+    expect(content).toContain("agentAppInstalled/save");
+    expect(content).toContain("agentSession/turn/start");
     expect(content).toContain("agentSession/runtimeEvents/append");
     expect(content).toContain("artifact/read");
     expect(content).toContain("content_factory.workspace_patch");
@@ -688,15 +692,34 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("内容工厂 Product Profile Fixture");
     expect(content).toContain("公众号文章草稿");
     expect(content).toContain("配图组");
+    expect(content).toContain("视频分镜");
+    expect(content).toContain("交付检查清单");
     expect(content).toContain("artifact-article-1");
     expect(content).toContain("artifact-image-1");
+    expect(content).toContain("artifact-video-storyboard");
+    expect(content).toContain("artifact-delivery-checklist");
+    expect(content).toContain("artifact-image-regenerate-workspace-patch");
+    expect(content).toContain("artifact-image-regenerated");
+    expect(content).toContain("image_regenerate_job_1");
+    expect(content).toContain("worker_dogfood");
+    expect(content).toContain("contentFactoryProductProfileWorkerTurnStart");
+    expect(content).toContain(
+      "contentFactoryProductProfileWorkerTurnExecuted",
+    );
+    expect(content).toContain("已重新生成 2 张候选图");
     expect(content).toContain("task-center-object-canvas-toggle");
     expect(content).toContain("workspace-product-profile-surface");
     expect(content).toContain("workspace-right-surface-host");
     expect(content).toContain("artifact_document.v1");
     expect(content).toContain("worker_invalid_json_output");
+    expect(content).toContain("failureCategory");
+    expect(content).toContain("retryAdvice");
+    expect(content).toContain("inspect_worker_output");
     expect(content).toContain(
       "contentFactoryProductProfileDoesNotUseModelTurn",
+    );
+    expect(content).toContain(
+      "contentFactoryProductProfileActionResultPatchProjected",
     );
     for (const assertionKey of CONTENT_FACTORY_PRODUCT_PROFILE_ASSERTION_KEYS) {
       expect(content).toContain(assertionKey);

@@ -11,9 +11,18 @@ import {
   CONTENT_FACTORY_PRODUCT_PROFILE_SESSION_TITLE,
   CONTENT_FACTORY_PRODUCT_PROFILE_THREAD_ID,
   CONTENT_FACTORY_PRODUCT_PROFILE_TURN_ID,
+  CONTENT_FACTORY_PRODUCT_PROFILE_WORKER_TASK_ID,
   FIXTURE_MODEL,
   FIXTURE_PROVIDER,
 } from "./claw-chat-current-fixture-constants.mjs";
+import {
+  runContentFactoryWorkerDogfoodTurn,
+  saveContentFactoryWorkerInstalledState,
+} from "./claw-chat-current-fixture-content-factory-worker-dogfood.mjs";
+import {
+  buildContentFactoryActionResultWorkspacePatch,
+  buildContentFactoryWorkspacePatch,
+} from "./claw-chat-current-fixture-content-factory-workspace-patches.mjs";
 import { invokeAppServerFromPage } from "./claw-chat-current-fixture-rpc.mjs";
 import {
   openSessionFromSidebar,
@@ -27,8 +36,11 @@ import {
 } from "./claw-chat-current-fixture-utils.mjs";
 
 const CONTENT_FACTORY_APP_ID = "content-factory-app";
-const ARTICLE_OBJECT_ID = "article-1";
 const IMAGE_SET_OBJECT_ID = "image-set-1";
+const CONTENT_FACTORY_PRODUCT_PROFILE_STORYBOARD_ARTIFACT_ID =
+  "artifact-video-storyboard";
+const CONTENT_FACTORY_PRODUCT_PROFILE_CHECKLIST_ARTIFACT_ID =
+  "artifact-delivery-checklist";
 
 export async function runContentFactoryProductProfileScenario({
   page,
@@ -41,12 +53,27 @@ export async function runContentFactoryProductProfileScenario({
     workspace,
     appServerRequests,
   );
+  const installedStateSave = await saveContentFactoryWorkerInstalledState(
+    page,
+    appServerRequests,
+  );
 
   const runtimeEventsAppend = await appendContentFactoryRuntimeEvents(
     page,
     workspace,
     appServerRequests,
   );
+  const workerTurnStart = await runContentFactoryWorkerDogfoodTurn({
+    page,
+    workspace,
+    requestLog: appServerRequests,
+  });
+  const actionResultRuntimeEventsAppend =
+    await appendContentFactoryProductProfileActionResultRuntimeEvents(
+      page,
+      workspace,
+      appServerRequests,
+    );
   const rightSurfaceRequest = await requestContentFactoryProductProfileSurface(
     page,
     workspace,
@@ -107,8 +134,12 @@ export async function runContentFactoryProductProfileScenario({
 
   return sanitizeJson({
     contentFactoryProductProfileSessionCreation: sessionCreation,
+    contentFactoryProductProfileInstalledStateSave: installedStateSave,
     contentFactoryProductProfileRuntimeEventsAppend:
       summarizeRuntimeEventsAppend(runtimeEventsAppend.result),
+    contentFactoryProductProfileWorkerTurnStart: workerTurnStart,
+    contentFactoryProductProfileActionResultRuntimeEventsAppend:
+      summarizeRuntimeEventsAppend(actionResultRuntimeEventsAppend.result),
     contentFactoryProductProfileRightSurfaceRequest:
       summarizeRightSurfaceRequest(rightSurfaceRequest.result),
     guiContentFactoryProductProfileSessionVisible: guiSessionVisible,
@@ -153,8 +184,14 @@ async function createContentFactoryProductProfileSession(
   workspace,
   requestLog,
 ) {
-  assert(workspace?.rootPath, "内容工厂 Product Profile fixture 缺少 workspace rootPath");
-  assert(workspace?.workspaceId, "内容工厂 Product Profile fixture 缺少 workspaceId");
+  assert(
+    workspace?.rootPath,
+    "内容工厂 Product Profile fixture 缺少 workspace rootPath",
+  );
+  assert(
+    workspace?.workspaceId,
+    "内容工厂 Product Profile fixture 缺少 workspaceId",
+  );
 
   const session = await invokeAppServerFromPage(
     page,
@@ -259,6 +296,11 @@ async function appendContentFactoryRuntimeEvents(page, workspace, requestLog) {
             status: "failed",
             errorCode: "worker_invalid_json_output",
             errorMessage: "Agent App worker returned invalid JSON",
+            failureCategory: "worker_output",
+            retryable: false,
+            retryAdvice: "inspect_worker_output",
+            retryAttempt: 0,
+            retryMaxAttempts: 0,
             message:
               "Agent App task worker failed: Agent App worker returned invalid JSON",
             metadata: {
@@ -269,6 +311,11 @@ async function appendContentFactoryRuntimeEvents(page, workspace, requestLog) {
                 turnId: CONTENT_FACTORY_PRODUCT_PROFILE_TURN_ID,
                 status: "failed",
                 errorCode: "worker_invalid_json_output",
+                failureCategory: "worker_output",
+                retryable: false,
+                retryAdvice: "inspect_worker_output",
+                retryAttempt: 0,
+                retryMaxAttempts: 0,
               },
             },
           },
@@ -279,92 +326,51 @@ async function appendContentFactoryRuntimeEvents(page, workspace, requestLog) {
   );
 }
 
-function buildContentFactoryWorkspacePatch(workspace) {
-  return {
-    schemaVersion: "product-workspace.v1",
-    appId: CONTENT_FACTORY_APP_ID,
-    sessionId: CONTENT_FACTORY_PRODUCT_PROFILE_SESSION_ID,
-    workspaceId: workspace.workspaceId,
-    primaryObjectRef: {
-      appId: CONTENT_FACTORY_APP_ID,
-      kind: "articleDraft",
-      id: ARTICLE_OBJECT_ID,
+async function appendContentFactoryProductProfileActionResultRuntimeEvents(
+  page,
+  workspace,
+  requestLog,
+) {
+  return await invokeAppServerFromPage(
+    page,
+    APP_SERVER_METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
+    {
       sessionId: CONTENT_FACTORY_PRODUCT_PROFILE_SESSION_ID,
-      artifactIds: [CONTENT_FACTORY_PRODUCT_PROFILE_ARTICLE_ARTIFACT_ID],
-      sourceTurnId: CONTENT_FACTORY_PRODUCT_PROFILE_TURN_ID,
-      sourceTaskId: "article_job_1",
-    },
-    selectedObjectRef: {
-      appId: CONTENT_FACTORY_APP_ID,
-      kind: "articleDraft",
-      id: ARTICLE_OBJECT_ID,
-      sessionId: CONTENT_FACTORY_PRODUCT_PROFILE_SESSION_ID,
-    },
-    objects: [
-      {
-        ref: {
-          appId: CONTENT_FACTORY_APP_ID,
-          kind: "articleDraft",
-          id: ARTICLE_OBJECT_ID,
-          sessionId: CONTENT_FACTORY_PRODUCT_PROFILE_SESSION_ID,
-          artifactIds: [CONTENT_FACTORY_PRODUCT_PROFILE_ARTICLE_ARTIFACT_ID],
-          sourceTurnId: CONTENT_FACTORY_PRODUCT_PROFILE_TURN_ID,
-          sourceTaskId: "article_job_1",
-        },
-        title: "公众号文章草稿",
-        status: "ready",
-        summary: "已生成首版文章",
-        previewArtifactId: CONTENT_FACTORY_PRODUCT_PROFILE_ARTICLE_ARTIFACT_ID,
-        source: {
-          taskKind: "content.article.generate",
-          taskId: "article_job_1",
-          turnId: CONTENT_FACTORY_PRODUCT_PROFILE_TURN_ID,
-          artifactIds: [CONTENT_FACTORY_PRODUCT_PROFILE_ARTICLE_ARTIFACT_ID],
-          markdown:
-            "# 内容工厂首版文章\n\n这是由 Agent App worker 写回的公众号文章草稿。",
-          evidenceIds: ["evidence-article-1"],
-        },
-      },
-      {
-        ref: {
-          appId: CONTENT_FACTORY_APP_ID,
-          kind: "imageGenerationSet",
-          id: IMAGE_SET_OBJECT_ID,
-          sessionId: CONTENT_FACTORY_PRODUCT_PROFILE_SESSION_ID,
-          artifactIds: [CONTENT_FACTORY_PRODUCT_PROFILE_IMAGE_ARTIFACT_ID],
-          sourceTurnId: CONTENT_FACTORY_PRODUCT_PROFILE_TURN_ID,
-          sourceTaskId: "image_job_1",
-        },
-        title: "配图组",
-        status: "needs_review",
-        summary: "等待选择主图",
-        previewArtifactId: CONTENT_FACTORY_PRODUCT_PROFILE_IMAGE_ARTIFACT_ID,
-        source: {
-          taskKind: "content.image.generate",
-          taskId: "image_job_1",
-          turnId: CONTENT_FACTORY_PRODUCT_PROFILE_TURN_ID,
-          artifactIds: [CONTENT_FACTORY_PRODUCT_PROFILE_IMAGE_ARTIFACT_ID],
-          images: [
-            {
-              id: CONTENT_FACTORY_PRODUCT_PROFILE_IMAGE_ARTIFACT_ID,
-              title: "主图",
-              url: "https://example.com/content-factory-image-1.png",
-              prompt: "明亮的中文内容工厂主图",
+      turnId: null,
+      runtimeEvents: [
+        {
+          type: "artifact.snapshot",
+          payload: {
+            artifact: {
+              artifactId: "artifact-image-regenerate-workspace-patch",
+              artifactRef: "artifact-image-regenerate-workspace-patch",
+              path: ".lime/artifacts/product-profile/image-regenerate-workspace-patch.json",
+              title: "配图组重新生成结果",
+              kind: "content_factory.workspace_patch",
+              status: "ready",
+              metadata: {
+                agentAppWorker: {
+                  appId: CONTENT_FACTORY_APP_ID,
+                  taskId: "image_regenerate_job_1",
+                  taskKind: "content.image.generate",
+                  turnId: "turn_content_factory_product_profile_action",
+                  workerEntrypoint: "./runtime/content-factory-worker.mjs",
+                  status: "completed",
+                  inputSummary: "action=regenerate; object=image-set-1",
+                  outputSummary: "1 object: 配图组重新生成结果",
+                  outputObjectCount: 1,
+                  outputArtifactKind: "content_factory.workspace_patch",
+                },
+                contentFactoryWorkspacePatch:
+                  buildContentFactoryActionResultWorkspacePatch(workspace),
+              },
             },
-          ],
-          evidenceIds: ["evidence-image-1"],
+          },
         },
-      },
-    ],
-    layoutState: {
-      activeTabKind: "productProfile",
-      activePaneKind: "documentCanvas",
-      openTabKinds: ["productProfile", "files"],
-      splitMode: "chat-right-dock",
+      ],
     },
-    sourceArtifacts: [{ artifactRef: "artifact-workspace-patch-1" }],
-    updatedAt: "2026-06-24T00:00:00.000Z",
-  };
+    requestLog,
+  );
 }
 
 async function notifySessionChanged(page, workspaceId) {
@@ -411,9 +417,14 @@ async function waitForContentFactoryProductProfileGui(page, options) {
         hasProductProfileTitle: bodyText.includes("产物 Profile"),
         hasArticleTitle: bodyText.includes("公众号文章草稿"),
         hasImageSetTitle: bodyText.includes("配图组"),
+        hasStoryboardTitle: bodyText.includes("视频分镜"),
+        hasChecklistTitle: bodyText.includes("交付检查清单"),
         hasWorkerEvidenceTitle: bodyText.includes("运行记录"),
         hasArticlePreview: bodyText.includes("内容工厂首版文章"),
         hasImagePrompt: bodyText.includes("明亮的中文内容工厂主图"),
+        hasRegeneratedImageSummary: bodyText.includes("已重新生成 2 张候选图"),
+        hasRegeneratedImagePrompt:
+          bodyText.includes("厨房台面主图，明亮自然光"),
         bodyTextSample: bodyText.slice(0, 2000),
       };
 
@@ -422,11 +433,11 @@ async function waitForContentFactoryProductProfileGui(page, options) {
         const style = node ? window.getComputedStyle(node) : null;
         return Boolean(
           node &&
-            rect &&
-            rect.width > 8 &&
-            rect.height > 8 &&
-            style?.display !== "none" &&
-            style?.visibility !== "hidden",
+          rect &&
+          rect.width > 8 &&
+          rect.height > 8 &&
+          style?.display !== "none" &&
+          style?.visibility !== "hidden",
         );
       }
     });
@@ -437,6 +448,8 @@ async function waitForContentFactoryProductProfileGui(page, options) {
       snapshot.hasProductProfileTitle &&
       snapshot.hasArticleTitle &&
       snapshot.hasImageSetTitle &&
+      snapshot.hasStoryboardTitle &&
+      snapshot.hasChecklistTitle &&
       snapshot.hasWorkerEvidenceTitle
     ) {
       return snapshot;
@@ -497,16 +510,53 @@ function summarizeContentFactoryProductProfileReadModel(result) {
     productWorkspace.worker_evidence,
   );
   const artifacts = readArray(threadRead.artifacts, detail?.artifacts);
-  const articleArtifact = artifacts.find(
-    (artifact) =>
-      readString(artifact?.artifactRef, artifact?.artifact_ref) ===
-      CONTENT_FACTORY_PRODUCT_PROFILE_ARTICLE_ARTIFACT_ID,
+  const articleArtifact = findArtifactByRef(
+    artifacts,
+    CONTENT_FACTORY_PRODUCT_PROFILE_ARTICLE_ARTIFACT_ID,
+  );
+  const storyboardArtifact = findArtifactByRef(
+    artifacts,
+    CONTENT_FACTORY_PRODUCT_PROFILE_STORYBOARD_ARTIFACT_ID,
+  );
+  const checklistArtifact = findArtifactByRef(
+    artifacts,
+    CONTENT_FACTORY_PRODUCT_PROFILE_CHECKLIST_ARTIFACT_ID,
   );
   const articleMetadata = asRecord(articleArtifact?.metadata) ?? {};
   const articleProductProfile = asRecord(articleMetadata.productProfile) ?? {};
+  const storyboardMetadata = asRecord(storyboardArtifact?.metadata) ?? {};
+  const storyboardProductProfile =
+    asRecord(storyboardMetadata.productProfile) ?? {};
+  const checklistMetadata = asRecord(checklistArtifact?.metadata) ?? {};
+  const checklistProductProfile =
+    asRecord(checklistMetadata.productProfile) ?? {};
   const failedEvidence = workerEvidence.find(
     (evidence) => readString(evidence?.status) === "failed",
   );
+  const completedActionEvidence = workerEvidence.find(
+    (evidence) =>
+      readString(evidence?.taskId, evidence?.task_id) ===
+      "image_regenerate_job_1",
+  );
+  const workerDogfoodEvidence = workerEvidence.find(
+    (evidence) =>
+      readString(evidence?.taskId, evidence?.task_id) ===
+      CONTENT_FACTORY_PRODUCT_PROFILE_WORKER_TASK_ID,
+  );
+  const imageObject = objects.find((object) => {
+    const ref = asRecord(object?.ref) ?? asRecord(object?.objectRef) ?? {};
+    return readString(ref.id) === IMAGE_SET_OBJECT_ID;
+  });
+  const actionResultArtifacts = artifacts.filter((artifact) => {
+    const artifactRef = readString(
+      artifact?.artifactRef,
+      artifact?.artifact_ref,
+    );
+    return (
+      artifactRef === "artifact-image-regenerated" ||
+      artifactRef === "artifact-image-regenerate-workspace-patch"
+    );
+  });
 
   return sanitizeJson({
     hasProductWorkspace: Object.keys(productWorkspace).length > 0,
@@ -526,11 +576,31 @@ function summarizeContentFactoryProductProfileReadModel(result) {
     objectCount: objects.length,
     objectTitles: objects.map((object) => readString(object?.title)),
     hasArticleObject: objects.some(
-      (object) => readString(object?.title) === "公众号文章草稿",
+      (object) => productObjectKind(object) === "articleDraft",
     ),
     hasImageSetObject: objects.some(
-      (object) => readString(object?.title) === "配图组",
+      (object) => productObjectKind(object) === "imageGenerationSet",
     ),
+    hasStoryboardObject: objects.some(
+      (object) => productObjectKind(object) === "videoStoryboard",
+    ),
+    hasChecklistObject: objects.some(
+      (object) => productObjectKind(object) === "deliveryChecklist",
+    ),
+    imageObject: imageObject
+      ? {
+          status: readString(imageObject.status),
+          summary: readString(imageObject.summary),
+          previewArtifactId: readString(
+            imageObject.previewArtifactId,
+            imageObject.preview_artifact_id,
+          ),
+          sourceTaskId: readString(
+            imageObject.ref?.sourceTaskId,
+            imageObject.ref?.source_task_id,
+          ),
+        }
+      : null,
     workerEvidenceCount: workerEvidence.length,
     failedWorkerEvidence: failedEvidence
       ? {
@@ -540,9 +610,65 @@ function summarizeContentFactoryProductProfileReadModel(result) {
             failedEvidence.errorCode,
             failedEvidence.error_code,
           ),
+          failureCategory: readString(
+            failedEvidence.failureCategory,
+            failedEvidence.failure_category,
+          ),
+          retryable: readBoolean(failedEvidence.retryable),
+          retryAdvice: readString(
+            failedEvidence.retryAdvice,
+            failedEvidence.retry_advice,
+          ),
+          retryAttempt: readNumber(
+            failedEvidence.retryAttempt,
+            failedEvidence.retry_attempt,
+          ),
+          retryMaxAttempts: readNumber(
+            failedEvidence.retryMaxAttempts,
+            failedEvidence.retry_max_attempts,
+          ),
+        }
+      : null,
+    completedActionWorkerEvidence: completedActionEvidence
+      ? {
+          taskId: readString(
+            completedActionEvidence.taskId,
+            completedActionEvidence.task_id,
+          ),
+          status: readString(completedActionEvidence.status),
+          artifactRef: readString(
+            completedActionEvidence.artifactRef,
+            completedActionEvidence.artifact_ref,
+          ),
+        }
+      : null,
+    workerDogfoodEvidence: workerDogfoodEvidence
+      ? {
+          taskId: readString(
+            workerDogfoodEvidence.taskId,
+            workerDogfoodEvidence.task_id,
+          ),
+          status: readString(workerDogfoodEvidence.status),
+          artifactRef: readString(
+            workerDogfoodEvidence.artifactRef,
+            workerDogfoodEvidence.artifact_ref,
+          ),
+          artifactKind: readString(
+            workerDogfoodEvidence.artifactKind,
+            workerDogfoodEvidence.artifact_kind,
+          ),
+          outputObjectCount: readNumber(
+            workerDogfoodEvidence.outputObjectCount,
+            workerDogfoodEvidence.output_object_count,
+          ),
         }
       : null,
     artifactCount: artifacts.length,
+    actionResultArtifacts: actionResultArtifacts.map((artifact) => ({
+      artifactRef: readString(artifact.artifactRef, artifact.artifact_ref),
+      kind: readString(artifact.kind),
+      title: readString(artifact.title),
+    })),
     articleArtifact: articleArtifact
       ? {
           artifactRef: readString(
@@ -559,7 +685,63 @@ function summarizeContentFactoryProductProfileReadModel(result) {
           ),
         }
       : null,
+    storyboardArtifact: storyboardArtifact
+      ? {
+          artifactRef: readString(
+            storyboardArtifact.artifactRef,
+            storyboardArtifact.artifact_ref,
+          ),
+          kind: readString(storyboardArtifact.kind),
+          title: readString(storyboardArtifact.title),
+          artifactSchema: readString(storyboardMetadata.artifactSchema),
+          artifactDocumentId: readString(
+            storyboardMetadata.artifactDocumentId,
+          ),
+          surfaceKind: readString(storyboardMetadata.surfaceKind),
+          productProfileObjectKind: readString(
+            storyboardProductProfile.objectKind,
+            storyboardProductProfile.object_kind,
+          ),
+          productProfileSurfaceKind: readString(
+            storyboardProductProfile.surfaceKind,
+            storyboardProductProfile.surface_kind,
+          ),
+        }
+      : null,
+    checklistArtifact: checklistArtifact
+      ? {
+          artifactRef: readString(
+            checklistArtifact.artifactRef,
+            checklistArtifact.artifact_ref,
+          ),
+          kind: readString(checklistArtifact.kind),
+          title: readString(checklistArtifact.title),
+          artifactSchema: readString(checklistMetadata.artifactSchema),
+          artifactDocumentId: readString(checklistMetadata.artifactDocumentId),
+          surfaceKind: readString(checklistMetadata.surfaceKind),
+          productProfileObjectKind: readString(
+            checklistProductProfile.objectKind,
+            checklistProductProfile.object_kind,
+          ),
+          productProfileSurfaceKind: readString(
+            checklistProductProfile.surfaceKind,
+            checklistProductProfile.surface_kind,
+          ),
+        }
+      : null,
   });
+}
+
+function findArtifactByRef(artifacts, artifactRef) {
+  return artifacts.find(
+    (artifact) =>
+      readString(artifact?.artifactRef, artifact?.artifact_ref) === artifactRef,
+  );
+}
+
+function productObjectKind(object) {
+  const ref = asRecord(object?.ref) ?? asRecord(object?.objectRef) ?? {};
+  return readString(ref.kind);
 }
 
 function summarizeContentFactoryArtifactRead(result) {
@@ -605,4 +787,22 @@ function readString(...values) {
     }
   }
   return "";
+}
+
+function readNumber(...values) {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function readBoolean(...values) {
+  for (const value of values) {
+    if (typeof value === "boolean") {
+      return value;
+    }
+  }
+  return null;
 }

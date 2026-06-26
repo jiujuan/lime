@@ -44,6 +44,8 @@ export function buildWorkspaceProductProfilePreviewArtifact({
     openedFrom: "right_surface_product_profile",
     artifactSchema: artifactDocument.schemaVersion,
     artifactKind: artifactDocument.kind,
+    surfaceKind: layout,
+    layout,
     artifactDocument,
     artifactTitle: artifactDocument.title,
     artifactDocumentId: artifactDocument.artifactId,
@@ -56,6 +58,8 @@ export function buildWorkspaceProductProfilePreviewArtifact({
       objectKind: object.ref.kind,
       objectId: object.ref.id,
       artifactIds,
+      surfaceKind: layout,
+      layout,
     },
   };
 

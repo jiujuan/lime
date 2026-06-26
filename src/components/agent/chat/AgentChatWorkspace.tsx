@@ -151,6 +151,17 @@ import { useWorkspaceVideoTaskActionRuntime } from "./workspace/useWorkspaceVide
 import { useWorkspaceSessionRestore } from "./workspace/useWorkspaceSessionRestore";
 import { useWorkspaceResetRuntime } from "./workspace/useWorkspaceResetRuntime";
 import { useWorkspaceSendActions } from "./workspace/useWorkspaceSendActions";
+import { useWorkspacePluginRuntimeContext } from "./workspace/useWorkspacePluginRuntimeContext";
+import { buildWorkspacePluginInputSuggestions } from "./workspace/workspacePluginInputSuggestions";
+import { buildWorkspacePluginHistoryRestoreProjection } from "./workspace/workspacePluginHistoryRestoreRuntime";
+import { WorkspacePluginHistoryRestoreLandingCard } from "./workspace/WorkspacePluginHistoryRestoreLandingCard";
+import { buildWorkspacePluginHistoryRestoreLandingModel } from "./workspace/workspacePluginHistoryRestoreLanding";
+import {
+  buildWorkspacePluginHistoryRestoreArtifactPreviewArtifact,
+  buildWorkspacePluginHistoryRestoreArtifactPreviewItems,
+  type WorkspacePluginHistoryRestoreArtifactPreviewItem,
+} from "./workspace/workspacePluginHistoryRestoreArtifacts";
+import { buildWorkspacePluginProductProfileFromActivation } from "./workspace/workspacePluginProductProfile";
 import {
   useGeneralWorkbenchInitialAutoGuideRuntime,
   useGeneralWorkbenchInitialDispatchRuntime,
@@ -1109,6 +1120,48 @@ export function AgentChatWorkspace({
       initialRequestMetadata,
       sessionExpertRequestMetadata,
     ],
+  );
+  const workspacePluginRuntimeContext = useWorkspacePluginRuntimeContext({
+    requestMetadata: workspaceRequestMetadataWithExpertSkills,
+  });
+  const workspacePluginInputSuggestions = useMemo(
+    () =>
+      buildWorkspacePluginInputSuggestions(
+        workspacePluginRuntimeContext.context,
+      ),
+    [workspacePluginRuntimeContext.context],
+  );
+  const workspacePluginHistoryRestoreProjection = useMemo(
+    () =>
+      buildWorkspacePluginHistoryRestoreProjection({
+        threadRead,
+        contracts: workspacePluginRuntimeContext.context.contracts,
+        registryItems: workspacePluginRuntimeContext.context.registry,
+      }),
+    [
+      threadRead,
+      workspacePluginRuntimeContext.context.contracts,
+      workspacePluginRuntimeContext.context.registry,
+    ],
+  );
+  const workspacePluginHistoryRestoreLandingModel = useMemo(
+    () =>
+      buildWorkspacePluginHistoryRestoreLandingModel({
+        projection: workspacePluginHistoryRestoreProjection,
+        contracts: workspacePluginRuntimeContext.context.contracts,
+      }),
+    [
+      workspacePluginHistoryRestoreProjection,
+      workspacePluginRuntimeContext.context.contracts,
+    ],
+  );
+  const workspacePluginHistoryRestoreArtifactPreviewItems = useMemo(
+    () =>
+      buildWorkspacePluginHistoryRestoreArtifactPreviewItems({
+        projection: workspacePluginHistoryRestoreProjection,
+        maxItems: 3,
+      }),
+    [workspacePluginHistoryRestoreProjection],
   );
   const restoredInteractiveMessageSnapshotRef = useRef(
     createRestoredInteractiveMessageSnapshot(),
@@ -2683,6 +2736,50 @@ export function AgentChatWorkspace({
     },
     [handleArtifactClick, workbenchRequests],
   );
+  const handleOpenWorkspacePluginHistoryArtifactPreview = useCallback(
+    (item: WorkspacePluginHistoryRestoreArtifactPreviewItem) => {
+      const artifact =
+        buildWorkspacePluginHistoryRestoreArtifactPreviewArtifact({
+          projection: workspacePluginHistoryRestoreProjection,
+          item,
+          title: String(
+            t(
+              "agentChat.workspaceConversation.pluginHistory.previewArtifactTitle",
+              {
+                index: item.displayIndex,
+              },
+            ),
+          ),
+        });
+      if (!artifact) {
+        toast.error(
+          String(
+            t(
+              "agentChat.workspaceConversation.pluginHistory.previewUnavailable",
+            ),
+          ),
+        );
+        return;
+      }
+
+      upsertGeneralArtifact(artifact);
+      handleWorkspaceArtifactClick(artifact);
+    },
+    [
+      handleWorkspaceArtifactClick,
+      t,
+      upsertGeneralArtifact,
+      workspacePluginHistoryRestoreProjection,
+    ],
+  );
+  const workspacePluginHistoryRestoreLandingCard =
+    workspacePluginHistoryRestoreLandingModel ? (
+      <WorkspacePluginHistoryRestoreLandingCard
+        artifactPreviewItems={workspacePluginHistoryRestoreArtifactPreviewItems}
+        model={workspacePluginHistoryRestoreLandingModel}
+        onOpenArtifactPreview={handleOpenWorkspacePluginHistoryArtifactPreview}
+      />
+    ) : null;
   const openMessageAttachmentPreview = useCallback(
     (
       target: Extract<MessagePreviewTarget, { kind: "message_attachment" }>,
@@ -3776,6 +3873,7 @@ export function AgentChatWorkspace({
       workspaceServiceSkillEntryActions.handleServiceSkillSelect,
     initialInputCapability: effectiveInitialInputCapability,
     initialKnowledgePackSelection,
+    pluginSuggestions: workspacePluginInputSuggestions,
     setChatToolPreferences,
     objectiveEnabled: inputbarObjectiveModeEnabled,
     onObjectiveEnabledChange: setInputbarObjectiveModeEnabled,
@@ -4060,10 +4158,8 @@ export function AgentChatWorkspace({
   const [rightSurfaceBrowserTitle, setRightSurfaceBrowserTitle] = useState<
     string | null
   >(null);
-  const [
-    activeBrowserRightSurfaceIntent,
-    setActiveBrowserRightSurfaceIntent,
-  ] = useState<WorkspaceRightSurfaceBrowserIntent | null>(null);
+  const [activeBrowserRightSurfaceIntent, setActiveBrowserRightSurfaceIntent] =
+    useState<WorkspaceRightSurfaceBrowserIntent | null>(null);
   const [activeFilesRightSurfaceTarget, setActiveFilesRightSurfaceTarget] =
     useState<WorkspaceFilesSurfaceTarget | null>(null);
   const [activeAgentAppSurfaces, setActiveAgentAppSurfaces] = useState<
@@ -4083,12 +4179,20 @@ export function AgentChatWorkspace({
     sessionWorkingDir?.trim() || project?.rootPath || null;
   const shellRightSurfaceAvailable = Boolean(canvasWorkbenchRootPath);
   const browserRightSurfaceAvailable = true;
+  const activePluginActivationContext =
+    workspacePluginRuntimeContext.context.status === "active"
+      ? workspacePluginRuntimeContext.context.activationContext
+      : workspacePluginHistoryRestoreProjection?.status === "restored"
+        ? workspacePluginHistoryRestoreProjection.activationContext
+        : null;
   const rightSurfaceAppServerPendingRuntime =
     useWorkspaceRightSurfacePendingRuntime({
       enabled: true,
       workspaceId: runtimeWorkspaceId,
       workspaceRoot: canvasWorkbenchRootPath,
       sessionId: sessionId || sceneSessionId,
+      pluginActivationContext: activePluginActivationContext,
+      pluginContracts: workspacePluginRuntimeContext.context.contracts,
     });
   const { consumePendingRequestsForSurface, dismissPendingRequestsForSurface } =
     rightSurfaceAppServerPendingRuntime;
@@ -4113,6 +4217,19 @@ export function AgentChatWorkspace({
   const productProfileFromThreadRead = useMemo(
     () => buildWorkspaceProductProfileFromThreadRead(sceneThreadRead),
     [sceneThreadRead],
+  );
+  const productProfileFromPluginActivation = useMemo(
+    () =>
+      buildWorkspacePluginProductProfileFromActivation({
+        activationContext: activePluginActivationContext,
+        contracts: workspacePluginRuntimeContext.context.contracts,
+        workspaceId: runtimeWorkspaceId,
+      }),
+    [
+      activePluginActivationContext,
+      runtimeWorkspaceId,
+      workspacePluginRuntimeContext.context.contracts,
+    ],
   );
   const handleToggleExpertInfoPanel = useCallback(() => {
     setHarnessPanelVisible(false);
@@ -4195,7 +4312,8 @@ export function AgentChatWorkspace({
   const productProfileRightSurface =
     activeProductProfile ??
     rightSurfaceAppServerPendingRuntime.pendingProductProfile ??
-    productProfileFromThreadRead;
+    productProfileFromThreadRead ??
+    productProfileFromPluginActivation;
   const productProfileRightSurfaceAvailable = Boolean(
     productProfileRightSurface || objectCanvasRightSurfaceAvailable,
   );
@@ -4780,9 +4898,7 @@ export function AgentChatWorkspace({
               <RightSurfaceBrowserPanel
                 active={rightSurfaceState.activeSurface === "browser"}
                 controlMode={browserRightSurfaceControlMode}
-                initialUrl={
-                  browserRightSurfaceSessionRef?.launchUrl ?? null
-                }
+                initialUrl={browserRightSurfaceSessionRef?.launchUrl ?? null}
                 lifecycleState={browserRightSurfaceLifecycleState}
                 sessionRef={browserRightSurfaceSessionRef}
                 onNavigate={handleRightSurfaceBrowserNavigate}
@@ -4960,8 +5076,10 @@ export function AgentChatWorkspace({
       ? fileManagerSidebar.toggleFileManagerSidebar
       : undefined,
     sceneAppExecutionSummaryCard,
+    pluginHistoryRestoreLandingCard: workspacePluginHistoryRestoreLandingCard,
     serviceSkillExecutionCard,
     contextWorkspaceEnabled: contextWorkspace.generalWorkbenchEnabled,
+    pluginSuggestions: workspacePluginInputSuggestions,
     input,
     setInput,
     providerType,

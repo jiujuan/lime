@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "content-factory.worker-request.v1",
+  "appId": "content-factory-app",
+  "sessionId": "session-content-factory",
+  "workspaceId": "workspace-main",
+  "turnId": "turn-action-1",
+  "taskId": "task-image-regenerate-1",
+  "taskKind": "content.image.generate",
+  "prompt": "Regenerate the image set with two candidate images.",
+  "actionKey": "regenerate",
+  "sourceObjectRef": {
+    "appId": "content-factory-app",
+    "kind": "imageGenerationSet",
+    "id": "image-set-1",
+    "sessionId": "session-content-factory",
+    "artifactIds": ["artifact-image-set-1"]
+  },
+  "expectedOutput": {
+    "artifactKind": "content_factory.workspace_patch",
+    "productWorkspaceSchema": "product-workspace.v1",
+    "objectKinds": [
+      "contentBrief",
+      "articleDraft",
+      "imageGenerationSet",
+      "videoScript",
+      "videoStoryboard",
+      "deliveryChecklist"
+    ],
+    "requiredObjectKinds": [
+      "articleDraft",
+      "imageGenerationSet",
+      "videoStoryboard",
+      "deliveryChecklist"
+    ]
+  },
+  "runtime": {
+    "workerEntrypoint": "./src/runtime/content-factory-worker.mjs",
+    "outputArtifactKind": "content_factory.workspace_patch",
+    "directProviderAccess": false,
+    "directFilesystemAccess": false
+  },
+  "requestedAt": "2026-06-26T00:00:00.000Z"
+}

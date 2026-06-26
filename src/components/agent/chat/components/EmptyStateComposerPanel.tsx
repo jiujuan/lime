@@ -14,6 +14,8 @@ import { InputbarAccessModeSelect } from "./Inputbar/components/InputbarAccessMo
 import { InputbarCore } from "./Inputbar/components/InputbarCore";
 import { InputbarModeStatusChip } from "./Inputbar/components/InputbarModeStatusChip";
 import { InputbarObjectiveInlinePanel } from "./Inputbar/components/InputbarObjectiveInlinePanel";
+import { InputbarPluginBadge } from "./Inputbar/components/InputbarPluginBadge";
+import { InputbarPluginSelector } from "./Inputbar/components/InputbarPluginSelector";
 import {
   InputbarProjectContextBar,
   type InputbarOpenedProject,
@@ -55,6 +57,14 @@ import type {
   InputbarKnowledgePackOption,
   InputbarKnowledgePackSelection,
 } from "./Inputbar/types";
+import {
+  applyInputbarPluginSelection,
+  removeInputbarPluginSelection,
+  resolveInputbarPluginDisplayName,
+  type InputbarPluginCapability,
+  type InputbarPluginSelection,
+  type InputbarPluginSkillCapability,
+} from "./Inputbar/pluginInputCapability";
 import type { InputbarCoreCopy } from "./Inputbar/components/inputbarCoreCopy";
 import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
 
@@ -127,6 +137,7 @@ interface EmptyStateComposerPanelProps {
   onManageKnowledgePacks?: () => void;
   copy: HomeSurfaceComposerCopy;
   inputbarCopy: InputbarCoreCopy;
+  pluginSuggestions?: readonly InputbarPluginCapability[];
   showCreationModeSelector: boolean;
   creationMode: CreationMode;
   onCreationModeChange?: (mode: CreationMode) => void;
@@ -252,6 +263,7 @@ export function EmptyStateComposerPanel({
   onManageKnowledgePacks,
   copy,
   inputbarCopy,
+  pluginSuggestions = [],
   showCreationModeSelector,
   creationMode,
   onCreationModeChange,
@@ -278,6 +290,8 @@ export function EmptyStateComposerPanel({
   onClearGuideHelp,
 }: EmptyStateComposerPanelProps) {
   const [draftInput, setDraftInput] = useState(input);
+  const [activePluginSelection, setActivePluginSelection] =
+    useState<InputbarPluginSelection | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [localObjectiveEnabled, setLocalObjectiveEnabled] = useState(false);
@@ -380,6 +394,46 @@ export function EmptyStateComposerPanel({
     setLocalObjectiveEnabled(nextObjectiveEnabled);
   };
 
+  const handleSelectPlugin = (
+    plugin: InputbarPluginCapability,
+    skill?: InputbarPluginSkillCapability,
+  ) => {
+    const blocked =
+      plugin.disabled ||
+      (plugin.blockerCodes?.length ?? 0) > 0 ||
+      skill?.disabled ||
+      (skill?.blockerCodes?.length ?? 0) > 0;
+    if (blocked) {
+      return;
+    }
+    const selection = applyInputbarPluginSelection({
+      input: draftInput,
+      plugin,
+      skill,
+    });
+    setDraftInput(selection.text);
+    setActivePluginSelection(selection);
+    window.requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+      textareaRef.current?.setSelectionRange(
+        selection.text.length,
+        selection.text.length,
+      );
+    });
+  };
+
+  const handleClearPluginSelection = () => {
+    if (!activePluginSelection) {
+      return;
+    }
+    const nextInput = removeInputbarPluginSelection({
+      input: draftInput,
+      selection: activePluginSelection,
+    });
+    setDraftInput(nextInput);
+    setActivePluginSelection(null);
+  };
+
   const handleToolAction = (tool: string) => {
     switch (tool) {
       case "attach":
@@ -410,6 +464,7 @@ export function EmptyStateComposerPanel({
     ) : null;
   const topExtra =
     guideHelpActive ||
+    activePluginSelection ||
     activeBuiltinCommand ||
     activeRuntimeScene ||
     activeCuratedTask ||
@@ -425,6 +480,16 @@ export function EmptyStateComposerPanel({
             closeLabel={copy.guideHelpCloseWithLabel(effectiveGuideHelpLabel)}
             closeTitle={copy.guideHelpClose}
             onClear={onClearGuideHelp ?? (() => undefined)}
+          />
+        ) : null}
+
+        {activePluginSelection ? (
+          <InputbarPluginBadge
+            selection={activePluginSelection}
+            removeLabel={copy.pluginChip.remove(
+              resolveInputbarPluginDisplayName(activePluginSelection.plugin),
+            )}
+            onClear={handleClearPluginSelection}
           />
         ) : null}
 
@@ -497,6 +562,18 @@ export function EmptyStateComposerPanel({
   const plusMenuSkillsPanel = isGeneralTheme ? (
     <SkillSelector {...skillSelectorProps} renderMode="inline" />
   ) : undefined;
+  const plusMenuPluginsPanel = (
+    <InputbarPluginSelector
+      plugins={pluginSuggestions}
+      labels={{
+        empty: copy.pluginChip.empty,
+        skillPrefix: copy.pluginChip.skillPrefix,
+        title: copy.pluginChip.selectorTitle,
+        unavailable: copy.pluginChip.unavailable,
+      }}
+      onSelectPlugin={handleSelectPlugin}
+    />
+  );
   const plusMenuLabels = copy.plusMenu;
   const planModeStatusLabel = plusMenuLabels.planMode
     .replace(/模式$/, "")
@@ -512,8 +589,10 @@ export function EmptyStateComposerPanel({
     subagentEnabled,
     knowledgeActive: Boolean(knowledgePackSelection?.enabled),
     objectiveActive: objectiveEnabled,
+    pluginsActive: Boolean(activePluginSelection),
     skillsActive: Boolean(skillSelection.activeSkill),
     knowledgePanel: plusMenuKnowledgePanel,
+    pluginsPanel: plusMenuPluginsPanel,
     skillsPanel: plusMenuSkillsPanel,
     onAddFiles: () => handleToolAction("attach"),
     onToggleTask: () => handleToolAction("task_mode"),

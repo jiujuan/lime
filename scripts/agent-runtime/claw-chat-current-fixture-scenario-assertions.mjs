@@ -1,13 +1,8 @@
 import fs from "node:fs";
 import {
-  APP_SERVER_METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
-  APP_SERVER_METHOD_ARTIFACT_READ,
   APP_SERVER_METHOD_SESSION_TURN_CANCEL,
   APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_LIST,
   APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST,
-  CONTENT_FACTORY_PRODUCT_PROFILE_ARTICLE_ARTIFACT_ID,
-  CONTENT_FACTORY_PRODUCT_PROFILE_SESSION_ID,
-  CONTENT_FACTORY_PRODUCT_PROFILE_SESSION_TITLE,
   CONTINUE_PROMPT,
   EVENT_READ_PROBE_TOOL_NAME,
   EVENT_READ_PROBE_TURN_ID,
@@ -30,6 +25,7 @@ import {
   SKILLS_RUNTIME_SKILL_NAME,
   WEB_TOOLS_RENDERING_PROMPT,
 } from "./claw-chat-current-fixture-constants.mjs";
+import { buildContentFactoryProductProfileScenarioAssertions } from "./claw-chat-current-fixture-content-factory-assertions.mjs";
 import { EXPERT_PANEL_SKILLS_RUNTIME_UI_SKILL_REF } from "./claw-chat-current-fixture-expert-actions.mjs";
 
 export function buildScenarioAssertions(context) {
@@ -73,104 +69,17 @@ export function buildScenarioAssertions(context) {
     webToolsRenderingTurnStart,
     workspace,
   } = context;
-  const contentFactoryProductProfileGui =
-    summary.contentFactoryProductProfileGui ?? {};
-  const contentFactoryProductProfileReadModel =
-    summary.contentFactoryProductProfileReadModel ?? {};
-  const contentFactoryProductProfileArtifactRead =
-    summary.contentFactoryProductProfileArtifactRead ?? {};
   const rightSurfaceVisualMatrix = summary.rightSurfaceVisualMatrix ?? {};
   const rightSurfaceVisualCaptures = rightSurfaceVisualMatrix.captures ?? {};
   const rightSurfaceVisualAppSurface =
     rightSurfaceVisualCaptures.appSurface?.stable?.agentAppSurface ?? {};
   const scenarioAssertions = isContentFactoryProductProfileScenario
-    ? {
-        contentFactoryProductProfileRuntimeEventsAppended:
-          appServerRequestMethods.includes(
-            APP_SERVER_METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
-          ) &&
-          summary.contentFactoryProductProfileRuntimeEventsAppend
-            ?.eventTypes?.[0] === "artifact.snapshot" &&
-          summary.contentFactoryProductProfileRuntimeEventsAppend?.eventTypes?.includes(
-            "runtime.error",
-          ) === true,
-        contentFactoryProductProfileRightSurfaceRequested:
-          appServerRequestMethods.includes(
-            APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST,
-          ) &&
-          summary.contentFactoryProductProfileRightSurfaceRequest
-            ?.surfaceKind === "productProfile" &&
-          summary.contentFactoryProductProfileRightSurfaceRequest?.origin ===
-            "runtime" &&
-          summary.contentFactoryProductProfileRightSurfaceRequest?.status ===
-            "pending",
-        contentFactoryProductProfileSessionOpenedFromSidebar:
-          summary.contentFactoryProductProfileSessionCreation?.sessionId ===
-            CONTENT_FACTORY_PRODUCT_PROFILE_SESSION_ID &&
-          summary.guiContentFactoryProductProfileSessionVisible
-            ?.hasSessionTitle === true &&
-          summary.guiContentFactoryProductProfileSessionOpened?.readModel
-            ?.sessionId === CONTENT_FACTORY_PRODUCT_PROFILE_SESSION_ID &&
-          pageText.includes(CONTENT_FACTORY_PRODUCT_PROFILE_SESSION_TITLE),
-        contentFactoryProductProfileRightSurfaceVisible:
-          summary.contentFactoryProductProfileRightSurface?.stable
-            ?.activeSurface === "productProfile" &&
-          summary.contentFactoryProductProfileRightSurface?.stable
-            ?.rootVisible === true &&
-          contentFactoryProductProfileGui.activeSurface === "productProfile" &&
-          contentFactoryProductProfileGui.rootVisible === true,
-        contentFactoryProductProfilePageShowsObjects:
-          contentFactoryProductProfileGui.hasProductProfileTitle === true &&
-          contentFactoryProductProfileGui.hasArticleTitle === true &&
-          contentFactoryProductProfileGui.hasImageSetTitle === true &&
-          contentFactoryProductProfileGui.hasWorkerEvidenceTitle === true,
-        contentFactoryProductProfileReadModelProjected:
-          contentFactoryProductProfileReadModel.hasProductWorkspace === true &&
-          contentFactoryProductProfileReadModel.appId ===
-            "content-factory-app" &&
-          contentFactoryProductProfileReadModel.sessionId ===
-            CONTENT_FACTORY_PRODUCT_PROFILE_SESSION_ID &&
-          contentFactoryProductProfileReadModel.objectCount >= 2 &&
-          contentFactoryProductProfileReadModel.hasArticleObject === true &&
-          contentFactoryProductProfileReadModel.hasImageSetObject === true,
-        contentFactoryProductProfileArtifactsProjected:
-          contentFactoryProductProfileReadModel.articleArtifact?.artifactRef ===
-            CONTENT_FACTORY_PRODUCT_PROFILE_ARTICLE_ARTIFACT_ID &&
-          contentFactoryProductProfileReadModel.articleArtifact?.kind ===
-            "artifact_document" &&
-          contentFactoryProductProfileReadModel.articleArtifact
-            ?.artifactSchema === "artifact_document.v1" &&
-          contentFactoryProductProfileReadModel.articleArtifact
-            ?.artifactDocumentId ===
-            "artifact-document:content-factory-app:artifact-article-1" &&
-          contentFactoryProductProfileReadModel.articleArtifact
-            ?.productProfileObjectKind === "articleDraft",
-        contentFactoryProductProfileArtifactReadContent:
-          appServerRequestMethods.includes(APP_SERVER_METHOD_ARTIFACT_READ) &&
-          contentFactoryProductProfileArtifactRead.artifactRef ===
-            CONTENT_FACTORY_PRODUCT_PROFILE_ARTICLE_ARTIFACT_ID &&
-          contentFactoryProductProfileArtifactRead.kind ===
-            "artifact_document" &&
-          contentFactoryProductProfileArtifactRead.contentStatus ===
-            "available" &&
-          contentFactoryProductProfileArtifactRead.contentIncludesSchema ===
-            true &&
-          contentFactoryProductProfileArtifactRead.contentIncludesDocumentId ===
-            true &&
-          contentFactoryProductProfileArtifactRead.contentIncludesArticleTitle ===
-            true,
-        contentFactoryProductProfileWorkerFailureEvidence:
-          contentFactoryProductProfileReadModel.failedWorkerEvidence?.taskId ===
-            "image_job_1" &&
-          contentFactoryProductProfileReadModel.failedWorkerEvidence?.status ===
-            "failed" &&
-          contentFactoryProductProfileReadModel.failedWorkerEvidence
-            ?.errorCode === "worker_invalid_json_output" &&
-          contentFactoryProductProfileGui.hasWorkerEvidenceTitle === true,
-        contentFactoryProductProfileDoesNotUseModelTurn: backendLedger.every(
-          (entry) => entry.kind !== "turnStart",
-        ),
-      }
+    ? buildContentFactoryProductProfileScenarioAssertions({
+        appServerRequestMethods,
+        backendLedger,
+        pageText,
+        summary,
+      })
     : isRightSurfaceVisualMatrixScenario
       ? {
           rightSurfaceVisualMatrixRequestedThroughAppServer:

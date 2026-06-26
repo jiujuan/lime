@@ -198,7 +198,9 @@ export const resolveContentWorkbenchUserFacingLabel = (
     : null;
 };
 
-export const resolveDirectContentGroupLabel = (toolName: string): string | null => {
+export const resolveDirectContentGroupLabel = (
+  toolName: string,
+): string | null => {
   const copy = DIRECT_CONTENT_GROUP_LABEL_COPY[normalizeToolNameKey(toolName)];
   return copy
     ? resolveContentWorkbenchToolCopy(copy.key, copy.defaultValue)
@@ -256,6 +258,7 @@ export const resolveToolPrimarySubject = (
   if (
     normalizedName === "bash" ||
     normalizedName === "execcommand" ||
+    normalizedName.includes("execcommand") ||
     normalizedName.includes("shell")
   ) {
     return resolveToolArgumentPreview(args, ["command", "cmd", "cwd"]);

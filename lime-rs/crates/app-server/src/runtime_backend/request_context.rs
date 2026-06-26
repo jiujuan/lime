@@ -404,6 +404,10 @@ pub(super) fn session_config_from_request(
         workspace_scope.working_dir.as_deref(),
         workspace_scope.project_root.as_deref(),
     );
+    let system_prompt = super::plugin_activation_context::append_plugin_activation_context_to_system_prompt(
+        system_prompt,
+        &super::skill_runtime_enable::request_metadata_values(request),
+    );
     let runtime_metadata = request
         .runtime_options
         .as_ref()

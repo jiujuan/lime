@@ -146,7 +146,6 @@ interface BuildGeneralWorkbenchSendBoundaryStateOptions {
   consumedInitialPromptKey: string | null;
   initialUserImages?: MessageImage[];
   mappedTheme: string;
-  socialArticleSkillKey: string;
   sourceText: string;
   sendOptions?: HandleSendOptions;
 }
@@ -561,7 +560,6 @@ export function buildGeneralWorkbenchSendBoundaryState({
   consumedInitialPromptKey,
   initialUserImages,
   mappedTheme,
-  socialArticleSkillKey,
   sourceText,
   sendOptions,
 }: BuildGeneralWorkbenchSendBoundaryStateOptions): GeneralWorkbenchSendBoundaryState {
@@ -575,28 +573,13 @@ export function buildGeneralWorkbenchSendBoundaryState({
   const shouldDismissGeneralWorkbenchEntryPrompt =
     isThemeWorkbench && !sendOptions?.purpose;
 
-  const trimmedSourceText = sourceText.trim();
-  const shouldWrapWithGeneralWorkbenchSkill =
-    isThemeWorkbench &&
-    mappedTheme === "general" &&
-    !sendOptions?.purpose &&
-    trimmedSourceText.length > 0 &&
-    !trimmedSourceText.startsWith("/") &&
-    !trimmedSourceText.startsWith("@");
-  const nextSourceText = shouldWrapWithGeneralWorkbenchSkill
-    ? `/${socialArticleSkillKey} ${trimmedSourceText}`
-    : sourceText;
-  const browserRequirementSourceText = shouldWrapWithGeneralWorkbenchSkill
-    ? trimmedSourceText
-    : nextSourceText;
-
   const browserRequirementMatch =
     mappedTheme === "general" && !sendOptions?.purpose
-      ? detectBrowserTaskRequirement(browserRequirementSourceText)
+      ? detectBrowserTaskRequirement(sourceText)
       : null;
 
   return {
-    sourceText: nextSourceText,
+    sourceText,
     browserRequirementMatch,
     shouldConsumePendingGeneralWorkbenchInitialPrompt,
     shouldDismissGeneralWorkbenchEntryPrompt,

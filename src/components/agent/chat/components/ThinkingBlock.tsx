@@ -175,13 +175,22 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
 
   if (!content) return null;
 
+  const shouldRenderGroupMarker = grouped && !hideSummary;
+
   return (
     <div
-      className={cn(grouped ? "flex items-start gap-2 py-1.5" : "py-0.5")}
+      className={cn(
+        grouped && shouldRenderGroupMarker
+          ? "flex items-start gap-2 py-1.5"
+          : grouped
+            ? "py-1.5"
+            : "py-0.5",
+      )}
       data-testid="thinking-block"
       data-visual-style={grouped ? "grouped-inline" : "card"}
+      data-group-marker={shouldRenderGroupMarker ? "yes" : "no"}
     >
-      {grouped ? (
+      {shouldRenderGroupMarker ? (
         <span className="pt-0.5 font-mono text-xs text-slate-400">
           {groupMarker}
         </span>

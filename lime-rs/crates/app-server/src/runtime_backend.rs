@@ -8,6 +8,7 @@ mod model_route_contract;
 mod model_route_resolver;
 mod model_routing;
 mod plan_events;
+mod plugin_activation_context;
 mod proposed_plan_parser;
 mod reasoning_events;
 mod skill_runtime_enable;

@@ -11,6 +11,7 @@ export type DevBridgeCommandTimeoutProfile =
   | "agent-runtime"
   | "agent-app-ui-runtime-start"
   | "agent-app-package"
+  | "desktop-user-interaction"
   | "knowledge-compile"
   | "voice-model-download"
   | "layered-design-project"
@@ -51,6 +52,7 @@ const noMockFallbackCompatCommands = new Set<string>([
 ]);
 
 const electronHostNoMockFallbackCommands = new Set([
+  "agent_app_select_directory",
   "open_file_preview_window",
   "open_system_settings_url",
   "save_layered_design_project_export",
@@ -74,6 +76,10 @@ const devBridgeAgentAppPackageCommands = new Set([
 const electronHostLayeredDesignProjectCommands = new Set([
   "save_layered_design_project_export",
   "read_layered_design_project_export",
+]);
+
+const electronHostUserInteractionCommands = new Set([
+  "agent_app_select_directory",
 ]);
 
 const devBridgeCooldownBypassCommands = new Set([
@@ -329,6 +335,9 @@ export function resolveDevBridgeCommandTimeoutProfile(
   }
   if (devBridgeAgentAppPackageCommands.has(command)) {
     return "agent-app-package";
+  }
+  if (electronHostUserInteractionCommands.has(command)) {
+    return "desktop-user-interaction";
   }
   if (command === "voice_models_download") {
     return "voice-model-download";

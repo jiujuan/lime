@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { AgentToolCallState } from "@/lib/api/agentProtocol";
 import {
   coalesceAdjacentThinkingProcessEntries,
+  shouldSplitProcessBeforeEntry,
   shouldAutoExpandProcessEntries,
   type StreamingProcessEntry,
 } from "./StreamingProcessGroupModel";
@@ -135,7 +136,7 @@ describe("StreamingProcessGroupModel", () => {
     ).toBe(false);
   });
 
-  it("普通命令仍默认折叠，避免实时 raw 输出切开正文", () => {
+  it("普通命令不默认展开详情，避免实时 raw 输出切开正文", () => {
     expect(
       shouldAutoExpandProcessEntries(
         [
@@ -151,6 +152,26 @@ describe("StreamingProcessGroupModel", () => {
           ),
         ],
         true,
+      ),
+    ).toBe(false);
+  });
+
+  it("纯 thinking 遇到 WebSearch 时应留在同一检索过程组内", () => {
+    expect(
+      shouldSplitProcessBeforeEntry(
+        [
+          {
+            kind: "thinking",
+            id: "thinking-before-web",
+            text: "Searching for current sources.",
+          },
+        ],
+        toolEntry(
+          toolCall({
+            id: "tool-web-search",
+            name: "WebSearch",
+          }),
+        ),
       ),
     ).toBe(false);
   });

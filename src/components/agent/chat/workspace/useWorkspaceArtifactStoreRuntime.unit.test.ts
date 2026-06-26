@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { Artifact } from "@/lib/artifact/types";
-import { shouldPersistSettledLiveArtifact } from "./useWorkspaceArtifactStoreRuntime";
+import {
+  buildMessageArtifactsSignature,
+  shouldPersistSettledLiveArtifact,
+} from "./useWorkspaceArtifactStoreRuntime";
 
 function artifact(id: string, status: Artifact["status"] = "complete") {
   return {
@@ -53,5 +56,27 @@ describe("shouldPersistSettledLiveArtifact", () => {
         settledLiveArtifact: liveArtifact,
       }),
     ).toBe(false);
+  });
+});
+
+describe("buildMessageArtifactsSignature", () => {
+  it("消息数组引用变化但 artifacts 内容相同时签名应保持稳定", () => {
+    const firstArtifact = artifact("artifact-1");
+    const firstMessages = [{ artifacts: [firstArtifact] }];
+    const secondMessages = [{ artifacts: [{ ...firstArtifact }] }];
+
+    expect(buildMessageArtifactsSignature(firstMessages)).toBe(
+      buildMessageArtifactsSignature(secondMessages),
+    );
+  });
+
+  it("artifacts 内容变化时签名应变化", () => {
+    expect(
+      buildMessageArtifactsSignature([{ artifacts: [artifact("artifact-1")] }]),
+    ).not.toBe(
+      buildMessageArtifactsSignature([
+        { artifacts: [artifact("artifact-1", "streaming")] },
+      ]),
+    );
   });
 });

@@ -10,6 +10,7 @@ import {
   coalesceAdjacentThinkingProcessEntries,
   isImportedProcessMetadata,
   isImportedToolCall,
+  isWebRetrievalToolCall,
   shouldAutoExpandProcessEntries,
   type StreamingProcessEntry,
 } from "./StreamingProcessGroupModel";
@@ -212,8 +213,18 @@ export const StreamingProcessRun: React.FC<StreamingProcessRunProps> = memo(
             : entry,
         )
       : coalescedEntries;
+    const toolEntries = processEntries.filter(
+      (entry): entry is Extract<StreamingProcessEntry, { kind: "tool" }> =>
+        entry.kind === "tool",
+    );
+    const shouldRenderGroupedTimeline =
+      toolEntries.length > 0 &&
+      toolEntries.every((entry) => isWebRetrievalToolCall(entry.toolCall));
 
-    if (forceGroup || (toolCount > 0 && processEntries.length > 1)) {
+    if (
+      shouldRenderGroupedTimeline &&
+      (forceGroup || (toolCount > 0 && processEntries.length > 1))
+    ) {
       return (
         <StreamingProcessGroup
           entries={processEntries}

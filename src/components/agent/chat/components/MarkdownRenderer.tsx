@@ -62,7 +62,6 @@ import {
 
 const STREAMING_LIGHT_RENDER_THRESHOLD = 2_000;
 const STREAMING_LIGHT_RENDER_DEBOUNCE_MS = 48;
-const STREAMING_STANDARD_RENDER_DEBOUNCE_MS = 24;
 const MARKDOWN_BUNDLE_META_MAX_SIZE = 64 * 1024;
 function hasDesktopHostImagePreviewBoundary(): boolean {
   return hasDesktopHostRuntimeMarkers() || hasDesktopHostInvokeCapability();
@@ -123,18 +122,23 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
       isStreaming && content.length >= STREAMING_LIGHT_RENDER_THRESHOLD;
     const useLightweightMarkdownRender =
       renderMode === "light" || useLightweightStreamingRender;
+    // 普通 streaming 的稳定/尾巴分区由 StreamingMarkdownContent 负责；
+    // MarkdownRenderer 只对超长内容保留重渲染防抖。
+    const shouldDebounceStreamingContent = useLightweightStreamingRender;
     const debouncedStreamingContent = useDebouncedValue(
       content,
-      useLightweightStreamingRender
-        ? STREAMING_LIGHT_RENDER_DEBOUNCE_MS
-        : STREAMING_STANDARD_RENDER_DEBOUNCE_MS,
+      shouldDebounceStreamingContent ? STREAMING_LIGHT_RENDER_DEBOUNCE_MS : 0,
       {
-        maxWait: useLightweightStreamingRender
+        maxWait: shouldDebounceStreamingContent
           ? STREAMING_LIGHT_RENDER_DEBOUNCE_MS
-          : STREAMING_STANDARD_RENDER_DEBOUNCE_MS,
+          : undefined,
       },
     );
-    const renderContent = isStreaming ? debouncedStreamingContent : content;
+    const renderContent = isStreaming
+      ? shouldDebounceStreamingContent
+        ? debouncedStreamingContent
+        : content
+      : content;
 
     const remarkPlugins = React.useMemo(
       () =>

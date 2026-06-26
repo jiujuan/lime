@@ -15,6 +15,7 @@ import type {
   KnowledgePageParams,
   Page,
   PageParams,
+  PluginsPageParams,
   ResourcesPageParams,
   SettingsPageParams,
   SkillsPageParams,
@@ -47,6 +48,10 @@ const loadSkillsWorkspacePage = () =>
   import("./skills").then((module) => ({
     default: module.SkillsWorkspacePage,
   }));
+const loadPluginMarketplacePage = () =>
+  import("@/features/plugin").then((module) => ({
+    default: module.PluginMarketplacePage,
+  }));
 const loadKnowledgePage = () =>
   import("@/features/knowledge").then((module) => ({
     default: module.KnowledgePage,
@@ -75,6 +80,7 @@ const loadBrowserRuntimeWorkspace = () =>
 
 const ResourcesPage = lazy(loadResourcesPage);
 const SkillsWorkspacePage = lazy(loadSkillsWorkspacePage);
+const PluginMarketplacePage = lazy(loadPluginMarketplacePage);
 const KnowledgePage = lazy(loadKnowledgePage);
 const AgentAppLabPage = lazy(loadAgentAppLabPage);
 const AgentAppsPage = lazy(loadAgentAppsPage);
@@ -334,6 +340,17 @@ export function AppPageContent({
         <SkillsWorkspacePage
           onNavigate={onNavigate}
           pageParams={activePageParams as SkillsPageParams}
+        />
+      </div>
+    );
+  }
+
+  if (activePage === "plugins") {
+    return (
+      <div style={columnPageStyle}>
+        <PluginMarketplacePage
+          onNavigate={onNavigate}
+          pageParams={activePageParams as PluginsPageParams}
         />
       </div>
     );

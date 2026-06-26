@@ -43,6 +43,7 @@ describe("commandPolicy", () => {
     expect(isBridgeTruthCommand("get_automation_jobs")).toBe(false);
     expect(isBridgeTruthCommand("project_memory_get")).toBe(false);
     for (const command of [
+      "agent_app_select_directory",
       "save_layered_design_project_export",
       "read_layered_design_project_export",
       "recognize_layered_design_text",
@@ -317,6 +318,9 @@ describe("commandPolicy", () => {
         "read_layered_design_project_export",
       ),
     ).toBe("layered-design-project");
+    expect(
+      resolveDevBridgeCommandTimeoutProfile("agent_app_select_directory"),
+    ).toBe("desktop-user-interaction");
     expect(
       resolveDevBridgeCommandTimeoutProfile("app_server_handle_json_lines", {
         request: {

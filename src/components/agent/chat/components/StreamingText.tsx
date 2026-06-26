@@ -258,6 +258,17 @@ export const StreamingText: React.FC<StreamingTextProps> = memo(
         setDisplayText(seededText);
       }
 
+      if (!prevTextRef.current && displayIndexRef.current === 0 && text) {
+        const seededText = resolveInitialStreamingDisplayText(
+          text,
+          isStreaming,
+        );
+        if (seededText) {
+          displayIndexRef.current = seededText.length;
+          setDisplayText(seededText);
+        }
+      }
+
       // 检测文本是否有新增
       if (text.length <= prevTextRef.current.length) {
         prevTextRef.current = text;
@@ -438,19 +449,28 @@ export const StreamingText: React.FC<StreamingTextProps> = memo(
                 const textContent =
                   typeof part.content === "string" ? part.content : "";
                 if (!textContent || textContent.trim() === "") return null;
-                return renderPlanAwareMarkdown(textContent, `text-${index}`, {
-                  onA2UISubmit,
-                  renderA2UIInline,
-                  renderProposedPlanBlocks,
-                  collapseCodeBlocks,
-                  shouldCollapseCodeBlock,
-                  onCodeBlockClick,
-                  isStreaming,
-                  showBlockActions,
-                  onQuoteContent,
-                  markdownRenderMode,
-                  readOnlyA2UI,
-                });
+                return (
+                  <StreamingMarkdownContent
+                    key={`text-${index}`}
+                    content={textContent}
+                    isStreaming={isStreaming}
+                    renderMarkdown={(markdown) =>
+                      renderPlanAwareMarkdown(markdown, `text-${index}`, {
+                        onA2UISubmit,
+                        renderA2UIInline,
+                        renderProposedPlanBlocks,
+                        collapseCodeBlocks,
+                        shouldCollapseCodeBlock,
+                        onCodeBlockClick,
+                        isStreaming,
+                        showBlockActions,
+                        onQuoteContent,
+                        markdownRenderMode,
+                        readOnlyA2UI,
+                      })
+                    }
+                  />
+                );
               }
             }
           })}

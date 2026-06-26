@@ -117,6 +117,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   openedProjects = [],
   onProjectContextChange,
   sessionId = null,
+  pluginSuggestions = [],
   isLoading = false,
   disabled = false,
   initialInputCapability,
@@ -810,6 +811,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         onManageKnowledgePacks={onManageKnowledgePacks}
         copy={homeSurfaceCopy.composer}
         inputbarCopy={inputbarCoreCopy}
+        pluginSuggestions={pluginSuggestions}
         showCreationModeSelector={showCreationModeSelector}
         creationMode={creationMode}
         onCreationModeChange={onCreationModeChange}
