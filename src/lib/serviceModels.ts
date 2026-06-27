@@ -12,6 +12,13 @@ export interface ResolvedServiceModelExecutionPreference {
   customPrompt?: string;
 }
 
+export interface ServiceModelSlotMetadata {
+  provider: string;
+  model: string;
+  source: string;
+  reason: string;
+}
+
 function normalizeMaybeString(value?: string | null): string | undefined {
   const normalized = value?.trim();
   return normalized ? normalized : undefined;
@@ -90,5 +97,27 @@ export function buildPersistedServiceModelPreference(
     preferredModelId: normalized.preferredModelId,
     enabled: normalized.enabled ?? true,
     customPrompt: normalized.customPrompt,
+  };
+}
+
+export function buildServiceModelSlotMetadata(params: {
+  preference?: ServiceModelPreferenceConfig | null;
+  source: string;
+  reason: string;
+}): ServiceModelSlotMetadata | undefined {
+  const normalized = normalizeServiceModelPreference(params.preference);
+  if (
+    normalized.enabled === false ||
+    !normalized.preferredProviderId ||
+    !normalized.preferredModelId
+  ) {
+    return undefined;
+  }
+
+  return {
+    provider: normalized.preferredProviderId,
+    model: normalized.preferredModelId,
+    source: params.source,
+    reason: params.reason,
   };
 }

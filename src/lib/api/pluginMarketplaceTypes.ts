@@ -13,6 +13,13 @@ export type PluginMarketplaceInstallState = "available" | "blocked";
 
 export type PluginMarketplaceActivationState = "activatable" | "blocked";
 
+export type ClientPluginInstallState =
+  | "installed"
+  | "enabled"
+  | "disabled"
+  | "uninstalled"
+  | "failed";
+
 export interface PluginMarketplacePackageRef {
   releaseId?: string;
   packageUrl?: string;
@@ -59,4 +66,30 @@ export interface PluginMarketplaceListResponse {
   marketplaceName: string;
   marketplaceDisplayName?: string;
   items: PluginMarketplaceItem[];
+}
+
+export interface ClientPluginInstallStateReport {
+  tenantId: string;
+  userId: string;
+  pluginName: string;
+  marketplaceName: string;
+  pluginKey: string;
+  sourceKind: PluginMarketplaceSourceKind;
+  sourceRef?: string;
+  state: ClientPluginInstallState;
+  releaseId?: string;
+  packageHash?: string;
+  manifestHash?: string;
+  reason?: string;
+  reportedAt: string;
+  updatedAt: string;
+}
+
+export interface ReportClientPluginInstallStatePayload {
+  state: ClientPluginInstallState;
+  releaseId?: string;
+  packageHash?: string;
+  manifestHash?: string;
+  reason?: string;
+  reportedAt?: string;
 }

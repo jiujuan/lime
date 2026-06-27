@@ -117,12 +117,10 @@ async fn product_profile_artifact_documents_cover_media_storyboard_and_checklist
         "storyboard"
     );
     assert_eq!(storyboard_content["blocks"][0]["type"], "rich_text");
-    assert!(
-        storyboard_content["blocks"][0]["markdown"]
-            .as_str()
-            .expect("storyboard markdown")
-            .contains("厨房开场")
-    );
+    assert!(storyboard_content["blocks"][0]["markdown"]
+        .as_str()
+        .expect("storyboard markdown")
+        .contains("厨房开场"));
 
     let checklist_content = read_artifact_document_content(&core, "artifact-delivery-checklist");
     assert_eq!(checklist_content["kind"], "plan");

@@ -96,7 +96,8 @@ function shouldSyncAgentMessageContentPartPhase(
   phase?: string | null,
 ): boolean {
   return (
-    isAgentMessageCommentaryPhase(phase) || isAgentMessageFinalAnswerPhase(phase)
+    isAgentMessageCommentaryPhase(phase) ||
+    isAgentMessageFinalAnswerPhase(phase)
   );
 }
 
@@ -163,12 +164,13 @@ function upsertAgentMessageContentPart(params: {
 export function mergeAssistantAgentMessageContentPartsFromThreadItems(params: {
   items: readonly AgentThreadItem[];
   parts?: MessageContentParts;
+  turnId?: string | null;
 }): MessageContentParts | undefined {
+  const normalizedTurnId = params.turnId?.trim();
   const agentMessageItems = params.items.filter(
-    (
-      item,
-    ): item is Extract<AgentThreadItem, { type: "agent_message" }> =>
+    (item): item is Extract<AgentThreadItem, { type: "agent_message" }> =>
       item.type === "agent_message" &&
+      (!normalizedTurnId || item.turn_id === normalizedTurnId) &&
       shouldSyncAgentMessageContentPartPhase(item.phase),
   );
   if (agentMessageItems.length === 0) {

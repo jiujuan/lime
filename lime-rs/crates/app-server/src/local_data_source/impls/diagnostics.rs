@@ -1,4 +1,5 @@
 use super::super::*;
+use app_server_protocol::SupportBundleExportParams;
 use async_trait::async_trait;
 
 #[async_trait]
@@ -35,8 +36,11 @@ impl DiagnosticsAppDataSource for LocalAppDataSource {
         Ok(diagnostics::read_log_storage_diagnostics().map_err(data_error)?)
     }
 
-    async fn export_support_bundle(&self) -> Result<SupportBundleExportResponse, RuntimeCoreError> {
-        diagnostics::export_support_bundle().map_err(data_error)
+    async fn export_support_bundle(
+        &self,
+        params: SupportBundleExportParams,
+    ) -> Result<SupportBundleExportResponse, RuntimeCoreError> {
+        diagnostics::export_support_bundle(params).map_err(data_error)
     }
 
     async fn read_windows_startup_diagnostics(

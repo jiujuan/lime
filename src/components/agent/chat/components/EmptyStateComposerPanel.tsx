@@ -397,6 +397,7 @@ export function EmptyStateComposerPanel({
   const handleSelectPlugin = (
     plugin: InputbarPluginCapability,
     skill?: InputbarPluginSkillCapability,
+    options?: { inputOverride?: string },
   ) => {
     const blocked =
       plugin.disabled ||
@@ -407,7 +408,7 @@ export function EmptyStateComposerPanel({
       return;
     }
     const selection = applyInputbarPluginSelection({
-      input: draftInput,
+      input: options?.inputOverride ?? draftInput,
       plugin,
       skill,
     });
@@ -719,6 +720,8 @@ export function EmptyStateComposerPanel({
         value={draftInput}
         onChange={setDraftInput}
         onSelectInputCapability={onSelectInputCapability}
+        pluginSuggestions={pluginSuggestions}
+        onSelectPlugin={handleSelectPlugin}
         projectId={projectId}
         defaultCuratedTaskReferenceMemoryIds={
           activeCapability?.kind === "curated_task"

@@ -19,6 +19,7 @@ export interface ContentFactoryDeliveryPart {
   objectKind: string;
   artifactType: string;
   surfaceKind: string;
+  outputArtifactKind?: string | null;
   title: string;
   stage: ContentFactoryDeliveryStage;
   required: boolean;
@@ -98,6 +99,7 @@ function buildDeliveryPart(
     objectKind,
     artifactType,
     surfaceKind,
+    outputArtifactKind: normalizeString(renderer.outputArtifactKind),
     title: objectTitle(objectKind, artifactType),
     stage: DELIVERY_STAGES[objectKind] ?? "draft",
     required: REQUIRED_OBJECT_KINDS.has(objectKind),
@@ -133,6 +135,7 @@ function buildObjectSource(part: ContentFactoryDeliveryPart): Record<string, unk
     return {
       artifactType: part.artifactType,
       surfaceKind: part.surfaceKind,
+      outputArtifactKind: part.outputArtifactKind ?? null,
       items: [
         {
           id: "article-draft",
@@ -156,6 +159,7 @@ function buildObjectSource(part: ContentFactoryDeliveryPart): Record<string, unk
   return {
     artifactType: part.artifactType,
     surfaceKind: part.surfaceKind,
+    outputArtifactKind: part.outputArtifactKind ?? null,
     documentText: "",
   };
 }
@@ -253,6 +257,7 @@ export function buildContentFactoryDeliveryProfile({
       {
         source: "content_factory_delivery_plan",
         pluginId: contract.id,
+        outputArtifactKind: primaryPart.outputArtifactKind ?? null,
         requiredObjectKinds: parts
           .filter((part) => part.required)
           .map((part) => part.objectKind),

@@ -305,6 +305,7 @@ fn completed_at_for_event<'a>(event: &'a AgentEvent, event_class: &str) -> Optio
     if event_class.ends_with(".completed")
         || event_class.ends_with(".result")
         || event_class.ends_with(".failed")
+        || event_class.ends_with(".canceled")
         || event_class == "turn.canceled"
         || event_class.ends_with(".resolved")
         || is_action_terminal_event_class(event_class)

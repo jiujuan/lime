@@ -27,6 +27,7 @@ const {
   mockInputbar,
   mockJotaiState,
   mockLaunchBrowserSession,
+  mockExecuteBrowserSessionAction,
   mockUseAgentChatUnified,
 } = getIndexTestMocks();
 
@@ -341,21 +342,15 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
 
   it("显式新 URL 的浏览器请求应复用现有会话并导航到新页面", async () => {
     mockBrowserAssistCompletedSession();
-    mockBrowserExecuteAction.mockResolvedValueOnce({
-      success: true,
-      backend: "cdp_direct",
-      session_id: "browser-session-1",
-      target_id: "target-news-1",
+    mockExecuteBrowserSessionAction.mockResolvedValueOnce({
+      sessionId: "browser-session-1",
       action: "navigate",
-      request_id: "browser-action-news",
-      data: {
+      result: {
         page_info: {
           title: "百度新闻",
           url: "https://news.baidu.com",
         },
       },
-      error: undefined,
-      attempts: [],
     });
 
     renderPage({
@@ -378,22 +373,21 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     });
     await flushEffects(12);
 
-    expect(mockBrowserExecuteAction).toHaveBeenCalledWith({
-      profile_key: "general_browser_assist",
-      backend: "cdp_direct",
+    expect(mockExecuteBrowserSessionAction).toHaveBeenCalledWith({
+      sessionId: "browser-session-1",
       action: "navigate",
       args: {
         action: "goto",
         url: "https://news.baidu.com",
-        wait_for_page_info: true,
+        timeout_ms: 20000,
       },
-      timeout_ms: 20000,
     });
+    expect(mockBrowserExecuteAction).not.toHaveBeenCalled();
     expect(sharedSendMessageMock).toHaveBeenCalledTimes(1);
     const sendCall = getSendMessageCall();
     expect(sendCall.content).toBe(prompt);
     expect(sendCall.images).toEqual([]);
-    expect(sendCall.webSearch).toBeUndefined();
+    expect(sendCall.webSearch).toBe(false);
     expect(sendCall.thinking).toBeUndefined();
     expect(sendCall.skipUserMessage).toBe(false);
     expect(sendCall.executionStrategy).toBe("react");
@@ -408,8 +402,12 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
               enabled: true,
               profile_key: "general_browser_assist",
             }),
+            browser_requirement: "required",
+            browser_launch_url: "https://news.baidu.com",
+            browser_user_step_required: false,
           }),
         }),
+        searchMode: "disabled",
       }),
     );
     expect(mockJotaiState.artifacts).toEqual(

@@ -1,0 +1,34 @@
+{
+  "$defs": {
+    "SupportBundleTraceExportSelection": {
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        },
+        "traceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId",
+        "traceId"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "includeTraceExport": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SupportBundleTraceExportSelection"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "title": "SupportBundleExportParams",
+  "type": "object"
+}

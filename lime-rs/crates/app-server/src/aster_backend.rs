@@ -29,6 +29,47 @@ pub struct AsterBackendSubmitRequest {
     pub queued_turn_id: Option<String>,
     pub queue_if_busy: bool,
     pub skip_pre_submit_resume: bool,
+    pub process_control: AsterBackendProcessControlCapabilities,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AsterBackendProcessControlCapabilities {
+    pub shared_registry: bool,
+    pub status: bool,
+    pub drain_output: bool,
+    pub interrupt: bool,
+    pub terminate: bool,
+    pub write_stdin: bool,
+}
+
+impl AsterBackendProcessControlCapabilities {
+    pub const fn none() -> Self {
+        Self {
+            shared_registry: false,
+            status: false,
+            drain_output: false,
+            interrupt: false,
+            terminate: false,
+            write_stdin: false,
+        }
+    }
+
+    pub const fn shared_execution_process_server() -> Self {
+        Self {
+            shared_registry: true,
+            status: true,
+            drain_output: true,
+            interrupt: true,
+            terminate: true,
+            write_stdin: true,
+        }
+    }
+}
+
+impl Default for AsterBackendProcessControlCapabilities {
+    fn default() -> Self {
+        Self::none()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -90,11 +131,22 @@ pub trait AsterBackendHost: Send + Sync {
 #[derive(Clone)]
 pub struct AsterBackend {
     host: Arc<dyn AsterBackendHost>,
+    process_control: AsterBackendProcessControlCapabilities,
 }
 
 impl AsterBackend {
     pub fn new(host: Arc<dyn AsterBackendHost>) -> Self {
-        Self { host }
+        Self::new_with_process_control(host, AsterBackendProcessControlCapabilities::none())
+    }
+
+    pub fn new_with_process_control(
+        host: Arc<dyn AsterBackendHost>,
+        process_control: AsterBackendProcessControlCapabilities,
+    ) -> Self {
+        Self {
+            host,
+            process_control,
+        }
     }
 }
 
@@ -123,6 +175,7 @@ impl ExecutionBackend for AsterBackend {
                 queued_turn_id: request.queued_turn_id,
                 queue_if_busy: request.queue_if_busy,
                 skip_pre_submit_resume: request.skip_pre_submit_resume,
+                process_control: self.process_control.clone(),
             })
             .await?;
 
@@ -233,13 +286,29 @@ mod tests {
             );
             assert!(request.queue_if_busy);
             assert!(request.skip_pre_submit_resume);
+            assert_eq!(
+                request.process_control,
+                AsterBackendProcessControlCapabilities::none()
+            );
             Ok(AsterBackendSubmitResult {
-                events: vec![RuntimeEvent::new(
-                    "message.delta",
-                    serde_json::json!({
-                        "text": format!("accepted:{}", request.input.text),
-                    }),
-                )],
+                events: vec![
+                    RuntimeEvent::new(
+                        "message.delta",
+                        serde_json::json!({
+                            "text": format!("accepted:{}", request.input.text),
+                        }),
+                    ),
+                    RuntimeEvent::new(
+                        "action.required",
+                        serde_json::json!({
+                            "requestId": "req_confirm_1",
+                            "actionType": "tool_confirmation",
+                            "data": {
+                                "toolName": "PublishTool"
+                            }
+                        }),
+                    ),
+                ],
             })
         }
 
@@ -334,9 +403,82 @@ mod tests {
             .await
             .expect("turn");
 
-        assert_eq!(output.events.len(), 1);
-        assert_eq!(output.events[0].event_type, "message.delta");
-        assert_eq!(output.events[0].payload["text"], "accepted:draft");
+        let message_delta = output
+            .events
+            .iter()
+            .find(|event| event.event_type == "message.delta")
+            .expect("message delta event");
+        assert_eq!(message_delta.payload["text"], "accepted:draft");
+    }
+
+    struct ProcessControlAwareAsterBackendHost;
+
+    #[async_trait]
+    impl AsterBackendHost for ProcessControlAwareAsterBackendHost {
+        async fn submit_turn(
+            &self,
+            request: AsterBackendSubmitRequest,
+        ) -> Result<AsterBackendSubmitResult, RuntimeCoreError> {
+            assert_eq!(
+                request.process_control,
+                AsterBackendProcessControlCapabilities::shared_execution_process_server()
+            );
+            Ok(AsterBackendSubmitResult::default())
+        }
+
+        async fn cancel_turn(
+            &self,
+            _request: AsterBackendCancelRequest,
+        ) -> Result<AsterBackendCancelResult, RuntimeCoreError> {
+            Ok(AsterBackendCancelResult::default())
+        }
+
+        async fn respond_action(
+            &self,
+            _request: AsterBackendActionRespondRequest,
+        ) -> Result<AsterBackendActionRespondResult, RuntimeCoreError> {
+            Ok(AsterBackendActionRespondResult::default())
+        }
+    }
+
+    #[tokio::test]
+    async fn aster_backend_submit_request_exposes_injected_process_control_contract() {
+        let backend = AsterBackend::new_with_process_control(
+            Arc::new(ProcessControlAwareAsterBackendHost),
+            AsterBackendProcessControlCapabilities::shared_execution_process_server(),
+        );
+        let core = RuntimeCore::with_backend(Arc::new(backend));
+        let session = core
+            .start_session(AgentSessionStartParams {
+                session_id: None,
+                thread_id: None,
+                app_id: "content-studio".to_string(),
+                workspace_id: Some("default".to_string()),
+                business_object_ref: None,
+                locale: None,
+            })
+            .expect("session")
+            .session;
+
+        core.start_turn(
+            AgentSessionTurnStartParams {
+                session_id: session.session_id,
+                turn_id: None,
+                input: AgentInput {
+                    text: "draft".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: None,
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext {
+                client_name: Some("test-client".to_string()),
+                client_version: None,
+            },
+        )
+        .await
+        .expect("turn");
     }
 
     #[tokio::test]
@@ -416,9 +558,12 @@ mod tests {
             .await
             .expect("action response");
 
-        assert_eq!(output.events.len(), 1);
-        assert_eq!(output.events[0].event_type, "action.resolved");
-        assert_eq!(output.events[0].payload["requestId"], "req_confirm_1");
+        let action_resolved = output
+            .events
+            .iter()
+            .find(|event| event.event_type == "action.resolved")
+            .expect("action resolved event");
+        assert_eq!(action_resolved.payload["requestId"], "req_confirm_1");
     }
 }
 

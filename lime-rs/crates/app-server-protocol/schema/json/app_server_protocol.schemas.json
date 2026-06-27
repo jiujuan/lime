@@ -3174,6 +3174,7 @@
                 "string"
               ]
             },
+            "businessObjectRefMetadata": true,
             "createdAt": {
               "type": "string"
             },
@@ -4518,6 +4519,7 @@
                 "string"
               ]
             },
+            "businessObjectRefMetadata": true,
             "createdAt": {
               "type": "string"
             },
@@ -5351,6 +5353,7 @@
             "string"
           ]
         },
+        "businessObjectRefMetadata": true,
         "createdAt": {
           "type": "string"
         },
@@ -7441,6 +7444,7 @@
                 "string"
               ]
             },
+            "businessObjectRefMetadata": true,
             "createdAt": {
               "type": "string"
             },
@@ -12266,6 +12270,695 @@
       "title": "DiagnosticsTelemetrySummary",
       "type": "object"
     },
+    "DiagnosticsTraceEvent": {
+      "$defs": {
+        "DiagnosticsTraceRedactionPolicy": {
+          "properties": {
+            "mode": {
+              "type": "string"
+            },
+            "promptText": {
+              "type": "boolean"
+            },
+            "providerPayload": {
+              "type": "boolean"
+            },
+            "rawAgentEventPayload": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "mode",
+            "promptText",
+            "providerPayload",
+            "rawAgentEventPayload"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "checkpoint": {
+          "type": "string"
+        },
+        "eventId": {
+          "type": "string"
+        },
+        "eventSequence": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "eventType": {
+          "type": "string"
+        },
+        "metrics": {
+          "additionalProperties": true,
+          "default": {},
+          "type": "object"
+        },
+        "redaction": {
+          "$ref": "#/$defs/DiagnosticsTraceRedactionPolicy"
+        },
+        "requestId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "runId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "schemaVersion": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seq": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "traceId": {
+          "type": "string"
+        },
+        "turnId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "wallTimeUnixMs": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "checkpoint",
+        "eventId",
+        "eventSequence",
+        "eventType",
+        "redaction",
+        "schemaVersion",
+        "seq",
+        "sessionId",
+        "traceId",
+        "wallTimeUnixMs"
+      ],
+      "title": "DiagnosticsTraceEvent",
+      "type": "object"
+    },
+    "DiagnosticsTraceExportParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        },
+        "traceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId",
+        "traceId"
+      ],
+      "title": "DiagnosticsTraceExportParams",
+      "type": "object"
+    },
+    "DiagnosticsTraceExportResponse": {
+      "$defs": {
+        "DiagnosticsTraceRedactionPolicy": {
+          "properties": {
+            "mode": {
+              "type": "string"
+            },
+            "promptText": {
+              "type": "boolean"
+            },
+            "providerPayload": {
+              "type": "boolean"
+            },
+            "rawAgentEventPayload": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "mode",
+            "promptText",
+            "providerPayload",
+            "rawAgentEventPayload"
+          ],
+          "type": "object"
+        },
+        "DiagnosticsTraceSummary": {
+          "properties": {
+            "eventCount": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "firstWallTimeUnixMs": {
+              "format": "int64",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "lastWallTimeUnixMs": {
+              "format": "int64",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "modifiedAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "sizeBytes": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "traceId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "eventCount",
+            "path",
+            "sessionId",
+            "sizeBytes",
+            "traceId"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "bundlePath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "exported": {
+          "type": "boolean"
+        },
+        "generatedAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "includedSections": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "omittedSections": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "outputDirectory": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "redaction": {
+          "$ref": "#/$defs/DiagnosticsTraceRedactionPolicy"
+        },
+        "trace": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DiagnosticsTraceSummary"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "available",
+        "exported",
+        "redaction"
+      ],
+      "title": "DiagnosticsTraceExportResponse",
+      "type": "object"
+    },
+    "DiagnosticsTraceListParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "limit": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "sessionId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "title": "DiagnosticsTraceListParams",
+      "type": "object"
+    },
+    "DiagnosticsTraceListResponse": {
+      "$defs": {
+        "DiagnosticsTraceRedactionPolicy": {
+          "properties": {
+            "mode": {
+              "type": "string"
+            },
+            "promptText": {
+              "type": "boolean"
+            },
+            "providerPayload": {
+              "type": "boolean"
+            },
+            "rawAgentEventPayload": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "mode",
+            "promptText",
+            "providerPayload",
+            "rawAgentEventPayload"
+          ],
+          "type": "object"
+        },
+        "DiagnosticsTraceSummary": {
+          "properties": {
+            "eventCount": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "firstWallTimeUnixMs": {
+              "format": "int64",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "lastWallTimeUnixMs": {
+              "format": "int64",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "modifiedAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "sizeBytes": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "traceId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "eventCount",
+            "path",
+            "sessionId",
+            "sizeBytes",
+            "traceId"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "redaction": {
+          "$ref": "#/$defs/DiagnosticsTraceRedactionPolicy"
+        },
+        "traceRoot": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "traces": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/DiagnosticsTraceSummary"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "available",
+        "redaction"
+      ],
+      "title": "DiagnosticsTraceListResponse",
+      "type": "object"
+    },
+    "DiagnosticsTraceReadParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "maxEvents": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "traceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId",
+        "traceId"
+      ],
+      "title": "DiagnosticsTraceReadParams",
+      "type": "object"
+    },
+    "DiagnosticsTraceReadResponse": {
+      "$defs": {
+        "DiagnosticsTraceEvent": {
+          "properties": {
+            "checkpoint": {
+              "type": "string"
+            },
+            "eventId": {
+              "type": "string"
+            },
+            "eventSequence": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "eventType": {
+              "type": "string"
+            },
+            "metrics": {
+              "additionalProperties": true,
+              "default": {},
+              "type": "object"
+            },
+            "redaction": {
+              "$ref": "#/$defs/DiagnosticsTraceRedactionPolicy"
+            },
+            "requestId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "runId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "schemaVersion": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "seq": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "threadId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "traceId": {
+              "type": "string"
+            },
+            "turnId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "wallTimeUnixMs": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "checkpoint",
+            "eventId",
+            "eventSequence",
+            "eventType",
+            "redaction",
+            "schemaVersion",
+            "seq",
+            "sessionId",
+            "traceId",
+            "wallTimeUnixMs"
+          ],
+          "type": "object"
+        },
+        "DiagnosticsTraceRedactionPolicy": {
+          "properties": {
+            "mode": {
+              "type": "string"
+            },
+            "promptText": {
+              "type": "boolean"
+            },
+            "providerPayload": {
+              "type": "boolean"
+            },
+            "rawAgentEventPayload": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "mode",
+            "promptText",
+            "providerPayload",
+            "rawAgentEventPayload"
+          ],
+          "type": "object"
+        },
+        "DiagnosticsTraceSummary": {
+          "properties": {
+            "eventCount": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "firstWallTimeUnixMs": {
+              "format": "int64",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "lastWallTimeUnixMs": {
+              "format": "int64",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "modifiedAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "sizeBytes": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "traceId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "eventCount",
+            "path",
+            "sessionId",
+            "sizeBytes",
+            "traceId"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "events": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/DiagnosticsTraceEvent"
+          },
+          "type": "array"
+        },
+        "redaction": {
+          "$ref": "#/$defs/DiagnosticsTraceRedactionPolicy"
+        },
+        "trace": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DiagnosticsTraceSummary"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "available",
+        "redaction"
+      ],
+      "title": "DiagnosticsTraceReadResponse",
+      "type": "object"
+    },
+    "DiagnosticsTraceRedactionPolicy": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "mode": {
+          "type": "string"
+        },
+        "promptText": {
+          "type": "boolean"
+        },
+        "providerPayload": {
+          "type": "boolean"
+        },
+        "rawAgentEventPayload": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "mode",
+        "promptText",
+        "providerPayload",
+        "rawAgentEventPayload"
+      ],
+      "title": "DiagnosticsTraceRedactionPolicy",
+      "type": "object"
+    },
+    "DiagnosticsTraceSummary": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "eventCount": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "firstWallTimeUnixMs": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "lastWallTimeUnixMs": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "modifiedAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "sizeBytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "traceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "eventCount",
+        "path",
+        "sessionId",
+        "sizeBytes",
+        "traceId"
+      ],
+      "title": "DiagnosticsTraceSummary",
+      "type": "object"
+    },
     "EndpointInfo": {
       "$defs": {
         "EndpointKind": {
@@ -12928,9 +13621,25 @@
     "ExecutionProcessDrainOutputParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
+        "afterSequence": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "limit": {
           "format": "uint16",
           "maximum": 65535,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "maxBytes": {
+          "format": "uint64",
           "minimum": 0,
           "type": [
             "integer",
@@ -13011,6 +13720,14 @@
             "$ref": "#/$defs/ExecutionProcessOutputDelta"
           },
           "type": "array"
+        },
+        "nextSequence": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       },
       "title": "ExecutionProcessDrainOutputResponse",
@@ -26355,6 +27072,40 @@
       "title": "StructuredOutputContract",
       "type": "object"
     },
+    "SupportBundleExportParams": {
+      "$defs": {
+        "SupportBundleTraceExportSelection": {
+          "properties": {
+            "sessionId": {
+              "type": "string"
+            },
+            "traceId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "sessionId",
+            "traceId"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "includeTraceExport": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SupportBundleTraceExportSelection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "title": "SupportBundleExportParams",
+      "type": "object"
+    },
     "SupportBundleExportResponse": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -26392,6 +27143,23 @@
         "platform"
       ],
       "title": "SupportBundleExportResponse",
+      "type": "object"
+    },
+    "SupportBundleTraceExportSelection": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        },
+        "traceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId",
+        "traceId"
+      ],
+      "title": "SupportBundleTraceExportSelection",
       "type": "object"
     },
     "TransportKind": {
@@ -29976,6 +30744,9 @@
               "diagnostics/logStorage/read",
               "diagnostics/server/read",
               "diagnostics/supportBundle/export",
+              "diagnostics/trace/export",
+              "diagnostics/trace/list",
+              "diagnostics/trace/read",
               "diagnostics/windowsStartup/read",
               "discordChannel/probe",
               "evidence/export",

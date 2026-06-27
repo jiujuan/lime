@@ -188,9 +188,8 @@ pub async fn check_if_compaction_needed(
     threshold_override: Option<f64>,
     session: &crate::session::Session,
 ) -> Result<bool> {
-    let messages = conversation.messages();
-    let config = Config::global();
     let threshold = if automatic_compaction_enabled_for_current_turn() {
+        let config = Config::global();
         threshold_override.unwrap_or_else(|| {
             config
                 .get_param::<f64>("ASTER_AUTO_COMPACT_THRESHOLD")
@@ -200,6 +199,14 @@ pub async fn check_if_compaction_needed(
         0.0
     };
 
+    if threshold <= 0.0 || threshold >= 1.0 {
+        debug!(
+            "Compaction check skipped because automatic compaction is disabled for current turn"
+        );
+        return Ok(false);
+    }
+
+    let messages = conversation.messages();
     let context_limit = provider.get_model_config().context_limit();
 
     let (current_tokens, token_source) = match session.total_tokens {
@@ -221,11 +228,7 @@ pub async fn check_if_compaction_needed(
 
     let usage_ratio = current_tokens as f64 / context_limit as f64;
 
-    let needs_compaction = if threshold <= 0.0 || threshold >= 1.0 {
-        false // Auto-compact is disabled.
-    } else {
-        usage_ratio > threshold
-    };
+    let needs_compaction = usage_ratio > threshold;
 
     debug!(
         "Compaction check: {} / {} tokens ({:.1}%), threshold: {:.1}%, needs compaction: {}, source: {}",
@@ -491,6 +494,8 @@ mod tests {
         reject_system_containing: Option<String>,
     }
 
+    struct PanicModelConfigProvider;
+
     impl MockProvider {
         fn new(message: Message, context_limit: usize) -> Self {
             Self {
@@ -587,6 +592,31 @@ mod tests {
 
         fn get_model_config(&self) -> ModelConfig {
             self.config.clone()
+        }
+    }
+
+    #[async_trait]
+    impl Provider for PanicModelConfigProvider {
+        fn metadata() -> ProviderMetadata {
+            ProviderMetadata::new("panic-model-config", "", "", "", vec![""], "", vec![])
+        }
+
+        fn get_name(&self) -> &str {
+            "panic-model-config"
+        }
+
+        async fn complete_with_model(
+            &self,
+            _model_config: &ModelConfig,
+            _system: &str,
+            _messages: &[Message],
+            _tools: &[Tool],
+        ) -> Result<(Message, ProviderUsage), ProviderError> {
+            panic!("disabled auto compaction should not call provider completion")
+        }
+
+        fn get_model_config(&self) -> ModelConfig {
+            panic!("disabled auto compaction should not read provider model config")
         }
     }
 
@@ -704,6 +734,33 @@ mod tests {
                     !check_if_compaction_needed(&provider, &conversation, Some(0.8), &session)
                         .await
                         .expect("禁用自动压缩后不应再触发自动压缩阈值"),
+                );
+            },
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_check_if_compaction_needed_short_circuits_when_auto_compaction_disabled() {
+        let provider = PanicModelConfigProvider;
+        let conversation = Conversation::new_unvalidated(vec![
+            Message::user().with_text("第一条用户消息"),
+            Message::assistant().with_text("第一条助手回复"),
+        ]);
+        let session = crate::session::Session {
+            conversation: Some(conversation.clone()),
+            message_count: 2,
+            total_tokens: None,
+            ..crate::session::Session::default()
+        };
+
+        crate::session_context::with_turn_context(
+            Some(build_auto_compaction_turn_context(false)),
+            async {
+                assert!(
+                    !check_if_compaction_needed(&provider, &conversation, Some(0.8), &session)
+                        .await
+                        .expect("禁用自动压缩后应直接跳过阈值检查"),
                 );
             },
         )

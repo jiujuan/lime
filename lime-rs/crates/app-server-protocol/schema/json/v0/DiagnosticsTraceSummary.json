@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "eventCount": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "firstWallTimeUnixMs": {
+      "format": "int64",
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "lastWallTimeUnixMs": {
+      "format": "int64",
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "modifiedAt": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "path": {
+      "type": "string"
+    },
+    "sessionId": {
+      "type": "string"
+    },
+    "sizeBytes": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "traceId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "eventCount",
+    "path",
+    "sessionId",
+    "sizeBytes",
+    "traceId"
+  ],
+  "title": "DiagnosticsTraceSummary",
+  "type": "object"
+}

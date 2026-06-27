@@ -22,7 +22,10 @@ import { runAgentStreamSubmitLifecycle } from "./agentStreamSubmitLifecycleContr
 import { buildAgentStreamSubmitOp } from "./agentStreamSubmitOpController";
 import { resolveAgentStreamSubmitContext } from "./agentStreamSubmitContext";
 import { registerAgentStreamTurnEventBinding } from "./agentStreamTurnEventBinding";
-import { extractAgentUiPerformanceTraceMetadata } from "./agentStreamPerformanceMetrics";
+import {
+  extractAgentUiPerformanceTraceMetadata,
+  mergeAgentUiPerformanceTraceMetadata,
+} from "./agentStreamPerformanceMetrics";
 import { extractInputbarManagedObjectiveText } from "../components/Inputbar/utils/inputbarModeRequestMetadata";
 
 type MessageParts = NonNullable<Message["contentParts"]>;
@@ -182,7 +185,8 @@ export async function executeAgentStreamSubmit(
     setExecutionRuntime,
   } = options;
 
-  const performanceTrace =
+  let resolvedRequestMetadata = requestMetadata;
+  let performanceTrace =
     extractAgentUiPerformanceTraceMetadata(requestMetadata);
   requestState.performanceTrace = performanceTrace;
 
@@ -211,14 +215,29 @@ export async function executeAgentStreamSubmit(
   if (!resolvedActiveSessionId) {
     throw new Error("缺少会话 ID，无法启动流式任务");
   }
+  if (performanceTrace) {
+    resolvedRequestMetadata = mergeAgentUiPerformanceTraceMetadata(
+      requestMetadata,
+      {
+        ...performanceTrace,
+        sessionId: resolvedActiveSessionId,
+        workspaceId: resolvedWorkspaceId ?? performanceTrace.workspaceId,
+      },
+    );
+    performanceTrace = extractAgentUiPerformanceTraceMetadata(
+      resolvedRequestMetadata,
+    );
+    requestState.performanceTrace = performanceTrace;
+  }
   const preserveAssistantContent =
     assistantDraft?.preserveContent === true
       ? assistantDraft.content?.trim() || null
       : null;
   const assistantFallbackContent =
     assistantDraft?.fallbackContent?.trim() || null;
-  const managedObjectiveText =
-    extractInputbarManagedObjectiveText(requestMetadata);
+  const managedObjectiveText = extractInputbarManagedObjectiveText(
+    resolvedRequestMetadata,
+  );
   const eventBindingWorkspaceId = resolvedWorkspaceId ?? "";
 
   const unlisten = await registerAgentStreamTurnEventBinding({
@@ -309,7 +328,7 @@ export async function executeAgentStreamSubmit(
           requestTurnId,
           systemPrompt,
           skipPreSubmitResume,
-          requestMetadata,
+          requestMetadata: resolvedRequestMetadata,
           executionRuntime,
           syncedRecentPreferences,
           syncedSessionModelPreference,

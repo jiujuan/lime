@@ -271,6 +271,16 @@ pub enum TextDeltaBatchBoundary {
     Provider,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentProviderTraceStage {
+    RequestStarted,
+    FirstEventReceived,
+    FirstTextDeltaReceived,
+    Failed,
+    Canceled,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum AgentEvent {
@@ -390,6 +400,31 @@ pub enum AgentEvent {
 
     #[serde(rename = "model_change")]
     ModelChange { model: String, mode: String },
+
+    #[serde(rename = "provider_trace")]
+    ProviderTrace {
+        stage: AgentProviderTraceStage,
+        provider: String,
+        model: String,
+        attempt: u32,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        elapsed_ms: Option<u64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        text_chars: Option<usize>,
+        status: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        failure_category: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        retryable: Option<bool>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        non_retryable_provider_rejection: Option<bool>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        cancel_reason: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        provider_request_id: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        provider_request_id_header: Option<String>,
+    },
 
     #[serde(rename = "context_trace")]
     ContextTrace { steps: Vec<AgentContextTraceStep> },

@@ -264,7 +264,9 @@ test("projectCodingWorkbenchViewFromEvents consumes current thread read model co
           cwd: "app",
           process_id: "process-command-install",
           execution_process_status: "running",
+          execution_process_control_status: "registered",
           execution_surface: "live_process",
+          stdin_writable: true,
           output_bytes: 13,
           output_omitted_bytes: 0,
           output_truncated: false,
@@ -307,7 +309,9 @@ test("projectCodingWorkbenchViewFromEvents consumes current thread read model co
   assert.deepEqual(view.commands[0].commandArgv, ["npm", "test"]);
   assert.equal(view.commands[0].processId, "process-command-install");
   assert.equal(view.commands[0].executionProcessStatus, "running");
+  assert.equal(view.commands[0].executionProcessControlStatus, "registered");
   assert.equal(view.commands[0].executionSurface, "live_process");
+  assert.equal(view.commands[0].stdinWritable, true);
   assert.equal(view.commands[0].outputBytes, 13);
   assert.equal(view.commands[0].outputOmittedBytes, 0);
   assert.equal(view.commands[0].outputTruncated, false);

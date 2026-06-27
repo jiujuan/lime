@@ -1,6 +1,7 @@
 use crate::runtime::memory_prompt::{
     append_memory_context_to_system_prompt, append_soul_context_to_system_prompt,
 };
+use crate::trace_context::w3c_trace_context;
 use crate::ExecutionRequest;
 use crate::RuntimeCoreError;
 use aster::session::{TurnContextOverride, TurnOutputSchemaSource};
@@ -16,9 +17,18 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+const LIME_RUNTIME_METADATA_KEY: &str = "lime_runtime";
+const LIME_RUNTIME_AUTO_COMPACT_KEY: &str = "auto_compact";
+const LIME_RUNTIME_TOOL_SURFACE_KEY: &str = "tool_surface";
+const LIME_RUNTIME_DIRECT_ANSWER_TOOL_SURFACE: &str = "direct_answer";
+const TRACE_METADATA_KEYS: &[&str] = &["agentUiPerformanceTrace", "agent_ui_performance_trace"];
+
 pub(super) fn resolve_runtime_model_selection(
     request: &ExecutionRequest,
 ) -> Result<RuntimeModelSelection, RuntimeCoreError> {
+    if let Some(selection) = fast_response_selection_from_profile_model_slot(request) {
+        return Ok(selection);
+    }
     if let Some(selection) = selection_from_explicit_preferences(request) {
         return Ok(selection);
     }
@@ -35,6 +45,18 @@ pub(super) fn resolve_runtime_model_selection(
     Err(RuntimeCoreError::Backend(
         "App Server runtime backend requires provider/model selection. Submit runtimeOptions.providerPreference and runtimeOptions.modelPreference, hostOptions.asterChatRequest.provider_config, or persist a complete session provider/model default.".to_string(),
     ))
+}
+
+pub(super) fn fast_response_selection_from_profile_model_slot(
+    request: &ExecutionRequest,
+) -> Option<RuntimeModelSelection> {
+    let metadata_values = runtime_model_metadata_values(request);
+    let selection = runtime_core::selection_from_profile_model_slot(
+        &metadata_values,
+        reasoning_effort_from_request(request),
+    )?;
+    let routing = runtime_core::resolve_model_routing_for_candidate(&metadata_values, &selection);
+    (routing.service_model_slot == "fast").then_some(selection)
 }
 
 pub(super) fn selection_from_explicit_preferences(
@@ -169,6 +191,21 @@ pub(super) fn reasoning_effort_from_request(request: &ExecutionRequest) -> Optio
     .into_iter()
     .flatten()
     .find_map(metadata_reasoning_effort)
+}
+
+fn runtime_model_metadata_values(request: &ExecutionRequest) -> Vec<&Value> {
+    let mut values = Vec::new();
+    if let Some(value) = request
+        .runtime_options
+        .as_ref()
+        .and_then(|options| options.metadata.as_ref())
+    {
+        values.push(value);
+    }
+    if let Some(value) = request.metadata.as_ref() {
+        values.push(value);
+    }
+    values
 }
 
 fn metadata_reasoning_effort(metadata: &Value) -> Option<String> {
@@ -383,6 +420,22 @@ pub(super) fn request_tool_policy_from_request(
     }
 }
 
+pub(super) fn should_defer_tool_surface_for_fast_response(
+    request: &ExecutionRequest,
+    request_tool_policy: &RequestToolPolicy,
+) -> bool {
+    if request_tool_policy.allows_web_search() {
+        return false;
+    }
+    let metadata_values = super::skill_runtime_enable::request_metadata_values(request);
+    metadata_values
+        .iter()
+        .any(|metadata| fast_response_routing_enabled(metadata))
+        && !metadata_values
+            .iter()
+            .any(|metadata| metadata_requests_tool_surface(metadata))
+}
+
 pub(super) fn session_config_from_request(
     request: &ExecutionRequest,
     host_request: Option<&AsterChatRequestSnapshot>,
@@ -392,36 +445,44 @@ pub(super) fn session_config_from_request(
     config_metadata: Option<Value>,
 ) -> aster::agents::SessionConfig {
     let workspace_scope = request_workspace_scope(request, host_request);
-    let system_prompt = merge_system_prompt_with_runtime_agents_for_project(
-        Some(request_system_prompt(request)),
-        workspace_scope.working_dir.as_deref(),
-        workspace_scope.project_root.as_deref(),
-    );
-    let system_prompt = super::agent_skills_context::append_agent_skills_context_to_system_prompt(
-        system_prompt,
-        &request.input.text,
-        &super::skill_runtime_enable::request_metadata_values(request),
-        workspace_scope.working_dir.as_deref(),
-        workspace_scope.project_root.as_deref(),
-    );
-    let system_prompt = super::plugin_activation_context::append_plugin_activation_context_to_system_prompt(
-        system_prompt,
-        &super::skill_runtime_enable::request_metadata_values(request),
-    );
-    let runtime_metadata = request
-        .runtime_options
-        .as_ref()
-        .and_then(|options| options.metadata.as_ref())
-        .or(request.metadata.as_ref());
-    let system_prompt = append_memory_context_to_system_prompt(system_prompt, runtime_metadata);
-    let system_prompt =
-        append_soul_context_to_system_prompt(system_prompt, config_metadata.as_ref());
-    let system_prompt =
-        merge_system_prompt_with_request_tool_policy(system_prompt, request_tool_policy);
+    let metadata_values = super::skill_runtime_enable::request_metadata_values(request);
+    let defer_tool_surface =
+        should_defer_tool_surface_for_fast_response(request, request_tool_policy);
+    let system_prompt = if defer_tool_surface {
+        Some(request_system_prompt(request))
+    } else {
+        let system_prompt = merge_system_prompt_with_runtime_agents_for_project(
+            Some(request_system_prompt(request)),
+            workspace_scope.working_dir.as_deref(),
+            workspace_scope.project_root.as_deref(),
+        );
+        let system_prompt =
+            super::agent_skills_context::append_agent_skills_context_to_system_prompt(
+                system_prompt,
+                &request.input.text,
+                &metadata_values,
+                workspace_scope.working_dir.as_deref(),
+                workspace_scope.project_root.as_deref(),
+            );
+        let system_prompt =
+            super::plugin_activation_context::append_plugin_activation_context_to_system_prompt(
+                system_prompt,
+                &metadata_values,
+            );
+        let runtime_metadata = request
+            .runtime_options
+            .as_ref()
+            .and_then(|options| options.metadata.as_ref())
+            .or(request.metadata.as_ref());
+        let system_prompt = append_memory_context_to_system_prompt(system_prompt, runtime_metadata);
+        let system_prompt =
+            append_soul_context_to_system_prompt(system_prompt, config_metadata.as_ref());
+        merge_system_prompt_with_request_tool_policy(system_prompt, request_tool_policy)
+    };
     let mut builder = SessionConfigBuilder::new(&scope.session_id)
         .thread_id(scope.thread_id.clone())
         .turn_id(scope.turn_id.clone())
-        .include_context_trace(true);
+        .include_context_trace(!defer_tool_surface);
     if let Some(system_prompt) = system_prompt {
         builder = builder.system_prompt(system_prompt);
     }
@@ -586,20 +647,37 @@ pub(super) fn turn_context_from_request(
     {
         metadata.insert("runtime_options".to_string(), runtime_metadata);
     }
-    let selected_skill_allowed_tools =
-        super::agent_skills_context::selected_agent_skill_allowed_tools_for_turn(
-            &request.input.text,
-            &super::skill_runtime_enable::request_metadata_values(request),
-            workspace_scope.working_dir.as_deref(),
-            workspace_scope.project_root.as_deref(),
-        );
-    if !selected_skill_allowed_tools.is_empty() {
+    if let Some(w3c_trace_context) = w3c_trace_context_metadata_from_request(request) {
+        metadata.insert("w3c_trace_context".to_string(), w3c_trace_context);
+    }
+    let request_tool_policy = request_tool_policy_from_request(host_request);
+    let defer_tool_surface =
+        should_defer_tool_surface_for_fast_response(request, &request_tool_policy);
+    if defer_tool_surface {
         metadata.insert(
-            "tool_scope".to_string(),
+            LIME_RUNTIME_METADATA_KEY.to_string(),
             json!({
-                "allowed_tools": selected_skill_allowed_tools,
+                LIME_RUNTIME_AUTO_COMPACT_KEY: false,
+                LIME_RUNTIME_TOOL_SURFACE_KEY: LIME_RUNTIME_DIRECT_ANSWER_TOOL_SURFACE,
+                "source": "fast_response_routing",
             }),
         );
+    } else {
+        let selected_skill_allowed_tools =
+            super::agent_skills_context::selected_agent_skill_allowed_tools_for_turn(
+                &request.input.text,
+                &super::skill_runtime_enable::request_metadata_values(request),
+                workspace_scope.working_dir.as_deref(),
+                workspace_scope.project_root.as_deref(),
+            );
+        if !selected_skill_allowed_tools.is_empty() {
+            metadata.insert(
+                "tool_scope".to_string(),
+                json!({
+                    "allowed_tools": selected_skill_allowed_tools,
+                }),
+            );
+        }
     }
     if let Some(config_metadata) = config_metadata {
         metadata.insert("config".to_string(), config_metadata);
@@ -620,6 +698,35 @@ pub(super) fn turn_context_from_request(
     } else {
         Some(context)
     }
+}
+
+fn w3c_trace_context_metadata_from_request(request: &ExecutionRequest) -> Option<Value> {
+    [
+        request
+            .runtime_options
+            .as_ref()
+            .and_then(|options| options.metadata.as_ref()),
+        request.metadata.as_ref(),
+    ]
+    .into_iter()
+    .flatten()
+    .filter_map(Value::as_object)
+    .filter_map(w3c_trace_context_metadata)
+    .next()
+}
+
+fn w3c_trace_context_metadata(metadata: &serde_json::Map<String, Value>) -> Option<Value> {
+    let trace = TRACE_METADATA_KEYS
+        .iter()
+        .filter_map(|key| metadata.get(*key))
+        .find_map(Value::as_object)?;
+    let w3c = w3c_trace_context(trace)?;
+    let mut payload = serde_json::Map::new();
+    payload.insert("traceparent".to_string(), Value::String(w3c.traceparent));
+    if let Some(tracestate) = w3c.tracestate {
+        payload.insert("tracestate".to_string(), Value::String(tracestate));
+    }
+    Some(Value::Object(payload))
 }
 
 fn output_schema_from_request(
@@ -764,6 +871,52 @@ fn host_requests_research_web_fetch(host: &AsterChatRequestSnapshot) -> bool {
             .pointer("/harness/research_skill_launch/research_request")
             .is_some()
     })
+}
+
+fn fast_response_routing_enabled(metadata: &Value) -> bool {
+    let Some(routing) = metadata
+        .pointer("/harness/fast_response_routing")
+        .or_else(|| metadata.pointer("/harness/fastResponseRouting"))
+        .or_else(|| metadata.pointer("/fast_response_routing"))
+        .or_else(|| metadata.pointer("/fastResponseRouting"))
+        .and_then(Value::as_object)
+    else {
+        return false;
+    };
+
+    routing
+        .get("mode")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or("auto")
+        != "off"
+}
+
+fn metadata_requests_tool_surface(metadata: &Value) -> bool {
+    [
+        "/harness/plugin_activation",
+        "/harness/pluginActivation",
+        "/plugin_activation",
+        "/pluginActivation",
+        "/harness/workspace_skill_runtime_enable",
+        "/harness/workspaceSkillRuntimeEnable",
+        "/workspace_skill_runtime_enable",
+        "/workspaceSkillRuntimeEnable",
+        "/harness/service_scene_launch",
+        "/harness/serviceSceneLaunch",
+        "/service_scene_launch",
+        "/serviceSceneLaunch",
+        "/harness/expert/skill_refs",
+        "/harness/expert/skillRefs",
+        "/expert/skill_refs",
+        "/expert/skillRefs",
+        "/harness/agent_skills",
+        "/harness/agentSkills",
+        "/agent_skills",
+        "/agentSkills",
+    ]
+    .iter()
+    .any(|pointer| metadata.pointer(pointer).is_some())
 }
 
 fn json_pointer_string(value: &Value, pointers: &[&str]) -> Option<String> {

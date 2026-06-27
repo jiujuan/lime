@@ -16,8 +16,7 @@ export const EXPERT_SKILLS_RUNTIME_DONE_TEXT =
   "CLAW_EXPERT_SKILLS_RUNTIME_DONE";
 export const EXPERT_SKILLS_RUNTIME_ID = "code-literature";
 export const EXPERT_SKILLS_RUNTIME_TITLE = "代码文学专家";
-export const EXPERT_SKILLS_RUNTIME_RELEASE_ID =
-  "rel-code-literature-20260515";
+export const EXPERT_SKILLS_RUNTIME_RELEASE_ID = "rel-code-literature-20260515";
 export const EXPERT_SKILLS_RUNTIME_SKILL_REF = "skill:capability-report";
 export const EXPERT_SKILLS_RUNTIME_BASE_SKILL_REF = "skill:code-review";
 export const EXPERT_SKILLS_RUNTIME_PANEL_PROMPT =
@@ -109,8 +108,7 @@ export function createSkillsRuntimeFixtureScenario(sessionId, options = {}) {
   const idSuffix = variant === "natural" ? "" : `-${variant}`;
   const prompt = options.prompt ?? SKILLS_RUNTIME_PROMPT;
   const doneText = options.doneText ?? SKILLS_RUNTIME_DONE_TEXT;
-  const summaryText =
-    options.summaryText ?? "Skills runtime 证据已完成";
+  const summaryText = options.summaryText ?? "Skills runtime 证据已完成";
   const guiSummaryText = options.guiSummaryText ?? summaryText;
   const trigger = options.trigger ?? "runtime_suggested";
   const selectionReason =
@@ -119,6 +117,7 @@ export function createSkillsRuntimeFixtureScenario(sessionId, options = {}) {
   const workspaceRuntimeEnable = options.workspaceRuntimeEnable ?? null;
   const sourceAllowlist = options.sourceAllowlist ?? [];
   const dedupeGuardTexts = options.dedupeGuardTexts ?? [];
+  const disallowedVisibleTexts = options.disallowedVisibleTexts ?? [];
   return {
     variant,
     prompt,
@@ -126,6 +125,7 @@ export function createSkillsRuntimeFixtureScenario(sessionId, options = {}) {
     summaryText,
     guiSummaryText,
     dedupeGuardTexts,
+    disallowedVisibleTexts,
     trigger,
     selectionReason,
     gateMode,
@@ -204,6 +204,10 @@ export function createExpertPanelSkillsRuntimeFixtureScenario(sessionId) {
     doneText: EXPERT_SKILLS_RUNTIME_PANEL_DONE_TEXT,
     summaryText: "专家面板新增 Skill 后的下一轮 runtime 证据已完成",
     dedupeGuardTexts: ["专家 Skills runtime 证据已完成"],
+    disallowedVisibleTexts: [
+      "专家 Skills runtime 证据已完成",
+      "我识别到专家绑定的 skillRefs",
+    ],
     trigger: "expert_panel_skill_refs_override",
     selectionReason:
       "ExpertInfoPanel added skill:capability-report; next turn inherited overridden expert skillRefs before skill_search and invocation",
@@ -543,7 +547,9 @@ function evidenceExportEventToolCallId(event) {
 function evidenceExportEventHasSkillRuntimeEvent(event, runtimeEvent) {
   const metadata = evidenceExportPayloadMetadata(event);
   const skillRuntime =
-    readRecord(metadata.skillRuntime) ?? readRecord(metadata.skill_runtime) ?? {};
+    readRecord(metadata.skillRuntime) ??
+    readRecord(metadata.skill_runtime) ??
+    {};
   return String(skillRuntime.event ?? "") === runtimeEvent;
 }
 
@@ -568,7 +574,9 @@ function evidenceExportEventExpertRuntime(event) {
 function evidenceExportEventSkillRuntime(event) {
   const metadata = evidenceExportPayloadMetadata(event);
   return (
-    readRecord(metadata.skillRuntime) ?? readRecord(metadata.skill_runtime) ?? {}
+    readRecord(metadata.skillRuntime) ??
+    readRecord(metadata.skill_runtime) ??
+    {}
   );
 }
 
@@ -585,14 +593,14 @@ export function summarizeSkillsRuntimeEvidenceExport(
     observabilitySummary.skillSearches ?? observabilitySummary.skill_searches,
   )
     ? (observabilitySummary.skillSearches ??
-        observabilitySummary.skill_searches)
+      observabilitySummary.skill_searches)
     : [];
   const skillInvocations = Array.isArray(
     observabilitySummary.skillInvocations ??
       observabilitySummary.skill_invocations,
   )
     ? (observabilitySummary.skillInvocations ??
-        observabilitySummary.skill_invocations)
+      observabilitySummary.skill_invocations)
     : [];
   const events = collectEvidenceExportEvents(evidenceExportResult);
   const skillSearchEventIndex = events.findIndex(
@@ -673,8 +681,7 @@ export function summarizeSkillsRuntimeEvidenceExport(
     const skillName = entry?.skillName ?? entry?.skill_name;
     const toolCallId = entry?.toolCallId ?? entry?.tool_call_id;
     return (
-      skillName === SKILLS_RUNTIME_SKILL_NAME &&
-      toolCallId === skillToolCallId
+      skillName === SKILLS_RUNTIME_SKILL_NAME && toolCallId === skillToolCallId
     );
   });
 
@@ -705,17 +712,14 @@ export function summarizeSkillsRuntimeEvidenceExport(
     expertDeclaredSkillRefs: Array.isArray(
       expertDeclaredRuntime.skillRefs ?? expertDeclaredRuntime.skill_refs,
     )
-      ? (expertDeclaredRuntime.skillRefs ??
-          expertDeclaredRuntime.skill_refs)
+      ? (expertDeclaredRuntime.skillRefs ?? expertDeclaredRuntime.skill_refs)
       : [],
     expertSelectedSkill:
       expertSelectedRuntime.skillName ??
       expertSelectedRuntime.skill_name ??
       null,
     expertInvokedSkill:
-      expertInvokedRuntime.skillName ??
-      expertInvokedRuntime.skill_name ??
-      null,
+      expertInvokedRuntime.skillName ?? expertInvokedRuntime.skill_name ?? null,
     skillSearchBeforeSkillInvocation:
       skillSearchEventIndex >= 0 &&
       skillInvocationEventIndex >= 0 &&
@@ -727,8 +731,7 @@ export function summarizeSkillsRuntimeEvidenceExport(
           entry?.query === SKILLS_RUNTIME_QUERY &&
           toolCallId === searchToolCallId
         );
-      })
-        ?.query ?? null,
+      })?.query ?? null,
     invocationSkillName:
       matchingInvocation?.skillName ?? matchingInvocation?.skill_name ?? null,
   };

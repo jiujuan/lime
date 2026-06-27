@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "mode": {
+      "type": "string"
+    },
+    "promptText": {
+      "type": "boolean"
+    },
+    "providerPayload": {
+      "type": "boolean"
+    },
+    "rawAgentEventPayload": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "mode",
+    "promptText",
+    "providerPayload",
+    "rawAgentEventPayload"
+  ],
+  "title": "DiagnosticsTraceRedactionPolicy",
+  "type": "object"
+}

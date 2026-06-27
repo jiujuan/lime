@@ -8,6 +8,7 @@ import {
   type MountedRenderResult,
   type MountedRoot,
 } from "@/components/workspace/hooks/testUtils";
+import { OemCloudControlPlaneError } from "@/lib/api/oemCloudControlPlane";
 import type { PluginRegistryItem } from "../manifest/types";
 import type { PluginMarketplaceRegistrySnapshot } from "./marketplaceRegistryLoader";
 import type { PluginMarketplaceItem } from "./types";
@@ -258,6 +259,42 @@ describe("usePluginMarketplaceRegistry", () => {
     expect((refreshError as Error).message).toBe("marketplace down");
     expect(getLatestValue().loading).toBe(false);
     expect(getLatestValue().error).toBe("marketplace down");
+    expect(getLatestValue().snapshot).toBeNull();
+    expect(getLatestValue().model).toBeNull();
+  });
+
+  it("认证失败时应标记需要重新连接云端账号且不暴露为加载错误", async () => {
+    const loader = vi.fn(async () => {
+      throw new OemCloudControlPlaneError("invalid auth token", {
+        status: 401,
+      });
+    });
+
+    await renderHook(
+      {
+        tenantId: "tenant-0001",
+        autoLoad: false,
+        loader,
+      },
+      (value) => {
+        latestValue = value;
+      },
+    );
+
+    let refreshError: unknown;
+    await act(async () => {
+      try {
+        await getLatestValue().refresh();
+      } catch (error) {
+        refreshError = error;
+      }
+    });
+    await flushEffects(4);
+
+    expect(refreshError).toBeInstanceOf(OemCloudControlPlaneError);
+    expect(getLatestValue().loading).toBe(false);
+    expect(getLatestValue().authRequired).toBe(true);
+    expect(getLatestValue().error).toBeNull();
     expect(getLatestValue().snapshot).toBeNull();
     expect(getLatestValue().model).toBeNull();
   });

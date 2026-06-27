@@ -65,12 +65,15 @@ mod storage_roots;
 mod thread_item_projection;
 mod tool_item_projection;
 mod tool_lifecycle;
+mod trace;
+mod trace_store;
 mod turn_execution;
 mod turn_input_events;
 mod usage_stats;
 mod voice;
 mod workspaces;
 
+use crate::execution_process::ExecutionProcessServer;
 pub use crate::file_checkpoint_snapshot::FileCheckpointSnapshotReadRequest;
 pub use crate::file_checkpoint_snapshot::FileCheckpointSnapshotRecord;
 pub use crate::file_checkpoint_snapshot::FileCheckpointSnapshotSaveRequest;
@@ -121,6 +124,10 @@ pub use sidecar_store::SidecarRef;
 pub use sidecar_store::SidecarStore;
 pub use sidecar_store::SidecarWriteRequest;
 pub use storage_roots::StorageRoots;
+pub(crate) use trace_store::export_trace_events_from_store_to_path;
+pub(crate) use trace_store::summarize_trace_event_store;
+pub use trace_store::TraceEventWriter;
+pub(crate) use trace_store::TRACE_EVENT_MAX_FILES_PER_SESSION;
 
 use crate::CapabilityInventorySource;
 use crate::CapabilitySource;
@@ -371,12 +378,14 @@ pub struct RuntimeCore {
     pub(in crate::runtime) output_snapshot_store: Arc<dyn OutputSnapshotStore>,
     pub(in crate::runtime) sidecar_store: Option<Arc<SidecarStore>>,
     pub(in crate::runtime) event_log_writer: Option<Arc<EventLogWriter>>,
+    pub(in crate::runtime) trace_event_writer: Option<Arc<TraceEventWriter>>,
     pub(in crate::runtime) projection_store: Option<Arc<ProjectionStore>>,
     pub(in crate::runtime) telemetry_store: Option<Arc<TelemetryStore>>,
     pub(in crate::runtime) browser_runtime: Arc<BrowserRuntimeManager>,
     evidence_export_provider: Arc<dyn EvidenceExportProvider>,
     knowledge_builder_runtime_executor: Arc<dyn KnowledgeBuilderRuntimeExecutor>,
     app_data_source: Arc<dyn AppDataSource>,
+    pub(crate) execution_process_server: Option<ExecutionProcessServer>,
 }
 
 #[derive(Clone)]
@@ -386,6 +395,7 @@ pub struct RuntimeCoreEventAppender {
     output_snapshot_store: Arc<dyn OutputSnapshotStore>,
     sidecar_store: Option<Arc<SidecarStore>>,
     event_log_writer: Option<Arc<EventLogWriter>>,
+    trace_event_writer: Option<Arc<TraceEventWriter>>,
     projection_store: Option<Arc<ProjectionStore>>,
 }
 
@@ -462,6 +472,7 @@ impl RuntimeCore {
             output_snapshot_store: Arc::new(NoopOutputSnapshotStore),
             sidecar_store: None,
             event_log_writer: None,
+            trace_event_writer: None,
             projection_store: None,
             telemetry_store: None,
             browser_runtime: Arc::new(BrowserRuntimeManager::new()),
@@ -470,7 +481,20 @@ impl RuntimeCore {
                 NativeKnowledgeBuilderRuntimeExecutor::new(),
             ),
             app_data_source: Arc::new(NoopAppDataSource),
+            execution_process_server: None,
         }
+    }
+
+    pub(crate) fn with_execution_process_server(
+        mut self,
+        execution_process_server: ExecutionProcessServer,
+    ) -> Self {
+        self.execution_process_server = Some(execution_process_server);
+        self
+    }
+
+    pub(crate) fn execution_process_server(&self) -> Option<ExecutionProcessServer> {
+        self.execution_process_server.clone()
     }
 
     pub fn with_app_data_source(mut self, app_data_source: Arc<dyn AppDataSource>) -> Self {
@@ -509,6 +533,11 @@ impl RuntimeCore {
         self
     }
 
+    pub fn with_trace_event_writer(mut self, trace_event_writer: Arc<TraceEventWriter>) -> Self {
+        self.trace_event_writer = Some(trace_event_writer);
+        self
+    }
+
     pub fn with_projection_store(mut self, projection_store: Arc<ProjectionStore>) -> Self {
         self.projection_store = Some(projection_store);
         self
@@ -534,6 +563,7 @@ impl RuntimeCore {
             output_snapshot_store: self.output_snapshot_store.clone(),
             sidecar_store: self.sidecar_store.clone(),
             event_log_writer: self.event_log_writer.clone(),
+            trace_event_writer: self.trace_event_writer.clone(),
             projection_store: self.projection_store.clone(),
         }
     }

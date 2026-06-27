@@ -13,6 +13,7 @@ import type { PluginMarketplaceRegistrySnapshot } from "./marketplace/marketplac
 import type { PluginRegistryItem } from "./manifest/types";
 import type { PluginMarketplaceItem } from "./marketplace/types";
 import type { PluginMarketplaceActionDeps } from "./marketplace/pluginMarketplaceActions";
+import type { PluginMarketplaceViewItem } from "./marketplace/pluginMarketplaceViewModel";
 import {
   PluginMarketplacePage,
   type PluginMarketplacePageProps,
@@ -232,17 +233,48 @@ describe("PluginMarketplacePage", () => {
     vi.restoreAllMocks();
   });
 
-  it("未连接云端时应显示阻断态且不加载 marketplace", async () => {
+  it("未连接云端时仍应加载插件工作台", async () => {
     const loader = vi.fn(async () => snapshot());
     const container = await renderPage({
       runtimeContext: null,
       loader,
     });
 
-    expect(container.textContent).toContain(
+    expect(loader).toHaveBeenCalledWith(
+      "",
+      { query: undefined, category: undefined, sort: "name" },
+      undefined,
+    );
+    expect(container.textContent).not.toContain(
       "plugin.marketplace.cloudRequired.title",
     );
-    expect(loader).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Research Kit");
+    expect(
+      container.querySelector(
+        '[data-testid="plugin-marketplace-list"]',
+      ),
+    ).not.toBeNull();
+  });
+
+  it("云端 session token 失效时仍保留插件工作台且不暴露 token 错误", async () => {
+    const loader = vi.fn(async () => {
+      throw new Error("invalid auth token");
+    });
+    const container = await renderPage({ loader });
+
+    expect(loader).toHaveBeenCalledTimes(1);
+    expect(container.textContent).not.toContain(
+      "plugin.marketplace.cloudRequired.title",
+    );
+    expect(container.textContent).not.toContain(
+      "plugin.marketplace.error.title",
+    );
+    expect(container.textContent).not.toContain("invalid auth token");
+    expect(
+      container.querySelector(
+        '[data-testid="plugin-marketplace-search"]',
+      ),
+    ).not.toBeNull();
   });
 
   it("应加载云端 marketplace 并展示只读插件列表", async () => {
@@ -361,13 +393,26 @@ describe("PluginMarketplacePage", () => {
       expect.objectContaining({
         agentEntry: "new-task",
         initialUserPrompt: "@Notes Kit ",
+        autoRunInitialPromptOnMount: true,
+        initialAutoSendRequestMetadata: {
+          harness: {
+            plugin_activation_intent: {
+              source: "plugin_marketplace_open",
+              trigger: "@Notes Kit",
+              plugin_id: "notes-kit@limecloud",
+              active_agent_app_id: "notes-kit",
+              active_entry_key: "notes-kit",
+              selected_skill_keys: undefined,
+            },
+          },
+        },
         immersiveHome: false,
         newChatAt: expect.any(Number),
       }),
     );
   });
 
-  it("插件详情技能入口应预填显式 @插件:技能 输入且不自动发送", async () => {
+  it("插件详情技能入口应预填显式 @插件:技能 输入并自动发送", async () => {
     const openSnapshot = snapshot();
     openSnapshot.registry[1] = registryItem("notes-kit@limecloud", {
       displayName: "Notes Kit",
@@ -400,13 +445,26 @@ describe("PluginMarketplacePage", () => {
       expect.objectContaining({
         agentEntry: "new-task",
         initialUserPrompt: "@Notes Kit:Article Writer ",
+        autoRunInitialPromptOnMount: true,
+        initialAutoSendRequestMetadata: {
+          harness: {
+            plugin_activation_intent: {
+              source: "plugin_marketplace_open",
+              trigger: "@Notes Kit:Article Writer",
+              plugin_id: "notes-kit@limecloud",
+              active_agent_app_id: "notes-kit",
+              active_entry_key: "notes-kit",
+              selected_skill_keys: ["article-writer"],
+            },
+          },
+        },
         immersiveHome: false,
         newChatAt: expect.any(Number),
       }),
     );
   });
 
-  it("只读历史插件应打开到历史恢复入口且不自动执行", async () => {
+  it("只读历史插件应先选择历史会话，再打开恢复入口且不自动执行", async () => {
     const historySnapshot = snapshot();
     historySnapshot.registry[1] = registryItem("notes-kit@limecloud", {
       displayName: "Notes Kit",
@@ -418,8 +476,30 @@ describe("PluginMarketplacePage", () => {
       blockerCodes: ["PLUGIN_ACTIVATION_BLOCKED"],
     });
     const loader = vi.fn(async () => historySnapshot);
+    const historySessionLoader = vi.fn(async () => ({
+      pluginId: "notes-kit@limecloud",
+      pluginLabel: "Notes Kit",
+      candidates: [
+        {
+          key: "notes-session-1:history_restore",
+          sessionId: "notes-session-1",
+          title: "Notes history",
+          updatedAt: 1710000123000,
+          messagesCount: 4,
+          pluginId: "notes-kit@limecloud",
+          activeAgentAppId: "notes-kit",
+          activeEntryKey: "notes-kit",
+          artifactRefs: ["artifact-1"],
+          source: "history_restore" as const,
+        },
+      ],
+    }));
     const onNavigate = vi.fn();
-    const container = await renderPage({ loader, onNavigate });
+    const container = await renderPage({
+      loader,
+      historySessionLoader,
+      onNavigate,
+    });
 
     const action = container.querySelector<HTMLButtonElement>(
       '[data-testid="plugin-marketplace-action-notes-kit@limecloud"]',
@@ -430,20 +510,37 @@ describe("PluginMarketplacePage", () => {
       action?.click();
       await Promise.resolve();
     });
+    await flushEffects(4);
+
+    expect(historySessionLoader).toHaveBeenCalledWith(
+      expect.objectContaining({ pluginId: "notes-kit@limecloud" }),
+    );
+    expect(onNavigate).not.toHaveBeenCalled();
+    const sessionAction = container.querySelector<HTMLButtonElement>(
+      '[data-testid="plugin-marketplace-history-session-notes-session-1"]',
+    );
+    expect(sessionAction?.disabled).toBe(false);
+
+    await act(async () => {
+      sessionAction?.click();
+      await Promise.resolve();
+    });
 
     expect(onNavigate).toHaveBeenCalledWith(
       "agent",
       expect.objectContaining({
         agentEntry: "claw",
+        initialSessionId: "notes-session-1",
         immersiveHome: false,
         entryBannerMessage: "plugin.marketplace.history.entryBanner",
         initialRequestMetadata: {
           harness: {
             plugin_history_restore: {
-              session_id: "plugin-history:notes-kit@limecloud",
+              session_id: "notes-session-1",
               plugin_id: "notes-kit@limecloud",
               active_agent_app_id: "notes-kit",
               active_entry_key: "notes-kit",
+              artifact_refs: ["artifact-1"],
             },
           },
         },
@@ -577,6 +674,99 @@ describe("PluginMarketplacePage", () => {
     expect(submitRegistrationCode).toHaveBeenCalledWith(
       "research-kit",
       "REG-001",
+    );
+    expect(loader).toHaveBeenCalledTimes(2);
+    expect(codeInput?.value).toBe("");
+  });
+
+  it("原生目录授权项没有 appId 时仍应提交插件注册码并刷新列表", async () => {
+    const registrationSnapshot = snapshot();
+    registrationSnapshot.marketplace.items[0] = marketplaceItem(
+      "native-kit@limecloud",
+      {
+        pluginName: "native-kit",
+        displayName: "Native Kit",
+        sourceKind: "plugin_catalog",
+        appId: undefined,
+        package: undefined,
+        policy: {
+          installation: "AVAILABLE",
+          authentication: "ON_INSTALL",
+        },
+        blockedReason: "registration required",
+      },
+    );
+    registrationSnapshot.registry[0] = registryItem("native-kit@limecloud", {
+      displayName: "Native Kit",
+      capabilityStates: ["installable"],
+      activationState: "blocked",
+      blockerCodes: [
+        "PLUGIN_MARKETPLACE_BLOCKED:registration required",
+        "PLUGIN_ACTIVATION_BLOCKED",
+      ],
+    });
+    const loader = vi.fn(async () => registrationSnapshot);
+    const submitPluginRegistrationCode: NonNullable<
+      PluginMarketplaceActionDeps["submitPluginRegistrationCode"]
+    > = vi.fn(async () => ({
+      schemaVersion: "plugin-marketplace/v1",
+      tenantId: "tenant-0001",
+      generatedAt: "2026-06-25T01:02:03.000Z",
+      marketplaceName: "limecloud",
+      items: [],
+    }));
+    const resolveRuntimeContext = vi.fn(() => runtimeContext());
+    const container = await renderPage({
+      loader,
+      actionDeps: {
+        submitPluginRegistrationCode,
+        resolveRuntimeContext,
+        dispatchChanged: vi.fn(),
+      },
+    });
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="plugin-marketplace-detail-native-kit@limecloud"]',
+        )
+        ?.click();
+      await Promise.resolve();
+    });
+    await flushEffects(2);
+
+    expect(
+      container.querySelector(
+        '[data-testid="plugin-marketplace-registration-panel"]',
+      ),
+    ).not.toBeNull();
+
+    const codeInput = container.querySelector<HTMLInputElement>(
+      '[data-testid="plugin-marketplace-registration-code-native-kit@limecloud"]',
+    );
+    await act(async () => {
+      if (codeInput) {
+        setInputValue(codeInput, "NATIVE-001");
+      }
+      await Promise.resolve();
+    });
+    await flushEffects(2);
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="plugin-marketplace-registration-submit-native-kit@limecloud"]',
+        )
+        ?.click();
+      await Promise.resolve();
+    });
+    await flushEffects(4);
+
+    expect(submitPluginRegistrationCode).toHaveBeenCalledWith(
+      "tenant-0001",
+      "native-kit",
+      { code: "NATIVE-001" },
+      "limecloud",
     );
     expect(loader).toHaveBeenCalledTimes(2);
     expect(codeInput?.value).toBe("");
@@ -837,11 +1027,21 @@ describe("PluginMarketplacePage", () => {
         disabled: false,
         blockerCodes: [],
       },
-    };
+    } as PluginMarketplaceViewItem;
 
     expect(buildPluginMarketplaceOpenAgentParams(item)).toMatchObject({
       agentEntry: "new-task",
       initialUserPrompt: "@fallback-plugin ",
+      autoRunInitialPromptOnMount: true,
+      initialAutoSendRequestMetadata: {
+        harness: {
+          plugin_activation_intent: {
+            source: "plugin_marketplace_open",
+            trigger: "@fallback-plugin",
+            plugin_id: "fallback-plugin",
+          },
+        },
+      },
     });
   });
 
@@ -876,19 +1076,34 @@ describe("PluginMarketplacePage", () => {
         disabled: false,
         blockerCodes: [],
       },
-    };
+    } as PluginMarketplaceViewItem;
 
-    expect(buildPluginMarketplaceHistoryAgentParams(item)).toMatchObject({
+    expect(
+      buildPluginMarketplaceHistoryAgentParams(item, {
+        key: "history-session:history_restore",
+        sessionId: "history-session",
+        title: "History Session",
+        updatedAt: 1710000000000,
+        messagesCount: 2,
+        pluginId: "history-plugin",
+        activeAgentAppId: "history-app",
+        activeEntryKey: "history-entry",
+        artifactRefs: ["artifact-1"],
+        source: "history_restore",
+      }),
+    ).toMatchObject({
       agentEntry: "claw",
+      initialSessionId: "history-session",
       immersiveHome: false,
       entryBannerMessage: "plugin.marketplace.history.entryBanner",
       initialRequestMetadata: {
         harness: {
           plugin_history_restore: {
-            session_id: "plugin-history:history-plugin",
+            session_id: "history-session",
             plugin_id: "history-plugin",
             active_agent_app_id: "history-app",
             active_entry_key: "history-entry",
+            artifact_refs: ["artifact-1"],
           },
         },
       },

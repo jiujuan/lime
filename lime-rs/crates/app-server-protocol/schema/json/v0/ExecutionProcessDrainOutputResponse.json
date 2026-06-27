@@ -62,6 +62,14 @@
         "$ref": "#/$defs/ExecutionProcessOutputDelta"
       },
       "type": "array"
+    },
+    "nextSequence": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
     }
   },
   "title": "ExecutionProcessDrainOutputResponse",

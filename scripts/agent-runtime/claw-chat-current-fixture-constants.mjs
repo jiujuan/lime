@@ -101,6 +101,14 @@ export const APP_SERVER_METHOD_ARTIFACT_READ = "artifact/read";
 export const APP_SERVER_METHOD_AGENT_APP_INSTALLED_SAVE =
   "agentAppInstalled/save";
 export const APP_SERVER_METHOD_EVIDENCE_EXPORT = "evidence/export";
+export const APP_SERVER_METHOD_DIAGNOSTICS_TRACE_LIST =
+  "diagnostics/trace/list";
+export const APP_SERVER_METHOD_DIAGNOSTICS_TRACE_READ =
+  "diagnostics/trace/read";
+export const APP_SERVER_METHOD_DIAGNOSTICS_TRACE_EXPORT =
+  "diagnostics/trace/export";
+export const APP_SERVER_METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT =
+  "diagnostics/supportBundle/export";
 export const APP_SERVER_METHOD_WORKSPACE_DEFAULT_ENSURE =
   "workspace/default/ensure";
 export const APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST =
@@ -174,6 +182,9 @@ export const CONTENT_FACTORY_PRODUCT_PROFILE_WORKER_ACTION_KEY =
   "worker_dogfood";
 export const CONTENT_FACTORY_PRODUCT_PROFILE_WORKER_TURN_ID = `${CONTENT_FACTORY_PRODUCT_PROFILE_SESSION_ID}-worker-turn`;
 export const CONTENT_FACTORY_PRODUCT_PROFILE_WORKER_TASK_ID = `${CONTENT_FACTORY_PRODUCT_PROFILE_WORKER_TURN_ID}:${CONTENT_FACTORY_PRODUCT_PROFILE_WORKER_ACTION_KEY}`;
+export const CONTENT_FACTORY_PRODUCT_PROFILE_REMOTE_REJECT_TURN_ID = `${CONTENT_FACTORY_PRODUCT_PROFILE_SESSION_ID}-remote-reject-turn`;
+export const CONTENT_FACTORY_PRODUCT_PROFILE_REMOTE_REJECT_ERROR_CODE =
+  "AGENT_APP_WORKER_REMOTE_RUNTIME_DISABLED";
 export const CONTENT_FACTORY_PRODUCT_PROFILE_ARTICLE_ARTIFACT_ID =
   "artifact-article-1";
 export const CONTENT_FACTORY_PRODUCT_PROFILE_IMAGE_ARTIFACT_ID =
@@ -279,5 +290,7 @@ export const CONTENT_FACTORY_PRODUCT_PROFILE_ASSERTION_KEYS = [
   "contentFactoryProductProfileWorkerFailureEvidence",
   "contentFactoryProductProfileWorkerTurnExecuted",
   "contentFactoryProductProfileActionResultPatchProjected",
+  "contentFactoryProductProfileRendererHostPlaceholderVisible",
+  "contentFactoryProductProfileRemoteRuntimeFailClosed",
   "contentFactoryProductProfileDoesNotUseModelTurn",
 ];

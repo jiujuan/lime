@@ -6,7 +6,9 @@ import type {
   AgentRuntimeWebSearchMode,
   AutoContinueRequestPayload,
 } from "@/lib/api/agentRuntime";
+import type { InstalledAgentAppState } from "@/features/agent-app/types";
 import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/types";
+import { listInstalledAgentApps } from "@/lib/api/agentApps";
 import { normalizeExecutionStrategyToReact } from "@/lib/api/agentRuntime/executionStrategyCompat";
 import type { ServiceModelsConfig } from "@/lib/api/appConfigTypes";
 import { logAgentDebug } from "@/lib/agentDebug";
@@ -57,7 +59,6 @@ import { parseVoiceWorkbenchCommand } from "../utils/voiceWorkbenchCommand";
 import { parseWritingWorkbenchCommand } from "../utils/writingWorkbenchCommand";
 import { parseWebpageWorkbenchCommand } from "../utils/webpageWorkbenchCommand";
 import {
-  buildAgentFastResponseSystemPrompt,
   resolveAgentFastResponseRouting,
 } from "../utils/fastResponseRouting";
 import { resolvePlainInputIntentConfirmation } from "../utils/plainInputIntentConfirmation";
@@ -172,6 +173,10 @@ import {
   readFastResponseMode,
   withFastResponseMetadata,
 } from "./commands/fastResponseHelpers";
+import {
+  mergePluginActivationSendOptions,
+  resolveWorkspacePluginActivation,
+} from "./workspacePluginActivation";
 import {
   isImageGenerationPlainInputIntent,
   isPlainInputIntentAffirmativeReply,
@@ -308,6 +313,9 @@ interface UseWorkspaceSendActionsParams {
     skipSessionRestore?: boolean;
     skipSessionStartHooks?: boolean;
   }) => Promise<string | null>;
+  listInstalledAgentAppsForPluginActivation?: () => Promise<{
+    states: InstalledAgentAppState[];
+  }>;
   resolveImageWorkbenchSkillRequest: (input: {
     rawText: string;
     parsedCommand: ParsedImageWorkbenchCommand;
@@ -422,6 +430,7 @@ export function useWorkspaceSendActions({
   handleAutoLaunchMatchedSiteSkill,
   openRuntimeSceneGate,
   ensureSessionForCommandMetadata,
+  listInstalledAgentAppsForPluginActivation = listInstalledAgentApps,
   resolveImageWorkbenchSkillRequest,
 }: UseWorkspaceSendActionsParams) {
   const { t } = useTranslation("agent");
@@ -2625,6 +2634,73 @@ export function useWorkspaceSendActions({
         }
       }
 
+      const hasMatchedWorkspaceMentionCommand = Boolean(
+        parsedImageWorkbenchCommand ||
+          parsedPosterWorkbenchCommand ||
+          parsedCoverWorkbenchCommand ||
+          parsedVideoWorkbenchCommand ||
+          parsedBroadcastWorkbenchCommand ||
+          parsedResourceSearchWorkbenchCommand ||
+          parsedTranscriptionWorkbenchCommand ||
+          parsedSearchWorkbenchCommand ||
+          parsedReportWorkbenchCommand ||
+          parsedCompetitorWorkbenchCommand ||
+          parsedDeepSearchWorkbenchCommand ||
+          parsedSiteSearchWorkbenchCommand ||
+          parsedPdfWorkbenchCommand ||
+          parsedFileReadWorkbenchCommand ||
+          parsedSummaryWorkbenchCommand ||
+          parsedTranslationWorkbenchCommand ||
+          parsedComplianceWorkbenchCommand ||
+          parsedLogoDecompositionWorkbenchCommand ||
+          parsedAnalysisWorkbenchCommand ||
+          parsedUrlParseWorkbenchCommand ||
+          parsedTypesettingWorkbenchCommand ||
+          parsedPresentationWorkbenchCommand ||
+          parsedFormWorkbenchCommand ||
+          parsedWebpageWorkbenchCommand ||
+          agentTurnMentionRoute ||
+          parsedWritingWorkbenchCommand ||
+          parsedChannelPreviewWorkbenchCommand ||
+          parsedUploadWorkbenchCommand ||
+          parsedPublishWorkbenchCommand ||
+          parsedVoiceWorkbenchCommand ||
+          parsedGrowthWorkbenchCommand ||
+          parsedBrowserWorkbenchCommand,
+      );
+      const shouldResolvePluginActivation =
+        !sendOptions?.purpose &&
+        !hasBoundSkillLaunch &&
+        !hasMatchedWorkspaceMentionCommand &&
+        sourceText.trim().startsWith("@");
+      if (shouldResolvePluginActivation) {
+        const pluginSessionId = await ensureCommandSessionId();
+        const installedAgentApps =
+          await listInstalledAgentAppsForPluginActivation();
+        const pluginActivationResolution = resolveWorkspacePluginActivation({
+          text: sourceText,
+          sessionId: pluginSessionId,
+          installedAgentApps: installedAgentApps.states,
+        });
+        if (pluginActivationResolution?.status === "blocked") {
+          clearSubmissionPreview();
+          toast.error(
+            translateAgentWorkspace(
+              "agentChat.workspace.pluginActivation.blocked",
+            ),
+          );
+          return { kind: "done", result: false };
+        }
+        if (pluginActivationResolution?.status === "matched") {
+          ensureSubmissionPreview();
+          sendOptions = mergePluginActivationSendOptions({
+            sendOptions,
+            resolution: pluginActivationResolution,
+          });
+          hasBoundSkillLaunch = true;
+        }
+      }
+
       const trimmedSourceText = sourceText.trim();
       if (
         activeTheme === "general" &&
@@ -2788,6 +2864,7 @@ export function useWorkspaceSendActions({
       ensureBrowserAssistCanvas,
       executionStrategy,
       handleAutoLaunchMatchedSiteSkill,
+      listInstalledAgentAppsForPluginActivation,
       resolveImageWorkbenchSkillRequest,
       input,
       mediaDefaults.voice,
@@ -2881,16 +2958,23 @@ export function useWorkspaceSendActions({
       setMentionedCharacters([]);
 
       try {
-        const teamPrepareStartedAt = Date.now();
-        const preparedRuntimeTeamState = await _prepareRuntimeTeamBeforeSend({
-          input: sourceText,
-          purpose: sendOptions?.purpose,
-          subagentEnabled: effectiveToolPreferences.subagent,
-        });
-        logAgentDebug("WorkspaceSend", "runtimeTeam.prepareDone", {
-          durationMs: Date.now() - teamPrepareStartedAt,
-          hasPreparedRuntimeTeamState: Boolean(preparedRuntimeTeamState),
-        });
+        const shouldPrepareRuntimeTeam = effectiveToolPreferences.subagent;
+        const teamPrepareStartedAt = shouldPrepareRuntimeTeam
+          ? Date.now()
+          : null;
+        const preparedRuntimeTeamState = shouldPrepareRuntimeTeam
+          ? await _prepareRuntimeTeamBeforeSend({
+              input: sourceText,
+              purpose: sendOptions?.purpose,
+              subagentEnabled: true,
+            })
+          : null;
+        if (teamPrepareStartedAt !== null) {
+          logAgentDebug("WorkspaceSend", "runtimeTeam.prepareDone", {
+            durationMs: Date.now() - teamPrepareStartedAt,
+            hasPreparedRuntimeTeamState: Boolean(preparedRuntimeTeamState),
+          });
+        }
         if (preparedRuntimeTeamState) {
           recordTeamFormationAgentUiProjection(preparedRuntimeTeamState, {
             sessionId,
@@ -2984,6 +3068,7 @@ export function useWorkspaceSendActions({
           requestMetadata: withFastResponseMetadata(
             nextRequestMetadata,
             fastResponseDecision,
+            serviceModels,
           ),
           ...(effectiveSearchMode ? { searchMode: effectiveSearchMode } : {}),
           providerOverride:
@@ -2992,13 +3077,7 @@ export function useWorkspaceSendActions({
           modelOverride:
             sendOptions?.modelOverride ??
             serviceModelSendOverrides.modelOverride,
-          systemPromptOverride:
-            sendOptions?.systemPromptOverride ??
-            (fastResponseDecision.enabled
-              ? buildAgentFastResponseSystemPrompt(undefined, {
-                  searchMode: fastResponseDecision.searchMode,
-                })
-              : undefined),
+          systemPromptOverride: sendOptions?.systemPromptOverride,
           assistantDraft: nextAssistantDraft,
         };
 

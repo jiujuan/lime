@@ -50,11 +50,17 @@ import {
 } from "../utils/curatedTaskReferenceSelection";
 import { buildSceneAppExecutionReviewPrefillSnapshot } from "../utils/sceneAppCuratedTaskReference";
 import { buildReviewFeedbackProjection } from "../utils/reviewFeedbackProjection";
+import type {
+  InputbarPluginCapability,
+  InputbarPluginSkillCapability,
+} from "../components/Inputbar/pluginInputCapability";
+import { buildMentionPluginCapabilityItems } from "./pluginCapabilitySections";
 
 const FEATURED_SERVICE_SKILL_LIMIT = 4;
 const RECENT_REPLAY_TEXT_PREVIEW_LIMIT = 48;
 
 type InputCapabilityIcon =
+  | "blocks"
   | "command"
   | "image-plus"
   | "sparkles"
@@ -97,6 +103,12 @@ export type InputCapabilityDescriptor =
       referenceMemoryIds?: string[];
       referenceEntries?: CuratedTaskReferenceEntry[];
       launcherPrefillHint?: string;
+    })
+  | (InputCapabilityBase & {
+      kind: "plugin";
+      plugin: InputbarPluginCapability;
+      skill?: InputbarPluginSkillCapability;
+      disabled?: boolean;
     })
   | (InputCapabilityBase & {
       kind: "character";
@@ -199,6 +211,7 @@ export interface InputCapabilitySectionsCopy {
     availableSkills: string;
     characters: string;
     featuredServiceSkills: string;
+    agentApps: string;
     installedSkills: string;
     installedSkillsEmpty: string;
     recentContinuations: string;
@@ -260,6 +273,7 @@ export function buildInputCapabilitySectionsCopy(
       translate("inputCapabilities.recentInput", { preview }),
     headings: {
       availableSkills: translate("inputCapabilities.heading.availableSkills"),
+      agentApps: translate("inputCapabilities.heading.agentApps"),
       characters: translate("inputCapabilities.heading.characters"),
       featuredServiceSkills: translate(
         "inputCapabilities.heading.featuredServiceSkills",
@@ -494,6 +508,7 @@ interface BuildInputCapabilitySectionsParams {
   slashCommands: SlashCommandDefinition[];
   sceneCommands: RuntimeSceneSlashCommand[];
   mentionServiceSkills: ServiceSkillHomeItem[];
+  pluginSuggestions?: readonly InputbarPluginCapability[];
   serviceSkillGroups?: ServiceSkillGroup[];
   filteredCharacters: Character[];
   installedSkills: Skill[];
@@ -983,6 +998,10 @@ function buildMentionCapabilitySections(
   visibleRecentMentionEntries.sort(compareRecentMentionEntries);
 
   const visibleBuiltinCommands = params.builtinCommands;
+  const visiblePluginItems = buildMentionPluginCapabilityItems({
+    plugins: params.pluginSuggestions ?? [],
+    query: params.mentionQuery,
+  });
   const visibleFeaturedServiceSkills =
     serviceSkillRecommendationBuckets.featuredSkills;
   const visibleServiceSkillGroups = groupMentionServiceSkills(
@@ -1061,6 +1080,26 @@ function buildMentionCapabilitySections(
         }),
       }),
     );
+  }
+
+  if (visiblePluginItems.length > 0) {
+    sections.push({
+      key: "agent-apps",
+      heading: params.inputCapabilityCopy.headings.agentApps,
+      items: visiblePluginItems.map((item) => ({
+        key: item.key,
+        kind: "plugin" as const,
+        title: item.title,
+        description: item.description,
+        icon: "blocks" as const,
+        iconClassName: item.disabled
+          ? "mr-2 h-4 w-4 text-slate-400"
+          : "mr-2 h-4 w-4 text-emerald-600",
+        plugin: item.plugin,
+        skill: item.skill,
+        disabled: item.disabled,
+      })),
+    });
   }
 
   if (visibleRecentMentionEntries.length > 0) {

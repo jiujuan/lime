@@ -108,6 +108,21 @@ function resolveFinalTextFromContentParts(
   return textParts[textParts.length - 1]?.text.trim() || "";
 }
 
+function resolveVisibleTextFromContentParts(
+  parts?: Message["contentParts"],
+): string {
+  return (
+    parts
+      ?.filter(
+        (part): part is Extract<MessageContentPart, { type: "text" }> =>
+          isFinalTextContentPart(part) && part.text.trim().length > 0,
+      )
+      .map((part) => part.text.trim())
+      .join("\n\n")
+      .trim() || ""
+  );
+}
+
 function endsWithThinkingSegmentBoundary(text: string): boolean {
   const normalized = text.trim();
   if (!normalized) {
@@ -134,7 +149,10 @@ export function resolveAssistantActionContent(params: {
   useProcessSeparatedFinalText: boolean;
 }): string {
   if (params.useProcessSeparatedFinalText) {
-    return resolveFinalTextFromContentParts(params.conversationContentParts);
+    return (
+      resolveVisibleTextFromContentParts(params.conversationContentParts) ||
+      params.displayContent.trim()
+    );
   }
 
   return (
@@ -189,18 +207,98 @@ export function resolveProcessSeparatedContentParts(
         : lastIndex,
     -1,
   );
+  const lastFinalTextPart = structuredParts[lastFinalTextIndex];
+  const lastFinalText =
+    lastFinalTextPart?.type === "text" ? lastFinalTextPart.text.trim() : "";
+  const normalizedLastFinalText = normalizeComparableText(lastFinalText);
 
-  const filtered = structuredParts.filter((part, index) => {
+  const filtered = structuredParts.flatMap<MessageContentPart>((part, index) => {
     if (part.type !== "text") {
-      return true;
+      return [part];
     }
     if (isCommentaryTextContentPart(part)) {
-      return true;
+      return [part];
     }
-    return index < firstProcessIndex || index === lastFinalTextIndex;
+
+    if (index < firstProcessIndex) {
+      const trimmedPart = trimFinalTextOverlapFromLeadingPart({
+        leadingPart: part,
+        finalText: lastFinalText,
+        normalizedFinalText: normalizedLastFinalText,
+      });
+      return trimmedPart ? [trimmedPart] : [];
+    }
+
+    if (index !== lastFinalTextIndex) {
+      return [];
+    }
+
+    if (isTextCoveredByThinkingPart(structuredParts, index, part.text)) {
+      return [];
+    }
+
+    return [part];
   });
 
   return filtered.length > 0 ? filtered : undefined;
+}
+
+function normalizeComparableText(text: string): string {
+  return text.trim().replace(/\s+/g, " ");
+}
+
+function normalizeCompactComparableText(text: string): string {
+  return text.trim().replace(/\s+/g, "");
+}
+
+function trimFinalTextOverlapFromLeadingPart(params: {
+  leadingPart: Extract<MessageContentPart, { type: "text" }>;
+  finalText: string;
+  normalizedFinalText: string;
+}): Extract<MessageContentPart, { type: "text" }> | null {
+  const leadingText = params.leadingPart.text.trim();
+  if (!leadingText || !params.finalText) {
+    return leadingText ? { ...params.leadingPart, text: leadingText } : null;
+  }
+
+  if (normalizeComparableText(leadingText) === params.normalizedFinalText) {
+    return null;
+  }
+
+  if (
+    normalizeCompactComparableText(leadingText) ===
+    normalizeCompactComparableText(params.finalText)
+  ) {
+    return null;
+  }
+
+  if (!leadingText.endsWith(params.finalText)) {
+    return { ...params.leadingPart, text: leadingText };
+  }
+
+  const retainedText = leadingText
+    .slice(0, leadingText.length - params.finalText.length)
+    .trim();
+  return retainedText ? { ...params.leadingPart, text: retainedText } : null;
+}
+
+function isTextCoveredByThinkingPart(
+  parts: MessageContentPart[],
+  textIndex: number,
+  text: string,
+): boolean {
+  const normalizedText = text.trim();
+  if (!normalizedText) {
+    return false;
+  }
+
+  return parts
+    .slice(textIndex + 1)
+    .some(
+      (part) =>
+        part.type === "thinking" &&
+        part.text.trim().startsWith(normalizedText),
+    );
 }
 
 export function hasInlineToolUseContentPart(

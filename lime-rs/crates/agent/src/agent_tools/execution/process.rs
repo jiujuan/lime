@@ -88,6 +88,8 @@ impl ExecutionOutputDelta {
                 "executionProcessStatus".to_string(),
                 json!(ExecutionProcessStatus::Running.label()),
             ),
+            ("stdinWritable".to_string(), json!(true)),
+            ("stdin_writable".to_string(), json!(true)),
         ])
     }
 }
@@ -128,6 +130,14 @@ impl ExecutionProcessSnapshot {
             ("outputTruncated".to_string(), json!(self.output_truncated)),
             ("exitCode".to_string(), json!(self.exit_code)),
             ("exit_code".to_string(), json!(self.exit_code)),
+            (
+                "stdinWritable".to_string(),
+                json!(!self.status.is_terminal()),
+            ),
+            (
+                "stdin_writable".to_string(),
+                json!(!self.status.is_terminal()),
+            ),
         ])
     }
 }
@@ -149,6 +159,8 @@ impl ExecutionProcessStart {
                 "executionProcessStatus".to_string(),
                 json!(ExecutionProcessStatus::Running.label()),
             ),
+            ("stdinWritable".to_string(), json!(true)),
+            ("stdin_writable".to_string(), json!(true)),
         ]);
         if let Some(command) = &self.command {
             metadata.insert("command".to_string(), json!(command));
@@ -779,6 +791,8 @@ mod tests {
         assert_eq!(metadata.get("processId"), Some(&json!("process-1")));
         assert_eq!(metadata.get("outputBytes"), Some(&json!(5)));
         assert_eq!(metadata.get("outputTruncated"), Some(&json!(false)));
+        assert_eq!(metadata.get("stdinWritable"), Some(&json!(true)));
+        assert_eq!(metadata.get("stdin_writable"), Some(&json!(true)));
     }
 
     #[test]
@@ -803,6 +817,9 @@ mod tests {
         let snapshot = process.snapshot();
         assert_eq!(snapshot.status, ExecutionProcessStatus::Interrupted);
         assert_eq!(snapshot.exit_code, None);
+        let metadata = snapshot.metadata();
+        assert_eq!(metadata.get("stdinWritable"), Some(&json!(false)));
+        assert_eq!(metadata.get("stdin_writable"), Some(&json!(false)));
     }
 
     #[test]

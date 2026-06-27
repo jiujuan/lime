@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import {
   buildTeamWorkspaceSessionFingerprint,
   type TeamWorkspaceActivityEntry,
@@ -12,6 +13,10 @@ import {
 } from "./runtimeEventSubscriptions";
 
 describe("runtimeEventSubscriptions", () => {
+  beforeEach(async () => {
+    await changeLimeLocale("zh-CN");
+  });
+
   it("应直接处理状态监听投影，而不需要先挂 React hook", async () => {
     const listeners = new Map<string, (event: { payload: unknown }) => void>();
     let liveRuntimeBySessionId: Record<string, TeamWorkspaceLiveRuntimeState> =

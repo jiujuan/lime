@@ -397,6 +397,7 @@ pub(crate) async fn execute_web_search_preflight_if_needed_with_enabled(
             parallelism: NEWS_PREFLIGHT_QUERY_PARALLELISM,
             auto_mode: false,
             bypass_restrictions: false,
+            live_process_registry: None,
         },
         planned_queries
             .iter()

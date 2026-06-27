@@ -37,21 +37,19 @@ describe("StreamingRenderer WebSearch rendering", () => {
       '[data-testid="streaming-process-group"] > button',
     );
 
-    expect(processGroupButtons).toHaveLength(2);
-    expect(processGroupButtons[0]?.textContent).toContain("思考中");
-    expect(processGroupButtons[0]?.textContent).not.toContain("正在搜索网页");
-    expect(processGroupButtons[1]?.textContent).toContain(
+    expect(processGroupButtons).toHaveLength(1);
+    expect(container.textContent).toContain("先判断需要补充哪些实时来源");
+    expect(processGroupButtons[0]?.textContent).toContain(
       "正在搜索网页 codex desktop rendering search card",
     );
-    expect(processGroupButtons[1]?.getAttribute("aria-expanded")).toBe("true");
+    expect(processGroupButtons[0]?.getAttribute("aria-expanded")).toBe("true");
     const processGroups = container.querySelectorAll<HTMLElement>(
       '[data-testid="streaming-process-group"]',
     );
-    expect(processGroups[0]?.getAttribute("data-process-kind")).toBe("mixed");
-    expect(processGroups[1]?.getAttribute("data-process-kind")).toBe(
+    expect(processGroups[0]?.getAttribute("data-process-kind")).toBe(
       "web_search",
     );
-    expect(processGroups[1]?.getAttribute("data-process-running")).toBe("yes");
+    expect(processGroups[0]?.getAttribute("data-process-running")).toBe("yes");
   });
 
   it("消息仍在输出时，联网搜索批次应默认展开为轻量进度并保持正文穿插", () => {

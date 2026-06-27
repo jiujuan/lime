@@ -263,11 +263,9 @@ export function handleTurnStreamEvent({
       typeof requestState.latestAssistantTextEventSequence === "number" &&
       processSequence < requestState.latestAssistantTextEventSequence
     ) {
-      requestState.hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary =
-        true;
+      requestState.hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary = true;
     } else {
-      requestState.hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary =
-        false;
+      requestState.hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary = false;
     }
     if (processSequence === null) {
       return;
@@ -304,9 +302,7 @@ export function handleTurnStreamEvent({
       (activeItemId && itemId && activeItemId !== itemId) ||
       (activePhase && phase && activePhase !== phase) ||
       (activeTurnId && turnId && activeTurnId !== turnId) ||
-      (activeEligibility &&
-        eligibility &&
-        activeEligibility !== eligibility)
+      (activeEligibility && eligibility && activeEligibility !== eligibility)
     ) {
       commitRenderedTextBeforeProcessPart();
     }
@@ -352,12 +348,11 @@ export function handleTurnStreamEvent({
     ) {
       return;
     }
-    requestState.hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary =
-      true;
+    requestState.hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary = true;
   };
   const upsertStructuredAgentMessageDeltaItem = (
     event: TextDeltaAgentEvent,
-    options: { textDelta?: string } = {},
+    options: { shouldSyncThreadItem?: boolean; textDelta?: string } = {},
   ): boolean => {
     const textDelta = options.textDelta ?? event.text;
     if (!textDelta) {
@@ -430,9 +425,14 @@ export function handleTurnStreamEvent({
     );
 
     bindAssistantMessageToRuntimeTurn(setMessages, assistantMsgId, turnId);
-    setThreadItems((prev) =>
-      upsertThreadItemState(removeThreadItemState(prev, pendingItemKey), item),
-    );
+    if (options.shouldSyncThreadItem !== false) {
+      setThreadItems((prev) =>
+        upsertThreadItemState(
+          removeThreadItemState(prev, pendingItemKey),
+          item,
+        ),
+      );
+    }
     if (normalizeOptionalText(event.itemId)) {
       syncAssistantAgentMessageContentPartFromThreadItem({
         assistantMsgId,
@@ -500,9 +500,9 @@ export function handleTurnStreamEvent({
         resetStreamedReasoningSegment(requestState);
       }
       if (data.item.type === "tool_call" || data.item.type === "reasoning") {
+        commitRenderedTextBeforeProcessPart();
         noteFinalAnswerRequiredProcessBoundary(sequenceFromAgentEvent(data));
         noteFinalAnswerRequiredProcessBoundary(data.item.sequence);
-        commitRenderedTextBeforeProcessPart();
       }
       handleAgentStreamThreadItemLifecycleEvent({
         assistantMsgId,
@@ -520,9 +520,9 @@ export function handleTurnStreamEvent({
         resetStreamedReasoningSegment(requestState);
       }
       if (data.item.type === "tool_call" || data.item.type === "reasoning") {
+        commitRenderedTextBeforeProcessPart();
         noteFinalAnswerRequiredProcessBoundary(sequenceFromAgentEvent(data));
         noteFinalAnswerRequiredProcessBoundary(data.item.sequence);
-        commitRenderedTextBeforeProcessPart();
       }
       if (
         handleAgentStreamThreadItemLifecycleEvent({
@@ -688,8 +688,11 @@ export function handleTurnStreamEvent({
     case "thinking_delta":
     case "reasoning_delta":
       {
-        noteFinalAnswerRequiredProcessBoundary(sequenceFromAgentEvent(data));
-        commitRenderedTextBeforeProcessPart();
+        const eventSequence = sequenceFromAgentEvent(data);
+        if (data.type === "reasoning_delta" || eventSequence !== null) {
+          noteFinalAnswerRequiredProcessBoundary(eventSequence);
+          commitRenderedTextBeforeProcessPart();
+        }
         const reasoningText =
           data.type === "reasoning_delta"
             ? data.text || data.delta || ""
@@ -854,7 +857,9 @@ export function handleTurnStreamEvent({
           firstTextDeltaAt: requestState.firstTextDeltaAt,
           metricDeltaText: data.text,
           now: Date.now(),
+          rendererEventReceivedAt: data.renderer_event_received_at,
           requestStartedAt: requestState.requestStartedAt,
+          serverEventEmittedAt: data.server_event_emitted_at,
           textDeltaBufferedCount: requestState.textDeltaBufferedCount,
         });
         if (visibleDelta.nextReplayOffset === null) {
@@ -888,6 +893,7 @@ export function handleTurnStreamEvent({
         Boolean(normalizeOptionalText(data.itemId));
       if (visibleTextDelta && isStructuredFinalDelta) {
         upsertStructuredAgentMessageDeltaItem(data, {
+          shouldSyncThreadItem: false,
           textDelta: visibleTextDelta,
         });
       }
@@ -934,8 +940,8 @@ export function handleTurnStreamEvent({
     case "tool_start":
       activateStream();
       clearOptimisticItem();
-      noteFinalAnswerRequiredProcessBoundary(sequenceFromAgentEvent(data));
       commitRenderedTextBeforeProcessPart();
+      noteFinalAnswerRequiredProcessBoundary(sequenceFromAgentEvent(data));
       upsertFallbackTextOverlayIfSilent("tool_start_fallback");
       playToolcallSound();
       {
@@ -963,8 +969,8 @@ export function handleTurnStreamEvent({
     case "tool_progress":
       activateStream();
       clearOptimisticItem();
-      noteFinalAnswerRequiredProcessBoundary(sequenceFromAgentEvent(data));
       commitRenderedTextBeforeProcessPart();
+      noteFinalAnswerRequiredProcessBoundary(sequenceFromAgentEvent(data));
       {
         const shouldUpdateMessageLayer =
           shouldUpdateLegacyToolMessageLayer(data);
@@ -984,8 +990,8 @@ export function handleTurnStreamEvent({
     case "tool_input_delta":
       activateStream();
       clearOptimisticItem();
-      noteFinalAnswerRequiredProcessBoundary(sequenceFromAgentEvent(data));
       commitRenderedTextBeforeProcessPart();
+      noteFinalAnswerRequiredProcessBoundary(sequenceFromAgentEvent(data));
       {
         const shouldUpdateMessageLayer =
           shouldUpdateLegacyToolMessageLayer(data);
@@ -1009,8 +1015,8 @@ export function handleTurnStreamEvent({
     case "tool_output_delta":
       activateStream();
       clearOptimisticItem();
-      noteFinalAnswerRequiredProcessBoundary(sequenceFromAgentEvent(data));
       commitRenderedTextBeforeProcessPart();
+      noteFinalAnswerRequiredProcessBoundary(sequenceFromAgentEvent(data));
       {
         const shouldUpdateMessageLayer =
           shouldUpdateLegacyToolMessageLayer(data);
@@ -1030,8 +1036,8 @@ export function handleTurnStreamEvent({
     case "tool_end":
       activateStream();
       clearOptimisticItem();
-      noteFinalAnswerRequiredProcessBoundary(sequenceFromAgentEvent(data));
       commitRenderedTextBeforeProcessPart();
+      noteFinalAnswerRequiredProcessBoundary(sequenceFromAgentEvent(data));
       {
         const toolEndPlan = buildAgentStreamToolEndPreApplyPlan({
           result: data.result,

@@ -28,6 +28,7 @@
 - 参考运行时主链进度日志：`internal/exec-plans/upstream-runtime-alignment-progress.md`
 - Agent Runtime 单一投影入口收口计划：`internal/exec-plans/agent-runtime-single-projection-entry-plan.md`
 - Claw Streaming Rendering Codex 对齐重构计划：`internal/exec-plans/claw-streaming-rendering-codex-refactor-plan.md`
+- Claw Trace 系统实施全过程计划：`internal/exec-plans/claw-trace-system-implementation-plan.md`
 - 生产命令 current 迁移计划：`internal/exec-plans/production-command-current-migration-plan.md`
 - Agent App uninstall current UI 进度：`internal/exec-plans/agent-app-uninstall-current-ui-progress.md`
 - P16 Diagnostics current fail-closed 进度：`internal/exec-plans/p16-diagnostics-current-fail-closed-progress.md`

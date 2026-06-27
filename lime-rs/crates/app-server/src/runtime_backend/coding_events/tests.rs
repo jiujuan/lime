@@ -116,7 +116,12 @@ fn shell_tool_metadata_only_delta_updates_process_lifecycle_without_consuming_ou
         metadata: Some(HashMap::from([
             ("processId".to_string(), json!("process-tool-process-start")),
             ("executionProcessStatus".to_string(), json!("running")),
+            (
+                "executionProcessControlStatus".to_string(),
+                json!("registered"),
+            ),
             ("executionSurface".to_string(), json!("live_process")),
+            ("stdinWritable".to_string(), json!(true)),
         ])),
     });
     let ended = mirror.process_event(&RuntimeAgentEvent::ToolEnd {
@@ -139,6 +144,14 @@ fn shell_tool_metadata_only_delta_updates_process_lifecycle_without_consuming_ou
     assert_eq!(
         process_update.after_raw[0].payload["metadata"]["executionProcessStatus"].as_str(),
         Some("running")
+    );
+    assert_eq!(
+        process_update.after_raw[0].payload["metadata"]["executionProcessControlStatus"].as_str(),
+        Some("registered")
+    );
+    assert_eq!(
+        process_update.after_raw[0].payload["metadata"]["stdinWritable"].as_bool(),
+        Some(true)
     );
     assert!(process_update.after_raw[0].payload.get("preview").is_none());
     assert_eq!(ended.after_raw[0].event_type, "command.output");

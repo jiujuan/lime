@@ -123,12 +123,9 @@ function canMergeTimelineAsSparseProcessPatch(
 ): boolean {
   return Boolean(
     items?.length &&
-      items.every(
-        (item) =>
-          item.type === "reasoning" ||
-          item.type === "agent_message" ||
-          item.type === "turn_summary",
-      ),
+    items.every(
+      (item) => item.type === "reasoning" || item.type === "turn_summary",
+    ),
   );
 }
 
@@ -294,8 +291,9 @@ export function resolveMessageListItemProjection({
   const hasRunningWebRetrievalPart = hasRunningWebRetrievalContentPart(
     rawDisplayContentParts,
   );
-  const hasInlineToolUseProcessPart =
-    hasInlineToolUseContentPart(rawDisplayContentParts);
+  const hasInlineToolUseProcessPart = hasInlineToolUseContentPart(
+    rawDisplayContentParts,
+  );
   const hasActiveTimelineTurn =
     timeline !== null && isActiveThreadTurnStatus(timeline.turn.status);
   const isLegacyUnphasedStreamingOverlay =
@@ -637,9 +635,11 @@ export function resolveMessageListItemProjection({
   const rendererConversationContentParts = usesProcessSeparatedFinalText
     ? resolveProcessSeparatedContentParts(conversationContentParts)
     : conversationContentParts;
-  const timelineOwnedActionContent = timelineOwnsInlineProcessFlow
-    ? resolveTimelineOwnedVisibleText(conversationContentParts)
-    : null;
+  const timelineOwnedActionContent =
+    timelineOwnsInlineProcessFlow &&
+    (messageContentPartsOwnInlineProcessFlow || !displayContent.trim())
+      ? resolveTimelineOwnedVisibleText(conversationContentParts)
+      : null;
   const rawActionContent =
     timelineOwnedActionContent ??
     resolveAssistantActionContent({

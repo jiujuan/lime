@@ -128,6 +128,7 @@ function buildProductProfileWorkerMetadata(workspace) {
         intent: "regenerate",
         risk: "write",
         task_kind: "content.image.generate",
+        output_artifact_kind: "content_factory.workspace_patch",
         prompt: "Regenerate the image set with two worker-generated candidates.",
         object: {
           app_id: CONTENT_FACTORY_APP_ID,

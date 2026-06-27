@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { buildProjection, type Message } from "./messageListItemProjection.testHarness";
+import {
+  buildProjection,
+  type Message,
+} from "./messageListItemProjection.testHarness";
 
 describe("messageListItemProjection web retrieval", () => {
   it("流式正文 overlay 不应把最终正文插到网页搜索过程前", () => {
@@ -58,7 +61,7 @@ describe("messageListItemProjection web retrieval", () => {
     );
     expect(projection.displayContent).toBe("");
     expect(projection.actionContent).toBe(
-      "## 今日国际新闻简报\n\n- 第一条要闻。",
+      "我先联网核实今天的国际新闻，再整理成简报。\n\n## 今日国际新闻简报\n\n- 第一条要闻。",
     );
   });
 
@@ -91,8 +94,7 @@ describe("messageListItemProjection web retrieval", () => {
           toolCall: {
             id: "web-fetch-rendering",
             name: "WebFetch",
-            arguments:
-              '{"url":"https://example.com/lime-websearch-rendering"}',
+            arguments: '{"url":"https://example.com/lime-websearch-rendering"}',
             status: "completed",
             startTime: new Date("2026-06-22T01:00:02.000Z"),
             endTime: new Date("2026-06-22T01:00:03.000Z"),
@@ -249,8 +251,7 @@ describe("messageListItemProjection web retrieval", () => {
     expect(
       parts.some(
         (part) =>
-          part.type === "thinking" &&
-          part.text.includes("我会先联网核实今天"),
+          part.type === "thinking" && part.text.includes("我会先联网核实今天"),
       ),
     ).toBe(false);
   });
@@ -534,12 +535,11 @@ describe("messageListItemProjection web retrieval", () => {
     );
 
     const parts = projection.rendererContentParts || [];
-    expect(parts.map((part) => part.type)).toEqual([
-      "tool_use",
-      "text",
-    ]);
+    expect(parts.map((part) => part.type)).toEqual(["tool_use", "text"]);
     expect(projection.actionContent).toBe("## 今日 AI 新闻\n\n- 第一条要闻。");
-    expect(projection.rendererContent).toBe("## 今日 AI 新闻\n\n- 第一条要闻。");
+    expect(projection.rendererContent).toBe(
+      "## 今日 AI 新闻\n\n- 第一条要闻。",
+    );
     expect(projection.rendererRawContent).toBe(
       "## 今日 AI 新闻\n\n- 第一条要闻。",
     );
@@ -595,12 +595,11 @@ describe("messageListItemProjection web retrieval", () => {
     );
 
     const parts = projection.rendererContentParts || [];
-    expect(parts.map((part) => part.type)).toEqual([
-      "tool_use",
-      "text",
-    ]);
+    expect(parts.map((part) => part.type)).toEqual(["tool_use", "text"]);
     expect(projection.actionContent).toBe("## 今日 AI 新闻\n\n- 第一条要闻。");
-    expect(projection.rendererContent).toBe("## 今日 AI 新闻\n\n- 第一条要闻。");
+    expect(projection.rendererContent).toBe(
+      "## 今日 AI 新闻\n\n- 第一条要闻。",
+    );
     expect(projection.rendererRawContent).toBe(
       "## 今日 AI 新闻\n\n- 第一条要闻。",
     );
@@ -695,12 +694,11 @@ describe("messageListItemProjection web retrieval", () => {
     );
 
     const parts = projection.rendererContentParts || [];
-    expect(parts.map((part) => part.type)).toEqual([
-      "tool_use",
-      "text",
-    ]);
+    expect(parts.map((part) => part.type)).toEqual(["tool_use", "text"]);
     expect(projection.actionContent).toBe("## 今日 AI 新闻\n\n- 第一条要闻。");
-    expect(projection.rendererContent).toBe("## 今日 AI 新闻\n\n- 第一条要闻。");
+    expect(projection.rendererContent).toBe(
+      "## 今日 AI 新闻\n\n- 第一条要闻。",
+    );
     expect(projection.rendererRawContent).toBe(
       "## 今日 AI 新闻\n\n- 第一条要闻。",
     );
@@ -756,12 +754,11 @@ describe("messageListItemProjection web retrieval", () => {
     );
 
     const parts = projection.rendererContentParts || [];
-    expect(parts.map((part) => part.type)).toEqual([
-      "tool_use",
-      "text",
-    ]);
+    expect(parts.map((part) => part.type)).toEqual(["tool_use", "text"]);
     expect(projection.actionContent).toBe("## 今日 AI 新闻\n\n- 第一条要闻。");
-    expect(projection.rendererContent).toBe("## 今日 AI 新闻\n\n- 第一条要闻。");
+    expect(projection.rendererContent).toBe(
+      "## 今日 AI 新闻\n\n- 第一条要闻。",
+    );
     expect(projection.rendererRawContent).toBe(
       "## 今日 AI 新闻\n\n- 第一条要闻。",
     );

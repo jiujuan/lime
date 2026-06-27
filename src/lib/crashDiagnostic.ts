@@ -4,6 +4,10 @@ import {
   type Config,
   type CrashReportingConfig,
 } from "@/lib/api/appConfig";
+import {
+  summarizeAgentUiPerformanceMetrics,
+  type AgentUiPerformanceSnapshot,
+} from "@/lib/agentUiPerformanceMetrics";
 import { loadNamespaceResource } from "@/i18n/loadNamespace";
 import { FALLBACK_LOCALE, normalizeLocale } from "@/i18n/locales";
 import { clearDiagnosticLogHistory, type LogEntry } from "@/lib/api/logs";
@@ -43,6 +47,10 @@ import {
   type WorkspaceRepairRecord,
 } from "@/lib/workspaceHealthTelemetry";
 import { hasDesktopHostInvokeCapability } from "@/lib/desktop-runtime";
+import {
+  buildAgentUiPerformanceDiagnosticSummary,
+  type AgentUiPerformanceDiagnosticSummary,
+} from "@/lib/crashDiagnosticAgentUiPerformance";
 
 export interface CrashDiagnosticPayload {
   generated_at: string;
@@ -63,6 +71,7 @@ export interface CrashDiagnosticPayload {
   log_storage_diagnostics?: LogStorageDiagnostics | null;
   windows_startup_diagnostics?: WindowsStartupDiagnostics | null;
   runtime_snapshot?: RuntimeDiagnosticSnapshot | null;
+  agent_ui_performance_summary?: AgentUiPerformanceDiagnosticSummary | null;
   workspace_repair_history?: WorkspaceRepairRecord[];
   general_workbench_document_state?: GeneralWorkbenchDocumentState | null;
   diagnostic_collection_notes?: string[];
@@ -250,6 +259,7 @@ interface BuildCrashDiagnosticPayloadParams {
   logStorageDiagnostics?: LogStorageDiagnostics | null;
   windowsStartupDiagnostics?: WindowsStartupDiagnostics | null;
   runtimeSnapshot?: RuntimeDiagnosticSnapshot | null;
+  agentUiPerformanceSnapshot?: AgentUiPerformanceSnapshot | null;
 }
 
 function buildRuntimeConfigSummary(config: Config): RuntimeConfigSummary {
@@ -579,6 +589,7 @@ export function buildCrashDiagnosticPayload(
     logStorageDiagnostics = null,
     windowsStartupDiagnostics = null,
     runtimeSnapshot = null,
+    agentUiPerformanceSnapshot = summarizeAgentUiPerformanceMetrics(),
   } = params;
 
   const frontendCrashBuffer = getFrontendCrashBuffer(maxCrashLogs);
@@ -621,6 +632,9 @@ export function buildCrashDiagnosticPayload(
     log_storage_diagnostics: logStorageDiagnostics,
     windows_startup_diagnostics: windowsStartupDiagnostics,
     runtime_snapshot: runtimeSnapshot,
+    agent_ui_performance_summary: buildAgentUiPerformanceDiagnosticSummary(
+      agentUiPerformanceSnapshot,
+    ),
     workspace_repair_history: getWorkspaceRepairHistory(maxWorkspaceRepairs),
     general_workbench_document_state: generalWorkbenchDocumentState,
     diagnostic_collection_notes: Array.from(

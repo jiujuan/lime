@@ -455,6 +455,8 @@ function statusFromDomainPayloadStatus(
     case "cancelled":
     case "not_found":
       return "failed";
+    case "canceled":
+      return "canceled";
     case "completed":
     case "done":
     case "success":

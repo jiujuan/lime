@@ -34,18 +34,83 @@ import {
   shouldScheduleAgentStreamInactivityWatchdog,
 } from "./agentStreamListenerReadinessController";
 import { startAgentStreamRequest } from "./agentStreamRequestStartController";
+import { buildAgentStreamProviderTraceMetricContext } from "./agentStreamRuntimeMetricsController";
 import {
   rememberAgentStreamUnknownEventWarning,
   resolveAgentStreamUnknownEventPlan,
 } from "./agentStreamUnknownEventController";
 import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
 import type { StreamRequestState } from "./agentStreamSubmissionLifecycle";
-import { recordAgentStreamPerformanceMetric } from "./agentStreamPerformanceMetrics";
+import {
+  recordAgentStreamPerformanceMetric,
+  type AgentUiPerformanceTraceMetadata,
+} from "./agentStreamPerformanceMetrics";
 
 type MessageParts = NonNullable<Message["contentParts"]>;
 const STREAM_FIRST_EVENT_TIMEOUT_MS = 12_000;
 const STREAM_INACTIVITY_TIMEOUT_MS = 120_000; // 2 分钟，兼容推理模型长时间思考
 const STREAM_DEFERRED_RECOVERY_POLL_MS = 5_000;
+
+function normalizeEventNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function parseEventTimestampMs(timestamp: string | undefined): number | null {
+  if (!timestamp) {
+    return null;
+  }
+  const parsed = Date.parse(timestamp);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function buildAgentEventPerformanceTrace(params: {
+  activeSessionId: string;
+  event: AgentEvent;
+  eventReceivedAt: number;
+  previousTrace?: AgentUiPerformanceTraceMetadata | null;
+  resolvedWorkspaceId: string;
+}): AgentUiPerformanceTraceMetadata | null {
+  const previousTrace = params.previousTrace ?? null;
+  if (!previousTrace && !params.event.trace_id && !params.event.run_id) {
+    return null;
+  }
+
+  return {
+    ...previousTrace,
+    requestId: params.event.request_id ?? previousTrace?.requestId ?? null,
+    runId: params.event.run_id ?? previousTrace?.runId ?? null,
+    sessionId:
+      params.event.session_id ??
+      previousTrace?.sessionId ??
+      params.activeSessionId,
+    traceId: params.event.trace_id ?? previousTrace?.traceId ?? null,
+    turnId: params.event.turn_id ?? previousTrace?.turnId ?? null,
+    workspaceId: previousTrace?.workspaceId ?? params.resolvedWorkspaceId,
+    serverEventEmittedAt:
+      normalizeEventNumber(params.event.server_event_emitted_at) ??
+      parseEventTimestampMs(params.event.timestamp) ??
+      previousTrace?.serverEventEmittedAt ??
+      null,
+    serverEventId:
+      params.event.event_id ?? previousTrace?.serverEventId ?? null,
+    serverEventSequence:
+      normalizeEventNumber(params.event.sequence) ??
+      previousTrace?.serverEventSequence ??
+      null,
+    serverEventType:
+      params.event.type ?? previousTrace?.serverEventType ?? null,
+    rendererEventReceivedAt:
+      normalizeEventNumber(params.event.renderer_event_received_at) ??
+      params.eventReceivedAt,
+    providerWaitMs:
+      params.event.type === "provider_trace" &&
+      params.event.stage === "first_text_delta_received"
+        ? normalizeEventNumber(params.event.elapsed_ms) ??
+          previousTrace?.providerWaitMs ??
+          null
+        : previousTrace?.providerWaitMs ?? null,
+  };
+}
 
 interface StreamObserver {
   onTextDelta?: (delta: string, accumulated: string) => void;
@@ -595,6 +660,39 @@ export async function registerAgentStreamTurnEventBinding(
       }
       lastEventReceivedAt = eventReceivedAt;
       lastRuntimeEventType = data.type;
+      requestState.performanceTrace = buildAgentEventPerformanceTrace({
+        activeSessionId,
+        event: data,
+        eventReceivedAt,
+        previousTrace: requestState.performanceTrace,
+        resolvedWorkspaceId,
+      });
+
+      if (data.type === "provider_trace") {
+        const providerTraceContext = buildAgentStreamProviderTraceMetricContext({
+          activeSessionId,
+          attempt: data.attempt,
+          cancelReason: data.cancel_reason,
+          elapsedMs: data.elapsed_ms,
+          eventName,
+          failureCategory: data.failure_category,
+          model: data.model,
+          provider: data.provider,
+          retryable: data.retryable,
+          runtimeEventType: data.runtime_event_type,
+          stage: data.stage,
+          status: data.status,
+          textChars: data.text_chars,
+        });
+        recordAgentStreamPerformanceMetric(
+          "agentStream.providerTrace",
+          requestState.performanceTrace,
+          providerTraceContext,
+        );
+        logAgentDebug("AgentStream", "providerTrace", providerTraceContext);
+        scheduleInactivityWatchdog();
+        return;
+      }
 
       handleTurnStreamEvent({
         data,

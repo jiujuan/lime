@@ -3,6 +3,7 @@ import type {
   PluginContract,
   PluginObjectRef,
 } from "@/features/plugin";
+import { resolvePluginRendererOutputContract } from "@/features/plugin";
 import {
   buildContentFactoryDeliveryProfile,
   CONTENT_FACTORY_PLUGIN_ID,
@@ -137,6 +138,13 @@ function buildPlaceholderObject(params: {
   ref: WorkspaceProductObjectRef;
 }): WorkspaceProductObject {
   const displayName = resolvePluginDisplayName(params.contract);
+  const outputContract =
+    resolvePluginRendererOutputContract(params.contract, {
+      artifactType: params.ref.kind,
+    }) ??
+    resolvePluginRendererOutputContract(params.contract, {
+      paneKind: params.contract.rightSurface.panes[0]?.kind,
+    });
   return {
     ref: params.ref,
     title: `${displayName} - ${params.ref.kind}`,
@@ -148,6 +156,12 @@ function buildPlaceholderObject(params: {
       pluginId: params.activationContext.pluginId,
       activeEntryKey: params.activationContext.activeEntryKey ?? null,
       selectedSkillKeys: params.activationContext.selectedSkillKeys ?? [],
+      rendererContract: outputContract,
+      outputArtifactKind: outputContract?.outputArtifactKind ?? null,
+      artifactType: outputContract?.artifactType ?? params.ref.kind,
+      surfaceKind: outputContract?.surfaceKind ?? null,
+      paneKind: outputContract?.paneKind ?? null,
+      rendererKind: outputContract?.rendererKind ?? null,
     },
   };
 }

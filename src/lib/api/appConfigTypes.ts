@@ -114,13 +114,21 @@ export interface ChatAppearanceConfig {
   append_selected_text_to_recommendation?: boolean;
 }
 
-export interface DeveloperConfig {
-  workspace_harness_enabled?: boolean;
+export type ClawTraceLevelConfig = "summary" | "debug";
+
+export interface ClawTraceConfig {
+  alert_enabled?: boolean;
+  enabled?: boolean;
+  level?: ClawTraceLevelConfig;
+  sample_rate?: number;
 }
 
-export type ToolExecutionWarningPolicyConfig =
-  | "none"
-  | "shell_command_risk";
+export interface DeveloperConfig {
+  workspace_harness_enabled?: boolean;
+  claw_trace?: ClawTraceConfig;
+}
+
+export type ToolExecutionWarningPolicyConfig = "none" | "shell_command_risk";
 
 export type ToolExecutionRestrictionProfileConfig =
   | "none"
@@ -133,10 +141,7 @@ export type ToolExecutionRestrictionProfileConfig =
 
 export type ToolExecutionSandboxProfileConfig = "none" | "workspace_command";
 
-export type ToolExecutionCommandRiskLevelConfig =
-  | "low"
-  | "medium"
-  | "high";
+export type ToolExecutionCommandRiskLevelConfig = "low" | "medium" | "high";
 
 export type ToolExecutionCommandRuleMatchTypeConfig =
   | "regex"

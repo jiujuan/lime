@@ -43,6 +43,65 @@ fn selection_from_profile_slot_reads_harness_metadata() {
 }
 
 #[test]
+fn selection_from_profile_slot_prefers_fast_slot_for_fast_response_metadata() {
+    let metadata = json!({
+        "harness": {
+            "fast_response_routing": {
+                "mode": "auto",
+                "service_model_slot": "responsive_chat"
+            },
+            "model_slots": {
+                "coding": {
+                    "provider": "custom-coding",
+                    "model": "coder-large"
+                },
+                "fast": {
+                    "provider": "responsive-provider",
+                    "model": "fast-chat"
+                },
+                "base": {
+                    "provider": "openai",
+                    "model": "gpt-4.1-mini"
+                }
+            }
+        }
+    });
+
+    let selection =
+        selection_from_profile_model_slot(&[&metadata], None).expect("fast slot selection");
+
+    assert_eq!(selection.provider, "responsive-provider");
+    assert_eq!(selection.model, "fast-chat");
+    let routing = resolve_model_routing_for_candidate(&[&metadata], &selection);
+    assert_eq!(routing.service_model_slot, "fast");
+    assert_eq!(routing.decision_reason, "profile_slot_selected".to_string());
+}
+
+#[test]
+fn selection_from_profile_slot_ignores_fast_slot_without_fast_response_metadata() {
+    let metadata = json!({
+        "harness": {
+            "model_slots": {
+                "coding": {
+                    "provider": "custom-coding",
+                    "model": "coder-large"
+                },
+                "fast": {
+                    "provider": "responsive-provider",
+                    "model": "fast-chat"
+                }
+            }
+        }
+    });
+
+    let selection =
+        selection_from_profile_model_slot(&[&metadata], None).expect("coding slot selection");
+
+    assert_eq!(selection.provider, "custom-coding");
+    assert_eq!(selection.model, "coder-large");
+}
+
+#[test]
 fn routing_payload_keeps_review_fast_local_as_diagnostics_only() {
     let metadata = json!({
         "harness": {
@@ -171,6 +230,66 @@ fn ready_routing_falls_back_from_unready_coding_slot_to_base_slot() {
         vec![
             "custom-coding/missing-key-coder".to_string(),
             "openai/gpt-4.1-mini".to_string()
+        ]
+    );
+}
+
+#[test]
+fn ready_routing_falls_back_from_unready_fast_slot_to_coding_slot() {
+    let metadata = json!({
+        "harness": {
+            "fast_response_routing": {
+                "mode": "auto",
+                "service_model_slot": "responsive_chat"
+            },
+            "model_slots": {
+                "fast": {
+                    "provider": "responsive-provider",
+                    "model": "fast-chat"
+                },
+                "coding": {
+                    "provider": "custom-coding",
+                    "model": "coder-large"
+                }
+            }
+        }
+    });
+    let requested =
+        selection_from_profile_model_slot(&[&metadata], None).expect("requested fast selection");
+
+    let resolution = resolve_ready_model_routing(&[&metadata], &requested, |candidate| {
+        if candidate.provider == "custom-coding" {
+            Ok(ProviderReadiness::provider_store_ready(
+                Some("custom".to_string()),
+                1,
+                1,
+            ))
+        } else {
+            Ok(ProviderReadiness::provider_store_needs_setup(
+                "missing_enabled_api_key",
+                Some("custom".to_string()),
+                Some(true),
+                0,
+                0,
+            ))
+        }
+    })
+    .expect("routing resolution");
+
+    assert_eq!(requested.provider, "responsive-provider");
+    assert_eq!(resolution.selection.provider, "custom-coding");
+    assert_eq!(resolution.selection.model, "coder-large");
+    assert!(resolution.readiness.ready);
+    assert_eq!(resolution.routing.service_model_slot, "coding");
+    assert_eq!(resolution.attempted.len(), 2);
+    assert_eq!(resolution.attempted[0].slot, "fast");
+    assert!(!resolution.attempted[0].readiness.ready);
+    assert_eq!(resolution.attempted[1].slot, "coding");
+    assert_eq!(
+        resolution.routing.fallback_chain,
+        vec![
+            "responsive-provider/fast-chat".to_string(),
+            "custom-coding/coder-large".to_string()
         ]
     );
 }

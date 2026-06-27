@@ -1,4 +1,5 @@
 use app_server::capability_source_from_app_policy_json;
+use app_server::init_app_server_otel_from_env;
 use app_server::run_stdio;
 use app_server::AppDataSource;
 use app_server::AppServer;
@@ -12,6 +13,7 @@ use app_server::LocalAppDataSource;
 use app_server::ProjectionStore;
 use app_server::SidecarStore;
 use app_server::StorageRoots;
+use app_server::TraceEventWriter;
 use app_server::DEFAULT_EXTERNAL_BACKEND_TIMEOUT_MS;
 use app_server_transport::DEFAULT_LISTEN_URL;
 use lime_core::app_paths;
@@ -40,6 +42,7 @@ async fn main() -> anyhow::Result<()> {
         anyhow::bail!("unsupported listen URL: {}", config.listen);
     }
 
+    let _otel_guard = init_app_server_otel_from_env()?;
     run_stdio(build_app_server(&config).await?).await?;
 
     Ok(())
@@ -149,12 +152,15 @@ async fn build_app_server(config: &CliConfig) -> anyhow::Result<AppServer> {
             ));
         let event_log_writer = EventLogWriter::new(&storage_roots.event_log_root)
             .map_err(|error| anyhow::anyhow!("failed to initialize event log writer: {error}"))?;
+        let trace_event_writer = TraceEventWriter::new(&storage_roots.trace_log_root)
+            .map_err(|error| anyhow::anyhow!("failed to initialize trace event writer: {error}"))?;
         let projection_store = ProjectionStore::initialize(&storage_roots.projection_db_path)
             .map_err(|error| anyhow::anyhow!("failed to initialize projection store: {error}"))?;
         let telemetry_store = TelemetryStore::initialize(&storage_roots.telemetry_db_path)
             .map_err(|error| anyhow::anyhow!("failed to initialize telemetry store: {error}"))?;
         runtime = runtime
             .with_event_log_writer(Arc::new(event_log_writer))
+            .with_trace_event_writer(Arc::new(trace_event_writer))
             .with_projection_store(Arc::new(projection_store))
             .with_telemetry_store(Arc::new(telemetry_store));
     }
@@ -530,6 +536,10 @@ mod tests {
         assert_eq!(
             storage_roots.event_log_root,
             data_dir.join("runtime").join("events")
+        );
+        assert_eq!(
+            storage_roots.trace_log_root,
+            data_dir.join("runtime").join("traces")
         );
     }
 

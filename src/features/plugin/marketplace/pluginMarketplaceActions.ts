@@ -8,6 +8,12 @@ import {
   type AgentAppUninstallRehearsalResult,
   type AgentAppUninstallResult,
 } from "@/lib/api/agentApps";
+import {
+  reportClientPluginInstallState,
+  submitClientPluginRegistrationCode,
+  type OemCloudClientPluginInstallStateReport,
+} from "@/lib/api/oemCloudControlPlane";
+import { resolveOemCloudRuntimeContext } from "@/lib/api/oemCloudRuntime";
 import type {
   CloudBootstrapApp,
   InstalledAgentAppState,
@@ -37,6 +43,20 @@ export type PluginMarketplaceActionBlockerCode =
   | "PLUGIN_UNINSTALL_UNAVAILABLE"
   | "PLUGIN_UNINSTALL_BLOCKED";
 
+export type PluginMarketplaceRemoteInstallStateSync =
+  | {
+      status: "synced";
+      report: OemCloudClientPluginInstallStateReport;
+    }
+  | {
+      status: "skipped";
+      reason: string;
+    }
+  | {
+      status: "failed";
+      message: string;
+    };
+
 export type PluginMarketplaceActionResult =
   | {
       status: "performed";
@@ -46,6 +66,7 @@ export type PluginMarketplaceActionResult =
       installedList?: InstalledAgentAppStateListResult;
       uninstallPreview?: AgentAppUninstallRehearsalResult;
       uninstallResult?: AgentAppUninstallResult;
+      remoteInstallStateSync?: PluginMarketplaceRemoteInstallStateSync;
     }
   | {
       status: "blocked";
@@ -59,7 +80,10 @@ export interface PluginMarketplaceActionDeps {
   setDisabled?: typeof setAgentAppDisabled;
   previewUninstall?: typeof previewAgentAppUninstall;
   submitRegistrationCode?: typeof submitAgentAppRegistrationCode;
+  submitPluginRegistrationCode?: typeof submitClientPluginRegistrationCode;
+  reportInstallState?: typeof reportClientPluginInstallState;
   uninstall?: typeof uninstallAgentApp;
+  resolveRuntimeContext?: typeof resolveOemCloudRuntimeContext;
   now?: () => string;
   dispatchChanged?: () => void;
 }
@@ -69,13 +93,33 @@ export async function submitPluginMarketplaceRegistrationCode(
   code: string,
   deps: PluginMarketplaceActionDeps = {},
 ): Promise<void> {
-  const appId = item.appId?.trim();
-  if (!appId) {
-    throw new Error("PLUGIN_APP_ID_MISSING");
-  }
   const registrationCode = code.trim();
   if (!registrationCode) {
     throw new Error("PLUGIN_REGISTRATION_CODE_MISSING");
+  }
+
+  if (item.sourceKind === "plugin_catalog") {
+    const pluginName = item.pluginName.trim();
+    if (!pluginName) {
+      throw new Error("PLUGIN_NAME_MISSING");
+    }
+    const runtime = (
+      deps.resolveRuntimeContext ?? resolveOemCloudRuntimeContext
+    )();
+    const tenantId = runtime?.tenantId?.trim();
+    if (!tenantId) {
+      throw new Error("PLUGIN_MARKETPLACE_CLOUD_SESSION_REQUIRED");
+    }
+    await (
+      deps.submitPluginRegistrationCode ?? submitClientPluginRegistrationCode
+    )(tenantId, pluginName, { code: registrationCode }, item.marketplaceName);
+    (deps.dispatchChanged ?? defaultDispatchChanged)();
+    return;
+  }
+
+  const appId = item.appId?.trim();
+  if (!appId) {
+    throw new Error("PLUGIN_APP_ID_MISSING");
   }
   await (deps.submitRegistrationCode ?? submitAgentAppRegistrationCode)(
     appId,
@@ -208,6 +252,48 @@ function buildUninstallBlockers(
   return blockerCodes;
 }
 
+async function syncRemotePluginInstallState(
+  item: PluginMarketplaceViewItem,
+  state: "installed" | "enabled" | "disabled" | "uninstalled",
+  deps: PluginMarketplaceActionDeps,
+): Promise<PluginMarketplaceRemoteInstallStateSync> {
+  const runtime = (deps.resolveRuntimeContext ?? resolveOemCloudRuntimeContext)();
+  const tenantId = runtime?.tenantId?.trim();
+  const pluginName = item.pluginName.trim();
+  if (!tenantId || !pluginName) {
+    return {
+      status: "skipped",
+      reason: "PLUGIN_MARKETPLACE_CLOUD_SESSION_REQUIRED",
+    };
+  }
+
+  try {
+    const report = await (
+      deps.reportInstallState ?? reportClientPluginInstallState
+    )(
+      tenantId,
+      pluginName,
+      {
+        state,
+        releaseId: item.releaseId ?? item.package?.releaseId,
+        packageHash: item.package?.packageHash,
+        manifestHash: item.package?.manifestHash,
+        reportedAt: (deps.now ?? (() => new Date().toISOString()))(),
+      },
+      item.marketplaceName,
+    );
+    return {
+      status: "synced",
+      report,
+    };
+  } catch (error) {
+    return {
+      status: "failed",
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 export async function performPluginMarketplaceAction(
   item: PluginMarketplaceViewItem,
   deps: PluginMarketplaceActionDeps = {},
@@ -236,12 +322,18 @@ export async function performPluginMarketplaceAction(
     const installedState = await (
       deps.installCloudRelease ?? installCloudAgentAppRelease
     )({ app });
+    const remoteInstallStateSync = await syncRemotePluginInstallState(
+      item,
+      "installed",
+      deps,
+    );
     (deps.dispatchChanged ?? defaultDispatchChanged)();
     return {
       status: "performed",
       action,
       item,
       installedState,
+      remoteInstallStateSync,
     };
   }
 
@@ -259,12 +351,18 @@ export async function performPluginMarketplaceAction(
       disabled: action === "disable",
       updatedAt: (deps.now ?? (() => new Date().toISOString()))(),
     });
+    const remoteInstallStateSync = await syncRemotePluginInstallState(
+      item,
+      action === "disable" ? "disabled" : "enabled",
+      deps,
+    );
     (deps.dispatchChanged ?? defaultDispatchChanged)();
     return {
       status: "performed",
       action,
       item,
       installedList,
+      remoteInstallStateSync,
     };
   }
 
@@ -294,6 +392,11 @@ export async function performPluginMarketplaceAction(
       blockerCodes: ["PLUGIN_UNINSTALL_BLOCKED"],
     };
   }
+  const remoteInstallStateSync = await syncRemotePluginInstallState(
+    item,
+    "uninstalled",
+    deps,
+  );
   (deps.dispatchChanged ?? defaultDispatchChanged)();
   return {
     status: "performed",
@@ -302,5 +405,6 @@ export async function performPluginMarketplaceAction(
     uninstallPreview,
     uninstallResult,
     installedList: uninstallResult.list,
+    remoteInstallStateSync,
   };
 }

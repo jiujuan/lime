@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  Blocks,
   Command as CommandIcon,
   ImagePlus,
   Sparkles,
@@ -26,6 +27,7 @@ import type {
   BuiltinInputCommand,
   RuntimeSceneSlashCommand,
 } from "./builtinCommands";
+import type { InputbarPluginCapability } from "../components/Inputbar/pluginInputCapability";
 import {
   buildInputCapabilitySections,
   buildInputCapabilitySectionsCopy,
@@ -44,6 +46,7 @@ interface CharacterMentionPanelProps {
   slashCommands: SlashCommandDefinition[];
   sceneCommands: RuntimeSceneSlashCommand[];
   mentionServiceSkills: ServiceSkillHomeItem[];
+  pluginSuggestions?: readonly InputbarPluginCapability[];
   serviceSkillGroups?: ServiceSkillGroup[];
   filteredCharacters: Character[];
   installedSkills: Skill[];
@@ -68,6 +71,7 @@ export const CharacterMentionPanel: React.FC<CharacterMentionPanelProps> = ({
   slashCommands,
   sceneCommands,
   mentionServiceSkills,
+  pluginSuggestions = [],
   serviceSkillGroups = [],
   filteredCharacters,
   installedSkills,
@@ -110,6 +114,7 @@ export const CharacterMentionPanel: React.FC<CharacterMentionPanelProps> = ({
       slashCommands,
       sceneCommands,
       mentionServiceSkills,
+      pluginSuggestions,
       serviceSkillGroups,
       filteredCharacters,
       installedSkills,
@@ -132,6 +137,7 @@ export const CharacterMentionPanel: React.FC<CharacterMentionPanelProps> = ({
     mentionEntryUsageVersion,
     mentionQuery,
     mentionServiceSkills,
+    pluginSuggestions,
     mode,
     projectId,
     referenceEntries,
@@ -202,6 +208,10 @@ export const CharacterMentionPanel: React.FC<CharacterMentionPanelProps> = ({
         return t("inputCapabilities.panel.helper.featuredServiceSkills");
       }
 
+      if (sectionKey === "agent-apps") {
+        return t("inputCapabilities.panel.helper.agentApps");
+      }
+
       if (sectionKey === "installed-skills") {
         return t("inputCapabilities.panel.helper.installedSkillsMention");
       }
@@ -247,6 +257,7 @@ export const CharacterMentionPanel: React.FC<CharacterMentionPanelProps> = ({
     (isEmptyMentionQuery &&
       ([
         "featured-service-skills",
+        "agent-apps",
         "installed-skills",
         "available-skills",
         "characters",
@@ -288,6 +299,8 @@ export const CharacterMentionPanel: React.FC<CharacterMentionPanelProps> = ({
     );
 
     switch (item.icon) {
+      case "blocks":
+        return <Blocks className={iconClassName} />;
       case "command":
         return <CommandIcon className={iconClassName} />;
       case "image-plus":
@@ -408,13 +421,21 @@ export const CharacterMentionPanel: React.FC<CharacterMentionPanelProps> = ({
             ) : null}
             {section.items.map((item) => {
               const visibleKindLabel = resolveVisibleKindLabel(item);
+              const disabled =
+                item.kind === "available_skill" ||
+                (item.kind === "plugin" && item.disabled === true);
 
               return (
                 <CommandItem
                   key={item.key}
-                  onSelect={() => handleSelectCapability(item)}
+                  disabled={disabled}
+                  onSelect={() => {
+                    if (!disabled) {
+                      handleSelectCapability(item);
+                    }
+                  }}
                   className={cn(
-                    item.kind === "available_skill"
+                    disabled
                       ? "cursor-pointer opacity-60"
                       : "cursor-pointer",
                     shouldCompactSectionItems(section.key) && "min-h-0 py-1.5",

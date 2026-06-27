@@ -39,6 +39,9 @@ import {
   APP_SERVER_METHOD_DIAGNOSTICS_LOG_STORAGE_READ,
   APP_SERVER_METHOD_DIAGNOSTICS_SERVER_READ,
   APP_SERVER_METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT,
+  APP_SERVER_METHOD_DIAGNOSTICS_TRACE_EXPORT,
+  APP_SERVER_METHOD_DIAGNOSTICS_TRACE_LIST,
+  APP_SERVER_METHOD_DIAGNOSTICS_TRACE_READ,
   APP_SERVER_METHOD_DIAGNOSTICS_WINDOWS_STARTUP_READ,
   APP_SERVER_METHOD_INITIALIZED,
   APP_SERVER_METHOD_INITIALIZE,
@@ -351,8 +354,7 @@ describe("App Server API", () => {
           lines: [
             line({
               id: 6,
-              method:
-                APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CONSUME,
+              method: APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CONSUME,
               params: {
                 requestId: pending.requestId,
                 requestIds: ["right-surface:missing"],
@@ -370,8 +372,7 @@ describe("App Server API", () => {
           lines: [
             line({
               id: 7,
-              method:
-                APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS,
+              method: APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS,
               params: {
                 requestId: pending.requestId,
                 requestIds: ["right-surface:gone"],
@@ -1764,6 +1765,103 @@ describe("App Server API", () => {
             },
           }),
         ],
+      })
+      .mockResolvedValueOnce({
+        lines: [
+          line({
+            id: 17,
+            result: {
+              available: true,
+              traces: [
+                {
+                  sessionId: "session-a",
+                  traceId: "trace-a",
+                  path: "sessions/session_session-a/trace_trace-a.jsonl",
+                  sizeBytes: 128,
+                  eventCount: 2,
+                },
+              ],
+              redaction: {
+                mode: "summary_only",
+                rawAgentEventPayload: false,
+                promptText: false,
+                providerPayload: false,
+              },
+            },
+          }),
+        ],
+      })
+      .mockResolvedValueOnce({
+        lines: [
+          line({
+            id: 18,
+            result: {
+              available: true,
+              trace: {
+                sessionId: "session-a",
+                traceId: "trace-a",
+                path: "sessions/session_session-a/trace_trace-a.jsonl",
+                sizeBytes: 128,
+                eventCount: 2,
+              },
+              events: [
+                {
+                  schemaVersion: 1,
+                  seq: 1,
+                  wallTimeUnixMs: 1_780_000_000_000,
+                  traceId: "trace-a",
+                  sessionId: "session-a",
+                  eventId: "evt-a",
+                  eventSequence: 1,
+                  eventType: "message.delta",
+                  checkpoint: "app_server.message_delta.emitted",
+                  metrics: { text_chars: 4 },
+                  redaction: {
+                    mode: "summary_only",
+                    rawAgentEventPayload: false,
+                    promptText: false,
+                    providerPayload: false,
+                  },
+                },
+              ],
+              redaction: {
+                mode: "summary_only",
+                rawAgentEventPayload: false,
+                promptText: false,
+                providerPayload: false,
+              },
+            },
+          }),
+        ],
+      })
+      .mockResolvedValueOnce({
+        lines: [
+          line({
+            id: 19,
+            result: {
+              available: true,
+              exported: true,
+              trace: {
+                sessionId: "session-a",
+                traceId: "trace-a",
+                path: "sessions/session_session-a/trace_trace-a.jsonl",
+                sizeBytes: 128,
+                eventCount: 2,
+              },
+              bundlePath: "/tmp/claw-trace-session-a-trace-a.zip",
+              outputDirectory: "/tmp",
+              generatedAt: "2026-06-27T00:00:00.000Z",
+              includedSections: ["trace/events.jsonl"],
+              omittedSections: ["prompt text"],
+              redaction: {
+                mode: "summary_only",
+                rawAgentEventPayload: false,
+                promptText: false,
+                providerPayload: false,
+              },
+            },
+          }),
+        ],
       });
 
     const client = new AppServerClient({ initialRequestId: 9 });
@@ -1800,6 +1898,39 @@ describe("App Server API", () => {
         result: { platform: "darwin" },
       },
     );
+    await expect(
+      client.listDiagnosticsTraces({ sessionId: "session-a", limit: 5 }),
+    ).resolves.toMatchObject({
+      result: {
+        traces: [expect.objectContaining({ traceId: "trace-a" })],
+      },
+    });
+    await expect(
+      client.readDiagnosticsTrace({
+        sessionId: "session-a",
+        traceId: "trace-a",
+        maxEvents: 20,
+      }),
+    ).resolves.toMatchObject({
+      result: {
+        events: [
+          expect.objectContaining({
+            checkpoint: "app_server.message_delta.emitted",
+          }),
+        ],
+      },
+    });
+    await expect(
+      client.exportDiagnosticsTrace({
+        sessionId: "session-a",
+        traceId: "trace-a",
+      }),
+    ).resolves.toMatchObject({
+      result: {
+        exported: true,
+        bundlePath: "/tmp/claw-trace-session-a-trace-a.zip",
+      },
+    });
 
     expect(safeInvoke).toHaveBeenNthCalledWith(
       1,
@@ -1916,6 +2047,58 @@ describe("App Server API", () => {
               id: 16,
               method: APP_SERVER_METHOD_DIAGNOSTICS_WINDOWS_STARTUP_READ,
               params: {},
+            }),
+          ],
+        },
+      },
+    );
+    expect(safeInvoke).toHaveBeenNthCalledWith(
+      9,
+      "app_server_handle_json_lines",
+      {
+        request: {
+          lines: [
+            line({
+              id: 17,
+              method: APP_SERVER_METHOD_DIAGNOSTICS_TRACE_LIST,
+              params: { sessionId: "session-a", limit: 5 },
+            }),
+          ],
+        },
+      },
+    );
+    expect(safeInvoke).toHaveBeenNthCalledWith(
+      10,
+      "app_server_handle_json_lines",
+      {
+        request: {
+          lines: [
+            line({
+              id: 18,
+              method: APP_SERVER_METHOD_DIAGNOSTICS_TRACE_READ,
+              params: {
+                sessionId: "session-a",
+                traceId: "trace-a",
+                maxEvents: 20,
+              },
+            }),
+          ],
+        },
+      },
+    );
+    expect(safeInvoke).toHaveBeenNthCalledWith(
+      11,
+      "app_server_handle_json_lines",
+      {
+        request: {
+          lines: [
+            line({
+              id: 19,
+              method: APP_SERVER_METHOD_DIAGNOSTICS_TRACE_EXPORT,
+              params: {
+                sessionId: "session-a",
+                traceId: "trace-a",
+              },
             }),
           ],
         },

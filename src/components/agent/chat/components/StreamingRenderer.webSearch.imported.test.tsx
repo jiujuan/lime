@@ -68,16 +68,15 @@ describe("StreamingRenderer WebSearch imported rendering", () => {
       '[data-testid="streaming-process-group"] > button',
     );
     const searchGroupButton = processGroupButtons.item(
-      1,
+      0,
     ) as HTMLButtonElement | null;
 
-    expect(processGroupButtons).toHaveLength(2);
-    expect(processGroupButton?.getAttribute("aria-expanded")).toBe("true");
+    expect(processGroupButtons).toHaveLength(1);
+    expect(processGroupButton?.getAttribute("aria-expanded")).toBe("false");
     expect(container.textContent).toContain("导入的命令记录");
     expect(searchGroupButton?.textContent).toContain(
       "已搜索网页：Lime history import",
     );
-    expect(searchGroupButton?.textContent).not.toContain("导入的命令记录");
     expect(container.textContent).not.toContain("npm test");
     expect(container.textContent).not.toContain("Output:");
     expect(searchGroupButton?.textContent).toContain("Lime history import");
@@ -86,6 +85,7 @@ describe("StreamingRenderer WebSearch imported rendering", () => {
       searchGroupButton?.click();
     });
 
+    expect(searchGroupButton?.getAttribute("aria-expanded")).toBe("true");
     expect(container.textContent).toContain("Lime history import");
   });
 

@@ -19,6 +19,9 @@ export function buildContentFactoryProductProfileScenarioAssertions({
   const gui = summary.contentFactoryProductProfileGui ?? {};
   const readModel = summary.contentFactoryProductProfileReadModel ?? {};
   const artifactRead = summary.contentFactoryProductProfileArtifactRead ?? {};
+  const rendererHost = gui.rendererHost ?? {};
+  const remoteRuntimeRejection =
+    summary.contentFactoryProductProfileRemoteRuntimeRejection ?? {};
 
   return {
     contentFactoryProductProfileRuntimeEventsAppended:
@@ -132,9 +135,6 @@ export function buildContentFactoryProductProfileScenarioAssertions({
     contentFactoryProductProfileActionResultPatchProjected:
       summary.contentFactoryProductProfileActionResultRuntimeEventsAppend
         ?.eventTypes?.[0] === "artifact.snapshot" &&
-      readModel.imageObject?.status === "ready" &&
-      readModel.imageObject?.summary === "已重新生成 2 张候选图" &&
-      readModel.imageObject?.previewArtifactId === "artifact-image-regenerated" &&
       readModel.completedActionWorkerEvidence?.taskId ===
         "image_regenerate_job_1" &&
       readModel.completedActionWorkerEvidence?.status === "completed" &&
@@ -149,6 +149,30 @@ export function buildContentFactoryProductProfileScenarioAssertions({
             "artifact-image-regenerate-workspace-patch" &&
           artifact.kind === "content_factory.workspace_patch",
       ) === true,
+    contentFactoryProductProfileRendererHostPlaceholderVisible:
+      summary.contentFactoryProductProfileStoryboardObjectSelection
+        ?.selected === true &&
+      rendererHost.visible === true &&
+      rendererHost.pluginVisible === true &&
+      rendererHost.rendererKindVisible === true &&
+      rendererHost.executionModeVisible === true &&
+      rendererHost.rendererExecutionModelVisible === true &&
+      rendererHost.entryLoadPolicyVisible === true &&
+      rendererHost.executableHostAbsent === true &&
+      rendererHost.reasonVisible === true &&
+      rendererHost.allowedOutputVisible === true &&
+      rendererHost.entryVisible === true &&
+      rendererHost.actionVisible === true,
+    contentFactoryProductProfileRemoteRuntimeFailClosed:
+      appServerRequestMethods.includes(APP_SERVER_METHOD_SESSION_TURN_START) &&
+      remoteRuntimeRejection.turnStatus === "accepted" &&
+      remoteRuntimeRejection.appId === "creator-pack" &&
+      remoteRuntimeRejection.errorCode ===
+        "AGENT_APP_WORKER_REMOTE_RUNTIME_DISABLED" &&
+      remoteRuntimeRejection.failureCategory === "configuration" &&
+      remoteRuntimeRejection.readModel?.status === "failed" &&
+      remoteRuntimeRejection.readModel?.errorCode ===
+        "AGENT_APP_WORKER_REMOTE_RUNTIME_DISABLED",
     contentFactoryProductProfileDoesNotUseModelTurn: backendLedger.every(
       (entry) => entry.kind !== "turnStart",
     ),

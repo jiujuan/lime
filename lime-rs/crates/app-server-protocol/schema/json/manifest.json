@@ -316,6 +316,18 @@
     },
     {
       "kind": "request",
+      "method": "diagnostics/trace/export"
+    },
+    {
+      "kind": "request",
+      "method": "diagnostics/trace/list"
+    },
+    {
+      "kind": "request",
+      "method": "diagnostics/trace/read"
+    },
+    {
+      "kind": "request",
       "method": "diagnostics/windowsStartup/read"
     },
     {
@@ -1330,6 +1342,15 @@
       "DiagnosticsRequestDedupDiagnostics",
       "DiagnosticsResponseCacheDiagnostics",
       "DiagnosticsTelemetrySummary",
+      "DiagnosticsTraceEvent",
+      "DiagnosticsTraceExportParams",
+      "DiagnosticsTraceExportResponse",
+      "DiagnosticsTraceListParams",
+      "DiagnosticsTraceListResponse",
+      "DiagnosticsTraceReadParams",
+      "DiagnosticsTraceReadResponse",
+      "DiagnosticsTraceRedactionPolicy",
+      "DiagnosticsTraceSummary",
       "EndpointInfo",
       "EndpointKind",
       "EvidenceExportParams",
@@ -1632,7 +1653,9 @@
       "SkillScaffoldCreateParams",
       "SkillScaffoldCreateResponse",
       "StructuredOutputContract",
+      "SupportBundleExportParams",
       "SupportBundleExportResponse",
+      "SupportBundleTraceExportSelection",
       "TransportKind",
       "UsageStatsDailyTrendsListResponse",
       "UsageStatsDailyUsage",

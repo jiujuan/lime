@@ -247,11 +247,12 @@ Electron 打包 / 发布 / updater metadata 的 current 事实源固定为 `forg
 
 旧 Rust / Tauri updater command 面已经删除，质量检查不能再把旧 `update_cmd` 文件、`commands::update_cmd::*` runner 注册、`UpdateInstallSessionState` 或 Rust 后台更新检查任务当作 fallback 或可修补对象。若 updater 行为失败，按 Electron Desktop Host / Forge / feed current 链路补实现和验证；不要在 `lime-rs/src/commands/` 新增 updater stub 或 compat wrapper。
 
-`scripts/` 根目录是冻结的历史入口区。新增可执行脚本默认必须放到 `scripts/<domain>/`、`scripts/lib/` 或所属 package；只有公开稳定入口且无法归入领域子目录时才允许新增根目录例外。涉及脚本目录、脚本入口或新增脚本时，必须同步检查：
+`scripts/` 根目录和一级领域目录都是冻结的治理边界。新增可执行脚本默认必须放到已有 `scripts/<domain>/`、`scripts/lib/` 或所属 package；只有公开稳定入口且无法归入现有领域目录时才允许新增根目录或一级目录例外。涉及脚本目录、脚本入口或新增脚本时，必须同步检查：
 
 - `scripts/README.md`
 - `scripts/script-root-governance-baseline.json`
 - `scripts/check-scripts-governance.mjs`
+- `scripts/lib/scripts-governance-core.mjs`
 - `package.json#scripts`
 
 最低校验至少包含：
@@ -265,6 +266,8 @@ npm run governance:scripts
 - 默认先跑受影响 crate、模块或定向测试
 - 再根据边界扩散决定是否执行全量 `cargo test`
 - 目标是尽快暴露问题，而不是一上来把所有测试都跑满
+- 后端 TDD / 发布续测默认优先使用仓库分层入口和 Cargo 过滤：`npm run test:rust:unit -- -p <crate> <filter>`、`npm run test:rust:integration -- -p <crate> --test <target>`；只有跨 crate 协议、workspace 版本 / schema、发布最终门禁或定向覆盖不足时，才扩大到 `--workspace` 或 `npm run test:rust`
+- 冷编译慢时不要靠反复全量重跑解决。优先复用统一 `lime-rs/target`、保留增量缓存，并在本机 / CI 工具链具备时使用 `RUSTC_WRAPPER=sccache` 或 `cargo nextest run` 作为环境级加速；仓库脚本只有在依赖和 CI 均已配置后才能把它们设为默认
 - 在仓库根运行 Rust 校验必须显式带 `--manifest-path "lime-rs/Cargo.toml"`，或先 `cd lime-rs`；不要直接 `rustc lime-rs/src/*.rs` 编译主 crate，否则会绕过 workspace 依赖并产生 `can't find crate for lime_*` 误报
 - 如果定向测试来自 `lime-rs/crates/aster-rust` 这类被 legacy host watch 覆盖的子工作区，先确认其 Cargo `target-dir` 已统一回 `lime-rs/target`，避免 watch 风暴导致 dev 无法启动
 
@@ -306,6 +309,9 @@ npm run test:integration
 npm run test:e2e
 npm run test:layers:stats
 npm run test:frontend:all
+npm run test:resume
+npm run test:related -- <files>
+npm run test:changed -- <ref>
 npm run test:rust:unit
 npm run test:rust:integration
 npm run test:rust:e2e
@@ -321,11 +327,15 @@ npm run test:rust:layers:stats
 - `test:e2e` 覆盖 Vitest 内显式 E2E / smoke / live-gated 测试；真实产品主路径仍以 `verify:gui-smoke` / Playwright 为准
 - `test:layers:stats` 按同一分类事实源输出分层统计、默认可运行数、live-gated 数，以及 component 测试的 VM 迁移候选提示
 - `test:frontend:all` 保留现有前端 Vitest 全量兼容入口
-- `test:rust:unit` 默认覆盖 Cargo default package 的 lib / module 单元测试，是后端 TDD 默认第一轮信号；改 workspace crate 时用 `npm run test:rust:unit -- -p <crate> <filter>` 定向运行
-- `test:rust:integration` 默认覆盖 Cargo default package 的 integration test targets；需要扩大到全后端时显式传 `--workspace`
+- `npm test` / `test:frontend:all` 由 `scripts/run-vitest-smart.mjs` 执行分批全量，状态写入 `.lime/test/vitest-smart-last-run.json`；失败或中断后默认先用 `npm run test:resume` 续跑，或用 `npm test -- --from-batch <N>` / `npm test -- --only-batch <N>` 精确补批次，不要直接从头重跑全量
+- `test:related` 使用 Vitest `related --run`，适合修改少量源码后只跑静态依赖相关测试；`test:changed` 使用 Vitest `--changed [ref]`，适合按 Git diff 收缩本地回归范围。二者是缩小反馈环，不替代发布前必要的全量或 GUI 证据
+- CI 需要横向压缩前端全量时优先用 Vitest `--shard=<index>/<count>` 做稳定分片，并合并报告；本地中断续跑仍使用 `.lime/test/` 状态，不把 shard 当成失败续跑机制
+- `test:rust:unit` 默认覆盖 Cargo default package 的 lib / module 单元测试，是后端 TDD 默认第一轮信号；改 workspace crate 时用 `npm run test:rust:unit -- -p <crate> <filter>` 定向运行，避免无差别编译所有 crate
+- `test:rust:integration` 默认覆盖 Cargo default package 的 integration test targets；需要扩大到全后端时显式传 `--workspace`，需要单个 integration target 时优先透传 `--test <target>`
 - `test:rust:e2e` 只在 `LIME_REAL_API_TEST=1` 或 `PROXYCAST_REAL_API_TEST=1` 显式打开时运行 ignored/live Rust E2E；默认不消耗真实 Provider / ASR 凭证
 - `test:rust:layers:stats` 输出 Rust 测试文件分层统计，区分 workspace 默认可运行、live-gated 和 excluded subcrate 治理项
 - Rust 分层命令的 `--list` 遵循同一 Cargo package scope：默认只列 root `lime` package，传 `--workspace` 才列全 workspace，传 `-p <crate>` 只列目标 crate；全树治理统计只看 `test:rust:layers:stats`
+- Rust 加速优先级：先 Cargo `-p` / `--lib` / `--test` / test filter 收缩范围，再复用 `target` / incremental / sccache 缓存，最后才考虑 Nextest 并行调度；不要把 Nextest 或 sccache 写成必需门禁，除非仓库已经把安装和 CI 缓存配置纳入事实源
 
 边界：
 
@@ -337,6 +347,7 @@ npm run test:rust:layers:stats
 - 前端复杂 UI 逻辑应优先抽到 View Model / projection / selector 中做单元测试；组件测试只保留必要渲染和事件接线，核心用户流程交给 GUI smoke / E2E
 - 新增或重写前端测试时先做分层判断：筛选 / 分组 / formatter / request builder / 状态机 / reducer / runtime 参数投影等可纯化逻辑必须落到 `*.unit.test.ts`；只有 React 渲染、真实 DOM 事件、hook 生命周期、DevBridge/Desktop Host/App Server、文件系统、网络或端到端流程才进入 component / contract / integration / e2e
 - 不允许为了“补回归”把大量业务分支继续加进 `*.test.tsx` 挂载测试。若当前逻辑暂时无法抽 VM，必须在路线图或执行计划记录原因、退出条件和后续迁移点，避免后续 Agent 把临时组件测试当作新规范
+- 如果本地前端全量已经产生 `.lime/test/vitest-smart-last-run.json`，继续验证时先读该状态：上次失败 / running / interrupted / pending 批次未处理前，不得无理由再次执行裸 `npm test` 从第 1 批开始。只有测试收集规则、批次大小、依赖图或目标分支已经改变，才重建状态并说明原因
 
 ### Layer 1：本地统一入口
 
@@ -873,6 +884,9 @@ npm run test:integration
 npm run test:e2e
 npm run test:layers:stats
 npm run test:frontend:all
+npm run test:resume
+npm run test:related -- <files>
+npm run test:changed -- <ref>
 npm run test:rust:unit
 npm run test:rust:integration
 npm run test:rust:e2e

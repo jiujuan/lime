@@ -26,6 +26,12 @@ function isLegacyFinalFallbackEligibility(
   );
 }
 
+function isUnscopedLegacyFinalFallbackEligibility(
+  eligibility: TextSegmentFinalEligibility | null,
+): eligibility is "legacy_unphased" {
+  return eligibility === "legacy_unphased";
+}
+
 export function resolveTextSegmentFinalEligibility(
   event: TextDeltaAgentEvent,
 ): TextSegmentFinalEligibility | null {
@@ -46,6 +52,9 @@ export function shouldRouteTextDeltaToFinalOverlay(params: {
   if (eligibility === "explicit_final") {
     return true;
   }
+  if (isUnscopedLegacyFinalFallbackEligibility(eligibility)) {
+    return true;
+  }
   if (isLegacyFinalFallbackEligibility(eligibility)) {
     return !params.requestState.hasFinalAnswerRequiredProcessBoundary;
   }
@@ -60,7 +69,10 @@ export function shouldSuppressLegacyTextDeltaAfterProcessBoundary(params: {
     return false;
   }
   const eligibility = resolveTextSegmentFinalEligibility(params.event);
-  return isLegacyFinalFallbackEligibility(eligibility);
+  return (
+    isLegacyFinalFallbackEligibility(eligibility) &&
+    !isUnscopedLegacyFinalFallbackEligibility(eligibility)
+  );
 }
 
 export function noteActiveFinalTextSegment(params: {
@@ -85,9 +97,24 @@ export function shouldCommitActiveTextSegmentAsFinal(
       : !requestState.hasFinalAnswerRequiredProcessBoundary;
   }
   if (eligibility === "legacy_unphased") {
-    return !requestState.hasFinalAnswerRequiredProcessBoundary;
+    return (
+      !requestState.hasFinalAnswerRequiredProcessBoundary ||
+      requestState.hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary ===
+        true
+    );
   }
   return !requestState.hasFinalAnswerRequiredProcessBoundary;
+}
+
+export function hasActiveTextSegmentProvenance(
+  requestState: StreamRequestState,
+): boolean {
+  return Boolean(
+    normalizeOptionalText(requestState.activeTextSegmentItemId) ||
+      normalizeOptionalText(requestState.activeTextSegmentPhase) ||
+      normalizeOptionalText(requestState.activeTextSegmentTurnId) ||
+      typeof requestState.activeTextSegmentSequence === "number",
+  );
 }
 
 export function resolveAccumulatedContentBeforeActiveTextSegment(
@@ -103,6 +130,30 @@ export function resolveAccumulatedContentBeforeActiveTextSegment(
     return "";
   }
   return content.slice(0, Math.min(startOffset, content.length));
+}
+
+export function resolveAccumulatedFinalContentForCompletion(
+  requestState: StreamRequestState,
+): string {
+  const content = requestState.accumulatedContent || "";
+  if (
+    !requestState.hasFinalAnswerRequiredProcessBoundary ||
+    requestState.hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary !==
+      true
+  ) {
+    return content;
+  }
+
+  const startOffset = requestState.activeTextSegmentStartOffset;
+  if (
+    typeof startOffset !== "number" ||
+    !Number.isFinite(startOffset) ||
+    startOffset <= 0
+  ) {
+    return content;
+  }
+
+  return content.slice(Math.min(startOffset, content.length));
 }
 
 export function clearActiveTextSegmentState(

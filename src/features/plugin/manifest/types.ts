@@ -10,6 +10,7 @@ export type PluginRendererKind =
   | "host_builtin"
   | "app_declared"
   | "artifact_viewer";
+export type PluginRendererActionRisk = "read" | "write";
 export type PluginConnectorKind =
   | "account"
   | "api"
@@ -122,9 +123,21 @@ export interface PluginArtifactRendererDeclaration {
   surfaceKind: string;
   rendererKind: PluginRendererKind;
   entry?: string;
+  outputArtifactKind?: string;
+  paneKind?: string;
+  actionKeys?: string[];
+  actions?: PluginArtifactRendererActionDeclaration[];
   capabilities?: string[];
   fallbackRendererKind?: string;
   defaultPane?: string;
+}
+
+export interface PluginArtifactRendererActionDeclaration {
+  key: string;
+  intent?: string;
+  risk: PluginRendererActionRisk;
+  taskKind?: string;
+  title?: string;
 }
 
 export interface PluginHistoryRestoreDeclaration {

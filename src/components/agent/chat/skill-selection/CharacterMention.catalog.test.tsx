@@ -12,6 +12,10 @@ import {
   typeMentionAndWait,
 } from "./CharacterMention.testFixtures";
 import { recordServiceSkillUsage } from "@/components/agent/chat/service-skills/storage";
+import type {
+  InputbarPluginCapability,
+  InputbarPluginSkillCapability,
+} from "../components/Inputbar/pluginInputCapability";
 
 describe("CharacterMention mention catalog", () => {
   it("@ 面板中的已安装技能应展示统一的轻量 skill 合同", async () => {
@@ -200,6 +204,47 @@ describe("CharacterMention mention catalog", () => {
     expect(bodyText.indexOf("搜索 / 读取")).toBeLessThan(
       bodyText.indexOf("场景 Skills"),
     );
+  });
+
+  it("输入 @ 查询 Agent App 时，应展示已安装应用并替换当前 mention", async () => {
+    const plugin: InputbarPluginCapability = {
+      pluginId: "content-factory-app",
+      displayName: "内容工厂",
+      description: "从创作需求生成文章、配图、视频分镜和交付检查清单。",
+    };
+    const onSelectPlugin = vi.fn<
+      (
+        selectedPlugin: InputbarPluginCapability,
+        skill?: InputbarPluginSkillCapability,
+        options?: { inputOverride?: string },
+      ) => void
+    >();
+    const onChangeSpy = vi.fn<(value: string) => void>();
+    const container = renderHarness({
+      pluginSuggestions: [plugin],
+      onSelectPlugin,
+      onChangeSpy,
+    });
+    const textarea = getTextarea(container);
+
+    await typeMentionAndWait(textarea, "@内容");
+
+    expect(document.body.textContent).toContain("Agent Apps");
+    expect(document.body.textContent).toContain("内容工厂");
+    expect(document.body.textContent).toContain("从创作需求生成文章");
+    expect(document.body.textContent).not.toContain("暂无可用 @命令");
+
+    const pluginButton = findButtonContaining("内容工厂");
+    expect(pluginButton).toBeTruthy();
+
+    act(() => {
+      pluginButton?.click();
+    });
+
+    expect(onChangeSpy).toHaveBeenCalledWith("@内容工厂 ");
+    expect(onSelectPlugin).toHaveBeenCalledWith(plugin, undefined, {
+      inputOverride: "@内容工厂 ",
+    });
   });
 
   it("最近使用的服务技能应优先显示在独立分组，且不在技能组里重复", async () => {

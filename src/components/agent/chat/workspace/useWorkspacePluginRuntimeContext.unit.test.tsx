@@ -211,6 +211,41 @@ describe("useWorkspacePluginRuntimeContext", () => {
     });
   });
 
+  it("preloadInstalled=true 时无激活 metadata 也应读取已安装应用候选", async () => {
+    const listInstalled = vi.fn(async () => ({
+      states: [createInstalledPluginBackedApp()],
+    }));
+
+    renderHook(
+      {
+        preloadInstalled: true,
+        listInstalled,
+      },
+      (value) => {
+        latestValue = value;
+      },
+    );
+    await flushEffects(8);
+
+    expect(listInstalled).toHaveBeenCalledTimes(1);
+    expect(getLatestValue()).toMatchObject({
+      loading: false,
+      error: null,
+      context: {
+        status: "inactive",
+        activationContext: null,
+        contracts: [expect.objectContaining({ id: "creator-workbench" })],
+        registry: [
+          expect.objectContaining({
+            pluginId: "creator-workbench",
+            activationState: "activatable",
+          }),
+        ],
+        blockerCodes: [],
+      },
+    });
+  });
+
   it("有显式插件激活 metadata 时应读取 installed registry 并输出 active 上下文", async () => {
     const installed = [createInstalledPluginBackedApp()];
     const listInstalled = vi.fn(async () => ({ states: installed }));

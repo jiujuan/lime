@@ -35,6 +35,8 @@ pub struct AgentSessionOverview {
     pub thread_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub business_object_ref_metadata: Option<serde_json::Value>,
     pub model: String,
     pub created_at: String,
     pub updated_at: String,

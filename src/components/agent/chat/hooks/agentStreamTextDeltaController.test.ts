@@ -24,7 +24,10 @@ describe("agentStreamTextDeltaController", () => {
         eventName: "event-a",
         firstEventDeltaMs: 100,
         firstRuntimeStatusDeltaMs: 60,
+        rendererEventReceivedDeltaMs: null,
         sessionId: "session-a",
+        serverEventDeltaMs: null,
+        serverToRendererDeltaMs: null,
       },
       nextAccumulatedContent: "你好",
       nextBufferedCount: 1,
@@ -86,6 +89,26 @@ describe("agentStreamTextDeltaController", () => {
       }),
       nextAccumulatedContent: "快照正文",
       nextBufferedCount: 1,
+    });
+  });
+
+  it("首个 text delta 指标应拆出 server 到 renderer 与 renderer apply 分段", () => {
+    expect(
+      buildAgentStreamTextDeltaApplyPlan({
+        activeSessionId: "session-a",
+        accumulatedContent: "",
+        deltaText: "好",
+        eventName: "event-a",
+        firstTextDeltaAt: null,
+        now: 180,
+        rendererEventReceivedAt: 150,
+        requestStartedAt: 100,
+        serverEventEmittedAt: 120,
+      }).firstTextDeltaContext,
+    ).toMatchObject({
+      rendererEventReceivedDeltaMs: 30,
+      serverEventDeltaMs: 60,
+      serverToRendererDeltaMs: 30,
     });
   });
 });

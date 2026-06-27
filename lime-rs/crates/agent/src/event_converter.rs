@@ -21,7 +21,8 @@ pub use crate::protocol::{
     AgentArtifactSignal as TauriArtifactSnapshot, AgentContextBudget as TauriContextBudget,
     AgentContextTraceStep as TauriContextTraceStep, AgentEvent as TauriAgentEvent,
     AgentMessage as TauriMessage, AgentMessageContent as TauriMessageContent,
-    AgentMissingContextFact as TauriMissingContextFact, AgentRetrievalRef as TauriRetrievalRef,
+    AgentMissingContextFact as TauriMissingContextFact,
+    AgentProviderTraceStage as TauriProviderTraceStage, AgentRetrievalRef as TauriRetrievalRef,
     AgentRuntimeStatus as TauriRuntimeStatus, AgentTeamMemoryRef as TauriTeamMemoryRef,
     AgentTokenUsage as TauriTokenUsage, AgentToolImage as TauriToolImage,
     AgentToolProgressPayload as TauriToolProgressPayload, AgentToolResult as TauriToolResult,
@@ -45,6 +46,39 @@ const TOOL_RESULT_DIAG_WARN_JSON_BYTES: usize = 64 * 1024;
 const TOOL_RESULT_DIAG_WARN_OUTPUT_CHARS: usize = 4_000;
 const TOOL_RESULT_DIAG_WARN_IMAGE_COUNT: usize = 4;
 const ASK_USER_QUESTIONS_SCHEMA_KEY: &str = "x-lime-ask-user-questions";
+const MCP_LOG_PROCESS_METADATA_KEYS: &[&str] = &[
+    "processId",
+    "process_id",
+    "toolId",
+    "tool_id",
+    "toolName",
+    "tool_name",
+    "executionProcessStatus",
+    "execution_process_status",
+    "executionProcessControlStatus",
+    "execution_process_control_status",
+    "stdinWritable",
+    "stdin_writable",
+    "executionSurface",
+    "execution_surface",
+    "outputSequence",
+    "output_sequence",
+    "outputKind",
+    "output_kind",
+    "outputBytes",
+    "output_bytes",
+    "outputOmittedBytes",
+    "output_omitted_bytes",
+    "outputTruncated",
+    "output_truncated",
+    "exit_code",
+    "elapsedMs",
+    "elapsed_ms",
+    "command",
+    "cwd",
+    "failure",
+    "phase",
+];
 
 fn enhance_execution_error_text(raw: &str) -> String {
     if !raw.contains("Execution error: No such file or directory (os error 2)") {
@@ -115,6 +149,21 @@ fn value_to_notification_text(value: &serde_json::Value) -> String {
     if let Some(text) = value.as_str() {
         return truncate_notification_text(text);
     }
+    if let Some(object) = value.as_object() {
+        for key in ["delta", "text", "message", "output"] {
+            if let Some(text) = object.get(key).and_then(serde_json::Value::as_str) {
+                if !text.trim().is_empty() {
+                    return truncate_notification_text(text);
+                }
+            }
+        }
+        if MCP_LOG_PROCESS_METADATA_KEYS
+            .iter()
+            .any(|key| object.contains_key(*key))
+        {
+            return String::new();
+        }
+    }
 
     truncate_notification_text(serde_json::to_string(value).unwrap_or_else(|_| value.to_string()))
 }
@@ -138,6 +187,20 @@ fn maybe_text_from_custom_notification_params(
     }
 
     None
+}
+
+fn merge_mcp_log_process_metadata(
+    metadata: &mut HashMap<String, serde_json::Value>,
+    data: &serde_json::Value,
+) {
+    let Some(object) = data.as_object() else {
+        return;
+    };
+    for key in MCP_LOG_PROCESS_METADATA_KEYS {
+        if let Some(value) = object.get(*key) {
+            metadata.insert((*key).to_string(), value.clone());
+        }
+    }
 }
 
 fn convert_mcp_notification(
@@ -174,6 +237,7 @@ fn convert_mcp_notification(
             if let Some(logger) = notification.params.logger {
                 metadata.insert("logger".to_string(), serde_json::Value::String(logger));
             }
+            merge_mcp_log_process_metadata(&mut metadata, &notification.params.data);
 
             vec![TauriAgentEvent::ToolOutputDelta {
                 tool_id,
@@ -1187,6 +1251,21 @@ pub fn convert_agent_event(event: AgentEvent) -> Vec<TauriAgentEvent> {
         AgentEvent::ModelChange { model, mode } => {
             vec![TauriAgentEvent::ModelChange { model, mode }]
         }
+        AgentEvent::ProviderTrace { event } => vec![TauriAgentEvent::ProviderTrace {
+            stage: convert_provider_trace_stage(event.stage),
+            provider: event.provider,
+            model: event.model,
+            attempt: event.attempt,
+            elapsed_ms: event.elapsed_ms,
+            text_chars: event.text_chars,
+            status: event.status.to_string(),
+            failure_category: event.failure_category,
+            retryable: event.retryable,
+            non_retryable_provider_rejection: event.non_retryable_provider_rejection,
+            cancel_reason: event.cancel_reason,
+            provider_request_id: event.provider_request_id,
+            provider_request_id_header: event.provider_request_id_header,
+        }],
         AgentEvent::HistoryReplaced(_conversation) => vec![],
         AgentEvent::ContextTrace { steps } => vec![TauriAgentEvent::ContextTrace {
             steps: steps
@@ -1219,6 +1298,24 @@ pub fn convert_agent_event(event: AgentEvent) -> Vec<TauriAgentEvent> {
             code: Some("context_compaction_accuracy".to_string()),
             message,
         }],
+    }
+}
+
+fn convert_provider_trace_stage(
+    stage: aster::agents::ProviderTraceStage,
+) -> TauriProviderTraceStage {
+    match stage {
+        aster::agents::ProviderTraceStage::RequestStarted => {
+            TauriProviderTraceStage::RequestStarted
+        }
+        aster::agents::ProviderTraceStage::FirstEventReceived => {
+            TauriProviderTraceStage::FirstEventReceived
+        }
+        aster::agents::ProviderTraceStage::FirstTextDeltaReceived => {
+            TauriProviderTraceStage::FirstTextDeltaReceived
+        }
+        aster::agents::ProviderTraceStage::Failed => TauriProviderTraceStage::Failed,
+        aster::agents::ProviderTraceStage::Canceled => TauriProviderTraceStage::Canceled,
     }
 }
 
@@ -2009,7 +2106,14 @@ mod tests {
                     level: LoggingLevel::Info,
                     logger: Some("runner".to_string()),
                     data: serde_json::json!({
-                        "message": "已生成一段工具输出"
+                        "message": "已生成一段工具输出",
+                        "processId": "process-tool-1",
+                        "executionProcessStatus": "running",
+                        "executionProcessControlStatus": "registered",
+                        "executionSurface": "live_process",
+                        "stdinWritable": true,
+                        "outputSequence": 3,
+                        "outputKind": "stdout"
                     }),
                 },
                 extensions: Default::default(),
@@ -2033,6 +2137,90 @@ mod tests {
                         .and_then(|metadata| metadata.get("notification_kind"))
                         .and_then(serde_json::Value::as_str),
                     Some("mcp_log")
+                );
+                assert_eq!(
+                    metadata
+                        .as_ref()
+                        .and_then(|metadata| metadata.get("processId"))
+                        .and_then(serde_json::Value::as_str),
+                    Some("process-tool-1")
+                );
+                assert_eq!(
+                    metadata
+                        .as_ref()
+                        .and_then(|metadata| metadata.get("executionProcessStatus"))
+                        .and_then(serde_json::Value::as_str),
+                    Some("running")
+                );
+                assert_eq!(
+                    metadata
+                        .as_ref()
+                        .and_then(|metadata| metadata.get("executionProcessControlStatus"))
+                        .and_then(serde_json::Value::as_str),
+                    Some("registered")
+                );
+                assert_eq!(
+                    metadata
+                        .as_ref()
+                        .and_then(|metadata| metadata.get("stdinWritable"))
+                        .and_then(serde_json::Value::as_bool),
+                    Some(true)
+                );
+                assert_eq!(
+                    metadata
+                        .as_ref()
+                        .and_then(|metadata| metadata.get("outputSequence"))
+                        .and_then(serde_json::Value::as_u64),
+                    Some(3)
+                );
+            }
+            other => panic!("Expected ToolOutputDelta event, got {other:?}"),
+        }
+
+        let lifecycle_events = convert_agent_event(AgentEvent::McpNotification((
+            "tool-1".to_string(),
+            ServerNotification::LoggingMessageNotification(LoggingMessageNotification {
+                method: LoggingMessageNotificationMethod,
+                params: LoggingMessageNotificationParam {
+                    level: LoggingLevel::Info,
+                    logger: Some("runner".to_string()),
+                    data: serde_json::json!({
+                        "message": "",
+                        "delta": "",
+                        "processId": "process-tool-1",
+                        "executionProcessStatus": "started",
+                        "executionProcessControlStatus": "registered",
+                        "executionSurface": "live_process",
+                        "stdinWritable": true,
+                        "phase": "started"
+                    }),
+                },
+                extensions: Default::default(),
+            }),
+        )));
+
+        assert_eq!(lifecycle_events.len(), 1);
+        match &lifecycle_events[0] {
+            TauriAgentEvent::ToolOutputDelta {
+                delta, metadata, ..
+            } => {
+                assert!(
+                    delta.is_empty(),
+                    "metadata-only process lifecycle logs should not render JSON as output"
+                );
+                assert_eq!(
+                    metadata
+                        .as_ref()
+                        .and_then(|metadata| metadata.get("phase"))
+                        .and_then(serde_json::Value::as_str),
+                    Some("started")
+                );
+                assert_eq!(
+                    metadata
+                        .as_ref()
+                        .and_then(|metadata| metadata.get("stdinWritable"))
+                        .and_then(serde_json::Value::as_bool),
+                    Some(true)
                 );
             }
             other => panic!("Expected ToolOutputDelta event, got {other:?}"),

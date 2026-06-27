@@ -26,7 +26,9 @@ use crate::tools::{ToolRegistry, VIEW_IMAGE_TOOL_NAME};
 use crate::agents::code_execution_extension::EXTENSION_NAME as CODE_EXECUTION_EXTENSION;
 use crate::agents::subagent_tool::AGENT_TOOL_NAME;
 use crate::agents::tool_argument_coercion::coerce_tool_arguments;
-use crate::session::{apply_session_update, query_session, SessionStore, TokenStatsUpdate};
+use crate::session::{
+    apply_session_update, query_session, SessionStore, TokenStatsUpdate, TurnContextOverride,
+};
 #[cfg(test)]
 use crate::session::{SessionManager, SessionType};
 use rmcp::model::{CallToolRequestParam, Content, Tool};
@@ -120,6 +122,43 @@ fn filter_tools_for_image_input_support(
     tools
 }
 
+fn first_text_delta_chars(message: &Message) -> Option<usize> {
+    message.content.iter().find_map(|content| {
+        let MessageContent::Text(text) = content else {
+            return None;
+        };
+        let trimmed = text.text.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.chars().count())
+        }
+    })
+}
+
+fn trace_first_provider_text_delta(
+    seen: &mut bool,
+    provider_name: &str,
+    model_name: &str,
+    started_at: &Instant,
+    message: &Message,
+) {
+    if *seen {
+        return;
+    }
+    let Some(chars) = first_text_delta_chars(message) else {
+        return;
+    };
+    *seen = true;
+    tracing::info!(
+        "[AsterAgent][TTFT] first provider text delta decoded: provider={}, model={}, elapsed_ms={}, chars={}",
+        provider_name,
+        model_name,
+        started_at.elapsed().as_millis(),
+        chars
+    );
+}
+
 fn strip_images_for_text_only_provider(messages: &[Message]) -> Conversation {
     let mut removed_total = 0usize;
     let stripped_messages = messages
@@ -185,6 +224,19 @@ fn resolve_turn_tool_surface_mode() -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string)
+}
+
+pub(super) fn turn_context_tool_surface_direct_answer(
+    turn_context: Option<&TurnContextOverride>,
+) -> bool {
+    matches!(
+        turn_context
+            .and_then(|context| context.metadata.get(LIME_RUNTIME_METADATA_KEY))
+            .and_then(|value| value.get(LIME_RUNTIME_TOOL_SURFACE_KEY))
+            .and_then(Value::as_str)
+            .map(str::trim),
+        Some(TURN_TOOL_SURFACE_DIRECT_ANSWER)
+    )
 }
 
 fn is_local_workspace_tool(tool_name: &str) -> bool {
@@ -299,6 +351,10 @@ fn should_strip_extension_prompt_context(tool_surface_mode: Option<&str>) -> boo
         tool_surface_mode,
         Some(TURN_TOOL_SURFACE_DIRECT_ANSWER | TURN_TOOL_SURFACE_LOCAL_WORKSPACE)
     )
+}
+
+fn should_load_workspace_hints(tool_surface_mode: Option<&str>) -> bool {
+    !matches!(tool_surface_mode, Some(TURN_TOOL_SURFACE_DIRECT_ANSWER))
 }
 
 fn turn_surface_prompt_guidance(tool_surface_mode: Option<&str>) -> Option<&'static str> {
@@ -851,20 +907,33 @@ impl Agent {
         model_config: &ModelConfig,
     ) -> Result<(Vec<Tool>, Vec<Tool>, String)> {
         let started_at = Instant::now();
-        // Get tools from extension manager
-        let mut tools = self.list_tools(None).await;
-
-        // Add frontend tools
-        let frontend_tools = self.frontend_tools.lock().await;
-        for frontend_tool in frontend_tools.values() {
-            tools.push(frontend_tool.tool.clone());
-        }
-
         let turn_tool_surface_mode = resolve_turn_tool_surface_mode();
-        let code_execution_active = self
-            .extension_manager
-            .is_extension_enabled(CODE_EXECUTION_EXTENSION)
-            .await;
+        let direct_answer_surface = matches!(
+            turn_tool_surface_mode.as_deref(),
+            Some(TURN_TOOL_SURFACE_DIRECT_ANSWER)
+        );
+
+        let mut tools = if direct_answer_surface {
+            Vec::new()
+        } else {
+            // Get tools from extension manager
+            let mut tools = self.list_tools(None).await;
+
+            // Add frontend tools
+            let frontend_tools = self.frontend_tools.lock().await;
+            for frontend_tool in frontend_tools.values() {
+                tools.push(frontend_tool.tool.clone());
+            }
+            tools
+        };
+
+        let code_execution_active = if direct_answer_surface {
+            false
+        } else {
+            self.extension_manager
+                .is_extension_enabled(CODE_EXECUTION_EXTENSION)
+                .await
+        };
         if code_execution_active && turn_tool_surface_mode.is_none() {
             let code_exec_prefix = format!("{CODE_EXECUTION_EXTENSION}__");
             tools.retain(|tool| tool.name.starts_with(&code_exec_prefix));
@@ -877,29 +946,33 @@ impl Agent {
             &turn_allowed_tools,
         );
         tools = filter_tools_for_turn_scope(tools, &turn_allowed_tools, &turn_disallowed_tools);
-        let provider_name = self
-            .provider()
-            .await
-            .ok()
-            .map(|provider| provider.get_name().to_string());
-        let model_supports_image_input = provider_name
-            .as_deref()
-            .and_then(|name| model_config_supports_image_input(name, model_config));
-        tools = filter_tools_for_image_input_support(tools, model_supports_image_input);
+        if !tools.is_empty() {
+            let provider_name = self
+                .provider()
+                .await
+                .ok()
+                .map(|provider| provider.get_name().to_string());
+            let model_supports_image_input = provider_name
+                .as_deref()
+                .and_then(|name| model_config_supports_image_input(name, model_config));
+            tools = filter_tools_for_image_input_support(tools, model_supports_image_input);
+        }
         let subagents_enabled = tools.iter().any(|tool| tool.name == AGENT_TOOL_NAME);
 
         // Stable tool ordering is important for multi session prompt caching.
         tools.sort_by(|a, b| a.name.cmp(&b.name));
 
         // Prepare system prompt
-        let mut extensions_info = self.extension_manager.get_extensions_info().await;
-        let (mut extension_count, mut tool_count) =
-            self.extension_manager.get_extension_and_tool_counts().await;
-        if should_strip_extension_prompt_context(turn_tool_surface_mode.as_deref()) {
-            extensions_info.clear();
-            extension_count = 0;
-            tool_count = tools.len();
-        }
+        let strip_extension_prompt_context =
+            should_strip_extension_prompt_context(turn_tool_surface_mode.as_deref());
+        let (extensions_info, extension_count, tool_count) = if strip_extension_prompt_context {
+            (Vec::new(), 0, tools.len())
+        } else {
+            let extensions_info = self.extension_manager.get_extensions_info().await;
+            let (extension_count, tool_count) =
+                self.extension_manager.get_extension_and_tool_counts().await;
+            (extensions_info, extension_count, tool_count)
+        };
 
         let final_output_instruction = self
             .final_output_tool
@@ -907,20 +980,28 @@ impl Agent {
             .await
             .as_ref()
             .map(|tool| tool.system_prompt());
+        let frontend_instructions = if direct_answer_surface {
+            None
+        } else {
+            self.frontend_instructions.lock().await.clone()
+        };
 
         let prompt_manager = self.prompt_manager.lock().await;
-        let mut system_prompt = prompt_manager
+        let mut prompt_builder = prompt_manager
             .builder()
             .with_extensions(extensions_info.into_iter())
-            .with_frontend_instructions(self.frontend_instructions.lock().await.clone())
+            .with_frontend_instructions(frontend_instructions)
             .with_additional_instruction(final_output_instruction)
             .with_extension_and_tool_counts(extension_count, tool_count)
             .with_code_execution_mode(code_execution_active)
-            .with_hints(working_dir)
             .with_enable_subagents(subagents_enabled)
             .with_session_prompt(session_prompt.map(|s| s.to_string()))
             .with_session_prompt_override(session_prompt_override)
-            .build();
+            .with_capabilities_layer(!direct_answer_surface);
+        if should_load_workspace_hints(turn_tool_surface_mode.as_deref()) {
+            prompt_builder = prompt_builder.with_hints(working_dir);
+        }
+        let mut system_prompt = prompt_builder.build();
         if let Some(guidance) = turn_surface_prompt_guidance(turn_tool_surface_mode.as_deref()) {
             system_prompt.push_str("\n\n");
             system_prompt.push_str(guidance);
@@ -979,6 +1060,10 @@ impl Agent {
         let toolshim_tools = toolshim_tools.to_owned();
         let provider = provider.clone();
         let turn_tool_surface_mode = resolve_turn_tool_surface_mode();
+        let direct_answer_surface = matches!(
+            turn_tool_surface_mode.as_deref(),
+            Some(TURN_TOOL_SURFACE_DIRECT_ANSWER)
+        );
 
         // Capture errors during stream creation and return them as part of the stream
         // so they can be handled by the existing error handling logic in the agent
@@ -1078,6 +1163,7 @@ impl Agent {
 
         Ok(Box::pin(try_stream! {
             let mut first_provider_content_seen = false;
+            let mut first_provider_text_delta_seen = false;
             let mut plaintext_tool_use_normalizer = PlaintextToolUseStreamNormalizer::default();
             while let Some(next) = stream.next().await {
                 let (mut message, usage) = match next {
@@ -1134,17 +1220,46 @@ impl Agent {
                 }
                 if let Some(response) = message.take() {
                     let mut usage_to_emit = usage;
+                    if direct_answer_surface {
+                        trace_first_provider_text_delta(
+                            &mut first_provider_text_delta_seen,
+                            provider.get_name(),
+                            &model_config.model_name,
+                            &started_at,
+                            &response,
+                        );
+                        yield (Some(response), usage_to_emit.take());
+                        if usage_to_emit.is_some() {
+                            yield (None, usage_to_emit);
+                        }
+                        continue;
+                    }
                     let normalized_messages = plaintext_tool_use_normalizer.process(response);
                     let mut emitted_message = false;
                     for normalized_message in normalized_messages {
+                        trace_first_provider_text_delta(
+                            &mut first_provider_text_delta_seen,
+                            provider.get_name(),
+                            &model_config.model_name,
+                            &started_at,
+                            &normalized_message,
+                        );
                         emitted_message = true;
                         yield (Some(normalized_message), usage_to_emit.take());
                     }
                     if usage_to_emit.is_some() {
                         if let Some(pending_message) = plaintext_tool_use_normalizer.finish() {
+                            let pending_message = normalize_plaintext_tool_use_message(pending_message);
+                            trace_first_provider_text_delta(
+                                &mut first_provider_text_delta_seen,
+                                provider.get_name(),
+                                &model_config.model_name,
+                                &started_at,
+                                &pending_message,
+                            );
                             emitted_message = true;
                             yield (
-                                Some(normalize_plaintext_tool_use_message(pending_message)),
+                                Some(pending_message),
                                 usage_to_emit.take(),
                             );
                         }
@@ -1158,7 +1273,15 @@ impl Agent {
                 yield (message, usage);
             }
             if let Some(pending_message) = plaintext_tool_use_normalizer.finish() {
-                yield (Some(normalize_plaintext_tool_use_message(pending_message)), None);
+                let pending_message = normalize_plaintext_tool_use_message(pending_message);
+                trace_first_provider_text_delta(
+                    &mut first_provider_text_delta_seen,
+                    provider.get_name(),
+                    &model_config.model_name,
+                    &started_at,
+                    &pending_message,
+                );
+                yield (Some(pending_message), None);
             }
         }))
     }
@@ -1366,6 +1489,7 @@ mod tests {
     use super::*;
     use crate::agents::mcp_client::{Error as McpClientError, McpClientTrait};
     use crate::conversation::message::{Message, MessageContent, ToolRequest};
+    use crate::hints::load_hints::AGENTS_MD_FILENAME;
     use crate::model::ModelConfig;
     use crate::providers::base::{Provider, ProviderUsage, Usage};
     use crate::providers::errors::ProviderError;
@@ -1383,11 +1507,34 @@ mod tests {
     use rmcp::object;
     use serde_json::json;
     use std::collections::HashMap;
+    use std::fs;
     use std::path::PathBuf;
     use tokio::sync::{mpsc, Mutex};
     use tokio_util::sync::CancellationToken;
 
     const MCP_CONTEXT_SENTINEL: &str = "MCP_CONTEXT_SENTINEL_SHOULD_STAY";
+
+    #[test]
+    fn first_text_delta_chars_returns_first_non_empty_text_delta() {
+        let message = Message::assistant()
+            .with_thinking("先分析。", "")
+            .with_text("  ")
+            .with_text("首段正文");
+
+        assert_eq!(first_text_delta_chars(&message), Some(4));
+    }
+
+    #[test]
+    fn first_text_delta_chars_ignores_non_text_and_empty_text() {
+        assert_eq!(
+            first_text_delta_chars(&Message::assistant().with_thinking("先分析。", "")),
+            None
+        );
+        assert_eq!(
+            first_text_delta_chars(&Message::assistant().with_text(" \n\t")),
+            None
+        );
+    }
 
     #[test]
     fn normalize_plaintext_tool_use_message_extracts_claude_code_xml_blocks() {
@@ -1659,6 +1806,63 @@ mod tests {
                 Message::assistant().with_text("ok"),
                 ProviderUsage::new(model_config.model_name.clone(), Usage::default()),
             ))
+        }
+    }
+
+    #[derive(Clone)]
+    struct StreamingTextProvider {
+        model_config: ModelConfig,
+        chunks: Vec<String>,
+    }
+
+    #[async_trait]
+    impl Provider for StreamingTextProvider {
+        fn metadata() -> crate::providers::base::ProviderMetadata {
+            crate::providers::base::ProviderMetadata::empty()
+        }
+
+        fn get_name(&self) -> &str {
+            "streaming-text"
+        }
+
+        fn get_model_config(&self) -> ModelConfig {
+            self.model_config.clone()
+        }
+
+        async fn complete_with_model(
+            &self,
+            model_config: &ModelConfig,
+            _system: &str,
+            _messages: &[Message],
+            _tools: &[Tool],
+        ) -> anyhow::Result<(Message, ProviderUsage), ProviderError> {
+            Ok((
+                Message::assistant().with_text(self.chunks.join("")),
+                ProviderUsage::new(model_config.model_name.clone(), Usage::default()),
+            ))
+        }
+
+        fn supports_streaming(&self) -> bool {
+            true
+        }
+
+        async fn stream_with_model(
+            &self,
+            model_config: &ModelConfig,
+            _system: &str,
+            _messages: &[Message],
+            _tools: &[Tool],
+        ) -> Result<MessageStream, ProviderError> {
+            let model = model_config.model_name.clone();
+            let chunks = self.chunks.clone();
+            Ok(Box::pin(futures::stream::iter(chunks.into_iter().map(
+                move |chunk| {
+                    Ok((
+                        Some(Message::assistant().with_text(chunk)),
+                        Some(ProviderUsage::new(model.clone(), Usage::default())),
+                    ))
+                },
+            ))))
         }
     }
 
@@ -2150,16 +2354,32 @@ mod tests {
             observed_models: None,
         });
         agent.update_provider(provider, &session.id).await?;
+        let frontend_marker = "DIRECT_ANSWER_SHOULD_NOT_LOAD_FRONTEND_INSTRUCTIONS";
+        agent
+            .add_extension(crate::agents::extension::ExtensionConfig::Frontend {
+                name: "frontend".to_string(),
+                description: "desc".to_string(),
+                tools: vec![],
+                instructions: Some(frontend_marker.to_string()),
+                bundled: None,
+                available_tools: vec![],
+                deferred_loading: false,
+                always_expose_tools: vec![],
+                allowed_caller: None,
+            })
+            .await?;
 
-        let working_dir = std::env::current_dir()?;
-        let (tools, _toolshim_tools, _system_prompt) = crate::session_context::with_turn_context(
+        let working_dir = tempfile::TempDir::new()?;
+        let hints_marker = "DIRECT_ANSWER_SHOULD_NOT_LOAD_PROJECT_HINTS";
+        fs::write(working_dir.path().join(AGENTS_MD_FILENAME), hints_marker)?;
+        let (tools, _toolshim_tools, system_prompt) = crate::session_context::with_turn_context(
             Some(build_turn_context_with_tool_surface(
                 TURN_TOOL_SURFACE_DIRECT_ANSWER,
             )),
             async {
                 agent
                     .prepare_tools_and_prompt(
-                        &working_dir,
+                        working_dir.path(),
                         None,
                         false,
                         &ModelConfig::new("test-model").unwrap(),
@@ -2170,6 +2390,130 @@ mod tests {
         .await?;
 
         assert!(tools.is_empty());
+        assert!(
+            !system_prompt.contains(hints_marker),
+            "direct_answer 不应在首包前读取 workspace hints"
+        );
+        assert!(
+            !system_prompt.contains(frontend_marker),
+            "direct_answer 空工具面不应在首包前拼接 frontend tool instructions"
+        );
+        assert!(system_prompt.contains("general-purpose AI agent"));
+        assert!(system_prompt.contains(DIRECT_ANSWER_TURN_GUIDANCE));
+        assert!(
+            !system_prompt.contains("# Extensions"),
+            "direct_answer 首包前不应渲染默认 capabilities 大模板"
+        );
+        assert!(
+            !system_prompt.contains("No extensions are defined."),
+            "direct_answer 首包前不应携带空 extension 提示"
+        );
+        assert!(
+            system_prompt.chars().count() < 700,
+            "direct_answer system prompt 应保持轻量，实际 chars={}",
+            system_prompt.chars().count()
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn prepare_tools_and_prompt_keeps_session_prompt_but_skips_capabilities_for_direct_answer(
+    ) -> anyhow::Result<()> {
+        let agent = crate::agents::Agent::new();
+
+        let session = SessionManager::create_session(
+            std::path::PathBuf::default(),
+            "test-direct-answer-session-prompt".to_string(),
+            SessionType::Hidden,
+        )
+        .await?;
+
+        let model_config = ModelConfig::new("test-model").unwrap();
+        let provider = std::sync::Arc::new(MockProvider {
+            model_config,
+            observed_models: None,
+        });
+        agent.update_provider(provider, &session.id).await?;
+        let working_dir = tempfile::TempDir::new()?;
+        let (tools, _toolshim_tools, system_prompt) = crate::session_context::with_turn_context(
+            Some(build_turn_context_with_tool_surface(
+                TURN_TOOL_SURFACE_DIRECT_ANSWER,
+            )),
+            async {
+                agent
+                    .prepare_tools_and_prompt(
+                        working_dir.path(),
+                        Some("Lime session prompt should stay."),
+                        false,
+                        &ModelConfig::new("test-model").unwrap(),
+                    )
+                    .await
+            },
+        )
+        .await?;
+
+        assert!(tools.is_empty());
+        assert!(system_prompt.contains("## Session Context"));
+        assert!(system_prompt.contains("Lime session prompt should stay."));
+        assert!(system_prompt.contains(DIRECT_ANSWER_TURN_GUIDANCE));
+        assert!(!system_prompt.contains("# Extensions"));
+        assert!(!system_prompt.contains("Response Guidelines"));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn prepare_tools_and_prompt_keeps_workspace_hints_for_regular_turns() -> anyhow::Result<()>
+    {
+        let agent = crate::agents::Agent::new();
+
+        let session = SessionManager::create_session(
+            std::path::PathBuf::default(),
+            "test-regular-turn-workspace-hints".to_string(),
+            SessionType::Hidden,
+        )
+        .await?;
+
+        let model_config = ModelConfig::new("test-model").unwrap();
+        let provider = std::sync::Arc::new(MockProvider {
+            model_config,
+            observed_models: None,
+        });
+        agent.update_provider(provider, &session.id).await?;
+        let frontend_marker = "REGULAR_TURN_SHOULD_LOAD_FRONTEND_INSTRUCTIONS";
+        agent
+            .add_extension(crate::agents::extension::ExtensionConfig::Frontend {
+                name: "frontend".to_string(),
+                description: "desc".to_string(),
+                tools: vec![],
+                instructions: Some(frontend_marker.to_string()),
+                bundled: None,
+                available_tools: vec![],
+                deferred_loading: false,
+                always_expose_tools: vec![],
+                allowed_caller: None,
+            })
+            .await?;
+
+        let working_dir = tempfile::TempDir::new()?;
+        let hints_marker = "REGULAR_TURN_SHOULD_LOAD_PROJECT_HINTS";
+        fs::write(working_dir.path().join(AGENTS_MD_FILENAME), hints_marker)?;
+        let (_tools, _toolshim_tools, system_prompt) = agent
+            .prepare_tools_and_prompt(
+                working_dir.path(),
+                None,
+                false,
+                &ModelConfig::new("test-model").unwrap(),
+            )
+            .await?;
+
+        assert!(
+            system_prompt.contains(hints_marker),
+            "普通回合仍应加载 workspace hints"
+        );
+        assert!(
+            system_prompt.contains(frontend_marker),
+            "普通回合仍应保留 frontend tool instructions"
+        );
         Ok(())
     }
 
@@ -2627,6 +2971,62 @@ mod tests {
                 .as_slice(),
             ["override-model"]
         );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn stream_response_from_provider_bypasses_plaintext_tool_use_for_direct_answer(
+    ) -> anyhow::Result<()> {
+        let provider = std::sync::Arc::new(StreamingTextProvider {
+            model_config: ModelConfig::new("fast-chat").unwrap(),
+            chunks: vec![
+                "<tool_use name=\"mcp__system__shell\">".to_string(),
+                "{\"command\":\"pwd\"}</tool_use>".to_string(),
+            ],
+        });
+        let messages = vec![Message::user().with_text("只回答一个字：好")];
+
+        let mut stream = crate::session_context::with_turn_context(
+            Some(build_turn_context_with_tool_surface(
+                TURN_TOOL_SURFACE_DIRECT_ANSWER,
+            )),
+            async {
+                Agent::stream_response_from_provider(
+                    provider,
+                    &ModelConfig::new("fast-chat").unwrap(),
+                    "",
+                    &messages,
+                    &[],
+                    &[],
+                )
+                .await
+            },
+        )
+        .await?;
+
+        let first = stream
+            .next()
+            .await
+            .expect("first chunk")?
+            .0
+            .expect("message");
+        let second = stream
+            .next()
+            .await
+            .expect("second chunk")?
+            .0
+            .expect("message");
+
+        assert_eq!(
+            first.as_concat_text(),
+            "<tool_use name=\"mcp__system__shell\">"
+        );
+        assert_eq!(second.as_concat_text(), "{\"command\":\"pwd\"}</tool_use>");
+        assert!(first
+            .content
+            .iter()
+            .chain(second.content.iter())
+            .all(|content| matches!(content, MessageContent::Text(_))));
         Ok(())
     }
 

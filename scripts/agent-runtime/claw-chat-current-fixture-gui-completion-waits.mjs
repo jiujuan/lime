@@ -7,7 +7,11 @@ import {
   SKILLS_RUNTIME_SCENARIO,
 } from "./claw-chat-current-fixture-constants.mjs";
 import { evaluatePageSnapshot } from "./claw-chat-current-fixture-rpc.mjs";
-import { assert, sanitizeJson, sleep } from "./claw-chat-current-fixture-utils.mjs";
+import {
+  assert,
+  sanitizeJson,
+  sleep,
+} from "./claw-chat-current-fixture-utils.mjs";
 
 export function countTextOccurrences(text, needle) {
   if (!text || !needle) {
@@ -48,6 +52,24 @@ export async function waitForGuiChatCompleted(
       }) => {
         const text = document.body?.innerText || "";
         const mainText = document.querySelector("main")?.innerText || text;
+        const turnGroups = Array.from(
+          document.querySelectorAll('[data-testid="message-turn-group"]'),
+        );
+        const scopedTurnGroup =
+          [...turnGroups]
+            .reverse()
+            .find((group) => (group.innerText || "").includes(prompt)) ?? null;
+        const scopedText = scopedTurnGroup?.innerText || mainText;
+        const assistantBubbles = Array.from(
+          (
+            scopedTurnGroup ||
+            document.querySelector('[data-testid="message-list-column"]') ||
+            document
+          ).querySelectorAll('[data-message-role="assistant"]'),
+        );
+        const assistantScope =
+          assistantBubbles[assistantBubbles.length - 1] ?? scopedTurnGroup;
+        const assistantScopeText = assistantScope?.innerText || scopedText;
         const textarea = document.querySelector(
           'textarea[name="agent-chat-message"]',
         );
@@ -80,12 +102,12 @@ export async function waitForGuiChatCompleted(
         });
         return {
           url: window.location.href,
-          hasPrompt: text.includes(prompt),
-          hasAssistantSummary: text.includes(summaryText),
+          hasPrompt: scopedText.includes(prompt),
+          hasAssistantSummary: assistantScopeText.includes(summaryText),
           requiredVisibleTextHits: requiredAssistantVisibleTexts.map(
             (requiredText) => ({
               text: requiredText,
-              occurrences: mainText.split(requiredText).length - 1,
+              occurrences: assistantScopeText.split(requiredText).length - 1,
             }),
           ),
           summaryOccurrences: text.split(summaryText).length - 1,
@@ -97,10 +119,35 @@ export async function waitForGuiChatCompleted(
           disallowedVisibleTextHits: disallowedVisibleTexts.map(
             (guardText) => ({
               text: guardText,
-              occurrences: mainText.split(guardText).length - 1,
+              occurrences: assistantScopeText.split(guardText).length - 1,
             }),
           ),
-          hasDoneText: text.includes(doneText),
+          scopedSummaryOccurrences: scopedText.split(summaryText).length - 1,
+          assistantScopeSummaryOccurrences:
+            assistantScopeText.split(summaryText).length - 1,
+          scopedDedupeGuardHits: dedupeGuardTexts.map((guardText) => ({
+            text: guardText,
+            occurrences: scopedText.split(guardText).length - 1,
+          })),
+          assistantScopeDedupeGuardHits: dedupeGuardTexts.map((guardText) => ({
+            text: guardText,
+            occurrences: assistantScopeText.split(guardText).length - 1,
+          })),
+          completionScope: {
+            foundTurnGroup: Boolean(scopedTurnGroup),
+            runtimeTurnId:
+              scopedTurnGroup?.getAttribute("data-runtime-turn-id") || "",
+            lastAssistantMessageId:
+              scopedTurnGroup?.getAttribute("data-last-assistant-message-id") ||
+              "",
+            assistantMessageId:
+              assistantScope?.getAttribute("data-message-id") || "",
+            assistantRuntimeTurnId:
+              assistantScope?.getAttribute("data-runtime-turn-id") || "",
+            text: scopedText,
+            assistantText: assistantScopeText,
+          },
+          hasDoneText: assistantScopeText.includes(doneText),
           hasEpochFallbackTitle: text.includes("任务 1970/1/1"),
           textareaVisible,
           textareaDisabled:
@@ -130,10 +177,13 @@ export async function waitForGuiChatCompleted(
       continue;
     }
     lastSnapshot = snapshot;
-    const hasRequiredAssistantVisibleTexts =
-      (snapshot.requiredVisibleTextHits || []).every(
-        (hit) => hit.occurrences > 0,
-      );
+    const hasRequiredAssistantVisibleTexts = (
+      snapshot.requiredVisibleTextHits || []
+    ).every((hit) => hit.occurrences > 0);
+    const scopedDedupeGuardHits =
+      snapshot.assistantScopeDedupeGuardHits || snapshot.dedupeGuardHits || [];
+    const scopedDisallowedVisibleTextHits =
+      snapshot.disallowedVisibleTextHits || [];
     const hasExpectedAssistantContent =
       requiredAssistantVisibleTexts.length > 0
         ? snapshot.hasAssistantSummary && hasRequiredAssistantVisibleTexts
@@ -144,12 +194,8 @@ export async function waitForGuiChatCompleted(
       snapshot.textareaVisible &&
       snapshot.textareaDisabled === false &&
       snapshot.stopButtonVisible === false &&
-      (snapshot.dedupeGuardHits || []).every(
-        (hit) => hit.occurrences <= 1,
-      ) &&
-      (snapshot.disallowedVisibleTextHits || []).every(
-        (hit) => hit.occurrences === 0,
-      )
+      scopedDedupeGuardHits.every((hit) => hit.occurrences <= 1) &&
+      scopedDisallowedVisibleTextHits.every((hit) => hit.occurrences === 0)
     ) {
       return snapshot;
     }
@@ -170,6 +216,9 @@ export async function waitForGuiSkillsRuntimeCompleted(
     doneText: scenario.doneText,
     summaryText: scenario.guiSummaryText ?? scenario.summaryText,
     dedupeGuardTexts: scenario.dedupeGuardTexts ?? [],
+    disallowedVisibleTexts: scenario.disallowedVisibleTexts ?? [
+      "legacy_tool_event",
+    ],
   });
 }
 
@@ -188,11 +237,11 @@ export async function waitForGuiPlanCompleted(page, options) {
         const style = textarea ? window.getComputedStyle(textarea) : null;
         const textareaVisible = Boolean(
           textarea &&
-            rect &&
-            rect.width > 16 &&
-            rect.height > 16 &&
-            style?.visibility !== "hidden" &&
-            style?.display !== "none",
+          rect &&
+          rect.width > 16 &&
+          rect.height > 16 &&
+          style?.visibility !== "hidden" &&
+          style?.display !== "none",
         );
         const buttons = Array.from(document.querySelectorAll("button")).map(
           (button) => ({
@@ -212,11 +261,10 @@ export async function waitForGuiPlanCompleted(page, options) {
           );
         });
         const taskRailText =
-          document
-            .querySelector('[data-testid="task-center-run-control-surface"]')
-            ?.textContent ||
-          document
-            .querySelector('[data-testid="task-center-task-rail"]')
+          document.querySelector(
+            '[data-testid="task-center-run-control-surface"]',
+          )?.textContent ||
+          document.querySelector('[data-testid="task-center-task-rail"]')
             ?.textContent ||
           text;
         const planDecisionPanel = document.querySelector(
@@ -229,11 +277,11 @@ export async function waitForGuiPlanCompleted(page, options) {
           : null;
         const planDecisionVisible = Boolean(
           planDecisionPanel &&
-            planDecisionRect &&
-            planDecisionRect.width > 320 &&
-            planDecisionRect.height > 48 &&
-            planDecisionStyle?.visibility !== "hidden" &&
-            planDecisionStyle?.display !== "none",
+          planDecisionRect &&
+          planDecisionRect.width > 320 &&
+          planDecisionRect.height > 48 &&
+          planDecisionStyle?.visibility !== "hidden" &&
+          planDecisionStyle?.display !== "none",
         );
         return {
           url: window.location.href,

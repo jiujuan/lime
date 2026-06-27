@@ -26,7 +26,9 @@ import {
   listClientTopupPackages,
   pollClientDesktopAuthSession,
   rotateClientAccessToken,
+  reportClientPluginInstallState,
   submitClientAgentAppRegistrationCode,
+  submitClientPluginRegistrationCode,
   updateClientSceneSkillPreferences,
 } from "./oemCloudControlPlane";
 
@@ -589,6 +591,147 @@ describe("oemCloudControlPlane desktop auth", () => {
       appId: "content-factory-app",
       registrationRequired: true,
       registrationState: "active",
+      packageHash: AGENT_APP_PACKAGE_HASH,
+    });
+  });
+
+  it("应提交原生插件注册码并解析刷新后的插件市场目录", async () => {
+    window.__LIME_SESSION_TOKEN__ = "session-token-001";
+
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        code: 200,
+        message: "success",
+        data: {
+          schemaVersion: "plugin-marketplace/v1",
+          tenantId: "tenant-0001",
+          generatedAt: "2026-06-25T00:03:00.000Z",
+          marketplaceName: "limecloud",
+          items: [
+            {
+              pluginKey: "research-kit@limecloud",
+              pluginName: "research-kit",
+              marketplaceName: "limecloud",
+              displayName: "Research Kit",
+              description: "Research plugin package",
+              version: "1.2.3",
+              category: "research",
+              categories: ["research"],
+              sourceKind: "plugin_catalog",
+              sourceRef: "release-001",
+              enabled: true,
+              installState: "available",
+              activationState: "activatable",
+              policy: {
+                installation: "AVAILABLE",
+                authentication: "ON_INSTALL",
+              },
+              package: {
+                releaseId: "release-001",
+                packageUrl:
+                  "https://packages.limecloud.example/plugins/research-kit-1.2.3.lpkg",
+                packageHash: AGENT_APP_PACKAGE_HASH,
+                manifestHash: AGENT_APP_MANIFEST_HASH,
+              },
+            },
+          ],
+        },
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const catalog = await submitClientPluginRegistrationCode(
+      "tenant-0001",
+      "research-kit",
+      { code: "PLUGIN-REG-2026" },
+      "limecloud",
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://user.limeai.run/api/v1/public/tenants/tenant-0001/client/plugins/research-kit/registration?marketplaceName=limecloud",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ code: "PLUGIN-REG-2026" }),
+        headers: expect.objectContaining({
+          Authorization: "Bearer session-token-001",
+        }),
+      }),
+    );
+    expect(catalog.items[0]).toMatchObject({
+      pluginKey: "research-kit@limecloud",
+      sourceKind: "plugin_catalog",
+      installState: "available",
+      activationState: "activatable",
+      package: {
+        releaseId: "release-001",
+        packageHash: AGENT_APP_PACKAGE_HASH,
+      },
+    });
+  });
+
+  it("应上报客户端插件安装态并解析服务端记录", async () => {
+    window.__LIME_SESSION_TOKEN__ = "session-token-001";
+
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        code: 200,
+        message: "success",
+        data: {
+          tenantId: "tenant-0001",
+          userId: "user-001",
+          pluginName: "research-kit",
+          marketplaceName: "limecloud",
+          pluginKey: "research-kit@limecloud",
+          sourceKind: "agent_app_release",
+          sourceRef: "release-001",
+          state: "enabled",
+          releaseId: "release-001",
+          packageHash: AGENT_APP_PACKAGE_HASH,
+          manifestHash: AGENT_APP_MANIFEST_HASH,
+          reportedAt: "2026-06-26T08:00:00.000Z",
+          updatedAt: "2026-06-26T08:00:01.000Z",
+        },
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const report = await reportClientPluginInstallState(
+      "tenant-0001",
+      "research-kit",
+      {
+        state: "enabled",
+        releaseId: "release-001",
+        packageHash: AGENT_APP_PACKAGE_HASH,
+        manifestHash: AGENT_APP_MANIFEST_HASH,
+        reportedAt: "2026-06-26T08:00:00.000Z",
+      },
+      "limecloud",
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://user.limeai.run/api/v1/public/tenants/tenant-0001/client/plugins/research-kit/install-state?marketplaceName=limecloud",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          state: "enabled",
+          releaseId: "release-001",
+          packageHash: AGENT_APP_PACKAGE_HASH,
+          manifestHash: AGENT_APP_MANIFEST_HASH,
+          reportedAt: "2026-06-26T08:00:00.000Z",
+        }),
+        headers: expect.objectContaining({
+          Authorization: "Bearer session-token-001",
+        }),
+      }),
+    );
+    expect(report).toMatchObject({
+      pluginKey: "research-kit@limecloud",
+      sourceKind: "agent_app_release",
+      state: "enabled",
       packageHash: AGENT_APP_PACKAGE_HASH,
     });
   });

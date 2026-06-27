@@ -27,6 +27,7 @@ const fixtureSourceFiles = [
   "scripts/agent-runtime/claw-chat-current-fixture-backend-file.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-backend-ledger.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-rpc.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-agent-ui-trace.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-read-model-core.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-read-model-waits.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-session.mjs",
@@ -115,11 +116,34 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("整理今天的国际新闻");
     expect(content).toContain("promptVisibleInTextarea");
     expect(content).toContain("hasPrompt");
+    expect(content).toContain('[data-testid="message-turn-group"]');
+    expect(content).toContain("assistantScopeText");
+    expect(content).toContain("completionScope");
+    expect(content).toContain("assistantScopeDedupeGuardHits");
+    expect(content).toContain("scenario.disallowedVisibleTexts");
     expect(content).toContain("今日国际新闻简要整理");
     expect(content).toContain("CLAW_NEWS_FIXTURE_DONE");
     expect(content).toContain("guiInputRemainsReady");
     expect(content).toContain("guiNotStuckStreaming");
     expect(content).toContain("noEpochFallbackTitle");
+    expect(content).toContain("agentUiPerformanceTraceEvidenceAvailable");
+    expect(content).toContain(
+      "agentUiPerformanceTraceSeparatesProviderAndClient",
+    );
+    expect(content).toContain("agentUiPerformanceTraceNoRawPayload");
+    expect(content).toContain("collectAppServerTraceEvidence");
+    expect(content).toContain("appServerTraceEvidenceAvailable");
+    expect(content).toContain("appServerTraceEvidenceUsesCurrentMethods");
+    expect(content).toContain("appServerTraceEvidenceHasW3cCarrier");
+    expect(content).toContain("appServerTraceEvidenceExportedSummaryOnly");
+    expect(content).toContain(
+      "appServerTraceSupportBundleOptInUsesCurrentMethod",
+    );
+    expect(content).toContain("appServerTraceSupportBundleOptInSummaryOnly");
+    expect(content).toContain('"diagnostics/supportBundle/export"');
+    expect(content).toContain("includeTraceExport");
+    expect(content).toContain("LIME_SUPPORT_BUNDLE_OUTPUT_DIR");
+    expect(content).toContain('"diagnostics/trace/export"');
   });
 
   it("uses a local external fixture backend and current Agent Session methods", () => {
@@ -703,8 +727,39 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("image_regenerate_job_1");
     expect(content).toContain("worker_dogfood");
     expect(content).toContain("contentFactoryProductProfileWorkerTurnStart");
+    expect(content).toContain("contentFactoryProductProfileWorkerTurnExecuted");
     expect(content).toContain(
-      "contentFactoryProductProfileWorkerTurnExecuted",
+      "CONTENT_FACTORY_PRODUCT_PROFILE_REMOTE_REJECT_TURN_ID",
+    );
+    expect(content).toContain("AGENT_APP_WORKER_REMOTE_RUNTIME_DISABLED");
+    expect(content).toContain("runRemotePluginRuntimeRejectionProbe");
+    expect(content).toContain(
+      "contentFactoryProductProfileRemoteRuntimeRejection",
+    );
+    expect(content).toContain(
+      "contentFactoryProductProfileRemoteRuntimeFailClosed",
+    );
+    expect(content).toContain(
+      "contentFactoryProductProfileStoryboardObjectSelection",
+    );
+    expect(content).toContain(
+      "workspace-product-profile-object-videoStoryboard",
+    );
+    expect(content).toContain(
+      "workspace-product-profile-app-declared-renderer",
+    );
+    expect(content).toContain("app_declared");
+    expect(content).toContain("host_placeholder");
+    expect(content).toContain("host_placeholder_only");
+    expect(content).toContain("not_loaded");
+    expect(content).toContain("rendererExecutionModelVisible");
+    expect(content).toContain("entryLoadPolicyVisible");
+    expect(content).toContain("executableHostAbsent");
+    expect(content).toContain("app_declared_renderer_placeholder_only");
+    expect(content).toContain("./renderer/storyboard.tsx");
+    expect(content).toContain("open_storyboard");
+    expect(content).toContain(
+      "contentFactoryProductProfileRendererHostPlaceholderVisible",
     );
     expect(content).toContain("已重新生成 2 张候选图");
     expect(content).toContain("task-center-object-canvas-toggle");

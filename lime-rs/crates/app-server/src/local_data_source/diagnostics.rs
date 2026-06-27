@@ -19,6 +19,7 @@ use std::time::UNIX_EPOCH;
 mod support_bundle;
 
 pub(crate) use support_bundle::export_support_bundle;
+pub(crate) use support_bundle::export_support_bundle_with_trace_root;
 
 pub(super) fn current_log_path() -> Result<PathBuf, String> {
     Ok(app_paths::resolve_logs_dir()?.join("lime.log"))

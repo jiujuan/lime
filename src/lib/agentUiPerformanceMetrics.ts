@@ -1,3 +1,12 @@
+import {
+  clearAgentUiPerformanceTraceHistory,
+  exportAgentUiPerformanceTraceHistory,
+  listAgentUiPerformanceTraceHistory,
+  saveAgentUiPerformanceTraceSnapshot,
+  type AgentUiPerformanceTraceHistoryExport,
+  type AgentUiPerformanceTraceHistoryRecord,
+} from "@/lib/agentUiPerformanceTraceHistory";
+
 export interface AgentUiPerformanceEntry {
   id: number;
   phase: string;
@@ -33,6 +42,10 @@ export interface AgentUiPerformanceSessionSummary {
   firstEventToFirstTextDeltaMs?: number;
   firstThinkingDeltaToFirstTextDeltaMs?: number;
   firstTextDeltaToFirstTextPaintMs?: number;
+  providerWaitMs?: number;
+  serverToRendererFirstTextDeltaMs?: number;
+  rendererApplyFirstTextDeltaMs?: number;
+  clientLocalOutputMs?: number;
   streamEnsureSessionDurationMs?: number;
   streamSubmitInvokeDurationMs?: number;
   homeInputMaterializeDurationMs?: number;
@@ -81,6 +94,10 @@ export interface AgentUiPerformanceApi {
   entries: () => AgentUiPerformanceEntry[];
   clear: () => void;
   summary: () => AgentUiPerformanceSnapshot;
+  clearHistory: () => void;
+  exportHistory: () => AgentUiPerformanceTraceHistoryExport;
+  history: () => AgentUiPerformanceTraceHistoryRecord[];
+  saveSnapshot: (label?: string) => AgentUiPerformanceTraceHistoryRecord | null;
 }
 
 type MetricValue = string | number | boolean | null;
@@ -413,6 +430,11 @@ export function summarizeAgentUiPerformanceMetrics(): AgentUiPerformanceSnapshot
       sessionEntries,
       "agentStream.firstTextDelta",
     );
+    const streamProviderFirstTextDelta = sessionEntries.find(
+      (entry) =>
+        entry.phase === "agentStream.providerTrace" &&
+        entry.metrics.stage === "first_text_delta_received",
+    );
     const streamFirstTextRenderFlush = firstEntry(
       sessionEntries,
       "agentStream.firstTextRenderFlush",
@@ -517,6 +539,21 @@ export function summarizeAgentUiPerformanceMetrics(): AgentUiPerformanceSnapshot
       firstTextDeltaToFirstTextPaintMs: deltaMs(
         streamFirstTextDelta,
         streamFirstTextPaint,
+      ),
+      providerWaitMs:
+        metricNumber(streamProviderFirstTextDelta ?? null, "providerWaitMs") ??
+        metricNumber(streamFirstTextDelta, "providerWaitMs"),
+      serverToRendererFirstTextDeltaMs: metricNumber(
+        streamFirstTextDelta,
+        "serverToRendererDeltaMs",
+      ),
+      rendererApplyFirstTextDeltaMs: metricNumber(
+        streamFirstTextDelta,
+        "rendererEventReceivedDeltaMs",
+      ),
+      clientLocalOutputMs: metricNumber(
+        streamFirstTextPaint,
+        "clientLocalOutputDeltaMs",
       ),
       streamEnsureSessionDurationMs: metricNumber(
         streamEnsureSessionDone,
@@ -677,6 +714,16 @@ export function installAgentUiPerformanceApi(): AgentUiPerformanceApi | null {
   const api: AgentUiPerformanceApi = {
     entries: getAgentUiPerformanceMetrics,
     clear: clearAgentUiPerformanceMetrics,
+    clearHistory: clearAgentUiPerformanceTraceHistory,
+    exportHistory: exportAgentUiPerformanceTraceHistory,
+    history: listAgentUiPerformanceTraceHistory,
+    saveSnapshot: (label?: string) =>
+      saveAgentUiPerformanceTraceSnapshot(
+        summarizeAgentUiPerformanceMetrics(),
+        {
+          label,
+        },
+      ),
     summary: summarizeAgentUiPerformanceMetrics,
   };
   window.__LIME_AGENTUI_PERF__ = api;

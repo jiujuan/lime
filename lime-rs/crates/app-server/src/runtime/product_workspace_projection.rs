@@ -1,6 +1,6 @@
 use app_server_protocol::AgentEvent;
 use app_server_protocol::AgentSession;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
 
 const DEFAULT_SCHEMA_VERSION: &str = "product-workspace.v1";

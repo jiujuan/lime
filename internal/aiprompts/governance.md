@@ -226,14 +226,14 @@ npm run test:contracts
 
 ### 0. `scripts/` 目录治理
 
-`scripts/` 根目录是冻结的历史入口区，不再作为新增脚本默认落点。
+`scripts/` 根目录和一级领域目录是冻结的脚本治理边界，不再作为新增脚本或新增领域目录的默认落点。
 
-- `current`：`scripts/lib/` 共享实现、`scripts/<domain>/` 领域脚本、被 `package.json` / CI 明确引用且仍在基线内的根入口脚本
+- `current`：`scripts/lib/` 共享实现、已登记在基线内的 `scripts/<domain>/` 领域脚本、被 `package.json` / CI 明确引用且仍在基线内的根入口脚本
 - `compat`：仍在根目录、但后续需要按领域迁移的历史入口脚本
 - `deprecated`：只服务旧迁移、旧发布或旧宿主证据的脚本，只能下线或并入 current 入口
 - `dead`：已删除脚本、旧产物路径、只允许作为 fail-fast fixture 出现的旧脚本名
 
-新增可执行脚本默认放到 `scripts/<domain>/`、`scripts/lib/` 或所属 package。只有公开稳定入口且无法归入领域子目录时，才允许新增根脚本例外；例外必须同步 `scripts/README.md`、`scripts/script-root-governance-baseline.json` 与执行计划退出条件。
+新增可执行脚本默认放到已有 `scripts/<domain>/`、`scripts/lib/` 或所属 package。只有公开稳定入口且无法归入已有领域子目录时，才允许新增根脚本或一级领域目录例外；例外必须同步 `scripts/README.md`、`scripts/script-root-governance-baseline.json` 与执行计划退出条件。本地缓存目录如 `scripts/**/__pycache__/` 和 `*.pyc` 只能作为 ignore/warn 对象，不得进入基线或发布候选；一旦被 git 跟踪，守卫必须失败。
 
 根目录回流守卫：
 
@@ -241,7 +241,7 @@ npm run test:contracts
 npm run governance:scripts
 ```
 
-该守卫用冻结基线拒绝新增 tracked 根脚本；未跟踪根脚本只作为并行工作区警告，不得直接写入基线。
+该守卫用冻结基线拒绝新增 tracked 根脚本和新增 tracked 一级领域目录；未跟踪根脚本 / 目录只作为并行工作区警告，不得直接写入基线。
 
 ### 1. Electron 打包事实源
 

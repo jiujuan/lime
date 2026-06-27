@@ -182,6 +182,19 @@ describe("workspaceExpertMetadata", () => {
     ).toBe(true);
   });
 
+  it("initial auto-send metadata 携带插件激活意图时允许 detached session", () => {
+    expect(
+      shouldAllowDetachedInitialAutoSend({
+        harness: {
+          plugin_activation_intent: {
+            plugin_id: "content-factory-app",
+            trigger: "@内容工厂",
+          },
+        },
+      }),
+    ).toBe(true);
+  });
+
   it("非 expert metadata 不允许 detached session", () => {
     expect(
       shouldAllowDetachedInitialAutoSend({

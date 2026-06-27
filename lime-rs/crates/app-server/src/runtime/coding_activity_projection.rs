@@ -34,7 +34,9 @@ struct CommandState {
     exit_code: Option<i64>,
     process_id: Option<String>,
     execution_process_status: Option<String>,
+    execution_process_control_status: Option<String>,
     execution_surface: Option<String>,
+    stdin_writable: Option<bool>,
     output_bytes: Option<u64>,
     output_omitted_bytes: Option<u64>,
     output_truncated: Option<bool>,
@@ -397,7 +399,9 @@ fn command_state(command_id: &str, event: &AgentEvent) -> CommandState {
         exit_code: None,
         process_id: None,
         execution_process_status: None,
+        execution_process_control_status: None,
         execution_surface: None,
+        stdin_writable: None,
         output_bytes: None,
         output_omitted_bytes: None,
         output_truncated: None,
@@ -449,7 +453,9 @@ fn command_state_value(command: CommandState) -> Value {
         "exit_code": command.exit_code,
         "process_id": command.process_id,
         "execution_process_status": command.execution_process_status,
+        "execution_process_control_status": command.execution_process_control_status,
         "execution_surface": command.execution_surface,
+        "stdin_writable": command.stdin_writable,
         "output_bytes": command.output_bytes,
         "output_omitted_bytes": command.output_omitted_bytes,
         "output_truncated": command.output_truncated,
@@ -616,9 +622,20 @@ fn merge_command_process_facts(command: &mut CommandState, payload: &Value) {
         &["executionProcessStatus", "execution_process_status"],
     )
     .or_else(|| command.execution_process_status.clone());
+    command.execution_process_control_status = payload_or_metadata_string(
+        payload,
+        &[
+            "executionProcessControlStatus",
+            "execution_process_control_status",
+        ],
+    )
+    .or_else(|| command.execution_process_control_status.clone());
     command.execution_surface =
         payload_or_metadata_string(payload, &["executionSurface", "execution_surface"])
             .or_else(|| command.execution_surface.clone());
+    command.stdin_writable =
+        payload_or_metadata_bool(payload, &["stdinWritable", "stdin_writable"])
+            .or(command.stdin_writable);
     command.output_bytes =
         payload_or_metadata_u64(payload, &["outputBytes", "output_bytes"]).or(command.output_bytes);
     command.output_omitted_bytes =

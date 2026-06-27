@@ -19,6 +19,7 @@ pub fn runtime_event_type_from_backend_type(event_type: &str) -> String {
         "action_resolved" => "action.resolved",
         "turn_context" => "turn.context",
         "model_change" => "model.changed",
+        "provider_trace" => "provider.trace",
         "context_trace" => "context.trace",
         "context_compaction_started" => "context.compaction.started",
         "context_compaction_completed" => "context.compaction.completed",

@@ -1,6 +1,6 @@
 # Scripts 目录治理
 
-`scripts/` 根目录当前是历史入口区，不再作为新增脚本的默认落点。npm scripts、GitHub Actions、文档和测试已经大量直接引用根目录脚本，物理迁移必须分批做；在迁移完成前，根目录用冻结基线守住，不允许继续变大。
+`scripts/` 根目录当前是历史入口区，不再作为新增脚本的默认落点。npm scripts、GitHub Actions、文档和测试已经大量直接引用根目录脚本，物理迁移必须分批做；在迁移完成前，根目录和一级领域目录都用冻结基线守住，不允许继续无序变大。
 
 ## 当前分类
 
@@ -12,15 +12,16 @@
 ## 新增规则
 
 1. 新增可执行脚本默认不得放在 `scripts/` 根目录。
-2. 领域脚本放到 `scripts/<domain>/`；共享库放到 `scripts/lib/`；属于某个 package 的脚本优先放回对应 package。
+2. 领域脚本放到已有 `scripts/<domain>/`；共享库放到 `scripts/lib/`；属于某个 package 的脚本优先放回对应 package。
 3. 根目录只允许保留历史入口、`README.md`、`script-root-governance-baseline.json` 和 `check-scripts-governance.mjs` 这类目录治理文件。
-4. 每新增脚本都要有稳定调用入口：优先通过 `package.json`、测试、CI workflow 或对应文档引用，不保留孤立手动脚本。
-5. 跨平台脚本优先使用 Node / TypeScript；Shell、PowerShell、Python 只在目标平台或现有工具链明确需要时使用，并在入口文档说明平台边界。
-6. 新脚本命名使用领域名，不使用 `Lime` / `lime_` / `lime-` 品牌前缀，除非对外资产名或第三方生态已经固定。
+4. 新增一级领域目录必须先说明 owner / 使用入口 / 退出条件，并同步本 README、基线和执行计划；不能为了一个临时脚本新增目录。
+5. 每新增脚本都要有稳定调用入口：优先通过 `package.json`、测试、CI workflow 或对应文档引用，不保留孤立手动脚本。
+6. 跨平台脚本优先使用 Node / TypeScript；Shell、PowerShell、Python 只在目标平台或现有工具链明确需要时使用，并在入口文档说明平台边界。
+7. 新脚本命名使用领域名，不使用 `Lime` / `lime_` / `lime-` 品牌前缀，除非对外资产名或第三方生态已经固定。
 
 ## 根目录冻结守卫
 
-根目录允许列表在：
+根目录和一级领域目录允许列表在：
 
 ```text
 scripts/script-root-governance-baseline.json
@@ -35,14 +36,17 @@ npm run governance:scripts
 该检查会：
 
 - 拒绝新增的已纳入 git 跟踪的 `scripts/*` 根文件
+- 拒绝新增的已纳入 git 跟踪的 `scripts/<new-domain>/**` 一级目录
 - 对未跟踪的 `scripts/*` 根文件输出本地警告，避免并行工作区误挡；这些文件不得直接写入基线
-- 输出当前根目录脚本数量和领域桶统计
-- 提示已经迁走但仍留在基线里的文件，便于后续缩小基线
+- 对未跟踪的一级目录输出本地警告；`scripts/__pycache__/` 这类已忽略本地缓存只提示，不得提交
+- 对任意 `scripts/**/__pycache__` 或 `*.pyc` Python 缓存文件输出本地提示；如果这类文件被 git 跟踪则直接失败
+- 输出当前根目录脚本数量、领域桶统计、一级目录文件数和扩展名分布
+- 提示已经迁走但仍留在基线里的文件或目录，便于后续缩小基线
 
-如果确实需要新增根入口，必须满足三个条件：
+如果确实需要新增根入口或一级领域目录，必须满足三个条件：
 
 - 它是公开稳定入口，而不是一次性工具
-- 不能放入已有 `scripts/<domain>/`、`scripts/lib/` 或 package 内
+- 不能放入已有 `scripts/<domain>/`、`scripts/lib/` 或 package 内；新增领域目录必须代表可长期维护的边界
 - 同步更新本 README、执行计划和基线，并说明退出条件
 
 ## 迁移顺序

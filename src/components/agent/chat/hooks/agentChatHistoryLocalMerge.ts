@@ -168,7 +168,9 @@ function findNextLocalProcessAssistantIndex(
   localAssistantMessages: Message[],
   startIndex: number,
   matchedLocalMessageIds: Set<string>,
+  targetMessage?: Message,
 ): number {
+  const targetRuntimeTurnId = targetMessage?.runtimeTurnId?.trim();
   for (
     let index = Math.max(0, startIndex);
     index < localAssistantMessages.length;
@@ -179,6 +181,12 @@ function findNextLocalProcessAssistantIndex(
       continue;
     }
     if (candidate.id && matchedLocalMessageIds.has(candidate.id)) {
+      continue;
+    }
+    if (
+      targetRuntimeTurnId &&
+      candidate.runtimeTurnId?.trim() !== targetRuntimeTurnId
+    ) {
       continue;
     }
     if (hasRetainableLocalAssistantProcessState(candidate)) {
@@ -219,9 +227,9 @@ function shouldPreserveLocalAssistantVisibleOutput(
 
   const localHasActiveRuntimeIdentity = Boolean(
     localMessage.runtimeTurnId?.trim() ||
-      localMessage.inlineProcessRetention ||
-      localMessage.isThinking ||
-      hasRetainableLocalAssistantProcessState(localMessage),
+    localMessage.inlineProcessRetention ||
+    localMessage.isThinking ||
+    hasRetainableLocalAssistantProcessState(localMessage),
   );
   if (
     localHasActiveRuntimeIdentity &&
@@ -394,14 +402,14 @@ function shouldMergeLocalAssistantProcessState(
   const remoteContent = normalizeSignatureText(remoteMessage.content);
   const hasCompatibleContent = Boolean(
     localContent &&
-      remoteContent &&
-      localContent === remoteContent &&
-      !isOmittedHistoryContentProjection(remoteMessage),
+    remoteContent &&
+    localContent === remoteContent &&
+    !isOmittedHistoryContentProjection(remoteMessage),
   );
   const hasCompatibleTurn = Boolean(
     localMessage.runtimeTurnId &&
-      remoteMessage.runtimeTurnId &&
-      localMessage.runtimeTurnId === remoteMessage.runtimeTurnId,
+    remoteMessage.runtimeTurnId &&
+    localMessage.runtimeTurnId === remoteMessage.runtimeTurnId,
   );
   if (hasRetainableLocalAssistantProcessState(remoteMessage)) {
     return (
@@ -672,6 +680,7 @@ export const mergeHydratedMessagesWithLocalState = (
               localAssistantMessages,
               localAssistantCursor,
               matchedLocalMessageIds,
+              message,
             );
       const resolvedMatchedAssistantIndex =
         matchedAssistantIndex >= 0
@@ -724,6 +733,12 @@ export const mergeHydratedMessagesWithLocalState = (
           localMessages,
           matchedLocalMessageIds,
         });
+      const hasExactAssistantIdentity = matchedAssistantIndexById >= 0;
+      const hasMatchingRuntimeTurn = Boolean(
+        localAssistantMessage?.runtimeTurnId?.trim() &&
+          message.runtimeTurnId?.trim() &&
+          localAssistantMessage.runtimeTurnId === message.runtimeTurnId,
+      );
       const shouldPreserveLocalRuntimeSnapshot =
         (hasMatchedUserTurn || hasRecoverableLocalUserTurn) &&
         hasRetainableLocalAssistantProcessState(localAssistantMessage) &&
@@ -734,7 +749,17 @@ export const mergeHydratedMessagesWithLocalState = (
           didMatchLocalProcessAssistantOnly) &&
         hasRetainableLocalAssistantProcessState(localAssistantMessage) &&
         !hasRetainableLocalAssistantProcessState(message);
+      const hasMatchedAssistantBySignature =
+        matchedAssistantIndex >= 0 &&
+        matchedAssistantIndexById < 0 &&
+        localUserMessages.length === 0;
       const shouldMergeMatchingProcessState =
+        (hasExactAssistantIdentity ||
+          hasMatchedAssistantBySignature ||
+          hasMatchedUserTurn ||
+          hasRecoverableLocalUserTurn ||
+          didMatchLocalProcessAssistantOnly ||
+          hasMatchingRuntimeTurn) &&
         shouldMergeLocalAssistantProcessState(localAssistantMessage, message);
       const shouldRetainLocalProcessState =
         !hasRenderableAssistantTextContent(message) ||
@@ -851,12 +876,10 @@ export const mergeHydratedMessagesWithLocalState = (
         ...message,
         id: localAssistantMessage?.id ?? message.id,
         content: shouldPreserveLocalVisibleOutput
-          ? mergeAssistantVisibleOutput(
-              {
-                localContent: localAssistantMessage?.content || "",
-                remoteContent: message.content,
-              },
-            )
+          ? mergeAssistantVisibleOutput({
+              localContent: localAssistantMessage?.content || "",
+              remoteContent: message.content,
+            })
           : message.content,
         usage: message.usage ?? localAssistantMessage?.usage,
         contentParts: resolvedFailedContentParts,

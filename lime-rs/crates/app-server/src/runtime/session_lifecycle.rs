@@ -24,6 +24,10 @@ fn stored_session_to_overview(stored: &StoredSession) -> AgentSessionOverview {
         session_id: session.session_id.clone(),
         thread_id: Some(session.thread_id.clone()),
         title: session_title::resolve_session_title(explicit_title, first_user_message),
+        business_object_ref_metadata: session
+            .business_object_ref
+            .as_ref()
+            .and_then(|reference| reference.metadata.clone()),
         model: session
             .business_object_ref
             .as_ref()

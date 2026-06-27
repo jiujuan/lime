@@ -448,6 +448,10 @@ fn projected_session_overview(conn: &Connection, row: ProjectedSessionRow) -> Ag
         session_id: row.session_id.clone(),
         thread_id: Some(row.thread_id),
         title: session_title::resolve_session_title(row.title, first_user_message),
+        business_object_ref_metadata: row
+            .metadata_json
+            .as_deref()
+            .and_then(|value| serde_json::from_str::<Value>(value).ok()),
         model: row.model.unwrap_or_default(),
         created_at: row.created_at.unwrap_or_else(|| row.updated_at.clone()),
         updated_at: row.updated_at,

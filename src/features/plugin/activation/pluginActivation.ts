@@ -154,8 +154,7 @@ function catalogEntryForPrefix(params: {
     prefix: params.prefix,
     pluginId: contract.id,
     pluginDisplayName: contract.displayName,
-    activeAgentAppId:
-      entry.kind === "agentApp" ? defaultAgentAppId(contract) : undefined,
+    activeAgentAppId: defaultAgentAppId(contract),
     activeEntryKey: entry.key,
     defaultObjectKind: entry.defaultObjectKind,
     activationState: params.activationState,

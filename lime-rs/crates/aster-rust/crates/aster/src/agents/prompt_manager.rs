@@ -114,6 +114,7 @@ pub struct SystemPromptBuilder<'a, M> {
     code_execution_mode: bool,
     session_prompt: Option<String>,
     session_prompt_override: bool,
+    include_capabilities_layer: bool,
 }
 
 impl<'a> SystemPromptBuilder<'a, PromptManager> {
@@ -199,6 +200,11 @@ impl<'a> SystemPromptBuilder<'a, PromptManager> {
         self
     }
 
+    pub fn with_capabilities_layer(mut self, enabled: bool) -> Self {
+        self.include_capabilities_layer = enabled;
+        self
+    }
+
     pub fn build(self) -> String {
         let mut extensions_info = self.extensions_info;
 
@@ -263,6 +269,7 @@ impl<'a> SystemPromptBuilder<'a, PromptManager> {
                 &self.manager.identity,
                 &self.session_prompt,
                 &capabilities_context,
+                self.include_capabilities_layer,
             )
         };
 
@@ -340,6 +347,7 @@ impl<'a> SystemPromptBuilder<'a, PromptManager> {
         identity: &AgentIdentity,
         session_prompt: &Option<String>,
         capabilities_context: &SystemPromptContext,
+        include_capabilities_layer: bool,
     ) -> String {
         // 1. 构建身份层
         let identity_prompt = if let Some(custom) = &identity.custom_prompt {
@@ -364,9 +372,12 @@ impl<'a> SystemPromptBuilder<'a, PromptManager> {
         };
 
         // 3. 构建能力层
-        let capabilities_prompt =
+        let capabilities_prompt = if include_capabilities_layer {
             prompt_template::render_global_file("capabilities.md", capabilities_context)
-                .unwrap_or_default();
+                .unwrap_or_default()
+        } else {
+            String::new()
+        };
 
         // 4. 组合：Identity + Session Context + Capabilities
         if capabilities_prompt.is_empty() {
@@ -461,6 +472,7 @@ impl PromptManager {
             code_execution_mode: false,
             session_prompt: None,
             session_prompt_override: false,
+            include_capabilities_layer: true,
         }
     }
 
@@ -557,6 +569,23 @@ mod tests {
         assert!(!result.contains('\u{E0043}'));
         assert!(result.contains("Extension help"));
         assert!(result.contains("hidden instructions"));
+    }
+
+    #[test]
+    fn test_build_system_prompt_can_skip_capabilities_layer() {
+        let manager = PromptManager::with_timestamp(DateTime::<Utc>::from_timestamp(0, 0).unwrap());
+
+        let system_prompt = manager
+            .builder()
+            .with_session_prompt(Some("Keep this session context.".to_string()))
+            .with_capabilities_layer(false)
+            .build();
+
+        assert!(system_prompt.contains("general-purpose AI agent"));
+        assert!(system_prompt.contains("## Session Context"));
+        assert!(system_prompt.contains("Keep this session context."));
+        assert!(!system_prompt.contains("# Extensions"));
+        assert!(!system_prompt.contains("No extensions are defined."));
     }
 
     #[test]

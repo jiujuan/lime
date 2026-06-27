@@ -12,6 +12,7 @@ export type { Topic } from "./agentChatShared";
 /** Hook 配置选项 */
 interface UseAgentChatUnifiedOptions {
   systemPrompt?: string;
+  clawTraceEnabled?: boolean;
   onWriteFile?: (
     content: string,
     fileName: string,

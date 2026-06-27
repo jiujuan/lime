@@ -18,6 +18,7 @@ mod model;
 mod project;
 mod project_git;
 mod project_shell;
+mod request_trace;
 mod right_surface;
 mod skill;
 mod voice;
@@ -134,6 +135,9 @@ use app_server_protocol::METHOD_CONVERSATION_IMPORT_THREAD_RUNTIME_EVENTS_READ;
 use app_server_protocol::METHOD_DIAGNOSTICS_LOG_STORAGE_READ;
 use app_server_protocol::METHOD_DIAGNOSTICS_SERVER_READ;
 use app_server_protocol::METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT;
+use app_server_protocol::METHOD_DIAGNOSTICS_TRACE_EXPORT;
+use app_server_protocol::METHOD_DIAGNOSTICS_TRACE_LIST;
+use app_server_protocol::METHOD_DIAGNOSTICS_TRACE_READ;
 use app_server_protocol::METHOD_DIAGNOSTICS_WINDOWS_STARTUP_READ;
 use app_server_protocol::METHOD_DISCORD_CHANNEL_PROBE;
 use app_server_protocol::METHOD_EVIDENCE_EXPORT;
@@ -342,6 +346,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::sync::Arc;
 use std::sync::Mutex;
+use tracing::Instrument;
 
 #[derive(Clone)]
 pub struct RequestProcessor {
@@ -360,11 +365,21 @@ struct ProcessorState {
 
 impl RequestProcessor {
     pub fn new(runtime: RuntimeCore) -> Self {
+        let execution_process = runtime
+            .execution_process_server()
+            .unwrap_or_else(ExecutionProcessServer::default);
+        Self::new_with_execution_process(runtime, execution_process)
+    }
+
+    pub(crate) fn new_with_execution_process(
+        runtime: RuntimeCore,
+        execution_process: ExecutionProcessServer,
+    ) -> Self {
         Self {
             state: Arc::new(Mutex::new(ProcessorState::default())),
             runtime: Arc::new(runtime),
             project_shell: ProjectShellManager::default(),
-            execution_process: ExecutionProcessServer::default(),
+            execution_process,
         }
     }
 
@@ -380,7 +395,11 @@ impl RequestProcessor {
         &self,
         request: JsonRpcRequest,
     ) -> Result<Vec<JsonRpcMessage>, AppServerError> {
-        self.handle_request_inner(request, None).await
+        let client_info = self.client_info();
+        let span = request_trace::request_span(&request, client_info.as_ref());
+        self.handle_request_inner(request, None)
+            .instrument(span)
+            .await
     }
 
     pub async fn handle_request_streaming(
@@ -388,7 +407,10 @@ impl RequestProcessor {
         request: JsonRpcRequest,
         event_callback: &mut (dyn FnMut(JsonRpcMessage) + Send),
     ) -> Result<Vec<JsonRpcMessage>, AppServerError> {
+        let client_info = self.client_info();
+        let span = request_trace::request_span(&request, client_info.as_ref());
         self.handle_request_inner(request, Some(event_callback))
+            .instrument(span)
             .await
     }
 
@@ -915,11 +937,17 @@ impl RequestProcessor {
                 self.handle_diagnostics_log_storage_read_impl().await
             }
             METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT => {
-                self.handle_diagnostics_support_bundle_export_impl().await
+                self.handle_diagnostics_support_bundle_export_impl(params)
+                    .await
             }
             METHOD_DIAGNOSTICS_SERVER_READ => self.handle_diagnostics_server_read_impl().await,
             METHOD_DIAGNOSTICS_WINDOWS_STARTUP_READ => {
                 self.handle_diagnostics_windows_startup_read_impl().await
+            }
+            METHOD_DIAGNOSTICS_TRACE_LIST => self.handle_diagnostics_trace_list_impl(params).await,
+            METHOD_DIAGNOSTICS_TRACE_READ => self.handle_diagnostics_trace_read_impl(params).await,
+            METHOD_DIAGNOSTICS_TRACE_EXPORT => {
+                self.handle_diagnostics_trace_export_impl(params).await
             }
             METHOD_USAGE_STATS_READ => self.handle_usage_stats_read(params).await,
             METHOD_USAGE_STATS_MODEL_RANKING_LIST => {
@@ -1421,14 +1449,16 @@ impl RequestProcessor {
         Ok(())
     }
 
-    pub(super) fn runtime_host_context(&self) -> RuntimeHostContext {
-        let client_info = self
-            .state
+    fn client_info(&self) -> Option<ClientInfo> {
+        self.state
             .lock()
             .expect("app-server state mutex poisoned")
             .client_info
-            .clone();
-        RuntimeHostContext::from(client_info)
+            .clone()
+    }
+
+    pub(super) fn runtime_host_context(&self) -> RuntimeHostContext {
+        RuntimeHostContext::from(self.client_info())
     }
 }
 
@@ -1965,6 +1995,8 @@ mod tests {
                     METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT,
                     Some(json!({
                         "processId": "jsonrpc-process-test",
+                        "afterSequence": 0,
+                        "maxBytes": 65536,
                     })),
                 ))
                 .await
@@ -1974,6 +2006,9 @@ mod tests {
                     let deltas = response.result["deltas"]
                         .as_array()
                         .expect("deltas should be an array");
+                    if !deltas.is_empty() {
+                        assert!(response.result["nextSequence"].as_u64().is_some());
+                    }
                     drained_deltas.extend(deltas.iter().cloned());
                     if drained_deltas.iter().any(|delta| {
                         delta["delta"]

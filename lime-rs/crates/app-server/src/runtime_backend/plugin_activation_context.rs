@@ -119,7 +119,11 @@ fn render_plugin_activation_context(context: &PluginActivationContext) -> String
     if !context.body.is_empty() {
         lines.push(format!("- body_after_trigger: {}", context.body));
     }
-    push_optional_line(&mut lines, "active_agent_app_id", &context.active_agent_app_id);
+    push_optional_line(
+        &mut lines,
+        "active_agent_app_id",
+        &context.active_agent_app_id,
+    );
     push_optional_line(&mut lines, "active_entry_key", &context.active_entry_key);
     if !context.selected_skill_keys.is_empty() {
         lines.push(format!(
@@ -225,9 +229,11 @@ mod tests {
             }
         });
 
-        let prompt =
-            append_plugin_activation_context_to_system_prompt(Some("base".to_string()), &[&metadata])
-                .expect("prompt");
+        let prompt = append_plugin_activation_context_to_system_prompt(
+            Some("base".to_string()),
+            &[&metadata],
+        )
+        .expect("prompt");
 
         assert!(prompt.starts_with("base"));
         assert!(prompt.contains("<plugin_activation_context>"));
@@ -249,7 +255,10 @@ mod tests {
         });
 
         assert_eq!(
-            append_plugin_activation_context_to_system_prompt(Some("base".to_string()), &[&metadata]),
+            append_plugin_activation_context_to_system_prompt(
+                Some("base".to_string()),
+                &[&metadata]
+            ),
             Some("base".to_string())
         );
     }

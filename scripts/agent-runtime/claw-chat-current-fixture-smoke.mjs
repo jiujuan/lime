@@ -20,6 +20,11 @@ import {
   THREAD_ID,
 } from "./claw-chat-current-fixture-constants.mjs";
 import { buildFixtureAssertionReport } from "./claw-chat-current-fixture-assertions.mjs";
+import {
+  collectAppServerTraceEvidence,
+  collectAgentUiPerformanceTraceEvidence,
+  enableClawTraceDebugOverride,
+} from "./claw-chat-current-fixture-agent-ui-trace.mjs";
 import { createTempRuntimeEnv } from "./claw-chat-current-fixture-backend-file.mjs";
 import {
   sanitizeBackendLedgerForEvidence,
@@ -157,6 +162,27 @@ function parseArgs(argv) {
   return options;
 }
 
+function traceEvidenceHasProviderAndClient(evidence) {
+  return (
+    evidence?.hasProviderWaitMs === true &&
+    evidence?.hasClientLocalOutputMs === true
+  );
+}
+
+async function updateAgentUiPerformanceTraceEvidence(summary, page) {
+  const evidence = sanitizeJson(
+    await collectAgentUiPerformanceTraceEvidence(page),
+  );
+  summary.agentUiPerformanceTraceLatest = evidence;
+  if (
+    !summary.agentUiPerformanceTrace ||
+    !traceEvidenceHasProviderAndClient(summary.agentUiPerformanceTrace) ||
+    traceEvidenceHasProviderAndClient(evidence)
+  ) {
+    summary.agentUiPerformanceTrace = evidence;
+  }
+}
+
 async function run() {
   const options = parseArgs(process.argv.slice(2));
   fs.mkdirSync(options.evidenceDir, { recursive: true });
@@ -278,6 +304,10 @@ async function run() {
     evidencePackManualEnableSkillsRuntime: null,
     evidencePackExpertSkillsRuntime: null,
     eventReadProbe: null,
+    clawTraceDebugOverride: null,
+    agentUiPerformanceTrace: null,
+    agentUiPerformanceTraceLatest: null,
+    appServerTraceEvidence: null,
     assertions: {},
     summary: summaryPath,
   };
@@ -333,6 +363,14 @@ async function run() {
         LIME_ELECTRON_BRAND_DEV_APP: "0",
         LIME_ELECTRON_CLEAR_RENDERER_CACHE: "0",
         LIME_ELECTRON_DEV_HTTP_BRIDGE: "0",
+        LIME_TRACE_EXPORT_OUTPUT_DIR: path.join(
+          runtimeEnv.tempRoot,
+          "trace-exports",
+        ),
+        LIME_SUPPORT_BUNDLE_OUTPUT_DIR: path.join(
+          runtimeEnv.tempRoot,
+          "support-bundles",
+        ),
         ...(options.appUrl ? { VITE_DEV_SERVER_URL: options.appUrl } : {}),
       },
       timeout: options.timeoutMs,
@@ -362,6 +400,11 @@ async function run() {
     });
     page.setDefaultTimeout(options.timeoutMs);
     await page.setViewportSize({ width: 1440, height: 1000 });
+
+    logStage("enable-claw-trace-debug-override");
+    summary.clawTraceDebugOverride = sanitizeJson(
+      await enableClawTraceDebugOverride(page, options),
+    );
 
     logStage("wait-renderer");
     const rendererSnapshot = await waitForRendererReady(
@@ -459,6 +502,9 @@ async function run() {
       sanitizeBackendLedgerForEvidence(backendLedger),
     );
     const pageText = await page.evaluate(() => document.body?.innerText || "");
+    summary.appServerTraceEvidence = sanitizeJson(
+      await collectAppServerTraceEvidence(page, appServerRequests),
+    );
     const traceRaw = await page.evaluate(() =>
       window.localStorage.getItem("lime_invoke_trace_buffer_v1"),
     );
@@ -466,6 +512,7 @@ async function run() {
       window.localStorage.getItem("lime_invoke_error_buffer_v1"),
     );
     const traceMessages = readTraceMessages(traceRaw);
+    await updateAgentUiPerformanceTraceEvidence(summary, page);
     const assertionReport = buildFixtureAssertionReport({
       backendLedger,
       traceMessages,
@@ -525,6 +572,10 @@ async function run() {
               return errorRaw;
             }
           })(),
+        );
+        await updateAgentUiPerformanceTraceEvidence(summary, page);
+        summary.appServerTraceEvidence = sanitizeJson(
+          await collectAppServerTraceEvidence(page, appServerRequests),
         );
       }
     } catch (traceError) {

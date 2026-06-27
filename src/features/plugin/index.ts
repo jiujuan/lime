@@ -6,6 +6,10 @@ export {
   PluginManifestError,
 } from "./manifest/pluginContract";
 export {
+  buildPluginRendererOutputContracts,
+  resolvePluginRendererOutputContract,
+} from "./manifest/pluginRendererOutput";
+export {
   projectPluginRegistry,
   projectPluginRegistryItem,
 } from "./manifest/pluginRegistry";
@@ -30,6 +34,7 @@ export {
   projectPluginRegistryInputsFromInstalledAgentApps,
 } from "./installed/installedAgentApps";
 export { buildPluginHistoryRestoreProjection } from "./history/pluginHistoryRestore";
+export { buildPluginHistorySessionSelectionModel } from "./history/pluginHistorySessionSelection";
 export {
   buildPluginActivationContext,
   buildPluginActivationMentionCatalog,
@@ -50,6 +55,7 @@ export type {
   PluginActivationIntent,
   PluginAgentAppDeclaration,
   PluginAgentAppUiKind,
+  PluginArtifactRendererActionDeclaration,
   PluginArtifactRendererDeclaration,
   PluginConnectorDeclaration,
   PluginConnectorKind,
@@ -70,10 +76,15 @@ export type {
   PluginRegistryProjectionInput,
   PluginRegistryRendererState,
   PluginRendererKind,
+  PluginRendererActionRisk,
   PluginRightSurfaceContract,
   PluginSkillDeclaration,
   PluginWorkspaceSelectionPolicy,
 } from "./manifest/types";
+export type {
+  PluginRendererOutputContract,
+  ResolvePluginRendererOutputContractParams,
+} from "./manifest/pluginRendererOutput";
 export type {
   PluginMarketplaceActivationState,
   PluginMarketplaceAuthenticationPolicy,
@@ -126,3 +137,9 @@ export type {
   PluginSessionWorkspaceObject,
   PluginWorkspaceLayoutState,
 } from "./history/pluginHistoryRestore";
+export type {
+  BuildPluginHistorySessionSelectionModelParams,
+  PluginHistorySessionCandidate,
+  PluginHistorySessionCandidateSource,
+  PluginHistorySessionSelectionModel,
+} from "./history/pluginHistorySessionSelection";

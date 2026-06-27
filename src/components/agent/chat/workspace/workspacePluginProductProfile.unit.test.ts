@@ -56,6 +56,7 @@ describe("workspacePluginProductProfile", () => {
           artifactType: "articleDraft",
           surfaceKind: "documentCanvas",
           rendererKind: "host_builtin",
+          outputArtifactKind: "creator.workspace_patch",
         },
       ],
     });
@@ -120,6 +121,9 @@ describe("workspacePluginProductProfile", () => {
         source: expect.objectContaining({
           source: "plugin_activation_context",
           selectedSkillKeys: ["article"],
+          outputArtifactKind: "creator.workspace_patch",
+          artifactType: "articleDraft",
+          surfaceKind: "documentCanvas",
         }),
       }),
     ]);

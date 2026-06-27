@@ -131,14 +131,43 @@ export function buildAgentStreamFirstTextPaintContext(params: {
   flushStartedAt: number;
   paintedAt: number;
   requestStartedAt: number;
+  rendererEventReceivedAt?: number | null;
+  serverEventEmittedAt?: number | null;
 }): Record<string, unknown> {
+  const rendererEventReceivedAt =
+    typeof params.rendererEventReceivedAt === "number" &&
+    Number.isFinite(params.rendererEventReceivedAt)
+      ? params.rendererEventReceivedAt
+      : null;
+  const serverEventEmittedAt =
+    typeof params.serverEventEmittedAt === "number" &&
+    Number.isFinite(params.serverEventEmittedAt)
+      ? params.serverEventEmittedAt
+      : null;
+
   return {
+    clientLocalOutputDeltaMs:
+      serverEventEmittedAt !== null
+        ? params.paintedAt - serverEventEmittedAt
+        : null,
     elapsedMs: params.paintedAt - params.requestStartedAt,
     eventName: params.eventName,
     firstTextDeltaDeltaMs: params.firstTextDeltaAt
       ? params.paintedAt - params.firstTextDeltaAt
       : null,
+    rendererEventReceivedDeltaMs:
+      rendererEventReceivedAt !== null
+        ? params.paintedAt - rendererEventReceivedAt
+        : null,
     renderFlushDeltaMs: params.paintedAt - params.flushStartedAt,
+    serverEventDeltaMs:
+      serverEventEmittedAt !== null
+        ? params.paintedAt - serverEventEmittedAt
+        : null,
+    serverToRendererDeltaMs:
+      serverEventEmittedAt !== null && rendererEventReceivedAt !== null
+        ? rendererEventReceivedAt - serverEventEmittedAt
+        : null,
     sessionId: params.activeSessionId,
   };
 }

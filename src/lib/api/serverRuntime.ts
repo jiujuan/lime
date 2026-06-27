@@ -133,6 +133,93 @@ export interface SupportBundleExportResult {
   omitted_sections: string[];
 }
 
+export interface SupportBundleTraceExportSelection {
+  session_id: string;
+  trace_id: string;
+}
+
+export interface SupportBundleExportParams {
+  include_trace_export?: SupportBundleTraceExportSelection;
+}
+
+export interface DiagnosticsTraceListParams {
+  session_id?: string;
+  limit?: number;
+}
+
+export interface DiagnosticsTraceReadParams {
+  session_id: string;
+  trace_id: string;
+  max_events?: number;
+}
+
+export interface DiagnosticsTraceExportParams {
+  session_id: string;
+  trace_id: string;
+}
+
+export interface DiagnosticsTraceRedactionPolicy {
+  mode: string;
+  raw_agent_event_payload: boolean;
+  prompt_text: boolean;
+  provider_payload: boolean;
+}
+
+export interface DiagnosticsTraceSummary {
+  session_id: string;
+  trace_id: string;
+  path: string;
+  size_bytes: number;
+  event_count: number;
+  first_wall_time_unix_ms?: number;
+  last_wall_time_unix_ms?: number;
+  modified_at?: string;
+}
+
+export interface DiagnosticsTraceEvent {
+  schema_version: number;
+  seq: number;
+  wall_time_unix_ms: number;
+  trace_id: string;
+  run_id?: string | null;
+  request_id?: string | null;
+  session_id: string;
+  thread_id?: string | null;
+  turn_id?: string | null;
+  event_id: string;
+  event_sequence: number;
+  event_type: string;
+  checkpoint: string;
+  metrics: Record<string, unknown>;
+  redaction: DiagnosticsTraceRedactionPolicy;
+}
+
+export interface DiagnosticsTraceListResult {
+  available: boolean;
+  trace_root?: string | null;
+  traces: DiagnosticsTraceSummary[];
+  redaction: DiagnosticsTraceRedactionPolicy;
+}
+
+export interface DiagnosticsTraceReadResult {
+  available: boolean;
+  trace?: DiagnosticsTraceSummary | null;
+  events: DiagnosticsTraceEvent[];
+  redaction: DiagnosticsTraceRedactionPolicy;
+}
+
+export interface DiagnosticsTraceExportResult {
+  available: boolean;
+  exported: boolean;
+  trace?: DiagnosticsTraceSummary | null;
+  bundle_path?: string | null;
+  output_directory?: string | null;
+  generated_at?: string | null;
+  included_sections: string[];
+  omitted_sections: string[];
+  redaction: DiagnosticsTraceRedactionPolicy;
+}
+
 export interface WindowsStartupCheck {
   key: string;
   status: "ok" | "warning" | "error";
@@ -178,9 +265,7 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-function isOptionalFiniteNumber(
-  value: unknown,
-): value is number | undefined {
+function isOptionalFiniteNumber(value: unknown): value is number | undefined {
   return value === undefined || isFiniteNumber(value);
 }
 
@@ -195,8 +280,61 @@ function isLogArtifactEntry(value: unknown): value is LogArtifactEntry {
   );
 }
 
+function isDiagnosticsTraceRedactionPolicy(
+  value: unknown,
+): value is DiagnosticsTraceRedactionPolicy {
+  return (
+    isRecord(value) &&
+    typeof value.mode === "string" &&
+    typeof value.raw_agent_event_payload === "boolean" &&
+    typeof value.prompt_text === "boolean" &&
+    typeof value.provider_payload === "boolean"
+  );
+}
+
+function isDiagnosticsTraceSummary(
+  value: unknown,
+): value is DiagnosticsTraceSummary {
+  return (
+    isRecord(value) &&
+    typeof value.session_id === "string" &&
+    typeof value.trace_id === "string" &&
+    typeof value.path === "string" &&
+    isFiniteNumber(value.size_bytes) &&
+    isFiniteNumber(value.event_count) &&
+    isOptionalFiniteNumber(value.first_wall_time_unix_ms) &&
+    isOptionalFiniteNumber(value.last_wall_time_unix_ms) &&
+    isOptionalString(value.modified_at)
+  );
+}
+
+function isDiagnosticsTraceEvent(
+  value: unknown,
+): value is DiagnosticsTraceEvent {
+  return (
+    isRecord(value) &&
+    isFiniteNumber(value.schema_version) &&
+    isFiniteNumber(value.seq) &&
+    isFiniteNumber(value.wall_time_unix_ms) &&
+    typeof value.trace_id === "string" &&
+    isOptionalNullableString(value.run_id) &&
+    isOptionalNullableString(value.request_id) &&
+    typeof value.session_id === "string" &&
+    isOptionalNullableString(value.thread_id) &&
+    isOptionalNullableString(value.turn_id) &&
+    typeof value.event_id === "string" &&
+    isFiniteNumber(value.event_sequence) &&
+    typeof value.event_type === "string" &&
+    typeof value.checkpoint === "string" &&
+    isRecord(value.metrics) &&
+    isDiagnosticsTraceRedactionPolicy(value.redaction)
+  );
+}
+
 function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === "string")
+  );
 }
 
 function isNumberArray(value: unknown): value is number[] {
@@ -366,9 +504,7 @@ function assertNotMockSupportBundle(value: SupportBundleExportResult): void {
   }
 }
 
-function assertNotMockWindowsStartup(
-  value: WindowsStartupDiagnostics,
-): void {
+function assertNotMockWindowsStartup(value: WindowsStartupDiagnostics): void {
   if (value.platform === "mock-web") {
     throw new Error(
       "get_windows_startup_diagnostics 尚未接入真实诊断 current 通道，收到 desktop-host mock 返回。",
@@ -376,7 +512,9 @@ function assertNotMockWindowsStartup(
   }
 }
 
-function assertServerDiagnostics(value: unknown): asserts value is ServerDiagnostics {
+function assertServerDiagnostics(
+  value: unknown,
+): asserts value is ServerDiagnostics {
   if (
     !isRecord(value) ||
     typeof value.generated_at !== "string" ||
@@ -427,6 +565,69 @@ function assertSupportBundleExportResult(
     !isStringArray(value.omitted_sections)
   ) {
     throw new Error("export_support_bundle did not return support bundle");
+  }
+}
+
+function assertDiagnosticsTraceListResult(
+  value: unknown,
+): asserts value is DiagnosticsTraceListResult {
+  if (
+    !isRecord(value) ||
+    typeof value.available !== "boolean" ||
+    !isOptionalNullableString(value.trace_root) ||
+    !Array.isArray(value.traces) ||
+    !value.traces.every(isDiagnosticsTraceSummary) ||
+    !isDiagnosticsTraceRedactionPolicy(value.redaction)
+  ) {
+    throw new Error("diagnostics_trace_list did not return trace list");
+  }
+}
+
+function assertDiagnosticsTraceReadResult(
+  value: unknown,
+): asserts value is DiagnosticsTraceReadResult {
+  if (
+    !isRecord(value) ||
+    typeof value.available !== "boolean" ||
+    !(
+      value.trace === undefined ||
+      value.trace === null ||
+      isDiagnosticsTraceSummary(value.trace)
+    ) ||
+    !Array.isArray(value.events) ||
+    !value.events.every(isDiagnosticsTraceEvent) ||
+    !isDiagnosticsTraceRedactionPolicy(value.redaction)
+  ) {
+    throw new Error("diagnostics_trace_read did not return trace events");
+  }
+}
+
+function assertDiagnosticsTraceExportResult(
+  value: unknown,
+): asserts value is DiagnosticsTraceExportResult {
+  if (
+    !isRecord(value) ||
+    typeof value.available !== "boolean" ||
+    typeof value.exported !== "boolean" ||
+    !(
+      value.trace === undefined ||
+      value.trace === null ||
+      isDiagnosticsTraceSummary(value.trace)
+    ) ||
+    !isOptionalNullableString(value.bundle_path) ||
+    !isOptionalNullableString(value.output_directory) ||
+    !isOptionalNullableString(value.generated_at) ||
+    !isStringArray(value.included_sections) ||
+    !isStringArray(value.omitted_sections) ||
+    !isDiagnosticsTraceRedactionPolicy(value.redaction)
+  ) {
+    throw new Error("diagnostics_trace_export did not return trace export");
+  }
+  if (
+    value.exported &&
+    (!value.bundle_path || !value.output_directory || !value.generated_at)
+  ) {
+    throw new Error("diagnostics_trace_export did not return export artifact");
   }
 }
 
@@ -674,10 +875,7 @@ function projectServerDiagnostics(value: {
       },
       stats: {
         entries_size: numberFromStats(idempotencyStats, "entries_size"),
-        in_progress_size: numberFromStats(
-          idempotencyStats,
-          "in_progress_size",
-        ),
+        in_progress_size: numberFromStats(idempotencyStats, "in_progress_size"),
         completed_size: numberFromStats(idempotencyStats, "completed_size"),
         check_new_total: numberFromStats(idempotencyStats, "check_new_total"),
         check_in_progress_total: numberFromStats(
@@ -711,6 +909,154 @@ function projectSupportBundleExport(value: {
     platform: value.platform,
     included_sections: value.includedSections,
     omitted_sections: value.omittedSections,
+  };
+}
+
+function projectSupportBundleExportParams(
+  params: SupportBundleExportParams,
+): { includeTraceExport?: { sessionId: string; traceId: string } } | undefined {
+  const selection = params.include_trace_export;
+  if (!selection) {
+    return undefined;
+  }
+  return {
+    includeTraceExport: {
+      sessionId: selection.session_id,
+      traceId: selection.trace_id,
+    },
+  };
+}
+
+function projectTraceRedactionPolicy(value: {
+  mode: string;
+  rawAgentEventPayload: boolean;
+  promptText: boolean;
+  providerPayload: boolean;
+}): DiagnosticsTraceRedactionPolicy {
+  return {
+    mode: value.mode,
+    raw_agent_event_payload: value.rawAgentEventPayload,
+    prompt_text: value.promptText,
+    provider_payload: value.providerPayload,
+  };
+}
+
+function projectTraceSummary(value: {
+  sessionId: string;
+  traceId: string;
+  path: string;
+  sizeBytes: number;
+  eventCount: number;
+  firstWallTimeUnixMs?: number;
+  lastWallTimeUnixMs?: number;
+  modifiedAt?: string;
+}): DiagnosticsTraceSummary {
+  return {
+    session_id: value.sessionId,
+    trace_id: value.traceId,
+    path: value.path,
+    size_bytes: value.sizeBytes,
+    event_count: value.eventCount,
+    ...(typeof value.firstWallTimeUnixMs === "number"
+      ? { first_wall_time_unix_ms: value.firstWallTimeUnixMs }
+      : {}),
+    ...(typeof value.lastWallTimeUnixMs === "number"
+      ? { last_wall_time_unix_ms: value.lastWallTimeUnixMs }
+      : {}),
+    ...(value.modifiedAt ? { modified_at: value.modifiedAt } : {}),
+  };
+}
+
+function projectTraceEvent(value: {
+  schemaVersion: number;
+  seq: number;
+  wallTimeUnixMs: number;
+  traceId: string;
+  runId?: string | null;
+  requestId?: string | null;
+  sessionId: string;
+  threadId?: string | null;
+  turnId?: string | null;
+  eventId: string;
+  eventSequence: number;
+  eventType: string;
+  checkpoint: string;
+  metrics?: Record<string, unknown>;
+  redaction: {
+    mode: string;
+    rawAgentEventPayload: boolean;
+    promptText: boolean;
+    providerPayload: boolean;
+  };
+}): DiagnosticsTraceEvent {
+  return {
+    schema_version: value.schemaVersion,
+    seq: value.seq,
+    wall_time_unix_ms: value.wallTimeUnixMs,
+    trace_id: value.traceId,
+    run_id: value.runId ?? null,
+    request_id: value.requestId ?? null,
+    session_id: value.sessionId,
+    thread_id: value.threadId ?? null,
+    turn_id: value.turnId ?? null,
+    event_id: value.eventId,
+    event_sequence: value.eventSequence,
+    event_type: value.eventType,
+    checkpoint: value.checkpoint,
+    metrics: isRecord(value.metrics) ? value.metrics : {},
+    redaction: projectTraceRedactionPolicy(value.redaction),
+  };
+}
+
+function projectDiagnosticsTraceList(value: {
+  available: boolean;
+  traceRoot?: string | null;
+  traces?: Array<Parameters<typeof projectTraceSummary>[0]>;
+  redaction: Parameters<typeof projectTraceRedactionPolicy>[0];
+}): DiagnosticsTraceListResult {
+  return {
+    available: value.available,
+    trace_root: value.traceRoot ?? null,
+    traces: (value.traces ?? []).map(projectTraceSummary),
+    redaction: projectTraceRedactionPolicy(value.redaction),
+  };
+}
+
+function projectDiagnosticsTraceRead(value: {
+  available: boolean;
+  trace?: Parameters<typeof projectTraceSummary>[0] | null;
+  events?: Array<Parameters<typeof projectTraceEvent>[0]>;
+  redaction: Parameters<typeof projectTraceRedactionPolicy>[0];
+}): DiagnosticsTraceReadResult {
+  return {
+    available: value.available,
+    trace: value.trace ? projectTraceSummary(value.trace) : null,
+    events: (value.events ?? []).map(projectTraceEvent),
+    redaction: projectTraceRedactionPolicy(value.redaction),
+  };
+}
+
+function projectDiagnosticsTraceExport(value: {
+  available: boolean;
+  exported: boolean;
+  trace?: Parameters<typeof projectTraceSummary>[0] | null;
+  bundlePath?: string | null;
+  outputDirectory?: string | null;
+  generatedAt?: string | null;
+  includedSections?: string[];
+  omittedSections?: string[];
+  redaction: Parameters<typeof projectTraceRedactionPolicy>[0];
+}): DiagnosticsTraceExportResult {
+  return {
+    available: value.available,
+    exported: value.exported,
+    trace: value.trace ? projectTraceSummary(value.trace) : null,
+    bundle_path: value.bundlePath ?? null,
+    output_directory: value.outputDirectory ?? null,
+    generated_at: value.generatedAt ?? null,
+    included_sections: value.includedSections ?? [],
+    omitted_sections: value.omittedSections ?? [],
+    redaction: projectTraceRedactionPolicy(value.redaction),
   };
 }
 
@@ -785,16 +1131,61 @@ export async function getLogStorageDiagnostics(): Promise<LogStorageDiagnostics>
   return result;
 }
 
-export async function exportSupportBundle(): Promise<SupportBundleExportResult> {
-  const response = await createAppServerClient().exportSupportBundle();
+export async function exportSupportBundle(
+  params: SupportBundleExportParams = {},
+): Promise<SupportBundleExportResult> {
+  const requestParams = projectSupportBundleExportParams(params);
+  const response = requestParams
+    ? await createAppServerClient().exportSupportBundle(requestParams)
+    : await createAppServerClient().exportSupportBundle();
   const result = projectSupportBundleExport(response.result);
   assertSupportBundleExportResult(result);
   assertNotMockSupportBundle(result);
   return result;
 }
 
+export async function listDiagnosticsTraces(
+  params: DiagnosticsTraceListParams = {},
+): Promise<DiagnosticsTraceListResult> {
+  const response = await createAppServerClient().listDiagnosticsTraces({
+    ...(params.session_id ? { sessionId: params.session_id } : {}),
+    ...(typeof params.limit === "number" ? { limit: params.limit } : {}),
+  });
+  const result = projectDiagnosticsTraceList(response.result);
+  assertDiagnosticsTraceListResult(result);
+  return result;
+}
+
+export async function readDiagnosticsTrace(
+  params: DiagnosticsTraceReadParams,
+): Promise<DiagnosticsTraceReadResult> {
+  const response = await createAppServerClient().readDiagnosticsTrace({
+    sessionId: params.session_id,
+    traceId: params.trace_id,
+    ...(typeof params.max_events === "number"
+      ? { maxEvents: params.max_events }
+      : {}),
+  });
+  const result = projectDiagnosticsTraceRead(response.result);
+  assertDiagnosticsTraceReadResult(result);
+  return result;
+}
+
+export async function exportDiagnosticsTrace(
+  params: DiagnosticsTraceExportParams,
+): Promise<DiagnosticsTraceExportResult> {
+  const response = await createAppServerClient().exportDiagnosticsTrace({
+    sessionId: params.session_id,
+    traceId: params.trace_id,
+  });
+  const result = projectDiagnosticsTraceExport(response.result);
+  assertDiagnosticsTraceExportResult(result);
+  return result;
+}
+
 export async function getWindowsStartupDiagnostics(): Promise<WindowsStartupDiagnostics> {
-  const response = await createAppServerClient().readWindowsStartupDiagnostics();
+  const response =
+    await createAppServerClient().readWindowsStartupDiagnostics();
   const result = projectWindowsStartupDiagnostics(response.result);
   assertWindowsStartupDiagnostics(result);
   assertNotMockWindowsStartup(result);

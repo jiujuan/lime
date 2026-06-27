@@ -95,6 +95,18 @@ describe("pluginInputCapability", () => {
     ).toBe("@内容工厂 整理选题");
   });
 
+  it("从 @ 面板补全出的触发前缀应保留尾随空格", () => {
+    expect(
+      applyInputbarPluginSelection({
+        input: "@内容工厂 ",
+        plugin: {
+          pluginId: "content-workbench",
+          displayName: "内容工厂",
+        },
+      }).text,
+    ).toBe("@内容工厂 ");
+  });
+
   it("移除插件选择时应清除对应触发前缀", () => {
     const selection = applyInputbarPluginSelection({
       input: "整理选题",

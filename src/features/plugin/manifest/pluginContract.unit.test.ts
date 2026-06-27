@@ -9,6 +9,7 @@ import {
   normalizePluginManifest,
   PluginManifestError,
 } from "./pluginContract";
+import { buildPluginRendererOutputContracts } from "./pluginRendererOutput";
 import {
   projectPluginRegistry,
   projectPluginRegistryItem,
@@ -147,6 +148,7 @@ describe("Plugin P1 manifest contract", () => {
           artifactType: "markdown_document",
           surfaceKind: "documentCanvas",
           rendererKind: "host_builtin",
+          outputArtifactKind: "content_factory.workspace_patch",
         }),
         expect.objectContaining({
           artifactType: "image_set",
@@ -233,6 +235,93 @@ describe("Plugin P1 manifest contract", () => {
     expect(contract.artifactRenderers).toEqual([]);
     expect(contract.rightSurface.productWorkspace.enabled).toBe(false);
     expect(contract.historyRestore.defaultSurface).toBe("chat");
+  });
+
+  it("应保留 app-declared renderer 输出 contract 和 pane action 声明", () => {
+    const contract = normalizePluginManifest({
+      id: "creator-pack",
+      displayName: "Creator Pack",
+      version: "1.0.0",
+      artifactRenderers: [
+        {
+          artifactType: "creator.article_draft",
+          surfaceKind: "documentCanvas",
+          paneKind: "editor",
+          rendererKind: "app_declared",
+          entry: "app://creator/editor",
+          outputArtifactKind: "creator.workspace_patch",
+          actionKeys: ["revise"],
+          actions: [
+            {
+              key: "regenerate",
+              intent: "regenerate",
+              risk: "write",
+              taskKind: "creator.generate",
+            },
+          ],
+          capabilities: ["history_restore"],
+        },
+      ],
+    });
+
+    expect(contract.artifactRenderers[0]).toMatchObject({
+      artifactType: "creator.article_draft",
+      surfaceKind: "documentCanvas",
+      paneKind: "editor",
+      rendererKind: "app_declared",
+      entry: "app://creator/editor",
+      outputArtifactKind: "creator.workspace_patch",
+      actionKeys: ["revise"],
+      actions: [
+        {
+          key: "regenerate",
+          intent: "regenerate",
+          risk: "write",
+          taskKind: "creator.generate",
+        },
+      ],
+    });
+    expect(buildPluginRendererOutputContracts(contract)).toEqual([
+      expect.objectContaining({
+        pluginId: "creator-pack",
+        artifactType: "creator.article_draft",
+        surfaceKind: "documentCanvas",
+        paneKind: "editor",
+        rendererKind: "app_declared",
+        outputArtifactKind: "creator.workspace_patch",
+        actionKeys: ["revise", "regenerate"],
+        capabilities: ["history_restore"],
+        runtimeAuthorization: expect.objectContaining({
+          status: "placeholder_only",
+          executionMode: "host_placeholder",
+          runtimeBoundary: "host_placeholder_only",
+          reasonCode: "app_declared_renderer_placeholder_only",
+          remoteRuntimePolicy: expect.objectContaining({
+            status: "disabled",
+            clientBehavior: "fail_closed",
+            serviceBoundary: "marketplace_control_plane_only",
+          }),
+        }),
+      }),
+    ]);
+  });
+
+  it("renderer action 风险非法时 fail closed", () => {
+    expect(() =>
+      normalizePluginManifest({
+        id: "broken-action",
+        displayName: "Broken Action",
+        version: "1.0.0",
+        artifactRenderers: [
+          {
+            artifactType: "articleDraft",
+            surfaceKind: "documentCanvas",
+            rendererKind: "host_builtin",
+            actions: [{ key: "delete_everything", risk: "admin" }],
+          },
+        ],
+      }),
+    ).toThrow("Plugin renderer action risk is unsupported");
   });
 });
 

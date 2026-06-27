@@ -682,6 +682,14 @@ describe("Agent API 治理护栏", () => {
           executionStrategy: "react",
           workspaceId: "workspace-1",
           workingDir: "/tmp/workspace-1",
+          businessObjectRefMetadata: {
+            harness: {
+              plugin_history_restore: {
+                session_id: "session-runtime-1",
+                plugin_id: "content-factory@limecloud",
+              },
+            },
+          },
         },
       ],
     });
@@ -698,6 +706,14 @@ describe("Agent API 治理护栏", () => {
         workspace_id: "workspace-1",
         working_dir: "/tmp/workspace-1",
         execution_strategy: "react",
+        session_business_object_ref_metadata: {
+          harness: {
+            plugin_history_restore: {
+              session_id: "session-runtime-1",
+              plugin_id: "content-factory@limecloud",
+            },
+          },
+        },
       },
     ]);
     expectAppServerRequest(1, "agentSession/list", {});

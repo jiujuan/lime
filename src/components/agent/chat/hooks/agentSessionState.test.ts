@@ -223,6 +223,25 @@ describe("agentSessionState", () => {
     ).toBe(true);
   });
 
+  it("已 hydrate 且 read model 仍在运行时应跳过重复 detail hydration", () => {
+    expect(
+      shouldSkipAlreadyHydratedSession({
+        currentTurnId: null,
+        hydratedSessionId: "topic-running",
+        messagesCount: 0,
+        queuedTurnsCount: 0,
+        selectedTopic: {
+          messagesCount: 0,
+          status: "running",
+        },
+        sessionId: "topic-running",
+        threadReadStatus: "running",
+        threadItemsCount: 0,
+        threadTurnsCount: 0,
+      }),
+    ).toBe(true);
+  });
+
   it("已 hydrate 的空草稿 topic 应跳过 detail hydration", () => {
     expect(
       shouldSkipAlreadyHydratedSession({

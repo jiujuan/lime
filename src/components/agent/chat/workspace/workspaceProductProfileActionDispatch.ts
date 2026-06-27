@@ -1,6 +1,7 @@
 import type { HandleSendOptions } from "../hooks/handleSendTypes";
 import {
   buildWorkspaceProductProfileActionRequestMetadata,
+  resolveWorkspaceProductProfileActionOutputArtifactKind,
   type WorkspaceProductProfileActionIntent,
 } from "./workspaceProductProfileModel";
 
@@ -13,15 +14,6 @@ export interface SubmitWorkspaceProductProfileActionIntentParams {
   intent: WorkspaceProductProfileActionIntent;
   submit: SubmitWorkspaceProductProfileAction;
   restoreInput?: (prompt: string) => void;
-}
-
-function readOutputArtifactKind(
-  intent: WorkspaceProductProfileActionIntent,
-): string | null {
-  if (intent.profile.appId === "content-factory-app") {
-    return "content_factory.workspace_patch";
-  }
-  return null;
 }
 
 function readObjectArtifactIds(
@@ -37,7 +29,8 @@ export function buildWorkspaceProductProfileActionSystemPrompt(
   intent: WorkspaceProductProfileActionIntent,
 ): string {
   const artifactIds = readObjectArtifactIds(intent);
-  const outputArtifactKind = readOutputArtifactKind(intent);
+  const outputArtifactKind =
+    resolveWorkspaceProductProfileActionOutputArtifactKind(intent);
   return [
     "本轮请求来自右侧 Product Profile action。",
     "Source: right_surface_product_profile",

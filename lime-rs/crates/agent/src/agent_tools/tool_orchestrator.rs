@@ -1,6 +1,7 @@
 use crate::agent_tools::execution::{
     decide_tool_execution, persisted_tool_execution_policy_from_metadata,
-    start_local_execution_process, tool_execution_policy_metadata, LocalExecutionRequest,
+    start_local_execution_process, tool_execution_policy_metadata, ExecutionOutputDelta,
+    ExecutionProcessSnapshot, LocalExecutionProcessControlHandle, LocalExecutionRequest,
     ToolExecutionDecision, ToolExecutionDecisionInput, ToolExecutionDecisionKind,
     ToolExecutionResolverInput,
 };
@@ -53,6 +54,19 @@ pub struct ToolExecutionBatchInput {
     pub parallelism: usize,
     pub auto_mode: bool,
     pub bypass_restrictions: bool,
+    pub live_process_registry: Option<Arc<dyn LiveExecutionProcessRegistry>>,
+}
+
+pub trait LiveExecutionProcessRegistry: Send + Sync {
+    fn register_live_process(
+        &self,
+        handle: LocalExecutionProcessControlHandle,
+        snapshot: ExecutionProcessSnapshot,
+    ) -> Result<(), String>;
+
+    fn record_live_process_output(&self, delta: ExecutionOutputDelta) -> Result<(), String>;
+
+    fn finish_live_process(&self, snapshot: ExecutionProcessSnapshot) -> Result<(), String>;
 }
 
 #[derive(Debug, Clone)]
@@ -352,13 +366,36 @@ async fn execute_live_shell_process(
 
     let mut stream_events = Vec::new();
     let start_snapshot = handle.status();
-    stream_events.push(RuntimeAgentEvent::ToolOutputDelta {
-        tool_id: planned.tool_id.clone(),
-        delta: String::new(),
-        output_kind: Some("process".to_string()),
-        metadata: Some(start_snapshot.metadata()),
-    });
+    let live_process_registry = input.live_process_registry.clone();
+    if let Some(registry) = live_process_registry.as_ref() {
+        match registry.register_live_process(handle.control_handle(), start_snapshot.clone()) {
+            Ok(()) => {
+                metadata.insert(
+                    "executionProcessControlStatus".to_string(),
+                    json!("registered"),
+                );
+                metadata.insert(
+                    "execution_process_control_status".to_string(),
+                    json!("registered"),
+                );
+            }
+            Err(error) => {
+                record_live_process_registry_error(metadata, "register", error);
+            }
+        }
+    }
+    let mut start_metadata = start_snapshot.metadata();
+    copy_live_process_control_metadata(metadata, &mut start_metadata);
+    stream_events.push(live_process_lifecycle_event(
+        &planned.tool_id,
+        start_metadata,
+    ));
     while let Some(delta) = handle.recv_output().await {
+        if let Some(registry) = live_process_registry.as_ref() {
+            if let Err(error) = registry.record_live_process_output(delta.clone()) {
+                record_live_process_registry_error(metadata, "record_output", error);
+            }
+        }
         let metadata = delta.metadata();
         stream_events.push(RuntimeAgentEvent::ToolOutputDelta {
             tool_id: planned.tool_id.clone(),
@@ -376,6 +413,22 @@ async fn execute_live_shell_process(
                 "failureCategory".to_string(),
                 json!("process_supervisor_failed"),
             );
+            let mut failure_metadata = handle.status().metadata();
+            failure_metadata.insert("executionProcessStatus".to_string(), json!("failed"));
+            failure_metadata.insert(
+                "failureCategory".to_string(),
+                json!("process_supervisor_failed"),
+            );
+            if let Some(registry) = live_process_registry.as_ref() {
+                if let Err(error) = registry.finish_live_process(handle.status()) {
+                    record_live_process_registry_error(metadata, "finish_failed", error);
+                }
+            }
+            copy_live_process_control_metadata(metadata, &mut failure_metadata);
+            stream_events.push(live_process_lifecycle_event(
+                &planned.tool_id,
+                failure_metadata,
+            ));
             return ToolExecutionOutcome {
                 tool_name: planned.tool_name,
                 tool_id: planned.tool_id,
@@ -387,6 +440,17 @@ async fn execute_live_shell_process(
             };
         }
     };
+    let mut terminal_metadata = final_snapshot.metadata();
+    copy_live_process_control_metadata(metadata, &mut terminal_metadata);
+    stream_events.push(live_process_lifecycle_event(
+        &planned.tool_id,
+        terminal_metadata,
+    ));
+    if let Some(registry) = live_process_registry.as_ref() {
+        if let Err(error) = registry.finish_live_process(final_snapshot.clone()) {
+            record_live_process_registry_error(metadata, "finish", error);
+        }
+    }
     metadata.extend(final_snapshot.metadata());
     metadata.insert("command".to_string(), json!(command));
     metadata.insert("cwd".to_string(), json!(cwd.to_string_lossy().to_string()));
@@ -410,6 +474,62 @@ async fn execute_live_shell_process(
         },
         metadata: Some(metadata.clone()),
         stream_events,
+    }
+}
+
+fn record_live_process_registry_error(
+    metadata: &mut HashMap<String, Value>,
+    phase: &str,
+    error: String,
+) {
+    metadata.insert(
+        "executionProcessControlStatus".to_string(),
+        json!("registration_error"),
+    );
+    metadata.insert(
+        "execution_process_control_status".to_string(),
+        json!("registration_error"),
+    );
+    metadata.insert(
+        "executionProcessControlErrorPhase".to_string(),
+        json!(phase),
+    );
+    metadata.insert(
+        "execution_process_control_error_phase".to_string(),
+        json!(phase),
+    );
+    metadata.insert("executionProcessControlError".to_string(), json!(error));
+    metadata.insert("execution_process_control_error".to_string(), json!(error));
+}
+
+fn copy_live_process_control_metadata(
+    source: &HashMap<String, Value>,
+    target: &mut HashMap<String, Value>,
+) {
+    for key in [
+        "executionProcessControlStatus",
+        "execution_process_control_status",
+        "executionProcessControlErrorPhase",
+        "execution_process_control_error_phase",
+        "executionProcessControlError",
+        "execution_process_control_error",
+    ] {
+        if let Some(value) = source.get(key) {
+            target.insert(key.to_string(), value.clone());
+        }
+    }
+}
+
+fn live_process_lifecycle_event(
+    tool_id: &str,
+    mut metadata: HashMap<String, Value>,
+) -> RuntimeAgentEvent {
+    metadata.insert("executionSurface".to_string(), json!("live_process"));
+    RuntimeAgentEvent::ToolOutputDelta {
+        tool_id: tool_id.to_string(),
+        delta: String::new(),
+        output_kind: Some("process".to_string()),
+        metadata: Some(metadata),
     }
 }
 

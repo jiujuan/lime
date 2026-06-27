@@ -39,6 +39,7 @@ import {
   WEB_TOOLS_SEARCH_TOOL_CALL_ID,
 } from "./claw-chat-current-fixture-constants.mjs";
 import { runContentFactoryProductProfileScenario } from "./claw-chat-current-fixture-content-factory-product-profile.mjs";
+import { collectAgentUiPerformanceTraceEvidence } from "./claw-chat-current-fixture-agent-ui-trace.mjs";
 import {
   addExpertSkillsRuntimeSkillFromInfoPanel,
   exportExpertPanelEvidencePackFromHarnessPanel,
@@ -247,6 +248,9 @@ export async function executeScenarioFlow({
         JSON.stringify(readModelPlanCompleted || {}).includes(step.step),
       ),
     });
+    summary.agentUiPerformanceTrace = sanitizeJson(
+      await collectAgentUiPerformanceTraceEvidence(page),
+    );
 
     logStage("verify-plan-history-hydrate-from-sidebar");
     Object.assign(

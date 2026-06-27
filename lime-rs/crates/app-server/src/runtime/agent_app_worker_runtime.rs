@@ -2,9 +2,9 @@ use super::RuntimeCore;
 use super::RuntimeCoreError;
 use super::RuntimeEvent;
 use app_server_protocol::AgentAppTaskRuntimeContract;
+use serde_json::json;
 use serde_json::Map;
 use serde_json::Value;
-use serde_json::json;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
@@ -390,9 +390,9 @@ fn inherited_agent_app_secret_env_keys() -> &'static [&'static str] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::runtime::RuntimeCore;
     use crate::runtime::agent_app_task_runtime::build_agent_app_task_runtime_contract;
     use crate::runtime::sidecar_store::SidecarStore;
+    use crate::runtime::RuntimeCore;
     use app_server_protocol::AgentInput;
     use app_server_protocol::AgentSessionReadParams;
     use app_server_protocol::AgentSessionStartParams;
@@ -452,8 +452,8 @@ mod tests {
             CONTENT_FACTORY_WORKSPACE_PATCH_KIND
         );
         assert_eq!(
-            events[0].payload["artifact"]["metadata"]["contentFactoryWorkspacePatch"]["selectedObjectRef"]
-                ["kind"],
+            events[0].payload["artifact"]["metadata"]["contentFactoryWorkspacePatch"]
+                ["selectedObjectRef"]["kind"],
             "imageGenerationSet"
         );
         assert_eq!(
@@ -612,11 +612,9 @@ mod tests {
                 sample_request,
             ))
             .expect("worker events");
-        assert!(
-            runtime_events[0].payload["artifact"]["content"]
-                .as_str()
-                .is_some_and(|content| content.contains("product-workspace.v1"))
-        );
+        assert!(runtime_events[0].payload["artifact"]["content"]
+            .as_str()
+            .is_some_and(|content| content.contains("product-workspace.v1")));
         core.start_session(AgentSessionStartParams {
             session_id: Some("session-content-factory-sidecar".to_string()),
             thread_id: Some("thread-content-factory-sidecar".to_string()),
@@ -674,13 +672,11 @@ mod tests {
             .expect("worker artifact content");
         assert!(content.contains("product-workspace.v1"));
         assert!(content.contains("Regenerated 2 image candidates."));
-        assert!(
-            artifact_read.artifacts[0]
-                .metadata
-                .as_ref()
-                .and_then(|metadata| metadata.get("sidecarRef"))
-                .is_some()
-        );
+        assert!(artifact_read.artifacts[0]
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get("sidecarRef"))
+            .is_some());
     }
 
     #[test]

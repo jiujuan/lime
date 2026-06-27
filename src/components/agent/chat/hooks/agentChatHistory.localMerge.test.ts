@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   extractThinkingContentFromParts,
+  mergeAdjacentAssistantMessages,
   mergeHydratedMessagesWithLocalState,
 } from "./agentChatHistory";
 
@@ -808,6 +809,134 @@ describe("agentChatHistory local merge", () => {
     });
   });
 
+  it("刷新会话详情时不应把上一轮专家过程合并到下一轮 assistant", () => {
+    const localMessages = [
+      {
+        id: "local-user-expert-first",
+        role: "user" as const,
+        content: "请以「代码文学专家」身份，使用绑定技能完成一次最小代码审查。",
+        timestamp: new Date("2026-06-21T18:41:38.000Z"),
+        runtimeTurnId: "turn-expert-first",
+      },
+      {
+        id: "local-assistant-expert-first",
+        role: "assistant" as const,
+        content:
+          "专家 Skills runtime 证据已完成：专家声明 skillRefs 只作为候选提示。",
+        contentParts: [
+          {
+            type: "text" as const,
+            text: "我识别到专家绑定的 skillRefs，但仍先通过 skill_search 选择。",
+            metadata: {
+              phase: "commentary",
+              turnId: "turn-expert-first",
+              itemId: "agent-message-commentary-turn-expert-first",
+            },
+          },
+          {
+            type: "text" as const,
+            text: "专家 Skills runtime 证据已完成：专家声明 skillRefs 只作为候选提示。",
+            metadata: {
+              phase: "final_answer",
+              turnId: "turn-expert-first",
+              itemId: "agent-message-final-turn-expert-first",
+            },
+          },
+        ],
+        timestamp: new Date("2026-06-21T18:41:39.000Z"),
+        runtimeTurnId: "turn-expert-first",
+      },
+    ];
+    const hydratedMessages = [
+      {
+        id: "history-user-expert-panel",
+        role: "user" as const,
+        content:
+          "请继续以「代码文学专家」身份，使用刚添加的技能再做一次最小代码审查。",
+        timestamp: new Date("2026-06-21T18:42:38.300Z"),
+        runtimeTurnId: "turn-expert-panel",
+      },
+      {
+        id: "history-assistant-expert-panel",
+        role: "assistant" as const,
+        content:
+          "专家面板新增 Skill 后的下一轮 runtime 证据已完成：右侧面板调整 skillRefs 后，下一轮请求继续通过 skill_search、SKILL.md 按需读取、gate 和 Skill 调用。",
+        contentParts: [
+          {
+            type: "text" as const,
+            text: "专家面板新增 Skill 后的下一轮 runtime 证据已完成：右侧面板调整 skillRefs 后，下一轮请求继续通过 skill_search、SKILL.md 按需读取、gate 和 Skill 调用。",
+            metadata: {
+              phase: "final_answer",
+              turnId: "turn-expert-panel",
+              itemId: "agent-message-final-turn-expert-panel",
+            },
+          },
+        ],
+        timestamp: new Date("2026-06-21T18:42:45.000Z"),
+        runtimeTurnId: "turn-expert-panel",
+      },
+    ];
+
+    const mergedMessages = mergeHydratedMessagesWithLocalState(
+      localMessages,
+      hydratedMessages,
+    );
+
+    expect(mergedMessages[1]?.id).toBe("history-assistant-expert-panel");
+    expect(mergedMessages[1]?.runtimeTurnId).toBe("turn-expert-panel");
+    expect(mergedMessages[1]?.content).not.toContain(
+      "专家 Skills runtime 证据已完成",
+    );
+    expect(mergedMessages[1]?.contentParts).toEqual(
+      hydratedMessages[1]?.contentParts,
+    );
+  });
+
+  it("相邻 assistant 历史过程不应跨 runtime turn 合并", () => {
+    const mergedMessages = mergeAdjacentAssistantMessages([
+      {
+        id: "assistant-expert-first",
+        role: "assistant",
+        content: "专家 Skills runtime 证据已完成：第一轮。",
+        contentParts: [
+          {
+            type: "text",
+            text: "专家 Skills runtime 证据已完成：第一轮。",
+            metadata: {
+              phase: "final_answer",
+              turnId: "turn-expert-first",
+            },
+          },
+        ],
+        timestamp: new Date("2026-06-21T18:41:39.000Z"),
+        runtimeTurnId: "turn-expert-first",
+      },
+      {
+        id: "assistant-expert-panel",
+        role: "assistant",
+        content: "专家面板新增 Skill 后的下一轮 runtime 证据已完成。",
+        contentParts: [
+          {
+            type: "text",
+            text: "专家面板新增 Skill 后的下一轮 runtime 证据已完成。",
+            metadata: {
+              phase: "final_answer",
+              turnId: "turn-expert-panel",
+            },
+          },
+        ],
+        timestamp: new Date("2026-06-21T18:42:45.000Z"),
+        runtimeTurnId: "turn-expert-panel",
+      },
+    ]);
+
+    expect(mergedMessages).toHaveLength(2);
+    expect(mergedMessages[1]?.content).not.toContain(
+      "专家 Skills runtime 证据已完成",
+    );
+    expect(mergedMessages[1]?.runtimeTurnId).toBe("turn-expert-panel");
+  });
+
   it("刷新会话详情时远端 WebTools final 不应覆盖本地已流式输出的导语和搜索过程", () => {
     const localMessages = [
       {
@@ -936,9 +1065,7 @@ describe("agentChatHistory local merge", () => {
     );
 
     expect(mergedMessages[1]?.id).toBe("local-assistant-web-tools");
-    expect(mergedMessages[1]?.content).toContain(
-      "我先联网核实目标页面来源。",
-    );
+    expect(mergedMessages[1]?.content).toContain("我先联网核实目标页面来源。");
     expect(mergedMessages[1]?.contentParts?.map((part) => part.type)).toEqual([
       "text",
       "tool_use",
@@ -1018,12 +1145,10 @@ describe("agentChatHistory local merge", () => {
     );
 
     expect(mergedMessages[1]?.id).toBe("local-assistant-web-tools-text");
-    expect(mergedMessages[1]?.content).toContain(
-      "我先联网核实目标页面来源。",
+    expect(mergedMessages[1]?.content).toContain("我先联网核实目标页面来源。");
+    expect(mergedMessages[1]?.content.match(/网页搜索渲染结论/g)).toHaveLength(
+      1,
     );
-    expect(
-      mergedMessages[1]?.content.match(/网页搜索渲染结论/g),
-    ).toHaveLength(1);
     expect(mergedMessages[1]?.contentParts?.[0]).toMatchObject({
       type: "text",
       text: "我先联网核实目标页面来源。",

@@ -109,7 +109,9 @@ async fn read_model_projects_active_coding_activity_and_pending_action() {
                     "outputRef": "output://cmd_active",
                     "processId": "process-cmd-active",
                     "executionProcessStatus": "running",
+                    "executionProcessControlStatus": "registered",
                     "executionSurface": "live_process",
+                    "stdinWritable": true,
                     "outputBytes": 14,
                     "outputOmittedBytes": 0,
                     "outputTruncated": false,
@@ -176,7 +178,12 @@ async fn read_model_projects_active_coding_activity_and_pending_action() {
     assert_eq!(commands[0]["output_refs"][0], "output://cmd_active");
     assert_eq!(commands[0]["process_id"], "process-cmd-active");
     assert_eq!(commands[0]["execution_process_status"], "running");
+    assert_eq!(
+        commands[0]["execution_process_control_status"],
+        "registered"
+    );
     assert_eq!(commands[0]["execution_surface"], "live_process");
+    assert_eq!(commands[0]["stdin_writable"], true);
     assert_eq!(commands[0]["output_bytes"], 14);
     assert_eq!(commands[0]["output_omitted_bytes"], 0);
     assert_eq!(commands[0]["output_truncated"], false);

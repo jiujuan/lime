@@ -8,6 +8,7 @@ import {
   performPluginMarketplaceAction,
   resolvePluginMarketplaceItemLabel,
   submitPluginMarketplaceRegistrationCode,
+  type PluginMarketplaceActionDeps,
 } from "./pluginMarketplaceActions";
 import type { PluginMarketplaceViewItem } from "./pluginMarketplaceViewModel";
 
@@ -102,13 +103,49 @@ function uninstallPreview() {
   };
 }
 
+function installStateReport(
+  state: "installed" | "enabled" | "disabled" | "uninstalled",
+) {
+  return {
+    tenantId: "tenant-0001",
+    userId: "user-001",
+    pluginName: "research-kit",
+    marketplaceName: "limecloud",
+    pluginKey: "research-kit@limecloud",
+    sourceKind: "agent_app_release" as const,
+    sourceRef: "release-001",
+    state,
+    releaseId: "release-001",
+    packageHash:
+      "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    manifestHash:
+      "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    reportedAt: "2026-06-25T01:02:03.000Z",
+    updatedAt: "2026-06-25T01:02:03.000Z",
+  };
+}
+
+function runtimeContext() {
+  return {
+    tenantId: "tenant-0001",
+  } as ReturnType<
+    NonNullable<PluginMarketplaceActionDeps["resolveRuntimeContext"]>
+  >;
+}
+
 describe("plugin marketplace actions", () => {
   it("安装应复用 current Agent App cloud release install API", async () => {
     const installCloudRelease = vi.fn(async () => installedState());
+    const reportInstallState: NonNullable<
+      PluginMarketplaceActionDeps["reportInstallState"]
+    > = vi.fn(async () => installStateReport("installed"));
     const dispatchChanged = vi.fn();
 
     const result = await performPluginMarketplaceAction(viewItem(), {
       installCloudRelease,
+      reportInstallState,
+      resolveRuntimeContext: vi.fn(runtimeContext),
+      now: () => "2026-06-25T01:02:03.000Z",
       dispatchChanged,
     });
 
@@ -135,6 +172,25 @@ describe("plugin marketplace actions", () => {
         defaultEntries: ["research-kit"],
       } satisfies Partial<CloudBootstrapApp>),
     });
+    expect(reportInstallState).toHaveBeenCalledWith(
+      "tenant-0001",
+      "research-kit",
+      {
+        state: "installed",
+        releaseId: "release-001",
+        packageHash:
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        manifestHash:
+          "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        reportedAt: "2026-06-25T01:02:03.000Z",
+      },
+      "limecloud",
+    );
+    expect(
+      result.status === "performed"
+        ? result.remoteInstallStateSync?.status
+        : undefined,
+    ).toBe("synced");
     expect(dispatchChanged).toHaveBeenCalledTimes(1);
   });
 
@@ -187,6 +243,9 @@ describe("plugin marketplace actions", () => {
       states: [installedState()],
       issues: [],
     }));
+    const reportInstallState: NonNullable<
+      PluginMarketplaceActionDeps["reportInstallState"]
+    > = vi.fn(async () => installStateReport("enabled"));
     const dispatchChanged = vi.fn();
 
     const result = await performPluginMarketplaceAction(
@@ -203,6 +262,8 @@ describe("plugin marketplace actions", () => {
       }),
       {
         setDisabled,
+        reportInstallState,
+        resolveRuntimeContext: vi.fn(runtimeContext),
         now: () => "2026-06-25T01:02:03.000Z",
         dispatchChanged,
       },
@@ -217,6 +278,15 @@ describe("plugin marketplace actions", () => {
       disabled: false,
       updatedAt: "2026-06-25T01:02:03.000Z",
     });
+    expect(reportInstallState).toHaveBeenCalledWith(
+      "tenant-0001",
+      "research-kit",
+      expect.objectContaining({
+        state: "enabled",
+        reportedAt: "2026-06-25T01:02:03.000Z",
+      }),
+      "limecloud",
+    );
     expect(dispatchChanged).toHaveBeenCalledTimes(1);
   });
 
@@ -225,6 +295,9 @@ describe("plugin marketplace actions", () => {
       states: [installedState()],
       issues: [],
     }));
+    const reportInstallState: NonNullable<
+      PluginMarketplaceActionDeps["reportInstallState"]
+    > = vi.fn(async () => installStateReport("disabled"));
     const dispatchChanged = vi.fn();
 
     const result = await performPluginMarketplaceAction(
@@ -241,6 +314,8 @@ describe("plugin marketplace actions", () => {
       }),
       {
         setDisabled,
+        reportInstallState,
+        resolveRuntimeContext: vi.fn(runtimeContext),
         now: () => "2026-06-25T01:02:03.000Z",
         dispatchChanged,
       },
@@ -256,6 +331,15 @@ describe("plugin marketplace actions", () => {
       disabled: true,
       updatedAt: "2026-06-25T01:02:03.000Z",
     });
+    expect(reportInstallState).toHaveBeenCalledWith(
+      "tenant-0001",
+      "research-kit",
+      expect.objectContaining({
+        state: "disabled",
+        reportedAt: "2026-06-25T01:02:03.000Z",
+      }),
+      "limecloud",
+    );
     expect(dispatchChanged).toHaveBeenCalledTimes(1);
   });
 
@@ -271,6 +355,9 @@ describe("plugin marketplace actions", () => {
       removedTargetCount: 1,
       missingTargetCount: 0,
     }));
+    const reportInstallState: NonNullable<
+      PluginMarketplaceActionDeps["reportInstallState"]
+    > = vi.fn(async () => installStateReport("uninstalled"));
     const dispatchChanged = vi.fn();
 
     const result = await performPluginMarketplaceAction(
@@ -288,6 +375,9 @@ describe("plugin marketplace actions", () => {
       {
         previewUninstall,
         uninstall,
+        reportInstallState,
+        resolveRuntimeContext: vi.fn(runtimeContext),
+        now: () => "2026-06-25T01:02:03.000Z",
         dispatchChanged,
       },
       "uninstall_keep_data",
@@ -309,6 +399,15 @@ describe("plugin marketplace actions", () => {
       appId: "research-kit",
       mode: "keep-data",
     });
+    expect(reportInstallState).toHaveBeenCalledWith(
+      "tenant-0001",
+      "research-kit",
+      expect.objectContaining({
+        state: "uninstalled",
+        reportedAt: "2026-06-25T01:02:03.000Z",
+      }),
+      "limecloud",
+    );
     expect(dispatchChanged).toHaveBeenCalledTimes(1);
   });
 
@@ -368,6 +467,48 @@ describe("plugin marketplace actions", () => {
     expect(submitRegistrationCode).toHaveBeenCalledWith(
       "research-kit",
       "reg-001",
+    );
+    expect(dispatchChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it("原生目录项注册授权应调用 client plugin registration API", async () => {
+    const submitPluginRegistrationCode: NonNullable<
+      PluginMarketplaceActionDeps["submitPluginRegistrationCode"]
+    > = vi.fn(async () => ({
+      schemaVersion: "plugin-marketplace/v1",
+      tenantId: "tenant-0001",
+      generatedAt: "2026-06-25T01:02:03.000Z",
+      marketplaceName: "limecloud",
+      items: [],
+    }));
+    const resolveRuntimeContext = vi.fn(
+      () =>
+        ({
+          tenantId: "tenant-0001",
+        }) as ReturnType<
+          NonNullable<PluginMarketplaceActionDeps["resolveRuntimeContext"]>
+        >,
+    );
+    const dispatchChanged = vi.fn();
+
+    await submitPluginMarketplaceRegistrationCode(
+      viewItem({
+        sourceKind: "plugin_catalog",
+        appId: undefined,
+      }),
+      "  reg-001  ",
+      {
+        submitPluginRegistrationCode,
+        resolveRuntimeContext,
+        dispatchChanged,
+      },
+    );
+
+    expect(submitPluginRegistrationCode).toHaveBeenCalledWith(
+      "tenant-0001",
+      "research-kit",
+      { code: "reg-001" },
+      "limecloud",
     );
     expect(dispatchChanged).toHaveBeenCalledTimes(1);
   });

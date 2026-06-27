@@ -54,6 +54,7 @@ function normalizeProviderSelection(value?: string | null): string {
 export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
   const {
     systemPrompt,
+    clawTraceEnabled = false,
     onWriteFile,
     workspaceId,
     workingDir,
@@ -382,6 +383,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     setPendingActions: tools.setPendingActions,
     refreshSessionReadModel: session.refreshSessionReadModel,
     executionRuntime: session.executionRuntime,
+    clawTraceEnabled,
   });
   detachStreamBindingsRef.current = stream.detachStreamBindings;
   const setChatMessages = session.setMessages;

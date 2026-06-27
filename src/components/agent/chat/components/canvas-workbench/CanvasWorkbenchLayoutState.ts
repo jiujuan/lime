@@ -102,7 +102,22 @@ export function translateCanvasWorkbenchText(
   key: string,
   options?: Record<string, unknown>,
 ): string {
-  return t(key, options);
+  const translated = t(key, options);
+  if (translated !== key || !options) {
+    return translated;
+  }
+  const fallbackDetails = Object.values(options)
+    .filter(
+      (value) =>
+        typeof value === "string" ||
+        typeof value === "number" ||
+        typeof value === "boolean",
+    )
+    .map(String)
+    .filter((value) => value.trim().length > 0);
+  return fallbackDetails.length > 0
+    ? `${key} ${fallbackDetails.join(" ")}`
+    : translated;
 }
 
 export function isCanvasWorkbenchToolTab(

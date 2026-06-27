@@ -128,6 +128,10 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     () => normalizeToolNameKey(toolCall.name),
     [toolCall.name],
   );
+  const isToolSearch = useMemo(
+    () => normalizedToolName === "toolsearch",
+    [normalizedToolName],
+  );
   const isSkillLikeTool =
     toolDisplay.family === "skill" ||
     metadata?.tool_family === "skill" ||
@@ -136,6 +140,7 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     normalizedToolName === "limerunserviceskill";
   const shouldSuppressTransientResultText =
     (toolCall.status === "running" || isMessageStreaming) &&
+    !isToolSearch &&
     !isUnifiedWebSearchToolName(toolCall.name) &&
     !isUnifiedWebFetchToolName(toolCall.name);
   const shouldSuppressResultText =
@@ -315,6 +320,27 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     () => summarizeResultText(resultText),
     [resultText],
   );
+  const liveResultPreview = useMemo(() => {
+    if (
+      toolCall.status !== "running" ||
+      !rawResultText ||
+      isSkillLikeTool ||
+      toolDisplay.family === "vision" ||
+      shouldHideResultEnvelope ||
+      importedSourcePresentation
+    ) {
+      return null;
+    }
+
+    return summarizeResultText(normalizeToolResultDetailText(rawResultText));
+  }, [
+    importedSourcePresentation,
+    isSkillLikeTool,
+    rawResultText,
+    shouldHideResultEnvelope,
+    toolCall.status,
+    toolDisplay.family,
+  ]);
   const resultImages = useMemo(
     () =>
       normalizeToolResultImages(
@@ -323,10 +349,6 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
         metadata,
       ) || [],
     [metadata, rawResultText, toolCall.result?.images],
-  );
-  const isToolSearch = useMemo(
-    () => normalizedToolName === "toolsearch",
-    [normalizedToolName],
   );
   const toolSearchSummary = useMemo(
     () =>
@@ -427,10 +449,11 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     ? t("agentChat.toolCall.skillContent.title.snapshot")
     : t("agentChat.toolCall.skillContent.title.current");
   const processSummary = useMemo(() => {
+    const streamingResultPreview = liveResultPreview || structuredResultPreview;
     const streamingOutputSummary =
-      toolCall.status === "running" && structuredResultPreview
+      toolCall.status === "running" && streamingResultPreview
         ? t("agentChat.toolCall.inline.streamingOutput", {
-            value: structuredResultPreview,
+            value: streamingResultPreview,
           })
         : null;
     const progressSummary =
@@ -440,12 +463,20 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
           })
         : null;
     const transientSummary = shouldSuppressResultText
-      ? progressSummary || processNarrative.preSummary
+      ? streamingOutputSummary || progressSummary || processNarrative.preSummary
       : null;
+    const shouldPreferResultPreview =
+      toolCall.status !== "running" &&
+      toolDisplay.family === "command" &&
+      Boolean(structuredResultPreview) &&
+      (processNarrative.postSource === "generic" ||
+        processNarrative.postSource === "none");
     const preferredSummary = importedSourcePresentation
       ? t("agentChat.toolCall.importedCommandRecord.description")
       : transientSummary
         ? transientSummary
+        : shouldPreferResultPreview
+          ? structuredResultPreview
         : toolCall.status === "running"
           ? isSkillLikeTool
             ? progressSummary || processNarrative.preSummary
@@ -463,6 +494,7 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     headline,
     importedSourcePresentation,
     isSkillLikeTool,
+    liveResultPreview,
     processNarrative.postSource,
     processNarrative.postSummary,
     processNarrative.preSummary,
@@ -471,6 +503,7 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     t,
     toolCall.progress?.message,
     toolCall.status,
+    toolDisplay.family,
   ]);
   const hasDetails =
     (Boolean(resultText) &&

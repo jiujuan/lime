@@ -1843,12 +1843,10 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       const activeSwitchPromise = new Promise<void>((resolve) => {
         resolveActiveSwitch = resolve;
       });
-      if (canReuseActiveSwitch) {
-        activeSessionSwitchRef.current = {
-          topicId,
-          promise: activeSwitchPromise,
-        };
-      }
+      activeSessionSwitchRef.current = {
+        topicId,
+        promise: activeSwitchPromise,
+      };
 
       const currentSessionId = sessionIdRef.current;
       const switchStartStatePlan = buildSessionSwitchStartStatePlan({
@@ -2644,6 +2642,9 @@ export function useAgentSession(options: UseAgentSessionOptions) {
 
     const sessionMissingFromTopics =
       topics.length > 0 && !topics.some((topic) => topic.id === sessionId);
+    if (activeSessionSwitchRef.current?.topicId === sessionId) {
+      return;
+    }
 
     const missingSessionAction = resolveMissingSessionFromTopicsAction({
       currentTurnId,
@@ -2751,6 +2752,12 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     const hasPreservedMessageCache =
       preserveRestoredMessages && messages.length > 0;
     const selectedTopic = topics.find((topic) => topic.id === sessionId);
+    if (isSessionHydrating && hydratedSessionRef.current === sessionId) {
+      return;
+    }
+    if (activeSessionSwitchRef.current?.topicId === sessionId) {
+      return;
+    }
     if (
       shouldSkipAlreadyHydratedSession({
         currentTurnId,
@@ -2759,6 +2766,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         queuedTurnsCount: queuedTurns.length,
         selectedTopic,
         sessionId,
+        threadReadStatus: threadRead?.status,
         threadItemsCount: threadItems.length,
         threadTurnsCount: threadTurns.length,
       })
@@ -2809,11 +2817,13 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     currentTurnId,
     preserveRestoredMessages,
     persistSessionRestoreCandidate,
+    isSessionHydrating,
     queuedTurns.length,
     runtime,
     sessionId,
     sessionIdRef,
     switchTopic,
+    threadRead?.status,
     threadItems.length,
     threadTurns.length,
     topics,

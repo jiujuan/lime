@@ -185,6 +185,338 @@ async fn completed_runtime_event_marks_turn_completed() {
 }
 
 #[tokio::test]
+async fn trace_metadata_is_attached_to_runtime_events() {
+    let core = RuntimeCore::with_backend(Arc::new(CompletedBackend));
+    let session = core
+        .start_session(AgentSessionStartParams {
+            session_id: Some("sess_trace".to_string()),
+            thread_id: Some("thread_trace".to_string()),
+            app_id: "content-studio".to_string(),
+            workspace_id: Some("default".to_string()),
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("session")
+        .session;
+
+    let output = core
+        .start_turn(
+            AgentSessionTurnStartParams {
+                session_id: session.session_id.clone(),
+                turn_id: Some("turn_trace".to_string()),
+                input: AgentInput {
+                    text: "hello".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: Some(RuntimeOptions {
+                    metadata: Some(json!({
+                        "agentUiPerformanceTrace": {
+                            "requestId": "request_trace",
+                            "runId": "run_trace",
+                            "sessionId": "sess_trace",
+                            "source": "agent-chat",
+                            "submittedAt": 1_710_000_000_000i64,
+                            "traceId": "trace_trace",
+                            "turnId": "turn_trace",
+                            "w3cTraceContext": {
+                                "traceparent": "00-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-BBBBBBBBBBBBBBBB-01",
+                                "tracestate": "vendor=value"
+                            },
+                            "workspaceId": "default"
+                        }
+                    })),
+                    ..RuntimeOptions::default()
+                }),
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("turn");
+
+    let delta = output
+        .events
+        .iter()
+        .find(|event| event.event_type == "message.delta")
+        .expect("message delta");
+    assert_eq!(delta.payload["trace_id"], "trace_trace");
+    assert_eq!(delta.payload["run_id"], "run_trace");
+    assert_eq!(delta.payload["request_id"], "request_trace");
+    assert!(delta.payload["server_event_emitted_at"]
+        .as_i64()
+        .is_some_and(|value| value > 0));
+    assert_eq!(
+        delta.payload["trace"]["checkpoint"],
+        "app_server.message_delta.emitted"
+    );
+    assert_eq!(delta.payload["trace"]["schemaVersion"], json!(1));
+    assert_eq!(
+        delta.payload["trace"]["submittedAt"],
+        json!(1_710_000_000_000i64)
+    );
+    assert_eq!(
+        delta.payload["trace"]["w3cTraceparent"],
+        "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01"
+    );
+    assert_eq!(
+        delta.payload["trace"]["w3cTraceId"],
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    );
+    assert_eq!(delta.payload["trace"]["w3cTracestate"], "vendor=value");
+
+    let completed = output
+        .events
+        .iter()
+        .find(|event| event.event_type == "turn.completed")
+        .expect("turn completed");
+    assert_eq!(
+        completed.payload["trace"]["checkpoint"],
+        "app_server.turn.terminal"
+    );
+    assert_eq!(completed.payload["trace"]["traceId"], "trace_trace");
+}
+
+#[tokio::test]
+async fn invalid_w3c_trace_context_is_not_propagated_to_runtime_events() {
+    let core = RuntimeCore::with_backend(Arc::new(CompletedBackend));
+    let session = core
+        .start_session(AgentSessionStartParams {
+            session_id: Some("sess_invalid_w3c".to_string()),
+            thread_id: Some("thread_invalid_w3c".to_string()),
+            app_id: "content-studio".to_string(),
+            workspace_id: Some("default".to_string()),
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("session")
+        .session;
+
+    let output = core
+        .start_turn(
+            AgentSessionTurnStartParams {
+                session_id: session.session_id.clone(),
+                turn_id: Some("turn_invalid_w3c".to_string()),
+                input: AgentInput {
+                    text: "hello".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: Some(RuntimeOptions {
+                    metadata: Some(json!({
+                        "agentUiPerformanceTrace": {
+                            "requestId": "request_invalid_w3c",
+                            "runId": "run_invalid_w3c",
+                            "sessionId": "sess_invalid_w3c",
+                            "traceId": "trace_invalid_w3c",
+                            "w3cTraceContext": {
+                                "traceparent": "00-00000000000000000000000000000000-bbbbbbbbbbbbbbbb-01",
+                                "tracestate": "vendor=value"
+                            }
+                        }
+                    })),
+                    ..RuntimeOptions::default()
+                }),
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("turn");
+
+    let delta = output
+        .events
+        .iter()
+        .find(|event| event.event_type == "message.delta")
+        .expect("message delta");
+    assert_eq!(delta.payload["trace_id"], "trace_invalid_w3c");
+    assert!(delta.payload["trace"].get("w3cTraceparent").is_none());
+    assert!(delta.payload["trace"].get("w3cTraceId").is_none());
+    assert!(delta.payload["trace"].get("w3cTracestate").is_none());
+}
+
+#[tokio::test]
+async fn provider_trace_events_keep_provider_wait_separate_from_message_delta() {
+    let core = RuntimeCore::with_backend(Arc::new(ProviderTraceBackend));
+    let session = core
+        .start_session(AgentSessionStartParams {
+            session_id: Some("sess_provider_trace".to_string()),
+            thread_id: Some("thread_provider_trace".to_string()),
+            app_id: "content-studio".to_string(),
+            workspace_id: Some("default".to_string()),
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("session")
+        .session;
+
+    let output = core
+        .start_turn(
+            AgentSessionTurnStartParams {
+                session_id: session.session_id.clone(),
+                turn_id: Some("turn_provider_trace".to_string()),
+                input: AgentInput {
+                    text: "hello".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: Some(RuntimeOptions {
+                    metadata: Some(json!({
+                        "agentUiPerformanceTrace": {
+                            "requestId": "request_provider_trace",
+                            "runId": "run_provider_trace",
+                            "sessionId": "sess_provider_trace",
+                            "source": "agent-chat",
+                            "submittedAt": 1_710_000_000_000i64,
+                            "traceId": "trace_provider_trace",
+                            "turnId": "turn_provider_trace",
+                            "workspaceId": "default"
+                        }
+                    })),
+                    ..RuntimeOptions::default()
+                }),
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("turn");
+
+    let provider_first_text = output
+        .events
+        .iter()
+        .find(|event| event.event_type == "provider.first_text_delta.received")
+        .expect("provider first text trace");
+    assert_eq!(
+        provider_first_text.payload["trace_id"],
+        "trace_provider_trace"
+    );
+    assert_eq!(
+        provider_first_text.payload["trace"]["checkpoint"],
+        "provider.first_text_delta.received"
+    );
+    assert_eq!(provider_first_text.payload["elapsed_ms"], json!(1500));
+    assert_eq!(provider_first_text.payload["text_chars"], json!(4));
+    assert_eq!(
+        provider_first_text.payload["provider_request_id"],
+        "req-provider-1"
+    );
+    assert_eq!(
+        provider_first_text.payload["provider_request_id_header"],
+        "x-request-id"
+    );
+    assert!(provider_first_text.payload["server_event_emitted_at"]
+        .as_i64()
+        .is_some_and(|value| value > 0));
+
+    let delta = output
+        .events
+        .iter()
+        .find(|event| event.event_type == "message.delta")
+        .expect("message delta");
+    assert_eq!(
+        delta.payload["trace"]["checkpoint"],
+        "app_server.message_delta.emitted"
+    );
+    assert_ne!(
+        provider_first_text.payload["trace"]["checkpoint"],
+        delta.payload["trace"]["checkpoint"]
+    );
+}
+
+#[tokio::test]
+async fn trace_events_are_appended_to_raw_trace_store_without_payload_text() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
+    let trace_event_writer =
+        Arc::new(TraceEventWriter::new(&roots.trace_log_root).expect("trace writer"));
+    let core = RuntimeCore::with_backend(Arc::new(ProviderTraceBackend))
+        .with_trace_event_writer(trace_event_writer.clone());
+    let session = core
+        .start_session(AgentSessionStartParams {
+            session_id: Some("sess_raw_trace".to_string()),
+            thread_id: Some("thread_raw_trace".to_string()),
+            app_id: "content-studio".to_string(),
+            workspace_id: Some("default".to_string()),
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("session")
+        .session;
+
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: session.session_id.clone(),
+            turn_id: Some("turn_raw_trace".to_string()),
+            input: AgentInput {
+                text: "hello raw prompt must not be stored".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: Some(RuntimeOptions {
+                metadata: Some(json!({
+                    "agentUiPerformanceTrace": {
+                        "requestId": "request_raw_trace",
+                        "runId": "run_raw_trace",
+                        "sessionId": "sess_raw_trace",
+                        "source": "agent-chat",
+                        "submittedAt": 1_710_000_000_000i64,
+                        "traceId": "trace_raw_trace",
+                        "turnId": "turn_raw_trace",
+                        "workspaceId": "default"
+                    }
+                })),
+                ..RuntimeOptions::default()
+            }),
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("turn");
+
+    let records = trace_event_writer
+        .read_raw_trace_events("sess_raw_trace", "trace_raw_trace")
+        .expect("raw trace records");
+    assert!(records.len() >= 6, "raw trace records: {records:?}");
+    assert_eq!(records[0].event.seq, 1);
+    assert!(records
+        .iter()
+        .any(|record| record.event.checkpoint == "provider.first_text_delta.received"));
+    assert!(records
+        .iter()
+        .any(|record| record.event.checkpoint == "app_server.message_delta.emitted"));
+    let provider_first_text = records
+        .iter()
+        .find(|record| record.event.checkpoint == "provider.first_text_delta.received")
+        .expect("provider first text trace");
+    assert_eq!(provider_first_text.event.metrics["elapsed_ms"], json!(1500));
+    assert_eq!(provider_first_text.event.metrics["text_chars"], json!(4));
+    assert_eq!(
+        provider_first_text.event.metrics["provider_request_id"],
+        json!("req-provider-1")
+    );
+    assert_eq!(
+        provider_first_text.event.metrics["provider_request_id_header"],
+        json!("x-request-id")
+    );
+    assert_eq!(provider_first_text.event.redaction.mode, "summary_only");
+    assert!(!provider_first_text.event.redaction.raw_agent_event_payload);
+    assert!(!provider_first_text.event.redaction.prompt_text);
+    assert!(!provider_first_text.event.redaction.provider_payload);
+
+    let raw = records
+        .iter()
+        .map(|record| std::fs::read_to_string(&record.path).expect("trace file"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(!raw.contains("hello raw prompt must not be stored"));
+    assert!(!raw.contains("你好！有什么可以帮你的吗？"));
+    assert!(!raw.contains("\"input\""));
+    assert!(!raw.contains("\"text\""));
+}
+
+#[tokio::test]
 async fn legacy_final_done_runtime_event_is_rejected_by_current_schema() {
     let core = RuntimeCore::with_backend(Arc::new(RecordingBackend::default()));
     let session = core

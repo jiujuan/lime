@@ -44,6 +44,7 @@ export type AppServerAgentSessionOverview = {
   sessionId: string;
   threadId?: string;
   title?: string;
+  businessObjectRefMetadata?: unknown;
   model: string;
   createdAt: string;
   updatedAt: string;
@@ -233,6 +234,19 @@ function readNullableStringField(
   return value === null || typeof value === "string" ? value : undefined;
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function readOptionalObjectField(
+  record: Record<string, unknown>,
+  camelKey: string,
+  snakeKey?: string,
+): Record<string, unknown> | undefined {
+  const value = readField(record, camelKey, snakeKey);
+  return isPlainObject(value) ? value : undefined;
+}
+
 function readAppServerAgentSession(
   value: unknown,
 ): AppServerAgentSession | null {
@@ -312,6 +326,11 @@ function readAppServerAgentSessionOverview(
     threadId:
       readOptionalStringField(value, "threadId", "thread_id") ?? undefined,
     title: readOptionalStringField(value, "title"),
+    businessObjectRefMetadata: readOptionalObjectField(
+      value,
+      "businessObjectRefMetadata",
+      "business_object_ref_metadata",
+    ),
     model,
     createdAt,
     updatedAt,
@@ -602,6 +621,10 @@ function appServerSessionOverviewToRuntimeInfo(
     execution_strategy: executionStrategyFromProtocol(
       session.executionStrategy,
     ),
+    session_business_object_ref_metadata:
+      isPlainObject(session.businessObjectRefMetadata)
+        ? session.businessObjectRefMetadata
+        : undefined,
     workspace_id: session.workspaceId,
     working_dir: session.workingDir,
   });

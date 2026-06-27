@@ -9,5 +9,11 @@ describe("skills runtime fixture scenario", () => {
     expect(scenario.dedupeGuardTexts).toContain(
       "专家 Skills runtime 证据已完成",
     );
+    expect(scenario.disallowedVisibleTexts).toContain(
+      "专家 Skills runtime 证据已完成",
+    );
+    expect(scenario.disallowedVisibleTexts).toContain(
+      "我识别到专家绑定的 skillRefs",
+    );
   });
 });

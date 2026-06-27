@@ -512,6 +512,7 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
 
   it("处理工作台调试信息开关关闭时仍应保留入口，但不触发工具库存读取", async () => {
     mockUseDeveloperFeatureFlags.mockReturnValue({
+      clawTraceEnabled: false,
       workspaceHarnessEnabled: false,
     });
 

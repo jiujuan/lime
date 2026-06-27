@@ -46,6 +46,7 @@ export function applyInputbarPluginSelection(params: {
 }): InputbarPluginSelection {
   const trigger = normalizeInputbarPluginTrigger(params.plugin, params.skill);
   const trimmedInput = params.input.trim();
+  const inputWithoutLeadingSpace = params.input.trimStart();
   if (!trimmedInput) {
     return {
       plugin: params.plugin,
@@ -60,7 +61,10 @@ export function applyInputbarPluginSelection(params: {
       plugin: params.plugin,
       skill: params.skill,
       trigger,
-      text: trimmedInput,
+      text:
+        trimmedInput === trigger && /\s$/.test(inputWithoutLeadingSpace)
+          ? `${trigger} `
+          : trimmedInput,
     };
   }
 

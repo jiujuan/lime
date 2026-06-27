@@ -32,8 +32,8 @@ export function buildContentFactoryWorkspacePatch(workspace) {
     },
     selectedObjectRef: {
       appId: CONTENT_FACTORY_APP_ID,
-      kind: "articleDraft",
-      id: ARTICLE_OBJECT_ID,
+      kind: "videoStoryboard",
+      id: STORYBOARD_OBJECT_ID,
       sessionId: CONTENT_FACTORY_PRODUCT_PROFILE_SESSION_ID,
     },
     objects: [
@@ -111,6 +111,23 @@ export function buildContentFactoryWorkspacePatch(workspace) {
           taskId: "storyboard_job_1",
           turnId: CONTENT_FACTORY_PRODUCT_PROFILE_TURN_ID,
           artifactIds: [CONTENT_FACTORY_PRODUCT_PROFILE_STORYBOARD_ARTIFACT_ID],
+          rendererContract: {
+            pluginId: CONTENT_FACTORY_APP_ID,
+            rendererKind: "app_declared",
+            artifactType: "videoStoryboard",
+            outputArtifactKind: "content_factory.workspace_patch",
+            surfaceKind: "productProfile",
+            paneKind: "storyboard",
+            entry: "./renderer/storyboard.tsx",
+            actionKeys: ["open_storyboard"],
+            runtimeAuthorization: {
+              status: "placeholder_only",
+              executionMode: "host_placeholder",
+              reasonCode: "app_declared_renderer_placeholder_only",
+              requestedOutputArtifactKind: "content_factory.workspace_patch",
+              allowedOutputArtifactKinds: ["content_factory.workspace_patch"],
+            },
+          },
           scenes: [
             {
               id: "shot-1",

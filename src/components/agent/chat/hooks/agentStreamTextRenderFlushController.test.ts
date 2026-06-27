@@ -159,13 +159,19 @@ describe("agentStreamTextRenderFlushController", () => {
         firstTextDeltaAt: 180,
         flushStartedAt: 220,
         paintedAt: 260,
+        rendererEventReceivedAt: 150,
         requestStartedAt: 100,
+        serverEventEmittedAt: 120,
       }),
     ).toEqual({
+      clientLocalOutputDeltaMs: 140,
       elapsedMs: 160,
       eventName: "event-a",
       firstTextDeltaDeltaMs: 80,
+      rendererEventReceivedDeltaMs: 110,
       renderFlushDeltaMs: 40,
+      serverEventDeltaMs: 140,
+      serverToRendererDeltaMs: 30,
       sessionId: "session-a",
     });
   });

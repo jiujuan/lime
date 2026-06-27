@@ -5,10 +5,12 @@ import {
   recordAgentUiPerformanceMetric,
   summarizeAgentUiPerformanceMetrics,
 } from "./agentUiPerformanceMetrics";
+import { clearAgentUiPerformanceTraceHistory } from "./agentUiPerformanceTraceHistory";
 
 describe("agentUiPerformanceMetrics", () => {
   afterEach(() => {
     clearAgentUiPerformanceMetrics();
+    clearAgentUiPerformanceTraceHistory();
   });
 
   it("应按会话汇总旧会话打开链路的关键耗时", () => {
@@ -138,6 +140,17 @@ describe("agentUiPerformanceMetrics", () => {
     expect(window.__LIME_AGENTUI_PERF__?.summary().sessions[0]?.sessionId).toBe(
       "session-window-api",
     );
+    expect(
+      window.__LIME_AGENTUI_PERF__?.saveSnapshot("window snapshot"),
+    ).toMatchObject({
+      label: "window snapshot",
+    });
+    expect(window.__LIME_AGENTUI_PERF__?.history()).toHaveLength(1);
+    expect(window.__LIME_AGENTUI_PERF__?.exportHistory().records).toHaveLength(
+      1,
+    );
+    window.__LIME_AGENTUI_PERF__?.clearHistory();
+    expect(window.__LIME_AGENTUI_PERF__?.history()).toHaveLength(0);
 
     window.__LIME_AGENTUI_PERF__?.clear();
     expect(getAgentUiPerformanceMetrics()).toHaveLength(0);

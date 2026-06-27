@@ -1,4 +1,6 @@
 use super::status::{agent_turn_is_terminal, session_status_from_turn_status};
+use super::trace;
+use super::trace_store::TraceEventWriter;
 use super::turn_input_events;
 use super::*;
 use crate::agent_ui_event_schema;
@@ -34,6 +36,7 @@ impl RuntimeCoreEventAppender {
             self.output_snapshot_store.as_ref(),
             self.sidecar_store.as_deref(),
             self.event_log_writer.as_deref(),
+            self.trace_event_writer.as_deref(),
             self.projection_store.as_deref(),
             session_id,
             &thread_id,
@@ -49,6 +52,7 @@ pub(in crate::runtime) fn append_runtime_events_to_state(
     output_snapshot_store: &dyn output_refs::OutputSnapshotStore,
     sidecar_store: Option<&SidecarStore>,
     event_log_writer: Option<&EventLogWriter>,
+    trace_event_writer: Option<&TraceEventWriter>,
     projection_store: Option<&ProjectionStore>,
     session_id: &str,
     thread_id: &str,
@@ -66,6 +70,7 @@ pub(in crate::runtime) fn append_runtime_events_to_state(
         output_snapshot_store,
         sidecar_store,
         event_log_writer,
+        trace_event_writer,
         projection_store,
         session_id,
         thread_id,
@@ -80,6 +85,7 @@ fn append_runtime_events_to_stored_session(
     output_snapshot_store: &dyn output_refs::OutputSnapshotStore,
     sidecar_store: Option<&SidecarStore>,
     event_log_writer: Option<&EventLogWriter>,
+    trace_event_writer: Option<&TraceEventWriter>,
     projection_store: Option<&ProjectionStore>,
     session_id: &str,
     thread_id: &str,
@@ -93,6 +99,7 @@ fn append_runtime_events_to_stored_session(
     if runtime_events.is_empty() {
         return Ok(Vec::new());
     }
+    let trace_context = trace::trace_context_for_turn(stored, turn_id);
     let mut events = Vec::with_capacity(runtime_events.len());
     let mut output_records = Vec::new();
     let mut pending_terminal_for_turn = false;
@@ -141,6 +148,9 @@ fn append_runtime_events_to_stored_session(
             timestamp: timestamp(),
             payload: normalized.payload,
         };
+        if let Some(trace_context) = trace_context.as_ref() {
+            trace::attach_agent_event_trace(&mut event, trace_context);
+        }
         if !text_delta_event {
             crate::file_checkpoint_snapshot::persist_runtime_file_checkpoint_snapshot(
                 &mut event,
@@ -189,6 +199,16 @@ fn append_runtime_events_to_stored_session(
         event_log_writer
             .append_events(&appended_events)
             .map_err(RuntimeCoreError::Backend)?;
+    }
+    if let Some(trace_event_writer) = trace_event_writer {
+        if let Err(error) = trace_event_writer.append_agent_events(&appended_events) {
+            tracing::warn!(
+                "[trace-event-store] failed to append {} trace candidate events for session {}: {}",
+                appended_events.len(),
+                session_id,
+                error
+            );
+        }
     }
     if let Some(projection_store) = projection_store {
         if let Err(error) = projection_store.apply_events(&appended_events) {

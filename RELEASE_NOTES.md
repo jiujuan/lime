@@ -1,48 +1,50 @@
-## Lime v1.80.0
+## Lime v1.81.0
 
 ### 新功能
 
-- 插件成为 Lime 一级产品概念：新增插件路线图、PRD、架构、接口合同、历史恢复规则与原型，明确插件负责安装、授权和分发，工作台应用作为插件内的独立 UI 能力。
-- 新增插件中心与 Marketplace 前端骨架：支持插件列表、详情、注册信息、Skill 面板、安装态合并、能力分类和 view model 投影，并接入导航与应用页入口。
-- Claw composer 支持插件显式激活：新增插件 chip / selector、`@插件` 输入能力、插件激活上下文、发送前 metadata 合并和 Right Surface 打开策略，普通会话不再依赖语义猜测插件。
-- 内容工厂插件 dogfood 进入主链：新增内容工厂插件 contract、worker runtime 样例、交付计划、workspace patch、媒体缓存声明、fixture package 和 browser intent launch 接线。
-- Agent App task worker runtime 扩展：App Server 能解析已安装 Agent App 的 runtime package、执行 worker turn、生成产品 Profile / artifact document 投影，并为内容工厂 worker 输出保留可追踪 evidence。
-- Browser Runtime 高风险动作进入 confirmation / human takeover 闭环：`click`、`type`、`submit`、`upload`、`download`、`javascript` 等页面变更动作在 CDP executor 内 fail-closed，并输出 `action.required`、permission facts 与 Evidence Pack action index。
-- ArtifactDocument 持久化链路补齐跨会话 scope、保存 evidence、preview 自动同步和文件级归档 manifest，历史打开后继续保存会复用同一个 App Server session / artifact ref。
+- Claw Trace 进入 current 主链：新增 renderer / App Server / provider checkpoint、W3C trace context carrier、summary-only raw trace JSONL store、Trace list / read / export diagnostics API，以及 Developer & Labs 中的 Trace 开关、列表复制、最近 Trace 读取与导出入口。
+- 支持包可显式附带单条 summary-only Trace export；默认支持包仍只包含裁剪后的摘要，避免写入 prompt、provider payload、assistant delta 或原始敏感正文。
+- App Server JSON-RPC 协议与 `@limecloud/app-server-client` 同步新增 `diagnostics/trace/list`、`diagnostics/trace/read`、`diagnostics/trace/export`、support bundle trace 选择参数和对应 schema / generated types / client methods。
+- 插件 Marketplace 产品化继续推进：详情页支持历史会话候选选择、刷新与精确打开，插件 runtime authorization、renderer output、历史恢复和安装态 view model 进一步收敛。
+- 内容工厂 / 产品 Profile Right Surface worker 从单一 product-profile 请求扩展为 pane action worker turn，支持 action intent、风险、source artifact、output artifact kind 与授权 fail-closed。
+- Claw / Agent UI 性能指标可把 provider wait、App Server emit、renderer receive、text apply、flush 和 first paint 串到同一个 trace summary，用于定位首字延迟来源。
+- execution process 与 MCP tool log metadata 进入 current 事件投影，工具过程可携带 process id、输出序号、stdin 可写状态和生命周期阶段。
 
 ### 修复
 
-- 修复 Claw 普通工具过程记录被批次摘要替换的问题，`Read` / `Ran` / Skill / MCP 等过程现在按 tool id 时序逐条保留，WebSearch / WebFetch 继续使用专门检索时间线。
-- 修复 Agent App intent 读取已安装列表时可能阻断普通发送的问题；读取失败或超时会降级跳过 intent 匹配，不影响 `agentSession/turn/start`。
-- 修复 Artifact store 在 streaming / Browser Assist 期间因消息引用变化反复同步导致 `Maximum update depth exceeded` 的风险，改为基于 artifact 内容签名同步。
-- 修复内嵌浏览器主窗口刷新后 `WebContentsView` 未清理的问题，避免旧浏览器视图和新 renderer 状态交叉。
-- 修复历史会话继续编辑 ArtifactDocument 时 scope 分散的问题，`artifact/read`、preview sync 与保存回写统一使用 `artifactDocumentPersistence` metadata。
+- 修复首字耗时容易被误归因到 renderer 的问题，provider/API 等待和 Lime 本地输出段现在分开投影。
+- 修复 metadata-only MCP process lifecycle log 被渲染成 JSON 工具输出的问题；这类事件现在保留结构化 metadata，但不会污染可见输出。
+- 修复插件历史入口只能跳到泛化 Agent 页面的问题，详情面板现在基于历史候选打开对应 session。
+- 修复 pane action worker 缺少授权约束时可能被当成普通 worker 执行的问题；不满足 runtime contract 时直接输出配置类失败并停止。
+- 修复无效 W3C `traceparent` 可能被当作远端 parent 传播的风险；非法 carrier 只保留 Lime 内部 trace identity，不参与 OTEL parent 继承。
 
 ### 优化与重构
 
-- 插件相关逻辑拆分为 manifest contract、marketplace registry、安装态、激活、历史恢复、Right Surface projection、内容工厂 contract 和浏览器 intent launch 等可测模块。
-- `useWorkspaceSendActions` 合并插件显式激活、Agent App intent 路由和已安装 App 缓存刷新，发送主路径保持 current App Server JSON-RPC / RuntimeCore 链路。
-- Browser Runtime 新增 `action_policy` 并将高风险动作 gating 下沉到 Rust executor，App Server evidence provider 只消费结构化动作状态。
-- Agent Chat streaming 渲染继续按 content part / lifecycle / provenance 分层，普通工具、web retrieval、thinking、final answer 各自保持明确 owner。
-- OEM cloud control plane 增加 typed client 与 contract 测试，为后续远程插件 marketplace 消费保留清晰边界。
+- Trace store 拆分为 append-only event、summary projection、export zip 与 support bundle attachment 模块，诊断读面复用 App Server current processor / local data source。
+- App Server request span 接入 OTEL 初始化与远端 parent 处理，`agentSession/turn/start` 可记录安全的 session / turn / trace 属性。
+- `packages/app-server-client` 的 request / connection method 表扩展到完整 current protocol surface，减少手写 client 方法遗漏。
+- Agent Chat streaming 继续按 trace metadata、text delta、render flush、runtime metrics controller 分层，避免把状态机、性能统计和渲染副作用塞进同一个 hook。
+- Product Profile / plugin Right Surface 渲染拆出 image cell、renderer host model、pane action 和 renderer output projection，保持 UI 与 worker contract 解耦。
 
 ### 测试与质量
 
-- 新增 / 扩展插件 manifest、marketplace view model、安装态、激活、历史恢复、内容工厂 contract、browser intent launch 与 Right Surface projection 单测。
-- 新增 / 扩展 App Server Agent App worker turn、runtime package 解析、产品 Profile artifact document、worker failure、browser action evidence export 和 read model 回归。
-- 新增 / 扩展 Claw inputbar、插件 selector、发送路由、ArtifactDocument persistence、artifact preview sync、StreamingRenderer、InlineToolProcessStep 与 Markdown display source 回归。
-- 新增 / 扩展 Browser Runtime 高风险动作 fail-closed、Electron embedded browser host、code artifact workbench fixture、claw current fixture 与 GUI evidence 断言。
-- 五语言 i18n 资源同步覆盖插件、Agent、Inputbar、Workspace 和导航新增可见文案。
-- 本版发布事实源更新到 `1.80.0`：根应用、Rust workspace、CLI npm package、App Server client package、Cargo lock 与 Aster 子工作区 lock。
+- 新增 / 扩展 Trace 相关 Rust 与前端回归：trace store list/read/export、request trace span、W3C carrier、Developer Claw Trace panel、trace timeline、serverRuntime diagnostics API。
+- 新增 / 扩展 App Server protocol / client contract 测试，覆盖 diagnostics trace methods、support bundle trace export selection、execution process drain output 和 generated protocol types。
+- 新增 / 扩展 Claw streaming 回归，覆盖 agent message content sync、runtime metrics controller、text delta controller、render flush controller、prepared send env、performance metrics 与 history merge。
+- 新增 / 扩展插件 Marketplace 与产品化回归，覆盖 manifest contract、runtime authorization、renderer output、history session selection、marketplace actions / loader / registry hook 和 Plugin Marketplace 页面。
+- 新增插件跨仓端到端证据包，记录 `plugin-productization-e2e` 真实 Electron fixture 摘要：current bridge、App Server JSON-RPC、本地安装态、worker dogfood、Right Surface、artifact read、远端运行 fail closed 均有证据。
+- 五语言 i18n 资源同步覆盖 Trace、Developer 设置、插件、Workspace 和 Agent 新增可见文案。
+- 本版发布事实源更新到 `1.81.0`：根应用、CLI npm package、App Server client package、Rust workspace、主 Cargo lock 与 Aster 子工作区 lock。当前仓库没有 `package-lock.json` / `pnpm-lock.yaml`，本次不新增 npm lockfile。
 
 ### 文档
 
-- 新增 `internal/roadmap/plugin/` 插件路线图文档集，覆盖 PRD、架构、技术基线、接口合同、实施计划、历史恢复、HTML 原型和低保真原型。
-- 更新 Agent App Host v3、Browser Runtime Right Surface、Claw streaming rendering 等执行计划，记录 v1.80.0 候选改动的验证证据、剩余缺口和退出条件。
-- 更新浏览器路线图，明确高风险动作 confirmation / human takeover 与 Evidence Pack action index 的 current 边界。
+- 新增 `internal/roadmap/trace/` 文档集，覆盖 PRD、架构、图、代码地图和分阶段实施计划。
+- 新增 `internal/exec-plans/claw-trace-system-implementation-plan.md`，记录 Claw Trace 从骨架、provider phase、Developer UI、raw trace store 到 OTEL exporter 的阶段状态。
+- 新增插件跨仓端到端证据包与插件使用 / 运营指南，明确 Marketplace、安装态上报、显式激活、Right Surface、历史恢复和 fail-closed 边界。
+- 更新 coding / plugin 路线图与执行计划，记录本轮 Trace、插件产品化、内容工厂 dogfood 和 App Server current 链路证据。
 
 ### 其他
 
-- 本版继续把插件化工作台、内容工厂 dogfood、ArtifactDocument 持久化、Browser Runtime 安全动作和 Claw 工具过程展示收敛到 App Server JSON-RPC / RuntimeCore / Electron Desktop Host current 主链；旧插件命令族、语义猜测激活、普通工具批次摘要和 mock fallback 不作为新增能力入口。
+- 本版继续把 Claw Trace、插件 Marketplace、内容工厂 pane action、产品 Profile Right Surface、execution process 过程输出和诊断支持包收敛到 App Server JSON-RPC / RuntimeCore / Electron Desktop Host current 主链；不恢复旧插件命令族、mock fallback 或 parallel runtime 入口。
 
-**完整变更**: `v1.79.0` -> `v1.80.0`
+**完整变更**: `v1.80.0` -> `v1.81.0`

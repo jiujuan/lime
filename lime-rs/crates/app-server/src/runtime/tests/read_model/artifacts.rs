@@ -783,11 +783,8 @@ async fn read_session_materializes_content_factory_workspace_patch_into_product_
         .as_deref()
         .expect("artifact document content");
     assert!(content.contains("\"schemaVersion\": \"artifact_document.v1\""));
-    assert!(
-        content.contains(
-            "\"artifactId\": \"artifact-document:content-factory-app:artifact-article-1\""
-        )
-    );
+    assert!(content
+        .contains("\"artifactId\": \"artifact-document:content-factory-app:artifact-article-1\""));
 
     core.update_session_current(AgentSessionUpdateParams {
         session_id: "sess_product_workspace".to_string(),
@@ -841,6 +838,7 @@ async fn read_session_materializes_content_factory_workspace_patch_into_product_
                             "intent": "regenerate",
                             "risk": "write",
                             "task_kind": "content.image.generate",
+                            "output_artifact_kind": "content_factory.workspace_patch",
                             "prompt": "请重新生成「配图组」",
                             "object": {
                                 "app_id": "content-factory-app",
@@ -984,23 +982,19 @@ async fn read_session_materializes_content_factory_workspace_patch_into_product_
     let action_result_artifacts = action_history[0]["resultArtifacts"]
         .as_array()
         .expect("product profile action result artifacts");
-    assert!(
-        action_result_artifacts
-            .iter()
-            .any(
-                |artifact| artifact["artifactRef"] == "artifact-image-regenerated"
-                    && artifact["kind"] == "artifact_document"
-                    && artifact["title"] == "配图组"
-            )
-    );
-    assert!(
-        action_result_artifacts
-            .iter()
-            .any(
-                |artifact| artifact["artifactRef"] == "artifact-image-regenerate-workspace-patch"
-                    && artifact["kind"] == "content_factory.workspace_patch"
-            )
-    );
+    assert!(action_result_artifacts
+        .iter()
+        .any(
+            |artifact| artifact["artifactRef"] == "artifact-image-regenerated"
+                && artifact["kind"] == "artifact_document"
+                && artifact["title"] == "配图组"
+        ));
+    assert!(action_result_artifacts
+        .iter()
+        .any(
+            |artifact| artifact["artifactRef"] == "artifact-image-regenerate-workspace-patch"
+                && artifact["kind"] == "content_factory.workspace_patch"
+        ));
     assert_eq!(
         action_detail["product_workspace"]["actionHistory"][0],
         action_history[0]

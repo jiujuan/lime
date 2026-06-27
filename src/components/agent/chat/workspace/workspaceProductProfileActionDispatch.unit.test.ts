@@ -25,6 +25,9 @@ const intent: WorkspaceProductProfileActionIntent = {
     title: "配图组",
     status: "needs_review",
     summary: "等待选择主图",
+    source: {
+      outputArtifactKind: "content_factory.workspace_patch",
+    },
   },
   profile: {
     schemaVersion: "product-workspace.v1",

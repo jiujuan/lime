@@ -149,6 +149,7 @@ describe("executionProcess API", () => {
           truncated: false,
         },
       ],
+      nextSequence: 1,
     };
     vi.mocked(client.drainExecutionProcessOutput).mockResolvedValueOnce(
       appServerResult(result),
@@ -156,13 +157,15 @@ describe("executionProcess API", () => {
 
     await expect(
       drainExecutionProcessOutput(
-        { processId: "process-1", limit: 16 },
+        { processId: "process-1", afterSequence: 0, limit: 16, maxBytes: 1024 },
         client,
       ),
     ).resolves.toEqual(result);
     expect(client.drainExecutionProcessOutput).toHaveBeenCalledWith({
       processId: "process-1",
+      afterSequence: 0,
       limit: 16,
+      maxBytes: 1024,
     });
     expect(safeInvoke).not.toHaveBeenCalled();
   });

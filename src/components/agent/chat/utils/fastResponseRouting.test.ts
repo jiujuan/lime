@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   buildAgentFastResponseMetadata,
-  buildAgentFastResponseSystemPrompt,
   resolveAgentRuntimeStatusPresentation,
   resolveAgentFastResponseRouting,
   resolveAgentFastResponseSearchMode,
@@ -12,7 +11,7 @@ const baseOptions = {
   isThemeWorkbench: false,
   contentId: null,
   messageCount: 0,
-  sourceText: "请只回复一个字：好",
+  sourceText: "帮我快速说明 TTFT 优化重点",
   imagesCount: 0,
   toolPreferences: {
     webSearch: false,
@@ -28,7 +27,7 @@ describe("resolveAgentFastResponseRouting", () => {
 
     expect(decision).toMatchObject({
       enabled: true,
-      reason: "first-turn-short-prompt",
+      reason: "first-turn-plain-text",
       label: "快速响应",
       serviceModelSlot: "responsive_chat",
       routingSlot: "responsive_chat_model",
@@ -38,12 +37,16 @@ describe("resolveAgentFastResponseRouting", () => {
     expect(buildAgentFastResponseMetadata(decision)).toEqual({
       mode: "auto",
       label: "快速响应",
-      reason: "first-turn-short-prompt",
+      profile_id: "responsive-chat-auto",
+      profileId: "responsive-chat-auto",
+      reason: "first-turn-plain-text",
       service_model_slot: "responsive_chat",
       routing_slot: "responsive_chat_model",
       routing_changed: false,
       resolver: "backend_service_model",
       runtime_status_presentation: "transient",
+      model_reasoning_effort: "minimal",
+      modelReasoningEffort: "minimal",
     });
   });
 
@@ -59,6 +62,46 @@ describe("resolveAgentFastResponseRouting", () => {
     ).toBe("transient");
 
     expect(resolveAgentRuntimeStatusPresentation(undefined)).toBe("timeline");
+  });
+
+  it("快速响应路由应从结构化 profile 生成 metadata，避免散落硬编码", () => {
+    const decision = resolveAgentFastResponseRouting({
+      ...baseOptions,
+      routingProfile: {
+        id: "responsive-chat-debug",
+        label: "Debug fast path",
+        reasoningEffort: "low",
+        resolver: "debug_resolver",
+        routingChanged: true,
+        routingSlot: "debug_routing_slot",
+        runtimeStatusPresentation: "timeline",
+        serviceModelSlot: "debug_service_slot",
+      },
+    });
+
+    expect(decision).toMatchObject({
+      enabled: true,
+      label: "Debug fast path",
+      profileId: "responsive-chat-debug",
+      reasoningEffort: "low",
+      resolver: "debug_resolver",
+      routingChanged: true,
+      routingSlot: "debug_routing_slot",
+      runtimeStatusPresentation: "timeline",
+      serviceModelSlot: "debug_service_slot",
+    });
+    expect(buildAgentFastResponseMetadata(decision)).toMatchObject({
+      label: "Debug fast path",
+      modelReasoningEffort: "low",
+      model_reasoning_effort: "low",
+      profile_id: "responsive-chat-debug",
+      profileId: "responsive-chat-debug",
+      resolver: "debug_resolver",
+      routing_changed: true,
+      routing_slot: "debug_routing_slot",
+      runtime_status_presentation: "timeline",
+      service_model_slot: "debug_service_slot",
+    });
   });
 
   it("只以 mappedTheme 判断通用对话，兼容 Claw/Harness 的现役入口命名", () => {
@@ -97,24 +140,24 @@ describe("resolveAgentFastResponseRouting", () => {
     expect(decision.searchMode).toBe("allowed");
   });
 
-  it("普通时效新闻整理不应被前端快速响应改成无工具短路径", () => {
+  it("普通时效新闻整理不应靠前端文本黑名单退出快速响应候选", () => {
     const decision = resolveAgentFastResponseRouting({
       ...baseOptions,
       sourceText: "整理今天的国际新闻",
     });
 
-    expect(decision.enabled).toBe(false);
-    expect(decision.reason).toBe("not-lightweight-text");
+    expect(decision.enabled).toBe(true);
+    expect(decision.reason).toBe("first-turn-plain-text");
   });
 
-  it("普通代码修复请求不应靠短文本进入快速响应", () => {
+  it("普通代码修复请求不应靠前端文本黑名单退出快速响应候选", () => {
     const decision = resolveAgentFastResponseRouting({
       ...baseOptions,
       sourceText: "请修复消息历史切换后图片卡片丢失的问题，并补一个回归测试",
     });
 
-    expect(decision.enabled).toBe(false);
-    expect(decision.reason).toBe("not-lightweight-text");
+    expect(decision.enabled).toBe(true);
+    expect(decision.reason).toBe("first-turn-plain-text");
   });
 
   it("只有显式 required 搜索模式才应禁用快速响应", () => {
@@ -157,36 +200,13 @@ describe("resolveAgentFastResponseRouting", () => {
         ...baseOptions,
         sourceText: "@浏览器 打开 https://example.com",
       }).reason,
-    ).toBe("not-lightweight-text");
+    ).toBe("not-plain-first-turn-text");
 
     expect(
       resolveAgentFastResponseRouting({
         ...baseOptions,
         sourceText: "/image 生成一张图",
       }).reason,
-    ).toBe("not-lightweight-text");
-  });
-
-  it("快速响应系统提示词应保持短路径且约束单字输出", () => {
-    const prompt = buildAgentFastResponseSystemPrompt(
-      new Date("2026-05-01T00:00:00Z"),
-    );
-
-    expect(prompt).toContain("快速响应助手");
-    expect(prompt).toContain("只输出一个字");
-    expect(prompt).toContain("不主动联网");
-    expect(prompt.length).toBeLessThan(260);
-  });
-
-  it("联网搜索 allowed 时系统提示词应交给模型按需决定是否使用工具", () => {
-    const prompt = buildAgentFastResponseSystemPrompt(
-      new Date("2026-05-01T00:00:00Z"),
-      { searchMode: "allowed" },
-    );
-
-    expect(prompt).toContain("联网搜索只是候选能力");
-    expect(prompt).toContain("需要实时或外部证据时再用工具");
-    expect(prompt).not.toContain("不主动联网");
-    expect(prompt.length).toBeLessThan(260);
+    ).toBe("not-plain-first-turn-text");
   });
 });

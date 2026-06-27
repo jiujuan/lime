@@ -20,11 +20,13 @@ mod model_route_assembly;
 mod model_route_execution;
 mod model_task_contract;
 mod objective;
+mod otel_trace;
 mod processor;
 mod project_shell;
 mod runtime;
 mod runtime_backend;
 mod runtime_factory;
+mod trace_context;
 
 pub use app_server_protocol::error_codes;
 pub use app_server_protocol::AgentInput;
@@ -106,6 +108,8 @@ pub use aster_backend::AsterBackendCancelResult;
 #[cfg(feature = "aster-backend")]
 pub use aster_backend::AsterBackendHost;
 #[cfg(feature = "aster-backend")]
+pub use aster_backend::AsterBackendProcessControlCapabilities;
+#[cfg(feature = "aster-backend")]
 pub use aster_backend::AsterBackendSubmitRequest;
 #[cfg(feature = "aster-backend")]
 pub use aster_backend::AsterBackendSubmitResult;
@@ -128,8 +132,12 @@ pub use local_data_source::LocalAppDataSource;
 pub use memory_store::LocalMemoryBackend;
 pub use memory_store::MemoryBackend;
 pub use memory_store::RolloutSummaryWriteParams;
+pub use otel_trace::init_app_server_otel_from_env;
+pub use otel_trace::AppServerOtelGuard;
 use processor::event_notification_jsonrpc;
 use processor::RequestProcessor;
+pub(crate) use runtime::export_trace_events_from_store_to_path;
+pub(crate) use runtime::summarize_trace_event_store;
 pub use runtime::ActionRespondRequest;
 pub use runtime::AgentAppDataSource;
 pub use runtime::AppDataSource;
@@ -188,6 +196,7 @@ pub use runtime::SidecarWriteRequest;
 pub use runtime::SkillAppDataSource;
 pub use runtime::StorageRoots;
 pub use runtime::ToolInventoryReadRequest;
+pub use runtime::TraceEventWriter;
 pub use runtime::UnavailableBackend;
 pub use runtime::UsageStatsAppDataSource;
 pub use runtime::VoiceAppDataSource;
@@ -197,6 +206,7 @@ pub use runtime::WorkspaceObjectCanvasReplayReadinessListParams;
 pub use runtime::WorkspaceObjectCanvasSnapshot;
 pub use runtime::WorkspaceObjectCanvasSnapshotListParams;
 pub use runtime::WorkspaceSkillBindingAppDataSource;
+pub(crate) use runtime::TRACE_EVENT_MAX_FILES_PER_SESSION;
 pub use runtime_backend::RuntimeBackend;
 pub use runtime_factory::AppServerBackendMode;
 pub use runtime_factory::AppServerRuntimeFactory;
@@ -1261,7 +1271,11 @@ mod tests {
     #[tokio::test]
     async fn aster_backend_json_rpc_agent_flow_smoke_covers_artifact_read_and_action_response() {
         let host = Arc::new(JsonRpcAsterAgentFlowSmokeHost::default());
-        let server = AppServerRuntimeFactory::aster_app_server(host.clone());
+        let sidecar_root = tempfile::tempdir().expect("sidecar root");
+        let runtime = AppServerRuntimeFactory::aster_runtime_core(host.clone()).with_sidecar_store(
+            Arc::new(SidecarStore::new(sidecar_root.path()).expect("sidecar store")),
+        );
+        let server = AppServer::with_runtime(runtime);
 
         request(
             &server,
@@ -1323,17 +1337,17 @@ mod tests {
             .await
             .expect("turn start");
 
-        assert_eq!(turn_messages.len(), 3);
+        assert!(turn_messages.len() >= 4);
         match &turn_messages[0] {
             JsonRpcMessage::Response(response) => {
-                assert_eq!(response.result["turn"]["status"], "accepted");
+                assert_eq!(response.result["turn"]["status"], "waitingAction");
                 assert_eq!(response.result["turn"]["sessionId"], "sess_flow");
                 assert_eq!(response.result["turn"]["turnId"], "turn_flow");
             }
             other => panic!("expected turn response, got {other:?}"),
         }
         assert_agent_event_notification(
-            &turn_messages[1],
+            agent_event_notification(&turn_messages, "message.delta").expect("message delta"),
             "message.delta",
             "turn_flow",
             json!({
@@ -1341,7 +1355,9 @@ mod tests {
                 "evidenceRefs": ["evidence://sess_flow/runtime"]
             }),
         );
-        match &turn_messages[2] {
+        match agent_event_notification(&turn_messages, "artifact.snapshot")
+            .expect("artifact notification")
+        {
             JsonRpcMessage::Notification(notification) => {
                 assert_eq!(notification.method, METHOD_AGENT_SESSION_EVENT);
                 let event = &notification.params.as_ref().expect("params")["event"];
@@ -1363,11 +1379,13 @@ mod tests {
             other => panic!("expected artifact notification, got {other:?}"),
         }
         assert_agent_event_notification(
-            &turn_messages[3],
+            agent_event_notification(&turn_messages, "action.required").expect("action required"),
             "action.required",
             "turn_flow",
             json!({
                 "requestId": "req_confirm_1",
+                "actionId": "req_confirm_1",
+                "actionKind": "approve-tool",
                 "actionType": "tool_confirmation",
                 "data": {
                     "toolName": "PublishTool",
@@ -1420,7 +1438,10 @@ mod tests {
         .await;
         assert_eq!(evidence_response["session"]["sessionId"], "sess_flow");
         assert_eq!(evidence_response["turns"][0]["turnId"], "turn_flow");
-        assert_eq!(evidence_response["events"][0]["type"], "message.delta");
+        let evidence_events = evidence_response["events"].as_array().expect("events");
+        assert!(evidence_events
+            .iter()
+            .any(|event| event["type"] == "message.delta"));
         assert_eq!(
             evidence_response["artifacts"][0]["artifactRef"],
             "artifact-report"
@@ -1487,6 +1508,7 @@ mod tests {
             "turn_flow",
             json!({
                 "requestId": "req_confirm_1",
+                "actionId": "req_confirm_1",
                 "actionType": "tool_confirmation",
                 "confirmed": true
             }),
@@ -2399,6 +2421,25 @@ mod tests {
             expected_turn_id,
             expected_payload,
         );
+    }
+
+    #[cfg(feature = "aster-backend")]
+    fn agent_event_notification<'a>(
+        messages: &'a [JsonRpcMessage],
+        expected_type: &str,
+    ) -> Option<&'a JsonRpcMessage> {
+        messages.iter().find(|message| {
+            let JsonRpcMessage::Notification(notification) = message else {
+                return false;
+            };
+            notification.method == METHOD_AGENT_SESSION_EVENT
+                && notification
+                    .params
+                    .as_ref()
+                    .and_then(|params| params.pointer("/event/type"))
+                    .and_then(serde_json::Value::as_str)
+                    == Some(expected_type)
+        })
     }
 
     fn assert_scoped_agent_event_notification(

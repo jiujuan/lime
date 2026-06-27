@@ -281,6 +281,7 @@ use app_server_protocol::SkillRepositoryListResponse;
 use app_server_protocol::SkillRepositorySaveParams;
 use app_server_protocol::SkillScaffoldCreateParams;
 use app_server_protocol::SkillScaffoldCreateResponse;
+use app_server_protocol::SupportBundleExportParams;
 use app_server_protocol::SupportBundleExportResponse;
 use app_server_protocol::UsageStatsDailyTrendsListResponse;
 use app_server_protocol::UsageStatsModelRankingListResponse;
@@ -350,8 +351,16 @@ use lime_services::api_key_provider_service::ApiKeyProviderService;
 use lime_services::model_registry_service::ModelRegistryService;
 use lime_services::skill_service::SkillService;
 use serde_json::Value;
+use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::Mutex as TokioMutex;
+
+pub(crate) fn export_support_bundle_with_trace_root(
+    params: SupportBundleExportParams,
+    trace_store_root: Option<&Path>,
+) -> Result<SupportBundleExportResponse, String> {
+    diagnostics::export_support_bundle_with_trace_root(params, trace_store_root)
+}
 
 pub struct LocalAppDataSource {
     db: DbConnection,

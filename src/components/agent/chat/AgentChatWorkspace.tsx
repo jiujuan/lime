@@ -662,7 +662,8 @@ export function AgentChatWorkspace({
   const runtimeWorkspaceId = resolveRuntimeWorkspaceId(
     validatedRuntimeProjectId,
   );
-  const { workspaceHarnessEnabled } = useDeveloperFeatureFlags();
+  const { clawTraceEnabled, workspaceHarnessEnabled } =
+    useDeveloperFeatureFlags();
   const { mediaDefaults, loading: mediaDefaultsLoading } =
     useGlobalMediaGenerationDefaults();
   const { serviceModels, agentResponseLanguage } = useServiceModelsConfig();
@@ -1043,6 +1044,7 @@ export function AgentChatWorkspace({
       : undefined,
     getSyncedSessionRecentPreferences,
     onOpenSubagents: handleOpenSubagents,
+    clawTraceEnabled,
   });
   const { workspaceHealthError, setWorkspaceHealthError } =
     useWorkspaceHealthRuntime({
@@ -1123,6 +1125,7 @@ export function AgentChatWorkspace({
   );
   const workspacePluginRuntimeContext = useWorkspacePluginRuntimeContext({
     requestMetadata: workspaceRequestMetadataWithExpertSkills,
+    preloadInstalled: true,
   });
   const workspacePluginInputSuggestions = useMemo(
     () =>
@@ -5209,6 +5212,8 @@ export function AgentChatWorkspace({
     handleSaveMessageAsKnowledge,
     handleOpenSubagentSession,
     handlePermissionResponse,
+    onRefreshSessionReadModel: () =>
+      refreshSessionReadModel(sceneSessionId || undefined),
     pendingPromotedA2UIActionRequest,
     shouldCollapseCodeBlocks,
     shouldCollapseCodeBlockInChat,

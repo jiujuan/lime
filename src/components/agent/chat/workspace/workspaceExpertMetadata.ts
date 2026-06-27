@@ -91,5 +91,10 @@ export function shouldAllowDetachedInitialAutoSend(
 ): boolean {
   const metadata = asRecord(initialAutoSendRequestMetadata);
   const harness = asRecord(metadata?.harness);
-  return Boolean(asRecord(metadata?.expert) || asRecord(harness?.expert));
+  return Boolean(
+    asRecord(metadata?.expert) ||
+      asRecord(harness?.expert) ||
+      asRecord(harness?.plugin_activation_intent) ||
+      asRecord(harness?.pluginActivationIntent),
+  );
 }

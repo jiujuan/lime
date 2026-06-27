@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { buildProjection, type Message } from "./messageListItemProjection.testHarness";
+import {
+  buildProjection,
+  type Message,
+} from "./messageListItemProjection.testHarness";
 
 describe("messageListItemProjection timeline flow", () => {
   it("历史 timeline 的审批和问答应按顺序进入交错过程", () => {
@@ -82,8 +85,7 @@ describe("messageListItemProjection timeline flow", () => {
       },
     ] as never);
 
-    const expectedActionContent =
-      "我需要先确认是否允许联网。\n\n确认后我再询问输出格式。\n\n最终回答：已按你的选择继续。";
+    const expectedActionContent = "最终回答：已按你的选择继续。";
     expect(projection.actionContent).toBe(expectedActionContent);
     expect(projection.rendererRawContent).toBe(expectedActionContent);
     expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
@@ -93,6 +95,16 @@ describe("messageListItemProjection timeline flow", () => {
       "action_required",
       "text",
     ]);
+    expect(
+      projection.rendererContentParts?.[0]?.type === "text"
+        ? projection.rendererContentParts[0].text
+        : "",
+    ).toBe("我需要先确认是否允许联网。");
+    expect(
+      projection.rendererContentParts?.[2]?.type === "text"
+        ? projection.rendererContentParts[2].text
+        : "",
+    ).toBe("确认后我再询问输出格式。");
 
     const actionParts = projection.rendererContentParts?.filter(
       (
@@ -165,8 +177,7 @@ describe("messageListItemProjection timeline flow", () => {
       },
     ] as never);
 
-    const expectedActionContent =
-      "我先查看你给的截图。\n\n最终观察：截图里有一个仪表盘。";
+    const expectedActionContent = "最终观察：截图里有一个仪表盘。";
     expect(projection.actionContent).toBe(expectedActionContent);
     expect(projection.rendererRawContent).toBe(expectedActionContent);
     expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
@@ -174,6 +185,11 @@ describe("messageListItemProjection timeline flow", () => {
       "tool_use",
       "text",
     ]);
+    expect(
+      projection.rendererContentParts?.[0]?.type === "text"
+        ? projection.rendererContentParts[0].text
+        : "",
+    ).toBe("我先查看你给的截图。");
 
     const toolPart = projection.rendererContentParts?.find(
       (
@@ -307,8 +323,7 @@ describe("messageListItemProjection timeline flow", () => {
       },
     ] as never);
 
-    const expectedActionContent =
-      "我先把工作拆成任务板。\n\n最终结论：任务板已完成。";
+    const expectedActionContent = "最终结论：任务板已完成。";
     expect(projection.actionContent).toBe(expectedActionContent);
     expect(projection.rendererRawContent).toBe(expectedActionContent);
     expect(projection.rendererRawContent).not.toContain("updatedFields");
@@ -320,6 +335,11 @@ describe("messageListItemProjection timeline flow", () => {
       "tool_use",
       "text",
     ]);
+    expect(
+      projection.rendererContentParts?.[0]?.type === "text"
+        ? projection.rendererContentParts[0].text
+        : "",
+    ).toBe("我先把工作拆成任务板。");
     expect(
       projection.rendererContentParts?.filter(
         (part) => part.type === "tool_use",

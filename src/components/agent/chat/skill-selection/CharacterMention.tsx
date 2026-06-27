@@ -51,6 +51,11 @@ import {
   LazyCharacterMentionPanel,
   preloadCharacterMentionPanel,
 } from "./characterMentionPanelLoader";
+import {
+  normalizeInputbarPluginTrigger,
+  type InputbarPluginCapability,
+  type InputbarPluginSkillCapability,
+} from "../components/Inputbar/pluginInputCapability";
 import type { InputCapabilityDescriptor } from "./inputCapabilitySections";
 import {
   recordSlashEntryUsage,
@@ -108,6 +113,14 @@ interface CharacterMentionProps {
       launcherPrefillHint?: string;
     },
   ) => void;
+  /** 选择 Agent App 插件回调 */
+  onSelectPlugin?: (
+    plugin: InputbarPluginCapability,
+    skill?: InputbarPluginSkillCapability,
+    options?: { inputOverride?: string },
+  ) => void;
+  /** Agent App 插件候选 */
+  pluginSuggestions?: readonly InputbarPluginCapability[];
   projectId?: string | null;
   sessionId?: string | null;
   /** 当前默认带入的灵感引用 */
@@ -249,6 +262,8 @@ export function CharacterMention({
   onSelectCharacter,
   onSelectInputCapability,
   onSelectCuratedTask,
+  onSelectPlugin,
+  pluginSuggestions = [],
   projectId,
   sessionId,
   defaultCuratedTaskReferenceMemoryIds = [],
@@ -735,6 +750,50 @@ export function CharacterMention({
     }, 0);
   };
 
+  const handleSelectPlugin = (
+    plugin: InputbarPluginCapability,
+    skill?: InputbarPluginSkillCapability,
+  ) => {
+    const textarea = inputRef.current;
+    if (!textarea) return;
+
+    const currentValue = textarea.value || value;
+    const cursorPos = textarea.selectionStart ?? currentValue.length;
+    const textAfterCursor = currentValue.slice(cursorPos);
+    const activeTrigger = resolveActiveTrigger(currentValue, cursorPos);
+    if (!activeTrigger || activeTrigger.mode !== "mention") {
+      return;
+    }
+
+    const mergedSelection = mergeTriggerSelectionText({
+      leadingText: currentValue.slice(0, activeTrigger.triggerIndex),
+      insertedText: normalizeInputbarPluginTrigger(plugin, skill),
+      trailingText: textAfterCursor,
+    });
+    const nextSelection =
+      textAfterCursor.length === 0
+        ? {
+            value: `${mergedSelection.value} `,
+            cursorPos: mergedSelection.cursorPos + 1,
+          }
+        : mergedSelection;
+    const normalizedValue =
+      nextSelection.value.trimEnd() === "" ? "" : nextSelection.value;
+
+    onChange(normalizedValue);
+    setShowMentions(false);
+    onSelectPlugin?.(plugin, skill, { inputOverride: normalizedValue });
+
+    setTimeout(() => {
+      textarea.focus();
+      const newCursorPos = Math.min(
+        nextSelection.cursorPos,
+        normalizedValue.length,
+      );
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+    }, 0);
+  };
+
   const handleSelectSlashCommand = (
     command: SlashCommandDefinition,
     options?: { replayText?: string },
@@ -963,6 +1022,9 @@ export function CharacterMention({
         return;
       case "service_skill":
         handleSelectServiceSkill(item.skill);
+        return;
+      case "plugin":
+        handleSelectPlugin(item.plugin, item.skill);
         return;
       case "slash_command":
         handleSelectSlashCommand(item.command, {
@@ -1214,6 +1276,7 @@ export function CharacterMention({
                 slashCommands={filteredSlashCommands}
                 sceneCommands={filteredRuntimeSceneCommands}
                 mentionServiceSkills={filteredServiceSkills}
+                pluginSuggestions={pluginSuggestions}
                 serviceSkillGroups={serviceSkillGroups}
                 filteredCharacters={filteredCharacters}
                 installedSkills={installedSkills}

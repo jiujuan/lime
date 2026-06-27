@@ -50,6 +50,7 @@ export interface Topic {
 
 export interface UseAsterAgentChatOptions {
   systemPrompt?: string;
+  clawTraceEnabled?: boolean;
   onWriteFile?: (
     content: string,
     fileName: string,

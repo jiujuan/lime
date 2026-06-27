@@ -855,6 +855,8 @@ fn shell_process_lifecycle_metadata(
     compact_object(json!({
         "processId": process_id,
         "executionProcessStatus": execution_process_status,
+        "executionProcessControlStatus": metadata.and_then(|metadata| metadata_string(metadata, &["executionProcessControlStatus", "execution_process_control_status"])),
+        "stdinWritable": metadata.and_then(|metadata| metadata_bool(metadata, &["stdinWritable", "stdin_writable"])),
         "executionSurface": execution_surface,
         "outputBytes": metadata.and_then(|metadata| metadata_u64(metadata, &["outputBytes", "output_bytes"])),
         "outputOmittedBytes": metadata.and_then(|metadata| metadata_u64(metadata, &["outputOmittedBytes", "output_omitted_bytes"])),
@@ -883,6 +885,15 @@ fn metadata_has_process_lifecycle(metadata: Option<&HashMap<String, Value>>) -> 
             &["executionProcessStatus", "execution_process_status"],
         )
         .is_some()
+        || metadata_string(
+            metadata,
+            &[
+                "executionProcessControlStatus",
+                "execution_process_control_status",
+            ],
+        )
+        .is_some()
+        || metadata_bool(metadata, &["stdinWritable", "stdin_writable"]).is_some()
         || metadata_string(metadata, &["executionSurface", "execution_surface"]).is_some()
 }
 

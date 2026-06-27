@@ -13,8 +13,13 @@ import type {
 } from "./marketplace/pluginMarketplaceActions";
 import { PluginMarketplaceRegistrationPanel } from "./PluginMarketplaceRegistrationPanel";
 import { shouldShowPluginMarketplaceRegistrationPanel } from "./PluginMarketplaceRegistrationPanelModel";
+import { PluginMarketplaceHistorySessionPanel } from "./PluginMarketplaceHistorySessionPanel";
 import { PluginMarketplaceSkillPanel } from "./PluginMarketplaceSkillPanel";
 import type { PluginSkillDeclaration } from "./manifest/types";
+import type {
+  PluginHistorySessionCandidate,
+  PluginHistorySessionSelectionModel,
+} from "./history/pluginHistorySessionSelection";
 
 export interface PluginMarketplaceDetailPanelProps {
   item: PluginMarketplaceViewItem | null;
@@ -26,11 +31,19 @@ export interface PluginMarketplaceDetailPanelProps {
     item: PluginMarketplaceViewItem,
     skill: PluginSkillDeclaration,
   ) => void;
+  historySelectionModel?: PluginHistorySessionSelectionModel | null;
+  historySelectionLoading?: boolean;
+  historySelectionError?: string | null;
+  onOpenHistorySession?: (
+    item: PluginMarketplaceViewItem,
+    candidate: PluginHistorySessionCandidate,
+  ) => void;
+  onRefreshHistorySessions?: (item: PluginMarketplaceViewItem) => void;
   onManage: (
     item: PluginMarketplaceViewItem,
     action: PluginMarketplaceExecutableActionKind,
   ) => void;
-  t: (key: string, options?: Record<string, string>) => string;
+  t: (key: string, options?: Record<string, string | number>) => string;
 }
 
 export function PluginMarketplaceDetailPanel({
@@ -40,6 +53,11 @@ export function PluginMarketplaceDetailPanel({
   onRegistrationCodeChange,
   onSubmitRegistration,
   onOpenSkill,
+  historySelectionError = null,
+  historySelectionLoading = false,
+  historySelectionModel = null,
+  onOpenHistorySession,
+  onRefreshHistorySessions,
   onManage,
   t,
 }: PluginMarketplaceDetailPanelProps) {
@@ -163,6 +181,20 @@ export function PluginMarketplaceDetailPanel({
         t={t}
       />
 
+      {item.primaryAction.kind === "view_history" ? (
+        <PluginMarketplaceHistorySessionPanel
+          model={historySelectionModel}
+          loading={historySelectionLoading}
+          error={historySelectionError}
+          pending={pendingPluginId === item.pluginId}
+          onOpenSession={(candidate) =>
+            onOpenHistorySession?.(item, candidate)
+          }
+          onRefresh={() => onRefreshHistorySessions?.(item)}
+          t={t}
+        />
+      ) : null}
+
       {shouldShowPluginMarketplaceRegistrationPanel(item) ? (
         <PluginMarketplaceRegistrationPanel
           item={item}
@@ -198,7 +230,7 @@ function PluginMarketplaceManagementPanel({
     item: PluginMarketplaceViewItem,
     action: PluginMarketplaceExecutableActionKind,
   ) => void;
-  t: (key: string, options?: Record<string, string>) => string;
+  t: (key: string, options?: Record<string, string | number>) => string;
 }) {
   return (
     <section

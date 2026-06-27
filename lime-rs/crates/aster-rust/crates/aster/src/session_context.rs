@@ -1,7 +1,9 @@
 use crate::conversation::message::ActionRequiredScope;
 use crate::session::TurnContextOverride;
 use futures::{Stream, StreamExt};
+use reqwest::header::HeaderMap;
 use serde_json::Value;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use tokio::task_local;
 
@@ -11,6 +13,19 @@ pub const TURN_ID_HEADER: &str = "aster-turn-id";
 pub const PENDING_REQUEST_ID_HEADER: &str = "aster-pending-request-id";
 pub const QUEUED_TURN_ID_HEADER: &str = "aster-queued-turn-id";
 pub const SUBAGENT_SESSION_ID_HEADER: &str = "aster-subagent-session-id";
+pub const TRACEPARENT_HEADER: &str = "traceparent";
+pub const TRACESTATE_HEADER: &str = "tracestate";
+const PROVIDER_REQUEST_ID_HEADERS: &[&str] = &[
+    "x-request-id",
+    "x-oai-request-id",
+    "x-openai-request-id",
+    "request-id",
+    "x-amzn-requestid",
+    "x-amz-request-id",
+    "x-goog-request-id",
+    "x-ms-request-id",
+];
+const MAX_PROVIDER_REQUEST_ID_LEN: usize = 256;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RequestCorrelationContext {
@@ -20,6 +35,14 @@ pub struct RequestCorrelationContext {
     pub pending_request_id: Option<String>,
     pub queued_turn_id: Option<String>,
     pub subagent_session_id: Option<String>,
+    pub traceparent: Option<String>,
+    pub tracestate: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ProviderResponseContext {
+    pub provider_request_id: Option<String>,
+    pub provider_request_id_header: Option<String>,
 }
 
 impl RequestCorrelationContext {
@@ -44,6 +67,12 @@ impl RequestCorrelationContext {
         if let Some(value) = self.subagent_session_id.clone() {
             headers.push((SUBAGENT_SESSION_ID_HEADER, value));
         }
+        if let Some(value) = self.traceparent.clone() {
+            headers.push((TRACEPARENT_HEADER, value));
+        }
+        if let Some(value) = self.tracestate.clone() {
+            headers.push((TRACESTATE_HEADER, value));
+        }
 
         headers
     }
@@ -59,6 +88,10 @@ task_local! {
 
 task_local! {
     pub static TURN_CONTEXT: Option<TurnContextOverride>;
+}
+
+task_local! {
+    static PROVIDER_RESPONSE_CONTEXT: RefCell<Option<ProviderResponseContext>>;
 }
 
 pub async fn with_session_id<F>(session_id: Option<String>, f: F) -> F::Output
@@ -94,7 +127,12 @@ pub async fn with_turn_context<F>(turn_context: Option<TurnContextOverride>, f: 
 where
     F: std::future::Future,
 {
-    TURN_CONTEXT.scope(turn_context, f).await
+    TURN_CONTEXT
+        .scope(
+            turn_context,
+            PROVIDER_RESPONSE_CONTEXT.scope(RefCell::new(None), f),
+        )
+        .await
 }
 
 pub async fn with_runtime_scope<F>(
@@ -123,6 +161,10 @@ pub fn current_request_correlation_context() -> RequestCorrelationContext {
     let action_scope = current_action_scope();
     let turn_context = current_turn_context();
     let metadata = turn_context.as_ref().map(|context| &context.metadata);
+    let traceparent = metadata.and_then(find_w3c_traceparent);
+    let tracestate = traceparent
+        .as_ref()
+        .and_then(|_| metadata.and_then(find_w3c_tracestate));
 
     RequestCorrelationContext {
         session_id: action_scope
@@ -145,7 +187,29 @@ pub fn current_request_correlation_context() -> RequestCorrelationContext {
                 find_metadata_string(value, &["subagent_session_id", "subagentSessionId"])
             })
             .or_else(|| metadata.and_then(find_subagent_session_id)),
+        traceparent,
+        tracestate,
     }
+}
+
+pub fn clear_current_provider_response_context() {
+    let _ = PROVIDER_RESPONSE_CONTEXT.try_with(|context| {
+        *context.borrow_mut() = None;
+    });
+}
+
+pub fn current_provider_response_context() -> Option<ProviderResponseContext> {
+    PROVIDER_RESPONSE_CONTEXT
+        .try_with(|context| context.borrow().clone())
+        .ok()
+        .flatten()
+}
+
+pub fn record_provider_response_headers(headers: &HeaderMap) {
+    let context = provider_response_context_from_headers(headers);
+    let _ = PROVIDER_RESPONSE_CONTEXT.try_with(|slot| {
+        *slot.borrow_mut() = context;
+    });
 }
 
 fn find_metadata_string(metadata: &HashMap<String, Value>, keys: &[&str]) -> Option<String> {
@@ -170,6 +234,92 @@ fn find_subagent_session_id(metadata: &HashMap<String, Value>) -> Option<String>
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToString::to_string)
+}
+
+fn find_w3c_traceparent(metadata: &HashMap<String, Value>) -> Option<String> {
+    let value = find_w3c_trace_context_string(metadata, &["traceparent"])?;
+    normalize_traceparent(&value)
+}
+
+fn find_w3c_tracestate(metadata: &HashMap<String, Value>) -> Option<String> {
+    find_w3c_trace_context_string(metadata, &["tracestate"])
+        .filter(|value| value.len() <= 256)
+        .filter(|value| value.bytes().all(|byte| matches!(byte, b' '..=b'~')))
+}
+
+fn find_w3c_trace_context_string(
+    metadata: &HashMap<String, Value>,
+    keys: &[&str],
+) -> Option<String> {
+    ["w3c_trace_context", "w3cTraceContext"]
+        .iter()
+        .filter_map(|key| metadata.get(*key))
+        .filter_map(Value::as_object)
+        .find_map(|trace| {
+            keys.iter()
+                .filter_map(|key| trace.get(*key))
+                .find_map(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToString::to_string)
+        })
+}
+
+fn normalize_traceparent(value: &str) -> Option<String> {
+    let normalized = value.trim().to_ascii_lowercase();
+    let mut parts = normalized.split('-');
+    let version = parts.next()?;
+    let trace_id = parts.next()?;
+    let parent_span_id = parts.next()?;
+    let trace_flags = parts.next()?;
+    if parts.next().is_some()
+        || version != "00"
+        || trace_id.len() != 32
+        || parent_span_id.len() != 16
+        || trace_flags.len() != 2
+        || !is_non_zero_hex(trace_id)
+        || !is_non_zero_hex(parent_span_id)
+        || !is_lowercase_hex(trace_flags)
+    {
+        return None;
+    }
+    Some(format!(
+        "{version}-{trace_id}-{parent_span_id}-{trace_flags}"
+    ))
+}
+
+fn is_non_zero_hex(value: &str) -> bool {
+    is_lowercase_hex(value) && value.bytes().any(|byte| byte != b'0')
+}
+
+fn is_lowercase_hex(value: &str) -> bool {
+    value
+        .bytes()
+        .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+}
+
+fn provider_response_context_from_headers(headers: &HeaderMap) -> Option<ProviderResponseContext> {
+    PROVIDER_REQUEST_ID_HEADERS.iter().find_map(|header| {
+        let value = headers
+            .get(*header)
+            .and_then(|value| value.to_str().ok())
+            .and_then(normalize_provider_request_id)?;
+        Some(ProviderResponseContext {
+            provider_request_id: Some(value),
+            provider_request_id_header: Some((*header).to_string()),
+        })
+    })
+}
+
+fn normalize_provider_request_id(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() || value.len() > MAX_PROVIDER_REQUEST_ID_LEN {
+        return None;
+    }
+    value
+        .bytes()
+        .all(|byte| matches!(byte, b'!'..=b'~'))
+        .then(|| value.to_string())
 }
 
 pub fn scope_stream<S>(
@@ -331,6 +481,92 @@ mod tests {
             assert_eq!(context.pending_request_id.as_deref(), Some("pending-1"));
             assert_eq!(context.queued_turn_id.as_deref(), Some("queued-1"));
             assert_eq!(context.subagent_session_id.as_deref(), Some("subagent-1"));
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_request_correlation_context_reads_w3c_trace_context() {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "w3c_trace_context".to_string(),
+            serde_json::json!({
+                "traceparent": "00-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-BBBBBBBBBBBBBBBB-01",
+                "tracestate": " vendor=value "
+            }),
+        );
+        let turn_context = TurnContextOverride {
+            metadata,
+            ..TurnContextOverride::default()
+        };
+
+        with_turn_context(Some(turn_context), async {
+            let context = current_request_correlation_context();
+            assert_eq!(
+                context.traceparent.as_deref(),
+                Some("00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01")
+            );
+            assert_eq!(context.tracestate.as_deref(), Some("vendor=value"));
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_request_correlation_context_rejects_invalid_w3c_traceparent() {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "w3cTraceContext".to_string(),
+            serde_json::json!({
+                "traceparent": "not-a-traceparent",
+                "tracestate": "vendor=value"
+            }),
+        );
+        let turn_context = TurnContextOverride {
+            metadata,
+            ..TurnContextOverride::default()
+        };
+
+        with_turn_context(Some(turn_context), async {
+            let context = current_request_correlation_context();
+            assert!(context.traceparent.is_none());
+            assert!(context.tracestate.is_none());
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_provider_response_context_reads_request_id_headers() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "x-openai-request-id",
+            " req-provider-1 ".parse().expect("header"),
+        );
+
+        with_turn_context(None, async {
+            record_provider_response_headers(&headers);
+            let context = current_provider_response_context().expect("provider response context");
+
+            assert_eq!(
+                context.provider_request_id.as_deref(),
+                Some("req-provider-1")
+            );
+            assert_eq!(
+                context.provider_request_id_header.as_deref(),
+                Some("x-openai-request-id")
+            );
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_provider_response_context_rejects_header_unsafe_request_id() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-request-id", "req one".parse().expect("header"));
+
+        with_turn_context(None, async {
+            record_provider_response_headers(&headers);
+
+            assert!(current_provider_response_context().is_none());
         })
         .await;
     }

@@ -17,7 +17,6 @@ export type AppServerDrainEventsResult = {
   lines: string[];
 };
 
-
 export type AppServerRequestId = protocol.RequestId;
 export type AppServerJsonValue = protocol.JsonValue;
 export type AppServerJsonRpcRequest = protocol.JsonRpcRequest;
@@ -34,7 +33,8 @@ export type AppServerBusinessObjectRef = protocol.BusinessObjectRef;
 export type AppServerCapabilityListParams = protocol.CapabilityListParams;
 export type AppServerCapabilityDescriptor = protocol.CapabilityDescriptor;
 export type AppServerCapabilityListResponse = protocol.CapabilityListResponse;
-export type AppServerRuntimeCapabilityManifest = protocol.RuntimeCapabilityManifest;
+export type AppServerRuntimeCapabilityManifest =
+  protocol.RuntimeCapabilityManifest;
 export type AppServerRuntimeResumeContract = protocol.RuntimeResumeContract;
 export type AppServerArtifactReadParams = protocol.ArtifactReadParams;
 export type AppServerArtifactContentStatus = protocol.ArtifactContentStatus;
@@ -44,20 +44,26 @@ export type AppServerFileSystemListDirectoryParams =
   protocol.FileSystemListDirectoryParams;
 export type AppServerFileSystemReadFilePreviewParams =
   protocol.FileSystemReadFilePreviewParams;
-export type AppServerFileSystemCreateFileParams = protocol.FileSystemCreateFileParams;
+export type AppServerFileSystemCreateFileParams =
+  protocol.FileSystemCreateFileParams;
 export type AppServerFileSystemCreateDirectoryParams =
   protocol.FileSystemCreateDirectoryParams;
-export type AppServerFileSystemRenameFileParams = protocol.FileSystemRenameFileParams;
-export type AppServerFileSystemDeleteFileParams = protocol.FileSystemDeleteFileParams;
-export type AppServerFileSystemMutationResponse = protocol.FileSystemMutationResponse;
-export type AppServerFileSystemDirectoryListing = protocol.FileSystemDirectoryListing;
+export type AppServerFileSystemRenameFileParams =
+  protocol.FileSystemRenameFileParams;
+export type AppServerFileSystemDeleteFileParams =
+  protocol.FileSystemDeleteFileParams;
+export type AppServerFileSystemMutationResponse =
+  protocol.FileSystemMutationResponse;
+export type AppServerFileSystemDirectoryListing =
+  protocol.FileSystemDirectoryListing;
 export type AppServerFileSystemFileEntry = protocol.FileSystemFileEntry;
 export type AppServerFileSystemFilePreview = protocol.FileSystemFilePreview;
 export type AppServerProjectGitStatusParams = protocol.ProjectGitStatusParams;
 export type AppServerProjectGitDiffBase = protocol.ProjectGitDiffBase;
 export type AppServerProjectGitDiffParams = protocol.ProjectGitDiffParams;
 export type AppServerProjectGitDiffResponse = protocol.ProjectGitDiffResponse;
-export type AppServerProjectGitCommitListParams = protocol.ProjectGitCommitListParams;
+export type AppServerProjectGitCommitListParams =
+  protocol.ProjectGitCommitListParams;
 export type AppServerProjectGitCommitListResponse =
   protocol.ProjectGitCommitListResponse;
 export type AppServerProjectGitBranchCheckoutParams =
@@ -68,7 +74,8 @@ export type AppServerProjectGitBranchCreateParams =
   protocol.ProjectGitBranchCreateParams;
 export type AppServerProjectGitBranchCreateResponse =
   protocol.ProjectGitBranchCreateResponse;
-export type AppServerProjectGitStatusResponse = protocol.ProjectGitStatusResponse;
+export type AppServerProjectGitStatusResponse =
+  protocol.ProjectGitStatusResponse;
 export type AppServerProjectGitWorktreeCreateParams =
   protocol.ProjectGitWorktreeCreateParams;
 export type AppServerProjectGitWorktreeCreateResponse =
@@ -81,7 +88,8 @@ export type AppServerAgentSessionHandoffBundleExportParams =
   protocol.AgentSessionHandoffBundleExportParams;
 export type AppServerAgentSessionHandoffBundleExportResponse =
   protocol.AgentSessionHandoffBundleExportResponse;
-export type AppServerAgentSessionHandoffArtifact = protocol.AgentSessionHandoffArtifact;
+export type AppServerAgentSessionHandoffArtifact =
+  protocol.AgentSessionHandoffArtifact;
 export type AppServerAgentSessionReplayCaseExportParams =
   protocol.AgentSessionReplayCaseExportParams;
 export type AppServerAgentSessionReplayCaseExportResponse =
@@ -96,10 +104,12 @@ export type AppServerAgentSessionReviewDecisionTemplateExportResponse =
   protocol.AgentSessionReviewDecisionTemplateExportResponse;
 export type AppServerAgentSessionReviewDecisionSaveParams =
   protocol.AgentSessionReviewDecisionSaveParams;
-export type AppServerAgentSessionReviewDecision = protocol.AgentSessionReviewDecision;
+export type AppServerAgentSessionReviewDecision =
+  protocol.AgentSessionReviewDecision;
 export type AppServerAgentSessionStartParams = protocol.AgentSessionStartParams;
 export type AppServerAgentSessionListParams = protocol.AgentSessionListParams;
-export type AppServerAgentSessionListResponse = protocol.AgentSessionListResponse;
+export type AppServerAgentSessionListResponse =
+  protocol.AgentSessionListResponse;
 export type AppServerAgentSessionReadParams = protocol.AgentSessionReadParams;
 export type AppServerConversationImportThreadRuntimeEventsReadParams =
   protocol.ConversationImportThreadRuntimeEventsReadParams;
@@ -110,7 +120,8 @@ export type AppServerAgentSessionToolInventoryReadParams =
 export type AppServerAgentInput = protocol.AgentInput;
 export type AppServerAgentAttachment = protocol.AgentAttachment;
 export type AppServerRuntimeOptions = protocol.RuntimeOptions;
-export type AppServerAgentSessionTurnStartParams = protocol.AgentSessionTurnStartParams;
+export type AppServerAgentSessionTurnStartParams =
+  protocol.AgentSessionTurnStartParams;
 export type AppServerAgentSessionTurnCancelParams =
   protocol.AgentSessionTurnCancelParams;
 export type AppServerAgentSessionRuntimeEventInput =
@@ -128,18 +139,24 @@ export type AppServerAgentSession = protocol.AgentSession;
 export type AppServerAgentTurnStatus = protocol.AgentTurnStatus;
 export type AppServerAgentTurn = protocol.AgentTurn;
 export type AppServerAgentEvent = protocol.AgentEvent;
-export type AppServerAgentSessionStartResponse = protocol.AgentSessionStartResponse;
-export type AppServerAgentSessionReadResponse = protocol.AgentSessionReadResponse;
+export type AppServerAgentSessionStartResponse =
+  protocol.AgentSessionStartResponse;
+export type AppServerAgentSessionReadResponse =
+  protocol.AgentSessionReadResponse;
 export type AppServerAgentSessionToolInventoryReadResponse =
   protocol.AgentSessionToolInventoryReadResponse;
-export type AppServerAgentSessionUpdateParams = protocol.AgentSessionUpdateParams;
-export type AppServerAgentSessionUpdateResponse = protocol.AgentSessionUpdateResponse;
+export type AppServerAgentSessionUpdateParams =
+  protocol.AgentSessionUpdateParams;
+export type AppServerAgentSessionUpdateResponse =
+  protocol.AgentSessionUpdateResponse;
 export type AppServerAgentSessionArchiveManyParams =
   protocol.AgentSessionArchiveManyParams;
 export type AppServerAgentSessionArchiveManyResponse =
   protocol.AgentSessionArchiveManyResponse;
-export type AppServerAgentSessionDeleteParams = protocol.AgentSessionDeleteParams;
-export type AppServerAgentSessionDeleteResponse = protocol.AgentSessionDeleteResponse;
+export type AppServerAgentSessionDeleteParams =
+  protocol.AgentSessionDeleteParams;
+export type AppServerAgentSessionDeleteResponse =
+  protocol.AgentSessionDeleteResponse;
 export type AppServerManagedObjectiveStatus = protocol.ManagedObjectiveStatus;
 export type AppServerManagedObjective = protocol.ManagedObjective;
 export type AppServerAgentSessionObjectiveReadParams =
@@ -166,8 +183,10 @@ export type AppServerAgentSessionObjectiveAuditParams =
   protocol.AgentSessionObjectiveAuditParams;
 export type AppServerAgentSessionObjectiveAuditResponse =
   protocol.AgentSessionObjectiveAuditResponse;
-export type AppServerAgentSessionCompactParams = protocol.AgentSessionCompactParams;
-export type AppServerAgentSessionCompactResponse = protocol.AgentSessionCompactResponse;
+export type AppServerAgentSessionCompactParams =
+  protocol.AgentSessionCompactParams;
+export type AppServerAgentSessionCompactResponse =
+  protocol.AgentSessionCompactResponse;
 export type AppServerAgentSessionThreadResumeParams =
   protocol.AgentSessionThreadResumeParams;
 export type AppServerAgentSessionThreadResumeResponse =
@@ -203,25 +222,30 @@ export type AppServerAgentSessionFileCheckpointRestoreResponse =
 export type AppServerSessionFileIdParams = protocol.SessionFileIdParams;
 export type AppServerSessionFileGetOrCreateParams =
   protocol.SessionFileGetOrCreateParams;
-export type AppServerSessionFileUpdateMetaParams = protocol.SessionFileUpdateMetaParams;
+export type AppServerSessionFileUpdateMetaParams =
+  protocol.SessionFileUpdateMetaParams;
 export type AppServerSessionFileSaveParams = protocol.SessionFileSaveParams;
 export type AppServerSessionFileMeta = protocol.SessionFileMeta;
 export type AppServerSessionFileEntry = protocol.SessionFileEntry;
 export type AppServerSessionFileMetaResponse = protocol.SessionFileMetaResponse;
-export type AppServerSessionFileEntryResponse = protocol.SessionFileEntryResponse;
+export type AppServerSessionFileEntryResponse =
+  protocol.SessionFileEntryResponse;
 export type AppServerSessionFileReadResponse = protocol.SessionFileReadResponse;
 export type AppServerSessionFileResolvePathResponse =
   protocol.SessionFileResolvePathResponse;
 export type AppServerSessionFileListResponse = protocol.SessionFileListResponse;
-export type AppServerSessionFileMutationResponse = protocol.SessionFileMutationResponse;
+export type AppServerSessionFileMutationResponse =
+  protocol.SessionFileMutationResponse;
 export type AppServerExecutionProcessDrainOutputParams =
   protocol.ExecutionProcessDrainOutputParams;
 export type AppServerExecutionProcessDrainOutputResponse =
   protocol.ExecutionProcessDrainOutputResponse;
 export type AppServerExecutionProcessEmptyResponse =
   protocol.ExecutionProcessEmptyResponse;
-export type AppServerExecutionProcessIdParams = protocol.ExecutionProcessIdParams;
-export type AppServerExecutionProcessStartParams = protocol.ExecutionProcessStartParams;
+export type AppServerExecutionProcessIdParams =
+  protocol.ExecutionProcessIdParams;
+export type AppServerExecutionProcessStartParams =
+  protocol.ExecutionProcessStartParams;
 export type AppServerExecutionProcessStartResponse =
   protocol.ExecutionProcessStartResponse;
 export type AppServerExecutionProcessStatusResponse =
@@ -238,9 +262,12 @@ export type AppServerAgentSessionActionReplayResponse =
   protocol.AgentSessionActionReplayResponse;
 export type AppServerAgentSessionActionRespondResponse =
   protocol.AgentSessionActionRespondResponse;
-export type AppServerGatewayChannelStatusParams = protocol.GatewayChannelStatusParams;
-export type AppServerGatewayChannelStartParams = protocol.GatewayChannelStartParams;
-export type AppServerGatewayChannelStopParams = protocol.GatewayChannelStopParams;
+export type AppServerGatewayChannelStatusParams =
+  protocol.GatewayChannelStatusParams;
+export type AppServerGatewayChannelStartParams =
+  protocol.GatewayChannelStartParams;
+export type AppServerGatewayChannelStopParams =
+  protocol.GatewayChannelStopParams;
 export type AppServerGatewayChannelStatusResponse =
   protocol.GatewayChannelStatusResponse;
 export type AppServerGatewayTunnelCloudflaredDetectResponse =
@@ -249,10 +276,14 @@ export type AppServerGatewayTunnelCloudflaredInstallParams =
   protocol.GatewayTunnelCloudflaredInstallParams;
 export type AppServerGatewayTunnelCloudflaredInstallResponse =
   protocol.GatewayTunnelCloudflaredInstallResponse;
-export type AppServerGatewayTunnelCreateParams = protocol.GatewayTunnelCreateParams;
-export type AppServerGatewayTunnelCreateResponse = protocol.GatewayTunnelCreateResponse;
-export type AppServerGatewayTunnelProbeResponse = protocol.GatewayTunnelProbeResponse;
-export type AppServerGatewayTunnelStatusResponse = protocol.GatewayTunnelStatusResponse;
+export type AppServerGatewayTunnelCreateParams =
+  protocol.GatewayTunnelCreateParams;
+export type AppServerGatewayTunnelCreateResponse =
+  protocol.GatewayTunnelCreateResponse;
+export type AppServerGatewayTunnelProbeResponse =
+  protocol.GatewayTunnelProbeResponse;
+export type AppServerGatewayTunnelStatusResponse =
+  protocol.GatewayTunnelStatusResponse;
 export type AppServerGatewayTunnelSyncWebhookUrlParams =
   protocol.GatewayTunnelSyncWebhookUrlParams;
 export type AppServerGatewayTunnelSyncWebhookUrlResponse =
@@ -263,27 +294,50 @@ export type AppServerWechatConfiguredAccount = protocol.WechatConfiguredAccount;
 export type AppServerWechatChannelAccountListResponse =
   protocol.WechatChannelAccountListResponse;
 export type AppServerWechatLoginStartParams = protocol.WechatLoginStartParams;
-export type AppServerWechatLoginStartResponse = protocol.WechatLoginStartResponse;
+export type AppServerWechatLoginStartResponse =
+  protocol.WechatLoginStartResponse;
 export type AppServerWechatLoginWaitParams = protocol.WechatLoginWaitParams;
 export type AppServerWechatLoginWaitResponse = protocol.WechatLoginWaitResponse;
 export type AppServerWechatChannelAccountRemoveParams =
   protocol.WechatChannelAccountRemoveParams;
 export type AppServerWechatChannelAccountRemoveResponse =
   protocol.WechatChannelAccountRemoveResponse;
-export type AppServerWechatRuntimeModelSetParams = protocol.WechatRuntimeModelSetParams;
+export type AppServerWechatRuntimeModelSetParams =
+  protocol.WechatRuntimeModelSetParams;
 export type AppServerWechatRuntimeModelSetResponse =
   protocol.WechatRuntimeModelSetResponse;
 export type AppServerLogEntry = protocol.LogEntry;
 export type AppServerLogListResponse = protocol.LogListResponse;
 export type AppServerLogPersistedTailParams = protocol.LogPersistedTailParams;
-export type AppServerLogPersistedTailResponse = protocol.LogPersistedTailResponse;
+export type AppServerLogPersistedTailResponse =
+  protocol.LogPersistedTailResponse;
 export type AppServerLogClearResponse = protocol.LogClearResponse;
 export type AppServerLogStorageDiagnosticsResponse =
   protocol.LogStorageDiagnosticsResponse;
-export type AppServerSupportBundleExportResponse = protocol.SupportBundleExportResponse;
-export type AppServerServerDiagnosticsResponse = protocol.ServerDiagnosticsResponse;
+export type AppServerSupportBundleExportParams =
+  protocol.SupportBundleExportParams;
+export type AppServerSupportBundleExportResponse =
+  protocol.SupportBundleExportResponse;
+export type AppServerServerDiagnosticsResponse =
+  protocol.ServerDiagnosticsResponse;
 export type AppServerWindowsStartupDiagnosticsResponse =
   protocol.WindowsStartupDiagnosticsResponse;
+export type AppServerDiagnosticsTraceListParams =
+  protocol.DiagnosticsTraceListParams;
+export type AppServerDiagnosticsTraceReadParams =
+  protocol.DiagnosticsTraceReadParams;
+export type AppServerDiagnosticsTraceExportParams =
+  protocol.DiagnosticsTraceExportParams;
+export type AppServerDiagnosticsTraceListResponse =
+  protocol.DiagnosticsTraceListResponse;
+export type AppServerDiagnosticsTraceReadResponse =
+  protocol.DiagnosticsTraceReadResponse;
+export type AppServerDiagnosticsTraceExportResponse =
+  protocol.DiagnosticsTraceExportResponse;
+export type AppServerDiagnosticsTraceSummary = protocol.DiagnosticsTraceSummary;
+export type AppServerDiagnosticsTraceEvent = protocol.DiagnosticsTraceEvent;
+export type AppServerDiagnosticsTraceRedactionPolicy =
+  protocol.DiagnosticsTraceRedactionPolicy;
 export type AppServerMediaTaskArtifactImageCreateParams =
   protocol.MediaTaskArtifactImageCreateParams;
 export type AppServerMediaTaskArtifactAudioCreateParams =
@@ -294,30 +348,40 @@ export type AppServerMediaTaskArtifactAudioCompleteParams =
   protocol.MediaTaskArtifactAudioCompleteParams;
 export type AppServerMediaTaskArtifactLookupParams =
   protocol.MediaTaskArtifactLookupParams;
-export type AppServerMediaTaskArtifactListParams = protocol.MediaTaskArtifactListParams;
-export type AppServerMediaTaskArtifactResponse = protocol.MediaTaskArtifactResponse;
+export type AppServerMediaTaskArtifactListParams =
+  protocol.MediaTaskArtifactListParams;
+export type AppServerMediaTaskArtifactResponse =
+  protocol.MediaTaskArtifactResponse;
 export type AppServerMediaTaskArtifactListResponse =
   protocol.MediaTaskArtifactListResponse;
-export type AppServerGalleryMaterialLookupParams = protocol.GalleryMaterialLookupParams;
+export type AppServerGalleryMaterialLookupParams =
+  protocol.GalleryMaterialLookupParams;
 export type AppServerGalleryMaterialMetadataCreateParams =
   protocol.GalleryMaterialMetadataCreateParams;
 export type AppServerGalleryMaterialMetadataUpdateParams =
   protocol.GalleryMaterialMetadataUpdateParams;
-export type AppServerGalleryMaterialFilterParams = protocol.GalleryMaterialFilterParams;
+export type AppServerGalleryMaterialFilterParams =
+  protocol.GalleryMaterialFilterParams;
 export type AppServerGalleryMaterialResponse = protocol.GalleryMaterialResponse;
 export type AppServerGalleryMaterialMetadataResponse =
   protocol.GalleryMaterialMetadataResponse;
-export type AppServerGalleryMaterialListResponse = protocol.GalleryMaterialListResponse;
+export type AppServerGalleryMaterialListResponse =
+  protocol.GalleryMaterialListResponse;
 export type AppServerGalleryMaterialDeleteResponse =
   protocol.GalleryMaterialDeleteResponse;
 export type AppServerProjectMaterial = protocol.ProjectMaterial;
-export type AppServerProjectMaterialListParams = protocol.ProjectMaterialListParams;
-export type AppServerProjectMaterialLookupParams = protocol.ProjectMaterialLookupParams;
-export type AppServerProjectMaterialUploadParams = protocol.ProjectMaterialUploadParams;
+export type AppServerProjectMaterialListParams =
+  protocol.ProjectMaterialListParams;
+export type AppServerProjectMaterialLookupParams =
+  protocol.ProjectMaterialLookupParams;
+export type AppServerProjectMaterialUploadParams =
+  protocol.ProjectMaterialUploadParams;
 export type AppServerProjectMaterialImportFromUrlParams =
   protocol.ProjectMaterialImportFromUrlParams;
-export type AppServerProjectMaterialUpdateParams = protocol.ProjectMaterialUpdateParams;
-export type AppServerProjectMaterialListResponse = protocol.ProjectMaterialListResponse;
+export type AppServerProjectMaterialUpdateParams =
+  protocol.ProjectMaterialUpdateParams;
+export type AppServerProjectMaterialListResponse =
+  protocol.ProjectMaterialListResponse;
 export type AppServerProjectMaterialResponse = protocol.ProjectMaterialResponse;
 export type AppServerProjectMaterialCountResponse =
   protocol.ProjectMaterialCountResponse;
@@ -331,7 +395,8 @@ export type AppServerVoiceAsrCredentialCreateParams =
   protocol.VoiceAsrCredentialCreateParams;
 export type AppServerVoiceAsrCredentialUpdateParams =
   protocol.VoiceAsrCredentialUpdateParams;
-export type AppServerVoiceAsrCredentialIdParams = protocol.VoiceAsrCredentialIdParams;
+export type AppServerVoiceAsrCredentialIdParams =
+  protocol.VoiceAsrCredentialIdParams;
 export type AppServerVoiceAsrCredentialListResponse =
   protocol.VoiceAsrCredentialListResponse;
 export type AppServerVoiceAsrCredentialWriteResponse =
@@ -341,13 +406,16 @@ export type AppServerVoiceAsrCredentialMutationResponse =
 export type AppServerVoiceAsrCredentialTestResponse =
   protocol.VoiceAsrCredentialTestResponse;
 export type AppServerVoiceInstruction = protocol.VoiceInstruction;
-export type AppServerVoiceInstructionSaveParams = protocol.VoiceInstructionSaveParams;
-export type AppServerVoiceInstructionIdParams = protocol.VoiceInstructionIdParams;
+export type AppServerVoiceInstructionSaveParams =
+  protocol.VoiceInstructionSaveParams;
+export type AppServerVoiceInstructionIdParams =
+  protocol.VoiceInstructionIdParams;
 export type AppServerVoiceInstructionListResponse =
   protocol.VoiceInstructionListResponse;
 export type AppServerVoiceInstructionMutationResponse =
   protocol.VoiceInstructionMutationResponse;
-export type AppServerVoiceModelDefaultSetParams = protocol.VoiceModelDefaultSetParams;
+export type AppServerVoiceModelDefaultSetParams =
+  protocol.VoiceModelDefaultSetParams;
 export type AppServerVoiceModelDefaultSetResponse =
   protocol.VoiceModelDefaultSetResponse;
 export type AppServerVoiceModelTestTranscribeFileParams =

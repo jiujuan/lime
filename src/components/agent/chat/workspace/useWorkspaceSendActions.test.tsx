@@ -1,6 +1,10 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import contentFactoryFixture from "@/features/agent-app/fixtures/content-factory-app.json";
+import { buildInstalledAppPreview } from "@/features/agent-app/install/installedAppPreview";
+import { buildInstalledAgentAppState } from "@/features/agent-app/install/installedAppState";
+import type { InstalledAgentAppState } from "@/features/agent-app/types";
 import { changeLimeLocale, getLimeI18n } from "@/i18n/createI18n";
 import type { TeamMemorySnapshot } from "@/lib/teamMemorySync";
 import type { ServiceSkillHomeItem } from "../service-skills/types";
@@ -436,6 +440,35 @@ function createBootstrapDispatchSnapshot(
   };
 }
 
+function createInstalledContentFactoryState(
+  overrides: Partial<InstalledAgentAppState> = {},
+): InstalledAgentAppState {
+  const timestamp = "2026-06-25T00:00:00.000Z";
+  const preview = buildInstalledAppPreview({
+    fixture: contentFactoryFixture,
+    loadedAt: timestamp,
+    checkedAt: timestamp,
+    generatedAt: timestamp,
+  });
+  const state = buildInstalledAgentAppState({
+    preview,
+    installedAt: timestamp,
+    updatedAt: timestamp,
+  });
+  return {
+    ...state,
+    readiness: {
+      ...state.readiness,
+      status: "ready",
+      blockers: [],
+      missingCapabilities: [],
+      entryReadiness: [],
+      installModes: [],
+    },
+    ...overrides,
+  };
+}
+
 function mountHook(initialProps?: Partial<HookProps>): HookHarness {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -653,18 +686,71 @@ describe("useWorkspaceSendActions", () => {
       await act(async () => {
         const started = await harness
           .getValue()
-          .handleSend(
-            [],
-            false,
-            false,
-            "帮我整理一下今天的重要新闻",
-            "react",
-          );
+          .handleSend([], false, false, "帮我整理一下今天的重要新闻", "react");
         expect(started).toBe(true);
       });
 
       expect(mockSendMessage).toHaveBeenCalledTimes(1);
       expect(mockListInstalledAgentApps).not.toHaveBeenCalled();
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("@内容工厂 应解析为 Agent App 激活 metadata，并跳过图片命令解析", async () => {
+    const harness = mountHook({
+      input: "@内容工厂 写一篇公众号文章",
+    });
+    mockEnsureSessionForCommandMetadata.mockResolvedValueOnce(
+      "session-plugin-1",
+    );
+    mockListInstalledAgentApps.mockResolvedValueOnce({
+      states: [createInstalledContentFactoryState()],
+      issues: [],
+    });
+
+    try {
+      await act(async () => {
+        const started = await harness
+          .getValue()
+          .handleSend(
+            [],
+            false,
+            false,
+            "@内容工厂 写一篇公众号文章",
+            "react",
+          );
+        expect(started).toBe(true);
+      });
+
+      expect(mockListInstalledAgentApps).toHaveBeenCalledTimes(1);
+      expect(mockResolveImageWorkbenchSkillRequest).not.toHaveBeenCalled();
+      expect(mockSendMessage).toHaveBeenCalledTimes(1);
+      expect(mockSendMessage.mock.calls[0]?.[0]).toBe(
+        "@内容工厂 写一篇公众号文章",
+      );
+      expect(mockSendMessage.mock.calls[0]?.[8]).toMatchObject({
+        requestMetadata: {
+          harness: {
+            plugin_activation: {
+              source: "plugin_explicit_mention",
+              trigger: "@内容工厂",
+              body: "写一篇公众号文章",
+              session_id: "session-plugin-1",
+              plugin_id: "content-factory-app",
+              active_agent_app_id: "content-factory-app",
+              active_entry_key: "content_factory",
+              opened_tabs: ["productProfile"],
+              selected_object_ref: {
+                plugin_id: "content-factory-app",
+                object_kind: "articleDraft",
+                object_id: "pending",
+              },
+              context_source: "user",
+            },
+          },
+        },
+      });
     } finally {
       harness.unmount();
     }
@@ -730,7 +816,6 @@ describe("useWorkspaceSendActions", () => {
       expect(mockSendMessage).toHaveBeenCalledTimes(1);
       const sendOptions = mockSendMessage.mock.calls[0]?.[8];
       expect(sendOptions).toMatchObject({
-        systemPromptOverride: expect.stringContaining("快速响应助手"),
         assistantDraft: {
           initialRuntimeStatus: {
             title: "快速响应已启用",
@@ -744,7 +829,7 @@ describe("useWorkspaceSendActions", () => {
             fast_response_routing: {
               mode: "auto",
               label: "快速响应",
-              reason: "first-turn-short-prompt",
+              reason: "first-turn-plain-text",
               service_model_slot: "responsive_chat",
               routing_slot: "responsive_chat_model",
               routing_changed: false,
@@ -753,6 +838,7 @@ describe("useWorkspaceSendActions", () => {
           },
         },
       });
+      expect(sendOptions?.systemPromptOverride).toBeUndefined();
       expect(sendOptions?.providerOverride).toBeUndefined();
       expect(sendOptions?.modelOverride).toBeUndefined();
       expect(
@@ -767,6 +853,7 @@ describe("useWorkspaceSendActions", () => {
       );
       expect(mockPreheatBrowserAssistInBackground).not.toHaveBeenCalled();
       expect(mockEnsureBrowserAssistCanvas).not.toHaveBeenCalled();
+      expect(mockPrepareRuntimeTeamBeforeSend).not.toHaveBeenCalled();
     } finally {
       harness.unmount();
     }
@@ -785,11 +872,10 @@ describe("useWorkspaceSendActions", () => {
 
       expect(mockSendMessage).toHaveBeenCalledTimes(1);
       expect(mockSendMessage.mock.calls[0]?.[8]).toMatchObject({
-        systemPromptOverride: expect.stringContaining("快速响应助手"),
         requestMetadata: {
           harness: {
             fast_response_routing: {
-              reason: "first-turn-short-prompt",
+              reason: "first-turn-plain-text",
               service_model_slot: "responsive_chat",
               routing_slot: "responsive_chat_model",
               routing_changed: false,
@@ -798,9 +884,58 @@ describe("useWorkspaceSendActions", () => {
         },
       });
       expect(
+        mockSendMessage.mock.calls[0]?.[8]?.systemPromptOverride,
+      ).toBeUndefined();
+      expect(
         mockSendMessage.mock.calls[0]?.[8]?.providerOverride,
       ).toBeUndefined();
       expect(mockSendMessage.mock.calls[0]?.[8]?.modelOverride).toBeUndefined();
+      expect(mockPrepareRuntimeTeamBeforeSend).not.toHaveBeenCalled();
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("首轮轻量对话应把 responsive_chat 配置投影到后端 fast slot", async () => {
+    const harness = mountHook({
+      serviceModels: {
+        responsive_chat: {
+          preferredProviderId: "responsive-provider",
+          preferredModelId: "fast-chat",
+        },
+      },
+    });
+
+    try {
+      await act(async () => {
+        const started = await harness
+          .getValue()
+          .handleSend([], false, false, "只回答一个字：好", "react");
+        expect(started).toBe(true);
+      });
+
+      expect(mockSendMessage).toHaveBeenCalledTimes(1);
+      const sendOptions = mockSendMessage.mock.calls[0]?.[8];
+      expect(sendOptions?.providerOverride).toBeUndefined();
+      expect(sendOptions?.modelOverride).toBeUndefined();
+      expect(sendOptions?.requestMetadata).toMatchObject({
+        harness: {
+          model_reasoning_effort: "minimal",
+          modelReasoningEffort: "minimal",
+          model_slots: {
+            fast: {
+              provider: "responsive-provider",
+              model: "fast-chat",
+              source: "service_models.responsive_chat",
+              reason: "fast_response_routing",
+            },
+          },
+          fast_response_routing: {
+            reason: "first-turn-plain-text",
+            service_model_slot: "responsive_chat",
+          },
+        },
+      });
     } finally {
       harness.unmount();
     }
@@ -820,7 +955,6 @@ describe("useWorkspaceSendActions", () => {
       expect(mockSendMessage).toHaveBeenCalledTimes(1);
       const sendOptions = mockSendMessage.mock.calls[0]?.[8];
       expect(sendOptions).toMatchObject({
-        systemPromptOverride: expect.stringContaining("只输出一个字"),
         requestMetadata: {
           harness: {
             fast_response_routing: {
@@ -830,8 +964,10 @@ describe("useWorkspaceSendActions", () => {
           },
         },
       });
+      expect(sendOptions?.systemPromptOverride).toBeUndefined();
       expect(sendOptions?.providerOverride).toBeUndefined();
       expect(sendOptions?.modelOverride).toBeUndefined();
+      expect(mockPrepareRuntimeTeamBeforeSend).not.toHaveBeenCalled();
     } finally {
       harness.unmount();
     }
@@ -1055,7 +1191,6 @@ Extract it into the Agent Skills directory.`,
 
       expect(mockSendMessage).toHaveBeenCalledTimes(1);
       expect(mockSendMessage.mock.calls[0]?.[8]).toMatchObject({
-        systemPromptOverride: expect.stringContaining("快速响应助手"),
         requestMetadata: {
           harness: {
             fast_response_routing: {
@@ -1064,6 +1199,9 @@ Extract it into the Agent Skills directory.`,
           },
         },
       });
+      expect(
+        mockSendMessage.mock.calls[0]?.[8]?.systemPromptOverride,
+      ).toBeUndefined();
       expect(
         mockSendMessage.mock.calls[0]?.[8]?.providerOverride,
       ).toBeUndefined();
@@ -5782,7 +5920,7 @@ Extract it into the Agent Skills directory.`,
     }
   });
 
-  it("普通输入走 current react 时仍应走普通 Agent 主链而不是 @代码 parser", async () => {
+  it("普通输入走 current react 时仍不应被 @代码 parser 改写", async () => {
     const harness = mountHook({
       input: "继续修复消息历史切换后图片卡片丢失的问题，并补一个回归测试",
       executionStrategy: "react",
@@ -5818,7 +5956,9 @@ Extract it into the Agent Skills directory.`,
           | undefined
       )?.harness;
       expect(harnessMetadata?.code_command).toBeUndefined();
-      expect(harnessMetadata?.fast_response_routing).toBeUndefined();
+      expect(harnessMetadata?.fast_response_routing).toMatchObject({
+        reason: "first-turn-plain-text",
+      });
       expect(listMentionEntryUsage()).toEqual([]);
       expect(listServiceSkillUsage()).toEqual([]);
     } finally {

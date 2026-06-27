@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  CLAW_TRACE_DEBUG_OVERRIDE_KEY,
   WORKSPACE_HARNESS_DEBUG_OVERRIDE_KEY,
+  normalizeClawTraceConfig,
+  normalizeDeveloperConfig,
+  readClawTraceDebugOverride,
   readWorkspaceHarnessDebugOverride,
+  resolveClawTraceEnabled,
   resolveWorkspaceHarnessEnabled,
 } from "./developerFeatures";
 
@@ -41,6 +46,86 @@ describe("developerFeatures", () => {
     expect(
       resolveWorkspaceHarnessEnabled({
         developer: { workspace_harness_enabled: false },
+      }),
+    ).toBe(false);
+  });
+
+  it("应默认关闭 Claw Trace，并规范化采样率和级别", () => {
+    expect(normalizeDeveloperConfig(null).claw_trace).toEqual({
+      alert_enabled: false,
+      enabled: false,
+      level: "summary",
+      sample_rate: 1,
+    });
+
+    expect(
+      normalizeClawTraceConfig({
+        alert_enabled: true,
+        enabled: true,
+        level: "debug",
+        sample_rate: 2,
+      }),
+    ).toEqual({
+      alert_enabled: true,
+      enabled: true,
+      level: "debug",
+      sample_rate: 1,
+    });
+
+    expect(
+      normalizeClawTraceConfig({
+        alert_enabled: false,
+        enabled: true,
+        level: "summary",
+        sample_rate: -1,
+      }),
+    ).toEqual({
+      alert_enabled: false,
+      enabled: true,
+      level: "summary",
+      sample_rate: 0,
+    });
+  });
+
+  it("Claw Trace 调试覆盖应独立于 Harness 开关", () => {
+    window.localStorage.setItem(CLAW_TRACE_DEBUG_OVERRIDE_KEY, "on");
+    expect(readClawTraceDebugOverride()).toBe(true);
+    expect(readWorkspaceHarnessDebugOverride()).toBeNull();
+
+    expect(
+      resolveClawTraceEnabled({
+        developer: {
+          workspace_harness_enabled: false,
+          claw_trace: { enabled: false },
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it("Claw Trace 没有调试覆盖时应回退到独立配置", () => {
+    expect(
+      resolveClawTraceEnabled({
+        developer: {
+          workspace_harness_enabled: true,
+          claw_trace: { enabled: false },
+        },
+      }),
+    ).toBe(false);
+
+    expect(
+      resolveClawTraceEnabled({
+        developer: {
+          workspace_harness_enabled: false,
+          claw_trace: { enabled: true, sample_rate: 1 },
+        },
+      }),
+    ).toBe(true);
+
+    expect(
+      resolveClawTraceEnabled({
+        developer: {
+          claw_trace: { enabled: true, sample_rate: 0 },
+        },
       }),
     ).toBe(false);
   });

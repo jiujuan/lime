@@ -1,7 +1,7 @@
 use app_server_protocol::AgentEvent;
 use app_server_protocol::ArtifactContentStatus;
 use app_server_protocol::ArtifactSummary;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use std::collections::HashSet;
 
 const ARTIFACT_DOCUMENT_SCHEMA_VERSION: &str = "artifact_document.v1";

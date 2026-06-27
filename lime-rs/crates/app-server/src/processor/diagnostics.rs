@@ -1,7 +1,10 @@
 //! diagnostics handlers for the App Server processor.
 
-use super::{dispatch_result, to_jsonrpc_error, RequestProcessor, RpcDispatch};
-use app_server_protocol::JsonRpcError;
+use super::{dispatch_result, parse_params, to_jsonrpc_error, RequestProcessor, RpcDispatch};
+use app_server_protocol::{
+    DiagnosticsTraceExportParams, DiagnosticsTraceListParams, DiagnosticsTraceReadParams,
+    JsonRpcError, SupportBundleExportParams,
+};
 
 impl RequestProcessor {
     pub(super) async fn handle_diagnostics_log_storage_read_impl(
@@ -18,11 +21,55 @@ impl RequestProcessor {
 
     pub(super) async fn handle_diagnostics_support_bundle_export_impl(
         &self,
+        params: Option<serde_json::Value>,
     ) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
+        let params: SupportBundleExportParams = parse_params(params)?;
         let response = self
             .runtime
-            .export_support_bundle()
+            .export_support_bundle(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_diagnostics_trace_list_impl(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: DiagnosticsTraceListParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .list_diagnostics_traces(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_diagnostics_trace_read_impl(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: DiagnosticsTraceReadParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .read_diagnostics_trace(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_diagnostics_trace_export_impl(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: DiagnosticsTraceExportParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .export_diagnostics_trace(params)
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)

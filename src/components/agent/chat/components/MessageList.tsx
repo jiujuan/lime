@@ -1,10 +1,7 @@
 import React, { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import {
-  MessageListContainer,
-  MessageListFrame,
-} from "../styles";
+import { MessageListContainer, MessageListFrame } from "../styles";
 import type { AgentStreamTextOverlaySnapshot } from "../hooks/agentStreamTextOverlayStore";
 import type { Message } from "../types";
 import { MessageListItem } from "./MessageListItem";
@@ -131,8 +128,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
   const promptCacheNotice = useMessageListPromptCacheNotice({
     lastAssistantMessage: timelineState.lastAssistantMessage,
     providerType,
-    restoredPromptCacheNoticeReady:
-      renderWindow.restoredPromptCacheNoticeReady,
+    restoredPromptCacheNoticeReady: renderWindow.restoredPromptCacheNoticeReady,
   });
 
   useMessageListAutoScroll({
@@ -166,7 +162,8 @@ const MessageListInner: React.FC<MessageListProps> = ({
     persistedHiddenHistoryCount: renderWindow.persistedHiddenHistoryCount,
     renderedMessages: renderWindow.renderedMessages,
     renderedThreadItemsCount: timelineState.renderedThreadItems.length,
-    renderedThreadItemsMeasurement: timelineState.renderedThreadItemsMeasurement,
+    renderedThreadItemsMeasurement:
+      timelineState.renderedThreadItemsMeasurement,
     renderedTurnsCount: timelineState.renderedTurns.length,
     renderGroups: timelineState.renderGroups,
     renderGroupsMeasurement: timelineState.renderGroupsMeasurement,
@@ -176,7 +173,8 @@ const MessageListInner: React.FC<MessageListProps> = ({
       timelineState.shouldDeferTailRuntimeStatusLine,
     shouldDeferThreadItemsScan: timelineState.shouldDeferThreadItemsScan,
     threadRead,
-    timelineByMessageIdMeasurement: timelineState.timelineByMessageIdMeasurement,
+    timelineByMessageIdMeasurement:
+      timelineState.timelineByMessageIdMeasurement,
     turnsCount: turns.length,
     visibleMessagesCount: renderWindow.visibleMessages.length,
   });
@@ -218,16 +216,19 @@ const MessageListInner: React.FC<MessageListProps> = ({
     });
   }, []);
 
-  const handleCopy = useCallback(async (content: string, id: string) => {
-    try {
-      await navigator.clipboard.writeText(content);
-      setCopiedId(id);
-      toast.success(t("agentChat.messageList.toast.copySuccess"));
-      setTimeout(() => setCopiedId(null), 2000);
-    } catch {
-      toast.error(t("agentChat.messageList.toast.copyFailed"));
-    }
-  }, [t]);
+  const handleCopy = useCallback(
+    async (content: string, id: string) => {
+      try {
+        await navigator.clipboard.writeText(content);
+        setCopiedId(id);
+        toast.success(t("agentChat.messageList.toast.copySuccess"));
+        setTimeout(() => setCopiedId(null), 2000);
+      } catch {
+        toast.error(t("agentChat.messageList.toast.copyFailed"));
+      }
+    },
+    [t],
+  );
 
   const renderMessageItem = useCallback(
     (
@@ -406,11 +407,19 @@ const MessageListInner: React.FC<MessageListProps> = ({
             ))}
 
           {timelineState.renderGroups.map((group, groupIndex) => {
+            const groupRuntimeTurnId =
+              group.timeline?.turn?.id ||
+              group.messages.find((message) => message.runtimeTurnId)
+                ?.runtimeTurnId ||
+              "";
             return (
               <section
                 key={group.id}
                 data-testid="message-turn-group"
                 data-group-index={groupIndex + 1}
+                data-runtime-turn-id={groupRuntimeTurnId}
+                data-last-assistant-message-id={group.lastAssistantId || ""}
+                data-timeline-message-id={group.timelineMessageId || ""}
                 className="py-2"
               >
                 <div className="space-y-1">

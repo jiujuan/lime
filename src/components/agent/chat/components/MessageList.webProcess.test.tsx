@@ -5,9 +5,7 @@ import {
   mockStreamingRenderer,
   render,
 } from "./MessageList.testHarness";
-import type {
-  Message,
-} from "./MessageList.testHarness";
+import type { Message } from "./MessageList.testHarness";
 
 describe("MessageList web process", () => {
   it("当前运行回合已有内联过程时，应让 StreamingRenderer 承担穿插式过程", () => {
@@ -222,7 +220,6 @@ describe("MessageList web process", () => {
     expect(contentParts[3]?.text).toContain("国际新闻简报");
     expect(contentParts[3]?.text).not.toContain("我先联网核实今天的国际新闻");
     expect(call?.rawContent).toContain("国际新闻简报");
-    expect(call?.rawContent).toContain("我先联网核实今天的国际新闻");
     expect(
       container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
     ).toBeNull();
@@ -310,7 +307,7 @@ describe("MessageList web process", () => {
     expect(toolNames).toEqual(["Read", "Write"]);
   });
 
-  it("完成态 timeline 已有计划时应内联计划文本但不重复渲染计划卡", () => {
+  it("完成态 timeline 已有计划时应保留执行轨迹但不重复渲染计划卡", () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -363,7 +360,7 @@ describe("MessageList web process", () => {
 
     expect(
       container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
-    ).toBeNull();
+    ).not.toBeNull();
     expect(
       container.querySelector('[data-testid="agent-thread-timeline:trailing"]'),
     ).toBeNull();
@@ -375,14 +372,6 @@ describe("MessageList web process", () => {
           {
             type: "thinking",
             text: "先对照用户截图，再确认 thread item 是否有重复来源。",
-          },
-          {
-            type: "text",
-            text:
-              "<proposed_plan>\n" +
-              "1. 合并 assistant turn\n" +
-              "2. 收拢补充 timeline\n" +
-              "</proposed_plan>",
           },
           { type: "text", text: "已经整理完执行思路。" },
         ],

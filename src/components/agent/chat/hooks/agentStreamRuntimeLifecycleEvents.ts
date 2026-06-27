@@ -33,6 +33,7 @@ import {
   bindAssistantMessageToRuntimeTurn,
   extractVisibleTextFromAgentMessage,
 } from "./agentStreamRuntimeHandlerUtils";
+import { resolveAccumulatedFinalContentForCompletion } from "./agentStreamTextDeltaLifecycle";
 import { shouldUseAgentMessageAsFinalText } from "../utils/agentMessagePhase";
 import type {
   HandleTurnStreamEventOptions,
@@ -336,8 +337,11 @@ export function handleAgentStreamTurnCompletedEvent(params: {
       noteCompletedTextAsAssistantReplyIfNeeded(params.requestState);
     }
   }
+  const finalAccumulatedContent = resolveAccumulatedFinalContentForCompletion(
+    params.requestState,
+  );
   const turnCompletedPlan = buildAgentStreamFinalDonePlan({
-    accumulatedContent: params.requestState.accumulatedContent,
+    accumulatedContent: finalAccumulatedContent,
     fallbackContent: params.assistantFallbackContent,
     hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary:
       params.requestState

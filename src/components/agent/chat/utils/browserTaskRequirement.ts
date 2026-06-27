@@ -1,4 +1,7 @@
-import { extractExplicitUrlFromText } from "./browserAssistIntent";
+import {
+  extractExplicitUrlFromText,
+  hasBrowserAssistIntent,
+} from "./browserAssistIntent";
 import type { BrowserTaskRequirement } from "../types";
 
 interface BrowserPlatformHint {
@@ -100,6 +103,15 @@ export function detectBrowserTaskRequirement(
   const hasRequiredAction = REQUIRED_ACTION_PATTERN.test(normalized);
   const hasAdminSurface = ADMIN_SURFACE_PATTERN.test(normalized);
   const hasUserStep = USER_STEP_PATTERN.test(normalized);
+
+  if (explicitUrl && hasBrowserAssistIntent(normalized)) {
+    return {
+      requirement: "required",
+      reason:
+        "用户显式要求打开 URL 并使用 Browser Assist，必须先建立或复用真实浏览器会话，不能退化成联网检索。",
+      launchUrl: explicitUrl,
+    };
+  }
 
   if (!platform && !hasRequiredAction && !hasAdminSurface) {
     return null;

@@ -597,6 +597,7 @@ export interface AgentSessionObjectiveStatusUpdateResponse {
 
 export interface AgentSessionOverview {
   archivedAt?: null | string;
+  businessObjectRefMetadata?: unknown;
   createdAt: string;
   executionStrategy?: null | string;
   messagesCount: number;
@@ -1434,6 +1435,84 @@ export interface DiagnosticsTelemetrySummary {
   totalTokens: number;
 }
 
+export interface DiagnosticsTraceEvent {
+  checkpoint: string;
+  eventId: string;
+  eventSequence: number;
+  eventType: string;
+  metrics?: Record<string, unknown>;
+  redaction: DiagnosticsTraceRedactionPolicy;
+  requestId?: null | string;
+  runId?: null | string;
+  schemaVersion: number;
+  seq: number;
+  sessionId: string;
+  threadId?: null | string;
+  traceId: string;
+  turnId?: null | string;
+  wallTimeUnixMs: number;
+}
+
+export interface DiagnosticsTraceExportParams {
+  sessionId: string;
+  traceId: string;
+}
+
+export interface DiagnosticsTraceExportResponse {
+  available: boolean;
+  bundlePath?: null | string;
+  exported: boolean;
+  generatedAt?: null | string;
+  includedSections?: string[];
+  omittedSections?: string[];
+  outputDirectory?: null | string;
+  redaction: DiagnosticsTraceRedactionPolicy;
+  trace?: DiagnosticsTraceSummary | null;
+}
+
+export interface DiagnosticsTraceListParams {
+  limit?: number | null;
+  sessionId?: null | string;
+}
+
+export interface DiagnosticsTraceListResponse {
+  available: boolean;
+  redaction: DiagnosticsTraceRedactionPolicy;
+  traceRoot?: null | string;
+  traces?: DiagnosticsTraceSummary[];
+}
+
+export interface DiagnosticsTraceReadParams {
+  maxEvents?: number | null;
+  sessionId: string;
+  traceId: string;
+}
+
+export interface DiagnosticsTraceReadResponse {
+  available: boolean;
+  events?: DiagnosticsTraceEvent[];
+  redaction: DiagnosticsTraceRedactionPolicy;
+  trace?: DiagnosticsTraceSummary | null;
+}
+
+export interface DiagnosticsTraceRedactionPolicy {
+  mode: string;
+  promptText: boolean;
+  providerPayload: boolean;
+  rawAgentEventPayload: boolean;
+}
+
+export interface DiagnosticsTraceSummary {
+  eventCount: number;
+  firstWallTimeUnixMs?: number | null;
+  lastWallTimeUnixMs?: number | null;
+  modifiedAt?: null | string;
+  path: string;
+  sessionId: string;
+  sizeBytes: number;
+  traceId: string;
+}
+
 export interface EndpointInfo {
   apiVersion?: null | string;
   baseUrl?: null | string;
@@ -1493,12 +1572,15 @@ export interface EvidencePackSummary {
 }
 
 export interface ExecutionProcessDrainOutputParams {
+  afterSequence?: number | null;
   limit?: number | null;
+  maxBytes?: number | null;
   processId?: null | string;
 }
 
 export interface ExecutionProcessDrainOutputResponse {
   deltas?: ExecutionProcessOutputDelta[];
+  nextSequence?: number | null;
 }
 
 export type ExecutionProcessEmptyResponse = Record<string, unknown>;
@@ -3545,6 +3627,10 @@ export interface StructuredOutputContract {
   type?: null | string;
 }
 
+export interface SupportBundleExportParams {
+  includeTraceExport?: SupportBundleTraceExportSelection | null;
+}
+
 export interface SupportBundleExportResponse {
   bundlePath: string;
   generatedAt: string;
@@ -3552,6 +3638,11 @@ export interface SupportBundleExportResponse {
   omittedSections?: string[];
   outputDirectory: string;
   platform: string;
+}
+
+export interface SupportBundleTraceExportSelection {
+  sessionId: string;
+  traceId: string;
 }
 
 export type TransportKind = "http" | "local_process" | "sidecar";

@@ -1,15 +1,15 @@
-use super::ExecutionRequest;
-use super::RuntimeCore;
-use super::RuntimeCoreError;
-use super::RuntimeEvent;
-use super::RuntimeEventSink;
 use super::agent_app_task_runtime::{
     build_agent_app_task_runtime_contract, resolve_agent_app_runtime_dir,
 };
 use super::agent_app_worker_runtime::AgentAppWorkerRunRequest;
 use super::timestamp;
-use serde_json::Value;
+use super::ExecutionRequest;
+use super::RuntimeCore;
+use super::RuntimeCoreError;
+use super::RuntimeEvent;
+use super::RuntimeEventSink;
 use serde_json::json;
+use serde_json::Value;
 
 const CONTENT_FACTORY_APP_ID: &str = "content-factory-app";
 const CONTENT_FACTORY_WORKSPACE_PATCH_KIND: &str = "content_factory.workspace_patch";
@@ -18,14 +18,46 @@ const WORKER_REQUEST_SCHEMA: &str = "content-factory.worker-request.v1";
 const DEFAULT_PRODUCT_PROFILE_TASK_KIND: &str = "content.factory.generate";
 const CLOUD_RELEASE_SOURCE_KIND: &str = "cloud_release";
 const WORKER_PACKAGE_SIGNATURE_UNVERIFIED: &str = "AGENT_APP_WORKER_PACKAGE_SIGNATURE_UNVERIFIED";
+const WORKER_REMOTE_RUNTIME_DISABLED: &str = "AGENT_APP_WORKER_REMOTE_RUNTIME_DISABLED";
+const WORKER_OUTPUT_UNAUTHORIZED: &str = "AGENT_APP_WORKER_OUTPUT_UNAUTHORIZED";
+const WORKER_REQUEST_INVALID: &str = "AGENT_APP_WORKER_REQUEST_INVALID";
+const PANE_ACTION_SOURCE: &str = "right_surface_pane_action";
 
 #[derive(Debug, Clone)]
-struct ProductProfileWorkerTurn {
+struct PaneActionWorkerTurn {
     app_id: String,
     action_key: Option<String>,
+    action_intent: Option<String>,
+    action_risk: Option<String>,
     prompt: String,
     source_object_ref: Option<Value>,
+    source_artifact_ids: Vec<String>,
+    source: String,
+    surface_kind: Option<String>,
+    pane_kind: Option<String>,
+    output_artifact_kind: Option<String>,
     task_kind: String,
+    workspace_id: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+enum PaneActionWorkerTurnResolution {
+    Run(PaneActionWorkerTurn),
+    Reject(PaneActionWorkerRejection),
+    Ignore,
+}
+
+#[derive(Debug, Clone)]
+struct PaneActionWorkerRejection {
+    app_id: Option<String>,
+    action_key: Option<String>,
+    error_code: &'static str,
+    error_message: String,
+    output_artifact_kind: Option<String>,
+    pane_kind: Option<String>,
+    source: String,
+    surface_kind: Option<String>,
+    task_kind: Option<String>,
     workspace_id: Option<String>,
 }
 
@@ -35,8 +67,19 @@ impl RuntimeCore {
         request: &ExecutionRequest,
         sink: &mut dyn RuntimeEventSink,
     ) -> Result<bool, RuntimeCoreError> {
-        let Some(worker_turn) = ProductProfileWorkerTurn::from_execution_request(request) else {
-            return Ok(false);
+        let worker_turn = match PaneActionWorkerTurn::resolve_from_execution_request(request) {
+            PaneActionWorkerTurnResolution::Run(worker_turn) => worker_turn,
+            PaneActionWorkerTurnResolution::Reject(rejection) => {
+                sink.emit(RuntimeEvent::new(
+                    "turn.accepted",
+                    rejection.accepted_payload(),
+                ))?;
+                let payload = rejection.failure_payload(request.turn.turn_id.as_str());
+                sink.emit(RuntimeEvent::new("runtime.error", payload.clone()))?;
+                sink.emit(RuntimeEvent::new("turn.failed", payload))?;
+                return Ok(true);
+            }
+            PaneActionWorkerTurnResolution::Ignore => return Ok(false),
         };
         let Some(installed_state) = self
             .find_agent_app_installed_state_for_worker(worker_turn.app_id.as_str())
@@ -51,14 +94,17 @@ impl RuntimeCore {
                 "backend": "agent_app_worker",
                 "appId": worker_turn.app_id,
                 "taskKind": worker_turn.task_kind,
-                "source": "right_surface_product_profile",
+                "source": worker_turn.source,
+                "surfaceKind": worker_turn.surface_kind,
+                "paneKind": worker_turn.pane_kind,
+                "outputArtifactKind": worker_turn.output_artifact_kind(),
             }),
         ))?;
 
         let mut retry_attempt = 0;
         loop {
             match self
-                .run_product_profile_worker_turn(request, &worker_turn, &installed_state)
+                .run_pane_action_worker_turn(request, &worker_turn, &installed_state)
                 .await
             {
                 Ok(events) => {
@@ -72,6 +118,7 @@ impl RuntimeCore {
                             "appId": worker_turn.app_id,
                             "taskId": worker_turn.task_id(request.turn.turn_id.as_str()),
                             "taskKind": worker_turn.task_kind,
+                            "outputArtifactKind": worker_turn.output_artifact_kind(),
                         }),
                     ))?;
                     break;
@@ -107,10 +154,10 @@ impl RuntimeCore {
         Ok(true)
     }
 
-    async fn run_product_profile_worker_turn(
+    async fn run_pane_action_worker_turn(
         &self,
         request: &ExecutionRequest,
-        worker_turn: &ProductProfileWorkerTurn,
+        worker_turn: &PaneActionWorkerTurn,
         installed_state: &serde_json::Value,
     ) -> Result<Vec<RuntimeEvent>, RuntimeCoreError> {
         if installed_state
@@ -238,6 +285,73 @@ fn worker_package_signature_error(app_id: &str, reason: &str) -> RuntimeCoreErro
     ))
 }
 
+impl PaneActionWorkerRejection {
+    fn accepted_payload(&self) -> Value {
+        json!({
+            "backend": "agent_app_worker",
+            "appId": self.app_id,
+            "taskKind": self.task_kind,
+            "source": self.source,
+            "workspaceId": self.workspace_id,
+            "surfaceKind": self.surface_kind,
+            "paneKind": self.pane_kind,
+            "outputArtifactKind": self.output_artifact_kind,
+            "authorization": "denied",
+            "reasonCode": self.error_code,
+        })
+    }
+
+    fn failure_payload(&self, turn_id: &str) -> Value {
+        json!({
+            "source": "agent_app_task_worker",
+            "backend": "agent_app_worker",
+            "appId": self.app_id,
+            "taskId": self.task_id(turn_id),
+            "taskKind": self.task_kind,
+            "turnId": turn_id,
+            "workspaceId": self.workspace_id,
+            "surfaceKind": self.surface_kind,
+            "paneKind": self.pane_kind,
+            "outputArtifactKind": self.output_artifact_kind,
+            "status": "failed",
+            "authorization": "denied",
+            "errorCode": self.error_code,
+            "errorMessage": self.error_message,
+            "message": self.error_message,
+            "failureCategory": "configuration",
+            "retryable": false,
+            "retryAdvice": "fix_runtime_contract",
+            "metadata": {
+                "agentAppWorker": {
+                    "appId": self.app_id,
+                    "taskId": self.task_id(turn_id),
+                    "taskKind": self.task_kind,
+                    "turnId": turn_id,
+                    "source": self.source,
+                    "workspaceId": self.workspace_id,
+                    "surfaceKind": self.surface_kind,
+                    "paneKind": self.pane_kind,
+                    "outputArtifactKind": self.output_artifact_kind,
+                    "status": "failed",
+                    "authorization": "denied",
+                    "errorCode": self.error_code,
+                    "errorMessage": self.error_message,
+                    "failureCategory": "configuration",
+                    "retryable": false,
+                    "retryAdvice": "fix_runtime_contract",
+                }
+            },
+        })
+    }
+
+    fn task_id(&self, turn_id: &str) -> String {
+        format!(
+            "{turn_id}:{}",
+            self.action_key.as_deref().unwrap_or("pane-action")
+        )
+    }
+}
+
 #[derive(Debug, Clone)]
 struct WorkerFailureProjection {
     error_code: &'static str,
@@ -353,42 +467,262 @@ fn classify_worker_failure(error_message: &str) -> WorkerFailureProjection {
     }
 }
 
-impl ProductProfileWorkerTurn {
+impl PaneActionWorkerTurn {
+    #[cfg(test)]
     fn from_execution_request(request: &ExecutionRequest) -> Option<Self> {
-        let metadata = request.metadata.as_ref()?;
-        if !is_product_profile_surface(metadata) {
-            return None;
+        match Self::resolve_from_execution_request(request) {
+            PaneActionWorkerTurnResolution::Run(worker_turn) => Some(worker_turn),
+            PaneActionWorkerTurnResolution::Reject(_) | PaneActionWorkerTurnResolution::Ignore => {
+                None
+            }
         }
-        let agent_app = metadata
+    }
+
+    fn resolve_from_execution_request(
+        request: &ExecutionRequest,
+    ) -> PaneActionWorkerTurnResolution {
+        match Self::resolve_pane_action_request(request) {
+            PaneActionWorkerTurnResolution::Ignore => {
+                Self::resolve_product_profile_action_request(request)
+            }
+            resolution => resolution,
+        }
+    }
+
+    fn resolve_pane_action_request(request: &ExecutionRequest) -> PaneActionWorkerTurnResolution {
+        let Some(metadata) = request.metadata.as_ref() else {
+            return PaneActionWorkerTurnResolution::Ignore;
+        };
+        let Some(agent_app) = metadata
             .get("agent_app")
-            .or_else(|| metadata.get("agentApp"))?;
-        if json_string(agent_app, &["source"]).as_deref() != Some("right_surface_product_profile") {
-            return None;
-        }
-        let app_id = json_string(agent_app, &["app_id", "appId"])?;
-        if app_id != CONTENT_FACTORY_APP_ID {
-            return None;
-        }
-        let action = agent_app
-            .get("product_profile_action")
-            .or_else(|| agent_app.get("productProfileAction"))?;
+            .or_else(|| metadata.get("agentApp"))
+        else {
+            return PaneActionWorkerTurnResolution::Ignore;
+        };
+        let Some(action) = agent_app
+            .get("pane_action")
+            .or_else(|| agent_app.get("paneAction"))
+        else {
+            return PaneActionWorkerTurnResolution::Ignore;
+        };
         if !action.is_object() {
-            return None;
+            return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
+                request,
+                agent_app,
+                Some(action),
+                WORKER_REQUEST_INVALID,
+                "Agent App pane action metadata must be an object.",
+            ));
+        }
+        let Some(app_id) = json_string(agent_app, &["app_id", "appId"]) else {
+            return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
+                request,
+                agent_app,
+                Some(action),
+                WORKER_REQUEST_INVALID,
+                "Agent App pane action app id is missing.",
+            ));
+        };
+        if app_id != CONTENT_FACTORY_APP_ID {
+            return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
+                request,
+                agent_app,
+                Some(action),
+                WORKER_REMOTE_RUNTIME_DISABLED,
+                format!("Remote Agent App runtime is disabled for app: {app_id}"),
+            ));
         }
         let task_kind = json_string(action, &["task_kind", "taskKind"])
             .unwrap_or_else(|| DEFAULT_PRODUCT_PROFILE_TASK_KIND.to_string());
         let prompt = json_string(action, &["prompt"]).unwrap_or_else(|| request.input.text.clone());
         if prompt.trim().is_empty() {
-            return None;
+            return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
+                request,
+                agent_app,
+                Some(action),
+                WORKER_REQUEST_INVALID,
+                "Agent App pane action prompt is missing.",
+            ));
         }
-        Some(Self {
+        let Some(surface_kind) = json_string(action, &["surface_kind", "surfaceKind"])
+            .or_else(|| right_surface_string(metadata, &["surface_kind", "surfaceKind"]))
+        else {
+            return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
+                request,
+                agent_app,
+                Some(action),
+                WORKER_REQUEST_INVALID,
+                "Agent App pane action surface kind is missing.",
+            ));
+        };
+        let Some(pane_kind) = json_string(action, &["pane_kind", "paneKind"])
+            .or_else(|| right_surface_string(metadata, &["pane_kind", "paneKind"]))
+        else {
+            return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
+                request,
+                agent_app,
+                Some(action),
+                WORKER_REQUEST_INVALID,
+                "Agent App pane action pane kind is missing.",
+            ));
+        };
+        let requested_output_artifact_kind =
+            json_string(action, &["output_artifact_kind", "outputArtifactKind"]);
+        let Some(output_artifact_kind) =
+            content_factory_output_artifact_kind(requested_output_artifact_kind.clone())
+        else {
+            return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
+                request,
+                agent_app,
+                Some(action),
+                WORKER_OUTPUT_UNAUTHORIZED,
+                format!(
+                    "Agent App worker output artifact kind is not authorized: {}",
+                    requested_output_artifact_kind
+                        .as_deref()
+                        .unwrap_or("<missing>")
+                ),
+            ));
+        };
+        PaneActionWorkerTurnResolution::Run(Self {
             app_id,
             action_key: json_string(action, &["key"]),
+            action_intent: json_string(action, &["intent"]),
+            action_risk: json_string(action, &["risk"]),
             prompt,
             source_object_ref: action
                 .get("object")
                 .filter(|value| value.is_object())
                 .cloned(),
+            source_artifact_ids: json_string_array(
+                action,
+                &["source_artifact_ids", "sourceArtifactIds"],
+            ),
+            source: json_string(agent_app, &["source"])
+                .unwrap_or_else(|| PANE_ACTION_SOURCE.to_string()),
+            surface_kind: Some(surface_kind),
+            pane_kind: Some(pane_kind),
+            output_artifact_kind,
+            task_kind,
+            workspace_id: json_string(agent_app, &["workspace_id", "workspaceId"])
+                .or_else(|| request.session.workspace_id.clone()),
+        })
+    }
+
+    fn resolve_product_profile_action_request(
+        request: &ExecutionRequest,
+    ) -> PaneActionWorkerTurnResolution {
+        let Some(metadata) = request.metadata.as_ref() else {
+            return PaneActionWorkerTurnResolution::Ignore;
+        };
+        if !is_product_profile_surface(metadata) {
+            return PaneActionWorkerTurnResolution::Ignore;
+        }
+        let Some(agent_app) = metadata
+            .get("agent_app")
+            .or_else(|| metadata.get("agentApp"))
+        else {
+            return PaneActionWorkerTurnResolution::Ignore;
+        };
+        if json_string(agent_app, &["source"]).as_deref() != Some("right_surface_product_profile") {
+            return PaneActionWorkerTurnResolution::Ignore;
+        }
+        let Some(app_id) = json_string(agent_app, &["app_id", "appId"]) else {
+            return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
+                request,
+                agent_app,
+                None,
+                WORKER_REQUEST_INVALID,
+                "Product Profile action app id is missing.",
+            ));
+        };
+        if app_id != CONTENT_FACTORY_APP_ID {
+            return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
+                request,
+                agent_app,
+                None,
+                WORKER_REMOTE_RUNTIME_DISABLED,
+                format!("Remote Agent App runtime is disabled for app: {app_id}"),
+            ));
+        }
+        let Some(action) = agent_app
+            .get("product_profile_action")
+            .or_else(|| agent_app.get("productProfileAction"))
+        else {
+            return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
+                request,
+                agent_app,
+                None,
+                WORKER_REQUEST_INVALID,
+                "Product Profile action metadata is missing.",
+            ));
+        };
+        if !action.is_object() {
+            return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
+                request,
+                agent_app,
+                Some(action),
+                WORKER_REQUEST_INVALID,
+                "Product Profile action metadata must be an object.",
+            ));
+        }
+        let task_kind = json_string(action, &["task_kind", "taskKind"])
+            .unwrap_or_else(|| DEFAULT_PRODUCT_PROFILE_TASK_KIND.to_string());
+        let prompt = json_string(action, &["prompt"]).unwrap_or_else(|| request.input.text.clone());
+        if prompt.trim().is_empty() {
+            return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
+                request,
+                agent_app,
+                Some(action),
+                WORKER_REQUEST_INVALID,
+                "Product Profile action prompt is missing.",
+            ));
+        }
+        let requested_output_artifact_kind =
+            json_string(action, &["output_artifact_kind", "outputArtifactKind"]);
+        let Some(output_artifact_kind) =
+            content_factory_output_artifact_kind(requested_output_artifact_kind.clone())
+        else {
+            return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
+                request,
+                agent_app,
+                Some(action),
+                WORKER_OUTPUT_UNAUTHORIZED,
+                format!(
+                    "Agent App worker output artifact kind is not authorized: {}",
+                    requested_output_artifact_kind
+                        .as_deref()
+                        .unwrap_or("<missing>")
+                ),
+            ));
+        };
+        let mut source_artifact_ids =
+            json_string_array(action, &["source_artifact_ids", "sourceArtifactIds"]);
+        if source_artifact_ids.is_empty() {
+            if let Some(object) = action.get("object").filter(|value| value.is_object()) {
+                source_artifact_ids = json_string_array(object, &["artifact_ids", "artifactIds"]);
+            }
+        }
+
+        PaneActionWorkerTurnResolution::Run(Self {
+            app_id,
+            action_key: json_string(action, &["key"]),
+            action_intent: json_string(action, &["intent"]),
+            action_risk: json_string(action, &["risk"]),
+            prompt,
+            source_object_ref: action
+                .get("object")
+                .filter(|value| value.is_object())
+                .cloned(),
+            source_artifact_ids,
+            source: "right_surface_product_profile".to_string(),
+            surface_kind: Some("productProfile".to_string()),
+            pane_kind: right_surface_string(metadata, &["pane_kind", "paneKind"]).or_else(|| {
+                action
+                    .get("object")
+                    .and_then(|object| json_string(object, &["kind"]))
+            }),
+            output_artifact_kind,
             task_kind,
             workspace_id: json_string(agent_app, &["workspace_id", "workspaceId"])
                 .or_else(|| request.session.workspace_id.clone()),
@@ -411,9 +745,16 @@ impl ProductProfileWorkerTurn {
             "taskKind": self.task_kind,
             "prompt": self.prompt,
             "actionKey": self.action_key,
+            "actionIntent": self.action_intent,
+            "actionRisk": self.action_risk,
+            "source": self.source,
+            "surfaceKind": self.surface_kind,
+            "paneKind": self.pane_kind,
+            "outputArtifactKind": self.output_artifact_kind(),
+            "sourceArtifactIds": self.source_artifact_ids,
             "sourceObjectRef": self.source_object_ref,
             "expectedOutput": {
-                "artifactKind": CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
+                "artifactKind": self.output_artifact_kind(),
                 "productWorkspaceSchema": PRODUCT_WORKSPACE_SCHEMA,
                 "objectKinds": [
                     "contentBrief",
@@ -432,7 +773,7 @@ impl ProductProfileWorkerTurn {
             },
             "runtime": {
                 "workerEntrypoint": worker_entrypoint,
-                "outputArtifactKind": CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
+                "outputArtifactKind": self.output_artifact_kind(),
                 "directProviderAccess": false,
                 "directFilesystemAccess": false
             },
@@ -449,6 +790,12 @@ impl ProductProfileWorkerTurn {
         )
     }
 
+    fn output_artifact_kind(&self) -> &str {
+        self.output_artifact_kind
+            .as_deref()
+            .unwrap_or(CONTENT_FACTORY_WORKSPACE_PATCH_KIND)
+    }
+
     fn failure_payload(
         &self,
         turn_id: &str,
@@ -462,6 +809,9 @@ impl ProductProfileWorkerTurn {
             "taskId": self.task_id(turn_id),
             "taskKind": self.task_kind,
             "turnId": turn_id,
+            "surfaceKind": self.surface_kind,
+            "paneKind": self.pane_kind,
+            "outputArtifactKind": self.output_artifact_kind(),
             "status": status,
             "errorCode": failure.error_code,
             "errorMessage": failure.error_message,
@@ -477,6 +827,10 @@ impl ProductProfileWorkerTurn {
                     "taskId": self.task_id(turn_id),
                     "taskKind": self.task_kind,
                     "turnId": turn_id,
+                    "source": self.source,
+                    "surfaceKind": self.surface_kind,
+                    "paneKind": self.pane_kind,
+                    "outputArtifactKind": self.output_artifact_kind(),
                     "status": status,
                     "inputSummary": format!("prompt={}", self.prompt),
                     "errorCode": failure.error_code,
@@ -501,6 +855,60 @@ fn is_product_profile_surface(metadata: &Value) -> bool {
         == Some("productProfile")
 }
 
+fn worker_rejection_from_values(
+    request: &ExecutionRequest,
+    agent_app: &Value,
+    action: Option<&Value>,
+    error_code: &'static str,
+    error_message: impl Into<String>,
+) -> PaneActionWorkerRejection {
+    let metadata = request.metadata.as_ref();
+    PaneActionWorkerRejection {
+        app_id: json_string(agent_app, &["app_id", "appId"]),
+        action_key: action.and_then(|action| json_string(action, &["key"])),
+        error_code,
+        error_message: error_message.into(),
+        output_artifact_kind: action.and_then(|action| {
+            json_string(action, &["output_artifact_kind", "outputArtifactKind"])
+        }),
+        pane_kind: action
+            .and_then(|action| json_string(action, &["pane_kind", "paneKind"]))
+            .or_else(|| {
+                metadata
+                    .and_then(|metadata| right_surface_string(metadata, &["pane_kind", "paneKind"]))
+            }),
+        source: json_string(agent_app, &["source"])
+            .unwrap_or_else(|| PANE_ACTION_SOURCE.to_string()),
+        surface_kind: action
+            .and_then(|action| json_string(action, &["surface_kind", "surfaceKind"]))
+            .or_else(|| {
+                metadata.and_then(|metadata| {
+                    right_surface_string(metadata, &["surface_kind", "surfaceKind"])
+                })
+            }),
+        task_kind: action.and_then(|action| json_string(action, &["task_kind", "taskKind"])),
+        workspace_id: json_string(agent_app, &["workspace_id", "workspaceId"])
+            .or_else(|| request.session.workspace_id.clone()),
+    }
+}
+
+fn right_surface_string(metadata: &Value, path: &[&str]) -> Option<String> {
+    metadata
+        .get("right_surface")
+        .or_else(|| metadata.get("rightSurface"))
+        .and_then(|right_surface| json_string(right_surface, path))
+}
+
+fn content_factory_output_artifact_kind(
+    output_artifact_kind: Option<String>,
+) -> Option<Option<String>> {
+    match output_artifact_kind.as_deref() {
+        None => None,
+        Some(CONTENT_FACTORY_WORKSPACE_PATCH_KIND) => Some(output_artifact_kind),
+        Some(_) => None,
+    }
+}
+
 fn json_string(value: &Value, path: &[&str]) -> Option<String> {
     for key in path {
         if let Some(value) = value.get(*key).and_then(Value::as_str) {
@@ -511,6 +919,27 @@ fn json_string(value: &Value, path: &[&str]) -> Option<String> {
         }
     }
     None
+}
+
+fn json_string_array(value: &Value, path: &[&str]) -> Vec<String> {
+    for key in path {
+        let Some(items) = value.get(*key).and_then(Value::as_array) else {
+            continue;
+        };
+        let mut result = Vec::new();
+        for item in items {
+            let Some(raw) = item.as_str() else {
+                continue;
+            };
+            let trimmed = raw.trim();
+            if trimmed.is_empty() || result.iter().any(|existing| existing == trimmed) {
+                continue;
+            }
+            result.push(trimmed.to_string());
+        }
+        return result;
+    }
+    Vec::new()
 }
 
 #[cfg(test)]
@@ -531,6 +960,7 @@ mod tests {
                 "product_profile_action": {
                     "key": "regenerate",
                     "task_kind": "content.image.generate",
+                    "output_artifact_kind": CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
                     "prompt": "重新生成配图"
                 }
             },
@@ -560,6 +990,7 @@ mod tests {
                 "product_profile_action": {
                     "key": "regenerate",
                     "task_kind": "content.image.generate",
+                    "output_artifact_kind": CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
                     "prompt": "重新生成配图",
                     "object": {
                         "app_id": CONTENT_FACTORY_APP_ID,
@@ -576,16 +1007,166 @@ mod tests {
         }));
 
         let worker_turn =
-            ProductProfileWorkerTurn::from_execution_request(&request).expect("worker turn");
+            PaneActionWorkerTurn::from_execution_request(&request).expect("worker turn");
 
         assert_eq!(worker_turn.app_id, CONTENT_FACTORY_APP_ID);
         assert_eq!(worker_turn.action_key.as_deref(), Some("regenerate"));
         assert_eq!(worker_turn.task_kind, "content.image.generate");
         assert_eq!(worker_turn.workspace_id.as_deref(), Some("workspace-main"));
+        assert_eq!(worker_turn.surface_kind.as_deref(), Some("productProfile"));
+        assert_eq!(worker_turn.pane_kind.as_deref(), Some("imageGenerationSet"));
+        assert_eq!(
+            worker_turn.output_artifact_kind.as_deref(),
+            Some(CONTENT_FACTORY_WORKSPACE_PATCH_KIND)
+        );
+        assert_eq!(
+            worker_turn.source_artifact_ids,
+            vec!["artifact-image-set-1"]
+        );
         assert_eq!(
             worker_turn.source_object_ref.unwrap()["kind"].as_str(),
             Some("imageGenerationSet")
         );
+    }
+
+    #[test]
+    fn extracts_content_factory_custom_pane_action_worker_turn() {
+        let request = execution_request(json!({
+            "agent_app": {
+                "source": PANE_ACTION_SOURCE,
+                "app_id": CONTENT_FACTORY_APP_ID,
+                "session_id": "session-content-factory",
+                "workspace_id": "workspace-main",
+                "pane_action": {
+                    "key": "regenerate",
+                    "intent": "regenerate",
+                    "risk": "write",
+                    "task_kind": "content.image.generate",
+                    "output_artifact_kind": CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
+                    "prompt": "重新生成配图",
+                    "surface_kind": "appSurface",
+                    "pane_kind": "imageGrid",
+                    "source_artifact_ids": ["artifact-image-set-1", "artifact-image-set-1"],
+                    "object": {
+                        "app_id": CONTENT_FACTORY_APP_ID,
+                        "kind": "imageGenerationSet",
+                        "id": "image-set-1",
+                        "session_id": "session-content-factory"
+                    }
+                }
+            },
+            "right_surface": {
+                "surface_kind": "appSurface",
+                "pane_kind": "imageGrid"
+            }
+        }));
+
+        let worker_turn =
+            PaneActionWorkerTurn::from_execution_request(&request).expect("worker turn");
+        let worker_request = worker_turn.worker_request(
+            request.session.session_id.as_str(),
+            request.turn.turn_id.as_str(),
+            Some("./src/runtime/content-factory-worker.mjs"),
+        );
+
+        assert_eq!(worker_turn.app_id, CONTENT_FACTORY_APP_ID);
+        assert_eq!(worker_turn.source, PANE_ACTION_SOURCE);
+        assert_eq!(worker_turn.action_key.as_deref(), Some("regenerate"));
+        assert_eq!(worker_turn.action_intent.as_deref(), Some("regenerate"));
+        assert_eq!(worker_turn.action_risk.as_deref(), Some("write"));
+        assert_eq!(worker_turn.surface_kind.as_deref(), Some("appSurface"));
+        assert_eq!(worker_turn.pane_kind.as_deref(), Some("imageGrid"));
+        assert_eq!(
+            worker_turn.output_artifact_kind.as_deref(),
+            Some(CONTENT_FACTORY_WORKSPACE_PATCH_KIND)
+        );
+        assert_eq!(
+            worker_turn.source_artifact_ids,
+            vec!["artifact-image-set-1"]
+        );
+        assert_eq!(worker_request["surfaceKind"], "appSurface");
+        assert_eq!(worker_request["paneKind"], "imageGrid");
+        assert_eq!(
+            worker_request["sourceArtifactIds"][0],
+            "artifact-image-set-1"
+        );
+        assert_eq!(
+            worker_request["outputArtifactKind"],
+            CONTENT_FACTORY_WORKSPACE_PATCH_KIND
+        );
+        assert_eq!(
+            worker_request["expectedOutput"]["artifactKind"],
+            CONTENT_FACTORY_WORKSPACE_PATCH_KIND
+        );
+        assert_eq!(
+            worker_request["runtime"]["outputArtifactKind"],
+            CONTENT_FACTORY_WORKSPACE_PATCH_KIND
+        );
+    }
+
+    #[test]
+    fn rejects_unsupported_pane_action_output_artifact_kind() {
+        let request = execution_request(json!({
+            "agent_app": {
+                "source": PANE_ACTION_SOURCE,
+                "app_id": CONTENT_FACTORY_APP_ID,
+                "pane_action": {
+                    "key": "regenerate",
+                    "task_kind": "content.image.generate",
+                    "output_artifact_kind": "other.workspace_patch",
+                    "prompt": "重新生成配图",
+                    "surface_kind": "appSurface",
+                    "pane_kind": "imageGrid"
+                }
+            },
+            "right_surface": {
+                "surface_kind": "appSurface",
+                "pane_kind": "imageGrid"
+            }
+        }));
+
+        assert!(PaneActionWorkerTurn::from_execution_request(&request).is_none());
+    }
+
+    #[test]
+    fn rejects_remote_plugin_pane_action_runtime() {
+        let request = execution_request(json!({
+            "agent_app": {
+                "source": PANE_ACTION_SOURCE,
+                "app_id": "creator-pack",
+                "pane_action": {
+                    "key": "regenerate",
+                    "task_kind": "creator.generate",
+                    "output_artifact_kind": "creator.workspace_patch",
+                    "prompt": "重新生成内容",
+                    "surface_kind": "appSurface",
+                    "pane_kind": "creatorCanvas"
+                }
+            },
+            "right_surface": {
+                "surface_kind": "appSurface",
+                "pane_kind": "creatorCanvas"
+            }
+        }));
+
+        let PaneActionWorkerTurnResolution::Reject(rejection) =
+            PaneActionWorkerTurn::resolve_from_execution_request(&request)
+        else {
+            panic!("remote plugin runtime should be rejected");
+        };
+
+        assert_eq!(
+            rejection.error_code,
+            "AGENT_APP_WORKER_REMOTE_RUNTIME_DISABLED"
+        );
+        assert_eq!(rejection.app_id.as_deref(), Some("creator-pack"));
+        assert_eq!(
+            rejection.output_artifact_kind.as_deref(),
+            Some("creator.workspace_patch")
+        );
+        assert!(rejection
+            .error_message
+            .contains("Remote Agent App runtime is disabled"));
     }
 
     #[test]

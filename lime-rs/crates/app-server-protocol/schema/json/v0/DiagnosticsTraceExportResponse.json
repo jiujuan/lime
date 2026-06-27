@@ -1,0 +1,139 @@
+{
+  "$defs": {
+    "DiagnosticsTraceRedactionPolicy": {
+      "properties": {
+        "mode": {
+          "type": "string"
+        },
+        "promptText": {
+          "type": "boolean"
+        },
+        "providerPayload": {
+          "type": "boolean"
+        },
+        "rawAgentEventPayload": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "mode",
+        "promptText",
+        "providerPayload",
+        "rawAgentEventPayload"
+      ],
+      "type": "object"
+    },
+    "DiagnosticsTraceSummary": {
+      "properties": {
+        "eventCount": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "firstWallTimeUnixMs": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "lastWallTimeUnixMs": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "modifiedAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "sizeBytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "traceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "eventCount",
+        "path",
+        "sessionId",
+        "sizeBytes",
+        "traceId"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "available": {
+      "type": "boolean"
+    },
+    "bundlePath": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "exported": {
+      "type": "boolean"
+    },
+    "generatedAt": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "includedSections": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "omittedSections": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "outputDirectory": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "redaction": {
+      "$ref": "#/$defs/DiagnosticsTraceRedactionPolicy"
+    },
+    "trace": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DiagnosticsTraceSummary"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "available",
+    "exported",
+    "redaction"
+  ],
+  "title": "DiagnosticsTraceExportResponse",
+  "type": "object"
+}

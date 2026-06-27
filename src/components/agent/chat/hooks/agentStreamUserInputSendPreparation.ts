@@ -16,6 +16,7 @@ import {
   type AgentRuntimeStatusPresentation,
 } from "../utils/fastResponseRouting";
 import { normalizeExecutionStrategy } from "./agentChatCoreUtils";
+import { ensureAgentUiPerformanceTraceMetadata } from "./agentStreamPerformanceMetrics";
 
 export type AgentStreamUserInputSendPreparationEnv = Pick<
   AgentStreamPreparedSendEnv,
@@ -24,6 +25,8 @@ export type AgentStreamUserInputSendPreparationEnv = Pick<
   | "modelRef"
   | "reasoningEffortRef"
   | "sessionIdRef"
+  | "clawTraceEnabled"
+  | "getWorkspaceIdForSubmit"
   | "activeStreamRef"
   | "getQueuedTurnsCount"
   | "isThreadBusy"
@@ -127,7 +130,8 @@ export function prepareAgentStreamUserInputSend(
   const resolvedModelOverride =
     sendOptions?.modelOverride?.trim() || modelOverride?.trim();
   const resolvedReasoningEffort =
-    sendOptions?.reasoningEffort?.trim() || env.reasoningEffortRef.current.trim();
+    sendOptions?.reasoningEffort?.trim() ||
+    env.reasoningEffortRef.current.trim();
   const effectiveProviderType =
     resolvedProviderOverride || env.providerTypeRef.current;
   const effectiveModel = resolvedModelOverride || env.modelRef.current;
@@ -136,7 +140,16 @@ export function prepareAgentStreamUserInputSend(
     ? env.getSyncedSessionModelPreference(currentSessionId)
     : null;
   const observer = sendOptions?.observer;
-  const requestMetadata = sendOptions?.requestMetadata;
+  const requestMetadata = ensureAgentUiPerformanceTraceMetadata(
+    sendOptions?.requestMetadata,
+    {
+      enabled: env.clawTraceEnabled,
+      sessionId: currentSessionId,
+      source: "agent-chat",
+      submittedAt: Date.now(),
+      workspaceId: env.getWorkspaceIdForSubmit(),
+    },
+  );
   const runtimeStatusPresentation =
     resolveAgentRuntimeStatusPresentation(requestMetadata);
   const messagePurpose = sendOptions?.purpose;

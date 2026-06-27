@@ -85,6 +85,45 @@ const productProfileArtifactPendingRequest: WorkspaceRightSurfacePendingRequest 
     },
   },
 };
+const appDeclaredRendererPendingRequest: WorkspaceRightSurfacePendingRequest = {
+  ...productProfilePendingRequest,
+  requestId: "right_surface_creator_profile_1",
+  sessionId: "session-main",
+  surfaceKind: "productProfile",
+  reason: "plugin_renderer_output_ready",
+  metadata: {
+    artifact: {
+      artifactId: "artifact-creator-workspace-patch-1",
+      kind: "creator.workspace_patch",
+      title: "创作工作台输出",
+    },
+    workspacePatch: {
+      schemaVersion: "product-workspace.v1",
+      appId: "creator-workbench",
+      sessionId: "session-main",
+      workspaceId: "workspace-main",
+      objects: [
+        {
+          ref: {
+            appId: "creator-workbench",
+            kind: "articleDraft",
+            id: "article-1",
+            sessionId: "session-main",
+            artifactIds: ["artifact-article-1"],
+          },
+          title: "文章草稿",
+          status: "ready",
+          source: {
+            taskKind: "creator.article.generate",
+          },
+        },
+      ],
+      layoutState: {
+        activePaneKind: "editor",
+      },
+    },
+  },
+};
 const agentAppSurfacePendingRequest: WorkspaceRightSurfacePendingRequest = {
   ...pendingRequest,
   requestId: "right_surface_agent_app_1",
@@ -405,6 +444,51 @@ describe("useWorkspaceRightSurfacePendingRuntime", () => {
           },
         ],
       });
+    });
+  });
+
+  it("应把 app-declared renderer 输出合同接入 pending Product Profile", async () => {
+    const plugin = normalizePluginManifest({
+      id: "creator-workbench",
+      displayName: "创作工作台",
+      version: "1.0.0",
+      artifactRenderers: [
+        {
+          artifactType: "articleDraft",
+          surfaceKind: "documentCanvas",
+          paneKind: "editor",
+          rendererKind: "app_declared",
+          outputArtifactKind: "creator.workspace_patch",
+        },
+      ],
+    });
+    const listPending = vi.fn(async () => ({
+      pending: [appDeclaredRendererPendingRequest],
+    }));
+    const { render, getValue } = renderHook({
+      listPending,
+      pluginContracts: [plugin],
+    });
+
+    await render();
+
+    await vi.waitFor(() => {
+      expect(getValue().pendingProductProfile?.objects[0]?.source).toMatchObject(
+        {
+          rendererContract: {
+            pluginId: "creator-workbench",
+            artifactType: "articleDraft",
+            surfaceKind: "documentCanvas",
+            paneKind: "editor",
+            rendererKind: "app_declared",
+            outputArtifactKind: "creator.workspace_patch",
+          },
+          outputArtifactKind: "creator.workspace_patch",
+          artifactType: "articleDraft",
+          surfaceKind: "documentCanvas",
+          paneKind: "editor",
+        },
+      );
     });
   });
 

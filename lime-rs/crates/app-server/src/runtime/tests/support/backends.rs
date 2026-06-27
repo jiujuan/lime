@@ -36,6 +36,78 @@ impl ExecutionBackend for CompletedBackend {
     }
 }
 
+pub(in crate::runtime::tests) struct ProviderTraceBackend;
+
+#[async_trait]
+impl ExecutionBackend for ProviderTraceBackend {
+    async fn start_turn(
+        &self,
+        _request: ExecutionRequest,
+        sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        sink.emit(RuntimeEvent::new("turn.started", json!({})))?;
+        sink.emit(RuntimeEvent::new(
+            "provider.request.started",
+            json!({
+                "stage": "request_started",
+                "provider": "openai",
+                "model": "gpt-4.1",
+                "attempt": 1,
+                "elapsed_ms": 0,
+                "status": "running"
+            }),
+        ))?;
+        sink.emit(RuntimeEvent::new(
+            "provider.first_event.received",
+            json!({
+                "stage": "first_event_received",
+                "provider": "openai",
+                "model": "gpt-4.1",
+                "attempt": 1,
+                "elapsed_ms": 1200,
+                "provider_request_id": "req-provider-1",
+                "provider_request_id_header": "x-request-id",
+                "status": "running"
+            }),
+        ))?;
+        sink.emit(RuntimeEvent::new(
+            "provider.first_text_delta.received",
+            json!({
+                "stage": "first_text_delta_received",
+                "provider": "openai",
+                "model": "gpt-4.1",
+                "attempt": 1,
+                "elapsed_ms": 1500,
+                "text_chars": 4,
+                "provider_request_id": "req-provider-1",
+                "provider_request_id_header": "x-request-id",
+                "status": "running"
+            }),
+        ))?;
+        sink.emit(RuntimeEvent::new(
+            "message.delta",
+            json!({ "text": "你好！有什么可以帮你的吗？" }),
+        ))?;
+        sink.emit(RuntimeEvent::new("turn.completed", json!({})))
+    }
+
+    async fn cancel_turn(
+        &self,
+        _request: CancelExecutionRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+
+    async fn respond_action(
+        &self,
+        _request: ActionRespondRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+}
+
 pub(in crate::runtime::tests) struct ToolReadModelBackend;
 
 #[async_trait]

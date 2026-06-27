@@ -11,9 +11,7 @@ import {
   MessageList,
   mountedRoots,
 } from "./MessageList.testHarness";
-import type {
-  Message,
-} from "./MessageList.testHarness";
+import type { Message } from "./MessageList.testHarness";
 
 describe("MessageList layout and scrolling", () => {
   it("应在同一滚动区域顶部渲染 leadingContent", () => {
@@ -161,6 +159,56 @@ describe("MessageList layout and scrolling", () => {
     expect(onEditMessage).toHaveBeenCalledWith(
       "msg-user-visual-footer",
       "帮我整理一下今天的国际新闻",
+    );
+  });
+
+  it("消息气泡和 turn group 应暴露 runtimeTurnId，供 GUI fixture 按轮验收", () => {
+    const container = render(
+      [
+        {
+          id: "user-turn-scope",
+          role: "user",
+          content: "第一轮问题",
+          timestamp: new Date("2026-06-01T02:57:00.000Z"),
+          runtimeTurnId: "turn-scope-1",
+        } as Message,
+        {
+          id: "assistant-turn-scope",
+          role: "assistant",
+          content: "第一轮回答",
+          timestamp: new Date("2026-06-01T02:57:01.000Z"),
+          runtimeTurnId: "turn-scope-1",
+        } as Message,
+      ],
+      {
+        turns: [
+          {
+            id: "turn-scope-1",
+            thread_id: "thread-scope",
+            prompt_text: "第一轮问题",
+            status: "completed",
+            started_at: "2026-06-01T02:57:00.000Z",
+            completed_at: "2026-06-01T02:57:01.000Z",
+            created_at: "2026-06-01T02:57:00.000Z",
+            updated_at: "2026-06-01T02:57:01.000Z",
+          },
+        ],
+      },
+    );
+
+    const group = container.querySelector<HTMLElement>(
+      '[data-testid="message-turn-group"]',
+    );
+    const assistantBubble = container.querySelector<HTMLElement>(
+      '[data-message-id="assistant-turn-scope"]',
+    );
+
+    expect(group?.getAttribute("data-runtime-turn-id")).toBe("turn-scope-1");
+    expect(group?.getAttribute("data-last-assistant-message-id")).toBe(
+      "assistant-turn-scope",
+    );
+    expect(assistantBubble?.getAttribute("data-runtime-turn-id")).toBe(
+      "turn-scope-1",
     );
   });
 
@@ -361,31 +409,55 @@ describe("MessageList layout and scrolling", () => {
       messageId: "assistant-overlay",
       eventName: "agent-runtime-overlay-test",
       content: "overlay 正文已经可见",
+      phase: "final_answer",
     });
 
-    const container = render([
-      {
-        id: "assistant-overlay",
-        role: "assistant",
-        content: "",
-        isThinking: true,
-        timestamp: new Date("2026-05-09T10:00:00.000Z"),
-        contentParts: [
-          {
-            type: "tool_use",
-            toolCall: {
-              id: "tool-1",
-              name: "read_file",
-              status: "running",
-              startTime: new Date("2026-05-09T10:00:00.000Z"),
+    const container = render(
+      [
+        {
+          id: "assistant-overlay",
+          role: "assistant",
+          content: "",
+          isThinking: true,
+          timestamp: new Date("2026-05-09T10:00:00.000Z"),
+          runtimeTurnId: "turn-overlay",
+          contentParts: [
+            {
+              type: "tool_use",
+              toolCall: {
+                id: "tool-1",
+                name: "read_file",
+                status: "running",
+                startTime: new Date("2026-05-09T10:00:00.000Z"),
+              },
             },
+          ],
+        } as Message,
+      ],
+      {
+        currentTurnId: "turn-overlay",
+        isSending: true,
+        turns: [
+          {
+            id: "turn-overlay",
+            thread_id: "thread-overlay",
+            prompt_text: "overlay",
+            status: "running",
+            started_at: "2026-05-09T10:00:00.000Z",
+            created_at: "2026-05-09T10:00:00.000Z",
+            updated_at: "2026-05-09T10:00:00.000Z",
           },
         ],
-      } as Message,
-    ]);
+      },
+    );
 
     expect(container.textContent).not.toContain("正在准备回复");
-    expect(mockStreamingRenderer).toHaveBeenLastCalledWith(
+    expect(
+      mockStreamingRenderer.mock.calls.find(
+        ([props]) =>
+          (props as { content?: string }).content === "overlay 正文已经可见",
+      )?.[0],
+    ).toEqual(
       expect.objectContaining({
         content: "overlay 正文已经可见",
         contentParts: expect.arrayContaining([
@@ -509,5 +581,4 @@ describe("MessageList layout and scrolling", () => {
     );
     expect(container.textContent).not.toContain("Start a new conversation");
   });
-
 });

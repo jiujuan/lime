@@ -24,6 +24,9 @@ const CURRENT_LOG_DIAGNOSTIC_METHOD_CONSTANTS = [
   "APP_SERVER_METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT",
   "APP_SERVER_METHOD_DIAGNOSTICS_SERVER_READ",
   "APP_SERVER_METHOD_DIAGNOSTICS_WINDOWS_STARTUP_READ",
+  "APP_SERVER_METHOD_DIAGNOSTICS_TRACE_LIST",
+  "APP_SERVER_METHOD_DIAGNOSTICS_TRACE_READ",
+  "APP_SERVER_METHOD_DIAGNOSTICS_TRACE_EXPORT",
 ];
 
 const CURRENT_LOG_DIAGNOSTIC_CLIENT_HELPERS = [
@@ -35,9 +38,26 @@ const CURRENT_LOG_DIAGNOSTIC_CLIENT_HELPERS = [
   "exportSupportBundle",
   "readServerDiagnostics",
   "readWindowsStartupDiagnostics",
+  "listDiagnosticsTraces",
+  "readDiagnosticsTrace",
+  "exportDiagnosticsTrace",
 ];
 
 const CURRENT_LOG_DIAGNOSTIC_METHODS = [
+  "log/list",
+  "log/persistedTail",
+  "log/clear",
+  "log/diagnosticHistory/clear",
+  "diagnostics/logStorage/read",
+  "diagnostics/supportBundle/export",
+  "diagnostics/server/read",
+  "diagnostics/windowsStartup/read",
+  "diagnostics/trace/list",
+  "diagnostics/trace/read",
+  "diagnostics/trace/export",
+];
+
+const LEGACY_LOG_DIAGNOSTIC_REPLACEMENT_METHODS = [
   "log/list",
   "log/persistedTail",
   "log/clear",
@@ -155,7 +175,7 @@ describe("logs diagnostics current App Server boundary", () => {
       expect(
         (replacements as Record<string, unknown>)[command],
         `${command} should point to current App Server method`,
-      ).toBe(CURRENT_LOG_DIAGNOSTIC_METHODS[index]);
+      ).toBe(LEGACY_LOG_DIAGNOSTIC_REPLACEMENT_METHODS[index]);
     }
   });
 
@@ -181,9 +201,7 @@ describe("logs diagnostics current App Server boundary", () => {
     for (const registration of LEGACY_LOG_TAURI_REGISTRATIONS) {
       expect(runnerSource).not.toContain(registration);
     }
-    expect(existsSync(resolve(cwd(), "lime-rs/src/app/runner.rs"))).toBe(
-      false,
-    );
+    expect(existsSync(resolve(cwd(), "lime-rs/src/app/runner.rs"))).toBe(false);
     expect(
       existsSync(resolve(cwd(), "lime-rs/src/dev_bridge/dispatcher.rs")),
     ).toBe(false);

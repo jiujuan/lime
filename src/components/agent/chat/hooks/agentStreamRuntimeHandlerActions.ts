@@ -36,6 +36,7 @@ import { isPersistedReasoningContentPart } from "./agentStreamReasoningContentSy
 import { resetStreamedReasoningSegment } from "./agentStreamReasoningTimeline";
 import {
   clearActiveTextSegmentState,
+  hasActiveTextSegmentProvenance,
   resolveAccumulatedContentBeforeActiveTextSegment,
   shouldCommitActiveTextSegmentAsFinal,
 } from "./agentStreamTextDeltaLifecycle";
@@ -225,7 +226,11 @@ export function createAgentStreamRuntimeHandlerActions({
           firstTextDeltaAt: requestState.firstTextDeltaAt,
           flushStartedAt,
           paintedAt,
+          rendererEventReceivedAt:
+            requestState.performanceTrace?.rendererEventReceivedAt,
           requestStartedAt: requestState.requestStartedAt,
+          serverEventEmittedAt:
+            requestState.performanceTrace?.serverEventEmittedAt,
         });
         recordAgentStreamPerformanceMetric(
           "agentStream.firstTextPaint",
@@ -262,6 +267,14 @@ export function createAgentStreamRuntimeHandlerActions({
         resolveAccumulatedContentBeforeActiveTextSegment(requestState);
       requestState.accumulatedContent = retainedFinalPrefix;
       requestState.renderedContent = retainedFinalPrefix;
+      clearActiveTextSegmentState(requestState);
+      clearAgentStreamTextOverlay(assistantMsgId);
+      return;
+    }
+
+    if (!hasActiveTextSegmentProvenance(requestState)) {
+      requestState.accumulatedContent = "";
+      requestState.renderedContent = "";
       clearActiveTextSegmentState(requestState);
       clearAgentStreamTextOverlay(assistantMsgId);
       return;
@@ -430,12 +443,20 @@ export function createAgentStreamRuntimeHandlerActions({
     });
 
     setThreadTurns((prev) => {
+      const hasPendingTurn = prev.some(
+        (turn) => turn.id === failedTimelinePlan.pendingTurnKey,
+      );
+      const currentTurnId = requestState.currentTurnId?.trim();
+      const candidateTurns =
+        !hasPendingTurn && currentTurnId
+          ? prev.filter((turn) => turn.id === currentTurnId)
+          : prev;
       const failedTurn = buildAgentStreamFailedTimelineTurnUpdate({
         activeSessionId: failedTimelinePlan.activeSessionId,
         errorMessage: failedTimelinePlan.errorMessage,
         failedAt: failedTimelinePlan.failedAt,
         pendingTurnKey: failedTimelinePlan.pendingTurnKey,
-        turns: prev,
+        turns: candidateTurns,
       });
       if (!failedTurn) {
         return prev;
@@ -540,6 +561,7 @@ export function createAgentStreamRuntimeHandlerActions({
           ...buildAgentStreamCompletedAssistantMessagePatch({
             parts: mergeAssistantAgentMessageContentPartsFromThreadItems({
               parts: msg.contentParts,
+              turnId: msg.runtimeTurnId ?? requestState.currentTurnId,
               items: [
                 ...Array.from(
                   requestState.streamedAgentMessageItemsByItemId?.values() ??
@@ -555,7 +577,7 @@ export function createAgentStreamRuntimeHandlerActions({
               sequence: requestState.activeTextSegmentSequence,
               turnId: requestState.activeTextSegmentTurnId,
             }),
-            previousContent: msg.content,
+            previousContent: rawContent === finalContent ? finalContent : msg.content,
             rawContent,
             surfaceThinkingDeltas:
               surfaceThinkingDeltas || isRetainedSkillProcessMessage(msg),
@@ -587,7 +609,7 @@ export function createAgentStreamRuntimeHandlerActions({
     finishRequestLog(requestState, requestLogPayload);
     completeAssistantStreamMessage({
       finalContent,
-      rawContent: requestState.accumulatedContent,
+      rawContent: finalContent,
       usage,
     });
   };

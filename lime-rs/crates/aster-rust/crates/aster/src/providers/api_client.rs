@@ -367,9 +367,12 @@ impl<'a> ApiRequestBuilder<'a> {
         );
 
         let request = self.send_request(|url, client| client.post(url)).await?;
-        Box::pin(async move { request.json(payload).send().await })
+        crate::session_context::clear_current_provider_response_context();
+        let response = Box::pin(async move { request.json(payload).send().await })
             .await
-            .map_err(Into::into)
+            .map_err(anyhow::Error::from)?;
+        crate::session_context::record_provider_response_headers(response.headers());
+        Ok(response)
     }
 
     pub async fn api_get(self) -> Result<ApiResponse> {
@@ -379,7 +382,10 @@ impl<'a> ApiRequestBuilder<'a> {
 
     pub async fn response_get(self) -> Result<Response> {
         let request = self.send_request(|url, client| client.get(url)).await?;
-        Ok(request.send().await?)
+        crate::session_context::clear_current_provider_response_context();
+        let response = request.send().await?;
+        crate::session_context::record_provider_response_headers(response.headers());
+        Ok(response)
     }
 
     async fn send_request<F>(&self, request_builder: F) -> Result<reqwest::RequestBuilder>
@@ -429,7 +435,8 @@ mod tests {
     use super::*;
     use crate::session_context::{
         PENDING_REQUEST_ID_HEADER, QUEUED_TURN_ID_HEADER, SESSION_ID_HEADER,
-        SUBAGENT_SESSION_ID_HEADER, THREAD_ID_HEADER, TURN_ID_HEADER,
+        SUBAGENT_SESSION_ID_HEADER, THREAD_ID_HEADER, TRACEPARENT_HEADER, TRACESTATE_HEADER,
+        TURN_ID_HEADER,
     };
 
     #[test]
@@ -522,6 +529,13 @@ mod tests {
                     "subagentSessionId".to_string(),
                     serde_json::json!("subagent-telemetry"),
                 ),
+                (
+                    "w3c_trace_context".to_string(),
+                    serde_json::json!({
+                        "traceparent": "00-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-BBBBBBBBBBBBBBBB-01",
+                        "tracestate": "vendor=value"
+                    }),
+                ),
             ]),
             ..crate::session::TurnContextOverride::default()
         };
@@ -569,6 +583,14 @@ mod tests {
                     .to_str()
                     .unwrap(),
                 "subagent-telemetry"
+            );
+            assert_eq!(
+                headers.get(TRACEPARENT_HEADER).unwrap().to_str().unwrap(),
+                "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01"
+            );
+            assert_eq!(
+                headers.get(TRACESTATE_HEADER).unwrap().to_str().unwrap(),
+                "vendor=value"
             );
         })
         .await;

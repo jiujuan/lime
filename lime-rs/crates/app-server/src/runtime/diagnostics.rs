@@ -30,8 +30,85 @@ impl RuntimeCore {
 
     pub async fn export_support_bundle(
         &self,
+        params: SupportBundleExportParams,
     ) -> Result<SupportBundleExportResponse, RuntimeCoreError> {
-        self.app_data_source.export_support_bundle().await
+        let trace_store_root = self
+            .trace_event_writer
+            .as_ref()
+            .map(|trace_event_writer| trace_event_writer.root());
+        crate::local_data_source::export_support_bundle_with_trace_root(params, trace_store_root)
+            .map_err(RuntimeCoreError::Backend)
+    }
+
+    pub async fn list_diagnostics_traces(
+        &self,
+        params: DiagnosticsTraceListParams,
+    ) -> Result<DiagnosticsTraceListResponse, RuntimeCoreError> {
+        let Some(trace_event_writer) = self.trace_event_writer.as_ref() else {
+            return Ok(DiagnosticsTraceListResponse {
+                available: false,
+                trace_root: None,
+                traces: Vec::new(),
+                redaction: DiagnosticsTraceRedactionPolicy {
+                    mode: "summary_only".to_string(),
+                    raw_agent_event_payload: false,
+                    prompt_text: false,
+                    provider_payload: false,
+                },
+            });
+        };
+        trace_event_writer
+            .list_trace_events(params)
+            .map_err(RuntimeCoreError::Backend)
+    }
+
+    pub async fn read_diagnostics_trace(
+        &self,
+        params: DiagnosticsTraceReadParams,
+    ) -> Result<DiagnosticsTraceReadResponse, RuntimeCoreError> {
+        let Some(trace_event_writer) = self.trace_event_writer.as_ref() else {
+            return Ok(DiagnosticsTraceReadResponse {
+                available: false,
+                trace: None,
+                events: Vec::new(),
+                redaction: DiagnosticsTraceRedactionPolicy {
+                    mode: "summary_only".to_string(),
+                    raw_agent_event_payload: false,
+                    prompt_text: false,
+                    provider_payload: false,
+                },
+            });
+        };
+        trace_event_writer
+            .read_trace_events(params)
+            .map_err(RuntimeCoreError::Backend)
+    }
+
+    pub async fn export_diagnostics_trace(
+        &self,
+        params: DiagnosticsTraceExportParams,
+    ) -> Result<DiagnosticsTraceExportResponse, RuntimeCoreError> {
+        let Some(trace_event_writer) = self.trace_event_writer.as_ref() else {
+            return Ok(DiagnosticsTraceExportResponse {
+                available: false,
+                exported: false,
+                trace: None,
+                bundle_path: None,
+                output_directory: None,
+                generated_at: None,
+                included_sections: Vec::new(),
+                omitted_sections: Vec::new(),
+                redaction: DiagnosticsTraceRedactionPolicy {
+                    mode: "summary_only".to_string(),
+                    raw_agent_event_payload: false,
+                    prompt_text: false,
+                    provider_payload: false,
+                },
+            });
+        };
+        trace_event_writer
+            .export_trace_events(params)
+            .map_err(RuntimeCoreError::Backend)
     }
 
     pub async fn read_server_diagnostics(

@@ -47,6 +47,8 @@ describe("agentStreamUserInputSendPreparation", () => {
       sessionIdRef: {
         current: options?.sessionId ?? "session-1",
       } as MutableRefObject<string | null>,
+      clawTraceEnabled: false,
+      getWorkspaceIdForSubmit: () => "workspace-1",
       activeStreamRef: {
         current: options?.activeStream ?? null,
       } as MutableRefObject<ActiveStreamState | null>,
@@ -166,6 +168,48 @@ describe("agentStreamUserInputSendPreparation", () => {
     expect(result.userMsgId).toBe("00000000-0000-0000-0000-000000000002");
     expect(messages).toHaveLength(2);
     expect(isSending).toBe(true);
+  });
+
+  it("开启 Claw Trace 时应在发送准备阶段补齐 trace metadata", () => {
+    vi.spyOn(crypto, "randomUUID")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000201")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000202")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000203")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000204")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000205")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000206")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000207");
+
+    const result = prepareAgentStreamUserInputSend({
+      content: "追踪首字延迟",
+      images: [],
+      skipUserMessage: false,
+      options: {
+        requestMetadata: { source: "test" },
+      },
+      env: {
+        ...createEnv({ sessionId: "session-trace" }),
+        clawTraceEnabled: true,
+      },
+    });
+
+    expect(result.requestMetadata).toMatchObject({
+      source: "test",
+      agentUiPerformanceTrace: expect.objectContaining({
+        requestId: expect.stringMatching(/^claw_request_/),
+        runId: expect.stringMatching(/^claw_run_/),
+        sessionId: "session-trace",
+        source: "agent-chat",
+        traceId: expect.stringMatching(/^claw_trace_/),
+        workspaceId: "workspace-1",
+        w3cTraceContext: expect.objectContaining({
+          traceparent: expect.stringMatching(
+            /^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/,
+          ),
+          traceId: expect.stringMatching(/^[0-9a-f]{32}$/),
+        }),
+      }),
+    });
   });
 
   it("displayContent 应透传给用户消息草稿", () => {

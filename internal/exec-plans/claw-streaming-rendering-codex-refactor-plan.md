@@ -1,6 +1,6 @@
 # Claw Streaming Rendering Codex 对齐重构计划
 
-> 状态：completed / S4.9 普通工具过程记录不再被批次摘要替换；WebTools、Skills Runtime 与 MCP structuredContent 真实 GUI fixture 已复跑通过；聚合 current fixture 剩 Expert Panel dedupe 旁路缺口
+> 状态：completed / S4.10 历史 hydrate / local merge / GUI fixture guard 已按结构化 runtime turn 边界收口；普通工具、WebTools、Skills Runtime、MCP structuredContent 与 Expert Panel 聚合 current fixture 均已复跑通过
 > 创建时间：2026-06-24
 > 关联研究：`internal/research/workbech/codex-streaming-rendering.md`
 > 主目标：用 Codex 风格的结构化 item lifecycle 修复 Claw / Agent Chat 中 reasoning、WebSearch / WebFetch、阶段性输出与最终正文的错序、重复、消失和错误追加。
@@ -497,6 +497,39 @@
       - failure evidence：`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-expert-panel-skills-runtime-regression-summary.json`
       - 定位：该旁路是 Expert Panel 二轮 fixture scenario / dedupe scope 问题，不是本轮普通工具 inline owner 主链；本轮直接相关三条 GUI fixture 已用 `s49c` 复跑通过。
 
+- S4.10 runtime turn 边界收口：
+  - 问题 1：Expert Panel 二轮场景中，第一轮专家 summary 是同一会话历史消息的合法可见内容；旧 `waitForGuiChatCompleted(...)` 用整页 `mainText` 做 `dedupeGuardTexts` 统计，把历史轮误判为当前轮重复。
+  - 问题 2：completion scope 改窄后仍复现第二轮 assistant bubble 混入第一轮专家 commentary / final 文案；根因是历史 hydrate / local merge 中仍存在跨 runtime turn 的 assistant 过程合并。
+  - Codex 对齐依据：验收与合并都必须按结构化 item / turn lifecycle 定位当前轮；不同 `runtimeTurnId` 的 assistant item / message 不能为了相邻显示、过程保留或最终态补全被合成一条。
+  - current 修复：
+    - `MessageList` 的 `message-turn-group` 暴露 `data-runtime-turn-id`、`data-last-assistant-message-id`、`data-timeline-message-id`。
+    - `MessageListItem` 的消息气泡暴露 `data-message-id` 与 `data-runtime-turn-id`。
+    - `waitForGuiChatCompleted(...)` 先按包含当前 prompt 的最新 `message-turn-group` 建立 completion scope，再在该 turn 的最新 assistant bubble 内检查 summary / done / required texts / dedupe guard / disallowed text；整页 occurrence 只保留为诊断字段，不再作为当前轮完成态判断。
+    - `mergeHydratedMessagesWithLocalState(...)` 的本地 process fallback 在远端带 `runtimeTurnId` 时只匹配同一 turn 的本地 assistant。
+    - `mergeAssistantAgentMessageContentPartsFromThreadItems(...)` 按当前 `turnId` 过滤 `agent_message` item，避免 completed merge 把 `getThreadItems()` 中历史 commentary / final 合到当前 assistant。
+    - `mergeAdjacentAssistantMessages(...)` 禁止两个明确且不同 `runtimeTurnId` 的相邻 assistant 合并。
+    - Expert Panel fixture scenario 增加 `disallowedVisibleTexts`，当前轮 assistant scope 中如出现第一轮专家文本直接失败。
+  - 定向验证：
+    - `npx vitest run "src/components/agent/chat/components/MessageList.test.tsx" "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs" "scripts/agent-runtime/claw-chat-current-fixture-gui-completion-waits.test.mjs"`，3 个文件、35 个用例通过。
+    - `npx vitest run "src/components/agent/chat/components/StreamingRenderer.processGroups.test.tsx" "src/components/agent/chat/components/StreamingRenderer.test.tsx" "src/components/agent/chat/components/StreamingRenderer.webSearch.sequence.test.tsx" "src/components/agent/chat/components/StreamingProcessGroupModel.unit.test.ts" "src/components/agent/chat/components/messageListItemProjection.webRetrieval.unit.test.ts" "src/components/agent/chat/components/StreamingRenderer.thinking.test.tsx" "src/components/agent/chat/components/StreamingRenderer.importedHistory.test.tsx" "src/components/agent/chat/components/messageListInlineProcess.test.ts" "src/components/agent/chat/components/messageListItemProjection.timeline.unit.test.ts" "src/components/agent/chat/components/messageListTimelineContentParts.unit.test.ts" "src/components/agent/chat/utils/toolDisplayInfo.test.ts" "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs"`，12 个文件、143 个用例通过。
+    - `npx prettier --check "src/components/agent/chat/components/MessageList.tsx" "src/components/agent/chat/components/MessageListItem.tsx" "src/components/agent/chat/components/MessageList.test.tsx" "scripts/agent-runtime/claw-chat-current-fixture-gui-completion-waits.mjs" "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs"`，通过。
+    - `npx vitest run "src/components/agent/chat/hooks/agentChatHistory.localMerge.test.ts" "src/components/agent/chat/hooks/agentChatHistory.test.ts" "src/components/agent/chat/hooks/agentChatHistory.compaction.test.ts" "scripts/agent-runtime/skills-runtime-fixture-scenario.test.mjs" "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs" "scripts/agent-runtime/claw-chat-current-fixture-gui-completion-waits.test.mjs"`，6 个文件、58 个用例通过。
+    - `npx vitest run "src/components/agent/chat/hooks/agentStreamAgentMessageContentSync.unit.test.ts" "src/components/agent/chat/hooks/agentChatHistory.localMerge.test.ts" "src/components/agent/chat/hooks/agentStreamRuntimeHandler.unit.test.ts"`，3 个文件、55 个用例通过。
+    - `npx prettier --check "scripts/agent-runtime/skills-runtime-fixture-scenario.mjs" "scripts/agent-runtime/skills-runtime-fixture-scenario.test.mjs" "scripts/agent-runtime/claw-chat-current-fixture-gui-completion-waits.mjs" "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs" "src/components/agent/chat/hooks/agentChatHistoryAdjacentMerge.ts" "src/components/agent/chat/hooks/agentChatHistory.localMerge.test.ts"`，通过。
+    - `npx eslint "src/components/agent/chat/components/MessageList.tsx" "src/components/agent/chat/components/MessageListItem.tsx" "src/components/agent/chat/hooks/agentChatHistoryAdjacentMerge.ts" "src/components/agent/chat/hooks/agentChatHistoryLocalMerge.ts" "src/components/agent/chat/hooks/agentStreamAgentMessageContentSync.ts" "src/components/agent/chat/hooks/agentStreamRuntimeHandlerActions.ts" --max-warnings 0`，通过。
+  - 真实 GUI fixture 验证：
+    - `node scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs --scenario expert-panel-skills-runtime --prefix claw-chat-current-fixture-expert-panel-skills-runtime-disallowed-guard-s56 --timeout-ms 180000`，通过。
+      - evidence：`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-expert-panel-skills-runtime-disallowed-guard-s56-summary.json`
+      - 关键断言：`.guiExpertPanelSkillsRuntimeCompleted.disallowedVisibleTextHits[]` 均为 `0`；当前 assistant scope 中 `oldHit=false`、`firstTurnHit=false`、`secondTurnHit=true`。
+    - `npm run smoke:agent-runtime-current-fixture`，通过；覆盖 history/cache hydration、stream completion、Claw 终态 UI、Coding Workbench Electron GUI 输入、cancel-then-continue、Plan history hydrate、Skills Runtime、MCP structuredContent、Expert Skills Runtime、Expert Plaza Skills Runtime、Expert Panel Skills Runtime；`liveProviderUsed=false`。
+    - `npm run verify:gui-smoke`，通过；覆盖 renderer smoke build、`typecheck:electron`、Electron host build、app-server sidecar build 和 Electron smoke，最终输出 `renderer loaded`、`app-server initialized protocol=appserver.v0 version=1.80.0`、`claw workbench shell ready`、`memory settings ready`。
+  - 全量校验缺口：
+    - `npm run verify:local` 已通过 `verify:app-version`、`i18n:check`、`i18n:unused`、`lint`、变更文件 `i18n:scan`，随后在 `npm run typecheck` 阶段被系统以 `143` 结束，未输出 TypeScript 诊断。
+    - 单独 `/usr/bin/time -p ./node_modules/.bin/tsc --noEmit --pretty false` 运行 `729.93s` 仍未自然退出，持续 CPU 计算且无诊断输出，已手动中断。
+    - `tsc --listFilesOnly` 展开约 `4820` 个文件，用时约 `90s`；`src/components/agent/chat/hooks` 显式 files 分片运行 `521.06s` 仍未自然退出，说明当前 TypeScript 全仓 / 大依赖图存在性能阻塞，不能把 `typecheck` 标记为通过。
+    - 进一步二分到本轮 hooks 变更的 5 个入口文件后，`tsc -p .lime/tmp/tsconfig-chatHooksChanged.files.json --noEmit --pretty false` 运行 `338.96s` 仍未自然退出；单入口 `agentStreamAgentMessageContentSync.ts` 正常解析依赖图运行 `141.15s` 仍未自然退出。
+    - `--noResolve` 单入口可在 `36.64s` 返回，但会产生大量缺失依赖假错误，不能作为有效 typecheck 证据；该结果仅说明慢点在正常依赖解析 / 类型图展开阶段，不是本轮文件的语法错误。
+
 ## 5. 当前缺口
 
 1. S3 current 展示主线已完成：live running WebSearch 中间态已有结构化 evidence，completed read model 不再作为唯一证据。
@@ -505,7 +538,7 @@
 4. 后续若复发展示问题，必须先看 `guiWebToolsRenderingInProgress.latestAssistantRendererContentPartTypes` 与 `latestAssistantTextAfterProcessPart`，普通工具则先看 DOM 中 `inline-tool-process-step` 数量与 tool id 时序，不要从截图文字猜 lifecycle。
 5. `request_tool_policy.rs` 仍是 2800+ 行巨型文件；本轮已把 idle 专项测试、stream diagnostics、text batcher、web retrieval process state、reply retry mode、WebSearch preflight、request policy config、runtime status 与 auto compaction projection 外移，后续应继续按职责拆 WebSearch execution tracker、stream attempt orchestration 或取消上下文持久化等 production 子模块。
 6. 无 sequence 的旧纯文本 provider 仍作为兼容兜底存在；后续要删除它，必须先确认 App Server / provider 全部输出 `phase` 或完成态 `turn_completed.text`。
-7. 聚合 `smoke:agent-runtime-current-fixture` 当前仍有 Expert Panel Skills Runtime override 旁路失败：第二轮 GUI 中旧专家 summary 出现 2 次，需下一刀收敛 Expert Panel fixture scenario 输出或把 dedupe guard 限定到 latest turn；不要用恢复普通工具批次摘要来掩盖该问题。
+7. Expert Panel Skills Runtime override 旁路已关闭：GUI completion wait、local merge、completed thread item merge 与相邻 assistant merge 均按 runtime turn 边界收口；历史轮 summary 仍可见但不再污染当前轮 assistant bubble。
 
 ## 6. 下一刀
 

@@ -5,23 +5,65 @@ export const AGENT_FAST_RESPONSE_MODE_STORAGE_KEY =
   "lime:agent-fast-response-mode";
 
 export type AgentFastResponseMode = "auto" | "off";
+export type AgentRuntimeStatusPresentation = "timeline" | "transient";
+export type AgentFastResponseRoutingReason =
+  | "mode-off"
+  | "non-general-theme"
+  | "theme-workbench"
+  | "content-bound"
+  | "not-first-turn"
+  | "image-input"
+  | "not-plain-first-turn-text"
+  | "explicit-model-override"
+  | "non-plain-chat"
+  | "heavy-capability-enabled"
+  | "first-turn-plain-text";
 
-const FAST_RESPONSE_SERVICE_MODEL_SLOT = "responsive_chat";
-const FAST_RESPONSE_ROUTING_SLOT = "responsive_chat_model";
+export interface AgentFastResponseRoutingProfile {
+  id: string;
+  label: string;
+  metadataMode: AgentFastResponseMode;
+  reasoningEffort: string;
+  resolver: string;
+  routingChanged: boolean;
+  routingSlot: string;
+  runtimeStatusPresentation: AgentRuntimeStatusPresentation;
+  serviceModelSlot: string;
+}
+
+export const DEFAULT_AGENT_FAST_RESPONSE_ROUTING_PROFILE: AgentFastResponseRoutingProfile =
+  {
+    id: "responsive-chat-auto",
+    label: "快速响应",
+    metadataMode: "auto",
+    reasoningEffort: "minimal",
+    resolver: "backend_service_model",
+    routingChanged: false,
+    routingSlot: "responsive_chat_model",
+    runtimeStatusPresentation: "transient",
+    serviceModelSlot: "responsive_chat",
+  };
+
+export const FAST_RESPONSE_REASONING_EFFORT =
+  DEFAULT_AGENT_FAST_RESPONSE_ROUTING_PROFILE.reasoningEffort;
 
 export interface AgentFastResponseRoutingDecision {
   enabled: boolean;
-  reason: string;
+  reason: AgentFastResponseRoutingReason;
   searchMode?: AgentRuntimeWebSearchMode;
   label?: string;
+  profileId?: string;
+  reasoningEffort?: string;
+  resolver?: string;
+  routingChanged?: boolean;
   serviceModelSlot?: string;
   routingSlot?: string;
+  runtimeStatusPresentation?: AgentRuntimeStatusPresentation;
 }
-
-export type AgentRuntimeStatusPresentation = "timeline" | "transient";
 
 interface ResolveAgentFastResponseRoutingOptions {
   mode?: AgentFastResponseMode;
+  routingProfile?: Partial<AgentFastResponseRoutingProfile>;
   mappedTheme: string;
   isThemeWorkbench: boolean;
   contentId?: string | null;
@@ -43,14 +85,11 @@ interface ResolveAgentFastResponseRoutingOptions {
   hasAutoContinue?: boolean;
 }
 
-const LIGHTWEIGHT_FIRST_TURN_MAX_CHARS = 800;
-const EXPLICIT_SHORT_REPLY_PATTERNS = [
-  /只(?:回复|回答|输出|说).{0,8}(?:一个字|一[句话句]|[一二三两]\s*个字|[一二三两]\s*句话)/u,
-  /(?:一个字|一[句话句]|[一二三两]\s*个字|[一二三两]\s*句话).{0,8}(?:回答|回复|输出)/u,
-  /(?:简短|简洁|简单).{0,8}(?:回答|回复|说明)/u,
-];
+const PLAIN_FIRST_TURN_MAX_CHARS = 800;
 
-function disabled(reason: string): AgentFastResponseRoutingDecision {
+function disabled(
+  reason: AgentFastResponseRoutingReason,
+): AgentFastResponseRoutingDecision {
   return { enabled: false, reason };
 }
 
@@ -62,12 +101,12 @@ function normalizeMode(mode?: AgentFastResponseMode): AgentFastResponseMode {
   return mode === "off" ? "off" : "auto";
 }
 
-function isLightweightFirstTurnText(text: string): boolean {
+function isPlainFirstTurnTextCandidate(text: string): boolean {
   const normalized = text.trim();
   if (!normalized) {
     return false;
   }
-  if (normalized.length > LIGHTWEIGHT_FIRST_TURN_MAX_CHARS) {
+  if (normalized.length > PLAIN_FIRST_TURN_MAX_CHARS) {
     return false;
   }
   if (normalized.startsWith("@") || normalized.startsWith("/")) {
@@ -76,9 +115,7 @@ function isLightweightFirstTurnText(text: string): boolean {
   if (normalized.includes("```")) {
     return false;
   }
-  return EXPLICIT_SHORT_REPLY_PATTERNS.some((pattern) =>
-    pattern.test(normalized),
-  );
+  return true;
 }
 
 function normalizeSearchMode(
@@ -99,6 +136,35 @@ function normalizeRuntimeStatusPresentation(
   value: unknown,
 ): AgentRuntimeStatusPresentation {
   return value === "transient" ? "transient" : "timeline";
+}
+
+function normalizeRoutingProfile(
+  profile?: Partial<AgentFastResponseRoutingProfile>,
+): AgentFastResponseRoutingProfile {
+  const fallback = DEFAULT_AGENT_FAST_RESPONSE_ROUTING_PROFILE;
+  return {
+    id: normalizeString(profile?.id) ?? fallback.id,
+    label: normalizeString(profile?.label) ?? fallback.label,
+    metadataMode:
+      profile?.metadataMode === "off" ? "off" : fallback.metadataMode,
+    reasoningEffort:
+      normalizeString(profile?.reasoningEffort) ?? fallback.reasoningEffort,
+    resolver: normalizeString(profile?.resolver) ?? fallback.resolver,
+    routingChanged:
+      typeof profile?.routingChanged === "boolean"
+        ? profile.routingChanged
+        : fallback.routingChanged,
+    routingSlot: normalizeString(profile?.routingSlot) ?? fallback.routingSlot,
+    runtimeStatusPresentation: normalizeRuntimeStatusPresentation(
+      profile?.runtimeStatusPresentation ?? fallback.runtimeStatusPresentation,
+    ),
+    serviceModelSlot:
+      normalizeString(profile?.serviceModelSlot) ?? fallback.serviceModelSlot,
+  };
+}
+
+function normalizeString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 export function resolveAgentFastResponseSearchMode(params: {
@@ -127,6 +193,8 @@ function hasHeavyToolPreference(params: {
 export function resolveAgentFastResponseRouting(
   options: ResolveAgentFastResponseRoutingOptions,
 ): AgentFastResponseRoutingDecision {
+  const profile = normalizeRoutingProfile(options.routingProfile);
+
   if (normalizeMode(options.mode) === "off") {
     return disabled("mode-off");
   }
@@ -146,8 +214,8 @@ export function resolveAgentFastResponseRouting(
   if (options.imagesCount > 0) {
     return disabled("image-input");
   }
-  if (!isLightweightFirstTurnText(options.sourceText)) {
-    return disabled("not-lightweight-text");
+  if (!isPlainFirstTurnTextCandidate(options.sourceText)) {
+    return disabled("not-plain-first-turn-text");
   }
   if (
     options.hasExplicitProviderOverride ||
@@ -182,11 +250,16 @@ export function resolveAgentFastResponseRouting(
 
   return {
     enabled: true,
-    reason: "first-turn-short-prompt",
-    label: "快速响应",
+    reason: "first-turn-plain-text",
+    label: profile.label,
+    profileId: profile.id,
+    reasoningEffort: profile.reasoningEffort,
+    resolver: profile.resolver,
+    routingChanged: profile.routingChanged,
     searchMode,
-    serviceModelSlot: FAST_RESPONSE_SERVICE_MODEL_SLOT,
-    routingSlot: FAST_RESPONSE_ROUTING_SLOT,
+    serviceModelSlot: profile.serviceModelSlot,
+    routingSlot: profile.routingSlot,
+    runtimeStatusPresentation: profile.runtimeStatusPresentation,
   };
 }
 
@@ -197,16 +270,21 @@ export function buildAgentFastResponseMetadata(
     return undefined;
   }
 
+  const profile = DEFAULT_AGENT_FAST_RESPONSE_ROUTING_PROFILE;
   return {
-    mode: "auto",
-    label: decision.label || "快速响应",
+    mode: profile.metadataMode,
+    label: decision.label || profile.label,
+    profile_id: decision.profileId || profile.id,
+    profileId: decision.profileId || profile.id,
     reason: decision.reason,
-    service_model_slot:
-      decision.serviceModelSlot || FAST_RESPONSE_SERVICE_MODEL_SLOT,
-    routing_slot: decision.routingSlot || FAST_RESPONSE_ROUTING_SLOT,
-    routing_changed: false,
-    resolver: "backend_service_model",
-    runtime_status_presentation: "transient",
+    service_model_slot: decision.serviceModelSlot || profile.serviceModelSlot,
+    routing_slot: decision.routingSlot || profile.routingSlot,
+    routing_changed: decision.routingChanged ?? profile.routingChanged,
+    resolver: decision.resolver || profile.resolver,
+    runtime_status_presentation:
+      decision.runtimeStatusPresentation || profile.runtimeStatusPresentation,
+    model_reasoning_effort: decision.reasoningEffort || profile.reasoningEffort,
+    modelReasoningEffort: decision.reasoningEffort || profile.reasoningEffort,
   };
 }
 
@@ -230,28 +308,4 @@ export function resolveAgentRuntimeStatusPresentation(
     fastResponseRouting.runtime_status_presentation ??
       fastResponseRouting.runtimeStatusPresentation,
   );
-}
-
-export function buildAgentFastResponseSystemPrompt(
-  now = new Date(),
-  options: {
-    searchMode?: AgentRuntimeWebSearchMode;
-  } = {},
-): string {
-  const date = new Intl.DateTimeFormat("zh-CN", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  }).format(now);
-  const searchRule =
-    options.searchMode === "allowed"
-      ? "联网搜索只是候选能力；需要实时或外部证据时再用工具，否则直接回答。"
-      : "不主动联网、不调用工具、不创建文件；证据不足时用一句话说明必要假设。";
-
-  return `你是 Lime 的快速响应助手。当前日期：${date}。
-本回合是轻量首轮普通对话，请直接回答用户。
-规则：
-- 严格遵守用户要求的字数、格式和语言；如果用户要求只回答一个字，就只输出一个字。
-- 不输出思维链、推理过程、标题、前后缀或额外寒暄。
-- ${searchRule}`;
 }

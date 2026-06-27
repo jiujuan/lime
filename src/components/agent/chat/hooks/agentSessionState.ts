@@ -271,6 +271,7 @@ export function shouldSkipAlreadyHydratedSession(options: {
   currentTurnId: string | null;
   messagesCount: number;
   queuedTurnsCount: number;
+  threadReadStatus?: string | null;
   threadItemsCount: number;
   threadTurnsCount: number;
   selectedTopic?: Pick<Topic, "messagesCount" | "status"> | null;
@@ -287,7 +288,14 @@ export function shouldSkipAlreadyHydratedSession(options: {
       threadItemsCount: options.threadItemsCount,
       threadTurnsCount: options.threadTurnsCount,
     });
-  if (hasLocalSessionContent) {
+  const normalizedThreadReadStatus = (options.threadReadStatus || "")
+    .trim()
+    .toLowerCase();
+  const hasRuntimeReadModelActivity =
+    normalizedThreadReadStatus === "queued" ||
+    normalizedThreadReadStatus === "running" ||
+    normalizedThreadReadStatus === "waiting_request";
+  if (hasLocalSessionContent || hasRuntimeReadModelActivity) {
     return true;
   }
 
@@ -531,7 +539,9 @@ export function buildHydratedAgentSessionSnapshot(
         preferredTurns: visibleIncomingTurns,
         preferredItems: visibleIncomingItems,
       }),
-      queuedTurns: normalizeQueuedTurnSnapshots(detail.queued_turns),
+      queuedTurns: normalizeQueuedTurnSnapshots(
+        detail.queued_turns ?? detail.thread_read?.queued_turns,
+      ),
       threadRead: detail.thread_read ?? null,
       executionRuntime:
         shouldPreserveExecutionRuntimeOnMissingDetail && !nextExecutionRuntime

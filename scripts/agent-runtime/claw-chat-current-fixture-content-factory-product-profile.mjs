@@ -3,10 +3,13 @@ import {
   APP_SERVER_METHOD_ARTIFACT_READ,
   APP_SERVER_METHOD_SESSION_READ,
   APP_SERVER_METHOD_SESSION_START,
+  APP_SERVER_METHOD_SESSION_TURN_START,
   APP_SERVER_METHOD_SESSION_UPDATE,
   APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST,
   CONTENT_FACTORY_PRODUCT_PROFILE_ARTICLE_ARTIFACT_ID,
   CONTENT_FACTORY_PRODUCT_PROFILE_IMAGE_ARTIFACT_ID,
+  CONTENT_FACTORY_PRODUCT_PROFILE_REMOTE_REJECT_ERROR_CODE,
+  CONTENT_FACTORY_PRODUCT_PROFILE_REMOTE_REJECT_TURN_ID,
   CONTENT_FACTORY_PRODUCT_PROFILE_SESSION_ID,
   CONTENT_FACTORY_PRODUCT_PROFILE_SESSION_TITLE,
   CONTENT_FACTORY_PRODUCT_PROFILE_THREAD_ID,
@@ -102,6 +105,8 @@ export async function runContentFactoryProductProfileScenario({
     toggleTestId: "task-center-object-canvas-toggle",
     rootTestId: "workspace-product-profile-surface",
   });
+  const storyboardObjectSelection =
+    await selectContentFactoryStoryboardObject(page, options);
   const gui = await waitForContentFactoryProductProfileGui(page, options);
 
   const readModel = await invokeAppServerFromPage(
@@ -131,6 +136,12 @@ export async function runContentFactoryProductProfileScenario({
   const artifactReadSummary = summarizeContentFactoryArtifactRead(
     artifactRead.result,
   );
+  const remoteRuntimeRejection = await runRemotePluginRuntimeRejectionProbe({
+    page,
+    workspace,
+    options,
+    requestLog: appServerRequests,
+  });
 
   return sanitizeJson({
     contentFactoryProductProfileSessionCreation: sessionCreation,
@@ -138,6 +149,8 @@ export async function runContentFactoryProductProfileScenario({
     contentFactoryProductProfileRuntimeEventsAppend:
       summarizeRuntimeEventsAppend(runtimeEventsAppend.result),
     contentFactoryProductProfileWorkerTurnStart: workerTurnStart,
+    contentFactoryProductProfileRemoteRuntimeRejection:
+      remoteRuntimeRejection,
     contentFactoryProductProfileActionResultRuntimeEventsAppend:
       summarizeRuntimeEventsAppend(actionResultRuntimeEventsAppend.result),
     contentFactoryProductProfileRightSurfaceRequest:
@@ -145,6 +158,8 @@ export async function runContentFactoryProductProfileScenario({
     guiContentFactoryProductProfileSessionVisible: guiSessionVisible,
     guiContentFactoryProductProfileSessionOpened: guiSessionOpened,
     contentFactoryProductProfileRightSurface: rightSurface,
+    contentFactoryProductProfileStoryboardObjectSelection:
+      storyboardObjectSelection,
     contentFactoryProductProfileGui: gui,
     contentFactoryProductProfileReadModel: readModelSummary,
     contentFactoryProductProfileArtifactRead: artifactReadSummary,
@@ -405,6 +420,12 @@ async function waitForContentFactoryProductProfileGui(page, options) {
       const root = document.querySelector(
         '[data-testid="workspace-product-profile-surface"]',
       );
+      const rendererHost = document.querySelector(
+        '[data-testid="workspace-product-profile-app-declared-renderer"]',
+      );
+      const rendererExecutableHost = rendererHost?.querySelector(
+        "iframe, webview",
+      );
       const toggle = document.querySelector(
         '[data-testid="task-center-object-canvas-toggle"]',
       );
@@ -425,6 +446,25 @@ async function waitForContentFactoryProductProfileGui(page, options) {
         hasRegeneratedImageSummary: bodyText.includes("已重新生成 2 张候选图"),
         hasRegeneratedImagePrompt:
           bodyText.includes("厨房台面主图，明亮自然光"),
+        rendererHost: {
+          visible: isVisible(rendererHost),
+          pluginVisible: bodyText.includes("content-factory-app"),
+          rendererKindVisible: bodyText.includes("app_declared"),
+          executionModeVisible: bodyText.includes("host_placeholder"),
+          rendererExecutionModelVisible: bodyText.includes(
+            "host_placeholder_only",
+          ),
+          entryLoadPolicyVisible: bodyText.includes("not_loaded"),
+          executableHostAbsent: !rendererExecutableHost,
+          reasonVisible: bodyText.includes(
+            "app_declared_renderer_placeholder_only",
+          ),
+          allowedOutputVisible: bodyText.includes(
+            "content_factory.workspace_patch",
+          ),
+          entryVisible: bodyText.includes("./renderer/storyboard.tsx"),
+          actionVisible: bodyText.includes("open_storyboard"),
+        },
         bodyTextSample: bodyText.slice(0, 2000),
       };
 
@@ -450,7 +490,10 @@ async function waitForContentFactoryProductProfileGui(page, options) {
       snapshot.hasImageSetTitle &&
       snapshot.hasStoryboardTitle &&
       snapshot.hasChecklistTitle &&
-      snapshot.hasWorkerEvidenceTitle
+      snapshot.hasWorkerEvidenceTitle &&
+      snapshot.rendererHost?.visible &&
+      snapshot.rendererHost?.executionModeVisible &&
+      snapshot.rendererHost?.reasonVisible
     ) {
       return snapshot;
     }
@@ -459,6 +502,187 @@ async function waitForContentFactoryProductProfileGui(page, options) {
   throw new Error(
     `内容工厂 Product Profile GUI 未就绪: ${JSON.stringify(
       sanitizeJson(lastSnapshot),
+    )}`,
+  );
+}
+
+async function selectContentFactoryStoryboardObject(page, options) {
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const snapshot = await page.evaluate(() => {
+      const button = document.querySelector(
+        '[data-testid="workspace-product-profile-object-videoStoryboard"]',
+      );
+      const visible = isVisible(button);
+      if (visible) {
+        button.click();
+      }
+      return {
+        visible,
+        text: button?.textContent ?? "",
+      };
+
+      function isVisible(node) {
+        const rect = node?.getBoundingClientRect();
+        const style = node ? window.getComputedStyle(node) : null;
+        return Boolean(
+          node &&
+          rect &&
+          rect.width > 8 &&
+          rect.height > 8 &&
+          style?.display !== "none" &&
+          style?.visibility !== "hidden",
+        );
+      }
+    });
+    lastSnapshot = snapshot;
+    if (snapshot?.visible) {
+      return sanitizeJson({
+        selected: true,
+        objectKind: "videoStoryboard",
+        text: snapshot.text,
+      });
+    }
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `内容工厂 Product Profile 分镜对象不可选: ${JSON.stringify(
+      sanitizeJson(lastSnapshot),
+    )}`,
+  );
+}
+
+async function runRemotePluginRuntimeRejectionProbe({
+  page,
+  workspace,
+  options,
+  requestLog,
+}) {
+  const response = await invokeAppServerFromPage(
+    page,
+    APP_SERVER_METHOD_SESSION_TURN_START,
+    {
+      sessionId: CONTENT_FACTORY_PRODUCT_PROFILE_SESSION_ID,
+      turnId: CONTENT_FACTORY_PRODUCT_PROFILE_REMOTE_REJECT_TURN_ID,
+      input: {
+        text: "尝试运行未授权的远端插件 Product Profile action。",
+      },
+      runtimeOptions: {
+        metadata: {
+          agent_app: {
+            source: "right_surface_product_profile",
+            app_id: "creator-pack",
+            workspace_id: workspace.workspaceId,
+            product_profile_action: {
+              key: "remote_regenerate",
+              intent: "regenerate",
+              risk: "write",
+              task_kind: "creator.generate",
+              output_artifact_kind: "creator.workspace_patch",
+              prompt: "Regenerate remote creator workspace.",
+              object: {
+                app_id: "creator-pack",
+                kind: "creatorCanvas",
+                id: "creator-canvas-1",
+                session_id: CONTENT_FACTORY_PRODUCT_PROFILE_SESSION_ID,
+                artifact_ids: ["artifact-remote-creator-1"],
+              },
+            },
+          },
+          right_surface: {
+            surface_kind: "productProfile",
+            source: "product_workspace",
+            action_key: "remote_regenerate",
+          },
+        },
+      },
+      queueIfBusy: false,
+      skipPreSubmitResume: true,
+    },
+    requestLog,
+  );
+
+  const events = response.messages
+    .filter((message) => message?.method === "agentSession/event")
+    .map((message) => message?.params?.event)
+    .filter(Boolean);
+  const payloads = events.map((event) => event?.payload ?? {});
+  const runtimeErrorPayload =
+    payloads.find(
+      (payload) =>
+        readString(payload?.errorCode, payload?.error_code) ===
+        CONTENT_FACTORY_PRODUCT_PROFILE_REMOTE_REJECT_ERROR_CODE,
+    ) ?? {};
+  const turn =
+    response.result?.turn && typeof response.result.turn === "object"
+      ? response.result.turn
+      : {};
+  const readModelRejection = await waitForRemotePluginRuntimeRejectionReadModel(
+    page,
+    options,
+    requestLog,
+  );
+
+  return sanitizeJson({
+    method: APP_SERVER_METHOD_SESSION_TURN_START,
+    turnId: turn.turnId ?? turn.turn_id ?? null,
+    turnStatus: turn.status ?? null,
+    eventTypes: events.map((event) => readString(event?.type)).filter(Boolean),
+    errorCode: readString(
+      runtimeErrorPayload.errorCode,
+      runtimeErrorPayload.error_code,
+    ) || readModelRejection.errorCode,
+    failureCategory: readString(
+      runtimeErrorPayload.failureCategory,
+      runtimeErrorPayload.failure_category,
+    ) || readModelRejection.failureCategory,
+    appId:
+      readString(runtimeErrorPayload.appId, runtimeErrorPayload.app_id) ||
+      readModelRejection.appId,
+    outputArtifactKind: readString(
+      runtimeErrorPayload.outputArtifactKind,
+      runtimeErrorPayload.output_artifact_kind,
+    ) || readModelRejection.outputArtifactKind,
+    readModel: readModelRejection,
+    hasRuntimeError: events.some((event) => event?.type === "runtime.error"),
+    hasTurnFailed: events.some((event) => event?.type === "turn.failed"),
+  });
+}
+
+async function waitForRemotePluginRuntimeRejectionReadModel(
+  page,
+  options,
+  requestLog,
+) {
+  const startedAt = Date.now();
+  let lastSummary = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const readModel = await invokeAppServerFromPage(
+      page,
+      APP_SERVER_METHOD_SESSION_READ,
+      {
+        sessionId: CONTENT_FACTORY_PRODUCT_PROFILE_SESSION_ID,
+        historyLimit: 20,
+      },
+      requestLog,
+    );
+    const summary = summarizeRemotePluginRuntimeRejectionReadModel(
+      readModel.result,
+    );
+    lastSummary = summary;
+    if (
+      summary.errorCode ===
+        CONTENT_FACTORY_PRODUCT_PROFILE_REMOTE_REJECT_ERROR_CODE &&
+      summary.status === "failed"
+    ) {
+      return summary;
+    }
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `远端插件运行拒绝证据未进入 read model: ${JSON.stringify(
+      sanitizeJson(lastSummary),
     )}`,
   );
 }
@@ -531,7 +755,10 @@ function summarizeContentFactoryProductProfileReadModel(result) {
   const checklistProductProfile =
     asRecord(checklistMetadata.productProfile) ?? {};
   const failedEvidence = workerEvidence.find(
-    (evidence) => readString(evidence?.status) === "failed",
+    (evidence) =>
+      readString(evidence?.status) === "failed" &&
+      readString(evidence?.errorCode, evidence?.error_code) ===
+        "worker_invalid_json_output",
   );
   const completedActionEvidence = workerEvidence.find(
     (evidence) =>
@@ -661,6 +888,19 @@ function summarizeContentFactoryProductProfileReadModel(result) {
             workerDogfoodEvidence.outputObjectCount,
             workerDogfoodEvidence.output_object_count,
           ),
+          errorCode: readString(
+            workerDogfoodEvidence.errorCode,
+            workerDogfoodEvidence.error_code,
+          ),
+          errorMessage: readString(
+            workerDogfoodEvidence.errorMessage,
+            workerDogfoodEvidence.error_message,
+            workerDogfoodEvidence.message,
+          ),
+          failureCategory: readString(
+            workerDogfoodEvidence.failureCategory,
+            workerDogfoodEvidence.failure_category,
+          ),
         }
       : null,
     artifactCount: artifacts.length,
@@ -729,6 +969,51 @@ function summarizeContentFactoryProductProfileReadModel(result) {
           ),
         }
       : null,
+  });
+}
+
+function summarizeRemotePluginRuntimeRejectionReadModel(result) {
+  const detail = asRecord(result?.detail) ?? asRecord(result);
+  const threadRead =
+    asRecord(detail?.threadRead) ?? asRecord(detail?.thread_read) ?? {};
+  const productWorkspace =
+    asRecord(threadRead.productWorkspace) ??
+    asRecord(threadRead.product_workspace) ??
+    asRecord(detail?.productWorkspace) ??
+    asRecord(detail?.product_workspace) ??
+    {};
+  const workerEvidence = readArray(
+    productWorkspace.workerEvidence,
+    productWorkspace.worker_evidence,
+  );
+  const rejectionEvidence = workerEvidence.find(
+    (evidence) =>
+      readString(evidence?.errorCode, evidence?.error_code) ===
+      CONTENT_FACTORY_PRODUCT_PROFILE_REMOTE_REJECT_ERROR_CODE,
+  );
+  return sanitizeJson({
+    status: readString(rejectionEvidence?.status),
+    appId: readString(rejectionEvidence?.appId, rejectionEvidence?.app_id),
+    taskId: readString(
+      rejectionEvidence?.taskId,
+      rejectionEvidence?.task_id,
+    ),
+    turnId: readString(
+      rejectionEvidence?.turnId,
+      rejectionEvidence?.turn_id,
+    ),
+    errorCode: readString(
+      rejectionEvidence?.errorCode,
+      rejectionEvidence?.error_code,
+    ),
+    failureCategory: readString(
+      rejectionEvidence?.failureCategory,
+      rejectionEvidence?.failure_category,
+    ),
+    outputArtifactKind: readString(
+      rejectionEvidence?.outputArtifactKind,
+      rejectionEvidence?.output_artifact_kind,
+    ),
   });
 }
 

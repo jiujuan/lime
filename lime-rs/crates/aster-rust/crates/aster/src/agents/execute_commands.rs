@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 use anyhow::{anyhow, Result};
@@ -40,23 +41,28 @@ pub fn list_commands() -> &'static [CommandDef] {
     COMMANDS
 }
 
+fn normalize_command_text(message_text: &str) -> Cow<'_, str> {
+    let trimmed = message_text.trim();
+    if COMPACT_TRIGGERS.contains(&trimmed) {
+        Cow::Borrowed(COMPACT_TRIGGERS[0])
+    } else {
+        Cow::Borrowed(trimmed)
+    }
+}
+
 impl Agent {
     pub async fn execute_command(
         &self,
         message_text: &str,
         session_id: &str,
     ) -> Result<Option<Message>> {
-        let mut trimmed = message_text.trim().to_string();
-
-        if COMPACT_TRIGGERS.contains(&trimmed.as_str()) {
-            trimmed = COMPACT_TRIGGERS[0].to_string();
-        }
+        let trimmed = normalize_command_text(message_text);
 
         if !trimmed.starts_with('/') {
             return Ok(None);
         }
 
-        let command_str = trimmed.strip_prefix('/').unwrap_or(&trimmed);
+        let command_str = trimmed.strip_prefix('/').unwrap_or(trimmed.as_ref());
         let (command, params_str) = command_str
             .split_once(' ')
             .map(|(cmd, p)| (cmd, p.trim()))
@@ -403,5 +409,26 @@ impl Agent {
             .join("\n\n");
 
         Ok(Some(Message::user().with_text(prompt)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_command_text_keeps_plain_text_borrowed() {
+        let normalized = normalize_command_text("  普通 direct answer 问题  ");
+
+        assert!(matches!(normalized, Cow::Borrowed(_)));
+        assert_eq!(normalized.as_ref(), "普通 direct answer 问题");
+    }
+
+    #[test]
+    fn normalize_command_text_maps_compat_compact_trigger() {
+        let normalized = normalize_command_text("Please compact this conversation");
+
+        assert!(matches!(normalized, Cow::Borrowed(_)));
+        assert_eq!(normalized.as_ref(), "/compact");
     }
 }

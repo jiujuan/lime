@@ -13,6 +13,7 @@ pub mod mcp_client;
 pub mod moim;
 pub mod platform_tools;
 pub mod prompt_manager;
+mod provider_trace;
 mod reply_parts;
 pub mod retry;
 mod schedule_tool;
@@ -83,13 +84,15 @@ pub mod error_handling;
 // Core Agent Exports
 // ============================================================================
 
-pub use agent::{Agent, AgentEvent};
+pub use agent::{Agent, AgentEvent, NativeToolExecutionHook, NativeToolExecutionRequest};
 pub use execute_commands::COMPACT_TRIGGERS;
 pub use extension::ExtensionConfig;
 pub use extension_manager::ExtensionManager;
 pub use identity::AgentIdentity;
 pub use prompt_manager::PromptManager;
+pub use provider_trace::{ProviderTraceEvent, ProviderTraceStage};
 pub use subagent_task_config::TaskConfig;
+pub use tool_execution::ToolCallResult;
 pub use types::{
     FrontendTool, PermissionRequestHookContext, PermissionRequestHookDecision,
     PermissionRequestHookHandler, RetryConfig, SessionConfig, SuccessCheck,

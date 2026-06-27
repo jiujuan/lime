@@ -24,10 +24,7 @@ pub(super) fn apply_workspace_skill_runtime_enable(
     request: &ExecutionRequest,
     session_id: &str,
 ) -> SkillRuntimeEnableGuard {
-    let guard = SkillRuntimeEnableGuard {
-        session_id: session_id.to_string(),
-    };
-    clear_skill_tool_session_access(session_id);
+    let guard = clear_workspace_skill_runtime_enable(session_id);
 
     let sources = workspace_skill_runtime_enable_sources(request);
     if !sources.is_empty() {
@@ -39,6 +36,14 @@ pub(super) fn apply_workspace_skill_runtime_enable(
         }
     }
 
+    guard
+}
+
+pub(super) fn clear_workspace_skill_runtime_enable(session_id: &str) -> SkillRuntimeEnableGuard {
+    let guard = SkillRuntimeEnableGuard {
+        session_id: session_id.to_string(),
+    };
+    clear_skill_tool_session_access(session_id);
     guard
 }
 

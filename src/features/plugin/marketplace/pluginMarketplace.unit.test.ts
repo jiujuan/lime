@@ -205,6 +205,69 @@ describe("Plugin marketplace projection", () => {
     ]);
   });
 
+  it("应从 manifestSummary.artifactRenderers 投影 renderer 输出 contract", () => {
+    const contract = buildPluginContractFromMarketplaceItem(
+      marketplaceItem({
+        sourceKind: "plugin_catalog",
+        appId: undefined,
+        manifestSummary: {
+          artifactRenderers: [
+            {
+              artifactType: "creator.article_draft",
+              surfaceKind: "documentCanvas",
+              paneKind: "editor",
+              rendererKind: "app_declared",
+              outputArtifactKind: "creator.workspace_patch",
+              actions: [
+                {
+                  key: "regenerate",
+                  risk: "write",
+                  taskKind: "creator.generate",
+                },
+              ],
+            },
+          ],
+          historyRestore: {
+            defaultSurface: "selectedObject",
+            restoreSelection: true,
+            restoreLayout: true,
+            fallback: "artifactPreview",
+          },
+        },
+      }),
+    );
+
+    expect(contract.artifactRenderers).toEqual([
+      expect.objectContaining({
+        artifactType: "creator.article_draft",
+        surfaceKind: "documentCanvas",
+        paneKind: "editor",
+        rendererKind: "app_declared",
+        outputArtifactKind: "creator.workspace_patch",
+        actions: [
+          {
+            key: "regenerate",
+            intent: undefined,
+            risk: "write",
+            taskKind: "creator.generate",
+            title: undefined,
+          },
+        ],
+      }),
+    ]);
+    expect(contract.rightSurface).toMatchObject({
+      productWorkspace: {
+        enabled: true,
+        primaryObjectKind: "creator.article_draft",
+      },
+      historyRestore: {
+        enabled: true,
+        restoreSelection: true,
+        restoreLayout: true,
+      },
+    });
+  });
+
   it("应把 available marketplace item 投影为可安装，安装后才可激活", () => {
     const item = marketplaceItem();
     const inputs = projectPluginMarketplaceRegistryInputs(marketplace([item]));

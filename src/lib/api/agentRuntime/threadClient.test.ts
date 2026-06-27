@@ -1188,16 +1188,18 @@ describe("agentRuntime threadClient", () => {
     });
 
     expect(listener).toHaveBeenCalledWith({
-      payload: {
+      payload: expect.objectContaining({
         type: "text_delta",
         text: "第一段",
         event_id: "evt-1",
+        renderer_event_received_at: expect.any(Number),
         sequence: 1,
+        server_event_emitted_at: Date.parse("2026-06-06T00:00:00.000Z"),
         session_id: "session-1",
         thread_id: "thread-1",
         turn_id: "turn-1",
         timestamp: "2026-06-06T00:00:00.000Z",
-      },
+      }),
     });
     unlisten();
   });
@@ -1380,9 +1382,9 @@ describe("agentRuntime threadClient", () => {
       event_name: "aster_stream_ordered",
     });
 
-    expect(listener.mock.calls.map(([event]) => event.payload.event_id)).toEqual(
-      ["evt-ordered-1", "evt-ordered-2", "evt-ordered-3"],
-    );
+    expect(
+      listener.mock.calls.map(([event]) => event.payload.event_id),
+    ).toEqual(["evt-ordered-1", "evt-ordered-2", "evt-ordered-3"]);
     unlisten();
   });
 
@@ -1845,6 +1847,9 @@ describe("agentRuntime threadClient", () => {
 
     expect(payload).toMatchObject({
       type: "runtime_status",
+      event_id: "evt-retrying",
+      renderer_event_received_at: expect.any(Number),
+      server_event_emitted_at: Date.parse("2026-06-06T00:00:00.000Z"),
       status: {
         phase: "retrying",
         title: "正在恢复模型输出",
@@ -2197,7 +2202,9 @@ describe("agentRuntime threadClient", () => {
       const appServerClient = appServerClientMock();
       let resolveStartTurn:
         | ((
-            value: Awaited<ReturnType<AgentRuntimeAppServerClient["startTurn"]>>,
+            value: Awaited<
+              ReturnType<AgentRuntimeAppServerClient["startTurn"]>
+            >,
           ) => void)
         | undefined;
       vi.mocked(appServerClient.startTurn).mockReturnValueOnce(
@@ -3153,6 +3160,50 @@ describe("agentRuntime threadClient", () => {
         method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
         params: {
           event: {
+            eventId: "evt-provider-first-text",
+            sequence: 10,
+            sessionId: "session-1",
+            turnId: "turn-1",
+            type: "provider.first_text_delta.received",
+            timestamp: "2026-06-06T00:00:08.000Z",
+            payload: {
+              provider: "openai",
+              model: "gpt-4.1",
+              attempt: 1,
+              elapsed_ms: 1500,
+              text_chars: 4,
+              status: "running",
+              provider_request_id: "req-provider-1",
+              provider_request_id_header: "x-request-id",
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      type: "provider_trace",
+      runtime_event_type: "provider.first_text_delta.received",
+      stage: "first_text_delta_received",
+      provider: "openai",
+      model: "gpt-4.1",
+      attempt: 1,
+      elapsed_ms: 1500,
+      text_chars: 4,
+      status: "running",
+      provider_request_id: "req-provider-1",
+      provider_request_id_header: "x-request-id",
+      event_id: "evt-provider-first-text",
+      renderer_event_received_at: expect.any(Number),
+      sequence: 10,
+      server_event_emitted_at: Date.parse("2026-06-06T00:00:08.000Z"),
+      session_id: "session-1",
+      turn_id: "turn-1",
+    });
+
+    expect(
+      projectAppServerAgentEventPayload({
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
             eventId: "evt-plan-final",
             sequence: 10,
             sessionId: "session-1",
@@ -3438,12 +3489,14 @@ describe("agentRuntime threadClient", () => {
           },
         },
       }),
-    ).toEqual({
+    ).toMatchObject({
       type: "artifact_snapshot",
       artifactId: "artifact-1",
       filePath: ".lime/artifacts/report.md",
       event_id: "evt-artifact",
+      renderer_event_received_at: expect.any(Number),
       sequence: 3,
+      server_event_emitted_at: Date.parse("2026-06-06T00:00:02.000Z"),
       session_id: "session-1",
       thread_id: undefined,
       turn_id: "turn-1",
@@ -3697,8 +3750,7 @@ describe("agentRuntime threadClient", () => {
               start_line: 2,
               end_line: 8,
             },
-            rawArgs:
-              '{"path":"src/App.tsx","start_line":2,"end_line":8}',
+            rawArgs: '{"path":"src/App.tsx","start_line":2,"end_line":8}',
             source: "runtime_tool_start",
           },
         },
@@ -3866,7 +3918,8 @@ describe("agentRuntime threadClient", () => {
           timestamp: "2026-06-06T00:00:12.000Z",
           payload: {
             commandId: "command-1",
-            canonicalCommand: "npm test -- src/lib/api/agentRuntime/threadClient.test.ts",
+            canonicalCommand:
+              "npm test -- src/lib/api/agentRuntime/threadClient.test.ts",
             commandSummary: "npm test",
             cwd: "/repo",
           },
@@ -3950,7 +4003,8 @@ describe("agentRuntime threadClient", () => {
           timestamp: "2026-06-06T00:00:13.000Z",
           payload: {
             commandId: "command-1",
-            canonicalCommand: "npm test -- src/lib/api/agentRuntime/threadClient.test.ts",
+            canonicalCommand:
+              "npm test -- src/lib/api/agentRuntime/threadClient.test.ts",
             cwd: "/repo",
             output: "PASS threadClient.test.ts",
             exitCode: 0,

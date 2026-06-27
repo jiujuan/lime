@@ -473,6 +473,68 @@ describe("buildCrashDiagnosticPayload", () => {
     expect(text).toContain("MCP 服务器数 / 运行中数：3 / 1");
   });
 
+  it("应附加 Agent UI 性能摘要且不导出 raw entries", () => {
+    const diagnostic = buildCrashDiagnosticPayload({
+      crashConfig: payload.crash_reporting,
+      logs: payload.frontend_crash_logs,
+      appVersion: payload.app_version,
+      platform: payload.platform,
+      userAgent: payload.user_agent,
+      agentUiPerformanceSnapshot: {
+        entries: [
+          {
+            id: 1,
+            phase: "agentStream.providerTrace",
+            at: 10,
+            wallTime: 1_700_000_000_000,
+            sessionId: "session-a",
+            workspaceId: "workspace-a",
+            source: "runtime",
+            metrics: {
+              providerWaitMs: 1200,
+              raw_provider_payload: "secret-provider-payload",
+            },
+          },
+        ],
+        sessions: [
+          {
+            sessionId: "session-a",
+            workspaceId: "workspace-a",
+            providerWaitMs: 1200,
+            serverToRendererFirstTextDeltaMs: 18,
+            rendererApplyFirstTextDeltaMs: 4,
+            clientLocalOutputMs: 80,
+            phases: [
+              "agentStream.providerTrace",
+              "agentStream.firstTextDelta",
+              "agentStream.firstTextPaint",
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(diagnostic.agent_ui_performance_summary).toMatchObject({
+      entry_count: 1,
+      session_count: 1,
+      sessions: [
+        {
+          sessionId: "session-a",
+          workspaceId: "workspace-a",
+          metrics: {
+            providerWaitMs: 1200,
+            serverToRendererFirstTextDeltaMs: 18,
+            rendererApplyFirstTextDeltaMs: 4,
+            clientLocalOutputMs: 80,
+          },
+        },
+      ],
+    });
+    expect(
+      JSON.stringify(diagnostic.agent_ui_performance_summary),
+    ).not.toContain("secret-provider-payload");
+  });
+
   it("无可用凭证时应提示初始化不足", () => {
     const diagnostic = buildCrashDiagnosticPayload({
       crashConfig: payload.crash_reporting,

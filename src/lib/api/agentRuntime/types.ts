@@ -116,6 +116,7 @@ export interface AsterSessionInfo {
   execution_strategy?: AsterExecutionStrategy;
   workspace_id?: string;
   working_dir?: string;
+  session_business_object_ref_metadata?: Record<string, unknown>;
 }
 
 export interface AgentRuntimeListSessionsOptions {

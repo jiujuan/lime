@@ -22,6 +22,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useComponentDebug } from "@/contexts/ComponentDebugContext";
 import { getConfig, saveConfig, type Config } from "@/lib/api/appConfig";
+import { summarizeAgentUiPerformanceMetrics } from "@/lib/agentUiPerformanceMetrics";
 import { getLogs, getPersistedLogsTail } from "@/lib/api/logs";
 import {
   getLogStorageDiagnostics,
@@ -43,6 +44,7 @@ import {
 } from "@/lib/crashDiagnostic";
 import { cn } from "@/lib/utils";
 import {
+  isClawTraceEnabled,
   isWorkspaceHarnessEnabled,
   normalizeDeveloperConfig,
 } from "@/lib/developerFeatures";
@@ -50,6 +52,7 @@ import {
   DANGER_BUTTON_CLASS_NAME,
   SECONDARY_BUTTON_CLASS_NAME,
 } from "./shared";
+import { ClawTraceSettingsPanel } from "./ClawTraceSettingsPanel";
 
 const ClipboardPermissionGuideCard = lazy(() =>
   import("../shared/ClipboardPermissionGuideCard").then((module) => ({
@@ -275,6 +278,7 @@ export function DeveloperSettings({
       crashConfig: normalizeCrashReportingConfig(config.crash_reporting),
       logs,
       persistedLogTail: persistedLogs,
+      agentUiPerformanceSnapshot: summarizeAgentUiPerformanceMetrics(),
       collectionNotes: runtimeSnapshotResult.collectionNotes,
       generalWorkbenchDocumentState,
       serverDiagnostics,
@@ -469,6 +473,7 @@ export function DeveloperSettings({
   );
 
   const workspaceHarnessEnabled = isWorkspaceHarnessEnabled(appConfig);
+  const clawTraceEnabled = isClawTraceEnabled(appConfig);
 
   return (
     <div className={cn("space-y-5", embedded ? "pb-0" : "pb-8")}>
@@ -512,6 +517,11 @@ export function DeveloperSettings({
               )}
             />
             <StatusPill
+              active={clawTraceEnabled}
+              activeLabel={t("settings.developer.status.clawTrace.on")}
+              inactiveLabel={t("settings.developer.status.clawTrace.off")}
+            />
+            <StatusPill
               active={enabled}
               activeLabel={t("settings.developer.status.componentDebug.on")}
               inactiveLabel={t("settings.developer.status.componentDebug.off")}
@@ -551,6 +561,14 @@ export function DeveloperSettings({
                 )}
                 onCheckedChange={(checked) => {
                   void handleWorkspaceHarnessEnabledChange(checked);
+                }}
+              />
+              <ClawTraceSettingsPanel
+                appConfig={appConfig}
+                onConfigSaved={setAppConfig}
+                onMessage={(nextMessage) => {
+                  setMessage(nextMessage);
+                  setTimeout(() => setMessage(null), 2500);
                 }}
               />
               <CompactSwitchRow

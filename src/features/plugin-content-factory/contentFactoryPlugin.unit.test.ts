@@ -55,6 +55,7 @@ describe("contentFactoryPlugin", () => {
           artifactType: "markdown_document",
           surfaceKind: "documentCanvas",
           rendererKind: "host_builtin",
+          outputArtifactKind: "content_factory.workspace_patch",
         }),
         expect.objectContaining({
           artifactType: "image_set",

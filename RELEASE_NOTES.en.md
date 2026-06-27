@@ -1,50 +1,52 @@
-## Lime v1.80.0
+## Lime v1.81.0
 
 <sub>The Simplified Chinese release notes are the primary version. This English page is a companion for international readers.</sub>
 
 ### New Features
 
-- Plugins are now the top-level Lime product concept. New plugin roadmap, PRD, architecture, interface contracts, history-restore rules, and prototypes define plugins as the install / authorization / distribution root, with workspace apps as a plugin capability.
-- Added the first Plugin Center and Marketplace frontend path: plugin lists, detail panels, registration and skill panels, installed-state merging, capability categories, view-model projection, and navigation / app-page entry points.
-- Claw composer now supports explicit plugin activation with plugin chips / selectors, `@plugin` input, plugin activation context, send-time metadata merging, and Right Surface opening rules. Normal chats no longer rely on semantic plugin guessing.
-- Content Factory moved onto the plugin dogfood path with plugin contracts, worker runtime samples, delivery plans, workspace patches, media-cache declarations, fixture packages, and browser intent launch wiring.
-- Agent App task worker runtime was expanded so App Server can resolve installed runtime packages, execute worker turns, project product Profile / artifact documents, and keep traceable evidence for Content Factory worker output.
-- Browser Runtime high-risk actions now use a confirmation / human-takeover loop. Mutating actions such as `click`, `type`, `submit`, `upload`, `download`, and `javascript` fail closed in the CDP executor and emit `action.required`, permission facts, and Evidence Pack action-index entries.
-- ArtifactDocument persistence now carries cross-session scope, save evidence, automatic preview synchronization, and file-level archive manifests, so history restore can continue saving to the same App Server session / artifact ref.
+- Claw Trace moved onto the current path with renderer / App Server / provider checkpoints, W3C trace-context carriers, a summary-only raw trace JSONL store, Trace list / read / export diagnostics APIs, and Developer & Labs controls for enabling Trace, copying lists, reading the latest Trace, and exporting it.
+- Support bundles can now explicitly attach a single summary-only Trace export. Default support bundles still include only trimmed summaries and do not write prompt text, provider payloads, assistant deltas, or raw sensitive content.
+- App Server JSON-RPC and `@limecloud/app-server-client` now include `diagnostics/trace/list`, `diagnostics/trace/read`, `diagnostics/trace/export`, support-bundle trace selection params, and the matching schemas / generated types / client methods.
+- Plugin Marketplace productization continued with history-session candidate selection, refresh, exact session opening, runtime authorization contracts, renderer output contracts, history restore, and installed-state view-model improvements.
+- Content Factory / Product Profile Right Surface worker turns now support pane-action metadata, including action intent, risk, source artifacts, output artifact kind, and authorization fail-closed behavior.
+- Claw / Agent UI performance metrics can now connect provider wait, App Server emit, renderer receive, text apply, render flush, and first paint into one trace summary for first-token latency diagnosis.
+- execution process and MCP tool-log metadata now flow through the current event projection with process id, output sequence, stdin writability, and lifecycle phase.
 
 ### Fixes
 
-- Fixed ordinary tool process records being replaced by batch summaries. `Read`, `Ran`, Skill, MCP, and similar process steps now remain visible in tool-id order, while WebSearch / WebFetch keep their dedicated retrieval timeline.
-- Fixed installed Agent App intent lookup blocking normal sends. Failures or timeouts now skip intent matching without blocking `agentSession/turn/start`.
-- Fixed an Artifact store synchronization loop risk during streaming / Browser Assist by switching to artifact content signatures instead of message object identity.
-- Fixed stale embedded-browser `WebContentsView` cleanup after main-window refreshes, preventing old browser views from crossing into new renderer state.
-- Fixed scattered ArtifactDocument scope during history editing by standardizing `artifact/read`, preview sync, and save append on `artifactDocumentPersistence` metadata.
+- Fixed first-token latency attribution so provider/API wait and Lime local rendering/output phases are projected separately.
+- Fixed metadata-only MCP process lifecycle logs being rendered as visible JSON tool output; these events now keep structured metadata without polluting the transcript.
+- Fixed Plugin Marketplace history actions opening only a generic Agent view; the detail panel now opens the selected historical session candidate.
+- Fixed pane-action workers without a valid runtime contract being treated as ordinary worker runs; invalid requests now fail closed with a configuration failure.
+- Fixed invalid W3C `traceparent` values being eligible for remote-parent propagation. Invalid carriers now preserve Lime trace identity but are not inherited by OTEL spans.
 
 ### Improvements and Refactors
 
-- Split plugin work into testable modules for manifest contracts, marketplace registry, installed state, activation, history restore, Right Surface projection, Content Factory contracts, and browser intent launch.
-- Consolidated plugin activation, Agent App intent routing, and installed App cache refresh in `useWorkspaceSendActions` while keeping sends on the current App Server JSON-RPC / RuntimeCore path.
-- Added Browser Runtime `action_policy` and moved high-risk action gating into the Rust executor; App Server evidence now consumes structured action state.
-- Continued separating Agent Chat streaming rendering by content part, lifecycle, and provenance, with clear owners for ordinary tools, web retrieval, thinking, and final answer text.
-- Added a typed OEM cloud control-plane client and contract tests to keep the future remote plugin marketplace boundary explicit.
+- Split Trace storage into append-only events, summary projection, export zip, and support-bundle attachment modules while keeping diagnostics reads on the current App Server processor / local data-source path.
+- App Server request spans now initialize OTEL and handle remote parents, allowing `agentSession/turn/start` to record safe session / turn / trace attributes.
+- Expanded `packages/app-server-client` request and connection method tables across the current protocol surface to reduce manually missed client methods.
+- Continued separating Agent Chat streaming into trace metadata, text delta, render flush, and runtime metrics controllers instead of mixing state-machine, performance, and render side effects in one hook.
+- Split Product Profile / plugin Right Surface rendering into image cells, renderer-host models, pane actions, and renderer-output projections so UI code stays decoupled from worker contracts.
 
 ### Tests and Quality
 
-- Added and expanded tests for plugin manifests, marketplace view models, installed state, activation, history restore, Content Factory contracts, browser intent launch, and Right Surface projection.
-- Added and expanded App Server regressions for Agent App worker turns, runtime package resolution, product Profile artifact documents, worker failures, browser action evidence export, and read models.
-- Added and expanded Claw regressions for inputbar plugin controls, send routing, ArtifactDocument persistence, artifact preview sync, StreamingRenderer, InlineToolProcessStep, and Markdown display source handling.
-- Added and expanded Browser Runtime high-risk action fail-closed tests, Electron embedded-browser host tests, code artifact workbench fixtures, Claw current fixtures, and GUI evidence assertions.
-- Updated five-locale i18n resources for new visible copy in Plugin, Agent, Inputbar, Workspace, and Navigation surfaces.
-- Updated release version facts to `1.80.0` across the root app, Rust workspace, CLI npm package, App Server client package, Cargo lock, and the Aster sub-workspace lock.
+- Added and expanded Trace regressions across Rust and frontend code: trace store list/read/export, request trace spans, W3C carriers, Developer Claw Trace panel, trace timeline, and serverRuntime diagnostics APIs.
+- Added and expanded App Server protocol / client contract tests for diagnostics trace methods, support-bundle trace export selection, execution process drain output, and generated protocol types.
+- Added and expanded Claw streaming regressions for agent message content sync, runtime metrics controller, text delta controller, render flush controller, prepared send env, performance metrics, and history merge.
+- Added and expanded Plugin Marketplace productization tests for manifest contracts, runtime authorization, renderer output, history session selection, marketplace actions / loader / registry hook, and the Marketplace page.
+- Added a cross-repository plugin E2E evidence pack with a `plugin-productization-e2e` real Electron fixture summary covering current bridge usage, App Server JSON-RPC, local installed state, worker dogfood, Right Surface, artifact read, and remote-run fail-closed behavior.
+- Updated five-locale i18n resources for new visible copy in Trace, Developer settings, Plugin, Workspace, and Agent surfaces.
+- Updated release version facts to `1.81.0` across the root app, CLI npm package, App Server client package, Rust workspace, main Cargo lock, and the Aster sub-workspace lock. This repository currently has no `package-lock.json` / `pnpm-lock.yaml`, so no npm lockfile was added.
 
 ### Documentation
 
-- Added the `internal/roadmap/plugin/` documentation set for the plugin roadmap, including PRD, architecture, technical baseline, interface contracts, implementation plan, history restore, HTML prototype, and low-fidelity prototype.
-- Updated Agent App Host v3, Browser Runtime Right Surface, and Claw streaming rendering execution plans with v1.80.0 release-candidate validation evidence, remaining gaps, and exit criteria.
-- Updated the browser roadmap to define the current boundary for high-risk action confirmation / human takeover and Evidence Pack action indexing.
+- Added the `internal/roadmap/trace/` documentation set for the Trace PRD, architecture, diagrams, code map, and staged implementation plan.
+- Added `internal/exec-plans/claw-trace-system-implementation-plan.md`, tracking Claw Trace from skeleton work through provider phase, Developer UI, raw trace store, and OTEL exporter stages.
+- Added the plugin cross-repository E2E evidence pack and user / operations guide, documenting Marketplace consumption, installed-state reports, explicit activation, Right Surface behavior, history restore, and fail-closed boundaries.
+- Updated coding / plugin roadmaps and implementation plans with this round of Trace, plugin productization, Content Factory dogfood, and App Server current-path evidence.
 
 ### Other
 
-- This release continues converging the plugin workspace, Content Factory dogfood path, ArtifactDocument persistence, Browser Runtime safe actions, and Claw tool-process display onto the App Server JSON-RPC / RuntimeCore / Electron Desktop Host current path. Old plugin command families, semantic activation guessing, ordinary-tool batch summaries, and mock fallback are not sources for new capabilities.
+- This release continues converging Claw Trace, Plugin Marketplace, Content Factory pane actions, Product Profile Right Surface, execution process output, and diagnostic support bundles onto the App Server JSON-RPC / RuntimeCore / Electron Desktop Host current path. Old plugin command families, mock fallback, and parallel runtime entry points are not restored.
 
-**Full changes**: `v1.79.0` -> `v1.80.0`
+**Full changes**: `v1.80.0` -> `v1.81.0`

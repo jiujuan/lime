@@ -199,7 +199,7 @@ describe("AppSidebar navigation", () => {
     expect(container.textContent).not.toContain("生成");
     expect(container.textContent).toContain("专家");
     expect(container.textContent).toContain("Skills");
-    expect(container.textContent).toContain("Agent Apps");
+    expect(container.textContent).toContain("插件");
     expect(container.textContent).not.toContain("项目资料");
     expect(container.textContent).not.toContain("灵感");
     expect(container.textContent).toContain("设置");
@@ -225,7 +225,7 @@ describe("AppSidebar navigation", () => {
       "新建任务",
       "专家",
       "Skills",
-      "Agent Apps",
+      "插件",
     ]);
     expect(
       container.querySelector('[data-testid="app-sidebar-footer-nav"]'),

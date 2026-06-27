@@ -79,6 +79,7 @@ const {
   mockCanvasWorkbenchLayout,
   mockLaunchBrowserSession,
   mockBrowserExecuteAction,
+  mockExecuteBrowserSessionAction,
 } = vi.hoisted(() => ({
   mockUseDeveloperFeatureFlags: vi.fn(),
   mockUseAgentChatUnified: vi.fn(),
@@ -221,6 +222,7 @@ const {
   }),
   mockLaunchBrowserSession: vi.fn(),
   mockBrowserExecuteAction: vi.fn(),
+  mockExecuteBrowserSessionAction: vi.fn(),
 }));
 
 export function getIndexTestMocks() {
@@ -278,6 +280,7 @@ export function getIndexTestMocks() {
     mockCanvasWorkbenchLayout,
     mockLaunchBrowserSession,
     mockBrowserExecuteAction,
+    mockExecuteBrowserSessionAction,
   };
 }
 
@@ -639,9 +642,7 @@ vi.mock("./components/TaskCenterUtilityToolbar", () => ({
       data-harness-panel-visible={harnessPanelVisible ? "true" : "false"}
       data-harness-toggle-label={harnessToggleLabel || "Harness"}
       data-show-expert-info-toggle={showExpertInfoToggle ? "true" : "false"}
-      data-expert-info-panel-visible={
-        expertInfoPanelVisible ? "true" : "false"
-      }
+      data-expert-info-panel-visible={expertInfoPanelVisible ? "true" : "false"}
     >
       {showCanvasToggle ? (
         <button
@@ -884,6 +885,18 @@ vi.mock("@/lib/webview-api", async () => {
     ...actual,
     launchBrowserSession: mockLaunchBrowserSession,
     browserExecuteAction: mockBrowserExecuteAction,
+  };
+});
+
+vi.mock("@/lib/api/browserRuntime", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/lib/api/browserRuntime")>(
+      "@/lib/api/browserRuntime",
+    );
+
+  return {
+    ...actual,
+    executeBrowserSessionAction: mockExecuteBrowserSessionAction,
   };
 });
 
@@ -1458,6 +1471,16 @@ beforeEach(() => {
     error: undefined,
     attempts: [],
   });
+  mockExecuteBrowserSessionAction.mockResolvedValue({
+    sessionId: "browser-session-1",
+    action: "navigate",
+    result: {
+      page_info: {
+        title: "新页面",
+        url: "https://example.com",
+      },
+    },
+  });
   vi.spyOn(
     configuredProvidersModule,
     "loadConfiguredProviders",
@@ -1490,6 +1513,7 @@ beforeEach(() => {
     createMockThemeContextWorkspaceState(),
   );
   mockUseDeveloperFeatureFlags.mockReturnValue({
+    clawTraceEnabled: false,
     workspaceHarnessEnabled: true,
   });
   mockSafeListen.mockResolvedValue(vi.fn());

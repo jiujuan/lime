@@ -413,6 +413,32 @@ export interface AgentEventThinkingDelta {
   text: string;
 }
 
+export type AgentProviderTraceStage =
+  | "request_started"
+  | "first_event_received"
+  | "first_text_delta_received"
+  | "failed"
+  | "canceled"
+  | (string & {});
+
+export interface AgentEventProviderTrace {
+  type: "provider_trace";
+  stage: AgentProviderTraceStage;
+  provider?: string;
+  model?: string;
+  attempt?: number;
+  elapsed_ms?: number;
+  text_chars?: number;
+  status?: string;
+  failure_category?: string;
+  retryable?: boolean;
+  non_retryable_provider_rejection?: boolean;
+  cancel_reason?: string;
+  provider_request_id?: string;
+  provider_request_id_header?: string;
+  runtime_event_type?: string;
+}
+
 export interface AgentEventReasoningStarted {
   type: "reasoning_started";
   reasoningId?: string;
@@ -852,9 +878,14 @@ export interface AgentEventError {
 
 export interface AgentEventEnvelope {
   event_id?: string;
+  renderer_event_received_at?: number;
+  request_id?: string;
+  run_id?: string;
   sequence?: number;
   session_id?: string;
+  server_event_emitted_at?: number;
   thread_id?: string;
+  trace_id?: string;
   turn_id?: string;
   timestamp?: string;
 }
@@ -871,6 +902,7 @@ export type AgentEvent = (
   | AgentEventTextDelta
   | AgentEventTextDeltaBatch
   | AgentEventThinkingDelta
+  | AgentEventProviderTrace
   | AgentEventReasoningStarted
   | AgentEventReasoningDelta
   | AgentEventReasoningFinal
@@ -1021,6 +1053,10 @@ function normalizeOptionalNumber(value: unknown): number | undefined {
     : undefined;
 }
 
+function normalizeOptionalBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
 function pickStringField(
   record: Record<string, unknown>,
   ...keys: string[]
@@ -1109,6 +1145,26 @@ function withAgentEventEnvelope<TEvent extends AgentEvent>(
         : typeof source.eventId === "string"
           ? source.eventId
           : event.event_id,
+    renderer_event_received_at:
+      typeof source.renderer_event_received_at === "number" &&
+      Number.isFinite(source.renderer_event_received_at)
+        ? source.renderer_event_received_at
+        : typeof source.rendererEventReceivedAt === "number" &&
+            Number.isFinite(source.rendererEventReceivedAt)
+          ? source.rendererEventReceivedAt
+          : event.renderer_event_received_at,
+    request_id:
+      typeof source.request_id === "string"
+        ? source.request_id
+        : typeof source.requestId === "string"
+          ? source.requestId
+          : event.request_id,
+    run_id:
+      typeof source.run_id === "string"
+        ? source.run_id
+        : typeof source.runId === "string"
+          ? source.runId
+          : event.run_id,
     sequence:
       typeof source.sequence === "number" && Number.isFinite(source.sequence)
         ? source.sequence
@@ -1119,12 +1175,26 @@ function withAgentEventEnvelope<TEvent extends AgentEvent>(
         : typeof source.sessionId === "string"
           ? source.sessionId
           : event.session_id,
+    server_event_emitted_at:
+      typeof source.server_event_emitted_at === "number" &&
+      Number.isFinite(source.server_event_emitted_at)
+        ? source.server_event_emitted_at
+        : typeof source.serverEventEmittedAt === "number" &&
+            Number.isFinite(source.serverEventEmittedAt)
+          ? source.serverEventEmittedAt
+          : event.server_event_emitted_at,
     thread_id:
       typeof source.thread_id === "string"
         ? source.thread_id
         : typeof source.threadId === "string"
           ? source.threadId
           : event.thread_id,
+    trace_id:
+      typeof source.trace_id === "string"
+        ? source.trace_id
+        : typeof source.traceId === "string"
+          ? source.traceId
+          : event.trace_id,
     turn_id:
       typeof source.turn_id === "string"
         ? source.turn_id
@@ -1133,6 +1203,71 @@ function withAgentEventEnvelope<TEvent extends AgentEvent>(
           : event.turn_id,
     timestamp:
       typeof source.timestamp === "string" ? source.timestamp : event.timestamp,
+  };
+}
+
+function providerTraceStageFromEventType(
+  type: string,
+): AgentProviderTraceStage | undefined {
+  switch (type) {
+    case "provider.request.started":
+      return "request_started";
+    case "provider.first_event.received":
+      return "first_event_received";
+    case "provider.first_text_delta.received":
+      return "first_text_delta_received";
+    case "provider.failed":
+      return "failed";
+    case "provider.canceled":
+      return "canceled";
+    default:
+      return undefined;
+  }
+}
+
+function normalizeProviderTraceEvent(
+  type: string,
+  event: Record<string, unknown>,
+): AgentEventProviderTrace | null {
+  const payload = normalizeRecord(event.payload);
+  const source = payload ?? event;
+  const stage =
+    pickStringField(source, "stage") ?? providerTraceStageFromEventType(type);
+  if (!stage) {
+    return null;
+  }
+
+  return {
+    type: "provider_trace",
+    stage,
+    provider: pickStringField(source, "provider", "providerId", "provider_id"),
+    model: pickStringField(source, "model", "modelName", "model_name"),
+    attempt: normalizeOptionalNumber(source.attempt),
+    elapsed_ms: normalizeOptionalNumber(source.elapsed_ms ?? source.elapsedMs),
+    text_chars: normalizeOptionalNumber(source.text_chars ?? source.textChars),
+    status: pickStringField(source, "status"),
+    failure_category: pickStringField(
+      source,
+      "failure_category",
+      "failureCategory",
+    ),
+    retryable: normalizeOptionalBoolean(source.retryable),
+    non_retryable_provider_rejection: normalizeOptionalBoolean(
+      source.non_retryable_provider_rejection ??
+        source.nonRetryableProviderRejection,
+    ),
+    cancel_reason: pickStringField(source, "cancel_reason", "cancelReason"),
+    provider_request_id: pickStringField(
+      source,
+      "provider_request_id",
+      "providerRequestId",
+    ),
+    provider_request_id_header: pickStringField(
+      source,
+      "provider_request_id_header",
+      "providerRequestIdHeader",
+    ),
+    runtime_event_type: pickStringField(source, "runtime_event_type") ?? type,
   };
 }
 
@@ -1146,800 +1281,861 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
 
   const parsedEvent: AgentEvent | null = (() => {
     switch (type) {
-    case "thread_started":
-      return {
-        type: "thread_started",
-        thread_id: (event.thread_id as string) || "",
-      };
-    case "turn_started":
-      return {
-        type: "turn_started",
-        turn: event.turn as AgentThreadTurn,
-      };
-    case "item_started":
-      return {
-        type: "item_started",
-        item: normalizeLegacyThreadItem(event.item as AgentThreadItem),
-      };
-    case "item_updated":
-      return {
-        type: "item_updated",
-        item: normalizeLegacyThreadItem(event.item as AgentThreadItem),
-      };
-    case "item_completed":
-      return {
-        type: "item_completed",
-        item: normalizeLegacyThreadItem(event.item as AgentThreadItem),
-      };
-    case "turn_completed":
-    case "turn.completed":
-      return {
-        type: "turn_completed",
-        turn: event.turn as AgentThreadTurn,
-        text: pickStringField(event, "text", "delta", "message", "content"),
-        usage: event.usage as AgentTokenUsage | undefined,
-      };
-    case "turn_failed":
-    case "turn.failed":
-      return {
-        type: "turn_failed",
-        turn: event.turn as AgentThreadTurn,
-      };
-    case "turn_canceled":
-    case "turn.canceled":
-      return {
-        type: "turn_canceled",
-        turn: event.turn as AgentThreadTurn,
-      };
-    case "text_delta":
-    case "message.delta": {
-      const payload = normalizeRecord(event.payload);
-      const source = payload ?? event;
-      return {
-        type: "text_delta",
-        text:
-          pickStringField(source, "text", "delta", "message", "content") || "",
-        itemId: pickStringField(
-          source,
-          "itemId",
-          "item_id",
-          "id",
-          "messageId",
-          "message_id",
-        ),
-        phase: pickStringField(source, "phase", "messagePhase", "message_phase"),
-      };
-    }
-    case "text_delta_batch":
-    case "message.delta_batch":
-    case "message.batch": {
-      const payload = normalizeRecord(event.payload);
-      const source = payload ?? event;
-      const text =
-        pickStringField(source, "text", "delta", "message", "content") || "";
-      const chunks = Array.isArray(event.chunks)
-        ? event.chunks.filter(
-            (chunk): chunk is string => typeof chunk === "string",
-          )
-        : payload && Array.isArray(payload.chunks)
-          ? payload.chunks.filter(
+      case "thread_started":
+        return {
+          type: "thread_started",
+          thread_id: (event.thread_id as string) || "",
+        };
+      case "turn_started":
+        return {
+          type: "turn_started",
+          turn: event.turn as AgentThreadTurn,
+        };
+      case "item_started":
+        return {
+          type: "item_started",
+          item: normalizeLegacyThreadItem(event.item as AgentThreadItem),
+        };
+      case "item_updated":
+        return {
+          type: "item_updated",
+          item: normalizeLegacyThreadItem(event.item as AgentThreadItem),
+        };
+      case "item_completed":
+        return {
+          type: "item_completed",
+          item: normalizeLegacyThreadItem(event.item as AgentThreadItem),
+        };
+      case "turn_completed":
+      case "turn.completed":
+        return {
+          type: "turn_completed",
+          turn: event.turn as AgentThreadTurn,
+          text: pickStringField(event, "text", "delta", "message", "content"),
+          usage: event.usage as AgentTokenUsage | undefined,
+        };
+      case "turn_failed":
+      case "turn.failed":
+        return {
+          type: "turn_failed",
+          turn: event.turn as AgentThreadTurn,
+        };
+      case "turn_canceled":
+      case "turn.canceled":
+        return {
+          type: "turn_canceled",
+          turn: event.turn as AgentThreadTurn,
+        };
+      case "text_delta":
+      case "message.delta": {
+        const payload = normalizeRecord(event.payload);
+        const source = payload ?? event;
+        return {
+          type: "text_delta",
+          text:
+            pickStringField(source, "text", "delta", "message", "content") ||
+            "",
+          itemId: pickStringField(
+            source,
+            "itemId",
+            "item_id",
+            "id",
+            "messageId",
+            "message_id",
+          ),
+          phase: pickStringField(
+            source,
+            "phase",
+            "messagePhase",
+            "message_phase",
+          ),
+        };
+      }
+      case "text_delta_batch":
+      case "message.delta_batch":
+      case "message.batch": {
+        const payload = normalizeRecord(event.payload);
+        const source = payload ?? event;
+        const text =
+          pickStringField(source, "text", "delta", "message", "content") || "";
+        const chunks = Array.isArray(event.chunks)
+          ? event.chunks.filter(
               (chunk): chunk is string => typeof chunk === "string",
             )
-        : text
-          ? [text]
-          : [];
-      return {
-        type: "text_delta_batch",
-        text,
-        chunks,
-        itemId: pickStringField(
-          source,
-          "itemId",
-          "item_id",
-          "id",
-          "messageId",
-          "message_id",
-        ),
-        phase: pickStringField(source, "phase", "messagePhase", "message_phase"),
-        boundary:
-          typeof event.boundary === "string"
-            ? event.boundary
-            : payload && typeof payload.boundary === "string"
-              ? payload.boundary
-              : "provider",
-      };
-    }
-    case "thinking_delta":
-      return {
-        type: "thinking_delta",
-        text: (event.text as string) || "",
-      };
-    case "reasoning_started":
-    case "reasoning.started":
-    case "reasoning.start": {
-      const payload = normalizeRecord(event.payload);
-      const source = payload ?? event;
-      return {
-        type: "reasoning_started",
-        reasoningId: pickStringField(source, "reasoningId", "reasoning_id", "id"),
-        model: source.model,
-        providerMetadata:
-          normalizeRecord(source.providerMetadata) ??
-          normalizeRecord(source.provider_metadata),
-      };
-    }
-    case "reasoning_delta":
-    case "reasoning.delta": {
-      const payload = normalizeRecord(event.payload);
-      const source = payload ?? event;
-      return {
-        type: "reasoning_delta",
-        reasoningId: pickStringField(source, "reasoningId", "reasoning_id", "id"),
-        text: pickStringField(source, "text", "delta", "message", "content") || "",
-        delta: pickStringField(source, "delta", "text", "message", "content"),
-        model: source.model,
-        providerMetadata:
-          normalizeRecord(source.providerMetadata) ??
-          normalizeRecord(source.provider_metadata),
-      };
-    }
-    case "reasoning_final":
-    case "reasoning.final": {
-      const payload = normalizeRecord(event.payload);
-      const source = payload ?? event;
-      return {
-        type: "reasoning_final",
-        reasoningId: pickStringField(source, "reasoningId", "reasoning_id", "id"),
-        text: pickStringField(source, "text", "delta", "message", "content") || "",
-        model: source.model,
-        providerMetadata:
-          normalizeRecord(source.providerMetadata) ??
-          normalizeRecord(source.provider_metadata),
-      };
-    }
-    case "reasoning_ended":
-    case "reasoning.ended":
-    case "reasoning.end": {
-      const payload = normalizeRecord(event.payload);
-      const source = payload ?? event;
-      return {
-        type: "reasoning_ended",
-        reasoningId: pickStringField(source, "reasoningId", "reasoning_id", "id"),
-        status: pickStringField(source, "status"),
-        model: source.model,
-        providerMetadata:
-          normalizeRecord(source.providerMetadata) ??
-          normalizeRecord(source.provider_metadata),
-      };
-    }
-    case "plan_delta":
-    case "plan.delta":
-    case "plan_final":
-    case "plan.final": {
-      const payload = normalizeRecord(event.payload);
-      const source = payload ?? event;
-      const isFinal = type === "plan_final" || type === "plan.final";
-      const planEvent = {
-        text: pickStringField(source, "text", "delta", "message", "content") || "",
-        delta: pickStringField(source, "delta", "text", "message", "content"),
-        plan: source.plan,
-        explanation: pickStringField(source, "explanation"),
-        sourceItemId: pickStringField(source, "sourceItemId", "source_item_id"),
-        toolCallId: pickStringField(source, "toolCallId", "tool_call_id"),
-        revisionId: pickStringField(source, "revisionId", "revision_id"),
-        source: pickStringField(source, "source"),
-      };
-      return isFinal
-        ? {
-            type: "plan_final",
-            ...planEvent,
-          }
-        : {
-            type: "plan_delta",
-            ...planEvent,
-          };
-    }
-    case "tool_start":
-    case "tool_started":
-    case "tool.started":
-      return {
-        type: "tool_start",
-        tool_name:
-          pickStringField(event, "tool_name", "toolName", "name") || "",
-        tool_id: pickStringField(event, "tool_id", "toolId", "id") || "",
-        arguments: normalizeToolArguments(
-          event.arguments ?? event.args ?? event.input ?? event.parameters,
-        ),
-      };
-    case "tool_end":
-    case "tool_result":
-    case "tool.result":
-    case "tool.failed":
-    case "tool_failed":
-      return {
-        type: "tool_end",
-        tool_id:
-          pickStringField(event, "tool_id", "toolId", "toolCallId", "id") ||
-          "",
-        result: normalizeToolExecutionResult(event),
-      };
-    case "tool_progress": {
-      const progress = normalizeRecord(event.progress) || {};
-      return {
-        type: "tool_progress",
-        tool_id: (event.tool_id as string) || "",
-        progress: {
-          message:
-            typeof progress.message === "string" ? progress.message : undefined,
-          progress: normalizeOptionalNumber(progress.progress),
-          total: normalizeOptionalNumber(progress.total),
-          metadata: normalizeRecord(progress.metadata),
-        },
-      };
-    }
-    case "tool_output_delta":
-      return {
-        type: "tool_output_delta",
-        tool_id: (event.tool_id as string) || "",
-        delta: (event.delta as string) || "",
-        output_kind:
-          typeof event.output_kind === "string" ? event.output_kind : undefined,
-        metadata: normalizeRecord(event.metadata),
-      };
-    case "tool_input_delta":
-      return {
-        type: "tool_input_delta",
-        tool_id: (event.tool_id as string) || "",
-        tool_name:
-          typeof event.tool_name === "string" ? event.tool_name : undefined,
-        delta: (event.delta as string) || "",
-        accumulated_arguments:
-          typeof event.accumulated_arguments === "string"
-            ? event.accumulated_arguments
-            : undefined,
-        provider:
-          typeof event.provider === "string" ? event.provider : undefined,
-      };
-    case "artifact_snapshot":
-    case "ArtifactSnapshot": {
-      const nestedArtifact =
-        event.artifact && typeof event.artifact === "object"
-          ? (event.artifact as Record<string, unknown>)
-          : undefined;
-      return {
-        type: "artifact_snapshot",
-        artifact: {
-          artifactId: String(
-            nestedArtifact?.artifactId ||
-              nestedArtifact?.artifact_id ||
-              event.artifact_id ||
-              event.artifactId ||
-              event.id ||
-              "artifact-unknown",
+          : payload && Array.isArray(payload.chunks)
+            ? payload.chunks.filter(
+                (chunk): chunk is string => typeof chunk === "string",
+              )
+            : text
+              ? [text]
+              : [];
+        return {
+          type: "text_delta_batch",
+          text,
+          chunks,
+          itemId: pickStringField(
+            source,
+            "itemId",
+            "item_id",
+            "id",
+            "messageId",
+            "message_id",
           ),
-          filePath:
-            (nestedArtifact?.filePath as string | undefined) ||
-            (nestedArtifact?.file_path as string | undefined) ||
-            (event.file_path as string | undefined) ||
-            (event.filePath as string | undefined),
-          content:
-            (nestedArtifact?.content as string | undefined) ||
-            (event.content as string | undefined),
-          metadata:
-            (nestedArtifact?.metadata as Record<string, unknown> | undefined) ||
-            (event.metadata as Record<string, unknown> | undefined),
-        },
-      };
-    }
-    case "action_required": {
-      const actionData =
-        (event.data as Record<string, unknown> | undefined) || {};
-      const requestId =
-        (event.request_id as string | undefined) ||
-        (actionData.request_id as string | undefined) ||
-        (actionData.id as string | undefined) ||
-        "";
-      const actionType =
-        (event.action_type as string | undefined) ||
-        (actionData.action_type as string | undefined) ||
-        (actionData.type as string | undefined) ||
-        "tool_confirmation";
-
-      return {
-        type: "action_required",
-        request_id: requestId,
-        action_type: actionType as AgentActionRequiredType,
-        scope: normalizeActionRequiredScope(event.scope ?? actionData.scope),
-        tool_name:
-          (event.tool_name as string | undefined) ||
-          (actionData.tool_name as string | undefined),
-        arguments:
-          (event.arguments as Record<string, unknown> | undefined) ||
-          (actionData.arguments as Record<string, unknown> | undefined),
-        prompt:
-          (event.prompt as string | undefined) ||
-          (actionData.prompt as string | undefined) ||
-          (actionData.message as string | undefined),
-        questions:
-          (event.questions as AgentActionRequiredQuestion[] | undefined) ||
-          (actionData.questions as AgentActionRequiredQuestion[] | undefined),
-        requested_schema:
-          (event.requested_schema as Record<string, unknown> | undefined) ||
-          (actionData.requested_schema as Record<string, unknown> | undefined),
-      };
-    }
-    case "action_resolved": {
-      const actionData =
-        (event.data as Record<string, unknown> | undefined) || {};
-      const requestId =
-        (event.request_id as string | undefined) ||
-        (actionData.request_id as string | undefined) ||
-        (actionData.requestId as string | undefined) ||
-        (actionData.id as string | undefined) ||
-        "";
-      const actionType =
-        (event.action_type as string | undefined) ||
-        (actionData.action_type as string | undefined) ||
-        (actionData.actionType as string | undefined) ||
-        (actionData.type as string | undefined) ||
-        "tool_confirmation";
-
-      return {
-        type: "action_resolved",
-        request_id: requestId,
-        action_type: actionType,
-        scope: normalizeActionRequiredScope(event.scope ?? actionData.scope),
-        approved:
-          typeof event.approved === "boolean"
-            ? event.approved
-            : typeof actionData.approved === "boolean"
-              ? actionData.approved
-              : typeof actionData.approve === "boolean"
-                ? actionData.approve
-                : undefined,
-        feedback:
-          typeof event.feedback === "string"
-            ? event.feedback
-            : typeof actionData.feedback === "string"
-              ? actionData.feedback
-              : undefined,
-        permission_mode:
-          typeof event.permission_mode === "string"
-            ? event.permission_mode
-            : typeof actionData.permission_mode === "string"
-              ? actionData.permission_mode
-              : typeof actionData.permissionMode === "string"
-                ? actionData.permissionMode
-                : undefined,
-        data: actionData,
-      };
-    }
-    case "turn_context":
-      return {
-        type: "turn_context",
-        session_id: (event.session_id as string) || "",
-        thread_id: (event.thread_id as string) || "",
-        turn_id: (event.turn_id as string) || "",
-        execution_strategy: normalizeExecutionStrategyToReact(
-          event.execution_strategy,
-        ),
-        output_schema_runtime:
-          (event.output_schema_runtime as
-            | AsterTurnOutputSchemaRuntime
-            | null
-            | undefined) || null,
-        context_summary:
-          (event.context_summary as
-            | AgentTurnContextSummary
-            | null
-            | undefined) || null,
-        approval_policy:
-          typeof event.approval_policy === "string"
-            ? event.approval_policy
-            : null,
-        sandbox_policy:
-          typeof event.sandbox_policy === "string"
-            ? event.sandbox_policy
-            : null,
-      };
-    case "model_change":
-      return {
-        type: "model_change",
-        model: (event.model as string) || "",
-        mode: (event.mode as string) || "",
-      };
-    case "model_effective":
-    case "model.effective": {
-      const payload = normalizeRecord(event.payload);
-      const source = payload ?? event;
-      return {
-        type: "model_effective",
-        model: source.model,
-        modelRef: source.modelRef ?? source.model_ref,
-        provider: pickStringField(source, "provider", "providerId", "provider_id"),
-        modelName: pickStringField(
-          source,
-          "modelName",
-          "model_name",
-          "modelId",
-          "model_id",
-        ),
-        source: pickStringField(source, "source"),
-        serviceModelSlot: pickStringField(
-          source,
-          "serviceModelSlot",
-          "service_model_slot",
-        ),
-        reasoning: source.reasoning,
-        capability: source.capability,
-        toolCalling: source.toolCalling ?? source.tool_calling,
-        requestedReasoningEffort: pickStringField(
-          source,
-          "requestedReasoningEffort",
-          "requested_reasoning_effort",
-        ),
-      };
-    }
-    case "context_trace":
-      return {
-        type: "context_trace",
-        steps: Array.isArray(event.steps)
-          ? (event.steps as AgentContextTraceStep[])
-          : [],
-      };
-    case "runtime_status": {
-      const status =
-        event.status && typeof event.status === "object"
-          ? (event.status as Record<string, unknown>)
-          : null;
-      const metadata =
-        status?.metadata && typeof status.metadata === "object"
-          ? (status.metadata as Record<string, unknown>)
-          : null;
-      const phase = status?.phase;
-      return {
-        type: "runtime_status",
-        status: {
-          phase:
-            phase === "preparing" ||
-            phase === "routing" ||
-            phase === "context" ||
-            phase === "permission_review" ||
-            phase === "retrying" ||
-            phase === "continuing" ||
-            phase === "synthesizing" ||
-            phase === "failed"
-              ? phase
-              : "routing",
-          title:
-            typeof status?.title === "string"
-              ? normalizeLegacyRuntimeStatusTitle(status.title)
-              : "",
-          detail: typeof status?.detail === "string" ? status.detail : "",
-          checkpoints: Array.isArray(status?.checkpoints)
-            ? (status?.checkpoints as string[])
-            : undefined,
-          metadata: metadata
-            ? {
-                ...metadata,
-                team_phase:
-                  typeof metadata.team_phase === "string"
-                    ? metadata.team_phase
-                    : undefined,
-                team_parallel_budget:
-                  typeof metadata.team_parallel_budget === "number"
-                    ? metadata.team_parallel_budget
-                    : undefined,
-                team_active_count:
-                  typeof metadata.team_active_count === "number"
-                    ? metadata.team_active_count
-                    : undefined,
-                team_queued_count:
-                  typeof metadata.team_queued_count === "number"
-                    ? metadata.team_queued_count
-                    : undefined,
-                concurrency_phase:
-                  typeof metadata.concurrency_phase === "string"
-                    ? metadata.concurrency_phase
-                    : undefined,
-                concurrency_scope:
-                  typeof metadata.concurrency_scope === "string"
-                    ? metadata.concurrency_scope
-                    : undefined,
-                concurrency_active_count:
-                  typeof metadata.concurrency_active_count === "number"
-                    ? metadata.concurrency_active_count
-                    : undefined,
-                concurrency_queued_count:
-                  typeof metadata.concurrency_queued_count === "number"
-                    ? metadata.concurrency_queued_count
-                    : undefined,
-                concurrency_budget:
-                  typeof metadata.concurrency_budget === "number"
-                    ? metadata.concurrency_budget
-                    : undefined,
-                provider_concurrency_group:
-                  typeof metadata.provider_concurrency_group === "string"
-                    ? metadata.provider_concurrency_group
-                    : undefined,
-                provider_parallel_budget:
-                  typeof metadata.provider_parallel_budget === "number"
-                    ? metadata.provider_parallel_budget
-                    : undefined,
-                queue_reason:
-                  typeof metadata.queue_reason === "string"
-                    ? metadata.queue_reason
-                    : undefined,
-                retryable_overload:
-                  typeof metadata.retryable_overload === "boolean"
-                    ? metadata.retryable_overload
-                    : undefined,
-                permission_status:
-                  typeof metadata.permission_status === "string"
-                    ? metadata.permission_status
-                    : undefined,
-                required_profile_keys: Array.isArray(
-                  metadata.required_profile_keys,
-                )
-                  ? (metadata.required_profile_keys as string[])
-                  : undefined,
-                ask_profile_keys: Array.isArray(metadata.ask_profile_keys)
-                  ? (metadata.ask_profile_keys as string[])
-                  : undefined,
-                blocking_profile_keys: Array.isArray(
-                  metadata.blocking_profile_keys,
-                )
-                  ? (metadata.blocking_profile_keys as string[])
-                  : undefined,
-                decision_source:
-                  typeof metadata.decision_source === "string"
-                    ? metadata.decision_source
-                    : undefined,
-                decision_scope:
-                  typeof metadata.decision_scope === "string"
-                    ? metadata.decision_scope
-                    : undefined,
-                confirmation_status:
-                  typeof metadata.confirmation_status === "string"
-                    ? metadata.confirmation_status
-                    : undefined,
-                confirmation_request_id:
-                  typeof metadata.confirmation_request_id === "string"
-                    ? metadata.confirmation_request_id
-                    : undefined,
-                confirmation_source:
-                  typeof metadata.confirmation_source === "string"
-                    ? metadata.confirmation_source
-                    : undefined,
-                declared_only:
-                  typeof metadata.declared_only === "boolean"
-                    ? metadata.declared_only
-                    : undefined,
-                turn_gating:
-                  typeof metadata.turn_gating === "boolean"
-                    ? metadata.turn_gating
-                    : undefined,
-                limit_status:
-                  typeof metadata.limit_status === "string"
-                    ? metadata.limit_status
-                    : undefined,
-                capability_gap:
-                  typeof metadata.capability_gap === "string"
-                    ? metadata.capability_gap
-                    : undefined,
-                keepalive_kind:
-                  typeof metadata.keepalive_kind === "string"
-                    ? metadata.keepalive_kind
-                    : undefined,
-                keepalive_sequence:
-                  typeof metadata.keepalive_sequence === "number"
-                    ? metadata.keepalive_sequence
-                    : undefined,
-                keepalive_elapsed_ms:
-                  typeof metadata.keepalive_elapsed_ms === "number"
-                    ? metadata.keepalive_elapsed_ms
-                    : undefined,
-              }
-            : undefined,
-        },
-      };
-    }
-    case "task_profile_resolved":
-      return {
-        type: "task_profile_resolved",
-        task_profile:
-          (event.task_profile as AsterSessionExecutionRuntimeTaskProfile) ||
-          (event.taskProfile as AsterSessionExecutionRuntimeTaskProfile),
-      };
-    case "candidate_set_resolved":
-      return {
-        type: "candidate_set_resolved",
-        routing_decision: routingDecisionFromEvent(event),
-      };
-    case "routing_decision_made":
-      return {
-        type: "routing_decision_made",
-        routing_decision: routingDecisionFromEvent(event),
-      };
-    case "routing_fallback_applied":
-      return {
-        type: "routing_fallback_applied",
-        routing_decision: routingDecisionFromEvent(event),
-      };
-    case "routing_not_possible":
-      return {
-        type: "routing_not_possible",
-        routing_decision: routingDecisionFromEvent(event),
-      };
-    case "limit_state_updated":
-      return {
-        type: "limit_state_updated",
-        limit_state:
-          (event.limit_state as AsterSessionExecutionRuntimeLimitState) ||
-          (event.limitState as AsterSessionExecutionRuntimeLimitState),
-      };
-    case "single_candidate_only":
-      return {
-        type: "single_candidate_only",
-        limit_state:
-          (event.limit_state as AsterSessionExecutionRuntimeLimitState) ||
-          (event.limitState as AsterSessionExecutionRuntimeLimitState),
-      };
-    case "single_candidate_capability_gap":
-      return {
-        type: "single_candidate_capability_gap",
-        limit_state:
-          (event.limit_state as AsterSessionExecutionRuntimeLimitState) ||
-          (event.limitState as AsterSessionExecutionRuntimeLimitState),
-      };
-    case "cost_estimated":
-      return {
-        type: "cost_estimated",
-        cost_state:
-          (event.cost_state as AsterSessionExecutionRuntimeCostState) ||
-          (event.costState as AsterSessionExecutionRuntimeCostState),
-      };
-    case "cost_recorded":
-      return {
-        type: "cost_recorded",
-        cost_state:
-          (event.cost_state as AsterSessionExecutionRuntimeCostState) ||
-          (event.costState as AsterSessionExecutionRuntimeCostState),
-      };
-    case "rate_limit_hit":
-      return {
-        type: "rate_limit_hit",
-        limit_event:
-          (event.limit_event as AsterSessionExecutionRuntimeLimitEvent) ||
-          (event.limitEvent as AsterSessionExecutionRuntimeLimitEvent),
-      };
-    case "quota_low":
-      return {
-        type: "quota_low",
-        limit_event:
-          (event.limit_event as AsterSessionExecutionRuntimeLimitEvent) ||
-          (event.limitEvent as AsterSessionExecutionRuntimeLimitEvent),
-      };
-    case "quota_blocked":
-      return {
-        type: "quota_blocked",
-        limit_event:
-          (event.limit_event as AsterSessionExecutionRuntimeLimitEvent) ||
-          (event.limitEvent as AsterSessionExecutionRuntimeLimitEvent),
-      };
-    case "queue_added": {
-      const queuedTurn = normalizeQueuedTurnSnapshot(event.queued_turn);
-      if (!queuedTurn) {
-        return null;
+          phase: pickStringField(
+            source,
+            "phase",
+            "messagePhase",
+            "message_phase",
+          ),
+          boundary:
+            typeof event.boundary === "string"
+              ? event.boundary
+              : payload && typeof payload.boundary === "string"
+                ? payload.boundary
+                : "provider",
+        };
       }
-      return {
-        type: "queue_added",
-        session_id: (event.session_id as string) || "",
-        queued_turn: queuedTurn,
-      };
-    }
-    case "queue_removed":
-      return {
-        type: "queue_removed",
-        session_id: (event.session_id as string) || "",
-        queued_turn_id: (event.queued_turn_id as string) || "",
-      };
-    case "queue_started":
-      return {
-        type: "queue_started",
-        session_id: (event.session_id as string) || "",
-        queued_turn_id: (event.queued_turn_id as string) || "",
-      };
-    case "queue_cleared":
-      return {
-        type: "queue_cleared",
-        session_id: (event.session_id as string) || "",
-        queued_turn_ids: Array.isArray(event.queued_turn_ids)
-          ? (event.queued_turn_ids as string[])
-          : [],
-      };
-    case "subagent_status_changed":
-      return {
-        type: "subagent_status_changed",
-        session_id: (event.session_id as string) || "",
-        root_session_id: (event.root_session_id as string) || "",
-        parent_session_id: event.parent_session_id as string | undefined,
-        status:
-          (event.status as AgentSubagentRuntimeStatus | undefined) || "idle",
-        latest_turn_id:
-          typeof event.latest_turn_id === "string"
-            ? event.latest_turn_id
-            : undefined,
-        latest_turn_status: event.latest_turn_status as
-          | AgentSubagentRuntimeStatus
-          | undefined,
-        queued_turn_count:
-          typeof event.queued_turn_count === "number"
-            ? event.queued_turn_count
-            : undefined,
-        team_phase:
-          typeof event.team_phase === "string" ? event.team_phase : undefined,
-        team_parallel_budget:
-          typeof event.team_parallel_budget === "number"
-            ? event.team_parallel_budget
-            : undefined,
-        team_active_count:
-          typeof event.team_active_count === "number"
-            ? event.team_active_count
-            : undefined,
-        team_queued_count:
-          typeof event.team_queued_count === "number"
-            ? event.team_queued_count
-            : undefined,
-        provider_concurrency_group:
-          typeof event.provider_concurrency_group === "string"
-            ? event.provider_concurrency_group
-            : undefined,
-        provider_parallel_budget:
-          typeof event.provider_parallel_budget === "number"
-            ? event.provider_parallel_budget
-            : undefined,
-        queue_reason:
-          typeof event.queue_reason === "string"
-            ? event.queue_reason
-            : undefined,
-        retryable_overload:
-          typeof event.retryable_overload === "boolean"
-            ? event.retryable_overload
-            : undefined,
-        closed: typeof event.closed === "boolean" ? event.closed : undefined,
-        usage: event.usage as AgentTokenUsage | undefined,
-        duration_ms: normalizeOptionalNumber(
-          event.duration_ms ?? event.durationMs,
-        ),
-        tool_count: normalizeOptionalNumber(
-          event.tool_count ?? event.toolCount,
-        ),
-        result_ref:
-          typeof event.result_ref === "string"
-            ? event.result_ref
-            : typeof event.resultRef === "string"
-              ? event.resultRef
+      case "thinking_delta":
+        return {
+          type: "thinking_delta",
+          text: (event.text as string) || "",
+        };
+      case "provider_trace":
+      case "provider.request.started":
+      case "provider.first_event.received":
+      case "provider.first_text_delta.received":
+      case "provider.failed":
+      case "provider.canceled":
+        return normalizeProviderTraceEvent(type, event);
+      case "reasoning_started":
+      case "reasoning.started":
+      case "reasoning.start": {
+        const payload = normalizeRecord(event.payload);
+        const source = payload ?? event;
+        return {
+          type: "reasoning_started",
+          reasoningId: pickStringField(
+            source,
+            "reasoningId",
+            "reasoning_id",
+            "id",
+          ),
+          model: source.model,
+          providerMetadata:
+            normalizeRecord(source.providerMetadata) ??
+            normalizeRecord(source.provider_metadata),
+        };
+      }
+      case "reasoning_delta":
+      case "reasoning.delta": {
+        const payload = normalizeRecord(event.payload);
+        const source = payload ?? event;
+        return {
+          type: "reasoning_delta",
+          reasoningId: pickStringField(
+            source,
+            "reasoningId",
+            "reasoning_id",
+            "id",
+          ),
+          text:
+            pickStringField(source, "text", "delta", "message", "content") ||
+            "",
+          delta: pickStringField(source, "delta", "text", "message", "content"),
+          model: source.model,
+          providerMetadata:
+            normalizeRecord(source.providerMetadata) ??
+            normalizeRecord(source.provider_metadata),
+        };
+      }
+      case "reasoning_final":
+      case "reasoning.final": {
+        const payload = normalizeRecord(event.payload);
+        const source = payload ?? event;
+        return {
+          type: "reasoning_final",
+          reasoningId: pickStringField(
+            source,
+            "reasoningId",
+            "reasoning_id",
+            "id",
+          ),
+          text:
+            pickStringField(source, "text", "delta", "message", "content") ||
+            "",
+          model: source.model,
+          providerMetadata:
+            normalizeRecord(source.providerMetadata) ??
+            normalizeRecord(source.provider_metadata),
+        };
+      }
+      case "reasoning_ended":
+      case "reasoning.ended":
+      case "reasoning.end": {
+        const payload = normalizeRecord(event.payload);
+        const source = payload ?? event;
+        return {
+          type: "reasoning_ended",
+          reasoningId: pickStringField(
+            source,
+            "reasoningId",
+            "reasoning_id",
+            "id",
+          ),
+          status: pickStringField(source, "status"),
+          model: source.model,
+          providerMetadata:
+            normalizeRecord(source.providerMetadata) ??
+            normalizeRecord(source.provider_metadata),
+        };
+      }
+      case "plan_delta":
+      case "plan.delta":
+      case "plan_final":
+      case "plan.final": {
+        const payload = normalizeRecord(event.payload);
+        const source = payload ?? event;
+        const isFinal = type === "plan_final" || type === "plan.final";
+        const planEvent = {
+          text:
+            pickStringField(source, "text", "delta", "message", "content") ||
+            "",
+          delta: pickStringField(source, "delta", "text", "message", "content"),
+          plan: source.plan,
+          explanation: pickStringField(source, "explanation"),
+          sourceItemId: pickStringField(
+            source,
+            "sourceItemId",
+            "source_item_id",
+          ),
+          toolCallId: pickStringField(source, "toolCallId", "tool_call_id"),
+          revisionId: pickStringField(source, "revisionId", "revision_id"),
+          source: pickStringField(source, "source"),
+        };
+        return isFinal
+          ? {
+              type: "plan_final",
+              ...planEvent,
+            }
+          : {
+              type: "plan_delta",
+              ...planEvent,
+            };
+      }
+      case "tool_start":
+      case "tool_started":
+      case "tool.started":
+        return {
+          type: "tool_start",
+          tool_name:
+            pickStringField(event, "tool_name", "toolName", "name") || "",
+          tool_id: pickStringField(event, "tool_id", "toolId", "id") || "",
+          arguments: normalizeToolArguments(
+            event.arguments ?? event.args ?? event.input ?? event.parameters,
+          ),
+        };
+      case "tool_end":
+      case "tool_result":
+      case "tool.result":
+      case "tool.failed":
+      case "tool_failed":
+        return {
+          type: "tool_end",
+          tool_id:
+            pickStringField(event, "tool_id", "toolId", "toolCallId", "id") ||
+            "",
+          result: normalizeToolExecutionResult(event),
+        };
+      case "tool_progress": {
+        const progress = normalizeRecord(event.progress) || {};
+        return {
+          type: "tool_progress",
+          tool_id: (event.tool_id as string) || "",
+          progress: {
+            message:
+              typeof progress.message === "string"
+                ? progress.message
+                : undefined,
+            progress: normalizeOptionalNumber(progress.progress),
+            total: normalizeOptionalNumber(progress.total),
+            metadata: normalizeRecord(progress.metadata),
+          },
+        };
+      }
+      case "tool_output_delta":
+        return {
+          type: "tool_output_delta",
+          tool_id: (event.tool_id as string) || "",
+          delta: (event.delta as string) || "",
+          output_kind:
+            typeof event.output_kind === "string"
+              ? event.output_kind
               : undefined,
-      };
-    case "message":
-      return {
-        type: "message",
-        message: event.message as AgentMessage,
-      };
-    case "error":
-      return {
-        type: "error",
-        message: (event.message as string) || "Unknown error",
-      };
-    case "warning":
-      return {
-        type: "warning",
-        code: event.code as string | undefined,
-        message: (event.message as string) || "Unknown warning",
-      };
-    default:
-      return null;
+          metadata: normalizeRecord(event.metadata),
+        };
+      case "tool_input_delta":
+        return {
+          type: "tool_input_delta",
+          tool_id: (event.tool_id as string) || "",
+          tool_name:
+            typeof event.tool_name === "string" ? event.tool_name : undefined,
+          delta: (event.delta as string) || "",
+          accumulated_arguments:
+            typeof event.accumulated_arguments === "string"
+              ? event.accumulated_arguments
+              : undefined,
+          provider:
+            typeof event.provider === "string" ? event.provider : undefined,
+        };
+      case "artifact_snapshot":
+      case "ArtifactSnapshot": {
+        const nestedArtifact =
+          event.artifact && typeof event.artifact === "object"
+            ? (event.artifact as Record<string, unknown>)
+            : undefined;
+        return {
+          type: "artifact_snapshot",
+          artifact: {
+            artifactId: String(
+              nestedArtifact?.artifactId ||
+                nestedArtifact?.artifact_id ||
+                event.artifact_id ||
+                event.artifactId ||
+                event.id ||
+                "artifact-unknown",
+            ),
+            filePath:
+              (nestedArtifact?.filePath as string | undefined) ||
+              (nestedArtifact?.file_path as string | undefined) ||
+              (event.file_path as string | undefined) ||
+              (event.filePath as string | undefined),
+            content:
+              (nestedArtifact?.content as string | undefined) ||
+              (event.content as string | undefined),
+            metadata:
+              (nestedArtifact?.metadata as
+                | Record<string, unknown>
+                | undefined) ||
+              (event.metadata as Record<string, unknown> | undefined),
+          },
+        };
+      }
+      case "action_required": {
+        const actionData =
+          (event.data as Record<string, unknown> | undefined) || {};
+        const requestId =
+          (event.request_id as string | undefined) ||
+          (actionData.request_id as string | undefined) ||
+          (actionData.id as string | undefined) ||
+          "";
+        const actionType =
+          (event.action_type as string | undefined) ||
+          (actionData.action_type as string | undefined) ||
+          (actionData.type as string | undefined) ||
+          "tool_confirmation";
+
+        return {
+          type: "action_required",
+          request_id: requestId,
+          action_type: actionType as AgentActionRequiredType,
+          scope: normalizeActionRequiredScope(event.scope ?? actionData.scope),
+          tool_name:
+            (event.tool_name as string | undefined) ||
+            (actionData.tool_name as string | undefined),
+          arguments:
+            (event.arguments as Record<string, unknown> | undefined) ||
+            (actionData.arguments as Record<string, unknown> | undefined),
+          prompt:
+            (event.prompt as string | undefined) ||
+            (actionData.prompt as string | undefined) ||
+            (actionData.message as string | undefined),
+          questions:
+            (event.questions as AgentActionRequiredQuestion[] | undefined) ||
+            (actionData.questions as AgentActionRequiredQuestion[] | undefined),
+          requested_schema:
+            (event.requested_schema as Record<string, unknown> | undefined) ||
+            (actionData.requested_schema as
+              | Record<string, unknown>
+              | undefined),
+        };
+      }
+      case "action_resolved": {
+        const actionData =
+          (event.data as Record<string, unknown> | undefined) || {};
+        const requestId =
+          (event.request_id as string | undefined) ||
+          (actionData.request_id as string | undefined) ||
+          (actionData.requestId as string | undefined) ||
+          (actionData.id as string | undefined) ||
+          "";
+        const actionType =
+          (event.action_type as string | undefined) ||
+          (actionData.action_type as string | undefined) ||
+          (actionData.actionType as string | undefined) ||
+          (actionData.type as string | undefined) ||
+          "tool_confirmation";
+
+        return {
+          type: "action_resolved",
+          request_id: requestId,
+          action_type: actionType,
+          scope: normalizeActionRequiredScope(event.scope ?? actionData.scope),
+          approved:
+            typeof event.approved === "boolean"
+              ? event.approved
+              : typeof actionData.approved === "boolean"
+                ? actionData.approved
+                : typeof actionData.approve === "boolean"
+                  ? actionData.approve
+                  : undefined,
+          feedback:
+            typeof event.feedback === "string"
+              ? event.feedback
+              : typeof actionData.feedback === "string"
+                ? actionData.feedback
+                : undefined,
+          permission_mode:
+            typeof event.permission_mode === "string"
+              ? event.permission_mode
+              : typeof actionData.permission_mode === "string"
+                ? actionData.permission_mode
+                : typeof actionData.permissionMode === "string"
+                  ? actionData.permissionMode
+                  : undefined,
+          data: actionData,
+        };
+      }
+      case "turn_context":
+        return {
+          type: "turn_context",
+          session_id: (event.session_id as string) || "",
+          thread_id: (event.thread_id as string) || "",
+          turn_id: (event.turn_id as string) || "",
+          execution_strategy: normalizeExecutionStrategyToReact(
+            event.execution_strategy,
+          ),
+          output_schema_runtime:
+            (event.output_schema_runtime as
+              | AsterTurnOutputSchemaRuntime
+              | null
+              | undefined) || null,
+          context_summary:
+            (event.context_summary as
+              | AgentTurnContextSummary
+              | null
+              | undefined) || null,
+          approval_policy:
+            typeof event.approval_policy === "string"
+              ? event.approval_policy
+              : null,
+          sandbox_policy:
+            typeof event.sandbox_policy === "string"
+              ? event.sandbox_policy
+              : null,
+        };
+      case "model_change":
+        return {
+          type: "model_change",
+          model: (event.model as string) || "",
+          mode: (event.mode as string) || "",
+        };
+      case "model_effective":
+      case "model.effective": {
+        const payload = normalizeRecord(event.payload);
+        const source = payload ?? event;
+        return {
+          type: "model_effective",
+          model: source.model,
+          modelRef: source.modelRef ?? source.model_ref,
+          provider: pickStringField(
+            source,
+            "provider",
+            "providerId",
+            "provider_id",
+          ),
+          modelName: pickStringField(
+            source,
+            "modelName",
+            "model_name",
+            "modelId",
+            "model_id",
+          ),
+          source: pickStringField(source, "source"),
+          serviceModelSlot: pickStringField(
+            source,
+            "serviceModelSlot",
+            "service_model_slot",
+          ),
+          reasoning: source.reasoning,
+          capability: source.capability,
+          toolCalling: source.toolCalling ?? source.tool_calling,
+          requestedReasoningEffort: pickStringField(
+            source,
+            "requestedReasoningEffort",
+            "requested_reasoning_effort",
+          ),
+        };
+      }
+      case "context_trace":
+        return {
+          type: "context_trace",
+          steps: Array.isArray(event.steps)
+            ? (event.steps as AgentContextTraceStep[])
+            : [],
+        };
+      case "runtime_status": {
+        const status =
+          event.status && typeof event.status === "object"
+            ? (event.status as Record<string, unknown>)
+            : null;
+        const metadata =
+          status?.metadata && typeof status.metadata === "object"
+            ? (status.metadata as Record<string, unknown>)
+            : null;
+        const phase = status?.phase;
+        return {
+          type: "runtime_status",
+          status: {
+            phase:
+              phase === "preparing" ||
+              phase === "routing" ||
+              phase === "context" ||
+              phase === "permission_review" ||
+              phase === "retrying" ||
+              phase === "continuing" ||
+              phase === "synthesizing" ||
+              phase === "failed"
+                ? phase
+                : "routing",
+            title:
+              typeof status?.title === "string"
+                ? normalizeLegacyRuntimeStatusTitle(status.title)
+                : "",
+            detail: typeof status?.detail === "string" ? status.detail : "",
+            checkpoints: Array.isArray(status?.checkpoints)
+              ? (status?.checkpoints as string[])
+              : undefined,
+            metadata: metadata
+              ? {
+                  ...metadata,
+                  team_phase:
+                    typeof metadata.team_phase === "string"
+                      ? metadata.team_phase
+                      : undefined,
+                  team_parallel_budget:
+                    typeof metadata.team_parallel_budget === "number"
+                      ? metadata.team_parallel_budget
+                      : undefined,
+                  team_active_count:
+                    typeof metadata.team_active_count === "number"
+                      ? metadata.team_active_count
+                      : undefined,
+                  team_queued_count:
+                    typeof metadata.team_queued_count === "number"
+                      ? metadata.team_queued_count
+                      : undefined,
+                  concurrency_phase:
+                    typeof metadata.concurrency_phase === "string"
+                      ? metadata.concurrency_phase
+                      : undefined,
+                  concurrency_scope:
+                    typeof metadata.concurrency_scope === "string"
+                      ? metadata.concurrency_scope
+                      : undefined,
+                  concurrency_active_count:
+                    typeof metadata.concurrency_active_count === "number"
+                      ? metadata.concurrency_active_count
+                      : undefined,
+                  concurrency_queued_count:
+                    typeof metadata.concurrency_queued_count === "number"
+                      ? metadata.concurrency_queued_count
+                      : undefined,
+                  concurrency_budget:
+                    typeof metadata.concurrency_budget === "number"
+                      ? metadata.concurrency_budget
+                      : undefined,
+                  provider_concurrency_group:
+                    typeof metadata.provider_concurrency_group === "string"
+                      ? metadata.provider_concurrency_group
+                      : undefined,
+                  provider_parallel_budget:
+                    typeof metadata.provider_parallel_budget === "number"
+                      ? metadata.provider_parallel_budget
+                      : undefined,
+                  queue_reason:
+                    typeof metadata.queue_reason === "string"
+                      ? metadata.queue_reason
+                      : undefined,
+                  retryable_overload:
+                    typeof metadata.retryable_overload === "boolean"
+                      ? metadata.retryable_overload
+                      : undefined,
+                  permission_status:
+                    typeof metadata.permission_status === "string"
+                      ? metadata.permission_status
+                      : undefined,
+                  required_profile_keys: Array.isArray(
+                    metadata.required_profile_keys,
+                  )
+                    ? (metadata.required_profile_keys as string[])
+                    : undefined,
+                  ask_profile_keys: Array.isArray(metadata.ask_profile_keys)
+                    ? (metadata.ask_profile_keys as string[])
+                    : undefined,
+                  blocking_profile_keys: Array.isArray(
+                    metadata.blocking_profile_keys,
+                  )
+                    ? (metadata.blocking_profile_keys as string[])
+                    : undefined,
+                  decision_source:
+                    typeof metadata.decision_source === "string"
+                      ? metadata.decision_source
+                      : undefined,
+                  decision_scope:
+                    typeof metadata.decision_scope === "string"
+                      ? metadata.decision_scope
+                      : undefined,
+                  confirmation_status:
+                    typeof metadata.confirmation_status === "string"
+                      ? metadata.confirmation_status
+                      : undefined,
+                  confirmation_request_id:
+                    typeof metadata.confirmation_request_id === "string"
+                      ? metadata.confirmation_request_id
+                      : undefined,
+                  confirmation_source:
+                    typeof metadata.confirmation_source === "string"
+                      ? metadata.confirmation_source
+                      : undefined,
+                  declared_only:
+                    typeof metadata.declared_only === "boolean"
+                      ? metadata.declared_only
+                      : undefined,
+                  turn_gating:
+                    typeof metadata.turn_gating === "boolean"
+                      ? metadata.turn_gating
+                      : undefined,
+                  limit_status:
+                    typeof metadata.limit_status === "string"
+                      ? metadata.limit_status
+                      : undefined,
+                  capability_gap:
+                    typeof metadata.capability_gap === "string"
+                      ? metadata.capability_gap
+                      : undefined,
+                  keepalive_kind:
+                    typeof metadata.keepalive_kind === "string"
+                      ? metadata.keepalive_kind
+                      : undefined,
+                  keepalive_sequence:
+                    typeof metadata.keepalive_sequence === "number"
+                      ? metadata.keepalive_sequence
+                      : undefined,
+                  keepalive_elapsed_ms:
+                    typeof metadata.keepalive_elapsed_ms === "number"
+                      ? metadata.keepalive_elapsed_ms
+                      : undefined,
+                }
+              : undefined,
+          },
+        };
+      }
+      case "task_profile_resolved":
+        return {
+          type: "task_profile_resolved",
+          task_profile:
+            (event.task_profile as AsterSessionExecutionRuntimeTaskProfile) ||
+            (event.taskProfile as AsterSessionExecutionRuntimeTaskProfile),
+        };
+      case "candidate_set_resolved":
+        return {
+          type: "candidate_set_resolved",
+          routing_decision: routingDecisionFromEvent(event),
+        };
+      case "routing_decision_made":
+        return {
+          type: "routing_decision_made",
+          routing_decision: routingDecisionFromEvent(event),
+        };
+      case "routing_fallback_applied":
+        return {
+          type: "routing_fallback_applied",
+          routing_decision: routingDecisionFromEvent(event),
+        };
+      case "routing_not_possible":
+        return {
+          type: "routing_not_possible",
+          routing_decision: routingDecisionFromEvent(event),
+        };
+      case "limit_state_updated":
+        return {
+          type: "limit_state_updated",
+          limit_state:
+            (event.limit_state as AsterSessionExecutionRuntimeLimitState) ||
+            (event.limitState as AsterSessionExecutionRuntimeLimitState),
+        };
+      case "single_candidate_only":
+        return {
+          type: "single_candidate_only",
+          limit_state:
+            (event.limit_state as AsterSessionExecutionRuntimeLimitState) ||
+            (event.limitState as AsterSessionExecutionRuntimeLimitState),
+        };
+      case "single_candidate_capability_gap":
+        return {
+          type: "single_candidate_capability_gap",
+          limit_state:
+            (event.limit_state as AsterSessionExecutionRuntimeLimitState) ||
+            (event.limitState as AsterSessionExecutionRuntimeLimitState),
+        };
+      case "cost_estimated":
+        return {
+          type: "cost_estimated",
+          cost_state:
+            (event.cost_state as AsterSessionExecutionRuntimeCostState) ||
+            (event.costState as AsterSessionExecutionRuntimeCostState),
+        };
+      case "cost_recorded":
+        return {
+          type: "cost_recorded",
+          cost_state:
+            (event.cost_state as AsterSessionExecutionRuntimeCostState) ||
+            (event.costState as AsterSessionExecutionRuntimeCostState),
+        };
+      case "rate_limit_hit":
+        return {
+          type: "rate_limit_hit",
+          limit_event:
+            (event.limit_event as AsterSessionExecutionRuntimeLimitEvent) ||
+            (event.limitEvent as AsterSessionExecutionRuntimeLimitEvent),
+        };
+      case "quota_low":
+        return {
+          type: "quota_low",
+          limit_event:
+            (event.limit_event as AsterSessionExecutionRuntimeLimitEvent) ||
+            (event.limitEvent as AsterSessionExecutionRuntimeLimitEvent),
+        };
+      case "quota_blocked":
+        return {
+          type: "quota_blocked",
+          limit_event:
+            (event.limit_event as AsterSessionExecutionRuntimeLimitEvent) ||
+            (event.limitEvent as AsterSessionExecutionRuntimeLimitEvent),
+        };
+      case "queue_added": {
+        const queuedTurn = normalizeQueuedTurnSnapshot(event.queued_turn);
+        if (!queuedTurn) {
+          return null;
+        }
+        return {
+          type: "queue_added",
+          session_id: (event.session_id as string) || "",
+          queued_turn: queuedTurn,
+        };
+      }
+      case "queue_removed":
+        return {
+          type: "queue_removed",
+          session_id: (event.session_id as string) || "",
+          queued_turn_id: (event.queued_turn_id as string) || "",
+        };
+      case "queue_started":
+        return {
+          type: "queue_started",
+          session_id: (event.session_id as string) || "",
+          queued_turn_id: (event.queued_turn_id as string) || "",
+        };
+      case "queue_cleared":
+        return {
+          type: "queue_cleared",
+          session_id: (event.session_id as string) || "",
+          queued_turn_ids: Array.isArray(event.queued_turn_ids)
+            ? (event.queued_turn_ids as string[])
+            : [],
+        };
+      case "subagent_status_changed":
+        return {
+          type: "subagent_status_changed",
+          session_id: (event.session_id as string) || "",
+          root_session_id: (event.root_session_id as string) || "",
+          parent_session_id: event.parent_session_id as string | undefined,
+          status:
+            (event.status as AgentSubagentRuntimeStatus | undefined) || "idle",
+          latest_turn_id:
+            typeof event.latest_turn_id === "string"
+              ? event.latest_turn_id
+              : undefined,
+          latest_turn_status: event.latest_turn_status as
+            | AgentSubagentRuntimeStatus
+            | undefined,
+          queued_turn_count:
+            typeof event.queued_turn_count === "number"
+              ? event.queued_turn_count
+              : undefined,
+          team_phase:
+            typeof event.team_phase === "string" ? event.team_phase : undefined,
+          team_parallel_budget:
+            typeof event.team_parallel_budget === "number"
+              ? event.team_parallel_budget
+              : undefined,
+          team_active_count:
+            typeof event.team_active_count === "number"
+              ? event.team_active_count
+              : undefined,
+          team_queued_count:
+            typeof event.team_queued_count === "number"
+              ? event.team_queued_count
+              : undefined,
+          provider_concurrency_group:
+            typeof event.provider_concurrency_group === "string"
+              ? event.provider_concurrency_group
+              : undefined,
+          provider_parallel_budget:
+            typeof event.provider_parallel_budget === "number"
+              ? event.provider_parallel_budget
+              : undefined,
+          queue_reason:
+            typeof event.queue_reason === "string"
+              ? event.queue_reason
+              : undefined,
+          retryable_overload:
+            typeof event.retryable_overload === "boolean"
+              ? event.retryable_overload
+              : undefined,
+          closed: typeof event.closed === "boolean" ? event.closed : undefined,
+          usage: event.usage as AgentTokenUsage | undefined,
+          duration_ms: normalizeOptionalNumber(
+            event.duration_ms ?? event.durationMs,
+          ),
+          tool_count: normalizeOptionalNumber(
+            event.tool_count ?? event.toolCount,
+          ),
+          result_ref:
+            typeof event.result_ref === "string"
+              ? event.result_ref
+              : typeof event.resultRef === "string"
+                ? event.resultRef
+                : undefined,
+        };
+      case "message":
+        return {
+          type: "message",
+          message: event.message as AgentMessage,
+        };
+      case "error":
+        return {
+          type: "error",
+          message: (event.message as string) || "Unknown error",
+        };
+      case "warning":
+        return {
+          type: "warning",
+          code: event.code as string | undefined,
+          message: (event.message as string) || "Unknown warning",
+        };
+      default:
+        return null;
     }
   })();
 

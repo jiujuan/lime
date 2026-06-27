@@ -119,6 +119,10 @@ const appServerProcessorFiles = [
   "lime-rs/crates/app-server/src/processor/mod.rs",
   ...collectRustFiles("lime-rs/crates/app-server/src/processor"),
 ];
+const agentRequestToolPolicyFiles = [
+  "lime-rs/crates/agent/src/request_tool_policy.rs",
+  ...collectRustFiles("lime-rs/crates/agent/src/request_tool_policy"),
+];
 const rustProtocolFiles = [
   "lime-rs/crates/app-server-protocol/src/lib.rs",
   "lime-rs/crates/app-server-protocol/src/jsonrpc_lite.rs",
@@ -2902,7 +2906,7 @@ const checks = [
   },
   {
     name: "Request tool policy delegates WebSearch preflight execution to current tool orchestrator",
-    file: "lime-rs/crates/agent/src/request_tool_policy.rs",
+    files: agentRequestToolPolicyFiles,
     snippets: [
       "execute_planned_tool_batch(",
       "ToolExecutionBatchInput",
@@ -3375,7 +3379,9 @@ const checks = [
       "submit_count: AtomicUsize",
       "action_count: AtomicUsize",
       "async fn aster_backend_json_rpc_agent_flow_smoke_covers_artifact_read_and_action_response()",
-      "AppServerRuntimeFactory::aster_app_server(host.clone())",
+      "AppServerRuntimeFactory::aster_runtime_core(host.clone()).with_sidecar_store(",
+      "SidecarStore::new(sidecar_root.path())",
+      "AppServer::with_runtime(runtime)",
       "METHOD_AGENT_SESSION_TURN_START",
       "METHOD_AGENT_SESSION_EVENT",
       "METHOD_ARTIFACT_READ",
@@ -3634,7 +3640,7 @@ const checks = [
     name: "Request tool policy avoids freshness keyword hard-code for preflight",
     files: [
       "lime-rs/crates/agent/src/lib.rs",
-      "lime-rs/crates/agent/src/request_tool_policy.rs",
+      ...agentRequestToolPolicyFiles,
     ],
     snippets: [
       "pub fn resolve_request_tool_policy_with_mode(",

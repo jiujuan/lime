@@ -1,6 +1,12 @@
-import { useState, type ReactNode } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Pause, RefreshCw, Square, Terminal } from "lucide-react";
+import {
+  Pause,
+  RefreshCw,
+  SendHorizontal,
+  Square,
+  Terminal,
+} from "lucide-react";
 import type { CodingWorkbenchView } from "@limecloud/agent-runtime-projection";
 import type { AgentRuntimeFileCheckpointThreadSummary } from "@/lib/api/agentRuntime";
 import type { ActionRequired, ConfirmResponse } from "../types";
@@ -31,6 +37,10 @@ export interface CodingWorkbenchCommandProcessControls {
   onTerminateProcess?: (processId: string) => void | Promise<unknown>;
   onRefreshProcessStatus?: (processId: string) => void | Promise<unknown>;
   onDrainProcessOutput?: (processId: string) => void | Promise<unknown>;
+  onWriteProcessStdin?: (
+    processId: string,
+    data: string,
+  ) => void | Promise<unknown>;
 }
 
 export function CodingWorkbenchOutputPanel({
@@ -155,6 +165,7 @@ export function CodingWorkbenchOutputPanel({
                       processId={command.processId}
                       executionProcessStatus={command.executionProcessStatus}
                       executionSurface={command.executionSurface}
+                      stdinWritable={command.stdinWritable}
                       processControls={processControls}
                     />
                   ) : null}
@@ -228,11 +239,13 @@ function CodingWorkbenchCommandProcessRow({
   processId,
   executionProcessStatus,
   executionSurface,
+  stdinWritable,
   processControls,
 }: {
   processId: string;
   executionProcessStatus?: string;
   executionSurface?: string;
+  stdinWritable?: boolean;
   processControls?: CodingWorkbenchCommandProcessControls;
 }) {
   const { t } = useTranslation("agent");
@@ -245,35 +258,50 @@ function CodingWorkbenchCommandProcessRow({
       processControls?.onRefreshProcessStatus ||
       processControls?.onDrainProcessOutput,
     );
+  const canWriteStdin =
+    live &&
+    stdinWritable === true &&
+    Boolean(processControls?.onWriteProcessStdin);
 
   return (
-    <div className="mt-3 flex min-h-8 items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-600">
-      <div className="flex min-w-0 items-center gap-2">
-        <Terminal className="h-3.5 w-3.5 shrink-0 text-slate-500" />
-        <span className="truncate">
-          {t("agentChat.canvasWorkbench.coding.outputs.processId", {
-            id: processId,
-          })}
-        </span>
-        {executionProcessStatus ? (
-          <span className="shrink-0 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] text-slate-500">
-            {t("agentChat.canvasWorkbench.coding.outputs.processStatus", {
-              status: executionProcessStatus,
+    <div
+      className="mt-3 space-y-2"
+      data-testid="coding-workbench-command-process"
+    >
+      <div className="flex min-h-8 items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-600">
+        <div className="flex min-w-0 items-center gap-2">
+          <Terminal className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+          <span className="truncate">
+            {t("agentChat.canvasWorkbench.coding.outputs.processId", {
+              id: processId,
             })}
           </span>
-        ) : null}
-        {executionSurface ? (
-          <span className="hidden shrink-0 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] text-slate-500 sm:inline-flex">
-            {t("agentChat.canvasWorkbench.coding.outputs.processSurface", {
-              surface: executionSurface,
-            })}
-          </span>
+          {executionProcessStatus ? (
+            <span className="shrink-0 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] text-slate-500">
+              {t("agentChat.canvasWorkbench.coding.outputs.processStatus", {
+                status: executionProcessStatus,
+              })}
+            </span>
+          ) : null}
+          {executionSurface ? (
+            <span className="hidden shrink-0 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] text-slate-500 sm:inline-flex">
+              {t("agentChat.canvasWorkbench.coding.outputs.processSurface", {
+                surface: executionSurface,
+              })}
+            </span>
+          ) : null}
+        </div>
+        {hasControls ? (
+          <CodingWorkbenchCommandProcessButtons
+            processId={processId}
+            processControls={processControls}
+          />
         ) : null}
       </div>
-      {hasControls ? (
-        <CodingWorkbenchCommandProcessButtons
+      {canWriteStdin ? (
+        <CodingWorkbenchCommandStdinForm
           processId={processId}
-          processControls={processControls}
+          onWriteProcessStdin={processControls?.onWriteProcessStdin}
         />
       ) : null}
     </div>
@@ -363,6 +391,73 @@ function CodingWorkbenchCommandProcessButtons({
         </ProcessControlButton>
       ) : null}
     </div>
+  );
+}
+
+function CodingWorkbenchCommandStdinForm({
+  processId,
+  onWriteProcessStdin,
+}: {
+  processId: string;
+  onWriteProcessStdin?: (
+    processId: string,
+    data: string,
+  ) => void | Promise<unknown>;
+}) {
+  const { t } = useTranslation("agent");
+  const [value, setValue] = useState("");
+  const [pending, setPending] = useState(false);
+  const canSubmit =
+    value.length > 0 && !pending && Boolean(onWriteProcessStdin);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!canSubmit || !onWriteProcessStdin) return;
+    const data = value.endsWith("\n") ? value : `${value}\n`;
+    setPending(true);
+    try {
+      await onWriteProcessStdin(processId, data);
+      setValue("");
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <form
+      className="flex min-h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5"
+      data-testid="coding-workbench-command-stdin-form"
+      onSubmit={handleSubmit}
+    >
+      <input
+        type="text"
+        value={value}
+        aria-label={t(
+          "agentChat.canvasWorkbench.coding.outputs.stdinInputAria",
+          { id: processId },
+        )}
+        placeholder={t(
+          "agentChat.canvasWorkbench.coding.outputs.stdinPlaceholder",
+        )}
+        onChange={(event) => setValue(event.currentTarget.value)}
+        disabled={pending}
+        className="min-w-0 flex-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+      />
+      <button
+        type="submit"
+        aria-label={t(
+          "agentChat.canvasWorkbench.coding.outputs.stdinSendAria",
+          { id: processId },
+        )}
+        title={t("agentChat.canvasWorkbench.coding.outputs.stdinSendAria", {
+          id: processId,
+        })}
+        disabled={!canSubmit}
+        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <SendHorizontal className="h-3.5 w-3.5" />
+      </button>
+    </form>
   );
 }
 

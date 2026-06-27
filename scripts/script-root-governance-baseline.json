@@ -1,6 +1,22 @@
 {
-  "generatedAt": "2026-06-08",
-  "policy": "The scripts root is a frozen legacy entrypoint area. New executable scripts must live under scripts/<domain>/, scripts/lib/, or the owning package. Shrink this baseline when root scripts are migrated.",
+  "generatedAt": "2026-06-27",
+  "policy": "The scripts root and first-level script domains are frozen legacy governance surfaces. New executable scripts must live under an existing scripts/<domain>/, scripts/lib/, or the owning package. Add a new scripts/<domain>/ only when the domain is documented and baseline-approved. Shrink this baseline when root scripts are migrated.",
+  "allowedDirectories": [
+    "scripts/agent-app",
+    "scripts/agent-qc",
+    "scripts/agent-runtime",
+    "scripts/app-server",
+    "scripts/electron",
+    "scripts/governance",
+    "scripts/harness",
+    "scripts/i18n",
+    "scripts/knowledge",
+    "scripts/lib",
+    "scripts/mcp",
+    "scripts/playwright",
+    "scripts/smoke"
+  ],
+  "ignoredLocalDirectories": ["scripts/__pycache__"],
   "allowedRootFiles": [
     "scripts/README.md",
     "scripts/agentui-ttft-live-sample.mjs",

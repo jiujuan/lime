@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertCircle, Boxes, Info, RefreshCw, Search } from "lucide-react";
+import { Boxes, Info, RefreshCw, Search } from "lucide-react";
 import {
-  hasOemCloudSession,
   resolveOemCloudRuntimeContext,
   type OemCloudRuntimeContext,
 } from "@/lib/api/oemCloudRuntime";
+import { listAgentRuntimeSessions } from "@/lib/api/agentRuntime";
 import type { PluginsPageParams } from "@/types/page";
 import type { Page, PageParams } from "@/types/page";
 import {
@@ -26,6 +26,11 @@ import {
   pluginMarketplaceStatusTone,
 } from "./marketplace/pluginMarketplacePresentation";
 import { PluginMarketplaceDetailPanel } from "./PluginMarketplaceDetailPanel";
+import {
+  buildPluginHistorySessionSelectionModel,
+  type PluginHistorySessionCandidate,
+  type PluginHistorySessionSelectionModel,
+} from "./history/pluginHistorySessionSelection";
 import type {
   PluginMarketplaceStatusFilter,
   PluginMarketplaceViewItem,
@@ -36,10 +41,15 @@ import {
   buildPluginMarketplaceOpenAgentParams,
 } from "./PluginMarketplacePageNavigation";
 
+export type PluginMarketplaceHistorySessionLoader = (
+  item: PluginMarketplaceViewItem,
+) => Promise<PluginHistorySessionSelectionModel>;
+
 export interface PluginMarketplacePageProps {
   pageParams?: PluginsPageParams;
   runtimeContext?: OemCloudRuntimeContext | null;
   loader?: PluginMarketplaceRegistryLoader;
+  historySessionLoader?: PluginMarketplaceHistorySessionLoader;
   actionDeps?: PluginMarketplaceActionDeps;
   onNavigate?: (page: Page, params?: PageParams) => void;
 }
@@ -52,6 +62,11 @@ const STATUS_FILTERS: PluginMarketplaceStatusFilter[] = [
   "attention",
 ];
 
+type PluginMarketplaceTranslate = (
+  key: string,
+  options?: Record<string, string | number>,
+) => string;
+
 function normalizeStatusFilter(
   value: PluginsPageParams["statusFilter"],
 ): PluginMarketplaceStatusFilter {
@@ -62,10 +77,18 @@ export function PluginMarketplacePage({
   pageParams,
   runtimeContext,
   loader,
+  historySessionLoader,
   actionDeps,
   onNavigate,
 }: PluginMarketplacePageProps) {
   const { t } = useTranslation("agent");
+  const translate = useMemo<PluginMarketplaceTranslate>(
+    () => {
+      const baseTranslate = t as unknown as PluginMarketplaceTranslate;
+      return (key, options) => String(baseTranslate(key, options));
+    },
+    [t],
+  );
   const resolvedRuntime = useMemo(
     () =>
       runtimeContext === undefined
@@ -82,12 +105,20 @@ export function PluginMarketplacePage({
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [selectedPluginId, setSelectedPluginId] = useState<string | null>(null);
+  const [historySelectionPluginId, setHistorySelectionPluginId] = useState<
+    string | null
+  >(null);
+  const [historySelectionModel, setHistorySelectionModel] =
+    useState<PluginHistorySessionSelectionModel | null>(null);
+  const [historySelectionLoading, setHistorySelectionLoading] = useState(false);
+  const [historySelectionError, setHistorySelectionError] = useState<
+    string | null
+  >(null);
   const [registrationCodes, setRegistrationCodes] = useState<
     Record<string, string>
   >({});
-  const cloudReady = hasOemCloudSession(resolvedRuntime);
   const registry = usePluginMarketplaceRegistry({
-    tenantId: resolvedRuntime?.tenantId ?? "",
+    tenantId: resolvedRuntime?.sessionToken ? resolvedRuntime.tenantId : "",
     marketplaceQuery: {
       category,
       sort: "name",
@@ -98,7 +129,6 @@ export function PluginMarketplacePage({
       statusFilter,
       sort: "status",
     },
-    autoLoad: cloudReady,
     loader,
   });
   const model = registry.model;
@@ -127,6 +157,36 @@ export function PluginMarketplacePage({
     );
   }, [model, selectedPluginId]);
 
+  async function loadHistorySessions(item: PluginMarketplaceViewItem) {
+    const load =
+      historySessionLoader ??
+      (async (target: PluginMarketplaceViewItem) => {
+        const sessions = await listAgentRuntimeSessions({
+          includeArchived: true,
+          limit: 80,
+        });
+        return buildPluginHistorySessionSelectionModel({
+          item: target,
+          sessions,
+        });
+      });
+    setSelectedPluginId(item.pluginId);
+    setHistorySelectionPluginId(item.pluginId);
+    setHistorySelectionLoading(true);
+    setHistorySelectionError(null);
+    try {
+      const nextModel = await load(item);
+      setHistorySelectionModel(nextModel);
+    } catch (error) {
+      setHistorySelectionModel(null);
+      setHistorySelectionError(
+        error instanceof Error ? error.message : String(error),
+      );
+    } finally {
+      setHistorySelectionLoading(false);
+    }
+  }
+
   async function handlePrimaryAction(item: PluginMarketplaceViewItem) {
     if (item.primaryAction.kind === "open") {
       const params = buildPluginMarketplaceOpenAgentParams(item);
@@ -136,10 +196,7 @@ export function PluginMarketplacePage({
       return;
     }
     if (item.primaryAction.kind === "view_history") {
-      const params = buildPluginMarketplaceHistoryAgentParams(item);
-      if (params) {
-        onNavigate?.("agent", params);
-      }
+      void loadHistorySessions(item);
       return;
     }
     if (
@@ -171,6 +228,16 @@ export function PluginMarketplacePage({
     skill: PluginSkillDeclaration,
   ) {
     const params = buildPluginMarketplaceOpenAgentParams(item, skill);
+    if (params) {
+      onNavigate?.("agent", params);
+    }
+  }
+
+  function handleOpenHistorySession(
+    item: PluginMarketplaceViewItem,
+    candidate: PluginHistorySessionCandidate,
+  ) {
+    const params = buildPluginMarketplaceHistoryAgentParams(item, candidate);
     if (params) {
       onNavigate?.("agent", params);
     }
@@ -259,7 +326,7 @@ export function PluginMarketplacePage({
             type="button"
             className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-[color:var(--lime-surface-border,#e2e8f0)] bg-[color:var(--lime-surface,#fff)] px-4 text-sm font-semibold text-[color:var(--lime-text-strong,#0f172a)] transition hover:bg-[color:var(--lime-surface-hover,#f8fafc)] disabled:cursor-not-allowed disabled:opacity-60"
             data-testid="plugin-marketplace-refresh"
-            disabled={!cloudReady || registry.loading}
+            disabled={registry.loading}
             onClick={() => void registry.refresh().catch(() => undefined)}
           >
             <RefreshCw className="size-4" aria-hidden="true" />
@@ -269,25 +336,7 @@ export function PluginMarketplacePage({
           </button>
         </header>
 
-        {!cloudReady ? (
-          <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-800">
-            <div className="flex items-start gap-3">
-              <AlertCircle
-                className="mt-0.5 size-5 shrink-0"
-                aria-hidden="true"
-              />
-              <div>
-                <h2 className="m-0 text-base font-semibold">
-                  {t("plugin.marketplace.cloudRequired.title")}
-                </h2>
-                <p className="mt-1 leading-6">
-                  {t("plugin.marketplace.cloudRequired.description")}
-                </p>
-              </div>
-            </div>
-          </section>
-        ) : (
-          <>
+        <>
             <section className="grid gap-3 md:grid-cols-5">
               <SummaryCard
                 label={t("plugin.marketplace.count.all")}
@@ -410,7 +459,7 @@ export function PluginMarketplacePage({
                                 item,
                               )}`}
                             >
-                              {t(pluginMarketplaceStatusLabelKey(item))}
+                              {translate(pluginMarketplaceStatusLabelKey(item))}
                             </span>
                           </div>
                           <p className="mt-2 line-clamp-2 text-sm leading-6 text-[color:var(--lime-text-muted,#64748b)]">
@@ -445,7 +494,7 @@ export function PluginMarketplacePage({
                             item={item}
                             pending={pendingActionId === item.pluginId}
                             onClick={() => void handlePrimaryAction(item)}
-                            t={t}
+                            t={translate}
                           />
                         </div>
                       </article>
@@ -482,14 +531,31 @@ export function PluginMarketplacePage({
                   void handleSubmitRegistration(item)
                 }
                 onOpenSkill={handleOpenSkill}
+                historySelectionModel={
+                  selectedDetailItem?.pluginId === historySelectionPluginId
+                    ? historySelectionModel
+                    : null
+                }
+                historySelectionLoading={
+                  selectedDetailItem?.pluginId === historySelectionPluginId &&
+                  historySelectionLoading
+                }
+                historySelectionError={
+                  selectedDetailItem?.pluginId === historySelectionPluginId
+                    ? historySelectionError
+                    : null
+                }
+                onOpenHistorySession={handleOpenHistorySession}
+                onRefreshHistorySessions={(item) =>
+                  void loadHistorySessions(item)
+                }
                 onManage={(item, action) =>
                   void handleManagementAction(item, action)
                 }
-                t={t}
+                t={translate}
               />
             </div>
-          </>
-        )}
+        </>
       </div>
     </main>
   );

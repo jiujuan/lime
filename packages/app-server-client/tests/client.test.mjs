@@ -143,6 +143,9 @@ const {
   METHOD_DIAGNOSTICS_LOG_STORAGE_READ,
   METHOD_DIAGNOSTICS_SERVER_READ,
   METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT,
+  METHOD_DIAGNOSTICS_TRACE_EXPORT,
+  METHOD_DIAGNOSTICS_TRACE_LIST,
+  METHOD_DIAGNOSTICS_TRACE_READ,
   METHOD_DIAGNOSTICS_WINDOWS_STARTUP_READ,
   METHOD_DISCORD_CHANNEL_PROBE,
   METHOD_FEISHU_CHANNEL_PROBE,
@@ -1171,6 +1174,12 @@ test("builds app data surface requests with current methods", () => {
   const clearedDiagnosticHistory = client.clearDiagnosticLogHistory();
   const logStorageDiagnostics = client.readLogStorageDiagnostics();
   const supportBundle = client.exportSupportBundle();
+  const supportBundleWithTrace = client.exportSupportBundle({
+    includeTraceExport: {
+      sessionId: "session-a",
+      traceId: "trace-a",
+    },
+  });
   const serverDiagnostics = client.readServerDiagnostics();
   const windowsStartupDiagnostics = client.readWindowsStartupDiagnostics();
   const gatewayChannelStatus = client.readGatewayChannelStatus({
@@ -1616,6 +1625,16 @@ test("builds app data surface requests with current methods", () => {
   assert.deepEqual(logStorageDiagnostics.params, {});
   assert.equal(supportBundle.method, METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT);
   assert.deepEqual(supportBundle.params, {});
+  assert.equal(
+    supportBundleWithTrace.method,
+    METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT,
+  );
+  assert.deepEqual(supportBundleWithTrace.params, {
+    includeTraceExport: {
+      sessionId: "session-a",
+      traceId: "trace-a",
+    },
+  });
   assert.equal(serverDiagnostics.method, METHOD_DIAGNOSTICS_SERVER_READ);
   assert.deepEqual(serverDiagnostics.params, {});
   assert.equal(
@@ -2542,6 +2561,9 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT, kind: "request" },
     { method: METHOD_DIAGNOSTICS_SERVER_READ, kind: "request" },
     { method: METHOD_DIAGNOSTICS_WINDOWS_STARTUP_READ, kind: "request" },
+    { method: METHOD_DIAGNOSTICS_TRACE_LIST, kind: "request" },
+    { method: METHOD_DIAGNOSTICS_TRACE_READ, kind: "request" },
+    { method: METHOD_DIAGNOSTICS_TRACE_EXPORT, kind: "request" },
     { method: METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE, kind: "request" },
     { method: METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE, kind: "request" },
     { method: METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE, kind: "request" },
@@ -2766,11 +2788,17 @@ test("exports app-server method catalog with request and notification kinds", ()
     isAppServerRequestMethod(METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED),
     false,
   );
-  assert.equal(isAppServerRequestMethod(METHOD_BROWSER_SESSION_TARGET_LIST), true);
+  assert.equal(
+    isAppServerRequestMethod(METHOD_BROWSER_SESSION_TARGET_LIST),
+    true,
+  );
   assert.equal(isAppServerRequestMethod(METHOD_BROWSER_SESSION_OPEN), true);
   assert.equal(isAppServerRequestMethod(METHOD_BROWSER_SESSION_READ), true);
   assert.equal(isAppServerRequestMethod(METHOD_BROWSER_SESSION_CLOSE), true);
-  assert.equal(isAppServerRequestMethod(METHOD_BROWSER_SESSION_EVENT_LIST), true);
+  assert.equal(
+    isAppServerRequestMethod(METHOD_BROWSER_SESSION_EVENT_LIST),
+    true,
+  );
   assert.equal(
     isAppServerRequestMethod(METHOD_BROWSER_SESSION_ACTION_EXECUTE),
     true,
@@ -2907,10 +2935,7 @@ test("exports app-server method catalog with request and notification kinds", ()
   assert.equal(isAppServerRequestMethod(METHOD_MCP_RESOURCE_LIST), true);
   assert.equal(isAppServerRequestMethod(METHOD_MCP_RESOURCE_READ), true);
   assert.equal(isAppServerRequestMethod(METHOD_MCP_RESOURCE_SUBSCRIBE), true);
-  assert.equal(
-    isAppServerRequestMethod(METHOD_MCP_RESOURCE_UNSUBSCRIBE),
-    true,
-  );
+  assert.equal(isAppServerRequestMethod(METHOD_MCP_RESOURCE_UNSUBSCRIBE), true);
   assert.equal(isAppServerRequestMethod(METHOD_PROJECT_MEMORY_READ), true);
   assert.equal(
     isAppServerRequestMethod(METHOD_CONNECT_DEEP_LINK_RESOLVE),
@@ -2958,7 +2983,9 @@ test("exports app-server method catalog with request and notification kinds", ()
   assert.equal(isAppServerNotificationMethod(METHOD_INITIALIZED), true);
   assert.equal(isAppServerNotificationMethod(METHOD_AGENT_SESSION_EVENT), true);
   assert.equal(
-    isAppServerNotificationMethod(METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED),
+    isAppServerNotificationMethod(
+      METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED,
+    ),
     true,
   );
   assert.equal(
@@ -2991,7 +3018,8 @@ test("parses workspace right surface pending changed notifications", () => {
     true,
   );
   assert.equal(
-    workspaceRightSurfacePendingChangedNotification(notification)?.params.changeType,
+    workspaceRightSurfacePendingChangedNotification(notification)?.params
+      .changeType,
     "requested",
   );
   assert.equal(

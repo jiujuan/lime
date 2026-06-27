@@ -22,6 +22,8 @@ export function buildAgentStreamTextDeltaApplyPlan(params: {
   now: number;
   requestStartedAt: number;
   metricDeltaText?: string;
+  rendererEventReceivedAt?: number | null;
+  serverEventEmittedAt?: number | null;
   textDeltaBufferedCount?: number | null;
 }): AgentStreamTextDeltaApplyPlan {
   const shouldRecordFirstTextDelta = shouldRecordAgentStreamFirstTextDelta({
@@ -40,6 +42,8 @@ export function buildAgentStreamTextDeltaApplyPlan(params: {
           firstRuntimeStatusAt: params.firstRuntimeStatusAt,
           firstTextDeltaAt,
           requestStartedAt: params.requestStartedAt,
+          rendererEventReceivedAt: params.rendererEventReceivedAt,
+          serverEventEmittedAt: params.serverEventEmittedAt,
         })
       : null,
     nextAccumulatedContent: appendTextWithOverlapDetection(

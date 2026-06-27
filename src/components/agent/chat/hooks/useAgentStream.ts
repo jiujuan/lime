@@ -139,6 +139,7 @@ interface UseAgentStreamOptions {
   setPendingActions: Dispatch<SetStateAction<ActionRequired[]>>;
   refreshSessionReadModel: (targetSessionId?: string) => Promise<boolean>;
   executionRuntime: AsterSessionExecutionRuntime | null;
+  clawTraceEnabled?: boolean;
 }
 
 export function useAgentStream(options: UseAgentStreamOptions) {
@@ -175,6 +176,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
     setPendingActions,
     refreshSessionReadModel,
     executionRuntime,
+    clawTraceEnabled = false,
   } = options;
 
   const {
@@ -220,6 +222,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
         warnedKeysRef,
         onWriteFile,
         executionRuntime,
+        clawTraceEnabled,
         setActiveStream,
         clearActiveStreamIfMatch,
         setMessages,
@@ -244,6 +247,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
       executionStrategy,
       ensureSession,
       executionRuntime,
+      clawTraceEnabled,
       getWorkspaceIdForSubmit,
       getSyncedSessionModelPreference,
       getSyncedSessionExecutionStrategy,

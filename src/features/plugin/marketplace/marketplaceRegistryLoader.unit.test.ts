@@ -1,7 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { InstalledAgentAppStateListResult } from "@/features/agent-app";
+import contentFactoryFixtureData from "@/features/agent-app/fixtures/content-factory-app.json";
+import { buildInstalledAgentAppState } from "@/features/agent-app/install/installedAppState";
+import { buildInstalledAppPreview } from "@/features/agent-app/install/installedAppPreview";
+import { buildAgentAppLabResolvedSetupState } from "@/features/agent-app/install/labInstallFlow";
+import { buildPackageIdentity } from "@/features/agent-app/install/packageIdentity";
+import type { AgentAppCloudCatalogResult } from "@/lib/api/agentApps";
+import type {
+  AppManifest,
+  CloudBootstrapApp,
+} from "@/features/agent-app/types";
 import type { InstalledAgentAppState } from "@/features/agent-app/types";
+import { OemCloudControlPlaneError } from "@/lib/api/oemCloudControlPlane";
 import type { PluginMarketplaceListResponse } from "./types";
 import { loadPluginMarketplaceRegistry } from "./marketplaceRegistryLoader";
 
@@ -102,6 +113,84 @@ function installedState(
   } as InstalledAgentAppState;
 }
 
+function readyInstalledState(): InstalledAgentAppState {
+  const loadedAt = "2026-06-25T00:00:00.000Z";
+  const manifest = contentFactoryFixtureData as AppManifest;
+  const identity = buildPackageIdentity({
+    manifest,
+    sourceKind: "local_folder",
+    sourceUri: "/tmp/lime/content-factory-app",
+    loadedAt,
+  });
+  const setupPreview = buildInstalledAppPreview({
+    fixture: manifest,
+    identity,
+    loadedAt,
+    checkedAt: loadedAt,
+    generatedAt: loadedAt,
+  });
+  const setup = buildAgentAppLabResolvedSetupState(setupPreview.projection);
+  const preview = buildInstalledAppPreview({
+    fixture: manifest,
+    identity,
+    setup,
+    loadedAt,
+    checkedAt: loadedAt,
+    generatedAt: loadedAt,
+  });
+  return buildInstalledAgentAppState({
+    preview,
+    setup,
+    installedAt: loadedAt,
+    updatedAt: loadedAt,
+  });
+}
+
+function cloudApp(
+  overrides: Partial<CloudBootstrapApp> = {},
+): CloudBootstrapApp {
+  return {
+    appId: "content-studio",
+    displayName: "Content Studio",
+    version: "0.4.0",
+    presentation: {
+      category: "content",
+      summary: "Content production app",
+    },
+    releaseId: "content-studio-0.4.0",
+    channel: "seeded",
+    registrationRequired: false,
+    registrationState: "not_required",
+    enabled: true,
+    packageUrl:
+      "https://packages.limecloud.example/agent-apps/content-studio-0.4.0.lpkg",
+    packageHash:
+      "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    manifestHash:
+      "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    capabilityRequirements: {},
+    defaultEntries: ["content-studio"],
+    policyDefaults: {},
+    toolAvailability: [],
+    ...overrides,
+  };
+}
+
+function agentAppCatalog(
+  apps: CloudBootstrapApp[],
+  source: AgentAppCloudCatalogResult["source"] = "seeded",
+): AgentAppCloudCatalogResult {
+  return {
+    source,
+    payload: {
+      schemaVersion: "agent-app-cloud-bootstrap/v1",
+      tenantId: "seeded",
+      generatedAt: "2026-06-25T00:00:00.000Z",
+      apps,
+    },
+  };
+}
+
 describe("plugin marketplace registry loader", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -159,5 +248,146 @@ describe("plugin marketplace registry loader", () => {
       }),
     ]);
     expect(snapshot.projectionInputs).toHaveLength(2);
+  });
+
+  it("没有云端租户时应合并本地已安装插件与 Agent App 目录", async () => {
+    const getMarketplace = vi.fn(async () => marketplace());
+    const localState = readyInstalledState();
+    const listInstalled = vi.fn(
+      async (): Promise<InstalledAgentAppStateListResult> => ({
+        states: [localState],
+        issues: [],
+      }),
+    );
+    const getAgentAppCatalog = vi.fn(async () => agentAppCatalog([cloudApp()]));
+
+    const snapshot = await loadPluginMarketplaceRegistry(
+      "",
+      {},
+      { getMarketplace, listInstalled, getAgentAppCatalog },
+    );
+
+    expect(getMarketplace).not.toHaveBeenCalled();
+    expect(listInstalled).toHaveBeenCalledTimes(1);
+    expect(getAgentAppCatalog).toHaveBeenCalledTimes(1);
+    expect(snapshot.marketplace.marketplaceName).toBe("local");
+    expect(snapshot.marketplace.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          pluginKey: localState.appId,
+          displayName: localState.manifest.displayName,
+          policy: {
+            installation: "INSTALLED_BY_DEFAULT",
+            authentication: "ON_USE",
+          },
+        }),
+        expect.objectContaining({
+          pluginKey: "content-studio",
+          displayName: "Content Studio",
+          appId: "content-studio",
+          policy: {
+            installation: "AVAILABLE",
+            authentication: "ON_USE",
+          },
+        }),
+      ]),
+    );
+    expect(snapshot.registry).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          pluginId: "content-studio",
+          installed: false,
+          enabled: false,
+          capabilityStates: expect.arrayContaining(["installable"]),
+        }),
+      ]),
+    );
+    expect(
+      snapshot.registry.find((item) => item.pluginId === localState.appId),
+    ).toMatchObject({
+      pluginId: localState.appId,
+      installed: true,
+      enabled: true,
+    });
+  });
+
+  it("Agent App 目录缺包哈希但本地已安装同 appId 时不应误报包不匹配", async () => {
+    const localState = installedState();
+    const listInstalled = vi.fn(
+      async (): Promise<InstalledAgentAppStateListResult> => ({
+        states: [localState],
+        issues: [],
+      }),
+    );
+    const getAgentAppCatalog = vi.fn(async () =>
+      agentAppCatalog([
+        cloudApp({
+          appId: localState.appId,
+          displayName: "Research Kit",
+          packageUrl: "",
+          packageHash: "",
+          manifestHash: "",
+          registrationRequired: true,
+          registrationState: "required",
+          enabled: false,
+          disabledReason: "registration required",
+        }),
+      ]),
+    );
+
+    const snapshot = await loadPluginMarketplaceRegistry(
+      "",
+      {},
+      {
+        getMarketplace: vi.fn(async () => marketplace()),
+        listInstalled,
+        getAgentAppCatalog,
+      },
+    );
+
+    expect(snapshot.registry).toEqual([
+      expect.objectContaining({
+        pluginId: localState.appId,
+        installed: true,
+        enabled: true,
+        activationState: "activatable",
+        blockerCodes: expect.not.arrayContaining([
+          "PLUGIN_INSTALLED_PACKAGE_MISMATCH",
+        ]),
+      }),
+    ]);
+  });
+
+  it("云端认证失败时应回退到本地已安装插件目录", async () => {
+    const getMarketplace = vi.fn(async () => {
+      throw new OemCloudControlPlaneError("invalid auth token", {
+        status: 401,
+      });
+    });
+    const localState = readyInstalledState();
+    const listInstalled = vi.fn(
+      async (): Promise<InstalledAgentAppStateListResult> => ({
+        states: [localState],
+        issues: [],
+      }),
+    );
+    const getAgentAppCatalog = vi.fn(async () => agentAppCatalog([]));
+
+    const snapshot = await loadPluginMarketplaceRegistry(
+      "tenant-0001",
+      { sort: "name" },
+      { getMarketplace, listInstalled, getAgentAppCatalog },
+    );
+
+    expect(getMarketplace).toHaveBeenCalledWith("tenant-0001", {
+      sort: "name",
+    });
+    expect(getAgentAppCatalog).toHaveBeenCalledTimes(1);
+    expect(snapshot.marketplace.marketplaceName).toBe("local");
+    expect(snapshot.registry[0]).toMatchObject({
+      pluginId: localState.appId,
+      installed: true,
+      enabled: true,
+    });
   });
 });

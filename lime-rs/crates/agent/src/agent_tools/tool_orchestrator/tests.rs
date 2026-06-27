@@ -11,7 +11,7 @@ use lime_core::config::{
 };
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
 use tokio::time::Duration;
 
@@ -163,6 +163,48 @@ impl Tool for DelayEchoTool {
     }
 }
 
+#[derive(Default)]
+struct RecordingLiveProcessRegistry {
+    registered: Mutex<Vec<ExecutionProcessSnapshot>>,
+    output: Mutex<Vec<ExecutionOutputDelta>>,
+    finished: Mutex<Vec<ExecutionProcessSnapshot>>,
+    control_statuses: Mutex<Vec<ExecutionProcessSnapshot>>,
+}
+
+impl LiveExecutionProcessRegistry for RecordingLiveProcessRegistry {
+    fn register_live_process(
+        &self,
+        handle: LocalExecutionProcessControlHandle,
+        snapshot: ExecutionProcessSnapshot,
+    ) -> Result<(), String> {
+        self.control_statuses
+            .lock()
+            .map_err(|_| "control status lock poisoned".to_string())?
+            .push(handle.status());
+        self.registered
+            .lock()
+            .map_err(|_| "registered lock poisoned".to_string())?
+            .push(snapshot);
+        Ok(())
+    }
+
+    fn record_live_process_output(&self, delta: ExecutionOutputDelta) -> Result<(), String> {
+        self.output
+            .lock()
+            .map_err(|_| "output lock poisoned".to_string())?
+            .push(delta);
+        Ok(())
+    }
+
+    fn finish_live_process(&self, snapshot: ExecutionProcessSnapshot) -> Result<(), String> {
+        self.finished
+            .lock()
+            .map_err(|_| "finished lock poisoned".to_string())?
+            .push(snapshot);
+        Ok(())
+    }
+}
+
 #[tokio::test]
 async fn execute_planned_tool_batch_emits_tool_start_and_terminal_events() {
     let registry = Arc::new(RwLock::new(ToolRegistry::new()));
@@ -182,6 +224,7 @@ async fn execute_planned_tool_batch_emits_tool_start_and_terminal_events() {
             parallelism: 2,
             auto_mode: false,
             bypass_restrictions: false,
+            live_process_registry: None,
         },
         vec![PlannedToolExecution {
             tool_name: "Echo".to_string(),
@@ -226,6 +269,7 @@ async fn execute_planned_tool_batch_preserves_input_order_when_parallel() {
             parallelism: 2,
             auto_mode: false,
             bypass_restrictions: false,
+            live_process_registry: None,
         },
         vec![
             PlannedToolExecution {
@@ -294,6 +338,7 @@ async fn execute_planned_tool_batch_attaches_policy_metadata_to_permission_denia
             parallelism: 1,
             auto_mode: false,
             bypass_restrictions: false,
+            live_process_registry: None,
         },
         vec![PlannedToolExecution {
             tool_name: "Bash".to_string(),
@@ -365,6 +410,7 @@ async fn execute_planned_tool_batch_emits_action_required_for_shell_approval_pol
             parallelism: 1,
             auto_mode: false,
             bypass_restrictions: false,
+            live_process_registry: None,
         },
         vec![PlannedToolExecution {
             tool_name: "Bash".to_string(),
@@ -428,6 +474,7 @@ async fn execute_planned_tool_batch_emits_sandbox_blocked_for_read_only_shell_wr
             parallelism: 1,
             auto_mode: false,
             bypass_restrictions: false,
+            live_process_registry: None,
         },
         vec![PlannedToolExecution {
             tool_name: "Bash".to_string(),
@@ -495,6 +542,7 @@ async fn execute_planned_tool_batch_respects_persisted_execution_policy() {
             parallelism: 1,
             auto_mode: false,
             bypass_restrictions: false,
+            live_process_registry: None,
         },
         vec![PlannedToolExecution {
             tool_name: "Bash".to_string(),
@@ -557,6 +605,7 @@ async fn execute_planned_shell_tool_emits_process_output_delta_before_terminal_e
             parallelism: 1,
             auto_mode: false,
             bypass_restrictions: false,
+            live_process_registry: None,
         },
         vec![PlannedToolExecution {
             tool_name: "Bash".to_string(),
@@ -590,6 +639,14 @@ async fn execute_planned_shell_tool_emits_process_output_delta_before_terminal_e
                         .as_ref()
                         .and_then(|metadata| metadata.get("executionProcessStatus"))
                         == Some(&json!("running"))
+                    && metadata
+                        .as_ref()
+                        .and_then(|metadata| metadata.get("executionSurface"))
+                        == Some(&json!("live_process"))
+                    && metadata
+                        .as_ref()
+                        .and_then(|metadata| metadata.get("stdinWritable"))
+                        == Some(&json!(true))
             )
         })
         .expect("process lifecycle delta should be emitted");
@@ -604,6 +661,39 @@ async fn execute_planned_shell_tool_emits_process_output_delta_before_terminal_e
             )
         })
         .expect("shell output delta should be emitted");
+    let terminal_process_delta_index = batch
+        .events
+        .iter()
+        .position(|event| {
+            matches!(
+                event,
+                RuntimeAgentEvent::ToolOutputDelta {
+                    tool_id,
+                    delta,
+                    output_kind,
+                    metadata,
+                } if tool_id == "tool-process"
+                    && delta.is_empty()
+                    && output_kind.as_deref() == Some("process")
+                    && metadata.as_ref().and_then(|metadata| metadata.get("processId"))
+                        == Some(&json!("process-tool-process"))
+                    && metadata
+                        .as_ref()
+                        .and_then(|metadata| metadata.get("executionProcessStatus"))
+                        == Some(&json!("exited"))
+                    && metadata
+                        .as_ref()
+                        .and_then(|metadata| metadata.get("executionSurface"))
+                        == Some(&json!("live_process"))
+                    && metadata.as_ref().and_then(|metadata| metadata.get("exit_code"))
+                        == Some(&json!(0))
+                    && metadata
+                        .as_ref()
+                        .and_then(|metadata| metadata.get("stdinWritable"))
+                        == Some(&json!(false))
+            )
+        })
+        .expect("terminal process lifecycle delta should be emitted");
     let terminal_index = batch
         .events
         .iter()
@@ -611,6 +701,8 @@ async fn execute_planned_shell_tool_emits_process_output_delta_before_terminal_e
         .expect("terminal event should be emitted");
     assert!(process_delta_index < delta_index);
     assert!(delta_index < terminal_index);
+    assert!(delta_index < terminal_process_delta_index);
+    assert!(terminal_process_delta_index < terminal_index);
 
     assert!(matches!(
         &batch.events[delta_index],
@@ -641,6 +733,132 @@ async fn execute_planned_shell_tool_emits_process_output_delta_before_terminal_e
         Some(&json!("process-tool-process"))
     );
     assert_eq!(terminal_metadata.get("exit_code"), Some(&json!(0)));
+}
+
+#[tokio::test]
+async fn execute_planned_shell_live_process_updates_registry() {
+    let registry = Arc::new(RwLock::new(ToolRegistry::new()));
+    {
+        let mut registry = registry.write().await;
+        registry.register(Box::new(AllowShellTool));
+    }
+    let live_registry = Arc::new(RecordingLiveProcessRegistry::default());
+
+    let batch = execute_planned_tool_batch(
+        ToolExecutionBatchInput {
+            registry,
+            session_id: "session-process-registry".to_string(),
+            working_directory: std::env::current_dir().unwrap_or_default(),
+            cancel_token: None,
+            turn_context: Some(TurnContextOverride {
+                sandbox_policy: Some("workspace-write".to_string()),
+                approval_policy: Some("never".to_string()),
+                ..TurnContextOverride::default()
+            }),
+            persisted_execution_policy: Some(ConfigToolExecutionPolicyConfig {
+                tool_overrides: HashMap::from([(
+                    "Bash".to_string(),
+                    ConfigToolExecutionOverrideConfig {
+                        warning_policy: Some(ConfigToolExecutionWarningPolicyConfig::None),
+                        restriction_profile: None,
+                        sandbox_profile: Some(ConfigToolExecutionSandboxProfileConfig::None),
+                    },
+                )]),
+                ..Default::default()
+            }),
+            parallelism: 1,
+            auto_mode: false,
+            bypass_restrictions: false,
+            live_process_registry: Some(live_registry.clone()),
+        },
+        vec![PlannedToolExecution {
+            tool_name: "Bash".to_string(),
+            tool_id: "tool-process-registry".to_string(),
+            arguments: Some(format!(
+                r#"{{"command":"{}"}}"#,
+                live_shell_output_command()
+            )),
+            params: json!({ "command": live_shell_output_command() }),
+        }],
+    )
+    .await;
+
+    assert!(batch.outcomes[0].success);
+    assert_eq!(
+        batch.outcomes[0]
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get("executionProcessControlStatus")),
+        Some(&json!("registered"))
+    );
+    let registered_start_delta = batch
+        .events
+        .iter()
+        .find(|event| {
+            matches!(
+                event,
+                RuntimeAgentEvent::ToolOutputDelta {
+                    tool_id,
+                    output_kind,
+                    metadata,
+                    ..
+                } if tool_id == "tool-process-registry"
+                    && output_kind.as_deref() == Some("process")
+                    && metadata
+                        .as_ref()
+                        .and_then(|metadata| metadata.get("executionProcessStatus"))
+                        == Some(&json!("running"))
+            )
+        })
+        .expect("registered process should emit start lifecycle delta");
+    let RuntimeAgentEvent::ToolOutputDelta { metadata, .. } = registered_start_delta else {
+        unreachable!("matched lifecycle delta")
+    };
+    let metadata = metadata.as_ref().expect("lifecycle metadata");
+    assert_eq!(
+        metadata.get("executionProcessControlStatus"),
+        Some(&json!("registered"))
+    );
+    assert_eq!(
+        metadata.get("execution_process_control_status"),
+        Some(&json!("registered"))
+    );
+    assert_eq!(metadata.get("stdinWritable"), Some(&json!(true)));
+
+    let registered = live_registry.registered.lock().expect("registered");
+    assert_eq!(registered.len(), 1);
+    assert_eq!(registered[0].process_id, "process-tool-process-registry");
+    assert_eq!(
+        registered[0].status,
+        crate::agent_tools::execution::ExecutionProcessStatus::Running
+    );
+    drop(registered);
+
+    let control_statuses = live_registry
+        .control_statuses
+        .lock()
+        .expect("control statuses");
+    assert_eq!(control_statuses.len(), 1);
+    assert_eq!(
+        control_statuses[0].process_id,
+        "process-tool-process-registry"
+    );
+    drop(control_statuses);
+
+    let output = live_registry.output.lock().expect("output");
+    assert!(output
+        .iter()
+        .any(|delta| delta.delta.contains("live-shell-output")));
+    drop(output);
+
+    let finished = live_registry.finished.lock().expect("finished");
+    assert_eq!(finished.len(), 1);
+    assert_eq!(finished[0].process_id, "process-tool-process-registry");
+    assert_eq!(
+        finished[0].status,
+        crate::agent_tools::execution::ExecutionProcessStatus::Exited
+    );
+    assert_eq!(finished[0].exit_code, Some(0));
 }
 
 #[tokio::test]
@@ -676,6 +894,7 @@ async fn execute_planned_shell_tool_process_metadata_preserves_failure_exit_code
             parallelism: 1,
             auto_mode: false,
             bypass_restrictions: false,
+            live_process_registry: None,
         },
         vec![PlannedToolExecution {
             tool_name: "Bash".to_string(),
@@ -735,6 +954,7 @@ async fn execute_planned_shell_live_process_uses_context_working_directory() {
             parallelism: 1,
             auto_mode: false,
             bypass_restrictions: false,
+            live_process_registry: None,
         },
         vec![PlannedToolExecution {
             tool_name: "Bash".to_string(),
@@ -797,6 +1017,7 @@ async fn execute_planned_shell_live_process_respects_tool_permission_preflight()
             parallelism: 1,
             auto_mode: false,
             bypass_restrictions: false,
+            live_process_registry: None,
         },
         vec![PlannedToolExecution {
             tool_name: "Bash".to_string(),
@@ -858,6 +1079,7 @@ async fn execute_planned_tool_batch_attaches_workspace_sandbox_context_when_back
             parallelism: 1,
             auto_mode: false,
             bypass_restrictions: false,
+            live_process_registry: None,
         },
         vec![PlannedToolExecution {
             tool_name: "Bash".to_string(),

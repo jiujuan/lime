@@ -51,6 +51,7 @@ import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
 import type {
   InputbarPluginCapability,
   InputbarPluginSelection,
+  InputbarPluginSkillCapability,
 } from "../pluginInputCapability";
 
 interface InputbarComposerSectionProps {
@@ -74,7 +75,11 @@ interface InputbarComposerSectionProps {
   activeCapability?: InputCapabilitySelection | null;
   activePluginSelection?: InputbarPluginSelection | null;
   pluginSuggestions?: readonly InputbarPluginCapability[];
-  onSelectPlugin?: (plugin: InputbarPluginCapability) => void;
+  onSelectPlugin?: (
+    plugin: InputbarPluginCapability,
+    skill?: InputbarPluginSkillCapability,
+    options?: { inputOverride?: string },
+  ) => void;
   defaultCuratedTaskReferenceMemoryIds?: string[];
   defaultCuratedTaskReferenceEntries?: CuratedTaskReferenceEntry[];
   knowledgePackSelection?: InputbarKnowledgePackSelection | null;
@@ -441,6 +446,8 @@ export const InputbarComposerSection: React.FC<
         onChange={inputAdapter.actions.setText}
         onSelectCharacter={onSelectCharacter}
         onSelectInputCapability={onSelectInputCapability}
+        pluginSuggestions={pluginSuggestions}
+        onSelectPlugin={onSelectPlugin}
         projectId={projectId}
         sessionId={sessionId}
         defaultCuratedTaskReferenceMemoryIds={

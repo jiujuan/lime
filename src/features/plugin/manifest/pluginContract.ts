@@ -13,6 +13,7 @@ import type {
   PluginActivationEntryDeclaration,
   PluginActivationEntryKind,
   PluginAgentAppDeclaration,
+  PluginArtifactRendererActionDeclaration,
   PluginArtifactRendererDeclaration,
   PluginContract,
   PluginContractProvenance,
@@ -266,6 +267,30 @@ function normalizeRendererKind(value: unknown): PluginRendererKind {
   return kind as PluginRendererKind;
 }
 
+function normalizeRendererActionRisk(
+  value: unknown,
+): PluginArtifactRendererActionDeclaration["risk"] {
+  const risk = readString(value) ?? "read";
+  if (risk !== "read" && risk !== "write") {
+    throw new PluginManifestError(
+      `Plugin renderer action risk is unsupported: ${risk}`,
+    );
+  }
+  return risk;
+}
+
+function normalizeRendererAction(
+  record: Record<string, unknown>,
+): PluginArtifactRendererActionDeclaration {
+  return {
+    key: requireString(record, "key"),
+    intent: readString(record.intent),
+    risk: normalizeRendererActionRisk(record.risk),
+    taskKind: readString(record.taskKind) ?? readString(record.task_kind),
+    title: readString(record.title),
+  };
+}
+
 function normalizeArtifactRenderer(
   record: Record<string, unknown>,
 ): PluginArtifactRendererDeclaration {
@@ -274,6 +299,16 @@ function normalizeArtifactRenderer(
     surfaceKind: requireString(record, "surfaceKind"),
     rendererKind: normalizeRendererKind(record.rendererKind),
     entry: readString(record.entry),
+    outputArtifactKind:
+      readString(record.outputArtifactKind) ??
+      readString(record.output_artifact_kind),
+    paneKind: readString(record.paneKind) ?? readString(record.pane_kind),
+    actionKeys: readStringArray(record.actionKeys),
+    actions: Array.isArray(record.actions)
+      ? readRecords(record.actions, "artifactRenderers.actions").map(
+          normalizeRendererAction,
+        )
+      : [],
     capabilities: readStringArray(record.capabilities),
     fallbackRendererKind: readString(record.fallbackRendererKind),
     defaultPane: readString(record.defaultPane),
@@ -538,16 +573,34 @@ function productionObjectByKind(
   );
 }
 
+function readAgentAppWorkerOutputArtifactKind(
+  manifest: NormalizedAppManifest,
+): string | undefined {
+  const runtimeWorker = isRecord(manifest.agentRuntime)
+    ? isRecord(manifest.agentRuntime.worker)
+      ? manifest.agentRuntime.worker
+      : undefined
+    : undefined;
+  return (
+    readString(manifest.runtimePackage.worker?.outputArtifactKind) ??
+    readString(runtimeWorker?.outputArtifactKind) ??
+    readString(runtimeWorker?.output_artifact_kind)
+  );
+}
+
 function artifactRenderersFromAgentApp(
   manifest: NormalizedAppManifest,
 ): PluginArtifactRendererDeclaration[] {
   const objects = productionObjectByKind(manifest);
+  const outputArtifactKind = readAgentAppWorkerOutputArtifactKind(manifest);
   return (manifest.workbench?.objectSurfaces ?? []).map((surface) => {
     const object = objects.get(surface.objectKind);
     return {
       artifactType: object?.artifactKind ?? surface.objectKind,
       surfaceKind: surface.surfaceKind,
       rendererKind: mapWorkbenchRendererKind(surface),
+      outputArtifactKind,
+      paneKind: surface.surfaceKind,
       defaultPane: surface.surfaceKind,
     };
   });

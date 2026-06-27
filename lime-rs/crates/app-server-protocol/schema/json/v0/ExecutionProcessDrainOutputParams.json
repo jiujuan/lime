@@ -1,9 +1,25 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
+    "afterSequence": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
     "limit": {
       "format": "uint16",
       "maximum": 65535,
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "maxBytes": {
+      "format": "uint64",
       "minimum": 0,
       "type": [
         "integer",

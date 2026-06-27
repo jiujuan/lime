@@ -5,7 +5,7 @@
   "workspaces": [
     "packages/*"
   ],
-  "version": "1.80.0",
+  "version": "1.81.0",
   "description": "AI content workspace for Chinese creators: desktop writing, research, prompt management, knowledge base, and multi-model workflows.",
   "keywords": [
     "ai",
@@ -79,6 +79,9 @@
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
     "prepare": "husky",
     "test": "node scripts/run-vitest-smart.mjs",
+    "test:resume": "node scripts/run-vitest-smart.mjs --resume",
+    "test:related": "node scripts/run-vitest-smart.mjs --related",
+    "test:changed": "node scripts/run-vitest-smart.mjs --changed",
     "test:unit": "node scripts/run-vitest-layer.mjs unit",
     "test:component": "node scripts/run-vitest-layer.mjs component",
     "test:contract": "node scripts/run-vitest-layer.mjs contract",

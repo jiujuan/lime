@@ -199,6 +199,16 @@ function shouldMergeAdjacentAssistantMessages(
     return false;
   }
 
+  const previousRuntimeTurnId = previous.runtimeTurnId?.trim();
+  const currentRuntimeTurnId = current.runtimeTurnId?.trim();
+  if (
+    previousRuntimeTurnId &&
+    currentRuntimeTurnId &&
+    previousRuntimeTurnId !== currentRuntimeTurnId
+  ) {
+    return false;
+  }
+
   if (hasSharedProcessIdentity(previous, current)) {
     return true;
   }

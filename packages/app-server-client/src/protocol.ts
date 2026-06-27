@@ -124,13 +124,11 @@ export const METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS =
   "workspaceRightSurface/pending/dismiss";
 export const METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED =
   "workspaceRightSurface/pendingChanged";
-export const METHOD_BROWSER_SESSION_TARGET_LIST =
-  "browserSession/target/list";
+export const METHOD_BROWSER_SESSION_TARGET_LIST = "browserSession/target/list";
 export const METHOD_BROWSER_SESSION_OPEN = "browserSession/open";
 export const METHOD_BROWSER_SESSION_READ = "browserSession/read";
 export const METHOD_BROWSER_SESSION_CLOSE = "browserSession/close";
-export const METHOD_BROWSER_SESSION_EVENT_LIST =
-  "browserSession/event/list";
+export const METHOD_BROWSER_SESSION_EVENT_LIST = "browserSession/event/list";
 export const METHOD_BROWSER_SESSION_ACTION_EXECUTE =
   "browserSession/action/execute";
 export const METHOD_SKILL_LIST = "skill/list";
@@ -250,6 +248,9 @@ export const METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT =
 export const METHOD_DIAGNOSTICS_SERVER_READ = "diagnostics/server/read";
 export const METHOD_DIAGNOSTICS_WINDOWS_STARTUP_READ =
   "diagnostics/windowsStartup/read";
+export const METHOD_DIAGNOSTICS_TRACE_LIST = "diagnostics/trace/list";
+export const METHOD_DIAGNOSTICS_TRACE_READ = "diagnostics/trace/read";
+export const METHOD_DIAGNOSTICS_TRACE_EXPORT = "diagnostics/trace/export";
 export const METHOD_GATEWAY_CHANNEL_START = "gatewayChannel/start";
 export const METHOD_GATEWAY_CHANNEL_STOP = "gatewayChannel/stop";
 export const METHOD_GATEWAY_CHANNEL_STATUS = "gatewayChannel/status";
@@ -619,6 +620,9 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT, kind: "request" },
   { method: METHOD_DIAGNOSTICS_SERVER_READ, kind: "request" },
   { method: METHOD_DIAGNOSTICS_WINDOWS_STARTUP_READ, kind: "request" },
+  { method: METHOD_DIAGNOSTICS_TRACE_LIST, kind: "request" },
+  { method: METHOD_DIAGNOSTICS_TRACE_READ, kind: "request" },
+  { method: METHOD_DIAGNOSTICS_TRACE_EXPORT, kind: "request" },
   { method: METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE, kind: "request" },
   { method: METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE, kind: "request" },
   { method: METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE, kind: "request" },
@@ -1382,6 +1386,7 @@ export type AgentSessionOverview = {
   sessionId: string;
   threadId?: string;
   title?: string;
+  businessObjectRefMetadata?: unknown;
   model: string;
   createdAt: string;
   updatedAt: string;
@@ -2044,6 +2049,15 @@ export type LogStorageDiagnosticsResponse = {
   inMemoryLogCount: number;
   relatedLogFiles: LogArtifactEntry[];
   rawResponseFiles: LogArtifactEntry[];
+};
+
+export type SupportBundleTraceExportSelection = {
+  sessionId: string;
+  traceId: string;
+};
+
+export type SupportBundleExportParams = {
+  includeTraceExport?: SupportBundleTraceExportSelection;
 };
 
 export type SupportBundleExportResponse = {

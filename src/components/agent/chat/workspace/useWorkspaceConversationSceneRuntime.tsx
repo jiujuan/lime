@@ -348,6 +348,7 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   handleSaveMessageAsKnowledge?: ConversationScenePresentationParams["messageList"]["onSaveMessageAsKnowledge"];
   handleOpenSubagentSession: ConversationScenePresentationParams["messageList"]["onOpenSubagentSession"];
   handlePermissionResponse: ConversationScenePresentationParams["messageList"]["onPermissionResponse"];
+  onRefreshSessionReadModel?: () => void | Promise<unknown>;
   pendingPromotedA2UIActionRequest: unknown;
   shouldCollapseCodeBlocks: ConversationScenePresentationParams["messageList"]["collapseCodeBlocks"];
   shouldCollapseCodeBlockInChat: ConversationScenePresentationParams["messageList"]["shouldCollapseCodeBlock"];
@@ -520,6 +521,7 @@ export function useWorkspaceConversationSceneRuntime({
   handleSaveMessageAsKnowledge,
   handleOpenSubagentSession,
   handlePermissionResponse,
+  onRefreshSessionReadModel,
   pendingPromotedA2UIActionRequest,
   shouldCollapseCodeBlocks,
   shouldCollapseCodeBlockInChat,
@@ -625,6 +627,7 @@ export function useWorkspaceConversationSceneRuntime({
         focusedTimelineItemId,
         onOpenFile: canvasScene.handleOpenCanvasWorkbenchPath,
         onRespondToAction: handlePermissionResponse,
+        onRefreshSessionReadModel,
         onSubmitRecoveryPrompt: (
           prompt,
           recoveryContext?: CodingWorkbenchRecoveryContext,
@@ -647,6 +650,7 @@ export function useWorkspaceConversationSceneRuntime({
       focusedTimelineItemId,
       handleSendFromEmptyState,
       handlePermissionResponse,
+      onRefreshSessionReadModel,
       isSending,
       locale,
       projectedCurrentTurnId,

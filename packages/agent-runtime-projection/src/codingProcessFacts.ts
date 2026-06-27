@@ -3,8 +3,12 @@ export interface CodingProcessFactInput {
   processId?: string;
   execution_process_status?: string;
   executionProcessStatus?: string;
+  execution_process_control_status?: string;
+  executionProcessControlStatus?: string;
   execution_surface?: string;
   executionSurface?: string;
+  stdin_writable?: boolean;
+  stdinWritable?: boolean;
   output_bytes?: number;
   outputBytes?: number;
   output_omitted_bytes?: number;
@@ -21,7 +25,9 @@ export interface CodingProcessFactInput {
 export interface CodingProcessFacts {
   processId?: string;
   executionProcessStatus?: string;
+  executionProcessControlStatus?: string;
   executionSurface?: string;
+  stdinWritable?: boolean;
   outputBytes?: number;
   outputOmittedBytes?: number;
   outputTruncated?: boolean;
@@ -74,11 +80,23 @@ export function codingProcessFactsFromInput(
       metadata.executionProcessStatus,
       metadata.execution_process_status,
     ),
+    executionProcessControlStatus: stringValue(
+      record.executionProcessControlStatus,
+      record.execution_process_control_status,
+      metadata.executionProcessControlStatus,
+      metadata.execution_process_control_status,
+    ),
     executionSurface: stringValue(
       record.executionSurface,
       record.execution_surface,
       metadata.executionSurface,
       metadata.execution_surface,
+    ),
+    stdinWritable: booleanValue(
+      record.stdinWritable,
+      record.stdin_writable,
+      metadata.stdinWritable,
+      metadata.stdin_writable,
     ),
     outputBytes: numberValue(
       record.outputBytes,
@@ -121,7 +139,11 @@ export function mergeCodingProcessFacts(
     processId: next.processId ?? base.processId,
     executionProcessStatus:
       next.executionProcessStatus ?? base.executionProcessStatus,
+    executionProcessControlStatus:
+      next.executionProcessControlStatus ??
+      base.executionProcessControlStatus,
     executionSurface: next.executionSurface ?? base.executionSurface,
+    stdinWritable: next.stdinWritable ?? base.stdinWritable,
     outputBytes: next.outputBytes ?? base.outputBytes,
     outputOmittedBytes: next.outputOmittedBytes ?? base.outputOmittedBytes,
     outputTruncated: next.outputTruncated ?? base.outputTruncated,

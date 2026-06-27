@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildServiceModelSlotMetadata,
   buildPersistedServiceModelPreference,
   hasServiceModelPreferenceOverride,
   normalizeServiceModelPreference,
@@ -71,5 +72,34 @@ describe("serviceModels", () => {
       preferredModelId: undefined,
       customPrompt: undefined,
     });
+  });
+
+  it("服务模型槽位元数据必须来自完整启用的 provider/model 配置", () => {
+    expect(
+      buildServiceModelSlotMetadata({
+        preference: {
+          preferredProviderId: " responsive-provider ",
+          preferredModelId: " fast-model ",
+        },
+        source: "service_models.responsive_chat",
+        reason: "fast_response_routing",
+      }),
+    ).toEqual({
+      provider: "responsive-provider",
+      model: "fast-model",
+      source: "service_models.responsive_chat",
+      reason: "fast_response_routing",
+    });
+
+    expect(
+      buildServiceModelSlotMetadata({
+        preference: {
+          preferredProviderId: "responsive-provider",
+          enabled: false,
+        },
+        source: "service_models.responsive_chat",
+        reason: "fast_response_routing",
+      }),
+    ).toBeUndefined();
   });
 });

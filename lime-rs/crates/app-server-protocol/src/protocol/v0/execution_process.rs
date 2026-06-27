@@ -108,7 +108,11 @@ pub struct ExecutionProcessDrainOutputParams {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub process_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub after_sequence: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_bytes: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -116,4 +120,6 @@ pub struct ExecutionProcessDrainOutputParams {
 pub struct ExecutionProcessDrainOutputResponse {
     #[serde(default)]
     pub deltas: Vec<ExecutionProcessOutputDelta>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_sequence: Option<u64>,
 }

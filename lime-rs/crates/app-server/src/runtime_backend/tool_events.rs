@@ -1,7 +1,7 @@
 use super::plan_events;
 use crate::RuntimeCoreError;
 use crate::RuntimeEvent;
-use lime_agent::{AgentEvent as RuntimeAgentEvent, AgentToolResult};
+use lime_agent::{AgentEvent as RuntimeAgentEvent, AgentProviderTraceStage, AgentToolResult};
 #[cfg(test)]
 use runtime_core::runtime_event_from_llm_event as runtime_core_event_from_llm_event;
 use serde_json::{json, Value};
@@ -80,6 +80,7 @@ pub(super) fn runtime_event_type_from_raw(raw_type: &str) -> &'static str {
         "action_resolved" => "action.resolved",
         "turn_context" => "turn.context",
         "model_change" => "model.changed",
+        "provider_trace" => "provider.trace",
         "context_trace" => "context.trace",
         "context_compaction_started" => "context.compaction.started",
         "context_compaction_completed" => "context.compaction.completed",
@@ -138,8 +139,21 @@ fn update_plan_event_from_tool_end(event: &RuntimeAgentEvent) -> Option<RuntimeE
 
 fn runtime_event_type_for_agent_event(event: &RuntimeAgentEvent, raw_type: &str) -> &'static str {
     match event {
+        RuntimeAgentEvent::ProviderTrace { stage, .. } => {
+            runtime_event_type_for_provider_trace_stage(*stage)
+        }
         RuntimeAgentEvent::ToolEnd { result, .. } if !result.success => "tool.failed",
         _ => runtime_event_type_from_raw(raw_type),
+    }
+}
+
+fn runtime_event_type_for_provider_trace_stage(stage: AgentProviderTraceStage) -> &'static str {
+    match stage {
+        AgentProviderTraceStage::RequestStarted => "provider.request.started",
+        AgentProviderTraceStage::FirstEventReceived => "provider.first_event.received",
+        AgentProviderTraceStage::FirstTextDeltaReceived => "provider.first_text_delta.received",
+        AgentProviderTraceStage::Failed => "provider.failed",
+        AgentProviderTraceStage::Canceled => "provider.canceled",
     }
 }
 
@@ -231,6 +245,39 @@ mod tests {
         assert_eq!(events[0].payload["delta"], "先理解目标");
         assert_eq!(events[0].payload["text"], "先理解目标");
         assert_eq!(events[0].payload["reasoningId"], "runtime-thinking");
+    }
+
+    #[test]
+    fn provider_trace_stage_maps_to_provider_runtime_event() {
+        let events = runtime_events_from_agent_event(&RuntimeAgentEvent::ProviderTrace {
+            stage: AgentProviderTraceStage::FirstTextDeltaReceived,
+            provider: "openai".to_string(),
+            model: "gpt-4.1".to_string(),
+            attempt: 1,
+            elapsed_ms: Some(1234),
+            text_chars: Some(8),
+            status: "running".to_string(),
+            failure_category: None,
+            retryable: None,
+            non_retryable_provider_rejection: None,
+            cancel_reason: None,
+            provider_request_id: Some("req-provider-1".to_string()),
+            provider_request_id_header: Some("x-request-id".to_string()),
+        })
+        .expect("provider trace should emit");
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "provider.first_text_delta.received");
+        assert_eq!(events[0].payload["stage"], "first_text_delta_received");
+        assert_eq!(events[0].payload["provider"], "openai");
+        assert_eq!(events[0].payload["model"], "gpt-4.1");
+        assert_eq!(events[0].payload["provider_request_id"], "req-provider-1");
+        assert_eq!(
+            events[0].payload["provider_request_id_header"],
+            "x-request-id"
+        );
+        assert_eq!(events[0].payload["elapsed_ms"], json!(1234));
+        assert_eq!(events[0].payload["text_chars"], json!(8));
     }
 
     #[test]

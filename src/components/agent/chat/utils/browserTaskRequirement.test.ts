@@ -27,6 +27,17 @@ describe("browserTaskRequirement", () => {
     ).toBeNull();
   });
 
+  it("显式 URL + Browser Assist 指令应识别为必须浏览器任务", () => {
+    expect(
+      detectBrowserTaskRequirement(
+        "打开 https://news.baidu.com，使用浏览器协助模式执行，并把实时浏览器画面显示在右侧画布中。",
+      ),
+    ).toMatchObject({
+      requirement: "required",
+      launchUrl: "https://news.baidu.com",
+    });
+  });
+
   it("发布验收与控制台检查不应误判为网页后台任务", () => {
     expect(
       detectBrowserTaskRequirement(

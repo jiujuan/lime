@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { OemCloudControlPlaneError } from "@/lib/api/oemCloudControlPlane";
 import {
   loadPluginMarketplaceRegistry,
   type PluginMarketplaceQuery,
@@ -29,6 +30,7 @@ export interface UsePluginMarketplaceRegistryOptions {
 export interface UsePluginMarketplaceRegistryResult {
   loading: boolean;
   error: string | null;
+  authRequired: boolean;
   snapshot: PluginMarketplaceRegistrySnapshot | null;
   model: PluginMarketplaceViewModel | null;
   refresh: () => Promise<PluginMarketplaceRegistrySnapshot>;
@@ -56,6 +58,28 @@ function errorMessage(error: unknown): string {
   return typeof error === "string"
     ? error
     : "Plugin marketplace registry load failed";
+}
+
+function isAuthenticationError(error: unknown): boolean {
+  if (
+    error instanceof OemCloudControlPlaneError &&
+    (error.status === 401 || error.status === 403)
+  ) {
+    return true;
+  }
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : "";
+  const normalized = message.trim().toLowerCase();
+  return (
+    normalized.includes("invalid auth token") ||
+    normalized.includes("session token") ||
+    normalized.includes("unauthorized") ||
+    normalized.includes("unauthenticated")
+  );
 }
 
 export function usePluginMarketplaceRegistry({
@@ -89,6 +113,7 @@ export function usePluginMarketplaceRegistry({
     useState<PluginMarketplaceRegistrySnapshot | null>(null);
   const [loading, setLoading] = useState(autoLoad);
   const [error, setError] = useState<string | null>(null);
+  const [authRequired, setAuthRequired] = useState(false);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -103,6 +128,7 @@ export function usePluginMarketplaceRegistry({
     requestSeqRef.current = requestSeq;
     setLoading(true);
     setError(null);
+    setAuthRequired(false);
 
     try {
       const nextSnapshot = await loader(
@@ -116,7 +142,13 @@ export function usePluginMarketplaceRegistry({
       return nextSnapshot;
     } catch (loadError) {
       if (mountedRef.current && requestSeq === requestSeqRef.current) {
-        setError(errorMessage(loadError));
+        if (isAuthenticationError(loadError)) {
+          setAuthRequired(true);
+          setSnapshot(null);
+          setError(null);
+        } else {
+          setError(errorMessage(loadError));
+        }
       }
       throw loadError;
     } finally {
@@ -149,6 +181,7 @@ export function usePluginMarketplaceRegistry({
   return {
     loading,
     error,
+    authRequired,
     snapshot,
     model,
     refresh,

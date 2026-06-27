@@ -1,161 +1,96 @@
-import fs from "node:fs";
-import path from "node:path";
-import { execFileSync } from "node:child_process";
+import { createScriptsGovernanceReport } from "./lib/scripts-governance-core.mjs";
 
-const SCRIPTS_DIR = "scripts";
-const BASELINE_PATH = path.join(
-  SCRIPTS_DIR,
-  "script-root-governance-baseline.json",
-);
-
-function readBaseline() {
-  const raw = fs.readFileSync(BASELINE_PATH, "utf8");
-  const parsed = JSON.parse(raw);
-  const allowedRootFiles = Array.isArray(parsed.allowedRootFiles)
-    ? parsed.allowedRootFiles
-    : [];
-  return {
-    policy: typeof parsed.policy === "string" ? parsed.policy : "",
-    allowedRootFiles: new Set(allowedRootFiles),
-  };
-}
-
-function listCurrentRootFiles() {
-  return fs
-    .readdirSync(SCRIPTS_DIR, { withFileTypes: true })
-    .filter((entry) => entry.isFile())
-    .map((entry) => path.posix.join(SCRIPTS_DIR, entry.name))
-    .sort();
-}
-
-function listGitTrackedFiles() {
-  try {
-    const output = execFileSync("git", ["ls-files", "--", "scripts/*"], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-    return new Set(
-      output
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .map((file) => file.replace(/\\/g, "/")),
-    );
-  } catch {
-    return new Set();
+function printList(prefix, files, writer = console.log) {
+  if (files.length === 0) {
+    return;
   }
-}
-
-function inferBucket(filePath) {
-  const fileName = path.basename(filePath);
-  if (fileName === "README.md" || fileName.includes("governance")) {
-    return "governance";
-  }
-  if (fileName.startsWith("i18n-") || fileName.includes("translation")) {
-    return "i18n";
-  }
-  if (fileName.startsWith("electron-") || fileName.includes("electron")) {
-    return "electron";
-  }
-  if (fileName.startsWith("agent-app")) {
-    return "agent-app";
-  }
-  if (fileName.startsWith("agent-qc")) {
-    return "agent-qc";
-  }
-  if (fileName.startsWith("agent-runtime") || fileName.startsWith("agent-")) {
-    return "agent-runtime";
-  }
-  if (fileName.startsWith("app-server")) {
-    return "app-server";
-  }
-  if (fileName.startsWith("harness-")) {
-    return "harness";
-  }
-  if (fileName.includes("smoke") || fileName.includes("e2e")) {
-    return "smoke";
-  }
-  if (
-    fileName.startsWith("check-") ||
-    fileName.startsWith("verify-") ||
-    fileName.startsWith("quality-") ||
-    fileName.startsWith("run-") ||
-    fileName.startsWith("report-")
-  ) {
-    return "quality";
-  }
-  if (fileName.includes("release") || fileName.includes("updater")) {
-    return "release";
-  }
-  return "misc";
-}
-
-function countByBucket(files) {
-  const counts = new Map();
+  writer(prefix);
   for (const file of files) {
-    const bucket = inferBucket(file);
-    counts.set(bucket, (counts.get(bucket) ?? 0) + 1);
+    writer(`- ${file}`);
   }
-  return [...counts.entries()].sort(([left], [right]) =>
-    left.localeCompare(right),
-  );
 }
 
-function main() {
-  const baseline = readBaseline();
-  const currentRootFiles = listCurrentRootFiles();
-  const gitTrackedFiles = listGitTrackedFiles();
-  const allowedRootFiles = baseline.allowedRootFiles;
-  const newRootFiles = currentRootFiles.filter(
-    (file) => !allowedRootFiles.has(file),
-  );
-  const trackedNewRootFiles = newRootFiles.filter((file) =>
-    gitTrackedFiles.has(file),
-  );
-  const untrackedNewRootFiles = newRootFiles.filter(
-    (file) => !gitTrackedFiles.has(file),
-  );
-  const retiredRootFiles = [...allowedRootFiles].filter(
-    (file) => !currentRootFiles.includes(file),
-  );
-  const bucketCounts = countByBucket(currentRootFiles);
+function formatExtensions(extensions) {
+  return extensions
+    .map(([extension, count]) => `${extension}:${count}`)
+    .join(", ");
+}
 
-  if (trackedNewRootFiles.length > 0) {
-    console.error("[scripts-governance] scripts root has new files:");
-    for (const file of trackedNewRootFiles) {
-      console.error(`- ${file}`);
-    }
+function printReport(report) {
+  if (report.trackedNewRootFiles.length > 0) {
+    printList(
+      "[scripts-governance] scripts root has new tracked files:",
+      report.trackedNewRootFiles,
+      console.error,
+    );
+  }
+
+  if (report.trackedNewDirectories.length > 0) {
+    printList(
+      "[scripts-governance] scripts has new tracked first-level directories:",
+      report.trackedNewDirectories,
+      console.error,
+    );
+  }
+  if (report.trackedPythonCacheFiles.length > 0) {
+    printList(
+      "[scripts-governance] scripts has tracked Python cache files:",
+      report.trackedPythonCacheFiles,
+      console.error,
+    );
+  }
+
+  if (report.hasFailures) {
     console.error("");
     console.error(
-      "Move new executable scripts under scripts/<domain>/, scripts/lib/, or the owning package. Only update the root baseline when intentionally shrinking or explicitly approving a root exception.",
+      "Move new executable scripts under an existing scripts/<domain>/, scripts/lib/, or the owning package. Only update the scripts baseline when explicitly approving a root or domain exception.",
     );
-    process.exit(1);
+    return;
   }
 
   console.log(
-    `[scripts-governance] ok rootFiles=${currentRootFiles.length} retired=${retiredRootFiles.length} untrackedNew=${untrackedNewRootFiles.length}`,
+    `[scripts-governance] ok rootFiles=${report.rootFileCount} directories=${report.directoryCount} retiredRoot=${report.retiredRootFiles.length} retiredDirs=${report.retiredDirectories.length} untrackedRoot=${report.untrackedNewRootFiles.length} untrackedDirs=${report.untrackedNewDirectories.length} ignoredLocalFiles=${report.ignoredLocalFiles.length}`,
   );
-  if (untrackedNewRootFiles.length > 0) {
-    console.warn(
-      "[scripts-governance] untracked root files are not baseline-approved:",
-    );
-    for (const file of untrackedNewRootFiles) {
-      console.warn(`- ${file}`);
-    }
-  }
-  if (retiredRootFiles.length > 0) {
-    console.log("[scripts-governance] retired baseline entries:");
-    for (const file of retiredRootFiles) {
-      console.log(`- ${file}`);
-    }
-  }
-  console.log(
-    `[scripts-governance] policy: ${baseline.policy || "scripts root is frozen"}`,
+  printList(
+    "[scripts-governance] untracked root files are not baseline-approved:",
+    report.untrackedNewRootFiles,
   );
+  printList(
+    "[scripts-governance] untracked first-level directories are not baseline-approved:",
+    report.untrackedNewDirectories,
+  );
+  printList(
+    "[scripts-governance] ignored local directories are present and must not be committed:",
+    report.ignoredLocalDirectories,
+  );
+  printList(
+    "[scripts-governance] ignored local Python cache files are present and must not be committed:",
+    report.ignoredLocalFiles,
+  );
+  printList(
+    "[scripts-governance] retired baseline root entries:",
+    report.retiredRootFiles,
+  );
+  printList(
+    "[scripts-governance] retired baseline directories:",
+    report.retiredDirectories,
+  );
+
+  console.log(`[scripts-governance] policy: ${report.policy}`);
   console.log("[scripts-governance] root buckets:");
-  for (const [bucket, count] of bucketCounts) {
+  for (const [bucket, count] of report.rootBucketCounts) {
     console.log(`- ${bucket}: ${count}`);
+  }
+  console.log("[scripts-governance] first-level directories:");
+  for (const summary of report.directorySummaries) {
+    console.log(
+      `- ${summary.directory}: files=${summary.fileCount} ${formatExtensions(summary.extensions)}`,
+    );
   }
 }
 
-main();
+const report = createScriptsGovernanceReport();
+printReport(report);
+if (report.hasFailures) {
+  process.exit(1);
+}

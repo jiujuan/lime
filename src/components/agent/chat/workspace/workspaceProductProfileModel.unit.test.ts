@@ -284,8 +284,7 @@ describe("workspaceProductProfileModel", () => {
       active_turn_id: "turn-worker-failed",
       productWorkspace: legacyWorkspacePatch,
       diagnostics: {
-        latest_turn_error_message:
-          "Agent App task worker failed: invalid JSON",
+        latest_turn_error_message: "Agent App task worker failed: invalid JSON",
         latest_turn_completed_at: "2026-06-24T00:00:03.000Z",
         warning_count: 0,
         context_compaction_count: 0,
@@ -337,7 +336,28 @@ describe("workspaceProductProfileModel", () => {
           intent: "regenerate",
           risk: "write",
           task_kind: "content.image.generate",
+          output_artifact_kind: "content_factory.workspace_patch",
           prompt: "请重新生成「配图组」",
+          object: {
+            app_id: "content-factory-app",
+            kind: "imageGenerationSet",
+            id: "image-set-1",
+            session_id: "session-main",
+            title: "配图组",
+            status: "needs_review",
+            artifact_ids: ["artifact-image-1"],
+          },
+        },
+        pane_action: {
+          key: "regenerate",
+          intent: "regenerate",
+          risk: "write",
+          task_kind: "content.image.generate",
+          output_artifact_kind: "content_factory.workspace_patch",
+          prompt: "请重新生成「配图组」",
+          pane_kind: "imageGenerationSet",
+          surface_kind: "productProfile",
+          source_artifact_ids: ["artifact-image-1"],
           object: {
             app_id: "content-factory-app",
             kind: "imageGenerationSet",
@@ -351,6 +371,7 @@ describe("workspaceProductProfileModel", () => {
       },
       right_surface: {
         surface_kind: "productProfile",
+        pane_kind: "imageGenerationSet",
         source: "threadRead",
         action_key: "regenerate",
       },

@@ -1,6 +1,7 @@
 mod agent_skills_context;
 mod agent_skills_telemetry;
 mod coding_events;
+mod live_execution_process;
 mod memory_tools;
 mod model_capability;
 mod model_registry_metadata;
@@ -15,6 +16,7 @@ mod skill_runtime_enable;
 mod tool_events;
 mod tool_inventory;
 
+use crate::execution_process::ExecutionProcessServer;
 use crate::runtime::memory_prompt::memory_soul_prompt_context_from_config;
 use crate::runtime::ToolInventoryReadRequest;
 use crate::ActionRespondRequest;
@@ -45,7 +47,7 @@ mod request_context;
 use request_context::{
     aster_chat_request_from_request, direct_provider_config_from_request,
     request_tool_policy_from_request, resolve_runtime_model_selection, session_config_from_request,
-    session_scope_from_request, RuntimeModelSelection,
+    session_scope_from_request, should_defer_tool_surface_for_fast_response, RuntimeModelSelection,
 };
 
 #[derive(Default)]
@@ -54,25 +56,54 @@ pub struct RuntimeBackend {
     api_key_provider_service: ApiKeyProviderService,
     db: Option<DbConnection>,
     app_data_source: Arc<RwLock<Option<Arc<dyn AppDataSource>>>>,
+    live_execution_process: Option<ExecutionProcessServer>,
 }
 
 impl RuntimeBackend {
     pub fn new() -> Self {
-        Self {
-            agent_state: AsterAgentState::new(),
-            api_key_provider_service: ApiKeyProviderService::new(),
-            db: None,
-            app_data_source: Arc::new(RwLock::new(None)),
-        }
+        Self::build(None, None)
     }
 
     pub fn with_db(db: DbConnection) -> Self {
+        Self::build(Some(db), None)
+    }
+
+    pub(crate) fn with_execution_process_server(execution_process: ExecutionProcessServer) -> Self {
+        Self::build(None, Some(execution_process))
+    }
+
+    pub(crate) fn with_db_and_execution_process_server(
+        db: DbConnection,
+        execution_process: ExecutionProcessServer,
+    ) -> Self {
+        Self::build(Some(db), Some(execution_process))
+    }
+
+    fn build(
+        db: Option<DbConnection>,
+        live_execution_process: Option<ExecutionProcessServer>,
+    ) -> Self {
         Self {
             agent_state: AsterAgentState::new(),
             api_key_provider_service: ApiKeyProviderService::new(),
-            db: Some(db),
+            db,
             app_data_source: Arc::new(RwLock::new(None)),
+            live_execution_process,
         }
+    }
+
+    async fn install_live_execution_process_hook_if_available(
+        &self,
+    ) -> Result<(), RuntimeCoreError> {
+        let Some(execution_process) = self.live_execution_process.clone() else {
+            return Ok(());
+        };
+        let hook = live_execution_process::RuntimeLiveExecutionProcessHook::new(execution_process);
+        self.agent_state
+            .with_agent_mut(|agent| agent.set_native_tool_execution_hook(Some(Arc::new(hook))))
+            .await
+            .map(|_| ())
+            .map_err(backend_error)
     }
 
     async fn register_memory_tools_if_available(&self) -> Result<(), RuntimeCoreError> {
@@ -166,15 +197,23 @@ impl RuntimeBackend {
         sink: &mut dyn RuntimeEventSink,
     ) -> Result<(), RuntimeCoreError> {
         let session_scope = session_scope_from_request(&request)?;
-        let _skill_runtime_enable_guard =
+        let host_request = aster_chat_request_from_request(&request);
+        let request_tool_policy = request_tool_policy_from_request(host_request.as_ref());
+        let defer_tool_surface =
+            should_defer_tool_surface_for_fast_response(&request, &request_tool_policy);
+        let _skill_runtime_enable_guard = if defer_tool_surface {
+            skill_runtime_enable::clear_workspace_skill_runtime_enable(&session_scope.session_id)
+        } else {
             skill_runtime_enable::apply_workspace_skill_runtime_enable(
                 &request,
                 &session_scope.session_id,
-            );
-        for event in agent_skills_telemetry::runtime_status_events_for_agent_skills(&request) {
-            sink.emit(event)?;
+            )
+        };
+        if !defer_tool_surface {
+            for event in agent_skills_telemetry::runtime_status_events_for_agent_skills(&request) {
+                sink.emit(event)?;
+            }
         }
-        let host_request = aster_chat_request_from_request(&request);
         let db = initialize_runtime_database(self.db.as_ref())?;
         let requested_selection = resolve_runtime_model_selection(&request)?;
         let direct_provider_config = direct_provider_config_from_request(
@@ -251,9 +290,12 @@ impl RuntimeBackend {
             &provider_config,
             route_resolution.service_model_slot(),
         ))?;
-        self.register_memory_tools_if_available().await?;
-        self.sync_mcp_bridges_if_available().await?;
-        let request_tool_policy = request_tool_policy_from_request(host_request.as_ref());
+        self.install_live_execution_process_hook_if_available()
+            .await?;
+        if !defer_tool_surface {
+            self.register_memory_tools_if_available().await?;
+            self.sync_mcp_bridges_if_available().await?;
+        }
         let config_metadata = current_agent_runtime_config_metadata();
         let session_config = session_config_from_request(
             &request,

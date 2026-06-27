@@ -1,4 +1,5 @@
 import type { PageParams } from "@/types/page";
+import type { PluginHistorySessionCandidate } from "./history/pluginHistorySessionSelection";
 import { resolvePluginMarketplaceItemLabel } from "./marketplace/pluginMarketplaceActions";
 import type { PluginMarketplaceViewItem } from "./marketplace/pluginMarketplaceViewModel";
 import type { PluginSkillDeclaration } from "./manifest/types";
@@ -23,6 +24,19 @@ export function buildPluginMarketplaceOpenAgentParams(
   return {
     agentEntry: "new-task",
     initialUserPrompt: `@${mention} `,
+    initialAutoSendRequestMetadata: {
+      harness: {
+        plugin_activation_intent: {
+          source: "plugin_marketplace_open",
+          trigger: `@${mention}`,
+          plugin_id: item.pluginId,
+          active_agent_app_id: item.appId?.trim() || undefined,
+          active_entry_key: item.pluginName.trim() || undefined,
+          selected_skill_keys: skill?.id.trim() ? [skill.id.trim()] : undefined,
+        },
+      },
+    },
+    autoRunInitialPromptOnMount: true,
     newChatAt: Date.now(),
     immersiveHome: false,
   };
@@ -30,24 +44,36 @@ export function buildPluginMarketplaceOpenAgentParams(
 
 export function buildPluginMarketplaceHistoryAgentParams(
   item: PluginMarketplaceViewItem,
+  candidate: PluginHistorySessionCandidate,
 ): PageParams | null {
   if (item.primaryAction.kind !== "view_history" || item.primaryAction.disabled) {
     return null;
   }
-  const pluginId = item.pluginId.trim();
+  const pluginId = candidate.pluginId.trim() || item.pluginId.trim();
+  const sessionId = candidate.sessionId.trim();
   if (!pluginId) {
+    return null;
+  }
+  if (!sessionId) {
     return null;
   }
   return {
     agentEntry: "claw",
+    initialSessionId: sessionId,
     immersiveHome: false,
     initialRequestMetadata: {
       harness: {
         plugin_history_restore: {
-          session_id: `plugin-history:${pluginId}`,
+          session_id: sessionId,
           plugin_id: pluginId,
-          active_agent_app_id: item.appId?.trim() || undefined,
-          active_entry_key: item.pluginName.trim() || undefined,
+          active_agent_app_id:
+            candidate.activeAgentAppId ?? item.appId?.trim() ?? undefined,
+          active_entry_key:
+            candidate.activeEntryKey ?? item.pluginName.trim() ?? undefined,
+          artifact_refs:
+            candidate.artifactRefs.length > 0
+              ? candidate.artifactRefs
+              : undefined,
         },
       },
     },

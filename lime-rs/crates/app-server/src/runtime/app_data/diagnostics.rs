@@ -31,7 +31,10 @@ pub trait DiagnosticsAppDataSource: Send + Sync {
         Err(unavailable("diagnostics/logStorage/read"))
     }
 
-    async fn export_support_bundle(&self) -> Result<SupportBundleExportResponse, RuntimeCoreError> {
+    async fn export_support_bundle(
+        &self,
+        _params: SupportBundleExportParams,
+    ) -> Result<SupportBundleExportResponse, RuntimeCoreError> {
         Err(unavailable("diagnostics/supportBundle/export"))
     }
 

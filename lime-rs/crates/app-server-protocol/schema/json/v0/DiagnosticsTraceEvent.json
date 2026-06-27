@@ -1,0 +1,110 @@
+{
+  "$defs": {
+    "DiagnosticsTraceRedactionPolicy": {
+      "properties": {
+        "mode": {
+          "type": "string"
+        },
+        "promptText": {
+          "type": "boolean"
+        },
+        "providerPayload": {
+          "type": "boolean"
+        },
+        "rawAgentEventPayload": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "mode",
+        "promptText",
+        "providerPayload",
+        "rawAgentEventPayload"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "checkpoint": {
+      "type": "string"
+    },
+    "eventId": {
+      "type": "string"
+    },
+    "eventSequence": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "eventType": {
+      "type": "string"
+    },
+    "metrics": {
+      "additionalProperties": true,
+      "default": {},
+      "type": "object"
+    },
+    "redaction": {
+      "$ref": "#/$defs/DiagnosticsTraceRedactionPolicy"
+    },
+    "requestId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "runId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "schemaVersion": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "seq": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "sessionId": {
+      "type": "string"
+    },
+    "threadId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "traceId": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "wallTimeUnixMs": {
+      "format": "int64",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "checkpoint",
+    "eventId",
+    "eventSequence",
+    "eventType",
+    "redaction",
+    "schemaVersion",
+    "seq",
+    "sessionId",
+    "traceId",
+    "wallTimeUnixMs"
+  ],
+  "title": "DiagnosticsTraceEvent",
+  "type": "object"
+}

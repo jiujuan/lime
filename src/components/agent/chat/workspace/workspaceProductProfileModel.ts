@@ -10,6 +10,7 @@ import {
   readWorkspaceProductProfileWorkerEvidence,
   type WorkspaceProductProfileWorkerEvidenceItem,
 } from "./workspaceProductProfileWorkerEvidence";
+import { buildWorkspacePluginPaneActionRequestMetadata } from "./workspacePluginPaneAction";
 
 export type WorkspaceProductProfileSource =
   | "threadRead"
@@ -363,12 +364,88 @@ export function buildWorkspaceProductProfileViewModel(
   };
 }
 
+function readOutputArtifactKindFromRecord(
+  record: Record<string, unknown> | null | undefined,
+): string {
+  if (!record) {
+    return "";
+  }
+  return readString(
+    record.outputArtifactKind,
+    record.output_artifact_kind,
+    record.workerOutputArtifactKind,
+    record.worker_output_artifact_kind,
+    record.artifactKind,
+    record.artifact_kind,
+  );
+}
+
+export function resolveWorkspaceProductProfileActionOutputArtifactKind(
+  intent: WorkspaceProductProfileActionIntent,
+): string | null {
+  const objectSourceOutput = readOutputArtifactKindFromRecord(
+    asRecord(intent.object.source),
+  );
+  if (objectSourceOutput) {
+    return objectSourceOutput;
+  }
+
+  for (const artifact of intent.profile.sourceArtifacts ?? []) {
+    const output = readOutputArtifactKindFromRecord(asRecord(artifact));
+    if (output) {
+      return output;
+    }
+  }
+
+  for (const evidence of intent.profile.workerEvidence ?? []) {
+    const output = evidence.artifactKind?.trim();
+    if (output) {
+      return output;
+    }
+  }
+
+  return null;
+}
+
 export function buildWorkspaceProductProfileActionRequestMetadata(
   intent: WorkspaceProductProfileActionIntent,
 ): Record<string, unknown> {
   const artifactIds = resolveProductObjectArtifactIds(intent.object);
+  const outputArtifactKind =
+    resolveWorkspaceProductProfileActionOutputArtifactKind(intent);
+  const paneActionMetadata = buildWorkspacePluginPaneActionRequestMetadata({
+    action: intent.action,
+    appId: intent.profile.appId,
+    sessionId: intent.profile.sessionId,
+    workspaceId: intent.profile.workspaceId ?? null,
+    prompt: intent.prompt,
+    outputArtifactKind,
+    paneKind: intent.object.ref.kind,
+    surfaceKind: "productProfile",
+    source: "right_surface_product_profile",
+    sourceArtifactIds: artifactIds,
+    object: {
+      app_id: intent.object.ref.appId,
+      kind: intent.object.ref.kind,
+      id: intent.object.ref.id,
+      session_id: intent.object.ref.sessionId,
+      version: intent.object.ref.version ?? null,
+      title: intent.object.title,
+      status: intent.object.status,
+      artifact_ids: artifactIds,
+      preview_artifact_id: intent.object.previewArtifactId ?? null,
+      source_turn_id: intent.object.ref.sourceTurnId ?? null,
+      source_task_id: intent.object.ref.sourceTaskId ?? null,
+    },
+  });
+  const paneAgentApp =
+    typeof paneActionMetadata.agent_app === "object" &&
+    paneActionMetadata.agent_app !== null
+      ? (paneActionMetadata.agent_app as Record<string, unknown>)
+      : {};
   return {
     agent_app: {
+      ...paneAgentApp,
       source: "right_surface_product_profile",
       app_id: intent.profile.appId,
       session_id: intent.profile.sessionId,
@@ -376,9 +453,10 @@ export function buildWorkspaceProductProfileActionRequestMetadata(
       product_profile_action: {
         key: intent.action.key,
         intent: intent.action.intent,
-        risk: intent.action.risk,
-        task_kind: intent.action.taskKind ?? null,
-        prompt: intent.prompt,
+          risk: intent.action.risk,
+          task_kind: intent.action.taskKind ?? null,
+          output_artifact_kind: outputArtifactKind,
+          prompt: intent.prompt,
         object: {
           app_id: intent.object.ref.appId,
           kind: intent.object.ref.kind,
@@ -396,6 +474,7 @@ export function buildWorkspaceProductProfileActionRequestMetadata(
     },
     right_surface: {
       surface_kind: "productProfile",
+      pane_kind: intent.object.ref.kind,
       source: intent.profile.source,
       action_key: intent.action.key,
     },
@@ -633,8 +712,13 @@ function readPreviewImage(
     record.asset_path,
   );
   const id =
-    readString(record.id, record.artifactId, record.artifact_id, url, localPath) ||
-    `image-${index + 1}`;
+    readString(
+      record.id,
+      record.artifactId,
+      record.artifact_id,
+      url,
+      localPath,
+    ) || `image-${index + 1}`;
   return {
     id,
     title: readString(record.title, record.name, record.alt, id) || id,

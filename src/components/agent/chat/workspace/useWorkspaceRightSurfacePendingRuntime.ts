@@ -34,6 +34,7 @@ import {
   buildWorkspaceProductProfileFromPendingRequests,
   type WorkspaceProductProfile,
 } from "./workspaceProductProfileModel";
+import { enrichWorkspaceProductProfileRendererOutput } from "./workspacePluginRendererOutputProjection";
 import {
   buildWorkspaceRightSurfacePendingBrowserIntent,
   type WorkspaceRightSurfaceBrowserIntent,
@@ -393,11 +394,16 @@ export function useWorkspaceRightSurfacePendingRuntime({
   );
   const pendingProductProfile = useMemo(
     () =>
-      buildWorkspaceProductProfileFromPendingRequests(pendingRequests) ??
-      buildContentFactoryWorkspacePatchProfileFromPendingRequests(
+      enrichWorkspaceProductProfileRendererOutput({
+        contracts: pluginContracts,
         pendingRequests,
-      ),
-    [pendingRequests],
+        profile:
+          buildWorkspaceProductProfileFromPendingRequests(pendingRequests) ??
+          buildContentFactoryWorkspacePatchProfileFromPendingRequests(
+            pendingRequests,
+          ),
+      }),
+    [pendingRequests, pluginContracts],
   );
   const pendingBrowserIntent = useMemo(
     () => buildWorkspaceRightSurfacePendingBrowserIntent(pendingRequests),

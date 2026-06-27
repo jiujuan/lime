@@ -18,7 +18,10 @@ import type {
 import type { InputCapabilitySelection } from "./inputCapabilitySelection";
 import type { CuratedTaskReferenceEntry } from "../utils/curatedTaskReferenceSelection";
 import { changeLimeLocale } from "@/i18n/createI18n";
-
+import type {
+  InputbarPluginCapability,
+  InputbarPluginSkillCapability,
+} from "../components/Inputbar/pluginInputCapability";
 
 const hoistedMocks = vi.hoisted(() => ({
   mockListServiceSkills: vi.fn(),
@@ -143,11 +146,21 @@ vi.mock("@/components/ui/command", () => {
   const CommandItem = ({
     children,
     onSelect,
+    disabled,
   }: {
     children: React.ReactNode;
     onSelect?: () => void;
+    disabled?: boolean;
   }) => (
-    <button type="button" onClick={() => onSelect?.()}>
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={() => {
+        if (!disabled) {
+          onSelect?.();
+        }
+      }}
+    >
       {children}
     </button>
   );
@@ -293,6 +306,12 @@ export interface HarnessProps {
     capability: InputCapabilitySelection,
     options?: { replayText?: string },
   ) => void;
+  pluginSuggestions?: readonly InputbarPluginCapability[];
+  onSelectPlugin?: (
+    plugin: InputbarPluginCapability,
+    skill?: InputbarPluginSkillCapability,
+    options?: { inputOverride?: string },
+  ) => void;
   projectId?: string | null;
   sessionId?: string | null;
   defaultCuratedTaskReferenceMemoryIds?: string[];
@@ -309,6 +328,8 @@ const Harness: React.FC<HarnessProps> = ({
   onNavigateToSettings,
   onChangeSpy,
   onSelectInputCapability,
+  pluginSuggestions = [],
+  onSelectPlugin,
   projectId = null,
   sessionId = null,
   defaultCuratedTaskReferenceMemoryIds = [],
@@ -344,6 +365,8 @@ const Harness: React.FC<HarnessProps> = ({
           }
         }}
         onSelectInputCapability={onSelectInputCapability}
+        pluginSuggestions={pluginSuggestions}
+        onSelectPlugin={onSelectPlugin}
         projectId={projectId}
         sessionId={sessionId}
         defaultCuratedTaskReferenceMemoryIds={

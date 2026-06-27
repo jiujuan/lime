@@ -5,6 +5,7 @@ const PRODUCT_DB_FILE_NAME: &str = "lime.db";
 const MEMORY_DIR_NAME: &str = "memories";
 const RUNTIME_DIR_NAME: &str = "runtime";
 const EVENT_LOG_DIR_NAME: &str = "events";
+const TRACE_LOG_DIR_NAME: &str = "traces";
 const SIDECAR_DIR_NAME: &str = "sidecar";
 const PROJECTION_DB_FILE_NAME: &str = "projection_1.sqlite";
 const TELEMETRY_DB_FILE_NAME: &str = "telemetry_1.sqlite";
@@ -16,37 +17,21 @@ pub struct StorageRoots {
     pub product_db_path: PathBuf,
     pub runtime_root: PathBuf,
     pub event_log_root: PathBuf,
+    pub trace_log_root: PathBuf,
     pub sidecar_root: PathBuf,
     pub projection_db_path: PathBuf,
     pub telemetry_db_path: PathBuf,
 }
 
 impl StorageRoots {
-    pub fn initialize(data_root: impl AsRef<Path>) -> Result<Self, String> {
+    pub fn from_data_root(data_root: impl AsRef<Path>) -> Self {
         let data_root = data_root.as_ref().to_path_buf();
         let runtime_root = data_root.join(RUNTIME_DIR_NAME);
         let event_log_root = runtime_root.join(EVENT_LOG_DIR_NAME);
+        let trace_log_root = runtime_root.join(TRACE_LOG_DIR_NAME);
         let sidecar_root = runtime_root.join(SIDECAR_DIR_NAME);
-        fs::create_dir_all(&event_log_root).map_err(|error| {
-            format!(
-                "无法创建 App Server runtime 事件目录 {}: {error}",
-                event_log_root.display()
-            )
-        })?;
-        fs::create_dir_all(&sidecar_root).map_err(|error| {
-            format!(
-                "无法创建 App Server runtime sidecar 目录 {}: {error}",
-                sidecar_root.display()
-            )
-        })?;
-        fs::create_dir_all(&runtime_root).map_err(|error| {
-            format!(
-                "无法创建 App Server runtime 目录 {}: {error}",
-                runtime_root.display()
-            )
-        })?;
 
-        Ok(Self {
+        Self {
             product_db_path: data_root.join(PRODUCT_DB_FILE_NAME),
             memory_root: data_root.join(MEMORY_DIR_NAME),
             projection_db_path: runtime_root.join(PROJECTION_DB_FILE_NAME),
@@ -54,8 +39,39 @@ impl StorageRoots {
             data_root,
             runtime_root,
             event_log_root,
+            trace_log_root,
             sidecar_root,
-        })
+        }
+    }
+
+    pub fn initialize(data_root: impl AsRef<Path>) -> Result<Self, String> {
+        let roots = Self::from_data_root(data_root);
+        fs::create_dir_all(&roots.event_log_root).map_err(|error| {
+            format!(
+                "无法创建 App Server runtime 事件目录 {}: {error}",
+                roots.event_log_root.display()
+            )
+        })?;
+        fs::create_dir_all(&roots.sidecar_root).map_err(|error| {
+            format!(
+                "无法创建 App Server runtime sidecar 目录 {}: {error}",
+                roots.sidecar_root.display()
+            )
+        })?;
+        fs::create_dir_all(&roots.trace_log_root).map_err(|error| {
+            format!(
+                "无法创建 App Server runtime trace 目录 {}: {error}",
+                roots.trace_log_root.display()
+            )
+        })?;
+        fs::create_dir_all(&roots.runtime_root).map_err(|error| {
+            format!(
+                "无法创建 App Server runtime 目录 {}: {error}",
+                roots.runtime_root.display()
+            )
+        })?;
+
+        Ok(roots)
     }
 }
 
@@ -72,6 +88,7 @@ mod tests {
         assert_eq!(roots.memory_root, roots.data_root.join("memories"));
         assert_eq!(roots.runtime_root, roots.data_root.join("runtime"));
         assert_eq!(roots.event_log_root, roots.runtime_root.join("events"));
+        assert_eq!(roots.trace_log_root, roots.runtime_root.join("traces"));
         assert_eq!(roots.sidecar_root, roots.runtime_root.join("sidecar"));
         assert_eq!(
             roots.projection_db_path,
@@ -82,6 +99,7 @@ mod tests {
             roots.runtime_root.join("telemetry_1.sqlite")
         );
         assert!(roots.event_log_root.is_dir());
+        assert!(roots.trace_log_root.is_dir());
         assert!(roots.sidecar_root.is_dir());
     }
 }

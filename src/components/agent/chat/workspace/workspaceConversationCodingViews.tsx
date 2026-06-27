@@ -10,6 +10,7 @@ import {
   interruptExecutionProcess,
   readExecutionProcessStatus,
   terminateExecutionProcess,
+  writeExecutionProcessStdin,
 } from "@/lib/api/executionProcess";
 import { projectCodingWorkbenchViewFromEvents } from "@limecloud/agent-runtime-projection";
 import { CanvasSessionOverviewPanel } from "../components/CanvasSessionOverviewPanel";
@@ -51,6 +52,7 @@ interface WorkspaceConversationCodingViewsParams {
   focusedTimelineItemId?: string | null;
   onOpenFile?: (path: string) => void | Promise<void>;
   onRespondToAction?: (response: ConfirmResponse) => void | Promise<void>;
+  onRefreshSessionReadModel?: () => void | Promise<unknown>;
   onSubmitRecoveryPrompt?: (
     prompt: string,
     context?: CodingWorkbenchRecoveryContext,
@@ -80,6 +82,7 @@ export function buildWorkspaceConversationCodingViews({
   focusedTimelineItemId,
   onOpenFile,
   onRespondToAction,
+  onRefreshSessionReadModel,
   onSubmitRecoveryPrompt,
 }: WorkspaceConversationCodingViewsParams): WorkspaceConversationCodingViews {
   const currentSessionTurn =
@@ -181,11 +184,27 @@ export function buildWorkspaceConversationCodingViews({
               fileCheckpointSummary={fileCheckpointSummary}
               submittedActionsInFlight={submittedActionsInFlight}
               processControls={{
-                onInterruptProcess: interruptExecutionProcess,
-                onTerminateProcess: terminateExecutionProcess,
-                onRefreshProcessStatus: readExecutionProcessStatus,
-                onDrainProcessOutput: (processId) =>
-                  drainExecutionProcessOutput({ processId }),
+                onInterruptProcess: withReadModelRefresh(
+                  interruptExecutionProcess,
+                  onRefreshSessionReadModel,
+                ),
+                onTerminateProcess: withReadModelRefresh(
+                  terminateExecutionProcess,
+                  onRefreshSessionReadModel,
+                ),
+                onRefreshProcessStatus: withReadModelRefresh(
+                  readExecutionProcessStatus,
+                  onRefreshSessionReadModel,
+                ),
+                onDrainProcessOutput: withReadModelRefresh(
+                  (processId) => drainExecutionProcessOutput({ processId }),
+                  onRefreshSessionReadModel,
+                ),
+                onWriteProcessStdin: withReadModelRefresh(
+                  (processId, data) =>
+                    writeExecutionProcessStdin({ processId, data }),
+                  onRefreshSessionReadModel,
+                ),
               }}
               onRespondToAction={onRespondToAction}
               onSubmitRecoveryPrompt={onSubmitRecoveryPrompt}
@@ -221,5 +240,16 @@ export function buildWorkspaceConversationCodingViews({
     outputView,
     logView,
     changeView,
+  };
+}
+
+function withReadModelRefresh<TArgs extends readonly unknown[]>(
+  handler: (...args: TArgs) => Promise<unknown>,
+  onRefreshSessionReadModel?: () => void | Promise<unknown>,
+): (...args: TArgs) => Promise<unknown> {
+  return async (...args) => {
+    const result = await handler(...args);
+    await onRefreshSessionReadModel?.();
+    return result;
   };
 }

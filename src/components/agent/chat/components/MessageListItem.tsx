@@ -438,7 +438,9 @@ export function MessageListItem({
             className={
               isUserCommandMessage ? "message-bubble-user-command" : undefined
             }
+            data-message-id={msg.id}
             data-message-role={msg.role}
+            data-runtime-turn-id={msg.runtimeTurnId || ""}
             data-message-content-part-types={contentPartDebugSignature(
               msg.contentParts,
             )}

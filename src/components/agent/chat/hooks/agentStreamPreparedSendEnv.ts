@@ -61,6 +61,7 @@ export interface AgentStreamPreparedSendEnv {
     context?: import("../types").WriteArtifactContext,
   ) => void;
   executionRuntime?: AsterSessionExecutionRuntime | null;
+  clawTraceEnabled: boolean;
   setActiveStream: (nextActive: ActiveStreamState | null) => void;
   clearActiveStreamIfMatch: (eventName: string) => boolean;
   setMessages: Dispatch<SetStateAction<Message[]>>;

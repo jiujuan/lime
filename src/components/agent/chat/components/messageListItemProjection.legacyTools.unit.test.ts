@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { buildProjection, type Message } from "./messageListItemProjection.testHarness";
+import {
+  buildProjection,
+  type Message,
+} from "./messageListItemProjection.testHarness";
 
 describe("messageListItemProjection legacy tool sources", () => {
   it("旧 timeline 缺少 phase 时应保留过程前导语并只把最后一条 agent_message 当作最终正文", () => {
@@ -77,18 +80,29 @@ describe("messageListItemProjection legacy tool sources", () => {
     ] as never);
 
     expect(projection.actionContent).toBe(
-      "我会先做几组中英文检索。\n\n## 今日国际新闻简报\n\n- 第一条要闻。",
+      "## 今日国际新闻简报\n\n- 第一条要闻。",
     );
     expect(projection.rendererRawContent).toBe(
-      "我会先做几组中英文检索。\n\n## 今日国际新闻简报\n\n- 第一条要闻。",
+      "## 今日国际新闻简报\n\n- 第一条要闻。",
     );
     expect(projection.rendererRawContent).not.toContain("交叉核对");
     expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
       "text",
       "tool_use",
+      "text",
       "tool_use",
       "text",
     ]);
+    expect(
+      projection.rendererContentParts?.[0]?.type === "text"
+        ? projection.rendererContentParts[0].text
+        : "",
+    ).toBe("我会先做几组中英文检索。");
+    expect(
+      projection.rendererContentParts?.[2]?.type === "text"
+        ? projection.rendererContentParts[2].text
+        : "",
+    ).toBe("我再打开几个页面交叉核对。");
   });
 
   it("timeline 已有工具 item 时不应再把 legacy message.toolCalls 作为第二套过程源", () => {

@@ -582,6 +582,7 @@ export function useInputbarController({
   const handleSelectPlugin = (
     plugin: InputbarPluginCapability,
     skill?: InputbarPluginSkillCapability,
+    options?: { inputOverride?: string },
   ) => {
     const blocked =
       plugin.disabled ||
@@ -592,7 +593,7 @@ export function useInputbarController({
       return;
     }
     const selection = applyInputbarPluginSelection({
-      input,
+      input: options?.inputOverride ?? input,
       plugin,
       skill,
     });

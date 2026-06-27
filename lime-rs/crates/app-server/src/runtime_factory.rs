@@ -1,3 +1,4 @@
+use crate::execution_process::ExecutionProcessServer;
 use crate::AppServer;
 use crate::ArtifactContentProvider;
 use crate::CapabilitySource;
@@ -9,7 +10,7 @@ use crate::RuntimeBackend;
 use crate::RuntimeCore;
 use crate::UnavailableBackend;
 #[cfg(feature = "aster-backend")]
-use crate::{AsterBackend, AsterBackendHost};
+use crate::{AsterBackend, AsterBackendHost, AsterBackendProcessControlCapabilities};
 use lime_core::database::DbConnection;
 use std::sync::Arc;
 use thiserror::Error;
@@ -94,30 +95,47 @@ impl AppServerRuntimeFactory {
     }
 
     pub fn runtime_backend_core() -> RuntimeCore {
-        RuntimeCore::with_backend(Arc::new(RuntimeBackend::new()))
+        let execution_process = ExecutionProcessServer::default();
+        RuntimeCore::with_backend(Arc::new(RuntimeBackend::with_execution_process_server(
+            execution_process.clone(),
+        )))
+        .with_execution_process_server(execution_process)
     }
 
     pub fn runtime_backend_core_with_db(db: DbConnection) -> RuntimeCore {
-        RuntimeCore::with_backend(Arc::new(RuntimeBackend::with_db(db)))
+        let execution_process = ExecutionProcessServer::default();
+        RuntimeCore::with_backend(Arc::new(
+            RuntimeBackend::with_db_and_execution_process_server(db, execution_process.clone()),
+        ))
+        .with_execution_process_server(execution_process)
     }
 
     pub fn runtime_backend_core_with_capability_source(
         capability_source: Arc<dyn CapabilitySource>,
     ) -> RuntimeCore {
+        let execution_process = ExecutionProcessServer::default();
         RuntimeCore::with_backend_and_capability_source(
-            Arc::new(RuntimeBackend::new()),
+            Arc::new(RuntimeBackend::with_execution_process_server(
+                execution_process.clone(),
+            )),
             capability_source,
         )
+        .with_execution_process_server(execution_process)
     }
 
     pub fn runtime_backend_core_with_db_and_capability_source(
         db: DbConnection,
         capability_source: Arc<dyn CapabilitySource>,
     ) -> RuntimeCore {
+        let execution_process = ExecutionProcessServer::default();
         RuntimeCore::with_backend_and_capability_source(
-            Arc::new(RuntimeBackend::with_db(db)),
+            Arc::new(RuntimeBackend::with_db_and_execution_process_server(
+                db,
+                execution_process.clone(),
+            )),
             capability_source,
         )
+        .with_execution_process_server(execution_process)
     }
 
     pub fn runtime_app_server() -> AppServer {
@@ -205,6 +223,18 @@ impl AppServerRuntimeFactory {
     }
 
     #[cfg(feature = "aster-backend")]
+    pub fn aster_runtime_core_with_execution_process_server(
+        host: Arc<dyn AsterBackendHost>,
+        execution_process: ExecutionProcessServer,
+    ) -> RuntimeCore {
+        RuntimeCore::with_backend(Arc::new(AsterBackend::new_with_process_control(
+            host,
+            AsterBackendProcessControlCapabilities::shared_execution_process_server(),
+        )))
+        .with_execution_process_server(execution_process)
+    }
+
+    #[cfg(feature = "aster-backend")]
     pub fn aster_runtime_core_with_capability_source(
         host: Arc<dyn AsterBackendHost>,
         capability_source: Arc<dyn CapabilitySource>,
@@ -247,15 +277,50 @@ impl AppServerRuntimeFactory {
     pub fn aster_app_server(host: Arc<dyn AsterBackendHost>) -> AppServer {
         AppServer::with_runtime(Self::aster_runtime_core(host))
     }
+
+    #[cfg(feature = "aster-backend")]
+    pub fn aster_app_server_with_execution_process_server(
+        host: Arc<dyn AsterBackendHost>,
+        execution_process: ExecutionProcessServer,
+    ) -> AppServer {
+        AppServer::with_runtime(Self::aster_runtime_core_with_execution_process_server(
+            host,
+            execution_process,
+        ))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "aster-backend")]
+    use crate::AsterBackendActionRespondRequest;
+    #[cfg(feature = "aster-backend")]
+    use crate::AsterBackendActionRespondResult;
+    #[cfg(feature = "aster-backend")]
+    use crate::AsterBackendCancelRequest;
+    #[cfg(feature = "aster-backend")]
+    use crate::AsterBackendCancelResult;
+    #[cfg(feature = "aster-backend")]
+    use crate::AsterBackendSubmitRequest;
+    #[cfg(feature = "aster-backend")]
+    use crate::AsterBackendSubmitResult;
     use crate::CapabilityInventoryRecord;
     use crate::CapabilityInventorySource;
+    #[cfg(feature = "aster-backend")]
+    use crate::RuntimeCoreError;
+    #[cfg(feature = "aster-backend")]
+    use crate::RuntimeHostContext;
+    #[cfg(feature = "aster-backend")]
+    use app_server_protocol::AgentInput;
+    #[cfg(feature = "aster-backend")]
+    use app_server_protocol::AgentSessionStartParams;
+    #[cfg(feature = "aster-backend")]
+    use app_server_protocol::AgentSessionTurnStartParams;
     use app_server_protocol::CapabilityDescriptor;
     use app_server_protocol::CapabilityListParams;
+    #[cfg(feature = "aster-backend")]
+    use async_trait::async_trait;
 
     #[test]
     fn backend_mode_is_explicit_for_standalone_binary() {
@@ -445,5 +510,82 @@ mod tests {
         assert_eq!(matched.capabilities.len(), 1);
         assert_eq!(matched.capabilities[0].id, "content.draft.generate");
         assert!(unmatched.capabilities.is_empty());
+    }
+
+    #[cfg(feature = "aster-backend")]
+    struct FactoryProcessControlHost;
+
+    #[cfg(feature = "aster-backend")]
+    #[async_trait]
+    impl AsterBackendHost for FactoryProcessControlHost {
+        async fn submit_turn(
+            &self,
+            request: AsterBackendSubmitRequest,
+        ) -> Result<AsterBackendSubmitResult, RuntimeCoreError> {
+            assert_eq!(
+                request.process_control,
+                AsterBackendProcessControlCapabilities::shared_execution_process_server()
+            );
+            Ok(AsterBackendSubmitResult::default())
+        }
+
+        async fn cancel_turn(
+            &self,
+            _request: AsterBackendCancelRequest,
+        ) -> Result<AsterBackendCancelResult, RuntimeCoreError> {
+            Ok(AsterBackendCancelResult::default())
+        }
+
+        async fn respond_action(
+            &self,
+            _request: AsterBackendActionRespondRequest,
+        ) -> Result<AsterBackendActionRespondResult, RuntimeCoreError> {
+            Ok(AsterBackendActionRespondResult::default())
+        }
+    }
+
+    #[cfg(feature = "aster-backend")]
+    #[tokio::test]
+    async fn aster_factory_can_share_execution_process_owner_with_runtime_core() {
+        let execution_process = ExecutionProcessServer::default();
+        let runtime = AppServerRuntimeFactory::aster_runtime_core_with_execution_process_server(
+            Arc::new(FactoryProcessControlHost),
+            execution_process.clone(),
+        );
+
+        assert!(runtime.execution_process_server().is_some());
+
+        let session = runtime
+            .start_session(AgentSessionStartParams {
+                session_id: None,
+                thread_id: None,
+                app_id: "content-studio".to_string(),
+                workspace_id: Some("default".to_string()),
+                business_object_ref: None,
+                locale: None,
+            })
+            .expect("session")
+            .session;
+
+        runtime
+            .start_turn(
+                AgentSessionTurnStartParams {
+                    session_id: session.session_id,
+                    turn_id: None,
+                    input: AgentInput {
+                        text: "draft".to_string(),
+                        attachments: Vec::new(),
+                    },
+                    runtime_options: None,
+                    queue_if_busy: false,
+                    skip_pre_submit_resume: false,
+                },
+                RuntimeHostContext {
+                    client_name: Some("test-client".to_string()),
+                    client_version: None,
+                },
+            )
+            .await
+            .expect("turn");
     }
 }

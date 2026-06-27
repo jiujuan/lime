@@ -165,6 +165,137 @@ async fn product_profile_worker_blocks_cloud_release_without_verified_signature_
 }
 
 #[tokio::test]
+async fn product_profile_worker_fails_closed_for_unauthorized_output_artifact_kind() {
+    let core = RuntimeCore::default();
+    let session = core
+        .start_session(AgentSessionStartParams {
+            session_id: Some("session-content-factory-output-auth".to_string()),
+            thread_id: Some("thread-content-factory-output-auth".to_string()),
+            app_id: "content-factory-app".to_string(),
+            workspace_id: Some("workspace-main".to_string()),
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("session")
+        .session;
+
+    let output = core
+        .start_turn(
+            AgentSessionTurnStartParams {
+                session_id: session.session_id,
+                turn_id: Some("turn-product-profile-output-auth".to_string()),
+                input: AgentInput {
+                    text: "重新生成配图".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: Some(RuntimeOptions {
+                    metadata: Some(product_profile_action_metadata_with_output_kind(
+                        "creator.workspace_patch",
+                    )),
+                    ..RuntimeOptions::default()
+                }),
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("product profile worker unauthorized output turn");
+
+    assert_eq!(output.response.turn.status, AgentTurnStatus::Failed);
+    let event_types = output
+        .events
+        .iter()
+        .map(|event| event.event_type.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        event_types,
+        vec![
+            "message.created",
+            "turn.accepted",
+            "runtime.error",
+            "turn.failed"
+        ]
+    );
+    let accepted = output
+        .events
+        .iter()
+        .find(|event| event.event_type == "turn.accepted")
+        .expect("accepted event");
+    assert_eq!(accepted.payload["authorization"], "denied");
+    assert_eq!(
+        accepted.payload["reasonCode"],
+        "AGENT_APP_WORKER_OUTPUT_UNAUTHORIZED"
+    );
+
+    let runtime_error = output
+        .events
+        .iter()
+        .find(|event| event.event_type == "runtime.error")
+        .expect("runtime error");
+    assert_eq!(
+        runtime_error.payload["errorCode"],
+        "AGENT_APP_WORKER_OUTPUT_UNAUTHORIZED"
+    );
+    assert_eq!(
+        runtime_error.payload["outputArtifactKind"],
+        "creator.workspace_patch"
+    );
+    assert_eq!(runtime_error.payload["failureCategory"], "configuration");
+    assert_eq!(runtime_error.payload["retryable"], false);
+}
+
+#[tokio::test]
+async fn product_profile_worker_fails_closed_when_output_artifact_kind_is_missing() {
+    let core = RuntimeCore::default();
+    let session = core
+        .start_session(AgentSessionStartParams {
+            session_id: Some("session-content-factory-output-missing".to_string()),
+            thread_id: Some("thread-content-factory-output-missing".to_string()),
+            app_id: "content-factory-app".to_string(),
+            workspace_id: Some("workspace-main".to_string()),
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("session")
+        .session;
+
+    let output = core
+        .start_turn(
+            AgentSessionTurnStartParams {
+                session_id: session.session_id,
+                turn_id: Some("turn-product-profile-output-missing".to_string()),
+                input: AgentInput {
+                    text: "重新生成配图".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: Some(RuntimeOptions {
+                    metadata: Some(product_profile_action_metadata_without_output_kind()),
+                    ..RuntimeOptions::default()
+                }),
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("product profile worker missing output turn");
+
+    assert_eq!(output.response.turn.status, AgentTurnStatus::Failed);
+    let runtime_error = output
+        .events
+        .iter()
+        .find(|event| event.event_type == "runtime.error")
+        .expect("runtime error");
+    assert_eq!(
+        runtime_error.payload["errorCode"],
+        "AGENT_APP_WORKER_OUTPUT_UNAUTHORIZED"
+    );
+    assert!(runtime_error.payload["outputArtifactKind"].is_null());
+    assert_eq!(runtime_error.payload["retryable"], false);
+}
+
+#[tokio::test]
 async fn product_profile_worker_retries_retryable_failure_and_completes() {
     if !node_available() {
         return;
@@ -469,6 +600,7 @@ fn product_profile_action_metadata() -> serde_json::Value {
                 "intent": "regenerate",
                 "risk": "write",
                 "task_kind": "content.image.generate",
+                "output_artifact_kind": "content_factory.workspace_patch",
                 "prompt": "Regenerate the image set with two candidate images.",
                 "object": {
                     "app_id": "content-factory-app",
@@ -486,6 +618,23 @@ fn product_profile_action_metadata() -> serde_json::Value {
             "action_key": "regenerate"
         }
     })
+}
+
+fn product_profile_action_metadata_with_output_kind(
+    output_artifact_kind: &str,
+) -> serde_json::Value {
+    let mut metadata = product_profile_action_metadata();
+    metadata["agent_app"]["product_profile_action"]["output_artifact_kind"] =
+        json!(output_artifact_kind);
+    metadata
+}
+
+fn product_profile_action_metadata_without_output_kind() -> serde_json::Value {
+    let mut metadata = product_profile_action_metadata();
+    if let Some(action) = metadata["agent_app"]["product_profile_action"].as_object_mut() {
+        action.remove("output_artifact_kind");
+    }
+    metadata
 }
 
 const RETRY_THEN_COMPLETE_WORKER: &str = r#"

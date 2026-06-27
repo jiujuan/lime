@@ -231,9 +231,10 @@ describe("MessageList imported history codex import", () => {
           content?: string;
           contentParts?: Array<Record<string, unknown>>;
         };
-        return (
-          rendererProps.content?.includes("已完成修复。") &&
-          rendererProps.contentParts?.some((part) => part.type === "tool_use")
+        return rendererProps.contentParts?.some(
+          (part) =>
+            isMockToolUsePart(part) &&
+            part.toolCall.id === "imported-command",
         );
       },
     )?.[0] as
@@ -242,10 +243,17 @@ describe("MessageList imported history codex import", () => {
 
     const importedContentParts =
       importedAssistantRendererCall?.contentParts || [];
-    expect(importedAssistantRendererCall?.content).toContain(
-      "我会先运行测试并检查失败。",
-    );
     expect(importedAssistantRendererCall?.content).toContain("已完成修复。");
+    expect(
+      importedContentParts
+        .filter((part) => part.type === "text")
+        .map((part) => part.text),
+    ).toEqual(
+      expect.arrayContaining([
+        "我会先运行测试并检查失败。",
+        "已完成修复。",
+      ]),
+    );
     expect(importedContentParts.map((part) => part.type)).toEqual(
       expect.arrayContaining([
         "thinking",

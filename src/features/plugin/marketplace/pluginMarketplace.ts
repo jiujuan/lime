@@ -3,6 +3,8 @@ import { projectPluginRegistry } from "../manifest/pluginRegistry";
 import type { InstalledAgentAppState } from "@/features/agent-app/types";
 import type {
   PluginContract,
+  PluginArtifactRendererDeclaration,
+  PluginHistoryRestoreDeclaration,
   PluginManifest,
   PluginRegistryItem,
   PluginRegistryProjectionInput,
@@ -83,7 +85,31 @@ export function projectPluginMarketplaceItemSkills(
   });
 }
 
+function projectPluginMarketplaceItemArtifactRenderers(
+  item: Pick<PluginMarketplaceItem, "manifestSummary">,
+): PluginArtifactRendererDeclaration[] {
+  const summary = readRecord(item.manifestSummary);
+  const rawRenderers = Array.isArray(summary?.artifactRenderers)
+    ? summary.artifactRenderers
+    : [];
+
+  return rawRenderers.flatMap((entry): PluginArtifactRendererDeclaration[] => {
+    const record = readRecord(entry);
+    return record ? [record as unknown as PluginArtifactRendererDeclaration] : [];
+  });
+}
+
+function projectPluginMarketplaceItemHistoryRestore(
+  item: Pick<PluginMarketplaceItem, "manifestSummary">,
+): PluginHistoryRestoreDeclaration | undefined {
+  const summary = readRecord(item.manifestSummary);
+  const historyRestore = readRecord(summary?.historyRestore);
+  return historyRestore as PluginHistoryRestoreDeclaration | undefined;
+}
+
 function marketplaceManifest(item: PluginMarketplaceItem): PluginManifest {
+  const artifactRenderers = projectPluginMarketplaceItemArtifactRenderers(item);
+  const historyRestore = projectPluginMarketplaceItemHistoryRestore(item);
   return {
     id: item.pluginKey,
     name: item.pluginName,
@@ -100,6 +126,8 @@ function marketplaceManifest(item: PluginMarketplaceItem): PluginManifest {
       capabilities: item.capabilities ?? [],
       screenshots: [],
     },
+    artifactRenderers,
+    ...(historyRestore ? { historyRestore } : {}),
     agentApps: item.appId
       ? [
           {

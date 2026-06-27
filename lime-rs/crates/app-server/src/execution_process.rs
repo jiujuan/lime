@@ -5,7 +5,7 @@ use app_server_protocol::{
     ExecutionProcessStartResponse, ExecutionProcessStatus, ExecutionProcessStatusResponse,
     ExecutionProcessWriteStdinParams,
 };
-use aster::tools::{BashTool, ToolContext, ToolRegistry};
+use aster::tools::{BashTool, PowerShellTool, ToolContext, ToolRegistry};
 use lime_agent::agent_tools::catalog::tool_catalog_entry;
 use lime_agent::agent_tools::execution::{
     decide_tool_execution, start_local_execution_process,
@@ -16,6 +16,7 @@ use lime_agent::agent_tools::execution::{
     LocalExecutionRequest, ToolExecutionDecisionInput, ToolExecutionDecisionKind,
     ToolExecutionResolverInput,
 };
+use lime_agent::agent_tools::tool_orchestrator::LiveExecutionProcessRegistry;
 use serde_json::json;
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
@@ -24,6 +25,7 @@ use std::sync::{Arc, Mutex};
 const DEFAULT_DRAIN_LIMIT: usize = 128;
 const MAX_DRAIN_LIMIT: usize = 1024;
 const OUTPUT_EVENT_CAP: usize = 4096;
+const OUTPUT_BYTE_CAP: usize = 4 * 1024 * 1024;
 
 #[derive(Debug, Clone, Default)]
 pub struct ExecutionProcessServer {
@@ -34,6 +36,7 @@ pub struct ExecutionProcessServer {
 struct ExecutionProcessState {
     processes: HashMap<String, ExecutionProcessEntry>,
     output: VecDeque<ExecutionProcessOutputDelta>,
+    output_bytes: usize,
 }
 
 #[derive(Debug)]
@@ -65,6 +68,69 @@ pub enum ExecutionProcessError {
 }
 
 impl ExecutionProcessServer {
+    pub fn register_process_handle(
+        &self,
+        handle: LocalExecutionProcessControlHandle,
+        snapshot: AgentExecutionProcessSnapshot,
+    ) -> Result<(), ExecutionProcessError> {
+        if handle.process_id() != snapshot.process_id {
+            return Err(ExecutionProcessError::Control(format!(
+                "control handle process id {} does not match snapshot process id {}",
+                handle.process_id(),
+                snapshot.process_id
+            )));
+        }
+        let process_id = snapshot.process_id.clone();
+        let snapshot = map_snapshot(snapshot);
+        let is_terminal = matches!(
+            snapshot.status,
+            ExecutionProcessStatus::Exited
+                | ExecutionProcessStatus::Interrupted
+                | ExecutionProcessStatus::Terminated
+                | ExecutionProcessStatus::Failed
+        );
+        let mut state = self.inner.lock().map_err(|_| ExecutionProcessError::Lock)?;
+        if state.processes.contains_key(&process_id) {
+            return Err(ExecutionProcessError::ProcessExists(process_id));
+        }
+        state.processes.insert(
+            process_id,
+            ExecutionProcessEntry {
+                handle: if is_terminal { None } else { Some(handle) },
+                final_snapshot: if is_terminal { Some(snapshot) } else { None },
+            },
+        );
+        Ok(())
+    }
+
+    pub fn record_process_output(
+        &self,
+        delta: AgentExecutionOutputDelta,
+    ) -> Result<(), ExecutionProcessError> {
+        let mut state = self.inner.lock().map_err(|_| ExecutionProcessError::Lock)?;
+        if !state.processes.contains_key(&delta.process_id) {
+            return Err(ExecutionProcessError::ProcessNotFound(delta.process_id));
+        }
+        push_output(&mut state, map_delta(delta));
+        Ok(())
+    }
+
+    pub fn finish_process(
+        &self,
+        snapshot: AgentExecutionProcessSnapshot,
+    ) -> Result<(), ExecutionProcessError> {
+        let process_id = snapshot.process_id.clone();
+        let snapshot = map_snapshot(snapshot);
+        let mut state = self.inner.lock().map_err(|_| ExecutionProcessError::Lock)?;
+        let entry = state
+            .processes
+            .get_mut(&process_id)
+            .ok_or_else(|| ExecutionProcessError::ProcessNotFound(process_id.clone()))?;
+        entry.handle = None;
+        entry.final_snapshot = Some(snapshot);
+        Ok(())
+    }
+
     pub async fn start_process(
         &self,
         params: ExecutionProcessStartParams,
@@ -105,6 +171,7 @@ impl ExecutionProcessServer {
         }
         let mut registry = ToolRegistry::new();
         registry.register(Box::new(BashTool::new()));
+        registry.register(Box::new(PowerShellTool::new()));
         let tool_context = ToolContext::new(working_directory.clone());
         registry
             .check_tool_permissions(
@@ -264,25 +331,64 @@ impl ExecutionProcessServer {
             .map(usize::from)
             .unwrap_or(DEFAULT_DRAIN_LIMIT)
             .min(MAX_DRAIN_LIMIT);
-        let mut state = self.inner.lock().map_err(|_| ExecutionProcessError::Lock)?;
+        let max_bytes = params
+            .max_bytes
+            .and_then(|value| usize::try_from(value).ok())
+            .unwrap_or(usize::MAX);
+        let after_sequence = params.after_sequence.unwrap_or_default();
+        let state = self.inner.lock().map_err(|_| ExecutionProcessError::Lock)?;
         let mut deltas = Vec::new();
-        let mut retained = VecDeque::new();
+        let mut bytes = 0usize;
+        let mut next_sequence = params.after_sequence;
 
-        while let Some(delta) = state.output.pop_front() {
-            if deltas.len() < limit
-                && params
-                    .process_id
-                    .as_ref()
-                    .is_none_or(|process_id| process_id == &delta.process_id)
-            {
-                deltas.push(delta);
-            } else {
-                retained.push_back(delta);
+        for delta in state.output.iter() {
+            if deltas.len() >= limit {
+                break;
             }
+            if params
+                .process_id
+                .as_ref()
+                .is_some_and(|process_id| process_id != &delta.process_id)
+            {
+                continue;
+            }
+            if delta.sequence <= after_sequence {
+                continue;
+            }
+            let delta_bytes = delta.delta.len();
+            if !deltas.is_empty() && bytes.saturating_add(delta_bytes) > max_bytes {
+                break;
+            }
+            bytes = bytes.saturating_add(delta_bytes);
+            next_sequence = Some(next_sequence.unwrap_or_default().max(delta.sequence));
+            deltas.push(delta.clone());
         }
-        state.output = retained;
 
-        Ok(ExecutionProcessDrainOutputResponse { deltas })
+        Ok(ExecutionProcessDrainOutputResponse {
+            deltas,
+            next_sequence,
+        })
+    }
+}
+
+impl LiveExecutionProcessRegistry for ExecutionProcessServer {
+    fn register_live_process(
+        &self,
+        handle: LocalExecutionProcessControlHandle,
+        snapshot: AgentExecutionProcessSnapshot,
+    ) -> Result<(), String> {
+        self.register_process_handle(handle, snapshot)
+            .map_err(|error| error.to_string())
+    }
+
+    fn record_live_process_output(&self, delta: AgentExecutionOutputDelta) -> Result<(), String> {
+        self.record_process_output(delta)
+            .map_err(|error| error.to_string())
+    }
+
+    fn finish_live_process(&self, snapshot: AgentExecutionProcessSnapshot) -> Result<(), String> {
+        self.finish_process(snapshot)
+            .map_err(|error| error.to_string())
     }
 }
 
@@ -326,9 +432,14 @@ fn shell_wrapper_part(part: &str) -> bool {
 }
 
 fn push_output(state: &mut ExecutionProcessState, delta: ExecutionProcessOutputDelta) {
+    state.output_bytes = state.output_bytes.saturating_add(delta.delta.len());
     state.output.push_back(delta);
-    while state.output.len() > OUTPUT_EVENT_CAP {
-        state.output.pop_front();
+    while state.output.len() > OUTPUT_EVENT_CAP || state.output_bytes > OUTPUT_BYTE_CAP {
+        let Some(evicted) = state.output.pop_front() else {
+            state.output_bytes = 0;
+            break;
+        };
+        state.output_bytes = state.output_bytes.saturating_sub(evicted.delta.len());
     }
 }
 
@@ -411,12 +522,17 @@ mod tests {
             .expect("process should start");
         assert_eq!(response.snapshot.status, ExecutionProcessStatus::Running);
 
-        let mut output = ExecutionProcessDrainOutputResponse { deltas: Vec::new() };
+        let mut output = ExecutionProcessDrainOutputResponse {
+            deltas: Vec::new(),
+            next_sequence: None,
+        };
         for _ in 0..20 {
             let next = server
                 .drain_output(ExecutionProcessDrainOutputParams {
                     process_id: Some("process-test".to_string()),
+                    after_sequence: None,
                     limit: None,
+                    max_bytes: None,
                 })
                 .expect("output should drain");
             output.deltas.extend(next.deltas);
@@ -440,6 +556,140 @@ mod tests {
             })
             .expect("status should read");
         assert_eq!(status.snapshot.status, ExecutionProcessStatus::Exited);
+    }
+
+    #[tokio::test]
+    async fn execution_process_output_replays_until_cursor_advances() {
+        let server = ExecutionProcessServer::default();
+        server
+            .start_process(ExecutionProcessStartParams {
+                process_id: "process-replay".to_string(),
+                tool_id: "tool-replay".to_string(),
+                tool_name: "Bash".to_string(),
+                command: vec![
+                    "sh".to_string(),
+                    "-c".to_string(),
+                    "printf replay".to_string(),
+                ],
+                working_directory: std::env::current_dir()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string(),
+                approval_policy: Some("never".to_string()),
+                sandbox_policy: Some("danger-full-access".to_string()),
+                runtime_metadata: None,
+                cwd: None,
+                env: HashMap::new(),
+            })
+            .await
+            .expect("process should start");
+
+        let mut first = ExecutionProcessDrainOutputResponse {
+            deltas: Vec::new(),
+            next_sequence: None,
+        };
+        for _ in 0..20 {
+            first = server
+                .drain_output(ExecutionProcessDrainOutputParams {
+                    process_id: Some("process-replay".to_string()),
+                    after_sequence: None,
+                    limit: None,
+                    max_bytes: None,
+                })
+                .expect("output should replay");
+            if first
+                .deltas
+                .iter()
+                .any(|delta| delta.delta.contains("replay"))
+            {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        }
+        assert!(first
+            .deltas
+            .iter()
+            .any(|delta| delta.delta.contains("replay")));
+        let cursor = first.next_sequence.expect("cursor should advance");
+
+        let repeated = server
+            .drain_output(ExecutionProcessDrainOutputParams {
+                process_id: Some("process-replay".to_string()),
+                after_sequence: None,
+                limit: None,
+                max_bytes: None,
+            })
+            .expect("output should remain replayable");
+        assert_eq!(repeated.deltas, first.deltas);
+
+        let after_cursor = server
+            .drain_output(ExecutionProcessDrainOutputParams {
+                process_id: Some("process-replay".to_string()),
+                after_sequence: Some(cursor),
+                limit: None,
+                max_bytes: None,
+            })
+            .expect("cursor read should succeed");
+        assert!(after_cursor.deltas.is_empty());
+        assert_eq!(after_cursor.next_sequence, Some(cursor));
+    }
+
+    #[tokio::test]
+    async fn execution_process_server_tracks_registered_live_process() {
+        let server = ExecutionProcessServer::default();
+        let mut handle = start_local_execution_process(LocalExecutionRequest {
+            process_id: "process-registered".to_string(),
+            tool_id: "tool-registered".to_string(),
+            tool_name: "Bash".to_string(),
+            command: shell_output_command("registered-output"),
+            cwd: Some(std::env::current_dir().unwrap_or_default()),
+            env: HashMap::new(),
+        })
+        .expect("local process should start");
+
+        server
+            .register_live_process(handle.control_handle(), handle.status())
+            .expect("registered process should attach");
+        let running = server
+            .status(ExecutionProcessIdParams {
+                process_id: "process-registered".to_string(),
+            })
+            .expect("registered status should read");
+        assert_eq!(running.snapshot.status, ExecutionProcessStatus::Running);
+
+        let mut saw_output = false;
+        while let Some(delta) = handle.recv_output().await {
+            saw_output |= delta.delta.contains("registered-output");
+            server
+                .record_live_process_output(delta)
+                .expect("registered output should record");
+        }
+        assert!(saw_output);
+
+        let final_snapshot = handle.wait().await.expect("process should finish");
+        server
+            .finish_live_process(final_snapshot)
+            .expect("registered process should finish");
+        let output = server
+            .drain_output(ExecutionProcessDrainOutputParams {
+                process_id: Some("process-registered".to_string()),
+                after_sequence: None,
+                limit: None,
+                max_bytes: None,
+            })
+            .expect("registered output should drain");
+        assert!(output
+            .deltas
+            .iter()
+            .any(|delta| delta.delta.contains("registered-output")));
+
+        let status = server
+            .status(ExecutionProcessIdParams {
+                process_id: "process-registered".to_string(),
+            })
+            .expect("final registered status should read");
+        assert_eq!(status.snapshot.status, ExecutionProcessStatus::Exited);
+        assert_eq!(status.snapshot.exit_code, Some(0));
     }
 
     #[tokio::test]
@@ -494,5 +744,23 @@ mod tests {
             .expect_err("workspace sandbox command should not use bare process");
 
         assert!(matches!(error, ExecutionProcessError::SandboxRequired));
+    }
+
+    fn shell_output_command(output: &str) -> Vec<String> {
+        if cfg!(windows) {
+            vec![
+                "cmd".to_string(),
+                "/D".to_string(),
+                "/S".to_string(),
+                "/C".to_string(),
+                format!("echo {output}"),
+            ]
+        } else {
+            vec![
+                "sh".to_string(),
+                "-c".to_string(),
+                format!("printf {output}"),
+            ]
+        }
     }
 }

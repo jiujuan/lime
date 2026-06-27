@@ -216,6 +216,80 @@ describe("agentProtocol", () => {
     });
   });
 
+  it("应保留 AgentEvent envelope 中的 trace timing 字段", () => {
+    expect(
+      parseAgentEvent({
+        type: "text_delta",
+        text: "首字",
+        event_id: "evt-1",
+        renderer_event_received_at: 120,
+        request_id: "request-1",
+        run_id: "run-1",
+        sequence: 2,
+        server_event_emitted_at: 100,
+        trace_id: "trace-1",
+        turn_id: "turn-1",
+      }),
+    ).toMatchObject({
+      type: "text_delta",
+      text: "首字",
+      event_id: "evt-1",
+      renderer_event_received_at: 120,
+      request_id: "request-1",
+      run_id: "run-1",
+      sequence: 2,
+      server_event_emitted_at: 100,
+      trace_id: "trace-1",
+      turn_id: "turn-1",
+    });
+  });
+
+  it("应解析 provider trace 事件并保留安全耗时 metadata", () => {
+    expect(
+      parseAgentEvent({
+        type: "provider.first_text_delta.received",
+        event_id: "evt-provider-1",
+        renderer_event_received_at: 180,
+        request_id: "request-provider-1",
+        run_id: "run-provider-1",
+        sequence: 3,
+        server_event_emitted_at: 160,
+        trace_id: "trace-provider-1",
+        turn_id: "turn-provider-1",
+        payload: {
+          provider: "openai",
+          model: "gpt-4.1",
+          attempt: 1,
+          elapsed_ms: 1500,
+          text_chars: 4,
+          status: "running",
+          provider_request_id: "req-provider-1",
+          provider_request_id_header: "x-request-id",
+        },
+      }),
+    ).toMatchObject({
+      type: "provider_trace",
+      stage: "first_text_delta_received",
+      provider: "openai",
+      model: "gpt-4.1",
+      attempt: 1,
+      elapsed_ms: 1500,
+      text_chars: 4,
+      status: "running",
+      provider_request_id: "req-provider-1",
+      provider_request_id_header: "x-request-id",
+      runtime_event_type: "provider.first_text_delta.received",
+      event_id: "evt-provider-1",
+      renderer_event_received_at: 180,
+      request_id: "request-provider-1",
+      run_id: "run-provider-1",
+      sequence: 3,
+      server_event_emitted_at: 160,
+      trace_id: "trace-provider-1",
+      turn_id: "turn-provider-1",
+    });
+  });
+
   it("应将 App Server current message.delta 解析为现有正文增量事件", () => {
     expect(
       parseAgentEvent({

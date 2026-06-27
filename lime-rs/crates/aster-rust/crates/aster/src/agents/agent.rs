@@ -3,7 +3,7 @@ use std::future::Future;
 use std::panic::AssertUnwindSafe;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
@@ -12,6 +12,7 @@ use futures::{future::join_all, stream, FutureExt, Stream, StreamExt, TryStreamE
 use uuid::Uuid;
 
 use super::final_output_tool::FinalOutputTool;
+use super::provider_trace::ProviderTraceEvent;
 use super::tool_execution::{ToolCallResult, CHAT_MODE_TOOL_SKIPPED_RESPONSE, DECLINED_RESPONSE};
 use crate::action_required_manager::ActionRequiredManager;
 use crate::agents::error_handling::OverflowHandler;
@@ -66,7 +67,7 @@ use crate::tools::{
     is_powershell_command_concurrency_safe, register_all_tools,
     should_register_current_surface_tool, AgentControlToolConfig, AskTool, CronCreateTool,
     CronDeleteTool, CronListTool, CurrentSurfaceToolGates, SharedFileReadHistory,
-    SpawnAgentRequest, SpawnAgentResponse, ToolRegistrationConfig, ToolRegistry,
+    SpawnAgentRequest, SpawnAgentResponse, ToolContext, ToolRegistrationConfig, ToolRegistry,
     DEFAULT_ASK_TIMEOUT_SECS,
 };
 use crate::user_message_manager::UserMessageManager;
@@ -1105,6 +1106,7 @@ pub struct Agent {
     pub(super) session_store: Option<Arc<dyn SessionStore>>,
     pub(super) thread_runtime_store: Arc<dyn ThreadRuntimeStore>,
     pub(super) agent_control_tools: Option<AgentControlToolConfig>,
+    native_tool_execution_hook: Option<Arc<dyn NativeToolExecutionHook>>,
 }
 
 #[derive(Clone, Debug)]
@@ -1147,6 +1149,9 @@ pub enum AgentEvent {
         model: String,
         mode: String,
     },
+    ProviderTrace {
+        event: ProviderTraceEvent,
+    },
     HistoryReplaced(Conversation),
     ContextTrace {
         steps: Vec<ContextTraceStep>,
@@ -1176,6 +1181,38 @@ fn collect_provider_tool_input_delta_events(message: &Message) -> Option<Vec<Age
     }
 
     Some(events)
+}
+
+fn provider_response_text_chars(message: &Message) -> Option<usize> {
+    message.content.iter().find_map(|content| {
+        let MessageContent::Text(text) = content else {
+            return None;
+        };
+        let trimmed = text.text.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.chars().count())
+        }
+    })
+}
+
+fn strip_tool_requests_for_direct_answer(mut message: Message) -> Message {
+    let original_len = message.content.len();
+    message.content.retain(|content| {
+        !matches!(
+            content,
+            MessageContent::ToolRequest(_) | MessageContent::FrontendToolRequest(_)
+        )
+    });
+
+    if message.content.len() != original_len {
+        tracing::info!(
+            "[AsterAgent][TTFT] structured tool request stripped from direct_answer response"
+        );
+    }
+
+    message
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1229,6 +1266,18 @@ pub enum ToolStreamItem<T> {
 
 pub type ToolStream =
     Pin<Box<dyn Stream<Item = ToolStreamItem<ToolResult<CallToolResult>>> + Send>>;
+
+#[derive(Clone)]
+pub struct NativeToolExecutionRequest {
+    pub tool_name: String,
+    pub tool_id: String,
+    pub params: Value,
+    pub context: ToolContext,
+}
+
+pub trait NativeToolExecutionHook: Send + Sync {
+    fn execute_native_tool(&self, request: NativeToolExecutionRequest) -> Option<ToolCallResult>;
+}
 
 fn tool_execution_panic_message(error: Box<dyn std::any::Any + Send>) -> String {
     let detail = if let Some(message) = error.downcast_ref::<&str>() {
@@ -1752,6 +1801,7 @@ impl Agent {
             session_store: None, // 默认使用全局 SessionManager
             thread_runtime_store: Arc::new(InMemoryThreadRuntimeStore::default()),
             agent_control_tools: None,
+            native_tool_execution_hook: None,
         }
     }
 
@@ -1787,6 +1837,7 @@ impl Agent {
     pub fn with_shared_native_tool_surface_from(mut self, other: &Agent) -> Self {
         self.tool_registry = other.tool_registry.clone();
         self.file_read_history = other.file_read_history.clone();
+        self.native_tool_execution_hook = other.native_tool_execution_hook.clone();
         self
     }
 
@@ -1889,6 +1940,7 @@ impl Agent {
             session_store: None,
             thread_runtime_store: Arc::new(InMemoryThreadRuntimeStore::default()),
             agent_control_tools,
+            native_tool_execution_hook: None,
         }
     }
 
@@ -1937,6 +1989,18 @@ impl Agent {
     /// initialized, so this must not be limited to `Agent::with_tool_config`.
     pub fn set_agent_control_tools(&mut self, config: Option<AgentControlToolConfig>) {
         self.agent_control_tools = config;
+    }
+
+    /// Replace the current native tool execution hook.
+    ///
+    /// Embedders use this narrow seam to route selected native tools through
+    /// a host-owned process manager while keeping the model-visible registry
+    /// unchanged.
+    pub fn set_native_tool_execution_hook(
+        &mut self,
+        hook: Option<Arc<dyn NativeToolExecutionHook>>,
+    ) {
+        self.native_tool_execution_hook = hook;
     }
 
     /// Get a reference to the tool registry
@@ -2644,28 +2708,36 @@ impl Agent {
             ),
         );
 
-        let memory_query = conversation
-            .messages()
-            .iter()
-            .rev()
-            .find_map(|msg| {
-                if msg.role == Role::User {
-                    let text = msg
-                        .content
-                        .iter()
-                        .filter_map(|content| content.as_text())
-                        .collect::<Vec<_>>()
-                        .join(" ");
-                    if text.trim().is_empty() {
-                        None
+        let direct_answer_surface = super::reply_parts::turn_context_tool_surface_direct_answer(
+            session_config.turn_context.as_ref(),
+        );
+        let memory_query = if direct_answer_surface {
+            push_trace("memory_injection", "skipped=direct_answer".to_string());
+            String::new()
+        } else {
+            conversation
+                .messages()
+                .iter()
+                .rev()
+                .find_map(|msg| {
+                    if msg.role == Role::User {
+                        let text = msg
+                            .content
+                            .iter()
+                            .filter_map(|content| content.as_text())
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        if text.trim().is_empty() {
+                            None
+                        } else {
+                            Some(text)
+                        }
                     } else {
-                        Some(text)
+                        None
                     }
-                } else {
-                    None
-                }
-            })
-            .unwrap_or_default();
+                })
+                .unwrap_or_default()
+        };
 
         if !memory_query.trim().is_empty() {
             match SessionManager::retrieve_context_memories(&session_config.id, &memory_query, 6)
@@ -2717,9 +2789,13 @@ impl Agent {
         let aster_mode = config.get_aster_mode().unwrap_or(AsterMode::Auto);
         push_trace("mode", format!("aster_mode={:?}", aster_mode));
 
-        self.tool_inspection_manager
-            .update_permission_inspector_mode(aster_mode)
-            .await;
+        if direct_answer_surface {
+            push_trace("permission_inspector", "skipped=direct_answer".to_string());
+        } else {
+            self.tool_inspection_manager
+                .update_permission_inspector_mode(aster_mode)
+                .await;
+        }
 
         Ok(ReplyContext {
             conversation,
@@ -3313,19 +3389,32 @@ impl Agent {
                     context = context.with_cancellation_token(token);
                 }
 
-                let registry = self.tool_registry.read().await;
-                let execute_result = registry.execute(&tool_name, params, &context, None).await;
-                drop(registry);
+                if let Some(hook_result) =
+                    self.native_tool_execution_hook.as_ref().and_then(|hook| {
+                        hook.execute_native_tool(NativeToolExecutionRequest {
+                            tool_name: tool_name.clone(),
+                            tool_id: request_id.clone(),
+                            params: params.clone(),
+                            context: context.clone(),
+                        })
+                    })
+                {
+                    hook_result
+                } else {
+                    let registry = self.tool_registry.read().await;
+                    let execute_result = registry.execute(&tool_name, params, &context, None).await;
+                    drop(registry);
 
-                match execute_result {
-                    Ok(result) => {
-                        ToolCallResult::from(Ok(native_tool_result_to_call_tool_result(result)))
+                    match execute_result {
+                        Ok(result) => {
+                            ToolCallResult::from(Ok(native_tool_result_to_call_tool_result(result)))
+                        }
+                        Err(e) => ToolCallResult::from(Err(ErrorData::new(
+                            ErrorCode::INTERNAL_ERROR,
+                            e.to_string(),
+                            None,
+                        ))),
                     }
-                    Err(e) => ToolCallResult::from(Err(ErrorData::new(
-                        ErrorCode::INTERNAL_ERROR,
-                        e.to_string(),
-                        None,
-                    ))),
                 }
             } else {
                 // MCP 工具：通过 extension_manager 分发
@@ -3810,8 +3899,11 @@ impl Agent {
             .clone()
             .ok_or_else(|| anyhow::anyhow!("Session {} has no conversation", session_config.id))?;
 
-        let needs_auto_compact =
-            check_if_compaction_needed(provider.as_ref(), &conversation, None, &session).await?;
+        let needs_auto_compact = crate::session_context::with_turn_context(
+            session_config.turn_context.clone(),
+            check_if_compaction_needed(provider.as_ref(), &conversation, None, &session),
+        )
+        .await?;
 
         let conversation_to_compact = conversation.clone();
         let scope_session_config = session_config.clone();
@@ -4066,9 +4158,17 @@ impl Agent {
         let reply_span = tracing::Span::current();
         self.reset_retry_attempts().await;
 
+        let direct_answer_surface = super::reply_parts::turn_context_tool_surface_direct_answer(
+            session_config.turn_context.as_ref(),
+        );
         let session_for_name = session.clone().without_messages();
-        let conversation_for_name = conversation.clone();
-        let deferred_session_name_generation =
+        let deferred_session_name_generation = if direct_answer_surface {
+            tracing::info!(
+                "[AsterAgent][TTFT] session name generation deferred for direct_answer turn"
+            );
+            Some((session_for_name, None, pinned_provider.clone()))
+        } else {
+            let conversation_for_name = conversation.clone();
             match pinned_provider.session_name_generation_execution_strategy() {
                 SessionNameGenerationExecutionStrategy::Background => {
                     let provider = pinned_provider.clone();
@@ -4087,10 +4187,11 @@ impl Agent {
                 }
                 SessionNameGenerationExecutionStrategy::AfterReply => Some((
                     session_for_name,
-                    conversation_for_name,
+                    Some(conversation_for_name),
                     pinned_provider.clone(),
                 )),
-            };
+            }
+        };
         let working_dir = session.working_dir.clone();
 
         Ok(Box::pin(async_stream::try_stream! {
@@ -4128,21 +4229,50 @@ impl Agent {
                     break;
                 }
 
-                let conversation_with_moim = super::moim::inject_moim(
-                    conversation.clone(),
-                    &self.extension_manager,
-                ).await;
-
-                let mut stream = crate::session_context::with_turn_context(
-                    session_config.turn_context.clone(),
-                    Self::stream_response_from_provider(
-                        pinned_provider.clone(),
-                        &model_config,
-                        &system_prompt,
-                        conversation_with_moim.messages(),
-                        &tools,
-                        &toolshim_tools,
+                let provider_conversation;
+                let provider_messages = if direct_answer_surface {
+                    tracing::info!(
+                        "[AsterAgent][TTFT] MOIM injection skipped for direct_answer turn"
+                    );
+                    conversation.messages()
+                } else {
+                    provider_conversation = super::moim::inject_moim(
+                        conversation.clone(),
+                        &self.extension_manager,
+                    )
+                    .await;
+                    provider_conversation.messages()
+                };
+                let provider_trace_started_at = Instant::now();
+                let provider_trace_provider = pinned_provider.get_name().to_string();
+                let provider_trace_model = model_config.model_name.clone();
+                let provider_trace_attempt = turns_taken;
+                let mut provider_first_event_seen = false;
+                let mut provider_first_text_delta_seen = false;
+                yield AgentEvent::ProviderTrace {
+                    event: ProviderTraceEvent::request_started(
+                        &provider_trace_provider,
+                        &provider_trace_model,
+                        provider_trace_attempt,
                     ),
+                };
+                let (mut stream, provider_response_context) = crate::session_context::with_turn_context(
+                    session_config.turn_context.clone(),
+                    async {
+                        crate::session_context::clear_current_provider_response_context();
+                        let stream = Self::stream_response_from_provider(
+                            pinned_provider.clone(),
+                            &model_config,
+                            &system_prompt,
+                            provider_messages,
+                            &tools,
+                            &toolshim_tools,
+                        )
+                        .await?;
+                        let provider_response_context =
+                            crate::session_context::current_provider_response_context();
+                        Ok::<_, ProviderError>((stream, provider_response_context))
+                    },
                 )
                 .await?;
 
@@ -4158,6 +4288,16 @@ impl Agent {
                             Ok(next) => next,
                             Err(_) => {
                                 if is_token_cancelled(&cancel_token) {
+                                    yield AgentEvent::ProviderTrace {
+                                        event: ProviderTraceEvent::canceled(
+                                            &provider_trace_provider,
+                                            &provider_trace_model,
+                                            provider_trace_attempt,
+                                            &provider_trace_started_at,
+                                            "cancelled_while_waiting_provider_stream",
+                                        )
+                                        .with_provider_response_context(provider_response_context.as_ref()),
+                                    };
                                     break;
                                 }
                                 continue;
@@ -4170,11 +4310,33 @@ impl Agent {
                         break;
                     };
                     if is_token_cancelled(&cancel_token) {
-                        break;
-                    }
+                        yield AgentEvent::ProviderTrace {
+                                event: ProviderTraceEvent::canceled(
+                                    &provider_trace_provider,
+                                    &provider_trace_model,
+                                    provider_trace_attempt,
+                                    &provider_trace_started_at,
+                                    "cancelled_before_provider_event_processing",
+                                )
+                                .with_provider_response_context(provider_response_context.as_ref()),
+                            };
+                            break;
+                        }
 
                     match next {
                         Ok((response, usage)) => {
+                            if !provider_first_event_seen {
+                                provider_first_event_seen = true;
+                                yield AgentEvent::ProviderTrace {
+                                    event: ProviderTraceEvent::first_event_received(
+                                        &provider_trace_provider,
+                                        &provider_trace_model,
+                                        provider_trace_attempt,
+                                        &provider_trace_started_at,
+                                    )
+                                    .with_provider_response_context(provider_response_context.as_ref()),
+                                };
+                            }
                             overflow_handler.reset();
 
                             // Emit model change event if provider is lead-worker
@@ -4202,12 +4364,36 @@ impl Agent {
                             }
 
                             if let Some(response) = response {
+                                if !provider_first_text_delta_seen {
+                                    if let Some(text_chars) = provider_response_text_chars(&response) {
+                                        provider_first_text_delta_seen = true;
+                                        yield AgentEvent::ProviderTrace {
+                                            event: ProviderTraceEvent::first_text_delta_received(
+                                                &provider_trace_provider,
+                                                &provider_trace_model,
+                                                provider_trace_attempt,
+                                                &provider_trace_started_at,
+                                                text_chars,
+                                            )
+                                            .with_provider_response_context(provider_response_context.as_ref()),
+                                        };
+                                    }
+                                }
                                 if let Some(tool_input_events) =
                                     collect_provider_tool_input_delta_events(&response)
                                 {
                                     for event in tool_input_events {
                                         yield event;
                                     }
+                                    continue;
+                                }
+
+                                if direct_answer_surface && tools.is_empty() {
+                                    let direct_response =
+                                        strip_tool_requests_for_direct_answer(response);
+                                    yield AgentEvent::Message(direct_response.clone());
+                                    tokio::task::yield_now().await;
+                                    messages_to_add.push(direct_response);
                                     continue;
                                 }
 
@@ -4413,6 +4599,16 @@ impl Agent {
                             }
                         }
                         Err(ref provider_err @ ProviderError::ContextLengthExceeded(_)) => {
+                            yield AgentEvent::ProviderTrace {
+                                event: ProviderTraceEvent::failed(
+                                    &provider_trace_provider,
+                                    &provider_trace_model,
+                                    provider_trace_attempt,
+                                    &provider_trace_started_at,
+                                    provider_err,
+                                )
+                                .with_provider_response_context(provider_response_context.as_ref()),
+                            };
                             crate::posthog::emit_error(provider_err.telemetry_type(), &provider_err.to_string());
 
                             if !overflow_handler.can_retry() {
@@ -4516,6 +4712,16 @@ impl Agent {
                             }
                         }
                         Err(ref provider_err) => {
+                            yield AgentEvent::ProviderTrace {
+                                event: ProviderTraceEvent::failed(
+                                    &provider_trace_provider,
+                                    &provider_trace_model,
+                                    provider_trace_attempt,
+                                    &provider_trace_started_at,
+                                    provider_err,
+                                )
+                                .with_provider_response_context(provider_response_context.as_ref()),
+                            };
                             crate::posthog::emit_error(provider_err.telemetry_type(), &provider_err.to_string());
                             if should_log_provider_failure_as_error(provider_err) {
                                 error!("Error: {}", provider_err);
@@ -4606,6 +4812,8 @@ impl Agent {
             if let Some((session_for_name, conversation_for_name, provider)) =
                 deferred_session_name_generation
             {
+                let conversation_for_name =
+                    conversation_for_name.unwrap_or_else(|| conversation.clone());
                 tokio::spawn(async move {
                     if let Err(e) = SessionManager::maybe_update_name_for_session(
                         &session_for_name,
@@ -4925,7 +5133,7 @@ impl Agent {
 mod tests {
     use super::*;
     use crate::agents::extension::PlatformExtensionContext;
-    use crate::providers::base::{Provider, ProviderMetadata, ProviderUsage};
+    use crate::providers::base::{Provider, ProviderMetadata, ProviderUsage, Usage};
     use crate::providers::errors::ProviderError;
     use crate::session::{
         extension_data::ExtensionData, initialize_session_runtime_store, ChatHistoryMatch,
@@ -4935,7 +5143,7 @@ mod tests {
     };
     use async_trait::async_trait;
     use futures::StreamExt;
-    use rmcp::model::Tool;
+    use rmcp::{model::Tool, object};
     use std::collections::HashMap;
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -4945,6 +5153,14 @@ mod tests {
 
     struct ModelAwareNativeOutputSchemaProvider;
     struct ContextLengthExceededProvider;
+    struct FastReplyProvider;
+    struct RecordingFastReplyProvider {
+        observed_message_texts: Arc<Mutex<Vec<Vec<String>>>>,
+    }
+    struct FrontendToolRequestFastReplyProvider;
+    struct TitleAwareFastReplyProvider {
+        session_name_calls: Arc<AtomicUsize>,
+    }
 
     struct CountingSessionStore {
         get_session_calls: AtomicUsize,
@@ -4953,6 +5169,25 @@ mod tests {
 
     struct DispatchAliasTool {
         name: String,
+    }
+
+    #[test]
+    fn provider_trace_event_attaches_provider_response_context() {
+        let started_at = Instant::now();
+        let context = crate::session_context::ProviderResponseContext {
+            provider_request_id: Some("req-provider-1".to_string()),
+            provider_request_id_header: Some("x-request-id".to_string()),
+        };
+
+        let event =
+            ProviderTraceEvent::first_text_delta_received("openai", "gpt-4.1", 1, &started_at, 4)
+                .with_provider_response_context(Some(&context));
+
+        assert_eq!(event.provider_request_id.as_deref(), Some("req-provider-1"));
+        assert_eq!(
+            event.provider_request_id_header.as_deref(),
+            Some("x-request-id")
+        );
     }
 
     #[async_trait]
@@ -5454,11 +5689,216 @@ mod tests {
         }
     }
 
+    #[async_trait]
+    impl Provider for FastReplyProvider {
+        fn metadata() -> ProviderMetadata
+        where
+            Self: Sized,
+        {
+            ProviderMetadata::empty()
+        }
+
+        fn get_name(&self) -> &str {
+            "fast-reply-provider"
+        }
+
+        async fn complete_with_model(
+            &self,
+            _model_config: &crate::model::ModelConfig,
+            _system: &str,
+            _messages: &[Message],
+            _tools: &[Tool],
+        ) -> Result<(Message, ProviderUsage), ProviderError> {
+            Ok((
+                Message::assistant().with_text("快速回答"),
+                ProviderUsage::new("fast-reply-provider".to_string(), Usage::default()),
+            ))
+        }
+
+        fn get_model_config(&self) -> crate::model::ModelConfig {
+            crate::model::ModelConfig {
+                model_name: "fast-reply-provider".to_string(),
+                context_limit: Some(100),
+                temperature: None,
+                max_tokens: None,
+                reasoning_effort: None,
+                toolshim: false,
+                toolshim_model: None,
+                fast_model: None,
+            }
+        }
+    }
+
+    #[async_trait]
+    impl Provider for RecordingFastReplyProvider {
+        fn metadata() -> ProviderMetadata
+        where
+            Self: Sized,
+        {
+            ProviderMetadata::empty()
+        }
+
+        fn get_name(&self) -> &str {
+            "recording-fast-reply-provider"
+        }
+
+        async fn complete_with_model(
+            &self,
+            _model_config: &crate::model::ModelConfig,
+            _system: &str,
+            messages: &[Message],
+            _tools: &[Tool],
+        ) -> Result<(Message, ProviderUsage), ProviderError> {
+            self.observed_message_texts
+                .lock()
+                .expect("记录 provider messages")
+                .push(messages.iter().map(Message::as_concat_text).collect());
+            Ok((
+                Message::assistant().with_text("快速回答"),
+                ProviderUsage::new(
+                    "recording-fast-reply-provider".to_string(),
+                    Usage::default(),
+                ),
+            ))
+        }
+
+        fn get_model_config(&self) -> crate::model::ModelConfig {
+            crate::model::ModelConfig {
+                model_name: "recording-fast-reply-provider".to_string(),
+                context_limit: Some(100),
+                temperature: None,
+                max_tokens: None,
+                reasoning_effort: None,
+                toolshim: false,
+                toolshim_model: None,
+                fast_model: None,
+            }
+        }
+    }
+
+    #[async_trait]
+    impl Provider for FrontendToolRequestFastReplyProvider {
+        fn metadata() -> ProviderMetadata
+        where
+            Self: Sized,
+        {
+            ProviderMetadata::empty()
+        }
+
+        fn get_name(&self) -> &str {
+            "frontend-tool-request-fast-reply-provider"
+        }
+
+        async fn complete_with_model(
+            &self,
+            _model_config: &crate::model::ModelConfig,
+            _system: &str,
+            _messages: &[Message],
+            _tools: &[Tool],
+        ) -> Result<(Message, ProviderUsage), ProviderError> {
+            Ok((
+                Message::assistant()
+                    .with_text("快速回答")
+                    .with_tool_request(
+                        "req-fast-frontend",
+                        Ok(CallToolRequestParam {
+                            name: "frontend__noop".into(),
+                            arguments: Some(serde_json::Map::new()),
+                        }),
+                    ),
+                ProviderUsage::new(
+                    "frontend-tool-request-fast-reply-provider".to_string(),
+                    Usage::default(),
+                ),
+            ))
+        }
+
+        fn get_model_config(&self) -> crate::model::ModelConfig {
+            crate::model::ModelConfig {
+                model_name: "frontend-tool-request-fast-reply-provider".to_string(),
+                context_limit: Some(100),
+                temperature: None,
+                max_tokens: None,
+                reasoning_effort: None,
+                toolshim: false,
+                toolshim_model: None,
+                fast_model: None,
+            }
+        }
+    }
+
+    #[async_trait]
+    impl Provider for TitleAwareFastReplyProvider {
+        fn metadata() -> ProviderMetadata
+        where
+            Self: Sized,
+        {
+            ProviderMetadata::empty()
+        }
+
+        fn get_name(&self) -> &str {
+            "title-aware-fast-reply-provider"
+        }
+
+        async fn complete_with_model(
+            &self,
+            _model_config: &crate::model::ModelConfig,
+            _system: &str,
+            _messages: &[Message],
+            _tools: &[Tool],
+        ) -> Result<(Message, ProviderUsage), ProviderError> {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            Ok((
+                Message::assistant().with_text("快速回答"),
+                ProviderUsage::new(
+                    "title-aware-fast-reply-provider".to_string(),
+                    Usage::default(),
+                ),
+            ))
+        }
+
+        async fn generate_session_name(
+            &self,
+            _messages: &Conversation,
+        ) -> Result<String, ProviderError> {
+            self.session_name_calls.fetch_add(1, Ordering::SeqCst);
+            Ok("快速回答标题".to_string())
+        }
+
+        fn get_model_config(&self) -> crate::model::ModelConfig {
+            crate::model::ModelConfig {
+                model_name: "title-aware-fast-reply-provider".to_string(),
+                context_limit: Some(100),
+                temperature: None,
+                max_tokens: None,
+                reasoning_effort: None,
+                toolshim: false,
+                toolshim_model: None,
+                fast_model: None,
+            }
+        }
+    }
+
     fn build_auto_compaction_disabled_turn_context() -> TurnContextOverride {
         let mut metadata = HashMap::new();
         metadata.insert(
             "lime_runtime".to_string(),
             serde_json::json!({
+                "auto_compact": false,
+            }),
+        );
+        TurnContextOverride {
+            metadata,
+            ..TurnContextOverride::default()
+        }
+    }
+
+    fn build_direct_answer_turn_context() -> TurnContextOverride {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "lime_runtime".to_string(),
+            serde_json::json!({
+                "tool_surface": "direct_answer",
                 "auto_compact": false,
             }),
         );
@@ -5998,6 +6438,375 @@ mod tests {
         }
 
         assert_eq!(store.get_session_calls(), 1);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_reply_uses_turn_context_for_pre_reply_compaction_check() -> Result<()> {
+        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
+
+        let store = Arc::new(CountingSessionStore::new(Session {
+            id: "session-fast-no-compact".to_string(),
+            working_dir: PathBuf::from("/tmp/fast-no-compact"),
+            name: "fast no compact".to_string(),
+            user_set_name: true,
+            session_type: SessionType::User,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            extension_data: ExtensionData::default(),
+            total_tokens: Some(90),
+            input_tokens: None,
+            output_tokens: None,
+            cached_input_tokens: None,
+            cache_creation_input_tokens: None,
+            accumulated_total_tokens: None,
+            accumulated_input_tokens: None,
+            accumulated_output_tokens: None,
+            schedule_id: None,
+            recipe: None,
+            user_recipe_values: None,
+            conversation: Some(Conversation::new_unvalidated(vec![
+                Message::user().with_text("快速问题")
+            ])),
+            message_count: 1,
+            provider_name: None,
+            model_config: None,
+        }));
+
+        let agent = Agent::new_with_required_session_runtime_store()
+            .expect("初始化 agent 失败")
+            .with_session_store(store);
+        agent
+            .update_provider(Arc::new(FastReplyProvider), "session-fast-no-compact")
+            .await?;
+
+        let session_config = SessionConfig {
+            id: "session-fast-no-compact".to_string(),
+            thread_id: Some("thread-fast-no-compact".to_string()),
+            turn_id: Some("turn-fast-no-compact".to_string()),
+            schedule_id: None,
+            max_turns: None,
+            retry_config: None,
+            system_prompt: None,
+            system_prompt_override: None,
+            include_context_trace: None,
+            turn_context: Some(build_auto_compaction_disabled_turn_context()),
+        };
+
+        let mut stream = agent
+            .reply(Message::user().with_text("快速问题"), session_config, None)
+            .await?;
+        let mut saw_reply = false;
+
+        while let Some(event) = stream.next().await {
+            match event? {
+                AgentEvent::ContextCompactionStarted { .. } => {
+                    panic!("fast/direct answer turn should not run pre-reply compaction")
+                }
+                AgentEvent::HistoryReplaced(_) => {
+                    panic!("fast/direct answer turn should not replace history before reply")
+                }
+                AgentEvent::Message(message) if message.as_concat_text().contains("快速回答") =>
+                {
+                    saw_reply = true;
+                    break;
+                }
+                _ => {}
+            }
+        }
+
+        assert!(saw_reply, "应直接进入 provider 回复");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_direct_answer_skips_moim_injection_before_provider_request() -> Result<()> {
+        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
+
+        let observed_message_texts = Arc::new(Mutex::new(Vec::new()));
+        let store = Arc::new(CountingSessionStore::new(Session {
+            id: "session-fast-no-moim".to_string(),
+            working_dir: PathBuf::from("/tmp/fast-no-moim"),
+            name: "fast no moim".to_string(),
+            user_set_name: true,
+            session_type: SessionType::User,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            extension_data: ExtensionData::default(),
+            total_tokens: Some(1),
+            input_tokens: None,
+            output_tokens: None,
+            cached_input_tokens: None,
+            cache_creation_input_tokens: None,
+            accumulated_total_tokens: None,
+            accumulated_input_tokens: None,
+            accumulated_output_tokens: None,
+            schedule_id: None,
+            recipe: None,
+            user_recipe_values: None,
+            conversation: Some(Conversation::new_unvalidated(vec![
+                Message::user().with_text("快速问题")
+            ])),
+            message_count: 1,
+            provider_name: None,
+            model_config: None,
+        }));
+
+        let agent = Agent::new_with_required_session_runtime_store()
+            .expect("初始化 agent 失败")
+            .with_session_store(store);
+        agent
+            .update_provider(
+                Arc::new(RecordingFastReplyProvider {
+                    observed_message_texts: observed_message_texts.clone(),
+                }),
+                "session-fast-no-moim",
+            )
+            .await?;
+
+        let session_config = SessionConfig {
+            id: "session-fast-no-moim".to_string(),
+            thread_id: Some("thread-fast-no-moim".to_string()),
+            turn_id: Some("turn-fast-no-moim".to_string()),
+            schedule_id: None,
+            max_turns: None,
+            retry_config: None,
+            system_prompt: None,
+            system_prompt_override: None,
+            include_context_trace: None,
+            turn_context: Some(build_direct_answer_turn_context()),
+        };
+
+        let mut stream = agent
+            .reply(Message::user().with_text("快速问题"), session_config, None)
+            .await?;
+        let mut saw_reply = false;
+
+        while let Some(event) = stream.next().await {
+            match event? {
+                AgentEvent::Message(message) if message.as_concat_text().contains("快速回答") =>
+                {
+                    saw_reply = true;
+                    break;
+                }
+                _ => {}
+            }
+        }
+
+        assert!(saw_reply, "应先看到主回复");
+        let observed = observed_message_texts
+            .lock()
+            .expect("读取 provider messages");
+        let first_request = observed.first().expect("provider 应收到一次请求");
+        assert!(
+            first_request
+                .iter()
+                .all(|text| !text.contains("<info-msg>")),
+            "direct_answer 首包前不应注入 MOIM 当前时间信息，actual={first_request:?}"
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_direct_answer_does_not_classify_frontend_tool_requests() -> Result<()> {
+        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
+
+        let store = Arc::new(CountingSessionStore::new(Session {
+            id: "session-fast-no-tool-classify".to_string(),
+            working_dir: PathBuf::from("/tmp/fast-no-tool-classify"),
+            name: "fast no tool classify".to_string(),
+            user_set_name: true,
+            session_type: SessionType::User,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            extension_data: ExtensionData::default(),
+            total_tokens: Some(1),
+            input_tokens: None,
+            output_tokens: None,
+            cached_input_tokens: None,
+            cache_creation_input_tokens: None,
+            accumulated_total_tokens: None,
+            accumulated_input_tokens: None,
+            accumulated_output_tokens: None,
+            schedule_id: None,
+            recipe: None,
+            user_recipe_values: None,
+            conversation: Some(Conversation::new_unvalidated(vec![
+                Message::user().with_text("快速问题")
+            ])),
+            message_count: 1,
+            provider_name: None,
+            model_config: None,
+        }));
+
+        let agent = Agent::new_with_required_session_runtime_store()
+            .expect("初始化 agent 失败")
+            .with_session_store(store);
+        agent
+            .add_extension(ExtensionConfig::Frontend {
+                name: "frontend".to_string(),
+                description: "desc".to_string(),
+                tools: vec![Tool::new(
+                    "frontend__noop".to_string(),
+                    "No-op frontend tool".to_string(),
+                    object!({ "type": "object", "properties": {} }),
+                )],
+                instructions: None,
+                bundled: None,
+                available_tools: vec![],
+                deferred_loading: false,
+                always_expose_tools: vec![],
+                allowed_caller: None,
+            })
+            .await?;
+        agent
+            .update_provider(
+                Arc::new(FrontendToolRequestFastReplyProvider),
+                "session-fast-no-tool-classify",
+            )
+            .await?;
+
+        let session_config = SessionConfig {
+            id: "session-fast-no-tool-classify".to_string(),
+            thread_id: Some("thread-fast-no-tool-classify".to_string()),
+            turn_id: Some("turn-fast-no-tool-classify".to_string()),
+            schedule_id: None,
+            max_turns: None,
+            retry_config: None,
+            system_prompt: None,
+            system_prompt_override: None,
+            include_context_trace: None,
+            turn_context: Some(build_direct_answer_turn_context()),
+        };
+
+        let mut stream = agent
+            .reply(Message::user().with_text("快速问题"), session_config, None)
+            .await?;
+        let mut saw_reply = false;
+
+        loop {
+            let next = tokio::time::timeout(Duration::from_secs(1), stream.next())
+                .await
+                .expect("direct_answer 空工具面不应等待前端工具响应");
+            let Some(event) = next else {
+                break;
+            };
+
+            if let AgentEvent::Message(message) = event? {
+                assert!(
+                    message
+                        .content
+                        .iter()
+                        .all(|content| !matches!(content, MessageContent::FrontendToolRequest(_))),
+                    "direct_answer 不应把 provider tool request 转成 frontend tool request"
+                );
+                if message.as_concat_text().contains("快速回答") {
+                    assert!(
+                        message
+                            .content
+                            .iter()
+                            .all(|content| !matches!(content, MessageContent::ToolRequest(_))),
+                        "direct_answer 空工具面不应保留 provider 结构化 tool request"
+                    );
+                    saw_reply = true;
+                }
+            }
+        }
+
+        assert!(saw_reply, "应看到剥离工具请求后的主回复");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_direct_answer_defers_session_name_generation_until_after_reply() -> Result<()> {
+        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
+
+        let session_name_calls = Arc::new(AtomicUsize::new(0));
+        let store = Arc::new(CountingSessionStore::new(Session {
+            id: "session-fast-title-deferred".to_string(),
+            working_dir: PathBuf::from("/tmp/fast-title-deferred"),
+            name: "New Session".to_string(),
+            user_set_name: false,
+            session_type: SessionType::User,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            extension_data: ExtensionData::default(),
+            total_tokens: Some(1),
+            input_tokens: None,
+            output_tokens: None,
+            cached_input_tokens: None,
+            cache_creation_input_tokens: None,
+            accumulated_total_tokens: None,
+            accumulated_input_tokens: None,
+            accumulated_output_tokens: None,
+            schedule_id: None,
+            recipe: None,
+            user_recipe_values: None,
+            conversation: Some(Conversation::new_unvalidated(vec![
+                Message::user().with_text("快速问题")
+            ])),
+            message_count: 1,
+            provider_name: None,
+            model_config: None,
+        }));
+
+        let agent = Agent::new_with_required_session_runtime_store()
+            .expect("初始化 agent 失败")
+            .with_session_store(store);
+        agent
+            .update_provider(
+                Arc::new(TitleAwareFastReplyProvider {
+                    session_name_calls: session_name_calls.clone(),
+                }),
+                "session-fast-title-deferred",
+            )
+            .await?;
+
+        let session_config = SessionConfig {
+            id: "session-fast-title-deferred".to_string(),
+            thread_id: Some("thread-fast-title-deferred".to_string()),
+            turn_id: Some("turn-fast-title-deferred".to_string()),
+            schedule_id: None,
+            max_turns: None,
+            retry_config: None,
+            system_prompt: None,
+            system_prompt_override: None,
+            include_context_trace: None,
+            turn_context: Some(build_direct_answer_turn_context()),
+        };
+
+        let mut stream = agent
+            .reply(Message::user().with_text("快速问题"), session_config, None)
+            .await?;
+        let mut saw_reply = false;
+
+        while let Some(event) = stream.next().await {
+            match event? {
+                AgentEvent::Message(message) if message.as_concat_text().contains("快速回答") =>
+                {
+                    assert_eq!(
+                        session_name_calls.load(Ordering::SeqCst),
+                        0,
+                        "direct_answer 首个回复前不应启动标题生成"
+                    );
+                    saw_reply = true;
+                }
+                _ => {}
+            }
+        }
+
+        assert!(saw_reply, "应先看到主回复");
+        for _ in 0..20 {
+            if session_name_calls.load(Ordering::SeqCst) > 0 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert_eq!(
+            session_name_calls.load(Ordering::SeqCst),
+            1,
+            "主回复完成后仍应异步生成会话标题"
+        );
         Ok(())
     }
 
@@ -7110,6 +7919,54 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(tool_names, vec!["Read".to_string()]);
 
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_prepare_reply_context_skips_permission_inspector_for_direct_answer() -> Result<()>
+    {
+        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
+
+        let agent = Agent::new();
+        let session = SessionManager::create_session(
+            PathBuf::from("."),
+            "agent-direct-answer-skip-inspector".to_string(),
+            SessionType::User,
+        )
+        .await?;
+        agent
+            .update_provider(Arc::new(NativeOutputSchemaProvider), &session.id)
+            .await?;
+
+        let session_config = SessionConfig {
+            id: session.id.clone(),
+            thread_id: Some("thread-direct-answer-skip-inspector".to_string()),
+            turn_id: Some("turn-direct-answer-skip-inspector".to_string()),
+            schedule_id: None,
+            max_turns: None,
+            retry_config: None,
+            system_prompt: None,
+            system_prompt_override: None,
+            include_context_trace: None,
+            turn_context: Some(build_direct_answer_turn_context()),
+        };
+
+        let reply_context = agent
+            .prepare_reply_context(
+                Conversation::default(),
+                PathBuf::from(".").as_path(),
+                &session_config,
+                true,
+            )
+            .await?;
+
+        assert!(reply_context.tools.is_empty());
+        assert!(
+            reply_context.context_trace.iter().any(|step| {
+                step.stage == "permission_inspector" && step.detail == "skipped=direct_answer"
+            }),
+            "direct_answer 首包前不应更新工具审批 inspector"
+        );
         Ok(())
     }
 

@@ -14,6 +14,8 @@ let configLoadingPromise: Promise<Config> | null = null;
 let configCacheStamp: string | null = null;
 
 export type {
+  ClawTraceConfig,
+  ClawTraceLevelConfig,
   Config,
   CrashReportingConfig,
   ChatAppearanceConfig,
@@ -131,7 +133,10 @@ function assertConfigShape(value: unknown): asserts value is Config {
 
   const defaultProvider = (value as { default_provider?: unknown })
     .default_provider;
-  if (typeof defaultProvider !== "string" || defaultProvider.trim().length === 0) {
+  if (
+    typeof defaultProvider !== "string" ||
+    defaultProvider.trim().length === 0
+  ) {
     throw new Error("get_config 未返回有效配置");
   }
 }
@@ -188,7 +193,11 @@ export async function getConfig(
   if (!configLoadingPromise) {
     configLoadingPromise = safeInvoke<unknown>("get_config")
       .then((config) => {
-        assertNotDiagnosticFacade("get_config", config, "真实配置 current 通道");
+        assertNotDiagnosticFacade(
+          "get_config",
+          config,
+          "真实配置 current 通道",
+        );
         assertConfigShape(config);
         configCache = normalizeConfig(config);
         configCacheStamp = readAppConfigChangeStamp();
@@ -212,7 +221,9 @@ export async function saveConfig(config: Config): Promise<void> {
 }
 
 export async function getEnvironmentPreview(): Promise<EnvironmentPreview> {
-  const result = await safeInvoke<EnvironmentPreview>("get_environment_preview");
+  const result = await safeInvoke<EnvironmentPreview>(
+    "get_environment_preview",
+  );
   assertNotDiagnosticFacade(
     "get_environment_preview",
     result,

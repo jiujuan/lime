@@ -21,6 +21,8 @@ import {
   EXPERT_SKILLS_RUNTIME_SCENARIO,
   EXPERT_SKILLS_RUNTIME_SKILL_REF,
   EXPERT_SKILLS_RUNTIME_TITLE,
+  FIXTURE_MODEL,
+  FIXTURE_PROVIDER,
   GOAL_DONE_TEXT,
   GOAL_PROMPT,
   MCP_STRUCTURED_CONTENT_DONE_TEXT,
@@ -282,6 +284,18 @@ if (input.kind === "turnStart") {
       turnId: currentTurnId()
     };
   }
+  function providerTracePayload(stage, elapsedMs, status, extra = {}) {
+    return {
+      stage,
+      provider: "${FIXTURE_PROVIDER}",
+      model: "${FIXTURE_MODEL}",
+      attempt: 1,
+      elapsed_ms: elapsedMs,
+      elapsedMs,
+      status,
+      ...extra
+    };
+  }
   const initialMessageText = isEventReadProbe
     ? "事件流 probe 已进入 RuntimeCore：\\n"
     : isContinuePrompt
@@ -306,6 +320,21 @@ if (input.kind === "turnStart") {
                         ? "我识别到右侧专家面板更新后的 skillRefs，并继续通过 skill_search 选择单个 Skill。\\n"
                         : "以下是今日国际新闻简要整理：\\n";
   const initialEvents = [
+    {
+      type: "provider.request.started",
+      payload: providerTracePayload("request_started", 0, "running")
+    },
+    {
+      type: "provider.first_event.received",
+      payload: providerTracePayload("first_event_received", 40, "running")
+    },
+    {
+      type: "provider.first_text_delta.received",
+      payload: providerTracePayload("first_text_delta_received", 90, "running", {
+        text_chars: initialMessageText.length,
+        textChars: initialMessageText.length
+      })
+    },
     {
       type: "message.delta",
       payload: messageDeltaPayload(

@@ -66,6 +66,23 @@ vi.mock("react-i18next", () => ({
         "workspace.productProfile.preview.storyboardEmpty": "等待分镜内容",
         "workspace.productProfile.preview.checklist": "交付复核",
         "workspace.productProfile.preview.checklistEmpty": "等待复核结果",
+        "workspace.productProfile.rendererHost.title": "插件渲染器",
+        "workspace.productProfile.rendererHost.detail": `${options?.count ?? 0} 个来源产物 · 宿主托管`,
+        "workspace.productProfile.rendererHost.plugin": "插件",
+        "workspace.productProfile.rendererHost.renderer": "渲染器",
+        "workspace.productProfile.rendererHost.surface": "界面",
+        "workspace.productProfile.rendererHost.pane": "面板",
+        "workspace.productProfile.rendererHost.output": "输出",
+        "workspace.productProfile.rendererHost.entry": "入口",
+        "workspace.productProfile.rendererHost.actions": "动作",
+        "workspace.productProfile.rendererHost.execution": "执行",
+        "workspace.productProfile.rendererHost.executionPlaceholder": "仅占位，不执行",
+        "workspace.productProfile.rendererHost.executionBlocked": "已阻断",
+        "workspace.productProfile.rendererHost.executionMode": "运行授权模式",
+        "workspace.productProfile.rendererHost.rendererExecutionModel": "渲染执行模型",
+        "workspace.productProfile.rendererHost.entryLoadPolicy": "入口加载策略",
+        "workspace.productProfile.rendererHost.reason": "原因",
+        "workspace.productProfile.rendererHost.allowedOutputs": "允许输出",
         "workspace.productProfile.action.revise": "改写",
         "workspace.productProfile.action.regenerate": "重新生成",
         "workspace.productProfile.action.createVariant": "生成变体",
@@ -304,6 +321,7 @@ function renderSurface({
   onActionIntent = vi.fn(),
   onOpenPreviewArtifact = vi.fn(),
   onSelectedObjectChange,
+  surfaceProfile = profile,
 }: {
   actionsDisabled?: boolean;
   onActionIntent?: React.ComponentProps<
@@ -315,6 +333,7 @@ function renderSurface({
   onSelectedObjectChange?: React.ComponentProps<
     typeof WorkspaceProductProfileSurface
   >["onSelectedObjectChange"];
+  surfaceProfile?: WorkspaceProductProfile;
 } = {}) {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -324,7 +343,7 @@ function renderSurface({
     root.render(
       <WorkspaceProductProfileSurface
         actionsDisabled={actionsDisabled}
-        profile={profile}
+        profile={surfaceProfile}
         onActionIntent={onActionIntent}
         onOpenPreviewArtifact={onOpenPreviewArtifact}
         onSelectedObjectChange={onSelectedObjectChange}
@@ -555,6 +574,73 @@ describe("WorkspaceProductProfileSurface", () => {
         '[data-testid="workspace-product-profile-checklist-item"]',
       ),
     ).not.toBeNull();
+  });
+
+  it("应把 app-declared renderer 显示为宿主受控占位", () => {
+    const surfaceProfile: WorkspaceProductProfile = {
+      ...profile,
+      selectedObjectRef: {
+        appId: "research-kit",
+        kind: "researchBrief",
+        id: "research-brief-1",
+        sessionId: "session-main",
+      },
+      objects: [
+        ...profile.objects,
+        {
+          ref: {
+            appId: "research-kit",
+            kind: "researchBrief",
+            id: "research-brief-1",
+            sessionId: "session-main",
+            artifactIds: ["artifact-research-1"],
+          },
+          title: "竞品调研面板",
+          status: "ready",
+          summary: "由插件声明的研究面板",
+          source: {
+            rendererContract: {
+              pluginId: "research-kit",
+              rendererKind: "app_declared",
+              artifactType: "researchBrief",
+              outputArtifactKind: "research.workspace_patch",
+              surfaceKind: "researchCanvas",
+              paneKind: "researchCanvas",
+              entry: "./renderers/research-pane.html",
+              actionKeys: ["refresh", "export"],
+              runtimeAuthorization: {
+                status: "placeholder_only",
+                executionMode: "host_placeholder",
+                reasonCode: "app_declared_renderer_placeholder_only",
+                requestedOutputArtifactKind: "research.workspace_patch",
+                allowedOutputArtifactKinds: ["content_factory.workspace_patch"],
+              },
+            },
+          },
+        },
+      ],
+    };
+    const container = renderSurface({ surfaceProfile });
+
+    expect(
+      container.querySelector(
+        '[data-testid="workspace-product-profile-app-declared-renderer"]',
+      ),
+    ).not.toBeNull();
+    expect(container.textContent).toContain("插件渲染器");
+    expect(container.textContent).toContain("research-kit");
+    expect(container.textContent).toContain("app_declared");
+    expect(container.textContent).toContain("research.workspace_patch");
+    expect(container.textContent).toContain("./renderers/research-pane.html");
+    expect(container.textContent).toContain("refresh, export");
+    expect(container.textContent).toContain("仅占位，不执行");
+    expect(container.textContent).toContain("host_placeholder");
+    expect(container.textContent).toContain("host_placeholder_only");
+    expect(container.textContent).toContain("not_loaded");
+    expect(container.textContent).toContain(
+      "app_declared_renderer_placeholder_only",
+    );
+    expect(container.querySelector("iframe, webview")).toBeNull();
   });
 
   it("重新挂载时应恢复最近选择的产物", () => {

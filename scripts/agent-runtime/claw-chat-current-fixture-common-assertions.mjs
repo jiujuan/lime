@@ -4,6 +4,10 @@ import {
   APP_SERVER_METHOD_SESSION_START,
   APP_SERVER_METHOD_SESSION_TURN_START,
   APP_SERVER_METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
+  APP_SERVER_METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT,
+  APP_SERVER_METHOD_DIAGNOSTICS_TRACE_EXPORT,
+  APP_SERVER_METHOD_DIAGNOSTICS_TRACE_LIST,
+  APP_SERVER_METHOD_DIAGNOSTICS_TRACE_READ,
   APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST,
   ASSISTANT_DONE_TEXT,
   CONTINUE_DONE_TEXT,
@@ -37,12 +41,19 @@ export function buildCommonAssertions(context) {
     isRightSurfaceVisualMatrixScenario,
     isContentFactoryProductProfileScenario,
     isAnyExpertSkillsRuntimeScenario,
+    isExpertPlazaSkillsRuntimeScenario,
     isExpertPanelSkillsRuntimeScenario,
     summary,
     pageText,
     errorRaw,
     actionableConsoleErrors,
   } = context;
+  const shouldRequireAgentUiTraceEvidence =
+    !isRightSurfaceVisualMatrixScenario &&
+    !isContentFactoryProductProfileScenario &&
+    !isExpertPlazaSkillsRuntimeScenario;
+  const agentUiPerformanceTrace = summary.agentUiPerformanceTrace;
+  const appServerTraceEvidence = summary.appServerTraceEvidence;
   const commonAssertions = {
     electronPreloadBridge: rendererSnapshot.electron === true,
     appServerJsonRpcUsed:
@@ -358,6 +369,64 @@ export function buildCommonAssertions(context) {
                             pageText.includes(ASSISTANT_DONE_TEXT)),
     noInvokeErrors: !errorRaw,
     noConsoleErrors: actionableConsoleErrors.length === 0,
+    agentUiPerformanceTraceEvidenceAvailable:
+      !shouldRequireAgentUiTraceEvidence ||
+      agentUiPerformanceTrace?.available === true,
+    agentUiPerformanceTraceSeparatesProviderAndClient:
+      !shouldRequireAgentUiTraceEvidence ||
+      (agentUiPerformanceTrace?.hasProviderWaitMs === true &&
+        agentUiPerformanceTrace?.hasClientLocalOutputMs === true),
+    agentUiPerformanceTraceNoRawPayload:
+      agentUiPerformanceTrace == null ||
+      (agentUiPerformanceTrace.rawEntriesExported === false &&
+        agentUiPerformanceTrace.forbiddenFragmentPresent === false),
+    appServerTraceEvidenceAvailable:
+      !shouldRequireAgentUiTraceEvidence ||
+      appServerTraceEvidence?.available === true,
+    appServerTraceEvidenceUsesCurrentMethods:
+      !shouldRequireAgentUiTraceEvidence ||
+      (appServerRequestMethods.includes(
+        APP_SERVER_METHOD_DIAGNOSTICS_TRACE_LIST,
+      ) &&
+        appServerRequestMethods.includes(
+          APP_SERVER_METHOD_DIAGNOSTICS_TRACE_READ,
+        ) &&
+        appServerRequestMethods.includes(
+          APP_SERVER_METHOD_DIAGNOSTICS_TRACE_EXPORT,
+        )),
+    appServerTraceSupportBundleOptInUsesCurrentMethod:
+      !shouldRequireAgentUiTraceEvidence ||
+      appServerRequestMethods.includes(
+        APP_SERVER_METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT,
+      ),
+    appServerTraceEvidenceSeparatesProviderAndServer:
+      !shouldRequireAgentUiTraceEvidence ||
+      (appServerTraceEvidence?.hasProviderFirstTextDelta === true &&
+        appServerTraceEvidence?.hasAppServerMessageDelta === true),
+    appServerTraceEvidenceHasW3cCarrier:
+      !shouldRequireAgentUiTraceEvidence ||
+      appServerTraceEvidence?.hasW3cTraceContext === true,
+    appServerTraceEvidenceExportedSummaryOnly:
+      !shouldRequireAgentUiTraceEvidence ||
+      (appServerTraceEvidence?.export?.exported === true &&
+        appServerTraceEvidence?.export?.includedSections?.includes(
+          "trace/events.jsonl",
+        ) === true &&
+        appServerTraceEvidence?.export?.omittedSections?.includes(
+          "assistant delta text",
+        ) === true &&
+        appServerTraceEvidence?.export?.redactionMode === "summary_only"),
+    appServerTraceSupportBundleOptInSummaryOnly:
+      !shouldRequireAgentUiTraceEvidence ||
+      (appServerTraceEvidence?.supportBundleWithTrace?.bundlePathExists ===
+        true &&
+        appServerTraceEvidence?.supportBundleWithTrace?.traceExportIncluded ===
+          true &&
+        appServerTraceEvidence?.supportBundleWithTrace?.rawTraceJsonlOmitted ===
+          true),
+    appServerTraceEvidenceNoRawPayload:
+      appServerTraceEvidence == null ||
+      appServerTraceEvidence.forbiddenFragmentPresent === false,
   };
   return commonAssertions;
 }

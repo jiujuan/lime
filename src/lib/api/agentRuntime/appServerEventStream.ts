@@ -284,6 +284,14 @@ function routeKey(route: AppServerAgentSessionEventRouteParams): string {
   return `${route.sessionId}\u0000${route.turnId ?? ""}\u0000${route.eventName}`;
 }
 
+function parseEventTimestampMs(timestamp: string | undefined): number | null {
+  if (!timestamp) {
+    return null;
+  }
+  const parsed = Date.parse(timestamp);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 export function sortAppServerAgentSessionNotifications(
   notifications: AppServerJsonRpcNotification[],
 ): AppServerJsonRpcNotification[] {
@@ -372,10 +380,13 @@ export function projectAppServerAgentEventPayload(
   }
 
   const payload = normalizeRecord(event.payload) ?? {};
+  const rendererEventReceivedAt = Date.now();
   const basePayload = {
     ...payload,
     event_id: event.eventId,
+    renderer_event_received_at: rendererEventReceivedAt,
     sequence: event.sequence,
+    server_event_emitted_at: parseEventTimestampMs(event.timestamp) ?? null,
     session_id: event.sessionId,
     thread_id: event.threadId,
     turn_id: event.turnId,
@@ -492,6 +503,47 @@ export function projectAppServerAgentEventPayload(
         ...basePayload,
         type: "thinking_delta",
         text: readString(payload, "text", "delta", "message") ?? "",
+      };
+    case "provider.request.started":
+    case "provider.first_event.received":
+    case "provider.first_text_delta.received":
+    case "provider.failed":
+    case "provider.canceled":
+      return {
+        ...basePayload,
+        type: "provider_trace",
+        runtime_event_type: event.type,
+        stage:
+          readString(payload, "stage") ??
+          providerTraceStageFromEventType(event.type),
+        provider: readString(payload, "provider", "providerId", "provider_id"),
+        model: readString(payload, "model", "modelName", "model_name"),
+        attempt: readFiniteNumber(payload, "attempt"),
+        elapsed_ms: readFiniteNumber(payload, "elapsed_ms", "elapsedMs"),
+        text_chars: readFiniteNumber(payload, "text_chars", "textChars"),
+        status: readString(payload, "status"),
+        failure_category: readString(
+          payload,
+          "failure_category",
+          "failureCategory",
+        ),
+        retryable: readBoolean(payload, "retryable"),
+        non_retryable_provider_rejection: readBoolean(
+          payload,
+          "non_retryable_provider_rejection",
+          "nonRetryableProviderRejection",
+        ),
+        cancel_reason: readString(payload, "cancel_reason", "cancelReason"),
+        provider_request_id: readString(
+          payload,
+          "provider_request_id",
+          "providerRequestId",
+        ),
+        provider_request_id_header: readString(
+          payload,
+          "provider_request_id_header",
+          "providerRequestIdHeader",
+        ),
       };
     case "plan.delta":
     case "plan.final":
@@ -692,7 +744,8 @@ export function projectAppServerAgentEventPayload(
           "tool_confirmation",
         scope: readActionScope(payload, event),
         tool_name: readToolName(payload),
-        arguments: normalizeRecord(payload.arguments) ?? normalizeRecord(payload.data),
+        arguments:
+          normalizeRecord(payload.arguments) ?? normalizeRecord(payload.data),
         prompt: readString(payload, "prompt", "message", "reason"),
         questions: readActionQuestions(payload),
         requested_schema:
@@ -900,6 +953,23 @@ function readFiniteNumber(
   return undefined;
 }
 
+function providerTraceStageFromEventType(type: string): string | undefined {
+  switch (type) {
+    case "provider.request.started":
+      return "request_started";
+    case "provider.first_event.received":
+      return "first_event_received";
+    case "provider.first_text_delta.received":
+      return "first_text_delta_received";
+    case "provider.failed":
+      return "failed";
+    case "provider.canceled":
+      return "canceled";
+    default:
+      return undefined;
+  }
+}
+
 function readToolCallId(record: Record<string, unknown>): string | undefined {
   return readString(
     record,
@@ -1042,8 +1112,14 @@ function readPatchItemFromPayload(
   status: "in_progress" | "completed" | "failed",
 ): Record<string, unknown> {
   const patchId =
-    readString(payload, "patchId", "patch_id", "toolCallId", "tool_call_id", "id") ??
-    event.eventId;
+    readString(
+      payload,
+      "patchId",
+      "patch_id",
+      "toolCallId",
+      "tool_call_id",
+      "id",
+    ) ?? event.eventId;
   const paths = readPatchPaths(payload);
   const stdout = readString(payload, "stdout", "output", "summary");
   const stderr = readString(payload, "stderr", "error", "message", "reason");
@@ -1062,7 +1138,9 @@ function readPatchItemFromPayload(
     type: "patch",
     text:
       readString(payload, "text", "patch", "message") ??
-      (paths.length > 0 ? `Patch changed ${paths.join(", ")}` : "Patch applied"),
+      (paths.length > 0
+        ? `Patch changed ${paths.join(", ")}`
+        : "Patch applied"),
     summary: paths.length > 0 ? paths : undefined,
     paths: paths.length > 0 ? paths : undefined,
     success:
@@ -1139,8 +1217,7 @@ function readActionScope(
     readString(scope ?? {}, "thread_id", "threadId") ??
     event.threadId ??
     event.sessionId;
-  const turnId =
-    readString(scope ?? {}, "turn_id", "turnId") ?? event.turnId;
+  const turnId = readString(scope ?? {}, "turn_id", "turnId") ?? event.turnId;
   if (!sessionId && !threadId && !turnId) {
     return undefined;
   }
